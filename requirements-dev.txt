@@ -1,0 +1,5 @@
+furo
+pytest
+pytest-coverage
+sphinx
+sphinx-gallery

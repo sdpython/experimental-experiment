@@ -1,0 +1,215 @@
+jobs:
+- job: 'TestLinuxWheelPip'
+  pool:
+    vmImage: 'ubuntu-latest'
+  strategy:
+    matrix:
+      Python311-Linux:
+        python.version: '3.11'
+    maxParallel: 3
+
+  steps:
+  - task: UsePythonVersion@0
+    inputs:
+      versionSpec: '$(python.version)'
+      architecture: 'x64'
+  - script: sudo apt-get update
+    displayName: 'AptGet Update'
+  - script: sudo apt-get install -y graphviz
+    displayName: 'Install Graphviz'
+  - script: python -m pip install --upgrade pip setuptools wheel
+    displayName: 'Install tools'
+  - script: pip install -r requirements.txt
+    displayName: 'Install Requirements'
+  - script: pip install -r requirements-dev.txt
+    displayName: 'Install Requirements dev'
+  - script: |
+      ruff .
+    displayName: 'Ruff'
+  - script: |
+      black --diff .
+    displayName: 'Black'
+  - script: |
+      python -m pip wheel . --wheel-dir dist -v -v -v
+    displayName: 'build wheel'
+  - script: |
+      python -m pip install . -v -v -v
+    displayName: 'install wheel'
+  - script: |
+      python -m pytest
+    displayName: 'Runs Unit Tests'
+  - task: PublishPipelineArtifact@0
+    inputs:
+      artifactName: 'wheel-linux-wheel-$(python.version)'
+      targetPath: 'dist'
+
+- job: 'TestLinuxNightly'
+  pool:
+    vmImage: 'ubuntu-latest'
+  strategy:
+    matrix:
+      Python311-Linux:
+        python.version: '3.11'
+    maxParallel: 3
+
+  steps:
+  - task: UsePythonVersion@0
+    inputs:
+      versionSpec: '$(python.version)'
+      architecture: 'x64'
+  - script: sudo apt-get update
+    displayName: 'AptGet Update'
+  - script: sudo apt-get install -y pandoc
+    displayName: 'Install Pandoc'
+  - script: sudo apt-get install -y inkscape
+    displayName: 'Install Inkscape'
+  - script: sudo apt-get install -y graphviz
+    displayName: 'Install Graphviz'
+  - script: python -m pip install --upgrade pip setuptools wheel
+    displayName: 'Install tools'
+  - script: pip install -r requirements.txt
+    displayName: 'Install Requirements'
+  - script: pip install -r requirements-dev.txt
+    displayName: 'Install Requirements dev'
+  - script: pip uninstall -y scikit-learn
+    displayName: 'Uninstall scikit-learn'
+  - script: pip install --pre --extra-index https://pypi.anaconda.org/scipy-wheels-nightly/simple scikit-learn
+    displayName: 'Install scikit-learn nightly'
+  - script: pip install onnxmltools --no-deps
+    displayName: 'Install onnxmltools'
+  - script: |
+      ruff .
+    displayName: 'Ruff'
+  - script: |
+      black --diff .
+    displayName: 'Black'
+  - script: |
+      python -m pytest
+    displayName: 'Runs Unit Tests'
+
+- job: 'TestLinux'
+  pool:
+    vmImage: 'ubuntu-latest'
+  strategy:
+    matrix:
+      Python311-Linux:
+        python.version: '3.11'
+    maxParallel: 3
+
+  steps:
+  - task: UsePythonVersion@0
+    inputs:
+      versionSpec: '$(python.version)'
+      architecture: 'x64'
+  - script: sudo apt-get update
+    displayName: 'AptGet Update'
+  - script: sudo apt-get install -y pandoc
+    displayName: 'Install Pandoc'
+  - script: sudo apt-get install -y inkscape
+    displayName: 'Install Inkscape'
+  - script: sudo apt-get install -y graphviz
+    displayName: 'Install Graphviz'
+  - script: python -m pip install --upgrade pip setuptools wheel
+    displayName: 'Install tools'
+  - script: pip install -r requirements.txt
+    displayName: 'Install Requirements'
+  - script: pip install -r requirements-dev.txt
+    displayName: 'Install Requirements dev'
+  - script: pip install onnxmltools --no-deps
+    displayName: 'Install onnxmltools'
+  - script: |
+      ruff .
+    displayName: 'Ruff'
+  - script: |
+      black --diff .
+    displayName: 'Black'
+  - script: |
+      python -m pytest --cov
+    displayName: 'Runs Unit Tests'
+  - script: |
+      python -u setup.py bdist_wheel
+    displayName: 'Build Package'
+  #- script: |
+  #    python -m sphinx _doc dist/html
+  #  displayName: 'Builds Documentation'
+  - task: PublishPipelineArtifact@0
+    inputs:
+      artifactName: 'wheel-linux-$(python.version)'
+      targetPath: 'dist'
+
+- job: 'TestWindows'
+  pool:
+    vmImage: 'windows-latest'
+  strategy:
+    matrix:
+      Python311-Windows:
+        python.version: '3.11'
+    maxParallel: 3
+
+  steps:
+  - task: UsePythonVersion@0
+    inputs:
+      versionSpec: '$(python.version)'
+      architecture: 'x64'
+  - script: python -m pip install --upgrade pip setuptools wheel
+    displayName: 'Install tools'
+  - script: pip install -r requirements.txt
+    displayName: 'Install Requirements'
+  - script: pip install -r requirements-dev.txt
+    displayName: 'Install Requirements dev'
+  - script: pip install onnxmltools --no-deps
+    displayName: 'Install onnxmltools'
+  - script: |
+      python -m pytest -v
+    displayName: 'Runs Unit Tests'
+  - script: |
+      python -u setup.py bdist_wheel
+    displayName: 'Build Package'
+  - task: PublishPipelineArtifact@0
+    inputs:
+      artifactName: 'wheel-windows-$(python.version)'
+      targetPath: 'dist'
+
+- job: 'TestMac'
+  pool:
+    vmImage: 'macOS-latest'
+  strategy:
+    matrix:
+      Python311-Mac:
+        python.version: '3.11'
+    maxParallel: 3
+
+  steps:
+  - task: UsePythonVersion@0
+    inputs:
+      versionSpec: '$(python.version)'
+      architecture: 'x64'
+  - script: gcc --version
+    displayName: 'gcc version'
+  #- script: brew upgrade
+  #  displayName: 'brew upgrade'
+  #- script: brew update
+  #  displayName: 'brew update'
+  - script: export
+    displayName: 'export'
+  - script: gcc --version
+    displayName: 'gcc version'
+  - script: python -m pip install --upgrade pip setuptools wheel
+    displayName: 'Install tools'
+  - script: pip install -r requirements.txt
+    displayName: 'Install Requirements'
+  - script: pip install -r requirements-dev.txt
+    displayName: 'Install Requirements dev'
+  - script: pip install onnxmltools --no-deps
+    displayName: 'Install onnxmltools'
+  - script: |
+      python -m pytest
+    displayName: 'Runs Unit Tests'
+  - script: |
+      python -u setup.py bdist_wheel
+    displayName: 'Build Package'
+  - task: PublishPipelineArtifact@0
+    inputs:
+      artifactName: 'wheel-mac-$(python.version)'
+      targetPath: 'dist'
+
