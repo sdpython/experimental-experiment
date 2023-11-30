@@ -1,5 +1,13 @@
+black
 furo
+pandas
+Pillow
+packaging
 pytest
 pytest-coverage
+ruff
 sphinx
 sphinx-gallery
+sphinx-issues
+tqdm
+wheel
