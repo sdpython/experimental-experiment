@@ -1,5 +1,8 @@
 import dataclasses
-from typing import Any
+from typing import Any, Optional, Protocol, runtime_checkable
+from onnx.defs import OpSchema
+
+TENSOR = "TENSOR"
 
 
 class Opset:
@@ -8,6 +11,11 @@ class Opset:
     cache = {}
 
     def __new__(cls, domain: str, version: int):
+        if domain == "":
+            if str(version) not in cls.__name__:
+                raise NameError(
+                    f"Class {cls.__name__!r} does include the version {version}."
+                )
         key = (cls, domain, version)
         existing = cls.cache.get(key)
         if existing:
@@ -81,3 +89,23 @@ class ParamSchema:
     def is_attribute(self) -> bool:
         """Returns True if the parameter is an ONNX attribute."""
         return not self.is_input
+
+
+@runtime_checkable
+class OpLike(Protocol):
+    """A protocol for objects that have an ONNX OpSchema."""
+
+    @property
+    def name(self) -> str:
+        ...
+
+    @property
+    def opset(self) -> Opset:
+        ...
+
+    @property
+    def op_schema(self) -> Optional[OpSchema]:
+        ...
+
+    def param_schemas(self) -> Optional[tuple[ParamSchema, ...]]:
+        ...

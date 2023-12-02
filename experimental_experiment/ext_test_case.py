@@ -45,6 +45,26 @@ def skipif_ci_apple(msg) -> Callable:
     return lambda x: x
 
 
+def with_path_append(path_to_add: Union[str, List[str]]) -> Callable:
+    """
+    Adds a path to sys.path to check.
+    """
+
+    def wraps(f, path_to_add=path_to_add):
+        def wrapped(self, path_to_add=path_to_add):
+            cpy = sys.path.copy()
+            if path_to_add is not None:
+                if isinstance(path_to_add, str):
+                    path_to_add = [path_to_add]
+                sys.path.extend(path_to_add)
+            f(self)
+            sys.path = cpy
+
+        return wrapped
+
+    return wraps
+
+
 def unit_test_going():
     """
     Enables a flag telling the script is running while testing it.

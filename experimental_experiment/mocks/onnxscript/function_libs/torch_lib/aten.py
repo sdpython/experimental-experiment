@@ -1,94 +1,32 @@
-from typing import List, Optional
-from onnx.defs import OpSchema
-from ...values import ParamSchema, TypeConstraint
+from typing import Any, Dict, List, Optional, Union
+from ...onnx_function import BaseOnnxFunction, OnnxFunction
 
 
-class NotImplementedFunction:
+class NotImplementedFunction(BaseOnnxFunction):
     def __init__(
         self,
         name: str,
-        n_inputs: int,
-        n_outputs: int = 1,
+        n_inputs: Union[int, List[str]],
+        n_outputs: Union[int, List[str]] = 1,
         domain: Optional[str] = None,
         opset: int = 1,
+        kwargs: Dict[str, Any] = None,
     ):
-        prefix = name.split("::", maxsplit=1)[0]
+        prefix, short = name.split("::", maxsplit=1)
         if prefix not in {"aten", "_operator", "internal", "math", "prims"}:
             raise RuntimeError(f"Unexpected name={name!r}.")
-        self.prefix_ = prefix
-        self.name_ = name
         if domain is None:
             default_values = {"aten": "pkg.onnxscript.torch_lib"}
-            self.domain_ = default_values[prefix]
-        else:
-            self.domain_ = domain
-        self.opset_ = opset
-        self.param_schemas_ = [
-            ParamSchema(name=f"i{i}", is_input=True) for i in range(n_inputs)
-        ]
-
-        formal_inputs = [
-            OpSchema.FormalParameter(
-                f"i{i}",
-                f"TI{i}",
-                param_option=OpSchema.FormalParameterOption.Single,
-                is_homogeneous=False,
-            )
-            for i in range(n_inputs)
-        ]
-        formal_outputs = [
-            OpSchema.FormalParameter(
-                f"o{i}",
-                f"TO{i}",
-                param_option=OpSchema.FormalParameterOption.Single,
-                is_homogeneous=False,
-            )
-            for i in range(n_outputs)
-        ]
-        tensor_types = [
-            "tensor(float)",
-            "tensor(double)",
-            "tensor(float16)",
-            "tensor(int64)",
-            "tensor(int32)",
-        ]
-        constraints = []
-        for i in range(n_inputs):
-            tc = TypeConstraint(name=f"TI{i}", allowed_types=tensor_types)
-            constraints.append(tc)
-        for i in range(n_outputs):
-            tc = TypeConstraint(name=f"TO{i}", allowed_types=tensor_types)
-            constraints.append(tc)
-        self.op_schema_ = OpSchema(
-            self.name_,
-            self.domain_,
-            since_version=self.opset_,
-            inputs=formal_inputs,
-            outputs=formal_outputs,
-            type_constraints=[c.as_tuple() for c in constraints],
-            attributes=[],  #  onnx.defs.OpSchema.Attribute(... ]
+            domain = default_values[prefix]
+        super().__init__(
+            f"{prefix}_{short}",
+            n_inputs=n_inputs,
+            n_outputs=n_outputs,
+            domain=domain,
+            opset=opset,
+            kwargs=kwargs,
+            register_name=name,
         )
-
-    def __call__(self, *args, **kwargs):
-        raise NotImplementedError(
-            f"Function '{self.__class__.__name__}.{self.name_}' is not implemented. "
-            f"args={args}, kwargs={kwargs}."
-        )
-
-    @property
-    def name(self) -> str:
-        return f"{self.prefix_}_{self.name_}"
-
-    @property
-    def opset(self) -> int:
-        return self.opset_
-
-    @property
-    def op_schema(self) -> int:
-        return self.op_schema_
-
-    def param_schemas(self) -> List[ParamSchema]:
-        return self.param_schemas_
 
 
 def register_aten_functions(registry=None):
@@ -97,10 +35,19 @@ def register_aten_functions(registry=None):
 
         registry = default_registry
 
+    from ._aten_functions import aten_convolution
+
+    aten_domain = "pkg.onnxscript.torch_lib"
+    implemented = [
+        aten_convolution,
+    ]
+    for f in implemented:
+        of = OnnxFunction(f, domain=aten_domain)
+        registry.register(of, of.register_name, private=False, complex=False)
+
     dummies = [
         ("aten::add.Tensor", 2),
         ("aten::alias", 1),
-        ("aten::convolution", 3),
         ("aten::getitem", 2),
         ("aten::max_pool2d_with_indices", 2),
         ("aten::mm", 2),
@@ -111,9 +58,5 @@ def register_aten_functions(registry=None):
         ("aten::view", 1),
     ]
     for name, n_inputs in dummies:
-        registry.register(
-            NotImplementedFunction(name, n_inputs=n_inputs),
-            name,
-            private=False,
-            complex=False,
-        )
+        of = NotImplementedFunction(name, n_inputs=n_inputs)
+        registry.register(of, of.register_name, private=False, complex=False)

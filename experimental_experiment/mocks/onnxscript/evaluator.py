@@ -1,10 +1,11 @@
 import contextlib
-from typing import Any, Mapping, Sequence
+from typing import Any, Mapping, Protocol, Sequence, runtime_checkable
 import onnx
 from .onnx_function import OnnxFunction
 
 
-class Evaluator:
+@runtime_checkable
+class Evaluator(Protocol):
     """Protocol for evaluating ONNX ops."""
 
     def eval(

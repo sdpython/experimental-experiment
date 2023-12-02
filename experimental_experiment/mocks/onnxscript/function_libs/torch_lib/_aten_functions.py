@@ -1,13 +1,10 @@
 from typing import Sequence
-from onnx.defs import OpSchema
-from ...onnx_opset import Opset
-from ...values import ParamSchema, TypeConstraint, OnnxFunction
 
 TENSOR = "TENSOR"
 
 
 def aten_convolution(
-    op: Opset,
+    g: "GraphBuilder",
     input: TENSOR,
     weight: TENSOR,
     bias: TENSOR = None,
@@ -18,6 +15,16 @@ def aten_convolution(
     output_padding: Sequence[int] = (0,),
     groups: int = 1,
 ) -> TENSOR:
+    if not hasattr(g.op, "domain") or not hasattr(g.op, "version"):
+        raise TypeError(f"Unexpected type {type(g.op)} for op.")
+    if transposed:
+        raise NotImplementedError(
+            f"aten_convolution does not support transposed={transposed}."
+        )
+    if output_padding and (min(output_padding) != 0 or max(output_padding) != 0):
+        raise NotImplementedError(
+            f"aten_convolution does not support output_padding={output_padding}."
+        )
     if not isinstance(padding, Sequence):
         padding = (padding, padding)
     pads = [*padding, *padding]
@@ -31,15 +38,16 @@ def aten_convolution(
     strides = list(stride)
 
     if bias is None:
-        weight_dim_0 = op.Shape(weight, start=0, end=1)
-        bias_shape = op.Expand(weight_dim_0, op.Constant(value_ints=[1]))
-        zero = op.CastLike(0.0, input)
-        bias = op.Expand(zero, bias_shape)
+        weight_dim_0 = g.op.Shape(g, weight, start=0, end=1)
+        bias_shape = g.op.Expand(weight_dim_0, g.op.Constant(g, value_ints=[1]))
+        zero = g.op.CastLike(g, 0.0, input)
+        bias = g.op.Expand(g, zero, bias_shape)
 
     # if Rank(input) != Rank(weight):
     #    input = op.Unsqueeze(input, op.Constant(value_ints=[0]))
 
-    return op.Conv(
+    return g.op.Conv(
+        g,
         input,
         weight,
         bias,

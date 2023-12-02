@@ -19,7 +19,7 @@ class Tensor:
 
         self._nparray = nparray
         if opset is None:
-            raise ValueError("Opset cannot be None.")
+            raise ValueError(f"Opset cannot be None, input type is {type(nparray)}.")
         self._opset = opset
 
     @property

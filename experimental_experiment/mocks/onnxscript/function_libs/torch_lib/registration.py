@@ -28,31 +28,24 @@ class Registry:
         self, func: Any, name: str, *, private: bool = False, complex: bool = False
     ) -> None:
         """Register a function."""
-        print(f"+REGISTER {name!r} {type(func)} {func}")
-
+        over = OverloadedFunction(name)
         if private:
-            self._registry.setdefault(name, OverloadedFunction(name)).privates.append(
-                func
-            )
+            self._registry.setdefault(name, over).privates.append(func)
         elif complex:
-            self._registry.setdefault(name, OverloadedFunction(name)).complex.append(
-                func
-            )
+            self._registry.setdefault(name, over).complex.append(func)
         else:
-            self._registry.setdefault(name, OverloadedFunction(name)).overloads.append(
-                func
-            )
+            self._registry.setdefault(name, over).overloads.append(func)
 
-    def __getitem__(self, name):
+    def __getitem__(self, name: str) -> OverloadedFunction:
         return self._registry[name]
 
-    def __contains__(self, name):
+    def __contains__(self, name: str) -> bool:
         return name in self._registry
 
-    def __iter__(self):
+    def __iter__(self) -> Generator[str, None, None]:
         return iter(self._registry)
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return repr(self._registry)
 
     def items(self) -> Generator[tuple[str, OverloadedFunction], None, None]:

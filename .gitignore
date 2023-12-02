@@ -4,6 +4,7 @@
 *.so
 *.whl
 *.xlsx
+*.onnx
 coverage.html/*
 _cache/*
 .coverage
