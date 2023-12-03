@@ -1,7 +1,7 @@
 import inspect
 from typing import Any, Callable, Dict, List, Optional, Sequence, Union
 from onnx.defs import OpSchema
-from onnx import AttributeProto, ModelProto
+from onnx import AttributeProto, FunctionProto, ModelProto
 from .values import ParamSchema, TypeConstraint
 
 TENSOR = "TENSOR"
@@ -193,11 +193,16 @@ class OnnxFunction(BaseOnnxFunction):
         )
         self.fct_ = fct
 
-    def to_onnx(self, *args, **kwargs) -> ModelProto:
+    def to_onnx(
+        self, *args, as_function=False, **kwargs
+    ) -> Union[FunctionProto, ModelProto]:
         g = self.get_builder()
         output_names = self.fct_(g, *args, **kwargs)
         g.make_output(output_names)
-        return g.to_onnx()
+        return g.to_onnx(as_function=True)
+
+    def to_function_proto(self):
+        return self.to_onnx(as_function=True)
 
     def __call__(self, *args, **kwargs):
         if len(args) == 0:

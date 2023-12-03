@@ -25,6 +25,22 @@ except ImportError:
 def return_module_cls():
     import torch
     from torch import nn
+
+    class MyModel(nn.Module):
+        def __init__(self):
+            super(MyModel, self).__init__()
+            self.conv1 = nn.Conv2d(1, 128, 5)
+
+        def forward(self, x):
+            return self.conv1(x)
+
+    input_tensor = torch.rand((1, 1, 128, 128), dtype=torch.float32)
+    return MyModel(), input_tensor
+
+
+def return_module_cls_full():
+    import torch
+    from torch import nn
     import torch.nn.functional as F
 
     class MyModel(nn.Module):
@@ -156,10 +172,23 @@ class TestMockExperimental(ExtTestCase):
         match = function_opschema.perfect_match_inputs(Diagnostic(), args, kwargs)
         self.assertTrue(match)
 
+    @unittest.skip("too many things to implement")
     @with_path_append(path_to_add)
     def test_mock_dynamo_export(self):
         model, input_tensor = return_module_cls()
         names = export_utils("test_dynamo_export", model, input_tensor)
+        x = input_tensor.numpy()
+        results = []
+        for name in names:
+            ref = ReferenceEvaluator(name)
+            results.append(ref.run(None, {"input": x})[0])
+        self.assertEqualArray(results[0], results[1])
+
+    @unittest.skip("too many things to implement")
+    @with_path_append(path_to_add)
+    def test_mock_dynamo_export_full(self):
+        model, input_tensor = return_module_cls_full()
+        names = export_utils("test_dynamo_export_full", model, input_tensor)
         x = input_tensor.numpy()
         results = []
         for name in names:

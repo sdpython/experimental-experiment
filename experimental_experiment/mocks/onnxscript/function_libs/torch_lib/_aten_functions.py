@@ -4,7 +4,7 @@ TENSOR = "TENSOR"
 
 
 def aten_convolution(
-    g: "GraphBuilder",
+    g: "GraphBuilder",  # noqa: F821
     input: TENSOR,
     weight: TENSOR,
     bias: TENSOR = None,

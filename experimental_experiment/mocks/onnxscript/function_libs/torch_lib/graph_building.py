@@ -151,7 +151,6 @@ class TorchScriptGraph:
 
     @property
     def initializers(self) -> Mapping[str, torch_Tensor_Type]:
-        stop
         return self._initializers
 
     # NOTE: This setter is used in torch converter when we activate fake mode,
@@ -159,12 +158,10 @@ class TorchScriptGraph:
     #       is because we don't want to introduce fake tensor in onnxscript.
     @initializers.setter
     def initializers(self, initializers: Dict[str, torch_Tensor_Type]):
-        stop
         self._initializers = initializers
 
     @property
     def initializers_inputs(self) -> Mapping[str, TorchScriptTensor]:
-        stop
         return self._initializers_inputs
 
     @property
@@ -216,7 +213,6 @@ class TorchScriptGraph:
         import torch
 
         if input_name is None:
-            stop
             # This input argument is None, which is mapped
             # to a NULL value in TorchScript type system.
             torch_value = self._create_op_call_in_torch_graph(
@@ -245,7 +241,6 @@ class TorchScriptGraph:
 
     def add_initializer(self, name: str, value: torch_Tensor_Type) -> TorchScriptTensor:
         if name in self._initializers_inputs:
-            stop
             if name in self._initializers and self._initializers[name] is not value:
                 raise ValueError(
                     f"Initializer {name!r} exists already with a different value."
@@ -310,7 +305,6 @@ class TorchScriptGraph:
             self._torch_graph.registerOutput(ts_output)
 
     def _add_constant_to_graph(self, constant) -> torch_Value_Type:
-        stop
         import torch
 
         if constant is None:
@@ -332,19 +326,48 @@ class TorchScriptGraph:
             self._torch_graph,
             "onnx::Constant",
             inputs=(),
-            attributes=dict(value=constant_tensor),
+            #  attributes=dict(value=constant_tensor),
         )[0]
         value.setDebugName(self._rename_intermediate_value(value.debugName()))
         return value
 
+    def fetch_function_proto_dict(
+        self, opset_version: int
+    ) -> Mapping[Tuple[str, str], onnx.FunctionProto]:
+        function_proto_dict: Dict[Tuple[str, str], onnx.FunctionProto] = {}
+        # Fetch local function protos. E.g., local functions representing module calls.
+        for (
+            sub_graph_name,
+            sub_torch_script_graph,
+        ) in self._sub_torch_script_graphs.items():
+            function_proto_dict.update(
+                sub_torch_script_graph.fetch_function_proto_dict(opset_version)
+            )
+            domain = sub_torch_script_graph.domain_name
+            assert domain is not None
+            name_domain = (
+                sub_graph_name,
+                domain,
+            )
+            assert (
+                name_domain not in function_proto_dict
+            ), f"Sub graph name already exists. {name_domain}"
+            function_proto_dict[name_domain] = sub_torch_script_graph.to_function_proto(
+                opset_version, sub_graph_name
+            )
+        # Fetch torchlib function protos.
+        for name_domain, function in self._function_store.items():
+            function_proto_dict[name_domain] = function.to_function_proto()
+        return function_proto_dict
+
     def to_model_proto(self, opset_version: int) -> onnx.ModelProto:
-        stop
         import torch
 
         function_proto_dict: Mapping[
             Tuple[str, str], onnx.FunctionProto
         ] = self.fetch_function_proto_dict(opset_version)
         unique_custom_domains: Dict[str, int] = {}
+        print(function_proto_dict)
 
         export_kwargs = dict(
             initializers=self.initializers,
@@ -353,7 +376,7 @@ class TorchScriptGraph:
             defer_weight_export=False,
             operator_export_type=torch.onnx.OperatorExportTypes.ONNX,
             strip_doc_string=False,
-            keep_initializers_as_inputs=_flags.EXPERIMENTAL_INITIALIZERS_AS_INPUTS,
+            keep_initializers_as_inputs=True,
             custom_opsets={},
             add_node_names=True,
             node_attr_to_name={},
@@ -539,34 +562,9 @@ class TorchScriptTracingEvaluator(Evaluator):
 
     @property
     def graph(self) -> TorchScriptGraph:
-        stop
         return self._graph
 
     def eval(self, schema, inputs, attributes):
-        stop
-        if _flags.EXPERIMENTAL_PREFER_TRACING:
-            if schema.name == "CastLike":
-                assert len(inputs) == 2
-                # Skip CastLike if the input and output types are the same
-                src_input = inputs[0]
-                target_input = inputs[1]
-                dtypes_available = (
-                    isinstance(src_input, TorchScriptTensor)
-                    and isinstance(target_input, TorchScriptTensor)
-                    and src_input.dtype is not None
-                    and target_input.dtype is not None
-                )
-                if dtypes_available:
-                    if src_input.dtype == target_input.dtype:
-                        # Same type. No cast needed
-                        return src_input
-                    else:
-                        # Create a Cast node
-                        return self._graph.add_op_call(
-                            onnx.defs.get_schema("Cast"),
-                            (src_input,),
-                            {"to": target_input.onnx_dtype},
-                        )
         return self._graph.add_op_call(schema, inputs, attributes)
 
     def separate_input_attributes_from_arguments(

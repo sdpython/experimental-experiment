@@ -79,8 +79,6 @@ class Tensor:
                 f"Number of indices {len(index)} is greater than rank {self.rank}"
             )
 
-        # Promote integer indices to tensors of rank 0
-        index = [autocast.cast_pyvalue_to_os_tensor(x) for x in index]
         # Process all elements in index
         shape = self.shape
         sliced_indices = []

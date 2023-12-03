@@ -1,6 +1,6 @@
 from typing import Any, List, Optional, Tuple, Union
 import onnx.helper as oh
-from onnx import ModelProto, TensorProto
+from onnx import FunctionProto, ModelProto, TensorProto
 from .values import Opset
 
 
@@ -95,15 +95,24 @@ class GraphBuilder:
             return output_names[0]
         return output_names
 
-    def to_onnx(self) -> ModelProto:
+    def to_onnx(self, as_function: bool = False) -> Union[FunctionProto, ModelProto]:
         dense = [
             self._fix_name_tensor(i)
             for i in self.initializers
             if isinstance(i, TensorProto)
         ]
+        opsets = [oh.make_opsetid(o.domain, o.version) for o in self.opsets.values()]
+        if as_function:
+            return oh.make_function(
+                self.nodes,
+                self.name,
+                [i.name for i in self.inputs],
+                [o.name for o in self.outputs],
+                domain=self.domain,
+            )
+
         graph = oh.make_graph(
             self.nodes, "experiment", self.inputs, self.outputs, dense
         )
-        opsets = [oh.make_opsetid(o.domain, o.version) for o in self.opsets.values()]
         model = oh.make_model(graph, opset_imports=opsets)
         return model
