@@ -115,7 +115,7 @@ def _aten_max_pool_with_indices_onnx(
     starts = g.op.Constant(value_ints=n_dims_zero)
     axes = g.op.Constant(value_ints=n_dims_axes)
 
-    delta = g.op.Slice(flatten_indices, axes, starts, ends)
+    delta = g.op.Slice(flatten_indices, starts, ends, axes)
     indices = g.op.Sub(indices, delta)
 
     if is_unbatched_rank:
