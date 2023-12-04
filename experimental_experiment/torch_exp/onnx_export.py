@@ -31,7 +31,10 @@ def to_onnx(
     exported_mod = torch.export.export(mod, args)
     signature = exported_mod.graph_signature
     mapping = signature.inputs_to_parameters
-    weights = dict(exported_mod.named_parameters())
+    try:
+        weights = dict(exported_mod.named_parameters())
+    except AttributeError:
+        weights = dict(mod.named_parameters())
 
     def retrieve(name):
         weight = mapping[name]

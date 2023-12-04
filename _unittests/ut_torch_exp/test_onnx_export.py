@@ -23,6 +23,24 @@ def return_module_cls():
     return MyModel(), input_tensor
 
 
+def return_module_cls2():
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        import torch
+        from torch import nn
+
+    class MyModel(nn.Module):
+        def __init__(self):
+            super(MyModel, self).__init__()
+            self.conv1 = nn.Conv2d(1, 128, 5)
+
+        def forward(self, x):
+            return torch.relu(self.conv1(x))
+
+    input_tensor = torch.rand((1, 1, 128, 128), dtype=torch.float32)
+    return MyModel(), input_tensor
+
+
 def export_utils(prefix, model, *args):
     import torch
 
@@ -42,6 +60,16 @@ def export_utils(prefix, model, *args):
 class TestMockExperimental(ExtTestCase):
     def test_simple_export(self):
         model, input_tensor = return_module_cls()
+        names = export_utils("test_simple_export", model, input_tensor)
+        x = input_tensor.numpy()
+        results = []
+        for name in names:
+            ref = ReferenceEvaluator(name)
+            results.append(ref.run(None, {"input": x})[0])
+        self.assertEqualArray(results[0], results[1])
+
+    def test_simple_export2(self):
+        model, input_tensor = return_module_cls2()
         names = export_utils("test_simple_export", model, input_tensor)
         x = input_tensor.numpy()
         results = []
