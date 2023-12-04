@@ -1,4 +1,5 @@
 import os
+import sys
 import unittest
 import warnings
 from onnx.reference import ReferenceEvaluator
@@ -90,6 +91,7 @@ def export_utils(prefix, model, *args):
 
 
 class TestMockExperimental(ExtTestCase):
+    @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
     def test_simple_export_conv(self):
         model, input_tensor = return_module_cls_conv()
         names = export_utils("test_simple_export_conv", model, input_tensor)
@@ -100,6 +102,7 @@ class TestMockExperimental(ExtTestCase):
             results.append(ref.run(None, {"input": x})[0])
         self.assertEqualArray(results[0], results[1])
 
+    @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
     def test_simple_export_relu(self):
         model, input_tensor = return_module_cls_relu()
         names = export_utils("test_simple_export_relu", model, input_tensor)
@@ -110,6 +113,7 @@ class TestMockExperimental(ExtTestCase):
             results.append(ref.run(None, {"input": x})[0])
         self.assertEqualArray(results[0], results[1])
 
+    @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
     def test_simple_export_apool(self):
         model, input_tensor = return_module_cls_pool()
         names = export_utils("test_simple_export_pool", model, input_tensor)
