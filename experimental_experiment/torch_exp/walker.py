@@ -102,6 +102,8 @@ class DynamoWalker:
     def call_function(self, node: "torch.fx.Node"):  # noqa: F821
         fx_args, fx_kwargs = self._fill_in_default_kwargs(node)
         aten_name = self._get_aten_name(node)
+        if aten_name == "getitem":
+            return self.getitem(node)
         fct = find_function(aten_name)
 
         args = []
@@ -111,4 +113,57 @@ class DynamoWalker:
             else:
                 args.append(i)
 
-        return fct(self.builder, [node.name], *args, *fx_kwargs)
+        val = node.meta.get("val", None)
+        if val is not None and isinstance(val, tuple):
+            n_outputs = len(val)
+            output_names = [f"{node.name}#{i}" for i in range(n_outputs)]
+        else:
+            output_names = [node.name]
+
+        try:
+            res = fct(self.builder, output_names, *args, **fx_kwargs)
+        except (TypeError, AttributeError, RuntimeError, ValueError) as e:
+            raise RuntimeError(
+                f"Unable to convertn node {node!r}, node.meta={node.meta}, "
+                f"node.__dict__={node.__dict__}."
+            ) from e
+
+        if val is not None:
+            # extracting shape and types
+            if not isinstance(val, tuple):
+                val = (val,)
+                res = (res,)
+            if len(val) != len(res):
+                raise RuntimeError(f"Length mismatch between {val} and {res}.")
+            for v, r in zip(val, res):
+                if isinstance(v, self.torch.Tensor):
+                    shape = v.shape
+                    dtype = self.builder._get_type(v.dtype)
+                    self.builder.set_shape(r, shape)
+                    self.builder.set_type(r, dtype)
+                else:
+                    raise TypeError(
+                        f"Unexpected type in node {node!r}, type(val)={type(v)}."
+                    )
+
+        return res
+
+    def getitem(self, node: "torch.fx.Node"):  # noqa: F821
+        args = node.args
+        assert len(args) == 2
+        node_output, index = args
+        result_name = node_output.name
+        val = node.meta.get("val", None)
+        if val is not None:
+            if isinstance(val, self.torch.Tensor):
+                shape = val.shape
+                dtype = self.builder._get_type(val.dtype)
+                self.builder.set_shape(node.name, shape)
+                self.builder.set_type(node.name, dtype)
+            else:
+                raise TypeError(
+                    f"Unexpected type in node {node!r}, type(val)={type(val)}."
+                )
+        return self.builder.make_node(
+            "Identity", [f"{result_name}#{index}"], [node.name]
+        )

@@ -1,12 +1,27 @@
-from typing import List, Sequence
+from typing import List, Sequence, Tuple
 import numpy as np
+from onnx import TensorProto
 from .graph_builder import GraphBuilder
+from ._aten_helper import _adjust_attributes_of_max_pool
+
 
 T = str
 
 
 def aten_abs(g: GraphBuilder, outputs: List[str], x: T) -> T:
     return g.make_node("Abs", [x], outputs)
+
+
+def aten_addmm(
+    g: GraphBuilder,
+    outputs: List[str],
+    a: T,
+    b: T,
+    c: T,
+    beta: float = 1.0,
+    alpha: float = 1.0,
+) -> T:
+    return g.op.Gemm(b, c, a, alpha=alpha, beta=beta, outputs=outputs)
 
 
 def aten_convolution(
@@ -64,5 +79,114 @@ def aten_convolution(
     )
 
 
+def _aten_max_pool_with_indices_onnx(
+    g: GraphBuilder,
+    outputs: List[str],
+    x: T,
+    kernel_size: Sequence[int],
+    stride: Sequence[int],
+    padding: Sequence[int],
+    dilation: Sequence[int],
+    ceil_mode: bool,
+    unbatched_rank: int,
+    n_dims_one: Sequence[int],
+    n_dims_zero: Sequence[int],
+    n_dims_axes: Sequence[int],
+) -> Tuple[T, T]:
+    if isinstance(ceil_mode, str):
+        raise TypeError(f"Unexpected ceil_mode={ceil_mode}")
+    is_unbatched_rank = g.rank(x) == unbatched_rank
+    if is_unbatched_rank:
+        x = g.op.Unsqueeze(x, axes=0)
+
+    pool_result, indices = g.op.MaxPool(
+        x,
+        ceil_mode=ceil_mode,
+        dilations=dilation,
+        kernel_shape=kernel_size,
+        pads=padding,
+        strides=stride,
+    )
+    _, flatten_indices = g.op.MaxPool(
+        x, dilations=dilation, kernel_shape=n_dims_one, strides=n_dims_one
+    )
+
+    ends = g.op.Constant(value_ints=n_dims_one)
+    starts = g.op.Constant(value_ints=n_dims_zero)
+    axes = g.op.Constant(value_ints=n_dims_axes)
+
+    delta = g.op.Slice(flatten_indices, axes, starts, ends)
+    indices = g.op.Sub(indices, delta)
+
+    if is_unbatched_rank:
+        pool_result = g.op.Squeeze(pool_result, g.op.Constant(value_ints=[0]))
+        indices = g.op.Squeeze(indices, g.op.Constant(value_ints=[0]))
+
+    if outputs:
+        if not isinstance(outputs, (tuple, list)):
+            raise TypeError(
+                f"Multiple outputs are expeted but type(outputs) is {type(outputs)}."
+            )
+        if len(outputs) != 2:
+            raise ValueError(f"Multiple outputs are expeted but outputs is {outputs}.")
+        return (
+            g.op.Identity(pool_result, outputs=outputs[0]),
+            g.op.Identity(indices, outputs=outputs[1]),
+        )
+    return pool_result, indices
+
+
+def aten_max_pool2d_with_indices(
+    g: GraphBuilder,
+    outputs: List[str],
+    x: T,
+    kernel_size: Sequence[int],
+    stride: Sequence[int] = (),
+    padding: Sequence[int] = (0, 0),
+    dilation: Sequence[int] = (1, 1),
+    ceil_mode: bool = False,
+) -> Tuple[T, T]:
+    assert isinstance(padding, (tuple, list))
+    assert isinstance(ceil_mode, (bool, int))
+    expand_size = 2
+
+    kernel_shape, strides, pads, dilations = _adjust_attributes_of_max_pool(
+        expand_size, kernel_size, stride, padding, dilation
+    )
+
+    return _aten_max_pool_with_indices_onnx(
+        g,
+        outputs,
+        x,
+        kernel_shape,
+        strides,
+        pads,
+        dilations,
+        ceil_mode,
+        3,
+        ([1] * expand_size),
+        ([0] * expand_size),
+        ([2 + i for i in range(expand_size)]),
+    )
+
+
+def aten_permute(g: GraphBuilder, outputs: List[str], x: T, dims: Sequence[int]) -> T:
+    if not dims:
+        return g.op.Transpose(x, outputs=outputs)
+
+    dims = [axis + len(dims) if axis < 0 else axis for axis in dims]
+    return g.op.Transpose(x, perm=dims, outputs=outputs)
+
+
 def aten_relu(g: GraphBuilder, outputs: List[str], x: T) -> T:
-    return g.op.Relu(x, outputs)
+    return g.op.Relu(x, outputs=outputs)
+
+
+def aten_view(g: GraphBuilder, outputs: List[str], x: T, size: T) -> T:
+    if isinstance(size, (int, tuple, list)):
+        size = [size] if isinstance(size, int) else list(size)
+        size = np.array(size, dtype=np.int64)
+        shape = g.make_initializer("", size)
+        return g.op.Reshape(x, shape, outputs=outputs)
+    size = g.op.Cast(size, to=TensorProto.INT64)
+    return g.op.Reshape(x, size, outputs=outputs)
