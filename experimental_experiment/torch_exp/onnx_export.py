@@ -39,7 +39,7 @@ def to_onnx(
     def retrieve(name):
         weight = mapping[name]
         if weight not in weights:
-            if name.startswith("L__self___") and weight[len("L__self___") :] in weights:
+            if weight.startswith("L__self___") and weight[len("L__self___") :] in weights:
                 weight = weight[len("L__self___") :]
         if weight not in weights:
             raise ValueError(
