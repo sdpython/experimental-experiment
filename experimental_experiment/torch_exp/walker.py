@@ -26,11 +26,16 @@ class DynamoWalker:
 
     def placeholder(self, node: "torch.fx.Node"):  # noqa: F821
         val = node.meta.get("val", None)
-        stack_trace = node.meta.get("stack_trace", None)
         if val is None:
             return self.builder.make_input(node.name)
         if isinstance(val, self.torch.Tensor):
+            stack_trace = node.meta.get("stack_trace", None)
             if stack_trace is None:
+                # torch 2.1.0 and 2.2.0 behave differently.
+                return self.builder.make_tensor_input(
+                    node.name, elem_type=val.dtype, shape=val.shape
+                )
+            if "nn_module_stack" not in node.meta:
                 return self.builder.make_tensor_input(
                     node.name, elem_type=val.dtype, shape=val.shape
                 )
