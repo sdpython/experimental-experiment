@@ -61,8 +61,9 @@ def export_utils(prefix, model, *args):
     names.append(name)
 
     name = f"{prefix}_simple.onnx"
-    export_output = to_onnx(model, tuple(args))
-    export_output.save(name)
+    onx = to_onnx(model, tuple(args))
+    with open(name, "wb") as f:
+        f.write(onx.SerializeToString())
     names.append(name)
     return names
 

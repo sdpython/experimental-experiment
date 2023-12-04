@@ -49,7 +49,6 @@ class GraphBuilder:
         if external:
             raise NotImplementedError("External initializers are not implemented yet.")
         if hasattr(value, "numpy"):
-            print(type(value), value)
             value = value.numpy()
         tensor = onh.from_array(value, name=name)
         self.initializers.append(tensor)
@@ -71,7 +70,7 @@ class GraphBuilder:
         if isinstance(name, list):
             res = []
             for n in name:
-                res.append(self.make_output(n, elem_type, shape))
+                res.append(self.make_tensor_output(n, elem_type, shape))
             return res
         elem_type = self._get_type(elem_type, False)
         self.outputs.append(oh.make_tensor_value_info(name, elem_type, shape))
@@ -96,19 +95,24 @@ class GraphBuilder:
             output_names = outputs
         if isinstance(inputs, str):
             inputs = [inputs]
-        node = oh.make_node(op_type, inputs, output_names, domain=domain, **kwargs)
+        try:
+            node = oh.make_node(op_type, inputs, output_names, domain=domain, **kwargs)
+        except TypeError as e:
+            iti = [type(i) for i in inputs]
+            ito = [type(o) for o in outputs]
+            raise TypeError(
+                f"A node {op_type!r} cannot be created with "
+                f"inputs={inputs} (types={iti}), oututs={outputs} (types={ito}), "
+                f"domain={domain!r}, kwargs={kwargs}."
+            ) from e
         self.nodes.append(node)
         if len(output_names) == 1:
             return output_names[0]
         return output_names
 
     def to_onnx(self, as_function: bool = False) -> Union[FunctionProto, ModelProto]:
-        dense = [
-            self._fix_name_tensor(i)
-            for i in self.initializers
-            if isinstance(i, TensorProto)
-        ]
-        opsets = [oh.make_opsetid(o.domain, o.version) for o in self.opsets.values()]
+        dense = [i for i in self.initializers if isinstance(i, TensorProto)]
+        opsets = [oh.make_opsetid(*o) for o in self.opsets.items()]
         if as_function:
             return oh.make_function(
                 self.nodes,

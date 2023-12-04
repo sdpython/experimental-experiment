@@ -3,6 +3,7 @@ import operator
 import types
 from typing import Any, Callable, Dict, List, Tuple
 from .graph_builder import GraphBuilder
+from .aten_functions import find_function
 
 
 class DynamoWalker:
@@ -18,6 +19,8 @@ class DynamoWalker:
             return self.placeholder(node)
         if node.op == "call_function":
             return self.call_function(node)
+        if node.op == "output":
+            return self.output(node)
 
         raise ValueError(f"Unable to process node kind {node.op!r} ({node}).")
 
@@ -34,6 +37,11 @@ class DynamoWalker:
             value = self.retriever(node.target)
             return self.builder.make_initializer(node.name, value)
         raise RuntimeError(f"Unsupported type {type(val)} for a placeholder.")
+
+    def output(self, node):
+        output_name = node.name
+        self.builder.make_tensor_output(output_name)
+        return output_name
 
     def _fill_in_default_kwargs(
         self, node: "torch.fx.Node"  # noqa: F821
@@ -81,6 +89,21 @@ class DynamoWalker:
     def call_function(self, node: "torch.fx.Node"):  # noqa: F821
         fx_args, fx_kwargs = self._fill_in_default_kwargs(node)
         aten_name = self._get_aten_name(node)
-        output_names = list(node.users)
-        fct = aten_functions.get(aten_name)
-        return fct(self.builder, output_names, *fx_args, *fx_kwargs)
+        outputs = list(node.users)
+        fct = find_function(aten_name)
+
+        args = []
+        for i in fx_args:
+            if hasattr(i, "name"):
+                args.append(i.name)
+            else:
+                args.append(i)
+
+        output_names = []
+        for o in outputs:
+            if hasattr(o, "name"):
+                output_names.append(o.name)
+            else:
+                output_names.append(o)
+
+        return fct(self.builder, output_names, *args, *fx_kwargs)
