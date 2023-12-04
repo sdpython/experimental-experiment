@@ -6,20 +6,30 @@ from onnx import FunctionProto, ModelProto, TensorProto
 
 
 class Opset:
+    # defined for opset >= 18
+    # name: number of expected outputs
     _implemented = {
-        "Add",
-        "And",
-        "Div",
-        "Exp",
-        "Expand",
-        "MatMul",
-        "Mul",
-        "Log",
-        "Op",
-        "Relu",
-        "Squeeze",
-        "Sub",
-        "Transpose",
+        "Add": 1,
+        "And": 1,
+        "Cast": 1,
+        "Constant": 1,
+        "Div": 1,
+        "Exp": 1,
+        "Expand": 1,
+        "Gemm": 1,
+        "Identity": 1,
+        "MatMul": 1,
+        "MaxPool": 2,
+        "Mul": 1,
+        "Log": 1,
+        "Or": 1,
+        "Relu": 1,
+        "Reshape": 2,
+        "Slice": 1,
+        "Squeeze": 1,
+        "Sub": 1,
+        "Transpose": 1,
+        "Unsqueeze": 1,
     }
 
     def __init__(self, builder: "GraphBuilder", opset: int):
@@ -29,17 +39,26 @@ class Opset:
     def __getattr__(self, name):
         if name in self._implemented:
             return partial(self.make_node, name)
-        return super().__getattr__(name)
+        try:
+            return super().__getattr__(name)
+        except AttributeError as e:
+            raise AttributeError(f"Unable to access attribute {name!r}.") from e
 
     def make_node(
         self,
         op_type: str,
-        inputs: Union[str, List[str]],
-        outputs: Union[int, List[str], str] = 1,
+        *inputs: Optional[Union[str, List[str]]],
+        outputs: Optional[Union[int, List[str], str]] = None,
         domain: str = "",
         **kwargs,
     ):
-        return self.builder.make_node(op_type, inputs, outputs, domain=domain, **kwargs)
+        if outputs is None:
+            outputs = self._implemented[op_type]
+        if inputs is None:
+            inputs = []
+        return self.builder.make_node(
+            op_type, inputs, outputs=outputs, domain=domain, **kwargs
+        )
 
 
 class GraphBuilder:
@@ -59,15 +78,43 @@ class GraphBuilder:
         self.input_names = input_names or []
         self.current_input = 0
         self.op = Opset(self, self.opsets[""])
+        self._known_shapes = {}
+        self._known_types = {}
+        self._checked_added = set()
+
+    def set_shape(self, name: str, shape: Tuple[int, ...]):
+        if not isinstance(name, str):
+            raise TypeError(f"Unexpected type {type(name)} for name.")
+        if name in self._known_shapes:
+            raise RuntimeError(f"Name {name!r} already exists.")
+        if not isinstance(shape, tuple):
+            raise TypeError(f"Unexpected shape type {type(shape)}.")
+        self._known_shapes[name] = shape
+
+    def set_type(self, name: str, dtype: int):
+        if not isinstance(name, str):
+            raise TypeError(f"Unexpected type {type(name)} for name.")
+        if name in self._known_types:
+            raise RuntimeError(f"Name {name!r} already exists.")
+        if not isinstance(dtype, int):
+            raise TypeError(f"Unexpected dtype type {type(dtype)}.")
+        self._known_types[name] = dtype
+
+    def rank(self, name: str) -> int:
+        if name not in self._known_shapes:
+            raise ValueError(f"Shape is unknown for result {name!r}.")
+        return len(self._known_shapes[name])
 
     def unique_name(self, prefix: str) -> str:
         if prefix in self._unique_names:
             i = 2
             sug = f"{prefix}2"
-            while sug not in self._unique_names:
+            while sug in self._unique_names:
                 i += 1
                 sug = f"{prefix}{i}"
+            self._unique_names.add(sug)
             return sug
+        self._unique_names.add(prefix)
         return prefix
 
     def _prepare_inputs(self, schema: Optional[Any], *inputs: List[Any]) -> List[str]:
@@ -95,7 +142,11 @@ class GraphBuilder:
             raise NotImplementedError("External initializers are not implemented yet.")
         if hasattr(value, "numpy"):
             value = value.numpy()
+        if name == "":
+            name = self.unique_name("cst")
         tensor = onh.from_array(value, name=name)
+        self.set_shape(name, value.shape)
+        self.set_type(name, oh.np_dtype_to_tensor_dtype(value.dtype))
         self.initializers.append(tensor)
         return name
 
@@ -112,6 +163,10 @@ class GraphBuilder:
         self.current_input += 1
         elem_type = self._get_type(elem_type)
         self.inputs.append(oh.make_tensor_value_info(input_name, elem_type, shape))
+        if shape:
+            self.set_shape(name, shape)
+        if elem_type:
+            self.set_type(name, elem_type)
         return name
 
     def make_tensor_output(
@@ -127,6 +182,10 @@ class GraphBuilder:
             return res
         elem_type = self._get_type(elem_type, False)
         self.outputs.append(oh.make_tensor_value_info(name, elem_type, shape))
+        if shape:
+            self.set_shape(name, shape)
+        if elem_type:
+            self.set_type(name, elem_type)
         return name
 
     def make_node(
@@ -137,17 +196,31 @@ class GraphBuilder:
         domain: str = "",
         **kwargs,
     ) -> Union[str, List[str]]:
+        if "ceil_mode" in kwargs and not isinstance(kwargs["ceil_mode"], int):
+            raise RuntimeError(
+                f"Wrong value for ceil_mode operator is {op_type}, kwargs={kwargs}."
+            )
+        if isinstance(inputs, tuple):
+            inputs = list(inputs)
         if isinstance(outputs, int):
             if outputs < 1:
                 raise ValueError(f"outputs={outputs} must be > 0.")
             lower = op_type.lower()
-            output_names = [self.unique_name(f"{lower}{i}") for i in range(outputs)]
+            output_names = [
+                self.unique_name(f"_onx_{lower}{i}") for i in range(outputs)
+            ]
         elif isinstance(outputs, str):
             output_names = [outputs]
         else:
             output_names = outputs
         if isinstance(inputs, str):
             inputs = [inputs]
+        # basic checking, to be removed later
+        key = (op_type, tuple(output_names))
+        if key in self._checked_added:
+            raise RuntimeError(f"This node was already added: {key}.")
+        self._checked_added.add(key)
+        # next
         try:
             node = oh.make_node(op_type, inputs, output_names, domain=domain, **kwargs)
         except TypeError as e:
