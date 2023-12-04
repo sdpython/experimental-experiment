@@ -1,5 +1,5 @@
 import warnings
-from typing import Dict, Tuple, Union
+from typing import Dict, Optional, Sequence, Union
 from onnx import ModelProto
 from .walker import DynamoWalker
 from .graph_builder import GraphBuilder
@@ -7,7 +7,8 @@ from .graph_builder import GraphBuilder
 
 def to_onnx(
     mod: "torch.nn.Module",  # noqa: F821
-    args: Tuple["torch.Tensor"],  # noqa: F821
+    args: Sequence["torch.Tensor"],  # noqa: F821
+    input_names: Optional[Sequence[str]] = None,
     target_opset: Union[int, Dict[str, int]] = 18,
     as_function: bool = False,
 ) -> ModelProto:
@@ -17,6 +18,8 @@ def to_onnx(
     <https://pytorch.org/tutorials/intermediate/torch_export_tutorial.html>`_.
 
     :param mod: torch module
+    :param args: input arguments
+    :param input_names: input names
     :param target_opset: targeted opset or targeted opsets as a dictionary
     :param as_function: export as a ModelProto or a FunctionProto
     :return: onnx model
@@ -40,7 +43,7 @@ def to_onnx(
             )
         return value.detach().numpy()
 
-    builder = GraphBuilder(target_opset)
+    builder = GraphBuilder(target_opset, input_names=input_names)
     walker = DynamoWalker(builder, retrieve)
 
     graph_module = exported_mod.graph_module

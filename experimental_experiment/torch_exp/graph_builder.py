@@ -1,11 +1,15 @@
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 import onnx.helper as oh
 import onnx.numpy_helper as onh
 from onnx import FunctionProto, ModelProto, TensorProto
 
 
 class GraphBuilder:
-    def __init__(self, target_opset: Union[int, Dict[str, int]]):
+    def __init__(
+        self,
+        target_opset: Union[int, Dict[str, int]],
+        input_names: Optional[Sequence[str]] = None,
+    ):
         self.opsets = (
             {"": target_opset} if isinstance(target_opset, int) else target_opset
         )
@@ -14,6 +18,8 @@ class GraphBuilder:
         self.inputs = []
         self.outputs = []
         self._unique_names = set()
+        self.input_names = input_names or []
+        self.current_input = 0
 
     def unique_name(self, prefix: str) -> str:
         if prefix in self._unique_names:
@@ -57,8 +63,16 @@ class GraphBuilder:
     def make_tensor_input(
         self, name: str, elem_type: Any, shape: Tuple[int, ...]
     ) -> str:
+        if self.current_input < len(self.input_names):
+            # The input needs to be renamed, an identity node is added.
+            input_name = self.input_names[self.current_input]
+            self.make_node("Identity", [input_name], [name])
+        else:
+            self.input_names.append(name)
+            input_name = name
+        self.current_input += 1
         elem_type = self._get_type(elem_type)
-        self.inputs.append(oh.make_tensor_value_info(name, elem_type, shape))
+        self.inputs.append(oh.make_tensor_value_info(input_name, elem_type, shape))
         return name
 
     def make_tensor_output(

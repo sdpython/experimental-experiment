@@ -40,6 +40,14 @@ class DynamoWalker:
 
     def output(self, node):
         output_name = node.name
+        declared = node.args
+        assert len(declared) == 1, "declared must have one element"
+        output = declared[0]
+        assert len(output) == 1, "declared[0] must have one element"
+        output = output[0]
+        if hasattr(output, "name"):
+            output = output.name
+        self.builder.make_node("Identity", [output], [output_name])
         self.builder.make_tensor_output(output_name)
         return output_name
 
@@ -89,7 +97,6 @@ class DynamoWalker:
     def call_function(self, node: "torch.fx.Node"):  # noqa: F821
         fx_args, fx_kwargs = self._fill_in_default_kwargs(node)
         aten_name = self._get_aten_name(node)
-        outputs = list(node.users)
         fct = find_function(aten_name)
 
         args = []
@@ -99,11 +106,4 @@ class DynamoWalker:
             else:
                 args.append(i)
 
-        output_names = []
-        for o in outputs:
-            if hasattr(o, "name"):
-                output_names.append(o.name)
-            else:
-                output_names.append(o)
-
-        return fct(self.builder, output_names, *args, *fx_kwargs)
+        return fct(self.builder, [node.name], *args, *fx_kwargs)
