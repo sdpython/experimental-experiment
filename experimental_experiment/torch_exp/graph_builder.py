@@ -1,7 +1,45 @@
+from functools import partial
 from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 import onnx.helper as oh
 import onnx.numpy_helper as onh
 from onnx import FunctionProto, ModelProto, TensorProto
+
+
+class Opset:
+    _implemented = {
+        "Add",
+        "And",
+        "Div",
+        "Exp",
+        "Expand",
+        "MatMul",
+        "Mul",
+        "Log",
+        "Op",
+        "Relu",
+        "Squeeze",
+        "Sub",
+        "Transpose",
+    }
+
+    def __init__(self, builder: "GraphBuilder", opset: int):
+        self.opset = opset
+        self.builder = builder
+
+    def __getattr__(self, name):
+        if name in self._implemented:
+            return partial(self.make_node, name)
+        return super().__getattr__(name)
+
+    def make_node(
+        self,
+        op_type: str,
+        inputs: Union[str, List[str]],
+        outputs: Union[int, List[str], str] = 1,
+        domain: str = "",
+        **kwargs,
+    ):
+        return self.builder.make_node(op_type, inputs, outputs, domain=domain, **kwargs)
 
 
 class GraphBuilder:
@@ -20,6 +58,7 @@ class GraphBuilder:
         self._unique_names = set()
         self.input_names = input_names or []
         self.current_input = 0
+        self.op = Opset(self, self.opsets[""])
 
     def unique_name(self, prefix: str) -> str:
         if prefix in self._unique_names:

@@ -2,26 +2,26 @@ from typing import List, Sequence
 import numpy as np
 from .graph_builder import GraphBuilder
 
-TENSOR_NAME = str
+T = str
 
 
-def aten_abs(g: GraphBuilder, outputs: List[str], x: TENSOR_NAME) -> TENSOR_NAME:
+def aten_abs(g: GraphBuilder, outputs: List[str], x: T) -> T:
     return g.make_node("Abs", [x], outputs)
 
 
 def aten_convolution(
     g: GraphBuilder,
     outputs: List[str],
-    input: TENSOR_NAME,
-    weight: TENSOR_NAME,
-    bias: TENSOR_NAME = None,
+    input: T,
+    weight: T,
+    bias: T = None,
     stride: Sequence[int] = (1,),
     padding: Sequence[int] = (0,),
     dilation: Sequence[int] = (1,),
     transposed: bool = False,
     output_padding: Sequence[int] = (0,),
     groups: int = 1,
-) -> TENSOR_NAME:
+) -> T:
     if transposed:
         raise NotImplementedError(
             f"aten_convolution does not support transposed={transposed}."
@@ -62,3 +62,7 @@ def aten_convolution(
         group=groups,
         dilations=dilations,
     )
+
+
+def aten_relu(g: GraphBuilder, outputs: List[str], x: T) -> T:
+    return g.op.Relu(x, outputs)
