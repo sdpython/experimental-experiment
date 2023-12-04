@@ -38,6 +38,15 @@ def to_onnx(
 
     def retrieve(name):
         weight = mapping[name]
+        if weight not in weights:
+            if name.startswith("L__self___") and weight[len("L__self___") :] in weights:
+                weight = weight[len("L__self___") :]
+        if weight not in weights:
+            raise ValueError(
+                f"Unexpected name {name!r} for input "
+                f"{name!r} mapped to weight {weight!r}, "
+                f"cannot be found in {', '.join(sorted(weights))}."
+            )
         value = weights[weight]
         if not isinstance(value, torch.Tensor):
             raise ValueError(
