@@ -9,5 +9,6 @@ ruff
 sphinx
 sphinx-gallery
 sphinx-issues
+sphinx-runpython
 tqdm
 wheel
