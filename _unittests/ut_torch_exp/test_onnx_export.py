@@ -91,6 +91,11 @@ def export_utils(prefix, model, *args):
 
 
 class TestMockExperimental(ExtTestCase):
+    def check_model_ort(self, name):
+        from onnxruntime import InferenceSession
+
+        InferenceSession(name, providers=["CPUExecutionProvider"])
+
     @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
     def test_simple_export_conv(self):
         model, input_tensor = return_module_cls_conv()
@@ -100,6 +105,7 @@ class TestMockExperimental(ExtTestCase):
         for name in names:
             ref = ReferenceEvaluator(name)
             results.append(ref.run(None, {"input": x})[0])
+            self.check_model_ort(name)
         self.assertEqualArray(results[0], results[1])
 
     @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
@@ -111,6 +117,7 @@ class TestMockExperimental(ExtTestCase):
         for name in names:
             ref = ReferenceEvaluator(name)
             results.append(ref.run(None, {"input": x})[0])
+            self.check_model_ort(name)
         self.assertEqualArray(results[0], results[1])
 
     @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
@@ -122,6 +129,7 @@ class TestMockExperimental(ExtTestCase):
         for name in names:
             ref = ReferenceEvaluator(name)
             results.append(ref.run(None, {"input": x})[0])
+            self.check_model_ort(name)
         self.assertEqualArray(results[0], results[1])
 
 
