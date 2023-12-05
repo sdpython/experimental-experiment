@@ -12,11 +12,12 @@ torch model after it was converted into ONNX through different processes:
   <https://pytorch.org/docs/stable/onnx.html#torchdynamo-based-onnx-exporter>`_,
   let's call it **dynamo**
 * if available, the previous model but optimized, **dynopt**
-* a custom exporter **custom**, this exporter supports a very limited
+* a custom exporter **cus_p0**, this exporter supports a very limited
   set of models, as **dynamo**, it relies on
   `torch.fx <https://pytorch.org/docs/stable/fx.html>`_ but the design is closer to
   what tensorflow-onnx does.
-* the same exporter but unused nodes were removed, **cusopt**
+* the same exporter but unused nodes were removed, **cus_p1**
+* the same exporter but constant where folded, **cus_p2**
 
 Some helpers
 ++++++++++++
@@ -36,6 +37,7 @@ import matplotlib.pyplot as plt
 import pandas
 import onnx
 from onnx_extended.ext_test_case import measure_time
+from onnx_array_api.plotting.text_plot import onnx_simple_text_plot
 import torch
 from torch import nn
 import torch.nn.functional as F
@@ -114,7 +116,7 @@ def export_dynopt(filename, model, *args):
         f.write(optimized_model.SerializeToString())
 
 
-def export_custom(filename, model, *args):
+def export_cus_p0(filename, model, *args):
     onx = to_onnx(model, tuple(args), input_names=["input"])
     with open(filename, "wb") as f:
         f.write(onx.SerializeToString())
@@ -145,7 +147,7 @@ export_functions = [
     export_script,
     export_dynamo,
     export_dynopt,
-    export_custom,
+    export_cus_p0,
     export_cus_p1,
     export_cus_p2,
 ]
@@ -183,15 +185,16 @@ for k, v in supported_exporters.items():
         v(filename, model, input_tensor)
         duration = time.perf_counter() - begin
         times.append(duration)
-    times.sort()
     onx = onnx.load(filename)
     print("done.")
     data.append(
         dict(
             export=k,
             time=np.mean(duration),
-            min=times[0],
-            max=times[-1],
+            min=min(times),
+            max=max(times),
+            first=times[0],
+            last=times[-1],
             std=np.std(times),
             nodes=len(onx.graph.node),
         )
@@ -215,7 +218,7 @@ df1 = pandas.DataFrame(data)
 print(df1)
 
 fig, ax = plt.subplots(1, 1)
-dfi = df1[["export", "time"]].set_index("export")
+dfi = df1[["export", "time", "std"]].set_index("export")
 dfi["time"].plot.barh(ax=ax, title="Export time", yerr=dfi["std"])
 fig.tight_layout()
 fig.savefig("plot_torch_export.png")
@@ -227,7 +230,7 @@ fig.savefig("plot_torch_export.png")
 pr = cProfile.Profile()
 pr.enable()
 for i in range(5):
-    export_custom("dummy.onnx", model, input_tensor)
+    export_cus_p0("dummy.onnx", model, input_tensor)
 pr.disable()
 s = io.StringIO()
 sortby = SortKey.CUMULATIVE
@@ -251,6 +254,7 @@ def clean_text(text):
     ]
     for p in pathes:
         text = text.replace(p, "")
+    text = text.replace("experimental_experiment", "experimental_experiment".upper())
     return text
 
 
@@ -360,3 +364,36 @@ fig, ax = plt.subplots()
 piv.plot.barh(ax=ax, title="Compares onnxruntime time on exported models")
 fig.tight_layout()
 fig.savefig("plot_torch_export_ort.png")
+
+
+######################################################
+# Show the interesting models
+# +++++++++++++++++++++++++++
+
+models = [
+    _ for _ in os.listdir(".") if ".onnx" in _ and _.startswith("ort-plot_torch_export")
+]
+for model in models:
+    if (
+        "cpu" not in model
+        and "cuda" not in model
+        or "aot" not in model
+        or "cus_p0" in model
+        or "cus_p1" in model
+    ):
+        print("skip1", model)
+        continue
+    if ("dynamo" in model or "dynopt" in model) and "aot0" in model:
+        print("skip2", model)
+        continue
+    if "aot1" in model and ("dynamo" in model or "dynopt" in model):
+        print("skip3", model)
+        continue
+    print()
+    print("#################################################")
+    print(model)
+    print("#################################################")
+    onx = onnx.load(model)
+    print(onnx_simple_text_plot(onx))
+
+print("done.")

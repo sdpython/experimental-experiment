@@ -150,10 +150,16 @@ class TestMockExperimental(ExtTestCase):
             model, (input_tensor,), input_names=["input"], remove_unused=True
         )
         self.assertGreater(len(onx1.graph.node), len(onx2.graph.node))
+        p1 = [n for n in onx1.graph.node if n.op_type == "Identity"]
+        p2 = [n for n in onx2.graph.node if n.op_type == "Identity"]
+        self.assertEqual(len(p1), 0)
+        self.assertEqual(len(p2), 0)
+
         sub1 = [n for n in onx1.graph.node if n.op_type == "Sub"]
         sub2 = [n for n in onx2.graph.node if n.op_type == "Sub"]
         self.assertEqual(len(sub1), 2)
         self.assertEqual(len(sub2), 0)
+
         p1 = [n for n in onx1.graph.node if n.op_type == "MaxPool"]
         p2 = [n for n in onx2.graph.node if n.op_type == "MaxPool"]
         self.assertEqual(len(p1), 4)
@@ -181,6 +187,7 @@ class TestMockExperimental(ExtTestCase):
         onx1 = to_onnx(
             model, (input_tensor,), input_names=["input"], remove_unused=True
         )
+        self.assertGreater(len(onx1.graph.node), 5)
         with open("dummy.onnx", "wb") as f:
             f.write(onx1.SerializeToString())
         onx2 = to_onnx(
@@ -190,7 +197,13 @@ class TestMockExperimental(ExtTestCase):
             remove_unused=True,
             constant_folding=True,
         )
+        self.assertGreater(len(onx2.graph.node), 5)
         self.assertGreater(len(onx1.graph.node), len(onx2.graph.node))
+
+        p1 = [n for n in onx1.graph.node if n.op_type == "Identity"]
+        p2 = [n for n in onx2.graph.node if n.op_type == "Identity"]
+        self.assertEqual(len(p1), 0)
+        self.assertEqual(len(p2), 0)
 
         p1 = [n for n in onx1.graph.node if n.op_type == "MaxPool"]
         p2 = [n for n in onx2.graph.node if n.op_type == "MaxPool"]
