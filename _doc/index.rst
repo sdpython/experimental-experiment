@@ -26,8 +26,7 @@ experimental-experiment: fuzzy work
 .. image:: https://codecov.io/gh/sdpython/experimental-experiment/branch/main/graph/badge.svg?token=Wb9ZGDta8J 
     :target: https://codecov.io/gh/sdpython/experimental-experiment
 
-**experimental-experiment** implements APIs to create custom ONNX graphs.
-The objective is to speed up the implementation of converter libraries.
+**experimental-experiment** is mostly to experiment ideas.
 
 .. toctree::
     :maxdepth: 1
