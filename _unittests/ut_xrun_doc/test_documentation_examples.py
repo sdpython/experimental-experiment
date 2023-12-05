@@ -67,9 +67,9 @@ class TestDocumentationExamples(ExtTestCase):
         fold = os.path.normpath(os.path.join(this, "..", "..", "_doc", "examples"))
         found = os.listdir(fold)
         for name in found:
-            if name in {"plot_onnx_export.py"}:
-                if sys.platform in {"darwin", "win32"}:
-                    # Stuck due to the creation of a secondary process.
+            if name in {"plot_torch_export.py"}:
+                if sys.platform in {"win32"}:
+                    # dynamo not supported on windows
                     continue
 
             if name.startswith("plot_") and name.endswith(".py"):
