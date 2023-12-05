@@ -55,7 +55,7 @@ def system_info():
         obs["cuda_count"] = torch.cuda.device_count()
         obs["cuda_name"] = torch.cuda.get_device_name()
         obs["cuda_capa"] = torch.cuda.get_device_capability()
-    except RuntimeError:
+    except (RuntimeError, AssertionError):
         # no cuda
         pass
     return obs

@@ -67,6 +67,11 @@ class TestDocumentationExamples(ExtTestCase):
         fold = os.path.normpath(os.path.join(this, "..", "..", "_doc", "examples"))
         found = os.listdir(fold)
         for name in found:
+            if name in {"plot_onnx_export.py"}:
+                if sys.platform in {"darwin", "win32"}:
+                    # Stuck due to the creation of a secondary process.
+                    continue
+
             if name.startswith("plot_") and name.endswith(".py"):
                 short_name = os.path.split(os.path.splitext(name)[0])[-1]
 
