@@ -21,13 +21,23 @@ class DynamoWalker:
             return self.call_function(node)
         if node.op == "output":
             return self.output(node)
+        if node.op == "call_module":
+            return self.call_module(node)
 
         raise ValueError(f"Unable to process node kind {node.op!r} ({node}).")
 
     def placeholder(self, node: "torch.fx.Node"):  # noqa: F821
         val = node.meta.get("val", None)
         if val is None:
-            return self.builder.make_input(node.name)
+            example_value = node.meta.get("example_value", None)
+            if example_value is None:
+                raise RuntimeError(
+                    f"Unable to guess what node is, node={node}, "
+                    f"meta={node.meta} {node.__dict__}."
+                )
+            return self.builder.make_tensor_input(
+                node.name, elem_type=example_value.dtype, shape=example_value.shape
+            )
         if isinstance(val, self.torch.Tensor):
             stack_trace = node.meta.get("stack_trace", None)
             if stack_trace is None:
@@ -117,6 +127,26 @@ class DynamoWalker:
 
         raise NotImplementedError(f"Unsupported function {node!r} (not implemented).")
 
+    def getitem(self, node: "torch.fx.Node"):  # noqa: F821
+        args = node.args
+        assert len(args) == 2
+        node_output, index = args
+        result_name = node_output.name
+        val = node.meta.get("val", None)
+        if val is not None:
+            if isinstance(val, self.torch.Tensor):
+                shape = val.shape
+                dtype = self.builder._get_type(val.dtype)
+                self.builder.set_shape(node.name, shape)
+                self.builder.set_type(node.name, dtype)
+            else:
+                raise TypeError(
+                    f"Unexpected type in node {node!r}, type(val)={type(val)}."
+                )
+        return self.builder.make_node(
+            "Identity", [f"{result_name}#{index}"], [node.name]
+        )
+
     def call_function(self, node: "torch.fx.Node"):  # noqa: F821
         fx_args, fx_kwargs = self._fill_in_default_kwargs(node)
         aten_name = self._get_aten_name(node)
@@ -166,22 +196,10 @@ class DynamoWalker:
 
         return res
 
-    def getitem(self, node: "torch.fx.Node"):  # noqa: F821
-        args = node.args
-        assert len(args) == 2
-        node_output, index = args
-        result_name = node_output.name
-        val = node.meta.get("val", None)
-        if val is not None:
-            if isinstance(val, self.torch.Tensor):
-                shape = val.shape
-                dtype = self.builder._get_type(val.dtype)
-                self.builder.set_shape(node.name, shape)
-                self.builder.set_type(node.name, dtype)
-            else:
-                raise TypeError(
-                    f"Unexpected type in node {node!r}, type(val)={type(val)}."
-                )
-        return self.builder.make_node(
-            "Identity", [f"{result_name}#{index}"], [node.name]
+    def call_module(self, node: "torch.fx.Node"):  # noqa: F821
+        import pprint
+
+        raise NotImplementedError(
+            f"node={node}\n--\nnode.__dict__={pprint.pformat(node.__dict__)}"
+            f"\n--\n{pprint.pformat(node.meta)}"
         )
