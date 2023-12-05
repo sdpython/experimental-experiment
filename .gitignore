@@ -5,6 +5,9 @@
 *.whl
 *.xlsx
 *.onnx
+*.png
+*.csv
+*.xlsx
 coverage.html/*
 _cache/*
 .coverage
