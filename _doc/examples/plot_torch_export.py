@@ -48,10 +48,14 @@ def system_info():
     obs = {}
     obs["processor"] = platform.processor()
     obs["cores"] = multiprocessing.cpu_count()
-    obs["cuda"] = 1 if torch.cuda.is_available() else 0
-    obs["cuda_count"] = torch.cuda.device_count()
-    obs["cuda_name"] = torch.cuda.get_device_name()
-    obs["cuda_capa"] = torch.cuda.get_device_capability()
+    try:
+        obs["cuda"] = 1 if torch.cuda.is_available() else 0
+        obs["cuda_count"] = torch.cuda.device_count()
+        obs["cuda_name"] = torch.cuda.get_device_name()
+        obs["cuda_capa"] = torch.cuda.get_device_capability()
+    except RuntimeError:
+        # no cuda
+        pass
     return obs
 
 
@@ -211,9 +215,8 @@ df1 = pandas.DataFrame(data)
 print(df1)
 
 fig, ax = plt.subplots(1, 1)
-df1[["export", "time"]].set_index("export")["time"].plot.barh(
-    ax=ax, title="Export time", yerr=df1["std"]
-)
+dfi = df1[["export", "time"]].set_index("export")
+dfi["time"].plot.barh(ax=ax, title="Export time", yerr=dfi["std"])
 fig.tight_layout()
 fig.savefig("plot_torch_export.png")
 
