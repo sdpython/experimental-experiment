@@ -4,6 +4,7 @@ import numpy as np
 import onnx.helper as oh
 import onnx.numpy_helper as onh
 from onnx import FunctionProto, ModelProto, TensorProto
+from onnx.reference import ReferenceEvaluator
 
 
 class Opset:
@@ -83,12 +84,28 @@ class GraphBuilder:
         self.op = Opset(self, self.opsets[""])
         self._known_shapes = {}
         self._known_types = {}
-        self._checked_added = set()
         self.constants_ = {}
 
     def is_constant(self, name: str) -> bool:
         """Tells if a result is a constant."""
         return name in self.constants_
+
+    def get_constant(self, name: str) -> np.ndarray:
+        if not self.is_constant(name):
+            raise ValueError(f"Result {name!r} is not a constant.")
+        if name not in self.initializers_dict:
+            raise ValueError(
+                f"Result {name!r} was never evaluated within method 'constant_folding'."
+            )
+        value = self.initializers_dict[name]
+        if isinstance(value, np.ndarray):
+            return value
+
+        import torch
+
+        if isinstance(value, torch.Tensor):
+            return value.detach().numpy()
+        raise TypeError(f"Unable to convert type {type(value)} into numpy array.")
 
     def set_shape(self, name: str, shape: Tuple[int, ...]):
         if not isinstance(name, str):
@@ -217,11 +234,7 @@ class GraphBuilder:
             output_names = outputs
         if isinstance(inputs, str):
             inputs = [inputs]
-        # basic checking, to be removed later
-        key = (op_type, tuple(output_names))
-        if key in self._checked_added:
-            raise RuntimeError(f"This node was already added: {key}.")
-        self._checked_added.add(key)
+
         # next
         try:
             node = oh.make_node(op_type, inputs, output_names, domain=domain, **kwargs)
@@ -233,6 +246,8 @@ class GraphBuilder:
                 f"inputs={inputs} (types={iti}), oututs={outputs} (types={ito}), "
                 f"domain={domain!r}, kwargs={kwargs}."
             ) from e
+
+        # constant handling
         if node.op_type == "Constant":
             size = len(node.SerializeToString())
             if size >= self.constant_size:
@@ -241,6 +256,12 @@ class GraphBuilder:
                     f"the constant: {size} >= {self.constant_size}."
                 )
             self.constants_[node.output[0]] = node
+        else:
+            if all(map(self.is_constant, node.input)):
+                for o in node.output:
+                    self.constants_[o] = node
+
+        # add the node
         self.nodes.append(node)
         if len(output_names) == 1:
             return output_names[0]
@@ -262,7 +283,7 @@ class GraphBuilder:
         arr_cont = arr.contiguous() if not arr.is_contiguous() else arr
         arr_cpu = arr_cont.cpu()
         if arr_cpu.data_ptr() == arr.data_ptr():
-            copy = torch.tensor(arr_cpu)
+            copy = arr_cpu.clone().detach().requires_grad_(False)
             assert arr_cpu.data_ptr() != copy.data_ptr()
             np_arr = np.from_dlpack(copy)
         else:
@@ -323,6 +344,7 @@ class GraphBuilder:
         """
         Simple function to remove unused nodes.
         It does not look into subgraphs and assumes there is none.
+        Everything is done in one pass.
         """
 
         # mark outputs
@@ -350,3 +372,34 @@ class GraphBuilder:
         }
         self.constants_ = {k: v for k, v in self.constants_.items() if k in marked}
         self.nodes = [node for i, node in enumerate(self.nodes) if i not in removed]
+
+    def constant_folding(self):
+        """
+        Folds all constants. Constants are marked during the creation of the graph.
+        There is no need to propagate this information.
+        """
+
+        updates = {}
+        node_to_remove = set()
+        for k, v in self.constants_.items():
+            if v is None:
+                # this is an initiliazer
+                continue
+            # a node
+            if all(map(self.is_constant, v.output)):
+                node_to_remove.add(tuple(v.output))
+                # node evaluation
+                ref = ReferenceEvaluator(v)
+                feeds = {i: self.get_constant(i) for i in v.input}
+                output = ref.run(None, feeds)
+                for name, value in zip(v.output, output):
+                    updates[name] = None
+                    self.initializers_dict[name] = value
+
+        self.constants_.update(updates)
+        new_nodes = []
+        for node in self.nodes:
+            if tuple(node.output) in node_to_remove:
+                continue
+            new_nodes.append(node)
+        self.nodes = new_nodes

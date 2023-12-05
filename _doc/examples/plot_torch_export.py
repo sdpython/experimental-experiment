@@ -48,10 +48,14 @@ def system_info():
     obs = {}
     obs["processor"] = platform.processor()
     obs["cores"] = multiprocessing.cpu_count()
-    obs["cuda"] = 1 if torch.cuda.is_available() else 0
-    obs["cuda_count"] = torch.cuda.device_count()
-    obs["cuda_name"] = torch.cuda.get_device_name()
-    obs["cuda_capa"] = torch.cuda.get_device_capability()
+    try:
+        obs["cuda"] = 1 if torch.cuda.is_available() else 0
+        obs["cuda_count"] = torch.cuda.device_count()
+        obs["cuda_name"] = torch.cuda.get_device_name()
+        obs["cuda_capa"] = torch.cuda.get_device_capability()
+    except RuntimeError:
+        # no cuda
+        pass
     return obs
 
 
@@ -116,8 +120,20 @@ def export_custom(filename, model, *args):
         f.write(onx.SerializeToString())
 
 
-def export_cusopt(filename, model, *args):
+def export_cus_p1(filename, model, *args):
     onx = to_onnx(model, tuple(args), input_names=["input"], remove_unused=True)
+    with open(filename, "wb") as f:
+        f.write(onx.SerializeToString())
+
+
+def export_cus_p2(filename, model, *args):
+    onx = to_onnx(
+        model,
+        tuple(args),
+        input_names=["input"],
+        remove_unused=True,
+        constant_folding=True,
+    )
     with open(filename, "wb") as f:
         f.write(onx.SerializeToString())
 
@@ -130,7 +146,8 @@ export_functions = [
     export_dynamo,
     export_dynopt,
     export_custom,
-    export_cusopt,
+    export_cus_p1,
+    export_cus_p2,
 ]
 
 exporters = {f.__name__.replace("export_", ""): f for f in export_functions}
@@ -160,13 +177,25 @@ data = []
 for k, v in supported_exporters.items():
     print(f"run exporter {k}")
     filename = f"plot_torch_export_{k}.onnx"
-    begin = time.perf_counter()
+    times = []
     for i in range(5):
+        begin = time.perf_counter()
         v(filename, model, input_tensor)
-    duration = time.perf_counter() - begin
+        duration = time.perf_counter() - begin
+        times.append(duration)
+    times.sort()
     onx = onnx.load(filename)
     print("done.")
-    data.append(dict(export=k, time=duration / 5, nodes=len(onx.graph.node)))
+    data.append(
+        dict(
+            export=k,
+            time=np.mean(duration),
+            min=times[0],
+            max=times[-1],
+            std=np.std(times),
+            nodes=len(onx.graph.node),
+        )
+    )
 
 
 #########################################
@@ -186,7 +215,8 @@ df1 = pandas.DataFrame(data)
 print(df1)
 
 fig, ax = plt.subplots(1, 1)
-df1[["export", "time"]].set_index("export").plot.barh(ax=ax, title="Export time")
+dfi = df1[["export", "time"]].set_index("export")
+dfi["time"].plot.barh(ax=ax, title="Export time", yerr=dfi["std"])
 fig.tight_layout()
 fig.savefig("plot_torch_export.png")
 
