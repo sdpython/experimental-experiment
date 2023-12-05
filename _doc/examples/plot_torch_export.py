@@ -292,7 +292,7 @@ def benchmark():
             loop.set_description(f"ERROR-load: {name} {e}")
             obs.update({"error": e, "step": "run"})
             data.append(obs)
-            raise e
+            continue
 
         input_name = sess.get_inputs()[0].name
         feeds = {input_name: np.random.rand(*shape).astype(np.float32)}
@@ -303,7 +303,7 @@ def benchmark():
             loop.set_description(f"ERROR-run: {name} {e}")
             obs.update({"error": e, "step": "load"})
             data.append(obs)
-            raise e
+            continue
         obs.update(measure_time(lambda: sess.run(None, feeds), max_time=1))
 
         loop.set_description(f"{obs['average']} {name} {ps}")
