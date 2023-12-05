@@ -12,6 +12,7 @@ def to_onnx(
     target_opset: Union[int, Dict[str, int]] = 18,
     as_function: bool = False,
     remove_unused: bool = False,
+    constant_folding: bool = False,
 ) -> ModelProto:
     """
     Exports a torch model into ONNX using
@@ -24,8 +25,12 @@ def to_onnx(
     :param target_opset: targeted opset or targeted opsets as a dictionary
     :param as_function: export as a ModelProto or a FunctionProto
     :param removed_unused: if True, remove unused nodes
+    :param constant_folding: if True, fold constants,
+        constants are detected while converting the model
     :return: onnx model
     """
+    if as_function:
+        raise NotImplementedError("Export to FunctionProto is not implemented yet.")
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         import torch.export
@@ -38,7 +43,7 @@ def to_onnx(
     except AttributeError:
         weights = dict(mod.named_parameters())
 
-    def retrieve(name):
+    def retrieve(name: str) -> torch.Tensor:
         weight = mapping[name]
         if weight not in weights:
             if (
@@ -69,4 +74,8 @@ def to_onnx(
 
     if remove_unused:
         builder.remove_unused()
+    if constant_folding:
+        builder.constant_folding()
+        if remove_unused:
+            builder.remove_unused()
     return builder.to_onnx()

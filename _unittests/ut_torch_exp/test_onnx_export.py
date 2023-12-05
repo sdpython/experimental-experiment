@@ -70,7 +70,7 @@ def return_module_cls_pool():
     return MyModel(), input_tensor
 
 
-def export_utils(prefix, model, *args, remove_unused=False):
+def export_utils(prefix, model, *args, remove_unused=False, constant_folding=True):
     import torch
 
     names = []
@@ -84,7 +84,11 @@ def export_utils(prefix, model, *args, remove_unused=False):
     if os.path.exists(name):
         os.remove(name)
     onx = to_onnx(
-        model, tuple(args), input_names=["input"], remove_unused=remove_unused
+        model,
+        tuple(args),
+        input_names=["input"],
+        remove_unused=remove_unused,
+        constant_folding=constant_folding,
     )
     with open(name, "wb") as f:
         f.write(onx.SerializeToString())
@@ -163,6 +167,54 @@ class TestMockExperimental(ExtTestCase):
         model, input_tensor = return_module_cls_pool()
         names = export_utils(
             "test_simple_export_pool_unused", model, input_tensor, remove_unused=True
+        )
+        x = input_tensor.numpy()
+        results = []
+        for name in names:
+            ref = InferenceSession(name, providers=["CPUExecutionProvider"])
+            results.append(ref.run(None, {"input": x})[0])
+        self.assertEqualArray(results[0], results[1])
+
+    @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
+    def test_constant_folding(self):
+        model, input_tensor = return_module_cls_pool()
+        onx1 = to_onnx(
+            model, (input_tensor,), input_names=["input"], remove_unused=True
+        )
+        with open("dummy.onnx", "wb") as f:
+            f.write(onx1.SerializeToString())
+        onx2 = to_onnx(
+            model,
+            (input_tensor,),
+            input_names=["input"],
+            remove_unused=True,
+            constant_folding=True,
+        )
+        self.assertGreater(len(onx1.graph.node), len(onx2.graph.node))
+
+        p1 = [n for n in onx1.graph.node if n.op_type == "MaxPool"]
+        p2 = [n for n in onx2.graph.node if n.op_type == "MaxPool"]
+        self.assertEqual(len(p1), 2)
+        self.assertEqual(len(p2), 2)
+        self.check_model_ort(onx2)
+
+        p1 = [n for n in onx1.graph.node if n.op_type == "Transpose"]
+        p2 = [n for n in onx2.graph.node if n.op_type == "Transpose"]
+        self.assertEqual(len(p1), 3)
+        self.assertEqual(len(p2), 0)
+        self.check_model_ort(onx2)
+
+    @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
+    def test_simple_export_pool_constant_folding(self):
+        from onnxruntime import InferenceSession
+
+        model, input_tensor = return_module_cls_pool()
+        names = export_utils(
+            "test_simple_export_pool_unused",
+            model,
+            input_tensor,
+            remove_unused=True,
+            constant_folding=True,
         )
         x = input_tensor.numpy()
         results = []
