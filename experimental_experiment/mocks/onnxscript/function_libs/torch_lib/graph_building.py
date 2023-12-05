@@ -363,11 +363,10 @@ class TorchScriptGraph:
     def to_model_proto(self, opset_version: int) -> onnx.ModelProto:
         import torch
 
-        function_proto_dict: Mapping[
-            Tuple[str, str], onnx.FunctionProto
-        ] = self.fetch_function_proto_dict(opset_version)
+        # function_proto_dict: Mapping[
+        #    Tuple[str, str], onnx.FunctionProto
+        # ] = self.fetch_function_proto_dict(opset_version)
         unique_custom_domains: Dict[str, int] = {}
-        print(function_proto_dict)
 
         export_kwargs = dict(
             initializers=self.initializers,

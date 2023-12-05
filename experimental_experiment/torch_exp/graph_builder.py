@@ -1,5 +1,6 @@
 from functools import partial
 from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
+import numpy as np
 import onnx.helper as oh
 import onnx.numpy_helper as onh
 from onnx import FunctionProto, ModelProto, TensorProto
@@ -66,21 +67,28 @@ class GraphBuilder:
         self,
         target_opset: Union[int, Dict[str, int]],
         input_names: Optional[Sequence[str]] = None,
+        constant_size: int = 1024,
     ):
         self.opsets = (
             {"": target_opset} if isinstance(target_opset, int) else target_opset
         )
         self.nodes = []
-        self.initializers = []
+        self.initializers_dict = {}
         self.inputs = []
         self.outputs = []
         self._unique_names = set()
         self.input_names = input_names or []
         self.current_input = 0
+        self.constant_size = constant_size
         self.op = Opset(self, self.opsets[""])
         self._known_shapes = {}
         self._known_types = {}
         self._checked_added = set()
+        self.constants_ = {}
+
+    def is_constant(self, name: str) -> bool:
+        """Tells if a result is a constant."""
+        return name in self.constants_
 
     def set_shape(self, name: str, shape: Tuple[int, ...]):
         if not isinstance(name, str):
@@ -140,14 +148,12 @@ class GraphBuilder:
     def make_initializer(self, name: str, value: Any, external: bool = False) -> str:
         if external:
             raise NotImplementedError("External initializers are not implemented yet.")
-        if hasattr(value, "numpy"):
-            value = value.numpy()
         if name == "":
             name = self.unique_name("cst")
-        tensor = onh.from_array(value, name=name)
         self.set_shape(name, value.shape)
-        self.set_type(name, oh.np_dtype_to_tensor_dtype(value.dtype))
-        self.initializers.append(tensor)
+        self.set_type(name, self._get_type(value.dtype))
+        self.initializers_dict[name] = value
+        self.constants_[name] = None
         return name
 
     def make_tensor_input(
@@ -227,13 +233,76 @@ class GraphBuilder:
                 f"inputs={inputs} (types={iti}), oututs={outputs} (types={ito}), "
                 f"domain={domain!r}, kwargs={kwargs}."
             ) from e
+        if node.op_type == "Constant":
+            size = len(node.SerializeToString())
+            if size >= self.constant_size:
+                raise ValueError(
+                    f"A node Constant holds a tensor bigger than "
+                    f"the constant: {size} >= {self.constant_size}."
+                )
+            self.constants_[node.output[0]] = node
         self.nodes.append(node)
         if len(output_names) == 1:
             return output_names[0]
         return output_names
 
+    def from_array(
+        self, arr: "torch.Tensor", name: str = None  # noqa: F821
+    ) -> TensorProto:
+        import sys
+        import torch
+
+        if not isinstance(arr, torch.Tensor):
+            raise TypeError(f"Unexpected type {type(arr)}.")
+        if arr.is_sparse:
+            raise NotImplementedError(
+                f"Sparse tensor is not supported yet but initializer {name!r} is."
+            )
+
+        arr_cont = arr.contiguous() if not arr.is_contiguous() else arr
+        arr_cpu = arr_cont.cpu()
+        if arr_cpu.data_ptr() == arr.data_ptr():
+            copy = torch.tensor(arr_cpu)
+            assert arr_cpu.data_ptr() != copy.data_ptr()
+            np_arr = np.from_dlpack(copy)
+        else:
+            np_arr = np.from_dlpack(arr_cpu)
+
+        tensor = TensorProto()
+        tensor.dims.extend(arr_cpu.shape)
+        tensor.name = name
+        tensor.data_type = self._get_type(arr_cpu.dtype)
+
+        raw = np_arr.tobytes()
+        tensor.raw_data = raw
+
+        if sys.byteorder == "big":
+            np_dtype = oh.tensor_dtype_to_np_dtype(tensor.data_type)
+            np.byteswap(np.frombuffer(tensor.raw_data, dtype=np_dtype), inplace=True)
+        return tensor
+
+    def _build_initializers(self) -> List[TensorProto]:
+        import torch
+
+        res = []
+        for k, v in sorted(self.initializers_dict.items()):
+            if isinstance(v, torch.Tensor):
+                # no string tensor
+                t = self.from_array(v, name=k)
+                res.append(t)
+                continue
+            if isinstance(v, np.ndarray):
+                t = onh.from_array(v, name=k)
+                res.append(t)
+                continue
+            raise TypeError(
+                f"Unable to convert initializer {k!r} with type "
+                f"{type(v)} into a TensorProto."
+            )
+        return res
+
     def to_onnx(self, as_function: bool = False) -> Union[FunctionProto, ModelProto]:
-        dense = [i for i in self.initializers if isinstance(i, TensorProto)]
+        dense = self._build_initializers()
         opsets = [oh.make_opsetid(*o) for o in self.opsets.items()]
         if as_function:
             return oh.make_function(
@@ -256,7 +325,7 @@ class GraphBuilder:
         It does not look into subgraphs and assumes there is none.
         """
 
-        # mark output
+        # mark outputs
         marked = {o.name: set() for o in self.outputs}
         for node in reversed(self.nodes):
             used = False
@@ -276,5 +345,8 @@ class GraphBuilder:
             if not (set(node.output) & marked_set):
                 removed.add(ind)
 
-        self.initializers = [i for i in self.initializers if i.name in marked]
+        self.initializers_dict = {
+            k: v for k, v in self.initializers_dict.items() if k in marked
+        }
+        self.constants_ = {k: v for k, v in self.constants_.items() if k in marked}
         self.nodes = [node for i, node in enumerate(self.nodes) if i not in removed]

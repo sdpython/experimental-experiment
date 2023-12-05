@@ -58,7 +58,7 @@ def to_onnx(
                 f"Unexpected type {type(value)} for input "
                 f"{name!r} mapped to weight {weight!r}."
             )
-        return value.detach().numpy()
+        return value
 
     builder = GraphBuilder(target_opset, input_names=input_names)
     walker = DynamoWalker(builder, retrieve)

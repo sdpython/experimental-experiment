@@ -155,10 +155,6 @@ class TestMockExperimental(ExtTestCase):
         self.assertEqual(len(p1), 4)
         self.assertEqual(len(p2), 2)
         self.check_model_ort(onx2)
-        from onnx_array_api.plotting.text_plot import onnx_simple_text_plot
-
-        print(onnx_simple_text_plot(onx1))
-        print(onnx_simple_text_plot(onx2))
 
     @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
     def test_simple_export_pool_unused(self):
