@@ -160,7 +160,7 @@ class TestMockExperimental(ExtTestCase):
 
             def info(self, *args, **kwargs):
                 self.stdout.append((args, kwargs))
-                print("INFO", args, kwargs)
+                # print("INFO", args, kwargs)
 
             @contextlib.contextmanager
             def log_section(self, level: int, message: str, *args, **kwargs):
