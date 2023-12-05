@@ -4,6 +4,7 @@ matplotlib
 onnx-array-api
 onnx-extended
 onnxruntime
+openpyxl
 pandas
 Pillow
 packaging
