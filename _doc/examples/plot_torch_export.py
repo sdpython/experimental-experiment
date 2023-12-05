@@ -190,7 +190,7 @@ for k, v in supported_exporters.items():
     data.append(
         dict(
             export=k,
-            time=np.mean(duration),
+            time=np.mean(times),
             min=min(times),
             max=max(times),
             first=times[0],
@@ -206,11 +206,24 @@ for k, v in supported_exporters.items():
 # before any other export can begin the translation
 # except the first one.
 
-begin = time.perf_counter()
+times = []
 for i in range(5):
+    begin = time.perf_counter()
     exported_mod = torch.export.export(model, (input_tensor,))
-duration = time.perf_counter() - begin
-data.append(dict(export="torch", time=duration / 5))
+    duration = time.perf_counter() - begin
+    times.append(duration)
+data.append(
+    dict(
+        export="torch",
+        time=np.mean(times),
+        min=min(times),
+        max=max(times),
+        first=times[0],
+        last=times[-1],
+        std=np.std(times),
+        nodes=len(onx.graph.node),
+    )
+)
 
 #############################
 # The result.
@@ -219,7 +232,7 @@ print(df1)
 
 fig, ax = plt.subplots(1, 1)
 dfi = df1[["export", "time", "std"]].set_index("export")
-dfi["time"].plot.barh(ax=ax, title="Export time", yerr=dfi["std"])
+dfi["time"].plot.bar(ax=ax, title="Export time", yerr=dfi["std"], rot=30)
 fig.tight_layout()
 fig.savefig("plot_torch_export.png")
 
@@ -367,33 +380,64 @@ fig.savefig("plot_torch_export_ort.png")
 
 
 ######################################################
-# Show the interesting models
-# +++++++++++++++++++++++++++
+# Show the interesting models for CPU
+# +++++++++++++++++++++++++++++++++++
+#
+# script
+# ~~~~~~
 
-models = [
-    _ for _ in os.listdir(".") if ".onnx" in _ and _.startswith("ort-plot_torch_export")
-]
-for model in models:
-    if (
-        "cpu" not in model
-        and "cuda" not in model
-        or "aot" not in model
-        or "cus_p0" in model
-        or "cus_p1" in model
-    ):
-        print("skip1", model)
-        continue
-    if ("dynamo" in model or "dynopt" in model) and "aot0" in model:
-        print("skip2", model)
-        continue
-    if "aot1" in model and ("dynamo" in model or "dynopt" in model):
-        print("skip3", model)
-        continue
-    print()
-    print("#################################################")
-    print(model)
-    print("#################################################")
-    onx = onnx.load(model)
-    print(onnx_simple_text_plot(onx))
+model = "ort-plot_torch_export_cus_p2-cpu-aot0.onnx"
+print(onnx_simple_text_plot(onnx.load(model)))
 
-print("done.")
+###############################################
+# cus_p2
+# ~~~~~~
+
+model = "ort-plot_torch_export_cus_p2-cpu-aot0.onnx"
+print(onnx_simple_text_plot(onnx.load(model)))
+
+###############################################
+# dynopt
+# ~~~~~~
+
+model = "ort-plot_torch_export_dynopt-cpu-aot1.onnx"
+print(onnx_simple_text_plot(onnx.load(model)))
+
+###############################################
+# dynamo
+# ~~~~~~
+
+model = "ort-plot_torch_export_dynamo-cpu-aot1.onnx"
+print(onnx_simple_text_plot(onnx.load(model)))
+
+
+######################################################
+# Show the interesting models for CUDA
+# +++++++++++++++++++++++++++++++++++
+#
+# script
+# ~~~~~~
+
+model = "ort-plot_torch_export_cus_p2-cuda-aot0.onnx"
+print(onnx_simple_text_plot(onnx.load(model)))
+
+###############################################
+# cus_p2
+# ~~~~~~
+
+model = "ort-plot_torch_export_cus_p2-cuda-aot0.onnx"
+print(onnx_simple_text_plot(onnx.load(model)))
+
+###############################################
+# dynopt
+# ~~~~~~
+
+model = "ort-plot_torch_export_dynopt-cuda-aot1.onnx"
+print(onnx_simple_text_plot(onnx.load(model)))
+
+###############################################
+# dynamo
+# ~~~~~~
+
+model = "ort-plot_torch_export_dynamo-cuda-aot1.onnx"
+print(onnx_simple_text_plot(onnx.load(model)))
