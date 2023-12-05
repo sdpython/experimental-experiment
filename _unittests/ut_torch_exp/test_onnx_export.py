@@ -96,7 +96,7 @@ def export_utils(prefix, model, *args, remove_unused=False, constant_folding=Tru
     return names
 
 
-class TestMockExperimental(ExtTestCase):
+class TestOnnxExport(ExtTestCase):
     def check_model_ort(self, name):
         from onnxruntime import InferenceSession
 
