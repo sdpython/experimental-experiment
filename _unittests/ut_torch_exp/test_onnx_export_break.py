@@ -1,8 +1,6 @@
 import os
 import sys
 import unittest
-import warnings
-from onnx.reference import ReferenceEvaluator
 from experimental_experiment.ext_test_case import ExtTestCase
 from experimental_experiment.torch_exp.onnx_export import to_onnx
 
