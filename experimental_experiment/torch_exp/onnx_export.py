@@ -72,6 +72,7 @@ def to_onnx(
     for node in graph_module.graph.nodes:
         walker(node)
 
+    builder.remove_identity_nodes()
     if remove_unused:
         builder.remove_unused()
     if constant_folding:

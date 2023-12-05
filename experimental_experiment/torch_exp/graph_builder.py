@@ -403,3 +403,59 @@ class GraphBuilder:
                 continue
             new_nodes.append(node)
         self.nodes = new_nodes
+
+    def remove_identity_nodes(self):
+        """
+        Removes identity nodes.
+        """
+        # f<irst pass: detect replacements
+        new_nodes = []
+        input_names = set(i.name for i in self.inputs)
+        output_names = set(i.name for i in self.outputs)
+        replacements = {}
+        for node in self.nodes:
+            if node.op_type != "Identity":
+                new_nodes.append(node)
+                continue
+
+            if node.output[0] not in output_names:
+                old_name, new_name = node.output[0], node.input[0]
+            elif node.input[0] not in input_names:
+                old_name, new_name = node.input[0], node.output[0]
+            else:
+                new_nodes.append(node)
+                continue
+
+            # the new name can be set for replacements as well
+            assert old_name not in replacements
+            if new_name in replacements:
+                new_name = replacements[new_name]
+                assert new_name not in replacements
+            replacements[old_name] = new_name
+
+        # second pass: replacements in initializer
+        for k, v in replacements.items():
+            if k in self.initializers_dict:
+                self.initializers_dict[v] = self.initializers_dict[k]
+                del self.initializers_dict[k]
+                assert self.constants_[v]
+                self.constants_[v] = self.constants_[k]
+                del self.constants_[k]
+
+        # third pass: replacements in node
+        self.nodes = []
+        for node in new_nodes:
+            repo = {o for o in node.output if o in replacements}
+            repi = {o for o in node.input if o in replacements}
+            if repi or repo:
+                new_node = oh.make_node(
+                    node.op_type,
+                    [replacements.get(i, i) for i in node.input],
+                    [replacements.get(i, i) for i in node.output],
+                    domain=node.domain,
+                    name=node.name,
+                )
+                new_node.attribute.extend(node.attribute)
+                self.nodes.append(new_node)
+            else:
+                self.nodes.append(node)
