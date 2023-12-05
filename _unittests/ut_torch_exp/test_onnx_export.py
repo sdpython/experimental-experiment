@@ -70,7 +70,7 @@ def return_module_cls_pool():
     return MyModel(), input_tensor
 
 
-def export_utils(prefix, model, *args):
+def export_utils(prefix, model, *args, remove_unused=False):
     import torch
 
     names = []
@@ -83,7 +83,9 @@ def export_utils(prefix, model, *args):
     name = f"{prefix}_simple.onnx"
     if os.path.exists(name):
         os.remove(name)
-    onx = to_onnx(model, tuple(args), input_names=["input"])
+    onx = to_onnx(
+        model, tuple(args), input_names=["input"], remove_unused=remove_unused
+    )
     with open(name, "wb") as f:
         f.write(onx.SerializeToString())
     names.append(name)
@@ -94,7 +96,10 @@ class TestMockExperimental(ExtTestCase):
     def check_model_ort(self, name):
         from onnxruntime import InferenceSession
 
-        InferenceSession(name, providers=["CPUExecutionProvider"])
+        if isinstance(name, str):
+            InferenceSession(name, providers=["CPUExecutionProvider"])
+            return
+        InferenceSession(name.SerializeToString(), providers=["CPUExecutionProvider"])
 
     @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
     def test_simple_export_conv(self):
@@ -121,15 +126,53 @@ class TestMockExperimental(ExtTestCase):
         self.assertEqualArray(results[0], results[1])
 
     @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
-    def test_simple_export_apool(self):
+    def test_simple_export_pool(self):
+        from onnxruntime import InferenceSession
+
         model, input_tensor = return_module_cls_pool()
         names = export_utils("test_simple_export_pool", model, input_tensor)
         x = input_tensor.numpy()
         results = []
         for name in names:
-            ref = ReferenceEvaluator(name)
+            ref = InferenceSession(name, providers=["CPUExecutionProvider"])
             results.append(ref.run(None, {"input": x})[0])
-            self.check_model_ort(name)
+        self.assertEqualArray(results[0], results[1])
+
+    @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
+    def test_remove_unused_nodes(self):
+        model, input_tensor = return_module_cls_pool()
+        onx1 = to_onnx(model, (input_tensor,), input_names=["input"])
+        onx2 = to_onnx(
+            model, (input_tensor,), input_names=["input"], remove_unused=True
+        )
+        self.assertGreater(len(onx1.graph.node), len(onx2.graph.node))
+        sub1 = [n for n in onx1.graph.node if n.op_type == "Sub"]
+        sub2 = [n for n in onx2.graph.node if n.op_type == "Sub"]
+        self.assertEqual(len(sub1), 2)
+        self.assertEqual(len(sub2), 0)
+        p1 = [n for n in onx1.graph.node if n.op_type == "MaxPool"]
+        p2 = [n for n in onx2.graph.node if n.op_type == "MaxPool"]
+        self.assertEqual(len(p1), 4)
+        self.assertEqual(len(p2), 2)
+        self.check_model_ort(onx2)
+        from onnx_array_api.plotting.text_plot import onnx_simple_text_plot
+
+        print(onnx_simple_text_plot(onx1))
+        print(onnx_simple_text_plot(onx2))
+
+    @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
+    def test_simple_export_pool_unused(self):
+        from onnxruntime import InferenceSession
+
+        model, input_tensor = return_module_cls_pool()
+        names = export_utils(
+            "test_simple_export_pool_unused", model, input_tensor, remove_unused=True
+        )
+        x = input_tensor.numpy()
+        results = []
+        for name in names:
+            ref = InferenceSession(name, providers=["CPUExecutionProvider"])
+            results.append(ref.run(None, {"input": x})[0])
         self.assertEqualArray(results[0], results[1])
 
 

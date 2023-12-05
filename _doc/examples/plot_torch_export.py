@@ -16,6 +16,7 @@ torch model after it was converted into ONNX through different processes:
   set of models, as **dynamo**, it relies on
   `torch.fx <https://pytorch.org/docs/stable/fx.html>`_ but the design is closer to
   what tensorflow-onnx does.
+* the same exporter but unused nodes were removed, **cusopt**
 
 Some helpers
 ++++++++++++
@@ -115,10 +116,22 @@ def export_custom(filename, model, *args):
         f.write(onx.SerializeToString())
 
 
+def export_cusopt(filename, model, *args):
+    onx = to_onnx(model, tuple(args), input_names=["input"], remove_unused=True)
+    with open(filename, "wb") as f:
+        f.write(onx.SerializeToString())
+
+
 #########################################
 # Let's check they are working.
 
-export_functions = [export_script, export_dynamo, export_dynopt, export_custom]
+export_functions = [
+    export_script,
+    export_dynamo,
+    export_dynopt,
+    export_custom,
+    export_cusopt,
+]
 
 exporters = {f.__name__.replace("export_", ""): f for f in export_functions}
 shape = [1, 1, 128, 128]
@@ -151,8 +164,10 @@ for k, v in supported_exporters.items():
     for i in range(5):
         v(filename, model, input_tensor)
     duration = time.perf_counter() - begin
+    onx = onnx.load(filename)
     print("done.")
-    data.append(dict(export=k, time=duration / 5))
+    data.append(dict(export=k, time=duration / 5, nodes=len(onx.graph.node)))
+
 
 #########################################
 # The last export to measure time torch spends in export the model
@@ -171,7 +186,7 @@ df1 = pandas.DataFrame(data)
 print(df1)
 
 fig, ax = plt.subplots(1, 1)
-df1.set_index("export").plot.barh(ax=ax, title="Export time")
+df1[["export", "time"]].set_index("export").plot.barh(ax=ax, title="Export time")
 fig.tight_layout()
 fig.savefig("plot_torch_export.png")
 
@@ -182,7 +197,7 @@ fig.savefig("plot_torch_export.png")
 pr = cProfile.Profile()
 pr.enable()
 for i in range(5):
-    export_custom(filename, model, input_tensor)
+    export_custom("dummy.onnx", model, input_tensor)
 pr.disable()
 s = io.StringIO()
 sortby = SortKey.CUMULATIVE
@@ -235,7 +250,7 @@ def benchmark():
     data = []
     confs = list(
         itertools.product(
-            [_ for _ in os.listdir(".") if ".onnx" in _],
+            [_ for _ in os.listdir(".") if ".onnx" in _ and _.startswith("plot_torch")],
             [
                 ["CPUExecutionProvider"],
                 ["CUDAExecutionProvider", "CPUExecutionProvider"],
@@ -250,16 +265,26 @@ def benchmark():
         _, ext = os.path.splitext(root)
         if ext != ".onnx":
             continue
-        opts = SessionOptions()
-        opts.add_session_config_entry("session.disable_aot_function_inlining", aot)
-        opts.graph_optimization_level = GraphOptimizationLevel.ORT_ENABLE_ALL
 
         obs = {}  # system_info()
         obs["name"] = name
         obs["providers"] = ",".join(ps)
-        obs["compute"] = "CUDA" if "CUDA" in obs["providers"] else "CPU"
+        p = "CUDA" if "CUDA" in obs["providers"] else "CPU"
+        obs["compute"] = p
         obs["aot"] = 1 if aot == "0" else 0
         obs["export"] = name.replace("plot_torch_export_", "").replace(".onnx", "")
+
+        onx = onnx.load(name)
+        obs["n_nodes"] = len(onx.graph.node)
+        obs["n_function"] = len(onx.functions or [])
+        obs["n_sub"] = len([n for n in onx.graph.node if n.op_type == "Sub"])
+
+        opts = SessionOptions()
+        opts.add_session_config_entry("session.disable_aot_function_inlining", aot)
+        opts.graph_optimization_level = GraphOptimizationLevel.ORT_ENABLE_ALL
+        opts.optimized_model_filepath = (
+            f"ort-{name.replace('.onnx', '')}-{p.lower()}-aot{aot}.onnx"
+        )
 
         try:
             sess = InferenceSession(name, opts, providers=ps)
@@ -267,7 +292,7 @@ def benchmark():
             loop.set_description(f"ERROR-load: {name} {e}")
             obs.update({"error": e, "step": "run"})
             data.append(obs)
-            continue
+            raise e
 
         input_name = sess.get_inputs()[0].name
         feeds = {input_name: np.random.rand(*shape).astype(np.float32)}
@@ -278,7 +303,7 @@ def benchmark():
             loop.set_description(f"ERROR-run: {name} {e}")
             obs.update({"error": e, "step": "load"})
             data.append(obs)
-            continue
+            raise e
         obs.update(measure_time(lambda: sess.run(None, feeds), max_time=1))
 
         loop.set_description(f"{obs['average']} {name} {ps}")

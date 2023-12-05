@@ -1,5 +1,8 @@
 black
 furo
+matplotlib
+onnx-extended
+onnxruntime
 pandas
 Pillow
 packaging

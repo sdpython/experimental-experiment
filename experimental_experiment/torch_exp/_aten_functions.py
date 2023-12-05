@@ -21,7 +21,7 @@ def aten_addmm(
     beta: float = 1.0,
     alpha: float = 1.0,
 ) -> T:
-    return g.op.Gemm(b, c, a, alpha=alpha, beta=beta, outputs=outputs)
+    return g.op.Gemm(b, c, a, alpha=float(alpha), beta=float(beta), outputs=outputs)
 
 
 def aten_convolution(

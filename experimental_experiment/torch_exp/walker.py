@@ -53,8 +53,26 @@ class DynamoWalker:
         if hasattr(output, "name"):
             output = output.name
         self.builder.make_node("Identity", [output], [output_name])
-        self.builder.make_tensor_output(output_name)
-        return output_name
+
+        val = node.meta.get("val", None)
+        if val is None:
+            output_name = node.name
+            self.builder.make_tensor_output(output_name)
+            return output_name
+
+        if isinstance(val, tuple):
+            if len(val) > 1:
+                raise NotImplementedError("Not yet implemented for multiple outputs.")
+            val = val[0]
+
+        if isinstance(val, self.torch.Tensor):
+            output_name = node.name
+            shape = val.shape
+            dtype = self.builder._get_type(val.dtype)
+            self.builder.make_tensor_output(output_name, dtype, shape)
+            return output_name
+
+        raise TypeError(f"Unexpected output type {type(val)}.")
 
     def _fill_in_default_kwargs(
         self, node: "torch.fx.Node"  # noqa: F821

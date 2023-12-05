@@ -11,6 +11,7 @@ def to_onnx(
     input_names: Optional[Sequence[str]] = None,
     target_opset: Union[int, Dict[str, int]] = 18,
     as_function: bool = False,
+    remove_unused: bool = False,
 ) -> ModelProto:
     """
     Exports a torch model into ONNX using
@@ -22,6 +23,7 @@ def to_onnx(
     :param input_names: input names
     :param target_opset: targeted opset or targeted opsets as a dictionary
     :param as_function: export as a ModelProto or a FunctionProto
+    :param removed_unused: if True, remove unused nodes
     :return: onnx model
     """
     with warnings.catch_warnings():
@@ -65,4 +67,6 @@ def to_onnx(
     for node in graph_module.graph.nodes:
         walker(node)
 
+    if remove_unused:
+        builder.remove_unused()
     return builder.to_onnx()

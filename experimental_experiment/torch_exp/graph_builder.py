@@ -196,10 +196,6 @@ class GraphBuilder:
         domain: str = "",
         **kwargs,
     ) -> Union[str, List[str]]:
-        if "ceil_mode" in kwargs and not isinstance(kwargs["ceil_mode"], int):
-            raise RuntimeError(
-                f"Wrong value for ceil_mode operator is {op_type}, kwargs={kwargs}."
-            )
         if isinstance(inputs, tuple):
             inputs = list(inputs)
         if isinstance(outputs, int):
@@ -253,3 +249,32 @@ class GraphBuilder:
         )
         model = oh.make_model(graph, opset_imports=opsets)
         return model
+
+    def remove_unused(self):
+        """
+        Simple function to remove unused nodes.
+        It does not look into subgraphs and assumes there is none.
+        """
+
+        # mark output
+        marked = {o.name: set() for o in self.outputs}
+        for node in reversed(self.nodes):
+            used = False
+            for o in node.output:
+                if o in marked:
+                    for i in node.input:
+                        marked[o].add(i)
+                        used = True
+            if used:
+                for i in node.input:
+                    marked[i] = set()
+
+        # removed nodes
+        removed = set()
+        marked_set = set(marked)
+        for ind, node in enumerate(self.nodes):
+            if not (set(node.output) & marked_set):
+                removed.add(ind)
+
+        self.initializers = [i for i in self.initializers if i.name in marked]
+        self.nodes = [node for i, node in enumerate(self.nodes) if i not in removed]
