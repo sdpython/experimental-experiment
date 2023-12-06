@@ -401,7 +401,8 @@ print(onnx_simple_text_plot(onnx.load(model)))
 # ~~~~~~
 
 model = "ort-plot_torch_export_dynopt-cpu-aot1.onnx"
-print(onnx_simple_text_plot(onnx.load(model)))
+if os.path.exists(model):
+    print(onnx_simple_text_plot(onnx.load(model)))
 
 ###############################################
 # dynamo
@@ -419,25 +420,29 @@ print(onnx_simple_text_plot(onnx.load(model)))
 # ~~~~~~
 
 model = "ort-plot_torch_export_cus_p2-cuda-aot0.onnx"
-print(onnx_simple_text_plot(onnx.load(model)))
+if os.path.exists(model):
+    print(onnx_simple_text_plot(onnx.load(model)))
 
 ###############################################
 # cus_p2
 # ~~~~~~
 
 model = "ort-plot_torch_export_cus_p2-cuda-aot0.onnx"
-print(onnx_simple_text_plot(onnx.load(model)))
+if os.path.exists(model):
+    print(onnx_simple_text_plot(onnx.load(model)))
 
 ###############################################
 # dynopt
 # ~~~~~~
 
 model = "ort-plot_torch_export_dynopt-cuda-aot1.onnx"
-print(onnx_simple_text_plot(onnx.load(model)))
+if os.path.exists(model):
+    print(onnx_simple_text_plot(onnx.load(model)))
 
 ###############################################
 # dynamo
 # ~~~~~~
 
 model = "ort-plot_torch_export_dynamo-cuda-aot1.onnx"
-print(onnx_simple_text_plot(onnx.load(model)))
+if os.path.exists(model):
+    print(onnx_simple_text_plot(onnx.load(model)))

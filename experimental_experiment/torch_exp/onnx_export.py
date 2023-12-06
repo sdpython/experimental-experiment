@@ -6,7 +6,7 @@ from .graph_builder import GraphBuilder
 
 
 def to_onnx(
-    mod: "torch.nn.Module",  # noqa: F821
+    mod: Union["torch.nn.Module", "torch.fx.GraphModule"],  # noqa: F821
     args: Sequence["torch.Tensor"],  # noqa: F821
     input_names: Optional[Sequence[str]] = None,
     target_opset: Union[int, Dict[str, int]] = 18,
@@ -33,17 +33,30 @@ def to_onnx(
         raise NotImplementedError("Export to FunctionProto is not implemented yet.")
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
+        import torch
         import torch.export
 
-    exported_mod = torch.export.export(mod, args)
-    signature = exported_mod.graph_signature
-    mapping = signature.inputs_to_parameters
-    try:
-        weights = dict(exported_mod.named_parameters())
-    except AttributeError:
-        weights = dict(mod.named_parameters())
+    if isinstance(mod, torch.fx.GraphModule):
+        graph_module = mod
+        weights = dict(graph_module.named_parameters())
+        mapping = {}
+    else:
+        exported_mod = torch.export.export(mod, args)
+        graph_module = exported_mod.graph_module
+        # print(graph_module.graph)
+        try:
+            weights = dict(exported_mod.named_parameters())
+        except AttributeError:
+            weights = dict(mod.named_parameters())
+        signature = exported_mod.graph_signature
+        mapping = signature.inputs_to_parameters
 
-    def retrieve(name: str) -> torch.Tensor:
+    def retrieve(name: str, weights=weights, mapping=mapping) -> torch.Tensor:
+        if name not in mapping:
+            raise RuntimeError(
+                f"Unable to find {name!r}. "
+                f"Available weights: {list(sorted(weights))}."
+            )
         weight = mapping[name]
         if weight not in weights:
             if (
@@ -68,7 +81,6 @@ def to_onnx(
     builder = GraphBuilder(target_opset, input_names=input_names)
     walker = DynamoWalker(builder, retrieve)
 
-    graph_module = exported_mod.graph_module
     for node in graph_module.graph.nodes:
         walker(node)
 

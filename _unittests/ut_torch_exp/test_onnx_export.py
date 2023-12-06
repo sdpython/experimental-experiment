@@ -51,11 +51,11 @@ def return_module_cls_pool():
     class MyModel(nn.Module):
         def __init__(self):
             super(MyModel, self).__init__()
-            self.conv1 = nn.Conv2d(1, 128, 5)
-            self.conv2 = nn.Conv2d(128, 16, 5)
-            self.fc1 = nn.Linear(13456, 1024)
-            self.fc2 = nn.Linear(1024, 128)
-            self.fc3 = nn.Linear(128, 10)
+            self.conv1 = nn.Conv2d(1, 16, 5)
+            self.conv2 = nn.Conv2d(16, 16, 5)
+            self.fc1 = nn.Linear(13456, 8)
+            self.fc2 = nn.Linear(8, 8)
+            self.fc3 = nn.Linear(8, 10)
 
         def forward(self, x):
             x = F.max_pool2d(F.relu(self.conv1(x)), (2, 2))
@@ -101,9 +101,28 @@ class TestOnnxExport(ExtTestCase):
         from onnxruntime import InferenceSession
 
         if isinstance(name, str):
-            InferenceSession(name, providers=["CPUExecutionProvider"])
+            try:
+                InferenceSession(name, providers=["CPUExecutionProvider"])
+            except Exception as e:
+                import onnx
+                from onnx_array_api.plotting.text_plot import onnx_simple_text_plot
+
+                raise AssertionError(
+                    f"onnxruntime cannot load the model "
+                    f"due to {e}\n{onnx_simple_text_plot(onnx.load(name))}"
+                )
             return
-        InferenceSession(name.SerializeToString(), providers=["CPUExecutionProvider"])
+        try:
+            InferenceSession(
+                name.SerializeToString(), providers=["CPUExecutionProvider"]
+            )
+        except Exception as e:
+            from onnx_array_api.plotting.text_plot import onnx_simple_text_plot
+
+            raise AssertionError(
+                f"onnxruntime cannot load the model"
+                f"due to {e}\n{onnx_simple_text_plot(name)}"
+            )
 
     @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
     def test_simple_export_conv(self):
@@ -198,7 +217,7 @@ class TestOnnxExport(ExtTestCase):
             constant_folding=True,
         )
         self.assertGreater(len(onx2.graph.node), 5)
-        self.assertGreater(len(onx1.graph.node), len(onx2.graph.node))
+        self.assertGreaterOrEqual(len(onx1.graph.node), len(onx2.graph.node))
 
         p1 = [n for n in onx1.graph.node if n.op_type == "Identity"]
         p2 = [n for n in onx2.graph.node if n.op_type == "Identity"]

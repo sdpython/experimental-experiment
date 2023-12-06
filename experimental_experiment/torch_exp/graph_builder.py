@@ -262,7 +262,10 @@ class GraphBuilder:
             for n in name:
                 res.append(self.make_tensor_output(n, elem_type, shape))
             return res
+
         elem_type = self._get_type(elem_type, False)
+        if elem_type == 0:
+            raise RuntimeError(f"Undefined element type for {name!r}.")
         self.outputs.append(oh.make_tensor_value_info(name, elem_type, shape))
         if shape:
             self.set_shape(name, shape)

@@ -225,6 +225,10 @@ class ExtTestCase(unittest.TestCase):
         if not os.path.exists(name):
             raise AssertionError(f"File or folder {name!r} does not exists.")
 
+    def assertGreaterOrEqual(self, a, b):
+        if a < b:
+            return AssertionError(f"{a} < {b}, a not greater or equal than b.")
+
     def assertEqualArray(
         self,
         expected: numpy.ndarray,

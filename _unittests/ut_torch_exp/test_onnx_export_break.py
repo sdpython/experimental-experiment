@@ -13,15 +13,15 @@ def return_module_cls_pool():
     class MyModel(nn.Module):
         def __init__(self, n_lin_layers=2):
             super(MyModel, self).__init__()
-            self.conv1 = nn.Conv2d(1, 128, 5)
-            self.conv2 = nn.Conv2d(128, 16, 5)
+            self.conv1 = nn.Conv2d(1, 16, 5)
+            self.conv2 = nn.Conv2d(16, 16, 5)
             if n_lin_layers == 2:
-                self.fc1 = nn.Linear(13456, 128)
-                self.fc3 = nn.Linear(128, 10)
+                self.fc1 = nn.Linear(13456, 8)
+                self.fc3 = nn.Linear(8, 10)
             else:
-                self.fc1 = nn.Linear(13456, 1024)
-                self.fc2 = nn.Linear(1024, 128)
-                self.fc3 = nn.Linear(128, 10)
+                self.fc1 = nn.Linear(13456, 8)
+                self.fc2 = nn.Linear(8, 8)
+                self.fc3 = nn.Linear(8, 10)
 
         def forward(self, x):
             x = F.max_pool2d(F.relu(self.conv1(x)), (2, 2))
@@ -39,7 +39,44 @@ def return_module_cls_pool():
     return MyModel(), input_tensor
 
 
-def export_utils(prefix, model, *args, remove_unused=False, constant_folding=True):
+def return_module_cls_explicit_break():
+    import torch
+    from torch import nn
+
+    class ModelWithBreaks(nn.Module):
+        def __init__(self):
+            super().__init__()
+
+            def create_sequential():
+                return nn.Sequential(
+                    nn.Linear(128, 128),
+                    nn.ReLU(),
+                    nn.Linear(128, 128),
+                    nn.ReLU(),
+                )
+
+            self.mod1 = create_sequential()
+            self.mod2 = create_sequential()
+            self.mod3 = create_sequential()
+            self.mod4 = create_sequential()
+
+        def forward(self, inp):
+            mod1 = self.mod1(inp)
+            torch._dynamo.graph_break()
+            mod2 = self.mod2(mod1)
+            torch._dynamo.graph_break()
+            mod3 = self.mod3(mod2)
+            torch._dynamo.graph_break()
+            mod4 = self.mod4(mod3)
+            return mod4
+
+    input_tensor = torch.randn((128, 128), dtype=torch.float32)
+    return ModelWithBreaks(), input_tensor
+
+
+def export_utils(
+    prefix, model, *args, remove_unused=False, constant_folding=True, xscript=False
+):
     import torch
 
     names = []
@@ -48,6 +85,14 @@ def export_utils(prefix, model, *args, remove_unused=False, constant_folding=Tru
         os.remove(name)
     torch.onnx.export(model, *args, name, input_names=["input"])
     names.append(name)
+
+    if xscript:
+        name = f"{prefix}_onnx_script.onnx"
+        try:
+            export_output = torch.onnx.dynamo_export(model, *args)
+            export_output.save(name)
+        except Exception as e:
+            print("dynamo failed: ", e)
 
     name = f"{prefix}_simple.onnx"
     if os.path.exists(name):
@@ -80,6 +125,23 @@ class TestOnnxExportBreak(ExtTestCase):
 
         model, input_tensor = return_module_cls_pool()
         names = export_utils("test_simple_export_break", model, input_tensor)
+        x = input_tensor.numpy()
+        results = []
+        for name in names:
+            ref = InferenceSession(name, providers=["CPUExecutionProvider"])
+            results.append(ref.run(None, {"input": x})[0])
+        self.assertEqualArray(results[0], results[1])
+
+    @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
+    @unittest.skip(reason="graph break not supported")
+    def test_simple_export_explicit_break(self):
+        from onnxruntime import InferenceSession
+
+        model, input_tensor = return_module_cls_explicit_break()
+        model(input_tensor)
+        names = export_utils(
+            "test_simple_export_explicit_break", model, input_tensor, xscript=True
+        )
         x = input_tensor.numpy()
         results = []
         for name in names:
