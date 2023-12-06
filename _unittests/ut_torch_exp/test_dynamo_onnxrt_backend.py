@@ -30,8 +30,9 @@ def return_module_cls_pool():
 
 class TestDynamoOnnxRtBackend(ExtTestCase):
     @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
-    @ignore_warnings(DeprecationWarning)
-    def test_onnxrt_tutorial_0(self):
+    @ignore_warnings((DeprecationWarning, UserWarning))
+    def test_onnxrt_tutorial_0a(self):
+        from onnxruntime import InferenceSession
         import torch
         import torch.onnx
         import torch._dynamo
@@ -51,8 +52,57 @@ class TestDynamoOnnxRtBackend(ExtTestCase):
             expected.detach().numpy(), got.detach().numpy(), atol=1e-5
         )
 
+        export = torch.onnx.dynamo_export(model, input_tensor)
+        onx = export.model_proto
+        sess = InferenceSession(
+            onx.SerializeToString(), providers=["CPUExecutionProvider"]
+        )
+        with open("dummy_baseline_a.onnx", "wb") as f:
+            f.write(onx.SerializeToString())
+        name = onx.graph.input[0].name
+        got = sess.run(None, {name: input_tensor.detach().numpy()})[0]
+        self.assertEqualArray(expected.detach().numpy(), got, atol=1e-5)
+
     @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
-    @ignore_warnings(DeprecationWarning)
+    @ignore_warnings((DeprecationWarning, UserWarning))
+    def test_onnxrt_tutorial_0b(self):
+        from onnxruntime import InferenceSession
+        import torch
+        import torch.onnx
+        import torch._dynamo
+
+        torch._dynamo.reset()
+
+        if not torch.onnx.is_onnxrt_backend_supported():
+            return
+
+        model, input_tensor = return_module_cls_pool()
+
+        def f(x):
+            return model(x)
+
+        expected = f(input_tensor)
+        optimized_mod = torch.compile(f)
+        got = optimized_mod(input_tensor)
+        self.assertEqual(expected.shape, got.shape)
+        self.assertEqual(expected.dtype, got.dtype)
+        self.assertEqualArray(
+            expected.detach().numpy(), got.detach().numpy(), atol=1e-5
+        )
+
+        export = torch.onnx.dynamo_export(f, input_tensor)
+        onx = export.model_proto
+        sess = InferenceSession(
+            onx.SerializeToString(), providers=["CPUExecutionProvider"]
+        )
+        with open("dummy_baseline_b.onnx", "wb") as f:
+            f.write(onx.SerializeToString())
+        name = onx.graph.input[0].name
+        got = sess.run(None, {name: input_tensor.detach().numpy()})[0]
+        self.assertEqualArray(expected.detach().numpy(), got, atol=1e-5)
+
+    @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
+    @ignore_warnings((DeprecationWarning, UserWarning))
     def test_onnxrt_tutorial_1(self):
         import torch
         import torch.onnx
@@ -65,11 +115,10 @@ class TestDynamoOnnxRtBackend(ExtTestCase):
 
         model, input_tensor = return_module_cls_pool()
         expected = model(input_tensor)
-        optimized_mod = torch.compile(model, backend="onnxrt")
 
         @torch.compile(backend="onnxrt")
         def f(x):
-            return optimized_mod(x)
+            return model(x)
 
         got = f(input_tensor)
         self.assertEqual(expected.shape, got.shape)
@@ -77,7 +126,7 @@ class TestDynamoOnnxRtBackend(ExtTestCase):
         self.assertEqualArray(expected.detach().numpy(), got.detach().numpy())
 
     @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
-    @ignore_warnings(DeprecationWarning)
+    @ignore_warnings((DeprecationWarning, UserWarning))
     def test_onnxrt_tutorial_2(self):
         import torch
         import torch.onnx
@@ -98,7 +147,7 @@ class TestDynamoOnnxRtBackend(ExtTestCase):
         self.assertEqualArray(expected.detach().numpy(), got.detach().numpy())
 
     @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
-    @ignore_warnings(DeprecationWarning)
+    @ignore_warnings((DeprecationWarning, UserWarning))
     def test_simple_dort(self):
         import torch
         import torch.onnx
