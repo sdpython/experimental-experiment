@@ -13,10 +13,10 @@ def return_module_cls_pool():
     class MyModel(nn.Module):
         def __init__(self, n_lin_layers=2):
             super(MyModel, self).__init__()
-            self.conv1 = nn.Conv2d(1, 128, 5)
-            self.conv2 = nn.Conv2d(128, 16, 5)
-            self.fc1 = nn.Linear(13456, 128)
-            self.fc3 = nn.Linear(128, 10)
+            self.conv1 = nn.Conv2d(1, 16, 5)
+            self.conv2 = nn.Conv2d(16, 16, 5)
+            self.fc1 = nn.Linear(13456, 8)
+            self.fc3 = nn.Linear(8, 10)
 
         def forward(self, x):
             x = F.max_pool2d(F.relu(self.conv1(x)), (2, 2))
@@ -63,7 +63,7 @@ class TestDynamoCompileOnnx(ExtTestCase):
         print(got)
         self.assertEqual(expected.shape, got.shape)
         self.assertEqual(expected.dtype, got.dtype)
-        self.assertEqualArray(expected.detach().numpy(), got.detatch.numpy())
+        self.assertEqualArray(expected.detach().numpy(), got.detach().numpy())
 
     @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
     def test_simple_dort_2(self):
@@ -107,7 +107,7 @@ class TestDynamoCompileOnnx(ExtTestCase):
         print(got)
         self.assertEqual(expected.shape, got.shape)
         self.assertEqual(expected.dtype, got.dtype)
-        self.assertEqualArray(expected.detach().numpy(), got.detatch.numpy())
+        self.assertEqualArray(expected.detach().numpy(), got.detach().numpy())
 
 
 if __name__ == "__main__":

@@ -51,11 +51,11 @@ def return_module_cls_pool():
     class MyModel(nn.Module):
         def __init__(self):
             super(MyModel, self).__init__()
-            self.conv1 = nn.Conv2d(1, 128, 5)
-            self.conv2 = nn.Conv2d(128, 16, 5)
-            self.fc1 = nn.Linear(13456, 1024)
-            self.fc2 = nn.Linear(1024, 128)
-            self.fc3 = nn.Linear(128, 10)
+            self.conv1 = nn.Conv2d(1, 16, 5)
+            self.conv2 = nn.Conv2d(16, 16, 5)
+            self.fc1 = nn.Linear(13456, 8)
+            self.fc2 = nn.Linear(8, 8)
+            self.fc3 = nn.Linear(8, 10)
 
         def forward(self, x):
             x = F.max_pool2d(F.relu(self.conv1(x)), (2, 2))
