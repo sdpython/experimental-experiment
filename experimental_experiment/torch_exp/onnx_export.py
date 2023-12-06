@@ -43,6 +43,7 @@ def to_onnx(
     else:
         exported_mod = torch.export.export(mod, args)
         graph_module = exported_mod.graph_module
+        # print(graph_module.graph)
         try:
             weights = dict(exported_mod.named_parameters())
         except AttributeError:
@@ -79,12 +80,6 @@ def to_onnx(
 
     builder = GraphBuilder(target_opset, input_names=input_names)
     walker = DynamoWalker(builder, retrieve)
-
-    print("-----------")
-    print(mapping)
-    print({k: type(v) for k, v in weights.items()})
-    for node in graph_module.graph.nodes:
-        print("+", node.op, node.name)
 
     for node in graph_module.graph.nodes:
         walker(node)

@@ -182,6 +182,10 @@ def aten_relu(g: GraphBuilder, outputs: List[str], x: T) -> T:
     return g.op.Relu(x, outputs=outputs)
 
 
+def aten_t(g: GraphBuilder, outputs: List[str], x: T) -> T:
+    return g.op.Transpose(x, perm=[1, 0], outputs=outputs)
+
+
 def aten_view(g: GraphBuilder, outputs: List[str], x: T, size: T) -> T:
     if isinstance(size, (int, tuple, list)):
         size = [size] if isinstance(size, int) else list(size)

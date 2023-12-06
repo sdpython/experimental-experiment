@@ -32,7 +32,41 @@ def return_module_cls_pool():
 
 class TestDynamoCompileOnnx(ExtTestCase):
     @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
-    def test_simple_dort(self):
+    def test_simple_dort_1(self):
+        import torch
+        from onnxruntime import InferenceSession
+
+        def onnx_compiler(model: torch.fx.GraphModule, args: List[torch.Tensor]):
+            export_output = torch.onnx.dynamo_export(model, *args)
+            onx = export_output.to_model_proto()
+            sess = InferenceSession(
+                onx.SerializeToString(), providers=["CPUExecutionProvider"]
+            )
+            names = [i.name for i in onx.graph.input]
+
+            def run(*inputs, sess=sess, names=names):
+                # not efficient
+                xnp = [x.detach().numpy() for x in inputs]
+                feeds = dict(zip(names, xnp))
+                res = tuple(torch.Tensor(y) for y in sess.run(None, feeds))
+                if len(res) == 1:
+                    return res[0]
+                return res
+
+            return run
+
+        model, input_tensor = return_module_cls_pool()
+        expected = model(input_tensor)
+        optimized_mod = torch.compile(model, backend=onnx_compiler)
+        got = optimized_mod(input_tensor)
+        print(expected)
+        print(got)
+        self.assertEqual(expected.shape, got.shape)
+        self.assertEqual(expected.dtype, got.dtype)
+        self.assertEqualArray(expected.detach().numpy(), got.detatch.numpy())
+
+    @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
+    def test_simple_dort_2(self):
         import torch
 
         def onnx_compiler(model: torch.fx.GraphModule, args: List[torch.Tensor]):

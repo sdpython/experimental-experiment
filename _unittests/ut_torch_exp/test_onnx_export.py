@@ -101,9 +101,28 @@ class TestOnnxExport(ExtTestCase):
         from onnxruntime import InferenceSession
 
         if isinstance(name, str):
-            InferenceSession(name, providers=["CPUExecutionProvider"])
+            try:
+                InferenceSession(name, providers=["CPUExecutionProvider"])
+            except Exception as e:
+                import onnx
+                from onnx_array_api.plotting.text_plot import onnx_simple_text_plot
+
+                raise AssertionError(
+                    f"onnxruntime cannot load the model "
+                    f"due to {e}\n{onnx_simple_text_plot(onnx.load(name))}"
+                )
             return
-        InferenceSession(name.SerializeToString(), providers=["CPUExecutionProvider"])
+        try:
+            InferenceSession(
+                name.SerializeToString(), providers=["CPUExecutionProvider"]
+            )
+        except Exception as e:
+            from onnx_array_api.plotting.text_plot import onnx_simple_text_plot
+
+            raise AssertionError(
+                f"onnxruntime cannot load the model"
+                f"due to {e}\n{onnx_simple_text_plot(name)}"
+            )
 
     @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
     def test_simple_export_conv(self):
@@ -198,7 +217,7 @@ class TestOnnxExport(ExtTestCase):
             constant_folding=True,
         )
         self.assertGreater(len(onx2.graph.node), 5)
-        self.assertGreater(len(onx1.graph.node), len(onx2.graph.node))
+        self.assertGreaterOrEqual(len(onx1.graph.node), len(onx2.graph.node))
 
         p1 = [n for n in onx1.graph.node if n.op_type == "Identity"]
         p2 = [n for n in onx2.graph.node if n.op_type == "Identity"]

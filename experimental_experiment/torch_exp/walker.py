@@ -67,7 +67,19 @@ class DynamoWalker:
         val = node.meta.get("val", None)
         if val is None:
             output_name = node.name
-            self.builder.make_tensor_output(output_name)
+            if output not in self.builder._known_shapes:
+                raise RuntimeError(
+                    f"val is None for node={node}, "
+                    f"output={output}, output_name={output_name}"
+                    f"\nmeta={node.meta}"
+                    f"\nnode.__dict__={node.__dict__}"
+                )
+
+            elem_type = self.builder._known_types[output]
+            shape = self.builder._known_shapes[output]
+            self.builder.make_tensor_output(
+                output_name, elem_type=elem_type, shape=shape
+            )
             return output_name
 
         if isinstance(val, tuple):
@@ -197,9 +209,24 @@ class DynamoWalker:
         return res
 
     def call_module(self, node: "torch.fx.Node"):  # noqa: F821
+        graph = node.graph
+        print(dir(graph))
+        print("---")
+        print(dir(graph))
+        print(graph.print_tabular())
+
+        """
+        target = node.target
+        meta = node.meta
+        if node.op == "call_module":
+            submodule = getattr(gm_torch_level, target)
+            if isinstance(submodule, torch.nn.Module):
+            """
+
         import pprint
 
         raise NotImplementedError(
             f"node={node}\n--\nnode.__dict__={pprint.pformat(node.__dict__)}"
-            f"\n--\n{pprint.pformat(node.meta)}"
+            f"\n--\n{pprint.pformat(node.meta)}\n---\n{dir(node)}\n---\n"
+            f"{type(node.graph)}\n---\n{node.graph}\n---\n{node.graph.__dict__}"
         )
