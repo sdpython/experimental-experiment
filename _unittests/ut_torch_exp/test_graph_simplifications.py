@@ -1,5 +1,3 @@
-import os
-import sys
 import unittest
 import onnx
 from experimental_experiment.ext_test_case import ExtTestCase
