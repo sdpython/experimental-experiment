@@ -3,7 +3,7 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 import numpy as np
 import onnx.helper as oh
 import onnx.numpy_helper as onh
-from onnx import FunctionProto, ModelProto, TensorProto
+from onnx import FunctionProto, ModelProto, NodeProto, TensorProto
 from onnx.reference import ReferenceEvaluator
 
 
@@ -66,25 +66,84 @@ class Opset:
 class GraphBuilder:
     def __init__(
         self,
-        target_opset: Union[int, Dict[str, int]],
+        target_opset_or_existing_proto: Union[
+            int, Dict[str, int], ModelProto, FunctionProto
+        ],
         input_names: Optional[Sequence[str]] = None,
         constant_size: int = 1024,
     ):
-        self.opsets = (
-            {"": target_opset} if isinstance(target_opset, int) else target_opset
-        )
-        self.nodes = []
-        self.initializers_dict = {}
-        self.inputs = []
-        self.outputs = []
-        self._unique_names = set()
-        self.input_names = input_names or []
-        self.current_input = 0
-        self.constant_size = constant_size
+        if isinstance(target_opset_or_existing_proto, (int, dict)):
+            self.opsets = (
+                {"": target_opset_or_existing_proto}
+                if isinstance(target_opset_or_existing_proto, int)
+                else target_opset_or_existing_proto
+            )
+            self.nodes = []
+            self.initializers_dict = {}
+            self.inputs = []
+            self.outputs = []
+            self._unique_names = set()
+            self.input_names = input_names or []
+            self.current_input = 0
+            self._known_shapes = {}
+            self._known_types = {}
+            self.constants_ = {}
+        elif isinstance(target_opset_or_existing_proto, ModelProto):
+            if input_names:
+                raise ValueError(
+                    "input_names must be empty if the input is an existing model."
+                )
+            proto = target_opset_or_existing_proto
+            self.opsets = {d.domain: d.version for d in proto.opset_import}
+            self.nodes = list(proto.graph.node)
+            self.initializers_dict = {i.name: i for i in proto.graph.initializer}
+            self.initializers_dict.update(
+                {i.name: i for i in proto.graph.sparse_initializer}
+            )
+            self.inputs = list(proto.graph.input)
+            self.outputs = list(proto.graph.output)
+            self.input_names = [i.name for i in proto.graph.input]
+            self.current_input = len(self.inputs)
+            # This should be improve.
+            self._known_shapes = {}
+            self._known_types = {}
+            self.constants_ = {}
+            for k, v in self.initializers_dict.items():
+                self.constants_[k] = None
+                self._known_shapes = self._get_tensor_shape(v)
+                self._known_types = self._get_tensor_type(v)
+            for node in self.nodes:
+                if node.op_type == "Constant":
+                    self.constants_[node.output[0]] = node
+                    self._known_shapes = self._get_tensor_shape(node)
+                    self._known_types = self._get_tensor_type(node)
+        else:
+            raise NotImplementedError(
+                f"{type(target_opset_or_existing_proto)} is not supported."
+            )
+
         self.op = Opset(self, self.opsets[""])
-        self._known_shapes = {}
-        self._known_types = {}
-        self.constants_ = {}
+        self.constant_size = constant_size
+
+    def _get_tensor_shape(
+        self, proto: Union[NodeProto, TensorProto]
+    ) -> Tuple[int, ...]:
+        if isinstance(proto, TensorProto):
+            return tuple(proto.dims)
+        if isinstance(proto, NodeProto):
+            for att in proto.attribute:
+                if att.name == "value_float":
+                    return tuple()
+        raise TypeError(f"Unexpected type {type(proto)}: {proto}.")
+
+    def _get_tensor_type(self, proto: Union[NodeProto, TensorProto]) -> int:
+        if isinstance(proto, TensorProto):
+            return proto.data_type
+        if isinstance(proto, NodeProto):
+            for att in proto.attribute:
+                if att.name == "value_float":
+                    return TensorProto.FLOAT
+        raise ValueError(f"Unexpected type or value {type(proto)}: {proto}.")
 
     def is_constant(self, name: str) -> bool:
         """Tells if a result is a constant."""
