@@ -85,7 +85,7 @@ class GraphBuilder:
         as_function: bool = False,
         optimization_options: Optional[OptimizationOptions] = None,
     ):
-        self.optimization_options = optimization_options
+        self.optimization_options = optimization_options or OptimizationOptions()
         self.as_function = as_function
 
         if isinstance(target_opset_or_existing_proto, (int, dict)):
@@ -327,7 +327,7 @@ class GraphBuilder:
         # constant handling
         if node.op_type == "Constant":
             size = len(node.SerializeToString())
-            if size >= self.constant_size:
+            if size >= self.optimization_options.constant_size:
                 raise ValueError(
                     f"A node Constant holds a tensor bigger than "
                     f"the constant: {size} >= {self.constant_size}."
