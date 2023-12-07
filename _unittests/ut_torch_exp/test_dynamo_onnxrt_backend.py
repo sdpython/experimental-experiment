@@ -83,6 +83,7 @@ class TestDynamoOnnxRtBackend(ExtTestCase):
 
         expected = f(input_tensor)
         optimized_mod = torch.compile(f)
+
         got = optimized_mod(input_tensor)
         self.assertEqual(expected.shape, got.shape)
         self.assertEqual(expected.dtype, got.dtype)

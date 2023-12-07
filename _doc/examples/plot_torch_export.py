@@ -409,7 +409,8 @@ if os.path.exists(model):
 # ~~~~~~
 
 model = "ort-plot_torch_export_dynamo-cpu-aot1.onnx"
-print(onnx_simple_text_plot(onnx.load(model)))
+if os.path.exists(model):
+    print(onnx_simple_text_plot(onnx.load(model)))
 
 
 ######################################################
