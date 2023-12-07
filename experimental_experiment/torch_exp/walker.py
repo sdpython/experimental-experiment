@@ -2,12 +2,13 @@ import inspect
 import operator
 import types
 from typing import Any, Callable, Dict, List, Tuple
-from .graph_builder import GraphBuilder
 from .aten_functions import find_function
 
 
 class DynamoWalker:
-    def __init__(self, graph_builder: GraphBuilder, retriever: Callable):
+    def __init__(
+        self, graph_builder: "GraphBuilder", retriever: Callable  # noqa: F821
+    ):
         import torch
 
         self.torch = torch
@@ -209,24 +210,47 @@ class DynamoWalker:
         return res
 
     def call_module(self, node: "torch.fx.Node"):  # noqa: F821
-        graph = node.graph
-        print(dir(graph))
-        print("---")
-        print(dir(graph))
-        print(graph.print_tabular())
+        def raise_msg():
+            import pprint
 
-        """
-        target = node.target
-        meta = node.meta
-        if node.op == "call_module":
-            submodule = getattr(gm_torch_level, target)
-            if isinstance(submodule, torch.nn.Module):
-            """
+            return (
+                f"node={node}\n--\nnode.__dict__={pprint.pformat(node.__dict__)}"
+                f"\n--\n{pprint.pformat(node.meta)}\n---\n{dir(node)}"
+                f"\n---GRAPH\n{type(node.graph)}\n---GRAPH\n{node.graph}"
+                f"\n---GRAPH\n{node.graph.__dict__}\n---GRAPH\n{dir(node.graph)}"
+                f"\n---GRAPH.MODULE\n{type(node.graph.owning_module)}"
+                f"\n---GRAPH.MODULE\n{node.graph.owning_module}"
+                # f"\n---GRAPH.MODULE\n{node.graph.owning_module.__dict__}"
+                f"\n---GRAPH.MODULE\n{dir(node.graph.owning_module)}"
+                f"\nVALUES\n{pprint.pformat(self.example_values_)}"
+            )
 
-        import pprint
+        import torch
+        from .onnx_export import _make_builder_walker
 
-        raise NotImplementedError(
-            f"node={node}\n--\nnode.__dict__={pprint.pformat(node.__dict__)}"
-            f"\n--\n{pprint.pformat(node.meta)}\n---\n{dir(node)}\n---\n"
-            f"{type(node.graph)}\n---\n{node.graph}\n---\n{node.graph.__dict__}"
-        )
+        sub_module = node.graph.owning_module.get_submodule(node.target)
+
+        if isinstance(sub_module, torch.nn.Module):
+            named_args = node.args
+            args = []
+            for a in named_args:
+                val = a.meta.get("example_value", None)
+                print(val.dtype, val.shape)
+                args.append(val)
+            print("++++++", args)
+            graph_module, builder, walker = _make_builder_walker(
+                sub_module,
+                tuple(args),
+                as_function=True,
+                target_opset=self.builder.opsets,
+                optimization_options=self.builder.optimization_options,
+            )
+            builder.process(graph_module, walker)
+        else:
+            raise NotImplementedError(
+                f"Not implemented for type {type(sub_module)}.\n{raise_msg()}"
+            )
+        print(builder.nodes)
+        print(builder.initializers)
+
+        stop

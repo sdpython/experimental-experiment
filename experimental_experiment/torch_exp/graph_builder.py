@@ -63,6 +63,18 @@ class Opset:
         )
 
 
+class OptimizationOptions:
+    def __init__(
+        self,
+        remove_unused: bool = False,
+        constant_folding: bool = True,
+        constant_size: int = 1024,
+    ):
+        self.remove_unused = remove_unused
+        self.constant_folding = constant_folding
+        self.constant_size = constant_size
+
+
 class GraphBuilder:
     def __init__(
         self,
@@ -70,8 +82,12 @@ class GraphBuilder:
             int, Dict[str, int], ModelProto, FunctionProto
         ],
         input_names: Optional[Sequence[str]] = None,
-        constant_size: int = 1024,
+        as_function: bool = False,
+        optimization_options: Optional[OptimizationOptions] = None,
     ):
+        self.optimization_options = optimization_options
+        self.as_function = as_function
+
         if isinstance(target_opset_or_existing_proto, (int, dict)):
             self.opsets = (
                 {"": target_opset_or_existing_proto}
@@ -123,7 +139,6 @@ class GraphBuilder:
             )
 
         self.op = Opset(self, self.opsets[""])
-        self.constant_size = constant_size
 
     def _get_tensor_shape(
         self, proto: Union[NodeProto, TensorProto]
@@ -384,7 +399,19 @@ class GraphBuilder:
             )
         return res
 
-    def to_onnx(self, as_function: bool = False) -> Union[FunctionProto, ModelProto]:
+    def process(
+        self, graph_module: "torch.f.GraphModule", walker: "Walker"  # noqa: F821
+    ):
+        for node in graph_module.graph.nodes:
+            walker(node)
+
+    def to_onnx(
+        self, as_function: bool = False, optimize: bool = True
+    ) -> Union[FunctionProto, ModelProto]:
+        if optimize:
+            self.optimize()
+        if as_function:
+            raise NotImplementedError("Export as FunctionProto is not implemented yet.")
         dense = self._build_initializers()
         opsets = [oh.make_opsetid(*o) for o in self.opsets.items()]
         if as_function:
@@ -401,6 +428,15 @@ class GraphBuilder:
         )
         model = oh.make_model(graph, opset_imports=opsets)
         return model
+
+    def optimize(self):
+        self.remove_identity_nodes()
+        if self.optimization_options.remove_unused:
+            self.remove_unused()
+        if self.optimization_options.constant_folding:
+            self.constant_folding()
+            if self.optimization_options.remove_unused:
+                self.remove_unused()
 
     def remove_unused(self):
         """
