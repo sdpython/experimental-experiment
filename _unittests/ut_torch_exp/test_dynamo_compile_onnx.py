@@ -72,15 +72,21 @@ class TestDynamoCompileOnnx(ExtTestCase):
     def test_simple_dort_2(self):
         import torch
 
-        def onnx_compiler(model: torch.fx.GraphModule, args: List[torch.Tensor]):
+        def onnx_compiler(graph_module: torch.fx.GraphModule, args: List[torch.Tensor]):
             from onnxruntime import InferenceSession
 
             input_names = (
                 ["input"] if len(args) == 1 else [f"input{i}" for i in range(len(args))]
             )
 
+            print("-------------------------")
+            print(id(graph_module))
+            print(dir(graph_module))
+            print(graph_module.__dict__)
+            print("-------------------------")
+
             onx = to_onnx(
-                model,
+                graph_module,
                 tuple(args),
                 input_names=input_names,
                 remove_unused=True,
@@ -103,6 +109,9 @@ class TestDynamoCompileOnnx(ExtTestCase):
             return run
 
         model, input_tensor = return_module_cls_pool()
+        print("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA")
+        torch.export.export(model, (input_tensor,))
+        print("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA")
         expected = model(input_tensor)
         optimized_mod = torch.compile(model, backend=onnx_compiler)
         got = optimized_mod(input_tensor)

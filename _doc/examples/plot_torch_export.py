@@ -330,7 +330,8 @@ def benchmark():
         opts.add_session_config_entry("session.disable_aot_function_inlining", aot)
         opts.graph_optimization_level = GraphOptimizationLevel.ORT_ENABLE_ALL
         opts.optimized_model_filepath = (
-            f"ort-{name.replace('.onnx', '')}-{p.lower()}-aot{aot}.onnx"
+            f"ort-{name.replace('.onnx', '')}-{p.lower()}-"
+            f"aot{1 if aot == '0' else 0}.onnx"
         )
 
         try:

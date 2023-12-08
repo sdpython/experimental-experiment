@@ -14,8 +14,17 @@ class DynamoWalker:
         self.torch = torch
         self.builder = graph_builder
         self.retriever = retriever
+        self.example_values_ = {}
 
     def __call__(self, node: "torch.fx.Node"):  # noqa: F821
+        if hasattr(node, "meta") and "example_value" in node.meta:
+            if isinstance(node.target, str):
+                self.example_values_[node.target] = node.meta["example_value"]
+            else:
+                raise RuntimeError(
+                    f"Unexpected type {type(node.target)} "
+                    f"for node.target for node {node}."
+                )
         if node.op == "placeholder":
             return self.placeholder(node)
         if node.op == "call_function":
@@ -219,6 +228,7 @@ class DynamoWalker:
                 f"\n---GRAPH\n{type(node.graph)}\n---GRAPH\n{node.graph}"
                 f"\n---GRAPH\n{node.graph.__dict__}\n---GRAPH\n{dir(node.graph)}"
                 f"\n---GRAPH.MODULE\n{type(node.graph.owning_module)}"
+                f"\n---GRAPH.MODULE\n{id(node.graph.owning_module)}"
                 f"\n---GRAPH.MODULE\n{node.graph.owning_module}"
                 # f"\n---GRAPH.MODULE\n{node.graph.owning_module.__dict__}"
                 f"\n---GRAPH.MODULE\n{dir(node.graph.owning_module)}"
@@ -238,6 +248,11 @@ class DynamoWalker:
                 print(val.dtype, val.shape)
                 args.append(val)
             print("++++++", args)
+            print(raise_msg())
+            print("##############")
+            print(sub_module)
+            print(dir(sub_module))
+            # print(sub_module.__dict__)
             graph_module, builder, walker = _make_builder_walker(
                 sub_module,
                 tuple(args),
