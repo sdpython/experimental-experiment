@@ -216,9 +216,9 @@ class DynamoInterpreter:
         else:
             output_names = [node.name]
 
-        try:
+        if 1:  # try:
             res = fct(self.builder, output_names, *args, **fx_kwargs)
-        except (TypeError, AttributeError, RuntimeError, ValueError) as e:
+        else:  # except (TypeError, AttributeError, RuntimeError, ValueError) as e:
             raise RuntimeError(
                 f"Unable to convert node {node!r}, node.meta={node.meta}, "
                 f"node.__dict__={node.__dict__}."

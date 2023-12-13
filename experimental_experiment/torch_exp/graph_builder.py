@@ -163,7 +163,15 @@ class GraphBuilder:
             for att in proto.attribute:
                 if att.name == "value_float":
                     return tuple()
-        raise TypeError(f"Unexpected type {type(proto)}: {proto}.")
+                if att.name == "value_int":
+                    return tuple(att.i)
+                if att.name == "value_floats":
+                    return tuple(att.floats)
+                if att.name == "value_ints":
+                    return (len(att.ints),)
+        raise TypeError(
+            f"Unexpected or unsupported scenario type {type(proto)}: {proto}."
+        )
 
     def _get_tensor_type(self, proto: Union[NodeProto, TensorProto]) -> int:
         if isinstance(proto, TensorProto):
@@ -172,6 +180,12 @@ class GraphBuilder:
             for att in proto.attribute:
                 if att.name == "value_float":
                     return TensorProto.FLOAT
+                if att.name == "value_int":
+                    return TensorProto.INT64
+                if att.name == "value_floats":
+                    return TensorProto.FLOAT
+                if att.name == "value_ints":
+                    return TensorProto.INT64
         raise ValueError(f"Unexpected type or value {type(proto)}: {proto}.")
 
     def is_constant(self, name: str) -> bool:

@@ -37,12 +37,14 @@ import matplotlib.pyplot as plt
 import pandas
 import onnx
 from onnx_extended.ext_test_case import measure_time
+from onnx_extended.memory_peak import start_spying_on
 from onnx_array_api.plotting.text_plot import onnx_simple_text_plot
 import torch
 from torch import nn
 import torch.nn.functional as F
 import experimental_experiment
 from experimental_experiment.torch_exp.onnx_export import to_onnx
+from experimental_experiment.plotting.memory import memory_peak_plot
 from tqdm import tqdm
 
 
@@ -89,6 +91,17 @@ class MyModel(nn.Module):
         x = self.fc3(x)
         return x
 
+
+def torch_model_size(model):
+    size_model = 0
+    for param in model.parameters():
+        size = param.numel() * torch.finfo(param.data.dtype).bits / 8
+        size_model += size
+    return size_model
+
+
+model_size = torch_model_size(MyModel())
+print(f"model size={model_size / 2 ** 20} Mb")
 
 #######################################
 # The exporters
@@ -167,8 +180,54 @@ for k, v in exporters.items():
         print(f"skipped due to {e}")
         continue
     supported_exporters[k] = v
-    print("done.")
+    print(f"done. size={os.stat(filename).st_size / 2 ** 20:1.0f} Mb")
 
+#################################
+# Exporter memory
+# +++++++++++++++
+
+
+def flatten(ps):
+    obs = ps["cpu"].to_dict(unit=2**20)
+    for i, g in enumerate(ps["gpus"]):
+        for k, v in g.to_dict().items():
+            obs[f"gpu{i}_{k}"] = v
+    return obs
+
+
+data = []
+
+for k, v in supported_exporters.items():
+    print(f"run exporter for memory {k}")
+    filename = f"plot_torch_export_{k}.onnx"
+    torch.cuda.set_device(0)
+    stat = start_spying_on(cuda=1)
+    v(filename, model, input_tensor)
+    obs = flatten(stat.stop())
+    print("done.")
+    onx = onnx.load(filename)
+    obs.update(dict(nodes=len(onx.graph.node), export=k))
+    data.append(obs)
+
+stat = start_spying_on(cuda=1)
+exported_mod = torch.export.export(model, (input_tensor,))
+obs = flatten(stat.stop())
+obs.update(dict(export="torch"))
+data.append(obs)
+
+#############################
+# The result.
+df1 = pandas.DataFrame(data)
+df1.to_csv("plot_torch_export_memory.csv", index=False)
+df1.to_excel("plot_torch_export_memory.xlsx", index=False)
+print(df1)
+
+ax = memory_peak_plot(
+    data,
+    bar=model_size,
+    suptitle="Memory Consumption of the Export\nmodel size={model_size:1.0f} Mb",
+)
+ax[0, 0].get_figure().savefig("plot_torch_export_memory.png")
 
 #################################
 # Exporter speed
@@ -228,13 +287,15 @@ data.append(
 #############################
 # The result.
 df1 = pandas.DataFrame(data)
+df1.to_csv("plot_torch_export_time.csv", index=False)
+df1.to_excel("plot_torch_export_time.xlsx", index=False)
 print(df1)
 
 fig, ax = plt.subplots(1, 1)
 dfi = df1[["export", "time", "std"]].set_index("export")
 dfi["time"].plot.bar(ax=ax, title="Export time", yerr=dfi["std"], rot=30)
 fig.tight_layout()
-fig.savefig("plot_torch_export.png")
+fig.savefig("plot_torch_export_time.png")
 
 ####################################
 # Profiling
@@ -295,6 +356,8 @@ def benchmark():
 
     shape = [1, 1, 128, 128]
     data = []
+    data_mem_load = []
+    data_mem_run = []
     confs = list(
         itertools.product(
             [_ for _ in os.listdir(".") if ".onnx" in _ and _.startswith("plot_torch")],
@@ -335,12 +398,26 @@ def benchmark():
         )
 
         try:
-            sess = InferenceSession(name, opts, providers=ps)
+            InferenceSession(name, opts, providers=ps)
         except Exception as e:
             loop.set_description(f"ERROR-load: {name} {e}")
             obs.update({"error": e, "step": "run"})
             data.append(obs)
             continue
+
+        stat = start_spying_on(cuda=1)
+        sess = InferenceSession(name, opts, providers=ps)
+        memobs = flatten(stat.stop())
+        memobs.update(
+            dict(
+                name=obs["name"],
+                aot=obs["aot"],
+                providers=obs["providers"],
+                export=obs["export"],
+                compute=obs["compute"],
+            )
+        )
+        data_mem_load.append(memobs)
 
         input_name = sess.get_inputs()[0].name
         feeds = {input_name: np.random.rand(*shape).astype(np.float32)}
@@ -352,18 +429,46 @@ def benchmark():
             obs.update({"error": e, "step": "load"})
             data.append(obs)
             continue
+
+        # memory consumption
+        stat = start_spying_on(cuda=1)
+        for i in range(0, 5):
+            sess.run(None, feeds)
+        memobs = flatten(stat.stop())
+        memobs.update(
+            dict(
+                name=obs["name"],
+                aot=obs["aot"],
+                providers=obs["providers"],
+                export=obs["export"],
+                compute=obs["compute"],
+            )
+        )
+        data_mem_run.append(memobs)
+
         obs.update(measure_time(lambda: sess.run(None, feeds), max_time=1))
 
         loop.set_description(f"{obs['average']} {name} {ps}")
         data.append(obs)
 
     df = pandas.DataFrame(data)
-    df.to_csv("benchmark.csv", index=False)
-    df.to_excel("benchmark.xlsx", index=False)
-    return df
+    df.to_csv("plot_torch_export_ort_time.csv", index=False)
+    df.to_excel("plot_torch_export_ort_time.xlsx", index=False)
+    dfmem = pandas.DataFrame(data_mem_load)
+    dfmem.to_csv("plot_torch_export_ort_load_mem.csv", index=False)
+    dfmem.to_excel("plot_torch_export_ort_load_mem.xlsx", index=False)
+    dfmemr = pandas.DataFrame(data_mem_run)
+    dfmemr.to_csv("plot_torch_export_ort_run_mem.csv", index=False)
+    dfmemr.to_excel("plot_torch_export_ort_run_mem.xlsx", index=False)
+    return df, dfmem, dfmemr
 
 
-df = benchmark()
+df, dfmem, dfmemr = benchmark()
+print("----------------------------------------------")
+print(dfmem.to_dict())
+print("----------------------------------------------")
+df.to_csv("plot_torch_export_ort_time.csv", index=False)
+df.to_excel("plot_torch_export_ort_time.xlsx", index=False)
 print(df)
 
 #####################################
@@ -377,7 +482,34 @@ print(piv)
 fig, ax = plt.subplots()
 piv.plot.barh(ax=ax, title="Compares onnxruntime time on exported models")
 fig.tight_layout()
-fig.savefig("plot_torch_export_ort.png")
+fig.savefig("plot_torch_export_ort_time.png")
+
+########################################
+# Memory Loading Time
+# +++++++++++++++++++
+
+ax = memory_peak_plot(
+    dfmem,
+    ("export", "aot", "compute"),
+    suptitle="Memory Consumption of onnxruntime loading time",
+    bar=model_size,
+    figsize=(18, 6),
+)
+ax[0, 0].get_figure().savefig("plot_torch_export_ort_load_mem.png")
+
+
+########################################
+# Memory Loading Time
+# +++++++++++++++++++
+
+ax = memory_peak_plot(
+    dfmemr,
+    ("export", "aot", "compute"),
+    suptitle="Memory Consumption of onnxruntime running time",
+    bar=model_size,
+    figsize=(18, 6),
+)
+ax[0, 0].get_figure().savefig("plot_torch_export_ort_run_mem.png")
 
 
 ######################################################
