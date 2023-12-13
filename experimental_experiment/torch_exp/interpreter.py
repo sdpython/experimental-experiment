@@ -5,7 +5,7 @@ from typing import Any, Callable, Dict, List, Tuple
 from .aten_functions import find_function
 
 
-class DynamoWalker:
+class DynamoInterpreter:
     def __init__(
         self, graph_builder: "GraphBuilder", retriever: Callable  # noqa: F821
     ):
@@ -16,7 +16,7 @@ class DynamoWalker:
         self.retriever = retriever
         self.example_values_ = {}
 
-    def __call__(self, node: "torch.fx.Node"):  # noqa: F821
+    def run_node(self, node: "torch.fx.Node"):  # noqa: F821
         if hasattr(node, "meta") and "example_value" in node.meta:
             if isinstance(node.target, str):
                 self.example_values_[node.target] = node.meta["example_value"]
@@ -33,13 +33,22 @@ class DynamoWalker:
             return self.output(node)
         if node.op == "call_module":
             return self.call_module(node)
+        if node.op == "get_attr":
+            return self.get_attr(node)
 
         raise ValueError(f"Unable to process node kind {node.op!r} ({node}).")
+
+    def get_attr(self, node: "torch.fx.Node"):  # noqa: F821
+        init = getattr(node.graph.owning_module, node.name)
+        self.builder.make_initializer(node.name, init)
+        return node.name
 
     def placeholder(self, node: "torch.fx.Node"):  # noqa: F821
         val = node.meta.get("val", None)
         if val is None:
             example_value = node.meta.get("example_value", None)
+            if self.builder.as_function and example_value is None:
+                return self.builder.make_tensor_input(node.name, None, None)
             if example_value is None:
                 raise RuntimeError(
                     f"Unable to guess what node is, node={node}, "
@@ -175,13 +184,7 @@ class DynamoWalker:
         if aten_name == "getitem":
             return self.getitem(node)
         fct = find_function(aten_name)
-
-        args = []
-        for i in fx_args:
-            if hasattr(i, "name"):
-                args.append(i.name)
-            else:
-                args.append(i)
+        args = [getattr(i, "name", i) for i in fx_args]
 
         val = node.meta.get("val", None)
         if val is not None and isinstance(val, tuple):
@@ -236,36 +239,49 @@ class DynamoWalker:
             )
 
         import torch
-        from .onnx_export import _make_builder_walker
+        from .onnx_export import _make_builder_interpreter
 
         sub_module = node.graph.owning_module.get_submodule(node.target)
 
-        if isinstance(sub_module, torch.nn.Module):
-            named_args = node.args
-            args = []
-            for a in named_args:
-                val = a.meta.get("example_value", None)
-                print(val.dtype, val.shape)
-                args.append(val)
-            print("++++++", args)
-            print(raise_msg())
-            print("##############")
-            print(sub_module)
-            print(dir(sub_module))
-            # print(sub_module.__dict__)
-            graph_module, builder, walker = _make_builder_walker(
-                sub_module,
-                tuple(args),
-                as_function=True,
-                target_opset=self.builder.opsets,
-                optimization_options=self.builder.optimization_options,
-            )
-            builder.process(graph_module, walker)
-        else:
+        if not isinstance(sub_module, torch.nn.Module):
             raise NotImplementedError(
                 f"Not implemented for type {type(sub_module)}.\n{raise_msg()}"
             )
-        print(builder.nodes)
-        print(builder.initializers)
 
-        stop
+        named_args = node.args
+        args = []
+        for a in named_args:
+            val = a.meta.get("example_value", None)
+            args.append(val)
+
+        if hasattr(sub_module, "graph") and isinstance(
+            sub_module, torch.fx.GraphModule
+        ):
+            gm = sub_module
+        else:
+            # https://pytorch.org/docs/stable/fx.html
+            tracer_class = torch.fx.Tracer
+            graph = tracer_class().trace(sub_module)
+            gm = torch.fx.GraphModule(sub_module, graph)
+
+        graph_module, builder, interpreter = _make_builder_interpreter(
+            gm,
+            tuple(args),
+            as_function=True,
+            target_opset=self.builder.opsets,
+            optimization_options=self.builder.optimization_options,
+        )
+        builder.process(graph_module, interpreter)
+
+        fx_args, _ = self._fill_in_default_kwargs(node)
+        args = [getattr(i, "name", i) for i in fx_args]
+
+        val = node.meta.get("val", None)
+        if val is not None and isinstance(val, tuple):
+            n_outputs = len(val)
+            output_names = [f"{node.name}#{i}" for i in range(n_outputs)]
+        else:
+            output_names = [node.name]
+
+        self.builder.make_nodes(builder, args, output_names)
+        return output_names

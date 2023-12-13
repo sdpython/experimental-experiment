@@ -1,7 +1,7 @@
 import warnings
 from typing import Dict, Optional, Sequence, Tuple, Union
 from onnx import ModelProto
-from .walker import DynamoWalker
+from .interpreter import DynamoInterpreter
 from .graph_builder import GraphBuilder, OptimizationOptions
 
 
@@ -33,14 +33,14 @@ def _retrieve(
     return value
 
 
-def _make_builder_walker(
+def _make_builder_interpreter(
     mod: Union["torch.nn.Module", "torch.fx.GraphModule"],  # noqa: F821
     args: Optional[Sequence["torch.Tensor"]] = None,  # noqa: F821
     input_names: Optional[Sequence[str]] = None,
     target_opset: Union[int, Dict[str, int]] = 18,
     as_function: bool = False,
     optimization_options: Optional[OptimizationOptions] = None,
-) -> Tuple["torch.fx.GraphModule", GraphBuilder, DynamoWalker]:  # noqa: F821
+) -> Tuple["torch.fx.GraphModule", GraphBuilder, DynamoInterpreter]:  # noqa: F821
     """
     Exports a torch model into ONNX using
     `dynamo export
@@ -67,7 +67,6 @@ def _make_builder_walker(
     else:
         exported_mod = torch.export.export(mod, args)
         graph_module = exported_mod.graph_module
-        # print(graph_module.graph)
         try:
             weights = dict(exported_mod.named_parameters())
         except AttributeError:
@@ -84,8 +83,8 @@ def _make_builder_walker(
         as_function=as_function,
         optimization_options=optimization_options,
     )
-    walker = DynamoWalker(builder, retrieve)
-    return graph_module, builder, walker
+    interpreter = DynamoInterpreter(builder, retrieve)
+    return graph_module, builder, interpreter
 
 
 def to_onnx(
@@ -112,7 +111,7 @@ def to_onnx(
         constants are detected while converting the model
     :return: onnx model
     """
-    graph_module, builder, walker = _make_builder_walker(
+    graph_module, builder, interpreter = _make_builder_interpreter(
         mod=mod,
         args=args,
         input_names=input_names,
@@ -124,6 +123,5 @@ def to_onnx(
         ),
     )
 
-    builder.process(graph_module, walker)
-
+    builder.process(graph_module, interpreter)
     return builder.to_onnx()

@@ -400,10 +400,12 @@ class GraphBuilder:
         return res
 
     def process(
-        self, graph_module: "torch.f.GraphModule", walker: "Walker"  # noqa: F821
+        self,
+        graph_module: "torch.f.GraphModule",  # noqa: F821
+        interpreter: "Interpreter",  # noqa: F821
     ):
         for node in graph_module.graph.nodes:
-            walker(node)
+            interpreter.run_node(node)
 
     def to_onnx(
         self, as_function: bool = False, optimize: bool = True
