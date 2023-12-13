@@ -82,6 +82,7 @@ def _make_builder_interpreter(
         input_names=input_names,
         as_function=as_function,
         optimization_options=optimization_options,
+        args=args,
     )
     interpreter = DynamoInterpreter(builder, retrieve)
     return graph_module, builder, interpreter

@@ -79,6 +79,108 @@ def aten_convolution(
     )
 
 
+def aten_conv2d(
+    g: GraphBuilder,
+    outputs: List[str],
+    input: T,
+    weight: T,
+    bias: T = None,
+    stride: Sequence[int] = (1, 1),
+    padding: Sequence[int] = (0, 0),
+    dilation: Sequence[int] = (1, 1),
+    groups: int = 1,
+) -> T:
+    return aten_convolution(
+        g,
+        outputs,
+        input=input,
+        weight=weight,
+        bias=bias,
+        stride=stride,
+        padding=padding,
+        dilation=dilation,
+        groups=groups,
+    )
+
+
+def aten_flatten(
+    g: GraphBuilder, outputs: List[str], x: T, start_dim: int = 1, end_dim: int = -1
+) -> T:
+    if start_dim != 0:
+        if start_dim == 1 and end_dim == -1:
+            shape = g.op.Shape(x)
+            take = g.op.GatherElements(shape, np.array([0], dtype=np.int64), axis=1)
+            resh = g.op.Concat(take, np.array([-1], dtype=np.int64))
+            return g.op.Reshape(x, resh, outputs=outputs)
+        raise NotImplementedError(
+            f"start_dim={start_dim}, end_dim={end_dim} not supported."
+        )
+    if end_dim == -1:
+        return g.make_node("Flatten", [x], outputs)
+    return g.make_node("Flatten", [x], outputs, to=end_dim)
+
+
+def aten_linear(
+    g: GraphBuilder, outputs: List[str], input: T, weight: T, bias: T = None
+) -> T:
+    weight_transposed = g.op.Transpose(weight, perm=[1, 0])
+    if bias:
+        res = g.op.MatMul(input, weight_transposed)
+        return g.op.Add(res, bias, outputs=outputs)
+    return g.op.MatMul(input, weight_transposed, outputs=outputs)
+
+
+def _aten_max_pool_onnx(
+    g: GraphBuilder,
+    outputs: List[str],
+    x: T,
+    kernel_shape: Sequence[int],
+    strides: Sequence[int],
+    pads: Sequence[int],
+    dilations: Sequence[int],
+    ceil_mode: bool,
+    unbatched_rank: int,
+) -> T:
+    # self_rank_is_unbatched_rank = Rank(self) == unbatched_rank
+    # if self_rank_is_unbatched_rank:  # C,H,W -> N,C,H,W and N=1
+    #     self = op.Unsqueeze(self, op.Constant(value_ints=[0]))
+
+    pool_result, _ = g.op.MaxPool(
+        x,
+        ceil_mode=ceil_mode,
+        dilations=dilations,
+        kernel_shape=kernel_shape,
+        pads=pads,
+        strides=strides,
+    )
+
+    # if self_rank_is_unbatched_rank:
+    #    pool_result = op.Squeeze(pool_result, op.Constant(value_ints=[0]))
+
+    return pool_result
+
+
+def aten_max_pool2d(
+    g: GraphBuilder,
+    outputs: List[str],
+    x: T,
+    kernel_size: Sequence[int],
+    stride: Sequence[int] = (),
+    padding: Sequence[int] = (0, 0),
+    dilation: Sequence[int] = (1, 1),
+    ceil_mode: bool = False,
+) -> T:
+    expand_size = 2
+
+    kernel_shape, strides, pads, dilations = _adjust_attributes_of_max_pool(
+        expand_size, kernel_size, stride, padding, dilation
+    )
+
+    return _aten_max_pool_onnx(
+        g, outputs, x, kernel_shape, strides, pads, dilations, ceil_mode, 3
+    )
+
+
 def _aten_max_pool_with_indices_onnx(
     g: GraphBuilder,
     outputs: List[str],

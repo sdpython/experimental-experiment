@@ -11,7 +11,7 @@ def return_module_cls_pool():
     import torch.nn.functional as F
 
     class MyModel(nn.Module):
-        def __init__(self, n_lin_layers=2):
+        def __init__(self):
             super(MyModel, self).__init__()
             self.conv1 = nn.Conv2d(1, 16, 5)
             self.conv2 = nn.Conv2d(16, 16, 5)
@@ -21,12 +21,12 @@ def return_module_cls_pool():
         def forward(self, x):
             c1 = self.conv1(x)
             f1 = F.relu(c1)
-            x = F.max_pool2d(f1, (2, 2))
-            x = F.max_pool2d(F.relu(self.conv2(x)), 2)
-            x = torch.flatten(x, 1)
-            x = F.relu(self.fc1(x))
-            x = self.fc3(x)
-            return x
+            t2 = F.max_pool2d(f1, (2, 2))
+            t3 = F.max_pool2d(F.relu(self.conv2(t2)), 2)
+            xf = torch.flatten(t3, 1)
+            xfr = F.relu(self.fc1(xf))
+            y = self.fc3(xfr)
+            return y
 
     input_tensor = torch.rand((1, 1, 128, 128), dtype=torch.float32)
     return MyModel(), input_tensor

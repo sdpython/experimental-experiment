@@ -29,3 +29,4 @@ experimental-experiment: fuzzy work
 .. image:: https://codecov.io/gh/sdpython/experimental-experiment/branch/main/graph/badge.svg?token=Wb9ZGDta8J 
     :target: https://codecov.io/gh/sdpython/experimental-experiment
 
+`Documentation <https://sdpython.github.io/doc/experimental-experiment/dev/>`_.

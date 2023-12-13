@@ -3,7 +3,7 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 import numpy as np
 import onnx.helper as oh
 import onnx.numpy_helper as onh
-from onnx import FunctionProto, ModelProto, NodeProto, TensorProto
+from onnx import AttributeProto, FunctionProto, ModelProto, NodeProto, TensorProto
 from onnx.reference import ReferenceEvaluator
 
 
@@ -14,10 +14,12 @@ class Opset:
         "Add": 1,
         "And": 1,
         "Cast": 1,
+        "Concat": 1,
         "Constant": 1,
         "Div": 1,
         "Exp": 1,
         "Expand": 1,
+        "GatherElements": 1,
         "Gemm": 1,
         "Identity": 1,
         "MatMul": 1,
@@ -27,6 +29,7 @@ class Opset:
         "Or": 1,
         "Relu": 1,
         "Reshape": 2,
+        "Shape": 1,
         "Slice": 1,
         "Squeeze": 1,
         "Sub": 1,
@@ -58,8 +61,17 @@ class Opset:
             outputs = self._implemented[op_type]
         if inputs is None:
             inputs = []
+        new_inputs = []
+        for i in inputs:
+            if not isinstance(i, str):
+                name = self.builder.unique_name("cst")
+                self.builder.make_initializer(name, i)
+                new_inputs.append(name)
+            else:
+                new_inputs.append(i)
+
         return self.builder.make_node(
-            op_type, inputs, outputs=outputs, domain=domain, **kwargs
+            op_type, new_inputs, outputs=outputs, domain=domain, **kwargs
         )
 
 
@@ -84,9 +96,11 @@ class GraphBuilder:
         input_names: Optional[Sequence[str]] = None,
         as_function: bool = False,
         optimization_options: Optional[OptimizationOptions] = None,
+        args: Optional[List[Any]] = None,
     ):
         self.optimization_options = optimization_options or OptimizationOptions()
         self.as_function = as_function
+        self.input_args = args
 
         if isinstance(target_opset_or_existing_proto, (int, dict)):
             self.opsets = (
@@ -126,13 +140,13 @@ class GraphBuilder:
             self.constants_ = {}
             for k, v in self.initializers_dict.items():
                 self.constants_[k] = None
-                self._known_shapes = self._get_tensor_shape(v)
-                self._known_types = self._get_tensor_type(v)
+                self.set_shape(k, self._get_tensor_shape(v))
+                self.set_type(k, self._get_tensor_type(v))
             for node in self.nodes:
                 if node.op_type == "Constant":
                     self.constants_[node.output[0]] = node
-                    self._known_shapes = self._get_tensor_shape(node)
-                    self._known_types = self._get_tensor_type(node)
+                    self.set_shape(node.output[0], self._get_tensor_shape(node))
+                    self.set_type(node.output[0], self._get_tensor_type(node))
         else:
             raise NotImplementedError(
                 f"{type(target_opset_or_existing_proto)} is not supported."
@@ -185,7 +199,12 @@ class GraphBuilder:
         if not isinstance(name, str):
             raise TypeError(f"Unexpected type {type(name)} for name.")
         if name in self._known_shapes:
-            raise RuntimeError(f"Name {name!r} already exists.")
+            if shape != self._known_shapes[name]:
+                raise RuntimeError(
+                    f"Name {name!r} already exists and it is different "
+                    f"{self._known_shapes[name]} != {shape}"
+                )
+            return
         if not isinstance(shape, tuple):
             raise TypeError(f"Unexpected shape type {type(shape)}.")
         self._known_shapes[name] = shape
@@ -193,16 +212,39 @@ class GraphBuilder:
     def set_type(self, name: str, dtype: int):
         if not isinstance(name, str):
             raise TypeError(f"Unexpected type {type(name)} for name.")
+        if isinstance(dtype, int):
+            int_type = dtype
+        else:
+            int_type = self._get_type(dtype)
         if name in self._known_types:
-            raise RuntimeError(f"Name {name!r} already exists.")
-        if not isinstance(dtype, int):
-            raise TypeError(f"Unexpected dtype type {type(dtype)}.")
-        self._known_types[name] = dtype
+            if int_type != self._known_types[name]:
+                raise RuntimeError(
+                    f"Name {name!r} already exists and it is different "
+                    f"{self._known_types[name]} != {int_type}."
+                )
+        self._known_types[name] = int_type
 
     def rank(self, name: str) -> int:
-        if name not in self._known_shapes:
-            raise ValueError(f"Shape is unknown for result {name!r}.")
-        return len(self._known_shapes[name])
+        return len(self.get_shape(name))
+
+    def has_shape(self, name: str) -> bool:
+        return name in self._known_shapes
+
+    def get_shape(self, name: str) -> int:
+        assert name in self._known_shapes, (
+            f"Shape is unknown for result {name!r}, "
+            f"known_shapes={self._known_shapes}."
+        )
+        return self._known_shapes[name]
+
+    def has_type(self, name: str) -> bool:
+        return name in self._known_types
+
+    def get_type(self, name: str) -> int:
+        assert name in self._known_types, (
+            f"Type is unknown for result {name!r}, " f"known_types={self._known_types}."
+        )
+        return self._known_types[name]
 
     def unique_name(self, prefix: str) -> str:
         if prefix in self._unique_names:
@@ -279,7 +321,7 @@ class GraphBuilder:
             return res
 
         elem_type = self._get_type(elem_type, False)
-        if elem_type == 0:
+        if not self.as_function and elem_type == 0:
             raise RuntimeError(f"Undefined element type for {name!r}.")
         self.outputs.append(oh.make_tensor_value_info(name, elem_type, shape))
         if shape:
@@ -294,8 +336,12 @@ class GraphBuilder:
         inputs: Union[str, List[str]],
         outputs: Union[int, List[str], str] = 1,
         domain: str = "",
+        attributes: Optional[List[AttributeProto]] = None,
         **kwargs,
     ) -> Union[str, List[str]]:
+        assert (
+            not kwargs or not attributes
+        ), f"Only attributes or kwargs can be filled for node {op_type!r}."
         if isinstance(inputs, tuple):
             inputs = list(inputs)
         if isinstance(outputs, int):
@@ -317,14 +363,20 @@ class GraphBuilder:
             node = oh.make_node(op_type, inputs, output_names, domain=domain, **kwargs)
         except TypeError as e:
             iti = [type(i) for i in inputs]
-            ito = [type(o) for o in outputs]
+            ito = (
+                [type(o) for o in outputs]
+                if isinstance(outputs, (tuple, list))
+                else outputs
+            )
             raise TypeError(
                 f"A node {op_type!r} cannot be created with "
-                f"inputs={inputs} (types={iti}), oututs={outputs} (types={ito}), "
+                f"inputs={inputs} (types={iti}), outputs={outputs} (types={ito}), "
                 f"domain={domain!r}, kwargs={kwargs}."
             ) from e
+        if attributes:
+            node.attribute.extend(attributes)
 
-        # constant handling
+        # constant handling, shape, type
         if node.op_type == "Constant":
             size = len(node.SerializeToString())
             if size >= self.optimization_options.constant_size:
@@ -332,7 +384,17 @@ class GraphBuilder:
                     f"A node Constant holds a tensor bigger than "
                     f"the constant: {size} >= {self.constant_size}."
                 )
-            self.constants_[node.output[0]] = node
+            k = node.output[0]
+            self.constants_[k] = node
+            self.set_shape(k, self._get_tensor_shape(node))
+            self.set_type(k, self._get_tensor_type(node))
+        elif node.op_type == "Identity":
+            if node.input[0] in self._known_shapes:
+                self.set_shape(node.output[0], self._known_shapes[node.input[0]])
+            if node.input[0] in self._known_types:
+                self.set_type(node.output[0], self._known_types[node.input[0]])
+            if self.is_constant(node.input[0]):
+                self.constants_[node.output[0]] = node
         else:
             if all(map(self.is_constant, node.input)):
                 for o in node.output:
@@ -340,6 +402,85 @@ class GraphBuilder:
 
         # add the node
         self.nodes.append(node)
+        if len(output_names) == 1:
+            return output_names[0]
+        return output_names
+
+    def make_nodes(
+        self,
+        builder: "GraphBuilder",
+        input_names: List[str],
+        output_names: List[str],
+        prefix: str = "",
+    ) -> Union[str, List[str]]:
+        """
+        Appends all nodes and initializers from another builder.
+        Handles the renaming of results.
+        The content stored in 'builder' is modified inplace to avoid copying.
+
+        :param builder: other builder
+        :param input_names: input names
+        :param output_names: output names
+        :param prefix: prefix all name from this builder
+        :return: output names
+        """
+        renaming = {}
+        for init, value in builder.initializers_dict.items():
+            name = self.unique_name(f"{prefix}{init}")
+            renaming[init] = name
+            if isinstance(value, TensorProto):
+                value.name = name
+            self.initializers_dict[name] = value
+
+            self.constants_[name] = None
+            self.set_shape(name, builder._known_shapes[init])
+            self.set_type(name, builder._known_types[init])
+
+        assert len(input_names) == len(
+            builder.inputs
+        ), f"Inconsistency between input_names={input_names} and inputs={builder.inputs}."
+        for name, inp in zip(input_names, builder.inputs):
+            new_name = self.unique_name(f"{prefix}{inp.name}")
+            self.set_shape(new_name, builder.get_shape(inp.name))
+            self.set_type(new_name, builder.get_type(inp.name))
+            renaming[inp.name] = new_name
+            self.make_node("Identity", [name], [new_name])
+
+        for node in builder.nodes:
+            new_inputs = [renaming[i] for i in node.input]
+            new_outputs = [self.unique_name(f"{prefix}{o}") for o in node.output]
+            for o, no in zip(node.output, new_outputs):
+                renaming[o] = no
+            self.make_node(
+                node.op_type,
+                new_inputs,
+                new_outputs,
+                domain=node.domain,
+                attributes=node.attribute,
+            )
+            for o, no in zip(node.output, new_outputs):
+                if builder.has_shape(o):
+                    self.set_shape(no, builder.get_shape(o))
+                if builder.has_type(o):
+                    self.set_type(no, builder.get_type(o))
+
+        assert len(output_names) == len(builder.outputs), (
+            f"Inconsistency between output_names={output_names} and "
+            f"outputs={builder.outputs}, renaming={renaming}."
+        )
+        for name, out in zip(output_names, builder.outputs):
+            self.make_node("Identity", [renaming[out.name]], [name])
+
+        # opsets and domains
+        for o, v in builder.opsets.items():
+            if o in self.opsets:
+                assert self.opsets[o] == builder.opsets[o], (
+                    f"Opset mismatch for domain {o!r}, "
+                    f"{self.opsets[o]} != {builder.opsets[o]}."
+                )
+                continue
+            self.opsets[o] = v
+
         if len(output_names) == 1:
             return output_names[0]
         return output_names

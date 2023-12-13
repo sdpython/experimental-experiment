@@ -28,8 +28,17 @@ def find_function(name: Any) -> Callable:
                 f"{', '.join(sorted(registered_functions))}."
             )
         return registered_functions[name]
+
     lookup = []
-    for att in ["__qualname__", "__name__"]:
+    if isinstance(name, type(abs)):
+        # example: conv2d or _VariableFunctionsClass.conv2d
+        new_name = f"aten_{name.__name__}"
+        if new_name in registered_functions:
+            return registered_functions[new_name]
+        lookup.append(new_name)
+
+    lookup_names = ["__qualname__", "__name__"]
+    for att in lookup_names:
         if hasattr(name, att):
             v = getattr(name, att)
             lookup.append(v)
@@ -37,5 +46,6 @@ def find_function(name: Any) -> Callable:
                 return registered_functions[v]
     raise RuntimeError(
         f"Unable to interpret type {type(name)}: {name!r}, searched for "
-        f"{lookup} among {', '.join(sorted(registered_functions))}."
+        f"{lookup} and attributes {lookup_names} among "
+        f"{', '.join(sorted(registered_functions))}."
     )
