@@ -527,6 +527,9 @@ def benchmark(shape):
             data.append(obs)
             continue
 
+        opts = SessionOptions()
+        opts.add_session_config_entry("session.disable_aot_function_inlining", aot)
+        opts.graph_optimization_level = GraphOptimizationLevel.ORT_ENABLE_ALL
         stat = start_spying_on(cuda=1)
         sess = InferenceSession(name, opts, providers=ps)
         memobs = flatten(stat.stop())
