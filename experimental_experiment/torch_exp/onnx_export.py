@@ -40,6 +40,7 @@ def _make_builder_interpreter(
     target_opset: Union[int, Dict[str, int]] = 18,
     as_function: bool = False,
     optimization_options: Optional[OptimizationOptions] = None,
+    verbose: int = 0,
 ) -> Tuple["torch.fx.GraphModule", GraphBuilder, DynamoInterpreter]:  # noqa: F821
     """
     Exports a torch model into ONNX using
@@ -52,6 +53,7 @@ def _make_builder_interpreter(
     :param target_opset: targeted opset or targeted opsets as a dictionary
     :param as_function: export as a ModelProto or a FunctionProto
     :param optimization_options: optimization options
+    :param verbose: verbosity level
     :return: onnx model
     """
 
@@ -83,6 +85,7 @@ def _make_builder_interpreter(
         as_function=as_function,
         optimization_options=optimization_options,
         args=args,
+        verbose=verbose,
     )
     interpreter = DynamoInterpreter(builder, retrieve)
     return graph_module, builder, interpreter
@@ -96,6 +99,7 @@ def to_onnx(
     as_function: bool = False,
     remove_unused: bool = False,
     constant_folding: bool = False,
+    verbose: int = 0,
 ) -> ModelProto:
     """
     Exports a torch model into ONNX using
@@ -110,6 +114,7 @@ def to_onnx(
     :param remove_unused: if True, remove unused nodes
     :param constant_folding: if True, fold constants,
         constants are detected while converting the model
+    :param verbose: verbosity level
     :return: onnx model
     """
     graph_module, builder, interpreter = _make_builder_interpreter(
@@ -122,6 +127,7 @@ def to_onnx(
             remove_unused=remove_unused,
             constant_folding=constant_folding,
         ),
+        verbose=verbose,
     )
 
     builder.process(graph_module, interpreter)

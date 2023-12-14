@@ -97,10 +97,12 @@ class GraphBuilder:
         as_function: bool = False,
         optimization_options: Optional[OptimizationOptions] = None,
         args: Optional[List[Any]] = None,
+        verbose: int = 0,
     ):
         self.optimization_options = optimization_options or OptimizationOptions()
         self.as_function = as_function
         self.input_args = args
+        self.verbose = verbose
 
         if isinstance(target_opset_or_existing_proto, (int, dict)):
             self.opsets = (
@@ -301,6 +303,10 @@ class GraphBuilder:
         self.set_type(name, self._get_type(value.dtype))
         self.initializers_dict[name] = value
         self.constants_[name] = None
+        if self.verbose and np.prod(value.shape) > 100:
+            print(
+                f"[GraphBuilder] make_initializer:{name}[{value.dtype}:{value.shape}]"
+            )
         return name
 
     def make_tensor_input(
@@ -316,6 +322,8 @@ class GraphBuilder:
         self.current_input += 1
         elem_type = self._get_type(elem_type)
         self.inputs.append(oh.make_tensor_value_info(input_name, elem_type, shape))
+        if self.verbose:
+            print(f"[GraphBuilder] make_tensor_input:{name}[{elem_type}:{shape}]")
         if shape:
             self.set_shape(name, shape)
         if elem_type:
@@ -338,6 +346,8 @@ class GraphBuilder:
         if not self.as_function and elem_type == 0:
             raise RuntimeError(f"Undefined element type for {name!r}.")
         self.outputs.append(oh.make_tensor_value_info(name, elem_type, shape))
+        if self.verbose:
+            print(f"[GraphBuilder] make_tensor_output:{name}[{elem_type}:{shape}]")
         if shape:
             self.set_shape(name, shape)
         if elem_type:
@@ -400,8 +410,12 @@ class GraphBuilder:
                 )
             k = node.output[0]
             self.constants_[k] = node
-            self.set_shape(k, self._get_tensor_shape(node))
-            self.set_type(k, self._get_tensor_type(node))
+            shape = self._get_tensor_shape(node)
+            dtype = self._get_tensor_type(node)
+            self.set_shape(k, shape)
+            self.set_type(k, dtype)
+            if self.verbose and np.prod(shape) > 100:
+                print(f"[GraphBuilder] make_constant:{k}[{dtype}:{shape}]")
         elif node.op_type == "Identity":
             if node.input[0] in self._known_shapes:
                 self.set_shape(node.output[0], self._known_shapes[node.input[0]])
@@ -526,6 +540,9 @@ class GraphBuilder:
         tensor.name = name
         tensor.data_type = self._get_type(arr_cpu.dtype)
 
+        if self.verbose and np.prod(arr_cpu.shape) > 100:
+            print(f"[GraphBuilder] from_array:{tensor.data_type}[{arr_cpu.shape}]")
+
         raw = np_arr.tobytes()
         tensor.raw_data = raw
 
@@ -545,6 +562,8 @@ class GraphBuilder:
                 res.append(t)
                 continue
             if isinstance(v, np.ndarray):
+                if self.verbose and np.prod(v.shape) > 100:
+                    print(f"[GraphBuilder] onh.from_array:{k}:{v.dtype}[{v.shape}]")
                 t = onh.from_array(v, name=k)
                 res.append(t)
                 continue
@@ -580,9 +599,13 @@ class GraphBuilder:
                 domain=self.domain,
             )
 
+        if self.verbose:
+            print("[GraphBuilder] onh.make_graph")
         graph = oh.make_graph(
             self.nodes, "experiment", self.inputs, self.outputs, dense
         )
+        if self.verbose:
+            print("[GraphBuilder] onh.make_model")
         model = oh.make_model(graph, opset_imports=opsets)
         return model
 
@@ -622,6 +645,11 @@ class GraphBuilder:
             if not (set(node.output) & marked_set):
                 removed.add(ind)
 
+        if self.verbose:
+            for k, v in self.initializers_dict.items():
+                if k not in marked:
+                    v = self.initializers_dict[k]
+                    print(f"[GraphBuilder] remove_initializer:{k}:{v.dtype}[{v.shape}]")
         self.initializers_dict = {
             k: v for k, v in self.initializers_dict.items() if k in marked
         }
@@ -650,6 +678,11 @@ class GraphBuilder:
                 for name, value in zip(v.output, output):
                     updates[name] = None
                     self.initializers_dict[name] = value
+                    if self.verbose:
+                        print(
+                            f"[GraphBuilder] fold_constant:{v.op_type}:{name}[{value.dtype}:"
+                            f"{value.shape}]:from:{','.join(sorted(feeds))}"
+                        )
 
         self.constants_.update(updates)
         new_nodes = []
