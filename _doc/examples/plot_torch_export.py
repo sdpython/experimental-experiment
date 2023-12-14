@@ -42,6 +42,7 @@ import onnx
 from onnx_extended.ext_test_case import measure_time
 from onnx_extended.memory_peak import start_spying_on
 from onnx_array_api.plotting.text_plot import onnx_simple_text_plot
+from onnx_array_api.profiling import profile2graph
 import torch
 from torch import nn
 import torch.nn.functional as F
@@ -432,8 +433,10 @@ def clean_text(text):
     return text
 
 
-text = "\n".join(s.getvalue().split("\n")[:200])
-print(clean_text(text))
+raw = s.getvalue()
+text = "\n".join(raw.split("\n")[:200])
+with open("plot_torch_export_profile.txt", "w") as f:
+    f.write(raw)
 
 ############################################
 # The following display helps to understand.
@@ -441,10 +444,10 @@ print(clean_text(text))
 # converter the initializer and build the onnx model once the conversion
 # is complete.
 
-# from onnx_array_api.profiling import profile2graph
-# root, nodes = profile2graph(ps, clean_text=clean_text)
-# text = root.to_text()
-# print(text)
+root, nodes = profile2graph(ps, clean_text=clean_text)
+text = root.to_text()
+with open("plot_torch_export_profile_h.txt", "w") as f:
+    f.write(text)
 
 ######################################
 # Benchmark
@@ -582,10 +585,16 @@ print(piv)
 
 
 piv_gpu = pandas.pivot_table(
-    df[df.compute == "CUDA"], index="export", columns=["compute", "aot"], values="average"
+    df[df.compute == "CUDA"],
+    index="export",
+    columns=["compute", "aot"],
+    values="average",
 )
 piv_cpu = pandas.pivot_table(
-    df[df.compute == "CPU"], index="export", columns=["compute", "aot"], values="average"
+    df[df.compute == "CPU"],
+    index="export",
+    columns=["compute", "aot"],
+    values="average",
 )
 
 fig, ax = plt.subplots(1, 2, figsize=(12, 4))
@@ -599,40 +608,46 @@ fig.savefig("plot_torch_export_ort_time.png")
 # Memory Loading Time
 # +++++++++++++++++++
 
-ax = memory_peak_plot(
-    dfmem,
-    ("export", "aot", "compute"),
-    suptitle="Memory Consumption of onnxruntime loading time",
-    bars=[model_size * i / 2**20 for i in range(1, 5)],
-    figsize=(18, 6),
-)
-ax[0, 0].get_figure().savefig("plot_torch_export_ort_load_mem.png")
+for compute in ["CPU", "CUDA"]:
+    ax = memory_peak_plot(
+        dfmem[dfmem.compute == compute],
+        ("export", "aot"),
+        suptitle=f"Memory Consumption of onnxruntime loading time"
+        f"\nrunning on {compute}",
+        bars=[model_size * i / 2**20 for i in range(1, 5)],
+        figsize=(18, 6),
+    )
+    ax[0, 0].get_figure().savefig(f"plot_torch_export_ort_load_mem_{compute}.png")
 
 ########################################
 # Memory First Running Time
 # +++++++++++++++++++++++++
 
-ax = memory_peak_plot(
-    dfmemfr,
-    ("export", "aot", "compute"),
-    suptitle="Memory Consumption of onnxruntime first running time",
-    bars=[model_size * i / 2**20 for i in range(1, 5)],
-    figsize=(18, 6),
-)
-ax[0, 0].get_figure().savefig("plot_torch_export_ort_first_run_mem.png")
+for compute in ["CPU", "CUDA"]:
+    ax = memory_peak_plot(
+        dfmemfr[dfmemfr.compute == compute],
+        ("export", "aot"),
+        suptitle=f"Memory Consumption of onnxruntime first running time"
+        f"\nrunning on {compute}",
+        bars=[model_size * i / 2**20 for i in range(1, 5)],
+        figsize=(18, 6),
+    )
+    ax[0, 0].get_figure().savefig(f"plot_torch_export_ort_first_run_mem_{compute}.png")
 
 ########################################
 # Memory Running Time
 # +++++++++++++++++++
 
-ax = memory_peak_plot(
-    dfmemr,
-    ("export", "aot", "compute"),
-    suptitle="Memory Consumption of onnxruntime running time",
-    bars=[model_size * i / 2**20 for i in range(1, 5)],
-    figsize=(18, 6),
-)
-ax[0, 0].get_figure().savefig("plot_torch_export_ort_run_mem.png")
+for compute in ["CPU", "CUDA"]:
+    ax = memory_peak_plot(
+        dfmemr[dfmemr.compute == compute],
+        ("export", "aot"),
+        suptitle=f"Memory Consumption of onnxruntime running time"
+        f"\nrunning on {compute}",
+        bars=[model_size * i / 2**20 for i in range(1, 5)],
+        figsize=(18, 6),
+    )
+    ax[0, 0].get_figure().savefig(f"plot_torch_export_ort_run_mem_{compute}.png")
 
 
 ######################################################
