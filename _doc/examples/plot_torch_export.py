@@ -110,6 +110,7 @@ class MyModelClass(nn.Module):
     def __init__(self, scenario=script_args.scenario):
         super(MyModelClass, self).__init__()
         if scenario == "middle":
+            self.large = False
             self.conv1 = nn.Conv2d(1, 128, 5)
             self.conv2 = nn.Conv2d(128, 16, 5)
             self.fc1 = nn.Linear(13456, 1024)
@@ -117,6 +118,7 @@ class MyModelClass(nn.Module):
             self.fc2 = nn.Linear(1024, 128)
             self.fc3 = nn.Linear(128, 10)
         elif scenario in (None, "small"):
+            self.large = False
             self.conv1 = nn.Conv2d(1, 16, 5)
             self.conv2 = nn.Conv2d(16, 16, 5)
             self.fc1 = nn.Linear(16, 512)
@@ -124,6 +126,7 @@ class MyModelClass(nn.Module):
             self.fc2 = nn.Linear(512, 128)
             self.fc3 = nn.Linear(128, 10)
         elif scenario in (None, "large"):
+            self.large = True
             self.conv1 = nn.Conv2d(1, 128, 5)
             self.conv2 = nn.Conv2d(128, 16, 5)
             self.fc1 = nn.Linear(13456, 4096)
@@ -148,17 +151,18 @@ class MyModelClass(nn.Module):
         x = F.max_pool2d(F.relu(self.conv2(x)), 2)
         x = torch.flatten(x, 1)
         x = F.relu(self.fc1(x))
-        # loop
-        x = F.relu(self.fca(x))
-        x = F.relu(self.fcb(x))
-        x = F.relu(self.fcc(x))
-        x = F.relu(self.fcd(x))
-        x = F.relu(self.fce(x))
-        x = F.relu(self.fcf(x))
-        x = F.relu(self.fcg(x))
-        x = F.relu(self.fch(x))
-        x = F.relu(self.fci(x))
-        # end of the loop
+        if self.large:
+            # loop
+            x = F.relu(self.fca(x))
+            x = F.relu(self.fcb(x))
+            x = F.relu(self.fcc(x))
+            x = F.relu(self.fcd(x))
+            x = F.relu(self.fce(x))
+            x = F.relu(self.fcf(x))
+            x = F.relu(self.fcg(x))
+            x = F.relu(self.fch(x))
+            x = F.relu(self.fci(x))
+            # end of the loop
         x = F.relu(self.fc2(x))
         x = self.fc3(x)
         return x
@@ -568,8 +572,18 @@ piv = pandas.pivot_table(
 )
 print(piv)
 
-fig, ax = plt.subplots()
-piv.plot.barh(ax=ax, title="Compares onnxruntime time on exported models")
+
+piv_gpu = pandas.pivot_table(
+    df[df.compute == "CUDA"], index="export", columns=["compute", "aot"], values="average"
+)
+piv_cpu = pandas.pivot_table(
+    df[df.compute == "CPU"], index="export", columns=["compute", "aot"], values="average"
+)
+
+fig, ax = plt.subplots(1, 2, figsize=(12, 4))
+fig.suptitle("Compares onnxruntime time on exported models")
+piv_cpu.plot.barh(ax=ax[0], title="CPU")
+piv_gpu.plot.barh(ax=ax[1], title="CUDA")
 fig.tight_layout()
 fig.savefig("plot_torch_export_ort_time.png")
 
