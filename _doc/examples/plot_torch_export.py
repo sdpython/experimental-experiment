@@ -16,8 +16,7 @@ torch model after it was converted into ONNX through different processes:
   set of models, as **dynamo**, it relies on
   `torch.fx <https://pytorch.org/docs/stable/fx.html>`_ but the design is closer to
   what tensorflow-onnx does.
-* the same exporter but unused nodes were removed, **cus_p1**
-* the same exporter but constant where folded, **cus_p2**
+* the same exporter but unused nodes were removed and constants were folded, **cus_p2**
 
 Some helpers
 ++++++++++++
@@ -119,8 +118,7 @@ def export_dynamo(filename, model, *args):
 
 def export_dynopt(filename, model, *args):
     export_output = torch.onnx.dynamo_export(model, *args)
-    export_output.save(filename)
-    model_onnx = onnx.load(filename)
+    model_onnx = export_output.model_proto
 
     from onnxrewriter.optimizer import optimize
 
@@ -131,12 +129,6 @@ def export_dynopt(filename, model, *args):
 
 def export_cus_p0(filename, model, *args):
     onx = to_onnx(model, tuple(args), input_names=["input"])
-    with open(filename, "wb") as f:
-        f.write(onx.SerializeToString())
-
-
-def export_cus_p1(filename, model, *args):
-    onx = to_onnx(model, tuple(args), input_names=["input"], remove_unused=True)
     with open(filename, "wb") as f:
         f.write(onx.SerializeToString())
 
@@ -161,7 +153,6 @@ export_functions = [
     export_dynamo,
     export_dynopt,
     export_cus_p0,
-    export_cus_p1,
     export_cus_p2,
 ]
 
@@ -190,7 +181,7 @@ for k, v in exporters.items():
 def flatten(ps):
     obs = ps["cpu"].to_dict(unit=2**20)
     for i, g in enumerate(ps["gpus"]):
-        for k, v in g.to_dict().items():
+        for k, v in g.to_dict(unit=2**20).items():
             obs[f"gpu{i}_{k}"] = v
     return obs
 
@@ -224,8 +215,9 @@ print(df1)
 
 ax = memory_peak_plot(
     data,
-    bar=model_size,
-    suptitle="Memory Consumption of the Export\nmodel size={model_size:1.0f} Mb",
+    bars=[model_size * i / 2**20 for i in range(1, 5)],
+    suptitle=f"Memory Consumption of the Export\n"
+    f"model size={model_size / 2**20:1.0f} Mb",
 )
 ax[0, 0].get_figure().savefig("plot_torch_export_memory.png")
 
@@ -492,7 +484,7 @@ ax = memory_peak_plot(
     dfmem,
     ("export", "aot", "compute"),
     suptitle="Memory Consumption of onnxruntime loading time",
-    bar=model_size,
+    bars=[model_size * i / 2**20 for i in range(1, 5)],
     figsize=(18, 6),
 )
 ax[0, 0].get_figure().savefig("plot_torch_export_ort_load_mem.png")
@@ -506,7 +498,7 @@ ax = memory_peak_plot(
     dfmemr,
     ("export", "aot", "compute"),
     suptitle="Memory Consumption of onnxruntime running time",
-    bar=model_size,
+    bars=[model_size * i / 2**20 for i in range(1, 5)],
     figsize=(18, 6),
 )
 ax[0, 0].get_figure().savefig("plot_torch_export_ort_run_mem.png")

@@ -1,11 +1,11 @@
-from typing import Optional, Tuple, Union
+from typing import List, Optional, Tuple, Union
 
 
 def memory_peak_plot(
     df1,
     key: Union[str, Tuple[str, ...]] = "export",
     suptitle: str = "Memory Peak",
-    bar: Optional[float] = None,
+    bars: Optional[Union[float, List[float]]] = None,
     figsize: Tuple[int, ...] = (10, 6),
     fontsize: Optional[int] = 6,
 ):
@@ -47,15 +47,21 @@ def memory_peak_plot(
     dfi["gpu0_mean-begin"].plot.bar(
         ax=ax[1, 2], title="GPU Memory average - memory begin (Mb)", rot=30
     )
-    if bar:
+    if bars:
+        if isinstance(bars, float):
+            bars = [bars]
         n = df1.groupby(keys).count().shape[0]
-        print(n)
-        for i in range(1, ax.shape[0]):
-            for j in range(ax.shape[1]):
-                ax[i, j].plot([0, n], [bar, bar], "r--")
+        for i in range(0, ax.shape[0]):
+            for j in range(1, ax.shape[1]):
+                for bar in bars:
+                    ax[i, j].plot([0, n], [bar, bar], "r--")
     if fontsize:
         for i in range(ax.shape[0]):
             for j in range(ax.shape[1]):
                 ax[i, j].tick_params(axis="both", which="major", labelsize=fontsize)
+    for i in range(ax.shape[0]):
+        for j in range(ax.shape[1]):
+            ls = ax[i, j].get_xticklabels()
+            ax[i, j].set_xticklabels(ls, ha="right")
     fig.tight_layout()
     return ax

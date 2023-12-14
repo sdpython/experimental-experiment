@@ -10,12 +10,12 @@ class TestPlottingMemory(ExtTestCase):
         ax = memory_peak_plot(
             data,
             suptitle="nice",
-            bar=55,
+            bars=[55, 110],
             key=("export", "aot", "compute"),
-            figsize=(18, 7),
+            figsize=(18 * 2, 7 * 2),
         )
         self.assertNotEmpty(ax)
-        # ax[0, 0].get_figure().savefig("check.png")
+        ax[0, 0].get_figure().savefig("check.png")
 
 
 if __name__ == "__main__":

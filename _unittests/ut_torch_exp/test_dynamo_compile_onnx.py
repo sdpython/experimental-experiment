@@ -41,7 +41,7 @@ class TestDynamoCompileOnnx(ExtTestCase):
 
         def onnxscript_compiler(model: torch.fx.GraphModule, args: List[torch.Tensor]):
             export_output = torch.onnx.dynamo_export(model, *args)
-            onx = export_output.to_model_proto()
+            onx = export_output.model_proto
             sess = InferenceSession(
                 onx.SerializeToString(), providers=["CPUExecutionProvider"]
             )
