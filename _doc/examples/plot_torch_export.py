@@ -402,16 +402,6 @@ fig.savefig("plot_torch_export_time.png")
 # Profiling
 # +++++++++
 
-pr = cProfile.Profile()
-pr.enable()
-for i in range(script_args.repeat):
-    export_cus_p2("dummy.onnx", model, input_tensor)
-pr.disable()
-s = io.StringIO()
-sortby = SortKey.CUMULATIVE
-ps = pstats.Stats(pr, stream=s).sort_stats(sortby)
-ps.print_stats()
-
 
 def clean_text(text):
     pathes = [
@@ -433,21 +423,55 @@ def clean_text(text):
     return text
 
 
+pr = cProfile.Profile()
+pr.enable()
+for i in range(script_args.repeat):
+    export_cus_p2("dummyc.onnx", model, input_tensor)
+pr.disable()
+s = io.StringIO()
+sortby = SortKey.CUMULATIVE
+ps = pstats.Stats(pr, stream=s).sort_stats(sortby)
+ps.print_stats()
+
+
 raw = s.getvalue()
 text = "\n".join(raw.split("\n")[:200])
-with open("plot_torch_export_profile.txt", "w") as f:
+print(text)
+with open("plot_torch_export_profile_custom.txt", "w") as f:
     f.write(raw)
-
-############################################
-# The following display helps to understand.
-# Most of the tiume added by the custom converter is used to
-# converter the initializer and build the onnx model once the conversion
-# is complete.
 
 root, nodes = profile2graph(ps, clean_text=clean_text)
 text = root.to_text()
-with open("plot_torch_export_profile_h.txt", "w") as f:
+with open("plot_torch_export_profile_custom_h.txt", "w") as f:
     f.write(text)
+
+
+####################################
+# Same with dynamo-exporter
+# +++++++++++++++++++++++++
+
+pr = cProfile.Profile()
+pr.enable()
+for i in range(script_args.repeat):
+    export_dynamo("dummyd.onnx", model, input_tensor)
+pr.disable()
+s = io.StringIO()
+sortby = SortKey.CUMULATIVE
+ps = pstats.Stats(pr, stream=s).sort_stats(sortby)
+ps.print_stats()
+
+
+raw = s.getvalue()
+text = "\n".join(raw.split("\n")[:200])
+print(text)
+with open("plot_torch_export_profile_dynamo.txt", "w") as f:
+    f.write(raw)
+
+root, nodes = profile2graph(ps, clean_text=clean_text)
+text = root.to_text()
+with open("plot_torch_export_profile_dynamo_h.txt", "w") as f:
+    f.write(text)
+
 
 ######################################
 # Benchmark
@@ -614,7 +638,7 @@ for compute in ["CPU", "CUDA"]:
         ("export", "aot"),
         suptitle=f"Memory Consumption of onnxruntime loading time"
         f"\nrunning on {compute}",
-        bars=[model_size * i / 2**20 for i in range(1, 5)],
+        bars=[model_size * i / 2**20 for i in range(1, 3)],
         figsize=(18, 6),
     )
     ax[0, 0].get_figure().savefig(f"plot_torch_export_ort_load_mem_{compute}.png")
@@ -629,7 +653,7 @@ for compute in ["CPU", "CUDA"]:
         ("export", "aot"),
         suptitle=f"Memory Consumption of onnxruntime first running time"
         f"\nrunning on {compute}",
-        bars=[model_size * i / 2**20 for i in range(1, 5)],
+        bars=[model_size * i / 2**20 for i in range(1, 3)],
         figsize=(18, 6),
     )
     ax[0, 0].get_figure().savefig(f"plot_torch_export_ort_first_run_mem_{compute}.png")
@@ -644,7 +668,7 @@ for compute in ["CPU", "CUDA"]:
         ("export", "aot"),
         suptitle=f"Memory Consumption of onnxruntime running time"
         f"\nrunning on {compute}",
-        bars=[model_size * i / 2**20 for i in range(1, 5)],
+        bars=[model_size * i / 2**20 for i in range(1, 3)],
         figsize=(18, 6),
     )
     ax[0, 0].get_figure().savefig(f"plot_torch_export_ort_run_mem_{compute}.png")
