@@ -44,6 +44,7 @@ import torch.nn.functional as F
 import experimental_experiment
 from experimental_experiment.torch_exp.onnx_export import to_onnx
 from experimental_experiment.plotting.memory import memory_peak_plot
+from experimental_experiment.ext_test_case import get_parsed_args
 from tqdm import tqdm
 
 
@@ -64,6 +65,33 @@ def system_info():
 
 pprint.pprint(system_info())
 
+#####################################
+# Scripts arguments
+
+
+script_args = get_parsed_args(
+    "plot_torch_export",
+    description=__doc__,
+    scenarios={
+        "small": "small models to test",
+        "middle": "55Mb model",
+    },
+    warmup=5,
+    repeat=5,
+    maxtime=(
+        2,
+        "maximum time to run a model to measure the computation time, "
+        "it is 0.1 when scenario is small",
+    ),
+    expose="scenarios,repeat,warmup",
+)
+
+if script_args.scenario in (None, "small"):
+    script_args.maxtime = 0.1
+print(f"scenario={script_args.scenario or 'small'}")
+print(f"warmup={script_args.warmup}")
+print(f"repeat={script_args.repeat}")
+print(f"maxtime={script_args.maxtime}")
 
 ############################
 # The model
@@ -72,14 +100,23 @@ pprint.pprint(system_info())
 # A simple model to convert.
 
 
-class MyModel(nn.Module):
-    def __init__(self):
-        super(MyModel, self).__init__()
-        self.conv1 = nn.Conv2d(1, 128, 5)
-        self.conv2 = nn.Conv2d(128, 16, 5)
-        self.fc1 = nn.Linear(13456, 1024)
-        self.fc2 = nn.Linear(1024, 128)
-        self.fc3 = nn.Linear(128, 10)
+class MyModelClass(nn.Module):
+    def __init__(self, scenario=script_args.scenario):
+        super(MyModelClass, self).__init__()
+        if scenario == "middle":
+            self.conv1 = nn.Conv2d(1, 128, 5)
+            self.conv2 = nn.Conv2d(128, 16, 5)
+            self.fc1 = nn.Linear(13456, 1024)
+            self.fc2 = nn.Linear(1024, 128)
+            self.fc3 = nn.Linear(128, 10)
+        elif scenario in (None, "small"):
+            self.conv1 = nn.Conv2d(1, 16, 5)
+            self.conv2 = nn.Conv2d(16, 16, 5)
+            self.fc1 = nn.Linear(16, 512)
+            self.fc2 = nn.Linear(512, 128)
+            self.fc3 = nn.Linear(128, 10)
+        else:
+            raise ValueError(f"Unsupported scenario={scenario!r}.")
 
     def forward(self, x):
         x = F.max_pool2d(F.relu(self.conv1(x)), (2, 2))
@@ -91,6 +128,19 @@ class MyModel(nn.Module):
         return x
 
 
+def create_model_and_input(scenario=script_args.scenario):
+    if scenario == "middle":
+        shape = [1, 1, 128, 128]
+    elif scenario in (None, "small"):
+        shape = [1, 1, 16, 16]
+    else:
+        raise ValueError(f"Unsupported scenario={scenario!r}.")
+    input_tensor = torch.rand(*shape).to(torch.float32)
+    model = MyModelClass(scenario=scenario)
+    assert model(input_tensor) is not None
+    return model, input_tensor
+
+
 def torch_model_size(model):
     size_model = 0
     for param in model.parameters():
@@ -99,7 +149,8 @@ def torch_model_size(model):
     return size_model
 
 
-model_size = torch_model_size(MyModel())
+model, input_tensor = create_model_and_input()
+model_size = torch_model_size(model)
 print(f"model size={model_size / 2 ** 20} Mb")
 
 #######################################
@@ -157,9 +208,6 @@ export_functions = [
 ]
 
 exporters = {f.__name__.replace("export_", ""): f for f in export_functions}
-shape = [1, 1, 128, 128]
-input_tensor = torch.rand(*shape).to(torch.float32)
-model = MyModel()
 
 supported_exporters = {}
 for k, v in exporters.items():
@@ -343,12 +391,12 @@ print(clean_text(text))
 # +++++++++
 
 
-def benchmark():
+def benchmark(shape):
     from onnxruntime import InferenceSession, SessionOptions, GraphOptimizationLevel
 
-    shape = [1, 1, 128, 128]
     data = []
     data_mem_load = []
+    data_mem_first_run = []
     data_mem_run = []
     confs = list(
         itertools.product(
@@ -380,6 +428,13 @@ def benchmark():
         obs["n_nodes"] = len(onx.graph.node)
         obs["n_function"] = len(onx.functions or [])
         obs["n_sub"] = len([n for n in onx.graph.node if n.op_type == "Sub"])
+        short_obs = dict(
+            name=obs["name"],
+            aot=obs["aot"],
+            providers=obs["providers"],
+            export=obs["export"],
+            compute=obs["compute"],
+        )
 
         opts = SessionOptions()
         opts.add_session_config_entry("session.disable_aot_function_inlining", aot)
@@ -400,45 +455,41 @@ def benchmark():
         stat = start_spying_on(cuda=1)
         sess = InferenceSession(name, opts, providers=ps)
         memobs = flatten(stat.stop())
-        memobs.update(
-            dict(
-                name=obs["name"],
-                aot=obs["aot"],
-                providers=obs["providers"],
-                export=obs["export"],
-                compute=obs["compute"],
-            )
-        )
+        memobs.update(short_obs)
         data_mem_load.append(memobs)
 
         input_name = sess.get_inputs()[0].name
         feeds = {input_name: np.random.rand(*shape).astype(np.float32)}
+
+        stat = start_spying_on(cuda=1)
         try:
-            for i in range(0, 5):
-                sess.run(None, feeds)
+            sess.run(None, feeds)
         except Exception as e:
             loop.set_description(f"ERROR-run: {name} {e}")
             obs.update({"error": e, "step": "load"})
             data.append(obs)
+            stat.stop()
             continue
+        memobs = flatten(stat.stop())
+        memobs.update(short_obs)
+        data_mem_first_run.append(memobs)
 
         # memory consumption
         stat = start_spying_on(cuda=1)
-        for i in range(0, 5):
+        for i in range(0, script_args.warmup):
             sess.run(None, feeds)
         memobs = flatten(stat.stop())
-        memobs.update(
-            dict(
-                name=obs["name"],
-                aot=obs["aot"],
-                providers=obs["providers"],
-                export=obs["export"],
-                compute=obs["compute"],
-            )
-        )
+        memobs.update(short_obs)
         data_mem_run.append(memobs)
 
-        obs.update(measure_time(lambda: sess.run(None, feeds), max_time=1))
+        obs.update(
+            measure_time(
+                lambda: sess.run(None, feeds),
+                max_time=script_args.maxtime,
+                repeat=script_args.repeat,
+                number=1,
+            )
+        )
 
         loop.set_description(f"{obs['average']} {name} {ps}")
         data.append(obs)
@@ -452,15 +503,13 @@ def benchmark():
     dfmemr = pandas.DataFrame(data_mem_run)
     dfmemr.to_csv("plot_torch_export_ort_run_mem.csv", index=False)
     dfmemr.to_excel("plot_torch_export_ort_run_mem.xlsx", index=False)
-    return df, dfmem, dfmemr
+    dfmemfr = pandas.DataFrame(data_mem_first_run)
+    dfmemfr.to_csv("plot_torch_export_ort_first_run_mem.csv", index=False)
+    dfmemfr.to_excel("plot_torch_export_ort_first_run_mem.xlsx", index=False)
+    return df, dfmem, dfmemfr, dfmemr
 
 
-df, dfmem, dfmemr = benchmark()
-print("----------------------------------------------")
-print(dfmem.to_dict())
-print("----------------------------------------------")
-df.to_csv("plot_torch_export_ort_time.csv", index=False)
-df.to_excel("plot_torch_export_ort_time.xlsx", index=False)
+df, dfmem, dfmemfr, dfmemr = benchmark(list(input_tensor.shape))
 print(df)
 
 #####################################
@@ -489,9 +538,21 @@ ax = memory_peak_plot(
 )
 ax[0, 0].get_figure().savefig("plot_torch_export_ort_load_mem.png")
 
+########################################
+# Memory First Running Time
+# +++++++++++++++++++++++++
+
+ax = memory_peak_plot(
+    dfmemfr,
+    ("export", "aot", "compute"),
+    suptitle="Memory Consumption of onnxruntime first running time",
+    bars=[model_size * i / 2**20 for i in range(1, 5)],
+    figsize=(18, 6),
+)
+ax[0, 0].get_figure().savefig("plot_torch_export_ort_first_run_mem.png")
 
 ########################################
-# Memory Loading Time
+# Memory Running Time
 # +++++++++++++++++++
 
 ax = memory_peak_plot(
