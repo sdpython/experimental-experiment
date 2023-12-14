@@ -423,54 +423,42 @@ def clean_text(text):
     return text
 
 
-pr = cProfile.Profile()
-pr.enable()
-for i in range(script_args.repeat):
-    export_cus_p2("dummyc.onnx", model, input_tensor)
-pr.disable()
-s = io.StringIO()
-sortby = SortKey.CUMULATIVE
-ps = pstats.Stats(pr, stream=s).sort_stats(sortby)
-ps.print_stats()
+def profile_function(name, export_function, verbose=False):
+    print(f"profile {name}: {export_function}")
+    pr = cProfile.Profile()
+    pr.enable()
+    for i in range(script_args.repeat):
+        export_function("dummyc.onnx", model, input_tensor)
+    pr.disable()
+    s = io.StringIO()
+    sortby = SortKey.CUMULATIVE
+    ps = pstats.Stats(pr, stream=s).sort_stats(sortby)
+    ps.print_stats()
+
+    raw = s.getvalue()
+    text = "\n".join(raw.split("\n")[:200])
+    if verbose:
+        print(text)
+    with open(f"plot_torch_export_profile_{name}.txt", "w") as f:
+        f.write(raw)
+
+    root, nodes = profile2graph(ps, clean_text=clean_text)
+    text = root.to_text()
+    with open(f"plot_torch_export_profile_{name}_h.txt", "w") as f:
+        f.write(text)
+    print("done.")
 
 
-raw = s.getvalue()
-text = "\n".join(raw.split("\n")[:200])
-print(text)
-with open("plot_torch_export_profile_custom.txt", "w") as f:
-    f.write(raw)
-
-root, nodes = profile2graph(ps, clean_text=clean_text)
-text = root.to_text()
-with open("plot_torch_export_profile_custom_h.txt", "w") as f:
-    f.write(text)
+profile_function("custom0", export_cus_p0, True)
+profile_function("custom2", export_cus_p2)
 
 
 ####################################
 # Same with dynamo-exporter
 # +++++++++++++++++++++++++
 
-pr = cProfile.Profile()
-pr.enable()
-for i in range(script_args.repeat):
-    export_dynamo("dummyd.onnx", model, input_tensor)
-pr.disable()
-s = io.StringIO()
-sortby = SortKey.CUMULATIVE
-ps = pstats.Stats(pr, stream=s).sort_stats(sortby)
-ps.print_stats()
-
-
-raw = s.getvalue()
-text = "\n".join(raw.split("\n")[:200])
-print(text)
-with open("plot_torch_export_profile_dynamo.txt", "w") as f:
-    f.write(raw)
-
-root, nodes = profile2graph(ps, clean_text=clean_text)
-text = root.to_text()
-with open("plot_torch_export_profile_dynamo_h.txt", "w") as f:
-    f.write(text)
+profile_function("dynamo", export_dynamo, verbose=True)
+profile_function("dynopt", export_dynopt)
 
 
 ######################################
@@ -606,6 +594,8 @@ piv = pandas.pivot_table(
     df, index="export", columns=["compute", "aot"], values="average"
 )
 print(piv)
+piv.to_csv("plot_torch_export_ort_time_compute.csv")
+piv.to_excel("plot_torch_export_ort_time_compute.xlsx")
 
 
 piv_gpu = pandas.pivot_table(
