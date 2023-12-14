@@ -140,6 +140,10 @@ class MyModelClass(nn.Module):
             self.fcg = nn.Linear(4096, 4096)
             self.fch = nn.Linear(4096, 4096)
             self.fci = nn.Linear(4096, 4096)
+            self.fck = nn.Linear(4096, 4096)
+            self.fcl = nn.Linear(4096, 4096)
+            self.fcm = nn.Linear(4096, 4096)
+            self.fcn = nn.Linear(4096, 4096)
             # end of the unfolded loop.
             self.fc2 = nn.Linear(4096, 128)
             self.fc3 = nn.Linear(128, 10)
@@ -162,6 +166,10 @@ class MyModelClass(nn.Module):
             x = F.relu(self.fcg(x))
             x = F.relu(self.fch(x))
             x = F.relu(self.fci(x))
+            x = F.relu(self.fck(x))
+            x = F.relu(self.fcl(x))
+            x = F.relu(self.fcm(x))
+            x = F.relu(self.fcn(x))
             # end of the loop
         x = F.relu(self.fc2(x))
         x = self.fc3(x)
