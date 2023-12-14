@@ -21,6 +21,8 @@ torch model after it was converted into ONNX through different processes:
 Some helpers
 ++++++++++++
 """
+import onnxruntime
+import contextlib
 import itertools
 import os
 import platform
@@ -30,6 +32,8 @@ import time
 import cProfile
 import pstats
 import io
+import warnings
+import logging
 from pstats import SortKey
 import numpy as np
 import matplotlib.pyplot as plt
@@ -46,6 +50,8 @@ from experimental_experiment.torch_exp.onnx_export import to_onnx
 from experimental_experiment.plotting.memory import memory_peak_plot
 from experimental_experiment.ext_test_case import get_parsed_args
 from tqdm import tqdm
+
+logging.disable(logging.ERROR)
 
 
 def system_info():
@@ -107,13 +113,32 @@ class MyModelClass(nn.Module):
             self.conv1 = nn.Conv2d(1, 128, 5)
             self.conv2 = nn.Conv2d(128, 16, 5)
             self.fc1 = nn.Linear(13456, 1024)
+            self.fcs = []
             self.fc2 = nn.Linear(1024, 128)
             self.fc3 = nn.Linear(128, 10)
         elif scenario in (None, "small"):
             self.conv1 = nn.Conv2d(1, 16, 5)
             self.conv2 = nn.Conv2d(16, 16, 5)
             self.fc1 = nn.Linear(16, 512)
+            self.fcs = []
             self.fc2 = nn.Linear(512, 128)
+            self.fc3 = nn.Linear(128, 10)
+        elif scenario in (None, "large"):
+            self.conv1 = nn.Conv2d(1, 128, 5)
+            self.conv2 = nn.Conv2d(128, 16, 5)
+            self.fc1 = nn.Linear(13456, 4096)
+            # torch script does not support loops.
+            self.fca = nn.Linear(4096, 4096)
+            self.fcb = nn.Linear(4096, 4096)
+            self.fcc = nn.Linear(4096, 4096)
+            self.fcd = nn.Linear(4096, 4096)
+            self.fce = nn.Linear(4096, 4096)
+            self.fcf = nn.Linear(4096, 4096)
+            self.fcg = nn.Linear(4096, 4096)
+            self.fch = nn.Linear(4096, 4096)
+            self.fci = nn.Linear(4096, 4096)
+            # end of the unfolded loop.
+            self.fc2 = nn.Linear(4096, 128)
             self.fc3 = nn.Linear(128, 10)
         else:
             raise ValueError(f"Unsupported scenario={scenario!r}.")
@@ -123,6 +148,17 @@ class MyModelClass(nn.Module):
         x = F.max_pool2d(F.relu(self.conv2(x)), 2)
         x = torch.flatten(x, 1)
         x = F.relu(self.fc1(x))
+        # loop
+        x = F.relu(self.fca(x))
+        x = F.relu(self.fcb(x))
+        x = F.relu(self.fcc(x))
+        x = F.relu(self.fcd(x))
+        x = F.relu(self.fce(x))
+        x = F.relu(self.fcf(x))
+        x = F.relu(self.fcg(x))
+        x = F.relu(self.fch(x))
+        x = F.relu(self.fci(x))
+        # end of the loop
         x = F.relu(self.fc2(x))
         x = self.fc3(x)
         return x
@@ -133,6 +169,8 @@ def create_model_and_input(scenario=script_args.scenario):
         shape = [1, 1, 128, 128]
     elif scenario in (None, "small"):
         shape = [1, 1, 16, 16]
+    elif scenario == "large":
+        shape = [1, 1, 128, 128]
     else:
         raise ValueError(f"Unsupported scenario={scenario!r}.")
     input_tensor = torch.rand(*shape).to(torch.float32)
@@ -159,23 +197,32 @@ print(f"model size={model_size / 2 ** 20} Mb")
 
 
 def export_script(filename, model, *args):
-    torch.onnx.export(model, *args, filename, input_names=["input"])
+    with contextlib.redirect_stdout(io.StringIO()):
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            torch.onnx.export(model, *args, filename, input_names=["input"])
 
 
 def export_dynamo(filename, model, *args):
-    export_output = torch.onnx.dynamo_export(model, *args)
-    export_output.save(filename)
+    with contextlib.redirect_stdout(io.StringIO()):
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            export_output = torch.onnx.dynamo_export(model, *args)
+            export_output.save(filename)
 
 
 def export_dynopt(filename, model, *args):
-    export_output = torch.onnx.dynamo_export(model, *args)
-    model_onnx = export_output.model_proto
+    with contextlib.redirect_stdout(io.StringIO()):
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            export_output = torch.onnx.dynamo_export(model, *args)
+            model_onnx = export_output.model_proto
 
-    from onnxrewriter.optimizer import optimize
+            from onnxrewriter.optimizer import optimize
 
-    optimized_model = optimize(model_onnx)
-    with open(filename, "wb") as f:
-        f.write(optimized_model.SerializeToString())
+            optimized_model = optimize(model_onnx)
+            with open(filename, "wb") as f:
+                f.write(optimized_model.SerializeToString())
 
 
 def export_cus_p0(filename, model, *args):
@@ -216,10 +263,11 @@ for k, v in exporters.items():
     try:
         v(filename, model, input_tensor)
     except Exception as e:
-        print(f"skipped due to {e}")
+        print(f"skipped due to {str(e)[:1000]}")
         continue
     supported_exporters[k] = v
     print(f"done. size={os.stat(filename).st_size / 2 ** 20:1.0f} Mb")
+
 
 #################################
 # Exporter memory
@@ -279,7 +327,7 @@ for k, v in supported_exporters.items():
     print(f"run exporter {k}")
     filename = f"plot_torch_export_{k}.onnx"
     times = []
-    for i in range(5):
+    for i in range(script_args.repeat):
         begin = time.perf_counter()
         v(filename, model, input_tensor)
         duration = time.perf_counter() - begin
@@ -306,7 +354,7 @@ for k, v in supported_exporters.items():
 # except the first one.
 
 times = []
-for i in range(5):
+for i in range(script_args.repeat):
     begin = time.perf_counter()
     exported_mod = torch.export.export(model, (input_tensor,))
     duration = time.perf_counter() - begin
@@ -343,7 +391,7 @@ fig.savefig("plot_torch_export_time.png")
 
 pr = cProfile.Profile()
 pr.enable()
-for i in range(5):
+for i in range(script_args.repeat):
     export_cus_p0("dummy.onnx", model, input_tensor)
 pr.disable()
 s = io.StringIO()
