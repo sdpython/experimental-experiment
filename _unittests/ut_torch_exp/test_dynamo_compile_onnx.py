@@ -107,8 +107,6 @@ class TestDynamoCompileOnnx(ExtTestCase):
         expected = model(input_tensor)
         optimized_mod = torch.compile(model, backend=onnx_compiler)
         got = optimized_mod(input_tensor)
-        print(expected)
-        print(got)
         self.assertEqual(expected.shape, got.shape)
         self.assertEqual(expected.dtype, got.dtype)
         self.assertEqualArray(expected.detach().numpy(), got.detach().numpy())

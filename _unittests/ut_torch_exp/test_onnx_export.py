@@ -262,11 +262,10 @@ class TestOnnxExport(ExtTestCase):
             verbose=1,
         )
         onx2 = onnx.load(names[-1])
-        print("------------------")
         for att in ["node", "initializer"]:
             v1 = getattr(onx1.graph, att)
             v2 = getattr(onx2.graph, att)
-            print(att, len(v1), len(v2))
+            self.assertEqual(len(v1), len(v2))
         x = input_tensor.numpy()
         results = []
         for name in names:

@@ -533,7 +533,7 @@ class GraphBuilder:
             assert arr_cpu.data_ptr() != copy.data_ptr()
             np_arr = np.from_dlpack(copy)
         else:
-            np_arr = np.from_dlpack(arr_cpu)
+            np_arr = np.from_dlpack(arr_cpu.detach())
 
         tensor = TensorProto()
         tensor.dims.extend(arr_cpu.shape)
@@ -656,6 +656,20 @@ class GraphBuilder:
         self.constants_ = {k: v for k, v in self.constants_.items() if k in marked}
         self.nodes = [node for i, node in enumerate(self.nodes) if i not in removed]
 
+    def _apply_transpose(
+        self, node: NodeProto, feeds: Dict[str, "torch.Tensor"]  # noqa: F821
+    ) -> "torch.Tensor":  # noqa: F821
+        import torch
+
+        perm = None
+        for att in node.attribute:
+            if att.name == "perm":
+                perm = tuple(att.ints)
+                break
+        assert perm, f"perm not here in node {node}"
+        assert len(perm) == 2, f"perm={perm} is not supported with torch"
+        return [torch.transpose(feeds[node.input[0]], *perm)]
+
     def constant_folding(self):
         """
         Folds all constants. Constants are marked during the creation of the graph.
@@ -672,9 +686,14 @@ class GraphBuilder:
             if all(map(self.is_constant, v.output)):
                 node_to_remove.add(tuple(v.output))
                 # node evaluation
-                ref = ReferenceEvaluator(v)
-                feeds = {i: self.get_constant(i) for i in v.input}
-                output = ref.run(None, feeds)
+                if v.op_type == "Transpose":
+                    # bypassing onnx.numpy_helper.from_array, too slow
+                    feeds = {i: self.initializers_dict[i] for i in v.input}
+                    output = self._apply_transpose(v, feeds)
+                else:
+                    ref = ReferenceEvaluator(v)
+                    feeds = {i: self.get_constant(i) for i in v.input}
+                    output = ref.run(None, feeds)
                 for name, value in zip(v.output, output):
                     updates[name] = None
                     self.initializers_dict[name] = value
