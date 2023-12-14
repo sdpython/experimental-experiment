@@ -311,7 +311,7 @@ for k, v in supported_exporters.items():
 stat = start_spying_on(cuda=1)
 exported_mod = torch.export.export(model, (input_tensor,))
 obs = flatten(stat.stop())
-obs.update(dict(export="torch"))
+obs.update(dict(export="torch.fx"))
 data.append(obs)
 
 #############################
@@ -373,7 +373,7 @@ for i in range(script_args.repeat):
     times.append(duration)
 data.append(
     dict(
-        export="torch",
+        export="torch.fx",
         time=np.mean(times),
         min=min(times),
         max=max(times),
@@ -404,7 +404,7 @@ fig.savefig("plot_torch_export_time.png")
 pr = cProfile.Profile()
 pr.enable()
 for i in range(script_args.repeat):
-    export_cus_p0("dummy.onnx", model, input_tensor)
+    export_cus_p2("dummy.onnx", model, input_tensor)
 pr.disable()
 s = io.StringIO()
 sortby = SortKey.CUMULATIVE
