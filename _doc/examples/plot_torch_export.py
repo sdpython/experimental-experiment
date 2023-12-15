@@ -477,7 +477,7 @@ profile_function("custom2", export_cus_p2)
 # Same with dynamo-exporter.
 
 profile_function("dynamo", export_dynamo, verbose=True)
-if export_dynopt in export_functions:
+if "dynopt" in supported_exporters:
     profile_function("dynopt", export_dynopt)
 
 
@@ -599,7 +599,7 @@ def benchmark(shape):
             measure_time(
                 lambda: InferenceSession(name, opts, providers=ps).run(None, feeds),
                 max_time=script_args.maxtime,
-                repeat=script_args.repeat,
+                repeat=max(1, script_args.repeat // 2),
                 number=1,
             )
         )
