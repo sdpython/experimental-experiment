@@ -639,6 +639,27 @@ piv_gpu.plot.barh(ax=ax[1], title="CUDA")
 fig.tight_layout()
 fig.savefig("plot_torch_export_ort_time.png")
 
+#####################################
+# New graph without the very long times.
+
+piv_cpu = pandas.pivot_table(
+    df[
+        (df.compute == "CPU")
+        & ((df.aot == 1) | ((df.export != "dynamo") & (df.export != "dynopt")))
+    ],
+    index="export",
+    columns=["compute", "aot"],
+    values="average",
+)
+
+fig, ax = plt.subplots(1, 2, figsize=(12, 4))
+fig.suptitle("Compares onnxruntime time on exported models\nHide dynamo without AOT")
+piv_cpu.plot.barh(ax=ax[0], title="CPU")
+piv_gpu.plot.barh(ax=ax[1], title="CUDA")
+fig.tight_layout()
+fig.savefig("plot_torch_export_ort_time_2.png")
+
+
 ########################################
 # Memory Loading Time
 # +++++++++++++++++++
