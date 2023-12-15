@@ -54,4 +54,4 @@ all the graphs, the data used to draw them, and the models.
 
 ::
 
-    python _doc/examples/plot_torch_export.py --large
+    python _doc/examples/plot_torch_export.py -s large
