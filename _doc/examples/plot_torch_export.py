@@ -18,10 +18,15 @@ torch model after it was converted into ONNX through different processes:
   what tensorflow-onnx does.
 * the same exporter but unused nodes were removed and constants were folded, **cus_p2**
 
+To run the script:
+
+::
+
+    python _doc/examples/plot_torch_export --help
+
 Some helpers
 ++++++++++++
 """
-import onnxruntime
 import contextlib
 import itertools
 import os
@@ -35,12 +40,23 @@ import io
 import warnings
 import logging
 from pstats import SortKey
+
+try:
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        import onnxruntime
+
+        assert "CUDAExecutionProvider" in onnxruntime.get_available_providers()
+except ImportError:
+    print("onnxruntime not available.")
+    import sys
+
+    sys.exit(0)
+
 import numpy as np
 import matplotlib.pyplot as plt
 import pandas
 import onnx
-from onnx_extended.ext_test_case import measure_time
-from onnx_extended.memory_peak import start_spying_on
 from onnx_array_api.plotting.text_plot import onnx_simple_text_plot
 from onnx_array_api.profiling import profile2graph
 import torch
@@ -49,7 +65,8 @@ import torch.nn.functional as F
 import experimental_experiment
 from experimental_experiment.torch_exp.onnx_export import to_onnx
 from experimental_experiment.plotting.memory import memory_peak_plot
-from experimental_experiment.ext_test_case import get_parsed_args
+from experimental_experiment.ext_test_case import get_parsed_args, measure_time
+from experimental_experiment.memory_peak import start_spying_on
 from tqdm import tqdm
 
 logging.disable(logging.ERROR)
@@ -80,8 +97,9 @@ script_args = get_parsed_args(
     "plot_torch_export",
     description=__doc__,
     scenarios={
-        "small": "small models to test",
+        "small": "small model to test",
         "middle": "55Mb model",
+        "large": "1Gb model",
     },
     warmup=5,
     repeat=5,
