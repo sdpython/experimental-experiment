@@ -366,13 +366,31 @@ def get_parsed_args(
     if epilog is None:
         epilog = ""
     parser = ArgumentParser(prog=name, description=description, epilog=epilog)
+    default_scenario = None
     if expose is not None:
         to_publish = set(expose.split(",")) if expose else set()
         if scenarios is not None:
             rows = ", ".join(f"{k}: {v}" for k, v in scenarios.items())
-            parser.add_argument(
-                "-s", "--scenario", help=f"Available scenarios: {rows}."
-            )
+            defval = os.environ.get("GENDOCDEFAULT", None)
+            if defval:
+                default_scenario = defval
+                assert (
+                    defval in scenarios
+                ), f"GENDOCDEFAULT={defval!r} not in {scenarios}"
+                parser.add_argument(
+                    "-s",
+                    "--scenario",
+                    help=f"Available scenarios: {rows}.",
+                    default=defval,
+                    type=str,
+                )
+            else:
+                parser.add_argument(
+                    "-s",
+                    "--scenario",
+                    help=f"Available scenarios: {rows}.",
+                    type=str,
+                )
         if not to_publish or "number" in to_publish:
             parser.add_argument(
                 "-n",
@@ -421,4 +439,7 @@ def get_parsed_args(
             default=v[0],
         )
 
-    return parser.parse_args()
+    res = parser.parse_args()
+    if default_scenario and not res.scenario:
+        res.scenario = default_scenario
+    return res
