@@ -478,7 +478,8 @@ profile_function("custom2", export_cus_p2)
 # +++++++++++++++++++++++++
 
 profile_function("dynamo", export_dynamo, verbose=True)
-profile_function("dynopt", export_dynopt)
+if export_dynopt in export_functions:
+    profile_function("dynopt", export_dynopt)
 
 
 ######################################
