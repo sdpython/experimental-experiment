@@ -46,7 +46,7 @@ try:
         warnings.simplefilter("ignore")
         import onnxruntime
 
-        assert "CUDAExecutionProvider" in onnxruntime.get_available_providers()
+        has_cuda = "CUDAExecutionProvider" in onnxruntime.get_available_providers()
 except ImportError:
     print("onnxruntime not available.")
     import sys
@@ -318,8 +318,9 @@ data = []
 for k, v in supported_exporters.items():
     print(f"run exporter for memory {k}")
     filename = f"plot_torch_export_{k}.onnx"
-    torch.cuda.set_device(0)
-    stat = start_spying_on(cuda=1)
+    if has_cuda:
+        torch.cuda.set_device(0)
+    stat = start_spying_on(cuda=1 if has_cuda else 0)
     v(filename, model, input_tensor)
     obs = flatten(stat.stop())
     print("done.")
@@ -327,7 +328,7 @@ for k, v in supported_exporters.items():
     obs.update(dict(nodes=len(onx.graph.node), export=k))
     data.append(obs)
 
-stat = start_spying_on(cuda=1)
+stat = start_spying_on(cuda=1 if has_cuda else 0)
 exported_mod = torch.export.export(model, (input_tensor,))
 obs = flatten(stat.stop())
 obs.update(dict(export="torch.fx"))
@@ -548,7 +549,7 @@ def benchmark(shape):
         opts = SessionOptions()
         opts.add_session_config_entry("session.disable_aot_function_inlining", aot)
         opts.graph_optimization_level = GraphOptimizationLevel.ORT_ENABLE_ALL
-        stat = start_spying_on(cuda=1)
+        stat = start_spying_on(cuda=1 if has_cuda else 0)
         sess = InferenceSession(name, opts, providers=ps)
         memobs = flatten(stat.stop())
         memobs.update(short_obs)
@@ -557,7 +558,7 @@ def benchmark(shape):
         input_name = sess.get_inputs()[0].name
         feeds = {input_name: np.random.rand(*shape).astype(np.float32)}
 
-        stat = start_spying_on(cuda=1)
+        stat = start_spying_on(cuda=1 if has_cuda else 0)
         try:
             sess.run(None, feeds)
         except Exception as e:
@@ -571,7 +572,7 @@ def benchmark(shape):
         data_mem_first_run.append(memobs)
 
         # memory consumption
-        stat = start_spying_on(cuda=1)
+        stat = start_spying_on(cuda=1 if has_cuda else 0)
         for i in range(0, script_args.warmup):
             sess.run(None, feeds)
         memobs = flatten(stat.stop())
