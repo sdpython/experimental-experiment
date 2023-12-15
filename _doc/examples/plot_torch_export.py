@@ -307,9 +307,10 @@ for k, v in exporters.items():
 
 def flatten(ps):
     obs = ps["cpu"].to_dict(unit=2**20)
-    for i, g in enumerate(ps["gpus"]):
-        for k, v in g.to_dict(unit=2**20).items():
-            obs[f"gpu{i}_{k}"] = v
+    if "gpus" in ps:
+        for i, g in enumerate(ps["gpus"]):
+            for k, v in g.to_dict(unit=2**20).items():
+                obs[f"gpu{i}_{k}"] = v
     return obs
 
 

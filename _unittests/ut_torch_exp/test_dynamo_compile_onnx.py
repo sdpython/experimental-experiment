@@ -1,8 +1,15 @@
 import sys
 import unittest
 from typing import List
+import packaging.version as pv
 from experimental_experiment.ext_test_case import ExtTestCase
 from experimental_experiment.torch_exp.onnx_export import to_onnx
+
+
+def torch_recent_enough():
+    import torch
+
+    return pv.Version(torch.__version__) >= pv.Version("2.2")
 
 
 def return_module_cls_pool():
@@ -34,7 +41,7 @@ def return_module_cls_pool():
 
 class TestDynamoCompileOnnx(ExtTestCase):
     @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
-    @unittest.skip("fails")
+    @unittest.skipIf(not torch_recent_enough(), reason="export fails")
     def test_simple_dort_1(self):
         import torch
         from onnxruntime import InferenceSession
@@ -69,6 +76,7 @@ class TestDynamoCompileOnnx(ExtTestCase):
         self.assertEqualArray(expected.detach().numpy(), got.detach().numpy())
 
     @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
+    @unittest.skipIf(not torch_recent_enough(), reason="export fails")
     def test_simple_dort_2(self):
         import torch
 
