@@ -419,8 +419,8 @@ fig.tight_layout()
 fig.savefig("plot_torch_export_time.png")
 
 ####################################
-# Profiling
-# +++++++++
+# Exporter Profiling
+# ++++++++++++++++++
 
 
 def clean_text(text):
@@ -474,8 +474,7 @@ profile_function("custom2", export_cus_p2)
 
 
 ####################################
-# Same with dynamo-exporter
-# +++++++++++++++++++++++++
+# Same with dynamo-exporter.
 
 profile_function("dynamo", export_dynamo, verbose=True)
 if export_dynopt in export_functions:
@@ -483,14 +482,15 @@ if export_dynopt in export_functions:
 
 
 ######################################
-# Benchmark
-# +++++++++
+# Benchmark exported models with ORT
+# ++++++++++++++++++++++++++++++++++
 
 
 def benchmark(shape):
     from onnxruntime import InferenceSession, SessionOptions, GraphOptimizationLevel
 
     data = []
+    data1 = []
     data_mem_load = []
     data_mem_first_run = []
     data_mem_run = []
@@ -524,6 +524,7 @@ def benchmark(shape):
         obs["n_nodes"] = len(onx.graph.node)
         obs["n_function"] = len(onx.functions or [])
         obs["n_sub"] = len([n for n in onx.graph.node if n.op_type == "Sub"])
+        obs1 = obs.copy()
         short_obs = dict(
             name=obs["name"],
             aot=obs["aot"],
@@ -593,9 +594,23 @@ def benchmark(shape):
         loop.set_description(f"{obs['average']} {name} {ps}")
         data.append(obs)
 
+        # check first run
+        obs1.update(
+            measure_time(
+                lambda: InferenceSession(name, opts, providers=ps).run(None, feeds),
+                max_time=script_args.maxtime,
+                repeat=script_args.repeat,
+                number=1,
+            )
+        )
+        data1.append(obs1)
+
     df = pandas.DataFrame(data)
     df.to_csv("plot_torch_export_ort_time.csv", index=False)
     df.to_excel("plot_torch_export_ort_time.xlsx", index=False)
+    df1 = pandas.DataFrame(data)
+    df1.to_csv("plot_torch_export_ort_time1_init.csv", index=False)
+    df1.to_excel("plot_torch_export_ort_time1_init.xlsx", index=False)
     dfmem = pandas.DataFrame(data_mem_load)
     dfmem.to_csv("plot_torch_export_ort_load_mem.csv", index=False)
     dfmem.to_excel("plot_torch_export_ort_load_mem.xlsx", index=False)
@@ -605,42 +620,47 @@ def benchmark(shape):
     dfmemfr = pandas.DataFrame(data_mem_first_run)
     dfmemfr.to_csv("plot_torch_export_ort_first_run_mem.csv", index=False)
     dfmemfr.to_excel("plot_torch_export_ort_first_run_mem.xlsx", index=False)
-    return df, dfmem, dfmemfr, dfmemr
+    return df, df1, dfmem, dfmemfr, dfmemr
 
 
-df, dfmem, dfmemfr, dfmemr = benchmark(list(input_tensor.shape))
+df, df_init, dfmem, dfmemfr, dfmemr = benchmark(list(input_tensor.shape))
 print(df)
 
 #####################################
 # Other view
 
-piv = pandas.pivot_table(
-    df, index="export", columns=["compute", "aot"], values="average"
-)
-print(piv)
-piv.to_csv("plot_torch_export_ort_time_compute.csv")
-piv.to_excel("plot_torch_export_ort_time_compute.xlsx")
+
+def view_time(df, title, suffix="time"):
+    piv = pandas.pivot_table(
+        df, index="export", columns=["compute", "aot"], values="average"
+    )
+    print(piv)
+    piv.to_csv(f"plot_torch_export_ort_{suffix}_compute.csv")
+    piv.to_excel(f"plot_torch_export_ort_{suffix}_compute.xlsx")
+
+    piv_gpu = pandas.pivot_table(
+        df[df.compute == "CUDA"],
+        index="export",
+        columns=["compute", "aot"],
+        values="average",
+    )
+    piv_cpu = pandas.pivot_table(
+        df[df.compute == "CPU"],
+        index="export",
+        columns=["compute", "aot"],
+        values="average",
+    )
+
+    fig, ax = plt.subplots(1, 2, figsize=(12, 4))
+    fig.suptitle(title)
+    piv_cpu.plot.barh(ax=ax[0], title="CPU")
+    piv_gpu.plot.barh(ax=ax[1], title="CUDA")
+    fig.tight_layout()
+    fig.savefig(f"plot_torch_export_ort_{suffix}.png")
+    return ax
 
 
-piv_gpu = pandas.pivot_table(
-    df[df.compute == "CUDA"],
-    index="export",
-    columns=["compute", "aot"],
-    values="average",
-)
-piv_cpu = pandas.pivot_table(
-    df[df.compute == "CPU"],
-    index="export",
-    columns=["compute", "aot"],
-    values="average",
-)
-
-fig, ax = plt.subplots(1, 2, figsize=(12, 4))
-fig.suptitle("Compares onnxruntime time on exported models")
-piv_cpu.plot.barh(ax=ax[0], title="CPU")
-piv_gpu.plot.barh(ax=ax[1], title="CUDA")
-fig.tight_layout()
-fig.savefig("plot_torch_export_ort_time.png")
+view_time(df, "Compares onnxruntime time on exported models")
 
 #####################################
 # New graph without the very long times.
@@ -658,14 +678,31 @@ piv_cpu = pandas.pivot_table(
 fig, ax = plt.subplots(1, 2, figsize=(12, 4))
 fig.suptitle("Compares onnxruntime time on exported models\nHide dynamo without AOT")
 piv_cpu.plot.barh(ax=ax[0], title="CPU")
-piv_gpu.plot.barh(ax=ax[1], title="CUDA")
+if has_cuda:
+    piv_gpu = pandas.pivot_table(
+        df[df.compute == "CUDA"],
+        index="export",
+        columns=["compute", "aot"],
+        values="average",
+    )
+    piv_gpu.plot.barh(ax=ax[1], title="CUDA")
 fig.tight_layout()
 fig.savefig("plot_torch_export_ort_time_2.png")
 
 
+####################################
+# Let's do the same with the loading time + the first run.
+
+view_time(
+    df_init,
+    "Compares onnxruntime loading time and first run on exported models",
+    suffix="time1_init",
+)
+
+
 ########################################
-# Memory Loading Time
-# +++++++++++++++++++
+# Memory Loading Time (ORT)
+# +++++++++++++++++++++++++
 
 for compute in ["CPU", "CUDA"]:
     ax = memory_peak_plot(
@@ -679,8 +716,8 @@ for compute in ["CPU", "CUDA"]:
     ax[0, 0].get_figure().savefig(f"plot_torch_export_ort_load_mem_{compute}.png")
 
 ########################################
-# Memory First Running Time
-# +++++++++++++++++++++++++
+# Memory First Running Time (ORT)
+# +++++++++++++++++++++++++++++++
 
 for compute in ["CPU", "CUDA"]:
     ax = memory_peak_plot(
@@ -694,8 +731,8 @@ for compute in ["CPU", "CUDA"]:
     ax[0, 0].get_figure().savefig(f"plot_torch_export_ort_first_run_mem_{compute}.png")
 
 ########################################
-# Memory Running Time
-# +++++++++++++++++++
+# Memory Running Time (ORT)
+# +++++++++++++++++++++++++
 
 for compute in ["CPU", "CUDA"]:
     ax = memory_peak_plot(
