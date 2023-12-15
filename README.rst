@@ -29,4 +29,14 @@ experimental-experiment: fuzzy work
 .. image:: https://codecov.io/gh/sdpython/experimental-experiment/branch/main/graph/badge.svg?token=Wb9ZGDta8J 
     :target: https://codecov.io/gh/sdpython/experimental-experiment
 
-`Documentation <https://sdpython.github.io/doc/experimental-experiment/dev/>`_.
+Compare torch exporters
++++++++++++++++++++++++
+
+The script evaluates the memory peak, the computation time of the exporters.
+It also compares the exported models when run through onnxruntime.
+The full script takes around 20 minutes to complete. It stores on disk
+all the graphs, the data used to draw them, and the models.
+
+::
+
+    python _doc/examples/plot_torch_export.py --large

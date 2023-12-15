@@ -1,3 +1,2 @@
 onnxruntime
-onnx-array-api
 torch
