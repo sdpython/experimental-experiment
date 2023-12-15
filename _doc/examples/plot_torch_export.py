@@ -24,6 +24,8 @@ To run the script:
 
     python _doc/examples/plot_torch_export --help
 
+The script takes around 12 with a larger models.
+
 Some helpers
 ++++++++++++
 """
@@ -608,7 +610,7 @@ def benchmark(shape):
     df = pandas.DataFrame(data)
     df.to_csv("plot_torch_export_ort_time.csv", index=False)
     df.to_excel("plot_torch_export_ort_time.xlsx", index=False)
-    df1 = pandas.DataFrame(data)
+    df1 = pandas.DataFrame(data1)
     df1.to_csv("plot_torch_export_ort_time1_init.csv", index=False)
     df1.to_excel("plot_torch_export_ort_time1_init.xlsx", index=False)
     dfmem = pandas.DataFrame(data_mem_load)
