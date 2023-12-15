@@ -4,9 +4,10 @@ matplotlib
 onnx-array-api
 git+https://github.com/microsoft/onnxscript.git
 openpyxl
+packaging
 pandas
 Pillow
-packaging
+psutil
 pytest
 pytest-coverage
 ruff
