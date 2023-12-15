@@ -20,8 +20,9 @@ def memory_peak_plot(
 
     df1["peak-begin"] = df1["peak"] - df1["begin"]
     df1["mean-begin"] = df1["mean"] - df1["begin"]
-    df1["gpu0_peak-begin"] = df1["gpu0_peak"] - df1["gpu0_begin"]
-    df1["gpu0_mean-begin"] = df1["gpu0_mean"] - df1["gpu0_begin"]
+    if "gpu0_peak" in df1.columns:
+        df1["gpu0_peak-begin"] = df1["gpu0_peak"] - df1["gpu0_begin"]
+        df1["gpu0_mean-begin"] = df1["gpu0_mean"] - df1["gpu0_begin"]
 
     fig, ax = plt.subplots(2, 3, figsize=figsize)
     fig.suptitle(suptitle)
@@ -37,16 +38,17 @@ def memory_peak_plot(
         ax=ax[0, 2], title="Memory average - memory begin (Mb)", rot=30
     )
 
-    dfi = df1[keys + ["gpu0_peak"]].set_index(keys)
-    dfi["gpu0_peak"].plot.bar(ax=ax[1, 0], title="GPU Memory peak (Mb)", rot=30)
-    dfi = df1[keys + ["gpu0_peak-begin"]].set_index(keys)
-    dfi["gpu0_peak-begin"].plot.bar(
-        ax=ax[1, 1], title="GPU Memory peak - memory begin (Mb)", rot=30
-    )
-    dfi = df1[keys + ["gpu0_mean-begin"]].set_index(keys)
-    dfi["gpu0_mean-begin"].plot.bar(
-        ax=ax[1, 2], title="GPU Memory average - memory begin (Mb)", rot=30
-    )
+    if "gpu0_peak" in df1.columns:
+        dfi = df1[keys + ["gpu0_peak"]].set_index(keys)
+        dfi["gpu0_peak"].plot.bar(ax=ax[1, 0], title="GPU Memory peak (Mb)", rot=30)
+        dfi = df1[keys + ["gpu0_peak-begin"]].set_index(keys)
+        dfi["gpu0_peak-begin"].plot.bar(
+            ax=ax[1, 1], title="GPU Memory peak - memory begin (Mb)", rot=30
+        )
+        dfi = df1[keys + ["gpu0_mean-begin"]].set_index(keys)
+        dfi["gpu0_mean-begin"].plot.bar(
+            ax=ax[1, 2], title="GPU Memory average - memory begin (Mb)", rot=30
+        )
     if bars:
         if isinstance(bars, float):
             bars = [bars]
