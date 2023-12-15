@@ -2,9 +2,7 @@ black
 furo
 matplotlib
 onnx-array-api
-git+https://github.com/microsoft/onnx-script.git
-git+https://github.com/microsoft/onnx-rewriter.git
-onnxruntime
+git+https://github.com/microsoft/onnxscript.git
 openpyxl
 pandas
 Pillow
