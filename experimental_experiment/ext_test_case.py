@@ -124,7 +124,7 @@ def measure_time(
 
         from pprint import pprint
         from math import cos
-        from onnx_extended.ext_test_case import measure_time
+        from experimental_experiment.ext_test_case import measure_time
 
         res = measure_time(lambda: cos(0.5))
         pprint(res)
@@ -355,7 +355,7 @@ def get_parsed_args(
     :param warmup: default value for warmup parameter
     :param sleep: default value for sleep parameter
     :param expose: if empty, keeps all the parameters,
-        if None, only publish kwargs contains, otherwise the list
+        if not None, only publish kwargs contains, otherwise the list
         of parameters to publish separated by a comma
     :param kwargs: additional parameters,
         example: `n_trees=(10, "number of trees to train")`

@@ -2,6 +2,7 @@ import os
 import sys
 import unittest
 import warnings
+import onnx
 from onnx.reference import ReferenceEvaluator
 from experimental_experiment.ext_test_case import ExtTestCase
 from experimental_experiment.torch_exp.onnx_export import to_onnx
@@ -70,7 +71,9 @@ def return_module_cls_pool():
     return MyModel(), input_tensor
 
 
-def export_utils(prefix, model, *args, remove_unused=False, constant_folding=True):
+def export_utils(
+    prefix, model, *args, remove_unused=False, constant_folding=True, verbose=0
+):
     import torch
 
     names = []
@@ -89,6 +92,7 @@ def export_utils(prefix, model, *args, remove_unused=False, constant_folding=Tru
         input_names=["input"],
         remove_unused=remove_unused,
         constant_folding=constant_folding,
+        verbose=verbose,
     )
     with open(name, "wb") as f:
         f.write(onx.SerializeToString())
@@ -242,12 +246,26 @@ class TestOnnxExport(ExtTestCase):
 
         model, input_tensor = return_module_cls_pool()
         names = export_utils(
-            "test_simple_export_pool_unused",
+            "test_simple_export_pool_unused_noopt",
             model,
             input_tensor,
             remove_unused=True,
             constant_folding=True,
         )
+        onx1 = onnx.load(names[-1])
+        names = export_utils(
+            "test_simple_export_pool_unused_opt",
+            model,
+            input_tensor,
+            remove_unused=True,
+            constant_folding=True,
+            verbose=1,
+        )
+        onx2 = onnx.load(names[-1])
+        for att in ["node", "initializer"]:
+            v1 = getattr(onx1.graph, att)
+            v2 = getattr(onx2.graph, att)
+            self.assertEqual(len(v1), len(v2))
         x = input_tensor.numpy()
         results = []
         for name in names:

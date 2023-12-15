@@ -2,12 +2,12 @@ black
 furo
 matplotlib
 onnx-array-api
-onnx-extended
-onnxruntime
+git+https://github.com/microsoft/onnxscript.git
 openpyxl
+packaging
 pandas
 Pillow
-packaging
+psutil
 pytest
 pytest-coverage
 ruff

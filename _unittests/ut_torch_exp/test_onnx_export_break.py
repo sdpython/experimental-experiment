@@ -28,7 +28,7 @@ def return_module_cls_pool():
             x = F.max_pool2d(F.relu(self.conv2(x)), 2)
             x = torch.flatten(x, 1)
             x = F.relu(self.fc1(x))
-            if x.shape[-1] == 128:
+            if not hasattr(self, "fc2"):
                 x = self.fc3(x)
             else:
                 x = F.relu(self.fc2(x))

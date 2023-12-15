@@ -1,8 +1,15 @@
 import sys
 import unittest
 from typing import List
+import packaging.version as pv
 from experimental_experiment.ext_test_case import ExtTestCase
 from experimental_experiment.torch_exp.onnx_export import to_onnx
+
+
+def torch_recent_enough():
+    import torch
+
+    return pv.Version(torch.__version__) >= pv.Version("2.2")
 
 
 def return_module_cls_pool():
@@ -11,7 +18,7 @@ def return_module_cls_pool():
     import torch.nn.functional as F
 
     class MyModel(nn.Module):
-        def __init__(self, n_lin_layers=2):
+        def __init__(self):
             super(MyModel, self).__init__()
             self.conv1 = nn.Conv2d(1, 16, 5)
             self.conv2 = nn.Conv2d(16, 16, 5)
@@ -19,12 +26,14 @@ def return_module_cls_pool():
             self.fc3 = nn.Linear(8, 10)
 
         def forward(self, x):
-            x = F.max_pool2d(F.relu(self.conv1(x)), (2, 2))
-            x = F.max_pool2d(F.relu(self.conv2(x)), 2)
-            x = torch.flatten(x, 1)
-            x = F.relu(self.fc1(x))
-            x = self.fc3(x)
-            return x
+            c1 = self.conv1(x)
+            f1 = F.relu(c1)
+            t2 = F.max_pool2d(f1, (2, 2))
+            t3 = F.max_pool2d(F.relu(self.conv2(t2)), 2)
+            xf = torch.flatten(t3, 1)
+            xfr = F.relu(self.fc1(xf))
+            y = self.fc3(xfr)
+            return y
 
     input_tensor = torch.rand((1, 1, 128, 128), dtype=torch.float32)
     return MyModel(), input_tensor
@@ -32,13 +41,14 @@ def return_module_cls_pool():
 
 class TestDynamoCompileOnnx(ExtTestCase):
     @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
+    @unittest.skipIf(not torch_recent_enough(), reason="export fails")
     def test_simple_dort_1(self):
         import torch
         from onnxruntime import InferenceSession
 
-        def onnx_compiler(model: torch.fx.GraphModule, args: List[torch.Tensor]):
+        def onnxscript_compiler(model: torch.fx.GraphModule, args: List[torch.Tensor]):
             export_output = torch.onnx.dynamo_export(model, *args)
-            onx = export_output.to_model_proto()
+            onx = export_output.model_proto
             sess = InferenceSession(
                 onx.SerializeToString(), providers=["CPUExecutionProvider"]
             )
@@ -57,7 +67,7 @@ class TestDynamoCompileOnnx(ExtTestCase):
 
         model, input_tensor = return_module_cls_pool()
         expected = model(input_tensor)
-        optimized_mod = torch.compile(model, backend=onnx_compiler)
+        optimized_mod = torch.compile(model, backend=onnxscript_compiler)
         got = optimized_mod(input_tensor)
         print(expected)
         print(got)
@@ -66,10 +76,11 @@ class TestDynamoCompileOnnx(ExtTestCase):
         self.assertEqualArray(expected.detach().numpy(), got.detach().numpy())
 
     @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
+    @unittest.skipIf(not torch_recent_enough(), reason="export fails")
     def test_simple_dort_2(self):
         import torch
 
-        def onnx_compiler(model: torch.fx.GraphModule, args: List[torch.Tensor]):
+        def onnx_compiler(graph_module: torch.fx.GraphModule, args: List[torch.Tensor]):
             from onnxruntime import InferenceSession
 
             input_names = (
@@ -77,7 +88,7 @@ class TestDynamoCompileOnnx(ExtTestCase):
             )
 
             onx = to_onnx(
-                model,
+                graph_module,
                 tuple(args),
                 input_names=input_names,
                 remove_unused=True,
@@ -100,11 +111,10 @@ class TestDynamoCompileOnnx(ExtTestCase):
             return run
 
         model, input_tensor = return_module_cls_pool()
+        torch.export.export(model, (input_tensor,))
         expected = model(input_tensor)
         optimized_mod = torch.compile(model, backend=onnx_compiler)
         got = optimized_mod(input_tensor)
-        print(expected)
-        print(got)
         self.assertEqual(expected.shape, got.shape)
         self.assertEqual(expected.dtype, got.dtype)
         self.assertEqualArray(expected.detach().numpy(), got.detach().numpy())
