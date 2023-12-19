@@ -24,7 +24,7 @@ To run the script:
 
     python _doc/examples/plot_torch_export --help
 
-The script takes around 12 with a larger models.
+The script takes around 12 minutes with a larger models.
 
 Some helpers
 ++++++++++++

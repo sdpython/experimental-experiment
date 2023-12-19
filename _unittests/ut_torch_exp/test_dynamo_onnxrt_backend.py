@@ -7,7 +7,7 @@ from experimental_experiment.ext_test_case import ExtTestCase, ignore_warnings
 def torch_recent_enough():
     import torch
 
-    return pv.Version(torch.__version__) >= pv.Version("2.2")
+    return pv.Version(".".join(torch.__version__.split(".")[:2])) >= pv.Version("2.2")
 
 
 def return_module_cls_pool():

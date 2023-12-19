@@ -71,6 +71,12 @@ class TestDocumentationExamples(ExtTestCase):
                 if sys.platform in {"win32"}:
                     # dynamo not supported on windows
                     continue
+            if name in {
+                "test_plot_profile_existing_onnx.py",
+                "test_plot_torch_dort.py",
+            }:
+                # too long
+                continue
 
             if name.startswith("plot_") and name.endswith(".py"):
                 short_name = os.path.split(os.path.splitext(name)[0])[-1]
