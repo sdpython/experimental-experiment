@@ -2,6 +2,8 @@
 Evaluate DORT
 =============
 
+It compares DORT to eager mode and the default backend.
+
 To run the script:
 
 ::
@@ -11,7 +13,6 @@ To run the script:
 Some helpers
 ++++++++++++
 """
-import onnxruntime
 import torch._dynamo
 import contextlib
 import itertools
@@ -212,7 +213,6 @@ def get_torch_eager(model, *args):
     def my_compiler(gm, example_inputs):
         return gm.forward
 
-    assert not isinstance(model, str)
     with contextlib.redirect_stdout(io.StringIO()):
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
@@ -222,7 +222,6 @@ def get_torch_eager(model, *args):
 
 
 def get_torch_default(model, *args):
-    assert not isinstance(model, str)
     with contextlib.redirect_stdout(io.StringIO()):
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
@@ -232,7 +231,6 @@ def get_torch_default(model, *args):
 
 
 def get_torch_dort(model, *args):
-    assert not isinstance(model, str)
     with contextlib.redirect_stdout(io.StringIO()):
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
