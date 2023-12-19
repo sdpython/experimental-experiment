@@ -18,6 +18,7 @@ def memory_peak_plot(
 
     keys = [key] if isinstance(key, str) else list(key)
 
+    df1 = df1.copy()
     df1["peak-begin"] = df1["peak"] - df1["begin"]
     df1["mean-begin"] = df1["mean"] - df1["begin"]
     if "gpu0_peak" in df1.columns:
