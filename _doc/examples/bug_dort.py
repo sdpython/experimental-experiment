@@ -4,7 +4,6 @@ from torch import nn
 import torch.nn.functional as F
 
 
-
 class MyModelClass(nn.Module):
     def __init__(self):
         super(MyModelClass, self).__init__()
@@ -36,7 +35,7 @@ def create_model_and_input():
 def get_torch_dort(model, *args):
     optimized_mod = torch.compile(model, backend="onnxrt", fullgraph=True)
     # fails: FAIL : Type Error: Type (tensor(int64)) of output arg (max_pool2d_with_indices_1) of node (_aten_max_pool_with_indices_onnx_16) does not match expected type (tensor(float)).
-    optimized_mod(*args)    
+    optimized_mod(*args)
     return optimized_mod
 
 
