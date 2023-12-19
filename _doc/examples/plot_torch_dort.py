@@ -322,18 +322,19 @@ for k, v in supported_exporters.items():
 #############################
 # The result.
 df1 = pandas.DataFrame(data)
-df1.to_csv("plot_torch_dort_memory.csv", index=False)
-df1.to_excel("plot_torch_dort_memory.xlsx", index=False)
+df1.to_csv("plot_torch_dort_1_memory.csv", index=False)
+df1.to_excel("plot_torch_dort_1_memory.xlsx", index=False)
 print(df1)
 
-ax = memory_peak_plot(
-    data,
-    key=("export", "p"),
-    bars=[model_size * i / 2**20 for i in range(1, 5)],
-    suptitle=f"Memory Consumption of the Compilation\n"
-    f"model size={model_size / 2**20:1.0f} Mb",
-)
-ax[0, 0].get_figure().savefig("plot_torch_dort_memory.png")
+for p in ["cpu", "cuda"]:
+    ax = memory_peak_plot(
+        df1[df1["p"] == p],
+        key=("export",),
+        bars=[model_size * i / 2**20 for i in range(1, 5)],
+        suptitle=f"Memory Consumption of the Compilation on {p}\n"
+        f"model size={model_size / 2**20:1.0f} Mb",
+    )
+    ax[0, 0].get_figure().savefig(f"plot_torch_dort_1_memory_{p}.png")
 
 #################################
 # dort first iteration speed
@@ -401,15 +402,15 @@ for k, v in supported_exporters.items():
 #############################
 # The result.
 df1 = pandas.DataFrame(data)
-df1.to_csv("plot_torch_dort_time.csv", index=False)
-df1.to_excel("plot_torch_dort_time.xlsx", index=False)
+df1.to_csv("plot_torch_dort_1_time.csv", index=False)
+df1.to_excel("plot_torch_dort_1_time.xlsx", index=False)
 print(df1)
 
 fig, ax = plt.subplots(1, 1)
 dfi = df1[["export", "p", "time", "std"]].set_index(["export", "p"])
 dfi["time"].plot.bar(ax=ax, title="Compilation time", yerr=dfi["std"], rot=30)
 fig.tight_layout()
-fig.savefig("plot_torch_dort_time.png")
+fig.savefig("plot_torch_dort_1_time.png")
 
 ####################################
 # Compilation Profiling
@@ -483,7 +484,7 @@ def function_to_profile(model=model, input_tensor=input_tensor):
     return get_torch_dort(model, input_tensor)
 
 
-profile_function("dort", function_to_profile, verbose=True)
+profile_function("dort", function_to_profile, verbose=True, suffix="1")
 
 
 ######################################
