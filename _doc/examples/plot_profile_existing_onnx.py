@@ -10,7 +10,6 @@ Preparation
 import os
 import numpy as np
 import matplotlib.pyplot as plt
-from onnx.helper import tensor_dtype_to_np_dtype
 from onnx_extended.args import get_parsed_args
 from onnx_extended.tools.js_profile import (
     js_profile_to_dataframe,
