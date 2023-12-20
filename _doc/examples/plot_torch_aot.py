@@ -1,6 +1,6 @@
 """
-Evaluate DORT
-=============
+Evaluate DORT Training
+======================
 
 It compares DORT to eager mode and the default backend.
 
@@ -8,7 +8,7 @@ To run the script:
 
 ::
 
-    python _doc/examples/plot_torch_dort --help
+    python _doc/examples/plot_torch_aot --help
 
 Some helpers
 ++++++++++++
@@ -83,7 +83,7 @@ pprint.pprint(system_info())
 
 
 script_args = get_parsed_args(
-    "plot_torch_dort",
+    "plot_torch_aot",
     description=__doc__,
     scenarios={
         "small": "small model to test",
@@ -188,9 +188,10 @@ def create_model_and_input(scenario=script_args.scenario):
     else:
         raise ValueError(f"Unsupported scenario={scenario!r}.")
     input_tensor = torch.rand(*shape).to(torch.float32)
+    y = torch.rand((1, 10)).to(torch.float32)
     model = MyModelClass(scenario=scenario)
     assert model(input_tensor) is not None
-    return model, input_tensor
+    return model, (input_tensor, y)
 
 
 def torch_model_size(model):
@@ -201,13 +202,32 @@ def torch_model_size(model):
     return size_model
 
 
-model, input_tensor = create_model_and_input()
+model, input_tensors = create_model_and_input()
 model_size = torch_model_size(model)
 print(f"model size={model_size / 2 ** 20} Mb")
 
 #######################################
 # Backends
 # ++++++++
+
+
+def run(model, tensor_x, tensor_y):
+    tensor_x = tensor_x.detach()
+    tensor_y = tensor_y.detach()
+    for param in model.parameters():
+        param.grad = None
+    try:
+        output = model(tensor_x)
+    except Exception as e:
+        raise AssertionError(f"issue with {type(tensor_x)}") from e
+    loss = F.mse_loss(output, tensor_y)
+
+    # return loss
+    def _backward_():
+        loss.backward()
+
+    _backward_()
+    return loss, (param.grad for param in model.parameters())
 
 
 def get_torch_eager(model, *args):
@@ -218,7 +238,7 @@ def get_torch_eager(model, *args):
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             optimized_mod = torch.compile(model, fullgraph=True, backend=my_compiler)
-            optimized_mod(*args)
+            assert run(optimized_mod, *args)
             return optimized_mod
 
 
@@ -227,7 +247,7 @@ def get_torch_default(model, *args):
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             optimized_mod = torch.compile(model, fullgraph=True, mode="reduce-overhead")
-            optimized_mod(*args)
+            assert run(optimized_mod, *args)
             return optimized_mod
 
 
@@ -236,18 +256,11 @@ def get_torch_dort(model, *args):
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             optimized_mod = torch.compile(model, backend="onnxrt", fullgraph=True)
-            optimized_mod(*args)
-            return optimized_mod
-
-
-def get_torch_opti(model, *args):
-    with contextlib.redirect_stdout(io.StringIO()):
-        os.environ["ONNX_OPTIMIZER"] = "1"
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-            optimized_mod = torch.compile(model, backend="onnxrt", fullgraph=True)
-            optimized_mod(*args)
-            os.environ["ONNX_OPTIMIZER"] = "0"
+            run(optimized_mod, *args)
+            # from onnxruntime.training.torchdynamo.register_backend import aot_ort
+            # compiled_model = torch._dynamo.optimize(aot_ort)(model)
+            # optimized_mod = torch.compile(model, backend="onnxrt", fullgraph=True)
+            assert run(optimized_mod, *args)
             return optimized_mod
 
 
@@ -258,7 +271,6 @@ export_functions = [
     get_torch_eager,
     get_torch_default,
     get_torch_dort,
-    # get_torch_opti,
 ]
 
 exporters = {f.__name__.replace("get_", ""): f for f in export_functions}
@@ -266,12 +278,12 @@ exporters = {f.__name__.replace("get_", ""): f for f in export_functions}
 supported_exporters = {}
 for k, v in exporters.items():
     print(f"run function {k}")
-    filename = f"plot_torch_dort_{k}.onnx"
+    filename = f"plot_torch_aot_{k}.onnx"
     torch._dynamo.reset()
-    model, input_tensor = create_model_and_input()
-    try:
-        v(model, input_tensor)
-    except Exception as e:
+    model, input_tensors = create_model_and_input()
+    if 1:  # try:
+        run(model, *input_tensors)
+    else:  # except Exception as e:
         print(f"skipped due to {str(e)[:1000]}")
         continue
     supported_exporters[k] = v
@@ -298,14 +310,14 @@ data = []
 
 for k, v in supported_exporters.items():
     print(f"run compile for memory {k} on cpu")
-    filename = f"plot_torch_dort_{k}.onnx"
+    filename = f"plot_torch_aot_{k}.onnx"
     if has_cuda:
         torch.cuda.set_device(0)
     torch._dynamo.reset()
     # CPU
-    model, input_tensor = create_model_and_input()
+    model, input_tensors = create_model_and_input()
     stat = start_spying_on(cuda=1 if has_cuda else 0)
-    v(model, input_tensor)
+    run(model, *input_tensors)
     obs = flatten(stat.stop())
     print("done.")
     obs.update(dict(export=k, p="cpu"))
@@ -316,12 +328,12 @@ for k, v in supported_exporters.items():
 
     torch._dynamo.reset()
     # CUDA
-    model, input_tensor = create_model_and_input()
+    model, input_tensors = create_model_and_input()
     model = model.cuda()
-    input_tensor = input_tensor.cuda()
+    input_tensors = [i.cuda() for i in input_tensors]
     print(f"run compile for memory {k} on cuda")
     stat = start_spying_on(cuda=1 if has_cuda else 0)
-    v(model, input_tensor)
+    run(model, *input_tensors)
     obs = flatten(stat.stop())
     print("done.")
     obs.update(dict(export=k, p="cuda"))
@@ -333,8 +345,8 @@ for k, v in supported_exporters.items():
 #############################
 # The result.
 df1 = pandas.DataFrame(data)
-df1.to_csv("plot_torch_dort_1_memory.csv", index=False)
-df1.to_excel("plot_torch_dort_1_memory.xlsx", index=False)
+df1.to_csv("plot_torch_aot_1_memory.csv", index=False)
+df1.to_excel("plot_torch_aot_1_memory.xlsx", index=False)
 print(df1)
 
 for p in ["cpu", "cuda"]:
@@ -345,7 +357,7 @@ for p in ["cpu", "cuda"]:
         suptitle=f"Memory Consumption of the Compilation on {p}\n"
         f"model size={model_size / 2**20:1.0f} Mb",
     )
-    ax[0, 0].get_figure().savefig(f"plot_torch_dort_1_memory_{p}.png")
+    ax[0, 0].get_figure().savefig(f"plot_torch_aot_1_memory_{p}.png")
 
 #################################
 # dort first iteration speed
@@ -357,12 +369,12 @@ for k, v in supported_exporters.items():
     print(f"run dort cpu {k}: {script_args.repeat1}")
     times = []
     for i in range(int(script_args.repeat1)):
-        model, input_tensor = create_model_and_input()
+        model, input_tensors = create_model_and_input()
         torch._dynamo.reset()
         if k == "opti":
             os.environ["ONNX_OPTIMIZER"] = "1"
         begin = time.perf_counter()
-        v(model, input_tensor)
+        run(model, *input_tensors)
         duration = time.perf_counter() - begin
         if k == "opti":
             os.environ["ONNX_OPTIMIZER"] = "0"
@@ -388,14 +400,14 @@ for k, v in supported_exporters.items():
     print(f"run dort cuda {k}: {script_args.repeat1}")
     times = []
     for i in range(int(script_args.repeat1)):
-        model, input_tensor = create_model_and_input()
+        model, input_tensors = create_model_and_input()
         model = model.cuda()
-        input_tensor = input_tensor.cuda()
+        input_tensors = [i.cuda() for i in input_tensors]
         torch._dynamo.reset()
         if k == "opti":
             os.environ["ONNX_OPTIMIZER"] = "1"
         begin = time.perf_counter()
-        v(model, input_tensor)
+        run(model, *input_tensors)
         duration = time.perf_counter() - begin
         if k == "opti":
             os.environ["ONNX_OPTIMIZER"] = "0"
@@ -421,15 +433,15 @@ for k, v in supported_exporters.items():
 #############################
 # The result.
 df1 = pandas.DataFrame(data)
-df1.to_csv("plot_torch_dort_1_time.csv", index=False)
-df1.to_excel("plot_torch_dort_1_time.xlsx", index=False)
+df1.to_csv("plot_torch_aot_1_time.csv", index=False)
+df1.to_excel("plot_torch_aot_1_time.xlsx", index=False)
 print(df1)
 
 fig, ax = plt.subplots(1, 1)
 dfi = df1[["export", "p", "time", "std"]].set_index(["export", "p"])
 dfi["time"].plot.bar(ax=ax, title="Compilation time", yerr=dfi["std"], rot=30)
 fig.tight_layout()
-fig.savefig("plot_torch_dort_1_time.png")
+fig.savefig("plot_torch_aot_1_time.png")
 
 ####################################
 # Compilation Profiling
@@ -462,11 +474,12 @@ def profile_function(
     if verbose:
         print(f"profile {name}: {export_function}")
     if with_args:
-        model, input_tensor = create_model_and_input()
+        model, input_tensors = create_model_and_input()
+        export_function(model, input_tensors)
         pr = cProfile.Profile()
         pr.enable()
         for i in range(int(script_args.repeat1)):
-            export_function(model, input_tensor)
+            export_function(model, input_tensors)
         pr.disable()
     else:
         pr = cProfile.Profile()
@@ -478,29 +491,29 @@ def profile_function(
     sortby = SortKey.CUMULATIVE
     ps = pstats.Stats(pr, stream=s).sort_stats(sortby)
     ps.print_stats()
-    # with open(f"plot_torch_dort_profile_{name}_{suffix}.pickle", "wb") as f:
+    # with open(f"plot_torch_aot_profile_{name}_{suffix}.pickle", "wb") as f:
     #     pickle.dump(ps, f)
 
     raw = s.getvalue()
     text = "\n".join(raw.split("\n")[:200])
     if verbose:
         print(text)
-    with open(f"plot_torch_dort_profile_{name}_{suffix}.txt", "w") as f:
+    with open(f"plot_torch_aot_profile_{name}_{suffix}.txt", "w") as f:
         f.write(raw)
 
     root, nodes = profile2graph(ps, clean_text=clean_text)
     text = root.to_text()
-    with open(f"plot_torch_dort_profile_{name}_{suffix}_h.txt", "w") as f:
+    with open(f"plot_torch_aot_profile_{name}_{suffix}_h.txt", "w") as f:
         f.write(text)
     if verbose:
         print("done.")
 
 
-model, input_tensor = create_model_and_input()
+model, input_tensors = create_model_and_input()
 
 
-def function_to_profile(model=model, input_tensor=input_tensor):
-    return get_torch_dort(model, input_tensor)
+def function_to_profile(model=model, input_tensors=input_tensors):
+    return get_torch_dort(model, *input_tensors)
 
 
 profile_function("dort", function_to_profile, verbose=True, suffix="1")
@@ -530,20 +543,20 @@ def benchmark(shape):
         obs["compute"] = p
         obs["export"] = name
 
-        model, input_tensor = create_model_and_input()
+        model, input_tensors = create_model_and_input()
         if p == "CUDA":
             model = model.cuda()
-            input_tensor = input_tensor.cuda()
-        exported_model = export_fct(model, input_tensor)
+            input_tensors = [i.cuda() for i in input_tensors]
+        exported_model = export_fct(model, *input_tensors)
 
         def call_model(
             export_fct=export_fct,
             exported_model=exported_model,
-            input_tensor=input_tensor,
+            input_tensors=input_tensors,
         ):
             if "opti" in export_fct.__name__:
                 os.environ["ONNX_OPTIMIZER"] = "1"
-            res = exported_model(input_tensor).sum()
+            res = run(exported_model, *input_tensors)
             if "opti" in export_fct.__name__:
                 os.environ["ONNX_OPTIMIZER"] = "0"
             return res
@@ -588,18 +601,18 @@ def benchmark(shape):
         time.sleep(1)
 
     df = pandas.DataFrame(data)
-    df.to_csv("plot_torch_dort_ort_time.csv", index=False)
-    df.to_excel("plot_torch_dort_ort_time.xlsx", index=False)
+    df.to_csv("plot_torch_aot_ort_time.csv", index=False)
+    df.to_excel("plot_torch_aot_ort_time.xlsx", index=False)
     dfmemr = pandas.DataFrame(data_mem_run)
-    dfmemr.to_csv("plot_torch_dort_ort_run_mem.csv", index=False)
-    dfmemr.to_excel("plot_torch_dort_ort_run_mem.xlsx", index=False)
+    dfmemr.to_csv("plot_torch_aot_ort_run_mem.csv", index=False)
+    dfmemr.to_excel("plot_torch_aot_ort_run_mem.xlsx", index=False)
     dfmemfr = pandas.DataFrame(data_mem_first_run)
-    dfmemfr.to_csv("plot_torch_dort_ort_first_run_mem.csv", index=False)
-    dfmemfr.to_excel("plot_torch_dort_ort_first_run_mem.xlsx", index=False)
+    dfmemfr.to_csv("plot_torch_aot_ort_first_run_mem.csv", index=False)
+    dfmemfr.to_excel("plot_torch_aot_ort_first_run_mem.xlsx", index=False)
     return df, dfmemfr, dfmemr
 
 
-df, dfmemfr, dfmemr = benchmark(list(input_tensor.shape))
+df, dfmemfr, dfmemr = benchmark(list(input_tensors[0].shape))
 print(df)
 
 #####################################
@@ -609,8 +622,8 @@ print(df)
 def view_time(df, title, suffix="time"):
     piv = pandas.pivot_table(df, index="export", columns=["compute"], values="average")
     print(piv)
-    piv.to_csv(f"plot_torch_dort_{suffix}_compute.csv")
-    piv.to_excel(f"plot_torch_dort_{suffix}_compute.xlsx")
+    piv.to_csv(f"plot_torch_aot_{suffix}_compute.csv")
+    piv.to_excel(f"plot_torch_aot_{suffix}_compute.xlsx")
 
     piv_gpu = pandas.pivot_table(
         df[df.compute == "CUDA"],
@@ -630,7 +643,7 @@ def view_time(df, title, suffix="time"):
     piv_cpu.plot.barh(ax=ax[0], title="CPU", logx=True)
     piv_gpu.plot.barh(ax=ax[1], title="CUDA", logx=True)
     fig.tight_layout()
-    fig.savefig(f"plot_torch_dort_{suffix}.png")
+    fig.savefig(f"plot_torch_aot_{suffix}.png")
     return ax
 
 
@@ -650,7 +663,7 @@ for compute in ["CPU", "CUDA"]:
         bars=[model_size * i / 2**20 for i in range(1, 3)],
         figsize=(18, 6),
     )
-    ax[0, 0].get_figure().savefig(f"plot_torch_dort_first_run_mem_{compute}.png")
+    ax[0, 0].get_figure().savefig(f"plot_torch_aot_first_run_mem_{compute}.png")
 
 ########################################
 # Memory Running Time (ORT)
@@ -665,4 +678,4 @@ for compute in ["CPU", "CUDA"]:
         bars=[model_size * i / 2**20 for i in range(1, 3)],
         figsize=(18, 6),
     )
-    ax[0, 0].get_figure().savefig(f"plot_torch_dort_run_mem_{compute}.png")
+    ax[0, 0].get_figure().savefig(f"plot_torch_aot_run_mem_{compute}.png")
