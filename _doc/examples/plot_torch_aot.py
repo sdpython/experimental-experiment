@@ -284,7 +284,7 @@ for k, v in exporters.items():
     if 1:  # try:
         run(model, *input_tensors)
     else:  # except Exception as e:
-        print(f"skipped due to {str(e)[:1000]}")
+        print(f"skipped due to {str(e)[:1000]}")  # noqa: F821
         continue
     supported_exporters[k] = v
     del model
