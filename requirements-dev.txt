@@ -12,6 +12,7 @@ pytest
 pytest-coverage
 ruff
 scikit-learn
+skl2onnx
 sphinx
 sphinx-gallery
 sphinx-issues
