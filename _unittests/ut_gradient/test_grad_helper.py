@@ -1,7 +1,6 @@
-import os
 import unittest
 import logging
-from pyquickhelper.pycode import ExtTestCase, ignore_warnings, get_temp_folder
+from experimental_experiment.pycode import ExtTestCase, ignore_warnings
 import numpy
 import onnx.defs
 from onnx.reference import ReferenceEvaluator
@@ -223,8 +222,7 @@ class TestGradHelper(ExtTestCase):
     @unittest.skipIf(training is None, reason="not training")
     @unittest.skipIf(GradientGraphBuilder is None, reason="not recent")
     def test_grad_helper_loss(self):
-        temp = get_temp_folder(__file__, "temp_grad_helper_loss")
-        grad_file = os.path.join(temp, "grad.onnx")
+        grad_file = "test_grad_helper_loss.onnx"
         X, y = make_regression(  # pylint: disable=W0632
             100, n_features=10, bias=2, random_state=0
         )
