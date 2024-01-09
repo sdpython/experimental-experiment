@@ -7,12 +7,6 @@ import onnx
 from onnx import ModelProto, TensorProto
 from onnx.helper import make_model, make_graph, make_node, make_tensor
 from onnx_array_api.graph_api import GraphBuilder
-from onnxruntime.capi._pybind_state import (
-    OrtModuleGraphBuilder,
-    OrtModuleGraphBuilderConfiguration,
-    TrainingGraphTransformerConfiguration,
-    Severity,
-)
 from .loss_helper import get_train_initializer
 
 
@@ -260,6 +254,13 @@ def _onnx_derivative_fw(
     """
     Implements a gradient based on class `OrtModuleGraphBuilder`.
     """
+    from onnxruntime.capi._pybind_state import (
+        OrtModuleGraphBuilder,
+        OrtModuleGraphBuilderConfiguration,
+        TrainingGraphTransformerConfiguration,
+        Severity,
+    )
+
     if verbose > 0:
         print(
             f"[_onnx_derivative_fw] weights={weights} inputs={inputs} options={options}"

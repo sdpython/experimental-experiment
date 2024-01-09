@@ -1,2 +1,3 @@
-onnxruntime-training
+onnxruntime-training; sys_platform == 'linux'
+onnxruntime; sys_platform != 'linux'
 torch
