@@ -16,7 +16,7 @@ Image have often 4 dimensions (N, C, H, W) = (batch, channels, height, width).
 Let's first start with a 2D image.
 """
 
-from typing import Sequence, Tuple
+from typing import Sequence
 import numpy as np
 from numpy.testing import assert_almost_equal
 from onnx.reference import ReferenceEvaluator
@@ -53,7 +53,7 @@ kernel
 # A raw version of a 2D convolution.
 
 
-def raw_convolution(data, kernel):
+def raw_convolution(data: np.array, kernel: Sequence[int]) -> np.array:
     rx = (kernel.shape[0] - 1) // 2
     ry = (kernel.shape[1] - 1) // 2
     res = np.zeros(data.shape, dtype=data.dtype)
@@ -289,7 +289,7 @@ ct
 # can be expressed as a matrix multiplication. It takes the image and the kernel shape.
 
 
-def _get_indices(i, shape):
+def _get_indices(i: int, shape: Sequence[int]) -> np.array[int]:
     res = np.empty((len(shape),), dtype=np.int64)
     k = len(shape) - 1
     while k > 0:
@@ -302,7 +302,7 @@ def _get_indices(i, shape):
     return res
 
 
-def _is_out(ind, shape):
+def _is_out(ind: Sequence[int], shape: Sequence[int]) -> bool:
     for i, s in zip(ind, shape):
         if i < 0:
             return True
@@ -311,7 +311,9 @@ def _is_out(ind, shape):
     return False
 
 
-def im2col_naive_implementation(data, kernel_shape, fill_value=0):
+def im2col_naive_implementation(
+    data: np.array, kernel_shape: Sequence[int], fill_value: int = 0
+) -> np.array:
     """
     Naive implementation for `im2col` or
     :func:`torch.nn.Unfold` (but with `padding=1`).
