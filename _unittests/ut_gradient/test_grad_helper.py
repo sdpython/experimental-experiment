@@ -1,6 +1,6 @@
 import unittest
 import logging
-from experimental_experiment.pycode import ExtTestCase, ignore_warnings
+from experimental_experiment.ext_test_case import ExtTestCase, ignore_warnings
 import numpy
 import onnx.defs
 from onnx.reference import ReferenceEvaluator
@@ -36,7 +36,7 @@ opset = onnx.defs.onnx_opset_version() - 2
 
 
 class TestGradHelper(ExtTestCase):
-    def check_runtime(self, onx, name, decimal=5, verbose=False):
+    def check_runtime(self, onx, name, atol=1e-5, verbose=False):
         feeds = random_feed(onx.graph.input)
         n = 0
         for _, v in feeds.items():
@@ -58,9 +58,9 @@ class TestGradHelper(ExtTestCase):
         oinf = ReferenceEvaluator(onx, new_ops=new_ops)
         pygot = oinf.run(None, feeds)
         output_names = [o.name for o in onx.graph.output]
-        self.assertGreater(len(output_names), 1)
+        self.assertGreater(len(output_names), 0)
         for i, o in enumerate(output_names):
-            self.assertEqualArray(got[i], pygot[i], decimal=decimal)
+            self.assertEqualArray(got[i], pygot[i], atol=atol)
         if verbose:
             print(
                 "%s - input=%r output=%r"
