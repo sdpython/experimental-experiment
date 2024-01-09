@@ -393,17 +393,16 @@ def add_loss_output(
         :script: DOT-SECTION
 
         import numpy
+        from onnx.defs import onnx_opset_version
         from sklearn.datasets import make_regression
         from sklearn.model_selection import train_test_split
         from sklearn.linear_model import LinearRegression
-        from mlprodict.onnx_conv import to_onnx
-        from mlprodict.onnxrt import OnnxInference
-        from onnxcustom import __max_supported_opset__ as opset
-        from onnxcustom.utils.orttraining_helper import add_loss_output
-        from onnxcustom.training.optimizers import OrtGradientOptimizer
+        from skl2onnx import to_onnx
+        from onnx_array_api.plotting.dot_plot import to_dot
+        from experimental_experiment.gradient.loss_helper import add_loss_output
 
-        X, y = make_regression(  # pylint: disable=W0632
-            100, n_features=10, bias=2, random_state=0)
+        opset = onnx_opset_version() - 2
+        X, y = make_regression(100, n_features=10, bias=2, random_state=0)
         X = X.astype(numpy.float32)
         y = y.astype(numpy.float32)
         w = (numpy.random.rand(y.shape[0]) + 1).astype(X.dtype)
@@ -411,14 +410,13 @@ def add_loss_output(
         reg = LinearRegression()
         reg.fit(X_train, y_train, sample_weight=w_train)
         reg.coef_ = reg.coef_.reshape((1, -1))
-        onx = to_onnx(reg, X_train, target_opset=opset,
-                      black_op={'LinearRegressor'})
+        onx = to_onnx(reg, X_train, target_opset=opset, black_op={"LinearRegressor"})
 
         onx_loss = add_loss_output(
-            onx, weight_name='weight', score_name='elastic',
-            l1_weight=0.1, l2_weight=0.9)
+            onx, weight_name="weight", score_name="elastic", l1_weight=0.1, l2_weight=0.9
+        )
 
-        print("DOT-SECTION", OnnxInference(onx_loss).to_dot())
+        print("DOT-SECTION", to_dot(onx_loss))
 
     Next example shows how to add a L2 loss with L1 and L2 penalties
     on the coefficients.
@@ -427,17 +425,17 @@ def add_loss_output(
         :script: DOT-SECTION
 
         import numpy
+        from onnx.defs import onnx_opset_version
         from sklearn.datasets import make_regression
         from sklearn.model_selection import train_test_split
         from sklearn.linear_model import LinearRegression
-        from mlprodict.onnx_conv import to_onnx
-        from mlprodict.onnxrt import OnnxInference
-        from onnxcustom import __max_supported_opset__ as opset
-        from onnxcustom.utils.orttraining_helper import add_loss_output
-        from onnxcustom.training.optimizers import OrtGradientOptimizer
+        from skl2onnx import to_onnx
+        from onnx_array_api.plotting.dot_plot import to_dot
+        from experimental_experiment.gradient.loss_helper import add_loss_output
 
-        X, y = make_regression(  # pylint: disable=W0632
-            100, n_features=10, bias=2, random_state=0)
+        opset = onnx_opset_version() - 2
+
+        X, y = make_regression(100, n_features=10, bias=2, random_state=0)
         X = X.astype(numpy.float32)
         y = y.astype(numpy.float32)
         w = (numpy.random.rand(y.shape[0]) + 1).astype(X.dtype)
@@ -445,17 +443,17 @@ def add_loss_output(
         reg = LinearRegression()
         reg.fit(X_train, y_train, sample_weight=w_train)
         reg.coef_ = reg.coef_.reshape((1, -1))
-        onx = to_onnx(reg, X_train, target_opset=opset,
-                      black_op={'LinearRegressor'})
+        onx = to_onnx(reg, X_train, target_opset=opset, black_op={"LinearRegressor"})
 
         onx_loss = add_loss_output(
-            onx, weight_name='weight', score_name='elastic',
-            penalty={'coef': {'l1': 0.5, 'l2':0.5},
-                     'intercept': {'l1': 0.5, 'l2':0.5}})
-
-        print("DOT-SECTION", OnnxInference(onx_loss).to_dot())
+            onx,
+            weight_name="weight",
+            score_name="elastic",
+            penalty={"coef": {"l1": 0.5, "l2": 0.5}, "intercept": {"l1": 0.5, "l2": 0.5}},
+        )
+        print("DOT-SECTION", to_dot(onx_loss))
     """
-    from mlprodict.onnx_tools.optim import onnx_remove_node_unused
+    from onnx_array_api.graph_api import GraphBuilder
 
     # rename every intermediate output call label
     def _replace(ens):
@@ -620,4 +618,7 @@ def add_loss_output(
         op_set.domain = oimp.domain
         op_set.version = oimp.version
     # Some nodes may have to be rewritten, Reciprocal(X) -> Div(1 / X).
-    return onnx_remove_node_unused(onnx_model)
+    g = GraphBuilder(onnx_model)
+    g.optimize()
+    onnx_model_opt = g.to_onnx()
+    return onnx_model_opt

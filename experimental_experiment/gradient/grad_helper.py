@@ -110,24 +110,26 @@ def onnx_derivative(
     .. gdot::
         :script: DOT-SECTION
 
-        import numpy
-        from skl2onnx.algebra.onnx_ops import (  # pylint: disable=E0611
-            OnnxAdd, OnnxMul, OnnxIdentity)
+        import numpy as np
+        from onnx.defs import onnx_opset_version
         from skl2onnx.common.data_types import FloatTensorType
-        from mlprodict.onnxrt import OnnxInference
-        from onnxcustom.training.grad_helper import (
-            onnx_derivative, DerivativeOptions)
-        from onnxcustom import __max_supported_opset__ as opv
+        from skl2onnx.algebra.onnx_ops import OnnxAdd
+        from onnx_array_api.plotting.dot_plot import to_dot
+        from experimental_experiment.gradient.grad_helper import (
+            onnx_derivative,
+            DerivativeOptions,
+        )
 
-        node = OnnxAdd('X', np.array([1], dtype=np.float32),
-                       op_version=opv, output_names=['Y'])
-        onx = node.to_onnx({'X': FloatTensorType([None, 10])},
-                           {'Y': FloatTensorType([None, 10])},
-                           target_opset=opv)
+        opv = onnx_opset_version() - 2
+
+        node = OnnxAdd("X", np.array([1], dtype=np.float32), op_version=opv, output_names=["Y"])
+        onx = node.to_onnx(
+            {"X": FloatTensorType([None, 10])},
+            {"Y": FloatTensorType([None, 10])},
+            target_opset=opv,
+        )
         new_onx = onnx_derivative(onx, options=DerivativeOptions.KeepYieldOp)
-
-        oinf = OnnxInference(new_onx)
-        print("DOT-SECTION", oinf.to_dot())
+        print("DOT-SECTION", to_dot(new_onx))
 
     These operators are the outputs of the
     initial graph and must be replaced by the gradient of these
@@ -137,48 +139,52 @@ def onnx_derivative(
     .. gdot::
         :script: DOT-SECTION
 
-        import numpy
-        from skl2onnx.algebra.onnx_ops import (  # pylint: disable=E0611
-            OnnxAdd, OnnxMul, OnnxIdentity)
+        import numpy as np
+        from onnx.defs import onnx_opset_version
         from skl2onnx.common.data_types import FloatTensorType
-        from mlprodict.onnxrt import OnnxInference
-        from onnxcustom.training.grad_helper import (
-            onnx_derivative, DerivativeOptions)
-        from onnxcustom import __max_supported_opset__ as opv
+        from skl2onnx.algebra.onnx_ops import OnnxAdd
+        from onnx_array_api.plotting.dot_plot import to_dot
+        from experimental_experiment.gradient.grad_helper import (
+            onnx_derivative,
+            DerivativeOptions,
+        )
 
-        node = OnnxAdd('X', np.array([1], dtype=np.float32),
-                       op_version=opv, output_names=['Y'])
-        onx = node.to_onnx({'X': FloatTensorType([None, 10])},
-                           {'Y': FloatTensorType([None, 10])},
-                           target_opset=opv)
+        opv = onnx_opset_version() - 2
+
+        node = OnnxAdd("X", np.array([1], dtype=np.float32), op_version=opv, output_names=["Y"])
+        onx = node.to_onnx(
+            {"X": FloatTensorType([None, 10])},
+            {"Y": FloatTensorType([None, 10])},
+            target_opset=opv,
+        )
         new_onx = onnx_derivative(onx, options=DerivativeOptions.Zero)
-
-        oinf = OnnxInference(new_onx)
-        print("DOT-SECTION", oinf.to_dot())
+        print("DOT-SECTION", to_dot(new_onx))
 
     The user can still compute the outputs.
 
     .. gdot::
         :script: DOT-SECTION
 
-        import numpy
-        from skl2onnx.algebra.onnx_ops import (  # pylint: disable=E0611
-            OnnxAdd, OnnxMul, OnnxIdentity)
+        import numpy as np
+        from onnx.defs import onnx_opset_version
         from skl2onnx.common.data_types import FloatTensorType
-        from mlprodict.onnxrt import OnnxInference
-        from onnxcustom.training.grad_helper import (
-            onnx_derivative, DerivativeOptions)
-        from onnxcustom import __max_supported_opset__ as opv
+        from skl2onnx.algebra.onnx_ops import OnnxAdd
+        from onnx_array_api.plotting.dot_plot import to_dot
+        from experimental_experiment.gradient.grad_helper import (
+            onnx_derivative,
+            DerivativeOptions,
+        )
 
-        node = OnnxAdd('X', np.array([1], dtype=np.float32),
-                       op_version=opv, output_names=['Y'])
-        onx = node.to_onnx({'X': FloatTensorType([None, 10])},
-                           {'Y': FloatTensorType([None, 10])},
-                           target_opset=opv)
+        opv = onnx_opset_version() - 2
+
+        node = OnnxAdd("X", np.array([1], dtype=np.float32), op_version=opv, output_names=["Y"])
+        onx = node.to_onnx(
+            {"X": FloatTensorType([None, 10])},
+            {"Y": FloatTensorType([None, 10])},
+            target_opset=opv,
+        )
         new_onx = onnx_derivative(onx, options=DerivativeOptions.KeepOutputs)
-
-        oinf = OnnxInference(new_onx)
-        print("DOT-SECTION", oinf.to_dot())
+        print("DOT-SECTION", to_dot(new_onx))
 
     The input gradient can be filled with a constant matrix
     filled with one and with the expected shape.
@@ -186,25 +192,28 @@ def onnx_derivative(
     .. gdot::
         :script: DOT-SECTION
 
-        import numpy
-        from skl2onnx.algebra.onnx_ops import (  # pylint: disable=E0611
-            OnnxAdd, OnnxMul, OnnxIdentity)
+        import numpy as np
+        from onnx.defs import onnx_opset_version
         from skl2onnx.common.data_types import FloatTensorType
-        from mlprodict.onnxrt import OnnxInference
-        from onnxcustom.training.grad_helper import (
-            onnx_derivative, DerivativeOptions)
-        from onnxcustom import __max_supported_opset__ as opv
+        from skl2onnx.algebra.onnx_ops import OnnxAdd
+        from onnx_array_api.plotting.dot_plot import to_dot
+        from experimental_experiment.gradient.grad_helper import (
+            onnx_derivative,
+            DerivativeOptions,
+        )
 
-        node = OnnxAdd('X', np.array([1], dtype=np.float32),
-                       op_version=opv, output_names=['Y'])
-        onx = node.to_onnx({'X': FloatTensorType([None, 10])},
-                           {'Y': FloatTensorType([None, 10])},
-                           target_opset=opv)
-        new_onx = onnx_derivative(onx, options=(
-            DerivativeOptions.KeepOutputs | DerivativeOptions.FillGrad))
+        opv = onnx_opset_version() - 2
 
-        oinf = OnnxInference(new_onx)
-        print("DOT-SECTION", oinf.to_dot())
+        node = OnnxAdd("X", np.array([1], dtype=np.float32), op_version=opv, output_names=["Y"])
+        onx = node.to_onnx(
+            {"X": FloatTensorType([None, 10])},
+            {"Y": FloatTensorType([None, 10])},
+            target_opset=opv,
+        )
+        new_onx = onnx_derivative(
+            onx, options=(DerivativeOptions.KeepOutputs | DerivativeOptions.FillGrad)
+        )
+        print("DOT-SECTION", to_dot(new_onx))
     """
     assert isinstance(
         options, DerivativeOptions
