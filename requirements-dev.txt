@@ -1,7 +1,7 @@
 black
 furo
 matplotlib
-onnx-array-api
+git+https://github.com/sdpython/onnx-array-api.git
 git+https://github.com/microsoft/onnxscript.git
 openpyxl
 packaging
@@ -11,6 +11,8 @@ psutil
 pytest
 pytest-coverage
 ruff
+scikit-learn
+skl2onnx
 sphinx
 sphinx-gallery
 sphinx-issues
