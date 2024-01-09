@@ -289,7 +289,7 @@ ct
 # can be expressed as a matrix multiplication. It takes the image and the kernel shape.
 
 
-def _get_indices(i: int, shape: Sequence[int]) -> np.array[int]:
+def _get_indices(i: int, shape: Sequence[int]) -> np.array:
     res = np.empty((len(shape),), dtype=np.int64)
     k = len(shape) - 1
     while k > 0:
