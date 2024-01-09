@@ -22,6 +22,7 @@ from numpy.testing import assert_almost_equal
 from onnx.reference import ReferenceEvaluator
 from onnx_array_api.light_api import start
 from onnx_array_api.plotting.graphviz_helper import plot_dot
+from onnxruntime import InferenceSession
 from torch import from_numpy
 from torch.nn import Fold, Unfold
 from torch.nn.functional import conv_transpose2d, conv2d
@@ -210,7 +211,7 @@ fold
 
 model = (
     start()
-    .vin("X", shape=[None, None])
+    .vin("X", shape=[1, 1, None, None])
     .cst(kernel[np.newaxis, np.newaxis, ...])
     .rename("W")
     .bring("X", "W")
@@ -235,7 +236,7 @@ ref.run(None, {"X": data[np.newaxis, np.newaxis, ...]})[0]
 
 
 grad = onnx_derivative(
-    model, options=DerivativeOptions.FillGrad | DerivativeOptions.KeepOutputs
+    model, options=DerivativeOptions.FillGrad | DerivativeOptions.KeepOutputs, verbose=1
 )
 plot_dot(grad)
 
@@ -244,12 +245,12 @@ plot_dot(grad)
 # Execution.
 
 
-ref = ReferenceEvaluator(grad)
-res = ref.run(
+sess = InferenceSession(grad.SerializeToString(), providers=["CPUExecutionProvider"])
+res = sess.run(
     None,
     {
         "X": data[np.newaxis, np.newaxis, ...],
-        "init": kernel[np.newaxis, np.newaxis, ...],
+        "W": kernel[np.newaxis, np.newaxis, ...],
     },
 )
 res
@@ -261,7 +262,7 @@ res
 
 model = (
     start()
-    .vin("X", shape=[None, None])
+    .vin("X", shape=[1, 1, None, None])
     .cst(kernel[np.newaxis, np.newaxis, ...])
     .rename("W")
     .bring("X", "W")
@@ -275,8 +276,8 @@ plot_dot(model)
 ############################
 # Execution.
 
-ref = ReferenceEvaluator(model, runtime="onnxruntime1")
-ct = ref.run(None, {"X": impl[np.newaxis, np.newaxis, ...]})["out_con_0"]
+sess = InferenceSession(model.SerializeToString(), providers=["CPUExecutionProvider"])
+ct = sess.run(None, {"X": impl[np.newaxis, np.newaxis, ...]})[0]
 ct
 
 
@@ -310,77 +311,39 @@ def _is_out(ind, shape):
     return False
 
 
-def im2col_naive_implementation(data, kernel_shape, dilations, pads, strides):
-    """Naive implementation for `im2col`.
+def im2col_naive_implementation(data, kernel_shape, fill_value=0):
+    """
+    Naive implementation for `im2col` or
+    :func:`torch.nn.Unfold` (but with `padding=1`).
 
-    Args:
-        data: image (float)
-        kernel_shape: kernel shape
-        dilations: dilations
-        pads: pads
-        strides: strides
-
-    Returns:
-        result
+    :param image: image (float)
+    :param kernel_shape: kernel shape
+    :param fill_value: fill value
+    :return: result
     """
     if not isinstance(kernel_shape, tuple):
         raise TypeError(f"Unexpected type {type(kernel_shape)!r} for kernel_shape.")
     if len(data.shape) != len(kernel_shape):
         raise ValueError(f"Shape mismatch {data.shape!r} and {kernel_shape!r}.")
-    n_dims = len(pads) // 2
-    new_pads = np.array([(pads[i], pads[i + n_dims]) for i in range(n_dims)])
-    list_output_shape = list(data.shape + kernel_shape)
-    for d in range(n_dims):
-        kd = kernel_shape[d] + (kernel_shape[d] - 1) * (dilations[d] - 1)
-        nd = int(
-            ((list_output_shape[d] - kd + new_pads[d][0] + new_pads[d][1]) / strides[d])
-            + 1
-        )
-        list_output_shape[d] = nd
-    output_shape = tuple(list_output_shape)
-
-    res = np.zeros(output_shape, dtype=data.dtype)
+    output_shape = data.shape + kernel_shape
+    res = np.empty(output_shape, dtype=data.dtype)
+    middle = np.array([-m / 2 for m in kernel_shape], dtype=np.int64)
     kernel_size = np.prod(kernel_shape)
-    res_size = np.prod(res.shape[:-n_dims])
-    for i in range(res_size):
-        i_res = _get_indices(i, res.shape[:-n_dims])
-        t_res = tuple(i_res)
+    data_size = np.prod(data.shape)
+    for i in range(data_size):
         for j in range(kernel_size):
+            i_data = _get_indices(i, data.shape)
             i_kernel = _get_indices(j, kernel_shape)
+            ind = i_data + i_kernel + middle
+            t_data = tuple(i_data)
             t_kernel = tuple(i_kernel)
-
-            i_img = i_res * strides - new_pads[:, 0] + i_kernel * dilations
-            t_img = tuple(i_img)
-            if _is_out(t_img, data.shape):
-                res[t_res + t_kernel] = 0
-            else:
-                res[t_res + t_kernel] = data[tuple(t_img)]
+            i_out = t_data + t_kernel
+            res[i_out] = fill_value if _is_out(ind, data.shape) else data[tuple(ind)]
     return res
 
 
-def im2col(
-    img: np.ndarray,
-    kernel_shape: Tuple[int, ...],
-    dilations: Sequence[int],
-    pads: Sequence[int],
-    strides: Sequence[int],
-) -> np.ndarray:
-    res = None
-    for n in range(img.shape[0]):
-        for c in range(img.shape[1]):
-            out = im2col_naive_implementation(
-                img[n, c, ...], kernel_shape, dilations, pads, strides
-            )
-            if res is None:
-                new_shape = img.shape[:2] + out.shape
-                res = np.empty(new_shape, dtype=img.dtype)
-            res[n, c, ...] = out
-    new_shape = res.shape[: -len(kernel_shape)] + (-1,)
-    return res.reshape(new_shape)
-
-
 v = np.arange(5).astype(np.float32)
-w = im2col(v, (3,))
+w = im2col_naive_implementation(v, (3,))
 w
 
 ##################################

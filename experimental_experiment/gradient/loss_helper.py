@@ -339,41 +339,6 @@ def get_train_initializer(onx: ModelProto):
     return res
 
 
-def _rewrite_op_no_grad(onx: ModelProto):
-    """
-    Rewrites operators with no gradient.
-    """
-    set_types = set(n.op_type for n in onx.graph.node)
-    if "Reciprocal" in set_types:
-        from skl2onnx.algebra.onnx_ops import OnnxDiv
-        from skl2onnx.common.data_types import FloatTensorType
-        from .onnx_rewriter import onnx_rewrite_operator
-
-        opset = None
-        for op in onx.opset_import:
-            if op.domain in ("", "ai.onnx"):
-                opset = op.version
-        if opset is None:  # pragma: no cover
-            from .. import get_max_opset
-
-            opset = get_max_opset()
-
-        node = OnnxDiv(
-            numpy.array([1], dtype=numpy.float32),
-            "X",
-            output_names=["Y"],
-            op_version=opset,
-        )
-        rewrite_onx = node.to_onnx(
-            inputs={"X": FloatTensorType()},
-            outputs={"Y": FloatTensorType()},
-            target_opset=opset,
-        )
-        onx = onnx_rewrite_operator(onx, "Reciprocal", rewrite_onx)
-
-    return onx
-
-
 def add_loss_output(
     onx: ModelProto,
     score_name: str = "squared_error",
@@ -654,4 +619,5 @@ def add_loss_output(
         op_set = onnx_model.opset_import.add()  # pylint: disable=E1101
         op_set.domain = oimp.domain
         op_set.version = oimp.version
-    return _rewrite_op_no_grad(onnx_remove_node_unused(onnx_model))
+    # Some nodes may have to be rewritten, Reciprocal(X) -> Div(1 / X).
+    return onnx_remove_node_unused(onnx_model)

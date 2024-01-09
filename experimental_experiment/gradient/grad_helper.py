@@ -11,6 +11,7 @@ from onnxruntime.capi._pybind_state import (
     OrtModuleGraphBuilder,
     OrtModuleGraphBuilderConfiguration,
     TrainingGraphTransformerConfiguration,
+    Severity,
 )
 from .loss_helper import get_train_initializer
 
@@ -89,6 +90,7 @@ def onnx_derivative(
     loss: Optional[str] = None,
     label: Optional[str] = None,
     path_name: Optional[str] = None,
+    verbose: int = 0,
 ) -> ModelProto:
     """
     Builds the gradient for an onnx graph.
@@ -103,6 +105,7 @@ def onnx_derivative(
         specified as well
     :param path_name: if *options* equal to `DerivativeOptions.Loss`,
         the gradient is saved to that path
+    :param verbose: verbosity
     :return: onnx graph
 
     The function calls :epkg:`OrtModuleGraphBuilderConfiguration`
@@ -222,8 +225,11 @@ def onnx_derivative(
             loss=loss,
             label=label,
             path_name=path_name,
+            verbose=verbose,
         )
-    return _onnx_derivative_fw(onx, weights=weights, inputs=inputs, options=options)
+    return _onnx_derivative_fw(
+        onx, weights=weights, inputs=inputs, options=options, verbose=verbose
+    )
 
 
 def _default_inputs(onx: ModelProto) -> List[str]:
@@ -245,27 +251,48 @@ def _default_inputs(onx: ModelProto) -> List[str]:
 
 
 def _onnx_derivative_fw(
-    onx: ModelProto, weights: List[str], inputs: List[str], options: DerivativeOptions
+    onx: ModelProto,
+    weights: List[str],
+    inputs: List[str],
+    options: DerivativeOptions,
+    verbose: int = 0,
 ) -> ModelProto:
     """
     Implements a gradient based on class `OrtModuleGraphBuilder`.
     """
+    if verbose > 0:
+        print(
+            f"[_onnx_derivative_fw] weights={weights} inputs={inputs} options={options}"
+        )
     if weights is None:
         inits = get_train_initializer(onx)
         weights = list(inits)
+        if verbose > 0:
+            print(f"[_onnx_derivative_fw] guessed weights={weights}")
+    if verbose > 0:
+        print("[_onnx_derivative_fw] OrtModuleGraphBuilder")
     builder = OrtModuleGraphBuilder()
-
     config = OrtModuleGraphBuilderConfiguration()
     config.initializer_names = weights
     config.initializer_names_to_train = weights
+    if verbose > 0:
+        config.loglevel = Severity.INFO
     if inputs is None:
         inputs_name = _default_inputs(onx)
         if len(inputs_name) > 0:
             config.input_names_require_grad = inputs_name
     config.build_gradient_graph = True
 
+    if verbose > 0:
+        print(
+            f"[_onnx_derivative_fw] TrainingGraphTransformerConfiguration with inputs_name={inputs_name}"
+        )
     p = TrainingGraphTransformerConfiguration()
+    if verbose > 0:
+        print("[_onnx_derivative_fw] builder initialize")
     builder.initialize(onx.SerializeToString(), config)
+    if verbose > 0:
+        print("[_onnx_derivative_fw] build")
     builder.build(p)
     try:
         train_onnx_model_serialized = builder.get_gradient_model()
@@ -292,12 +319,14 @@ def _onnx_derivative_fw(
         for index, node in enumerate(grad_yield.graph.node)
         if node.op_type != "YieldOp"
     ]
+
     inputs = list(grad_yield.graph.input)
     if options & DerivativeOptions.KeepOutputs:
         outputs = list(grad_yield.graph.output)
     else:
         original = set(i.name for i in onx.graph.output)
         outputs = [o for o in grad_yield.graph.output if o.name not in original]
+
     map_out = {o.name: o for o in onx.graph.output}
     for index, yn in yields_op:
         if len(yn.input) != 1 or len(yn.output) != 1:
@@ -335,6 +364,8 @@ def _onnx_derivative_fw(
             outputs.append(out)
 
     # Final graph.
+    if verbose > 0:
+        print("[_onnx_derivative_fw] final graph")
     other_nodes.sort()
     other_nodes = [o[1] for o in other_nodes]
     graph = make_graph(
@@ -359,9 +390,14 @@ def _onnx_derivative_fw(
         op_set.domain = oimp.domain
         op_set.version = oimp.version
 
+    if verbose > 0:
+        print("[_onnx_derivative_fw] optimize")
     g = GraphBuilder(new_model)
     g.optimize()
-    return g.to_onnx()
+    onx_grad = g.to_onnx()
+    if verbose > 0:
+        print("[_onnx_derivative_fw] done")
+    return onx_grad
 
 
 def _onnx_derivative_loss(
@@ -372,6 +408,7 @@ def _onnx_derivative_loss(
     loss: str,
     label: str,
     path_name: str,
+    verbose: int = 0,
 ) -> ModelProto:
     """
     Implements a gradient based on class `PyGradientGraphBuilder`.
@@ -397,8 +434,20 @@ def _onnx_derivative_loss(
         inputs = set(inputs)
     inputs = set(x for x in inputs if x not in label)
 
-    builder = GradientGraphBuilder(onx.SerializeToString(), label, inputs, loss)
+    str_onx = onx.SerializeToString()
+    if verbose > 0:
+        print(f"[_onnx_derivative_loss] label={label!r}, inputs={inputs}, loss={loss}")
+    builder = GradientGraphBuilder(str_onx, label, inputs, loss)
+    if verbose > 0:
+        print(f"[_onnx_derivative_loss] build, onx size={len(str_onx)}")
     builder.build()
+    if verbose > 0:
+        print(f"[_onnx_derivative_loss] save to {path_name!r}")
     builder.save(path_name)
+    if verbose > 0:
+        print(f"[_onnx_derivative_loss] load {path_name!r}")
     with open(path_name, "rb") as f:
-        return onnx.load(f)
+        grad_onx = onnx.load(f)
+    if verbose > 0:
+        print("[_onnx_derivative_loss] done")
+    return grad_onx
