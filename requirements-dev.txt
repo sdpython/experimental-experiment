@@ -11,6 +11,7 @@ psutil
 pytest
 pytest-coverage
 ruff
+scikit-learn
 sphinx
 sphinx-gallery
 sphinx-issues
