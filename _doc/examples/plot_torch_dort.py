@@ -314,6 +314,9 @@ for k, v in supported_exporters.items():
     gc.collect()
     time.sleep(1)
 
+    if k in {"torch_default"}:
+        print(f"skip compile for memory {k} on cuda")
+        continue
     torch._dynamo.reset()
     # CUDA
     model, input_tensor = create_model_and_input()
@@ -385,6 +388,9 @@ for k, v in supported_exporters.items():
         )
     )
 
+    if k in {"torch_dort", "torch_default"}:
+        print(f"skip dort cuda {k}: {script_args.repeat1}")
+        continue
     print(f"run dort cuda {k}: {script_args.repeat1}")
     times = []
     for i in range(int(script_args.repeat1)):
@@ -534,7 +540,13 @@ def benchmark(shape):
         if p == "CUDA":
             model = model.cuda()
             input_tensor = input_tensor.cuda()
-        exported_model = export_fct(model, input_tensor)
+        try:
+            exported_model = export_fct(model, input_tensor)
+        except torch._dynamo.exc.BackendCompilerFailed as e:
+            # Triton only supports devices of CUDA Capability >= 7.0, but your device is of CUDA capability 6.1
+            obs["error"] = str(e)
+            data.append(obs)
+            continue
 
         def call_model(
             export_fct=export_fct,

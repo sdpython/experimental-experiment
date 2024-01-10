@@ -547,7 +547,12 @@ def benchmark(shape):
         if p == "CUDA":
             model = model.cuda()
             input_tensors = [i.cuda() for i in input_tensors]
-        exported_model = export_fct(model, *input_tensors)
+        try:
+            exported_model = export_fct(model, *input_tensors)
+        except Exception as e:
+            obs["error"] = str(e)
+            data.append(obs)
+            continue
 
         def call_model(
             export_fct=export_fct,
