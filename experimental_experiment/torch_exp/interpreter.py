@@ -2,15 +2,13 @@ import inspect
 import operator
 import types
 from typing import Any, Callable, Dict, List, Tuple
+from ._helper import make_hash
 from .aten_functions import find_function
 
 
 class DynamoInterpreter:
     def _hash(self) -> str:
-        aa = id(self) % (26**3)
-        return (
-            f"{chr(65 + aa // 26 ** 2)}{chr(65 + (aa // 26) % 26)}{chr(65 + aa % 26)}"
-        )
+        return make_hash(self)
 
     def __init__(
         self, graph_builder: "GraphBuilder", retriever: Callable  # noqa: F821

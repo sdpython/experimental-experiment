@@ -5,6 +5,7 @@ import onnx.helper as oh
 import onnx.numpy_helper as onh
 from onnx import AttributeProto, FunctionProto, ModelProto, NodeProto, TensorProto
 from onnx.reference import ReferenceEvaluator
+from ._helper import make_hash
 
 
 class Opset:
@@ -89,10 +90,7 @@ class OptimizationOptions:
 
 class GraphBuilder:
     def _hash(self) -> str:
-        aa = id(self) % (26**3)
-        return (
-            f"{chr(65 + aa // 26 ** 2)}{chr(65 + (aa // 26) % 26)}{chr(65 + aa % 26)}"
-        )
+        return make_hash(self)
 
     def __init__(
         self,
