@@ -58,6 +58,7 @@ from experimental_experiment.ext_test_case import get_parsed_args, measure_time
 from experimental_experiment.memory_peak import start_spying_on
 from tqdm import tqdm
 
+has_cuda = has_cuda and torch.cuda.is_available()
 logging.disable(logging.ERROR)
 
 
