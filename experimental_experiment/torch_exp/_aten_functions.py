@@ -109,8 +109,8 @@ def aten_flatten(
     if start_dim != 0:
         if start_dim == 1 and end_dim == -1:
             shape = g.op.Shape(x)
-            take = g.op.GatherElements(shape, np.array([0], dtype=np.int64), axis=1)
-            resh = g.op.Concat(take, np.array([-1], dtype=np.int64))
+            take = g.op.GatherElements(shape, np.array([0], dtype=np.int64), axis=0)
+            resh = g.op.Concat(take, np.array([-1], dtype=np.int64), axis=0)
             return g.op.Reshape(x, resh, outputs=outputs)
         raise NotImplementedError(
             f"start_dim={start_dim}, end_dim={end_dim} not supported."
