@@ -235,10 +235,11 @@ class DynamoInterpreter:
         self._set_shape_and_type(node, res)
         if isinstance(node.name, str):
             if len(output_names) != 1:
-                raise NotImplementedError(
-                    f"Unexpected output_names {output_names}, res={res!r}, node.name={node.name!r}"
-                )
-            if res != node.name:
+                if output_names != list(res):
+                    raise NotImplementedError(
+                        f"Unexpected output_names {output_names}, res={res!r}, node.name={node.name!r}"
+                    )
+            elif res != node.name:
                 self.builder.make_node("Identity", [res], [node.name])
                 res = node.name
         else:

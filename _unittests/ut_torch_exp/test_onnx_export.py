@@ -253,14 +253,17 @@ class TestOnnxExport(ExtTestCase):
             constant_folding=True,
         )
         onx1 = onnx.load(names[-1])
-        names = export_utils(
-            "test_simple_export_pool_unused_opt",
-            model,
-            input_tensor,
-            remove_unused=True,
-            constant_folding=True,
-            verbose=1,
+        names, out, _ = self.capture(
+            lambda: export_utils(
+                "test_simple_export_pool_unused_opt",
+                model,
+                input_tensor,
+                remove_unused=True,
+                constant_folding=True,
+                verbose=1,
+            )
         )
+        self.assertIn("[GraphBuilder", out)
         onx2 = onnx.load(names[-1])
         for att in ["node", "initializer"]:
             v1 = getattr(onx1.graph, att)
