@@ -110,8 +110,35 @@ class TestLlama(ExtTestCase):
         ):
             self.assertEqual(len(onnx_info), expected_number_of_onnx_models)
 
+    def common_test_model(
+        self,
+        model,
+        example_args_collection,
+        test_backward: bool,
+        dynamic: bool,
+    ):
+        local_aot_ort, local_ort = make_aot_ort(dynamic=dynamic)
+
+        self._test_model_numerically(
+            model,
+            local_aot_ort,
+            example_args_collection,
+            fullgraph=True,
+            test_backward=test_backward,
+        )
+
+        number_of_captured_graphs = 2 if test_backward else 1
+        execution_count = len(example_args_collection) * number_of_captured_graphs
+        self._assert_counting_information(
+            local_ort,
+            expected_execution_count=execution_count,
+            number_of_cached_graph_modules=number_of_captured_graphs,
+            number_of_exported_onnx_models_for_all_graph_modules=(1,)
+            * number_of_captured_graphs,
+        )
+
     @ignore_warnings((UserWarning, DeprecationWarning))
-    def test_mlp_with_local_backend(self):
+    def test_ort_mlp(self):
         import torch
 
         class MLP(torch.nn.Module):
@@ -135,56 +162,33 @@ class TestLlama(ExtTestCase):
             (torch.randn(batch, 2, dtype=torch.float32),) for batch in batch_sizes
         )
 
-        local_aot_ort, local_ort = make_aot_ort(dynamic=False)
+        self.common_test_model(MLP(), example_args_collection, False, False)
 
-        self._test_model_numerically(
-            MLP(),
-            local_aot_ort,
-            example_args_collection,
-        )
-        self._assert_counting_information(
-            local_ort,
-            expected_execution_count=len(example_args_collection),
-            number_of_cached_graph_modules=1,
-            number_of_exported_onnx_models_for_all_graph_modules=(1,),
-        )
-
-    def common_test_llama_decoder_with_local_backend(
-        self, test_local_backend: bool, test_backward: bool, dynamic: bool
-    ):
+    @ignore_warnings((UserWarning, DeprecationWarning))
+    def test_ort_llama_decoder(self):
         from experimental_experiment.torch_helper.llama_helper import get_llama_decoder
 
+        dynamic = False
         if dynamic:
             input_dims = ((2, 8), (4, 7), (9, 15))
         else:
             input_dims = ((9, 15), (9, 15), (9, 15))
         model, example_args_collection = get_llama_decoder(input_dims=input_dims)
-
-        local_aot_ort, local_ort = make_aot_ort()
-
-        self._test_model_numerically(
-            model,
-            local_aot_ort,
-            example_args_collection,
-            fullgraph=True,
-            test_backward=test_backward,
-        )
-
-        if test_local_backend:
-            assert local_ort is not None
-            number_of_captured_graphs = 2 if test_backward else 1
-            execution_count = len(example_args_collection) * number_of_captured_graphs
-            self._assert_counting_information(
-                local_ort,
-                expected_execution_count=execution_count,
-                number_of_cached_graph_modules=number_of_captured_graphs,
-                number_of_exported_onnx_models_for_all_graph_modules=(1,)
-                * number_of_captured_graphs,
-            )
+        self.common_test_model(model, example_args_collection, False, False)
 
     @ignore_warnings((UserWarning, DeprecationWarning))
-    def test_ort_llama_decoder_with_local_backend(self):
-        self.common_test_llama_decoder_with_local_backend(False, False, False)
+    def test_ort_llama_attention(self):
+        from experimental_experiment.torch_helper.llama_helper import (
+            get_llama_attention,
+        )
+
+        dynamic = False
+        if dynamic:
+            input_dims = ((2, 8), (4, 7), (9, 15))
+        else:
+            input_dims = ((9, 15), (9, 15), (9, 15))
+        model, example_args_collection = get_llama_attention(input_dims=input_dims)
+        self.common_test_model(model, example_args_collection, False, False)
 
 
 if __name__ == "__main__":

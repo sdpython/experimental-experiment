@@ -17,5 +17,6 @@ sphinx
 sphinx-gallery
 sphinx-issues
 sphinx-runpython
+transformers
 tqdm
 wheel
