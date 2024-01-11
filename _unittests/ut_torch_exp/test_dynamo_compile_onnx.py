@@ -2,7 +2,8 @@ import sys
 import unittest
 from typing import List
 import packaging.version as pv
-from experimental_experiment.ext_test_case import ExtTestCase
+from onnx.reference import ReferenceEvaluator
+from experimental_experiment.ext_test_case import ExtTestCase, ignore_warnings
 from experimental_experiment.torch_exp.onnx_export import to_onnx
 
 
@@ -58,6 +59,7 @@ class TestDynamoCompileOnnx(ExtTestCase):
 
     @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
     @unittest.skipIf(not torch_recent_enough(), reason="export fails")
+    @ignore_warnings((UserWarning, DeprecationWarning))
     def test_simple_dort_0(self):
         import torch
 
@@ -65,8 +67,6 @@ class TestDynamoCompileOnnx(ExtTestCase):
         expected = model(input_tensor)
         optimized_mod = torch.compile(model, backend="onnxrt")
         got = optimized_mod(input_tensor)
-        print(expected)
-        print(got)
         self.assertEqual(expected.shape, got.shape)
         self.assertEqual(expected.dtype, got.dtype)
         self.assertEqualArray(
@@ -102,15 +102,66 @@ class TestDynamoCompileOnnx(ExtTestCase):
         expected = model(input_tensor)
         optimized_mod = torch.compile(model, backend=onnxscript_compiler)
         got = optimized_mod(input_tensor)
-        print(expected)
-        print(got)
         self.assertEqual(expected.shape, got.shape)
         self.assertEqual(expected.dtype, got.dtype)
         self.assertEqualArray(expected.detach().numpy(), got.detach().numpy())
 
     @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
     @unittest.skipIf(not torch_recent_enough(), reason="export fails")
-    def test_simple_dort_2(self):
+    def test_simple_dort_2_onnx(self):
+        import torch
+
+        def onnx_compiler(graph_module: torch.fx.GraphModule, args: List[torch.Tensor]):
+            input_names = (
+                ["input"] if len(args) == 1 else [f"input{i}" for i in range(len(args))]
+            )
+
+            onx = to_onnx(
+                graph_module,
+                tuple(args),
+                input_names=input_names,
+                remove_unused=True,
+                constant_folding=True,
+                verbose=4,
+            )
+            try:
+                sess = ReferenceEvaluator(onx, verbose=10)
+            except Exception as e:
+                from onnx_array_api.plotting.text_plot import onnx_simple_text_plot
+
+                raise AssertionError(
+                    f"Unable to run onnx graph ({str(e)})\n{onnx_simple_text_plot(onx)}"
+                ) from e
+            names = [i.name for i in onx.graph.input]
+
+            def run(*inputs, sess=sess, names=names):
+                # not efficient
+                xnp = [x.detach().numpy() for x in inputs]
+                feeds = dict(zip(names, xnp))
+                res = tuple(torch.Tensor(y) for y in sess.run(None, feeds))
+                return res
+
+            return run
+
+        def lf():
+            model, input_tensor = return_module_cls_pool()
+            torch.export.export(model, (input_tensor,))
+            expected = model(input_tensor)
+            optimized_mod = torch.compile(model, backend=onnx_compiler)
+            got = optimized_mod(input_tensor)
+            return expected, got
+
+        (expected, got), out, _ = self.capture(lf)
+        self.assertIn("[GraphBuilder", out)
+        self.assertEqual(expected.dtype, got.dtype)
+        self.assertEqualArray(
+            expected.detach().numpy().ravel(), got.detach().numpy().ravel(), atol=1e-5
+        )
+        self.assertEqual(expected.shape, got.shape)
+
+    @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
+    @unittest.skipIf(not torch_recent_enough(), reason="export fails")
+    def test_simple_dort_2_ort(self):
         import torch
 
         def onnx_compiler(graph_module: torch.fx.GraphModule, args: List[torch.Tensor]):
@@ -127,9 +178,16 @@ class TestDynamoCompileOnnx(ExtTestCase):
                 remove_unused=True,
                 constant_folding=True,
             )
-            sess = InferenceSession(
-                onx.SerializeToString(), providers=["CPUExecutionProvider"]
-            )
+            try:
+                sess = InferenceSession(
+                    onx.SerializeToString(), providers=["CPUExecutionProvider"]
+                )
+            except Exception as e:
+                from onnx_array_api.plotting.text_plot import onnx_simple_text_plot
+
+                raise AssertionError(
+                    f"Unable to run onnx graph ({str(e)})\n{onnx_simple_text_plot(onx)}"
+                ) from e
             names = [i.name for i in onx.graph.input]
 
             def run(*inputs, sess=sess, names=names):
@@ -137,8 +195,6 @@ class TestDynamoCompileOnnx(ExtTestCase):
                 xnp = [x.detach().numpy() for x in inputs]
                 feeds = dict(zip(names, xnp))
                 res = tuple(torch.Tensor(y) for y in sess.run(None, feeds))
-                if len(res) == 1:
-                    return res[0]
                 return res
 
             return run
@@ -148,9 +204,11 @@ class TestDynamoCompileOnnx(ExtTestCase):
         expected = model(input_tensor)
         optimized_mod = torch.compile(model, backend=onnx_compiler)
         got = optimized_mod(input_tensor)
-        self.assertEqual(expected.shape, got.shape)
         self.assertEqual(expected.dtype, got.dtype)
-        self.assertEqualArray(expected.detach().numpy(), got.detach().numpy())
+        self.assertEqualArray(
+            expected.detach().numpy().ravel(), got.detach().numpy().ravel(), atol=1e-5
+        )
+        self.assertEqual(expected.shape, got.shape)
 
 
 if __name__ == "__main__":

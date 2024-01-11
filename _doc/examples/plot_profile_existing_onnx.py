@@ -10,13 +10,22 @@ Preparation
 import os
 import numpy as np
 import matplotlib.pyplot as plt
-from onnx_extended.args import get_parsed_args
-from onnx_extended.tools.js_profile import (
-    js_profile_to_dataframe,
-    plot_ort_profile,
-)
+from experimental_experiment.ext_test_case import get_parsed_args
 
-filename = os.path.join(os.path.dirname(__file__ or ""), "example_4700-CPUep-opt.onnx")
+try:
+    from onnx_extended.tools.js_profile import (
+        js_profile_to_dataframe,
+        plot_ort_profile,
+    )
+except ImportError:
+    js_profile_to_dataframe = None
+
+try:
+    filename = os.path.join(
+        os.path.dirname(__file__ or ""), "example_4700-CPUep-opt.onnx"
+    )
+except NameError:
+    filename = "example_4700-CPUep-opt.onnx"
 
 script_args = get_parsed_args(
     "plot_profile_existing_onnx",
@@ -72,9 +81,13 @@ for i in range(script_args.repeat):
     sess.run(None, feeds)
 
 prof = sess.end_profiling()
-df = js_profile_to_dataframe(prof, first_it_out=True)
-df.to_csv("plot_profile_existing_onnx.csv")
-df.to_excel("plot_profile_existing_onnx.xlsx")
-fig, ax = plt.subplots(1, 2, figsize=(10, 5))
-plot_ort_profile(df, ax[0], ax[1], "dort")
-fig.savefig("plot_profile_existing_onnx.png")
+if js_profile_to_dataframe is not None:
+    df = js_profile_to_dataframe(prof, first_it_out=True)
+    df.to_csv("plot_profile_existing_onnx.csv")
+    df.to_excel("plot_profile_existing_onnx.xlsx")
+    fig, ax = plt.subplots(1, 2, figsize=(10, 5))
+
+    plot_ort_profile(df, ax[0], ax[1], "dort")
+    fig.savefig("plot_profile_existing_onnx.png")
+else:
+    print("Install onnx-extended first.")

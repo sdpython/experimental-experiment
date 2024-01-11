@@ -67,10 +67,15 @@ import torch.nn.functional as F
 import experimental_experiment
 from experimental_experiment.torch_exp.onnx_export import to_onnx
 from experimental_experiment.plotting.memory import memory_peak_plot
-from experimental_experiment.ext_test_case import get_parsed_args, measure_time
+from experimental_experiment.ext_test_case import (
+    get_parsed_args,
+    measure_time,
+    get_figure,
+)
 from experimental_experiment.memory_peak import start_spying_on
 from tqdm import tqdm
 
+has_cuda = has_cuda and torch.cuda.is_available()
 logging.disable(logging.ERROR)
 
 
@@ -350,7 +355,7 @@ ax = memory_peak_plot(
     suptitle=f"Memory Consumption of the Export\n"
     f"model size={model_size / 2**20:1.0f} Mb",
 )
-ax[0, 0].get_figure().savefig("plot_torch_export_memory.png")
+get_figure(ax).savefig("plot_torch_export_memory.png")
 
 #################################
 # Exporter speed
@@ -715,7 +720,7 @@ for compute in ["CPU", "CUDA"]:
         bars=[model_size * i / 2**20 for i in range(1, 3)],
         figsize=(18, 6),
     )
-    ax[0, 0].get_figure().savefig(f"plot_torch_export_ort_load_mem_{compute}.png")
+    get_figure(ax).savefig(f"plot_torch_export_ort_load_mem_{compute}.png")
 
 ########################################
 # Memory First Running Time (ORT)
@@ -730,7 +735,7 @@ for compute in ["CPU", "CUDA"]:
         bars=[model_size * i / 2**20 for i in range(1, 3)],
         figsize=(18, 6),
     )
-    ax[0, 0].get_figure().savefig(f"plot_torch_export_ort_first_run_mem_{compute}.png")
+    get_figure(ax).savefig(f"plot_torch_export_ort_first_run_mem_{compute}.png")
 
 ########################################
 # Memory Running Time (ORT)
@@ -745,7 +750,7 @@ for compute in ["CPU", "CUDA"]:
         bars=[model_size * i / 2**20 for i in range(1, 3)],
         figsize=(18, 6),
     )
-    ax[0, 0].get_figure().savefig(f"plot_torch_export_ort_run_mem_{compute}.png")
+    get_figure(ax).savefig(f"plot_torch_export_ort_run_mem_{compute}.png")
 
 
 ######################################################

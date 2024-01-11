@@ -54,10 +54,15 @@ from torch import nn
 import torch.nn.functional as F
 import experimental_experiment
 from experimental_experiment.plotting.memory import memory_peak_plot
-from experimental_experiment.ext_test_case import get_parsed_args, measure_time
+from experimental_experiment.ext_test_case import (
+    get_parsed_args,
+    measure_time,
+    get_figure,
+)
 from experimental_experiment.memory_peak import start_spying_on
 from tqdm import tqdm
 
+has_cuda = has_cuda and torch.cuda.is_available()
 logging.disable(logging.ERROR)
 
 
@@ -326,6 +331,8 @@ for k, v in supported_exporters.items():
     gc.collect()
     time.sleep(1)
 
+    if not has_cuda:
+        continue
     torch._dynamo.reset()
     # CUDA
     model, input_tensors = create_model_and_input()
@@ -357,7 +364,7 @@ for p in ["cpu", "cuda"]:
         suptitle=f"Memory Consumption of the Compilation on {p}\n"
         f"model size={model_size / 2**20:1.0f} Mb",
     )
-    ax[0, 0].get_figure().savefig(f"plot_torch_aot_1_memory_{p}.png")
+    get_figure(ax).savefig(f"plot_torch_aot_1_memory_{p}.png")
 
 #################################
 # dort first iteration speed
@@ -396,6 +403,9 @@ for k, v in supported_exporters.items():
             p="cpu",
         )
     )
+
+    if not has_cuda:
+        continue
 
     print(f"run dort cuda {k}: {script_args.repeat1}")
     times = []
@@ -547,7 +557,12 @@ def benchmark(shape):
         if p == "CUDA":
             model = model.cuda()
             input_tensors = [i.cuda() for i in input_tensors]
-        exported_model = export_fct(model, *input_tensors)
+        try:
+            exported_model = export_fct(model, *input_tensors)
+        except Exception as e:
+            obs["error"] = str(e)
+            data.append(obs)
+            continue
 
         def call_model(
             export_fct=export_fct,
@@ -663,7 +678,7 @@ for compute in ["CPU", "CUDA"]:
         bars=[model_size * i / 2**20 for i in range(1, 3)],
         figsize=(18, 6),
     )
-    ax[0, 0].get_figure().savefig(f"plot_torch_aot_first_run_mem_{compute}.png")
+    get_figure(ax).savefig(f"plot_torch_aot_first_run_mem_{compute}.png")
 
 ########################################
 # Memory Running Time (ORT)
@@ -678,4 +693,4 @@ for compute in ["CPU", "CUDA"]:
         bars=[model_size * i / 2**20 for i in range(1, 3)],
         figsize=(18, 6),
     )
-    ax[0, 0].get_figure().savefig(f"plot_torch_aot_run_mem_{compute}.png")
+    get_figure(ax).savefig(f"plot_torch_aot_run_mem_{compute}.png")

@@ -2,10 +2,14 @@ import inspect
 import operator
 import types
 from typing import Any, Callable, Dict, List, Tuple
+from ._helper import make_hash
 from .aten_functions import find_function
 
 
 class DynamoInterpreter:
+    def _hash(self) -> str:
+        return make_hash(self)
+
     def __init__(
         self, graph_builder: "GraphBuilder", retriever: Callable  # noqa: F821
     ):
@@ -26,6 +30,8 @@ class DynamoInterpreter:
                     f"for node.target in {node}, op={node.op}, "
                     f"node.target={node.target}, node.meta={node.meta}."
                 )
+        if self.builder.verbose > 1:
+            print(f"[DynamoInterpreter-{self._hash()}.run_node] {node.op}:{node.name}")
         if node.op == "placeholder":
             return self.placeholder(node)
         if node.op == "call_function":
@@ -93,7 +99,7 @@ class DynamoInterpreter:
             output = output[0]
             if hasattr(output, "name"):
                 output = output.name
-        self.builder.make_node("Identity", [output], [output_name])
+        self.builder.make_node("Identity", [output], [output_name], check=False)
 
         val = node.meta.get("val", None)
         if val is None:
@@ -225,6 +231,20 @@ class DynamoInterpreter:
             ) from e
 
         self._set_shape_and_type(node, res)
+        if isinstance(node.name, str):
+            if len(output_names) != 1:
+                if output_names != list(res):
+                    raise NotImplementedError(
+                        f"Unexpected output_names {output_names}, res={res!r}, node.name={node.name!r}"
+                    )
+            elif res != node.name:
+                self.builder.make_node("Identity", [res], [node.name])
+                res = node.name
+        else:
+            raise NotImplementedError(
+                f"Unexpected type {type(node.name)} for node.name={node.name!r}."
+            )
+
         return res
 
     def _set_shape_and_type(self, node, res):
@@ -296,6 +316,7 @@ class DynamoInterpreter:
             as_function=True,
             target_opset=self.builder.opsets,
             optimization_options=self.builder.optimization_options,
+            verbose=self.builder.verbose,
         )
         builder.process(graph_module, interpreter)
         assert builder.outputs, f"No output detected for node={node}, graph={gm}"

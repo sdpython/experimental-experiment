@@ -422,3 +422,18 @@ def get_parsed_args(
         )
 
     return parser.parse_args()
+
+
+def get_figure(ax):
+    """
+    Returns the figure of a matplotlib figure.
+    """
+    if hasattr(ax, "get_figure"):
+        return ax.get_figure()
+    if len(ax.shape) == 0:
+        return ax.get_figure()
+    if len(ax.shape) == 1:
+        return ax[0].get_figure()
+    if len(ax.shape) == 2:
+        return ax[0, 0].get_figure()
+    raise RuntimeError(f"Unexpected shape {ax.shape} for axis.")
