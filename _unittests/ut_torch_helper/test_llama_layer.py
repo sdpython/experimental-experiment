@@ -1,7 +1,11 @@
 import copy
 import unittest
 from typing import Tuple
-from experimental_experiment.ext_test_case import ExtTestCase, ignore_warnings
+from experimental_experiment.ext_test_case import (
+    ExtTestCase,
+    ignore_warnings,
+    skipif_ci_windows,
+)
 
 
 def make_aot_ort(dynamic: bool = False):
@@ -138,6 +142,7 @@ class TestLlama(ExtTestCase):
         )
 
     @ignore_warnings((UserWarning, DeprecationWarning))
+    @skipif_ci_windows("torch.compile not supported on Windows")
     def test_ort_mlp(self):
         import torch
 
@@ -165,29 +170,90 @@ class TestLlama(ExtTestCase):
         self.common_test_model(MLP(), example_args_collection, False, False)
 
     @ignore_warnings((UserWarning, DeprecationWarning))
-    def test_ort_llama_decoder(self):
-        from experimental_experiment.torch_helper.llama_helper import get_llama_decoder
+    @skipif_ci_windows("torch.compile not supported on Windows")
+    def test_ort_mlp_backward(self):
+        import torch
 
-        dynamic = False
+        class MLP(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.fc1 = torch.nn.Linear(2, 4, bias=True)
+                self.fc2 = torch.nn.Linear(4, 2, bias=True)
+
+            def forward(self, tensor_x: torch.Tensor):
+                tensor_x = self.fc1(tensor_x)
+                tensor_x = torch.sigmoid(tensor_x)
+                tensor_x = self.fc2(tensor_x)
+                tensor_x = torch.sigmoid(tensor_x)
+                return tensor_x
+
+        # with static shape (dynamic=False), the conversion to onnx is done
+        # every time the batch size changes
+        batch_sizes = [3, 3, 3, 3, 3]
+
+        example_args_collection = tuple(
+            (torch.randn(batch, 2, dtype=torch.float32),) for batch in batch_sizes
+        )
+
+        self.common_test_model(MLP(), example_args_collection, True, False)
+
+    @classmethod
+    def get_input_dims(cls, dynamic: bool):
         if dynamic:
             input_dims = ((2, 8), (4, 7), (9, 15))
         else:
             input_dims = ((9, 15), (9, 15), (9, 15))
+        return input_dims
+
+    @ignore_warnings((UserWarning, DeprecationWarning))
+    @skipif_ci_windows("torch.compile not supported on Windows")
+    def test_ort_llama_decoder(self):
+        from experimental_experiment.torch_helper.llama_helper import get_llama_decoder
+
+        input_dims = self.get_input_dims(False)
         model, example_args_collection = get_llama_decoder(input_dims=input_dims)
         self.common_test_model(model, example_args_collection, False, False)
 
     @ignore_warnings((UserWarning, DeprecationWarning))
+    @skipif_ci_windows("torch.compile not supported on Windows")
+    def test_ort_llama_decoder_backward(self):
+        from experimental_experiment.torch_helper.llama_helper import get_llama_decoder
+
+        input_dims = self.get_input_dims(False)
+        model, example_args_collection = get_llama_decoder(input_dims=input_dims)
+        self.common_test_model(model, example_args_collection, True, False)
+
+    @ignore_warnings((UserWarning, DeprecationWarning))
+    @skipif_ci_windows("torch.compile not supported on Windows")
     def test_ort_llama_attention(self):
         from experimental_experiment.torch_helper.llama_helper import (
             get_llama_attention,
         )
 
-        dynamic = False
-        if dynamic:
-            input_dims = ((2, 8), (4, 7), (9, 15))
-        else:
-            input_dims = ((9, 15), (9, 15), (9, 15))
+        input_dims = self.get_input_dims(False)
         model, example_args_collection = get_llama_attention(input_dims=input_dims)
+        self.common_test_model(model, example_args_collection, False, False)
+
+    @ignore_warnings((UserWarning, DeprecationWarning))
+    @skipif_ci_windows("torch.compile not supported on Windows")
+    def test_ort_llama_attention_backward(self):
+        from experimental_experiment.torch_helper.llama_helper import (
+            get_llama_attention,
+        )
+
+        input_dims = self.get_input_dims(False)
+        model, example_args_collection = get_llama_attention(input_dims=input_dims)
+        self.common_test_model(model, example_args_collection, True, False)
+
+    @ignore_warnings((UserWarning, DeprecationWarning))
+    @skipif_ci_windows("torch.compile not supported on Windows")
+    def test_ort_llama_1model(self):
+        from experimental_experiment.torch_helper.llama_helper import (
+            get_llama_model,
+        )
+
+        input_dims = self.get_input_dims(False)
+        model, example_args_collection = get_llama_model(input_dims=input_dims)
         self.common_test_model(model, example_args_collection, False, False)
 
 

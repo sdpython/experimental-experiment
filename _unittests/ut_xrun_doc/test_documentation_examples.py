@@ -75,8 +75,8 @@ class TestDocumentationExamples(ExtTestCase):
                     # dynamo not supported on windows
                     reason = "windows not supported"
             if not reason and name in {
-                "plot_convolutation_matmul.py",
-                "plot_profile_existing_onnx.py",
+                # "plot_convolutation_matmul.py",
+                # "plot_profile_existing_onnx.py",
                 "test_plot_torch_dort.py",
                 "plot_torch_aot.py",
                 "plot_torch_dort.py",
