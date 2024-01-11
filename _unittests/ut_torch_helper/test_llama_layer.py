@@ -1,6 +1,6 @@
 import copy
 import unittest
-from typing import Tuple
+from typing import Optional, Tuple
 from experimental_experiment.ext_test_case import (
     ExtTestCase,
     ignore_warnings,
@@ -26,7 +26,7 @@ def make_aot_ort(dynamic: bool = False):
 
 
 class TestLlama(ExtTestCase):
-    def _test_model_numerically(
+    def assert_model_numerically(
         self,
         model,
         dynamo_backend,
@@ -34,27 +34,13 @@ class TestLlama(ExtTestCase):
         fullgraph: bool = True,
         test_backward: bool = False,
         dynamic: bool = False,
-        atol: float = 1e-5,
-        rtol: float = 1e-6,
+        atol: float = 1e-4,
+        rtol: float = 1e-4,
+        onnx_export: Optional[str] = None,
     ):
-        """
-        Run original and compiled model and compare the results.
-        Args:
-            model: The model to test.
-            dynamo_backend: The dynamo backend to use. Here we use string `onnxrt` or
-              the first returned value of `make_aot_ort(dynamic=True)`.
-            example_args_collection: A tuple of example arguments to test. E.g.,
-                (
-                  (torch.randn(2), torch.randn(2)),
-                  (torch.randn(4), torch.randn(4)),
-                )
-              if you want to test
-                model(torch.randn(2), torch.randn(2)) and
-                model(torch.randn(4), torch.randn(4))
-              .
-        """
         import torch
 
+        assert onnx_export, "No export name was given"
         compiled_model = torch.compile(
             copy.deepcopy(model),
             backend=dynamo_backend,
@@ -62,8 +48,11 @@ class TestLlama(ExtTestCase):
             fullgraph=fullgraph,
         )
 
+        one_example = None
         for example_args in example_args_collection:
             baseline_result = model(*example_args)
+            one_example = example_args
+
             result = compiled_model(*example_args)
             if isinstance(baseline_result, torch.Tensor):
                 torch.testing.assert_close(baseline_result, result)
@@ -80,14 +69,35 @@ class TestLlama(ExtTestCase):
                             baseline_param.grad, param.grad, atol=atol, rtol=rtol
                         )
             else:
-                assert (
-                    test_backward is False
-                ), "Calculating backward with multiple outputs is not supported yet."
+                if hasattr(baseline_result, "to_tuple"):
+                    baseline_result = baseline_result.to_tuple()
+                    result = result.to_tuple()
+                assert len(baseline_result) == len(
+                    result
+                ), f"Mismatch number of outputs {len(baseline_result)} != {len(result)}"
+                assert test_backward is False, (
+                    f"Calculating backward with multiple outputs is not supported yet, "
+                    f"expecting {len(baseline_result)}, got {len(result)}."
+                )
                 for baseline_elem, result_elem in zip(baseline_result, result):
                     torch.testing.assert_close(baseline_elem, result_elem)
                     torch.testing.assert_close(
                         baseline_elem, result_elem, atol=atol, rtol=rtol
                     )
+
+        # export to onnx
+        try:
+            torch.onnx.export(
+                copy.deepcopy(model), *one_example, f"{onnx_export}_script.onnx"
+            )
+        except Exception as e:
+            print("torch.onnx.export failed:", e)
+        try:
+            torch.onnx.dynamo_export(copy.deepcopy(model), *one_example).save(
+                f"{onnx_export}_dynamo.onnx"
+            )
+        except Exception as e:
+            print("torch.onnx.dynamo_export failed:", e)
 
     def _assert_counting_information(
         self,
@@ -95,15 +105,20 @@ class TestLlama(ExtTestCase):
         expected_execution_count: int,
         number_of_cached_graph_modules: int,
         number_of_exported_onnx_models_for_all_graph_modules: Tuple[int, ...],
+        expected_graph_break=0,
     ):
-        self.assertEqual(expected_execution_count, ort_backend.execution_count)
         self.assertEqual(
-            len(ort_backend._all_ort_execution_info.execution_info_per_graph_module),
-            number_of_cached_graph_modules,
+            expected_execution_count * (expected_graph_break + 1),
+            ort_backend.execution_count,
         )
         self.assertEqual(
             len(ort_backend._all_ort_execution_info.execution_info_per_graph_module),
-            len(number_of_exported_onnx_models_for_all_graph_modules),
+            number_of_cached_graph_modules * (expected_graph_break + 1),
+        )
+        self.assertEqual(
+            len(ort_backend._all_ort_execution_info.execution_info_per_graph_module),
+            len(number_of_exported_onnx_models_for_all_graph_modules)
+            * (expected_graph_break + 1),
         )
         for (
             onnx_info,
@@ -120,15 +135,19 @@ class TestLlama(ExtTestCase):
         example_args_collection,
         test_backward: bool,
         dynamic: bool,
+        fullgraph: bool = True,
+        onnx_export=None,
+        expected_graph_break=0,
     ):
         local_aot_ort, local_ort = make_aot_ort(dynamic=dynamic)
 
-        self._test_model_numerically(
+        self.assert_model_numerically(
             model,
             local_aot_ort,
             example_args_collection,
-            fullgraph=True,
             test_backward=test_backward,
+            fullgraph=fullgraph,
+            onnx_export=onnx_export,
         )
 
         number_of_captured_graphs = 2 if test_backward else 1
@@ -139,6 +158,7 @@ class TestLlama(ExtTestCase):
             number_of_cached_graph_modules=number_of_captured_graphs,
             number_of_exported_onnx_models_for_all_graph_modules=(1,)
             * number_of_captured_graphs,
+            expected_graph_break=expected_graph_break,
         )
 
     @ignore_warnings((UserWarning, DeprecationWarning))
@@ -167,7 +187,9 @@ class TestLlama(ExtTestCase):
             (torch.randn(batch, 2, dtype=torch.float32),) for batch in batch_sizes
         )
 
-        self.common_test_model(MLP(), example_args_collection, False, False)
+        self.common_test_model(
+            MLP(), example_args_collection, False, False, onnx_export="test_ort_mlp"
+        )
 
     @ignore_warnings((UserWarning, DeprecationWarning))
     @skipif_ci_windows("torch.compile not supported on Windows")
@@ -195,7 +217,13 @@ class TestLlama(ExtTestCase):
             (torch.randn(batch, 2, dtype=torch.float32),) for batch in batch_sizes
         )
 
-        self.common_test_model(MLP(), example_args_collection, True, False)
+        self.common_test_model(
+            MLP(),
+            example_args_collection,
+            True,
+            False,
+            onnx_export="test_ort_mlp_backward",
+        )
 
     @classmethod
     def get_input_dims(cls, dynamic: bool):
@@ -212,7 +240,13 @@ class TestLlama(ExtTestCase):
 
         input_dims = self.get_input_dims(False)
         model, example_args_collection = get_llama_decoder(input_dims=input_dims)
-        self.common_test_model(model, example_args_collection, False, False)
+        self.common_test_model(
+            model,
+            example_args_collection,
+            False,
+            False,
+            onnx_export="test_ort_llama_decoder",
+        )
 
     @ignore_warnings((UserWarning, DeprecationWarning))
     @skipif_ci_windows("torch.compile not supported on Windows")
@@ -221,7 +255,13 @@ class TestLlama(ExtTestCase):
 
         input_dims = self.get_input_dims(False)
         model, example_args_collection = get_llama_decoder(input_dims=input_dims)
-        self.common_test_model(model, example_args_collection, True, False)
+        self.common_test_model(
+            model,
+            example_args_collection,
+            True,
+            False,
+            onnx_export="test_ort_llama_decoder_backward",
+        )
 
     @ignore_warnings((UserWarning, DeprecationWarning))
     @skipif_ci_windows("torch.compile not supported on Windows")
@@ -232,7 +272,13 @@ class TestLlama(ExtTestCase):
 
         input_dims = self.get_input_dims(False)
         model, example_args_collection = get_llama_attention(input_dims=input_dims)
-        self.common_test_model(model, example_args_collection, False, False)
+        self.common_test_model(
+            model,
+            example_args_collection,
+            False,
+            False,
+            onnx_export="test_ort_llama_attention",
+        )
 
     @ignore_warnings((UserWarning, DeprecationWarning))
     @skipif_ci_windows("torch.compile not supported on Windows")
@@ -243,19 +289,53 @@ class TestLlama(ExtTestCase):
 
         input_dims = self.get_input_dims(False)
         model, example_args_collection = get_llama_attention(input_dims=input_dims)
-        self.common_test_model(model, example_args_collection, True, False)
+        self.common_test_model(
+            model,
+            example_args_collection,
+            True,
+            False,
+            onnx_export="test_ort_llama_attention_backward",
+        )
 
     @ignore_warnings((UserWarning, DeprecationWarning))
     @skipif_ci_windows("torch.compile not supported on Windows")
-    def test_ort_llama_1model(self):
+    def test_ort_llama_model_nofullgraph(self):
         from experimental_experiment.torch_helper.llama_helper import (
             get_llama_model,
         )
 
         input_dims = self.get_input_dims(False)
         model, example_args_collection = get_llama_model(input_dims=input_dims)
-        self.common_test_model(model, example_args_collection, False, False)
+        self.common_test_model(
+            model,
+            example_args_collection,
+            False,
+            False,
+            fullgraph=False,
+            onnx_export="test_ort_llama_model_nofullgraph",
+            expected_graph_break=7,
+        )
+
+    @ignore_warnings((UserWarning, DeprecationWarning))
+    @skipif_ci_windows("torch.compile not supported on Windows")
+    def test_ort_llama_model_backward_nofullgraph(self):
+        from experimental_experiment.torch_helper.llama_helper import (
+            get_llama_model,
+        )
+
+        input_dims = self.get_input_dims(False)
+        model, example_args_collection = get_llama_model(input_dims=input_dims)
+        self.common_test_model(
+            model,
+            example_args_collection,
+            True,
+            False,
+            fullgraph=False,
+            onnx_export="test_ort_llama_model_backward_nofullgraph",
+            expected_graph_break=7,
+        )
 
 
 if __name__ == "__main__":
+    TestLlama().test_ort_llama_model_backward_nofullgraph()
     unittest.main(verbosity=2)

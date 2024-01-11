@@ -77,10 +77,10 @@ class TestDocumentationExamples(ExtTestCase):
             if not reason and name in {
                 # "plot_convolutation_matmul.py",
                 # "plot_profile_existing_onnx.py",
-                "test_plot_torch_dort.py",
+                # "test_plot_torch_dort.py",
                 "plot_torch_aot.py",
                 "plot_torch_dort.py",
-                "plot_torch_export.py",
+                # "plot_torch_export.py",
             }:
                 # too long
                 reason = "not working yet or too long"
