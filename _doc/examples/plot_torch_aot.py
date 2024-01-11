@@ -54,7 +54,11 @@ from torch import nn
 import torch.nn.functional as F
 import experimental_experiment
 from experimental_experiment.plotting.memory import memory_peak_plot
-from experimental_experiment.ext_test_case import get_parsed_args, measure_time
+from experimental_experiment.ext_test_case import (
+    get_parsed_args,
+    measure_time,
+    get_figure,
+)
 from experimental_experiment.memory_peak import start_spying_on
 from tqdm import tqdm
 
@@ -360,7 +364,7 @@ for p in ["cpu", "cuda"]:
         suptitle=f"Memory Consumption of the Compilation on {p}\n"
         f"model size={model_size / 2**20:1.0f} Mb",
     )
-    ax[0, 0].get_figure().savefig(f"plot_torch_aot_1_memory_{p}.png")
+    get_figure(ax).savefig(f"plot_torch_aot_1_memory_{p}.png")
 
 #################################
 # dort first iteration speed
@@ -674,7 +678,7 @@ for compute in ["CPU", "CUDA"]:
         bars=[model_size * i / 2**20 for i in range(1, 3)],
         figsize=(18, 6),
     )
-    ax[0, 0].get_figure().savefig(f"plot_torch_aot_first_run_mem_{compute}.png")
+    get_figure(ax).savefig(f"plot_torch_aot_first_run_mem_{compute}.png")
 
 ########################################
 # Memory Running Time (ORT)
@@ -689,4 +693,4 @@ for compute in ["CPU", "CUDA"]:
         bars=[model_size * i / 2**20 for i in range(1, 3)],
         figsize=(18, 6),
     )
-    ax[0, 0].get_figure().savefig(f"plot_torch_aot_run_mem_{compute}.png")
+    get_figure(ax).savefig(f"plot_torch_aot_run_mem_{compute}.png")
