@@ -315,6 +315,8 @@ for k, v in supported_exporters.items():
     gc.collect()
     time.sleep(1)
 
+    if not has_cuda:
+        continue
     if k in {"torch_default"}:
         print(f"skip compile for memory {k} on cuda")
         continue
@@ -389,6 +391,8 @@ for k, v in supported_exporters.items():
         )
     )
 
+    if not has_cuda:
+        continue
     if k in {"torch_dort", "torch_default"}:
         print(f"skip dort cuda {k}: {script_args.repeat1}")
         continue

@@ -327,6 +327,8 @@ for k, v in supported_exporters.items():
     gc.collect()
     time.sleep(1)
 
+    if not has_cuda:
+        continue
     torch._dynamo.reset()
     # CUDA
     model, input_tensors = create_model_and_input()
@@ -397,6 +399,9 @@ for k, v in supported_exporters.items():
             p="cpu",
         )
     )
+
+    if not has_cuda:
+        continue
 
     print(f"run dort cuda {k}: {script_args.repeat1}")
     times = []
