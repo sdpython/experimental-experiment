@@ -637,12 +637,6 @@ def view_time(df, title, suffix="time"):
     piv.to_csv(f"plot_torch_dort_{suffix}_compute.csv")
     piv.to_excel(f"plot_torch_dort_{suffix}_compute.xlsx")
 
-    piv_gpu = pandas.pivot_table(
-        df[df.compute == "CUDA"],
-        index="export",
-        columns=["compute"],
-        values="average",
-    )
     piv_cpu = pandas.pivot_table(
         df[df.compute == "CPU"],
         index="export",
@@ -653,7 +647,16 @@ def view_time(df, title, suffix="time"):
     fig, ax = plt.subplots(1, 2, figsize=(12, 4))
     fig.suptitle(title)
     piv_cpu.plot.barh(ax=ax[0], title="CPU", logx=True)
-    piv_gpu.plot.barh(ax=ax[1], title="CUDA", logx=True)
+
+    if has_cuda:
+        piv_gpu = pandas.pivot_table(
+            df[df.compute == "CUDA"],
+            index="export",
+            columns=["compute"],
+            values="average",
+        )
+        piv_gpu.plot.barh(ax=ax[1], title="CUDA", logx=True)
+
     fig.tight_layout()
     fig.savefig(f"plot_torch_dort_{suffix}.png")
     return ax
@@ -682,6 +685,8 @@ for compute in ["CPU", "CUDA"]:
 # +++++++++++++++++++++++++
 
 for compute in ["CPU", "CUDA"]:
+    if not has_cuda and compute == "CUDA":
+        continue
     ax = memory_peak_plot(
         dfmemr[dfmemr.compute == compute],
         ("export",),
