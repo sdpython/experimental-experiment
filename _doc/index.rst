@@ -27,6 +27,7 @@ experimental-experiment: fuzzy work
     :target: https://codecov.io/gh/sdpython/experimental-experiment
 
 **experimental-experiment** is mostly to experiment ideas.
+Source are `sdpython/experimental-experiment <https://github.com/sdpython/experimental-experiment>`_.
 
 .. toctree::
     :maxdepth: 1
@@ -46,3 +47,4 @@ experimental-experiment: fuzzy work
 Older versions
 ++++++++++++++
 
+* `0.1.0 <../v0.1.0/index.html>`_
