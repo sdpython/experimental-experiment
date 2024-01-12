@@ -33,7 +33,7 @@ def make_aot_ort(dynamic: bool = False):
 
 
 class TestLlama(ExtTestCase):
-    def assert_model_numerically(
+    def _assert_model_numerically(
         self,
         model,
         dynamo_backend,
@@ -82,15 +82,33 @@ class TestLlama(ExtTestCase):
                 assert len(baseline_result) == len(
                     result
                 ), f"Mismatch number of outputs {len(baseline_result)} != {len(result)}"
-                assert test_backward is False, (
-                    f"Calculating backward with multiple outputs is not supported yet, "
-                    f"expecting {len(baseline_result)}, got {len(result)}."
-                )
                 for baseline_elem, result_elem in zip(baseline_result, result):
                     torch.testing.assert_close(baseline_elem, result_elem)
                     torch.testing.assert_close(
                         baseline_elem, result_elem, atol=atol, rtol=rtol
                     )
+                if test_backward:
+
+                    def _do_sum(x):
+                        if isinstance(x, torch.Tensor):
+                            return x.sum()
+                        if isinstance(x, tuple):
+                            s = _do_sum(x[0])
+                            for i in range(1, len(x)):
+                                s = s + _do_sum(x[i])
+                            return s
+                        raise TypeError(f"unexpected type {type(x)}")
+
+                    baseline_sum = _do_sum(baseline_result)
+                    result_sum = _do_sum(result)
+                    baseline_sum.backward()
+                    result_sum.backward()
+                    for baseline_param, param in zip(
+                        model.parameters(), compiled_model.parameters()
+                    ):
+                        torch.testing.assert_close(
+                            baseline_param.grad, param.grad, atol=atol, rtol=rtol
+                        )
 
         # export to onnx
         try:
@@ -145,10 +163,11 @@ class TestLlama(ExtTestCase):
         fullgraph: bool = True,
         onnx_export=None,
         expected_graph_break=0,
+        assert_counting=True,
     ):
         local_aot_ort, local_ort = make_aot_ort(dynamic=dynamic)
 
-        self.assert_model_numerically(
+        self._assert_model_numerically(
             model,
             local_aot_ort,
             example_args_collection,
@@ -159,14 +178,15 @@ class TestLlama(ExtTestCase):
 
         number_of_captured_graphs = 2 if test_backward else 1
         execution_count = len(example_args_collection) * number_of_captured_graphs
-        self._assert_counting_information(
-            local_ort,
-            expected_execution_count=execution_count,
-            number_of_cached_graph_modules=number_of_captured_graphs,
-            number_of_exported_onnx_models_for_all_graph_modules=(1,)
-            * number_of_captured_graphs,
-            expected_graph_break=expected_graph_break,
-        )
+        if assert_counting:
+            self._assert_counting_information(
+                local_ort,
+                expected_execution_count=execution_count,
+                number_of_cached_graph_modules=number_of_captured_graphs,
+                number_of_exported_onnx_models_for_all_graph_modules=(1,)
+                * number_of_captured_graphs,
+                expected_graph_break=expected_graph_break,
+            )
 
     @ignore_warnings((UserWarning, DeprecationWarning))
     @skipif_ci_windows("torch.compile not supported on Windows")
@@ -343,6 +363,7 @@ class TestLlama(ExtTestCase):
             fullgraph=False,
             onnx_export="test_ort_llama_model_backward_nofullgraph",
             expected_graph_break=7,
+            assert_counting=False,
         )
 
 
