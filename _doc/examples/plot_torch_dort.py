@@ -348,6 +348,8 @@ df1.to_excel("plot_torch_dort_1_memory.xlsx", index=False)
 print(df1)
 
 for p in ["cpu", "cuda"]:
+    if not has_cuda and p == "cuda":
+        continue
     ax = memory_peak_plot(
         df1[df1["p"] == p],
         key=("export",),

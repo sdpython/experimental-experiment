@@ -74,6 +74,10 @@ class TestDocumentationExamples(ExtTestCase):
                 if sys.platform in {"win32"}:
                     # dynamo not supported on windows
                     reason = "windows not supported"
+            if not reason and name in {"plot_convolutation_matmul.py"}:
+                if sys.platform in {"win32"}:
+                    # dynamo not supported on windows
+                    reason = "graphviz not installed"
             if not reason and name in {
                 # "plot_convolutation_matmul.py",
                 # "plot_profile_existing_onnx.py",
