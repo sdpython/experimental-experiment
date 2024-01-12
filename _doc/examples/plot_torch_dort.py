@@ -670,6 +670,8 @@ view_time(df, "Compares processing time on backends")
 # +++++++++++++++++++++++++++++++
 
 for compute in ["CPU", "CUDA"]:
+    if not has_cuda and compute == "CUDA":
+        continue
     ax = memory_peak_plot(
         dfmemfr[dfmemfr.compute == compute],
         ("export",),
