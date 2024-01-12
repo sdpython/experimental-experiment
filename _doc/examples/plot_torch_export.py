@@ -527,6 +527,9 @@ def benchmark(shape):
         obs["aot"] = 1 if aot == "0" else 0
         obs["export"] = name.replace("plot_torch_export_", "").replace(".onnx", "")
 
+        if not has_cuda and p == "CUDA":
+            continue
+
         onx = onnx.load(name)
         obs["n_nodes"] = len(onx.graph.node)
         obs["n_function"] = len(onx.functions or [])
@@ -645,12 +648,6 @@ def view_time(df, title, suffix="time"):
     piv.to_csv(f"plot_torch_export_ort_{suffix}_compute.csv")
     piv.to_excel(f"plot_torch_export_ort_{suffix}_compute.xlsx")
 
-    piv_gpu = pandas.pivot_table(
-        df[df.compute == "CUDA"],
-        index="export",
-        columns=["compute", "aot"],
-        values="average",
-    )
     piv_cpu = pandas.pivot_table(
         df[df.compute == "CPU"],
         index="export",
@@ -661,7 +658,16 @@ def view_time(df, title, suffix="time"):
     fig, ax = plt.subplots(1, 2, figsize=(12, 4))
     fig.suptitle(title)
     piv_cpu.plot.barh(ax=ax[0], title="CPU")
-    piv_gpu.plot.barh(ax=ax[1], title="CUDA")
+
+    if has_cuda:
+        piv_gpu = pandas.pivot_table(
+            df[df.compute == "CUDA"],
+            index="export",
+            columns=["compute", "aot"],
+            values="average",
+        )
+        piv_gpu.plot.barh(ax=ax[1], title="CUDA")
+
     fig.tight_layout()
     fig.savefig(f"plot_torch_export_ort_{suffix}.png")
     return ax
@@ -685,6 +691,7 @@ piv_cpu = pandas.pivot_table(
 fig, ax = plt.subplots(1, 2, figsize=(12, 4))
 fig.suptitle("Compares onnxruntime time on exported models\nHide dynamo without AOT")
 piv_cpu.plot.barh(ax=ax[0], title="CPU")
+
 if has_cuda:
     piv_gpu = pandas.pivot_table(
         df[df.compute == "CUDA"],
@@ -693,6 +700,7 @@ if has_cuda:
         values="average",
     )
     piv_gpu.plot.barh(ax=ax[1], title="CUDA")
+
 fig.tight_layout()
 fig.savefig("plot_torch_export_ort_time_2.png")
 
@@ -712,6 +720,8 @@ view_time(
 # +++++++++++++++++++++++++
 
 for compute in ["CPU", "CUDA"]:
+    if not has_cuda and compute == "CUDA":
+        continue
     ax = memory_peak_plot(
         dfmem[dfmem.compute == compute],
         ("export", "aot"),
@@ -727,6 +737,8 @@ for compute in ["CPU", "CUDA"]:
 # +++++++++++++++++++++++++++++++
 
 for compute in ["CPU", "CUDA"]:
+    if not has_cuda and compute == "CUDA":
+        continue
     ax = memory_peak_plot(
         dfmemfr[dfmemfr.compute == compute],
         ("export", "aot"),
@@ -742,6 +754,8 @@ for compute in ["CPU", "CUDA"]:
 # +++++++++++++++++++++++++
 
 for compute in ["CPU", "CUDA"]:
+    if not has_cuda and compute == "CUDA":
+        continue
     ax = memory_peak_plot(
         dfmemr[dfmemr.compute == compute],
         ("export", "aot"),
