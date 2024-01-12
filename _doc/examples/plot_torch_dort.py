@@ -549,6 +549,8 @@ def benchmark(shape):
 
         model, input_tensor = create_model_and_input()
         if p == "CUDA":
+            if not has_cuda:
+                continue
             model = model.cuda()
             input_tensor = input_tensor.cuda()
         try:
