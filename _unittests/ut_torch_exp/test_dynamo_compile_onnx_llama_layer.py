@@ -1,12 +1,14 @@
 import copy
 import unittest
 import packaging.version as pv
-from typing import Optional, Tuple
+from typing import Any, List, Optional, Tuple
+from onnx.reference import ReferenceEvaluator
 from experimental_experiment.ext_test_case import (
     ExtTestCase,
     ignore_warnings,
     skipif_ci_windows,
 )
+from experimental_experiment.torch_exp.onnx_export import to_onnx
 
 
 def torch_min(v: str) -> bool:
@@ -15,28 +17,28 @@ def torch_min(v: str) -> bool:
     return pv.Version(torch.__version__) < pv.Version(v)
 
 
-def make_aot_ort(dynamic: bool = False):
-    from torch.onnx import (
-        _OrtBackend as OrtBackend,
-        _OrtBackendOptions as OrtBackendOptions,
-        ExportOptions,
-    )
+class TestDynamoLlama(ExtTestCase):
+    def test_aaaa(self):
+        import torch
+        from transformers import LlamaConfig
+        from transformers.models.llama.modeling_llama import LlamaAttention
 
-    ort_backend = OrtBackend(
-        options=OrtBackendOptions(
-            export_options=ExportOptions(
-                dynamic_shapes=dynamic,
-            )
+        config = LlamaConfig(
+            num_hidden_layers=1,
+            vocab_size=1024,
+            hidden_size=16,
+            intermediate_size=16,
+            max_position_embeddings=256,
+            num_attention_heads=2,
+            hidden_dropout_prob=0.0,
+            attention_dropout_prob=0.0,
         )
-    )
-    return ort_backend, ort_backend
+        model = LlamaAttention(config, layer_idx=0)
+        torch.save(model, "temp.llama.torch.pkl")
 
-
-class TestLlama(ExtTestCase):
     def _assert_model_numerically(
         self,
         model,
-        dynamo_backend,
         example_args_collection,
         fullgraph: bool = True,
         test_backward: bool = False,
@@ -48,9 +50,43 @@ class TestLlama(ExtTestCase):
         import torch
 
         assert onnx_export, "No export name was given"
+
+        def onnx_compiler(graph_module: torch.fx.GraphModule, args: List[torch.Tensor]):
+            print(graph_module.graph)
+            input_names = (
+                ["input"] if len(args) == 1 else [f"input{i}" for i in range(len(args))]
+            )
+
+            onx = to_onnx(
+                graph_module,
+                tuple(args),
+                input_names=input_names,
+                remove_unused=True,
+                constant_folding=True,
+                verbose=4,
+            )
+            try:
+                sess = ReferenceEvaluator(onx, verbose=10)
+            except Exception as e:
+                from onnx_array_api.plotting.text_plot import onnx_simple_text_plot
+
+                raise AssertionError(
+                    f"Unable to run onnx graph ({str(e)})\n{onnx_simple_text_plot(onx)}"
+                ) from e
+            names = [i.name for i in onx.graph.input]
+
+            def run(*inputs, sess=sess, names=names):
+                # not efficient
+                xnp = [x.detach().numpy() for x in inputs]
+                feeds = dict(zip(names, xnp))
+                res = tuple(torch.Tensor(y) for y in sess.run(None, feeds))
+                return res
+
+            return run
+
         compiled_model = torch.compile(
             copy.deepcopy(model),
-            backend=dynamo_backend,
+            backend=onnx_compiler,
             dynamic=dynamic,
             fullgraph=fullgraph,
         )
@@ -126,7 +162,7 @@ class TestLlama(ExtTestCase):
 
     def _assert_counting_information(
         self,
-        ort_backend: "OrtBackend",  # noqa: F821
+        ort_backend: Any,
         expected_execution_count: int,
         number_of_cached_graph_modules: int,
         number_of_exported_onnx_models_for_all_graph_modules: Tuple[int, ...],
@@ -165,11 +201,8 @@ class TestLlama(ExtTestCase):
         expected_graph_break=0,
         assert_counting=True,
     ):
-        local_aot_ort, local_ort = make_aot_ort(dynamic=dynamic)
-
-        self._assert_model_numerically(
+        local_ort = self._assert_model_numerically(
             model,
-            local_aot_ort,
             example_args_collection,
             test_backward=test_backward,
             fullgraph=fullgraph,

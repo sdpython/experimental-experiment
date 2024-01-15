@@ -2,6 +2,7 @@ import inspect
 import operator
 import types
 from typing import Any, Callable, Dict, List, Tuple
+import numpy as np
 from ._helper import make_hash
 from .aten_functions import find_function
 
@@ -42,11 +43,19 @@ class DynamoInterpreter:
             return self.call_module(node)
         if node.op == "get_attr":
             return self.get_attr(node)
+        if node.op == "call_method":
+            return self.call_method(node)
 
         raise ValueError(f"Unable to process node kind {node.op!r} ({node}).")
 
     def get_attr(self, node: "torch.fx.Node"):  # noqa: F821
-        init = getattr(node.graph.owning_module, node.name)
+        try:
+            init = getattr(node.graph.owning_module, node.target)
+        except AttributeError as e:
+            raise AttributeError(
+                f"Unable to find attribute {node.target!r} (node.name={node.name!r}) in "
+                f"{list(sorted(dir(node.graph.owning_module)))}."
+            ) from e
         self.builder.make_initializer(node.name, init)
         return node.name
 
@@ -193,18 +202,63 @@ class DynamoInterpreter:
         node_output, index = args
         result_name = node_output.name
         val = node.meta.get("val", None)
+        set_shape = False
         if val is not None:
             if isinstance(val, self.torch.Tensor):
                 shape = val.shape
                 dtype = self.builder._get_type(val.dtype)
                 self.builder.set_shape(node.name, shape)
                 self.builder.set_type(node.name, dtype)
+                set_shape = True
             else:
                 raise TypeError(
                     f"Unexpected type in node {node!r}, type(val)={type(val)}."
                 )
-        return self.builder.make_node(
-            "Identity", [f"{result_name}#{index}"], [node.name]
+        if isinstance(index, int):
+            return self.builder.make_node(
+                "Identity", [f"{result_name}#{index}"], [node.name]
+            )
+
+        if isinstance(index, slice):
+            start = np.array([index.start or 0], dtype=np.int64)
+            if index.stop is None:
+                raise NotImplementedError("index is {index}, not implemented yet")
+            end = np.array([index.stop], dtype=np.int64)
+            axis = np.array([0], dtype=np.int64)
+
+            inputs = [
+                node_output.name,
+                self.builder.make_initializer(
+                    self.builder.unique_name(f"{node.name}_start"), start
+                ),
+                self.builder.make_initializer(
+                    self.builder.unique_name(f"{node.name}_end"), end
+                ),
+                self.builder.make_initializer(
+                    self.builder.unique_name(f"{node.name}_axis"), axis
+                ),
+            ]
+            if index.step is not None:
+                step = np.array([index.step], dtype=np.int64)
+                inputs.append(
+                    self.builder.make_initializer(
+                        self.builder.unique_name(f"{node.name}_step"), step
+                    )
+                )
+
+            res = self.builder.make_node("Slice", inputs, [node.name])
+            if not set_shape:
+                dtype = self.builder.get_type(inputs[0])
+                shape = self.builder.get_shape(inputs[0])
+                self.builder.set_shape(
+                    node.name, self.builder._apply_slice_to_shape(shape, index)
+                )
+                self.builder.set_type(node.name, dtype)
+            return res
+
+        raise RuntimeError(
+            f"Unexpected type {type(index)} for index={index}, "
+            f"node={node}, args={args}, val={val}."
         )
 
     def call_function(self, node: "torch.fx.Node"):  # noqa: F821
@@ -350,3 +404,41 @@ class DynamoInterpreter:
             builder, args, output_names, prefix=f"_sub_{sub_module.__class__.__name__}_"
         )
         return output_names
+
+    def call_method(self, node: "torch.fx.Node"):  # noqa: F821
+        method_name = node.target
+        args = node.args
+        assert isinstance(args, tuple), f"Unexpected type {type(args)}."
+
+        if method_name == "view":
+            input_name = args[0].name
+            new_shape_name = self.builder.unique_name(f"{input_name}_view_shape")
+            self.builder.make_initializer(
+                new_shape_name, np.array(args[1:], dtype=np.int64)
+            )
+            res = self.builder.make_node(
+                "Reshape", [input_name, new_shape_name], [node.name]
+            )
+            dtype = self.builder.get_type(input_name)
+            self.builder.set_shape(node.name, args[1:])
+            self.builder.set_type(node.name, dtype)
+            return res
+
+        if method_name == "transpose":
+            input_name = args[0].name
+            perm = list(range(self.builder.rank(input_name)))
+            dim0, dim1 = args[1:]
+            perm[dim0], perm[dim1] = perm[dim1], perm[dim0]
+            res = self.builder.make_node(
+                "Transpose", [input_name], [node.name], perm=perm
+            )
+            dtype = self.builder.get_type(input_name)
+            shape = list(self.builder.get_shape(input_name))
+            shape[dim0], shape[dim1] = shape[dim1], shape[dim0]
+            self.builder.set_shape(node.name, tuple(shape))
+            self.builder.set_type(node.name, dtype)
+            return res
+
+        raise NotImplementedError(
+            f"Method {method_name!r} is not implemented with args={args}."
+        )

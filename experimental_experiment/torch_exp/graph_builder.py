@@ -255,15 +255,19 @@ class GraphBuilder:
         self._known_types[name] = int_type
 
     def rank(self, name: str) -> int:
+        assert isinstance(name, str), f"Unexpected type {type(name)} for name."
         return len(self.get_shape(name))
 
     def has_shape(self, name: str) -> bool:
+        assert isinstance(name, str), f"Unexpected type {type(name)} for name."
         return name in self._known_shapes
 
     def has_name(self, name: str) -> bool:
+        assert isinstance(name, str), f"Unexpected type {type(name)} for name."
         return name in self._known_names
 
     def get_shape(self, name: str) -> int:
+        assert isinstance(name, str), f"Unexpected type {type(name)} for name."
         assert name in self._known_shapes, (
             f"Shape is unknown for result {name!r}, "
             f"known_shapes={self._known_shapes}."
@@ -271,9 +275,11 @@ class GraphBuilder:
         return self._known_shapes[name]
 
     def has_type(self, name: str) -> bool:
+        assert isinstance(name, str), f"Unexpected type {type(name)} for name."
         return name in self._known_types
 
     def get_type(self, name: str) -> int:
+        assert isinstance(name, str), f"Unexpected type {type(name)} for name."
         assert name in self._known_types, (
             f"Type is unknown for result {name!r}, " f"known_types={self._known_types}."
         )
