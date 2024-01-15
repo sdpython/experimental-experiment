@@ -1,4 +1,5 @@
 from typing import Sequence, Tuple
+from onnx import TensorProto
 
 
 def _adjust_attributes_of_max_pool(
@@ -42,3 +43,13 @@ def _adjust_attributes_of_max_pool(
         strides = stride
 
     return (kernel_shape, strides, pads, dilations)
+
+
+def torch_dtype_to_onnx_dtype(to: "torch.dtype") -> int:  # noqa: F821
+    import torch
+
+    if to == torch.float32:
+        return TensorProto.FLOAT
+    if to == torch.int64:
+        return TensorProto.INT64
+    raise NotImplementedError(f"Unable to convert torch dtype {to} to onnx dtype.")

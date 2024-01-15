@@ -18,6 +18,7 @@ def torch_min(v: str) -> bool:
 
 
 class TestDynamoLlama(ExtTestCase):
+    @ignore_warnings((UserWarning, DeprecationWarning))
     def test_aaaa(self):
         import torch
         from transformers import LlamaConfig
@@ -52,7 +53,6 @@ class TestDynamoLlama(ExtTestCase):
         assert onnx_export, "No export name was given"
 
         def onnx_compiler(graph_module: torch.fx.GraphModule, args: List[torch.Tensor]):
-            print(graph_module.graph)
             input_names = (
                 ["input"] if len(args) == 1 else [f"input{i}" for i in range(len(args))]
             )

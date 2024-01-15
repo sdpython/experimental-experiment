@@ -7,6 +7,7 @@
 *.onnx
 *.png
 *.csv
+*.pkl
 *.xlsx
 *.sarif
 coverage.html/*

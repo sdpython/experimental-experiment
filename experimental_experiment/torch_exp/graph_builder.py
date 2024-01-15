@@ -92,6 +92,21 @@ class GraphBuilder:
     def _hash(self) -> str:
         return make_hash(self)
 
+    @classmethod
+    def _apply_slice_to_shape(
+        cls, shape: Tuple[int], index: slice, axis: int = 0
+    ) -> Tuple[int]:
+        assert isinstance(shape, tuple)
+        assert isinstance(index, slice)
+        n = shape[axis]
+        start = index.start or 0
+        end = index.stop or n
+        diff = end - start
+        dim = diff // index.step if index.step else diff
+        new_shape = list(shape)
+        new_shape[axis] = dim
+        return tuple(new_shape)
+
     def __init__(
         self,
         target_opset_or_existing_proto: Union[
@@ -643,8 +658,14 @@ class GraphBuilder:
         graph_module: "torch.f.GraphModule",  # noqa: F821
         interpreter: "Interpreter",  # noqa: F821
     ):
-        for node in graph_module.graph.nodes:
-            interpreter.run_node(node)
+        for i, node in enumerate(graph_module.graph.nodes):
+            try:
+                interpreter.run_node(node)
+            except Exception as e:
+                raise RuntimeError(
+                    f"Unable to convert node {i}/{len(graph_module.graph.nodes)} "
+                    f"[{node}] from graph\n{graph_module.graph}"
+                ) from e
 
     def to_onnx(
         self, as_function: bool = False, optimize: bool = True
