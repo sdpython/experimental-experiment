@@ -1,4 +1,4 @@
-from typing import Any, Callable, Dict
+from typing import Any, Callable, Dict, Optional
 from . import _aten_functions
 
 
@@ -20,12 +20,15 @@ def _register() -> Dict[str, Callable]:
 registered_functions = _register()
 
 
-def find_function(name: Any) -> Callable:
+def find_function(
+    name: Any, args: Optional[Any] = None, kwargs: Optional[Dict[str, Any]] = None
+) -> Callable:
     if isinstance(name, str):
         if name not in registered_functions:
             raise RuntimeError(
                 f"Unable find function {name!r} among "
-                f"{', '.join(sorted(registered_functions))}."
+                f"{', '.join(sorted(registered_functions))} and "
+                f"args={args}, kwargs={kwargs}."
             )
         return registered_functions[name]
 
@@ -47,5 +50,6 @@ def find_function(name: Any) -> Callable:
     raise RuntimeError(
         f"Unable to interpret type {type(name)}: {name!r}, searched for "
         f"{lookup} and attributes {lookup_names} among "
-        f"{', '.join(sorted(registered_functions))}."
+        f"{', '.join(sorted(registered_functions))} and "
+        f"args={args}, kwargs={kwargs}."
     )

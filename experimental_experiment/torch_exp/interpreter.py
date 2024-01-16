@@ -197,6 +197,57 @@ class DynamoInterpreter:
             f"node.target={node.target}, type is {type(node.target)}."
         )
 
+    def _getitem_slice(
+        self,
+        node: "torch.fx.Node",  # noqa: F821
+        input_name: str,
+        index_slice: slice,
+        set_shape: bool,
+        axis: int,
+    ):
+        assert isinstance(axis, int), f"Unexpected type {type(axis)} for axis"
+        aaxis = np.array([axis], dtype=np.int64)
+        axis_name = self.builder.unique_name(f"{node.name}_axis")
+        self.builder.make_initializer(axis_name, aaxis)
+        start = np.array([index_slice.start or 0], dtype=np.int64)
+        end_name = self.builder.unique_name(f"{node.name}_end")
+        if index_slice.stop is None:
+            shape_name = self.builder.unique_name(f"{node.name}_shape")
+            self.builder.make_node("Shape", [input_name], [shape_name])
+            self.builder.make_node(
+                "GatherElements", [input_name, axis_name], [end_name]
+            )
+        else:
+            end = np.array([index_slice.stop], dtype=np.int64)
+            self.builder.make_initializer(end_name, end)
+
+        inputs = [
+            input_name,
+            self.builder.make_initializer(
+                self.builder.unique_name(f"{node.name}_start"), start
+            ),
+            end_name,
+            axis_name,
+        ]
+        if index_slice.step is not None:
+            step = np.array([index_slice.step], dtype=np.int64)
+            inputs.append(
+                self.builder.make_initializer(
+                    self.builder.unique_name(f"{node.name}_step"), step
+                )
+            )
+
+        res = self.builder.make_node("Slice", inputs, [node.name])
+        if not set_shape:
+            dtype = self.builder.get_type(inputs[0])
+            shape = self.builder.get_shape(inputs[0])
+            self.builder.set_shape(
+                node.name,
+                self.builder._apply_slice_to_shape(shape, index_slice, axis=axis),
+            )
+            self.builder.set_type(node.name, dtype)
+        return res
+
     def getitem(self, node: "torch.fx.Node"):  # noqa: F821
         args = node.args
         assert len(args) == 2
@@ -215,51 +266,50 @@ class DynamoInterpreter:
                 raise TypeError(
                     f"Unexpected type in node {node!r}, type(val)={type(val)}."
                 )
+
+        if hasattr(index, "name"):
+            # A dynamic index (torch.fx.Node)
+            res = self.builder.make_node(
+                "Gather", [result_name, index.name], [node.name]
+            )
+            if not set_shape:
+                dtype = self.builder.get_type(result_name)
+                self.builder.set_type(node.name, dtype)
+            return res
+
         if isinstance(index, int):
             return self.builder.make_node(
                 "Identity", [f"{result_name}#{index}"], [node.name]
             )
 
         if isinstance(index, slice):
-            start = np.array([index.start or 0], dtype=np.int64)
-            if index.stop is None:
-                raise NotImplementedError("index is {index}, not implemented yet")
-            end = np.array([index.stop], dtype=np.int64)
-            axis = np.array([0], dtype=np.int64)
+            return self._getitem_slice(
+                node, node_output.name, index, set_shape=set_shape, axis=0
+            )
 
-            inputs = [
-                node_output.name,
-                self.builder.make_initializer(
-                    self.builder.unique_name(f"{node.name}_start"), start
-                ),
-                self.builder.make_initializer(
-                    self.builder.unique_name(f"{node.name}_end"), end
-                ),
-                self.builder.make_initializer(
-                    self.builder.unique_name(f"{node.name}_axis"), axis
-                ),
-            ]
-            if index.step is not None:
-                step = np.array([index.step], dtype=np.int64)
-                inputs.append(
-                    self.builder.make_initializer(
-                        self.builder.unique_name(f"{node.name}_step"), step
+        if isinstance(index, tuple):
+            if all(map(lambda x: x is Ellipsis or isinstance(x, (slice, int)), index)):
+                # case where there is only one slice
+                n_ellipsis = sum(map(lambda x: 1 if x is Ellipsis else 0, index))
+                if n_ellipsis == len(index) - 1:
+                    axis = max(
+                        map(
+                            lambda ix: -1 if ix[1] is Ellipsis else ix[0],
+                            enumerate(index),
+                        )
                     )
-                )
-
-            res = self.builder.make_node("Slice", inputs, [node.name])
-            if not set_shape:
-                dtype = self.builder.get_type(inputs[0])
-                shape = self.builder.get_shape(inputs[0])
-                self.builder.set_shape(
-                    node.name, self.builder._apply_slice_to_shape(shape, index)
-                )
-                self.builder.set_type(node.name, dtype)
-            return res
+                    return self._getitem_slice(
+                        node,
+                        node_output.name,
+                        index[axis],
+                        set_shape=set_shape,
+                        axis=axis,
+                    )
 
         raise RuntimeError(
             f"getitem: unexpected type {type(index)} for index={index}, "
-            f"node={node}, args={args}, val={val}."
+            f"node={node}, args={args}, val={val}"
+            f"{self.builder.get_debug_msg()}"
         )
 
     def call_function(self, node: "torch.fx.Node"):  # noqa: F821
@@ -267,17 +317,26 @@ class DynamoInterpreter:
         aten_name = self._get_aten_name(node)
         if aten_name == "getitem":
             return self.getitem(node)
-        fct = find_function(aten_name)
-        args = [getattr(i, "name", i) for i in fx_args]
-        output_names = self._get_output_names(node)
+        fct = find_function(aten_name, args=node.args, kwargs=node.kwargs)
 
-        try:
-            res = fct(self.builder, output_names, *args, **fx_kwargs)
-        except (TypeError, AttributeError, RuntimeError, ValueError) as e:
-            raise RuntimeError(
-                f"Unable to convert node {node!r}, node.meta={node.meta}, "
-                f"node.__dict__={node.__dict__}."
-            ) from e
+        args = []
+        for i in fx_args:
+            if i is None:
+                args.append(None)
+            elif isinstance(i, str):
+                args.append(i)
+            elif hasattr(i, "name"):
+                args.append(i.name)
+            elif isinstance(i, tuple):
+                # For node cat=concat
+                args.append(tuple(t.name for t in i))
+            else:
+                raise RuntimeError(f"Unexpected type {type(i)} in args={node.args}")
+
+        output_names = self._get_output_names(node)
+        can_set = self._can_set_shape_and_type(node)
+
+        res = fct(self.builder, not can_set, output_names, *args, **fx_kwargs)
 
         self._set_shape_and_type(node, res)
         res = self._check_output_name(node, res, output_names)
@@ -298,13 +357,7 @@ class DynamoInterpreter:
         output_names = self._get_output_names(node)
         can_set = self._can_set_shape_and_type(node)
 
-        try:
-            res = fct(self.builder, not can_set, output_names, *args, **kwargs)
-        except (TypeError, AttributeError, RuntimeError, ValueError) as e:
-            raise RuntimeError(
-                f"Unable to convert node {node!r}, method_name={method_name!r}, "
-                f" node.meta={node.meta}, node.__dict__={node.__dict__}."
-            ) from e
+        res = fct(self.builder, not can_set, output_names, *args, **kwargs)
 
         self._set_shape_and_type(node, res)
         res = self._check_output_name(node, res, output_names)

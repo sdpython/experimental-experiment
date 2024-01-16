@@ -8,12 +8,23 @@ from ._aten_helper import _adjust_attributes_of_max_pool
 T = str
 
 
-def aten_abs(g: GraphBuilder, outputs: List[str], x: T) -> T:
-    return g.make_node("Abs", [x], outputs)
+def aten_abs(g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T) -> T:
+    res = g.make_node("Abs", [x], outputs)
+    if set_shape_type:
+        g.set_type(outputs[0], g.get_type(x))
+        g.set_shape(outputs[0], g.get_shape(x))
+    return res
+
+
+def aten_add(
+    g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T, y: T
+) -> T:
+    return g.op.Add(x, y, outputs=outputs)
 
 
 def aten_addmm(
     g: GraphBuilder,
+    set_shape_type: bool,
     outputs: List[str],
     a: T,
     b: T,
@@ -24,8 +35,19 @@ def aten_addmm(
     return g.op.Gemm(b, c, a, alpha=float(alpha), beta=float(beta), outputs=outputs)
 
 
+def aten_cat(
+    g: GraphBuilder,
+    set_shape_type: bool,
+    outputs: List[str],
+    tensors: Tuple[T, ...],
+    dim: int = 0,
+) -> T:
+    return g.op.Concat(*tensors, axis=dim, outputs=outputs)
+
+
 def aten_convolution(
     g: GraphBuilder,
+    set_shape_type: bool,
     outputs: List[str],
     input: T,
     weight: T,
@@ -81,6 +103,7 @@ def aten_convolution(
 
 def aten_conv2d(
     g: GraphBuilder,
+    set_shape_type: bool,
     outputs: List[str],
     input: T,
     weight: T,
@@ -104,7 +127,12 @@ def aten_conv2d(
 
 
 def aten_flatten(
-    g: GraphBuilder, outputs: List[str], x: T, start_dim: int = 1, end_dim: int = -1
+    g: GraphBuilder,
+    set_shape_type: bool,
+    outputs: List[str],
+    x: T,
+    start_dim: int = 1,
+    end_dim: int = -1,
 ) -> T:
     if start_dim != 0:
         if start_dim == 1 and end_dim == -1:
@@ -121,7 +149,12 @@ def aten_flatten(
 
 
 def aten_linear(
-    g: GraphBuilder, outputs: List[str], input: T, weight: T, bias: T = None
+    g: GraphBuilder,
+    set_shape_type: bool,
+    outputs: List[str],
+    input: T,
+    weight: T,
+    bias: T = None,
 ) -> T:
     weight_transposed = g.op.Transpose(weight, perm=[1, 0])
     if bias:
@@ -132,6 +165,7 @@ def aten_linear(
 
 def _aten_max_pool_onnx(
     g: GraphBuilder,
+    set_shape_type: bool,
     outputs: List[str],
     x: T,
     kernel_shape: Sequence[int],
@@ -162,6 +196,7 @@ def _aten_max_pool_onnx(
 
 def aten_max_pool2d(
     g: GraphBuilder,
+    set_shape_type: bool,
     outputs: List[str],
     x: T,
     kernel_size: Sequence[int],
@@ -183,6 +218,7 @@ def aten_max_pool2d(
 
 def _aten_max_pool_with_indices_onnx(
     g: GraphBuilder,
+    set_shape_type: bool,
     outputs: List[str],
     x: T,
     kernel_size: Sequence[int],
@@ -240,6 +276,7 @@ def _aten_max_pool_with_indices_onnx(
 
 def aten_max_pool2d_with_indices(
     g: GraphBuilder,
+    set_shape_type: bool,
     outputs: List[str],
     x: T,
     kernel_size: Sequence[int],
@@ -272,7 +309,23 @@ def aten_max_pool2d_with_indices(
     )
 
 
-def aten_permute(g: GraphBuilder, outputs: List[str], x: T, dims: Sequence[int]) -> T:
+def aten_mul(
+    g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T, y: T
+) -> T:
+    return g.op.Mul(x, y, outputs=outputs)
+
+
+def aten_neg(g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T) -> T:
+    res = g.make_node("Neg", [x], outputs)
+    if set_shape_type:
+        g.set_type(outputs[0], g.get_type(x))
+        g.set_shape(outputs[0], g.get_shape(x))
+    return res
+
+
+def aten_permute(
+    g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T, dims: Sequence[int]
+) -> T:
     if not dims:
         return g.op.Transpose(x, outputs=outputs)
 
@@ -280,15 +333,17 @@ def aten_permute(g: GraphBuilder, outputs: List[str], x: T, dims: Sequence[int])
     return g.op.Transpose(x, perm=dims, outputs=outputs)
 
 
-def aten_relu(g: GraphBuilder, outputs: List[str], x: T) -> T:
+def aten_relu(g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T) -> T:
     return g.op.Relu(x, outputs=outputs)
 
 
-def aten_t(g: GraphBuilder, outputs: List[str], x: T) -> T:
+def aten_t(g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T) -> T:
     return g.op.Transpose(x, perm=[1, 0], outputs=outputs)
 
 
-def aten_view(g: GraphBuilder, outputs: List[str], x: T, size: T) -> T:
+def aten_view(
+    g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T, size: T
+) -> T:
     if isinstance(size, (int, tuple, list)):
         size = [size] if isinstance(size, int) else list(size)
         size = np.array(size, dtype=np.int64)

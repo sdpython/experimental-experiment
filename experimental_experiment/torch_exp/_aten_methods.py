@@ -43,6 +43,26 @@ def aten_meth_transpose(
     return res
 
 
+def aten_meth_unsqueeze(
+    g: GraphBuilder,
+    set_shape_type: bool,
+    outputs: List[str],
+    input_name: T,
+    dim: int,
+) -> T:
+    new_name = g.unique_name(f"{input_name}_axes")
+    g.make_initializer(new_name, np.array([dim], dtype=np.int64))
+    res = g.make_node("Unsqueeze", [input_name, new_name], outputs)
+    if set_shape_type:
+        dtype = g.get_type(input_name)
+        g.set_type(outputs[0], dtype)
+        if g.has_shape(input_name):
+            shape = list(g.get_shape(input_name))
+            shape.insert(dim, 1)
+            g.set_shape(outputs[0], tuple(shape))
+    return res
+
+
 def aten_meth_view(
     g: GraphBuilder,
     set_shape_type: bool,

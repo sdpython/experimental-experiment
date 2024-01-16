@@ -122,6 +122,7 @@ class GraphBuilder:
         self.as_function = as_function
         self.input_args = args
         self.verbose = verbose
+        self._debug_msg = {}
 
         if isinstance(target_opset_or_existing_proto, (int, dict)):
             self.opsets = (
@@ -285,7 +286,7 @@ class GraphBuilder:
         assert isinstance(name, str), f"Unexpected type {type(name)} for name."
         assert name in self._known_shapes, (
             f"Shape is unknown for result {name!r}, "
-            f"known_shapes={self._known_shapes}."
+            f"known_shapes={self._known_shapes}{self.get_debug_msg()}"
         )
         return self._known_shapes[name]
 
@@ -398,6 +399,18 @@ class GraphBuilder:
             self.set_type(name, elem_type)
         return name
 
+    def _debug_string_inputs(self, inputs):
+        st = ""
+        c = "-TS#"
+        for i in inputs:
+            k = 0
+            if self.has_type(i):
+                k += 1
+            if self.has_shape(i):
+                k += 2
+            st += c[k]
+        return st
+
     def make_node(
         self,
         op_type: str,
@@ -429,7 +442,9 @@ class GraphBuilder:
 
         if self.verbose == 2:
             print(
-                f"[GraphBuilder-{self._hash()}.make_node] {op_type}:{inputs}->{outputs}"
+                f"[GraphBuilder-{self._hash()}.make_node]"
+                f"[{self._debug_string_inputs(inputs)}] "
+                f"{op_type}:{inputs}->{outputs}"
             )
 
         if check is not False:
@@ -497,7 +512,9 @@ class GraphBuilder:
                     self.constants_[o] = node
             if self.verbose > 3:
                 print(
-                    f"[GraphBuilder-{self._hash()}.make_node] {node.op_type}:{node.input}->{node.output}"
+                    f"[GraphBuilder-{self._hash()}.make_node] "
+                    f"[{self._debug_string_inputs(node.input)}] "
+                    f"{node.op_type}:{node.input}->{node.output}"
                 )
 
         # add the node
@@ -653,19 +670,26 @@ class GraphBuilder:
             )
         return res
 
+    def get_debug_msg(self) -> str:
+        if not self._debug_msg:
+            return ""
+        rows = ["", "--DEBUG--"]
+        for k, v in self._debug_msg.items():
+            rows.append(f"-- {k}")
+            rows.append(str(v))
+        return "\n".join(rows)
+
     def process(
         self,
         graph_module: "torch.f.GraphModule",  # noqa: F821
         interpreter: "Interpreter",  # noqa: F821
     ):
+        self._debug_msg["process.graph_module"] = graph_module.graph
         for i, node in enumerate(graph_module.graph.nodes):
-            try:
-                interpreter.run_node(node)
-            except Exception as e:
-                raise RuntimeError(
-                    f"Unable to convert node {i}/{len(graph_module.graph.nodes)} "
-                    f"[{node}] from graph\n{graph_module.graph}"
-                ) from e
+            self._debug_msg[
+                "process.progress"
+            ] = f"node {i}/{len(graph_module.graph.nodes)} "
+            interpreter.run_node(node)
 
     def to_onnx(
         self, as_function: bool = False, optimize: bool = True
