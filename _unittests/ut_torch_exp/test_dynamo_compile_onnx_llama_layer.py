@@ -52,7 +52,15 @@ class TestDynamoLlama(ExtTestCase):
 
         assert onnx_export, "No export name was given"
 
-        def onnx_compiler(graph_module: torch.fx.GraphModule, args: List[torch.Tensor]):
+        class backend:
+            def __init__(self):
+                self.execution_count = 0
+
+        _b = backend()
+
+        def onnx_compiler(
+            graph_module: torch.fx.GraphModule, args: List[torch.Tensor], _b=_b
+        ):
             input_names = (
                 ["input"] if len(args) == 1 else [f"input{i}" for i in range(len(args))]
             )
@@ -75,11 +83,12 @@ class TestDynamoLlama(ExtTestCase):
                 ) from e
             names = [i.name for i in onx.graph.input]
 
-            def run(*inputs, sess=sess, names=names):
+            def run(*inputs, sess=sess, names=names, _b=_b):
                 # not efficient
                 xnp = [x.detach().numpy() for x in inputs]
                 feeds = dict(zip(names, xnp))
                 res = tuple(torch.Tensor(y) for y in sess.run(None, feeds))
+                _b.execution_count += 1
                 return res
 
             return run
@@ -160,6 +169,8 @@ class TestDynamoLlama(ExtTestCase):
         except Exception as e:
             print("torch.onnx.dynamo_export failed:", e)
 
+        return _b
+
     def _assert_counting_information(
         self,
         ort_backend: Any,
@@ -172,23 +183,6 @@ class TestDynamoLlama(ExtTestCase):
             expected_execution_count * (expected_graph_break + 1),
             ort_backend.execution_count,
         )
-        self.assertEqual(
-            len(ort_backend._all_ort_execution_info.execution_info_per_graph_module),
-            number_of_cached_graph_modules * (expected_graph_break + 1),
-        )
-        self.assertEqual(
-            len(ort_backend._all_ort_execution_info.execution_info_per_graph_module),
-            len(number_of_exported_onnx_models_for_all_graph_modules)
-            * (expected_graph_break + 1),
-        )
-        for (
-            onnx_info,
-            expected_number_of_onnx_models,
-        ) in zip(
-            ort_backend._all_ort_execution_info.execution_info_per_graph_module.values(),
-            number_of_exported_onnx_models_for_all_graph_modules,
-        ):
-            self.assertEqual(len(onnx_info), expected_number_of_onnx_models)
 
     def common_test_model(
         self,
@@ -223,7 +217,7 @@ class TestDynamoLlama(ExtTestCase):
 
     @ignore_warnings((UserWarning, DeprecationWarning))
     @skipif_ci_windows("torch.compile not supported on Windows")
-    def test_ort_mlp(self):
+    def test_ort_amlp(self):
         import torch
 
         class MLP(torch.nn.Module):
@@ -254,7 +248,7 @@ class TestDynamoLlama(ExtTestCase):
     @ignore_warnings((UserWarning, DeprecationWarning))
     @skipif_ci_windows("torch.compile not supported on Windows")
     @unittest.skipIf(torch_min("2.2"), reason="missing kernel")
-    def test_ort_mlp_backward(self):
+    def test_ort_amlp_backward(self):
         import torch
 
         class MLP(torch.nn.Module):

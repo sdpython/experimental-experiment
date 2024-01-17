@@ -202,7 +202,7 @@ class DynamoInterpreter:
         node: "torch.fx.Node",  # noqa: F821
         input_name: str,
         index_slice: slice,
-        set_shape: bool,
+        set_shape_type: bool,
         axis: int,
     ):
         assert isinstance(axis, int), f"Unexpected type {type(axis)} for axis"
@@ -238,7 +238,7 @@ class DynamoInterpreter:
             )
 
         res = self.builder.make_node("Slice", inputs, [node.name])
-        if not set_shape:
+        if set_shape_type:
             dtype = self.builder.get_type(inputs[0])
             shape = self.builder.get_shape(inputs[0])
             self.builder.set_shape(
@@ -254,14 +254,14 @@ class DynamoInterpreter:
         node_output, index = args
         result_name = node_output.name
         val = node.meta.get("val", None)
-        set_shape = False
+        set_shape_type = True
         if val is not None:
             if isinstance(val, self.torch.Tensor):
                 shape = val.shape
                 dtype = self.builder._get_type(val.dtype)
                 self.builder.set_shape(node.name, shape)
                 self.builder.set_type(node.name, dtype)
-                set_shape = True
+                set_shape_type = False
             else:
                 raise TypeError(
                     f"Unexpected type in node {node!r}, type(val)={type(val)}."
@@ -272,9 +272,14 @@ class DynamoInterpreter:
             res = self.builder.make_node(
                 "Gather", [result_name, index.name], [node.name]
             )
-            if not set_shape:
-                dtype = self.builder.get_type(result_name)
-                self.builder.set_type(node.name, dtype)
+            if set_shape_type:
+                self.builder.set_type(node.name, self.builder.get_type(result_name))
+                self.builder.set_rank(
+                    node.name,
+                    self.builder.get_rank(result_name)
+                    + self.builder.get_rank(index.name)
+                    - 1,
+                )
             return res
 
         if isinstance(index, int):
@@ -284,7 +289,7 @@ class DynamoInterpreter:
 
         if isinstance(index, slice):
             return self._getitem_slice(
-                node, node_output.name, index, set_shape=set_shape, axis=0
+                node, node_output.name, index, set_shape_type=set_shape_type, axis=0
             )
 
         if isinstance(index, tuple):
@@ -302,7 +307,7 @@ class DynamoInterpreter:
                         node,
                         node_output.name,
                         index[axis],
-                        set_shape=set_shape,
+                        set_shape_type=set_shape_type,
                         axis=axis,
                     )
 
@@ -330,8 +335,14 @@ class DynamoInterpreter:
             elif isinstance(i, tuple):
                 # For node cat=concat
                 args.append(tuple(t.name for t in i))
+            elif isinstance(i, float):
+                cst = self.builder.make_initializer("", np.array(i, dtype=np.float32))
+                args.append(cst)
             else:
-                raise RuntimeError(f"Unexpected type {type(i)} in args={node.args}")
+                raise RuntimeError(
+                    f"Unexpected type {type(i)} for function {aten_name!r} "
+                    f"in args={node.args}"
+                )
 
         output_names = self._get_output_names(node)
         can_set = self._can_set_shape_and_type(node)

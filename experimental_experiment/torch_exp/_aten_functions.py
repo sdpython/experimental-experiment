@@ -2,7 +2,11 @@ from typing import List, Sequence, Tuple
 import numpy as np
 from onnx import TensorProto
 from .graph_builder import GraphBuilder
-from ._aten_helper import _adjust_attributes_of_max_pool
+from ._aten_helper import (
+    _adjust_attributes_of_max_pool,
+    set_shape_type_unary_op,
+    set_shape_type_binary_op,
+)
 
 
 T = str
@@ -11,15 +15,17 @@ T = str
 def aten_abs(g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T) -> T:
     res = g.make_node("Abs", [x], outputs)
     if set_shape_type:
-        g.set_type(outputs[0], g.get_type(x))
-        g.set_shape(outputs[0], g.get_shape(x))
+        set_shape_type_unary_op(g, outputs[0], x)
     return res
 
 
 def aten_add(
     g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T, y: T
 ) -> T:
-    return g.op.Add(x, y, outputs=outputs)
+    res = g.op.Add(x, y, outputs=outputs)
+    if set_shape_type:
+        set_shape_type_binary_op(g, outputs[0], x, y)
+    return res
 
 
 def aten_addmm(
@@ -42,7 +48,15 @@ def aten_cat(
     tensors: Tuple[T, ...],
     dim: int = 0,
 ) -> T:
-    return g.op.Concat(*tensors, axis=dim, outputs=outputs)
+    res = g.op.Concat(*tensors, axis=dim, outputs=outputs)
+    if set_shape_type:
+        dt0 = g.get_type(tensors[0])
+        assert all(map(lambda t: g.get_type(t) == dt0, tensors))
+        r0 = g.get_rank(tensors[0])
+        assert all(map(lambda t: g.get_rank(t) == r0, tensors))
+        g.set_type(outputs[0], dt0)
+        g.set_rank(outputs[0], r0)
+    return res
 
 
 def aten_convolution(
@@ -126,6 +140,36 @@ def aten_conv2d(
     )
 
 
+def aten_dropout(
+    g: GraphBuilder,
+    set_shape_type: bool,
+    outputs: List[str],
+    x: T,
+    p: T = 0.5,  # float
+    train: T = False,  # bool
+) -> T:
+    """dropout(Tensor input, float p, bool train) -> Tensor"""
+
+    # if IsScalar(input):
+    #     input = op.Reshape(input, op.Constant(value_ints=[-1]))
+    #     result, _ = op.Dropout(input, p, train)
+    #     result = op.Squeeze(result)
+    # else:
+    #     result, _ = op.Dropout(x, p, train)
+
+    if len(outputs) == 1:
+        outputs = outputs.copy()
+        outputs.append("")
+    if isinstance(p, float):
+        p = np.array(p, dtype=np.float64)
+    if isinstance(train, bool):
+        train = np.array(train, dtype=np.bool_)
+    result, _ = g.op.Dropout(x, p, train, outputs=outputs)
+    if set_shape_type:
+        set_shape_type_unary_op(g, outputs[0], x)
+    return result
+
+
 def aten_flatten(
     g: GraphBuilder,
     set_shape_type: bool,
@@ -161,6 +205,15 @@ def aten_linear(
         res = g.op.MatMul(input, weight_transposed)
         return g.op.Add(res, bias, outputs=outputs)
     return g.op.MatMul(input, weight_transposed, outputs=outputs)
+
+
+def aten_matmul(
+    g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T, y: T
+) -> T:
+    res = g.op.MatMul(x, y, outputs=outputs)
+    if set_shape_type:
+        set_shape_type_binary_op(g, outputs[0], x, y)
+    return res
 
 
 def _aten_max_pool_onnx(
@@ -312,7 +365,10 @@ def aten_max_pool2d_with_indices(
 def aten_mul(
     g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T, y: T
 ) -> T:
-    return g.op.Mul(x, y, outputs=outputs)
+    res = g.op.Mul(x, y, outputs=outputs)
+    if set_shape_type:
+        set_shape_type_binary_op(g, outputs[0], x, y)
+    return res
 
 
 def aten_neg(g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T) -> T:
@@ -337,8 +393,33 @@ def aten_relu(g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T) -
     return g.op.Relu(x, outputs=outputs)
 
 
+def aten_sigmoid(g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T) -> T:
+    res = g.op.Sigmoid(x, outputs=outputs)
+    if set_shape_type:
+        set_shape_type_unary_op(g, outputs[0], x)
+    return res
+
+
+def aten_softmax(
+    g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T, dim: int = -1
+) -> T:
+    res = g.op.Softmax(x, axis=dim, outputs=outputs)
+    if set_shape_type:
+        set_shape_type_unary_op(g, outputs[0], x)
+    return res
+
+
 def aten_t(g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T) -> T:
     return g.op.Transpose(x, perm=[1, 0], outputs=outputs)
+
+
+def aten_truediv(
+    g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T, y: T
+) -> T:
+    res = g.op.Div(x, y, outputs=outputs)
+    if set_shape_type:
+        set_shape_type_binary_op(g, outputs[0], x, y)
+    return res
 
 
 def aten_view(

@@ -18,6 +18,7 @@ class Opset:
         "Concat": 1,
         "Constant": 1,
         "Div": 1,
+        "Dropout": 2,
         "Exp": 1,
         "Expand": 1,
         "GatherElements": 1,
@@ -31,7 +32,9 @@ class Opset:
         "Relu": 1,
         "Reshape": 2,
         "Shape": 1,
+        "Sigmoid": 1,
         "Slice": 1,
+        "Softmax": 1,
         "Squeeze": 1,
         "Sub": 1,
         "Transpose": 1,
@@ -139,6 +142,7 @@ class GraphBuilder:
             self.current_input = 0
             self._known_shapes = {}
             self._known_types = {}
+            self._known_ranks = {}
             self.constants_ = {}
             self._known_names = self._unique_names.copy()
         elif isinstance(target_opset_or_existing_proto, ModelProto):
@@ -160,6 +164,7 @@ class GraphBuilder:
             # This should be improve.
             self._known_shapes = {}
             self._known_types = {}
+            self._known_ranks = {}
             self._known_names = set()
             self.constants_ = {}
             for k, v in self.initializers_dict.items():
@@ -240,7 +245,12 @@ class GraphBuilder:
         assert name not in self._known_names, f"Name {name!r} already exists."
         self._known_names.add(name)
 
-    def set_shape(self, name: str, shape: Tuple[int, ...]):
+    def set_rank(self, name: str, value: int):
+        assert isinstance(name, str), f"Unexpected type {type(name)} for name."
+        assert name not in self._known_ranks, f"Name {name!r} already exists."
+        self._known_ranks[name] = value
+
+    def set_shape(self, name: str, shape: Tuple[int, ...], set_rank: bool = True):
         assert isinstance(name, str), f"Unexpected type {type(name)} for name."
         if name in self._known_shapes:
             if shape != self._known_shapes[name]:
@@ -253,6 +263,8 @@ class GraphBuilder:
         if self.verbose > 5:
             print(f"[GraphBuilder-{self._hash()}.set_shape] {name}:{shape}")
         self._known_shapes[name] = shape
+        if set_rank and not self.has_rank(name):
+            self.set_rank(name, len(shape))
 
     def set_type(self, name: str, dtype: int):
         assert isinstance(name, str), f"Unexpected type {type(name)} for name."
@@ -272,15 +284,31 @@ class GraphBuilder:
 
     def rank(self, name: str) -> int:
         assert isinstance(name, str), f"Unexpected type {type(name)} for name."
-        return len(self.get_shape(name))
+        return self.get_rank(name)
+
+    def has_name(self, name: str) -> bool:
+        assert isinstance(name, str), f"Unexpected type {type(name)} for name."
+        return name in self._known_names
+
+    def has_rank(self, name: str) -> bool:
+        assert isinstance(name, str), f"Unexpected type {type(name)} for name."
+        return name in self._known_ranks
 
     def has_shape(self, name: str) -> bool:
         assert isinstance(name, str), f"Unexpected type {type(name)} for name."
         return name in self._known_shapes
 
-    def has_name(self, name: str) -> bool:
+    def has_type(self, name: str) -> bool:
         assert isinstance(name, str), f"Unexpected type {type(name)} for name."
-        return name in self._known_names
+        return name in self._known_types
+
+    def get_rank(self, name: str) -> int:
+        assert isinstance(name, str), f"Unexpected type {type(name)} for name."
+        assert name in self._known_ranks, (
+            f"Rank is unknown for result {name!r}, "
+            f"known_shapes={self._known_ranks}{self.get_debug_msg()}"
+        )
+        return self._known_ranks[name]
 
     def get_shape(self, name: str) -> int:
         assert isinstance(name, str), f"Unexpected type {type(name)} for name."
@@ -289,10 +317,6 @@ class GraphBuilder:
             f"known_shapes={self._known_shapes}{self.get_debug_msg()}"
         )
         return self._known_shapes[name]
-
-    def has_type(self, name: str) -> bool:
-        assert isinstance(name, str), f"Unexpected type {type(name)} for name."
-        return name in self._known_types
 
     def get_type(self, name: str) -> int:
         assert isinstance(name, str), f"Unexpected type {type(name)} for name."
@@ -325,8 +349,12 @@ class GraphBuilder:
             st = str(elem_type)
             if "float32" in st:
                 elem_type = TensorProto.FLOAT
+            elif "float64" in st:
+                elem_type = TensorProto.DOUBLE
             elif "int64" in st:
                 elem_type = TensorProto.INT64
+            elif "bool" in st:
+                elem_type = TensorProto.BOOL
             elif elem_type is None:
                 elem_type = TensorProto.UNDEFINED
             elif exc:
@@ -401,13 +429,15 @@ class GraphBuilder:
 
     def _debug_string_inputs(self, inputs):
         st = ""
-        c = "-TS#"
+        c = "-TRUSVW#"
         for i in inputs:
             k = 0
             if self.has_type(i):
                 k += 1
-            if self.has_shape(i):
+            if self.has_rank(i):
                 k += 2
+            if self.has_shape(i):
+                k += 4
             st += c[k]
         return st
 

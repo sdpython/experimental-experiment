@@ -6,6 +6,27 @@ from .graph_builder import GraphBuilder
 T = str
 
 
+def aten_meth_contiguous(
+    g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T
+) -> T:
+    return g.make_node("Identity", [x], outputs)
+
+
+def aten_meth_reshape(
+    g: GraphBuilder,
+    set_shape_type: bool,
+    outputs: List[str],
+    input_name: T,
+    *shape: List[int],
+) -> T:
+    cst = g.make_initializer("", np.array(shape, dtype=np.int64))
+    res = g.make_node("Reshape", [input_name, cst], outputs)
+    if set_shape_type:
+        g.set_type(outputs[0], g.get_type(input_name))
+        g.set_shape(outputs[0], tuple(shape))
+    return res
+
+
 def aten_meth_to(
     g: GraphBuilder,
     set_shape_type: bool,
@@ -17,9 +38,11 @@ def aten_meth_to(
     onnx_to = torch_dtype_to_onnx_dtype(dtype)
     res = g.make_node("Cast", [input_name], outputs, to=onnx_to)
     if set_shape_type:
-        shape = g.get_shape(input_name)
-        g.set_shape(outputs[0], shape)
         g.set_type(outputs[0], onnx_to)
+        if g.has_shape(input_name):
+            g.set_shape(outputs[0], g.get_shape(input_name))
+        elif g.has_rank(input_name):
+            g.set_rank(outputs[0], g.get_rank(input_name))
     return res
 
 
@@ -35,11 +58,13 @@ def aten_meth_transpose(
     perm[dim0], perm[dim1] = perm[dim1], perm[dim0]
     res = g.make_node("Transpose", [input_name], outputs, perm=perm)
     if set_shape_type:
-        dtype = g.get_type(input_name)
-        shape = list(g.get_shape(input_name))
-        shape[dim0], shape[dim1] = shape[dim1], shape[dim0]
-        g.set_shape(outputs[0], tuple(shape))
-        g.set_type(outputs[0], dtype)
+        g.set_type(outputs[0], g.get_type(input_name))
+        if g.has_shape(input_name):
+            shape = list(g.get_shape(input_name))
+            shape[dim0], shape[dim1] = shape[dim1], shape[dim0]
+            g.set_shape(outputs[0], tuple(shape))
+        elif g.has_rank(input_name):
+            g.set_rank(outputs[0], g.has_rank(input_name))
     return res
 
 
@@ -60,6 +85,8 @@ def aten_meth_unsqueeze(
             shape = list(g.get_shape(input_name))
             shape.insert(dim, 1)
             g.set_shape(outputs[0], tuple(shape))
+        elif g.has_rank(input_name):
+            g.set_rank(outputs[0], g.get_rank(input_name) + 1)
     return res
 
 
