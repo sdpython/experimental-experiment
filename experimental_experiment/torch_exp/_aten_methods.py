@@ -1,6 +1,7 @@
 from typing import List, Optional, Sequence
 import numpy as np
-from ._aten_helper import torch_dtype_to_onnx_dtype
+from onnx.helper import tensor_dtype_to_np_dtype
+from ._aten_helper import torch_dtype_to_onnx_dtype, set_shape_type_unary_op
 from .graph_builder import GraphBuilder
 
 T = str
@@ -9,7 +10,57 @@ T = str
 def aten_meth_contiguous(
     g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T
 ) -> T:
-    return g.make_node("Identity", [x], outputs)
+    return g.make_node("Identity", [x], outputs, name="contiguous")
+
+
+def aten_meth_mean(
+    g: GraphBuilder,
+    set_shape_type: bool,
+    outputs: List[str],
+    x: T,
+    dim: T,
+    keepdim: bool = False,
+) -> T:
+    if isinstance(dim, int):
+        cst = g.make_initializer("", np.array([dim], dtype=np.int64))
+    elif isinstance(dim, tuple):
+        cst = g.make_initializer("", np.array(dim, dtype=np.int64))
+    else:
+        raise RuntimeError(f"Unexpected type {type(dim)} for dim.")
+    res = g.make_node(
+        "ReduceMean", [x, cst], outputs, keepdims=1 if keepdim else 0, name="mean"
+    )
+    # if set_shape_type:
+    #    set_shape_type_unary_op(g, outputs[0], x)
+    return res
+
+
+def aten_meth_pow(
+    g: GraphBuilder,
+    set_shape_type: bool,
+    outputs: List[str],
+    x: T,
+    exponent: T,
+) -> T:
+    assert isinstance(
+        x, str
+    ), f"Unexpected type {type(x)} (x={x!r}, exponent={exponent!r})"
+    if isinstance(exponent, (int, float)):
+        cst = g.make_initializer(
+            "", np.array(exponent, dtype=tensor_dtype_to_np_dtype(g.get_type(x)))
+        )
+    elif isinstance(exponent, np.array):
+        cst = g.make_initializer(
+            "", exponent.as_type(tensor_dtype_to_np_dtype(g.get_type(x)))
+        )
+    elif isinstance(exponent, str):
+        cst = exponent
+    else:
+        raise RuntimeError(f"Unexpected type {type(exponent)} for exponent.")
+    res = g.make_node("Pow", [x, cst], outputs)
+    if set_shape_type:
+        set_shape_type_unary_op(g, outputs[0], x)
+    return res
 
 
 def aten_meth_reshape(
@@ -99,7 +150,7 @@ def aten_meth_view(
 ) -> T:
     new_shape_name = g.unique_name(f"{input_name}_view_shape")
     g.make_initializer(new_shape_name, np.array(args, dtype=np.int64))
-    res = g.make_node("Reshape", [input_name, new_shape_name], outputs)
+    res = g.make_node("Reshape", [input_name, new_shape_name], outputs, name="view")
     if set_shape_type:
         dtype = g.get_type(input_name)
         g.set_shape(outputs[0], args[1:])

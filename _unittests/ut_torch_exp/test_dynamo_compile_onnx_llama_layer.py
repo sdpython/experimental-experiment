@@ -217,7 +217,7 @@ class TestDynamoLlama(ExtTestCase):
 
     @ignore_warnings((UserWarning, DeprecationWarning))
     @skipif_ci_windows("torch.compile not supported on Windows")
-    def test_ort_amlp(self):
+    def test_ort_mlp(self):
         import torch
 
         class MLP(torch.nn.Module):
@@ -248,7 +248,7 @@ class TestDynamoLlama(ExtTestCase):
     @ignore_warnings((UserWarning, DeprecationWarning))
     @skipif_ci_windows("torch.compile not supported on Windows")
     @unittest.skipIf(torch_min("2.2"), reason="missing kernel")
-    def test_ort_amlp_backward(self):
+    def test_ort_mlp_backward(self):
         import torch
 
         class MLP(torch.nn.Module):
@@ -290,7 +290,7 @@ class TestDynamoLlama(ExtTestCase):
 
     @ignore_warnings((UserWarning, DeprecationWarning))
     @skipif_ci_windows("torch.compile not supported on Windows")
-    def test_ort_llama_decoder(self):
+    def test_ort_llama_decoder_forward(self):
         from experimental_experiment.torch_helper.llama_helper import get_llama_decoder
 
         input_dims = self.get_input_dims(False)
@@ -320,7 +320,7 @@ class TestDynamoLlama(ExtTestCase):
 
     @ignore_warnings((UserWarning, DeprecationWarning))
     @skipif_ci_windows("torch.compile not supported on Windows")
-    def test_ort_llama_attention(self):
+    def test_ort_llama_mattention(self):
         from experimental_experiment.torch_helper.llama_helper import (
             get_llama_attention,
         )
@@ -337,7 +337,7 @@ class TestDynamoLlama(ExtTestCase):
 
     @ignore_warnings((UserWarning, DeprecationWarning))
     @skipif_ci_windows("torch.compile not supported on Windows")
-    def test_ort_llama_attention_backward(self):
+    def test_ort_llama_mattention_backward(self):
         from experimental_experiment.torch_helper.llama_helper import (
             get_llama_attention,
         )

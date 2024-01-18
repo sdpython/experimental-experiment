@@ -38,7 +38,9 @@ def aten_addmm(
     beta: float = 1.0,
     alpha: float = 1.0,
 ) -> T:
-    return g.op.Gemm(b, c, a, alpha=float(alpha), beta=float(beta), outputs=outputs)
+    return g.op.Gemm(
+        b, c, a, alpha=float(alpha), beta=float(beta), outputs=outputs, name="addmm"
+    )
 
 
 def aten_cat(
@@ -383,14 +385,27 @@ def aten_permute(
     g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T, dims: Sequence[int]
 ) -> T:
     if not dims:
-        return g.op.Transpose(x, outputs=outputs)
+        return g.op.Transpose(x, outputs=outputs, name="permute")
 
     dims = [axis + len(dims) if axis < 0 else axis for axis in dims]
-    return g.op.Transpose(x, perm=dims, outputs=outputs)
+    return g.op.Transpose(x, perm=dims, outputs=outputs, name="permute")
 
 
 def aten_relu(g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T) -> T:
     return g.op.Relu(x, outputs=outputs)
+
+
+def aten_rsqrt(
+    g: GraphBuilder,
+    set_shape_type: bool,
+    outputs: List[str],
+    x: T,
+) -> T:
+    ext = g.make_node("Sqrt", [x], name="rsqrt")
+    res = g.make_node("Reciprocal", ext, outputs, name="rsqrt")
+    if set_shape_type:
+        set_shape_type_unary_op(g, outputs[0], x)
+    return res
 
 
 def aten_sigmoid(g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T) -> T:
@@ -410,13 +425,13 @@ def aten_softmax(
 
 
 def aten_t(g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T) -> T:
-    return g.op.Transpose(x, perm=[1, 0], outputs=outputs)
+    return g.op.Transpose(x, perm=[1, 0], outputs=outputs, name="t")
 
 
 def aten_truediv(
     g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T, y: T
 ) -> T:
-    res = g.op.Div(x, y, outputs=outputs)
+    res = g.op.Div(x, y, outputs=outputs, name="truediv")
     if set_shape_type:
         set_shape_type_binary_op(g, outputs[0], x, y)
     return res
@@ -429,6 +444,6 @@ def aten_view(
         size = [size] if isinstance(size, int) else list(size)
         size = np.array(size, dtype=np.int64)
         shape = g.make_initializer("", size)
-        return g.op.Reshape(x, shape, outputs=outputs)
-    size = g.op.Cast(size, to=TensorProto.INT64)
-    return g.op.Reshape(x, size, outputs=outputs)
+        return g.op.Reshape(x, shape, outputs=outputs, name="view")
+    size = g.op.Cast(size, to=TensorProto.INT64, name="view")
+    return g.op.Reshape(x, size, outputs=outputs, name="view")

@@ -59,6 +59,7 @@ class Opset:
         *inputs: Optional[Union[str, List[str]]],
         outputs: Optional[Union[int, List[str], str]] = None,
         domain: str = "",
+        name: Optional[str] = None,
         **kwargs,
     ):
         if outputs is None:
@@ -75,7 +76,7 @@ class Opset:
                 new_inputs.append(i)
 
         return self.builder.make_node(
-            op_type, new_inputs, outputs=outputs, domain=domain, **kwargs
+            op_type, new_inputs, outputs=outputs, domain=domain, name=name, **kwargs
         )
 
 
@@ -139,6 +140,7 @@ class GraphBuilder:
             self.outputs = []
             self.input_names = input_names or []
             self._unique_names = set(self.input_names)
+            self._unique_node_names = set()
             self.current_input = 0
             self._known_shapes = {}
             self._known_types = {}
@@ -167,12 +169,19 @@ class GraphBuilder:
             self._known_ranks = {}
             self._known_names = set()
             self.constants_ = {}
+            self._unique_node_names = set()
+            self._unique_names = set(self.input_names)
+
             for k, v in self.initializers_dict.items():
                 self.constants_[k] = None
+                self._unique_names.add(k)
                 self.set_name(k)
                 self.set_shape(k, self._get_tensor_shape(v))
                 self.set_type(k, self._get_tensor_type(v))
             for node in self.nodes:
+                self._unique_names |= set(node.output)
+                if node.name:
+                    self._unique_node_names.add(node.name)
                 if node.op_type == "Constant":
                     self.constants_[node.output[0]] = node
                     self.set_name(node.output[0])
@@ -321,7 +330,8 @@ class GraphBuilder:
     def get_type(self, name: str) -> int:
         assert isinstance(name, str), f"Unexpected type {type(name)} for name."
         assert name in self._known_types, (
-            f"Type is unknown for result {name!r}, " f"known_types={self._known_types}."
+            f"Type is unknown for result {name!r}, "
+            f"known_types={self._known_types}{self.get_debug_msg()}."
         )
         return self._known_types[name]
 
@@ -336,6 +346,18 @@ class GraphBuilder:
             return sug
         self._unique_names.add(prefix)
         return prefix
+
+    def unique_node_name(self, name: str) -> str:
+        if name in self._unique_node_names:
+            i = 2
+            sug = f"{name}2"
+            while sug in self._unique_node_names:
+                i += 1
+                sug = f"{name}{i}"
+            self._unique_node_names.add(sug)
+            return sug
+        self._unique_node_names.add(name)
+        return name
 
     def _prepare_inputs(self, schema: Optional[Any], *inputs: List[Any]) -> List[str]:
         input_names = []
@@ -449,6 +471,7 @@ class GraphBuilder:
         domain: str = "",
         attributes: Optional[List[AttributeProto]] = None,
         check: Optional[bool] = None,
+        name: Optional[str] = None,
         **kwargs,
     ) -> Union[str, List[str]]:
         assert (
@@ -491,9 +514,14 @@ class GraphBuilder:
                 assert self.has_shape(i), f"Input {i!r} has no known shape."
                 assert self.has_type(i), f"Input {i!r} has no known type."
 
+        if name:
+            name = self.unique_node_name(name)
+
         # next
         try:
-            node = oh.make_node(op_type, inputs, output_names, domain=domain, **kwargs)
+            node = oh.make_node(
+                op_type, inputs, output_names, domain=domain, name=name, **kwargs
+            )
         except TypeError as e:
             iti = [type(i) for i in inputs]
             ito = (

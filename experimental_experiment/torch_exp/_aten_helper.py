@@ -86,8 +86,11 @@ def set_shape_type_binary_op(
     """
     Sets the shape and type for a binary operator (add, mul, ...).
     """
-    assert g.get_type(input_name1) == g.get_type(input_name2)
-    g.set_type(name, g.get_type(input_name1))
+    dtype = g.get_type(input_name1) if g.has_type(input_name1) else None
+    if not dtype:
+        dtype = g.get_type(input_name2) if g.has_type(input_name2) else None
+    assert dtype, f"{g.get_type(input_name1)}"
+    g.set_type(name, dtype)
     if g.has_shape(input_name1) and g.has_shape(input_name2):
         g.set_shape(
             name, broadcast_shape(g.get_shape(input_name1), g.get_shape(input_name2))
