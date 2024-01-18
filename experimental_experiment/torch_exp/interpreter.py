@@ -100,43 +100,53 @@ class DynamoInterpreter:
     def output(self, node):
         output_name = node.name
         declared = node.args
-        assert len(declared) == 1, f"declared must have one element: {declared}"
+        assert len(declared) == 1, (
+            f"declared must have one element: {declared}, output_name={output_name}"
+            f"{self.builder.get_debug_msg()}"
+        )
         output = declared[0]
         if hasattr(output, "name"):
             output = output.name
+            self.builder.make_node("Identity", [output], [output_name], check=False)
+            outputs = [(output, output_name)]
         else:
-            assert len(output) == 1, f"declared[0] must have one element: {declared}"
-            output = output[0]
-            if hasattr(output, "name"):
-                output = output.name
-        self.builder.make_node("Identity", [output], [output_name], check=False)
+            outputs = []
+            for i, a in enumerate(output):
+                if hasattr(a, "name"):
+                    a = a.name
+                o = f"{output_name}_{i}"
+                self.builder.make_node("Identity", [a], [o], check=False)
+                outputs.append((a, o))
 
         val = node.meta.get("val", None)
-        if val is None:
-            output_name = node.name
-            if output in self.builder._known_shapes:
-                elem_type = self.builder.get_type(output)
-                shape = self.builder.get_shape(output)
-            elif self.builder.as_function:
-                elem_type = None
-                shape = None
-            else:
-                raise RuntimeError(
-                    f"val is None for node={node}, "
-                    f"output={output}, output_name={output_name}"
-                    f"\nmeta={node.meta}"
-                    f"\nnode.__dict__={node.__dict__}"
-                )
-
-            self.builder.make_tensor_output(
-                output_name, elem_type=elem_type, shape=shape
-            )
-            return output_name
 
         if isinstance(val, tuple):
             if len(val) > 1:
                 raise NotImplementedError("Not yet implemented for multiple outputs.")
             val = val[0]
+
+        if val is None:
+            for a, o in outputs:
+                elem_type = self.builder.get_type(a)
+                if self.builder.has_shape(a):
+                    shape = self.builder.get_shape(a)
+                elif self.builder.has_rank(a):
+                    shape = tuple([None] * self.builder.get_rank(a))
+                elif self.builder.as_function:
+                    shape = None
+                else:
+                    raise RuntimeError(
+                        f"val is None for node={node}, "
+                        f"output={output}, a={a!r}, o={o!r}, "
+                        f"has_type={self.builder.has_type(a)}, "
+                        f"has_rank={self.builder.has_rank(a)}, "
+                        f"has_shape={self.builder.has_shape(a)}, "
+                        f"\nmeta={node.meta}"
+                        f"\nnode.__dict__={node.__dict__}"
+                    )
+
+                self.builder.make_tensor_output(o, elem_type=elem_type, shape=shape)
+            return [_[1] for _ in outputs]
 
         if isinstance(val, self.torch.Tensor):
             output_name = node.name
@@ -322,7 +332,9 @@ class DynamoInterpreter:
         aten_name = self._get_aten_name(node)
         if aten_name == "getitem":
             return self.getitem(node)
-        fct = find_function(aten_name, args=node.args, kwargs=node.kwargs)
+        fct = find_function(
+            aten_name, args=node.args, kwargs=node.kwargs, graph_builder=self.builder
+        )
 
         args = []
         for i in fx_args:
@@ -337,6 +349,9 @@ class DynamoInterpreter:
                 args.append(tuple(t.name for t in i))
             elif isinstance(i, float):
                 cst = self.builder.make_initializer("", np.array(i, dtype=np.float32))
+                args.append(cst)
+            elif isinstance(i, int):
+                cst = self.builder.make_initializer("", np.array(i, dtype=np.int64))
                 args.append(cst)
             else:
                 raise RuntimeError(

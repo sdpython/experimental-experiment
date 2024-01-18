@@ -2,47 +2,16 @@ from typing import Sequence, Tuple
 from onnx import TensorProto
 
 
-def _adjust_attributes_of_max_pool(
-    expand_size: int,
-    kernel_size: Sequence[int],
-    stride: Sequence[int],
-    padding: Sequence[int],
-    dilation: Sequence[int],
-) -> Tuple[Sequence[int], Sequence[int], Sequence[int], Sequence[int]]:
-    if isinstance(dilation, int):
-        dilations = [dilation] * expand_size
-    else:
-        dilations = dilation
+def onnx_dtype_to_torch_dtype(itype: int) -> "torch.dtype":  # noqa: F821
+    import torch
 
-    if isinstance(kernel_size, int):
-        kernel_shape = [kernel_size] * expand_size
-    else:
-        kernel_shape = kernel_size
-
-    if isinstance(padding, int):
-        pads = [padding] * expand_size * 2
-    elif len(padding) == 1:
-        pads = padding * expand_size * 2
-    elif len(padding) == 2:
-        # 2D padding
-        pads = padding * 2
-    elif len(padding) == 3:
-        # 3D padding
-        pads = padding * 2
-    else:
-        # When padding is already done for all dimensions,
-        # we don't need to double it
-        # eg: (1, 1, 1, 1, 1, 1)
-        pads = padding
-
-    if isinstance(stride, int):
-        strides = [stride] * expand_size
-    elif not stride:
-        strides = kernel_shape
-    else:
-        strides = stride
-
-    return (kernel_shape, strides, pads, dilations)
+    if itype == TensorProto.FLOAT:
+        return torch.float32
+    if itype == TensorProto.FLOAT16:
+        return torch.float16
+    if itype == TensorProto.INT64:
+        return torch.int64
+    raise NotImplementedError(f"Unable to convert onnx type {itype} to torch.type.")
 
 
 def torch_dtype_to_onnx_dtype(to: "torch.dtype") -> int:  # noqa: F821
@@ -97,3 +66,46 @@ def set_shape_type_binary_op(
         )
     elif g.has_rank(input_name1) and g.has_rank(input_name2):
         g.set_rank(name, max(g.get_rank(input_name1), g.get_rank(input_name2)))
+
+
+def _adjust_attributes_of_max_pool(
+    expand_size: int,
+    kernel_size: Sequence[int],
+    stride: Sequence[int],
+    padding: Sequence[int],
+    dilation: Sequence[int],
+) -> Tuple[Sequence[int], Sequence[int], Sequence[int], Sequence[int]]:
+    if isinstance(dilation, int):
+        dilations = [dilation] * expand_size
+    else:
+        dilations = dilation
+
+    if isinstance(kernel_size, int):
+        kernel_shape = [kernel_size] * expand_size
+    else:
+        kernel_shape = kernel_size
+
+    if isinstance(padding, int):
+        pads = [padding] * expand_size * 2
+    elif len(padding) == 1:
+        pads = padding * expand_size * 2
+    elif len(padding) == 2:
+        # 2D padding
+        pads = padding * 2
+    elif len(padding) == 3:
+        # 3D padding
+        pads = padding * 2
+    else:
+        # When padding is already done for all dimensions,
+        # we don't need to double it
+        # eg: (1, 1, 1, 1, 1, 1)
+        pads = padding
+
+    if isinstance(stride, int):
+        strides = [stride] * expand_size
+    elif not stride:
+        strides = kernel_shape
+    else:
+        strides = stride
+
+    return (kernel_shape, strides, pads, dilations)

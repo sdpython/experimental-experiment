@@ -1,11 +1,14 @@
-from typing import List, Sequence, Tuple
+from typing import List, Optional, Sequence, Tuple
 import numpy as np
 from onnx import TensorProto
+from onnx.helper import tensor_dtype_to_np_dtype
 from .graph_builder import GraphBuilder
 from ._aten_helper import (
     _adjust_attributes_of_max_pool,
     set_shape_type_unary_op,
     set_shape_type_binary_op,
+    onnx_dtype_to_torch_dtype,
+    torch_dtype_to_onnx_dtype,
 )
 
 
@@ -41,6 +44,67 @@ def aten_addmm(
     return g.op.Gemm(
         b, c, a, alpha=float(alpha), beta=float(beta), outputs=outputs, name="addmm"
     )
+
+
+def aten_all(g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T) -> T:
+    res = g.op.Cast(
+        g.op.ReduceMin(g.op.Cast(x, to=TensorProto.INT32, name="all"), name="all"),
+        to=TensorProto.BOOL,
+        outputs=outputs,
+        name="all",
+    )
+    if set_shape_type:
+        g.set_type(res, TensorProto.BOOL)
+        g.set_shape(res, tuple())
+    return res
+
+
+def aten_arange(
+    g: GraphBuilder,
+    set_shape_type: bool,
+    outputs: List[str],
+    start: Optional[int] = None,
+    end: Optional[int] = None,
+    step: int = 1,
+    dtype: Optional["torch.dtype"] = None,  # noqa: F821
+) -> T:
+    if start is not None and end is None:
+        end = start
+        start = 0
+    if dtype is None:
+        if isinstance(end, str):
+            itype = g.get_type(end)
+        else:
+            itype = torch_dtype_to_onnx_dtype(type(end))
+    else:
+        itype = torch_dtype_to_onnx_dtype(dtype)
+    dtype = onnx_dtype_to_torch_dtype(itype)
+    npdtype = tensor_dtype_to_np_dtype(itype)
+    if step is None:
+        step = 1
+    assert start is not None, "start cannot be None"
+    assert end is not None, "end cannot be None"
+    assert step is not None, "step cannot be None"
+    if isinstance(start, str):
+        i_start = start
+    else:
+        i_start = np.array([start], dtype=npdtype)
+    if isinstance(end, str):
+        i_end = end
+    else:
+        i_end = np.array([end], dtype=npdtype)
+    if isinstance(step, str):
+        i_step = step
+    else:
+        i_step = np.array([step], dtype=npdtype)
+    res = g.op.Range(i_start, i_end, i_step, outputs=outputs)
+    if set_shape_type:
+        g.set_type(res, itype)
+        if isinstance(end, str) or isinstance(start, str) or isinstance(step, str):
+            g.set_rank(res, 1)
+        else:
+            g.set_shape(res, ((end - start) // step,))
+    return res
 
 
 def aten_cat(
@@ -170,6 +234,38 @@ def aten_dropout(
     if set_shape_type:
         set_shape_type_unary_op(g, outputs[0], x)
     return result
+
+
+def aten_embedding(
+    g: GraphBuilder,
+    set_shape_type: bool,
+    outputs: List[str],
+    weight: T,
+    indices: T,
+    padding_idx: Optional[int] = None,
+    max_norm: Optional[int] = None,
+    norm_type: float = 2.0,
+    scale_grad_by_freq: bool = False,
+    sparse: bool = False,
+) -> T:
+    if padding_idx is not None or scale_grad_by_freq or sparse or max_norm is not None:
+        raise NotImplementedError(
+            f"Not implemented when padding_idx={padding_idx}, or "
+            f"scale_grad_by_freq={scale_grad_by_freq} or sparse={sparse} "
+            f"or max_norm={max_norm} or norm_type={norm_type} "
+            f"are different from the default values."
+        )
+    res = g.op.Gather(weight, indices, outputs=outputs)
+    if set_shape_type:
+        g.set_type(res, g.get_type(weight))
+    return res
+
+
+def aten_eq(g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T, y: T) -> T:
+    res = g.op.Equal(x, y, outputs=outputs)
+    if set_shape_type:
+        set_shape_type_binary_op(g, outputs[0], x, y)
+    return res
 
 
 def aten_flatten(
@@ -413,6 +509,10 @@ def aten_sigmoid(g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T
     if set_shape_type:
         set_shape_type_unary_op(g, outputs[0], x)
     return res
+
+
+def aten_silu(g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T) -> T:
+    return g.op.Mul(x, g.op.Sigmoid(x, name="silu"), outputs=outputs, name="silu")
 
 
 def aten_softmax(

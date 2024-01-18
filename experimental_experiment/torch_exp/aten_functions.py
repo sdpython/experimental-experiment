@@ -21,14 +21,17 @@ registered_functions = _register()
 
 
 def find_function(
-    name: Any, args: Optional[Any] = None, kwargs: Optional[Dict[str, Any]] = None
+    name: Any,
+    args: Optional[Any] = None,
+    kwargs: Optional[Dict[str, Any]] = None,
+    graph_builder: Optional["GraphBuilder"] = None,  # noqa: F821
 ) -> Callable:
     if isinstance(name, str):
         if name not in registered_functions:
             raise RuntimeError(
-                f"Unable find function {name!r} among "
-                f"{', '.join(sorted(registered_functions))} and "
-                f"args={args}, kwargs={kwargs}."
+                f"Unable find function {name!r}, "
+                f"args={args}, kwargs={kwargs}"
+                f"{'' if graph_builder is None else graph_builder.get_debug_msg()}"
             )
         return registered_functions[name]
 
@@ -48,8 +51,8 @@ def find_function(
             if v in registered_functions:
                 return registered_functions[v]
     raise RuntimeError(
-        f"Unable to interpret type {type(name)}: {name!r}, searched for "
-        f"{lookup} and attributes {lookup_names} among "
-        f"{', '.join(sorted(registered_functions))} and "
-        f"args={args}, kwargs={kwargs}."
+        f"Unable to interpret function {type(name)}: {name!r}, searched for "
+        f"{lookup} and attributes {lookup_names}, "
+        f"args={args}, kwargs={kwargs}"
+        f"{'' if graph_builder is None else graph_builder.get_debug_msg()}"
     )

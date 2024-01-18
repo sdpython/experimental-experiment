@@ -19,8 +19,10 @@ class Opset:
         "Constant": 1,
         "Div": 1,
         "Dropout": 2,
+        "Equal": 1,
         "Exp": 1,
         "Expand": 1,
+        "Gather": 1,
         "GatherElements": 1,
         "Gemm": 1,
         "Identity": 1,
@@ -29,6 +31,8 @@ class Opset:
         "Mul": 1,
         "Log": 1,
         "Or": 1,
+        "Range": 1,
+        "ReduceMin": 1,
         "Relu": 1,
         "Reshape": 2,
         "Shape": 1,
@@ -51,7 +55,10 @@ class Opset:
         try:
             return super().__getattr__(name)
         except AttributeError as e:
-            raise AttributeError(f"Unable to access attribute {name!r}.") from e
+            raise AttributeError(
+                f"Unable to access attribute {name!r}, "
+                f"you can still use this operator with method 'make_node'."
+            ) from e
 
     def make_node(
         self,
@@ -560,20 +567,16 @@ class GraphBuilder:
                 self.set_type(node.output[0], self._known_types[node.input[0]])
             if self.is_constant(node.input[0]):
                 self.constants_[node.output[0]] = node
-            if self.verbose > 3:
-                print(
-                    f"[GraphBuilder-{self._hash()}.make_node] Identity:{node.input[0]}->{node.output[0]}]"
-                )
         else:
             if all(map(self.is_constant, node.input)):
                 for o in node.output:
                     self.constants_[o] = node
-            if self.verbose > 3:
-                print(
-                    f"[GraphBuilder-{self._hash()}.make_node] "
-                    f"[{self._debug_string_inputs(node.input)}] "
-                    f"{node.op_type}:{node.input}->{node.output}"
-                )
+        if self.verbose > 3:
+            print(
+                f"[GraphBuilder-{self._hash()}.make_node] "
+                f"[{self._debug_string_inputs(node.input)}] "
+                f"{node.op_type}:{node.input}->{node.output}"
+            )
 
         # add the node
         for o in node.output:
@@ -873,7 +876,7 @@ class GraphBuilder:
                 # this is an initiliazer
                 continue
             # a node
-            if all(map(self.is_constant, v.output)):
+            if all(map(self.is_constant, v.input)):
                 node_to_remove.add(tuple(v.output))
                 # node evaluation
                 if v.op_type == "Transpose":
