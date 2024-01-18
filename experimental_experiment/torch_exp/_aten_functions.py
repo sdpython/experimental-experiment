@@ -446,6 +446,7 @@ def aten_max_pool2d_with_indices(
 
     return _aten_max_pool_with_indices_onnx(
         g,
+        set_shape_type,
         outputs,
         x,
         kernel_shape,

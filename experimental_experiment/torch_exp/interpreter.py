@@ -347,16 +347,13 @@ class DynamoInterpreter:
             elif isinstance(i, tuple):
                 # For node cat=concat
                 args.append(tuple(t.name for t in i))
-            elif isinstance(i, float):
-                cst = self.builder.make_initializer("", np.array(i, dtype=np.float32))
-                args.append(cst)
-            elif isinstance(i, int):
-                cst = self.builder.make_initializer("", np.array(i, dtype=np.int64))
-                args.append(cst)
+            elif isinstance(i, (list, float, int)):
+                args.append(i)
             else:
                 raise RuntimeError(
-                    f"Unexpected type {type(i)} for function {aten_name!r} "
-                    f"in args={node.args}"
+                    f"Unexpected type (argument {i}) {type(i)} "
+                    f"for function {aten_name!r} "
+                    f"in args={node.args}{self.builder.get_debug_msg()}"
                 )
 
         output_names = self._get_output_names(node)
