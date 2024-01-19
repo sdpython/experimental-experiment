@@ -23,7 +23,9 @@ def torch_dtype_to_onnx_dtype(to: "torch.dtype") -> int:  # noqa: F821
         return TensorProto.FLOAT
     if to == torch.int64:
         return TensorProto.INT64
-    raise NotImplementedError(f"Unable to convert torch dtype {to} to onnx dtype.")
+    if to == torch.bool:
+        return TensorProto.BOOL
+    raise NotImplementedError(f"Unable to convert torch dtype {to!r} to onnx dtype.")
 
 
 def broadcast_shape(sh1: Tuple[int, ...], sh2: Tuple[int, ...]) -> Tuple[int, ...]:

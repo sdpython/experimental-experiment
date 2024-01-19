@@ -1,5 +1,6 @@
 import inspect
 import operator
+import pprint
 import types
 from typing import Any, Callable, Dict, List, Tuple, Union
 import numpy as np
@@ -213,47 +214,108 @@ class DynamoInterpreter:
         input_name: str,
         index_slice: slice,
         set_shape_type: bool,
-        axis: int,
+        axes: List[int],
+        expand_axes: List[int],
     ):
-        assert isinstance(axis, int), f"Unexpected type {type(axis)} for axis"
-        aaxis = np.array([axis], dtype=np.int64)
-        axis_name = self.builder.unique_name(f"{node.name}_axis")
-        self.builder.make_initializer(axis_name, aaxis)
-        start = np.array([index_slice.start or 0], dtype=np.int64)
-        end_name = self.builder.unique_name(f"{node.name}_end")
-        if index_slice.stop is None:
-            shape_name = self.builder.unique_name(f"{node.name}_shape")
-            self.builder.make_node("Shape", [input_name], [shape_name])
-            self.builder.make_node(
-                "GatherElements", [input_name, axis_name], [end_name]
-            )
+        assert isinstance(axes, list), f"Unexpected type {type(axes)} for axes"
+        assert all(
+            map(lambda i: isinstance(i, int), axes)
+        ), f"Expected only integer axis but got {axes}"
+        assert len(axes) == len(
+            index_slice
+        ), f"Length mismatch {len(axes)} != {len(index_slice)}"
+
+        # axes
+        aaxes = np.array(axes, dtype=np.int64)
+        axes_name = self.builder.unique_name(f"{node.name}_axis")
+        self.builder.make_initializer(axes_name, aaxes)
+
+        starts = []
+        ends = []
+        steps = []
+        shape_name = None
+        end_name = None
+        concat = False
+        for axis, aslice in zip(axes, index_slice):
+            if isinstance(aslice, int):
+                # integer
+                starts.append(aslice)
+                ends.append(aslice + 1)
+                steps.append(1)
+                continue
+
+            starts.append(aslice.start or 0)
+
+            if aslice.stop is None:
+                if shape_name is None:
+                    shape_name = self.builder.unique_name(f"{node.name}_shape")
+                    self.builder.make_node(
+                        "Shape", [input_name], [shape_name], name="getitem_slice"
+                    )
+
+                aaxis = np.array(axis, dtype=np.int64)
+                axis_name = self.builder.unique_name(f"{node.name}_axis_{axis}")
+                self.builder.make_initializer(axis_name, aaxis)
+
+                end_name = self.builder.unique_name(f"{node.name}_end")
+                self.builder.make_node(
+                    "GatherElements",
+                    [input_name, axis_name],
+                    [end_name],
+                    name="getitem_slice",
+                )
+                ends.append(end_name)
+                concat = True
+            else:
+                ends.append(aslice.stop)
+                end = np.array([index_slice.stop], dtype=np.int64)
+                self.builder.make_initializer(end_name, end)
+
+            steps.append(aslice.step if aslice.step else 1)
+
+        # if concat: one end is coming from a shape
+        if concat:
+            iends = [
+                i if isinstance(i, str) else np.array(i, dtype=np.int64) for i in ends
+            ]
+            conc = self.builder.op.Concat(*iends, axis=0, name="getitem_slice")
         else:
-            end = np.array([index_slice.stop], dtype=np.int64)
-            self.builder.make_initializer(end_name, end)
+            conc = self.builder.make_initializer("", np.array(ends, dtype=np.int64))
 
         inputs = [
             input_name,
             self.builder.make_initializer(
-                self.builder.unique_name(f"{node.name}_start"), start
+                self.builder.unique_name(f"{node.name}_start"),
+                np.array(starts, dtype=np.int64),
             ),
-            end_name,
-            axis_name,
+            conc,
+            axes_name,
+            self.builder.make_initializer(
+                self.builder.unique_name(f"{node.name}_step"),
+                np.array(steps, dtype=np.int64),
+            ),
         ]
-        if index_slice.step is not None:
-            step = np.array([index_slice.step], dtype=np.int64)
-            inputs.append(
-                self.builder.make_initializer(
-                    self.builder.unique_name(f"{node.name}_step"), step
-                )
-            )
 
-        res = self.builder.make_node("Slice", inputs, [node.name])
+        if expand_axes:
+            sliced = self.builder.make_node("Slice", inputs, name="getitem_slice")
+            res = self.builder.op.Unsqueeze(
+                sliced,
+                np.array(expand_axes, dtype=np.int64),
+                outputs=[node.name],
+                name="getitem_slice",
+            )
+        else:
+            res = self.builder.make_node(
+                "Slice", inputs, [node.name], name="getitem_slice"
+            )
         if set_shape_type:
             dtype = self.builder.get_type(inputs[0])
             shape = self.builder.get_shape(inputs[0])
             self.builder.set_shape(
                 node.name,
-                self.builder._apply_slice_to_shape(shape, index_slice, axis=axis),
+                self.builder._apply_slice_to_shape(
+                    shape, index_slice, axes=axes, expand_axes=expand_axes
+                ),
             )
             self.builder.set_type(node.name, dtype)
         return res
@@ -299,7 +361,7 @@ class DynamoInterpreter:
 
         if isinstance(index, slice):
             return self._getitem_slice(
-                node, node_output.name, index, set_shape_type=set_shape_type, axis=0
+                node, node_output.name, [index], set_shape_type=set_shape_type, axes=[0]
             )
 
         if isinstance(index, tuple):
@@ -310,29 +372,25 @@ class DynamoInterpreter:
                 )
             ):
                 # case where there is only one slice
-                n_ellipsis = sum(
-                    map(lambda x: 1 if (x is Ellipsis or x is None) else 0, index)
+                axes = []
+                slices = []
+                expand_axes = []
+                for i, ind in enumerate(index):
+                    if ind is Ellipsis:
+                        continue
+                    if ind is None:
+                        expand_axes.append(i)
+                        continue
+                    axes.append(i - len(expand_axes))
+                    slices.append(ind)
+                return self._getitem_slice(
+                    node,
+                    node_output.name,
+                    slices,
+                    set_shape_type=set_shape_type,
+                    axes=axes,
+                    expand_axes=expand_axes,
                 )
-                if n_ellipsis == len(index) - 1:
-                    axis = max(
-                        map(
-                            lambda ix: -1 if ix[1] is Ellipsis else ix[0],
-                            enumerate(index),
-                        )
-                    )
-                    return self._getitem_slice(
-                        node,
-                        node_output.name,
-                        index[axis],
-                        set_shape_type=set_shape_type,
-                        axis=axis,
-                    )
-                else:
-                    raise RuntimeError(
-                        f"getitem: unexpected slice for index={index}, "
-                        f"node={node}, args={args}, val={val}"
-                        f"{self.builder.get_debug_msg()}"
-                    )
 
         raise RuntimeError(
             f"getitem: unexpected type {type(index)} for index={index}, "
@@ -385,7 +443,10 @@ class DynamoInterpreter:
         ), f"Unexpected type {type(node.args)} for node.args."
 
         fct = find_method(
-            f"aten_meth_{method_name}", args=node.args, kwargs=node.kwargs
+            f"aten_meth_{method_name}",
+            args=node.args,
+            kwargs=node.kwargs,
+            graph_builder=self.builder,
         )
         args = node.args
         args = [getattr(args[0], "name", args[0]), *args[1:]]
@@ -456,8 +517,6 @@ class DynamoInterpreter:
 
     def call_module(self, node: "torch.fx.Node"):  # noqa: F821
         def raise_msg():
-            import pprint
-
             return (
                 f"node={node}\n--\nnode.__dict__={pprint.pformat(node.__dict__)}"
                 f"\n--\n{pprint.pformat(node.meta)}\n---\n{dir(node)}"

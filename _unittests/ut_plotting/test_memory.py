@@ -15,7 +15,7 @@ class TestPlottingMemory(ExtTestCase):
             figsize=(18 * 2, 7 * 2),
         )
         self.assertNotEmpty(ax)
-        get_figure(ax).savefig("check.png")
+        get_figure(ax).savefig("test_memory_peak_plot.png")
 
 
 if __name__ == "__main__":

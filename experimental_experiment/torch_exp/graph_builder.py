@@ -110,19 +110,39 @@ class GraphBuilder:
     def _hash(self) -> str:
         return make_hash(self)
 
-    @classmethod
     def _apply_slice_to_shape(
-        cls, shape: Tuple[int], index: slice, axis: int = 0
+        self,
+        shape: Tuple[int],
+        indices: List[slice],
+        axes: List[int],
+        expand_axes: List[int],
     ) -> Tuple[int]:
-        assert isinstance(shape, tuple)
-        assert isinstance(index, slice)
-        n = shape[axis]
-        start = index.start or 0
-        end = index.stop or n
-        diff = end - start
-        dim = diff // index.step if index.step else diff
-        new_shape = list(shape)
-        new_shape[axis] = dim
+        assert isinstance(
+            shape, tuple
+        ), f"Unexpected type {type(shape)} for shape: {shape}"
+        assert isinstance(
+            indices, list
+        ), f"Unexpected type {type(indices)} for index: {indices}"
+        assert isinstance(axes, list), f"Unexpected type {type(axes)} for index: {axes}"
+        assert len(indices) == len(
+            axes
+        ), f"Mismatch lengths {len(indices)} != {len(axes)}"
+        new_shape = []
+        for index, axis in zip(indices, axes):
+            while len(new_shape) < axis:
+                new_shape.append(shape[len(new_shape)])
+            assert axis < len(shape), (
+                f"axis={axis} is out of order (shape={shape}, "
+                f"indices={indices}, axes={axes}){self.get_debug_msg()}"
+            )
+            n = shape[axis]
+            start = index.start or 0
+            end = index.stop or n
+            diff = end - start
+            dim = diff // index.step if index.step else diff
+            new_shape.append(dim)
+        for e in expand_axes:
+            new_shape.insert(e, 1)
         return tuple(new_shape)
 
     def __init__(

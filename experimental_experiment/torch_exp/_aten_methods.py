@@ -1,4 +1,4 @@
-from typing import Any, List, Optional, Sequence
+from typing import Any, Dict, List, Sequence
 import numpy as np
 from onnx.helper import tensor_dtype_to_np_dtype
 from ._aten_helper import torch_dtype_to_onnx_dtype, set_shape_type_unary_op
@@ -11,6 +11,20 @@ def aten_meth_contiguous(
     g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T
 ) -> T:
     return g.make_node("Identity", [x], outputs, name="contiguous")
+
+
+def aten_meth_expand(
+    g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T, *dims: List[int]
+) -> T:
+    size = np.abs(np.array(dims, dtype=np.int64))
+    return g.op.Expand(x, size, outputs=outputs)
+
+
+def aten_meth_masked_fill(
+    g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T, mask: T, value: Any
+) -> T:
+    value_cast = g.op.CastLike(value, x)
+    return g.op.Where(mask, value_cast, x)
 
 
 def aten_meth_masked_fill_(
@@ -90,11 +104,36 @@ def aten_meth_to(
     set_shape_type: bool,
     outputs: List[str],
     input_name: T,
-    dtype: Optional["torch.dtype"] = None,  # noqa: F821
+    *args: List[Any],
+    **kwargs: Dict[str, Any],
 ) -> T:
-    assert dtype is not None, "dtype cannot be None for method to"
+    import torch
+
+    dtype = kwargs.get("dtype", None)
+    device = kwargs.get("device", None)
+    for a in args:
+        if isinstance(a, torch.dtype):
+            assert (
+                dtype is None
+            ), f"dtype is specified in args and kwargs {args}, {kwargs}"
+            dtype = a
+            continue
+        if isinstance(a, torch.device):
+            assert (
+                device is None
+            ), f"device is specified in args and kwargs {args}, {kwargs}"
+            device = a
+            continue
+        raise NotImplementedError(f"Unexpected type for argument {type(a)}")
+    assert (
+        dtype is not None or device is not None
+    ), "dtype or device cannot be None for method to"
+
+    if dtype is None:
+        return g.op.Identity(input_name, outputs=outputs, name="to")
     onnx_to = torch_dtype_to_onnx_dtype(dtype)
-    res = g.make_node("Cast", [input_name], outputs, to=onnx_to)
+
+    res = g.make_node("Cast", [input_name], outputs, to=onnx_to, name="to")
     if set_shape_type:
         g.set_type(outputs[0], onnx_to)
         if g.has_shape(input_name):

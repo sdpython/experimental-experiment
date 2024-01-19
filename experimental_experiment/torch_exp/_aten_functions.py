@@ -588,6 +588,16 @@ def aten_softmax(
     return res
 
 
+def aten_sub(
+    g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T, y: T
+) -> T:
+    x, y = prepare_inputs_homogeneous_operator(g, x, y)
+    res = g.op.Sub(x, y, outputs=outputs)
+    if set_shape_type:
+        set_shape_type_binary_op(g, outputs[0], x, y)
+    return res
+
+
 def aten_t(g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T) -> T:
     return g.op.Transpose(x, perm=[1, 0], outputs=outputs, name="t")
 
