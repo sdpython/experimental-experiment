@@ -15,8 +15,10 @@ class Opset:
         "Add": 1,
         "And": 1,
         "Cast": 1,
+        "CastLike": 1,
         "Concat": 1,
         "Constant": 1,
+        "ConstantOfShape": 1,
         "Div": 1,
         "Dropout": 2,
         "Equal": 1,
@@ -29,6 +31,7 @@ class Opset:
         "MatMul": 1,
         "MaxPool": 2,
         "Mul": 1,
+        "Less": 1,
         "Log": 1,
         "Or": 1,
         "Range": 1,
@@ -43,6 +46,7 @@ class Opset:
         "Sub": 1,
         "Transpose": 1,
         "Unsqueeze": 1,
+        "Where": 1,
     }
 
     def __init__(self, builder: "GraphBuilder", opset: int):
@@ -75,12 +79,15 @@ class Opset:
             inputs = []
         new_inputs = []
         for i in inputs:
-            if not isinstance(i, str):
+            if isinstance(i, str):
+                new_inputs.append(i)
+            elif hasattr(i, "name"):
+                # torch.fx.Node
+                new_inputs.append(i.name)
+            else:
                 name = self.builder.unique_name("cst")
                 self.builder.make_initializer(name, i)
                 new_inputs.append(name)
-            else:
-                new_inputs.append(i)
 
         return self.builder.make_node(
             op_type, new_inputs, outputs=outputs, domain=domain, name=name, **kwargs
@@ -395,6 +402,17 @@ class GraphBuilder:
             raise NotImplementedError("External initializers are not implemented yet.")
         if name == "":
             name = self.unique_name("cst")
+        if isinstance(value, int):
+            value = np.array(value, dtype=np.int64)
+        elif isinstance(value, float):
+            value = np.array(value, dtype=np.float32)
+        elif hasattr(value, "data"):
+            # torch.nn.parameter.Parameter -> np.array
+            pass
+        elif isinstance(value, np.ndarray):
+            pass
+        else:
+            raise RuntimeError(f"Unexpected type {type(value)} for value={value!r}.")
         self.set_shape(name, value.shape)
         self.set_type(name, self._get_type(value.dtype))
         self.set_name(name)

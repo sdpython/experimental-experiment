@@ -2,12 +2,14 @@ from typing import List, Optional, Sequence, Tuple
 import numpy as np
 from onnx import TensorProto
 from onnx.helper import tensor_dtype_to_np_dtype
+from onnx.numpy_helper import from_array
 from .graph_builder import GraphBuilder
 from ._aten_helper import (
     _adjust_attributes_of_max_pool,
     set_shape_type_unary_op,
     set_shape_type_binary_op,
     onnx_dtype_to_torch_dtype,
+    prepare_inputs_homogeneous_operator,
     torch_dtype_to_onnx_dtype,
 )
 
@@ -25,6 +27,7 @@ def aten_abs(g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T) ->
 def aten_add(
     g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T, y: T
 ) -> T:
+    x, y = prepare_inputs_homogeneous_operator(g, x, y)
     res = g.op.Add(x, y, outputs=outputs)
     if set_shape_type:
         set_shape_type_binary_op(g, outputs[0], x, y)
@@ -74,6 +77,10 @@ def aten_arange(
     if dtype is None:
         if isinstance(end, str):
             itype = g.get_type(end)
+        elif isinstance(end, int):
+            itype = TensorProto.INT64
+        elif isinstance(end, float):
+            itype = TensorProto.FLOAT
         else:
             itype = torch_dtype_to_onnx_dtype(type(end))
     else:
@@ -262,6 +269,7 @@ def aten_embedding(
 
 
 def aten_eq(g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T, y: T) -> T:
+    x, y = prepare_inputs_homogeneous_operator(g, x, y)
     res = g.op.Equal(x, y, outputs=outputs)
     if set_shape_type:
         set_shape_type_binary_op(g, outputs[0], x, y)
@@ -290,6 +298,53 @@ def aten_flatten(
     return g.make_node("Flatten", [x], outputs, to=end_dim)
 
 
+def aten_full(
+    g: GraphBuilder,
+    set_shape_type: bool,
+    outputs: List[str],
+    size: T,
+    fill_value: float,
+    dtype=None,
+) -> T:
+    assert isinstance(
+        fill_value, (float, int)
+    ), f"Unexpected type {type(fill_value)} for fill_value."
+    new_shape = None
+
+    if isinstance(size, tuple):
+        tsize = np.array(size, dtype=np.int64)
+        new_shape = size
+    else:
+        raise RuntimeError(f"Unexpected type {type(size)} for size.")
+
+    if dtype is None:
+        if isinstance(fill_value, int):
+            value = np.array(fill_value, dtype=np.int64)
+            itype = TensorProto.INT64
+        elif isinstance(fill_value, float):
+            value = np.array(fill_value, dtype=np.float32)
+            itype = TensorProto.FLOAT
+        else:
+            itype = torch_dtype_to_onnx_dtype(type(fill_value))
+            ntype = tensor_dtype_to_np_dtype(itype)
+            value = np.array(fill_value, dtype=ntype)
+    else:
+        itype = torch_dtype_to_onnx_dtype(dtype)
+        ntype = tensor_dtype_to_np_dtype(itype)
+        value = np.array(fill_value, dtype=ntype)
+
+    res = g.op.ConstantOfShape(tsize, value=from_array(value), outputs=outputs)
+    if set_shape_type:
+        g.set_type(res, itype)
+        if new_shape:
+            g.set_shape(res, new_shape)
+
+    # size = op.Cast(size, to=INT64.dtype)
+    # fill_value = op.Cast(fill_value, to=dtype)
+    # return op.Expand(fill_value, size)
+    return res
+
+
 def aten_linear(
     g: GraphBuilder,
     set_shape_type: bool,
@@ -303,6 +358,14 @@ def aten_linear(
         res = g.op.MatMul(input, weight_transposed)
         return g.op.Add(res, bias, outputs=outputs)
     return g.op.MatMul(input, weight_transposed, outputs=outputs)
+
+
+def aten_lt(g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T, y: T) -> T:
+    x, y = prepare_inputs_homogeneous_operator(g, x, y)
+    res = g.op.Less(x, y, outputs=outputs)
+    if set_shape_type:
+        set_shape_type_binary_op(g, outputs[0], x, y)
+    return res
 
 
 def aten_matmul(

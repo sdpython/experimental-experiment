@@ -1,4 +1,4 @@
-from typing import List, Optional, Sequence
+from typing import Any, List, Optional, Sequence
 import numpy as np
 from onnx.helper import tensor_dtype_to_np_dtype
 from ._aten_helper import torch_dtype_to_onnx_dtype, set_shape_type_unary_op
@@ -11,6 +11,13 @@ def aten_meth_contiguous(
     g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T
 ) -> T:
     return g.make_node("Identity", [x], outputs, name="contiguous")
+
+
+def aten_meth_masked_fill_(
+    g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T, mask: T, value: Any
+) -> T:
+    value_cast = g.op.CastLike(value, x)
+    return g.op.Where(mask, value_cast, x)
 
 
 def aten_meth_mean(

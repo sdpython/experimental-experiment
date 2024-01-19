@@ -1,5 +1,7 @@
-from typing import Sequence, Tuple
+from typing import Any, Sequence, Set, Tuple
+import numpy as np
 from onnx import TensorProto
+from onnx.helper import np_dtype_to_tensor_dtype, tensor_dtype_to_np_dtype
 
 
 def onnx_dtype_to_torch_dtype(itype: int) -> "torch.dtype":  # noqa: F821
@@ -66,6 +68,70 @@ def set_shape_type_binary_op(
         )
     elif g.has_rank(input_name1) and g.has_rank(input_name2):
         g.set_rank(name, max(g.get_rank(input_name1), g.get_rank(input_name2)))
+
+
+def _get_input_type(g: "GraphBuilder", x: Any) -> int:  # noqa: F821
+    if isinstance(x, int):
+        return TensorProto.INT64
+    if isinstance(x, float):
+        return TensorProto.FLOAT
+    if isinstance(x, str):
+        return g.get_type(x)
+    if isinstance(x, np.array):
+        return np_dtype_to_tensor_dtype(x.dtype)
+    # A torch tensor.
+    if hasattr(x, "dtype"):
+        return torch_dtype_to_onnx_dtype(x.dtype)
+    raise RuntimeError(f"Unable to guess type from {type(x)}.")
+
+
+def _get_compute_type(dtypes: Set[int]) -> int:
+    order = [
+        TensorProto.DOUBLE,
+        TensorProto.FLOAT,
+        TensorProto.FLOAT16,
+        TensorProto.INT64,
+        TensorProto.UINT64,
+        TensorProto.INT32,
+        TensorProto.UINT32,
+        TensorProto.INT16,
+        TensorProto.UINT16,
+        TensorProto.INT8,
+        TensorProto.UINT8,
+    ]
+    for t in order:
+        if t in dtypes:
+            return t
+    raise RuntimeError(f"Unable to guess compute type {dtypes}.")
+
+
+def _cast_inputs(g: "GraphBuilder", a: Any, itype: int) -> str:  # noqa: F821
+    if isinstance(a, str):
+        # a result
+        return g.op.Cast(a, to=itype)
+    if isinstance(a, (int, float)):
+        a = np.array(a)
+    if isinstance(a, np.ndarray):
+        return g.make_initializer("", a.astype(tensor_dtype_to_np_dtype(itype)))
+    raise RuntimeError(f"Unexpected type {type(a)}, itype={itype}.")
+
+
+def prepare_inputs_homogeneous_operator(
+    g: "GraphBuilder", *args: Sequence[str]  # noqa: F821
+) -> Tuple[str]:
+    """
+    Cast any inputs to ensure all inputs share the same type.
+    """
+    dtypes_list = [_get_input_type(g, a) for a in args]
+    dtypes = set(dtypes_list)
+    only = _get_compute_type(set(dtypes))
+    inputs = []
+    for dt, a in zip(dtypes_list, args):
+        if dt == only and isinstance(a, str):
+            inputs.append(a)
+            continue
+        inputs.append(_cast_inputs(g, a, only))
+    return tuple(inputs)
 
 
 def _adjust_attributes_of_max_pool(

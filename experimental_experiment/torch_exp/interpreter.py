@@ -303,9 +303,16 @@ class DynamoInterpreter:
             )
 
         if isinstance(index, tuple):
-            if all(map(lambda x: x is Ellipsis or isinstance(x, (slice, int)), index)):
+            if all(
+                map(
+                    lambda x: x is Ellipsis or x is None or isinstance(x, (slice, int)),
+                    index,
+                )
+            ):
                 # case where there is only one slice
-                n_ellipsis = sum(map(lambda x: 1 if x is Ellipsis else 0, index))
+                n_ellipsis = sum(
+                    map(lambda x: 1 if (x is Ellipsis or x is None) else 0, index)
+                )
                 if n_ellipsis == len(index) - 1:
                     axis = max(
                         map(
@@ -319,6 +326,12 @@ class DynamoInterpreter:
                         index[axis],
                         set_shape_type=set_shape_type,
                         axis=axis,
+                    )
+                else:
+                    raise RuntimeError(
+                        f"getitem: unexpected slice for index={index}, "
+                        f"node={node}, args={args}, val={val}"
+                        f"{self.builder.get_debug_msg()}"
                     )
 
         raise RuntimeError(
@@ -344,10 +357,10 @@ class DynamoInterpreter:
                 args.append(i)
             elif hasattr(i, "name"):
                 args.append(i.name)
-            elif isinstance(i, tuple):
-                # For node cat=concat
-                args.append(tuple(t.name for t in i))
-            elif isinstance(i, (list, float, int)):
+            # elif isinstance(i, tuple):
+            # For node cat=concat
+            #    args.append(tuple(t.name for t in i))
+            elif isinstance(i, (list, float, int, tuple)):
                 args.append(i)
             else:
                 raise RuntimeError(
