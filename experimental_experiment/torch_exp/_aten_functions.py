@@ -349,15 +349,26 @@ def aten_linear(
     g: GraphBuilder,
     set_shape_type: bool,
     outputs: List[str],
-    input: T,
+    x: T,
     weight: T,
     bias: T = None,
 ) -> T:
     weight_transposed = g.op.Transpose(weight, perm=[1, 0])
     if bias:
-        res = g.op.MatMul(input, weight_transposed)
-        return g.op.Add(res, bias, outputs=outputs)
-    return g.op.MatMul(input, weight_transposed, outputs=outputs)
+        res = g.op.MatMul(x, weight_transposed)
+        res = g.op.Add(res, bias, outputs=outputs)
+    else:
+        res = g.op.MatMul(x, weight_transposed, outputs=outputs)
+    if set_shape_type:
+        g.set_type(res, g.get_type(x))
+        if g.has_shape(x) and g.has_shape(weight):
+            shape_x = g.get_shape(x)
+            shape_w = g.get_shape(weight)
+            new_shape = (shape_x[0], shape_w[0])
+            g.set_shape(res, new_shape)
+        else:
+            g.set_rank(res, 2)
+    return res
 
 
 def aten_lt(g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T, y: T) -> T:

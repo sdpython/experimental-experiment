@@ -85,9 +85,9 @@ class Opset:
                 # torch.fx.Node
                 new_inputs.append(i.name)
             else:
-                name = self.builder.unique_name("cst")
-                self.builder.make_initializer(name, i)
-                new_inputs.append(name)
+                cst_name = self.builder.unique_name("cst")
+                self.builder.make_initializer(cst_name, i)
+                new_inputs.append(cst_name)
 
         return self.builder.make_node(
             op_type, new_inputs, outputs=outputs, domain=domain, name=name, **kwargs
@@ -494,7 +494,7 @@ class GraphBuilder:
             self.set_type(name, elem_type)
         return name
 
-    def _debug_string_inputs(self, inputs):
+    def _debug_string_inputs(self, inputs, align=None):
         st = ""
         c = "-TRUSVW#"
         for i in inputs:
@@ -506,6 +506,8 @@ class GraphBuilder:
             if self.has_shape(i):
                 k += 4
             st += c[k]
+        if align and len(st) < align:
+            st += " " * (align - len(st))
         return st
 
     def make_node(
@@ -772,10 +774,40 @@ class GraphBuilder:
     def get_debug_msg(self) -> str:
         if not self._debug_msg:
             return ""
+
+        def _align(s, length):
+            if len(s) < length:
+                s += " " * (length - len(s))
+            return s
+
         rows = ["", "--DEBUG--"]
         for k, v in self._debug_msg.items():
             rows.append(f"-- {k}")
             rows.append(str(v))
+        rows.append("--")
+        hs = self._hash()
+        for io in self.inputs:
+            shh = str(io.type.tensor_type.shape).replace("\n", "")
+            rows.append(
+                f"[GraphBuilder-{hs}.make_tensor_input] {io.name}"
+                f"[{io.type.tensor_type.elem_type}:{shh}]"
+            )
+        for name, init in self.initializers_dict.items():
+            rows.append(
+                f"[GraphBuilder-{hs}.make_initializer] {name}[{init.dtype}:{init.shape}]"
+            )
+        for node in self.nodes:
+            rows.append(
+                f"[GraphBuilder-{hs}.make_node] "
+                f"{_align(node.name, 15)} [{self._debug_string_inputs(node.input, 4)}] "
+                f"{node.op_type}:{node.input}->{node.output}"
+            )
+        for io in self.outputs:
+            shh = str(io.type.tensor_type.shape).replace("\n", "")
+            rows.append(
+                f"[GraphBuilder-{hs}.make_tensor_output] {io.name}"
+                f"[{io.type.tensor_type.elem_type}:{shh}]"
+            )
         return "\n".join(rows)
 
     def process(

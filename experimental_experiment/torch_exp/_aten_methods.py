@@ -1,10 +1,22 @@
 from typing import Any, Dict, List, Sequence
 import numpy as np
 from onnx.helper import tensor_dtype_to_np_dtype
-from ._aten_helper import torch_dtype_to_onnx_dtype, set_shape_type_unary_op
+from ._aten_helper import (
+    torch_dtype_to_onnx_dtype,
+    set_shape_type_binary_op,
+    set_shape_type_unary_op,
+)
 from .graph_builder import GraphBuilder
 
 T = str
+
+
+def aten_meth_bool(
+    g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T
+) -> T:
+    import torch
+
+    return aten_meth_to(g, set_shape_type, outputs, x, dtype=torch.bool)
 
 
 def aten_meth_contiguous(
@@ -17,21 +29,41 @@ def aten_meth_expand(
     g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T, *dims: List[int]
 ) -> T:
     size = np.abs(np.array(dims, dtype=np.int64))
-    return g.op.Expand(x, size, outputs=outputs)
+    res = g.op.Expand(x, size, outputs=outputs)
+    if set_shape_type:
+        g.set_type(res, g.get_type(x))
+        g.set_shape(res, tuple(dims))
+    return res
 
 
 def aten_meth_masked_fill(
     g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T, mask: T, value: Any
 ) -> T:
-    value_cast = g.op.CastLike(value, x)
-    return g.op.Where(mask, value_cast, x)
+    return aten_meth_masked_fill_(g, set_shape_type, outputs, x, mask, value)
 
 
 def aten_meth_masked_fill_(
     g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T, mask: T, value: Any
 ) -> T:
-    value_cast = g.op.CastLike(value, x)
-    return g.op.Where(mask, value_cast, x)
+    value_cast = g.op.CastLike(value, x, name="masked_fill")
+    res = g.op.Where(mask, value_cast, x, name="masked_fill")
+    if set_shape_type:
+        g.set_type(res, g.get_type(x))
+        g.set_type(value_cast, g.get_type(x))
+        if isinstance(value, str):
+            if g.has_shape(value):
+                g.set_shape(value_cast, g.get_shape(value))
+            elif g.has_rank(value):
+                g.set_rank(value_cast, g.get_rank(value))
+        elif isinstance(value, (int, float, bool)):
+            g.set_shape(value_cast, tuple())
+        elif hasattr(value, "shape"):
+            g.set_shape(value_cast, value.shape)
+        else:
+            raise RuntimeError(f"Unable to guess shape from type {type(value)}")
+        set_shape_type_binary_op(g, res, mask, value_cast, x, begin=1)
+
+    return res
 
 
 def aten_meth_mean(

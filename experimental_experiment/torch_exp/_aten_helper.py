@@ -1,4 +1,4 @@
-from typing import Any, Sequence, Set, Tuple
+from typing import Any, List, Sequence, Set, Tuple
 import numpy as np
 from onnx import TensorProto
 from onnx.helper import np_dtype_to_tensor_dtype, tensor_dtype_to_np_dtype
@@ -54,22 +54,51 @@ def set_shape_type_unary_op(
 
 
 def set_shape_type_binary_op(
-    g: "GraphBuilder", name: str, input_name1: str, input_name2: str  # noqa: F821
+    g: "GraphBuilder", name: str, *input_names: List[str], begin: int = 0  # noqa: F821
 ):
     """
     Sets the shape and type for a binary operator (add, mul, ...).
     """
-    dtype = g.get_type(input_name1) if g.has_type(input_name1) else None
-    if not dtype:
-        dtype = g.get_type(input_name2) if g.has_type(input_name2) else None
-    assert dtype, f"{g.get_type(input_name1)}"
+    # type
+    dtype = None
+    for input_name in input_names[begin:]:
+        if g.has_type(input_name):
+            dtype = g.get_type(input_name)
+            break
+    assert dtype, f"Unable to guess type from {input_names}{g.get_debug_msg()}"
     g.set_type(name, dtype)
-    if g.has_shape(input_name1) and g.has_shape(input_name2):
-        g.set_shape(
-            name, broadcast_shape(g.get_shape(input_name1), g.get_shape(input_name2))
-        )
-    elif g.has_rank(input_name1) and g.has_rank(input_name2):
-        g.set_rank(name, max(g.get_rank(input_name1), g.get_rank(input_name2)))
+
+    # shape
+    shape = None
+    for input_name in input_names:
+        if g.has_shape(input_name):
+            if shape is None:
+                shape = g.get_shape(input_name)
+            else:
+                shape = broadcast_shape(shape, g.get_shape(input_name))
+        elif shape is not None:
+            # one shape is missing
+            shape = None
+            break
+
+    if shape is not None:
+        g.set_shape(name, shape)
+        return
+
+    # rank otherwise
+    rank = None
+    for input_name in input_names:
+        if g.has_rank(input_name):
+            if rank is None:
+                rank = g.get_rank(input_name)
+            else:
+                rank = max(rank, g.get_rank(input_name))
+        elif rank is not None:
+            # one shape is missing
+            rank = None
+            break
+    if rank is not None:
+        g.set_rank(name, rank)
 
 
 def _get_input_type(g: "GraphBuilder", x: Any) -> int:  # noqa: F821

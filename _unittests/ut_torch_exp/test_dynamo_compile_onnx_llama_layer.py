@@ -1,4 +1,5 @@
 import copy
+import os
 import unittest
 import packaging.version as pv
 from typing import Any, List, Optional, Tuple
@@ -9,6 +10,7 @@ from experimental_experiment.ext_test_case import (
     skipif_ci_windows,
 )
 from experimental_experiment.torch_exp.onnx_export import to_onnx
+from experimental_experiment.torch_exp._helper import make_hash
 
 
 def torch_min(v: str) -> bool:
@@ -56,6 +58,8 @@ class TestDynamoLlama(ExtTestCase):
             def __init__(self):
                 self.execution_count = 0
 
+        i_saved = [1]
+        hs = make_hash(model)
         _b = backend()
 
         def onnx_compiler(
@@ -73,6 +77,13 @@ class TestDynamoLlama(ExtTestCase):
                 constant_folding=True,
                 verbose=4,
             )
+            name = f"test_dynamo_compile_onnx_llama_layer-{hs}-{i_saved[0]}.onnx"
+            assert not os.path.exists(name)
+            with open(name, "wb") as f:
+                f.write(onx.SerializeToString())
+            with open(name + ".txt", "w") as f:
+                f.write(str(graph_module.graph))
+            i_saved[0] += 1
             try:
                 sess = ReferenceEvaluator(onx, verbose=10)
             except Exception as e:
@@ -102,10 +113,10 @@ class TestDynamoLlama(ExtTestCase):
 
         one_example = None
         for example_args in example_args_collection:
-            baseline_result = model(*example_args)
             one_example = example_args
-
+            baseline_result = model(*example_args)
             result = compiled_model(*example_args)
+
             if isinstance(baseline_result, torch.Tensor):
                 torch.testing.assert_close(baseline_result, result)
                 torch.testing.assert_close(
@@ -217,7 +228,7 @@ class TestDynamoLlama(ExtTestCase):
 
     @ignore_warnings((UserWarning, DeprecationWarning))
     @skipif_ci_windows("torch.compile not supported on Windows")
-    def test_ort_mlp(self):
+    def test_ort_amlp_forward(self):
         import torch
 
         class MLP(torch.nn.Module):
@@ -248,7 +259,7 @@ class TestDynamoLlama(ExtTestCase):
     @ignore_warnings((UserWarning, DeprecationWarning))
     @skipif_ci_windows("torch.compile not supported on Windows")
     @unittest.skipIf(torch_min("2.2"), reason="missing kernel")
-    def test_ort_mlp_backward(self):
+    def test_ort_amlp_backward(self):
         import torch
 
         class MLP(torch.nn.Module):

@@ -144,6 +144,7 @@ class DynamoInterpreter:
                         f"has_shape={self.builder.has_shape(a)}, "
                         f"\nmeta={node.meta}"
                         f"\nnode.__dict__={node.__dict__}"
+                        f"{self.builder.get_debug_msg()}"
                     )
 
                 self.builder.make_tensor_output(o, elem_type=elem_type, shape=shape)
@@ -448,8 +449,13 @@ class DynamoInterpreter:
             kwargs=node.kwargs,
             graph_builder=self.builder,
         )
-        args = node.args
-        args = [getattr(args[0], "name", args[0]), *args[1:]]
+        args = [getattr(node.args[0], "name", node.args[0])]
+        for i in node.args[1:]:
+            if hasattr(i, "name"):
+                args.append(i.name)
+            else:
+                args.append(i)
+
         kwargs = node.kwargs
         output_names = self._get_output_names(node)
         can_set = self._can_set_shape_and_type(node)
