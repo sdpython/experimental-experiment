@@ -213,6 +213,10 @@ def aten_conv2d(
     )
 
 
+def aten_detach(g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T) -> T:
+    return g.make_node("Identity", [x], outputs, name="detach")
+
+
 def aten_dropout(
     g: GraphBuilder,
     set_shape_type: bool,

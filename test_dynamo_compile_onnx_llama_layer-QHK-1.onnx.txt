@@ -1,0 +1,13 @@
+graph():
+    %primals_1 : [num_users=1] = placeholder[target=primals_1]
+    %primals_2 : [num_users=1] = placeholder[target=primals_2]
+    %primals_3 : [num_users=1] = placeholder[target=primals_3]
+    %primals_4 : [num_users=1] = placeholder[target=primals_4]
+    %primals_5 : [num_users=2] = placeholder[target=primals_5]
+    %t : [num_users=1] = call_function[target=torch.ops.aten.t.default](args = (%primals_1,), kwargs = {})
+    %addmm : [num_users=1] = call_function[target=torch.ops.aten.addmm.default](args = (%primals_2, %primals_5, %t), kwargs = {})
+    %sigmoid : [num_users=2] = call_function[target=torch.ops.aten.sigmoid.default](args = (%addmm,), kwargs = {})
+    %t_1 : [num_users=2] = call_function[target=torch.ops.aten.t.default](args = (%primals_3,), kwargs = {})
+    %addmm_1 : [num_users=1] = call_function[target=torch.ops.aten.addmm.default](args = (%primals_4, %sigmoid, %t_1), kwargs = {})
+    %sigmoid_1 : [num_users=1] = call_function[target=torch.ops.aten.sigmoid.default](args = (%addmm_1,), kwargs = {})
+    return [sigmoid_1, primals_5, sigmoid, t_1, sigmoid_1]
