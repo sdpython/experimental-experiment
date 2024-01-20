@@ -68,15 +68,15 @@ class TestDynamoLlama(ExtTestCase):
             input_names = (
                 ["input"] if len(args) == 1 else [f"input{i}" for i in range(len(args))]
             )
-
             onx = to_onnx(
                 graph_module,
                 tuple(args),
                 input_names=input_names,
                 remove_unused=True,
-                constant_folding=True,
+                constant_folding=False,
                 verbose=4,
             )
+
             name = f"test_dynamo_compile_onnx_llama_layer-{hs}-{i_saved[0]}.onnx"
             assert not os.path.exists(name)
             with open(name, "wb") as f:
@@ -104,12 +104,24 @@ class TestDynamoLlama(ExtTestCase):
 
             return run
 
-        compiled_model = torch.compile(
-            copy.deepcopy(model),
-            backend=onnx_compiler,
-            dynamic=dynamic,
-            fullgraph=fullgraph,
-        )
+        if test_backward:
+            from torch._dynamo.backends.common import aot_autograd
+
+            aot_compiler = aot_autograd(fw_compiler=onnx_compiler)
+
+            compiled_model = torch.compile(
+                copy.deepcopy(model),
+                backend=aot_compiler,
+                dynamic=dynamic,
+                fullgraph=fullgraph,
+            )
+        else:
+            compiled_model = torch.compile(
+                copy.deepcopy(model),
+                backend=onnx_compiler,
+                dynamic=dynamic,
+                fullgraph=fullgraph,
+            )
 
         one_example = None
         for example_args in example_args_collection:

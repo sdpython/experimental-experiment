@@ -6,11 +6,16 @@ from .graph_builder import GraphBuilder, OptimizationOptions
 
 
 def _retrieve(
-    name: str, weights: Dict[str, "torch.Tensor"], mapping: Dict[str, str]  # noqa: F821
+    name: str,
+    weights: Dict[str, "torch.Tensor"],  # noqa: F821
+    mapping: Dict[str, str],
+    graph_builder: "GraphBuilder",  # noqa: F821
 ) -> "torch.Tensor":  # noqa: F821
     if name not in mapping:
         raise RuntimeError(
-            f"Unable to find {name!r}. " f"Available weights: {list(sorted(weights))}."
+            f"Unable to find {name!r}. Available weights: {list(sorted(weights))}. "
+            f"mapping={mapping} "
+            f"{graph_builder.get_debug_msg() if graph_builder else ''}"
         )
     weight = mapping[name]
     if weight not in weights:
@@ -76,9 +81,6 @@ def _make_builder_interpreter(
         signature = exported_mod.graph_signature
         mapping = signature.inputs_to_parameters
 
-    def retrieve(name, weights=weights, mapping=mapping):
-        return _retrieve(name, weights, mapping)
-
     builder = GraphBuilder(
         target_opset,
         input_names=input_names,
@@ -87,6 +89,10 @@ def _make_builder_interpreter(
         args=args,
         verbose=verbose,
     )
+
+    def retrieve(name, weights=weights, mapping=mapping, builder=builder):
+        return _retrieve(name, weights, mapping, builder)
+
     interpreter = DynamoInterpreter(builder, retrieve)
     return graph_module, builder, interpreter
 

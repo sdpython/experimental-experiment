@@ -63,6 +63,7 @@ class DynamoInterpreter:
 
     def placeholder(self, node: "torch.fx.Node"):  # noqa: F821
         val = node.meta.get("val", None)
+
         if val is None:
             example_value = node.meta.get("example_value", None)
             index_input = len(self.builder.inputs)
@@ -83,6 +84,12 @@ class DynamoInterpreter:
             return self.builder.make_tensor_input(
                 node.name, elem_type=example_value.dtype, shape=example_value.shape
             )
+
+        if ".FakeTensor" in str(type(val)):
+            dtype = val.dtype
+            shape = val.shape
+            return self.builder.make_tensor_input(node.name, dtype, shape)
+
         if isinstance(val, self.torch.Tensor):
             stack_trace = node.meta.get("stack_trace", None)
             if stack_trace is None:

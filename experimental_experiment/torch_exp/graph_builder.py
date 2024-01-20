@@ -990,7 +990,7 @@ class GraphBuilder:
 
             if node.output[0] not in output_names:
                 old_name, new_name = node.output[0], node.input[0]
-            elif node.input[0] not in input_names:
+            elif node.input[0] not in input_names and node.input[0] not in replacements:
                 old_name, new_name = node.input[0], node.output[0]
             else:
                 new_nodes.append(node)
@@ -1023,10 +1023,13 @@ class GraphBuilder:
             repo = {o for o in node.output if o in replacements}
             repi = {o for o in node.input if o in replacements}
             if repi or repo:
+                new_inputs = [replacements.get(i, i) for i in node.input]
+                new_outputs = [replacements.get(i, i) for i in node.output]
+                assert "output_1" not in new_inputs
                 new_node = oh.make_node(
                     node.op_type,
-                    [replacements.get(i, i) for i in node.input],
-                    [replacements.get(i, i) for i in node.output],
+                    new_inputs,
+                    new_outputs,
                     domain=node.domain,
                     name=node.name,
                 )
