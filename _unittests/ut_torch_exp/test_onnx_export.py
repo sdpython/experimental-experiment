@@ -206,11 +206,21 @@ class TestOnnxExport(ExtTestCase):
 
     @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
     def test_constant_folding(self):
+        try:
+            from onnx_array_api.plotting.text_plot import onnx_simple_text_plot
+        except ImportError:
+            onnx_simple_text_plot = str
         model, input_tensor = return_module_cls_pool()
         onx1 = to_onnx(
-            model, (input_tensor,), input_names=["input"], remove_unused=True
+            model,
+            (input_tensor,),
+            input_names=["input"],
+            remove_unused=True,
+            constant_folding=False,
         )
         self.assertGreater(len(onx1.graph.node), 5)
+        self.assertEqual(len(onx1.graph.input), 1)
+        self.assertEqual(len(onx1.graph.output), 1)
         with open("dummy.onnx", "wb") as f:
             f.write(onx1.SerializeToString())
         onx2 = to_onnx(
@@ -222,6 +232,8 @@ class TestOnnxExport(ExtTestCase):
         )
         self.assertGreater(len(onx2.graph.node), 5)
         self.assertGreaterOrEqual(len(onx1.graph.node), len(onx2.graph.node))
+        self.assertEqual(len(onx2.graph.input), 1)
+        self.assertEqual(len(onx2.graph.output), 1)
 
         p1 = [n for n in onx1.graph.node if n.op_type == "Identity"]
         p2 = [n for n in onx2.graph.node if n.op_type == "Identity"]
@@ -236,8 +248,12 @@ class TestOnnxExport(ExtTestCase):
 
         p1 = [n for n in onx1.graph.node if n.op_type == "Transpose"]
         p2 = [n for n in onx2.graph.node if n.op_type == "Transpose"]
-        self.assertEqual(len(p1), 3)
-        self.assertEqual(len(p2), 0)
+        self.assertEqual(
+            len(p1), 3, f"Mismatch Transpose\n{onnx_simple_text_plot(onx1)}"
+        )
+        self.assertEqual(
+            len(p2), 0, f"Mismatch Transpose\n{onnx_simple_text_plot(onx2)}"
+        )
         self.check_model_ort(onx2)
 
     @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")

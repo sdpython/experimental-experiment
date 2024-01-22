@@ -109,6 +109,13 @@ class OptimizationOptions:
         self.constant_folding = constant_folding
         self.constant_size = constant_size
 
+    def __repr__(self):
+        return (
+            f"{self.__class__.__name__}(remove_unused={self.remove_unused}, "
+            f"constant_folding={self.constant_folding}, "
+            f"constant_size={self.constant_size})"
+        )
+
 
 class GraphBuilder:
     def _hash(self) -> str:
@@ -966,7 +973,8 @@ class GraphBuilder:
                     self.initializers_dict[name] = value
                     if self.verbose:
                         print(
-                            f"[GraphBuilder.constant_folding] fold_constant:{v.op_type}:{name}[{value.dtype}:"
+                            f"[GraphBuilder.constant_folding] fold_constant:"
+                            f"{v.op_type}:{name}[{value.dtype}:"
                             f"{value.shape}]:from:{','.join(sorted(feeds))}"
                         )
 

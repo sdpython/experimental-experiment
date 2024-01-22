@@ -85,11 +85,6 @@ class DynamoInterpreter:
                 node.name, elem_type=example_value.dtype, shape=example_value.shape
             )
 
-        if ".FakeTensor" in str(type(val)):
-            dtype = val.dtype
-            shape = val.shape
-            return self.builder.make_tensor_input(node.name, dtype, shape)
-
         if isinstance(val, self.torch.Tensor):
             stack_trace = node.meta.get("stack_trace", None)
             if stack_trace is None:
@@ -102,6 +97,14 @@ class DynamoInterpreter:
                     node.name, elem_type=val.dtype, shape=val.shape
                 )
             value = self.retriever(node.target)
+            if value is None:
+                if ".FakeTensor" in str(type(val)):
+                    dtype = val.dtype
+                    shape = val.shape
+                    return self.builder.make_tensor_input(node.name, dtype, shape)
+                raise RuntimeError(
+                    f"value is None, unable to retrieve target {node.target!r}"
+                )
             return self.builder.make_initializer(node.name, value)
         raise RuntimeError(f"Unsupported type {type(val)} for a placeholder.")
 
