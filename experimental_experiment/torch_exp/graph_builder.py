@@ -836,6 +836,10 @@ class GraphBuilder:
     def to_onnx(
         self, as_function: bool = False, optimize: bool = True
     ) -> Union[FunctionProto, ModelProto]:
+        if len(self.nodes) == 0:
+            raise RuntimeError(
+                f"The onnx model is empty (no node).\n{self.get_debug_msg()}"
+            )
         if optimize:
             self.optimize()
         if as_function:
