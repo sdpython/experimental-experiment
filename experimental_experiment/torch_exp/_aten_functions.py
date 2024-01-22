@@ -1,4 +1,4 @@
-from typing import List, Optional, Sequence, Tuple
+from typing import List, Optional, Sequence, Tuple, Union
 import numpy as np
 from onnx import TensorProto
 from onnx.helper import tensor_dtype_to_np_dtype
@@ -95,15 +95,15 @@ def aten_arange(
     if isinstance(start, str):
         i_start = start
     else:
-        i_start = np.array([start], dtype=npdtype)
+        i_start = np.array(start, dtype=npdtype)
     if isinstance(end, str):
         i_end = end
     else:
-        i_end = np.array([end], dtype=npdtype)
+        i_end = np.array(end, dtype=npdtype)
     if isinstance(step, str):
         i_step = step
     else:
-        i_step = np.array([step], dtype=npdtype)
+        i_step = np.array(step, dtype=npdtype)
     res = g.op.Range(i_start, i_end, i_step, outputs=outputs)
     if set_shape_type:
         g.set_type(res, itype)
@@ -539,6 +539,10 @@ def aten_max_pool2d_with_indices(
     )
 
 
+def aten_mm(g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T, y: T) -> T:
+    return g.op.MatMul(x, y, outputs=outputs)
+
+
 def aten_mul(
     g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T, y: T
 ) -> T:
@@ -590,6 +594,17 @@ def aten_sigmoid(g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T
     return res
 
 
+def aten_sigmoid_backward(
+    g: GraphBuilder, set_shape_type: bool, outputs: List[str], grad_output: T, output: T
+) -> T:
+    res = g.op.Sigmoid(output)
+    res2 = g.op.Mul(res, res)
+    grad = g.op.Mul(res2, g.op.Exp(g.op.Neg(output)))
+    if set_shape_type:
+        set_shape_type_unary_op(g, outputs[0], output)
+    return g.op.Mul(grad_output, grad, outputs=outputs)
+
+
 def aten_silu(g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T) -> T:
     return g.op.Mul(x, g.op.Sigmoid(x, name="silu"), outputs=outputs, name="silu")
 
@@ -611,6 +626,43 @@ def aten_sub(
     if set_shape_type:
         set_shape_type_binary_op(g, outputs[0], x, y)
     return res
+
+
+def aten_sum(
+    g: GraphBuilder,
+    set_shape_type: bool,
+    outputs: List[str],
+    x: T,
+    dim: Union[int, List[int]],
+    keepdim: bool,
+) -> T:
+    if dim is None:
+        result = g.op.ReduceSum(x, keepdims=keepdim, outputs=outputs)
+    else:
+        if isinstance(dim, int):
+            adim = np.array([dim], dtype=np.int64)
+        else:
+            adim = np.array(dim, dtype=np.int64)
+        result = g.op.ReduceSum(x, adim, keepdims=keepdim, outputs=outputs)
+    return result
+
+
+def aten_sum_dim_IntList(
+    g: GraphBuilder,
+    set_shape_type: bool,
+    outputs: List[str],
+    x: T,
+    dim: Optional[Union[int, List[int]]],
+    keepdim: bool,
+    dtype: Optional["torch.dtype"] = None,  # noqa: F821
+) -> T:
+    if dtype is None:
+        return aten_sum(g, set_shape_type, outputs, x, dim, keepdim)
+
+    res = aten_sum(g, set_shape_type, None, x, dim, keepdim)
+    itype = torch_dtype_to_onnx_dtype(dtype)
+    result = g.op.Cast(res, to=itype, outputs=outputs)
+    return result
 
 
 def aten_t(g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T) -> T:

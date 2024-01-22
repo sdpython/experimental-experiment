@@ -3,7 +3,6 @@ import os
 import unittest
 import packaging.version as pv
 from typing import Any, List, Optional, Tuple
-from onnx.reference import ReferenceEvaluator
 from experimental_experiment.ext_test_case import (
     ExtTestCase,
     ignore_warnings,
@@ -62,6 +61,28 @@ class TestDynamoLlama(ExtTestCase):
         hs = make_hash(model)
         _b = backend()
 
+        def get_session(onx, impl="ref", exc=True):
+            if exc:
+                try:
+                    return get_session(onx, impl, exc=False)
+                except Exception as e:
+                    from onnx_array_api.plotting.text_plot import onnx_simple_text_plot
+
+                    raise AssertionError(
+                        f"Unable to build session ({str(e)})\n{onnx_simple_text_plot(onx)}"
+                    ) from e
+
+            if impl == "ref":
+                from onnx.reference import ReferenceEvaluator
+
+                return ReferenceEvaluator(onx, verbose=10)
+            else:
+                import onnxruntime
+
+                return onnxruntime.InferenceSession(
+                    onx.SerializeToString(), providers=["CPUExecutionProvider"]
+                )
+
         def onnx_compiler(
             graph_module: torch.fx.GraphModule, args: List[torch.Tensor], _b=_b
         ):
@@ -77,21 +98,16 @@ class TestDynamoLlama(ExtTestCase):
                 verbose=4,
             )
 
-            name = f"test_dynamo_compile_onnx_llama_layer-{hs}-{i_saved[0]}.onnx"
+            name = f"temp_{onnx_export}-{hs}-{i_saved[0]}.onnx"
             assert not os.path.exists(name)
             with open(name, "wb") as f:
                 f.write(onx.SerializeToString())
             with open(name + ".txt", "w") as f:
                 f.write(str(graph_module.graph))
             i_saved[0] += 1
-            try:
-                sess = ReferenceEvaluator(onx, verbose=10)
-            except Exception as e:
-                from onnx_array_api.plotting.text_plot import onnx_simple_text_plot
 
-                raise AssertionError(
-                    f"Unable to run onnx graph ({str(e)})\n{onnx_simple_text_plot(onx)}"
-                ) from e
+            sess = get_session(onx, "ort", exc=True)
+
             names = [i.name for i in onx.graph.input]
 
             def run(*inputs, sess=sess, names=names, _b=_b):
@@ -141,7 +157,12 @@ class TestDynamoLlama(ExtTestCase):
                         model.parameters(), compiled_model.parameters()
                     ):
                         torch.testing.assert_close(
-                            baseline_param.grad, param.grad, atol=atol, rtol=rtol
+                            baseline_param.grad,
+                            param.grad,
+                            atol=atol,
+                            rtol=rtol,
+                            msg=f"Mismatch atol={atol}, rtol={rtol}\n"
+                            f"{baseline_param.grad}\n---\n{param.grad}",
                         )
             else:
                 if hasattr(baseline_result, "to_tuple"):
@@ -151,9 +172,13 @@ class TestDynamoLlama(ExtTestCase):
                     result
                 ), f"Mismatch number of outputs {len(baseline_result)} != {len(result)}"
                 for baseline_elem, result_elem in zip(baseline_result, result):
-                    torch.testing.assert_close(baseline_elem, result_elem)
                     torch.testing.assert_close(
-                        baseline_elem, result_elem, atol=atol, rtol=rtol
+                        baseline_elem,
+                        result_elem,
+                        atol=atol,
+                        rtol=rtol,
+                        msg=f"Mismatch atol={atol}, rtol={rtol}\n"
+                        f"{baseline_elem}\n---\n{result_elem}",
                     )
                 if test_backward:
 
@@ -175,7 +200,12 @@ class TestDynamoLlama(ExtTestCase):
                         model.parameters(), compiled_model.parameters()
                     ):
                         torch.testing.assert_close(
-                            baseline_param.grad, param.grad, atol=atol, rtol=rtol
+                            baseline_param.grad,
+                            param.grad,
+                            atol=atol,
+                            rtol=rtol,
+                            msg=f"Mismatch atol={atol}, rtol={rtol}\n"
+                            f"{baseline_param.grad}\n---\n{param.grad}",
                         )
 
         # export to onnx
@@ -240,7 +270,7 @@ class TestDynamoLlama(ExtTestCase):
 
     @ignore_warnings((UserWarning, DeprecationWarning))
     @skipif_ci_windows("torch.compile not supported on Windows")
-    def test_ort_amlp_forward(self):
+    def test_ort_mlp_forward(self):
         import torch
 
         class MLP(torch.nn.Module):
@@ -271,7 +301,7 @@ class TestDynamoLlama(ExtTestCase):
     @ignore_warnings((UserWarning, DeprecationWarning))
     @skipif_ci_windows("torch.compile not supported on Windows")
     @unittest.skipIf(torch_min("2.2"), reason="missing kernel")
-    def test_ort_amlp_backward(self):
+    def test_ort_mlp_backward(self):
         import torch
 
         class MLP(torch.nn.Module):

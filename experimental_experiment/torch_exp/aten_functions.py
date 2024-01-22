@@ -38,7 +38,7 @@ def find_function(
     lookup = []
     if isinstance(name, type(abs)):
         # example: conv2d or _VariableFunctionsClass.conv2d
-        new_name = f"aten_{name.__name__}"
+        new_name = f"aten_{name.__name__.replace('.', '_')}"
         if new_name in registered_functions:
             return registered_functions[new_name]
         lookup.append(new_name)
@@ -46,7 +46,7 @@ def find_function(
     lookup_names = ["__qualname__", "__name__"]
     for att in lookup_names:
         if hasattr(name, att):
-            v = getattr(name, att)
+            v = getattr(name, att).replace(".", "_")
             lookup.append(v)
             if v in registered_functions:
                 return registered_functions[v]

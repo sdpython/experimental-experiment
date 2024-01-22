@@ -120,11 +120,16 @@ class DynamoInterpreter:
         else:
             outputs = []
             for i, a in enumerate(output):
-                if hasattr(a, "name"):
-                    a = a.name
                 o = f"{output_name}_{i}"
-                self.builder.make_node("Identity", [a], [o], check=False)
-                outputs.append((a, o))
+                if a is None:
+                    # the gradient may need unused output
+                    self.builder.make_node("Constant", [], [o], value_float=0)
+                    outputs.append((None, o))
+                else:
+                    if hasattr(a, "name"):
+                        a = a.name
+                    self.builder.make_node("Identity", [a], [o], check=False)
+                    outputs.append((a, o))
 
         val = node.meta.get("val", None)
 
@@ -135,24 +140,28 @@ class DynamoInterpreter:
 
         if val is None:
             for a, o in outputs:
-                elem_type = self.builder.get_type(a)
-                if self.builder.has_shape(a):
-                    shape = self.builder.get_shape(a)
-                elif self.builder.has_rank(a):
-                    shape = tuple([None] * self.builder.get_rank(a))
-                elif self.builder.as_function:
-                    shape = None
+                if a is None:
+                    elem_type = self.builder.get_type(o)
+                    shape = self.builder.get_shape(o)
                 else:
-                    raise RuntimeError(
-                        f"val is None for node={node}, "
-                        f"output={output}, a={a!r}, o={o!r}, "
-                        f"has_type={self.builder.has_type(a)}, "
-                        f"has_rank={self.builder.has_rank(a)}, "
-                        f"has_shape={self.builder.has_shape(a)}, "
-                        f"\nmeta={node.meta}"
-                        f"\nnode.__dict__={node.__dict__}"
-                        f"{self.builder.get_debug_msg()}"
-                    )
+                    elem_type = self.builder.get_type(a)
+                    if self.builder.has_shape(a):
+                        shape = self.builder.get_shape(a)
+                    elif self.builder.has_rank(a):
+                        shape = tuple([None] * self.builder.get_rank(a))
+                    elif self.builder.as_function:
+                        shape = None
+                    else:
+                        raise RuntimeError(
+                            f"val is None for node={node}, "
+                            f"output={output}, a={a!r}, o={o!r}, "
+                            f"has_type={self.builder.has_type(a)}, "
+                            f"has_rank={self.builder.has_rank(a)}, "
+                            f"has_shape={self.builder.has_shape(a)}, "
+                            f"\nmeta={node.meta}"
+                            f"\nnode.__dict__={node.__dict__}"
+                            f"{self.builder.get_debug_msg()}"
+                        )
 
                 self.builder.make_tensor_output(o, elem_type=elem_type, shape=shape)
             return [_[1] for _ in outputs]
