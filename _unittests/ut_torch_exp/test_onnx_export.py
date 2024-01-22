@@ -252,7 +252,9 @@ class TestOnnxExport(ExtTestCase):
         p1 = [n for n in onx1.graph.node if n.op_type == "MaxPool"]
         p2 = [n for n in onx2.graph.node if n.op_type == "MaxPool"]
         self.assertEqual(len(p1), 2)
-        self.assertEqual(len(p2), 2)
+        self.assertEqual(
+            len(p2), 2, f"Mismatch number of MaxPool, {onnx_simple_text_plot(onx2)}"
+        )
         self.check_model_ort(onx2)
 
         p1 = [n for n in onx1.graph.node if n.op_type == "Transpose"]
