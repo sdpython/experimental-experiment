@@ -842,6 +842,11 @@ class GraphBuilder:
             )
         if optimize:
             self.optimize()
+        if len(self.nodes) == 0:
+            raise RuntimeError(
+                f"The onnx model is empty after optimization (no node)."
+                f"\n{self.get_debug_msg()}"
+            )
         if as_function:
             raise NotImplementedError("Export as FunctionProto is not implemented yet.")
         dense = self._build_initializers()
@@ -863,6 +868,11 @@ class GraphBuilder:
         if self.verbose:
             print(f"[GraphBuilder-{self._hash()}.to_onnx] onh.make_model")
         model = oh.make_model(graph, opset_imports=opsets)
+        if len(model.graph.node) == 0:
+            raise RuntimeError(
+                f"The onnx model is empty after export to onnx (no node)."
+                f"\n{self.get_debug_msg()}"
+            )
         return model
 
     def io_names(self):
