@@ -167,6 +167,8 @@ class TestOnnxExport(ExtTestCase):
 
     @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
     def test_remove_unused_nodes(self):
+        from onnx_array_api.plotting.text_plot import onnx_simple_text_plot
+
         model, input_tensor = return_module_cls_pool()
         onx1 = to_onnx(model, (input_tensor,), input_names=["input"])
         onx2 = to_onnx(
@@ -186,7 +188,9 @@ class TestOnnxExport(ExtTestCase):
         p1 = [n for n in onx1.graph.node if n.op_type == "MaxPool"]
         p2 = [n for n in onx2.graph.node if n.op_type == "MaxPool"]
         self.assertEqual(len(p1), 4)
-        self.assertEqual(len(p2), 2)
+        self.assertEqual(
+            len(p2), 2, f"Mismatch number of MaxPool, {onnx_simple_text_plot(onx2)}"
+        )
         self.check_model_ort(onx2)
 
     @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
@@ -218,7 +222,12 @@ class TestOnnxExport(ExtTestCase):
             remove_unused=True,
             constant_folding=False,
         )
-        self.assertGreater(len(onx1.graph.node), 5)
+        self.assertGreater(
+            len(onx1.graph.node),
+            5,
+            msg=f"Mismath number of node {len(onx1.graph.node)}, "
+            f"{onnx_simple_text_plot(onx1)}",
+        )
         self.assertEqual(len(onx1.graph.input), 1)
         self.assertEqual(len(onx1.graph.output), 1)
         with open("dummy.onnx", "wb") as f:
