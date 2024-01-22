@@ -10,6 +10,7 @@
 *.pkl
 *.xlsx
 *.sarif
+temp*.onnx*
 coverage.html/*
 _cache/*
 .coverage

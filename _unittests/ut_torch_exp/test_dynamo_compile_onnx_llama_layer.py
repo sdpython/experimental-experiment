@@ -408,7 +408,7 @@ class TestDynamoLlama(ExtTestCase):
     @ignore_warnings((UserWarning, DeprecationWarning))
     @skipif_ci_windows("torch.compile not supported on Windows")
     @unittest.skipIf(torch_min("2.2"), reason="missing kernel")
-    def test_ort_llama_model_nofullgraph(self):
+    def test_ort_allama_model_nofullgraph(self):
         from experimental_experiment.torch_helper.llama_helper import (
             get_llama_model,
         )
