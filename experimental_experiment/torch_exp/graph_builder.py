@@ -896,28 +896,23 @@ class GraphBuilder:
         return "\n".join(rows)
 
     def optimize(self):
-        assert (
-            len(self.nodes) > 0
-        ), f"The onnx model is empty (OPT0, no node).\n{self.get_debug_msg()}"
+        def _check(step):
+            assert (
+                len(self.nodes) > 0
+            ), f"The onnx model is empty (step {step}, no node).\n{self.get_debug_msg()}"
+
+        _check("A")
         self.remove_identity_nodes()
-        assert (
-            len(self.nodes) > 0
-        ), f"The onnx model is empty (OPT1, no node).\n{self.get_debug_msg()}"
+        _check("B")
         if self.optimization_options.remove_unused:
             self.remove_unused()
-            assert (
-                len(self.nodes) > 0
-            ), f"The onnx model is empty (OPT2, no node).\n{self.get_debug_msg()}"
+            _check("C")
         if self.optimization_options.constant_folding:
             self.constant_folding()
-            assert (
-                len(self.nodes) > 0
-            ), f"The onnx model is empty (OPT3, no node).\n{self.get_debug_msg()}"
+            _check("D")
             if self.optimization_options.remove_unused:
                 self.remove_unused()
-                assert (
-                    len(self.nodes) > 0
-                ), f"The onnx model is empty (OPT4, no node).\n{self.get_debug_msg()}"
+                _check("D")
 
     def remove_unused(self):
         """
