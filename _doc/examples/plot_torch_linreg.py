@@ -63,7 +63,6 @@ sr2 = r2_score(y_test, y_pred)
 print(f"SGDRegressor: sl2={sl2}, sr2={sr2}")
 
 
-
 ###############################
 # torch
 # =====
