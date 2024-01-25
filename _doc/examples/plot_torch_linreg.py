@@ -10,7 +10,7 @@ data
 """
 
 from sklearn.datasets import make_regression
-from sklearn.linear_model import LinearRegression
+from sklearn.linear_model import LinearRegression, SGDRegressor
 from sklearn.metrics import mean_squared_error, r2_score
 from sklearn.model_selection import train_test_split
 import torch
@@ -21,8 +21,12 @@ print(X.shape, y.shape)
 X_train, X_test, y_train, y_test = train_test_split(X, y)
 
 ################################
-# sciit-learn
-# ===========
+# scikit-learn: the simple regression
+# ===================================
+#
+# .. math::
+#
+#       A^* = (X'X)^{-1}X'Y
 
 
 clr = LinearRegression()
@@ -38,6 +42,26 @@ y_pred = clr.predict(X_test)
 l2 = mean_squared_error(y_test, y_pred)
 r2 = r2_score(y_test, y_pred)
 print(f"LinearRegression: l2={l2}, r2={r2}")
+
+################################
+# scikit-learn: SGD algorithm
+# ===================================
+#
+# SGD = Stochastic Gradient Descent
+
+clr = SGDRegressor(max_iter=5, verbose=1)
+clr.fit(X_train, y_train)
+
+print(f"coefficients: {clr.coef_}, {clr.intercept_}")
+
+#############################
+# Evaluation
+
+y_pred = clr.predict(X_test)
+sl2 = mean_squared_error(y_test, y_pred)
+sr2 = r2_score(y_test, y_pred)
+print(f"SGDRegressor: sl2={sl2}, sr2={sr2}")
+
 
 ###############################
 # torch

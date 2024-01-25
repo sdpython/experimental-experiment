@@ -386,7 +386,6 @@ def add_loss_output(
         *yt* is expected to be binary, *yp* is a matrix with two
         columns, the sum on every line is 1.
 
-    See example :ref:`l-orttraining-nn-gpu`.
     Next example shows the loss with L1 and L2 loss.
 
     .. gdot::

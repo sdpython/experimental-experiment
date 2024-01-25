@@ -102,7 +102,7 @@ def onnx_derivative(
     :param verbose: verbosity
     :return: onnx graph
 
-    The function calls :epkg:`OrtModuleGraphBuilderConfiguration`
+    The function calls *OrtModuleGraphBuilderConfiguration*
     from :epkg:`onnxruntime-training`. This graph is meant to be used
     with @see cl OrtGradientForwardBackward and includes
     operator `YieldOp`. That's the graph looks this way:
