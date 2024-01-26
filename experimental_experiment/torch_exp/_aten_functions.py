@@ -1,4 +1,4 @@
-from typing import List, Optional, Sequence, Tuple, Union
+from typing import Any, List, Optional, Sequence, Tuple, Union
 import numpy as np
 from onnx import TensorProto
 from onnx.helper import tensor_dtype_to_np_dtype
@@ -24,9 +24,32 @@ def aten_abs(g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T) ->
     return res
 
 
+def aten_acos(g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T) -> T:
+    res = g.make_node("Acos", [x], outputs)
+    if set_shape_type:
+        set_shape_type_unary_op(g, outputs[0], x)
+    return res
+
+
 def aten_add(
     g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T, y: T
 ) -> T:
+    x, y = prepare_inputs_homogeneous_operator(g, x, y)
+    res = g.op.Add(x, y, outputs=outputs)
+    if set_shape_type:
+        set_shape_type_binary_op(g, outputs[0], x, y)
+    return res
+
+
+def aten_add_Scalar(
+    g: GraphBuilder,
+    set_shape_type: bool,
+    outputs: List[str],
+    x: T,
+    y: T,
+    alpha: Optional[Any] = None,
+) -> T:
+    assert alpha in (None, 1), f"alpha={alpha}, not implemented"
     x, y = prepare_inputs_homogeneous_operator(g, x, y)
     res = g.op.Add(x, y, outputs=outputs)
     if set_shape_type:
@@ -211,6 +234,13 @@ def aten_conv2d(
         dilation=dilation,
         groups=groups,
     )
+
+
+def aten_cos(g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T) -> T:
+    res = g.make_node("Cos", [x], outputs)
+    if set_shape_type:
+        set_shape_type_unary_op(g, outputs[0], x)
+    return res
 
 
 def aten_detach(g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T) -> T:
@@ -544,6 +574,15 @@ def aten_mm(g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T, y: 
 
 
 def aten_mul(
+    g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T, y: T
+) -> T:
+    res = g.op.Mul(x, y, outputs=outputs)
+    if set_shape_type:
+        set_shape_type_binary_op(g, outputs[0], x, y)
+    return res
+
+
+def aten_mul_Tensor(
     g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T, y: T
 ) -> T:
     res = g.op.Mul(x, y, outputs=outputs)

@@ -11,6 +11,7 @@
 *.xlsx
 *.sarif
 temp*.onnx*
+temp_dump/*
 coverage.html/*
 _cache/*
 .coverage
