@@ -57,6 +57,22 @@ def aten_add_Scalar(
     return res
 
 
+def aten_add_Tensor(
+    g: GraphBuilder,
+    set_shape_type: bool,
+    outputs: List[str],
+    x: T,
+    y: T,
+    alpha: Optional[Any] = None,
+) -> T:
+    assert alpha in (None, 1), f"alpha={alpha}, not implemented"
+    x, y = prepare_inputs_homogeneous_operator(g, x, y)
+    res = g.op.Add(x, y, outputs=outputs)
+    if set_shape_type:
+        set_shape_type_binary_op(g, outputs[0], x, y)
+    return res
+
+
 def aten_addmm(
     g: GraphBuilder,
     set_shape_type: bool,
@@ -134,6 +150,42 @@ def aten_arange(
             g.set_rank(res, 1)
         else:
             g.set_shape(res, ((end - start) // step,))
+    return res
+
+
+def aten_arange_start_step(
+    g: GraphBuilder,
+    set_shape_type: bool,
+    outputs: List[str],
+    start: Optional[int] = None,
+    end: Optional[int] = None,
+    step: int = 1,
+    dtype: Optional["torch.dtype"] = None,  # noqa: F821
+) -> T:
+    return aten_arange(g, set_shape_type, outputs, start, end, step, dtype)
+
+
+def aten_argmax(
+    g: GraphBuilder,
+    set_shape_type: bool,
+    outputs: List[str],
+    x: T,
+    dim: int,
+    keepdim: bool = False,
+) -> T:
+    if dim is None:
+        res = g.op.ArgMax(x, keepdims=1 if keepdim else 0, outputs=outputs)
+    elif isinstance(dim, int):
+        res = g.op.ArgMax(
+            x,
+            np.array([dim], dtype=np.int64),
+            keepdims=1 if keepdim else 0,
+            outputs=outputs,
+        )
+    elif isinstance(dim, str):
+        res = g.op.ArgMax(x, dim, keepdims=1 if keepdim else 0, outputs=outputs)
+    else:
+        raise RuntimeError(f"Unexpected type {type(dim)} for dim")
     return res
 
 

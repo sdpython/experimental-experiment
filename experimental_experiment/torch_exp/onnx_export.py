@@ -1,6 +1,7 @@
 import warnings
 from typing import Dict, Optional, Sequence, Tuple, Union
 from onnx import ModelProto
+from onnx.defs import onnx_opset_version
 from .interpreter import DynamoInterpreter
 from .graph_builder import GraphBuilder, OptimizationOptions
 
@@ -101,7 +102,7 @@ def to_onnx(
     mod: Union["torch.nn.Module", "torch.fx.GraphModule"],  # noqa: F821
     args: Sequence["torch.Tensor"],  # noqa: F821
     input_names: Optional[Sequence[str]] = None,
-    target_opset: Union[int, Dict[str, int]] = 18,
+    target_opset: Optional[Union[int, Dict[str, int]]] = None,
     as_function: bool = False,
     remove_unused: bool = False,
     constant_folding: bool = False,
@@ -123,6 +124,8 @@ def to_onnx(
     :param verbose: verbosity level
     :return: onnx model
     """
+    if target_opset is None:
+        target_opset = min(18, onnx_opset_version() - 1)
     graph_module, builder, interpreter = _make_builder_interpreter(
         mod=mod,
         args=args,

@@ -7,6 +7,7 @@ Profiles any onnx model on CPU.
 Preparation
 +++++++++++
 """
+
 import os
 import numpy as np
 import matplotlib.pyplot as plt

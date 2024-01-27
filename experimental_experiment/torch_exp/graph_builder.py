@@ -14,6 +14,8 @@ class Opset:
     _implemented = {
         "Add": 1,
         "And": 1,
+        "ArgMax": 1,
+        "ArgMin": 1,
         "Cast": 1,
         "CastLike": 1,
         "Concat": 1,
@@ -828,9 +830,9 @@ class GraphBuilder:
     ):
         self._debug_msg["process.graph_module"] = graph_module.graph
         for i, node in enumerate(graph_module.graph.nodes):
-            self._debug_msg[
-                "process.progress"
-            ] = f"node {i}/{len(graph_module.graph.nodes)} "
+            self._debug_msg["process.progress"] = (
+                f"node {i}/{len(graph_module.graph.nodes)} "
+            )
             interpreter.run_node(node)
 
     def to_onnx(
