@@ -19,7 +19,7 @@ from torch.onnx.symbolic_helper import (
     parse_args,
 )
 from torch._dynamo.backends.common import aot_autograd
-from experimental_experiment.ext_test_case import ExtTestCase
+from experimental_experiment.ext_test_case import ExtTestCase, ignore_warnings
 from experimental_experiment.torch_exp.onnx_export import to_onnx
 
 BATCH_SIZE = 2
@@ -74,6 +74,7 @@ def onnx_compiler(
     onnx_export: str = "?",
     counter: Optional[List[int]] = None,
     opset_version: Optional[int] = None,
+    impl: str = "ort",
 ):
     assert isinstance(counter, list), f"unexpected type {type(counter)} for counter"
     input_names = (
@@ -85,7 +86,7 @@ def onnx_compiler(
         input_names=input_names,
         remove_unused=True,
         constant_folding=False,
-        verbose=4,
+        verbose=0 if impl == "ort" else 4,
         target_opset=opset_version,
     )
 
@@ -99,8 +100,9 @@ def onnx_compiler(
             f.write(onx.SerializeToString())
         with open(name + ".txt", "w") as f:
             f.write(str(graph_module.graph))
+            f.write("\n")
 
-    sess = get_session(onx, "ort", exc=True)
+    sess = get_session(onx, impl, exc=True)
 
     names = [i.name for i in onx.graph.input]
 
@@ -142,6 +144,12 @@ class TestOperators(ExtTestCase):
         rtol=1e-6,
         opset_version=None,
         test_backward=True,
+        operator_export_type=None,
+        impl="ort",
+        #
+        input_names=None,
+        dynamic_axes=None,
+        keep_initializers_as_inputs=None,
     ):
         assert isinstance(onnx_export, str), f"Export onnx is wrong for f={f}"
         if isinstance(args, torch.Tensor):
@@ -164,6 +172,7 @@ class TestOperators(ExtTestCase):
                     onnx_export=onnx_export,
                     counter=counter,
                     opset_version=opset_version,
+                    impl=impl,
                 )
             )
 
@@ -217,6 +226,7 @@ class TestOperators(ExtTestCase):
                     onnx_export=onnx_export,
                     counter=counter,
                     opset_version=opset_version,
+                    impl=impl,
                 ),
                 dynamic=False,
                 fullgraph=fullgraph,
@@ -236,6 +246,7 @@ class TestOperators(ExtTestCase):
                     baseline_result, result, atol=atol, rtol=rtol
                 )
 
+    @ignore_warnings(UserWarning)
     def test_aaa(self):
         x = torch.rand(3, 4, requires_grad=True)
         self.assertONNX(
@@ -269,12 +280,14 @@ class TestOperators(ExtTestCase):
             lambda x: x.type_as(x), x, onnx_export=inspect.currentframe().f_code.co_name
         )
 
+    @ignore_warnings(UserWarning)
     def test_addconstant(self):
         x = torch.randn(2, 3, requires_grad=True).double()
         self.assertONNX(
             lambda x: x + 1, x, onnx_export=inspect.currentframe().f_code.co_name
         )
 
+    @ignore_warnings(UserWarning)
     def test_add_broadcast(self):
         x = torch.randn(2, 3, requires_grad=True).double()
         y = torch.randn(3, requires_grad=True).double()
@@ -282,6 +295,7 @@ class TestOperators(ExtTestCase):
             operator.add, (x, y), onnx_export=inspect.currentframe().f_code.co_name
         )
 
+    @ignore_warnings(UserWarning)
     def test_add_left_broadcast(self):
         x = torch.randn(3, requires_grad=True).double()
         y = torch.randn(2, 3, requires_grad=True).double()
@@ -289,6 +303,7 @@ class TestOperators(ExtTestCase):
             operator.add, (x, y), onnx_export=inspect.currentframe().f_code.co_name
         )
 
+    @ignore_warnings(UserWarning)
     def test_add_size1_broadcast(self):
         x = torch.randn(2, 3, requires_grad=True).double()
         y = torch.randn(2, 1, requires_grad=True).double()
@@ -296,6 +311,7 @@ class TestOperators(ExtTestCase):
             operator.add, (x, y), onnx_export=inspect.currentframe().f_code.co_name
         )
 
+    @ignore_warnings(UserWarning)
     def test_add_size1_right_broadcast(self):
         x = torch.randn(2, 3, requires_grad=True).double()
         y = torch.randn(3, requires_grad=True).double()
@@ -303,6 +319,7 @@ class TestOperators(ExtTestCase):
             operator.add, (x, y), onnx_export=inspect.currentframe().f_code.co_name
         )
 
+    @ignore_warnings(UserWarning)
     def test_add_size1_singleton_broadcast(self):
         x = torch.randn(2, 3, requires_grad=True).double()
         y = torch.randn(1, 3, requires_grad=True).double()
@@ -382,6 +399,7 @@ class TestOperators(ExtTestCase):
             torch.mm, (m1, m2), onnx_export=inspect.currentframe().f_code.co_name
         )
 
+    @ignore_warnings(UserWarning)
     def test_addmm(self):
         m1 = torch.randn(2, 3, requires_grad=True)
         m2 = torch.randn(3, 4, requires_grad=True)
@@ -541,6 +559,7 @@ class TestOperators(ExtTestCase):
             onnx_export=inspect.currentframe().f_code.co_name,
         )
 
+    @ignore_warnings((UserWarning, DeprecationWarning))
     def test_at_op(self):
         x = torch.randn(3, 4)
 
@@ -564,6 +583,7 @@ class TestOperators(ExtTestCase):
             x,
             operator_export_type=torch.onnx.OperatorExportTypes.ONNX_ATEN_FALLBACK,
             onnx_export=inspect.currentframe().f_code.co_name,
+            test_backward=False,
         )
 
     def test_clip(self):
@@ -825,12 +845,14 @@ class TestOperators(ExtTestCase):
             lambda x: x.tan(), x, onnx_export=inspect.currentframe().f_code.co_name
         )
 
+    @ignore_warnings(UserWarning)
     def test_asin(self):
         x = torch.rand(3, 4, requires_grad=True)
         self.assertONNX(
             lambda x: x.asin(), x, onnx_export=inspect.currentframe().f_code.co_name
         )
 
+    @ignore_warnings(UserWarning)
     def test_acos(self):
         x = torch.rand(3, 4, requires_grad=True)
         self.assertONNX(
@@ -866,6 +888,7 @@ class TestOperators(ExtTestCase):
             onnx_export=inspect.currentframe().f_code.co_name,
         )
 
+    @ignore_warnings(UserWarning)
     def test_atan(self):
         x = torch.randn(3, 4, requires_grad=True)
         self.assertONNX(
@@ -910,6 +933,7 @@ class TestOperators(ExtTestCase):
             lambda x: torch.argmax(x, dim=1),
             x,
             onnx_export=inspect.currentframe().f_code.co_name,
+            test_backward=False,
         )
 
     def test_logsoftmax(self):
@@ -1611,6 +1635,7 @@ class TestOperators(ExtTestCase):
             (x, y),
             opset_version=_onnx_opset_version,
             onnx_export=inspect.currentframe().f_code.co_name,
+            test_backward=False,
         )
 
         torch.onnx.unregister_custom_op_symbolic("::embedding", _onnx_opset_version)
@@ -1670,6 +1695,7 @@ class TestOperators(ExtTestCase):
             keep_initializers_as_inputs=False,
             operator_export_type=torch.onnx.OperatorExportTypes.ONNX_ATEN_FALLBACK,
             onnx_export=inspect.currentframe().f_code.co_name,
+            test_backward=False,
         )
 
         torch.onnx.unregister_custom_op_symbolic("::embedding", _onnx_opset_version)

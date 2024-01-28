@@ -31,6 +31,13 @@ def aten_acos(g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T) -
     return res
 
 
+def aten_acosh(g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T) -> T:
+    res = g.make_node("Acosh", [x], outputs)
+    if set_shape_type:
+        set_shape_type_unary_op(g, outputs[0], x)
+    return res
+
+
 def aten_add(
     g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T, y: T
 ) -> T:
@@ -170,22 +177,61 @@ def aten_argmax(
     set_shape_type: bool,
     outputs: List[str],
     x: T,
-    dim: int,
+    dim: Optional[int] = None,
     keepdim: bool = False,
 ) -> T:
     if dim is None:
-        res = g.op.ArgMax(x, keepdims=1 if keepdim else 0, outputs=outputs)
+        xf = g.op.Reshape(x, np.array([-1], dtype=np.int64))
+        res = g.op.Squeeze(
+            g.op.ArgMax(xf, keepdims=(1 if keepdim else 0)),
+            outputs=outputs,
+        )
     elif isinstance(dim, int):
         res = g.op.ArgMax(
             x,
-            np.array([dim], dtype=np.int64),
+            axis=dim,
             keepdims=1 if keepdim else 0,
             outputs=outputs,
         )
-    elif isinstance(dim, str):
-        res = g.op.ArgMax(x, dim, keepdims=1 if keepdim else 0, outputs=outputs)
     else:
         raise RuntimeError(f"Unexpected type {type(dim)} for dim")
+    if set_shape_type:
+        g.set_type(res, TensorProto.INT64)
+        if dim is None:
+            g.set_shape(res, (1,))
+        elif g.has_shape(x):
+            sh = g.get_shape(x)
+            g.set_shape(res, (sh[dim],))
+        else:
+            g.set_rank(res, 1)
+    return res
+
+
+def aten_asin(g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T) -> T:
+    res = g.make_node("Asin", [x], outputs)
+    if set_shape_type:
+        set_shape_type_unary_op(g, outputs[0], x)
+    return res
+
+
+def aten_asinh(g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T) -> T:
+    res = g.make_node("Asinh", [x], outputs)
+    if set_shape_type:
+        set_shape_type_unary_op(g, outputs[0], x)
+    return res
+
+
+def aten_atan(g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T) -> T:
+    res = g.make_node("Atan", [x], outputs)
+    if set_shape_type:
+        set_shape_type_unary_op(g, outputs[0], x)
+    return res
+
+
+def aten_atanh(g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T) -> T:
+    res = g.make_node("Atanh", [x], outputs)
+    if set_shape_type:
+        set_shape_type_unary_op(g, outputs[0], x)
     return res
 
 
@@ -297,6 +343,32 @@ def aten_cos(g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T) ->
 
 def aten_detach(g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T) -> T:
     return g.make_node("Identity", [x], outputs, name="detach")
+
+
+def aten_div(
+    g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T, y: T
+) -> T:
+    x, y = prepare_inputs_homogeneous_operator(g, x, y)
+    res = g.op.Div(x, y, outputs=outputs)
+    if set_shape_type:
+        set_shape_type_binary_op(g, outputs[0], x, y)
+    return res
+
+
+def aten_div_Tensor(
+    g: GraphBuilder,
+    set_shape_type: bool,
+    outputs: List[str],
+    x: T,
+    y: T,
+    alpha: Optional[Any] = None,
+) -> T:
+    assert alpha in (None, 1), f"alpha={alpha}, not implemented"
+    x, y = prepare_inputs_homogeneous_operator(g, x, y)
+    res = g.op.Div(x, y, outputs=outputs)
+    if set_shape_type:
+        set_shape_type_binary_op(g, outputs[0], x, y)
+    return res
 
 
 def aten_dropout(
@@ -429,6 +501,14 @@ def aten_full(
     # fill_value = op.Cast(fill_value, to=dtype)
     # return op.Expand(fill_value, size)
     return res
+
+
+def aten_FunctionCtx(
+    g: GraphBuilder, set_shape_type: bool, outputs: List[str], *args, **kwargs
+):
+    if len(args) == 0 and len(kwargs) == 0:
+        return
+    raise NotImplementedError(f"args={args}, kwargs={kwargs}")
 
 
 def aten_linear(
@@ -648,6 +728,47 @@ def aten_neg(g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T) ->
     if set_shape_type:
         g.set_type(outputs[0], g.get_type(x))
         g.set_shape(outputs[0], g.get_shape(x))
+    return res
+
+
+def aten_ones(
+    g: GraphBuilder,
+    set_shape_type: bool,
+    outputs: List[str],
+    size: T,
+    dtype: int = TensorProto.FLOAT,
+    layout=None,
+    device=None,
+    pin_memory=None,
+) -> T:
+    import torch
+
+    assert layout is None, f"ones not implemented for layout={layout} is not None"
+    assert not pin_memory, "ones not implemented for pin_memory=True"
+    new_shape = None
+    if isinstance(size, list):
+        isize = np.array(size, dtype=np.int64)
+        new_shape = tuple(size)
+    elif isinstance(size, int):
+        isize = np.array([size], dtype=np.int64)
+        new_shape = (size,)
+    elif isinstance(size, torch.Tensor):
+        isize = size.detach().numpy().astype(np.int64)
+        new_shape = tuple(isize)
+    else:
+        isize = g.op.Cast(size, to=TensorProto.INT64)
+        new_shape = None
+    if dtype is None:
+        dtype = TensorProto.FLOAT
+    res = g.op.ConstantOfShape(
+        isize,
+        value=from_array(np.array([1], dtype=tensor_dtype_to_np_dtype(dtype))),
+        outputs=outputs,
+    )
+    if set_shape_type:
+        g.set_type(res, dtype)
+        if new_shape:
+            g.set_shape(res, new_shape)
     return res
 
 

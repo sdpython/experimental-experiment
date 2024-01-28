@@ -43,7 +43,7 @@ class Opset:
         "ReduceMin": 1,
         "ReduceSum": 1,
         "Relu": 1,
-        "Reshape": 2,
+        "Reshape": 1,
         "Shape": 1,
         "Sigmoid": 1,
         "Slice": 1,
@@ -85,6 +85,9 @@ class Opset:
             inputs = []
         new_inputs = []
         for i in inputs:
+            assert not isinstance(
+                i, (list, tuple)
+            ), f"Wrong inputs for operator {op_type!r}: {inputs!r}"
             if isinstance(i, str):
                 new_inputs.append(i)
             elif hasattr(i, "name"):
@@ -92,7 +95,9 @@ class Opset:
                 new_inputs.append(i.name)
             else:
                 cst_name = self.builder.unique_name("cst")
-                self.builder.make_initializer(cst_name, i)
+                self.builder.make_initializer(
+                    cst_name, i, msg=f"input {i} of op_type={op_type!r}"
+                )
                 new_inputs.append(cst_name)
 
         return self.builder.make_node(
@@ -430,7 +435,9 @@ class GraphBuilder:
                 raise ValueError(f"Unable to interpret elem_type {elem_type!r}.")
         return elem_type
 
-    def make_initializer(self, name: str, value: Any, external: bool = False) -> str:
+    def make_initializer(
+        self, name: str, value: Any, external: bool = False, msg: str = ""
+    ) -> str:
         if external:
             raise NotImplementedError("External initializers are not implemented yet.")
         if name == "":
@@ -445,7 +452,10 @@ class GraphBuilder:
         elif isinstance(value, np.ndarray):
             pass
         else:
-            raise RuntimeError(f"Unexpected type {type(value)} for value={value!r}.")
+            raise RuntimeError(
+                f"Initializer name={name!r}, "
+                f"unexpected type {type(value)} for value={value!r} ({msg})."
+            )
         self.set_shape(name, value.shape)
         self.set_type(name, self._get_type(value.dtype))
         self.set_name(name)

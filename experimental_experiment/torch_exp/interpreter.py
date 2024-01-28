@@ -191,6 +191,7 @@ class DynamoInterpreter:
 
         if inspect.isbuiltin(node.target) or not node_schema:
             complete_args = list(node.args)
+            complete_kwargs = node.kwargs
         else:
             for i, expected_arg in enumerate(node_schema.arguments):
                 if i < len(node.args):
@@ -451,6 +452,14 @@ class DynamoInterpreter:
         can_set = self._can_set_shape_and_type(node)
 
         res = fct(self.builder, not can_set, output_names, *args, **fx_kwargs)
+        if res is None:
+            if len(node.users) == 0:
+                return
+            raise RuntimeError(
+                f"Unexpected return res=None, for node={node}, "
+                f"output_names={output_names}"
+                f"{self.builder.get_debug_msg()}"
+            )
 
         self._set_shape_and_type(node, res)
         res = self._check_output_name(node, res, output_names)
