@@ -36,7 +36,7 @@ jobs:
       python -m pip install . -v -v -v
     displayName: 'install wheel'
   - script: |
-      python -m pytest
+      python -m pytest -v
     displayName: 'Runs Unit Tests'
   - task: PublishPipelineArtifact@0
     inputs:
