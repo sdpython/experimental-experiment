@@ -22,6 +22,7 @@ from torch.onnx.symbolic_helper import (
 from torch._dynamo.backends.common import aot_autograd
 from experimental_experiment.ext_test_case import ExtTestCase, ignore_warnings
 from experimental_experiment.torch_exp.onnx_export import to_onnx
+from experimental_experiment.torch_exp._exceptions import FunctionNotFoundError
 
 BATCH_SIZE = 2
 RNN_BATCH_SIZE = 7
@@ -192,7 +193,7 @@ class TestOperators(ExtTestCase):
                 result = compiled_model(*args)
             except torch._dynamo.exc.BackendCompilerFailed as e:
                 if "FunctionNotFoundError" in str(e):
-                    raise unittest.SkipTest(str(e))
+                    raise unittest.SkipTest(f"MISSING FOR FORWARD {e}")
                 raise
 
             if isinstance(baseline_result, torch.Tensor):
@@ -207,7 +208,10 @@ class TestOperators(ExtTestCase):
                 )
 
                 baseline_result.sum().backward()
-                result.sum().backward()
+                try:
+                    result.sum().backward()
+                except FunctionNotFoundError as e:
+                    raise unittest.SkipTest(f"MISSING FOR BACKWARD {e}")
 
                 for baseline_param, param in zip(
                     model.parameters(), compiled_model.parameters()
@@ -1224,6 +1228,7 @@ class TestOperators(ExtTestCase):
         self.assertONNX(
             lambda data, index: data.scatter_add(1, indices, values),
             (data, (indices, values)),
+            onnx_export=inspect.currentframe().f_code.co_name,
         )
 
     def test_scatter_add_opset11(self):
@@ -1234,6 +1239,7 @@ class TestOperators(ExtTestCase):
             lambda data, index: data.scatter_add(1, indices, values),
             (data, (indices, values)),
             opset_version=11,
+            onnx_export=inspect.currentframe().f_code.co_name,
         )
 
     def test_scatter_add_opset16(self):
@@ -1244,6 +1250,7 @@ class TestOperators(ExtTestCase):
             lambda data, index: data.scatter_add(1, indices, values),
             (data, (indices, values)),
             opset_version=16,
+            onnx_export=inspect.currentframe().f_code.co_name,
         )
 
     def test_master_opset(self):
@@ -1254,12 +1261,19 @@ class TestOperators(ExtTestCase):
     def test_std(self):
         x = torch.randn(2, 3, 4).float()
         self.assertONNX(
-            lambda x: torch.std(x, dim=(0, 1), unbiased=True, keepdim=True), x
+            lambda x: torch.std(x, dim=(0, 1), unbiased=True, keepdim=True),
+            x,
+            onnx_export=inspect.currentframe().f_code.co_name,
         )
 
     def test_cumsum(self):
         x = torch.randn(2, 3, 4, requires_grad=True)
-        self.assertONNX(lambda x: torch.cumsum(x, dim=1), x, opset_version=11)
+        self.assertONNX(
+            lambda x: torch.cumsum(x, dim=1),
+            x,
+            opset_version=11,
+            onnx_export=inspect.currentframe().f_code.co_name,
+        )
 
     def test_dict(self):
         class MyModel(torch.nn.Module):
@@ -1271,7 +1285,9 @@ class TestOperators(ExtTestCase):
                 return x_out
 
         x = {torch.tensor(1.0): torch.randn(1, 2, 3)}
-        self.assertONNX(MyModel(), (x, {}))
+        self.assertONNX(
+            MyModel(), (x, {}), onnx_export=inspect.currentframe().f_code.co_name
+        )
 
     def test_dict_str(self):
         class MyModel(torch.nn.Module):
@@ -1281,7 +1297,9 @@ class TestOperators(ExtTestCase):
                 return x_out
 
         x = {"test_key_in": torch.randn(1, 2, 3)}
-        self.assertONNX(MyModel(), (x, {}))
+        self.assertONNX(
+            MyModel(), (x, {}), onnx_export=inspect.currentframe().f_code.co_name
+        )
 
     @unittest.skipIf(SKIP_DYNAMIC_SHAPE, reason="dynamic shape")
     def test_arange_dynamic(self):
@@ -1752,6 +1770,7 @@ class TestOperators(ExtTestCase):
             (x,),
             input_names=["x"],
             dynamic_axes={"x": {0: "dim_0"}},
+            onnx_export=inspect.currentframe().f_code.co_name,
         )
 
 

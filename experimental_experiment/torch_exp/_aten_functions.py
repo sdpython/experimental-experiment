@@ -340,6 +340,13 @@ def aten_cos(g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T) ->
     return res
 
 
+def aten_cosh(g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T) -> T:
+    res = g.make_node("Cosh", [x], outputs)
+    if set_shape_type:
+        set_shape_type_unary_op(g, outputs[0], x)
+    return res
+
+
 def aten_detach(g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T) -> T:
     return g.make_node("Identity", [x], outputs, name="detach")
 
@@ -820,6 +827,20 @@ def aten_silu(g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T) -
     return g.op.Mul(x, g.op.Sigmoid(x, name="silu"), outputs=outputs, name="silu")
 
 
+def aten_sin(g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T) -> T:
+    res = g.make_node("Sin", [x], outputs)
+    if set_shape_type:
+        set_shape_type_unary_op(g, outputs[0], x)
+    return res
+
+
+def aten_sinh(g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T) -> T:
+    res = g.make_node("Sinh", [x], outputs)
+    if set_shape_type:
+        set_shape_type_unary_op(g, outputs[0], x)
+    return res
+
+
 def aten_softmax(
     g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T, dim: int = -1
 ) -> T:
@@ -844,17 +865,23 @@ def aten_sum(
     set_shape_type: bool,
     outputs: List[str],
     x: T,
-    dim: Union[int, List[int]],
-    keepdim: bool,
+    dim: Optional[Union[int, List[int]]] = None,
+    keepdim: bool = False,
+    dtype=None,
 ) -> T:
+    if dtype is not None:
+        itype = torch_dtype_to_onnx_dtype(dtype)
+        xc = g.op.Cast(x, to=itype)
+    else:
+        xc = x
     if dim is None:
-        result = g.op.ReduceSum(x, keepdims=keepdim, outputs=outputs)
+        result = g.op.ReduceSum(xc, keepdims=keepdim, outputs=outputs)
     else:
         if isinstance(dim, int):
             adim = np.array([dim], dtype=np.int64)
         else:
             adim = np.array(dim, dtype=np.int64)
-        result = g.op.ReduceSum(x, adim, keepdims=keepdim, outputs=outputs)
+        result = g.op.ReduceSum(xc, adim, keepdims=keepdim, outputs=outputs)
     return result
 
 
