@@ -425,10 +425,16 @@ class GraphBuilder:
                 elem_type = TensorProto.FLOAT
             elif "float64" in st:
                 elem_type = TensorProto.DOUBLE
+            elif "uint64" in st:
+                elem_type = TensorProto.UINT64
             elif "int64" in st:
                 elem_type = TensorProto.INT64
             elif "bool" in st:
                 elem_type = TensorProto.BOOL
+            elif "uint8" in st:
+                elem_type = TensorProto.UINT8
+            elif "int8" in st:
+                elem_type = TensorProto.INT8
             elif elem_type is None:
                 elem_type = TensorProto.UNDEFINED
             elif exc:

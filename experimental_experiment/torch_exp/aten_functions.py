@@ -1,5 +1,6 @@
 from typing import Any, Callable, Dict, Optional
 from . import _aten_functions
+from ._exceptions import FunctionNotFoundError
 
 
 def _register() -> Dict[str, Callable]:
@@ -50,7 +51,7 @@ def find_function(
             lookup.append(v)
             if v in registered_functions:
                 return registered_functions[v]
-    raise RuntimeError(
+    raise FunctionNotFoundError(
         f"Unable to interpret function {type(name)}: {name!r}, searched for "
         f"{lookup} and attributes {lookup_names}, "
         f"args={args}, kwargs={kwargs}"

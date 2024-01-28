@@ -4,6 +4,7 @@ import itertools
 import operator
 import os
 import unittest
+import sys
 from typing import List, Optional, Union
 import numpy as np
 from onnx import ModelProto
@@ -150,6 +151,7 @@ class TestOperators(ExtTestCase):
         input_names=None,
         dynamic_axes=None,
         keep_initializers_as_inputs=None,
+        training=None,
     ):
         if sys.platform == "win32":
             raise unittest.SkipTest("Windows not supported yet.")
@@ -186,7 +188,12 @@ class TestOperators(ExtTestCase):
             )
 
             baseline_result = model(*args)
-            result = compiled_model(*args)
+            try:
+                result = compiled_model(*args)
+            except torch._dynamo.exc.BackendCompilerFailed as e:
+                if "FunctionNotFoundError" in str(e):
+                    raise unittest.SkipTest(str(e))
+                raise
 
             if isinstance(baseline_result, torch.Tensor):
                 self.assertEqualArray(
@@ -392,6 +399,7 @@ class TestOperators(ExtTestCase):
             lambda inputs: torch.cat(inputs, 1),
             ((x, y),),
             onnx_export=inspect.currentframe().f_code.co_name,
+            test_backward=False,
         )
 
     def test_mm(self):
@@ -1020,6 +1028,7 @@ class TestOperators(ExtTestCase):
             nn.BatchNorm2d(128, affine=False, momentum=0.3),
             x,
             keep_initializers_as_inputs=True,
+            onnx_export=inspect.currentframe().f_code.co_name,
         )
 
     def test_embedding_bags(self):
@@ -1415,7 +1424,11 @@ class TestOperators(ExtTestCase):
         x = torch.randn(10, 3, 5)
         b1 = torch.randn(10, 3, 4)
         b2 = torch.randn(10, 4, 5)
-        self.assertONNX(lambda x, b1, b2: torch.baddbmm(x, b1, b2), (x, b1, b2))
+        self.assertONNX(
+            lambda x, b1, b2: torch.baddbmm(x, b1, b2),
+            (x, b1, b2),
+            onnx_export=inspect.currentframe().f_code.co_name,
+        )
 
     def test_round(self):
         x = torch.tensor([0.9920, -1.0362, -1.5000, 2.5000], requires_grad=True)

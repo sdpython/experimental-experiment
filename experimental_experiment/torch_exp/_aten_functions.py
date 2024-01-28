@@ -289,9 +289,8 @@ def aten_convolution(
 
     if bias is None:
         weight_dim_0 = g.make_node("Shape", [weight], start=0, end=1)
-        bias_shape = g.make_node(
-            "Expand", [weight_dim_0], g.make_node("Constant", value_ints=[1])
-        )
+        cst1 = g.make_node("Constant", [], value_ints=[1])
+        bias_shape = g.make_node("Expand", [weight_dim_0, cst1])
         zero = g.make_node("CastLike", [np.array([0.0]), input])
         bias = g.make_node("Expand", [zero, bias_shape])
 

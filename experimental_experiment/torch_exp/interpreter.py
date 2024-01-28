@@ -419,6 +419,23 @@ class DynamoInterpreter:
             f"{self.builder.get_debug_msg()}"
         )
 
+    def _process_arg(self, node, aten_name, i):
+        if i is None:
+            return None
+        if isinstance(i, str):
+            return i
+        if hasattr(i, "name"):
+            return i.name
+        if isinstance(i, tuple):
+            return tuple(self._process_arg(node, aten_name, t) for t in i)
+        if isinstance(i, (list, float, int, tuple)):
+            return i
+        raise RuntimeError(
+            f"Unexpected type (argument {i}) {type(i)} "
+            f"for function {aten_name!r} "
+            f"in args={node.args}{self.builder.get_debug_msg()}"
+        )
+
     def call_function(self, node: "torch.fx.Node"):  # noqa: F821
         fx_args, fx_kwargs = self._fill_in_default_kwargs(node)
         aten_name = self._get_aten_name(node)
@@ -428,29 +445,9 @@ class DynamoInterpreter:
             aten_name, args=node.args, kwargs=node.kwargs, graph_builder=self.builder
         )
 
-        args = []
-        for i in fx_args:
-            if i is None:
-                args.append(None)
-            elif isinstance(i, str):
-                args.append(i)
-            elif hasattr(i, "name"):
-                args.append(i.name)
-            # elif isinstance(i, tuple):
-            # For node cat=concat
-            #    args.append(tuple(t.name for t in i))
-            elif isinstance(i, (list, float, int, tuple)):
-                args.append(i)
-            else:
-                raise RuntimeError(
-                    f"Unexpected type (argument {i}) {type(i)} "
-                    f"for function {aten_name!r} "
-                    f"in args={node.args}{self.builder.get_debug_msg()}"
-                )
-
+        args = [self._process_arg(node, aten_name, a) for a in fx_args]
         output_names = self._get_output_names(node)
         can_set = self._can_set_shape_and_type(node)
-
         res = fct(self.builder, not can_set, output_names, *args, **fx_kwargs)
         if res is None:
             if len(node.users) == 0:
