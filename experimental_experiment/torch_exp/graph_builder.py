@@ -429,6 +429,14 @@ class GraphBuilder:
                 elem_type = TensorProto.UINT64
             elif "int64" in st:
                 elem_type = TensorProto.INT64
+            elif "uint32" in st:
+                elem_type = TensorProto.UINT32
+            elif "int32" in st:
+                elem_type = TensorProto.INT16
+            elif "uint16" in st:
+                elem_type = TensorProto.UINT16
+            elif "int16" in st:
+                elem_type = TensorProto.INT32
             elif "bool" in st:
                 elem_type = TensorProto.BOOL
             elif "uint8" in st:

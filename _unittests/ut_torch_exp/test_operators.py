@@ -991,17 +991,29 @@ class TestOperators(ExtTestCase):
 
     def test_norm_p1(self):
         x = torch.randn(1, 2, 3, 4, requires_grad=True)
-        self.assertONNX(lambda x: x.norm(p=1, dim=2), (x))
+        self.assertONNX(
+            lambda x: x.norm(p=1, dim=2),
+            (x),
+            onnx_export=inspect.currentframe().f_code.co_name,
+        )
 
     def test_norm_p2(self):
         x = torch.randn(1, 2, 3, 4, requires_grad=True)
-        self.assertONNX(lambda x: x.norm(p=2, dim=2), (x))
+        self.assertONNX(
+            lambda x: x.norm(p=2, dim=2),
+            (x),
+            onnx_export=inspect.currentframe().f_code.co_name,
+        )
 
     def test_upsample_nearest_scale(self):
         x = torch.randn(1, 2, 3, 4, requires_grad=True)
         self.assertONNX(
             lambda x: nn.functional.interpolate(
-                x, scale_factor=2.0, mode="nearest", recompute_scale_factor=False
+                x,
+                scale_factor=2.0,
+                mode="nearest",
+                recompute_scale_factor=False,
+                onnx_export=inspect.currentframe().f_code.co_name,
             ),
             x,
         )
@@ -1009,13 +1021,17 @@ class TestOperators(ExtTestCase):
     def test_upsample_nearest_scale_default_scale_factor(self):
         x = torch.randn(1, 2, 3, 4, requires_grad=True)
         self.assertONNX(
-            lambda x: nn.functional.interpolate(x, scale_factor=2.0, mode="nearest"), x
+            lambda x: nn.functional.interpolate(x, scale_factor=2.0, mode="nearest"),
+            x,
+            onnx_export=inspect.currentframe().f_code.co_name,
         )
 
     def test_upsample_nearest_size(self):
         x = torch.randn(1, 2, 3, 4, requires_grad=True)
         self.assertONNX(
-            lambda x: nn.functional.interpolate(x, size=16, mode="nearest"), x
+            lambda x: nn.functional.interpolate(x, size=16, mode="nearest"),
+            x,
+            onnx_export=inspect.currentframe().f_code.co_name,
         )
 
     def test_unsqueeze(self):
@@ -1044,6 +1060,7 @@ class TestOperators(ExtTestCase):
             (input, offset),
             keep_initializers_as_inputs=True,
             operator_export_type=torch.onnx.OperatorExportTypes.ONNX_ATEN_FALLBACK,
+            onnx_export=inspect.currentframe().f_code.co_name,
         )
 
     def test_implicit_expand(self):
@@ -1082,7 +1099,12 @@ class TestOperators(ExtTestCase):
 
     def test_prelu(self):
         x = torch.randn(1, 2, 3, 4)
-        self.assertONNX(torch.nn.PReLU(2), x, keep_initializers_as_inputs=True)
+        self.assertONNX(
+            torch.nn.PReLU(2),
+            x,
+            keep_initializers_as_inputs=True,
+            onnx_export=inspect.currentframe().f_code.co_name,
+        )
 
     def test_log_sigmoid(self):
         x = torch.randn(1, 2, 3, 4)
@@ -1093,7 +1115,10 @@ class TestOperators(ExtTestCase):
     def test_linear(self):
         x = torch.randn(3, 4)
         self.assertONNX(
-            torch.nn.Linear(4, 5, bias=True), x, keep_initializers_as_inputs=True
+            torch.nn.Linear(4, 5, bias=True),
+            x,
+            keep_initializers_as_inputs=True,
+            onnx_export=inspect.currentframe().f_code.co_name,
         )
 
     def test_empty_like(self):
@@ -1172,6 +1197,7 @@ class TestOperators(ExtTestCase):
                 )
             ),
             x,
+            onnx_export=inspect.currentframe().f_code.co_name,
         )
 
     def test_dropout_training(self):
@@ -1180,6 +1206,7 @@ class TestOperators(ExtTestCase):
             lambda x: torch.max(functional.dropout(x)),
             x,
             training=torch.onnx.TrainingMode.TRAINING,
+            onnx_export=inspect.currentframe().f_code.co_name,
         )
 
     def test_dropout_opset12(self):
@@ -1188,6 +1215,7 @@ class TestOperators(ExtTestCase):
             lambda x: torch.max(functional.dropout(x, training=False)),
             x,
             opset_version=12,
+            onnx_export=inspect.currentframe().f_code.co_name,
         )
 
     def test_dropout_training_opset12(self):
@@ -1197,6 +1225,7 @@ class TestOperators(ExtTestCase):
             x,
             opset_version=12,
             training=torch.onnx.TrainingMode.TRAINING,
+            onnx_export=inspect.currentframe().f_code.co_name,
         )
 
     def test_nonzero(self):
@@ -1211,14 +1240,21 @@ class TestOperators(ExtTestCase):
 
     def test_gather(self):
         data = torch.randn(3, 4, 3, requires_grad=True)
-        index = torch.tensor([2, 0]).view(1, 2, 1).expand(3, 2, 3)
-        self.assertONNX(lambda data, index: data.gather(1, index), (data, index))
+        index = (torch.tensor([2, 0]).view(1, 2, 1).expand(3, 2, 3),)
+        self.assertONNX(
+            lambda data, index: data.gather(1, index),
+            (data, index),
+            onnx_export=inspect.currentframe().f_code.co_name,
+        )
 
     def test_gather_opset11(self):
         data = torch.randn(3, 4, 3, requires_grad=True)
         index = torch.tensor([2, 0]).view(1, 2, 1).expand(3, 2, 3)
         self.assertONNX(
-            lambda data, index: data.gather(1, index), (data, index), opset_version=11
+            lambda data, index: data.gather(1, index),
+            (data, index),
+            opset_version=11,
+            onnx_export=inspect.currentframe().f_code.co_name,
         )
 
     def test_scatter_add(self):
