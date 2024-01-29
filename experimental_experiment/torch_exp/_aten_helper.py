@@ -30,6 +30,14 @@ def torch_dtype_to_onnx_dtype(to: "torch.dtype") -> int:  # noqa: F821
     raise NotImplementedError(f"Unable to convert torch dtype {to!r} to onnx dtype.")
 
 
+def dtype_to_tensor_dtype(dt: "dtype") -> int:  # noqa: F821
+    try:
+        return np_dtype_to_tensor_dtype(dt)
+    except KeyError:
+        pass
+    return torch_dtype_to_onnx_dtype(dt)
+
+
 def broadcast_shape(sh1: Tuple[int, ...], sh2: Tuple[int, ...]) -> Tuple[int, ...]:
     """
     Computes the shape for many broadcasting operators.

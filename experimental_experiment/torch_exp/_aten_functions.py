@@ -3,7 +3,7 @@ import numpy as np
 from onnx import TensorProto
 from onnx.helper import tensor_dtype_to_np_dtype
 from onnx.numpy_helper import from_array
-from .graph_builder import GraphBuilder
+from ._exceptions import FunctionNotFoundError
 from ._aten_helper import (
     _adjust_attributes_of_max_pool,
     set_shape_type_unary_op,
@@ -12,6 +12,7 @@ from ._aten_helper import (
     prepare_inputs_homogeneous_operator,
     torch_dtype_to_onnx_dtype,
 )
+from .graph_builder import GraphBuilder
 
 
 T = str
@@ -271,11 +272,11 @@ def aten_convolution(
     groups: int = 1,
 ) -> T:
     if transposed:
-        raise NotImplementedError(
+        raise FunctionNotFoundError(
             f"aten_convolution does not support transposed={transposed}."
         )
     if output_padding and (min(output_padding) != 0 or max(output_padding) != 0):
-        raise NotImplementedError(
+        raise FunctionNotFoundError(
             f"aten_convolution does not support output_padding={output_padding}."
         )
     if not isinstance(padding, Sequence):

@@ -5,6 +5,7 @@ import onnx.helper as oh
 import onnx.numpy_helper as onh
 from onnx import AttributeProto, FunctionProto, ModelProto, NodeProto, TensorProto
 from onnx.reference import ReferenceEvaluator
+from ._aten_helper import dtype_to_tensor_dtype
 from ._helper import make_hash
 
 
@@ -105,6 +106,8 @@ class Opset:
         )
 
     def ReduceSumAnyOpset(self, *args, **kwargs):
+        if len(args) == 1:
+            return self.ReduceSum(*args, **kwargs)
         assert len(args) == 2, f"ReduceSumAnyOpset expects 2 arguments not {len(args)}"
         if self.builder.main_opset >= 13:
             return self.ReduceSum(*args, **kwargs)
@@ -722,9 +725,7 @@ class GraphBuilder:
             if len(node.output) == 1:
                 cst, _ = self.compute_constant(node.output[0], exc=False)
                 if cst is not None:
-                    self.set_type(
-                        node.output[0], oh.np_dtype_to_tensor_dtype(cst[0].dtype)
-                    )
+                    self.set_type(node.output[0], dtype_to_tensor_dtype(cst[0].dtype))
                     self.set_shape(node.output[0], cst[0].shape)
         elif set_shape_type:
             if node.op_type == "GatherElements":
@@ -1066,7 +1067,10 @@ class GraphBuilder:
                 break
         assert perm, f"perm not here in node {node}"
         assert len(perm) == 2, f"perm={perm} is not supported with torch"
-        return [torch.transpose(feeds[node.input[0]], *perm)]
+        x = feeds[node.input[0]]
+        if isinstance(x, np.ndarray):
+            x = torch.Tensor(x)
+        return [torch.transpose(x, *perm)]
 
     def compute_constant(
         self, name: str, exc: bool = True
