@@ -166,7 +166,9 @@ class DynamoInterpreter:
                             f"{self.builder.get_debug_msg()}"
                         )
 
-                self.builder.make_tensor_output(o, elem_type=elem_type, shape=shape)
+                self.builder.make_tensor_output(
+                    o, elem_type=elem_type, shape=shape, indexed=False
+                )
             return [_[1] for _ in outputs]
 
         if isinstance(val, self.torch.Tensor):
@@ -285,6 +287,7 @@ class DynamoInterpreter:
                     [input_name, axis_name],
                     [end_name],
                     name="getitem_slice",
+                    set_shape_type=True,
                 )
                 ends.append(end_name)
                 concat = True

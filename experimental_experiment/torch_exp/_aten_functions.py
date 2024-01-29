@@ -58,7 +58,7 @@ def aten_add_Scalar(
 ) -> T:
     assert alpha in (None, 1), f"alpha={alpha}, not implemented"
     x, y = prepare_inputs_homogeneous_operator(g, x, y)
-    res = g.op.Add(x, y, outputs=outputs)
+    res = g.op.Add(x, y, outputs=outputs, name="add_Scalar")
     if set_shape_type:
         set_shape_type_binary_op(g, outputs[0], x, y)
     return res
@@ -74,7 +74,7 @@ def aten_add_Tensor(
 ) -> T:
     assert alpha in (None, 1), f"alpha={alpha}, not implemented"
     x, y = prepare_inputs_homogeneous_operator(g, x, y)
-    res = g.op.Add(x, y, outputs=outputs)
+    res = g.op.Add(x, y, outputs=outputs, name="add_Tensor")
     if set_shape_type:
         set_shape_type_binary_op(g, outputs[0], x, y)
     return res
@@ -155,7 +155,7 @@ def aten_arange(
         i_step = step
     else:
         i_step = np.array(step, dtype=npdtype)
-    res = g.op.Range(i_start, i_end, i_step, outputs=outputs)
+    res = g.op.Range(i_start, i_end, i_step, outputs=outputs, name="arange")
     if set_shape_type:
         g.set_type(res, itype)
         if isinstance(end, str) or isinstance(start, str) or isinstance(step, str):
@@ -190,13 +190,11 @@ def aten_argmax(
         res = g.op.Squeeze(
             g.op.ArgMax(xf, keepdims=(1 if keepdim else 0)),
             outputs=outputs,
+            name="argmax",
         )
     elif isinstance(dim, int):
         res = g.op.ArgMax(
-            x,
-            axis=dim,
-            keepdims=1 if keepdim else 0,
-            outputs=outputs,
+            x, axis=dim, keepdims=1 if keepdim else 0, outputs=outputs, name="argmax"
         )
     else:
         raise RuntimeError(f"Unexpected type {type(dim)} for dim")
@@ -247,7 +245,7 @@ def aten_cat(
     tensors: Tuple[T, ...],
     dim: int = 0,
 ) -> T:
-    res = g.op.Concat(*tensors, axis=dim, outputs=outputs)
+    res = g.op.Concat(*tensors, axis=dim, outputs=outputs, name="cat")
     if set_shape_type:
         dt0 = g.get_type(tensors[0])
         assert all(map(lambda t: g.get_type(t) == dt0, tensors))
@@ -294,22 +292,25 @@ def aten_convolution(
 
     if bias is None:
         if g.main_opset >= 13:
-            weight_dim_0 = g.make_node("Shape", [weight], start=0, end=1)
+            weight_dim_0 = g.make_node("Shape", [weight], start=0, end=1, name="conv")
         elif g.main_opset >= 13:
-            shape = g.op.Shape(weight)
+            shape = g.op.Shape(weight, name="conv")
             weight_dim_0 = g.op.Slice(
                 shape,
                 np.array([0], dtype=np.int64),
                 np.array([1], dtype=np.int64),
                 np.array([0], dtype=np.int64),
+                name="conv",
             )
         else:
-            shape = g.op.Shape(weight)
-            weight_dim_0 = g.op.Slice(shape, axes=[0], starts=[0], ends=[1])
-        cst1 = g.make_node("Constant", [], value_ints=[1])
-        bias_shape = g.make_node("Expand", [weight_dim_0, cst1])
+            shape = g.op.Shape(weight, name="conv")
+            weight_dim_0 = g.op.Slice(
+                shape, axes=[0], starts=[0], ends=[1], name="conv"
+            )
+        cst1 = g.make_node("Constant", [], value_ints=[1], name="conv")
+        bias_shape = g.make_node("Expand", [weight_dim_0, cst1], name="conv")
         dtype = tensor_dtype_to_np_dtype(g.get_type(input))
-        bias = g.op.Expand(np.array([0.0], dtype=dtype), bias_shape)
+        bias = g.op.Expand(np.array([0.0], dtype=dtype), bias_shape, name="conv")
 
     # if Rank(input) != Rank(weight):
     #    input = op.Unsqueeze(input, op.Constant(value_ints=[0]))
@@ -322,6 +323,7 @@ def aten_convolution(
         pads=pads,
         group=groups,
         dilations=dilations,
+        name="conv",
     )
 
 
@@ -388,7 +390,7 @@ def aten_div_Tensor(
 ) -> T:
     assert alpha in (None, 1), f"alpha={alpha}, not implemented"
     x, y = prepare_inputs_homogeneous_operator(g, x, y)
-    res = g.op.Div(x, y, outputs=outputs)
+    res = g.op.Div(x, y, outputs=outputs, name="div_Tensor")
     if set_shape_type:
         set_shape_type_binary_op(g, outputs[0], x, y)
     return res
@@ -428,8 +430,8 @@ def aten_embedding(
     g: GraphBuilder,
     set_shape_type: bool,
     outputs: List[str],
-    weight: T,
     indices: T,
+    weight: T,
     padding_idx: Optional[int] = None,
     max_norm: Optional[int] = None,
     norm_type: float = 2.0,
@@ -443,7 +445,7 @@ def aten_embedding(
             f"or max_norm={max_norm} or norm_type={norm_type} "
             f"are different from the default values."
         )
-    res = g.op.Gather(weight, indices, outputs=outputs)
+    res = g.op.Gather(weight, indices, outputs=outputs, name="embedding")
     if set_shape_type:
         g.set_type(res, g.get_type(weight))
     return res
@@ -467,10 +469,14 @@ def aten_flatten(
 ) -> T:
     if start_dim != 0:
         if start_dim == 1 and end_dim == -1:
-            shape = g.op.Shape(x)
-            take = g.op.GatherElements(shape, np.array([0], dtype=np.int64), axis=0)
-            resh = g.op.Concat(take, np.array([-1], dtype=np.int64), axis=0)
-            return g.op.Reshape(x, resh, outputs=outputs)
+            shape = g.op.Shape(x, name="flatten")
+            take = g.op.GatherElements(
+                shape, np.array([0], dtype=np.int64), axis=0, name="flatten"
+            )
+            resh = g.op.Concat(
+                take, np.array([-1], dtype=np.int64), axis=0, name="flatten"
+            )
+            return g.op.Reshape(x, resh, outputs=outputs, name="flatten")
         raise NotImplementedError(
             f"start_dim={start_dim}, end_dim={end_dim} not supported."
         )
@@ -519,7 +525,9 @@ def aten_full(
         ntype = tensor_dtype_to_np_dtype(itype)
         value = np.array(fill_value, dtype=ntype).reshape((1,))
 
-    res = g.op.ConstantOfShape(tsize, value=from_array(value), outputs=outputs)
+    res = g.op.ConstantOfShape(
+        tsize, value=from_array(value), outputs=outputs, name="full"
+    )
     if set_shape_type:
         g.set_type(res, itype)
         if new_shape:
@@ -547,12 +555,12 @@ def aten_linear(
     weight: T,
     bias: T = None,
 ) -> T:
-    weight_transposed = g.op.Transpose(weight, perm=[1, 0])
+    weight_transposed = g.op.Transpose(weight, perm=[1, 0], name="linear")
     if bias:
         res = g.op.MatMul(x, weight_transposed)
         res = g.op.Add(res, bias, outputs=outputs)
     else:
-        res = g.op.MatMul(x, weight_transposed, outputs=outputs)
+        res = g.op.MatMul(x, weight_transposed, outputs=outputs, name="linear")
     if set_shape_type:
         g.set_type(res, g.get_type(x))
         if g.has_shape(x) and g.has_shape(weight):
@@ -567,7 +575,7 @@ def aten_linear(
 
 def aten_lt(g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T, y: T) -> T:
     x, y = prepare_inputs_homogeneous_operator(g, x, y)
-    res = g.op.Less(x, y, outputs=outputs)
+    res = g.op.Less(x, y, outputs=outputs, name="lt")
     if set_shape_type:
         set_shape_type_binary_op(g, outputs[0], x, y)
     return res
@@ -593,6 +601,7 @@ def _aten_max_pool_onnx(
     dilations: Sequence[int],
     ceil_mode: bool,
     unbatched_rank: int,
+    name: str,
 ) -> T:
     # self_rank_is_unbatched_rank = Rank(self) == unbatched_rank
     # if self_rank_is_unbatched_rank:  # C,H,W -> N,C,H,W and N=1
@@ -605,6 +614,7 @@ def _aten_max_pool_onnx(
         kernel_shape=kernel_shape,
         pads=pads,
         strides=strides,
+        name=name,
     )
 
     # if self_rank_is_unbatched_rank:
@@ -631,7 +641,16 @@ def aten_max_pool2d(
     )
 
     return _aten_max_pool_onnx(
-        g, outputs, x, kernel_shape, strides, pads, dilations, ceil_mode, 3
+        g,
+        outputs,
+        x,
+        kernel_shape,
+        strides,
+        pads,
+        dilations,
+        ceil_mode,
+        3,
+        name="max_pool2d",
     )
 
 
@@ -649,6 +668,7 @@ def _aten_max_pool_with_indices_onnx(
     n_dims_one: Sequence[int],
     n_dims_zero: Sequence[int],
     n_dims_axes: Sequence[int],
+    name: str,
 ) -> Tuple[T, T]:
     if isinstance(ceil_mode, str):
         raise TypeError(f"Unexpected ceil_mode={ceil_mode}")
@@ -663,21 +683,24 @@ def _aten_max_pool_with_indices_onnx(
         kernel_shape=kernel_size,
         pads=padding,
         strides=stride,
+        name=name,
     )
     _, flatten_indices = g.op.MaxPool(
         x, dilations=dilation, kernel_shape=n_dims_one, strides=n_dims_one
     )
 
-    ends = g.op.Constant(value_ints=n_dims_one)
-    starts = g.op.Constant(value_ints=n_dims_zero)
-    axes = g.op.Constant(value_ints=n_dims_axes)
+    ends = g.op.Constant(value_ints=n_dims_one, name=name)
+    starts = g.op.Constant(value_ints=n_dims_zero, name=name)
+    axes = g.op.Constant(value_ints=n_dims_axes, name=name)
 
-    delta = g.op.Slice(flatten_indices, starts, ends, axes)
-    indices = g.op.Sub(indices, delta)
+    delta = g.op.Slice(flatten_indices, starts, ends, axes, name=name)
+    indices = g.op.Sub(indices, delta, name=name)
 
     if is_unbatched_rank:
-        pool_result = g.op.Squeeze(pool_result, g.op.Constant(value_ints=[0]))
-        indices = g.op.Squeeze(indices, g.op.Constant(value_ints=[0]))
+        pool_result = g.op.Squeeze(
+            pool_result, g.op.Constant(value_ints=[0]), name=name
+        )
+        indices = g.op.Squeeze(indices, g.op.Constant(value_ints=[0]), name=name)
 
     if outputs:
         if not isinstance(outputs, (tuple, list)):
@@ -687,8 +710,8 @@ def _aten_max_pool_with_indices_onnx(
         if len(outputs) != 2:
             raise ValueError(f"Multiple outputs are expeted but outputs is {outputs}.")
         return (
-            g.op.Identity(pool_result, outputs=outputs[0]),
-            g.op.Identity(indices, outputs=outputs[1]),
+            g.op.Identity(pool_result, outputs=outputs[0], name=name),
+            g.op.Identity(indices, outputs=outputs[1], name=name),
         )
     return pool_result, indices
 
@@ -726,11 +749,12 @@ def aten_max_pool2d_with_indices(
         ([1] * expand_size),
         ([0] * expand_size),
         ([2 + i for i in range(expand_size)]),
+        name="max_pool2d_with_indices",
     )
 
 
 def aten_mm(g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T, y: T) -> T:
-    return g.op.MatMul(x, y, outputs=outputs)
+    return g.op.MatMul(x, y, outputs=outputs, name="mm")
 
 
 def aten_mul(
@@ -745,7 +769,7 @@ def aten_mul(
 def aten_mul_Tensor(
     g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T, y: T
 ) -> T:
-    res = g.op.Mul(x, y, outputs=outputs)
+    res = g.op.Mul(x, y, outputs=outputs, name="mul_Tensor")
     if set_shape_type:
         set_shape_type_binary_op(g, outputs[0], x, y)
     return res
@@ -792,6 +816,7 @@ def aten_ones(
         isize,
         value=from_array(np.array([1], dtype=tensor_dtype_to_np_dtype(dtype))),
         outputs=outputs,
+        name="ones",
     )
     if set_shape_type:
         g.set_type(res, dtype)
@@ -837,9 +862,13 @@ def aten_sigmoid(g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T
 def aten_sigmoid_backward(
     g: GraphBuilder, set_shape_type: bool, outputs: List[str], grad_output: T, output: T
 ) -> T:
-    res = g.op.Sigmoid(output)
-    res2 = g.op.Mul(res, res)
-    grad = g.op.Mul(res2, g.op.Exp(g.op.Neg(output)))
+    res = g.op.Sigmoid(output, name="sigmoid_backward")
+    res2 = g.op.Mul(res, res, name="sigmoid_backward")
+    grad = g.op.Mul(
+        res2,
+        g.op.Exp(g.op.Neg(output, name="sigmoid_backward"), name="sigmoid_backward"),
+        name="sigmoid_backward",
+    )
     if set_shape_type:
         set_shape_type_unary_op(g, outputs[0], output)
     return g.op.Mul(grad_output, grad, outputs=outputs)
@@ -897,13 +926,17 @@ def aten_sum(
     else:
         xc = x
     if dim is None:
-        result = g.op.ReduceSumAnyOpset(xc, keepdims=keepdim, outputs=outputs)
+        result = g.op.ReduceSumAnyOpset(
+            xc, keepdims=keepdim, outputs=outputs, name="sum"
+        )
     else:
         if isinstance(dim, int):
             adim = np.array([dim], dtype=np.int64)
         else:
             adim = np.array(dim, dtype=np.int64)
-        result = g.op.ReduceSumAnyOpset(xc, adim, keepdims=keepdim, outputs=outputs)
+        result = g.op.ReduceSumAnyOpset(
+            xc, adim, keepdims=keepdim, outputs=outputs, name="sum"
+        )
     return result
 
 
@@ -921,7 +954,7 @@ def aten_sum_dim_IntList(
 
     res = aten_sum(g, set_shape_type, None, x, dim, keepdim)
     itype = torch_dtype_to_onnx_dtype(dtype)
-    result = g.op.Cast(res, to=itype, outputs=outputs)
+    result = g.op.Cast(res, to=itype, outputs=outputs, name="sum_dim_IntList")
     return result
 
 

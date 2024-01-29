@@ -304,13 +304,15 @@ class GraphBuilder:
         """Tells if a result is a constant."""
         return name in self.constants_
 
-    def get_constant(self, name: str) -> np.ndarray:
+    def get_constant(self, name: str, exc: bool = True) -> np.ndarray:
         if not self.is_constant(name):
             raise ValueError(f"Result {name!r} is not a constant.")
         if name not in self.initializers_dict:
-            raise ValueError(
-                f"Result {name!r} was never evaluated within method 'constant_folding'."
-            )
+            if exc:
+                raise ValueError(
+                    f"Result {name!r} was never evaluated within method 'constant_folding'."
+                )
+            return None
         value = self.initializers_dict[name]
         if isinstance(value, np.ndarray):
             return value
@@ -530,6 +532,7 @@ class GraphBuilder:
         name: Union[str, List[str]],
         elem_type: Optional[int] = None,
         shape: Optional[Tuple[int, ...]] = None,
+        indexed: bool = True,
     ) -> Union[str, List[str]]:
         if isinstance(name, list):
             res = []
@@ -538,7 +541,7 @@ class GraphBuilder:
             return res
 
         assert (
-            "_" in name
+            not indexed or "_" in name
         ), f"Name {name!r} is not indexed like 'output_0'{self.get_debug_msg()}"
         elem_type = self._get_type(elem_type, False)
         if not self.as_function and elem_type == 0:
@@ -570,6 +573,22 @@ class GraphBuilder:
             st += " " * (align - len(st))
         return st
 
+    def _check_op_type(
+        self,
+        op_type: str,
+        inputs: List[str],
+        outputs: List[str],
+        domain: str,
+        name: str,
+        **kwargs: Dict[str, Any],
+    ):
+        if op_type == "Concat":
+            for i in inputs:
+                if self.has_rank(i) and self.get_rank(i) == 0:
+                    raise RuntimeError(
+                        f"Input {i} for node Concat has no rank{self.get_debug_msg()}"
+                    )
+
     def make_node(
         self,
         op_type: str,
@@ -579,6 +598,7 @@ class GraphBuilder:
         attributes: Optional[List[AttributeProto]] = None,
         check: Optional[bool] = None,
         name: Optional[str] = None,
+        set_shape_type: bool = False,
         **kwargs,
     ) -> Union[str, List[str]]:
         assert (
@@ -624,6 +644,10 @@ class GraphBuilder:
         if name:
             name = self.unique_node_name(name)
 
+        self._check_op_type(
+            op_type, inputs, outputs, domain=domain, name=name, **kwargs
+        )
+
         # next
         try:
             node = oh.make_node(
@@ -645,6 +669,24 @@ class GraphBuilder:
             node.attribute.extend(attributes)
 
         # constant handling, shape, type
+        self._make_node_set_shape_type_constant(node, set_shape_type=set_shape_type)
+
+        if self.verbose > 3:
+            print(
+                f"[GraphBuilder-{self._hash()}.make_node] "
+                f"[{self._debug_string_inputs(node.input)}] "
+                f"{node.op_type}:{node.input}->{node.output}"
+            )
+
+        # add the node
+        for o in node.output:
+            self.set_name(o)
+        self.nodes.append(node)
+        if len(output_names) == 1:
+            return output_names[0]
+        return output_names
+
+    def _make_node_set_shape_type_constant(self, node: NodeProto, set_shape_type: bool):
         if node.op_type == "Constant":
             size = len(node.SerializeToString())
             if size >= self.optimization_options.constant_size:
@@ -661,30 +703,38 @@ class GraphBuilder:
             if self.verbose and (self.verbose > 3 or np.prod(shape) > 100):
                 print(f"[GraphBuilder-{self._hash()}.make_node] {k}[{dtype}:{shape}]")
         elif node.op_type == "Identity":
-            if node.input[0] in self._known_shapes:
+            if self.has_shape(node.input[0]):
                 self.set_shape(node.output[0], self._known_shapes[node.input[0]])
-            if node.input[0] in self._known_types:
+            if self.has_type(node.input[0]):
                 self.set_type(node.output[0], self._known_types[node.input[0]])
             if self.is_constant(node.input[0]):
                 self.constants_[node.output[0]] = node
-        else:
-            if all(map(self.is_constant, node.input)):
-                for o in node.output:
-                    self.constants_[o] = node
-        if self.verbose > 3:
-            print(
-                f"[GraphBuilder-{self._hash()}.make_node] "
-                f"[{self._debug_string_inputs(node.input)}] "
-                f"{node.op_type}:{node.input}->{node.output}"
-            )
-
-        # add the node
-        for o in node.output:
-            self.set_name(o)
-        self.nodes.append(node)
-        if len(output_names) == 1:
-            return output_names[0]
-        return output_names
+        elif node.op_type == "Shape":
+            self.set_type(node.output[0], TensorProto.INT64)
+            if self.has_shape(node.input[0]) and len(node.attribute) == 0:
+                shape = self.get_shape(node.input[0])
+                self.set_shape(node.output[0], (len(shape),))
+            else:
+                self.set_rank(node.output[0], 1)
+        elif all(map(self.is_constant, node.input)):
+            for o in node.output:
+                self.constants_[o] = node
+            if len(node.output) == 1:
+                cst, _ = self.compute_constant(node.output[0], exc=False)
+                if cst is not None:
+                    self.set_type(
+                        node.output[0], oh.np_dtype_to_tensor_dtype(cst[0].dtype)
+                    )
+                    self.set_shape(node.output[0], cst[0].shape)
+        elif set_shape_type:
+            if node.op_type == "GatherElements":
+                if self.has_rank(node.input[0]) and self.has_rank(node.input[0]):
+                    r1 = self.get_rank(node.input[0])
+                    assert r1 == self.get_rank(node.input[1]), (
+                        f"Rank mismatch {r1} != {self.get_rank(node.input[1])} "
+                        f"(GatherElements:{node.input}){self.get_debug_msg()}"
+                    )
+                    self.set_rank(node.output[0], r1)
 
     def make_nodes(
         self,
@@ -1018,6 +1068,26 @@ class GraphBuilder:
         assert len(perm) == 2, f"perm={perm} is not supported with torch"
         return [torch.transpose(feeds[node.input[0]], *perm)]
 
+    def compute_constant(
+        self, name: str, exc: bool = True
+    ) -> Tuple[np.ndarray, Dict[str, np.ndarray]]:
+        assert self.is_constant(name), f"Name {name!r} is not a constant."
+        if name is self.initializers_dict:
+            return self.initializers_dict[name]
+        v = self.constants_[name]
+        assert isinstance(v, NodeProto), f"Unexpected type {type(v)} for name={name!r}"
+        feeds = {i: self.get_constant(i, exc=exc) for i in v.input}
+        for val in feeds.values():
+            if val is None:
+                return None, None
+        if v.op_type == "Transpose":
+            # bypassing onnx.numpy_helper.from_array, too slow
+            output = self._apply_transpose(v, feeds)
+        else:
+            ref = ReferenceEvaluator(v)
+            output = ref.run(None, feeds)
+        return output, feeds
+
     def constant_folding(self):
         """
         Folds all constants. Constants are marked during the creation of the graph.
@@ -1034,14 +1104,7 @@ class GraphBuilder:
             if all(map(self.is_constant, v.input)):
                 node_to_remove.add(tuple(v.output))
                 # node evaluation
-                if v.op_type == "Transpose":
-                    # bypassing onnx.numpy_helper.from_array, too slow
-                    feeds = {i: self.initializers_dict[i] for i in v.input}
-                    output = self._apply_transpose(v, feeds)
-                else:
-                    ref = ReferenceEvaluator(v)
-                    feeds = {i: self.get_constant(i) for i in v.input}
-                    output = ref.run(None, feeds)
+                output, feeds = self.compute_constant(k)
                 for name, value in zip(v.output, output):
                     updates[name] = None
                     self.initializers_dict[name] = value
