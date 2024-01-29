@@ -104,6 +104,21 @@ class Opset:
             op_type, new_inputs, outputs=outputs, domain=domain, name=name, **kwargs
         )
 
+    def ReduceSumAnyOpset(self, *args, **kwargs):
+        assert len(args) == 2, f"ReduceSumAnyOpset expects 2 arguments not {len(args)}"
+        if self.builder.main_opset >= 13:
+            return self.ReduceSum(*args, **kwargs)
+        axes = args[1]
+        if isinstance(axes, np.ndarray):
+            iaxes = axes.tolist()
+        elif isinstance(axes, int):
+            iaxes = axes
+        else:
+            raise RuntimeError(
+                f"Unable to call ReduceSum on a dynamic input axis={axes}"
+            )
+        return self.ReduceSum(args[0], axes=iaxes, **kwargs)
+
 
 class OptimizationOptions:
     def __init__(
@@ -245,6 +260,11 @@ class GraphBuilder:
             )
 
         self.op = Opset(self, self.opsets[""])
+
+    @property
+    def main_opset(self):
+        "Returns the opset for the main domain (assuming it is used)."
+        return self.opsets[""]
 
     def _get_tensor_shape(
         self, proto: Union[NodeProto, TensorProto]

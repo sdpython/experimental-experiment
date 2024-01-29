@@ -116,7 +116,12 @@ def aten_arange(
     end: Optional[int] = None,
     step: int = 1,
     dtype: Optional["torch.dtype"] = None,  # noqa: F821
+    layout=None,
+    device=None,
+    pin_memory=None,
 ) -> T:
+    assert layout is None, f"arange not implemented for layout={layout} is not None"
+    assert not pin_memory, "arange not implemented for pin_memory=True"
     if start is not None and end is None:
         end = start
         start = 0
@@ -288,11 +293,23 @@ def aten_convolution(
     strides = list(stride)
 
     if bias is None:
-        weight_dim_0 = g.make_node("Shape", [weight], start=0, end=1)
+        if g.main_opset >= 13:
+            weight_dim_0 = g.make_node("Shape", [weight], start=0, end=1)
+        elif g.main_opset >= 13:
+            shape = g.op.Shape(weight)
+            weight_dim_0 = g.op.Slice(
+                shape,
+                np.array([0], dtype=np.int64),
+                np.array([1], dtype=np.int64),
+                np.array([0], dtype=np.int64),
+            )
+        else:
+            shape = g.op.Shape(weight)
+            weight_dim_0 = g.op.Slice(shape, axes=[0], starts=[0], ends=[1])
         cst1 = g.make_node("Constant", [], value_ints=[1])
         bias_shape = g.make_node("Expand", [weight_dim_0, cst1])
-        zero = g.make_node("CastLike", [np.array([0.0]), input])
-        bias = g.make_node("Expand", [zero, bias_shape])
+        dtype = tensor_dtype_to_np_dtype(g.get_type(input))
+        bias = g.op.Expand(np.array([0.0], dtype=dtype), bias_shape)
 
     # if Rank(input) != Rank(weight):
     #    input = op.Unsqueeze(input, op.Constant(value_ints=[0]))
@@ -469,7 +486,12 @@ def aten_full(
     size: T,
     fill_value: float,
     dtype=None,
+    layout=None,
+    device=None,
+    pin_memory=None,
 ) -> T:
+    assert layout is None, f"full not implemented for layout={layout} is not None"
+    assert not pin_memory, "full not implemented for pin_memory=True"
     assert isinstance(
         fill_value, (float, int)
     ), f"Unexpected type {type(fill_value)} for fill_value."
@@ -483,19 +505,19 @@ def aten_full(
 
     if dtype is None:
         if isinstance(fill_value, int):
-            value = np.array(fill_value, dtype=np.int64)
+            value = np.array(fill_value, dtype=np.int64).reshape((1,))
             itype = TensorProto.INT64
         elif isinstance(fill_value, float):
-            value = np.array(fill_value, dtype=np.float32)
+            value = np.array(fill_value, dtype=np.float32).reshape((1,))
             itype = TensorProto.FLOAT
         else:
             itype = torch_dtype_to_onnx_dtype(type(fill_value))
             ntype = tensor_dtype_to_np_dtype(itype)
-            value = np.array(fill_value, dtype=ntype)
+            value = np.array(fill_value, dtype=ntype).reshape((1,))
     else:
         itype = torch_dtype_to_onnx_dtype(dtype)
         ntype = tensor_dtype_to_np_dtype(itype)
-        value = np.array(fill_value, dtype=ntype)
+        value = np.array(fill_value, dtype=ntype).reshape((1,))
 
     res = g.op.ConstantOfShape(tsize, value=from_array(value), outputs=outputs)
     if set_shape_type:
@@ -875,13 +897,13 @@ def aten_sum(
     else:
         xc = x
     if dim is None:
-        result = g.op.ReduceSum(xc, keepdims=keepdim, outputs=outputs)
+        result = g.op.ReduceSumAnyOpset(xc, keepdims=keepdim, outputs=outputs)
     else:
         if isinstance(dim, int):
             adim = np.array([dim], dtype=np.int64)
         else:
             adim = np.array(dim, dtype=np.int64)
-        result = g.op.ReduceSum(xc, adim, keepdims=keepdim, outputs=outputs)
+        result = g.op.ReduceSumAnyOpset(xc, adim, keepdims=keepdim, outputs=outputs)
     return result
 
 

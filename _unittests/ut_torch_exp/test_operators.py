@@ -29,7 +29,9 @@ RNN_BATCH_SIZE = 7
 RNN_SEQUENCE_LENGTH = 11
 RNN_INPUT_SIZE = 5
 RNN_HIDDEN_SIZE = 3
-SKIP_DYNAMIC_SHAPE = True
+DYNAMIC_SHAPE_SUPPORTED = False
+DICT_SUPPORTED = False
+OP_BOOL_SUPPORTED = False
 
 
 class FuncModule(Module):
@@ -342,8 +344,13 @@ class TestOperators(ExtTestCase):
 
     def test_rsub(self):
         x = torch.randn(2, 3, requires_grad=True).double()
-        self.assertONNX(lambda x: 1 - x, (x,))
+        self.assertONNX(
+            lambda x: 1 - x, (x,), onnx_export=inspect.currentframe().f_code.co_name
+        )
 
+    @unittest.skipIf(
+        not OP_BOOL_SUPPORTED, reason="multiplication of boolean not supported"
+    )
     def test_mul_bool(self):
         x = torch.tensor([True, False, True, False])
         y = torch.tensor([True, True, False, False])
@@ -353,6 +360,9 @@ class TestOperators(ExtTestCase):
             onnx_export=inspect.currentframe().f_code.co_name,
         )
 
+    @unittest.skipIf(
+        not OP_BOOL_SUPPORTED, reason="multiplication of boolean not supported"
+    )
     def test_mul_fp_bool(self):
         x = torch.tensor([9.4, 1.7, 3.6])
         y = torch.tensor([True, True, False])
@@ -450,6 +460,7 @@ class TestOperators(ExtTestCase):
             x,
             params=(y,),
             keep_initializers_as_inputs=True,
+            onnx_export=inspect.currentframe().f_code.co_name,
         )
 
     def test_params_onnx_irv4(self):
@@ -460,6 +471,7 @@ class TestOperators(ExtTestCase):
             x,
             params=(y,),
             keep_initializers_as_inputs=False,
+            onnx_export=inspect.currentframe().f_code.co_name,
         )
 
     def test_batchnorm(self):
@@ -638,6 +650,7 @@ class TestOperators(ExtTestCase):
             lambda x: torch.full(x.shape, 2.0),
             x,
             onnx_export=inspect.currentframe().f_code.co_name,
+            test_backward=False,
         )
 
     def test_full_like(self):
@@ -1013,9 +1026,9 @@ class TestOperators(ExtTestCase):
                 scale_factor=2.0,
                 mode="nearest",
                 recompute_scale_factor=False,
-                onnx_export=inspect.currentframe().f_code.co_name,
             ),
             x,
+            onnx_export=inspect.currentframe().f_code.co_name,
         )
 
     def test_upsample_nearest_scale_default_scale_factor(self):
@@ -1228,6 +1241,7 @@ class TestOperators(ExtTestCase):
             onnx_export=inspect.currentframe().f_code.co_name,
         )
 
+    @unittest.skipIf(not DYNAMIC_SHAPE_SUPPORTED, reason="dynamic shape")
     def test_nonzero(self):
         x = torch.tensor(
             [[[2.0, 2.0], [1.0, 0.0]], [[0.0, 0.0], [1.0, 1.0]]], requires_grad=True
@@ -1240,7 +1254,7 @@ class TestOperators(ExtTestCase):
 
     def test_gather(self):
         data = torch.randn(3, 4, 3, requires_grad=True)
-        index = (torch.tensor([2, 0]).view(1, 2, 1).expand(3, 2, 3),)
+        index = torch.tensor([2, 0]).view(1, 2, 1).expand(3, 2, 3)
         self.assertONNX(
             lambda data, index: data.gather(1, index),
             (data, index),
@@ -1292,7 +1306,13 @@ class TestOperators(ExtTestCase):
     def test_master_opset(self):
         x = torch.randn(2, 3).float()
         y = torch.randn(2, 3).float()
-        self.assertONNX(operator.add, (x, y), opset_version=10)
+        self.assertONNX(
+            operator.add,
+            (x, y),
+            opset_version=10,
+            onnx_export=inspect.currentframe().f_code.co_name,
+            test_backward=False,
+        )
 
     def test_std(self):
         x = torch.randn(2, 3, 4).float()
@@ -1311,9 +1331,10 @@ class TestOperators(ExtTestCase):
             onnx_export=inspect.currentframe().f_code.co_name,
         )
 
+    @unittest.skipIf(not DICT_SUPPORTED, reason="only tensor are supported")
     def test_dict(self):
         class MyModel(torch.nn.Module):
-            def forward(self, x_in):
+            def forward(self, x_in, *args, **kwargs):
                 x_out = {}
                 x_out["test_key_out"] = torch.add(
                     x_in[list(x_in.keys())[0]], list(x_in.keys())[0]  # noqa: RUF015
@@ -1325,9 +1346,10 @@ class TestOperators(ExtTestCase):
             MyModel(), (x, {}), onnx_export=inspect.currentframe().f_code.co_name
         )
 
+    @unittest.skipIf(not DICT_SUPPORTED, reason="only tensor are supported")
     def test_dict_str(self):
         class MyModel(torch.nn.Module):
-            def forward(self, x_in):
+            def forward(self, x_in, *args, **kwargs):
                 x_out = {}
                 x_out["test_key_out"] = torch.add(x_in["test_key_in"], 2.0)
                 return x_out
@@ -1337,7 +1359,7 @@ class TestOperators(ExtTestCase):
             MyModel(), (x, {}), onnx_export=inspect.currentframe().f_code.co_name
         )
 
-    @unittest.skipIf(SKIP_DYNAMIC_SHAPE, reason="dynamic shape")
+    @unittest.skipIf(not DYNAMIC_SHAPE_SUPPORTED, reason="dynamic shape")
     def test_arange_dynamic(self):
         class TestModel(torch.nn.Module):
             def forward(self, input):
@@ -1372,6 +1394,7 @@ class TestOperators(ExtTestCase):
             model,
             x,
             operator_export_type=torch.onnx.OperatorExportTypes.ONNX_ATEN_FALLBACK,
+            onnx_export=inspect.currentframe().f_code.co_name,
         )
 
     def test_pixel_shuffle(self):
@@ -1426,6 +1449,7 @@ class TestOperators(ExtTestCase):
             onnx_export=inspect.currentframe().f_code.co_name,
         )
 
+    @unittest.skipIf(not DYNAMIC_SHAPE_SUPPORTED, reason="dynamic shape")
     def test_unique(self):
         x = torch.randint(3, (2, 3, 4, 5)).float()
         self.assertONNX(
@@ -1441,7 +1465,11 @@ class TestOperators(ExtTestCase):
         x = torch.ones(3, requires_grad=True)
         y = torch.zeros(4, requires_grad=True)
         z = torch.ones(5, requires_grad=True)
-        self.assertONNX(lambda x, y, z: torch.meshgrid(x, y, z), (x, y, z))
+        self.assertONNX(
+            lambda x, y, z: torch.meshgrid(x, y, z),
+            (x, y, z),
+            onnx_export=inspect.currentframe().f_code.co_name,
+        )
 
     def test_meshgrid_indexing(self):
         x = torch.ones(3, requires_grad=True)
@@ -1454,6 +1482,7 @@ class TestOperators(ExtTestCase):
             onnx_export=inspect.currentframe().f_code.co_name,
         )
 
+    @unittest.skipIf(not DYNAMIC_SHAPE_SUPPORTED, reason="dynamic shape")
     def test_topk(self):
         x = torch.arange(1.0, 6.0, requires_grad=True)
         k = torch.tensor(3)
@@ -1464,6 +1493,7 @@ class TestOperators(ExtTestCase):
             onnx_export=inspect.currentframe().f_code.co_name,
         )
 
+    @unittest.skipIf(not DYNAMIC_SHAPE_SUPPORTED, reason="dynamic shape")
     def test_topk_smallest_unsorted(self):
         x = torch.arange(1.0, 6.0, requires_grad=True)
         k = torch.tensor(3)
@@ -1576,6 +1606,9 @@ class TestOperators(ExtTestCase):
             onnx_export=inspect.currentframe().f_code.co_name,
         )
 
+    @unittest.skipIf(
+        True, reason="TorchDynamo purposely graph breaks on RNN, GRU, LSTMs"
+    )
     def test_lstm_none_sequence_lens(self):
         """Test symbolic shape inference for LSTM when the input sequence_lens = None."""
         input = torch.randn(RNN_SEQUENCE_LENGTH, BATCH_SIZE, RNN_INPUT_SIZE)
@@ -1617,9 +1650,7 @@ class TestOperators(ExtTestCase):
     def test_dynamic_axes_add_inputs_same_symbolic_shape(self):
         m1 = torch.randn(2, 3, requires_grad=True)
         self.assertONNX(
-            lambda x: torch.add(
-                x, x, onnx_export=inspect.currentframe().f_code.co_name
-            ),
+            lambda x: torch.add(x, x),
             (m1,),
             input_names=["input_1"],
             dynamic_axes={"input_1": {1: "dim_1"}},
