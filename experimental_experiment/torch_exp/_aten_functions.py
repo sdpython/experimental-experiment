@@ -127,6 +127,12 @@ def aten_arange(
         end = start
         start = 0
     if dtype is None:
+        import torch
+
+        dt = torch.get_default_dtype()
+        if dt is not None:
+            dtype = torch_dtype_to_onnx_dtype(dt)
+    if dtype is None:
         if isinstance(end, str):
             itype = g.get_type(end)
         elif isinstance(end, int):
@@ -135,6 +141,8 @@ def aten_arange(
             itype = TensorProto.FLOAT
         else:
             itype = torch_dtype_to_onnx_dtype(type(end))
+    elif isinstance(dtype, int):
+        itype = dtype
     else:
         itype = torch_dtype_to_onnx_dtype(dtype)
     dtype = onnx_dtype_to_torch_dtype(itype)
@@ -456,7 +464,7 @@ def aten_eq(g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T, y: 
     x, y = prepare_inputs_homogeneous_operator(g, x, y)
     res = g.op.Equal(x, y, outputs=outputs)
     if set_shape_type:
-        set_shape_type_binary_op(g, outputs[0], x, y)
+        set_shape_type_binary_op(g, outputs[0], x, y, cmp_op=True)
     return res
 
 
@@ -548,6 +556,14 @@ def aten_FunctionCtx(
     raise NotImplementedError(f"args={args}, kwargs={kwargs}")
 
 
+def aten_gt(g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T, y: T) -> T:
+    x, y = prepare_inputs_homogeneous_operator(g, x, y)
+    res = g.op.Greater(x, y, outputs=outputs)
+    if set_shape_type:
+        set_shape_type_binary_op(g, outputs[0], x, y, cmp_op=True)
+    return res
+
+
 def aten_linear(
     g: GraphBuilder,
     set_shape_type: bool,
@@ -578,7 +594,7 @@ def aten_lt(g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T, y: 
     x, y = prepare_inputs_homogeneous_operator(g, x, y)
     res = g.op.Less(x, y, outputs=outputs, name="lt")
     if set_shape_type:
-        set_shape_type_binary_op(g, outputs[0], x, y)
+        set_shape_type_binary_op(g, outputs[0], x, y, cmp_op=True)
     return res
 
 

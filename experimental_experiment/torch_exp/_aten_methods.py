@@ -25,6 +25,10 @@ def aten_meth_contiguous(
     return g.make_node("Identity", [x], outputs, name="contiguous")
 
 
+def aten_meth_cpu(g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T) -> T:
+    return g.make_node("Identity", [x], outputs, name="cpu")
+
+
 def aten_meth_expand(
     g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T, *dims: List[int]
 ) -> T:

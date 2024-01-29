@@ -48,6 +48,7 @@ class TestDynamoLlama(ExtTestCase):
         atol: float = 1e-4,
         rtol: float = 1e-4,
         onnx_export: Optional[str] = None,
+        impl="ort",
     ):
         import torch
 
@@ -60,6 +61,7 @@ class TestDynamoLlama(ExtTestCase):
         i_saved = [1]
         hs = make_hash(model)
         _b = backend()
+        last_graph_module = []
 
         def get_session(onx, impl="ref", exc=True):
             if exc:
@@ -70,6 +72,7 @@ class TestDynamoLlama(ExtTestCase):
 
                     raise AssertionError(
                         f"Unable to build session ({str(e)})\n{onnx_simple_text_plot(onx)}"
+                        f"\n-----\n{last_graph_module[-1].graph}"
                     ) from e
 
             if impl == "ref":
@@ -86,6 +89,7 @@ class TestDynamoLlama(ExtTestCase):
         def onnx_compiler(
             graph_module: torch.fx.GraphModule, args: List[torch.Tensor], _b=_b
         ):
+            last_graph_module.append(graph_module)
             input_names = (
                 ["input"] if len(args) == 1 else [f"input{i}" for i in range(len(args))]
             )
@@ -98,7 +102,9 @@ class TestDynamoLlama(ExtTestCase):
                 verbose=4,
             )
 
-            name = f"temp_{onnx_export}-{hs}-{i_saved[0]}.onnx"
+            if not os.path.exists("temp_dump"):
+                os.mkdir("temp_dump")
+            name = f"temp_dump/{onnx_export}-{hs}-{i_saved[0]}.onnx"
             assert not os.path.exists(name)
             with open(name, "wb") as f:
                 f.write(onx.SerializeToString())
@@ -106,7 +112,7 @@ class TestDynamoLlama(ExtTestCase):
                 f.write(str(graph_module.graph))
             i_saved[0] += 1
 
-            sess = get_session(onx, "ort", exc=True)
+            sess = get_session(onx, impl, exc=True)
 
             names = [i.name for i in onx.graph.input]
 
@@ -247,6 +253,7 @@ class TestDynamoLlama(ExtTestCase):
         onnx_export=None,
         expected_graph_break=0,
         assert_counting=True,
+        impl="ort",
     ):
         local_ort = self._assert_model_numerically(
             model,
@@ -254,6 +261,7 @@ class TestDynamoLlama(ExtTestCase):
             test_backward=test_backward,
             fullgraph=fullgraph,
             onnx_export=onnx_export,
+            impl=impl,
         )
 
         number_of_captured_graphs = 2 if test_backward else 1
@@ -423,6 +431,7 @@ class TestDynamoLlama(ExtTestCase):
             fullgraph=False,
             onnx_export="test_ort_llama_model_nofullgraph",
             expected_graph_break=7,
+            impl="ref",
         )
 
     @ignore_warnings((UserWarning, DeprecationWarning))

@@ -64,19 +64,27 @@ def set_shape_type_unary_op(
 
 
 def set_shape_type_binary_op(
-    g: "GraphBuilder", name: str, *input_names: List[str], begin: int = 0  # noqa: F821
+    g: "GraphBuilder",  # noqa: F821
+    name: str,
+    *input_names: List[str],
+    begin: int = 0,
+    cmp_op: bool = False,
 ):
     """
     Sets the shape and type for a binary operator (add, mul, ...).
     """
     # type
     dtype = None
-    for input_name in input_names[begin:]:
-        if g.has_type(input_name):
-            dtype = g.get_type(input_name)
-            break
-    assert dtype, f"Unable to guess type from {input_names}{g.get_debug_msg()}"
-    g.set_type(name, dtype)
+    if cmp_op:
+        # operator comparing values
+        g.set_type(name, TensorProto.BOOL)
+    else:
+        for input_name in input_names[begin:]:
+            if g.has_type(input_name):
+                dtype = g.get_type(input_name)
+                break
+        assert dtype, f"Unable to guess type from {input_names}{g.get_debug_msg()}"
+        g.set_type(name, dtype)
 
     # shape
     shape = None

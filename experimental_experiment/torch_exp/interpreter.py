@@ -277,14 +277,14 @@ class DynamoInterpreter:
                         "Shape", [input_name], [shape_name], name="getitem_slice"
                     )
 
-                aaxis = np.array(axis, dtype=np.int64)
+                aaxis = np.array([axis], dtype=np.int64)
                 axis_name = self.builder.unique_name(f"{node.name}_axis_{axis}")
                 self.builder.make_initializer(axis_name, aaxis)
 
                 end_name = self.builder.unique_name(f"{node.name}_end")
                 self.builder.make_node(
                     "GatherElements",
-                    [input_name, axis_name],
+                    [shape_name, axis_name],
                     [end_name],
                     name="getitem_slice",
                     set_shape_type=True,

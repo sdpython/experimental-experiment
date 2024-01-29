@@ -30,6 +30,7 @@ class Opset:
         "Gather": 1,
         "GatherElements": 1,
         "Gemm": 1,
+        "Greater": 1,
         "Identity": 1,
         "MatMul": 1,
         "MaxPool": 2,
@@ -1178,7 +1179,6 @@ class GraphBuilder:
             if repi or repo:
                 new_inputs = [replacements.get(i, i) for i in node.input]
                 new_outputs = [replacements.get(i, i) for i in node.output]
-                assert "output_1" not in new_inputs
                 new_node = oh.make_node(
                     node.op_type,
                     new_inputs,
