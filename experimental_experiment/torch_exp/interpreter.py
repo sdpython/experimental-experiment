@@ -170,7 +170,8 @@ class DynamoInterpreter:
             return [_[1] for _ in outputs]
 
         if isinstance(val, self.torch.Tensor):
-            output_name = node.name
+            n_outputs = len(self.builder.outputs)
+            output_name = f"{node.name}_{n_outputs}"
             shape = val.shape
             dtype = self.builder._get_type(val.dtype)
             self.builder.make_tensor_output(output_name, dtype, shape)
@@ -448,7 +449,9 @@ class DynamoInterpreter:
         args = [self._process_arg(node, aten_name, a) for a in fx_args]
         output_names = self._get_output_names(node)
         can_set = self._can_set_shape_and_type(node)
+        n_nodes = len(self.builder.nodes) + len(self.builder.initializers_dict)
         res = fct(self.builder, not can_set, output_names, *args, **fx_kwargs)
+        n_nodes_after = len(self.builder.nodes) + len(self.builder.initializers_dict)
         if res is None:
             if len(node.users) == 0:
                 return
@@ -456,6 +459,11 @@ class DynamoInterpreter:
                 f"Unexpected return res=None, for node={node}, "
                 f"output_names={output_names}"
                 f"{self.builder.get_debug_msg()}"
+            )
+        if n_nodes_after == n_nodes:
+            raise RuntimeError(
+                f"No node or initializer was added ({n_nodes}=={n_nodes_after}) "
+                f"for node={node}{self.builder.get_debug_msg()}"
             )
 
         self._set_shape_and_type(node, res)

@@ -517,6 +517,9 @@ class GraphBuilder:
                 res.append(self.make_tensor_output(n, elem_type, shape))
             return res
 
+        assert (
+            "_" in name
+        ), f"Name {name!r} is not indexed like 'output_0'{self.get_debug_msg()}"
         elem_type = self._get_type(elem_type, False)
         if not self.as_function and elem_type == 0:
             raise RuntimeError(f"Undefined element type for {name!r}.")
@@ -922,6 +925,7 @@ class GraphBuilder:
         return "\n".join(rows)
 
     def optimize(self):
+
         def _check(step):
             assert (
                 len(self.nodes) > 0
