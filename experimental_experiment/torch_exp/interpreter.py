@@ -293,8 +293,6 @@ class DynamoInterpreter:
                 concat = True
             else:
                 ends.append(aslice.stop)
-                end = np.array([index_slice.stop], dtype=np.int64)
-                self.builder.make_initializer(end_name, end)
 
             steps.append(aslice.step if aslice.step else 1)
 
@@ -386,7 +384,12 @@ class DynamoInterpreter:
 
         if isinstance(index, slice):
             return self._getitem_slice(
-                node, node_output.name, [index], set_shape_type=set_shape_type, axes=[0]
+                node,
+                node_output.name,
+                [index],
+                set_shape_type=set_shape_type,
+                axes=[0],
+                expand_axes=[],
             )
 
         if isinstance(index, tuple):
