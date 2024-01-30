@@ -148,7 +148,13 @@ class TestDynamoLlama(ExtTestCase):
         one_example = None
         for example_args in example_args_collection:
             one_example = example_args
+            print("---------------")
+            print([t.dtype for t in example_args])
+            print("---------------")
             baseline_result = model(*example_args)
+            print("---------------")
+            print([t.dtype for t in example_args])
+            print("---------------")
             result = compiled_model(*example_args)
 
             if isinstance(baseline_result, torch.Tensor):

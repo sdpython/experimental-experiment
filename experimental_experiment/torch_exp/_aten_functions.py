@@ -350,6 +350,7 @@ def aten_conv2d(
 ) -> T:
     return aten_convolution(
         g,
+        set_shape_type,
         outputs,
         input=input,
         weight=weight,
