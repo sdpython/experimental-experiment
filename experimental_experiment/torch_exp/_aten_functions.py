@@ -8,6 +8,7 @@ from ._aten_helper import (
     _adjust_attributes_of_max_pool,
     set_shape_type_unary_op,
     set_shape_type_binary_op,
+    set_shape_type_reduce_op,
     onnx_dtype_to_torch_dtype,
     prepare_inputs_homogeneous_operator,
     torch_dtype_to_onnx_dtype,
