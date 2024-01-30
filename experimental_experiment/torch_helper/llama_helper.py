@@ -169,7 +169,7 @@ def get_llama_model(
 
     def generate_example_inputs(batch: int, seq: int, vocab_size: int):
         input_ids = ids_tensor([batch, seq], vocab_size)
-        input_mask = torch.tril(torch.ones(batch, seq, dtype=torch.int32))
+        input_mask = torch.tril(torch.ones(batch, seq, dtype=torch.float32))
         return input_ids, input_mask
 
     example_args_collection = []
