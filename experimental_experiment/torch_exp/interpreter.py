@@ -268,6 +268,9 @@ class DynamoInterpreter:
                 steps.append(1)
                 continue
 
+            assert isinstance(
+                aslice, slice
+            ), f"Unexpected type {aslice} in {index_slice}"
             starts.append(aslice.start or 0)
 
             if aslice.stop is None:
@@ -334,12 +337,21 @@ class DynamoInterpreter:
         if set_shape_type:
             dtype = self.builder.get_type(inputs[0])
             shape = self.builder.get_shape(inputs[0])
-            self.builder.set_shape(
-                node.name,
-                self.builder._apply_slice_to_shape(
-                    shape, index_slice, axes=axes, expand_axes=expand_axes
-                ),
+            new_shape = self.builder._apply_slice_to_shape(
+                shape, index_slice, axes=axes, expand_axes=expand_axes
             )
+            if self.builder.has_shape(
+                node.name
+            ) and new_shape != self.builder.get_shape(node.name):
+                raise RuntimeError(
+                    f"Shape for node {node.name!r} is already set to "
+                    f"{self.builder.get_shape(node.name)} with type "
+                    f"{self.builder.get_type(node.name)} (expecting {dtype}) "
+                    f"new_shape={new_shape}, shape={shape}, index_slice={index_slice}, "
+                    f"axes={axes}, expand_axes={expand_axes}"
+                    f"{self.builder.get_debug_msg()}"
+                )
+            self.builder.set_shape(node.name, new_shape)
             self.builder.set_type(node.name, dtype)
         return res
 
@@ -403,13 +415,21 @@ class DynamoInterpreter:
                 axes = []
                 slices = []
                 expand_axes = []
+                ellipsis = False
                 for i, ind in enumerate(index):
                     if ind is Ellipsis:
+                        assert not ellipsis, f"Second (...) found in index={index}"
+                        ellipsis = True
                         continue
                     if ind is None:
+                        assert (
+                            not ellipsis
+                        ), f"An axis cannot be inserted after (...) in index={index}"
                         expand_axes.append(i)
                         continue
-                    axes.append(i - len(expand_axes))
+                    axes.append(
+                        ((i - len(index)) if ellipsis else i) - len(expand_axes)
+                    )
                     slices.append(ind)
                 return self._getitem_slice(
                     node,
@@ -511,6 +531,9 @@ class DynamoInterpreter:
             n_outputs = len(val)
             output_names = [f"{node.name}#{i}" for i in range(n_outputs)]
         else:
+            assert isinstance(
+                node.name, str
+            ), f"Unexpected type {type(node.name)} for node.name"
             output_names = [node.name]
         return output_names
 

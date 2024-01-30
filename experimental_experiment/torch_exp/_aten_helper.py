@@ -1,7 +1,14 @@
-from typing import Any, List, Sequence, Set, Tuple
+from typing import Any, List, Optional, Sequence, Set, Tuple
 import numpy as np
-from onnx import TensorProto
+from onnx import TensorProto, TensorShapeProto
 from onnx.helper import np_dtype_to_tensor_dtype, tensor_dtype_to_np_dtype
+
+
+def _nice_shape(shape: TensorShapeProto) -> str:
+    els = []
+    for sh in shape.dim:
+        els.append(str(sh.dim_value) if sh.HasField("dim_value") else sh.dim_param)
+    return "x".join(els)
 
 
 def onnx_dtype_to_torch_dtype(itype: int) -> "torch.dtype":  # noqa: F821
@@ -51,12 +58,15 @@ def broadcast_shape(sh1: Tuple[int, ...], sh2: Tuple[int, ...]) -> Tuple[int, ..
 
 
 def set_shape_type_unary_op(
-    g: "GraphBuilder", name: str, input_name: str  # noqa: F821
+    g: "GraphBuilder",  # noqa: F821
+    name: str,
+    input_name: str,
+    itype: Optional[int] = None,
 ):
     """
     Sets the shape and type for an unary operator (abs, exp, ...).
     """
-    g.set_type(name, g.get_type(input_name))
+    g.set_type(name, itype or g.get_type(input_name))
     if g.has_shape(input_name):
         g.set_shape(name, g.get_shape(input_name))
     elif g.has_rank(input_name):

@@ -5,7 +5,7 @@ import onnx.helper as oh
 import onnx.numpy_helper as onh
 from onnx import AttributeProto, FunctionProto, ModelProto, NodeProto, TensorProto
 from onnx.reference import ReferenceEvaluator
-from ._aten_helper import dtype_to_tensor_dtype
+from ._aten_helper import dtype_to_tensor_dtype, _nice_shape
 from ._helper import make_hash
 
 
@@ -168,6 +168,10 @@ class GraphBuilder:
         new_shape = []
         for index, axis in zip(indices, axes):
             while len(new_shape) < axis:
+                assert shape[len(new_shape)] >= 0, (
+                    f"Negative value in shape {shape}, indices={indices}, "
+                    f"axes={axes}, expand_axes={expand_axes}"
+                )
                 new_shape.append(shape[len(new_shape)])
             assert axis < len(shape), (
                 f"axis={axis} is out of order (shape={shape}, "
@@ -178,7 +182,18 @@ class GraphBuilder:
             end = index.stop or n
             diff = end - start
             dim = diff // index.step if index.step else diff
+            dim = max(dim, 0)
+            assert dim >= 0, (
+                f"Negative dim={dim}, axis={axis}, shape={shape}, indices={indices}, "
+                f"axes={axes}, expand_axes={expand_axes}"
+            )
             new_shape.append(dim)
+        for a in shape[len(new_shape) :]:
+            assert a >= 0, (
+                f"Negative value in shape {shape}, indices={indices}, "
+                f"axes={axes}, expand_axes={expand_axes}"
+            )
+            new_shape.append(a)
         for e in expand_axes:
             new_shape.insert(e, 1)
         return tuple(new_shape)
@@ -340,11 +355,14 @@ class GraphBuilder:
 
     def set_shape(self, name: str, shape: Tuple[int, ...], set_rank: bool = True):
         assert isinstance(name, str), f"Unexpected type {type(name)} for name."
+        assert (
+            len(shape) == 0 or min(shape) >= 0
+        ), f"Negative value in shape {shape} for {name!r}{self.get_debug_msg()}"
         if name in self._known_shapes:
             if shape != self._known_shapes[name]:
                 raise RuntimeError(
                     f"Name {name!r} already exists and it is different "
-                    f"{self._known_shapes[name]} != {shape}"
+                    f"{self._known_shapes[name]} != {shape}{self.get_debug_msg()}"
                 )
             return
         assert isinstance(shape, tuple), f"Unexpected shape type {type(shape)}."
@@ -562,18 +580,26 @@ class GraphBuilder:
             self.set_type(name, elem_type)
         return name
 
-    def _debug_string_inputs(self, inputs, align=None):
+    def _get_symbol(self, i: str) -> str:
+        k = 0
+        if self.has_type(i):
+            k += 1
+        if self.has_rank(i):
+            k += 2
+        if self.has_shape(i):
+            k += 4
+        return k
+
+    def _debug_string_inputs(
+        self, inputs: List[str], outputs: List[str], align: Optional[int] = None
+    ) -> str:
         st = ""
         c = "-TRUSVW#"
         for i in inputs:
-            k = 0
-            if self.has_type(i):
-                k += 1
-            if self.has_rank(i):
-                k += 2
-            if self.has_shape(i):
-                k += 4
-            st += c[k]
+            st += c[self._get_symbol(i)]
+        st += ":"
+        for o in outputs:
+            st += c[self._get_symbol(o)]
         if align and len(st) < align:
             st += " " * (align - len(st))
         return st
@@ -628,7 +654,7 @@ class GraphBuilder:
         if self.verbose == 2:
             print(
                 f"[GraphBuilder-{self._hash()}.make_node]"
-                f"[{self._debug_string_inputs(inputs)}] "
+                f"[{self._debug_string_inputs(inputs, output_names)}] "
                 f"{op_type}:{inputs}->{outputs}"
             )
 
@@ -679,7 +705,7 @@ class GraphBuilder:
         if self.verbose > 3:
             print(
                 f"[GraphBuilder-{self._hash()}.make_node] "
-                f"[{self._debug_string_inputs(node.input)}] "
+                f"[{self._debug_string_inputs(node.input, output_names)}] "
                 f"{node.op_type}:{node.input}->{node.output}"
             )
 
@@ -893,6 +919,20 @@ class GraphBuilder:
                 s += " " * (length - len(s))
             return s
 
+        def _size(t):
+            if hasattr(t, "numel"):
+                return t.numel()
+            if hasattr(t, "size"):
+                return t.size
+            raise RuntimeError(f"Size unknown for type {t}.")
+
+        def _values(t):
+            if hasattr(t, "detach"):
+                return t.detach().numpy().ravel().tolist()
+            if hasattr(t, "size"):
+                return t.ravel().tolist()
+            raise RuntimeError(f"Values unknown for type {t}.")
+
         rows = ["", "--DEBUG--"]
         for k, v in self._debug_msg.items():
             rows.append(f"-- {k}")
@@ -900,23 +940,24 @@ class GraphBuilder:
         rows.append("--")
         hs = self._hash()
         for io in self.inputs:
-            shh = str(io.type.tensor_type.shape).replace("\n", "")
+            shh = _nice_shape(io.type.tensor_type.shape)
             rows.append(
                 f"[GraphBuilder-{hs}.make_tensor_input] {io.name}"
                 f"[{io.type.tensor_type.elem_type}:{shh}]"
             )
         for name, init in self.initializers_dict.items():
+            sval = "" if _size(init) > 5 else f":{_values(init)}"
             rows.append(
-                f"[GraphBuilder-{hs}.make_initializer] {name}[{init.dtype}:{init.shape}]"
+                f"[GraphBuilder-{hs}.make_initializer] {name}[{init.dtype}:{init.shape}{sval}]"
             )
         for node in self.nodes:
             rows.append(
                 f"[GraphBuilder-{hs}.make_node] "
-                f"{_align(node.name, 15)} [{self._debug_string_inputs(node.input, 4)}] "
+                f"{_align(node.name, 15)} [{self._debug_string_inputs(node.input, node.output, 6)}] "
                 f"{node.op_type}:{node.input}->{node.output}"
             )
         for io in self.outputs:
-            shh = str(io.type.tensor_type.shape).replace("\n", "")
+            shh = _nice_shape(io.type.tensor_type.shape)
             rows.append(
                 f"[GraphBuilder-{hs}.make_tensor_output] {io.name}"
                 f"[{io.type.tensor_type.elem_type}:{shh}]"

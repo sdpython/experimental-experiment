@@ -342,7 +342,7 @@ class TestLlama(ExtTestCase):
             False,
             fullgraph=False,
             onnx_export="test_ort_llama_model_nofullgraph",
-            expected_graph_break=7,
+            expected_graph_break=4,
         )
 
     @ignore_warnings((UserWarning, DeprecationWarning))

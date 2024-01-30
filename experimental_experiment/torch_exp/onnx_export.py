@@ -107,7 +107,8 @@ def to_onnx(
     remove_unused: bool = False,
     constant_folding: bool = False,
     verbose: int = 0,
-) -> ModelProto:
+    return_builder: bool = False,
+) -> Union[ModelProto, Tuple[ModelProto, GraphBuilder]]:
     """
     Exports a torch model into ONNX using
     `dynamo export
@@ -140,4 +141,7 @@ def to_onnx(
     )
 
     builder.process(graph_module, interpreter)
-    return builder.to_onnx()
+    onx = builder.to_onnx()
+    if return_builder:
+        return onx, builder
+    return onx

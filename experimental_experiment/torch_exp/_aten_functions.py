@@ -334,7 +334,7 @@ def aten_convolution(
     # if Rank(input) != Rank(weight):
     #    input = op.Unsqueeze(input, op.Constant(value_ints=[0]))
 
-    return g.make_node(
+    res = g.make_node(
         "Conv",
         [input, weight, bias],
         outputs,
@@ -344,6 +344,10 @@ def aten_convolution(
         dilations=dilations,
         name="conv",
     )
+    if set_shape_type:
+        g.set_type(res, g.get_type(input))
+        g.set_rank(res, g.get_rank(input))
+    return res
 
 
 def aten_conv2d(
@@ -422,7 +426,7 @@ def aten_dropout(
     outputs: List[str],
     x: T,
     p: T = 0.5,  # float
-    train: T = False,  # bool
+    training: T = True,  # bool
 ) -> T:
     """dropout(Tensor input, float p, bool train) -> Tensor"""
 
@@ -438,9 +442,9 @@ def aten_dropout(
         outputs.append("")
     if isinstance(p, float):
         p = np.array(p, dtype=np.float64)
-    if isinstance(train, bool):
-        train = np.array(train, dtype=np.bool_)
-    result, _ = g.op.Dropout(x, p, train, outputs=outputs)
+    if isinstance(training, bool):
+        training = np.array(training, dtype=np.bool_)
+    result, _ = g.op.Dropout(x, p, training, outputs=outputs)
     if set_shape_type:
         set_shape_type_unary_op(g, outputs[0], x)
     return result
@@ -575,6 +579,13 @@ def aten_gt(g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T, y: 
     return res
 
 
+# def aten_index_Tensor(
+#
+# ):
+# x, [i]  -> x[i]
+# x, [None, i]  -> x[:, i]
+
+
 def aten_linear(
     g: GraphBuilder,
     set_shape_type: bool,
@@ -670,6 +681,7 @@ def aten_max_pool2d(
 
     return _aten_max_pool_onnx(
         g,
+        set_shape_type,
         outputs,
         x,
         kernel_shape,
@@ -937,12 +949,59 @@ def aten_sinh(g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T) -
     return res
 
 
-def aten_softmax(
-    g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T, dim: int = -1
+def aten_slice_Tensor(
+    g: GraphBuilder,
+    set_shape_type: bool,
+    outputs: List[str],
+    x: T,
+    dim: int = 0,
+    start: int = 0,
+    end: Optional[int] = None,
+    step: Optional[int] = None,
 ) -> T:
-    res = g.op.Softmax(x, axis=dim, outputs=outputs)
+    assert isinstance(dim, int), f"Not implemented for dim={dim!r}"
+    assert isinstance(start, int), f"Not implemented for start={start!r}"
+    assert end is None or isinstance(end, int), f"Not implemented for end={end!r}"
+    assert step is None or isinstance(step, int), f"Not implemented for step={step!r}"
+    if end is None:
+        end = start
+        start = 0
+    inputs = [
+        np.array([start], dtype=np.int64),
+        np.array([end], dtype=np.int64),
+        np.array([dim], dtype=np.int64),
+    ]
+    if step is not None and step != 1:
+        inputs.append(np.array([step], dtype=np.int64))
+    res = g.op.Slice(x, *inputs, outputs=outputs)
     if set_shape_type:
-        set_shape_type_unary_op(g, outputs[0], x)
+        dtype = g.get_type(inputs[0])
+        shape = g.get_shape(inputs[0])
+        new_shape = g._apply_slice_to_shape(
+            shape, slice(start, end, step), axes=[dim], expand_axes=[]
+        )
+        g.set_shape(res, new_shape)
+        g.set_type(res, dtype)
+    return res
+
+
+def aten_softmax(
+    g: GraphBuilder,
+    set_shape_type: bool,
+    outputs: List[str],
+    x: T,
+    dim: int = -1,
+    dtype=None,
+) -> T:
+    if dtype is not None:
+        itype = torch_dtype_to_onnx_dtype(dtype)
+        xc = g.op.Cast(x, to=itype)
+    else:
+        itype = None
+        xc = x
+    res = g.op.Softmax(xc, axis=dim, outputs=outputs)
+    if set_shape_type:
+        set_shape_type_unary_op(g, outputs[0], xc, itype=itype)
     return res
 
 
@@ -1009,9 +1068,43 @@ def aten_t(g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T) -> T
     return g.op.Transpose(x, perm=[1, 0], outputs=outputs, name="t")
 
 
+def aten_transpose(
+    g: GraphBuilder,
+    set_shape_type: bool,
+    outputs: List[str],
+    input_name: T,
+    dim0: int,
+    dim1: int,
+) -> T:
+    perm = list(range(g.rank(input_name)))
+    perm[dim0], perm[dim1] = perm[dim1], perm[dim0]
+    res = g.make_node("Transpose", [input_name], outputs, perm=perm)
+    if set_shape_type:
+        g.set_type(outputs[0], g.get_type(input_name))
+        if g.has_shape(input_name):
+            shape = list(g.get_shape(input_name))
+            shape[dim0], shape[dim1] = shape[dim1], shape[dim0]
+            g.set_shape(outputs[0], tuple(shape))
+        elif g.has_rank(input_name):
+            g.set_rank(outputs[0], g.has_rank(input_name))
+    return res
+
+
+def aten_transpose_int(
+    g: GraphBuilder,
+    set_shape_type: bool,
+    outputs: List[str],
+    input_name: T,
+    dim0: int,
+    dim1: int,
+) -> T:
+    return aten_transpose(g, set_shape_type, outputs, input_name, dim0, dim1)
+
+
 def aten_truediv(
     g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T, y: T
 ) -> T:
+    x, y = prepare_inputs_homogeneous_operator(g, x, y)
     res = g.op.Div(x, y, outputs=outputs, name="truediv")
     if set_shape_type:
         set_shape_type_binary_op(g, outputs[0], x, y)

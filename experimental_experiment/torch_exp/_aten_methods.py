@@ -236,6 +236,6 @@ def aten_meth_view(
     res = g.make_node("Reshape", [input_name, new_shape_name], outputs, name="view")
     if set_shape_type:
         dtype = g.get_type(input_name)
-        g.set_shape(outputs[0], args[1:])
+        g.set_shape(outputs[0], tuple(args))
         g.set_type(outputs[0], dtype)
     return res
