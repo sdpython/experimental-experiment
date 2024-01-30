@@ -39,6 +39,7 @@ class Opset:
         "Log": 1,
         "Neg": 1,
         "Or": 1,
+        "Pow": 1,
         "Range": 1,
         "ReduceMax": 1,
         "ReduceMean": 1,
