@@ -126,12 +126,20 @@ def aten_arange(
     if start is not None and end is None:
         end = start
         start = 0
+
     if dtype is None:
         import torch
+        from torch._prims_common import IntLike
 
-        dt = torch.get_default_dtype()
+        # coming from function arange in torch/_refs.__init__.py
+        args = (start, end, step)
+        if all(isinstance(arg, IntLike) for arg in args):
+            dt = torch.int64
+        else:
+            dt = torch.get_default_dtype()
         if dt is not None:
             dtype = torch_dtype_to_onnx_dtype(dt)
+
     if dtype is None:
         if isinstance(end, str):
             itype = g.get_type(end)
@@ -145,6 +153,7 @@ def aten_arange(
         itype = dtype
     else:
         itype = torch_dtype_to_onnx_dtype(dtype)
+
     dtype = onnx_dtype_to_torch_dtype(itype)
     npdtype = tensor_dtype_to_np_dtype(itype)
     if step is None:
@@ -778,6 +787,7 @@ def aten_mm(g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T, y: 
 def aten_mul(
     g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T, y: T
 ) -> T:
+    x, y = prepare_inputs_homogeneous_operator(g, x, y)
     res = g.op.Mul(x, y, outputs=outputs)
     if set_shape_type:
         set_shape_type_binary_op(g, outputs[0], x, y)
@@ -851,6 +861,22 @@ def aten_permute(
 
     dims = [axis + len(dims) if axis < 0 else axis for axis in dims]
     return g.op.Transpose(x, perm=dims, outputs=outputs, name="permute")
+
+
+def aten_pow_Tensor_Scalar(
+    g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T, exponent: T
+) -> T:
+    if isinstance(exponent, (int, float)):
+        exponent = np.array([exponent])
+    if isinstance(exponent, np.ndarray):
+        if g.has_type(x):
+            exponent = exponent.astype(tensor_dtype_to_np_dtype(g.get_type(x)))
+        else:
+            exponent = g.op.CastLike(exponent, x)
+    res = g.op.Pow(x, exponent, outputs=outputs)
+    if set_shape_type:
+        set_shape_type_unary_op(g, outputs[0], x)
+    return res
 
 
 def aten_relu(g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T) -> T:
@@ -955,6 +981,8 @@ def aten_sum(
         result = g.op.ReduceSumAnyOpset(
             xc, adim, keepdims=keepdim, outputs=outputs, name="sum"
         )
+    if set_shape_type:
+        set_shape_type_reduce_op(g, outputs[0], x, keepdim=keepdim)
     return result
 
 

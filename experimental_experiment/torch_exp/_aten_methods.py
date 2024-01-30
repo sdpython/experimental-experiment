@@ -5,6 +5,7 @@ from ._aten_helper import (
     torch_dtype_to_onnx_dtype,
     set_shape_type_binary_op,
     set_shape_type_unary_op,
+    set_shape_type_reduce_op,
 )
 from .graph_builder import GraphBuilder
 
@@ -87,8 +88,8 @@ def aten_meth_mean(
     res = g.make_node(
         "ReduceMean", [x, cst], outputs, keepdims=1 if keepdim else 0, name="mean"
     )
-    # if set_shape_type:
-    #    set_shape_type_unary_op(g, outputs[0], x)
+    if set_shape_type:
+        set_shape_type_reduce_op(g, outputs[0], x, keepdim=keepdim)
     return res
 
 

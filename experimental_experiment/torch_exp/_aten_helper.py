@@ -119,6 +119,17 @@ def set_shape_type_binary_op(
         g.set_rank(name, rank)
 
 
+def set_shape_type_reduce_op(
+    g: "GraphBuilder",  # noqa: F821
+    name: str,
+    x: str,
+    keepdim: int,
+):
+    assert keepdim in {0, 1}, f"keepdim={keepdim} must be in {{0, 1}}"
+    g.set_type(name, g.get_type(x))
+    g.set_rank(name, g.get_rank(x) + keepdim - 1)
+
+
 def _get_input_type(g: "GraphBuilder", x: Any) -> int:  # noqa: F821
     if isinstance(x, int):
         return TensorProto.INT64

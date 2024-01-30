@@ -21,7 +21,6 @@ def torch_min(v: str) -> bool:
 class TestDynamoLlama(ExtTestCase):
     @ignore_warnings((UserWarning, DeprecationWarning))
     def test_aaaa(self):
-        import torch
         from transformers import LlamaConfig
         from transformers.models.llama.modeling_llama import LlamaAttention
 
@@ -35,8 +34,7 @@ class TestDynamoLlama(ExtTestCase):
             hidden_dropout_prob=0.0,
             attention_dropout_prob=0.0,
         )
-        model = LlamaAttention(config, layer_idx=0)
-        torch.save(model, "temp.llama.torch.pkl")
+        LlamaAttention(config, layer_idx=0)
 
     def _assert_model_numerically(
         self,
