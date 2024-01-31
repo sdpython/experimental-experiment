@@ -413,6 +413,7 @@ class TestDynamoLlama(ExtTestCase):
             True,
             False,
             onnx_export="test_ort_llama_attention_backward",
+            impl="ref",
         )
 
     @ignore_warnings((UserWarning, DeprecationWarning))

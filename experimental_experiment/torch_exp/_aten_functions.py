@@ -257,6 +257,12 @@ def aten_atanh(g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T) 
     return res
 
 
+def aten_bmm(
+    g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T, y: T
+) -> T:
+    return g.op.MatMul(x, y, outputs=outputs, name="bmm")
+
+
 def aten_cat(
     g: GraphBuilder,
     set_shape_type: bool,
@@ -282,8 +288,10 @@ def aten_clone(
     x: T,
     memory_format: Optional[str] = None,
 ) -> T:
+    import torch
+
     assert (
-        memory_format is None
+        memory_format is None or memory_format == torch.contiguous_format
     ), f"Unexpected value for memory_format={memory_format!r}{g.get_debug_msg()}"
     return g.make_node("Identity", [x], outputs, name="clone")
 
@@ -496,6 +504,22 @@ def aten_eq(g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T, y: 
     return res
 
 
+def aten_expand(
+    g: GraphBuilder,
+    set_shape_type: bool,
+    outputs: List[str],
+    x: T,
+    *sizes: List[int],
+    implicit: bool = False,
+) -> T:
+    assert not implicit, f"Unexpected value for implicit={implicit!r}"
+    res = g.op.Expand(x, np.array(sizes, dtype=np.int64), outputs=outputs)
+    if set_shape_type:
+        g.set_type(res, g.get_type(x))
+        g.set_shape(res, tuple(sizes))
+    return res
+
+
 def aten_flatten(
     g: GraphBuilder,
     set_shape_type: bool,
@@ -592,11 +616,35 @@ def aten_gt(g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T, y: 
     return res
 
 
-# def aten_index_Tensor(
-#
-# ):
-# x, [i]  -> x[i]
-# x, [None, i]  -> x[:, i]
+def aten_index_Tensor(
+    g: GraphBuilder,
+    set_shape_type: bool,
+    outputs: List[str],
+    x: T,
+    indices: Sequence[T],
+) -> T:
+    assert isinstance(
+        indices, (list, tuple)
+    ), f"Unexpected type {type(indices)} for indices"
+    indices_rank = 0
+    indices_last = 0
+    if len(indices) == 1 and isinstance(indices[0], str):
+        new_indices = g.op.Reshape(indices[0], np.array([-1, 1], dtype=np.int64))
+        res = g.op.GatherND(x, new_indices, outputs=outputs)
+        indices_rank = g.get_rank(indices[0])
+        indices_last = g.get_shape(indices[0])[-1]
+    else:
+        raise RuntimeError(
+            f"aten_indices implemented yet for indices={indices}{g.get_debug_msg()}"
+        )
+
+    # a_indices = np.array(indices, dtype=np.int64).reshape((-1, 1))
+    # res = g.op.GatherND(x, indices, outputs=outputs)
+
+    if set_shape_type:
+        g.set_type(res, g.get_type(x))
+        g.get_rank(res, g.get_rank(x) + indices_rank + indices_last - 1)
+    return res
 
 
 def aten_linear(
@@ -1008,13 +1056,28 @@ def aten_softmax(
 ) -> T:
     if dtype is not None:
         itype = torch_dtype_to_onnx_dtype(dtype)
-        xc = g.op.Cast(x, to=itype)
+        xc = g.op.Cast(x, to=itype, name="softmax")
     else:
         itype = None
         xc = x
     res = g.op.Softmax(xc, axis=dim, outputs=outputs)
     if set_shape_type:
-        set_shape_type_unary_op(g, outputs[0], xc, itype=itype)
+        set_shape_type_unary_op(g, res, xc, itype=itype)
+    return res
+
+
+def aten__softmax(
+    g: GraphBuilder,
+    set_shape_type: bool,
+    outputs: List[str],
+    x: T,
+    dim: int = -1,
+    half_to_float: bool = False,
+) -> T:
+    assert not half_to_float, f"Unexpected value for half_to_float={half_to_float!r}"
+    res = g.op.Softmax(x, axis=dim, outputs=outputs, name="_softmax")
+    if set_shape_type:
+        set_shape_type_unary_op(g, res, x)
     return res
 
 
@@ -1124,13 +1187,42 @@ def aten_truediv(
     return res
 
 
+def aten_unsqueeze(
+    g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T, dim: int
+) -> T:
+    assert isinstance(dim, int), f"Not implemented for dim={dim!r}"
+    res = g.op.Unsqueeze(x, np.array([dim], dtype=np.int64), outputs=outputs)
+    if set_shape_type:
+        g.set_type(res, g.get_type(x))
+        if g.has_shape(x):
+            shape = list(g.get_shape(x))
+            shape.insert(dim, 1)
+            g.set_shape(res, tuple(shape))
+        else:
+            g.set_rank(res, g.get_rank(x) + 1)
+    return res
+
+
 def aten_view(
-    g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T, size: T
+    g: GraphBuilder,
+    set_shape_type: bool,
+    outputs: List[str],
+    x: T,
+    size: T,
+    node_name: str = "view",
 ) -> T:
     if isinstance(size, (int, tuple, list)):
-        size = [size] if isinstance(size, int) else list(size)
-        size = np.array(size, dtype=np.int64)
-        shape = g.make_initializer("", size)
-        return g.op.Reshape(x, shape, outputs=outputs, name="view")
-    size = g.op.Cast(size, to=TensorProto.INT64, name="view")
-    return g.op.Reshape(x, size, outputs=outputs, name="view")
+        asize = [size] if isinstance(size, int) else list(size)
+        asize = np.array(asize, dtype=np.int64)
+        assert (
+            len(asize.shape) == 1
+        ), f"Unexpected shape for view, size={size}{g.get_debug_msg()}"
+        return g.op.Reshape(x, asize, outputs=outputs, name=node_name)
+    size = g.op.Cast(size, to=TensorProto.INT64, name=node_name)
+    return g.op.Reshape(x, size, outputs=outputs, name=node_name)
+
+
+def aten__unsafe_view(
+    g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T, size: T
+) -> T:
+    return aten_view(g, set_shape_type, outputs, x, size, node_name="_unsafe_view")

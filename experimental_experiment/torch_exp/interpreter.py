@@ -455,8 +455,17 @@ class DynamoInterpreter:
             return i.name
         if isinstance(i, tuple):
             return tuple(self._process_arg(node, aten_name, t) for t in i)
-        if isinstance(i, (list, float, int, tuple)):
+        if isinstance(i, (float, int, tuple)):
             return i
+        if isinstance(i, list):
+            new_list = []
+            for el in i:
+                if hasattr(el, "name"):
+                    # torch.fx.Node
+                    new_list.append(el.name)
+                    continue
+                new_list.append(el)
+            return new_list
         raise RuntimeError(
             f"Unexpected type (argument {i}) {type(i)} "
             f"for function {aten_name!r} "

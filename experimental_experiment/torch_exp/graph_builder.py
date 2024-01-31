@@ -29,6 +29,7 @@ class Opset:
         "Expand": 1,
         "Gather": 1,
         "GatherElements": 1,
+        "GatherND": 1,
         "Gemm": 1,
         "Greater": 1,
         "Identity": 1,
@@ -1195,6 +1196,7 @@ class GraphBuilder:
         input_names = set(i.name for i in self.inputs)
         output_names = set(i.name for i in self.outputs)
         replacements = {}
+        replacements_rev = {}
         for node in self.nodes:
             if node.op_type != "Identity":
                 new_nodes.append(node)
@@ -1216,9 +1218,26 @@ class GraphBuilder:
                     f"node.input={node.input}, node.output={node.output}, "
                     f"input_names={input_names}, output_names={output_names}"
                 )
+            if old_name in replacements_rev:
+                old_old_name = replacements_rev[old_name]
+                replacements[old_old_name] = new_name
+                replacements_rev[new_name] = old_old_name
             if old_name in replacements:
                 replacements[replacements[old_name]] = new_name
+            assert new_name not in replacements, (
+                f"Name {old_name!r} still in {replacements}, node.op_type={node.op_type!r}, "
+                f"node.input={node.input}, node.output={node.output}, "
+                f"input_names={input_names}, output_names={output_names}"
+            )
             replacements[old_name] = new_name
+            replacements_rev[new_name] = old_name
+
+            # verification
+            for k, v in replacements.items():
+                assert v not in replacements, (
+                    f"replacement {k}->{v} is not possible because of "
+                    f"{v}->{replacements[v]}, old_name={old_name!r}, new_name={new_name!r}"
+                )
 
         # second pass: replacements in initializer
         for k, v in replacements.items():
