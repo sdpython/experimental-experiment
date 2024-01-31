@@ -356,7 +356,7 @@ class GraphBuilder:
     def set_shape(self, name: str, shape: Tuple[int, ...], set_rank: bool = True):
         assert isinstance(name, str), f"Unexpected type {type(name)} for name."
         assert (
-            len(shape) == 0 or min(shape) >= 0
+            len(shape) == 0 or None in shape or min(shape) >= 0
         ), f"Negative value in shape {shape} for {name!r}{self.get_debug_msg()}"
         if name in self._known_shapes:
             if shape != self._known_shapes[name]:
@@ -660,13 +660,15 @@ class GraphBuilder:
 
         if check is not False:
             for i in inputs:
-                assert self.has_name(
-                    i
-                ), f"Input {i!r} does not exist for operator {op_type!r} ({self._hash()})."
+                assert self.has_name(i), (
+                    f"Input {i!r} does not exist for operator {op_type!r} "
+                    f"({self._hash()}){self.get_debug_msg()}"
+                )
             for i in output_names:
-                assert not self.has_name(
-                    i
-                ), f"Output {i!r} already exists for operator {op_type!r} ({self._hash()})."
+                assert not self.has_name(i), (
+                    f"Output {i!r} already exists for operator {op_type!r} "
+                    f"({self._hash()}){self.get_debug_msg()}"
+                )
         if check is True:
             for i in inputs:
                 assert self.has_shape(i), f"Input {i!r} has no known shape."
@@ -970,6 +972,20 @@ class GraphBuilder:
         interpreter: "Interpreter",  # noqa: F821
     ):
         self._debug_msg["process.graph_module"] = graph_module.graph
+
+        # looks into output marked as "alias_of_input"
+        # see https://pytorch.org/functorch/main/_modules/torch/_functorch/aot_autograd.html
+        # in that case, gen_alias_from_base is mixing the input data and the output stride
+        # places = []
+        # for node in graph_module.graph.nodes:
+        #     if node.op == "placeholder":
+        #         places.append(node)
+        # for node in places:
+        #     with graph_module.graph.inserting_after(node):
+        #         cloned_node = graph_module.graph.call_method("clone", args=(node.target,))
+        #         node.replace_all_uses_with(cloned_node)
+        # graph_module.recompile()
+
         for i, node in enumerate(graph_module.graph.nodes):
             self._debug_msg["process.progress"] = (
                 f"node {i}/{len(graph_module.graph.nodes)} "

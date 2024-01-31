@@ -275,6 +275,19 @@ def aten_cat(
     return res
 
 
+def aten_clone(
+    g: GraphBuilder,
+    set_shape_type: bool,
+    outputs: List[str],
+    x: T,
+    memory_format: Optional[str] = None,
+) -> T:
+    assert (
+        memory_format is None
+    ), f"Unexpected value for memory_format={memory_format!r}{g.get_debug_msg()}"
+    return g.make_node("Identity", [x], outputs, name="clone")
+
+
 def aten_convolution(
     g: GraphBuilder,
     set_shape_type: bool,

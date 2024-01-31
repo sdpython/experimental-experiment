@@ -20,6 +20,16 @@ def aten_meth_bool(
     return aten_meth_to(g, set_shape_type, outputs, x, dtype=torch.bool)
 
 
+def aten_meth_clone(
+    g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T
+) -> T:
+    assert x != outputs[0], (
+        f"Input and output are the same x={x!r}, "
+        f"outputs={outputs!r}{g.get_debug_msg()}"
+    )
+    return g.make_node("Identity", [x], outputs, name="clone")
+
+
 def aten_meth_contiguous(
     g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T
 ) -> T:

@@ -244,7 +244,9 @@ class ExtTestCase(unittest.TestCase):
         try:
             assert_allclose(expected, value, atol=atol, rtol=rtol)
         except AssertionError as e:
-            raise AssertionError(msg) from e
+            if msg:
+                raise AssertionError(msg) from e
+            raise
 
     def assertAlmostEqual(
         self,
@@ -439,3 +441,19 @@ def get_figure(ax):
     if len(ax.shape) == 2:
         return ax[0, 0].get_figure()
     raise RuntimeError(f"Unexpected shape {ax.shape} for axis.")
+
+
+def dump_dort_onnx(fn):
+    prefix = fn.__name__
+    folder = "tests_dump"
+    if not os.path.exists(folder):
+        os.mkdir(folder)
+
+    def wrapped(self):
+        value = os.environ.get("ONNXRT_DUMP_PATH", None)
+        os.environ["ONNXRT_DUMP_PATH"] = os.path.join(folder, f"{prefix}_")
+        res = fn(self)
+        os.environ["ONNXRT_DUMP_PATH"] = value or ""
+        return res
+
+    return wrapped

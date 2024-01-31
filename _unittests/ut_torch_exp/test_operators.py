@@ -45,7 +45,8 @@ class FuncModule(Module):
 
     def forward(self, *args):
         f_args = list(itertools.chain(args, self.params))
-        return self.f(*f_args)
+        res = self.f(*f_args)
+        return res
 
 
 def get_session(
@@ -85,6 +86,7 @@ def onnx_compiler(
     input_names = (
         ["input"] if len(args) == 1 else [f"input{i}" for i in range(len(args))]
     )
+
     onx = to_onnx(
         graph_module,
         tuple(args),
@@ -128,6 +130,8 @@ def onnx_compiler(
         feeds = dict(zip(names, xnp))
         results = sess.run(None, feeds)
         res = tuple(torch.Tensor(y).to(_dtype[y.dtype]) for y in results)
+        if len(res) == 1:
+            return res[0]
         return res
 
     return run
@@ -891,10 +895,38 @@ class TestOperators(ExtTestCase):
             lambda x: x.acos(), x, onnx_export=inspect.currentframe().f_code.co_name
         )
 
-    def test_slice(self):
-        x = torch.rand(3, 4, requires_grad=True)
+    def test_slice_ort_view(self):
+        x = torch.arange(20, requires_grad=True, dtype=torch.float32).reshape((-1, 4))
         self.assertONNX(
-            lambda x: x[:, 1:2], x, onnx_export=inspect.currentframe().f_code.co_name
+            lambda x: x[:, 1:2],
+            x,
+            onnx_export=inspect.currentframe().f_code.co_name,
+        )
+
+    def test_slice_ort_clone(self):
+        x = torch.arange(20, requires_grad=True, dtype=torch.float32).reshape((-1, 4))
+        self.assertONNX(
+            lambda x: x.clone()[:, 1:2],
+            x,
+            onnx_export=inspect.currentframe().f_code.co_name,
+        )
+
+    def test_slice_ref_view(self):
+        x = torch.arange(20, requires_grad=True, dtype=torch.float32).reshape((-1, 4))
+        self.assertONNX(
+            lambda x: x[:, 1:2],
+            x,
+            onnx_export=inspect.currentframe().f_code.co_name,
+            impl="ref",
+        )
+
+    def test_slice_ref_clone(self):
+        x = torch.arange(20, requires_grad=True, dtype=torch.float32).reshape((-1, 4))
+        self.assertONNX(
+            lambda x: x.clone()[:, 1:2],
+            x,
+            onnx_export=inspect.currentframe().f_code.co_name,
+            impl="ref",
         )
 
     def test_slice_dynamic(self):
