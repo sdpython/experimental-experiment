@@ -131,19 +131,35 @@ class TestLlama(ExtTestCase):
         number_of_cached_graph_modules: int,
         number_of_exported_onnx_models_for_all_graph_modules: Tuple[int, ...],
         expected_graph_break=0,
+        example_args_collection=None,
     ):
         self.assertEqual(
             expected_execution_count * (expected_graph_break + 1),
             ort_backend.execution_count,
         )
+        assert example_args_collection is not None
         self.assertEqual(
             len(ort_backend._all_ort_execution_info.execution_info_per_graph_module),
-            number_of_cached_graph_modules * (expected_graph_break + 1),
+            number_of_cached_graph_modules
+            * (expected_graph_break + 1)
+            * len(example_args_collection),
+            msg=f"ERROR execution_info_per_graph_module="
+            f"{len(ort_backend._all_ort_execution_info.execution_info_per_graph_module)}, "
+            f"number_of_cached_graph_modules={number_of_cached_graph_modules}, "
+            f"expected_graph_break={expected_graph_break}, "
+            f"example_args_collection={len(example_args_collection)}",
         )
         self.assertEqual(
             len(ort_backend._all_ort_execution_info.execution_info_per_graph_module),
             len(number_of_exported_onnx_models_for_all_graph_modules)
+            * len(example_args_collection)
             * (expected_graph_break + 1),
+            msg=f"ERROR execution_info_per_graph_module="
+            f"{len(ort_backend._all_ort_execution_info.execution_info_per_graph_module)}, "
+            f"number_of_exported_onnx_models_for_all_graph_modules="
+            f"{number_of_exported_onnx_models_for_all_graph_modules}, "
+            f"expected_graph_break={expected_graph_break}, "
+            f"example_args_collection={len(example_args_collection)}",
         )
         for (
             onnx_info,
@@ -186,6 +202,7 @@ class TestLlama(ExtTestCase):
                 number_of_exported_onnx_models_for_all_graph_modules=(1,)
                 * number_of_captured_graphs,
                 expected_graph_break=expected_graph_break,
+                example_args_collection=example_args_collection,
             )
 
     @ignore_warnings((UserWarning, DeprecationWarning))
@@ -328,7 +345,7 @@ class TestLlama(ExtTestCase):
     @ignore_warnings((UserWarning, DeprecationWarning))
     @skipif_ci_windows("torch.compile not supported on Windows")
     @unittest.skipIf(torch_min("2.2"), reason="missing kernel")
-    def test_ort_llama_model_nofullgraph(self):
+    def test_ort_llama_model(self):
         from experimental_experiment.torch_helper.llama_helper import (
             get_llama_model,
         )
@@ -340,15 +357,15 @@ class TestLlama(ExtTestCase):
             example_args_collection,
             False,
             False,
-            fullgraph=False,
-            onnx_export="test_ort_llama_model_nofullgraph",
+            fullgraph=True,
+            onnx_export="test_ort_llama_model",
             expected_graph_break=4,
         )
 
     @ignore_warnings((UserWarning, DeprecationWarning))
     @skipif_ci_windows("torch.compile not supported on Windows")
     @unittest.skipIf(torch_min("2.2"), reason="missing kernel")
-    def test_ort_llama_model_backward_nofullgraph(self):
+    def test_ort_llama_model_backward(self):
         from experimental_experiment.torch_helper.llama_helper import (
             get_llama_model,
         )
@@ -360,8 +377,8 @@ class TestLlama(ExtTestCase):
             example_args_collection,
             True,
             False,
-            fullgraph=False,
-            onnx_export="test_ort_llama_model_backward_nofullgraph",
+            fullgraph=True,
+            onnx_export="test_ort_llama_model_backward",
             expected_graph_break=7,
             assert_counting=False,
         )

@@ -417,7 +417,7 @@ class TestDynamoLlama(ExtTestCase):
     @ignore_warnings((UserWarning, DeprecationWarning))
     @skipif_ci_windows("torch.compile not supported on Windows")
     @unittest.skipIf(torch_min("2.2"), reason="missing kernel")
-    def test_llama_model_nofullgraph(self):
+    def test_llama_model(self):
         from experimental_experiment.torch_helper.llama_helper import (
             get_llama_model,
         )
@@ -429,8 +429,8 @@ class TestDynamoLlama(ExtTestCase):
             example_args_collection,
             False,
             False,
-            fullgraph=False,
-            onnx_export="test_llama_model_nofullgraph",
+            fullgraph=True,
+            onnx_export="test_llama_model",
             expected_graph_break=7,
             impl="ref",
         )
@@ -438,7 +438,7 @@ class TestDynamoLlama(ExtTestCase):
     @ignore_warnings((UserWarning, DeprecationWarning))
     @skipif_ci_windows("torch.compile not supported on Windows")
     @unittest.skipIf(torch_min("2.2"), reason="missing kernel")
-    def test_llama_model_nofullgraph_backward(self):
+    def test_llama_model_backward(self):
         from experimental_experiment.torch_helper.llama_helper import (
             get_llama_model,
         )
@@ -450,8 +450,8 @@ class TestDynamoLlama(ExtTestCase):
             example_args_collection,
             True,
             False,
-            fullgraph=False,
-            onnx_export="test_llama_model_backward_nofullgraph",
+            fullgraph=True,
+            onnx_export="test_llama_model_backward",
             expected_graph_break=7,
             assert_counting=False,
         )

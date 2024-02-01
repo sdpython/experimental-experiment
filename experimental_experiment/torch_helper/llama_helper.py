@@ -129,7 +129,7 @@ def get_llama_model(
     num_hidden_layers=1,
     vocab_size=1024,
     intermediate_size=16,
-    max_position_embeddings=256,
+    max_position_embeddings=1024,
     num_attention_heads=2,
 ):
     import torch
