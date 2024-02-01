@@ -17,8 +17,6 @@ def get_llama_decoder(
     intermediate_size=16,
     max_position_embeddings=256,
     num_attention_heads=2,
-    hidden_dropout_prob=0.0,
-    attention_dropout_prob=0.0,
 ):
     import torch
     from transformers import LlamaConfig
@@ -31,8 +29,6 @@ def get_llama_decoder(
         intermediate_size=intermediate_size,
         max_position_embeddings=max_position_embeddings,
         num_attention_heads=num_attention_heads,
-        hidden_dropout_prob=hidden_dropout_prob,
-        attention_dropout_prob=attention_dropout_prob,
     )
 
     class LlamaDecoderWrapper(torch.nn.Module):
@@ -69,22 +65,18 @@ def get_llama_attention(
     intermediate_size=16,
     max_position_embeddings=256,
     num_attention_heads=2,
-    hidden_dropout_prob=0.0,
-    attention_dropout_prob=0.0,
 ):
     import torch
     from transformers import LlamaConfig
     from transformers.models.llama.modeling_llama import LlamaAttention
 
     config = LlamaConfig(
-        num_hidden_layers=1,
-        vocab_size=1024,
+        num_hidden_layers=num_hidden_layers,
+        vocab_size=vocab_size,
         hidden_size=hidden_size,
-        intermediate_size=16,
-        max_position_embeddings=256,
-        num_attention_heads=2,
-        hidden_dropout_prob=0.0,
-        attention_dropout_prob=0.0,
+        intermediate_size=intermediate_size,
+        max_position_embeddings=max_position_embeddings,
+        num_attention_heads=num_attention_heads,
     )
 
     class LlamaAttentionWrapper(torch.nn.Module):
@@ -139,22 +131,18 @@ def get_llama_model(
     intermediate_size=16,
     max_position_embeddings=256,
     num_attention_heads=2,
-    hidden_dropout_prob=0.0,
-    attention_dropout_prob=0.0,
 ):
     import torch
     from transformers import LlamaConfig
     from transformers.models.llama.modeling_llama import LlamaModel
 
     config = LlamaConfig(
-        num_hidden_layers=1,
-        vocab_size=1024,
+        num_hidden_layers=num_hidden_layers,
+        vocab_size=vocab_size,
         hidden_size=hidden_size,
-        intermediate_size=16,
-        max_position_embeddings=256,
-        num_attention_heads=2,
-        hidden_dropout_prob=0.0,
-        attention_dropout_prob=0.0,
+        intermediate_size=intermediate_size,
+        max_position_embeddings=max_position_embeddings,
+        num_attention_heads=num_attention_heads,
     )
 
     class LlamaModelWrapper(torch.nn.Module):
