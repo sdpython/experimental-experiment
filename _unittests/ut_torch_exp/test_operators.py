@@ -297,6 +297,29 @@ class TestOperators(ExtTestCase):
             lambda x: x[0], x, onnx_export=inspect.currentframe().f_code.co_name
         )
 
+    def test_index_tensor(self):
+        x = torch.arange(12, requires_grad=True, dtype=torch.float32).reshape((-1, 4))
+        y = x[[0, 2]]
+        assert y.shape == (2, 4), f"{y.shape}"
+        self.assertONNX(
+            lambda x: x[[0, 2]],
+            x,
+            onnx_export=inspect.currentframe().f_code.co_name,
+            test_backward=False,
+        )
+
+    def test_index_tensor_f(self):
+        x = torch.arange(12, requires_grad=True, dtype=torch.float32).reshape((-1, 4))
+        y = torch.index_select(x.clone(), 0, torch.tensor([0, 2]))
+        print("**", torch.tensor([0, 2], dtype=torch.int64))
+        assert y.shape == (2, 4)
+        self.assertONNX(
+            lambda x: torch.index_select(x.clone(), 0, torch.tensor([0, 2])),
+            x,
+            onnx_export=inspect.currentframe().f_code.co_name,
+            test_backward=False,
+        )
+
     def test_type_as(self):
         x = torch.tensor([0.0], requires_grad=True)
         self.assertONNX(

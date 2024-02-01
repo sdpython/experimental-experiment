@@ -629,17 +629,16 @@ def aten_index_Tensor(
     indices_rank = 0
     indices_last = 0
     if len(indices) == 1 and isinstance(indices[0], str):
-        new_indices = g.op.Reshape(indices[0], np.array([-1, 1], dtype=np.int64))
-        res = g.op.GatherND(x, new_indices, outputs=outputs)
+        new_indices = g.op.Reshape(
+            indices[0], np.array([-1, 1], dtype=np.int64), name="index"
+        )
+        res = g.op.GatherND(x, new_indices, outputs=outputs, name="index")
         indices_rank = g.get_rank(indices[0])
         indices_last = g.get_shape(indices[0])[-1]
     else:
         raise RuntimeError(
             f"aten_indices implemented yet for indices={indices}{g.get_debug_msg()}"
         )
-
-    # a_indices = np.array(indices, dtype=np.int64).reshape((-1, 1))
-    # res = g.op.GatherND(x, indices, outputs=outputs)
 
     if set_shape_type:
         g.set_type(res, g.get_type(x))
