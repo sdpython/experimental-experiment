@@ -707,9 +707,11 @@ def aten_linear(
     return res
 
 
-def aten_lt(g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T, y: T) -> T:
+def aten_lt(
+    g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T, y: T, name="lt"
+) -> T:
     x, y = prepare_inputs_homogeneous_operator(g, x, y)
-    res = g.op.Less(x, y, outputs=outputs, name="lt")
+    res = g.op.Less(x, y, outputs=outputs, name=name)
     if set_shape_type:
         set_shape_type_binary_op(g, outputs[0], x, y, cmp_op=True)
     return res
@@ -718,7 +720,7 @@ def aten_lt(g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T, y: 
 def aten_lt_Tensor(
     g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T, y: T
 ) -> T:
-    return aten_lt(g, set_shape_type, outputs, x, y)
+    return aten_lt(g, set_shape_type, outputs, x, y, name="lt_Tensor")
 
 
 def aten_matmul(

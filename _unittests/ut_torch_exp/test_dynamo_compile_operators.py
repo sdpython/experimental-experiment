@@ -14,7 +14,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.onnx
 from torch.autograd import Function
-from torch.nn import functional, Module
+from torch.nn import functional, Module, Parameter
 from torch.onnx.symbolic_helper import (
     _get_tensor_dim_size,
     _get_tensor_sizes,
@@ -41,10 +41,12 @@ class FuncModule(Module):
             params = ()
         super().__init__()
         self.f = f
+        self.ppp = Parameter(torch.Tensor([1]))
         self.params = nn.ParameterList(list(params))
 
     def forward(self, *args):
         f_args = list(itertools.chain(args, self.params))
+        f_args[0] = f_args[0] + self.ppp
         res = self.f(*f_args)
         return res
 
@@ -118,10 +120,12 @@ def onnx_compiler(
         np.dtype("float64"): torch.float64,
         np.dtype("int32"): torch.int32,
         np.dtype("int64"): torch.int64,
+        np.dtype("bool"): torch.bool,
         np.float32: torch.float32,
         np.float64: torch.float64,
         np.int32: torch.int32,
         np.int64: torch.int64,
+        np.bool_: torch.bool,
     }
 
     def run(*inputs, sess=sess, names=names):
@@ -223,9 +227,13 @@ class TestOperators(ExtTestCase):
                 except FunctionNotFoundError as e:
                     raise unittest.SkipTest(f"MISSING FOR BACKWARD {e}")
 
-                for baseline_param, param in zip(
-                    model.parameters(), compiled_model.parameters()
-                ):
+                l1 = list(model.parameters())
+                l2 = list(compiled_model.parameters())
+                self.assertEqual(len(l1), len(l2))
+                assert len(l1) > 0, "No gradient to test"
+                n_gradient = 0
+                for baseline_param, param in zip(l1, l2):
+                    n_gradient += 1
                     self.assertEqualArray(
                         baseline_param.grad.detach().numpy(),
                         param.grad.detach().numpy(),
@@ -238,6 +246,7 @@ class TestOperators(ExtTestCase):
                         atol=atol,
                         rtol=rtol,
                     )
+                assert n_gradient > 0, f"No gradient was checked"
             else:
                 raise AssertionError(f"Unexpected type {type(baseline_result)}.")
         else:
@@ -852,10 +861,14 @@ class TestOperators(ExtTestCase):
         )
 
     def test_lt(self):
-        x = torch.randn(1, 2, 3, 1, requires_grad=False).int()
-        y = torch.randn(1, 4, requires_grad=False).int()
+        x = torch.randn(1, 2, 3, 1, requires_grad=True)
+        y = torch.randn(1, 4, requires_grad=True)
         self.assertONNX(
-            operator.lt, (x, y), onnx_export=inspect.currentframe().f_code.co_name
+            operator.lt,
+            (x, y),
+            onnx_export=inspect.currentframe().f_code.co_name,
+            impl="ref",
+            test_backward=False,
         )
 
     def test_gt(self):
@@ -1195,6 +1208,31 @@ class TestOperators(ExtTestCase):
         self.assertONNX(
             torch.nn.LogSigmoid(), x, onnx_export=inspect.currentframe().f_code.co_name
         )
+
+    def test_sigmoid(self):
+        with self.subTest(dim=4):
+            x = torch.randn(1, 2, 3, 4, requires_grad=True)
+            self.assertONNX(
+                lambda x: torch.sigmoid(x),
+                x,
+                onnx_export=inspect.currentframe().f_code.co_name,
+            )
+
+        with self.subTest(dim=2):
+            x = torch.randn(3, 4, requires_grad=True)
+            self.assertONNX(
+                lambda x: torch.sigmoid(x),
+                x,
+                onnx_export=inspect.currentframe().f_code.co_name,
+            )
+
+        with self.subTest(dim=1):
+            x = torch.randn(4, requires_grad=True)
+            self.assertONNX(
+                lambda x: torch.sigmoid(x),
+                x,
+                onnx_export=inspect.currentframe().f_code.co_name,
+            )
 
     def test_linear(self):
         x = torch.randn(3, 4)

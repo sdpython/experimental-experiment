@@ -308,7 +308,7 @@ class TestDynamoLlama(ExtTestCase):
     @ignore_warnings((UserWarning, DeprecationWarning))
     @skipif_ci_windows("torch.compile not supported on Windows")
     @unittest.skipIf(torch_min("2.2"), reason="missing kernel")
-    def test_mlp_backward(self):
+    def test_mlp_backward_ort(self):
         import torch
 
         class MLP(torch.nn.Module):
@@ -337,7 +337,43 @@ class TestDynamoLlama(ExtTestCase):
             example_args_collection,
             True,
             False,
-            onnx_export="test_ort_mlp_backward",
+            onnx_export="test_ort_mlp_backward_ort",
+        )
+
+    @ignore_warnings((UserWarning, DeprecationWarning))
+    @skipif_ci_windows("torch.compile not supported on Windows")
+    @unittest.skipIf(torch_min("2.2"), reason="missing kernel")
+    def test_mlp_backward_ref(self):
+        import torch
+
+        class MLP(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.fc1 = torch.nn.Linear(2, 4, bias=True)
+                self.fc2 = torch.nn.Linear(4, 2, bias=True)
+
+            def forward(self, tensor_x: torch.Tensor):
+                tensor_x = self.fc1(tensor_x)
+                tensor_x = torch.sigmoid(tensor_x)
+                tensor_x = self.fc2(tensor_x)
+                tensor_x = torch.sigmoid(tensor_x)
+                return tensor_x
+
+        # with static shape (dynamic=False), the conversion to onnx is done
+        # every time the batch size changes
+        batch_sizes = [3, 3, 3, 3, 3]
+
+        example_args_collection = tuple(
+            (torch.randn(batch, 2, dtype=torch.float32),) for batch in batch_sizes
+        )
+
+        self.common_test_model(
+            MLP(),
+            example_args_collection,
+            True,
+            False,
+            onnx_export="test_ort_mlp_backward_ref",
+            impl="ref",
         )
 
     @classmethod
