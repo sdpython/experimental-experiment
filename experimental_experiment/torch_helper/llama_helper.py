@@ -131,6 +131,7 @@ def get_llama_model(
     intermediate_size=16,
     max_position_embeddings=1024,
     num_attention_heads=2,
+    _attn_implementation="eager",  # needed value to remove graph breaks
 ):
     import torch
     from transformers import LlamaConfig
@@ -144,6 +145,8 @@ def get_llama_model(
         max_position_embeddings=max_position_embeddings,
         num_attention_heads=num_attention_heads,
     )
+    if _attn_implementation:
+        config._attn_implementation = _attn_implementation
 
     class LlamaModelWrapper(torch.nn.Module):
         def __init__(self, config):

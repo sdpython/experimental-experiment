@@ -1078,7 +1078,6 @@ class GraphBuilder:
         return "\n".join(rows)
 
     def optimize(self):
-
         def _check(step):
             assert (
                 len(self.nodes) > 0

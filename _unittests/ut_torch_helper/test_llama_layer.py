@@ -1,3 +1,4 @@
+import onnxruntime  # noqa: F401
 import copy
 import unittest
 import packaging.version as pv
@@ -140,9 +141,7 @@ class TestLlama(ExtTestCase):
         assert example_args_collection is not None
         self.assertEqual(
             len(ort_backend._all_ort_execution_info.execution_info_per_graph_module),
-            number_of_cached_graph_modules
-            * (expected_graph_break + 1)
-            * len(example_args_collection),
+            number_of_cached_graph_modules * (expected_graph_break + 1),
             msg=f"ERROR execution_info_per_graph_module="
             f"{len(ort_backend._all_ort_execution_info.execution_info_per_graph_module)}, "
             f"number_of_cached_graph_modules={number_of_cached_graph_modules}, "
@@ -152,7 +151,6 @@ class TestLlama(ExtTestCase):
         self.assertEqual(
             len(ort_backend._all_ort_execution_info.execution_info_per_graph_module),
             len(number_of_exported_onnx_models_for_all_graph_modules)
-            * len(example_args_collection)
             * (expected_graph_break + 1),
             msg=f"ERROR execution_info_per_graph_module="
             f"{len(ort_backend._all_ort_execution_info.execution_info_per_graph_module)}, "

@@ -1,3 +1,4 @@
+import onnxruntime  # noqa: F401
 import unittest
 import logging
 from experimental_experiment.ext_test_case import ExtTestCase, ignore_warnings
