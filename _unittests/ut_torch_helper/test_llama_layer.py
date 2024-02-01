@@ -80,6 +80,9 @@ class TestLlama(ExtTestCase):
                 if hasattr(baseline_result, "to_tuple"):
                     baseline_result = baseline_result.to_tuple()
                     result = result.to_tuple()
+
+                baseline_result = tuple(b for b in baseline_result if b is not None)
+                result = tuple(b for b in result if b is not None)
                 assert len(baseline_result) == len(result), (
                     f"Mismatch number of outputs {len(baseline_result)}"
                     f"[{type(baseline_result)}] != {len(result)}"
@@ -139,6 +142,10 @@ class TestLlama(ExtTestCase):
         self.assertEqual(
             expected_execution_count * (expected_graph_break + 1),
             ort_backend.execution_count,
+            msg=f"expected_execution_count={expected_execution_count}, "
+            f"expected_graph_break={expected_graph_break}, "
+            f"ort_backend.execution_count={ort_backend.execution_count}, "
+            f"number_of_cached_graph_modules={number_of_cached_graph_modules}",
         )
         for (
             onnx_info,
@@ -175,11 +182,11 @@ class TestLlama(ExtTestCase):
         )
 
         number_of_captured_graphs = 2 if test_backward else 1
-        execution_count = len(example_args_collection) * number_of_captured_graphs
         if assert_counting:
             self._assert_counting_information(
                 local_ort,
-                expected_execution_count=execution_count,
+                expected_execution_count=len(example_args_collection)
+                * number_of_captured_graphs,
                 number_of_cached_graph_modules=number_of_captured_graphs,
                 number_of_exported_onnx_models_for_all_graph_modules=(1,)
                 * number_of_captured_graphs,
@@ -341,7 +348,7 @@ class TestLlama(ExtTestCase):
             False,
             fullgraph=True,
             onnx_export="test_ort_llama_model",
-            expected_graph_break=4,
+            expected_graph_break=0,
         )
 
     @ignore_warnings((UserWarning, DeprecationWarning))
@@ -361,8 +368,8 @@ class TestLlama(ExtTestCase):
             False,
             fullgraph=True,
             onnx_export="test_ort_llama_model_backward",
-            expected_graph_break=7,
-            assert_counting=False,
+            expected_graph_break=0,
+            assert_counting=True,
         )
 
 
