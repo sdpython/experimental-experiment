@@ -355,6 +355,8 @@ class DynamoInterpreter:
         return res
 
     def getitem(self, node: "torch.fx.Node"):  # noqa: F821
+        import torch
+
         args = node.args
         assert len(args) == 2
         node_output, index = args
@@ -403,7 +405,7 @@ class DynamoInterpreter:
                 expand_axes=[],
             )
 
-        if isinstance(index, tuple):
+        if isinstance(index, (tuple, torch.fx.immutable_collections.immutable_list)):
             if all(
                 map(
                     lambda x: x is Ellipsis or x is None or isinstance(x, (slice, int)),
