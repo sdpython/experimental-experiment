@@ -165,7 +165,6 @@ class DynamoInterpreter:
                             f"\nnode.__dict__={node.__dict__}"
                             f"{self.builder.get_debug_msg()}"
                         )
-
                 self.builder.make_tensor_output(
                     o, elem_type=elem_type, shape=shape, indexed=False
                 )

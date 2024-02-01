@@ -509,7 +509,7 @@ def aten_expand(
     set_shape_type: bool,
     outputs: List[str],
     x: T,
-    *sizes: List[int],
+    sizes: List[int],
     implicit: bool = False,
 ) -> T:
     assert not implicit, f"Unexpected value for implicit={implicit!r}"
@@ -1027,6 +1027,9 @@ def aten_slice_Tensor(
     if end is None:
         end = start
         start = 0
+    if start == 0 and end == 9223372036854775807 and step in {1, None}:
+        # nothing to do
+        return g.op.Identity(x, outputs=outputs)
     inputs = [
         np.array([start], dtype=np.int64),
         np.array([end], dtype=np.int64),
@@ -1052,7 +1055,7 @@ def aten_softmax(
     outputs: List[str],
     x: T,
     dim: int = -1,
-    dtype=None,
+    dtype: Optional["torch.dtype"] = None,  # noqa: F821
 ) -> T:
     if dtype is not None:
         itype = torch_dtype_to_onnx_dtype(dtype)

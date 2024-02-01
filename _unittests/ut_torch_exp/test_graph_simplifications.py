@@ -1,5 +1,7 @@
 import unittest
 import onnx
+import onnx.helper as oh
+from onnx import TensorProto
 from experimental_experiment.ext_test_case import ExtTestCase
 from experimental_experiment.torch_exp.graph_builder import GraphBuilder
 
@@ -52,6 +54,44 @@ class TestGraphSimplification(ExtTestCase):
         onx = self.call_optimizer(model)
         self.assertEqual(len(onx.graph.node), 2)
         self.assertEqual(onx.graph.node[0].op_type, "Split")
+
+    def test_remove_identity(self):
+        opset_imports = [oh.make_opsetid("", 12)]
+        inputs = []
+        outputs = []
+        nodes = []
+        initializers = []
+        sparse_initializers = []
+        functions = []
+        inputs.append(
+            oh.make_tensor_value_info("input", TensorProto.FLOAT, shape=(2, 3))
+        )
+        nodes.append(oh.make_node("Softmax", ["input"], ["output_0"], axis=0))
+        nodes.append(oh.make_node("Identity", ["output_0"], ["output_1"]))
+        outputs.append(
+            oh.make_tensor_value_info("output_0", TensorProto.FLOAT, shape=(2, 3))
+        )
+        outputs.append(
+            oh.make_tensor_value_info("output_1", TensorProto.FLOAT, shape=(2, 3))
+        )
+        graph = oh.make_graph(
+            nodes,
+            "experiment",
+            inputs,
+            outputs,
+            initializers,
+            sparse_initializer=sparse_initializers,
+        )
+        model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
+        self.assertEqual(len(model.graph.node), 2)
+        self.assertEqual(model.graph.node[0].op_type, "Softmax")
+        self.assertEqual(model.graph.node[1].op_type, "Identity")
+        self.assertEqual(len(model.graph.output), 2)
+        onx = self.call_optimizer(model)
+        self.assertEqual(len(onx.graph.node), 2)
+        self.assertEqual(onx.graph.node[0].op_type, "Softmax")
+        self.assertEqual(onx.graph.node[1].op_type, "Identity")
+        self.assertEqual(len(model.graph.output), 2)
 
 
 if __name__ == "__main__":

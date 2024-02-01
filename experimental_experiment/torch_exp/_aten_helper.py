@@ -57,6 +57,30 @@ def broadcast_shape(sh1: Tuple[int, ...], sh2: Tuple[int, ...]) -> Tuple[int, ..
     return shape + sh2[len(shape) :]
 
 
+def set_shape_type_reshape(
+    g: "GraphBuilder",  # noqa: F821
+    name: str,
+    input_name: str,
+    new_shape: Sequence[int],
+):
+    dtype = g.get_type(input_name)
+    g.set_type(name, dtype)
+    if min(new_shape) == -1:
+        if g.has_shape(input_name):
+            shape = list(g.get_shape(input_name))
+            arg_size = np.prod([a for a in new_shape if a >= 0])
+            size = np.prod(shape)
+            index = new_shape.index(-1)
+            if arg_size == 0:
+                assert size == 0, f"Unable to reshape {shape} into {new_shape}"
+                shape[index] = 1
+            else:
+                shape[index] = int(size // arg_size)
+            g.set_shape(name, tuple(shape))
+    else:
+        g.set_shape(name, tuple(new_shape))
+
+
 def set_shape_type_unary_op(
     g: "GraphBuilder",  # noqa: F821
     name: str,

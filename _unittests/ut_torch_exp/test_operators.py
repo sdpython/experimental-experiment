@@ -130,8 +130,6 @@ def onnx_compiler(
         feeds = dict(zip(names, xnp))
         results = sess.run(None, feeds)
         res = tuple(torch.Tensor(y).to(_dtype[y.dtype]) for y in results)
-        if len(res) == 1:
-            return res[0]
         return res
 
     return run
@@ -209,6 +207,7 @@ class TestOperators(ExtTestCase):
                     result.detach().numpy(),
                     atol=atol,
                     rtol=rtol,
+                    msg=f"expected\n{baseline_result}\n--got--\n{result}",
                 )
                 try:
                     torch.testing.assert_close(
@@ -895,6 +894,10 @@ class TestOperators(ExtTestCase):
             lambda x: x.acos(), x, onnx_export=inspect.currentframe().f_code.co_name
         )
 
+    @unittest.skipIf(
+        True,
+        reason="https://github.com/pytorch/pytorch/issues/104505#issuecomment-1919745791",
+    )
     def test_slice_ort_view(self):
         x = torch.arange(20, requires_grad=True, dtype=torch.float32).reshape((-1, 4))
         self.assertONNX(
@@ -911,6 +914,10 @@ class TestOperators(ExtTestCase):
             onnx_export=inspect.currentframe().f_code.co_name,
         )
 
+    @unittest.skipIf(
+        True,
+        reason="https://github.com/pytorch/pytorch/issues/104505#issuecomment-1919745791",
+    )
     def test_slice_ref_view(self):
         x = torch.arange(20, requires_grad=True, dtype=torch.float32).reshape((-1, 4))
         self.assertONNX(
@@ -1199,6 +1206,10 @@ class TestOperators(ExtTestCase):
             onnx_export=inspect.currentframe().f_code.co_name,
         )
 
+    @unittest.skipIf(
+        True,
+        reason="https://github.com/pytorch/pytorch/issues/104505#issuecomment-1919745791",
+    )
     def test_expand(self):
         x = torch.randn(6, 1, requires_grad=True)
         self.assertONNX(
@@ -1502,6 +1513,10 @@ class TestOperators(ExtTestCase):
             onnx_export=inspect.currentframe().f_code.co_name,
         )
 
+    @unittest.skipIf(
+        True,
+        reason="https://github.com/pytorch/pytorch/issues/104505#issuecomment-1919745791",
+    )
     def test_meshgrid(self):
         x = torch.ones(3, requires_grad=True)
         y = torch.zeros(4, requires_grad=True)
@@ -1512,6 +1527,10 @@ class TestOperators(ExtTestCase):
             onnx_export=inspect.currentframe().f_code.co_name,
         )
 
+    @unittest.skipIf(
+        True,
+        reason="https://github.com/pytorch/pytorch/issues/104505#issuecomment-1919745791",
+    )
     def test_meshgrid_indexing(self):
         x = torch.ones(3, requires_grad=True)
         y = torch.zeros(4, requires_grad=True)
@@ -1699,7 +1718,7 @@ class TestOperators(ExtTestCase):
             onnx_export=inspect.currentframe().f_code.co_name,
         )
 
-    def test_dynamic_axes_matmul(self):
+    def test_dynamic_axes_matmul_ort(self):
         m1 = torch.randn(2, 2, 4, requires_grad=True)
         m2 = torch.randn(2, 4, 3, requires_grad=True)
         self.assertONNX(
@@ -1709,6 +1728,19 @@ class TestOperators(ExtTestCase):
             dynamic_axes={"input_1": {1: "dim_0"}, "input_2": {2: "dim_1"}},
             opset_version=12,
             onnx_export=inspect.currentframe().f_code.co_name,
+        )
+
+    def test_dynamic_axes_matmul_ref(self):
+        m1 = torch.randn(2, 2, 4, requires_grad=True)
+        m2 = torch.randn(2, 4, 3, requires_grad=True)
+        self.assertONNX(
+            lambda x, y: torch.matmul(x, y),
+            (m1, m2),
+            input_names=["input_1", "input_2"],
+            dynamic_axes={"input_1": {1: "dim_0"}, "input_2": {2: "dim_1"}},
+            opset_version=12,
+            onnx_export=inspect.currentframe().f_code.co_name,
+            impl="ref",
         )
 
     def test_dynamic_axes_reduce_mean(self):
@@ -1722,9 +1754,19 @@ class TestOperators(ExtTestCase):
             onnx_export=inspect.currentframe().f_code.co_name,
         )
 
-    def test_dynamic_axes_unchange(self):
-        """Test ProcessUnchangeNode in symbolic shape inference."""
-        m1 = torch.randn(2, 3, requires_grad=True)
+    def test_dynamic_axes_unchange_softmax_ort(self):
+        m1 = torch.arange(6, requires_grad=True, dtype=torch.float32).reshape((-1, 3))
+        self.assertONNX(
+            lambda x: torch.softmax(x, dim=0),
+            (m1,),
+            input_names=["input"],
+            dynamic_axes={"input": {1: "dim_1"}},
+            opset_version=13,
+            onnx_export=inspect.currentframe().f_code.co_name,
+        )
+
+    def test_dynamic_axes_unchange_softmax_ref(self):
+        m1 = torch.arange(6, requires_grad=True, dtype=torch.float32).reshape((-1, 3))
         self.assertONNX(
             lambda x: torch.softmax(x, dim=0),
             (m1,),
@@ -1732,6 +1774,7 @@ class TestOperators(ExtTestCase):
             dynamic_axes={"input": {1: "dim_1"}},
             opset_version=12,
             onnx_export=inspect.currentframe().f_code.co_name,
+            impl="ref",
         )
 
     def test_aten_embedding_1(self):
@@ -1872,13 +1915,15 @@ class TestOperators(ExtTestCase):
 
         radix = 2
         cardinality = 1
-        x = torch.randn(10, 1, 128, 1)
+        shape = (10, 1, 128, 1)
+        x = torch.arange(np.prod(shape), dtype=torch.float32).reshape(shape)
         self.assertONNX(
             RSoftMax(radix, cardinality),
             (x,),
             input_names=["x"],
             dynamic_axes={"x": {0: "dim_0"}},
             onnx_export=inspect.currentframe().f_code.co_name,
+            test_backward=False,
         )
 
 

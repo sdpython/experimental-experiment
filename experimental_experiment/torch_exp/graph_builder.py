@@ -98,9 +98,8 @@ class Opset:
                 # torch.fx.Node
                 new_inputs.append(i.name)
             else:
-                cst_name = self.builder.unique_name("cst")
-                self.builder.make_initializer(
-                    cst_name, i, msg=f"input {i} of op_type={op_type!r}"
+                cst_name = self.builder.make_initializer(
+                    "", i, msg=f"input {i} of op_type={op_type!r}"
                 )
                 new_inputs.append(cst_name)
 
@@ -356,6 +355,7 @@ class GraphBuilder:
 
     def set_shape(self, name: str, shape: Tuple[int, ...], set_rank: bool = True):
         assert isinstance(name, str), f"Unexpected type {type(name)} for name."
+        self._check_shape(shape, 0, name=name)
         assert (
             len(shape) == 0 or None in shape or min(shape) >= 0
         ), f"Negative value in shape {shape} for {name!r}{self.get_debug_msg()}"
@@ -500,8 +500,6 @@ class GraphBuilder:
     ) -> str:
         if external:
             raise NotImplementedError("External initializers are not implemented yet.")
-        if name == "":
-            name = self.unique_name("cst")
         if isinstance(value, int):
             value = np.array(value, dtype=np.int64)
         elif isinstance(value, float):
@@ -516,6 +514,14 @@ class GraphBuilder:
                 f"Initializer name={name!r}, "
                 f"unexpected type {type(value)} for value={value!r} ({msg})."
             )
+        if name == "":
+            sh = "".join(map(str, value.shape))
+            sh2 = (
+                "x".join(map(str, value.ravel().tolist()))
+                if value.size <= 5 and value.dtype == np.int64
+                else ""
+            )
+            name = self.unique_name(f"init{sh}_{sh2}")
         self.set_shape(name, value.shape)
         self.set_type(name, self._get_type(value.dtype))
         self.set_name(name)
@@ -570,6 +576,7 @@ class GraphBuilder:
         elem_type = self._get_type(elem_type, False)
         if not self.as_function and elem_type == 0:
             raise RuntimeError(f"Undefined element type for {name!r}.")
+        self._check_shape(shape, name=name, elem_type=elem_type)
         self.outputs.append(oh.make_tensor_value_info(name, elem_type, shape))
         if self.verbose:
             print(
@@ -580,6 +587,21 @@ class GraphBuilder:
         if elem_type:
             self.set_type(name, elem_type)
         return name
+
+    def _check_shape(self, shape: Any, elem_type: int, name: Optional[str] = None):
+        assert isinstance(
+            elem_type, int
+        ), f"elem_type must be an integer not {type(elem_type)}"
+        assert shape is None or isinstance(
+            shape, tuple
+        ), f"Shape must be a tuple not {type(shape)}"
+        if shape is None:
+            return None
+        for s in shape:
+            assert s is None or isinstance(s, (str, int)), (
+                f"One element of shape={shape} has type {type(s)}, "
+                f"name={name!r}, elem_type={elem_type}{self.get_debug_msg()}"
+            )
 
     def _get_symbol(self, i: str) -> str:
         k = 0
@@ -1204,7 +1226,11 @@ class GraphBuilder:
 
             if node.output[0] not in output_names:
                 old_name, new_name = node.output[0], node.input[0]
-            elif node.input[0] not in input_names and node.input[0] not in replacements:
+            elif (
+                node.input[0] not in input_names
+                and node.input[0] not in output_names
+                and node.input[0] not in replacements
+            ):
                 old_name, new_name = node.input[0], node.output[0]
             else:
                 new_nodes.append(node)

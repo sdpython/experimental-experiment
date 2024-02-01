@@ -6,6 +6,7 @@ from ._aten_helper import (
     set_shape_type_binary_op,
     set_shape_type_unary_op,
     set_shape_type_reduce_op,
+    set_shape_type_reshape,
 )
 from .graph_builder import GraphBuilder
 
@@ -141,8 +142,7 @@ def aten_meth_reshape(
     cst = g.make_initializer("", np.array(shape, dtype=np.int64))
     res = g.make_node("Reshape", [input_name, cst], outputs)
     if set_shape_type:
-        g.set_type(outputs[0], g.get_type(input_name))
-        g.set_shape(outputs[0], tuple(shape))
+        set_shape_type_reshape(g, res, input_name, shape)
     return res
 
 
@@ -245,7 +245,5 @@ def aten_meth_view(
     g.make_initializer(new_shape_name, np.array(args, dtype=np.int64))
     res = g.make_node("Reshape", [input_name, new_shape_name], outputs, name="view")
     if set_shape_type:
-        dtype = g.get_type(input_name)
-        g.set_shape(outputs[0], tuple(args))
-        g.set_type(outputs[0], dtype)
+        set_shape_type_reshape(g, res, input_name, args)
     return res
