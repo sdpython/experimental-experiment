@@ -124,6 +124,23 @@ class Opset:
             )
         return self.ReduceSum(args[0], axes=iaxes, **kwargs)
 
+    def ReduceMeanAnyOpset(self, *args, **kwargs):
+        if len(args) == 1:
+            return self.ReduceSum(*args, **kwargs)
+        assert len(args) == 2, f"ReduceMeanAnyOpset expects 2 arguments not {len(args)}"
+        if self.builder.main_opset >= 18:
+            return self.ReduceMean(*args, **kwargs)
+        axes = args[1]
+        if isinstance(axes, np.ndarray):
+            iaxes = axes.tolist()
+        elif isinstance(axes, int):
+            iaxes = axes
+        else:
+            raise RuntimeError(
+                f"Unable to call ReduceSum on a dynamic input axis={axes}"
+            )
+        return self.ReduceMean(args[0], axes=iaxes, **kwargs)
+
 
 class OptimizationOptions:
     def __init__(

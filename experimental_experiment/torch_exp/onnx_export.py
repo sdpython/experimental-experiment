@@ -13,6 +13,8 @@ def _retrieve(
     graph_builder: "GraphBuilder",  # noqa: F821
 ) -> "torch.Tensor":  # noqa: F821
     if name not in mapping:
+        if len(weights) == 0:
+            return None
         raise RuntimeError(
             f"Unable to find {name!r}. Available weights: {list(sorted(weights))}. "
             f"mapping={mapping} "

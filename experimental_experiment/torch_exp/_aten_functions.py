@@ -122,7 +122,7 @@ def aten_arange(
     device=None,
     pin_memory=None,
 ) -> T:
-    assert layout is None, f"arange not implemented for layout={layout} is not None"
+    assert layout is None, f"arange not implemented for layout={layout!r} is not None"
     assert not pin_memory, "arange not implemented for pin_memory=True"
     if start is not None and end is None:
         end = start
@@ -184,6 +184,22 @@ def aten_arange(
     return res
 
 
+def aten_arange_start(
+    g: GraphBuilder,
+    set_shape_type: bool,
+    outputs: List[str],
+    start: Optional[int] = None,
+    end: Optional[int] = None,
+    dtype: Optional["torch.dtype"] = None,  # noqa: F821
+    layout=None,
+    device=None,
+    pin_memory=None,
+) -> T:
+    assert layout is None, f"arange not implemented for layout={layout!r} is not None"
+    assert not pin_memory, "arange not implemented for pin_memory=True"
+    return aten_arange(g, set_shape_type, outputs, start, end, dtype=dtype)
+
+
 def aten_arange_start_step(
     g: GraphBuilder,
     set_shape_type: bool,
@@ -192,7 +208,12 @@ def aten_arange_start_step(
     end: Optional[int] = None,
     step: int = 1,
     dtype: Optional["torch.dtype"] = None,  # noqa: F821
+    layout=None,
+    device=None,
+    pin_memory=None,
 ) -> T:
+    assert layout is None, f"arange not implemented for layout={layout!r} is not None"
+    assert not pin_memory, "arange not implemented for pin_memory=True"
     return aten_arange(g, set_shape_type, outputs, start, end, step, dtype)
 
 
@@ -483,7 +504,12 @@ def aten_embedding(
     scale_grad_by_freq: bool = False,
     sparse: bool = False,
 ) -> T:
-    if padding_idx is not None or scale_grad_by_freq or sparse or max_norm is not None:
+    if (
+        (padding_idx is not None and padding_idx >= 0)
+        or scale_grad_by_freq
+        or sparse
+        or max_norm is not None
+    ):
         raise NotImplementedError(
             f"Not implemented when padding_idx={padding_idx}, or "
             f"scale_grad_by_freq={scale_grad_by_freq} or sparse={sparse} "
@@ -557,7 +583,7 @@ def aten_full(
     device=None,
     pin_memory=None,
 ) -> T:
-    assert layout is None, f"full not implemented for layout={layout} is not None"
+    assert layout is None, f"full not implemented for layout={layout!r} is not None"
     assert not pin_memory, "full not implemented for pin_memory=True"
     assert isinstance(
         fill_value, (float, int)
@@ -565,6 +591,15 @@ def aten_full(
     new_shape = None
 
     if isinstance(size, tuple):
+        assert all(
+            map(lambda x: isinstance(x, int), size)
+        ), f"Unexpected values for size={size}"
+        tsize = np.array(size, dtype=np.int64)
+        new_shape = size
+    elif isinstance(size, list):
+        assert all(
+            map(lambda x: isinstance(x, int), size)
+        ), f"Unexpected values for size={size}"
         tsize = np.array(size, dtype=np.int64)
         new_shape = size
     else:
@@ -680,12 +715,38 @@ def aten_lt(g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T, y: 
     return res
 
 
+def aten_lt_Tensor(
+    g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T, y: T
+) -> T:
+    return aten_lt(g, set_shape_type, outputs, x, y)
+
+
 def aten_matmul(
     g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T, y: T
 ) -> T:
     res = g.op.MatMul(x, y, outputs=outputs)
     if set_shape_type:
         set_shape_type_binary_op(g, outputs[0], x, y)
+    return res
+
+
+def aten_masked_fill_Scalar(
+    g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T, mask: T, value
+) -> T:
+    dt = g.get_type(mask)
+    if dt != TensorProto.BOOL:
+        cmask = g.op.Cast(mask, to=TensorProto.BOOL, name="masked_fill_Scalar")
+    else:
+        cmask = mask
+    dtx = g.get_type(x)
+    avalue = np.array([value], dtype=tensor_dtype_to_np_dtype(dtx))
+    res = g.op.Where(cmask, avalue, x)
+    if set_shape_type:
+        g.set_type(res, dtx)
+        if g.has_shape(mask):
+            g.set_shape(res, g.get_shape(mask))
+        else:
+            g.set_rank(res, g.get_rank(mask))
     return res
 
 
@@ -853,6 +914,37 @@ def aten_max_pool2d_with_indices(
     )
 
 
+def aten_mean_dim(
+    g: GraphBuilder,
+    set_shape_type: bool,
+    outputs: List[str],
+    x: T,
+    dim: Optional[Union[int, List[int]]] = None,
+    keepdim: bool = False,
+    dtype=None,
+) -> T:
+    if dtype is not None:
+        itype = torch_dtype_to_onnx_dtype(dtype)
+        xc = g.op.Cast(x, to=itype)
+    else:
+        xc = x
+    if dim is None:
+        result = g.op.ReduceMeanAnyOpset(
+            xc, keepdims=keepdim, outputs=outputs, name="mean_dim"
+        )
+    else:
+        if isinstance(dim, int):
+            adim = np.array([dim], dtype=np.int64)
+        else:
+            adim = np.array(dim, dtype=np.int64)
+        result = g.op.ReduceMeanAnyOpset(
+            xc, adim, keepdims=keepdim, outputs=outputs, name="mean_dim"
+        )
+    if set_shape_type:
+        set_shape_type_reduce_op(g, outputs[0], x, keepdim=keepdim)
+    return result
+
+
 def aten_mm(g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T, y: T) -> T:
     return g.op.MatMul(x, y, outputs=outputs, name="mm")
 
@@ -896,7 +988,7 @@ def aten_ones(
 ) -> T:
     import torch
 
-    assert layout is None, f"ones not implemented for layout={layout} is not None"
+    assert layout is None, f"ones not implemented for layout={layout!r} is not None"
     assert not pin_memory, "ones not implemented for pin_memory=True"
     new_shape = None
     if isinstance(size, list):
@@ -967,6 +1059,30 @@ def aten_rsqrt(
     if set_shape_type:
         set_shape_type_unary_op(g, outputs[0], x)
     return res
+
+
+def aten_rsub(
+    g: GraphBuilder,
+    set_shape_type: bool,
+    outputs: List[str],
+    x: T,
+    y: T,
+    alpha: float = 1,
+) -> T:
+    assert alpha == 1, f"Not implemented with alpha={alpha}"
+    return aten_sub(g, set_shape_type, outputs, y, x)
+
+
+def aten_rsub_Scalar(
+    g: GraphBuilder,
+    set_shape_type: bool,
+    outputs: List[str],
+    x: T,
+    y: T,
+    alpha: float = 1,
+) -> T:
+    assert alpha == 1, f"Not implemented with alpha={alpha}"
+    return aten_sub(g, set_shape_type, outputs, y, x)
 
 
 def aten_sigmoid(g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T) -> T:
@@ -1144,6 +1260,31 @@ def aten_sum_dim_IntList(
 
 def aten_t(g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T) -> T:
     return g.op.Transpose(x, perm=[1, 0], outputs=outputs, name="t")
+
+
+def aten__to_copy(
+    g: GraphBuilder,
+    set_shape_type: bool,
+    outputs: List[str],
+    x: T,
+    dtype: Optional["torch.dtype"] = None,  # noqa: F821
+    layout=None,
+    device=None,
+    pin_memory=None,
+    non_blocking=False,
+    memory_format=None,
+) -> T:
+    assert layout is None, f"_to_copy implemented with layout={layout!r}"
+    assert device is None, f"_to_copy implemented with device={device!r}"
+    assert pin_memory is None, f"_to_copy implemented with pin_memory={pin_memory!r}"
+    assert not non_blocking, f"_to_copy implemented with non_blocking={non_blocking!r}"
+    assert (
+        memory_format is None
+    ), f"_to_copy implemented with memory_format={memory_format!r}"
+    if dtype is None:
+        return g.op.Identity(x, outputs=outputs, name="_to_copy")
+    itype = torch_dtype_to_onnx_dtype(dtype)
+    return g.op.Cast(x, to=itype, outputs=outputs, name="_to_copy")
 
 
 def aten_transpose(
