@@ -80,9 +80,11 @@ class TestLlama(ExtTestCase):
                 if hasattr(baseline_result, "to_tuple"):
                     baseline_result = baseline_result.to_tuple()
                     result = result.to_tuple()
-                assert len(baseline_result) == len(
-                    result
-                ), f"Mismatch number of outputs {len(baseline_result)} != {len(result)}"
+                assert len(baseline_result) == len(result), (
+                    f"Mismatch number of outputs {len(baseline_result)}"
+                    f"[{type(baseline_result)}] != {len(result)}"
+                    f"[{type(result)}]"
+                )
                 for baseline_elem, result_elem in zip(baseline_result, result):
                     torch.testing.assert_close(baseline_elem, result_elem)
                     torch.testing.assert_close(
@@ -158,6 +160,9 @@ class TestLlama(ExtTestCase):
         expected_graph_break=0,
         assert_counting=True,
     ):
+        import torch
+
+        torch._dynamo.reset()
         local_aot_ort, local_ort = make_aot_ort(dynamic=dynamic)
 
         self._assert_model_numerically(
