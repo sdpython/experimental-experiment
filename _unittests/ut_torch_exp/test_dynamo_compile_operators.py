@@ -366,7 +366,6 @@ class TestOperators(ExtTestCase):
     def test_index_tensor_f(self):
         x = torch.arange(12, requires_grad=True, dtype=torch.float32).reshape((-1, 4))
         y = torch.index_select(x.clone(), 0, torch.tensor([0, 2]))
-        print("**", torch.tensor([0, 2], dtype=torch.int64))
         assert y.shape == (2, 4)
         self.assertONNX(
             lambda x: torch.index_select(x.clone(), 0, torch.tensor([0, 2])),
