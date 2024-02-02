@@ -80,7 +80,7 @@ class FuncModuleModule(Module):
 
     def forward(self, *args):
         x = args[0] + self.ppp
-        res = self.mod(x)
+        res = self.mod(x, *args[1:])
         return res
 
 
