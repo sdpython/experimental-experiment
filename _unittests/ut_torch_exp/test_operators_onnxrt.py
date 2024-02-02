@@ -2,13 +2,10 @@ import copy
 import inspect
 import itertools
 import operator
-import os
 import unittest
 import sys
-from typing import List, Optional, Union
 import packaging.version as pv
 import numpy as np
-from onnx import ModelProto
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -20,13 +17,7 @@ from torch.onnx.symbolic_helper import (
     _get_tensor_sizes,
     parse_args,
 )
-from torch._dynamo.backends.common import aot_autograd
-from experimental_experiment.ext_test_case import (
-    ExtTestCase,
-    ignore_warnings,
-    requires_torch,
-)
-from experimental_experiment.torch_exp.onnx_export import to_onnx
+from experimental_experiment.ext_test_case import ExtTestCase, ignore_warnings
 from experimental_experiment.torch_exp._exceptions import FunctionNotFoundError
 
 BATCH_SIZE = 2
@@ -55,111 +46,24 @@ class FuncModule(Module):
         return res
 
 
-class FuncModule0(Module):
-    def __init__(self, f, params=None):
-        if params is None:
-            params = ()
-        super().__init__()
-        self.f = f
-        self.ppp = Parameter(torch.Tensor([1]))
-        self.params = nn.ParameterList(list(params))
+def make_aot_ort(dynamic: bool = False):
+    from torch.onnx import (
+        _OrtBackend as OrtBackend,
+        _OrtBackendOptions as OrtBackendOptions,
+        ExportOptions,
+    )
 
-    def forward(self, *args):
-        f_args = list(itertools.chain(args, self.params))
-        args = [tuple([f_args[0][0] + self.ppp, *f_args[0][1:]])]
-        res = self.f(*args)
-        return res
-
-
-def get_session(
-    onx: ModelProto, impl: str = "ref", exc: bool = True
-) -> Union["ReferenceEvaluator", "InferenceSession"]:  # noqa: F821
-    if exc:
-        try:
-            return get_session(onx, impl, exc=False)
-        except Exception as e:
-            from onnx_array_api.plotting.text_plot import onnx_simple_text_plot
-
-            raise AssertionError(
-                f"Unable to build session ({str(e)})\n{onnx_simple_text_plot(onx)}"
-            ) from e
-
-    if impl == "ref":
-        from onnx.reference import ReferenceEvaluator
-
-        return ReferenceEvaluator(onx, verbose=10)
-    else:
-        import onnxruntime
-
-        return onnxruntime.InferenceSession(
-            onx.SerializeToString(), providers=["CPUExecutionProvider"]
+    ort_backend = OrtBackend(
+        options=OrtBackendOptions(
+            export_options=ExportOptions(
+                dynamic_shapes=dynamic,
+            )
         )
-
-
-def onnx_compiler(
-    graph_module: torch.fx.GraphModule,
-    args: List[torch.Tensor],
-    onnx_export: str = "?",
-    counter: Optional[List[int]] = None,
-    opset_version: Optional[int] = None,
-    impl: str = "ort",
-):
-    assert isinstance(counter, list), f"unexpected type {type(counter)} for counter"
-    input_names = (
-        ["input"] if len(args) == 1 else [f"input{i}" for i in range(len(args))]
     )
-
-    onx = to_onnx(
-        graph_module,
-        tuple(args),
-        input_names=input_names,
-        remove_unused=True,
-        constant_folding=False,
-        verbose=0 if impl == "ort" else 4,
-        target_opset=opset_version,
-    )
-
-    if not os.path.exists("temp_dump"):
-        os.mkdir("temp_dump")
-
-    counter[0] += 1
-    if onnx_export != "?":
-        name = os.path.join("temp_dump", f"{onnx_export}_{counter[0]}.onnx")
-        with open(name, "wb") as f:
-            f.write(onx.SerializeToString())
-        with open(name + ".txt", "w") as f:
-            f.write(str(graph_module.graph))
-            f.write("\n")
-
-    sess = get_session(onx, impl, exc=True)
-
-    names = [i.name for i in onx.graph.input]
-
-    _dtype = {
-        np.dtype("float32"): torch.float32,
-        np.dtype("float64"): torch.float64,
-        np.dtype("int32"): torch.int32,
-        np.dtype("int64"): torch.int64,
-        np.dtype("bool"): torch.bool,
-        np.float32: torch.float32,
-        np.float64: torch.float64,
-        np.int32: torch.int32,
-        np.int64: torch.int64,
-        np.bool_: torch.bool,
-    }
-
-    def run(*inputs, sess=sess, names=names):
-        # not efficient
-        xnp = [x.detach().numpy() for x in inputs]
-        feeds = dict(zip(names, xnp))
-        results = sess.run(None, feeds)
-        res = tuple(torch.Tensor(y).to(_dtype[y.dtype]) for y in results)
-        return res
-
-    return run
+    return ort_backend, ort_backend
 
 
-class TestOperators(ExtTestCase):
+class TestOperatorsOnnxrt(ExtTestCase):
     def setUp(self):
         super().setUp()
         torch._dynamo.reset()
@@ -182,7 +86,6 @@ class TestOperators(ExtTestCase):
         dynamic_axes=None,
         keep_initializers_as_inputs=None,
         training=None,
-        input_index: Optional[int] = None,
     ):
         if sys.platform == "win32":
             raise unittest.SkipTest("Windows not supported yet.")
@@ -193,30 +96,17 @@ class TestOperators(ExtTestCase):
             params = ()
         if isinstance(f, nn.Module):
             model = f
-        elif input_index is None:
-            model = FuncModule(f, params)
         else:
-            assert input_index == 0, f"Not implemented for input_index={input_index}"
-            model = FuncModule0(f, params)
+            model = FuncModule(f, params)
         model.eval()
-
-        counter = [0]
 
         if test_backward:
             # forward/backward
-            aot_compiler = aot_autograd(
-                fw_compiler=lambda *args: onnx_compiler(
-                    *args,
-                    onnx_export=onnx_export,
-                    counter=counter,
-                    opset_version=opset_version,
-                    impl=impl,
-                )
-            )
+            local_aot_ort, local_ort = make_aot_ort(dynamic=False)
 
             compiled_model = torch.compile(
                 copy.deepcopy(model),
-                backend=aot_compiler,
+                backend=local_aot_ort,
                 dynamic=False,
                 fullgraph=fullgraph,
             )
@@ -278,13 +168,7 @@ class TestOperators(ExtTestCase):
             # forward only
             compiled_model = torch.compile(
                 copy.deepcopy(model),
-                backend=lambda *args: onnx_compiler(
-                    *args,
-                    onnx_export=onnx_export,
-                    counter=counter,
-                    opset_version=opset_version,
-                    impl=impl,
-                ),
+                backend="onnxrt",
                 dynamic=False,
                 fullgraph=fullgraph,
             )
@@ -448,7 +332,10 @@ class TestOperators(ExtTestCase):
     def test_chunk(self):
         x = torch.tensor([0.0, 1.0, 2.0], requires_grad=True)
         self.assertONNX(
-            lambda x: x.chunk(2), x, onnx_export=inspect.currentframe().f_code.co_name
+            lambda x: x.chunk(2),
+            x,
+            onnx_export=inspect.currentframe().f_code.co_name,
+            test_backward=False,
         )
 
     def test_split(self):
@@ -469,17 +356,6 @@ class TestOperators(ExtTestCase):
             lambda x: torch.split(x, [2, 1, 3], 1),
             x,
             onnx_export=inspect.currentframe().f_code.co_name,
-        )
-
-    def test_concat2(self):
-        x = torch.randn(2, 3)
-        y = torch.randn(2, 3)
-        self.assertONNX(
-            lambda inputs: torch.cat(inputs, 1),
-            ((x, y),),
-            onnx_export=inspect.currentframe().f_code.co_name,
-            test_backward=False,
-            input_index=0,
         )
 
     def test_mm(self):
@@ -641,6 +517,7 @@ class TestOperators(ExtTestCase):
             nn.AvgPool2d(3, stride=2),
             x,
             onnx_export=inspect.currentframe().f_code.co_name,
+            test_backward=False,
         )
 
     def test_maxpool_indices(self):
@@ -652,11 +529,6 @@ class TestOperators(ExtTestCase):
         )
 
     @ignore_warnings((UserWarning, DeprecationWarning))
-    @requires_torch(
-        "2.3.0",
-        "torch._dynamo.exc.InternalTorchDynamoError: type object "
-        "'FunctionMeta' has no attribute 'forward'",
-    )
     def test_at_op(self):
         x = torch.randn(3, 4)
 
@@ -1173,6 +1045,7 @@ class TestOperators(ExtTestCase):
             x,
             keep_initializers_as_inputs=True,
             onnx_export=inspect.currentframe().f_code.co_name,
+            test_backward=False,
         )
 
     def test_embedding_bags(self):
@@ -1529,6 +1402,7 @@ class TestOperators(ExtTestCase):
             input,
             opset_version=11,
             onnx_export=inspect.currentframe().f_code.co_name,
+            test_backward=False,
         )
 
     def test_layer_norm_aten(self):

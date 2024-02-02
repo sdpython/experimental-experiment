@@ -457,3 +457,16 @@ def dump_dort_onnx(fn):
         return res
 
     return wrapped
+
+
+def requires_torch(version: str, msg: str) -> Callable:
+    """
+    Skips a unit test if torch is not recent enough.
+    """
+    import packaging.version as pv
+    import torch
+
+    if pv.Version(torch.__version__) < pv.Version(version):
+        msg = f"Test does not work on azure pipeline (Windows). {msg}"
+        return unittest.skip(msg)
+    return lambda x: x
