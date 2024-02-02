@@ -71,6 +71,19 @@ class FuncModule0(Module):
         return res
 
 
+class FuncModuleModule(Module):
+    def __init__(self, f):
+        super().__init__()
+        self.f = f
+        self.mod = f
+        self.ppp = Parameter(torch.Tensor([1]))
+
+    def forward(self, *args):
+        x = args[0] + self.ppp
+        res = self.mod(x)
+        return res
+
+
 def get_session(
     onx: ModelProto, impl: str = "ref", exc: bool = True
 ) -> Union["ReferenceEvaluator", "InferenceSession"]:  # noqa: F821
@@ -192,7 +205,7 @@ class TestOperators(ExtTestCase):
         if params is None:
             params = ()
         if isinstance(f, nn.Module):
-            model = f
+            model = FuncModuleModule(f)
         elif input_index is None:
             model = FuncModule(f, params)
         else:
@@ -1091,11 +1104,19 @@ class TestOperators(ExtTestCase):
 
     def test_elu(self):
         x = torch.randn(1, 2, 3, 4, requires_grad=True)
-        self.assertONNX(nn.ELU(), x, onnx_export=inspect.currentframe().f_code.co_name)
+        self.assertONNX(
+            torch.nn.functional.elu,
+            x,
+            onnx_export=inspect.currentframe().f_code.co_name,
+        )
 
     def test_selu(self):
         x = torch.randn(1, 2, 3, 4, requires_grad=True)
-        self.assertONNX(nn.SELU(), x, onnx_export=inspect.currentframe().f_code.co_name)
+        self.assertONNX(
+            torch.nn.functional.selu,
+            x,
+            onnx_export=inspect.currentframe().f_code.co_name,
+        )
 
     def test_repeat(self):
         x = torch.randn(1, 2, 3, 4, requires_grad=True)
@@ -1348,11 +1369,7 @@ class TestOperators(ExtTestCase):
     def test_dropout_default(self):
         x = torch.randn(3, 4, requires_grad=True)
         self.assertONNX(
-            lambda x: torch.max(
-                functional.dropout(
-                    x,
-                )
-            ),
+            lambda x: torch.max(functional.dropout(x)),
             x,
             onnx_export=inspect.currentframe().f_code.co_name,
         )
