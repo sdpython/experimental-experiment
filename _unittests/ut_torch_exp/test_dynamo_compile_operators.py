@@ -196,6 +196,7 @@ class TestOperators(ExtTestCase):
         keep_initializers_as_inputs=None,
         training=None,
         input_index: Optional[int] = None,
+        square_loss=False,
     ):
         if sys.platform == "win32":
             raise unittest.SkipTest("Windows not supported yet.")
@@ -258,11 +259,18 @@ class TestOperators(ExtTestCase):
                     if "nan" not in str(e):
                         raise
 
-                baseline_result.sum().backward()
-                try:
-                    result.sum().backward()
-                except FunctionNotFoundError as e:
-                    raise unittest.SkipTest(f"MISSING FOR BACKWARD {e}")
+                if square_loss:
+                    (baseline_result.sum() ** 2).backward()
+                    try:
+                        (result.sum() ** 2).backward()
+                    except FunctionNotFoundError as e:
+                        raise unittest.SkipTest(f"MISSING FOR BACKWARD {e}")
+                else:
+                    baseline_result.sum().backward()
+                    try:
+                        result.sum().backward()
+                    except FunctionNotFoundError as e:
+                        raise unittest.SkipTest(f"MISSING FOR BACKWARD {e}")
 
                 l1 = list(model.parameters())
                 l2 = list(compiled_model.parameters())
@@ -1263,16 +1271,31 @@ class TestOperators(ExtTestCase):
         )
 
     def test_sigmoid(self):
-        with self.subTest(dim=4):
-            x = torch.randn(1, 2, 3, 4, requires_grad=True)
+        with self.subTest(dim=2, impl="ref"):
+            x = torch.arange(12, dtype=torch.float32, requires_grad=True).reshape(
+                (3, 4)
+            )
             self.assertONNX(
                 lambda x: torch.sigmoid(x),
                 x,
                 onnx_export=inspect.currentframe().f_code.co_name,
+                impl="ref",
+                square_loss=True,
             )
 
         with self.subTest(dim=2):
-            x = torch.randn(3, 4, requires_grad=True)
+            x = torch.arange(12, dtype=torch.float32, requires_grad=True).reshape(
+                (3, 4)
+            )
+            self.assertONNX(
+                lambda x: torch.sigmoid(x),
+                x,
+                onnx_export=inspect.currentframe().f_code.co_name,
+                square_loss=True,
+            )
+
+        with self.subTest(dim=4):
+            x = torch.randn(1, 2, 3, 4, requires_grad=True)
             self.assertONNX(
                 lambda x: torch.sigmoid(x),
                 x,

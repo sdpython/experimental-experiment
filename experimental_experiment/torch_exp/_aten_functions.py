@@ -1095,18 +1095,23 @@ def aten_sigmoid(g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T
 
 
 def aten_sigmoid_backward(
-    g: GraphBuilder, set_shape_type: bool, outputs: List[str], grad_output: T, output: T
+    g: GraphBuilder, set_shape_type: bool, outputs: List[str], out_grad: T, y: T
 ) -> T:
-    res = g.op.Sigmoid(output, name="sigmoid_backward")
-    res2 = g.op.Mul(res, res, name="sigmoid_backward")
-    grad = g.op.Mul(
-        res2,
-        g.op.Exp(g.op.Neg(output, name="sigmoid_backward"), name="sigmoid_backward"),
-        name="sigmoid_backward",
-    )
+    """
+    See https://github.com/pytorch/pytorch/blob/main/torch/_decomp/decompositions.py#L108.
+    conj_physical = identity for real number.
+
+    ::
+
+        return out_grad * (y * (1 - y)).conj_physical()
+    """
+    dtype = tensor_dtype_to_np_dtype(g.get_type(y))
+    _1y = g.op.Sub(np.array([1], dtype=dtype), y, name="sigmoid_backward")
+    y1y = g.op.Mul(y, _1y, name="sigmoid_backward")
+    res = g.op.Mul(out_grad, y1y, outputs=outputs, name="sigmoid_backward")
     if set_shape_type:
-        set_shape_type_unary_op(g, outputs[0], output)
-    return g.op.Mul(grad_output, grad, outputs=outputs)
+        set_shape_type_unary_op(g, outputs[0], y)
+    return res
 
 
 def aten_silu(g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T) -> T:
