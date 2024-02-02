@@ -246,7 +246,7 @@ class TestOperators(ExtTestCase):
                         atol=atol,
                         rtol=rtol,
                     )
-                assert n_gradient > 0, f"No gradient was checked"
+                assert n_gradient > 0, "No gradient was checked"
             else:
                 raise AssertionError(f"Unexpected type {type(baseline_result)}.")
         else:
