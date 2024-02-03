@@ -1265,10 +1265,6 @@ def aten_sum_dim_IntList(
     return result
 
 
-def aten_t(g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T) -> T:
-    return g.op.Transpose(x, perm=[1, 0], outputs=outputs, name="t")
-
-
 def aten__to_copy(
     g: GraphBuilder,
     set_shape_type: bool,
@@ -1292,6 +1288,80 @@ def aten__to_copy(
         return g.op.Identity(x, outputs=outputs, name="_to_copy")
     itype = torch_dtype_to_onnx_dtype(dtype)
     return g.op.Cast(x, to=itype, outputs=outputs, name="_to_copy")
+
+
+def aten_t(g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T) -> T:
+    return g.op.Transpose(x, perm=[1, 0], outputs=outputs, name="t")
+
+
+def _aten_tensor_int1(
+    g: GraphBuilder,
+    set_shape_type: bool,
+    outputs: List[str],
+    input_name: T,
+    indices: Tuple[Any, ...],
+    axes: List[int],
+    expand_axes: List[int],
+) -> T:
+    assert isinstance(axes, list), f"Unexpected type {type(axes)} for axes"
+    assert all(
+        map(lambda i: isinstance(i, int), axes)
+    ), f"Expected only integer axis but got {axes}"
+    assert all(
+        map(lambda i: isinstance(i, int), indices)
+    ), f"Expected only integer axis but got {indices}"
+    assert len(axes) == 1, f"Length mismatch {len(axes)} != 1"
+
+    # axes
+    indices_name = g.unique_name(f"{outputs[0]}_indices")
+    g.make_initializer(indices_name, np.array(indices, dtype=np.int64))
+
+    res = g.make_node(
+        "Gather",
+        [input_name, indices_name],
+        outputs,
+        axis=axes[0],
+        name="getitem_int1",
+        set_shape_type=True,
+    )
+
+    if expand_axes:
+        raise RuntimeError(f"Not implemented when expand_axes={expand_axes}.")
+    if set_shape_type:
+        dtype = g.get_type(input_name)
+        shape = g.get_shape(input_name)
+        new_shape = g._apply_slice_to_shape(
+            shape, indices, axes=axes, expand_axes=expand_axes
+        )
+        if g.has_shape(outputs[0]) and new_shape != g.get_shape(outputs[0]):
+            raise RuntimeError(
+                f"Shape for node {res!r} is already set to "
+                f"{g.get_shape(res)} with type "
+                f"{g.get_type(res)} (expecting {dtype}) "
+                f"new_shape={new_shape}, shape={shape}, index_slice={indices}, "
+                f"axes={axes}, expand_axes={expand_axes}"
+                f"{g.get_debug_msg()}"
+            )
+        g.set_shape(res, new_shape)
+        g.set_type(res, dtype)
+    return res
+
+
+def aten_tensor(
+    g: GraphBuilder,
+    set_shape_type: bool,
+    outputs: List[str],
+    x: T,
+    indices: Tuple[Any, ...],
+) -> T:
+    if isinstance(indices, tuple) and len(indices) == 1:
+        if isinstance(indices[0], list) and all(
+            map(lambda i: isinstance(i, int), indices[0])
+        ):
+            return _aten_tensor_int1(g, set_shape_type, outputs, x, indices, [0], [])
+    raise RuntimeError(
+        f"Unable to handle getitem with indices={indices}{g.get_debug_msg()}"
+    )
 
 
 def aten_transpose(

@@ -354,6 +354,60 @@ class DynamoInterpreter:
             self.builder.set_type(node.name, dtype)
         return res
 
+    def _getitem_int1(
+        self,
+        node: "torch.fx.Node",  # noqa: F821
+        input_name: str,
+        indices: List[int],
+        set_shape_type: bool,
+        axes: List[int],
+        expand_axes: List[int],
+    ):
+        assert isinstance(axes, list), f"Unexpected type {type(axes)} for axes"
+        assert all(
+            map(lambda i: isinstance(i, int), axes)
+        ), f"Expected only integer axis but got {axes}"
+        assert all(
+            map(lambda i: isinstance(i, int), indices)
+        ), f"Expected only integer axis but got {indices}"
+        assert len(axes) == 1, f"Length mismatch {len(axes)} != 1"
+
+        # axes
+        indices_name = self.builder.unique_name(f"{node.name}_indices")
+        self.builder.make_initializer(indices_name, np.array(indices, dtype=np.int64))
+
+        res = self.builder.make_node(
+            "Gather",
+            [input_name, indices_name],
+            [node.name],
+            axis=axes[0],
+            name="getitem_int1",
+            set_shape_type=True,
+        )
+
+        if expand_axes:
+            raise RuntimeError(f"Not implemented when expand_axes={expand_axes}.")
+        if set_shape_type:
+            dtype = self.builder.get_type(input_name)
+            shape = self.builder.get_shape(input_name)
+            new_shape = self.builder._apply_slice_to_shape(
+                shape, indices, axes=axes, expand_axes=expand_axes
+            )
+            if self.builder.has_shape(
+                node.name
+            ) and new_shape != self.builder.get_shape(node.name):
+                raise RuntimeError(
+                    f"Shape for node {node.name!r} is already set to "
+                    f"{self.builder.get_shape(node.name)} with type "
+                    f"{self.builder.get_type(node.name)} (expecting {dtype}) "
+                    f"new_shape={new_shape}, shape={shape}, index_slice={indices}, "
+                    f"axes={axes}, expand_axes={expand_axes}"
+                    f"{self.builder.get_debug_msg()}"
+                )
+            self.builder.set_shape(node.name, new_shape)
+            self.builder.set_type(node.name, dtype)
+        return res
+
     def getitem(self, node: "torch.fx.Node"):  # noqa: F821
         import torch
 
@@ -405,14 +459,25 @@ class DynamoInterpreter:
                 expand_axes=[],
             )
 
-        if isinstance(index, (tuple, torch.fx.immutable_collections.immutable_list)):
-            if all(
-                map(
-                    lambda x: x is Ellipsis or x is None or isinstance(x, (slice, int)),
+        if isinstance(index, torch.fx.immutable_collections.immutable_list):
+            # something like x[[0, 2]]
+            if all(map(lambda x: isinstance(x, int), index)):
+                # something like x[[0, 1]]
+                axes = [0]
+                return self._getitem_int1(
+                    node,
+                    node_output.name,
                     index,
+                    set_shape_type=set_shape_type,
+                    axes=axes,
+                    expand_axes=[],
                 )
+
+        if isinstance(index, tuple):
+            if all(
+                map(lambda x: x is Ellipsis or x is None or isinstance(x, slice), index)
             ):
-                # case where there is only one slice
+                # something like x[3:4]
                 axes = []
                 slices = []
                 expand_axes = []

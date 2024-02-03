@@ -179,32 +179,46 @@ class GraphBuilder:
             indices, list
         ), f"Unexpected type {type(indices)} for index: {indices}"
         assert isinstance(axes, list), f"Unexpected type {type(axes)} for index: {axes}"
-        assert len(indices) == len(
-            axes
+        assert len(axes) in (
+            1,
+            len(indices),
         ), f"Mismatch lengths {len(indices)} != {len(axes)}"
-        new_shape = []
-        for index, axis in zip(indices, axes):
-            while len(new_shape) < axis:
-                assert shape[len(new_shape)] >= 0, (
-                    f"Negative value in shape {shape}, indices={indices}, "
+
+        if all(map(lambda i: isinstance(i, slice), indices)):
+            new_shape = []
+            for index, axis in zip(indices, axes):
+                while len(new_shape) < axis:
+                    assert shape[len(new_shape)] >= 0, (
+                        f"Negative value in shape {shape}, indices={indices}, "
+                        f"axes={axes}, expand_axes={expand_axes}"
+                    )
+                    new_shape.append(shape[len(new_shape)])
+                assert axis < len(shape), (
+                    f"axis={axis} is out of order (shape={shape}, "
+                    f"indices={indices}, axes={axes}){self.get_debug_msg()}"
+                )
+                n = shape[axis]
+                start = index.start or 0
+                end = index.stop or n
+                diff = end - start
+                dim = diff // index.step if index.step else diff
+                dim = max(dim, 0)
+                assert dim >= 0, (
+                    f"Negative dim={dim}, axis={axis}, shape={shape}, indices={indices}, "
                     f"axes={axes}, expand_axes={expand_axes}"
                 )
-                new_shape.append(shape[len(new_shape)])
-            assert axis < len(shape), (
-                f"axis={axis} is out of order (shape={shape}, "
-                f"indices={indices}, axes={axes}){self.get_debug_msg()}"
+                new_shape.append(dim)
+        elif all(map(lambda i: isinstance(i, int), indices)):
+            assert len(axes) == 1, (
+                f"Unable to guess new shape from shape={shape}, "
+                f"indices={indices}, axes={axes}, expand_axes={expand_axes}"
             )
-            n = shape[axis]
-            start = index.start or 0
-            end = index.stop or n
-            diff = end - start
-            dim = diff // index.step if index.step else diff
-            dim = max(dim, 0)
-            assert dim >= 0, (
-                f"Negative dim={dim}, axis={axis}, shape={shape}, indices={indices}, "
-                f"axes={axes}, expand_axes={expand_axes}"
+            new_shape = [len(indices), *shape[1:]]
+        else:
+            raise RuntimeError(
+                f"Unable to guess new shape from shape={shape}, "
+                f"indices={indices}, axes={axes}, expand_axes={expand_axes}"
             )
-            new_shape.append(dim)
         for a in shape[len(new_shape) :]:
             assert a >= 0, (
                 f"Negative value in shape {shape}, indices={indices}, "
