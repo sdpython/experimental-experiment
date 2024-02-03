@@ -38,6 +38,7 @@ class Opset:
         "Mul": 1,
         "Less": 1,
         "Log": 1,
+        "LogSoftmax": 1,
         "Neg": 1,
         "Or": 1,
         "Pow": 1,

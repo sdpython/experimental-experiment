@@ -519,6 +519,7 @@ def aten_embedding(
     res = g.op.Gather(weight, indices, outputs=outputs, name="embedding")
     if set_shape_type:
         g.set_type(res, g.get_type(weight))
+        g.set_rank(res, g.get_rank(weight) + g.get_rank(indices) - 1)
     return res
 
 
@@ -652,11 +653,7 @@ def aten_gt(g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T, y: 
 
 
 def aten_index_Tensor(
-    g: GraphBuilder,
-    set_shape_type: bool,
-    outputs: List[str],
-    x: T,
-    indices: Sequence[T],
+    g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T, indices: List[int]
 ) -> T:
     assert isinstance(
         indices, (list, tuple)
@@ -678,6 +675,22 @@ def aten_index_Tensor(
     if set_shape_type:
         g.set_type(res, g.get_type(x))
         g.get_rank(res, g.get_rank(x) + indices_rank + indices_last - 1)
+    return res
+
+
+def aten_index_select(
+    g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T, dim: int, index: T
+) -> T:
+    res = g.op.Gather(x, index, axis=dim, outputs=outputs)
+    if set_shape_type:
+        g.set_type(res, g.get_type(x))
+        if g.has_shape(x) and g.has_shape(index):
+            shape = list(g.get_shape(x))
+            index_shape = g.get_shape(index)
+            shape[dim] = index_shape[0]
+            g.set_shape(res, tuple(shape))
+        else:
+            g.set_rank(res, g.get_rank(x))
     return res
 
 
@@ -704,6 +717,65 @@ def aten_linear(
             g.set_shape(res, new_shape)
         else:
             g.set_rank(res, 2)
+    return res
+
+
+def aten__log_softmax(
+    g: GraphBuilder,
+    set_shape_type: bool,
+    outputs: List[str],
+    x: T,
+    dim: int = -1,
+    unnamed: bool = False,
+    dtype: Optional["torch.dtype"] = None,  # noqa: F821
+) -> T:
+    assert not unnamed, "Not implemented when the third parameter is False"
+    if dtype is not None:
+        itype = torch_dtype_to_onnx_dtype(dtype)
+        xc = g.op.Cast(x, to=itype, name="log_softmax")
+    else:
+        itype = None
+        xc = x
+    res = g.op.LogSoftmax(xc, axis=dim, outputs=outputs)
+    if set_shape_type:
+        set_shape_type_unary_op(g, res, xc, itype=itype)
+    return res
+
+
+def aten__log_softmax_backward_data(
+    g: GraphBuilder,
+    set_shape_type: bool,
+    outputs: List[str],
+    grad_output: T,
+    output: T,
+    dim: int,
+    input_dtype: Optional["torch.dtype"] = None,  # noqa: F821
+):
+    if input_dtype is not None:
+        itype = torch_dtype_to_onnx_dtype(input_dtype)
+        grad_outputc = g.op.Cast(
+            grad_output, to=itype, name="log_softmax_backward_data"
+        )
+    else:
+        itype = None
+        grad_outputc = grad_output
+    res = g.op.Sub(
+        grad_output,
+        g.op.Mul(
+            g.op.Exp(output, name="log_softmax_backward_data"),
+            g.op.ReduceSum(
+                grad_output,
+                np.array([dim], dtype=np.int64),
+                keepdims=True,
+                name="log_softmax_backward_data",
+            ),
+            name="log_softmax_backward_data",
+        ),
+        outputs=outputs,
+        name="log_softmax_backward_data",
+    )
+    if set_shape_type:
+        set_shape_type_unary_op(g, res, grad_outputc, itype=itype)
     return res
 
 
@@ -1352,8 +1424,26 @@ def aten_tensor(
     set_shape_type: bool,
     outputs: List[str],
     x: T,
-    indices: Tuple[Any, ...],
+    indices: Optional[Tuple[Any, ...]] = None,
 ) -> T:
+    if indices is None:
+        # x is some data to convert into a Tensor
+        if isinstance(x, list) and all(map(lambda e: isinstance(e, (int, float)), x)):
+            if all(map(lambda e: isinstance(e, int), x)):
+                cst = np.array(x, dtype=np.int64)
+            elif all(map(lambda e: isinstance(e, float), x)):
+                cst = np.array(x, dtype=np.float32)
+            else:
+                raise RuntimeError(
+                    f"Unable to convert to guess value dtype "
+                    f"for x={x}{g.get_debug_msg()}"
+                )
+
+            return g.make_initializer(outputs[0], cst)
+        raise RuntimeError(
+            f"Unable to convert a value into a tensor, x={x}{g.get_debug_msg()}"
+        )
+
     if isinstance(indices, tuple) and len(indices) == 1:
         if isinstance(indices[0], list) and all(
             map(lambda i: isinstance(i, int), indices[0])

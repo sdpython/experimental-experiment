@@ -532,6 +532,10 @@ class DynamoInterpreter:
                     continue
                 new_list.append(el)
             return new_list
+        import torch
+
+        if isinstance(i, torch.dtype):
+            return i
         raise RuntimeError(
             f"Unexpected type (argument {i}) {type(i)} "
             f"for function {aten_name!r} "
