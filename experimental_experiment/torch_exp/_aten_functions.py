@@ -1186,8 +1186,20 @@ def aten_sigmoid_backward(
     return res
 
 
-def aten_silu(g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T) -> T:
-    return g.op.Mul(x, g.op.Sigmoid(x, name="silu"), outputs=outputs, name="silu")
+def aten_silu(
+    g: GraphBuilder,
+    set_shape_type: bool,
+    outputs: List[str],
+    x: T,
+    inplace: bool = False,
+) -> T:
+    assert (
+        not inplace
+    ), f"inplace computation is not allowed with onnx{g.get_debug_msg()}"
+    res = g.op.Mul(x, g.op.Sigmoid(x, name="silu"), outputs=outputs, name="silu")
+    if set_shape_type:
+        set_shape_type_unary_op(g, res, x)
+    return res
 
 
 def aten_sin(g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T) -> T:

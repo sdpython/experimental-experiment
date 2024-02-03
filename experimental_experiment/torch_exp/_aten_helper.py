@@ -48,7 +48,13 @@ def dtype_to_tensor_dtype(dt: "dtype") -> int:  # noqa: F821
 def broadcast_shape(sh1: Tuple[int, ...], sh2: Tuple[int, ...]) -> Tuple[int, ...]:
     """
     Computes the shape for many broadcasting operators.
+
+    :param sh1: first shape
+    :param sh2: second shape
+    :return: resulting shape
     """
+    assert all(map(lambda i: isinstance(i, int), sh1)), f"Unexpected sh1={sh1}"
+    assert all(map(lambda i: isinstance(i, int), sh2)), f"Unexpected sh2={sh2}"
     if len(sh1) == len(sh2):
         return tuple(max(i, j) for i, j in zip(sh1, sh2))
     shape = tuple(max(i, j) for i, j in zip(sh1, sh2))
@@ -124,10 +130,11 @@ def set_shape_type_binary_op(
     shape = None
     for input_name in input_names:
         if g.has_shape(input_name):
-            if shape is None:
-                shape = g.get_shape(input_name)
-            else:
-                shape = broadcast_shape(shape, g.get_shape(input_name))
+            input_shape = g.get_shape(input_name)
+            if None in input_shape:
+                shape = None
+                break
+            shape = shape if shape is None else broadcast_shape(shape, input_shape)
         elif shape is not None:
             # one shape is missing
             shape = None

@@ -45,6 +45,7 @@ class TestDynamoLlama(ExtTestCase):
         rtol: float = 1e-4,
         onnx_export: Optional[str] = None,
         impl="ort",
+        verbose: int = 0,
     ):
         import torch
 
@@ -74,7 +75,7 @@ class TestDynamoLlama(ExtTestCase):
             if impl == "ref":
                 from onnx.reference import ReferenceEvaluator
 
-                return ReferenceEvaluator(onx, verbose=10)
+                return ReferenceEvaluator(onx, verbose=verbose)
             else:
                 import onnxruntime
 
@@ -95,7 +96,7 @@ class TestDynamoLlama(ExtTestCase):
                 input_names=input_names,
                 remove_unused=True,
                 constant_folding=False,
-                verbose=6,
+                verbose=verbose * 6,
                 return_builder=True,
             )
 
@@ -144,9 +145,7 @@ class TestDynamoLlama(ExtTestCase):
                 fullgraph=fullgraph,
             )
 
-        one_example = None
         for example_args in example_args_collection:
-            one_example = example_args
             baseline_result = model(*example_args)
             result = compiled_model(*example_args)
 
@@ -173,10 +172,18 @@ class TestDynamoLlama(ExtTestCase):
                 if hasattr(baseline_result, "to_tuple"):
                     baseline_result = baseline_result.to_tuple()
                     result = result.to_tuple()
+                baseline_result = tuple(b for b in baseline_result if b is not None)
+                result = tuple(b for b in result if b is not None)
                 assert len(baseline_result) == len(
                     result
                 ), f"Mismatch number of outputs {len(baseline_result)} != {len(result)}"
                 for baseline_elem, result_elem in zip(baseline_result, result):
+                    self.assertEqualArray(
+                        baseline_elem.detach().numpy(),
+                        result_elem.detach().numpy(),
+                        atol=atol,
+                        rtol=rtol,
+                    )
                     torch.testing.assert_close(
                         baseline_elem,
                         result_elem,
@@ -204,6 +211,12 @@ class TestDynamoLlama(ExtTestCase):
                     for baseline_param, param in zip(
                         model.parameters(), compiled_model.parameters()
                     ):
+                        self.assertEqualArray(
+                            baseline_param.grad.detach().numpy(),
+                            param.grad.detach().numpy(),
+                            atol=atol,
+                            rtol=rtol,
+                        )
                         torch.testing.assert_close(
                             baseline_param.grad,
                             param.grad,
@@ -212,21 +225,6 @@ class TestDynamoLlama(ExtTestCase):
                             msg=f"Mismatch atol={atol}, rtol={rtol}\n"
                             f"{baseline_param.grad}\n---\n{param.grad}",
                         )
-
-        # export to onnx
-        try:
-            torch.onnx.export(
-                copy.deepcopy(model), *one_example, f"{onnx_export}_script.onnx"
-            )
-        except Exception as e:
-            print("torch.onnx.export failed:", e)
-        try:
-            torch.onnx.dynamo_export(copy.deepcopy(model), *one_example).save(
-                f"{onnx_export}_dynamo.onnx"
-            )
-        except Exception as e:
-            print("torch.onnx.dynamo_export failed:", e)
-
         return _b
 
     def _assert_counting_information(
@@ -253,6 +251,7 @@ class TestDynamoLlama(ExtTestCase):
         expected_graph_break=0,
         assert_counting=True,
         impl="ort",
+        verbose: int = 0,
     ):
         local_ort = self._assert_model_numerically(
             model,
@@ -261,6 +260,7 @@ class TestDynamoLlama(ExtTestCase):
             fullgraph=fullgraph,
             onnx_export=onnx_export,
             impl=impl,
+            verbose=verbose,
         )
 
         number_of_captured_graphs = 2 if test_backward else 1
@@ -394,8 +394,8 @@ class TestDynamoLlama(ExtTestCase):
         self.common_test_model(
             model,
             example_args_collection,
-            False,
-            False,
+            test_backward=False,
+            dynamic=False,
             onnx_export="test_llama_decoder",
         )
 
@@ -409,14 +409,14 @@ class TestDynamoLlama(ExtTestCase):
         self.common_test_model(
             model,
             example_args_collection,
-            True,
-            False,
+            test_backward=True,
+            dynamic=False,
             onnx_export="test_llama_decoder_backward",
         )
 
     @ignore_warnings((UserWarning, DeprecationWarning))
     @skipif_ci_windows("torch.compile not supported on Windows")
-    def test_llama_w_attention(self):
+    def test_llama_attention_forward(self):
         from experimental_experiment.torch_helper.llama_helper import (
             get_llama_attention,
         )
@@ -426,8 +426,8 @@ class TestDynamoLlama(ExtTestCase):
         self.common_test_model(
             model,
             example_args_collection,
-            False,
-            False,
+            test_backward=False,
+            dynamic=False,
             onnx_export="test_llama_attention",
             impl="ref",
         )
@@ -444,8 +444,8 @@ class TestDynamoLlama(ExtTestCase):
         self.common_test_model(
             model,
             example_args_collection,
-            True,
-            False,
+            test_backward=True,
+            dynamic=False,
             onnx_export="test_llama_attention_backward",
             impl="ref",
         )
@@ -453,7 +453,7 @@ class TestDynamoLlama(ExtTestCase):
     @ignore_warnings((UserWarning, DeprecationWarning))
     @skipif_ci_windows("torch.compile not supported on Windows")
     @unittest.skipIf(torch_min("2.2"), reason="missing kernel")
-    def test_llama_model(self):
+    def test_llama_model_foward(self):
         from experimental_experiment.torch_helper.llama_helper import (
             get_llama_model,
         )
@@ -463,8 +463,8 @@ class TestDynamoLlama(ExtTestCase):
         self.common_test_model(
             model,
             example_args_collection,
-            False,
-            False,
+            test_backward=False,
+            dynamic=False,
             fullgraph=True,
             onnx_export="test_llama_model",
             expected_graph_break=7,
@@ -484,8 +484,8 @@ class TestDynamoLlama(ExtTestCase):
         self.common_test_model(
             model,
             example_args_collection,
-            True,
-            False,
+            test_backward=True,
+            dynamic=False,
             fullgraph=True,
             onnx_export="test_llama_model_backward",
             expected_graph_break=7,

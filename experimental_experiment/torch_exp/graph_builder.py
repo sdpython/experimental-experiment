@@ -860,8 +860,6 @@ class GraphBuilder:
             new_name = self.unique_name(f"{prefix}{inp.name}")
             renaming[inp.name] = new_name
             self.make_node("Identity", [name], [new_name])
-            self.set_shape(new_name, builder.get_shape(inp.name))
-            self.set_type(new_name, builder.get_type(inp.name))
 
         for node in builder.nodes:
             new_inputs = [renaming[i] for i in node.input]
