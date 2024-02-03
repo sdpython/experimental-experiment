@@ -1403,7 +1403,7 @@ def _aten_tensor_int1(
     res = g.make_node(
         "Gather",
         [input_name, indices_name],
-        outputs,
+        outputs=outputs,
         axis=axes[0],
         name="getitem_int1",
         set_shape_type=True,
@@ -1413,21 +1413,24 @@ def _aten_tensor_int1(
         raise RuntimeError(f"Not implemented when expand_axes={expand_axes}.")
     if set_shape_type:
         dtype = g.get_type(input_name)
-        shape = g.get_shape(input_name)
-        new_shape = g._apply_slice_to_shape(
-            shape, indices, axes=axes, expand_axes=expand_axes
-        )
-        if g.has_shape(outputs[0]) and new_shape != g.get_shape(outputs[0]):
-            raise RuntimeError(
-                f"Shape for node {res!r} is already set to "
-                f"{g.get_shape(res)} with type "
-                f"{g.get_type(res)} (expecting {dtype}) "
-                f"new_shape={new_shape}, shape={shape}, index_slice={indices}, "
-                f"axes={axes}, expand_axes={expand_axes}"
-                f"{g.get_debug_msg()}"
-            )
-        g.set_shape(res, new_shape)
         g.set_type(res, dtype)
+        if g.has_shape(input_name):
+            shape = g.get_shape(input_name)
+            new_shape = g._apply_slice_to_shape(
+                shape, indices, axes=axes, expand_axes=expand_axes
+            )
+            if g.has_shape(outputs[0]) and new_shape != g.get_shape(outputs[0]):
+                raise RuntimeError(
+                    f"Shape for node {res!r} is already set to "
+                    f"{g.get_shape(res)} with type "
+                    f"{g.get_type(res)} (expecting {dtype}) "
+                    f"new_shape={new_shape}, shape={shape}, index_slice={indices}, "
+                    f"axes={axes}, expand_axes={expand_axes}"
+                    f"{g.get_debug_msg()}"
+                )
+            g.set_shape(res, new_shape)
+        else:
+            g.set_rank(res, g.get_rank(input_name))
     return res
 
 

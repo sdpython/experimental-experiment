@@ -792,7 +792,9 @@ class GraphBuilder:
                 print(f"[GraphBuilder-{self._hash()}.make_node] {k}[{dtype}:{shape}]")
         elif node.op_type == "Identity":
             if self.has_shape(node.input[0]):
-                self.set_shape(node.output[0], self._known_shapes[node.input[0]])
+                self.set_shape(node.output[0], self.get_shape[node.input[0]])
+            elif self.has_rank(node.input[0]):
+                self.set_rank(node.output[0], self.get_rank(node.input[0]))
             if self.has_type(node.input[0]):
                 self.set_type(node.output[0], self._known_types[node.input[0]])
             if self.is_constant(node.input[0]):

@@ -363,50 +363,17 @@ class DynamoInterpreter:
         axes: List[int],
         expand_axes: List[int],
     ):
-        assert isinstance(axes, list), f"Unexpected type {type(axes)} for axes"
-        assert all(
-            map(lambda i: isinstance(i, int), axes)
-        ), f"Expected only integer axis but got {axes}"
-        assert all(
-            map(lambda i: isinstance(i, int), indices)
-        ), f"Expected only integer axis but got {indices}"
-        assert len(axes) == 1, f"Length mismatch {len(axes)} != 1"
+        from ._aten_functions import _aten_tensor_int1
 
-        # axes
-        indices_name = self.builder.unique_name(f"{node.name}_indices")
-        self.builder.make_initializer(indices_name, np.array(indices, dtype=np.int64))
-
-        res = self.builder.make_node(
-            "Gather",
-            [input_name, indices_name],
+        return _aten_tensor_int1(
+            self.builder,
+            set_shape_type,
             [node.name],
-            axis=axes[0],
-            name="getitem_int1",
-            set_shape_type=True,
+            input_name,
+            indices,
+            axes=axes,
+            expand_axes=expand_axes,
         )
-
-        if expand_axes:
-            raise RuntimeError(f"Not implemented when expand_axes={expand_axes}.")
-        if set_shape_type:
-            dtype = self.builder.get_type(input_name)
-            shape = self.builder.get_shape(input_name)
-            new_shape = self.builder._apply_slice_to_shape(
-                shape, indices, axes=axes, expand_axes=expand_axes
-            )
-            if self.builder.has_shape(
-                node.name
-            ) and new_shape != self.builder.get_shape(node.name):
-                raise RuntimeError(
-                    f"Shape for node {node.name!r} is already set to "
-                    f"{self.builder.get_shape(node.name)} with type "
-                    f"{self.builder.get_type(node.name)} (expecting {dtype}) "
-                    f"new_shape={new_shape}, shape={shape}, index_slice={indices}, "
-                    f"axes={axes}, expand_axes={expand_axes}"
-                    f"{self.builder.get_debug_msg()}"
-                )
-            self.builder.set_shape(node.name, new_shape)
-            self.builder.set_type(node.name, dtype)
-        return res
 
     def getitem(self, node: "torch.fx.Node"):  # noqa: F821
         import torch
