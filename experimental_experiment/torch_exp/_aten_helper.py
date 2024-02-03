@@ -71,7 +71,12 @@ def set_shape_type_reshape(
 ):
     dtype = g.get_type(input_name)
     g.set_type(name, dtype)
-    if min(new_shape) == -1:
+    if isinstance(new_shape, str):
+        if g.has_shape(new_shape):
+            g.set_rank(name, len(g.get_shape(new_shape)))
+    elif not all(map(lambda i: isinstance(i, int), new_shape)):
+        g.set_rank(name, len(new_shape))
+    elif min(new_shape) == -1:
         if g.has_shape(input_name):
             shape = list(g.get_shape(input_name))
             arg_size = np.prod([a for a in new_shape if a >= 0])
@@ -83,6 +88,8 @@ def set_shape_type_reshape(
             else:
                 shape[index] = int(size // arg_size)
             g.set_shape(name, tuple(shape))
+        else:
+            g.set_rank(name, len(new_shape))
     else:
         g.set_shape(name, tuple(new_shape))
 

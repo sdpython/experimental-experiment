@@ -433,9 +433,14 @@ class GraphBuilder:
         assert isinstance(name, str), f"Unexpected type {type(name)} for name."
         return name in self._known_ranks
 
-    def has_shape(self, name: str) -> bool:
+    def has_shape(self, name: str, full=False) -> bool:
         assert isinstance(name, str), f"Unexpected type {type(name)} for name."
-        return name in self._known_shapes
+        if name not in self._known_shapes:
+            return False
+        if full:
+            shape = self._known_shapes[name]
+            return all(map(lambda i: isinstance(i, int), shape)) and min(shape) >= 0
+        return True
 
     def has_type(self, name: str) -> bool:
         assert isinstance(name, str), f"Unexpected type {type(name)} for name."
@@ -792,11 +797,11 @@ class GraphBuilder:
                 print(f"[GraphBuilder-{self._hash()}.make_node] {k}[{dtype}:{shape}]")
         elif node.op_type == "Identity":
             if self.has_shape(node.input[0]):
-                self.set_shape(node.output[0], self.get_shape[node.input[0]])
+                self.set_shape(node.output[0], self.get_shape(node.input[0]))
             elif self.has_rank(node.input[0]):
                 self.set_rank(node.output[0], self.get_rank(node.input[0]))
             if self.has_type(node.input[0]):
-                self.set_type(node.output[0], self._known_types[node.input[0]])
+                self.set_type(node.output[0], self.get_type(node.input[0]))
             if self.is_constant(node.input[0]):
                 self.constants_[node.output[0]] = node
         elif node.op_type == "Shape":

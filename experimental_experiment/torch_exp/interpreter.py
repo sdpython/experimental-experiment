@@ -620,7 +620,7 @@ class DynamoInterpreter:
                 raise RuntimeError(f"Length mismatch between {val} and {res}.")
             for v, r in zip(val, res):
                 if isinstance(v, self.torch.Tensor):
-                    shape = v.shape
+                    shape = tuple(v.shape)
                     dtype = self.builder._get_type(v.dtype)
                     self.builder.set_shape(r, shape)
                     self.builder.set_type(r, dtype)

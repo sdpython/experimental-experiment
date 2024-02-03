@@ -9,6 +9,7 @@ from ._aten_helper import (
     set_shape_type_unary_op,
     set_shape_type_binary_op,
     set_shape_type_reduce_op,
+    set_shape_type_reshape,
     onnx_dtype_to_torch_dtype,
     prepare_inputs_homogeneous_operator,
     torch_dtype_to_onnx_dtype,
@@ -470,15 +471,6 @@ def aten_dropout(
     p: T = 0.5,  # float
     training: T = True,  # bool
 ) -> T:
-    """dropout(Tensor input, float p, bool train) -> Tensor"""
-
-    # if IsScalar(input):
-    #     input = op.Reshape(input, op.Constant(value_ints=[-1]))
-    #     result, _ = op.Dropout(input, p, train)
-    #     result = op.Squeeze(result)
-    # else:
-    #     result, _ = op.Dropout(x, p, train)
-
     if len(outputs) == 1:
         outputs = outputs.copy()
         outputs.append("")
@@ -570,7 +562,14 @@ def aten_flatten(
         )
     if end_dim == -1:
         return g.make_node("Flatten", [x], outputs)
-    return g.make_node("Flatten", [x], outputs, to=end_dim)
+    res = g.make_node("Flatten", [x], outputs, to=end_dim)
+    if set_shape_type:
+        g.set_type(res, g.get_type(x))
+        if g.has_shape(x, full=True):
+            g.set_shape(res, (int(np.prod(g.get_shape(x)))))
+        else:
+            g.set_rank(res, 1)
+    return res
 
 
 def aten_full(
@@ -1542,9 +1541,16 @@ def aten_view(
         assert (
             len(asize.shape) == 1
         ), f"Unexpected shape for view, size={size}{g.get_debug_msg()}"
-        return g.op.Reshape(x, asize, outputs=outputs, name=node_name)
-    size = g.op.Cast(size, to=TensorProto.INT64, name=node_name)
-    return g.op.Reshape(x, size, outputs=outputs, name=node_name)
+        res = g.op.Reshape(x, asize, outputs=outputs, name=node_name)
+        if set_shape_type:
+            set_shape_type_reshape(g, res, x, asize)
+        return res
+
+    csize = g.op.Cast(size, to=TensorProto.INT64, name=node_name)
+    res = g.op.Reshape(x, csize, outputs=outputs, name=node_name)
+    if set_shape_type:
+        set_shape_type_reshape(g, res, x, size)
+    return res
 
 
 def aten__unsafe_view(
