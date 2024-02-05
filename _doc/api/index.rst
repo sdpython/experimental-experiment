@@ -11,3 +11,4 @@ API
     interpreter
     onnx_export
     aten_function
+    convert

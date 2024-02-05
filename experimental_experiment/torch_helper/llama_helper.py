@@ -15,8 +15,9 @@ def get_llama_decoder(
     num_hidden_layers=1,
     vocab_size=1024,
     intermediate_size=16,
-    max_position_embeddings=256,
+    max_position_embeddings=1024,
     num_attention_heads=2,
+    _attn_implementation="eager",
 ):
     import torch
     from transformers import LlamaConfig
@@ -30,6 +31,8 @@ def get_llama_decoder(
         max_position_embeddings=max_position_embeddings,
         num_attention_heads=num_attention_heads,
     )
+    if _attn_implementation:
+        config._attn_implementation = _attn_implementation
 
     class LlamaDecoderWrapper(torch.nn.Module):
         def __init__(self, config):
@@ -63,8 +66,9 @@ def get_llama_attention(
     num_hidden_layers=1,
     vocab_size=1024,
     intermediate_size=16,
-    max_position_embeddings=256,
+    max_position_embeddings=1024,
     num_attention_heads=2,
+    _attn_implementation="eager",
 ):
     import torch
     from transformers import LlamaConfig
@@ -78,6 +82,8 @@ def get_llama_attention(
         max_position_embeddings=max_position_embeddings,
         num_attention_heads=num_attention_heads,
     )
+    if _attn_implementation:
+        config._attn_implementation = _attn_implementation
 
     class LlamaAttentionWrapper(torch.nn.Module):
         def __init__(self, config):
