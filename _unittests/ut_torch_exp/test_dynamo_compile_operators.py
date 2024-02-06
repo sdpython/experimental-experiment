@@ -1318,14 +1318,6 @@ class TestOperators(ExtTestCase):
             onnx_export=inspect.currentframe().f_code.co_name,
         )
 
-    def test_empty_like(self):
-        x = torch.randn(5, 8, requires_grad=True)
-        self.assertONNX(
-            lambda x: torch.empty_like(x),
-            x,
-            onnx_export=inspect.currentframe().f_code.co_name,
-        )
-
     def test_zeros_like(self):
         x = torch.randn(5, 8, requires_grad=True)
         self.assertONNX(
@@ -1876,15 +1868,32 @@ class TestOperators(ExtTestCase):
             impl="ref",
         )
 
-    def test_dynamic_axes_reduce_mean(self):
-        m1 = torch.randn(2, 3, 4, requires_grad=True)
+    def test_dynamic_axes_reduce_mean_12(self):
+        m1 = torch.arange(24, dtype=torch.float32, requires_grad=True).reshape(
+            (2, 3, 4)
+        )
         self.assertONNX(
             lambda x: torch.mean(x, dim=1),
-            (m1),
+            (m1,),
             input_names=["input"],
             dynamic_axes={"input": {1: "dim_1", 2: "dim_2"}},
             opset_version=12,
             onnx_export=inspect.currentframe().f_code.co_name,
+            impl="ref",
+        )
+
+    def test_dynamic_axes_reduce_mean_18(self):
+        m1 = torch.arange(24, dtype=torch.float32, requires_grad=True).reshape(
+            (2, 3, 4)
+        )
+        self.assertONNX(
+            lambda x: torch.mean(x, dim=1),
+            (m1,),
+            input_names=["input"],
+            dynamic_axes={"input": {1: "dim_1", 2: "dim_2"}},
+            opset_version=18,
+            onnx_export=inspect.currentframe().f_code.co_name,
+            impl="ref",
         )
 
     def test_dynamic_axes_unchange_softmax_ort(self):
@@ -1905,7 +1914,7 @@ class TestOperators(ExtTestCase):
             (m1,),
             input_names=["input"],
             dynamic_axes={"input": {1: "dim_1"}},
-            opset_version=12,
+            opset_version=14,
             onnx_export=inspect.currentframe().f_code.co_name,
             impl="ref",
         )

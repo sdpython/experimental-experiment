@@ -109,39 +109,43 @@ class Opset:
             op_type, new_inputs, outputs=outputs, domain=domain, name=name, **kwargs
         )
 
+    @staticmethod
+    def _iaxes(op_type, axes) -> int:
+        if isinstance(axes, np.ndarray):
+            iaxes = axes.tolist()
+        elif isinstance(axes, int):
+            iaxes = [axes]
+        else:
+            raise RuntimeError(
+                f"Unable to call {op_type} on a dynamic input axis={axes}"
+            )
+        return iaxes
+
+    def UnsqueezeAnyOpset(self, *args, **kwargs):
+        if len(args) == 1 and len(kwargs) == 0:
+            return self.Unsqueeze(*args)
+        assert len(args) == 2, f"UnsqueezeAnyOpset expects 2 arguments not {len(args)}"
+        if self.builder.main_opset >= 13:
+            return self.Unsqueeze(*args, **kwargs)
+        return self.Unsqueeze(args[0], axes=self._iaxes("Unsqueeze", args[1]), **kwargs)
+
     def ReduceSumAnyOpset(self, *args, **kwargs):
         if len(args) == 1:
             return self.ReduceSum(*args, **kwargs)
         assert len(args) == 2, f"ReduceSumAnyOpset expects 2 arguments not {len(args)}"
         if self.builder.main_opset >= 13:
             return self.ReduceSum(*args, **kwargs)
-        axes = args[1]
-        if isinstance(axes, np.ndarray):
-            iaxes = axes.tolist()
-        elif isinstance(axes, int):
-            iaxes = axes
-        else:
-            raise RuntimeError(
-                f"Unable to call ReduceSum on a dynamic input axis={axes}"
-            )
-        return self.ReduceSum(args[0], axes=iaxes, **kwargs)
+        return self.ReduceSum(args[0], axes=self._iaxes("ReduceSum", args[1]), **kwargs)
 
     def ReduceMeanAnyOpset(self, *args, **kwargs):
         if len(args) == 1:
-            return self.ReduceSum(*args, **kwargs)
+            return self.ReduceMean(*args, **kwargs)
         assert len(args) == 2, f"ReduceMeanAnyOpset expects 2 arguments not {len(args)}"
         if self.builder.main_opset >= 18:
             return self.ReduceMean(*args, **kwargs)
-        axes = args[1]
-        if isinstance(axes, np.ndarray):
-            iaxes = axes.tolist()
-        elif isinstance(axes, int):
-            iaxes = axes
-        else:
-            raise RuntimeError(
-                f"Unable to call ReduceSum on a dynamic input axis={axes}"
-            )
-        return self.ReduceMean(args[0], axes=iaxes, **kwargs)
+        return self.ReduceMean(
+            args[0], axes=self._iaxes("ReduceMean", args[1]), **kwargs
+        )
 
 
 class OptimizationOptions:
@@ -552,16 +556,17 @@ class GraphBuilder:
                 f"Initializer name={name!r}, "
                 f"unexpected type {type(value)} for value={value!r} ({msg})."
             )
+        itype = self._get_type(value.dtype)
         if name == "":
-            sh = "".join(map(str, value.shape))
+            sh = "x".join(map(str, value.shape))
             sh2 = (
-                "x".join(map(str, value.ravel().tolist()))
+                "_".join(map(str, value.ravel().tolist()))
                 if value.size <= 5 and value.dtype == np.int64
                 else ""
             )
-            name = self.unique_name(f"init{sh}_{sh2}")
+            name = self.unique_name(f"init{itype}_s{sh}_{sh2}")
         self.set_shape(name, value.shape)
-        self.set_type(name, self._get_type(value.dtype))
+        self.set_type(name, itype)
         self.set_name(name)
         self.initializers_dict[name] = value
         self.constants_[name] = None
@@ -680,6 +685,10 @@ class GraphBuilder:
                     raise RuntimeError(
                         f"Input {i} for node Concat has no rank{self.get_debug_msg()}"
                     )
+        if op_type.startswith("Reduce"):
+            assert (
+                len(inputs) == 1 or "axes" not in kwargs
+            ), f"Operator {op_type} defines twice the axes{self.get_debug_msg()}"
 
     def make_node(
         self,
@@ -712,6 +721,10 @@ class GraphBuilder:
         if isinstance(inputs, str):
             inputs = [inputs]
 
+        inputs, kwargs = self._partial_rewrite_opset_version(
+            op_type, inputs, kwargs, domain=domain
+        )
+
         if self.verbose == 2:
             print(
                 f"[GraphBuilder-{self._hash()}.make_node]"
@@ -741,6 +754,10 @@ class GraphBuilder:
         self._check_op_type(
             op_type, inputs, outputs, domain=domain, name=name, **kwargs
         )
+
+        # break?
+        # if op_type == "ReduceSum":
+        #    raise AssertionError(f"MANUAL BREAK{self.get_debug_msg()}")
 
         # next
         try:
@@ -779,6 +796,30 @@ class GraphBuilder:
         if len(output_names) == 1:
             return output_names[0]
         return output_names
+
+    def _partial_rewrite_opset_version(
+        self, op_type: str, inputs: List[str], kwargs: Dict[str, Any], domain: str
+    ) -> Tuple[List[str], Dict[str, Any]]:
+        if domain == "":
+            opset = self.opsets[""]
+            if op_type == "Unsqueeze":
+                if opset < 13 and len(inputs) == 2:
+                    assert isinstance(
+                        inputs[1], (list, np.ndarray)
+                    ), f"Unexpected type for axis={inputs[1]} and operator Unsqueeze"
+                    kwargs["axes"] = (
+                        [inputs[1]]
+                        if isinstance(inputs[1], int)
+                        else inputs[1].tolist()
+                    )
+                    inputs = inputs[:1]
+                elif opset >= 13 and len(inputs) == 1:
+                    name = self.make_initializer(
+                        "", np.array(kwargs["axes"], dtype=np.int64)
+                    )
+                    inputs.append(name)
+                    del kwargs["axes"]
+        return inputs, kwargs
 
     def _make_node_set_shape_type_constant(self, node: NodeProto, set_shape_type: bool):
         if node.op_type == "Constant":

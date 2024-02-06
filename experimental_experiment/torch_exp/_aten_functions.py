@@ -450,7 +450,7 @@ def aten_div(
 def aten_div_Scalar(
     g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T, y: T
 ) -> T:
-    return aten_mul(g, set_shape_type, outputs, x, y, name="div_Scalar")
+    return aten_div(g, set_shape_type, outputs, x, y, name="div_Scalar")
 
 
 def aten_div_Tensor(
@@ -1414,26 +1414,27 @@ def aten_slice_backward(
 
     itype = g.get_type(grad_output)
     value = from_array(np.array([0], dtype=tensor_dtype_to_np_dtype(itype)))
-    if start == 0:
-        # case :<something>
+    inputs = []
+
+    if start > 0:
         cst_shape = list(shape)
-        cst_shape[dim] = input_sizes[dim] - shape[dim]
+        cst_shape[dim] = start
         cst = g.op.ConstantOfShape(
             np.array(cst_shape, dtype=np.int64), value=value, name="slice_backward"
         )
-        res = g.op.Concat(grad_output, cst, axis=dim, name="slice_backward")
-    elif end == 9223372036854775807:
-        # case <something:
+        inputs.append(cst)
+
+    inputs.append(grad_output)
+
+    if end < 9223372036854775807:
         cst_shape = list(shape)
-        cst_shape[dim] = input_sizes[dim] - shape[dim]
+        cst_shape[dim] = input_sizes[dim] - shape[dim] - start
         cst = g.op.ConstantOfShape(
             np.array(cst_shape, dtype=np.int64), value=value, name="slice_backward"
         )
-        res = g.op.Concat(cst, grad_output, axis=dim, name="slice_backward")
-    else:
-        raise RuntimeError(
-            f"slice_backward not implemented for start={start}, end={end}{g.get_debug_msg()}"
-        )
+        inputs.append(cst)
+
+    res = g.op.Concat(*inputs, axis=dim, name="slice_backward")
 
     if set_shape_type:
         g.set_type(res, g.get_type(grad_output))
@@ -1743,7 +1744,7 @@ def aten_unsqueeze(
     g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T, dim: int
 ) -> T:
     assert isinstance(dim, int), f"Not implemented for dim={dim!r}"
-    res = g.op.Unsqueeze(x, np.array([dim], dtype=np.int64), outputs=outputs)
+    res = g.op.UnsqueezeAnyOpset(x, np.array([dim], dtype=np.int64), outputs=outputs)
     if set_shape_type:
         g.set_type(res, g.get_type(x))
         if g.has_shape(x):
