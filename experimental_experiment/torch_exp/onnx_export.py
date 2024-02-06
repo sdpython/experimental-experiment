@@ -20,6 +20,9 @@ def _retrieve(
         # This is not a weight but a constant.
         if isinstance(value, torch.Tensor) and "FakeTensor" not in str(type(value)):
             return value
+        if len(weights) == 0 and len(buffers) == 0:
+            # It has to be an input.
+            return None
         raise RuntimeError(
             f"Unable to find {name!r}."
             f"\nAvailable weights: {list(sorted(weights))}. "
