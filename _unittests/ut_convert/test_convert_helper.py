@@ -29,7 +29,7 @@ class TestConvertHelper(ExtTestCase):
     @unittest.skipIf(not has_rewriter, reason="onnx-rewriter is missing")
     def test_optimize_llama(self):
         import torch
-        from experimental_experiment.torch_helepr.llama_helper import (
+        from experimental_experiment.torch_helper.llama_helper import (
             get_llama_attention,
         )
 
@@ -42,7 +42,7 @@ class TestConvertHelper(ExtTestCase):
 
     def test_inline_llama(self):
         import torch
-        from experimental_experiment.torch_helepr.llama_helper import (
+        from experimental_experiment.torch_helper.llama_helper import (
             get_llama_attention,
         )
 
@@ -55,7 +55,7 @@ class TestConvertHelper(ExtTestCase):
 
     def test_ort_optimize(self):
         import torch
-        from experimental_experiment.torch_helepr.llama_helper import (
+        from experimental_experiment.torch_helper.llama_helper import (
             get_llama_attention,
         )
 
@@ -68,7 +68,7 @@ class TestConvertHelper(ExtTestCase):
     @unittest.skipIf(not has_cuda(), reason="no cuda")
     def test_ort_optimize_cuda(self):
         import torch
-        from experimental_experiment.torch_helepr.llama_helper import (
+        from experimental_experiment.torch_helper.llama_helper import (
             get_llama_attention,
         )
 

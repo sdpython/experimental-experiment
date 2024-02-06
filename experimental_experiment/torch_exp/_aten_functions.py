@@ -438,13 +438,19 @@ def aten_detach(g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T)
 
 
 def aten_div(
-    g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T, y: T
+    g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T, y: T, name="div"
 ) -> T:
     x, y = prepare_inputs_homogeneous_operator(g, x, y)
-    res = g.op.Div(x, y, outputs=outputs)
+    res = g.op.Div(x, y, outputs=outputs, name=name)
     if set_shape_type:
         set_shape_type_binary_op(g, outputs[0], x, y)
     return res
+
+
+def aten_div_Scalar(
+    g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T, y: T
+) -> T:
+    return aten_mul(g, set_shape_type, outputs, x, y, name="div_Scalar")
 
 
 def aten_div_Tensor(
@@ -515,6 +521,108 @@ def aten_embedding(
     return res
 
 
+def aten_embedding_dense_backward(
+    g: GraphBuilder,
+    set_shape_type: bool,
+    outputs: List[str],
+    grad_output: T,
+    indices: T,
+    num_weights: int,
+    padding_idx: int,
+    scale_grad_by_freq: bool,
+) -> T:
+    assert (
+        not scale_grad_by_freq
+    ), f"scale_grad_by_freq=True not implemented{g.get_debug_msg()}"
+    assert g.has_shape(grad_output), f"missing shape for grad_output{g.get_debug_msg()}"
+    assert all(
+        map(lambda i: isinstance(i, int), g.get_shape(grad_output))
+    ), f"unknown shape for grad_output{g.get_debug_msg()}"
+
+    # if scale_grad_by_freq:
+    #     counts = indices.new_zeros((num_weights,))
+    #     ones = torch.ones_like(indices)
+    #     counts = aten._unsafe_index_put(counts, [indices], ones, accumulate=True)
+    #     grad_weights_scale = counts[indices]
+    #     grad_output = grad_output / grad_weights_scale.unsqueeze(-1)
+
+    # mask = _unsqueeze_to_dim(indices == padding_idx, grad_output.ndim)
+    shape = [1] * g.get_rank(grad_output)
+    shape[0] = -1
+    mask = g.op.Reshape(
+        g.op.Equal(
+            indices,
+            np.array([padding_idx], dtype=np.int64),
+            name="embedding_dense_backward",
+        ),
+        np.array(shape, dtype=np.int64),
+        name="embedding_dense_backward",
+    )
+    g.set_type(mask, TensorProto.BOOL)
+    g.set_rank(mask, len(shape))
+
+    # grad = grad_output.masked_fill(mask, 0)
+    grad = aten_masked_fill_Scalar(
+        g, set_shape_type, None, grad_output, mask, 0, name="embedding_dense_backward"
+    )
+
+    new_shape = (num_weights,) + g.get_shape(grad_output)[g.get_rank(indices) :]
+    grad_weight = g.op.ConstantOfShape(
+        np.array(new_shape, dtype=np.int64), name="embedding_dense_backward"
+    )
+    indices_reshaped = g.op.Unsqueeze(
+        indices, np.array([0], dtype=np.int64), name="embedding_dense_backward"
+    )
+    res = g.op.ScatterElements(
+        grad_weight,
+        indices_reshaped,
+        grad,
+        outputs=outputs,
+        name="embedding_dense_backward",
+    )
+    if set_shape_type:
+        g.set_type(res, g.get_type(grad_output))
+        g.set_shape(res, new_shape)
+    return res
+
+
+def aten_empty_like(
+    g: GraphBuilder,
+    set_shape_type: bool,
+    outputs: List[str],
+    x: T,
+    dtype: Optional["torch.dtype"] = None,  # noqa: F821
+    layout=None,
+    device=None,
+    pin_memory=None,
+    memory_format=None,
+) -> T:
+    import torch
+
+    assert (
+        layout is None
+    ), f"empty_like not implemented for layout={layout!r} is not None"
+    assert not pin_memory, "empty_like not implemented for pin_memory=True"
+    assert (
+        memory_format is None or memory_format == torch.preserve_format
+    ), f"empty_like not implemented for memory_format={memory_format}"
+
+    if g.has_shape(x) and all(map(lambda i: isinstance(i, int), g.get_shape(x))):
+        # simple case
+        return aten_full(
+            g,
+            set_shape_type,
+            outputs,
+            g.get_shape(x),
+            0,
+            dtype=dtype or g.get_type(x),
+            name="empty_like",
+        )
+    raise RuntimeError(
+        f"empty_like is not implemented when shape is not fully known{g.get_debug_msg()}"
+    )
+
+
 def aten_eq(g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T, y: T) -> T:
     x, y = prepare_inputs_homogeneous_operator(g, x, y)
     res = g.op.Equal(x, y, outputs=outputs)
@@ -537,6 +645,24 @@ def aten_expand(
         g.set_type(res, g.get_type(x))
         g.set_shape(res, tuple(sizes))
     return res
+
+
+def aten_fill_Scalar(
+    g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T, v: T
+) -> T:
+    if g.has_shape(x) and all(map(lambda i: isinstance(i, int), g.get_shape(x))):
+        return aten_full(
+            g,
+            set_shape_type,
+            outputs,
+            g.get_shape(x),
+            v,
+            dtype=g.get_type(x),
+            name="fill_Scalar",
+        )
+    raise RuntimeError(
+        f"fill is not implemented when shape is not fully known{g.get_debug_msg()}"
+    )
 
 
 def aten_flatten(
@@ -582,6 +708,7 @@ def aten_full(
     layout=None,
     device=None,
     pin_memory=None,
+    name: str = "full",
 ) -> T:
     assert layout is None, f"full not implemented for layout={layout!r} is not None"
     assert not pin_memory, "full not implemented for pin_memory=True"
@@ -617,12 +744,12 @@ def aten_full(
             ntype = tensor_dtype_to_np_dtype(itype)
             value = np.array(fill_value, dtype=ntype).reshape((1,))
     else:
-        itype = torch_dtype_to_onnx_dtype(dtype)
+        itype = dtype if isinstance(dtype, int) else torch_dtype_to_onnx_dtype(dtype)
         ntype = tensor_dtype_to_np_dtype(itype)
         value = np.array(fill_value, dtype=ntype).reshape((1,))
 
     res = g.op.ConstantOfShape(
-        tsize, value=from_array(value), outputs=outputs, name="full"
+        tsize, value=from_array(value), outputs=outputs, name="name"
     )
     if set_shape_type:
         g.set_type(res, itype)
@@ -799,16 +926,22 @@ def aten_matmul(
 
 
 def aten_masked_fill_Scalar(
-    g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T, mask: T, value
+    g: GraphBuilder,
+    set_shape_type: bool,
+    outputs: List[str],
+    x: T,
+    mask: T,
+    value,
+    name="masked_fill_Scalar",
 ) -> T:
     dt = g.get_type(mask)
     if dt != TensorProto.BOOL:
-        cmask = g.op.Cast(mask, to=TensorProto.BOOL, name="masked_fill_Scalar")
+        cmask = g.op.Cast(mask, to=TensorProto.BOOL, name=name)
     else:
         cmask = mask
     dtx = g.get_type(x)
     avalue = np.array([value], dtype=tensor_dtype_to_np_dtype(dtx))
-    res = g.op.Where(cmask, avalue, x)
+    res = g.op.Where(cmask, avalue, x, name=name)
     if set_shape_type:
         g.set_type(res, dtx)
         if g.has_shape(mask):
@@ -1018,13 +1151,19 @@ def aten_mm(g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T, y: 
 
 
 def aten_mul(
-    g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T, y: T
+    g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T, y: T, name="mul"
 ) -> T:
     x, y = prepare_inputs_homogeneous_operator(g, x, y)
-    res = g.op.Mul(x, y, outputs=outputs)
+    res = g.op.Mul(x, y, outputs=outputs, name="mul")
     if set_shape_type:
         set_shape_type_binary_op(g, outputs[0], x, y)
     return res
+
+
+def aten_mul_Scalar(
+    g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T, y: T
+) -> T:
+    return aten_mul(g, set_shape_type, outputs, x, y, name="mul_Scalar")
 
 
 def aten_mul_Tensor(
@@ -1370,13 +1509,22 @@ def aten__softmax_backward_data(
 
 
 def aten_sub(
-    g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T, y: T
+    g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T, y: T, name="sub"
 ) -> T:
     x, y = prepare_inputs_homogeneous_operator(g, x, y)
-    res = g.op.Sub(x, y, outputs=outputs)
+    res = g.op.Sub(x, y, outputs=outputs, name=name)
     if set_shape_type:
         set_shape_type_binary_op(g, outputs[0], x, y)
     return res
+
+
+def aten_sub_Tensor(
+    g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T, y: T, alpha: float
+) -> T:
+    assert (
+        alpha == 1
+    ), f"sub_Tensor not implemented for alpha={alpha}{g.get_debug_msg()}"
+    return aten_sub(g, set_shape_type, outputs, x, y, name="sub_Tensor")
 
 
 def aten_sum(

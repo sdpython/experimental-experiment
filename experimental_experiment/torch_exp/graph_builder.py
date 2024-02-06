@@ -49,6 +49,7 @@ class Opset:
         "ReduceSum": 1,
         "Relu": 1,
         "Reshape": 1,
+        "ScatterElements": 1,
         "Shape": 1,
         "Sigmoid": 1,
         "Slice": 1,

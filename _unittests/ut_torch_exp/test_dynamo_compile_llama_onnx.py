@@ -126,6 +126,14 @@ class TestDynamoLlama(ExtTestCase):
 
             return run
 
+        def _flatten(a):
+            if isinstance(a, tuple):
+                r = []
+                for i in a:
+                    r.extend(_flatten(i))
+                return tuple(_ for _ in r if _ is not None)
+            return (a,) if a is not None else tuple()
+
         if test_backward:
             from torch._dynamo.backends.common import aot_autograd
 
@@ -160,20 +168,21 @@ class TestDynamoLlama(ExtTestCase):
                     for baseline_param, param in zip(
                         model.parameters(), compiled_model.parameters()
                     ):
-                        torch.testing.assert_close(
-                            baseline_param.grad,
-                            param.grad,
+                        self.assertEqualArray(
+                            baseline_param.grad.detach().numpy(),
+                            param.grad.detach().numpy(),
                             atol=atol,
                             rtol=rtol,
-                            msg=f"Mismatch atol={atol}, rtol={rtol}\n"
-                            f"{baseline_param.grad}\n---\n{param.grad}",
+                        )
+                        torch.testing.assert_close(
+                            baseline_param.grad, param.grad, atol=atol, rtol=rtol
                         )
             else:
                 if hasattr(baseline_result, "to_tuple"):
                     baseline_result = baseline_result.to_tuple()
                     result = result.to_tuple()
-                baseline_result = tuple(b for b in baseline_result if b is not None)
-                result = tuple(b for b in result if b is not None)
+                baseline_result = _flatten(baseline_result)
+                result = _flatten(result)
                 assert len(baseline_result) == len(
                     result
                 ), f"Mismatch number of outputs {len(baseline_result)} != {len(result)}"
@@ -185,12 +194,7 @@ class TestDynamoLlama(ExtTestCase):
                         rtol=rtol,
                     )
                     torch.testing.assert_close(
-                        baseline_elem,
-                        result_elem,
-                        atol=atol,
-                        rtol=rtol,
-                        msg=f"Mismatch atol={atol}, rtol={rtol}\n"
-                        f"{baseline_elem}\n---\n{result_elem}",
+                        baseline_elem, result_elem, atol=atol, rtol=rtol
                     )
                 if test_backward:
 
