@@ -8,6 +8,13 @@ from experimental_experiment.convert.convert_helper import (
     ort_optimize,
 )
 
+try:
+    import onnxrewriter  # noqa: F401
+
+    has_rewriter = True
+except ImportError:
+    has_rewriter = False
+
 
 def has_cuda():
     import torch
@@ -19,6 +26,7 @@ input_dims = ((2, 1024),)
 
 
 class TestConvertHelper(ExtTestCase):
+    @unittest.skipIf(not has_rewriter, reason="onnx-rewriter is missing")
     def test_optimize_llama(self):
         import torch
         from onnxrt_backend_dev.llama.llama_helper import get_llama_attention

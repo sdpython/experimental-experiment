@@ -7,6 +7,13 @@ import time
 from experimental_experiment import __file__ as experimental_experiment_file
 from experimental_experiment.ext_test_case import ExtTestCase, is_windows
 
+try:
+    import onnxrewriter  # noqa: F401
+
+    has_rewriter = True
+except ImportError:
+    has_rewriter = False
+
 VERBOSE = 0
 ROOT = os.path.realpath(
     os.path.abspath(os.path.join(experimental_experiment_file, "..", ".."))
@@ -78,6 +85,12 @@ class TestDocumentationExamples(ExtTestCase):
                 if sys.platform in {"win32"}:
                     # dynamo not supported on windows
                     reason = "graphviz not installed"
+            if (
+                not reason
+                and not has_rewriter
+                and name in {"plot_torch_export.py", "plot_llama_diff_export.py"}
+            ):
+                reason = "missing onnx-rewriter"
             if not reason and name in {
                 # "plot_convolutation_matmul.py",
                 # "plot_profile_existing_onnx.py",
