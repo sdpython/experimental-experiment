@@ -488,8 +488,8 @@ def aten_embedding(
     g: GraphBuilder,
     set_shape_type: bool,
     outputs: List[str],
-    indices: T,
     weight: T,
+    indices: T,
     padding_idx: Optional[int] = None,
     max_norm: Optional[int] = None,
     norm_type: float = 2.0,
@@ -657,30 +657,25 @@ def aten_index_Tensor(
     assert isinstance(
         indices, (list, tuple)
     ), f"Unexpected type {type(indices)} for indices"
-    indices_rank = 0
-    indices_last = 0
     if len(indices) == 1 and isinstance(indices[0], str):
-        new_indices = g.op.Reshape(
-            indices[0], np.array([-1, 1], dtype=np.int64), name="index"
+        return aten_index_select(
+            g, set_shape_type, outputs, x, dim=0, index=indices[0], name="index_Tensor"
         )
-        res = g.op.GatherND(x, new_indices, outputs=outputs, name="index")
-        indices_rank = g.get_rank(indices[0])
-        indices_last = g.get_shape(indices[0])[-1]
-    else:
-        raise RuntimeError(
-            f"aten_indices implemented yet for indices={indices}{g.get_debug_msg()}"
-        )
-
-    if set_shape_type:
-        g.set_type(res, g.get_type(x))
-        g.get_rank(res, g.get_rank(x) + indices_rank + indices_last - 1)
-    return res
+    raise RuntimeError(
+        f"aten_indices implemented yet for indices={indices}{g.get_debug_msg()}"
+    )
 
 
 def aten_index_select(
-    g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T, dim: int, index: T
+    g: GraphBuilder,
+    set_shape_type: bool,
+    outputs: List[str],
+    x: T,
+    dim: int,
+    index: T,
+    name: str = "index_select",
 ) -> T:
-    res = g.op.Gather(x, index, axis=dim, outputs=outputs)
+    res = g.op.Gather(x, index, axis=dim, outputs=outputs, name=name)
     if set_shape_type:
         g.set_type(res, g.get_type(x))
         if g.has_shape(x) and g.has_shape(index):

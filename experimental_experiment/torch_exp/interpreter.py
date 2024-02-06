@@ -96,7 +96,7 @@ class DynamoInterpreter:
                 return self.builder.make_tensor_input(
                     node.name, elem_type=val.dtype, shape=val.shape
                 )
-            value = self.retriever(node.target)
+            value = self.retriever(node.target, val)
             if value is None:
                 if ".FakeTensor" in str(type(val)):
                     dtype = val.dtype

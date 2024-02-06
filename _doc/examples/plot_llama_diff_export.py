@@ -46,6 +46,7 @@ import onnx
 from onnx_array_api.reference import compare_onnx_execution, ExtendedReferenceEvaluator
 import torch
 from experimental_experiment.ext_test_case import get_parsed_args, unit_test_going
+from experimental_experiment.torch_exp.onnx_export import to_onnx
 from experimental_experiment.convert.convert_helper import (
     optimize_model_proto,
     ort_optimize,
@@ -70,10 +71,15 @@ script_args = get_parsed_args(
     "plot_llama_diff_export",
     description=__doc__,
     part=("attention", "one value among attention, decoder, model"),
-    expose="part",
+    exporter=("dynamo", "one value among dynamo, custom"),
+    ortopt=(1, "run onnxruntime optimization"),
+    expose="part,exporter,ortopt",
 )
 
 print(f"part={script_args.part}")
+print(f"exporter={script_args.exporter}")
+ortopt = script_args.ortopt in (1, "1")
+print(f"ortopt={ortopt}")
 
 
 def opt_filename(filename: str) -> str:
@@ -86,8 +92,9 @@ def export_script(filename, model, *args):
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             torch.onnx.export(model, args, filename, input_names=["input"])
-    onx = onnx.load(filename)
-    ort_optimize(onx, opt_filename(filename), providers=provider)
+    if ortopt:
+        onx = onnx.load(filename)
+        ort_optimize(onx, opt_filename(filename), providers=provider)
 
 
 def export_dynamo(filename, model, *args):
@@ -99,7 +106,22 @@ def export_dynamo(filename, model, *args):
     new_model = optimize_model_proto(model)
     with open(filename, "wb") as f:
         f.write(new_model.SerializeToString())
-    ort_optimize(new_model, opt_filename(filename), providers=provider)
+    if ortopt:
+        ort_optimize(new_model, opt_filename(filename), providers=provider)
+
+
+def export_custom(filename, model, *args):
+    new_model = to_onnx(
+        model,
+        tuple(args),
+        input_names=[f"input{i}" for i in range(len(args))],
+        remove_unused=True,
+        constant_folding=False,
+    )
+    with open(filename, "wb") as f:
+        f.write(new_model.SerializeToString())
+    if ortopt:
+        ort_optimize(new_model, opt_filename(filename), providers=provider)
 
 
 ###################################
@@ -136,20 +158,29 @@ print(f"eager mode worked {expected.shape}, {expected.dtype}")
 ###################################
 # Export
 
+exporter = script_args.exporter
 file1 = f"llama.{script_args.part}.script.onnx"
-file2 = f"llama.{script_args.part}.dynamo.onnx"
+file2 = f"llama.{script_args.part}.{exporter}.onnx"
 
 print("torch script exporter")
 export_script(file1, model, *inputs[0])
 
-print("torch dynamo exporter")
-export_dynamo(file2, model, *inputs[0])
+if exporter == "dynamo":
+    print("torch dynamo exporter")
+    export_dynamo(file2, model, *inputs[0])
+elif exporter == "custom":
+    print("torch custom exporter")
+    export_custom(file2, model, *inputs[0])
+else:
+    raise AssertionError(f"Unexpected value for exporter={exporter!r}.")
 
 #########################################
 # Verification
 
-file1 = f"llama.{script_args.part}.script.opt.onnx"
-file2 = f"llama.{script_args.part}.dynamo.opt.onnx"
+if ortopt:
+    print("Using models optimized by onnxruntime")
+    file1 = f"llama.{script_args.part}.script.opt.onnx"
+    file2 = f"llama.{script_args.part}.{exporter}.opt.onnx"
 
 
 providers = (
@@ -157,9 +188,6 @@ providers = (
     if provider == "cpu"
     else ["CUDAExecutionProvider", "CPUExecutionProvider"]
 )
-sess1 = onnxruntime.InferenceSession(file1, providers=providers)
-sess2 = onnxruntime.InferenceSession(file2, providers=providers)
-
 
 model1 = onnx.load(file1)
 model2 = onnx.load(file2)
@@ -167,16 +195,20 @@ model2 = onnx.load(file2)
 feeds1, feeds2 = {}, {}
 for i in range(len(inputs[0])):
     x = inputs[0][i].detach().numpy()
-    feeds1[sess1.get_inputs()[i].name] = x
-    feeds2[sess2.get_inputs()[i].name] = x
+    feeds1[model1.graph.input[i].name] = x
+    feeds2[model2.graph.input[i].name] = x
 
-got1 = sess1.run(None, feeds1)
-got2 = sess2.run(None, feeds2)
+if ortopt:
+    sess1 = onnxruntime.InferenceSession(file1, providers=providers)
+    sess2 = onnxruntime.InferenceSession(file2, providers=providers)
 
-diff1 = np.abs(expected.detach().numpy() - got1[0]).max()
-diff2 = np.abs(expected.detach().numpy() - got2[0]).max()
+    got1 = sess1.run(None, feeds1)
+    got2 = sess2.run(None, feeds2)
 
-print(f"Error with the eager model: {diff1}, {diff2}")
+    diff1 = np.abs(expected.detach().numpy() - got1[0]).max()
+    diff2 = np.abs(expected.detach().numpy() - got2[0]).max()
+
+    print(f"Error with the eager model and onnxruntime: {diff1}, {diff2}")
 
 #########################################
 # With the reference evaluator
@@ -184,14 +216,13 @@ print(f"Error with the eager model: {diff1}, {diff2}")
 sess1 = ExtendedReferenceEvaluator(file1)
 sess2 = ExtendedReferenceEvaluator(file2)
 
-
 got1 = sess1.run(None, feeds1)
 got2 = sess2.run(None, feeds2)
 
 diff1 = np.abs(expected.detach().numpy() - got1[0]).max()
 diff2 = np.abs(expected.detach().numpy() - got2[0]).max()
 
-print(f"Error with the eager model: {diff1}, {diff2}")
+print(f"Error with the eager model and the reference evaluator: {diff1}, {diff2}")
 
 #########################################
 # Comparison and execution
@@ -206,7 +237,7 @@ def clean_name(name):
 
 np_inputs = [i.detach().numpy() for i in inputs[0]]
 res1, res2, align, dc = compare_onnx_execution(
-    model1, model2, inputs=np_inputs, verbose=1
+    model1, model2, inputs=np_inputs, verbose=1, raise_exc=False
 )
 for r in res2:
     r.name = clean_name(r.name)
