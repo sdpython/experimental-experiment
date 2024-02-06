@@ -29,7 +29,9 @@ class TestConvertHelper(ExtTestCase):
     @unittest.skipIf(not has_rewriter, reason="onnx-rewriter is missing")
     def test_optimize_llama(self):
         import torch
-        from onnxrt_backend_dev.llama.llama_helper import get_llama_attention
+        from experimental_experiment.torch_helepr.llama_helper import (
+            get_llama_attention,
+        )
 
         model, example_args_collection = get_llama_attention(input_dims=input_dims)
         model(*example_args_collection[0])
@@ -40,7 +42,9 @@ class TestConvertHelper(ExtTestCase):
 
     def test_inline_llama(self):
         import torch
-        from onnxrt_backend_dev.llama.llama_helper import get_llama_attention
+        from experimental_experiment.torch_helepr.llama_helper import (
+            get_llama_attention,
+        )
 
         model, example_args_collection = get_llama_attention(input_dims=input_dims)
         model(*example_args_collection[0])
@@ -51,7 +55,9 @@ class TestConvertHelper(ExtTestCase):
 
     def test_ort_optimize(self):
         import torch
-        from onnxrt_backend_dev.llama.llama_helper import get_llama_attention
+        from experimental_experiment.torch_helepr.llama_helper import (
+            get_llama_attention,
+        )
 
         model, example_args_collection = get_llama_attention(input_dims=input_dims)
         model(*example_args_collection[0])
@@ -62,7 +68,9 @@ class TestConvertHelper(ExtTestCase):
     @unittest.skipIf(not has_cuda(), reason="no cuda")
     def test_ort_optimize_cuda(self):
         import torch
-        from onnxrt_backend_dev.llama.llama_helper import get_llama_attention
+        from experimental_experiment.torch_helepr.llama_helper import (
+            get_llama_attention,
+        )
 
         model, example_args_collection = get_llama_attention(input_dims=input_dims)
         model(*example_args_collection[0])

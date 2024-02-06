@@ -29,7 +29,7 @@ def optimize_model_proto(model_proto: ModelProto) -> ModelProto:
             opset_version=self._resolved_onnx_exporter_options.onnx_registry.opset_version
         )
 
-        from onnxrt_backend_dev.convert_helper import optimize_model_proto
+        from experimental_experiment.convert.convert_helper import optimize_model_proto
         onnx_model = optimize_model_proto(onnx_model)
     """
     from onnxrewriter.optimizer import optimize

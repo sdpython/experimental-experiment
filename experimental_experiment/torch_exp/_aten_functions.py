@@ -1249,6 +1249,59 @@ def aten_slice_Tensor(
     return res
 
 
+def aten_slice_backward(
+    g: GraphBuilder,
+    set_shape_type: bool,
+    outputs: List[str],
+    grad_output: T,
+    input_sizes: List[int],
+    dim: int,
+    start: int,
+    end: int,
+    step: int,
+) -> T:
+    assert (
+        step == 1
+    ), f"slice_backward not implemented for step={step}{g.get_debug_msg()}"
+    assert g.has_shape(
+        grad_output
+    ), f"slice_backward not implemented when grad_output has not shape{g.get_debug_msg()}"
+
+    shape = g.get_shape(grad_output)
+
+    assert all(
+        map(lambda i: isinstance(i, int), shape)
+    ), f"slice_backward not implemented when shape={shape}{g.get_debug_msg()}"
+
+    itype = g.get_type(grad_output)
+    value = from_array(np.array([0], dtype=tensor_dtype_to_np_dtype(itype)))
+    if start == 0:
+        # case :<something>
+        cst_shape = list(shape)
+        cst_shape[dim] = input_sizes[dim] - shape[dim]
+        cst = g.op.ConstantOfShape(
+            np.array(cst_shape, dtype=np.int64), value=value, name="slice_backward"
+        )
+        res = g.op.Concat(grad_output, cst, axis=dim, name="slice_backward")
+    elif end == 9223372036854775807:
+        # case <something:
+        cst_shape = list(shape)
+        cst_shape[dim] = input_sizes[dim] - shape[dim]
+        cst = g.op.ConstantOfShape(
+            np.array(cst_shape, dtype=np.int64), value=value, name="slice_backward"
+        )
+        res = g.op.Concat(cst, grad_output, axis=dim, name="slice_backward")
+    else:
+        raise RuntimeError(
+            f"slice_backward not implemented for start={start}, end={end}{g.get_debug_msg()}"
+        )
+
+    if set_shape_type:
+        g.set_type(res, g.get_type(grad_output))
+        g.set_shape(res, tuple(input_sizes))
+    return res
+
+
 def aten_softmax(
     g: GraphBuilder,
     set_shape_type: bool,
@@ -1281,6 +1334,38 @@ def aten__softmax(
     res = g.op.Softmax(x, axis=dim, outputs=outputs, name="_softmax")
     if set_shape_type:
         set_shape_type_unary_op(g, res, x)
+    return res
+
+
+def aten__softmax_backward_data(
+    g: GraphBuilder,
+    set_shape_type: bool,
+    outputs: List[str],
+    grad_output: T,
+    y: T,
+    dim: int,
+    input_dtype: Optional["torch.dtype"] = None,  # noqa: F821
+) -> T:
+    if input_dtype is not None:
+        itype = torch_dtype_to_onnx_dtype(input_dtype)
+        grad_outputc = g.op.Cast(
+            grad_output, to=itype, name="log_softmax_backward_data"
+        )
+    else:
+        itype = None
+        grad_outputc = grad_output
+
+    new_grad_output = g.op.Mul(grad_outputc, y)
+    sums = g.op.ReduceSum(
+        new_grad_output,
+        np.array([dim], dtype=np.int64),
+        keepdims=1,
+        name="softmax_backward_data",
+    )
+    temp = g.op.Mul(y, sums, name="softmax_backward_data")
+    res = g.op.Sub(new_grad_output, temp, outputs=outputs, name="softmax_backward_data")
+    if set_shape_type:
+        set_shape_type_unary_op(g, res, grad_outputc, itype=itype)
     return res
 
 

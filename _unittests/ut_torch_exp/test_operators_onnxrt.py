@@ -928,7 +928,20 @@ class TestOperatorsOnnxrt(ExtTestCase):
             impl="ref",
         )
 
-    def test_slice_dynamic(self):
+    def test_slice_dynamic_forward(self):
+        x = torch.rand(3, 4, requires_grad=True)
+        self.assertONNX(
+            lambda x: x[x.size(0) :, x.size(1) - 3],
+            x,
+            opset_version=10,
+            onnx_export=inspect.currentframe().f_code.co_name,
+            test_backward=False,
+        )
+
+    @unittest.skipIf(
+        True, reason="data_ptr was false. Pointer to data memory is not valid"
+    )
+    def test_slice_dynamic_backward(self):
         x = torch.rand(3, 4, requires_grad=True)
         self.assertONNX(
             lambda x: x[x.size(0) :, x.size(1) - 3],

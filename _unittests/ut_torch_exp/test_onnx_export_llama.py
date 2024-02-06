@@ -57,7 +57,7 @@ def export_utils(
         return_builder=return_builder,
     )
     with open(f"{prefix}.custom.onnx", "wb") as f:
-        f.write(onx.SerializeToString())
+        f.write((onx[0] if return_builder else onx).SerializeToString())
     return onx
 
 
