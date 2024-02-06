@@ -797,6 +797,10 @@ class GraphBuilder:
             return output_names[0]
         return output_names
 
+    @property
+    def last_added_node(self):
+        return self.nodes[-1] if self.nodes else None
+
     def _partial_rewrite_opset_version(
         self, op_type: str, inputs: List[str], kwargs: Dict[str, Any], domain: str
     ) -> Tuple[List[str], Dict[str, Any]]:

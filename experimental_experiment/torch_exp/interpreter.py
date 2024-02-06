@@ -618,16 +618,24 @@ class DynamoInterpreter:
                 res = (res,)
             if len(val) != len(res):
                 raise RuntimeError(f"Length mismatch between {val} and {res}.")
+            description = []
+            last_node = self.builder.last_added_node
+            output_sets = set(last_node.output) if last_node is not None else {}
+
             for v, r in zip(val, res):
                 if isinstance(v, self.torch.Tensor):
                     shape = tuple(v.shape)
                     dtype = self.builder._get_type(v.dtype)
                     self.builder.set_shape(r, shape)
                     self.builder.set_type(r, dtype)
+                    if r in output_sets:
+                        description.append(f"{r}:{dtype}:{shape}".replace(" ", ""))
                 else:
                     raise TypeError(
                         f"Unexpected type in node {node!r}, type(val)={type(v)}."
                     )
+            if last_node is not None:
+                last_node.description = "\n".join(description)
 
     def call_module(self, node: "torch.fx.Node"):  # noqa: F821
         def raise_msg():

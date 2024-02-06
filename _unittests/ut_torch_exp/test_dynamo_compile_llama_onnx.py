@@ -60,7 +60,7 @@ class TestDynamoLlama(ExtTestCase):
         _b = backend()
         last_graph_module = []
 
-        def get_session(onx, impl="ref", exc=True):
+        def get_session(onx, impl="ref", exc=True, verbose=0):
             if exc:
                 try:
                     return get_session(onx, impl, exc=False)
@@ -112,7 +112,7 @@ class TestDynamoLlama(ExtTestCase):
                 f.write(builder.get_debug_msg())
             i_saved[0] += 1
 
-            sess = get_session(onx, impl, exc=True)
+            sess = get_session(onx, impl, exc=True, verbose=verbose)
 
             names = [i.name for i in onx.graph.input]
 
@@ -473,6 +473,7 @@ class TestDynamoLlama(ExtTestCase):
             onnx_export="test_llama_model",
             expected_graph_break=7,
             impl="ref",
+            verbose=1,
         )
 
     @ignore_warnings((UserWarning, DeprecationWarning))

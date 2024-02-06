@@ -3,6 +3,7 @@ import io
 import sys
 import unittest
 import warnings
+import packaging.version as pv
 from onnx.reference import ReferenceEvaluator
 from experimental_experiment.ext_test_case import ExtTestCase, ignore_warnings
 from experimental_experiment.torch_exp.onnx_export import to_onnx
@@ -11,6 +12,12 @@ from experimental_experiment.torch_helper.llama_helper import (
     get_llama_decoder,
     get_llama_model,
 )
+
+
+def torch_version():
+    import torch
+
+    return ".".join(torch.__version__.split(".")[:2])
 
 
 def export_script(filename, model, *args):
@@ -137,6 +144,7 @@ class TestOnnxExportLlama(ExtTestCase):
         self.check_model_ort(onx)
 
     @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
+    @unittest.skipIf(pv.Version(torch_version()) < pv.Version("2.3"), reason="bug")
     @ignore_warnings(DeprecationWarning)
     def test_llama_model(self):
         model, input_tensors = get_llama_model()
