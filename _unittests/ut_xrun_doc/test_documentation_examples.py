@@ -95,7 +95,7 @@ class TestDocumentationExamples(ExtTestCase):
                 in {
                     "plot_torch_export.py",
                     "plot_llama_diff_export.py",
-                    "test_plot_llama_diff_dort.py",
+                    "plot_llama_diff_dort.py",
                 }
             ):
                 reason = "missing onnx-rewriter"
