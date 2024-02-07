@@ -45,6 +45,7 @@ Source are `sdpython/experimental-experiment
 
     CHANGELOGS
     license
+    long_outputs
 
 Older versions
 ++++++++++++++

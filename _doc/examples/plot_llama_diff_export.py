@@ -247,3 +247,6 @@ for r in res2:
     r.name = clean_name(r.name)
 text = dc.to_str(res1, res2, align, column_size=90)
 print(text)
+
+#################################
+# See :ref:`l-long-outputs-llama-diff-export` for a better view.
