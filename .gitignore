@@ -13,6 +13,8 @@
 temp*.onnx*
 temp_dump/*
 coverage.html/*
+dump_models/*
+temp_dump_models/*
 _cache/*
 .coverage
 dist/*

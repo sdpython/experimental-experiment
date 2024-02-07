@@ -67,9 +67,12 @@ def ort_optimize(
     elif providers == "cuda":
         providers = ["CUDAExecutionProvider", "CPUExecutionProvider"]
     assert isinstance(providers, list), f"Unexpected value for providers={providers!r}"
-    if isinstance(onnx_model, ModelProto):
-        onnxruntime.InferenceSession(
-            onnx_model.SerializeToString(), opts, providers=providers
-        )
-    else:
-        onnxruntime.InferenceSession(onnx_model, opts, providers=providers)
+    onnxruntime.InferenceSession(
+        (
+            onnx_model.SerializeToString()
+            if isinstance(onnx_model, ModelProto)
+            else onnx_model
+        ),
+        opts,
+        providers=providers,
+    )

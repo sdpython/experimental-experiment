@@ -126,6 +126,7 @@ def export_custom(filename, model, *args):
 
 ###################################
 # Model and data
+# ++++++++++++++
 
 if unit_test_going():
     kwargs = dict(input_dims=[(2, 1024)] * 2)
@@ -156,7 +157,8 @@ print(f"eager mode worked {expected.shape}, {expected.dtype}")
 
 
 ###################################
-# Export
+# Exporting
+# +++++++++
 
 exporter = script_args.exporter
 file1 = f"llama.{script_args.part}.script.onnx"
@@ -176,6 +178,7 @@ else:
 
 #########################################
 # Verification
+# ++++++++++++
 
 if ortopt:
     print("Using models optimized by onnxruntime")
@@ -211,7 +214,8 @@ if ortopt:
     print(f"Error with the eager model and onnxruntime: {diff1}, {diff2}")
 
 #########################################
-# With the reference evaluator
+# Verifciation with the reference evaluator
+# +++++++++++++++++++++++++++++++++++++++++
 
 sess1 = ExtendedReferenceEvaluator(file1)
 sess2 = ExtendedReferenceEvaluator(file2)

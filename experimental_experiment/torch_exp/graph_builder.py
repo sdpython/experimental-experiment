@@ -9,6 +9,32 @@ from ._aten_helper import dtype_to_tensor_dtype, _nice_shape
 from ._helper import make_hash
 
 
+def _default_OPSET_TO_IR_VERSION():
+    return {
+        1: 3,
+        2: 3,
+        3: 3,
+        4: 3,
+        5: 3,
+        6: 3,
+        7: 3,
+        8: 4,
+        9: 4,
+        10: 5,
+        11: 6,
+        12: 7,
+        13: 7,
+        14: 7,
+        15: 8,
+        16: 8,
+        17: 8,
+        18: 8,
+        19: 9,
+        20: 9,
+        21: 10,
+    }
+
+
 class Opset:
     # defined for opset >= 18
     # name: number of expected outputs
@@ -1160,6 +1186,8 @@ class GraphBuilder:
         if self.verbose:
             print(f"[GraphBuilder-{self._hash()}.to_onnx] onh.make_model")
         model = oh.make_model(graph, opset_imports=opsets)
+        if "" in self.opsets:
+            model.ir_version = _default_OPSET_TO_IR_VERSION()[self.opsets[""]]
         if len(model.graph.node) == 0:
             raise RuntimeError(
                 f"The onnx model is empty after export to onnx (no node)."

@@ -2,7 +2,7 @@
 Evaluate DORT
 =============
 
-It compares DORT to eager mode and the default backend.
+It compares DORT to eager mode and :epkg:`onnxrt backend`.
 
 To run the script:
 
