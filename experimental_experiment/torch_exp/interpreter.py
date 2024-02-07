@@ -5,6 +5,7 @@ import types
 from typing import Any, Callable, Dict, List, Tuple, Union
 import numpy as np
 from ._helper import make_hash
+from ._aten_helper import torch_dtype_to_onnx_dtype
 from .aten_functions import find_function
 from .aten_methods import find_method
 
@@ -37,12 +38,16 @@ class DynamoInterpreter:
                 )
         if self.builder.verbose > 1:
             exa = (
-                f"{example_value.dtype}:{example_value.shape}"
+                f"{torch_dtype_to_onnx_dtype(example_value.dtype)}{example_value.shape}"
                 if hasattr(example_value, "dtype")
                 else ""
             )
             v = node.meta.get("val", None) if hasattr(node, "meta") else None
-            val = f"{v.dtype}:{v.shape}" if hasattr(v, "dtype") else ""
+            val = (
+                f"{torch_dtype_to_onnx_dtype(v.dtype)}{v.shape}"
+                if hasattr(v, "dtype")
+                else ""
+            )
             symbol = "#" if self._can_set_shape_and_type(node) else "-"
             a1 = "E" if hasattr(node, "meta") and "example_value" in node.meta else "-"
             a2 = "A" if hasattr(node, "meta") and "val" in node.meta else "-"

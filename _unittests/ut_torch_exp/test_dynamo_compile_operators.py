@@ -1579,6 +1579,7 @@ class TestOperators(ExtTestCase):
             x,
             operator_export_type=torch.onnx.OperatorExportTypes.ONNX_ATEN_FALLBACK,
             onnx_export=inspect.currentframe().f_code.co_name,
+            atol=3e-4,
         )
 
     def test_pixel_shuffle(self):

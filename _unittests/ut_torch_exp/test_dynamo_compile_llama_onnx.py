@@ -46,6 +46,7 @@ class TestDynamoLlama(ExtTestCase):
         onnx_export: Optional[str] = None,
         impl="ort",
         verbose: int = 0,
+        decompositions=False,
     ):
         import torch
 
@@ -137,7 +138,13 @@ class TestDynamoLlama(ExtTestCase):
         if test_backward:
             from torch._dynamo.backends.common import aot_autograd
 
-            aot_compiler = aot_autograd(fw_compiler=onnx_compiler)
+            if decompositions:
+                aot_compiler = aot_autograd(
+                    fw_compiler=onnx_compiler,
+                    decompositions=torch._decomp.decomposition_table,
+                )
+            else:
+                aot_compiler = aot_autograd(fw_compiler=onnx_compiler)
 
             compiled_model = torch.compile(
                 copy.deepcopy(model),
@@ -256,6 +263,7 @@ class TestDynamoLlama(ExtTestCase):
         assert_counting=True,
         impl="ort",
         verbose: int = 0,
+        decompositions: bool = False,
     ):
         local_ort = self._assert_model_numerically(
             model,
@@ -265,6 +273,7 @@ class TestDynamoLlama(ExtTestCase):
             onnx_export=onnx_export,
             impl=impl,
             verbose=verbose,
+            decompositions=decompositions,
         )
 
         number_of_captured_graphs = 2 if test_backward else 1
@@ -495,6 +504,28 @@ class TestDynamoLlama(ExtTestCase):
             onnx_export="test_llama_model_backward",
             expected_graph_break=7,
             assert_counting=False,
+        )
+
+    @ignore_warnings((UserWarning, DeprecationWarning))
+    @skipif_ci_windows("torch.compile not supported on Windows")
+    @unittest.skipIf(torch_min("2.2"), reason="missing kernel")
+    def test_llama_model_backward_decomposition(self):
+        from experimental_experiment.torch_helper.llama_helper import (
+            get_llama_model,
+        )
+
+        input_dims = self.get_input_dims(False)
+        model, example_args_collection = get_llama_model(input_dims=input_dims)
+        self.common_test_model(
+            model,
+            example_args_collection,
+            test_backward=True,
+            dynamic=False,
+            fullgraph=True,
+            onnx_export="test_llama_model_backward",
+            expected_graph_break=7,
+            assert_counting=False,
+            decompositions=True,
         )
 
 
