@@ -17,6 +17,7 @@ Some helpers
 ++++++++++++
 """
 
+import copy
 import os
 import warnings
 import logging
@@ -36,6 +37,7 @@ except ImportError:
 import onnx
 from onnx_array_api.reference import compare_onnx_execution, ExtendedReferenceEvaluator
 import torch
+from torch._dynamo.backends.common import aot_autograd
 from experimental_experiment.ext_test_case import get_parsed_args, unit_test_going
 from experimental_experiment.convert.convert_helper import (
     optimize_model_proto,
@@ -49,10 +51,14 @@ from experimental_experiment.torch_helper.llama_helper import (
 from experimental_experiment.torch_helper.dump_helper import (
     assert_all_close,
     dump_onnx,
-    onnx_debug_backend,
     reorder_functions_in_proto,
     inputs_from_onnx_model,
     build_matching_inputs,
+)
+from experimental_experiment.torch_helper.debug_backend import onnx_debug_backend
+from experimental_experiment.torch_helper.training_helper import (
+    train_loop,
+    make_aot_ort,
 )
 
 has_cuda = has_cuda and torch.cuda.is_available()
@@ -108,8 +114,15 @@ else:
     raise RuntimeError(f"Unexpected value for part={script_args.part!r}")
 
 print(f"simple run with {len(inputs)} inputs")
-expected = model(*inputs[0])
-print(f"eager mode worked {expected.shape}, {expected.dtype}")
+if backward:
+    expected = train_loop(copy.deepcopy(model), *inputs[0])
+    print(
+        f"-- eager mode worked, {len(expected)} gradients, first one is "
+        f"{expected[0].shape}, {expected[0].dtype}"
+    )
+else:
+    expected = model(*inputs[0])
+    print(f"eager mode worked {expected.shape}, {expected.dtype}")
 
 
 ###################################
@@ -120,7 +133,39 @@ folder = "dump_models"
 storage = {}
 
 if backward:
-    raise NotImplementedError()
+    # onnxrt backend
+    local_aot_ort, _ = make_aot_ort(dynamic=False)
+
+    optimized_mod = torch.compile(
+        copy.deepcopy(model), backend=local_aot_ort, dynamic=False, fullgraph=True
+    )
+
+    with dump_onnx("llama_onnxrt", folder=folder, clean=True):
+        expected_onnxrt = train_loop(optimized_mod, *inputs[0])
+    assert_all_close(expected[0], expected_onnxrt[0])
+    print(
+        f"-- onnxrt backend worked, {len(expected_onnxrt)} gradients, first one is "
+        f"{expected_onnxrt[0].shape}, {expected_onnxrt[0].dtype}"
+    )
+
+    # debugging backend
+    aot_compiler = aot_autograd(
+        fw_compiler=lambda *args, **kwargs: onnx_debug_backend(
+            *args,
+            dump_prefix=os.path.join(folder, "llama_debug"),
+            target_opset=18,
+            storage=storage,
+            **kwargs,
+        )
+    )
+    onnx_mod = torch.compile(copy.deepcopy(model), backend=aot_compiler, fullgraph=True)
+    got = train_loop(onnx_mod, *inputs[0])
+    assert_all_close(expected[0], got[0])
+    print(
+        f"-- debug backend worked, {len(got)} gradients, first one is "
+        f"{got[0].shape}, {got[0].dtype}"
+    )
+
 else:
     # onnxrt backend
     optimized_mod = torch.compile(model, backend="onnxrt", fullgraph=True)
@@ -170,7 +215,15 @@ print("\n".join(str(graph_module.graph).split("\n")[:10]))
 # ++++++++++++++++++++++++
 
 if backward:
-    assert False, "Not implemented yet"
+    print(f"-- {len(storage['instance'])} onnx models were creates")
+    for i, inst in enumerate(storage["instance"]):
+        print(f"  model {i}: {len(inst['inputs'])} runs")
+
+    # deal with forward
+    onnx_models = list(sorted([m for m in models if m.endswith(".onnx") and "_0" in m]))
+    assert len(onnx_models) == 2, f"unexpected value {onnx_models}"
+    model_onnxrt = os.path.join(folder, onnx_models[1])
+    model_debug = os.path.join(folder, onnx_models[0])
 else:
     onnx_models = list(sorted([m for m in models if m.endswith(".onnx")]))
     assert len(onnx_models) == 2, f"unexpected value {onnx_models}"

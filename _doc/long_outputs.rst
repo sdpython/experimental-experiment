@@ -2,6 +2,11 @@
 Long Outputs uneasy to read
 ===========================
 
+:hide-toc:
+
+.. contents::
+    :local:
+
 examples
 ========
 
@@ -11,6 +16,7 @@ plot_llama_diff_export
 ++++++++++++++++++++++
 
 Output coming from example :ref:`l-plot-llama-diff-export`.
+See also `raw rendering <https://github.com/sdpython/experimental-experiment/blob/main/_doc/long_outputs.rst#plot_llama_diff_export>`_.
 
 **attention**
 

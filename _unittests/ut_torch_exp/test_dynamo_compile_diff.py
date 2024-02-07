@@ -1,5 +1,6 @@
 import os
 import unittest
+import packaging.version as pv
 from experimental_experiment.ext_test_case import (
     ExtTestCase,
     skipif_ci_windows,
@@ -7,8 +8,18 @@ from experimental_experiment.ext_test_case import (
 )
 
 
+def torch_version():
+    import torch
+
+    return ".".join(torch.__version__.split(".")[:2])
+
+
 class TestDynamoCompileDiff(ExtTestCase):
     @skipif_ci_windows("dynamo does not work on windows")
+    @unittest.skipIf(
+        pv.Version(torch_version()) < pv.Version("2.2.1"),
+        reason="onnxrt not fully implemented",
+    )
     @ignore_warnings((UserWarning, RuntimeWarning, DeprecationWarning))
     def test_standalone(self):
         import onnxruntime  # noqa: F401
@@ -31,10 +42,12 @@ class TestDynamoCompileDiff(ExtTestCase):
         from experimental_experiment.torch_helper.dump_helper import (
             assert_all_close,
             dump_onnx,
-            onnx_debug_backend,
             reorder_functions_in_proto,
             inputs_from_onnx_model,
             build_matching_inputs,
+        )
+        from experimental_experiment.torch_helper.debug_backend import (
+            onnx_debug_backend,
         )
 
         logging.disable(logging.ERROR)
