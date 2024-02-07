@@ -19,6 +19,10 @@ def get_llama_decoder(
     num_attention_heads=2,
     _attn_implementation="eager",
 ):
+    """
+    Returns the decoder part.
+    See :func:`experimental_experiment.torch_exp.llama_helper.get_llama_model`.
+    """
     import torch
     from transformers import LlamaConfig
     from transformers.models.llama.modeling_llama import LlamaDecoderLayer
@@ -70,6 +74,10 @@ def get_llama_attention(
     num_attention_heads=2,
     _attn_implementation="eager",
 ):
+    """
+    Returns the attention part.
+    See :func:`experimental_experiment.torch_exp.llama_helper.get_llama_model`.
+    """
     import torch
     from transformers import LlamaConfig
     from transformers.models.llama.modeling_llama import LlamaAttention
@@ -139,6 +147,26 @@ def get_llama_model(
     num_attention_heads=2,
     _attn_implementation="eager",  # needed value to remove graph breaks
 ):
+    """
+    Returns a model.
+    See `LlamaConfig
+    <https://huggingface.co/docs/transformers/v4.37.2/en/model_doc/llama2#transformers.LlamaConfig>`_.
+    The parameters are chosen for a unit test configuration.
+    For benchmark, a bigger one should be used.
+    Commented out, the default value from :epkg:`transformers`.
+
+    ::
+
+        kwargs = dict(
+            input_dims=[(2, 1024)] * 2,
+            num_hidden_layers=1,  # 32
+            hidden_size=512,  # 4096
+            vocab_size=4000,  # 32000
+            intermediate_size=2000,  # 11008
+            max_position_embeddings=2048,
+            num_attention_heads=8,  # 32
+        )
+    """
     import torch
     from transformers import LlamaConfig
     from transformers.models.llama.modeling_llama import LlamaModel

@@ -1,6 +1,6 @@
 import contextlib
 import os
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 import numpy as np
 from onnx import ModelProto, load
 from onnx.helper import tensor_dtype_to_np_dtype
@@ -16,6 +16,8 @@ def dump_onnx(prefix: str, folder: Optional[str] = None, clean: bool = False):
     :param prefix: prefix for all files
     :param folder: sub folder (created if it does not exist)
     :param clean: if True, cleans the folder
+
+    See :ref:`l-plot-onnxrt-diff` for an example.
     """
     if folder:
         if not os.path.exists(folder):
@@ -43,6 +45,8 @@ def assert_all_close(v1: Any, v2: Any, atol=1e-5, rtol=1e-5):
 
     :param v1: tensor or tuple of tensors
     :param v2: tensor or tuple of tensors
+
+    See :ref:`l-plot-onnxrt-diff` for an example.
     """
     import torch
 
@@ -100,7 +104,7 @@ def onnx_debug_backend(
     providers: Optional[Tuple[str]] = None,
     raise_exc: bool = True,
     storage: Optional[Dict[str, Any]] = None,
-):
+) -> Callable:
     """
     Custom backend to export torch models into onnx.
     This backend is not meant to be efficient, it more to check
@@ -119,6 +123,9 @@ def onnx_debug_backend(
     :param raise_exc: raise an exception whenever something goes wrong
     :param storage: to store any interesting objects during the process,
         including this inputs or anything else
+    :return: Callable
+
+    See :ref:`l-plot-onnxrt-diff` for an example.
     """
     import torch
     from ..torch_exp.onnx_export import to_onnx
@@ -206,6 +213,8 @@ def reorder_functions_in_proto(proto: Union[str, ModelProto]) -> Union[str, Mode
 
     :param proto: a model
     :return: modified model inplace
+
+    See :ref:`l-plot-onnxrt-diff` for an example.
     """
     if isinstance(proto, str):
         p = load(proto)
@@ -237,6 +246,8 @@ def inputs_from_onnx_model(
     :param model: model or filename
     :param init: include the initializer as well
     :return: list of inputs and initializers
+
+    See :ref:`l-plot-onnxrt-diff` for an example.
     """
     if isinstance(model, str):
         proto = load(model)
@@ -274,6 +285,8 @@ def build_matching_inputs(
     :param feeds: inputs for the first model
     :param model2: second model, the one we need the inputs for
     :return: new inputs
+
+    See :ref:`l-plot-onnxrt-diff` for an example.
     """
     if isinstance(model1, str):
         return build_matching_inputs(load(model1), feeds, model2)

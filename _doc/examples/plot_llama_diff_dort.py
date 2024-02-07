@@ -1,6 +1,8 @@
 """
-Compares LLAMA exporters for onnxrt
-===================================
+.. _l-plot-onnxrt-diff:
+
+Compares LLAMA exporters for onnxrt backend
+===========================================
 
 The script compares exported models in :epkg:`pytorch`
 using :epkg:`onnxrt backend`.

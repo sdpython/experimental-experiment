@@ -1,6 +1,10 @@
 import os
 import unittest
-from experimental_experiment.ext_test_case import ExtTestCase, skipif_ci_windows, ignore_warnings
+from experimental_experiment.ext_test_case import (
+    ExtTestCase,
+    skipif_ci_windows,
+    ignore_warnings,
+)
 
 
 class TestDynamoCompileDiff(ExtTestCase):
