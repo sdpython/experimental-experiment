@@ -10,6 +10,8 @@ examples
 plot_llama_diff_export
 ++++++++++++++++++++++
 
+Output coming from example :ref:`l-plot-llama-diff-export`.
+
 **attention**
 
 ::

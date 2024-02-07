@@ -1,4 +1,6 @@
 """
+.. _l-plot-llama-diff-export:
+
 Compares LLAMA exporters
 ========================
 
