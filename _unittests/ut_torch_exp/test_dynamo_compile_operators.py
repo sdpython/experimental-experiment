@@ -116,6 +116,7 @@ def onnx_compiler(
     counter: Optional[List[int]] = None,
     opset_version: Optional[int] = None,
     impl: str = "ort",
+    verbose: int = 0,
 ):
     assert isinstance(counter, list), f"unexpected type {type(counter)} for counter"
     input_names = (
@@ -128,7 +129,7 @@ def onnx_compiler(
         input_names=input_names,
         remove_unused=True,
         constant_folding=False,
-        verbose=0 if impl == "ort" else 4,
+        verbose=verbose if impl == "ort" else max(6, verbose),
         target_opset=opset_version,
     )
 
@@ -197,6 +198,7 @@ class TestOperators(ExtTestCase):
         training=None,
         input_index: Optional[int] = None,
         square_loss=False,
+        verbose=0,
     ):
         if sys.platform == "win32":
             raise unittest.SkipTest("Windows not supported yet.")
@@ -225,6 +227,7 @@ class TestOperators(ExtTestCase):
                     counter=counter,
                     opset_version=opset_version,
                     impl=impl,
+                    verbose=verbose,
                 )
             )
 
@@ -305,6 +308,7 @@ class TestOperators(ExtTestCase):
                     counter=counter,
                     opset_version=opset_version,
                     impl=impl,
+                    verbose=verbose,
                 ),
                 dynamic=False,
                 fullgraph=fullgraph,
@@ -328,7 +332,10 @@ class TestOperators(ExtTestCase):
     def test_aaa(self):
         x = torch.rand(3, 4, requires_grad=True)
         self.assertONNX(
-            lambda x: x.acos(), x, onnx_export=inspect.currentframe().f_code.co_name
+            lambda x: x.acos(),
+            x,
+            onnx_export=inspect.currentframe().f_code.co_name,
+            verbose=6,
         )
 
     def test_basic(self):

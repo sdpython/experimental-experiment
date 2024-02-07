@@ -390,20 +390,47 @@ class GraphBuilder:
         assert name not in self._known_ranks, f"Name {name!r} already exists."
         self._known_ranks[name] = value
 
-    def set_shape(self, name: str, shape: Tuple[int, ...], set_rank: bool = True):
+    def is_more_precise(self, shape: Tuple[int, ...], base: Tuple[int, ...]) -> bool:
+        assert len(shape) == len(
+            base
+        ), f"Cannot compare shapes with different ranks {shape} and {base}"
+        for a, b in zip(shape, base):
+            if isinstance(a, int) and isinstance(b, int):
+                if a != b:
+                    return False
+            if isinstance(a, str) and isinstance(b, str):
+                if a != b:
+                    return False
+        return True
+
+    def set_shape(
+        self,
+        name: str,
+        shape: Tuple[int, ...],
+        set_rank: bool = True,
+        set_if_more_precise: bool = False,
+    ):
         assert isinstance(name, str), f"Unexpected type {type(name)} for name."
         self._check_shape(shape, 0, name=name)
         assert (
             len(shape) == 0 or None in shape or min(shape) >= 0
         ), f"Negative value in shape {shape} for {name!r}{self.get_debug_msg()}"
+        assert isinstance(shape, tuple), f"Unexpected shape type {type(shape)}."
         if name in self._known_shapes:
-            if shape != self._known_shapes[name]:
+            old_shape = self._known_shapes[name]
+            if len(shape) == len(old_shape) and set_if_more_precise:
+                if not self.is_more_precise(shape=shape, base=old_shape):
+                    raise RuntimeError(
+                        f"Name {name!r} already exists and it is not compatible "
+                        f"{old_shape} != {shape}{self.get_debug_msg()}"
+                    )
+            elif shape != old_shape:
                 raise RuntimeError(
                     f"Name {name!r} already exists and it is different "
-                    f"{self._known_shapes[name]} != {shape}{self.get_debug_msg()}"
+                    f"{old_shape} != {shape}{self.get_debug_msg()}"
                 )
-            return
-        assert isinstance(shape, tuple), f"Unexpected shape type {type(shape)}."
+            else:
+                return
         if self.verbose > 5:
             print(f"[GraphBuilder-{self._hash()}.set_shape] {name}:{shape}")
         self._known_shapes[name] = shape

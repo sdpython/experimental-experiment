@@ -1178,8 +1178,7 @@ def aten_mul_Tensor(
 def aten_neg(g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T) -> T:
     res = g.make_node("Neg", [x], outputs)
     if set_shape_type:
-        g.set_type(outputs[0], g.get_type(x))
-        g.set_shape(outputs[0], g.get_shape(x))
+        set_shape_type_unary_op(g, res, x)
     return res
 
 
@@ -1599,7 +1598,10 @@ def aten__to_copy(
     if dtype is None:
         return g.op.Identity(x, outputs=outputs, name="_to_copy")
     itype = torch_dtype_to_onnx_dtype(dtype)
-    return g.op.Cast(x, to=itype, outputs=outputs, name="_to_copy")
+    res = g.op.Cast(x, to=itype, outputs=outputs, name="_to_copy")
+    if set_shape_type:
+        set_shape_type_unary_op(g, res, x, itype=itype)
+    return res
 
 
 def aten_t(g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T) -> T:

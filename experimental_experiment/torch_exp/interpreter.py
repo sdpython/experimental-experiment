@@ -24,9 +24,11 @@ class DynamoInterpreter:
         self.example_values_ = {}
 
     def run_node(self, node: "torch.fx.Node"):  # noqa: F821
+        example_value = None
         if hasattr(node, "meta") and "example_value" in node.meta:
             if isinstance(node.target, str) or callable(node.target):
                 self.example_values_[node.target] = node.meta["example_value"]
+                example_value = self.example_values_[node.target]
             else:
                 raise RuntimeError(
                     f"Unexpected type {type(node.target)} "
@@ -34,7 +36,20 @@ class DynamoInterpreter:
                     f"node.target={node.target}, node.meta={node.meta}."
                 )
         if self.builder.verbose > 1:
-            print(f"[DynamoInterpreter-{self._hash()}.run_node] {node.op}:{node.name}")
+            exa = (
+                f"{example_value.dtype}:{example_value.shape}"
+                if hasattr(example_value, "dtype")
+                else ""
+            )
+            v = node.meta.get("val", None) if hasattr(node, "meta") else None
+            val = f"{v.dtype}:{v.shape}" if hasattr(v, "dtype") else ""
+            symbol = "#" if self._can_set_shape_and_type(node) else "-"
+            a1 = "E" if hasattr(node, "meta") and "example_value" in node.meta else "-"
+            a2 = "A" if hasattr(node, "meta") and "val" in node.meta else "-"
+            print(
+                f"[DynamoInterpreter-{self._hash()}.run_node][{symbol}{a1}{a2}] "
+                f"{node.op}:{node.name}:{exa}:{val}"
+            )
         if node.op == "placeholder":
             return self.placeholder(node)
         if node.op == "call_function":
@@ -611,6 +626,16 @@ class DynamoInterpreter:
         self, node: "torch.fx.Node", res: Union[str, List[str]]  # noqa: F821
     ):
         val = node.meta.get("val", None)
+        exa = node.meta.get("example_value", None)
+        if val is not None and exa is not None:
+            assert val.dtype == exa.dtype, (
+                f"dtype inconsistency (val, example_value) "
+                f"{val.dtype} != {exa.dtype}{self.builder.get_debug_msg()}"
+            )
+            assert val.shape == exa.shape, (
+                f"shape inconsistency (val, example_value) "
+                f"{val.shape} != {exa.shape}{self.builder.get_debug_msg()}"
+            )
         if val is not None:
             # extracting shape and types
             if not isinstance(val, tuple):
@@ -626,7 +651,7 @@ class DynamoInterpreter:
                 if isinstance(v, self.torch.Tensor):
                     shape = tuple(v.shape)
                     dtype = self.builder._get_type(v.dtype)
-                    self.builder.set_shape(r, shape)
+                    self.builder.set_shape(r, shape, set_if_more_precise=True)
                     self.builder.set_type(r, dtype)
                     if r in output_sets:
                         description.append(f"{r}:{dtype}:{shape}".replace(" ", ""))
@@ -635,7 +660,7 @@ class DynamoInterpreter:
                         f"Unexpected type in node {node!r}, type(val)={type(v)}."
                     )
             if last_node is not None:
-                last_node.description = "\n".join(description)
+                last_node.doc_string = "\n".join(description)
 
     def call_module(self, node: "torch.fx.Node"):  # noqa: F821
         def raise_msg():
