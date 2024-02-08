@@ -28,13 +28,13 @@ def aten_meth_clone(
         f"Input and output are the same x={x!r}, "
         f"outputs={outputs!r}{g.get_debug_msg()}"
     )
-    return g.make_node("Identity", [x], outputs, name="clone")
+    return g.make_node("Identity", [x], outputs, name=".clone")
 
 
 def aten_meth_contiguous(
     g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T
 ) -> T:
-    return g.make_node("Identity", [x], outputs, name="contiguous")
+    return g.make_node("Identity", [x], outputs, name=".contiguous")
 
 
 def aten_meth_cpu(g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T) -> T:
@@ -45,7 +45,7 @@ def aten_meth_expand(
     g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T, *dims: List[int]
 ) -> T:
     size = np.abs(np.array(dims, dtype=np.int64))
-    res = g.op.Expand(x, size, outputs=outputs)
+    res = g.op.Expand(x, size, outputs=outputs, name=".expand")
     if set_shape_type:
         g.set_type(res, g.get_type(x))
         g.set_shape(res, tuple(dims))
@@ -61,8 +61,8 @@ def aten_meth_masked_fill(
 def aten_meth_masked_fill_(
     g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T, mask: T, value: Any
 ) -> T:
-    value_cast = g.op.CastLike(value, x, name="masked_fill")
-    res = g.op.Where(mask, value_cast, x, name="masked_fill")
+    value_cast = g.op.CastLike(value, x, name=".masked_fill")
+    res = g.op.Where(mask, value_cast, x, name=".masked_fill")
     if set_shape_type:
         g.set_type(res, g.get_type(x))
         g.set_type(value_cast, g.get_type(x))
@@ -97,7 +97,7 @@ def aten_meth_mean(
     else:
         raise RuntimeError(f"Unexpected type {type(dim)} for dim.")
     res = g.make_node(
-        "ReduceMean", [x, cst], outputs, keepdims=1 if keepdim else 0, name="mean"
+        "ReduceMean", [x, cst], outputs, keepdims=1 if keepdim else 0, name=".mean"
     )
     if set_shape_type:
         set_shape_type_reduce_op(g, outputs[0], x, keepdim=keepdim)
@@ -177,10 +177,10 @@ def aten_meth_to(
     ), "dtype or device cannot be None for method to"
 
     if dtype is None:
-        return g.op.Identity(input_name, outputs=outputs, name="to")
+        return g.op.Identity(input_name, outputs=outputs, name=".to")
     onnx_to = torch_dtype_to_onnx_dtype(dtype)
 
-    res = g.make_node("Cast", [input_name], outputs, to=onnx_to, name="to")
+    res = g.make_node("Cast", [input_name], outputs, to=onnx_to, name=".to")
     if set_shape_type:
         g.set_type(outputs[0], onnx_to)
         if g.has_shape(input_name):
@@ -243,7 +243,7 @@ def aten_meth_view(
 ) -> T:
     new_shape_name = g.unique_name(f"{input_name}_view_shape")
     g.make_initializer(new_shape_name, np.array(args, dtype=np.int64))
-    res = g.make_node("Reshape", [input_name, new_shape_name], outputs, name="view")
+    res = g.make_node("Reshape", [input_name, new_shape_name], outputs, name=".view")
     if set_shape_type:
         set_shape_type_reshape(g, res, input_name, args)
     return res

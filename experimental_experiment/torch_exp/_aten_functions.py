@@ -98,6 +98,15 @@ def aten_addmm(
     )
 
 
+def aten_alias(
+    g: GraphBuilder,
+    set_shape_type: bool,
+    outputs: List[str],
+    x: T,
+) -> T:
+    return g.make_node("Identity", [x], outputs, name="alias")
+
+
 def aten_all(g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T) -> T:
     res = g.op.Cast(
         g.op.ReduceMin(g.op.Cast(x, to=TensorProto.INT32, name="all"), name="all"),
@@ -419,6 +428,20 @@ def aten_conv2d(
     )
 
 
+def aten_copy(
+    g: GraphBuilder,
+    set_shape_type: bool,
+    outputs: List[str],
+    x: T,
+    src: T,
+    non_blocking: bool = False,
+) -> T:
+    assert not non_blocking, "copy implemented when non_blocking is True"
+    if g.get_type(x) == g.get_type(src):
+        return g.op.Identity(src, name="copy")
+    return g.op.CastLike(src, x, name="copy")
+
+
 def aten_cos(g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T) -> T:
     res = g.make_node("Cos", [x], outputs)
     if set_shape_type:
@@ -631,6 +654,12 @@ def aten_eq(g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T, y: 
     return res
 
 
+def aten_eq_Scalar(
+    g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T, y: T
+) -> T:
+    return aten_eq(g, set_shape_type, outputs, x, y)
+
+
 def aten_expand(
     g: GraphBuilder,
     set_shape_type: bool,
@@ -640,10 +669,47 @@ def aten_expand(
     implicit: bool = False,
 ) -> T:
     assert not implicit, f"Unexpected value for implicit={implicit!r}"
-    res = g.op.Expand(x, np.array(sizes, dtype=np.int64), outputs=outputs)
+    if min(sizes) >= 0:
+        res = g.op.Expand(
+            x, np.array(sizes, dtype=np.int64), outputs=outputs, name="expand"
+        )
+        if set_shape_type:
+            g.set_type(res, g.get_type(x))
+            g.set_shape(res, tuple(sizes))
+        return res
+
+    if g.has_shape(x):
+        shape = g.get_shape(x)
+        assert len(shape) == len(
+            sizes
+        ), f"Unexpected shape={shape} for x as sizes={sizes}{g.get_debug_msg()}"
+        new_shape = []
+        for a, b in zip(shape, sizes):
+            if b == -1:
+                assert isinstance(b, int), (
+                    f"Not implemented when the shape is not fullu known, "
+                    f"shape={shape} for x as sizes={sizes}{g.get_debug_msg()}"
+                )
+                new_shape.append(a)
+            else:
+                new_shape.append(b)
+        res = g.op.Expand(
+            x, np.array(new_shape, dtype=np.int64), outputs=outputs, name="expand_neg"
+        )
+        if set_shape_type:
+            g.set_type(res, g.get_type(x))
+            g.set_shape(res, tuple(new_shape))
+        return res
+
+    res = g.op.Expand(
+        x,
+        np.abs(np.array(new_shape, dtype=np.int64)),
+        outputs=outputs,
+        name="expand_neg2",
+    )
     if set_shape_type:
         g.set_type(res, g.get_type(x))
-        g.set_shape(res, tuple(sizes))
+        g.set_rank(res, len(sizes))
     return res
 
 
@@ -1254,6 +1320,33 @@ def aten_relu(g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T) -
     return g.op.Relu(x, outputs=outputs)
 
 
+def aten_repeat(
+    g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T, repeats: T
+) -> T:
+    if isinstance(repeats, list) and all(map(lambda i: isinstance(i, int), repeats)):
+        irep = np.array(repeats, dtype=np.int64)
+        if g.get_rank(x) != len(repeats):
+            expanded = g.op.Expand(
+                x, np.array((1,) * len(repeats), dtype=np.int64), name="repeat"
+            )
+        else:
+            expanded = x
+        res = g.op.Tile(expanded, irep, name="repeat")
+        if set_shape_type:
+            g.set_type(res, g.get_type(x))
+            if g.has_shape(x):
+                shape = g.get_shape(x)
+                if len(shape) == len(repeats):
+                    new_shape = np.array(shape) * irep
+                    g.set_shape(res, tuple(new_shape))
+                else:
+                    g.set_rank(res, len(repeats))
+            else:
+                g.set_rank(res, len(repeats))
+        return res
+    raise RuntimeError(f"Not implemented when repeats={repeats!r}")
+
+
 def aten_rsqrt(
     g: GraphBuilder,
     set_shape_type: bool,
@@ -1439,6 +1532,58 @@ def aten_slice_backward(
         g.set_type(res, g.get_type(grad_output))
         g.set_shape(res, tuple(input_sizes))
     return res
+
+
+def aten_slice_scatter(
+    g: GraphBuilder,
+    set_shape_type: bool,
+    outputs: List[str],
+    x: T,
+    src: T,
+    dim: int = 0,
+    start: Optional[int] = None,
+    end: Optional[int] = None,
+    step: Optional[int] = None,
+) -> T:
+
+    if g.has_shape(x):
+        # step 1
+        shape = g.get_shape(x)
+        dim_shape = shape[dim]
+        assert isinstance(
+            dim_shape, int
+        ), f"slice_scatter not implemented when shape={shape}"
+        index_1 = np.arange(0, dim)
+        if end is None:
+            index_2 = index_1[start::step]
+        else:
+            index_2 = index_1[start or 0 : end : step]
+
+        # step 2
+
+        v = (0 if dim < 0 else len(shape)) - dim
+        if v > 1:
+            r = np.arange(1, v, 1)
+            index_base = np.expand_dims(index_2, r)
+        else:
+            index_base = index_2
+
+        # Step 3: Expand the indices.
+        shape_expand = g.op.ScatterElements(
+            np.array(shape, dtype=np.int64),
+            np.array([dim], dtype=np.int64),
+            np.array([1], dtype=np.int64),
+            name="slice_scatter",
+        )
+        indices = g.op.Expand(index_base, shape_expand, name="slice_scatter")
+
+        # Step 4: final ScatterElements.
+        res = g.op.ScatterElements(x, indices, src, axis=dim, name="slice_scatter")
+        if set_shape_type:
+            g.set_type(res, g.get_type(x))
+            g.set_shape(res, shape)
+        return res
+    raise RuntimeError(f"slice_scatter not implement when shape of {x!r} is not known.")
 
 
 def aten_softmax(

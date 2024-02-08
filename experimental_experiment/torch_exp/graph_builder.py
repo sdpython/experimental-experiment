@@ -82,6 +82,7 @@ class Opset:
         "Softmax": 1,
         "Squeeze": 1,
         "Sub": 1,
+        "Tile": 1,
         "Transpose": 1,
         "Unsqueeze": 1,
         "Where": 1,
