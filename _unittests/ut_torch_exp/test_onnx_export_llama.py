@@ -151,11 +151,15 @@ class TestOnnxExportLlama(ExtTestCase):
         input_tensors = input_tensors[0]
         expected = model(*input_tensors)
         onx = export_utils("test_llama_model", model, *input_tensors, dynamo=False)
+        with open("debug.onnx", "wb") as f:
+            f.write(onx.SerializeToString())
         xp = [x.numpy() for x in input_tensors]
         feeds = {f"input{i}": x for i, x in enumerate(xp)}
-        ref = ReferenceEvaluator(onx, verbose=10)
+        ref = ReferenceEvaluator(onx)
         results = ref.run(None, feeds)
         self.assertEqualArray(expected[0].detach().numpy(), results[0], atol=1e-5)
+        with open("debug.onnx", "wb") as f:
+            f.write(onx.SerializeToString())
         self.check_model_ort(onx)
 
 

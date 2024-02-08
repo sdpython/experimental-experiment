@@ -44,8 +44,9 @@ def aten_acosh(g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T) 
 def aten_add(
     g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T, y: T
 ) -> T:
-    x, y = prepare_inputs_homogeneous_operator(g, x, y)
-    res = g.op.Add(x, y, outputs=outputs)
+    res, x, y = prepare_inputs_homogeneous_operator(
+        g, x, y, f=g.op.Add, name="add", outputs=outputs
+    )
     if set_shape_type:
         set_shape_type_binary_op(g, outputs[0], x, y)
     return res
@@ -463,8 +464,9 @@ def aten_detach(g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T)
 def aten_div(
     g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T, y: T, name="div"
 ) -> T:
-    x, y = prepare_inputs_homogeneous_operator(g, x, y)
-    res = g.op.Div(x, y, outputs=outputs, name=name)
+    res, x, y = prepare_inputs_homogeneous_operator(
+        g, x, y, f=g.op.Div, name=name, outputs=outputs
+    )
     if set_shape_type:
         set_shape_type_binary_op(g, outputs[0], x, y)
     return res
@@ -776,11 +778,17 @@ def aten_full(
     pin_memory=None,
     name: str = "full",
 ) -> T:
-    assert layout is None, f"full not implemented for layout={layout!r} is not None"
+    import torch
+
+    assert layout in (None, torch.strided), (
+        f"full not implemented for layout={layout!r} is not None, "
+        f"size={size!r}, dtype={dtype}{g.get_debug_msg()}"
+    )
     assert not pin_memory, "full not implemented for pin_memory=True"
-    assert isinstance(
+    assert fill_value is None or isinstance(
         fill_value, (float, int)
     ), f"Unexpected type {type(fill_value)} for fill_value."
+
     new_shape = None
 
     if isinstance(size, tuple):
@@ -799,12 +807,12 @@ def aten_full(
         raise RuntimeError(f"Unexpected type {type(size)} for size.")
 
     if dtype is None:
-        if isinstance(fill_value, int):
-            value = np.array(fill_value, dtype=np.int64).reshape((1,))
-            itype = TensorProto.INT64
-        elif isinstance(fill_value, float):
+        if fill_value is None or isinstance(fill_value, float):
             value = np.array(fill_value, dtype=np.float32).reshape((1,))
             itype = TensorProto.FLOAT
+        elif isinstance(fill_value, int):
+            value = np.array(fill_value, dtype=np.int64).reshape((1,))
+            itype = TensorProto.INT64
         else:
             itype = torch_dtype_to_onnx_dtype(type(fill_value))
             ntype = tensor_dtype_to_np_dtype(itype)
@@ -812,7 +820,7 @@ def aten_full(
     else:
         itype = dtype if isinstance(dtype, int) else torch_dtype_to_onnx_dtype(dtype)
         ntype = tensor_dtype_to_np_dtype(itype)
-        value = np.array(fill_value, dtype=ntype).reshape((1,))
+        value = np.array(fill_value or 0, dtype=ntype).reshape((1,))
 
     res = g.op.ConstantOfShape(
         tsize, value=from_array(value), outputs=outputs, name="name"
@@ -1219,8 +1227,9 @@ def aten_mm(g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T, y: 
 def aten_mul(
     g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T, y: T, name="mul"
 ) -> T:
-    x, y = prepare_inputs_homogeneous_operator(g, x, y)
-    res = g.op.Mul(x, y, outputs=outputs, name="mul")
+    res, x, y = prepare_inputs_homogeneous_operator(
+        g, x, y, f=g.op.Mul, name="mul", outputs=outputs
+    )
     if set_shape_type:
         set_shape_type_binary_op(g, outputs[0], x, y)
     return res
@@ -1235,10 +1244,7 @@ def aten_mul_Scalar(
 def aten_mul_Tensor(
     g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T, y: T
 ) -> T:
-    res = g.op.Mul(x, y, outputs=outputs, name="mul_Tensor")
-    if set_shape_type:
-        set_shape_type_binary_op(g, outputs[0], x, y)
-    return res
+    return aten_mul(g, set_shape_type, outputs, x, y, name="mul_Tensor")
 
 
 def aten_neg(g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T) -> T:
@@ -1550,20 +1556,23 @@ def aten_slice_scatter(
         # step 1
         shape = g.get_shape(x)
         dim_shape = shape[dim]
+
         assert isinstance(
             dim_shape, int
         ), f"slice_scatter not implemented when shape={shape}"
-        index_1 = np.arange(0, dim)
+
+        index_1 = np.arange(0, dim_shape)
         if end is None:
             index_2 = index_1[start::step]
         else:
             index_2 = index_1[start or 0 : end : step]
+        index_2 = index_2.copy()
 
         # step 2
 
         v = (0 if dim < 0 else len(shape)) - dim
         if v > 1:
-            r = np.arange(1, v, 1)
+            r = tuple(np.arange(1, v, 1))
             index_base = np.expand_dims(index_2, r)
         else:
             index_base = index_2
@@ -1583,7 +1592,10 @@ def aten_slice_scatter(
             g.set_type(res, g.get_type(x))
             g.set_shape(res, shape)
         return res
-    raise RuntimeError(f"slice_scatter not implement when shape of {x!r} is not known.")
+    raise RuntimeError(
+        f"slice_scatter not implement when shape of {x!r} "
+        f"is not known.{g.get_debug_msg()}"
+    )
 
 
 def aten_softmax(
@@ -1933,3 +1945,28 @@ def aten__unsafe_view(
     g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T, size: T
 ) -> T:
     return aten_view(g, set_shape_type, outputs, x, size, node_name="_unsafe_view")
+
+
+def aten_zeros(
+    g: GraphBuilder,
+    set_shape_type: bool,
+    outputs: List[str],
+    size: T,
+    dtype=None,
+    layout=None,
+    device=None,
+    pin_memory=None,
+    name: str = "seros",
+) -> T:
+    return aten_full(
+        g,
+        set_shape_type,
+        outputs,
+        size,
+        fill_value=None,
+        dtype=dtype,
+        layout=layout,
+        device=device,
+        pin_memory=pin_memory,
+        name=name,
+    )

@@ -1039,6 +1039,54 @@ class TestOperators(ExtTestCase):
             onnx_export=inspect.currentframe().f_code.co_name,
         )
 
+    def test_slice_scatter_1_forward(self):
+        a = torch.zeros(8, 8)
+        b = torch.ones(2, 8)
+        self.assertONNX(
+            lambda a, b: torch.slice_scatter(a, b, start=6),
+            (a, b),
+            opset_version=18,
+            onnx_export=inspect.currentframe().f_code.co_name,
+            impl="ref",
+            test_backward=False,
+        )
+
+    def test_slice_scatter_1_backward(self):
+        a = torch.zeros(8, 8)
+        b = torch.ones(2, 8)
+        self.assertONNX(
+            lambda a, b: torch.slice_scatter(a, b, start=6),
+            (a, b),
+            opset_version=18,
+            onnx_export=inspect.currentframe().f_code.co_name,
+            impl="ref",
+            test_backward=True,
+        )
+
+    def test_slice_scatter_2_forward(self):
+        a = torch.zeros(8, 8)
+        b = torch.ones(8, 2)
+        self.assertONNX(
+            lambda a, b: torch.slice_scatter(a, b, dim=1, start=2, end=6, step=2),
+            (a, b),
+            opset_version=18,
+            onnx_export=inspect.currentframe().f_code.co_name,
+            impl="ref",
+            test_backward=False,
+        )
+
+    def test_slice_scatter_2_backward(self):
+        a = torch.zeros(8, 8)
+        b = torch.ones(8, 2)
+        self.assertONNX(
+            lambda a, b: torch.slice_scatter(a, b, dim=1, start=2, end=6, step=2),
+            (a, b),
+            opset_version=18,
+            onnx_export=inspect.currentframe().f_code.co_name,
+            impl="ref",
+            test_backward=True,
+        )
+
     def test_sign(self):
         x = torch.rand(3, 4, requires_grad=True)
         self.assertONNX(

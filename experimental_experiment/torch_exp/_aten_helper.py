@@ -1,4 +1,4 @@
-from typing import Any, List, Optional, Sequence, Set, Tuple
+from typing import Any, Callable, List, Optional, Sequence, Set, Tuple
 import numpy as np
 from onnx import TensorProto, TensorShapeProto
 from onnx.helper import np_dtype_to_tensor_dtype, tensor_dtype_to_np_dtype
@@ -132,6 +132,9 @@ def set_shape_type_binary_op(
                 break
         assert dtype, f"Unable to guess type from {input_names}{g.get_debug_msg()}"
         g.set_type(name, dtype)
+        assert (
+            dtype != TensorProto.BOOL
+        ), f"dtype is bool, does not work with a binary operator{g.get_debug_msg()}"
 
     # shape
     shape = None
@@ -141,7 +144,9 @@ def set_shape_type_binary_op(
             if None in input_shape:
                 shape = None
                 break
-            shape = shape if shape is None else broadcast_shape(shape, input_shape)
+            shape = (
+                input_shape if shape is None else broadcast_shape(shape, input_shape)
+            )
         elif shape is not None:
             # one shape is missing
             shape = None
@@ -185,7 +190,7 @@ def _get_input_type(g: "GraphBuilder", x: Any) -> int:  # noqa: F821
         return TensorProto.FLOAT
     if isinstance(x, str):
         return g.get_type(x)
-    if isinstance(x, np.array):
+    if isinstance(x, np.ndarray):
         return np_dtype_to_tensor_dtype(x.dtype)
     # A torch tensor.
     if hasattr(x, "dtype"):
@@ -210,13 +215,17 @@ def _get_compute_type(dtypes: Set[int]) -> int:
     for t in order:
         if t in dtypes:
             return t
+    if TensorProto.BOOL in dtypes:
+        return TensorProto.INT32
     raise RuntimeError(f"Unable to guess compute type {dtypes}.")
 
 
-def _cast_inputs(g: "GraphBuilder", a: Any, itype: int) -> str:  # noqa: F821
+def _cast_inputs(
+    g: "GraphBuilder", a: Any, itype: int, name: Optional[str] = None  # noqa: F821
+) -> str:
     if isinstance(a, str):
         # a result
-        return g.op.Cast(a, to=itype)
+        return g.op.Cast(a, to=itype, name=name)
     if isinstance(a, (int, float)):
         a = np.array(a)
     if isinstance(a, np.ndarray):
@@ -225,8 +234,12 @@ def _cast_inputs(g: "GraphBuilder", a: Any, itype: int) -> str:  # noqa: F821
 
 
 def prepare_inputs_homogeneous_operator(
-    g: "GraphBuilder", *args: Sequence[str]  # noqa: F821
-) -> Tuple[str]:
+    g: "GraphBuilder",  # noqa: F821
+    *args: Sequence[str],
+    f: Optional[Callable] = None,
+    outputs: Optional[List[str]] = None,
+    name: Optional[str] = None,
+) -> Tuple[str, ...]:
     """
     Cast any inputs to ensure all inputs share the same type.
     """
@@ -238,8 +251,17 @@ def prepare_inputs_homogeneous_operator(
         if dt == only and isinstance(a, str):
             inputs.append(a)
             continue
-        inputs.append(_cast_inputs(g, a, only))
-    return tuple(inputs)
+        inputs.append(_cast_inputs(g, a, only, name=name))
+    if f is None:
+        return tuple(inputs)
+    if inputs == args:
+        # No cast.
+        res = f(*inputs, outputs=outputs, name=name)
+    else:
+        res = g.op.Cast(
+            f(*inputs, name=name), to=dtypes_list[0], outputs=outputs, name=name
+        )
+    return tuple([res, *inputs])
 
 
 def _adjust_attributes_of_max_pool(
