@@ -9,6 +9,14 @@ from ._aten_helper import (
     set_shape_type_reshape,
 )
 from .graph_builder import GraphBuilder
+from ._aten_functions import (
+    aten_cos,
+    aten_expand,
+    aten_eq,
+    aten_repeat,
+    aten_sin,
+    aten_t,
+)
 
 T = str
 
@@ -37,19 +45,32 @@ def aten_meth_contiguous(
     return g.make_node("Identity", [x], outputs, name=".contiguous")
 
 
+def aten_meth_cos(g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T) -> T:
+    return aten_cos(g, set_shape_type, outputs, x)
+
+
 def aten_meth_cpu(g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T) -> T:
     return g.make_node("Identity", [x], outputs, name="cpu")
+
+
+def aten_meth_eq(
+    g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T, y: T
+) -> T:
+    return aten_eq(g, set_shape_type, outputs, x, y)
 
 
 def aten_meth_expand(
     g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T, *dims: List[int]
 ) -> T:
-    size = np.abs(np.array(dims, dtype=np.int64))
-    res = g.op.Expand(x, size, outputs=outputs, name=".expand")
-    if set_shape_type:
-        g.set_type(res, g.get_type(x))
-        g.set_shape(res, tuple(dims))
-    return res
+    return aten_expand(g, set_shape_type, outputs, x, dims, name=".expand")
+
+
+def aten_meth_float(
+    g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T
+) -> T:
+    import torch
+
+    return aten_meth_to(g, set_shape_type, outputs, x, dtype=torch.float32)
 
 
 def aten_meth_masked_fill(
@@ -132,6 +153,12 @@ def aten_meth_pow(
     return res
 
 
+def aten_meth_repeat(
+    g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T, *repeats: List[int]
+) -> T:
+    return aten_repeat(g, set_shape_type, outputs, x, repeats, name=".repeat")
+
+
 def aten_meth_reshape(
     g: GraphBuilder,
     set_shape_type: bool,
@@ -144,6 +171,14 @@ def aten_meth_reshape(
     if set_shape_type:
         set_shape_type_reshape(g, res, input_name, shape)
     return res
+
+
+def aten_meth_sin(g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T) -> T:
+    return aten_sin(g, set_shape_type, outputs, x)
+
+
+def aten_meth_t(g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T) -> T:
+    return aten_t(g, set_shape_type, outputs, x, name=".t")
 
 
 def aten_meth_to(

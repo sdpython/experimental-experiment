@@ -225,7 +225,13 @@ def _cast_inputs(
 ) -> str:
     if isinstance(a, str):
         # a result
-        return g.op.Cast(a, to=itype, name=name)
+        res = g.op.Cast(a, to=itype, name=name)
+        g.set_type(res, itype)
+        if g.has_shape(a):
+            g.set_shape(res, g.get_shape(a))
+        else:
+            g.set_rank(res, g.get_rank(a))
+        return res
     if isinstance(a, (int, float)):
         a = np.array(a)
     if isinstance(a, np.ndarray):

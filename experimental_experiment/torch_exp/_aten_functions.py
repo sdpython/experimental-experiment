@@ -669,11 +669,12 @@ def aten_expand(
     x: T,
     sizes: List[int],
     implicit: bool = False,
+    name: str = "expand",
 ) -> T:
     assert not implicit, f"Unexpected value for implicit={implicit!r}"
     if min(sizes) >= 0:
         res = g.op.Expand(
-            x, np.array(sizes, dtype=np.int64), outputs=outputs, name="expand"
+            x, np.array(sizes, dtype=np.int64), outputs=outputs, name=name
         )
         if set_shape_type:
             g.set_type(res, g.get_type(x))
@@ -696,7 +697,7 @@ def aten_expand(
             else:
                 new_shape.append(b)
         res = g.op.Expand(
-            x, np.array(new_shape, dtype=np.int64), outputs=outputs, name="expand_neg"
+            x, np.array(new_shape, dtype=np.int64), outputs=outputs, name=f"{name}_neg"
         )
         if set_shape_type:
             g.set_type(res, g.get_type(x))
@@ -707,7 +708,7 @@ def aten_expand(
         x,
         np.abs(np.array(new_shape, dtype=np.int64)),
         outputs=outputs,
-        name="expand_neg2",
+        name=f"{name}_neg2",
     )
     if set_shape_type:
         g.set_type(res, g.get_type(x))
@@ -1231,7 +1232,7 @@ def aten_mul(
         g, x, y, f=g.op.Mul, name="mul", outputs=outputs
     )
     if set_shape_type:
-        set_shape_type_binary_op(g, outputs[0], x, y)
+        set_shape_type_binary_op(g, res, x, y)
     return res
 
 
@@ -1327,24 +1328,31 @@ def aten_relu(g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T) -
 
 
 def aten_repeat(
-    g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T, repeats: T
+    g: GraphBuilder,
+    set_shape_type: bool,
+    outputs: List[str],
+    x: T,
+    repeats: T,
+    name: str = "repeat",
 ) -> T:
-    if isinstance(repeats, list) and all(map(lambda i: isinstance(i, int), repeats)):
+    if isinstance(repeats, (tuple, list)) and all(
+        map(lambda i: isinstance(i, int), repeats)
+    ):
         irep = np.array(repeats, dtype=np.int64)
         if g.get_rank(x) != len(repeats):
             expanded = g.op.Expand(
-                x, np.array((1,) * len(repeats), dtype=np.int64), name="repeat"
+                x, np.array((1,) * len(repeats), dtype=np.int64), name=name
             )
         else:
             expanded = x
-        res = g.op.Tile(expanded, irep, name="repeat")
+        res = g.op.Tile(expanded, irep, name=name)
         if set_shape_type:
             g.set_type(res, g.get_type(x))
             if g.has_shape(x):
                 shape = g.get_shape(x)
                 if len(shape) == len(repeats):
                     new_shape = np.array(shape) * irep
-                    g.set_shape(res, tuple(new_shape))
+                    g.set_shape(res, tuple(map(int, new_shape)))
                 else:
                     g.set_rank(res, len(repeats))
             else:
@@ -1388,6 +1396,46 @@ def aten_rsub_Scalar(
 ) -> T:
     assert alpha == 1, f"Not implemented with alpha={alpha}"
     return aten_sub(g, set_shape_type, outputs, y, x)
+
+
+def aten_setitem(
+    g: GraphBuilder,
+    set_shape_type: bool,
+    outputs: List[str],
+    x: T,
+    indices: Tuple[Any, ...],
+    values: T,
+) -> T:
+    if (
+        isinstance(indices, tuple)
+        and len(indices) == 2
+        and indices[0] is Ellipsis
+        and isinstance(indices[1], slice)
+    ):
+        s = indices[1]
+        return aten_slice_scatter(
+            g,
+            set_shape_type,
+            outputs,
+            x,
+            values,
+            dim=g.get_rank(x) - 1,
+            start=s.start,
+            end=s.stop,
+            step=s.step,
+            name="setitem",
+        )
+
+    # if set_shape_type:
+    #    g.set_type(res, g.get_type(x))
+    #    if g.has_shape(x):
+    #        g.set_shape(res, g.get_shape(x))
+    #    else:
+    #        g.set_rank(res, g.get_rank(x))
+    # return res
+    raise RuntimeError(
+        f"setitem not implemented for indices={indices}{g.get_debug_msg()}"
+    )
 
 
 def aten_sigmoid(g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T) -> T:
@@ -1550,6 +1598,7 @@ def aten_slice_scatter(
     start: Optional[int] = None,
     end: Optional[int] = None,
     step: Optional[int] = None,
+    name="slice_scatter",
 ) -> T:
 
     if g.has_shape(x):
@@ -1582,12 +1631,12 @@ def aten_slice_scatter(
             np.array(shape, dtype=np.int64),
             np.array([dim], dtype=np.int64),
             np.array([1], dtype=np.int64),
-            name="slice_scatter",
+            name=name,
         )
-        indices = g.op.Expand(index_base, shape_expand, name="slice_scatter")
+        indices = g.op.Expand(index_base, shape_expand, name=name)
 
         # Step 4: final ScatterElements.
-        res = g.op.ScatterElements(x, indices, src, axis=dim, name="slice_scatter")
+        res = g.op.ScatterElements(x, indices, src, axis=dim, name=name)
         if set_shape_type:
             g.set_type(res, g.get_type(x))
             g.set_shape(res, shape)
@@ -1761,8 +1810,20 @@ def aten__to_copy(
     return res
 
 
-def aten_t(g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T) -> T:
-    return g.op.Transpose(x, perm=[1, 0], outputs=outputs, name="t")
+def aten_t(
+    g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T, name: str = "t"
+) -> T:
+    res = g.op.Transpose(x, perm=[1, 0], outputs=outputs, name=name)
+    if set_shape_type:
+        g.set_type(res, g.get_type(x))
+        if g.has_shape(x):
+            shape = list(g.get_shape(x))
+            assert len(shape) == 2, f"Unexpected shape={shape}, should be 2D"
+            shape[0], shape[1] = shape[1], shape[0]
+            g.set_shape(res, tuple(shape))
+        else:
+            g.set_rank(res, g.get_rank(x))
+    return res
 
 
 def _aten_tensor_int1(

@@ -61,7 +61,7 @@ class TestDynamoLlama(ExtTestCase):
         _b = backend()
         last_graph_module = []
 
-        def get_session(onx, impl="ref", exc=True, verbose=0):
+        def get_session(onx, impl="ref", exc=True, verbose=verbose):
             if exc:
                 try:
                     return get_session(onx, impl, exc=False)
@@ -482,7 +482,7 @@ class TestDynamoLlama(ExtTestCase):
             onnx_export="test_llama_model",
             expected_graph_break=7,
             impl="ref",
-            verbose=1,
+            verbose=10,
         )
 
     @ignore_warnings((UserWarning, DeprecationWarning))

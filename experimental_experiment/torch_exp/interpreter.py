@@ -508,7 +508,7 @@ class DynamoInterpreter:
             return i.name
         if isinstance(i, tuple):
             return tuple(self._process_arg(node, aten_name, t) for t in i)
-        if isinstance(i, (float, int, tuple)):
+        if isinstance(i, (float, int, tuple, slice)):
             return i
         if isinstance(i, list):
             new_list = []
@@ -519,6 +519,8 @@ class DynamoInterpreter:
                     continue
                 new_list.append(el)
             return new_list
+        if i is Ellipsis:
+            return i
         import torch
 
         if isinstance(i, torch.dtype):
