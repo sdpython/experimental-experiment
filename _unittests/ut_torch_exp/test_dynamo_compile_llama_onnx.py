@@ -481,8 +481,7 @@ class TestDynamoLlama(ExtTestCase):
             fullgraph=True,
             onnx_export="test_llama_model",
             expected_graph_break=7,
-            impl="ref",
-            verbose=10,
+            impl="ort",
         )
 
     @ignore_warnings((UserWarning, DeprecationWarning))

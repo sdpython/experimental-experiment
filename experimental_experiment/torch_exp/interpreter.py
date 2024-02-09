@@ -419,7 +419,7 @@ class DynamoInterpreter:
         if hasattr(index, "name"):
             # A dynamic index (torch.fx.Node)
             res = self.builder.make_node(
-                "Gather", [result_name, index.name], [node.name]
+                "Gather", [result_name, index.name], [node.name], name="getitem"
             )
             if set_shape_type:
                 self.builder.set_type(node.name, self.builder.get_type(result_name))
@@ -433,7 +433,7 @@ class DynamoInterpreter:
 
         if isinstance(index, int):
             return self.builder.make_node(
-                "Identity", [f"{result_name}#{index}"], [node.name]
+                "Identity", [f"{result_name}#{index}"], [node.name], name="getitem"
             )
 
         if isinstance(index, slice):
@@ -643,6 +643,8 @@ class DynamoInterpreter:
                 f"shape inconsistency (val, example_value) "
                 f"{val.shape} != {exa.shape}{self.builder.get_debug_msg()}"
             )
+        description = []
+        last_node = self.builder.last_added_node
         if val is not None:
             # extracting shape and types
             if not isinstance(val, tuple):
@@ -650,8 +652,6 @@ class DynamoInterpreter:
                 res = (res,)
             if len(val) != len(res):
                 raise RuntimeError(f"Length mismatch between {val} and {res}.")
-            description = []
-            last_node = self.builder.last_added_node
             output_sets = set(last_node.output) if last_node is not None else {}
 
             for v, r in zip(val, res):
@@ -666,8 +666,10 @@ class DynamoInterpreter:
                     raise TypeError(
                         f"Unexpected type in node {node!r}, type(val)={type(v)}."
                     )
-            if last_node is not None:
-                last_node.doc_string = "\n".join(description)
+        if exa is not None and not isinstance(exa, tuple):
+            description.append(f"~{exa.dtype}:{exa.shape}".replace(" ", ""))
+        if last_node is not None and description:
+            last_node.doc_string = "\n".join(description)
 
     def call_module(self, node: "torch.fx.Node"):  # noqa: F821
         def raise_msg():

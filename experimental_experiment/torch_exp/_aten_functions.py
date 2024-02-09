@@ -519,8 +519,8 @@ def aten_embedding(
     g: GraphBuilder,
     set_shape_type: bool,
     outputs: List[str],
-    weight: T,
     indices: T,
+    weight: T,
     padding_idx: Optional[int] = None,
     max_norm: Optional[int] = None,
     norm_type: float = 2.0,
@@ -539,6 +539,9 @@ def aten_embedding(
             f"or max_norm={max_norm} or norm_type={norm_type} "
             f"are different from the default values."
         )
+    assert g.get_type(indices) == 7, (
+        f"indices must be integer not {g.get_type(indices)}" f"{g.get_debug_msg()}"
+    )
     res = g.op.Gather(weight, indices, outputs=outputs, name="embedding")
     if set_shape_type:
         g.set_type(res, g.get_type(weight))
