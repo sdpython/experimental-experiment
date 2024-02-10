@@ -519,8 +519,8 @@ def aten_embedding(
     g: GraphBuilder,
     set_shape_type: bool,
     outputs: List[str],
-    indices: T,
     weight: T,
+    indices: T,
     padding_idx: Optional[int] = None,
     max_norm: Optional[int] = None,
     norm_type: float = 2.0,
@@ -540,8 +540,11 @@ def aten_embedding(
             f"are different from the default values."
         )
     assert g.get_type(indices) == 7, (
-        f"indices must be integer not {g.get_type(indices)}" f"{g.get_debug_msg()}"
+        f"indices be integer not {g.get_type(indices)}, "
+        f"weight is {g.get_type(weight)}"
+        f"{g.get_debug_msg()}"
     )
+
     res = g.op.Gather(weight, indices, outputs=outputs, name="embedding")
     if set_shape_type:
         g.set_type(res, g.get_type(weight))
@@ -2034,3 +2037,26 @@ def aten_zeros(
         pin_memory=pin_memory,
         name=name,
     )
+
+
+def prims_broadcast_in_dim(
+    g: GraphBuilder,
+    set_shape_type: bool,
+    outputs: List[str],
+    a: T,
+    shape: List[int],
+    broadcast_dimensions: List[int],
+) -> T:
+    raise RuntimeError(f"not implementated yet{g.get_debug_msg()}")
+    """
+        s = list(shape)
+        for broadcast_dimension in broadcast_dimensions:
+            s[broadcast_dimension] = -1
+
+        v = a
+        for idx, x in enumerate(s):
+            if x != -1:
+                v = unsqueeze(v, idx)
+
+        return expand(v, shape)
+    """

@@ -6,7 +6,7 @@ from ._exceptions import FunctionNotFoundError
 def _register() -> Dict[str, Callable]:
     res = {}
     for k, v in _aten_functions.__dict__.items():
-        if k.startswith("aten_"):
+        if k.startswith("aten_") or k.startswith("prims_"):
             other_key = "::".join(k.split("_", maxsplit=1))
             options = {k: v, other_key: v}
             for c in options:
@@ -51,6 +51,7 @@ def find_function(
             lookup.append(v)
             if v in registered_functions:
                 return registered_functions[v]
+
     raise FunctionNotFoundError(
         f"Unable to interpret function {type(name)}: {name!r}, searched for "
         f"{lookup} and attributes {lookup_names}, "

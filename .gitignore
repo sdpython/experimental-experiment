@@ -15,6 +15,7 @@ temp_dump/*
 coverage.html/*
 dump_models/*
 temp_dump_models/*
+temp_llama_model_*/*
 _cache/*
 .coverage
 dist/*

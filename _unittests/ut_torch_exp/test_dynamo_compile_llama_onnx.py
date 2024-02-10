@@ -10,6 +10,7 @@ from experimental_experiment.ext_test_case import (
 )
 from experimental_experiment.torch_exp.onnx_export import to_onnx
 from experimental_experiment.torch_exp._helper import make_hash
+from experimental_experiment.torch_helper.dump_helper import dump_onnx
 
 
 def torch_min(v: str) -> bool:
@@ -153,6 +154,7 @@ class TestDynamoLlama(ExtTestCase):
                 fullgraph=fullgraph,
             )
         else:
+            assert fullgraph
             compiled_model = torch.compile(
                 copy.deepcopy(model),
                 backend=onnx_compiler,
@@ -169,7 +171,7 @@ class TestDynamoLlama(ExtTestCase):
                 torch.testing.assert_close(
                     baseline_result, result, atol=atol, rtol=rtol
                 )
-                if test_backward:
+                if test_backward and test_backward != 1:
                     baseline_result.sum().backward()
                     result.sum().backward()
                     for baseline_param, param in zip(
@@ -203,7 +205,7 @@ class TestDynamoLlama(ExtTestCase):
                     torch.testing.assert_close(
                         baseline_elem, result_elem, atol=atol, rtol=rtol
                     )
-                if test_backward:
+                if test_backward and test_backward != 1:
 
                     def _do_sum(x):
                         if isinstance(x, torch.Tensor):
@@ -409,7 +411,7 @@ class TestDynamoLlama(ExtTestCase):
             example_args_collection,
             test_backward=False,
             dynamic=False,
-            onnx_export="test_llama_decoder",
+            onnx_export="test_llama_decoder_forward",
         )
 
     @ignore_warnings((UserWarning, DeprecationWarning))
@@ -441,7 +443,7 @@ class TestDynamoLlama(ExtTestCase):
             example_args_collection,
             test_backward=False,
             dynamic=False,
-            onnx_export="test_llama_attention",
+            onnx_export="test_llama_attention_forward",
             impl="ref",
         )
 
@@ -466,22 +468,71 @@ class TestDynamoLlama(ExtTestCase):
     @ignore_warnings((UserWarning, DeprecationWarning))
     @skipif_ci_windows("torch.compile not supported on Windows")
     @unittest.skipIf(torch_min("2.2"), reason="missing kernel")
+    @unittest.skip("aten_embedding receives the inputs in the other way")
     def test_llama_model_forward(self):
+        import torch
         from experimental_experiment.torch_helper.llama_helper import (
             get_llama_model,
         )
 
         input_dims = self.get_input_dims(False)
         model, example_args_collection = get_llama_model(input_dims=input_dims)
+
+        # onnxrt backend
+        compiled_model = torch.compile(
+            copy.deepcopy(model),
+            backend="onnxrt",
+            dynamic=False,
+            fullgraph=True,
+        )
+        folder = "temp_llama_model_forward"
+        with dump_onnx("llama_onnxrt", folder=folder, clean=True):
+            compiled_model(*example_args_collection[0])
+
         self.common_test_model(
             model,
             example_args_collection,
             test_backward=False,
             dynamic=False,
             fullgraph=True,
-            onnx_export="test_llama_model",
+            onnx_export="test_llama_model_forward",
             expected_graph_break=7,
             impl="ort",
+        )
+
+    @ignore_warnings((UserWarning, DeprecationWarning))
+    @skipif_ci_windows("torch.compile not supported on Windows")
+    @unittest.skipIf(torch_min("2.2"), reason="missing kernel")
+    def test_llama_model_backward_forward(self):
+        import torch
+        from experimental_experiment.torch_helper.llama_helper import (
+            get_llama_model,
+        )
+
+        input_dims = self.get_input_dims(False)
+        model, example_args_collection = get_llama_model(input_dims=input_dims)
+
+        # onnxrt backend
+        compiled_model = torch.compile(
+            copy.deepcopy(model),
+            backend="onnxrt",
+            dynamic=False,
+            fullgraph=True,
+        )
+        folder = "temp_llama_model_backward_forward"
+        with dump_onnx("llama_onnxrt", folder=folder, clean=True):
+            compiled_model(*example_args_collection[0])
+
+        self.common_test_model(
+            model,
+            example_args_collection,
+            test_backward=1,
+            dynamic=False,
+            fullgraph=True,
+            onnx_export="test_llama_model_backward_forward",
+            expected_graph_break=7,
+            impl="ort",
+            assert_counting=False,
         )
 
     @ignore_warnings((UserWarning, DeprecationWarning))
@@ -521,7 +572,29 @@ class TestDynamoLlama(ExtTestCase):
             test_backward=True,
             dynamic=False,
             fullgraph=True,
-            onnx_export="test_llama_model_backward",
+            onnx_export="test_llama_model_backward_decomposition",
+            expected_graph_break=7,
+            assert_counting=False,
+            decompositions=True,
+        )
+
+    @ignore_warnings((UserWarning, DeprecationWarning))
+    @skipif_ci_windows("torch.compile not supported on Windows")
+    @unittest.skipIf(torch_min("2.2"), reason="missing kernel")
+    def test_llama_model_backward_forward_decomposition(self):
+        from experimental_experiment.torch_helper.llama_helper import (
+            get_llama_model,
+        )
+
+        input_dims = self.get_input_dims(False)
+        model, example_args_collection = get_llama_model(input_dims=input_dims)
+        self.common_test_model(
+            model,
+            example_args_collection,
+            test_backward=1,
+            dynamic=False,
+            fullgraph=True,
+            onnx_export="test_llama_model_backward_decomposition",
             expected_graph_break=7,
             assert_counting=False,
             decompositions=True,
