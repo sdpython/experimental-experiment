@@ -257,7 +257,10 @@ def export_dynopt(filename, model, *args):
             export_output = torch.onnx.dynamo_export(model, *args)
             model_onnx = export_output.model_proto
 
-            from onnxrewriter.optimizer import optimize
+            try:
+                from onnxrewriter.optimizer import optimize
+            except ImportError:
+                optimize = lambda onx: onx  # noqa: E731
 
             optimized_model = optimize(model_onnx)
             with open(filename, "wb") as f:

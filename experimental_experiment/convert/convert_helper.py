@@ -32,8 +32,11 @@ def optimize_model_proto(model_proto: ModelProto) -> ModelProto:
         from experimental_experiment.convert.convert_helper import optimize_model_proto
         onnx_model = optimize_model_proto(onnx_model)
     """
-    from onnxrewriter.optimizer import optimize
-    from onnxrewriter.rewriter.transformers import rewrite
+    try:
+        from onnxrewriter.optimizer import optimize
+        from onnxrewriter.rewriter.transformers import rewrite
+    except ImportError:
+        return model_proto
 
     # model_proto = inline_model_proto(model_proto)
     model_proto = optimize(
