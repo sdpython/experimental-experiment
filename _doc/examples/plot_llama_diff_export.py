@@ -58,6 +58,7 @@ from experimental_experiment.torch_helper.llama_helper import (
     get_llama_attention,
     get_llama_decoder,
 )
+from experimental_experiment.torch_helper.dump_helper import reorder_functions_in_proto
 
 has_cuda = has_cuda and torch.cuda.is_available()
 logging.disable(logging.ERROR)
@@ -220,8 +221,11 @@ if ortopt:
     print(f"Error with the eager model and onnxruntime: {diff1}, {diff2}")
 
 #########################################
-# Verifciation with the reference evaluator
+# Verification with the reference evaluator
 # +++++++++++++++++++++++++++++++++++++++++
+
+reorder_functions_in_proto(file1)
+reorder_functions_in_proto(file2)
 
 sess1 = ExtendedReferenceEvaluator(file1)
 sess2 = ExtendedReferenceEvaluator(file2)
