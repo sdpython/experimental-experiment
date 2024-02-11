@@ -226,9 +226,15 @@ if backward:
     model_debug = os.path.join(folder, onnx_models[0])
 else:
     onnx_models = list(sorted([m for m in models if m.endswith(".onnx")]))
-    assert len(onnx_models) == 2, f"unexpected value {onnx_models}"
-    model_onnxrt = os.path.join(folder, onnx_models[1])
-    model_debug = os.path.join(folder, onnx_models[0])
+    if len(onnx_models) == 2:
+        model_onnxrt = os.path.join(folder, onnx_models[1])
+        model_debug = os.path.join(folder, onnx_models[0])
+    else:
+        model_debug = os.path.join(folder, onnx_models[0])
+        # the following error may appear:
+        # Node type 'Rank' from domain 'pkg.onnxscript.torch_lib.common' is unknown
+        print(f"One model is missing, onnx_models={onnx_models}")
+        model_onnxrt = model_debug
 
 print(f"model_onnxrt={model_onnxrt}")
 print(f"model_debug={model_debug}")

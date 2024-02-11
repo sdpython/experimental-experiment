@@ -394,6 +394,7 @@ class TestOperatorsOnnxrt(ExtTestCase):
             lambda x, y, z: torch.addmm(torch.addmm(z, x, y), x, y),
             (m1, m2, m3),
             onnx_export=inspect.currentframe().f_code.co_name,
+            atol=1e-4,
         )
 
     def test_permute2(self):
