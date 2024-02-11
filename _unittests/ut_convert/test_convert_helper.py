@@ -1,7 +1,7 @@
 import onnxruntime  # noqa: F401
 import unittest
 from onnx import ModelProto
-from experimental_experiment.ext_test_case import ExtTestCase
+from experimental_experiment.ext_test_case import ExtTestCase, skipif_ci_windows
 from experimental_experiment.convert.convert_helper import (
     optimize_model_proto,
     inline_model_proto,
@@ -40,6 +40,7 @@ class TestConvertHelper(ExtTestCase):
         model_proto = optimize_model_proto(model_proto)
         self.assertIsInstance(model_proto, ModelProto)
 
+    @skipif_ci_windows("dynamo not working on windows")
     def test_inline_llama(self):
         import torch
         from experimental_experiment.torch_helper.llama_helper import (
@@ -53,6 +54,7 @@ class TestConvertHelper(ExtTestCase):
         model_proto = inline_model_proto(model_proto)
         self.assertIsInstance(model_proto, ModelProto)
 
+    @skipif_ci_windows("dynamo not working on windows")
     def test_ort_optimize(self):
         import torch
         from experimental_experiment.torch_helper.llama_helper import (

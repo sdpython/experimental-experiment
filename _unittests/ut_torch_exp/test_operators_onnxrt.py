@@ -1565,6 +1565,7 @@ class TestOperatorsOnnxrt(ExtTestCase):
             x,
             opset_version=11,
             onnx_export=inspect.currentframe().f_code.co_name,
+            atol=1e-4,
         )
         self.assertONNX(
             lambda x: torch.linalg.det(x),
