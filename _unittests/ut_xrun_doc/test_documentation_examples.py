@@ -5,7 +5,7 @@ import importlib
 import subprocess
 import time
 from experimental_experiment import __file__ as experimental_experiment_file
-from experimental_experiment.ext_test_case import ExtTestCase, is_windows
+from experimental_experiment.ext_test_case import ExtTestCase, is_windows, is_apple
 
 try:
     import onnxrewriter  # noqa: F401
@@ -110,6 +110,13 @@ class TestDocumentationExamples(ExtTestCase):
             }:
                 # too long
                 reason = "not working yet or too long"
+
+            if (
+                not reason
+                and is_apple()
+                and name in {"test_plot_convolutation_matmul.py"}
+            ):
+                reason = "dot is missing"
 
             if reason:
 
