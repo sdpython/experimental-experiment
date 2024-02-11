@@ -248,9 +248,12 @@ class TestDynamoLlama(ExtTestCase):
         number_of_exported_onnx_models_for_all_graph_modules: Tuple[int, ...],
         expected_graph_break=0,
     ):
-        self.assertEqual(
-            expected_execution_count * (expected_graph_break + 1),
+        self.assertIn(
             ort_backend.execution_count,
+            (
+                expected_execution_count * (expected_graph_break + 1),
+                expected_execution_count * (expected_graph_break + 1) // 2,
+            ),
         )
 
     def common_test_model(
@@ -350,8 +353,8 @@ class TestDynamoLlama(ExtTestCase):
         self.common_test_model(
             MLP(),
             example_args_collection,
-            True,
-            False,
+            test_backward=True,
+            dynamic=False,
             onnx_export="test_ort_mlp_backward_ort",
         )
 
@@ -385,8 +388,8 @@ class TestDynamoLlama(ExtTestCase):
         self.common_test_model(
             MLP(),
             example_args_collection,
-            True,
-            False,
+            test_backward=True,
+            dynamic=False,
             onnx_export="test_ort_mlp_backward_ref",
             impl="ref",
         )

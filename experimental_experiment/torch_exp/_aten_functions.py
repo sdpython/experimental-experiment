@@ -2047,8 +2047,9 @@ def prims_broadcast_in_dim(
     shape: List[int],
     broadcast_dimensions: List[int],
 ) -> T:
-    raise RuntimeError(f"not implementated yet{g.get_debug_msg()}")
     """
+    ::
+
         s = list(shape)
         for broadcast_dimension in broadcast_dimensions:
             s[broadcast_dimension] = -1
@@ -2060,3 +2061,31 @@ def prims_broadcast_in_dim(
 
         return expand(v, shape)
     """
+    assert max(broadcast_dimensions) < len(shape), (
+        f"Index out of boundary, shape={shape}, "
+        f"broadcast_dimensions={broadcast_dimensions}{g.get_debug_msg()}"
+    )
+    s = list(shape)
+    for broadcast_dimension in broadcast_dimensions:
+        s[broadcast_dimension] = -1
+
+    uns = []
+    for idx, x in enumerate(s):
+        if x != -1:
+            uns.append(idx + len(uns))
+
+    unsqueezed = g.op.Unsqueeze(
+        a, np.array(uns, dtype=np.int64), name="broadcast_in_dim"
+    )
+    res = g.op.Expand(
+        unsqueezed,
+        np.array(shape, dtype=np.int64),
+        name="broadcast_in_dim",
+        outputs=outputs,
+    )
+
+    if set_shape_type:
+        g.set_type(res, g.get_type(a))
+        g.set_shape(res, shape)
+
+    return res
