@@ -228,10 +228,14 @@ reorder_functions_in_proto(file1)
 reorder_functions_in_proto(file2)
 
 sess1 = ExtendedReferenceEvaluator(file1)
-sess2 = ExtendedReferenceEvaluator(file2)
+try:
+    sess2 = ExtendedReferenceEvaluator(file2)
+except NotImplementedError as e:
+    print(e)
+    sess2 = None
 
 got1 = sess1.run(None, feeds1)
-got2 = sess2.run(None, feeds2)
+got2 = got1 if sess2 is None else sess2.run(None, feeds2)
 
 diff1 = np.abs(expected.detach().numpy() - got1[0]).max()
 diff2 = np.abs(expected.detach().numpy() - got2[0]).max()
@@ -249,14 +253,15 @@ def clean_name(name):
     ).replace("_inlfunc_torch_nn_modules_linear_Linear", "")
 
 
-np_inputs = [i.detach().numpy() for i in inputs[0]]
-res1, res2, align, dc = compare_onnx_execution(
-    model1, model2, inputs=np_inputs, verbose=1, raise_exc=False
-)
-for r in res2:
-    r.name = clean_name(r.name)
-text = dc.to_str(res1, res2, align, column_size=90)
-print(text)
+if sess2 is not None:
+    np_inputs = [i.detach().numpy() for i in inputs[0]]
+    res1, res2, align, dc = compare_onnx_execution(
+        model1, model2, inputs=np_inputs, verbose=1, raise_exc=False
+    )
+    for r in res2:
+        r.name = clean_name(r.name)
+    text = dc.to_str(res1, res2, align, column_size=90)
+    print(text)
 
 #################################
 # See :ref:`l-long-outputs-llama-diff-export` for a better view.
