@@ -271,7 +271,11 @@ feedsrt = build_matching_inputs(model_debug, feeds, model_onnxrt)
 ####################################
 # Let's load the model and optimize them.
 
-onnxrt = optimize_model_proto(onnx.load(model_onnxrt))
+try:
+    onnxrt = optimize_model_proto(onnx.load(model_onnxrt))
+except ImportError as e:
+    print("missing library", e)
+    debug = model_debug
 debug = onnx.load(model_debug)
 
 ###################################
