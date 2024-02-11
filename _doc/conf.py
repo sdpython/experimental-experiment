@@ -115,6 +115,7 @@ epkg_dictionary = {
     "onnxruntime-training": "https://onnxruntime.ai/docs/get-started/training-on-device.html",
     "numpy": "https://numpy.org/",
     "onnx-array-api": ("https://sdpython.github.io/doc/onnx-array-api/dev/"),
+    "onnx-rewriter": "https://github.com/microsoft/onnxscript",
     "onnxscript": "https://github.com/microsoft/onnxscript",
     "python": "https://www.python.org/",
     "pytorch": "https://pytorch.org/",
@@ -124,4 +125,5 @@ epkg_dictionary = {
     "sphinx-gallery": "https://github.com/sphinx-gallery/sphinx-gallery",
     "torch": "https://pytorch.org/docs/stable/torch.html",
     "torch.onnx": "https://pytorch.org/docs/stable/onnx.html",
+    "transformers": "https://huggingface.co/docs/transformers/en/index",
 }
