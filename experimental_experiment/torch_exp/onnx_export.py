@@ -1,36 +1,83 @@
 import warnings
-from typing import Dict, Optional, Sequence, Tuple, Union
+from typing import Any, Dict, Optional, Sequence, Tuple, Union
 from onnx import ModelProto
+from onnx.defs import onnx_opset_version
 from .interpreter import DynamoInterpreter
 from .graph_builder import GraphBuilder, OptimizationOptions
 
 
 def _retrieve(
-    name: str, weights: Dict[str, "torch.Tensor"], mapping: Dict[str, str]  # noqa: F821
+    name: str,
+    value: Any,
+    weights: Dict[str, "torch.Tensor"],  # noqa: F821
+    buffers: Dict[str, "torch.Tensor"],  # noqa: F821
+    mapping: Dict[str, Tuple[str, bool]],
+    graph_builder: "GraphBuilder",  # noqa: F821
 ) -> "torch.Tensor":  # noqa: F821
     if name not in mapping:
-        raise RuntimeError(
-            f"Unable to find {name!r}. " f"Available weights: {list(sorted(weights))}."
-        )
-    weight = mapping[name]
-    if weight not in weights:
-        if weight.startswith("L__self___") and weight[len("L__self___") :] in weights:
-            weight = weight[len("L__self___") :]
-    if weight not in weights:
-        raise ValueError(
-            f"Unexpected name {name!r} for input "
-            f"{name!r} mapped to weight {weight!r}, "
-            f"cannot be found in {', '.join(sorted(weights))}."
-        )
-    import torch
+        import torch
 
-    value = weights[weight]
-    if not isinstance(value, torch.Tensor):
-        raise ValueError(
-            f"Unexpected type {type(value)} for input "
-            f"{name!r} mapped to weight {weight!r}."
+        # This is not a weight but a constant.
+        if isinstance(value, torch.Tensor) and "FakeTensor" not in str(type(value)):
+            return value
+        if len(weights) == 0 and len(buffers) == 0:
+            # It has to be an input.
+            return None
+        raise RuntimeError(
+            f"Unable to find {name!r}."
+            f"\nAvailable weights: {list(sorted(weights))}. "
+            f"\nAvailable buffers: {list(sorted(buffers))}. "
+            f"\nmapping={mapping}"
+            f"{graph_builder.get_debug_msg() if graph_builder else ''}"
+            f"\nvalue={value.dtype}:{value.shape}\n{value}"
         )
-    return value
+
+    new_name, is_weight = mapping[name]
+
+    if is_weight:
+        if new_name not in weights:
+            if (
+                new_name.startswith("L__self___")
+                and new_name[len("L__self___") :] in weights
+            ):
+                new_name = new_name[len("L__self___") :]
+        if new_name not in weights:
+            raise ValueError(
+                f"Unexpected name {name!r} for input "
+                f"{name!r} mapped to weight {new_name!r}, "
+                f"cannot be found in {', '.join(sorted(weights))}."
+            )
+        import torch
+
+        value = weights[new_name]
+        if not isinstance(value, torch.Tensor):
+            raise ValueError(
+                f"Unexpected type {type(value)} for input "
+                f"{name!r} mapped to weight {new_name!r}."
+            )
+        return value
+    else:
+        if new_name not in buffers:
+            if (
+                new_name.startswith("L__self___")
+                and new_name[len("L__self___") :] in buffers
+            ):
+                new_name = new_name[len("L__self___") :]
+        if new_name not in buffers:
+            raise ValueError(
+                f"Unexpected name {name!r} for input "
+                f"{name!r} mapped to buffer {new_name!r}, "
+                f"cannot be found in {', '.join(sorted(buffers))}."
+            )
+        import torch
+
+        value = buffers[new_name]
+        if not isinstance(value, torch.Tensor):
+            raise ValueError(
+                f"Unexpected type {type(value)} for constant "
+                f"{name!r} mapped to buffer {new_name!r}."
+            )
+        return value
 
 
 def _make_builder_interpreter(
@@ -65,6 +112,7 @@ def _make_builder_interpreter(
     if isinstance(mod, torch.fx.GraphModule):
         graph_module = mod
         weights = dict(graph_module.named_parameters())
+        buffers = dict(graph_module.named_buffers())
         mapping = {}
     else:
         exported_mod = torch.export.export(mod, args)
@@ -73,11 +121,16 @@ def _make_builder_interpreter(
             weights = dict(exported_mod.named_parameters())
         except AttributeError:
             weights = dict(mod.named_parameters())
+        try:
+            buffers = dict(exported_mod.named_buffers())
+        except AttributeError:
+            buffers = dict(mod.named_buffers())
         signature = exported_mod.graph_signature
-        mapping = signature.inputs_to_parameters
-
-    def retrieve(name, weights=weights, mapping=mapping):
-        return _retrieve(name, weights, mapping)
+        mapping = {}
+        for k, v in signature.inputs_to_parameters.items():
+            mapping[k] = v, True
+        for k, v in signature.inputs_to_buffers.items():
+            mapping[k] = v, False
 
     builder = GraphBuilder(
         target_opset,
@@ -87,6 +140,12 @@ def _make_builder_interpreter(
         args=args,
         verbose=verbose,
     )
+
+    def retrieve(
+        name, value, weights=weights, buffers=buffers, mapping=mapping, builder=builder
+    ):
+        return _retrieve(name, value, weights, buffers, mapping, builder)
+
     interpreter = DynamoInterpreter(builder, retrieve)
     return graph_module, builder, interpreter
 
@@ -95,12 +154,13 @@ def to_onnx(
     mod: Union["torch.nn.Module", "torch.fx.GraphModule"],  # noqa: F821
     args: Sequence["torch.Tensor"],  # noqa: F821
     input_names: Optional[Sequence[str]] = None,
-    target_opset: Union[int, Dict[str, int]] = 18,
+    target_opset: Optional[Union[int, Dict[str, int]]] = None,
     as_function: bool = False,
     remove_unused: bool = False,
     constant_folding: bool = False,
     verbose: int = 0,
-) -> ModelProto:
+    return_builder: bool = False,
+) -> Union[ModelProto, Tuple[ModelProto, GraphBuilder]]:
     """
     Exports a torch model into ONNX using
     `dynamo export
@@ -117,6 +177,8 @@ def to_onnx(
     :param verbose: verbosity level
     :return: onnx model
     """
+    if target_opset is None:
+        target_opset = min(18, onnx_opset_version() - 1)
     graph_module, builder, interpreter = _make_builder_interpreter(
         mod=mod,
         args=args,
@@ -131,4 +193,7 @@ def to_onnx(
     )
 
     builder.process(graph_module, interpreter)
-    return builder.to_onnx()
+    onx = builder.to_onnx()
+    if return_builder:
+        return onx, builder
+    return onx

@@ -29,6 +29,7 @@ The script takes around 12 minutes with a larger models.
 Some helpers
 ++++++++++++
 """
+
 import contextlib
 import itertools
 import os
@@ -775,14 +776,16 @@ for compute in ["CPU", "CUDA"]:
 # ~~~~~~
 
 model = "ort-plot_torch_export_cus_p2-cpu-aot0.onnx"
-print(onnx_simple_text_plot(onnx.load(model)))
+if os.path.exists(model):
+    print(onnx_simple_text_plot(onnx.load(model)))
 
 ###############################################
 # cus_p2
 # ~~~~~~
 
 model = "ort-plot_torch_export_cus_p2-cpu-aot0.onnx"
-print(onnx_simple_text_plot(onnx.load(model)))
+if os.path.exists(model):
+    print(onnx_simple_text_plot(onnx.load(model)))
 
 ###############################################
 # dynopt

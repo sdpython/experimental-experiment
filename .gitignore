@@ -7,9 +7,15 @@
 *.onnx
 *.png
 *.csv
+*.pkl
 *.xlsx
 *.sarif
+temp*.onnx*
+temp_dump/*
 coverage.html/*
+dump_models/*
+temp_dump_models/*
+temp_llama_model_*/*
 _cache/*
 .coverage
 dist/*
@@ -23,6 +29,7 @@ plot_*.txt
 _doc/auto_examples/*
 _doc/sg_execution_times.rst
 _doc/examples/_cache/*
+_doc/examples/dump_models/*
 _doc/examples/onnxruntime_profile*
 _doc/examples/plot_*.png
 _doc/examples/plot_*.xlsx

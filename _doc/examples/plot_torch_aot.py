@@ -2,7 +2,7 @@
 Evaluate DORT Training
 ======================
 
-It compares DORT to eager mode and the default backend.
+It compares DORT to eager mode and :epkg:`onnxrt backend`.
 
 To run the script:
 
@@ -13,6 +13,7 @@ To run the script:
 Some helpers
 ++++++++++++
 """
+
 import warnings
 
 try:

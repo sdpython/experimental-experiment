@@ -225,9 +225,11 @@ class ExtTestCase(unittest.TestCase):
         if not os.path.exists(name):
             raise AssertionError(f"File or folder {name!r} does not exists.")
 
-    def assertGreaterOrEqual(self, a, b):
+    def assertGreaterOrEqual(self, a, b, msg=None):
         if a < b:
-            return AssertionError(f"{a} < {b}, a not greater or equal than b.")
+            return AssertionError(
+                f"{a} < {b}, a not greater or equal than b\n{msg or ''}"
+            )
 
     def assertEqualArray(
         self,
@@ -242,7 +244,9 @@ class ExtTestCase(unittest.TestCase):
         try:
             assert_allclose(expected, value, atol=atol, rtol=rtol)
         except AssertionError as e:
-            raise AssertionError(msg) from e
+            if msg:
+                raise AssertionError(msg) from e
+            raise
 
     def assertAlmostEqual(
         self,
@@ -437,3 +441,32 @@ def get_figure(ax):
     if len(ax.shape) == 2:
         return ax[0, 0].get_figure()
     raise RuntimeError(f"Unexpected shape {ax.shape} for axis.")
+
+
+def dump_dort_onnx(fn):
+    prefix = fn.__name__
+    folder = "tests_dump"
+    if not os.path.exists(folder):
+        os.mkdir(folder)
+
+    def wrapped(self):
+        value = os.environ.get("ONNXRT_DUMP_PATH", None)
+        os.environ["ONNXRT_DUMP_PATH"] = os.path.join(folder, f"{prefix}_")
+        res = fn(self)
+        os.environ["ONNXRT_DUMP_PATH"] = value or ""
+        return res
+
+    return wrapped
+
+
+def requires_torch(version: str, msg: str) -> Callable:
+    """
+    Skips a unit test if torch is not recent enough.
+    """
+    import packaging.version as pv
+    import torch
+
+    if pv.Version(torch.__version__) < pv.Version(version):
+        msg = f"Test does not work on azure pipeline (Windows). {msg}"
+        return unittest.skip(msg)
+    return lambda x: x

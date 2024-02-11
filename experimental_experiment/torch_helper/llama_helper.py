@@ -4,6 +4,7 @@ Code modified from different sources:
 * https://github.com/huggingface/transformers/blob/main/tests/models/llama/test_modeling_llama.py
 * https://github.com/pytorch/pytorch/pull/117009
 """
+
 import random
 from typing import Sequence, Tuple
 
@@ -14,11 +15,14 @@ def get_llama_decoder(
     num_hidden_layers=1,
     vocab_size=1024,
     intermediate_size=16,
-    max_position_embeddings=256,
+    max_position_embeddings=1024,
     num_attention_heads=2,
-    hidden_dropout_prob=0.0,
-    attention_dropout_prob=0.0,
+    _attn_implementation="eager",
 ):
+    """
+    Returns the decoder part.
+    See :func:`experimental_experiment.torch_exp.llama_helper.get_llama_model`.
+    """
     import torch
     from transformers import LlamaConfig
     from transformers.models.llama.modeling_llama import LlamaDecoderLayer
@@ -30,9 +34,9 @@ def get_llama_decoder(
         intermediate_size=intermediate_size,
         max_position_embeddings=max_position_embeddings,
         num_attention_heads=num_attention_heads,
-        hidden_dropout_prob=hidden_dropout_prob,
-        attention_dropout_prob=attention_dropout_prob,
     )
+    if _attn_implementation:
+        config._attn_implementation = _attn_implementation
 
     class LlamaDecoderWrapper(torch.nn.Module):
         def __init__(self, config):
@@ -66,25 +70,28 @@ def get_llama_attention(
     num_hidden_layers=1,
     vocab_size=1024,
     intermediate_size=16,
-    max_position_embeddings=256,
+    max_position_embeddings=1024,
     num_attention_heads=2,
-    hidden_dropout_prob=0.0,
-    attention_dropout_prob=0.0,
+    _attn_implementation="eager",
 ):
+    """
+    Returns the attention part.
+    See :func:`experimental_experiment.torch_exp.llama_helper.get_llama_model`.
+    """
     import torch
     from transformers import LlamaConfig
     from transformers.models.llama.modeling_llama import LlamaAttention
 
     config = LlamaConfig(
-        num_hidden_layers=1,
-        vocab_size=1024,
+        num_hidden_layers=num_hidden_layers,
+        vocab_size=vocab_size,
         hidden_size=hidden_size,
-        intermediate_size=16,
-        max_position_embeddings=256,
-        num_attention_heads=2,
-        hidden_dropout_prob=0.0,
-        attention_dropout_prob=0.0,
+        intermediate_size=intermediate_size,
+        max_position_embeddings=max_position_embeddings,
+        num_attention_heads=num_attention_heads,
     )
+    if _attn_implementation:
+        config._attn_implementation = _attn_implementation
 
     class LlamaAttentionWrapper(torch.nn.Module):
         def __init__(self, config):
@@ -136,25 +143,44 @@ def get_llama_model(
     num_hidden_layers=1,
     vocab_size=1024,
     intermediate_size=16,
-    max_position_embeddings=256,
+    max_position_embeddings=1024,
     num_attention_heads=2,
-    hidden_dropout_prob=0.0,
-    attention_dropout_prob=0.0,
+    _attn_implementation="eager",  # needed value to remove graph breaks
 ):
+    """
+    Returns a model.
+    See `LlamaConfig
+    <https://huggingface.co/docs/transformers/v4.37.2/en/model_doc/llama2#transformers.LlamaConfig>`_.
+    The parameters are chosen for a unit test configuration.
+    For benchmark, a bigger one should be used.
+    Commented out, the default value from :epkg:`transformers`.
+
+    ::
+
+        kwargs = dict(
+            input_dims=[(2, 1024)] * 2,
+            num_hidden_layers=1,  # 32
+            hidden_size=512,  # 4096
+            vocab_size=4000,  # 32000
+            intermediate_size=2000,  # 11008
+            max_position_embeddings=2048,
+            num_attention_heads=8,  # 32
+        )
+    """
     import torch
     from transformers import LlamaConfig
     from transformers.models.llama.modeling_llama import LlamaModel
 
     config = LlamaConfig(
-        num_hidden_layers=1,
-        vocab_size=1024,
+        num_hidden_layers=num_hidden_layers,
+        vocab_size=vocab_size,
         hidden_size=hidden_size,
-        intermediate_size=16,
-        max_position_embeddings=256,
-        num_attention_heads=2,
-        hidden_dropout_prob=0.0,
-        attention_dropout_prob=0.0,
+        intermediate_size=intermediate_size,
+        max_position_embeddings=max_position_embeddings,
+        num_attention_heads=num_attention_heads,
     )
+    if _attn_implementation:
+        config._attn_implementation = _attn_implementation
 
     class LlamaModelWrapper(torch.nn.Module):
         def __init__(self, config):
@@ -164,11 +190,11 @@ def get_llama_model(
         def forward(self, input_ids, attention_mask):
             assert attention_mask is not None
             model_output = self.model(input_ids, attention_mask=attention_mask)
-            return model_output
+            return model_output.to_tuple()
 
     def generate_example_inputs(batch: int, seq: int, vocab_size: int):
         input_ids = ids_tensor([batch, seq], vocab_size)
-        input_mask = torch.tril(torch.ones(batch, seq))
+        input_mask = torch.tril(torch.ones(batch, seq, dtype=torch.float32))
         return input_ids, input_mask
 
     example_args_collection = []

@@ -92,8 +92,6 @@ class TestDynamoCompileOnnx(ExtTestCase):
                 xnp = [x.detach().numpy() for x in inputs]
                 feeds = dict(zip(names, xnp))
                 res = tuple(torch.Tensor(y) for y in sess.run(None, feeds))
-                if len(res) == 1:
-                    return res[0]
                 return res
 
             return run

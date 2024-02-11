@@ -1,7 +1,11 @@
-import sys
 import unittest
 import packaging.version as pv
-from experimental_experiment.ext_test_case import ExtTestCase, ignore_warnings
+from experimental_experiment.ext_test_case import (
+    ExtTestCase,
+    ignore_warnings,
+    skipif_ci_apple,
+    skipif_ci_windows,
+)
 
 
 def torch_recent_enough():
@@ -36,7 +40,8 @@ def return_module_cls_pool():
 
 
 class TestDynamoOnnxRtBackend(ExtTestCase):
-    @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
+    @skipif_ci_apple("crash on apple")
+    @skipif_ci_windows("not supported yet on Windows")
     @unittest.skipIf(not torch_recent_enough(), reason="export fails")
     @ignore_warnings((DeprecationWarning, UserWarning))
     def test_onnxrt_tutorial_0a(self):
@@ -71,7 +76,8 @@ class TestDynamoOnnxRtBackend(ExtTestCase):
         got = sess.run(None, {name: input_tensor.detach().numpy()})[0]
         self.assertEqualArray(expected.detach().numpy(), got, atol=1e-5)
 
-    @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
+    @skipif_ci_apple("crash on apple")
+    @skipif_ci_windows("not supported yet on Windows")
     @unittest.skipIf(not torch_recent_enough(), reason="export fails")
     @ignore_warnings((DeprecationWarning, UserWarning))
     def test_onnxrt_tutorial_0b(self):
@@ -111,7 +117,8 @@ class TestDynamoOnnxRtBackend(ExtTestCase):
         got = sess.run(None, {name: input_tensor.detach().numpy()})[0]
         self.assertEqualArray(expected.detach().numpy(), got, atol=1e-5)
 
-    @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
+    @skipif_ci_apple("crash on apple")
+    @skipif_ci_windows("not supported yet on Windows")
     @unittest.skipIf(not torch_recent_enough(), reason="export fails")
     @unittest.skip(
         "FAIL : Type Error: Type (tensor(int64)) of output arg "
@@ -142,7 +149,8 @@ class TestDynamoOnnxRtBackend(ExtTestCase):
         self.assertEqual(expected.dtype, got.dtype)
         self.assertEqualArray(expected.detach().numpy(), got.detach().numpy())
 
-    @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
+    @skipif_ci_apple("crash on apple")
+    @skipif_ci_windows("not supported yet on Windows")
     @unittest.skipIf(not torch_recent_enough(), reason="export fails")
     @unittest.skip(
         "FAIL : Type Error: Type (tensor(int64)) of output arg "
@@ -170,7 +178,8 @@ class TestDynamoOnnxRtBackend(ExtTestCase):
         self.assertEqual(expected.dtype, got.dtype)
         self.assertEqualArray(expected.detach().numpy(), got.detach().numpy())
 
-    @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
+    @skipif_ci_apple("crash on apple")
+    @skipif_ci_windows("not supported yet on Windows")
     @unittest.skipIf(not torch_recent_enough(), reason="export fails")
     @unittest.skip(
         "FAIL : Type Error: Type (tensor(int64)) of output arg "

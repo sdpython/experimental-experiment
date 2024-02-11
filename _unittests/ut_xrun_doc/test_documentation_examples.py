@@ -5,7 +5,14 @@ import importlib
 import subprocess
 import time
 from experimental_experiment import __file__ as experimental_experiment_file
-from experimental_experiment.ext_test_case import ExtTestCase, is_windows
+from experimental_experiment.ext_test_case import ExtTestCase, is_windows, is_apple
+
+try:
+    import onnxrewriter  # noqa: F401
+
+    has_rewriter = True
+except ImportError:
+    has_rewriter = False
 
 VERBOSE = 0
 ROOT = os.path.realpath(
@@ -70,14 +77,29 @@ class TestDocumentationExamples(ExtTestCase):
             if not name.endswith(".py") or not name.startswith("plot_"):
                 continue
             reason = None
+
             if name in {"plot_torch_export.py"}:
                 if sys.platform in {"win32"}:
                     # dynamo not supported on windows
                     reason = "windows not supported"
+
             if not reason and name in {"plot_convolutation_matmul.py"}:
                 if sys.platform in {"win32"}:
                     # dynamo not supported on windows
                     reason = "graphviz not installed"
+
+            if (
+                not reason
+                and not has_rewriter
+                and name
+                in {
+                    "plot_torch_export.py",
+                    "plot_llama_diff_export.py",
+                    "plot_llama_diff_dort.py",
+                }
+            ):
+                reason = "missing onnx-rewriter"
+
             if not reason and name in {
                 # "plot_convolutation_matmul.py",
                 # "plot_profile_existing_onnx.py",
@@ -88,6 +110,9 @@ class TestDocumentationExamples(ExtTestCase):
             }:
                 # too long
                 reason = "not working yet or too long"
+
+            if not reason and is_apple() and name in {"plot_convolutation_matmul.py"}:
+                reason = "dot is missing"
 
             if reason:
 
