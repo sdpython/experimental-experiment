@@ -261,6 +261,39 @@ def aten_argmax(
     return res
 
 
+def aten_as_strided(
+    g: GraphBuilder,
+    set_shape_type: bool,
+    outputs: List[str],
+    x: T,
+    size: List[int],
+    stride: List[int],
+    storage_offset: Optional[int] = None,
+) -> T:
+    import torch
+    from torch.fx.experimental.proxy_tensor import maybe_disable_fake_tensor_mode
+
+    assert g.has_shape(
+        x
+    ), f"not implemented when shape of x is not known{g.get_debug_msg()}"
+    shape = g.get_shape(x)
+    n = np.prod(shape)
+    indices = np.arange(n).reshape(shape)
+    with maybe_disable_fake_tensor_mode():
+        tindices = torch.tensor(indices)
+        strided = torch.as_strided(tindices, size, stride, storage_offset)
+        np_strided = strided.detach().numpy().ravel()
+
+    flat = g.op.Reshape(x, np.array([-1], dtype=np.int64))
+    xflat = g.op.Gather(flat, np_strided.astype(np.int64))
+    res = g.op.Reshape(xflat, np.array(size, dtype=np.int64), outputs=outputs)
+
+    if set_shape_type:
+        g.set_type(res, g.get_type(x))
+        g.set_shape(res, tuple(size))
+    return res
+
+
 def aten_asin(g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T) -> T:
     res = g.make_node("Asin", [x], outputs)
     if set_shape_type:
@@ -319,13 +352,16 @@ def aten_clone(
     outputs: List[str],
     x: T,
     memory_format: Optional[str] = None,
+    name="clone",
 ) -> T:
     import torch
 
     assert (
-        memory_format is None or memory_format == torch.contiguous_format
+        memory_format is None
+        or memory_format == torch.contiguous_format
+        or memory_format == torch.preserve_format
     ), f"Unexpected value for memory_format={memory_format!r}{g.get_debug_msg()}"
-    return g.make_node("Identity", [x], outputs, name="clone")
+    return g.make_node("Identity", [x], outputs, name=name)
 
 
 def aten_convolution(
@@ -2088,4 +2124,37 @@ def prims_broadcast_in_dim(
         g.set_type(res, g.get_type(a))
         g.set_shape(res, shape)
 
+    return res
+
+
+def prims_clone(
+    g: GraphBuilder,
+    set_shape_type: bool,
+    outputs: List[str],
+    x: T,
+    memory_format: Optional[str] = None,
+) -> T:
+    return aten_clone(
+        g, set_shape_type, outputs, x, memory_format=memory_format, name="prims_clone"
+    )
+
+
+def prims_transpose(
+    g: GraphBuilder,
+    set_shape_type: bool,
+    outputs: List[str],
+    input_name: T,
+    perm: List[int],
+) -> T:
+    res = g.make_node("Transpose", [input_name], outputs, perm=list(perm))
+    if set_shape_type:
+        g.set_type(outputs[0], g.get_type(input_name))
+        if g.has_shape(input_name):
+            shape = list(g.get_shape(input_name))
+            new_shape = shape.copy()
+            for i, p in enumerate(perm):
+                new_shape[i] = shape[p]
+            g.set_shape(outputs[0], tuple(new_shape))
+        elif g.has_rank(input_name):
+            g.set_rank(outputs[0], g.has_rank(input_name))
     return res

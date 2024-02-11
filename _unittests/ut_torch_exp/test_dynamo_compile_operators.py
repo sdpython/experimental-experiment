@@ -2129,6 +2129,14 @@ class TestOperators(ExtTestCase):
             test_backward=False,
         )
 
+    def test_as_strided_0(self):
+        x = torch.arange(12, requires_grad=True, dtype=torch.float32).reshape((-1, 3))
+        self.assertONNX(
+            lambda x: torch.as_strided(x, (3, 3), (1, 2)),
+            x,
+            onnx_export=inspect.currentframe().f_code.co_name,
+        )
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

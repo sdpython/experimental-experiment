@@ -53,6 +53,7 @@ class Opset:
         "Equal": 1,
         "Exp": 1,
         "Expand": 1,
+        "Flatten": 1,
         "Gather": 1,
         "GatherElements": 1,
         "GatherND": 1,
