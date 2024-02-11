@@ -105,7 +105,11 @@ def export_dynamo(filename, model, *args):
             warnings.simplefilter("ignore")
             export_output = torch.onnx.dynamo_export(model, *args)
             model = export_output.model_proto
-    new_model = optimize_model_proto(model)
+    try:
+        new_model = optimize_model_proto(model)
+    except ImportError as e:
+        print("skipping optimization, missing package:", e)
+        new_model = model
     with open(filename, "wb") as f:
         f.write(new_model.SerializeToString())
     if ortopt:
