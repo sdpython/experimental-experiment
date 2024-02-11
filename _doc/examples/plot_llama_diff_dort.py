@@ -275,7 +275,7 @@ try:
     onnxrt = optimize_model_proto(onnx.load(model_onnxrt))
 except ImportError as e:
     print("missing library", e)
-    debug = model_debug
+    onnxrt = model_debug
 debug = onnx.load(model_debug)
 
 ###################################
