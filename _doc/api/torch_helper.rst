@@ -47,6 +47,11 @@ inputs_from_onnx_model
 
 .. autofunction:: experimental_experiment.torch_helper.dump_helper.inputs_from_onnx_model
 
+onnx_custom_backend
++++++++++++++++++++
+
+.. autofunction:: experimental_experiment.torch_helper.fast_backend.onnx_custom_backend
+
 onnx_debug_backend
 ++++++++++++++++++
 

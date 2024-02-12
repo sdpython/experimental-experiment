@@ -5,7 +5,10 @@ from onnx import ModelProto
 
 
 def _get_session(
-    onx: ModelProto, impl: str = "ort", exc: bool = True
+    onx: ModelProto,
+    impl: str = "ort",
+    providers: Optional[List[str]] = None,
+    exc: bool = True,
 ) -> Tuple[Union["ReferenceEvaluator", "InferenceSession"], "RunOptions"]:  # noqa: F821
     assert impl == "ort", f"Unexpected impl={impl!r}"
     assert exc, f"Silent mode is not allowed but exc={exc!r}"
@@ -15,40 +18,36 @@ def _get_session(
     run_options.add_run_config_entry("disable_synchronize_execution_providers", "1")
 
     return (
-        onnxruntime.InferenceSession(
-            onx.SerializeToString(), providers=["CPUExecutionProvider"]
-        ),
+        onnxruntime.InferenceSession(onx.SerializeToString(), providers=providers),
         run_options,
     )
 
 
-def _adjust_scalar_from_fx_to_onnx(
-    dynamo_value: "torch.Tensor",  # noqa: F821
-    value_info: "onnx.ValueInfoProto",  # noqa: F821
-) -> "torch.Tensor":  # noqa: F821
-    """Helper function to wrap PyTorch variables as torch.Tensor"""
-    assert hasattr(dynamo_value, "contiguous"), f"Unexpected type={type(dynamo_value)}"
-    return dynamo_value.contiguous()
-
-
 def _get_ortvalues_from_torch_tensors(
     torch_type_to_np_type: Dict[Any, Any],
+    devices_list: Dict[int, Any],
     OrtValueVector: type,
     tensors: Tuple["torch.Tensor", ...],  # noqa: F821
-    devices: Tuple["ORTC.OrtDevice", ...],  # noqa: F821
-) -> Tuple["torch.Tensor", ...]:  # noqa: F821
+    n_outputs: int,
+) -> Tuple[Tuple["torch.Tensor", ...], Tuple["OrtDevice", ...]]:  # noqa: F821
     ortvalues = OrtValueVector()
     ortvalues.reserve(len(tensors))
     dtypes = []
     shapes = []
     data_ptrs = []
+    devices = []
+    max_device = -1
 
     for tensor in tensors:
         dtypes.append(torch_type_to_np_type[tensor.dtype])
         shapes.append(tensor.size())
         data_ptrs.append(tensor.data_ptr())
+        d = tensor.get_device()
+        devices.append(devices_list[d])
+        max_device = max(max_device, d)
+
     ortvalues.push_back_batch(tensors, data_ptrs, dtypes, shapes, devices)
-    return ortvalues
+    return ortvalues, [devices_list[max_device] for i in range(n_outputs)]
 
 
 def _ortvalues_to_torch_tensor(
@@ -65,26 +64,25 @@ def _run_onnx_session_with_ortvaluevector(
     OrtValueVector: type,
     from_dlpack: Callable,
     torch_type_to_np_type: Dict[Any, Any],
+    devices: Dict[int, Any],
     run_options: "onnxruntime.RunOptions",  # noqa: F821
     sess: "onnxruntime.InferenceSession",  # noqa: F821
     input_names: Tuple[str, ...],
     inputs: Tuple["torch.Tensor", ...],  # noqa: F821
-    input_devices: Tuple["ORTC.OrtDevice", ...],  # noqa: F821
-    output_names: Optional[Tuple[str, ...]] = None,
-    outputs: Optional[Tuple["torch.Tensor", ...]] = None,  # noqa: F821
-    output_devices: Optional[Tuple["ORTC.OrtDevice", ...]] = None,  # noqa: F821
+    output_names: List[str],
     input_value_infos: Optional[Tuple["onnx.ValueInfoProto", ...]] = None,  # noqa: F821
 ) -> Tuple["torch.Tensor"]:  # noqa: F821
     # _nvtx_range_push("contiguous")
-    inputs = tuple(
-        _adjust_scalar_from_fx_to_onnx(arg, value_info)
-        for arg, value_info in zip(inputs, input_value_infos)
-    )
+    contiguous_inputs = tuple(a.contiguous() for a in inputs)
     # _nvtx_range_pop()
 
     # _nvtx_range_push("push_back_batch")
-    ort_inputs = _get_ortvalues_from_torch_tensors(
-        torch_type_to_np_type, inputs, input_devices
+    ort_inputs, output_devices = _get_ortvalues_from_torch_tensors(
+        torch_type_to_np_type,
+        devices,
+        OrtValueVector,
+        contiguous_inputs,
+        len(output_names),
     )
     # _nvtx_range_pop()
 
@@ -115,7 +113,8 @@ def onnx_custom_backend(
     storage: Optional[Dict[str, Any]] = None,
 ) -> Callable:
     """
-    Custom backend to export torch models into onnx.
+    Custom backend to export torch models into onnx
+    (see :epkg:`torch.compiler`).
     This backend relies on :epkg:`onnxruntime` and tries to be
     as efficient as possible.
 
@@ -153,6 +152,19 @@ def onnx_custom_backend(
         torch.bool: np.bool_,
     }
 
+    DEVICES = {
+        -1: ORTC.OrtDevice(ORTC.OrtDevice.cpu(), ORTC.OrtDevice.default_memory(), 0)
+    }
+    providers = ["CPUExecutionProvider"]
+    if torch.cuda.is_available():
+        for i in range(torch.cuda.device_count()):
+            DEVICES[i] = ORTC.OrtDevice(
+                ORTC.OrtDevice.cuda(), ORTC.OrtDevice.default_memory(), i
+            )
+        max_device = max(i.get_device() for i in args)
+        if max_device >= 0:
+            providers = ["CUDAExecutionProvider", "CPUExecutionProvider"]
+
     input_names = (
         ["input"] if len(args) == 1 else [f"input{i}" for i in range(len(args))]
     )
@@ -186,9 +198,10 @@ def onnx_custom_backend(
             f.write(str(graph_module.graph))
             f.write("\n")
 
-    sess, run_options = _get_session(onx, backend, exc=raise_exc)
+    sess, run_options = _get_session(onx, backend, providers, exc=raise_exc)
 
-    names = [i.name for i in onx.graph.input]
+    input_names = [i.name for i in onx.graph.input]
+    output_names = [i.name for i in onx.graph.output]
 
     if storage is not None:
         stor = {}
@@ -202,23 +215,27 @@ def onnx_custom_backend(
         stor["sess"] = sess
         stor["inputs"] = []
         stor["outputs"] = []
+        stor["providers"] = providers
     else:
         stor = None
 
-    def run(*inputs, sess=sess, names=names, stor=stor):
+    def run(
+        *inputs,
+        sess=sess,
+        stor=stor,
+        input_names=input_names,
+        output_names=output_names,
+    ):
         res = _run_onnx_session_with_ortvaluevector(
             ORTC.OrtValueVector,
             _from_dlpack,
             TORCH_DTYPE_TO_NUMPY_DTYPE,
+            DEVICES,
             run_options,
             sess,
-            names,
+            input_names,
             inputs,
-            input_devices=None,
-            output_names=None,
-            outputs=None,
-            output_devices=None,
-            input_value_infos=None,
+            output_names,
         )
         if stor:
             stor["inputs"].append(args)

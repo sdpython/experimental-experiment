@@ -5,6 +5,7 @@ import unittest
 import sys
 import packaging.version as pv
 import torch
+from torch._dynamo.backends.common import aot_autograd
 from experimental_experiment.ext_test_case import (
     ExtTestCase,
     ignore_warnings,
@@ -12,6 +13,12 @@ from experimental_experiment.ext_test_case import (
 from experimental_experiment.torch_helper.dump_helper import assert_all_close
 from experimental_experiment.torch_helper.debug_backend import onnx_debug_backend
 from experimental_experiment.torch_helper.fast_backend import onnx_custom_backend
+
+
+def has_cuda():
+    import torch
+
+    return torch.cuda.is_available()
 
 
 def torch_version():
@@ -44,8 +51,7 @@ class FuncModule0(torch.nn.Module):
         self.params = torch.nn.ParameterList(list(params))
 
     def forward(self, *args):
-        f_args = list(itertools.chain(args, self.params))
-        args = tuple([f_args[0][0] + self.ppp, *f_args[0][1:]])
+        args = tuple([args[0] + self.ppp, *args[1:]])
         res = self.f(*args)
         return res
 
@@ -83,11 +89,10 @@ class TestDynamoCompileBackend(ExtTestCase):
         verbose=0,
         input_index=0,
     ):
-        from torch._dynamo.backends.common import aot_autograd
-
         if sys.platform == "win32":
             raise unittest.SkipTest("Windows not supported yet.")
         assert isinstance(onnx_export, str), f"Export onnx is wrong for f={f}"
+        torch._dynamo.reset()
         if isinstance(args, torch.Tensor):
             args = [args]
         if params is None:
@@ -103,6 +108,7 @@ class TestDynamoCompileBackend(ExtTestCase):
         storage = {}
 
         if backend == "debug":
+            args = tuple(a.to(torch.device("cpu")) for a in args)
             backend_onnx = lambda *args, **kwargs: onnx_debug_backend(  # noqa: E731
                 *args,
                 target_opset=opset_version,
@@ -112,6 +118,10 @@ class TestDynamoCompileBackend(ExtTestCase):
                 **kwargs,
             )
         elif backend == "fast":
+            max_device = max(i.get_device() for i in args)
+            if max_device >= 0:
+                model = model.to(torch.device("cuda"))
+
             backend_onnx = lambda *args, **kwargs: onnx_custom_backend(  # noqa: E731
                 *args,
                 target_opset=opset_version,
@@ -135,9 +145,10 @@ class TestDynamoCompileBackend(ExtTestCase):
             )
 
             if verbose > 1:
-                print("-- model", len(args))
+                print("-- torch model", len(args))
             baseline_result = model(*args)
             if verbose > 1:
+                print("-- done")
                 print("-- compiled_model", len(args))
             result = compiled_model(*args)
             if verbose > 1:
@@ -166,9 +177,10 @@ class TestDynamoCompileBackend(ExtTestCase):
                 fullgraph=fullgraph,
             )
             if verbose > 1:
-                print("-- model", len(args))
+                print("-- torch model", len(args))
             baseline_result = model(*args)
             if verbose > 1:
+                print("-- done")
                 print("-- compiled_model", len(args))
             result = compiled_model(*args)
             if verbose > 1:
@@ -190,8 +202,11 @@ class TestDynamoCompileBackend(ExtTestCase):
         input_names=None,
         dynamic_axes=False,
         verbose=0,
+        backends=None,
     ):
-        for backend in ["debug", "fast"]:
+        if backends is None:
+            backends = ["fast", "debug"]
+        for backend in backends:
             if verbose:
                 print(f"---- backend={backend!r}")
             with self.subTest(backend=backend):
@@ -217,14 +232,48 @@ class TestDynamoCompileBackend(ExtTestCase):
         reason="onnxrt not fully implemented",
     )
     @ignore_warnings((UserWarning, RuntimeWarning, DeprecationWarning))
-    def test_aaaa_forward(self):
+    def test_aaaa_forward_cpu(self):
         x = torch.rand(3, 4, requires_grad=True)
+
         self.assertONNX(
             lambda x: x.cos(),
             x,
             onnx_export=inspect.currentframe().f_code.co_name,
-            verbose=6,
+            verbose=0,
             test_backward=False,
+        )
+
+    @unittest.skipIf(
+        pv.Version(torch_version()) < pv.Version("2.2.1"),
+        reason="onnxrt not fully implemented",
+    )
+    @ignore_warnings((UserWarning, RuntimeWarning, DeprecationWarning))
+    def test_aaaa_backward_cpu(self):
+        x = torch.rand(3, 4, requires_grad=True)
+
+        self.assertONNX(
+            lambda x: x.cos(),
+            x,
+            onnx_export=inspect.currentframe().f_code.co_name,
+            verbose=0,
+            test_backward=True,
+        )
+
+    @unittest.skipIf(
+        pv.Version(torch_version()) < pv.Version("2.2.1"),
+        reason="onnxrt not fully implemented",
+    )
+    @unittest.skipIf(not has_cuda(), reason="needs cuda")
+    @ignore_warnings((UserWarning, RuntimeWarning, DeprecationWarning))
+    def test_aaaa_backward_cuda(self):
+        x = torch.rand(3, 4, requires_grad=True).to(torch.device("cuda"))
+
+        self.assertONNX(
+            lambda x: x.cos(),
+            x,
+            onnx_export=inspect.currentframe().f_code.co_name,
+            verbose=0,
+            test_backward=True,
         )
 
 

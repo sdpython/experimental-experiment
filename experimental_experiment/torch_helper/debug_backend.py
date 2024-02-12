@@ -41,7 +41,8 @@ def onnx_debug_backend(
     storage: Optional[Dict[str, Any]] = None,
 ) -> Callable:
     """
-    Custom backend to export torch models into onnx.
+    Custom backend to export torch models into onnx
+    (see :epkg:`torch.compiler`).
     This backend is not meant to be efficient, it is more to check
     the conversion is ok. It relies either on :epkg:`onnxruntime`
     or the python reference implementation.

@@ -124,6 +124,7 @@ epkg_dictionary = {
     "sklearn-onnx": "https://onnx.ai/sklearn-onnx/",
     "sphinx-gallery": "https://github.com/sphinx-gallery/sphinx-gallery",
     "torch": "https://pytorch.org/docs/stable/torch.html",
+    "torch.compiler": "https://pytorch.org/docs/stable/torch.compiler.html",
     "torch.onnx": "https://pytorch.org/docs/stable/onnx.html",
     "transformers": "https://huggingface.co/docs/transformers/en/index",
 }
