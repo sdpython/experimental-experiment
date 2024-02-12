@@ -35,7 +35,7 @@ def onnx_debug_backend(
     target_opset: Optional[int] = None,
     backend: str = "ort",
     verbose: Union[int, Tuple[int, int]] = 0,
-    dump_prefix: Optional[None] = str,
+    dump_prefix: Optional[None] = None,
     providers: Optional[Tuple[str]] = None,
     raise_exc: bool = True,
     storage: Optional[Dict[str, Any]] = None,

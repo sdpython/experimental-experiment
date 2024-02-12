@@ -2,10 +2,9 @@ import copy
 import inspect
 import itertools
 import operator
-import os
 import unittest
 import sys
-from typing import List, Optional, Union
+from typing import Optional, Union
 import packaging.version as pv
 import numpy as np
 from onnx import ModelProto
@@ -26,8 +25,9 @@ from experimental_experiment.ext_test_case import (
     ignore_warnings,
     requires_torch,
 )
-from experimental_experiment.torch_exp.onnx_export import to_onnx
 from experimental_experiment.torch_exp._exceptions import FunctionNotFoundError
+from experimental_experiment.torch_helper.dump_helper import assert_all_close
+from experimental_experiment.torch_helper.debug_backend import onnx_debug_backend
 
 BATCH_SIZE = 2
 RNN_BATCH_SIZE = 7
@@ -109,70 +109,6 @@ def get_session(
         )
 
 
-def onnx_compiler(
-    graph_module: torch.fx.GraphModule,
-    args: List[torch.Tensor],
-    onnx_export: str = "?",
-    counter: Optional[List[int]] = None,
-    opset_version: Optional[int] = None,
-    impl: str = "ort",
-    verbose: int = 0,
-):
-    assert isinstance(counter, list), f"unexpected type {type(counter)} for counter"
-    input_names = (
-        ["input"] if len(args) == 1 else [f"input{i}" for i in range(len(args))]
-    )
-
-    onx = to_onnx(
-        graph_module,
-        tuple(args),
-        input_names=input_names,
-        remove_unused=True,
-        constant_folding=False,
-        verbose=verbose if impl == "ort" else max(6, verbose),
-        target_opset=opset_version,
-    )
-
-    if not os.path.exists("temp_dump"):
-        os.mkdir("temp_dump")
-
-    counter[0] += 1
-    if onnx_export != "?":
-        name = os.path.join("temp_dump", f"{onnx_export}_{counter[0]}.onnx")
-        with open(name, "wb") as f:
-            f.write(onx.SerializeToString())
-        with open(name + ".txt", "w") as f:
-            f.write(str(graph_module.graph))
-            f.write("\n")
-
-    sess = get_session(onx, impl, exc=True)
-
-    names = [i.name for i in onx.graph.input]
-
-    _dtype = {
-        np.dtype("float32"): torch.float32,
-        np.dtype("float64"): torch.float64,
-        np.dtype("int32"): torch.int32,
-        np.dtype("int64"): torch.int64,
-        np.dtype("bool"): torch.bool,
-        np.float32: torch.float32,
-        np.float64: torch.float64,
-        np.int32: torch.int32,
-        np.int64: torch.int64,
-        np.bool_: torch.bool,
-    }
-
-    def run(*inputs, sess=sess, names=names):
-        # not efficient
-        xnp = [x.detach().numpy() for x in inputs]
-        feeds = dict(zip(names, xnp))
-        results = sess.run(None, feeds)
-        res = tuple(torch.Tensor(y).to(_dtype[y.dtype]) for y in results)
-        return res
-
-    return run
-
-
 class TestOperators(ExtTestCase):
     def setUp(self):
         super().setUp()
@@ -215,21 +151,21 @@ class TestOperators(ExtTestCase):
             assert input_index == 0, f"Not implemented for input_index={input_index}"
             model = FuncModule0(f, params)
         model.eval()
+        storage = {}
 
-        counter = [0]
+        backend_debug = lambda *args, **kwargs: onnx_debug_backend(  # noqa: E731
+            *args,
+            # dump_prefix=os.path.join(folder, "llama_debug"),
+            target_opset=opset_version,
+            storage=storage,
+            backend=impl,
+            verbose=verbose,
+            **kwargs,
+        )
 
         if test_backward:
             # forward/backward
-            aot_compiler = aot_autograd(
-                fw_compiler=lambda *args: onnx_compiler(
-                    *args,
-                    onnx_export=onnx_export,
-                    counter=counter,
-                    opset_version=opset_version,
-                    impl=impl,
-                    verbose=verbose,
-                )
-            )
+            aot_compiler = aot_autograd(fw_compiler=backend_debug)
 
             compiled_model = torch.compile(
                 copy.deepcopy(model),
@@ -247,20 +183,7 @@ class TestOperators(ExtTestCase):
                 raise
 
             if isinstance(baseline_result, torch.Tensor):
-                self.assertEqualArray(
-                    baseline_result.detach().numpy(),
-                    result.detach().numpy(),
-                    atol=atol,
-                    rtol=rtol,
-                    msg=f"expected\n{baseline_result}\n--got--\n{result}",
-                )
-                try:
-                    torch.testing.assert_close(
-                        baseline_result, result, atol=atol, rtol=rtol, equal_nan=True
-                    )
-                except AssertionError as e:
-                    if "nan" not in str(e):
-                        raise
+                assert_all_close(baseline_result, result, atol=atol, rtol=rtol)
 
                 if square_loss:
                     (baseline_result.sum() ** 2).backward()
@@ -275,58 +198,24 @@ class TestOperators(ExtTestCase):
                     except FunctionNotFoundError as e:
                         raise unittest.SkipTest(f"MISSING FOR BACKWARD {e}")
 
-                l1 = list(model.parameters())
-                l2 = list(compiled_model.parameters())
-                self.assertEqual(len(l1), len(l2))
-                assert len(l1) > 0, "No gradient to test"
-                n_gradient = 0
-                for baseline_param, param in zip(l1, l2):
-                    n_gradient += 1
-                    self.assertEqualArray(
-                        baseline_param.grad.detach().numpy(),
-                        param.grad.detach().numpy(),
-                        atol=atol,
-                        rtol=rtol,
-                    )
-                    torch.testing.assert_close(
-                        baseline_param.grad,
-                        param.grad,
-                        atol=atol,
-                        rtol=rtol,
-                        equal_nan=True,
-                    )
-                assert n_gradient > 0, "No gradient was checked"
+                base_grads = tuple(_.grad for _ in model.parameters())
+                grads = tuple(_.grad for _ in compiled_model.parameters())
+                self.assertEqual(len(base_grads), len(grads))
+                assert_all_close(base_grads, grads, atol=atol, rtol=rtol)
+                assert len(grads) > 0, "No gradient was checked"
             else:
                 raise AssertionError(f"Unexpected type {type(baseline_result)}.")
         else:
             # forward only
             compiled_model = torch.compile(
                 copy.deepcopy(model),
-                backend=lambda *args: onnx_compiler(
-                    *args,
-                    onnx_export=onnx_export,
-                    counter=counter,
-                    opset_version=opset_version,
-                    impl=impl,
-                    verbose=verbose,
-                ),
+                backend=backend_debug,
                 dynamic=False,
                 fullgraph=fullgraph,
             )
-
             baseline_result = model(*args)
             result = compiled_model(*args)
-
-            if isinstance(baseline_result, torch.Tensor):
-                self.assertEqualArray(
-                    baseline_result.detach().numpy(),
-                    result.detach().numpy(),
-                    atol=atol,
-                    rtol=rtol,
-                )
-                torch.testing.assert_close(
-                    baseline_result, result, atol=atol, rtol=rtol, equal_nan=True
-                )
+            assert_all_close(baseline_result, result, atol=atol, rtol=rtol)
 
     @ignore_warnings(UserWarning)
     def test_aaa(self):

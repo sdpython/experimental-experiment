@@ -9,6 +9,7 @@ from experimental_experiment.ext_test_case import (
     skipif_ci_windows,
     requires_torch,
 )
+from experimental_experiment.torch_helper.dump_helper import assert_all_close
 
 
 def has_cuda():
@@ -74,59 +75,14 @@ class TestLlama(ExtTestCase):
 
         for example_args in example_args_collection:
             baseline_result = model(*example_args)
-
             result = compiled_model(*example_args)
-            if isinstance(baseline_result, torch.Tensor):
-                torch.testing.assert_close(
-                    baseline_result, result, atol=atol, rtol=rtol
-                )
-                if test_backward:
-                    baseline_result.sum().backward()
-                    result.sum().backward()
-                    for baseline_param, param in zip(
-                        model.parameters(), compiled_model.parameters()
-                    ):
-                        torch.testing.assert_close(
-                            baseline_param.grad, param.grad, atol=atol, rtol=rtol
-                        )
-            else:
-                if hasattr(baseline_result, "to_tuple"):
-                    baseline_result = baseline_result.to_tuple()
-                    result = result.to_tuple()
-
-                baseline_result = tuple(b for b in baseline_result if b is not None)
-                result = tuple(b for b in result if b is not None)
-                assert len(baseline_result) == len(result), (
-                    f"Mismatch number of outputs {len(baseline_result)}"
-                    f"[{type(baseline_result)}] != {len(result)}"
-                    f"[{type(result)}]"
-                )
-                for baseline_elem, result_elem in zip(baseline_result, result):
-                    torch.testing.assert_close(
-                        baseline_elem, result_elem, atol=atol, rtol=rtol
-                    )
-                if test_backward:
-
-                    def _do_sum(x):
-                        if isinstance(x, torch.Tensor):
-                            return x.sum()
-                        if isinstance(x, tuple):
-                            s = _do_sum(x[0])
-                            for i in range(1, len(x)):
-                                s = s + _do_sum(x[i])
-                            return s
-                        raise TypeError(f"unexpected type {type(x)}")
-
-                    baseline_sum = _do_sum(baseline_result)
-                    result_sum = _do_sum(result)
-                    baseline_sum.backward()
-                    result_sum.backward()
-                    for baseline_param, param in zip(
-                        model.parameters(), compiled_model.parameters()
-                    ):
-                        torch.testing.assert_close(
-                            baseline_param.grad, param.grad, atol=atol, rtol=rtol
-                        )
+            assert_all_close(baseline_result, result, atol=atol, rtol=rtol)
+            if test_backward:
+                baseline_result[0].sum().backward()
+                result[0].sum().backward()
+                base_grads = tuple(_.grad for _ in model.parameters())
+                grads = tuple(_.grad for _ in compiled_model.parameters())
+                assert_all_close(base_grads, grads, atol=atol, rtol=rtol)
 
     def _assert_counting_information(
         self,
