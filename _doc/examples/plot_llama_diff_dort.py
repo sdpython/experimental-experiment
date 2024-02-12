@@ -5,7 +5,8 @@ Compares LLAMA exporters for onnxrt backend
 ===========================================
 
 The script compares exported models in :epkg:`pytorch`
-using :epkg:`onnxrt backend`.
+using :epkg:`onnxrt backend`. It tries to do a side by side
+of the execution of both models.
 
 To run the script:
 

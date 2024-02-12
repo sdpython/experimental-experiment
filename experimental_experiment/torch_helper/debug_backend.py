@@ -42,8 +42,9 @@ def onnx_debug_backend(
 ) -> Callable:
     """
     Custom backend to export torch models into onnx.
-    This backend is not meant to be efficient, it more to check
-    the conversion is ok.
+    This backend is not meant to be efficient, it is more to check
+    the conversion is ok. It relies either on :epkg:`onnxruntime`
+    or the python reference implementation.
 
     :param graph_module: graph to export
     :param args: arguments
@@ -56,11 +57,13 @@ def onnx_debug_backend(
     :param dump_prefix
     :param providers: where to run the model, by default
     :param raise_exc: raise an exception whenever something goes wrong
-    :param storage: to store any interesting objects during the process,
-        including this inputs or anything else
+    :param storage: to store any interesting objects during the process
     :return: Callable
 
     See :ref:`l-plot-onnxrt-diff` for an example.
+    If not empty, `storage` keeps the memory of the data generated,
+    onnx models, graph module as well the inputs and outputs when
+    the model is run.
     """
     import torch
     from ..torch_exp.onnx_export import to_onnx
@@ -128,7 +131,7 @@ def onnx_debug_backend(
         stor["inputs"] = []
         stor["outputs"] = []
 
-    def run(*inputs, sess=sess, names=names):
+    def run(*inputs, sess=sess, names=names, stor=stor):
         xnp = [x.detach().numpy() for x in inputs]
         feeds = dict(zip(names, xnp))
         results = sess.run(None, feeds)

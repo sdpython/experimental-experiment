@@ -43,14 +43,14 @@ dump_onnx
 .. autofunction:: experimental_experiment.torch_helper.dump_helper.dump_onnx
 
 inputs_from_onnx_model
-++++++++++++++++++
+++++++++++++++++++++++
 
 .. autofunction:: experimental_experiment.torch_helper.dump_helper.inputs_from_onnx_model
 
 onnx_debug_backend
 ++++++++++++++++++
 
-.. autofunction:: experimental_experiment.torch_helper.dump_helper.onnx_debug_backend
+.. autofunction:: experimental_experiment.torch_helper.debug_backend.onnx_debug_backend
 
 reorder_functions_in_proto
 ++++++++++++++++++++++++++
