@@ -52,10 +52,11 @@ def assert_all_close(v1: Any, v2: Any, atol=1e-5, rtol=1e-5):
 
     if isinstance(v1, torch.Tensor):
         assert isinstance(v2, torch.Tensor), f"v2 is not a tensor but {type(v2)}"
-        assert torch.allclose(v1, v2, atol=atol, rtol=rtol)
+        assert_all_close(v1.detach().numpy(), v2.detach().numpy(), atol=atol, rtol=rtol)
+        assert torch.allclose(v1, v2, atol=atol, rtol=rtol, equal_nan=True)
     elif isinstance(v1, np.ndarray):
         assert isinstance(v2, np.ndarray), f"v2 is not an array but {type(v2)}"
-        np.testing.assert_all_close(v1, v2, atol=atol, rtol=rtol)
+        np.testing.assert_allclose(v1, v2, atol=atol, rtol=rtol)
     elif isinstance(v1, (tuple, list)):
         assert isinstance(v2, type(v1)), f"v2 is not a {type(v1)} but {type(v2)}"
         v1 = tuple(_ for _ in v1 if _ is not None)
