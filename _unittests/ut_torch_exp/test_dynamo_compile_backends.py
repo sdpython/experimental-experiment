@@ -194,7 +194,7 @@ class TestDynamoCompileBackend(ExtTestCase):
         for backend in ["debug", "fast"]:
             if verbose:
                 print(f"---- backend={backend!r}")
-            with self.subTest(backed=backend):
+            with self.subTest(backend=backend):
                 onnx_export_ = "" if onnx_export else f"{onnx_export}_{backend}"
                 self._assertONNX(
                     backend,

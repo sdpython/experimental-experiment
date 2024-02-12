@@ -126,7 +126,10 @@ class DynamoInterpreter:
                     f"value is None, unable to retrieve target {node.target!r}"
                 )
             return self.builder.make_initializer(node.name, value)
-        raise RuntimeError(f"Unsupported type {type(val)} for a placeholder.")
+        raise RuntimeError(
+            f"Unsupported type {type(val)} for a "
+            f"placeholder{self.builder.get_debug_msg()}."
+        )
 
     def output(self, node):
         output_name = node.name
