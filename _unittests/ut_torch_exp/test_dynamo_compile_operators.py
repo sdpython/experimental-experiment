@@ -4,10 +4,9 @@ import itertools
 import operator
 import unittest
 import sys
-from typing import Optional, Union
+from typing import Optional
 import packaging.version as pv
 import numpy as np
-from onnx import ModelProto
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -84,31 +83,6 @@ class FuncModuleModule(Module):
         return res
 
 
-def get_session(
-    onx: ModelProto, impl: str = "ref", exc: bool = True
-) -> Union["ReferenceEvaluator", "InferenceSession"]:  # noqa: F821
-    if exc:
-        try:
-            return get_session(onx, impl, exc=False)
-        except Exception as e:
-            from onnx_array_api.plotting.text_plot import onnx_simple_text_plot
-
-            raise AssertionError(
-                f"Unable to build session ({str(e)})\n{onnx_simple_text_plot(onx)}"
-            ) from e
-
-    if impl == "ref":
-        from onnx.reference import ReferenceEvaluator
-
-        return ReferenceEvaluator(onx, verbose=10)
-    else:
-        import onnxruntime
-
-        return onnxruntime.InferenceSession(
-            onx.SerializeToString(), providers=["CPUExecutionProvider"]
-        )
-
-
 class TestOperators(ExtTestCase):
     def setUp(self):
         super().setUp()
@@ -129,7 +103,7 @@ class TestOperators(ExtTestCase):
         impl="ort",
         #
         input_names=None,
-        dynamic_axes=None,
+        dynamic_axes=False,
         keep_initializers_as_inputs=None,
         training=None,
         input_index: Optional[int] = None,
@@ -155,7 +129,6 @@ class TestOperators(ExtTestCase):
 
         backend_debug = lambda *args, **kwargs: onnx_debug_backend(  # noqa: E731
             *args,
-            # dump_prefix=os.path.join(folder, "llama_debug"),
             target_opset=opset_version,
             storage=storage,
             backend=impl,
@@ -170,7 +143,7 @@ class TestOperators(ExtTestCase):
             compiled_model = torch.compile(
                 copy.deepcopy(model),
                 backend=aot_compiler,
-                dynamic=False,
+                dynamic=dynamic_axes,
                 fullgraph=fullgraph,
             )
 
@@ -210,7 +183,7 @@ class TestOperators(ExtTestCase):
             compiled_model = torch.compile(
                 copy.deepcopy(model),
                 backend=backend_debug,
-                dynamic=False,
+                dynamic=dynamic_axes,
                 fullgraph=fullgraph,
             )
             baseline_result = model(*args)

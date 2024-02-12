@@ -130,13 +130,15 @@ def onnx_debug_backend(
         stor["sess"] = sess
         stor["inputs"] = []
         stor["outputs"] = []
+    else:
+        stor = None
 
     def run(*inputs, sess=sess, names=names, stor=stor):
         xnp = [x.detach().numpy() for x in inputs]
         feeds = dict(zip(names, xnp))
         results = sess.run(None, feeds)
         res = tuple(torch.Tensor(y).to(_dtype[y.dtype]) for y in results)
-        if storage:
+        if stor:
             stor["inputs"].append(feeds)
             stor["outputs"].append(res)
         return res
