@@ -44,7 +44,7 @@ parsed_args = get_parsed_args(
     description=__doc__,
     warmup=5,
     repeat=5,
-    backend=("eager,inductor,ort", "backend to test"),
+    backend=("eager,inductor,ort,custom", "backend to test"),
     device=("cpu,cuda" if torch.cuda.is_available() else "cpu", "device to test"),
     num_hidden_layers=("1,2", "hidden layers to test"),
     mixed=("0,1", "boolean value to test (mixed precision or not)"),
@@ -88,6 +88,7 @@ else:
             repeat=1,
             mixed=0,
             warmup=1,
+            config="small",
         ),
     ]
 

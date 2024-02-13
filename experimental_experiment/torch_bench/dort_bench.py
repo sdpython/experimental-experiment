@@ -52,6 +52,7 @@ from experimental_experiment.convert.convert_helper import optimize_model_proto
 from experimental_experiment.torch_dynamo import onnx_custom_backend, onnx_debug_backend
 from experimental_experiment.torch_helper.llama_helper import get_llama_model
 from experimental_experiment.torch_helper.training_helper import make_aot_ort
+from experimental_experiment.torch_dynamo import get_decomposition_table
 
 
 if args.config == "small":
@@ -90,11 +91,13 @@ elif args.backend == "inductor":
 elif args.backend == "eager":
     compiled_model = model
 elif args.backend == "custom":
+    get_decomposition_table
     target_opset = args.target_opset
     aot_compiler = aot_autograd(
         fw_compiler=lambda *args, **kwargs: onnx_custom_backend(
             *args, target_opset=target_opset, **kwargs
-        )
+        ),
+        decompositions=get_decomposition_table(),
     )
     compiled_model = torch.compile(model, backend=aot_compiler, fullgraph=True)
 elif args.backend == "debug":
@@ -105,7 +108,8 @@ elif args.backend == "debug":
     aot_compiler = aot_autograd(
         fw_compiler=lambda *args, **kwargs: onnx_debug_backend(
             *args, target_opset=target_opset, backend="ref", **kwargs
-        )
+        ),
+        decompositions=get_decomposition_table(),
     )
     compiled_model = torch.compile(model, backend=aot_compiler, fullgraph=True)
 else:
@@ -176,7 +180,7 @@ times = []
 for example_inputs in example_args_collection[args.warmup :]:
     inputs = [t.to("cuda") for t in example_inputs] if is_cuda else example_inputs
     start_time = time.perf_counter()
-    loop_iteration(is_cuda, inputs, compiled_model)
+    loop_iteration(is_cuda, inputs, compiled_model, loss)
     times.append(time.perf_counter() - start_time)
 
 print("measures done.")
