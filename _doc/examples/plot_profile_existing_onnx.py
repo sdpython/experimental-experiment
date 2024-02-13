@@ -23,10 +23,10 @@ except ImportError:
 
 try:
     filename = os.path.join(
-        os.path.dirname(__file__ or ""), "example_4700-CPUep-opt.onnx"
+        os.path.dirname(__file__ or ""), "data", "example_4700-CPUep-opt.onnx"
     )
 except NameError:
-    filename = "example_4700-CPUep-opt.onnx"
+    filename = "data/example_4700-CPUep-opt.onnx"
 
 script_args = get_parsed_args(
     "plot_profile_existing_onnx",
