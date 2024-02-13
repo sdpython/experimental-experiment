@@ -55,17 +55,25 @@ class FuncModule(Module):
 
 
 class FuncModule0(Module):
-    def __init__(self, f, params=None):
-        if params is None:
-            params = ()
+    def __init__(self, f):
         super().__init__()
         self.f = f
         self.ppp = Parameter(torch.Tensor([1]))
-        self.params = nn.ParameterList(list(params))
 
     def forward(self, *args):
-        f_args = list(itertools.chain(args, self.params))
-        args = [tuple([f_args[0][0] + self.ppp, *f_args[0][1:]])]
+        args = tuple([args[0] + self.ppp, *args[1:]])
+        res = self.f(*args)
+        return res
+
+
+class FuncModule1(Module):
+    def __init__(self, f):
+        super().__init__()
+        self.f = f
+        self.ppp = Parameter(torch.Tensor([1]))
+
+    def forward(self, *args):
+        args = tuple([args[0], args[1] + self.ppp, *args[2:]])
         res = self.f(*args)
         return res
 
@@ -108,6 +116,7 @@ class TestOperators(ExtTestCase):
         training=None,
         input_index: Optional[int] = None,
         square_loss=False,
+        use_decomposition=False,
         verbose=0,
     ):
         if sys.platform == "win32":
@@ -115,15 +124,23 @@ class TestOperators(ExtTestCase):
         assert isinstance(onnx_export, str), f"Export onnx is wrong for f={f}"
         if isinstance(args, torch.Tensor):
             args = [args]
-        if params is None:
-            params = ()
         if isinstance(f, nn.Module):
             model = FuncModuleModule(f)
         elif input_index is None:
+            if params is None:
+                params = ()
             model = FuncModule(f, params)
+        elif input_index == 0:
+            assert params is None, f"not implemented with params={params}"
+            model = FuncModule0(f)
+        elif input_index == 1:
+            assert params is None, f"not implemented with params={params}"
+            model = FuncModule1(f)
         else:
-            assert input_index == 0, f"Not implemented for input_index={input_index}"
-            model = FuncModule0(f, params)
+            assert input_index in (
+                0,
+                1,
+            ), f"Not implemented for input_index={input_index}"
         model.eval()
         storage = {}
 
@@ -138,7 +155,20 @@ class TestOperators(ExtTestCase):
 
         if test_backward:
             # forward/backward
-            aot_compiler = aot_autograd(fw_compiler=backend_debug)
+            if use_decomposition:
+                new_table = {}
+                for k, v in torch._decomp.decomposition_table.items():
+                    if k.name() in {
+                        "aten::embedding_dense_backward",
+                    }:
+                        new_table[k] = v
+                    # elif "unsafe" in str(k) or "index" in str(k):
+                    #    print(k, v)
+                aot_compiler = aot_autograd(
+                    fw_compiler=backend_debug, decompositions=new_table
+                )
+            else:
+                aot_compiler = aot_autograd(fw_compiler=backend_debug)
 
             compiled_model = torch.compile(
                 copy.deepcopy(model),
@@ -179,6 +209,7 @@ class TestOperators(ExtTestCase):
             else:
                 raise AssertionError(f"Unexpected type {type(baseline_result)}.")
         else:
+            assert not use_decomposition, "not implemented for use_decomposition=True"
             # forward only
             compiled_model = torch.compile(
                 copy.deepcopy(model),
@@ -2007,6 +2038,22 @@ class TestOperators(ExtTestCase):
             lambda x: torch.as_strided(x, (3, 3), (1, 2)),
             x,
             onnx_export=inspect.currentframe().f_code.co_name,
+        )
+
+    def test_embedding_simple(self):
+        ix = torch.tensor([[1, 2, 4, 5], [4, 3, 2, 9]], dtype=torch.int64)
+        embedding_matrix = torch.arange(
+            30, dtype=torch.float32, requires_grad=True
+        ).reshape((-1, 3))
+        torch.embedding(embedding_matrix, ix)
+        self.assertONNX(
+            lambda ix, mat: torch.embedding(mat, ix),
+            (ix, embedding_matrix),
+            onnx_export=inspect.currentframe().f_code.co_name,
+            input_index=1,
+            impl="ref",
+            verbose=0,
+            use_decomposition=True,
         )
 
 

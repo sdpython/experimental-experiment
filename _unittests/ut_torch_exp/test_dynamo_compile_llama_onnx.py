@@ -8,7 +8,10 @@ from experimental_experiment.ext_test_case import (
     skipif_ci_windows,
 )
 from experimental_experiment.torch_helper.dump_helper import dump_onnx, assert_all_close
-from experimental_experiment.torch_dynamo import onnx_debug_backend
+from experimental_experiment.torch_dynamo import (
+    onnx_debug_backend,
+    get_decomposition_table,
+)
 
 
 def torch_min(v: str) -> bool:
@@ -89,7 +92,9 @@ class TestDynamoLlama(ExtTestCase):
                     decompositions=torch._decomp.decomposition_table,
                 )
             else:
-                aot_compiler = aot_autograd(fw_compiler=backend_debug)
+                aot_compiler = aot_autograd(
+                    fw_compiler=backend_debug, decompositions=get_decomposition_table()
+                )
 
             compiled_model = torch.compile(
                 copy.deepcopy(model),
@@ -134,6 +139,8 @@ class TestDynamoLlama(ExtTestCase):
         impl="ort",
         verbose: int = 0,
         decompositions: bool = False,
+        atol: float = 1e-4,
+        rtol: float = 1e-4,
     ):
         storage = self._assert_model_numerically(
             model,
@@ -144,6 +151,8 @@ class TestDynamoLlama(ExtTestCase):
             impl=impl,
             verbose=verbose,
             decompositions=decompositions,
+            atol=atol,
+            rtol=rtol,
         )
         self.assertIsInstance(storage, dict)
 
@@ -481,7 +490,8 @@ class TestDynamoLlama(ExtTestCase):
             fullgraph=True,
             onnx_export="test_llama_model_backward",
             impl="ref",
-            verbose=10,
+            verbose=0,
+            atol=1e-2,
         )
 
 

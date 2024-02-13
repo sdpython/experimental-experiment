@@ -598,10 +598,45 @@ def aten_embedding_dense_backward(
     padding_idx: int,
     scale_grad_by_freq: bool,
 ) -> T:
+    """
+    def _unsqueeze_to_dim(x: Tensor, dim: int) -> Tensor:
+        for _ in range(dim - x.dim()):
+            x = x.unsqueeze(-1)
+        return x
+
+    def embedding_dense_backward(
+        grad_output: Tensor,
+        indices: Tensor,
+        num_weights: int,
+        padding_idx: int,
+        scale_grad_by_freq: bool,
+    ):
+        computation_dtype, result_dtype = utils.elementwise_dtypes(
+            grad_output, type_promotion_kind=utils.ELEMENTWISE_TYPE_PROMOTION_KIND.DEFAULT
+        )
+        grad_output = grad_output.to(computation_dtype)
+        indices = _maybe_convert_to_dtype(indices, torch.long)  # type: ignore[assignment]
+        if scale_grad_by_freq:
+            counts = indices.new_zeros((num_weights,))
+            ones = torch.ones_like(indices)
+            counts = aten._unsafe_index_put(counts, [indices], ones, accumulate=True)
+            grad_weights_scale = counts[indices]
+            grad_output = grad_output / grad_weights_scale.unsqueeze(-1)
+
+        mask = _unsqueeze_to_dim(indices == padding_idx, grad_output.ndim)
+        grad = grad_output.masked_fill(mask, 0)
+        grad_weight = grad_output.new_zeros(
+            (num_weights,) + grad_output.shape[indices.ndim :]
+        )
+        return aten._unsafe_index_put(grad_weight, [indices], grad, accumulate=True).to(
+            result_dtype
+        )
+    """
     assert (
         not scale_grad_by_freq
     ), f"scale_grad_by_freq=True not implemented{g.get_debug_msg()}"
     assert g.has_shape(grad_output), f"missing shape for grad_output{g.get_debug_msg()}"
+    assert g.has_shape(indices), f"missing shape for indices{g.get_debug_msg()}"
     assert all(
         map(lambda i: isinstance(i, int), g.get_shape(grad_output))
     ), f"unknown shape for grad_output{g.get_debug_msg()}"
@@ -614,19 +649,25 @@ def aten_embedding_dense_backward(
     #     grad_output = grad_output / grad_weights_scale.unsqueeze(-1)
 
     # mask = _unsqueeze_to_dim(indices == padding_idx, grad_output.ndim)
-    shape = [1] * g.get_rank(grad_output)
-    shape[0] = -1
+    shape_indices = list(g.get_shape(indices))
+    ndim = g.get_rank(grad_output)
+    rank_indices = g.get_rank(indices)
+    shape_indices.extend([1] * (ndim - rank_indices))
+    assert ndim == len(shape_indices), (
+        f"New shape for indices is wrong shape_indices="
+        f"{shape_indices}, expected rank={ndim}"
+    )
     mask = g.op.Reshape(
         g.op.Equal(
             indices,
             np.array([padding_idx], dtype=np.int64),
             name="embedding_dense_backward",
         ),
-        np.array(shape, dtype=np.int64),
+        np.array(shape_indices, dtype=np.int64),
         name="embedding_dense_backward",
     )
     g.set_type(mask, TensorProto.BOOL)
-    g.set_rank(mask, len(shape))
+    g.set_rank(mask, len(shape_indices))
 
     # grad = grad_output.masked_fill(mask, 0)
     grad = aten_masked_fill_Scalar(
@@ -639,7 +680,9 @@ def aten_embedding_dense_backward(
         name="embedding_dense_backward_masked_fill",
     )
 
-    new_shape = (num_weights,) + g.get_shape(grad_output)[g.get_rank(indices) :]
+    shape_output = g.get_shape(grad_output)
+    new_shape = (num_weights,) + shape_output[rank_indices:]
+    print("****", shape_indices, shape_output, new_shape, num_weights, rank_indices)
     grad_weight = g.op.ConstantOfShape(
         np.array(new_shape, dtype=np.int64), name="embedding_dense_backward"
     )
@@ -656,6 +699,10 @@ def aten_embedding_dense_backward(
     if set_shape_type:
         g.set_type(res, g.get_type(grad_output))
         g.set_shape(res, new_shape)
+    assert res is None, (
+        "aten_embedding_dense_backward is not correctly implemented, "
+        "use get_decomposition_table."
+    )
     return res
 
 
@@ -913,6 +960,69 @@ def aten_index_Tensor(
         )
     raise RuntimeError(
         f"aten_indices implemented yet for indices={indices}{g.get_debug_msg()}"
+    )
+
+
+def aten_index_put(
+    g: GraphBuilder,
+    set_shape_type: bool,
+    outputs: List[str],
+    self: T,
+    indices: List[T],
+    values: T,
+    accumulate: bool = False,
+    name="aten_index_put",
+) -> T:
+    assert isinstance(
+        indices, list
+    ), f"Unexpected type {type(indices)}{g.get_debug_msg()}"
+    assert (
+        len(indices) == 1
+    ), f"Not implementeded for indices={indices}{g.get_debug_msg()}"
+    assert g.has_shape(self), f"Missing shape for {self!r}{g.get_debug_msg()}"
+
+    index = indices[0]  # tensor
+    new_index = g.op.Unsqueeze(index, np.array([-1], dtype=np.int64), name=name)
+
+    shape_self = g.get_shape(self)
+
+    if accumulate:
+        zeros = g.op.ConstantOfShape(
+            np.array(shape_self, dtype=np.int64),
+            value=from_array(
+                np.array([0], dtype=tensor_dtype_to_np_dtype(g.get_type(values)))
+            ),
+            name=name,
+        )
+        result = g.op.ScatterND(zeros, new_index, values, name=name, reduction="add")
+        res = g.op.Add(result, self, name=name)
+    else:
+        res = g.op.ScatterND(self, new_index, values, name=name)
+
+    if set_shape_type:
+        g.set_type(res, g.get_type(self))
+        g.set_shape(res, g.get_shape(self))
+    return result
+
+
+def aten__unsafe_index_put(
+    g: GraphBuilder,
+    set_shape_type: bool,
+    outputs: List[str],
+    self: T,
+    indices: List[T],
+    values: T,
+    accumulate: bool = False,
+) -> T:
+    return aten_index_put(
+        g,
+        set_shape_type,
+        outputs,
+        self,
+        indices,
+        values,
+        accumulate,
+        name="aten__unsafe_index_put",
     )
 
 
@@ -1301,6 +1411,34 @@ def aten_neg(g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T) ->
     if set_shape_type:
         set_shape_type_unary_op(g, res, x)
     return res
+
+
+def aten_new_zeros(
+    g: GraphBuilder,
+    set_shape_type: bool,
+    outputs: List[str],
+    x: T,
+    size: T,
+    dtype=None,
+    layout=None,
+    device=None,
+    pin_memory=None,
+    name: str = "seros",
+) -> T:
+    if dtype is None:
+        dtype = onnx_dtype_to_torch_dtype(g.get_type(x))
+    return aten_full(
+        g,
+        set_shape_type,
+        outputs,
+        size,
+        fill_value=None,
+        dtype=dtype,
+        layout=layout,
+        device=device,
+        pin_memory=pin_memory,
+        name=name,
+    )
 
 
 def aten_ones(

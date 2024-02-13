@@ -12,3 +12,8 @@ onnx_custom_backend
 ===================
 
 .. autofunction:: experimental_experiment.torch_dynamo.onnx_custom_backend
+
+get_decomposition_table
+=======================
+
+.. autofunction:: experimental_experiment.torch_dynamo.get_decomposition_table

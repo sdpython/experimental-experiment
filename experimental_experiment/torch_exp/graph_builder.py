@@ -77,6 +77,7 @@ class Opset:
         "Relu": 1,
         "Reshape": 1,
         "ScatterElements": 1,
+        "ScatterND": 1,
         "Shape": 1,
         "Sigmoid": 1,
         "Slice": 1,
