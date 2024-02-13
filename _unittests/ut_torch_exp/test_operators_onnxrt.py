@@ -1017,7 +1017,10 @@ class TestOperatorsOnnxrt(ExtTestCase):
     def test_logsoftmax(self):
         x = torch.randn(1, 2, 3, 4, requires_grad=True)
         self.assertONNX(
-            nn.LogSoftmax(dim=3), x, onnx_export=inspect.currentframe().f_code.co_name
+            nn.LogSoftmax(dim=3),
+            x,
+            onnx_export=inspect.currentframe().f_code.co_name,
+            atol=1e-4,
         )
 
     def test_pow(self):

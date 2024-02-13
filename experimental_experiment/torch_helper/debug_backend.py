@@ -41,7 +41,8 @@ def onnx_debug_backend(
     storage: Optional[Dict[str, Any]] = None,
 ) -> Callable:
     """
-    Custom backend to export torch models into onnx.
+    Custom backend to export torch models into onnx
+    (see :epkg:`torch.compiler`).
     This backend is not meant to be efficient, it is more to check
     the conversion is ok. It relies either on :epkg:`onnxruntime`
     or the python reference implementation.
@@ -130,13 +131,15 @@ def onnx_debug_backend(
         stor["sess"] = sess
         stor["inputs"] = []
         stor["outputs"] = []
+    else:
+        stor = None
 
     def run(*inputs, sess=sess, names=names, stor=stor):
         xnp = [x.detach().numpy() for x in inputs]
         feeds = dict(zip(names, xnp))
         results = sess.run(None, feeds)
         res = tuple(torch.Tensor(y).to(_dtype[y.dtype]) for y in results)
-        if storage:
+        if stor:
             stor["inputs"].append(feeds)
             stor["outputs"].append(res)
         return res

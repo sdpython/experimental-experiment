@@ -4,10 +4,9 @@ import itertools
 import operator
 import unittest
 import sys
-from typing import Optional, Union
+from typing import Optional
 import packaging.version as pv
 import numpy as np
-from onnx import ModelProto
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -84,31 +83,6 @@ class FuncModuleModule(Module):
         return res
 
 
-def get_session(
-    onx: ModelProto, impl: str = "ref", exc: bool = True
-) -> Union["ReferenceEvaluator", "InferenceSession"]:  # noqa: F821
-    if exc:
-        try:
-            return get_session(onx, impl, exc=False)
-        except Exception as e:
-            from onnx_array_api.plotting.text_plot import onnx_simple_text_plot
-
-            raise AssertionError(
-                f"Unable to build session ({str(e)})\n{onnx_simple_text_plot(onx)}"
-            ) from e
-
-    if impl == "ref":
-        from onnx.reference import ReferenceEvaluator
-
-        return ReferenceEvaluator(onx, verbose=10)
-    else:
-        import onnxruntime
-
-        return onnxruntime.InferenceSession(
-            onx.SerializeToString(), providers=["CPUExecutionProvider"]
-        )
-
-
 class TestOperators(ExtTestCase):
     def setUp(self):
         super().setUp()
@@ -129,7 +103,7 @@ class TestOperators(ExtTestCase):
         impl="ort",
         #
         input_names=None,
-        dynamic_axes=None,
+        dynamic_axes=False,
         keep_initializers_as_inputs=None,
         training=None,
         input_index: Optional[int] = None,
@@ -155,7 +129,6 @@ class TestOperators(ExtTestCase):
 
         backend_debug = lambda *args, **kwargs: onnx_debug_backend(  # noqa: E731
             *args,
-            # dump_prefix=os.path.join(folder, "llama_debug"),
             target_opset=opset_version,
             storage=storage,
             backend=impl,
@@ -170,7 +143,7 @@ class TestOperators(ExtTestCase):
             compiled_model = torch.compile(
                 copy.deepcopy(model),
                 backend=aot_compiler,
-                dynamic=False,
+                dynamic=dynamic_axes not in (None, False),
                 fullgraph=fullgraph,
             )
 
@@ -210,7 +183,7 @@ class TestOperators(ExtTestCase):
             compiled_model = torch.compile(
                 copy.deepcopy(model),
                 backend=backend_debug,
-                dynamic=False,
+                dynamic=dynamic_axes not in (None, False),
                 fullgraph=fullgraph,
             )
             baseline_result = model(*args)
@@ -1770,6 +1743,7 @@ class TestOperators(ExtTestCase):
             onnx_export=inspect.currentframe().f_code.co_name,
         )
 
+    @unittest.skipIf(not DYNAMIC_SHAPE_SUPPORTED, reason="dynamic axes not supported")
     def test_dynamic_axes_add(self):
         m1 = torch.randn(2, 3, requires_grad=True)
         m2 = torch.randn(2, 1, requires_grad=True)
@@ -1782,6 +1756,7 @@ class TestOperators(ExtTestCase):
             onnx_export=inspect.currentframe().f_code.co_name,
         )
 
+    @unittest.skipIf(not DYNAMIC_SHAPE_SUPPORTED, reason="dynamic axes not supported")
     def test_dynamic_axes_add_inputs_same_symbolic_shape(self):
         m1 = torch.randn(2, 3, requires_grad=True)
         self.assertONNX(
@@ -1793,6 +1768,7 @@ class TestOperators(ExtTestCase):
             onnx_export=inspect.currentframe().f_code.co_name,
         )
 
+    @unittest.skipIf(not DYNAMIC_SHAPE_SUPPORTED, reason="dynamic axes not supported")
     def test_dynamic_axes_matmul_ort(self):
         m1 = torch.randn(2, 2, 4, requires_grad=True)
         m2 = torch.randn(2, 4, 3, requires_grad=True)
@@ -1805,6 +1781,7 @@ class TestOperators(ExtTestCase):
             onnx_export=inspect.currentframe().f_code.co_name,
         )
 
+    @unittest.skipIf(not DYNAMIC_SHAPE_SUPPORTED, reason="dynamic axes not supported")
     def test_dynamic_axes_matmul_ref(self):
         m1 = torch.randn(2, 2, 4, requires_grad=True)
         m2 = torch.randn(2, 4, 3, requires_grad=True)
@@ -1818,6 +1795,7 @@ class TestOperators(ExtTestCase):
             impl="ref",
         )
 
+    @unittest.skipIf(not DYNAMIC_SHAPE_SUPPORTED, reason="dynamic axes not supported")
     def test_dynamic_axes_reduce_mean_12(self):
         m1 = torch.arange(24, dtype=torch.float32, requires_grad=True).reshape(
             (2, 3, 4)
@@ -1832,6 +1810,7 @@ class TestOperators(ExtTestCase):
             impl="ref",
         )
 
+    @unittest.skipIf(not DYNAMIC_SHAPE_SUPPORTED, reason="dynamic axes not supported")
     def test_dynamic_axes_reduce_mean_18(self):
         m1 = torch.arange(24, dtype=torch.float32, requires_grad=True).reshape(
             (2, 3, 4)
@@ -1846,6 +1825,7 @@ class TestOperators(ExtTestCase):
             impl="ref",
         )
 
+    @unittest.skipIf(not DYNAMIC_SHAPE_SUPPORTED, reason="dynamic axes not supported")
     def test_dynamic_axes_unchange_softmax_ort(self):
         m1 = torch.arange(6, requires_grad=True, dtype=torch.float32).reshape((-1, 3))
         self.assertONNX(
@@ -1857,6 +1837,7 @@ class TestOperators(ExtTestCase):
             onnx_export=inspect.currentframe().f_code.co_name,
         )
 
+    @unittest.skipIf(not DYNAMIC_SHAPE_SUPPORTED, reason="dynamic axes not supported")
     def test_dynamic_axes_unchange_softmax_ref(self):
         m1 = torch.arange(6, requires_grad=True, dtype=torch.float32).reshape((-1, 3))
         self.assertONNX(
@@ -1977,22 +1958,23 @@ class TestOperators(ExtTestCase):
 
         torch.onnx.unregister_custom_op_symbolic("::embedding", _onnx_opset_version)
 
-    # Without shapeValueMap, the onnx graph looks like:
-    # graph(%0 : Float(*, 1, 128, 1, strides=[128, 128, 1, 1], requires_grad=0, device=cpu)):
-    #   %2 : Long(4, strides=[1], device=cpu) = onnx::Shape(%0)
-    #   %4 : Long(device=cpu) = onnx::Constant[value={0}]()
-    #   %5 : Long(device=cpu) = onnx::Gather[axis=0](%2, %4)
-    #   %6 : Long(device=cpu) = onnx::Constant[value={1}]()
-    #   %7 : Long(device=cpu) = onnx::Constant[value={2}]()
-    #   %8 : Long(device=cpu) = onnx::Constant[value={-1}]()
-    #   %9 : int[] = prim::ListConstruct(%5, %6, %7, %8)
-    #   %10 : Float(*, *, *, *, strides=[128, 128, 64, 1], requires_grad=0, device=cpu) = onnx::Reshape(%0, %9)
-    #   ...
-    # With shapeValueMap, it becomes:
-    #   ...
-    #   %10 : Float(*, 1, 2, 64, strides=[128, 128, 64, 1], requires_grad=0, device=cpu) = onnx::Reshape(%0, %9)
-    #   ...
+    @unittest.skipIf(not DYNAMIC_SHAPE_SUPPORTED, reason="dynamic shape")
     def test_shape_value_map(self):
+        # Without shapeValueMap, the onnx graph looks like:
+        # graph(%0 : Float(*, 1, 128, 1, strides=[128, 128, 1, 1], requires_grad=0, device=cpu)):
+        #   %2 : Long(4, strides=[1], device=cpu) = onnx::Shape(%0)
+        #   %4 : Long(device=cpu) = onnx::Constant[value={0}]()
+        #   %5 : Long(device=cpu) = onnx::Gather[axis=0](%2, %4)
+        #   %6 : Long(device=cpu) = onnx::Constant[value={1}]()
+        #   %7 : Long(device=cpu) = onnx::Constant[value={2}]()
+        #   %8 : Long(device=cpu) = onnx::Constant[value={-1}]()
+        #   %9 : int[] = prim::ListConstruct(%5, %6, %7, %8)
+        #   %10 : Float(*, *, *, *, strides=[128, 128, 64, 1], requires_grad=0, device=cpu) = onnx::Reshape(%0, %9)
+        #   ...
+        # With shapeValueMap, it becomes:
+        #   ...
+        #   %10 : Float(*, 1, 2, 64, strides=[128, 128, 64, 1], requires_grad=0, device=cpu) = onnx::Reshape(%0, %9)
+        #   ...
         class RSoftMax(torch.nn.Module):
             def __init__(self, radix, cardinality):
                 super().__init__()
