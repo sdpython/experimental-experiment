@@ -61,9 +61,14 @@ class FuncModule0(Module):
         self.ppp = Parameter(torch.Tensor([1]))
 
     def forward(self, *args):
-        args = tuple([args[0] + self.ppp, *args[1:]])
-        res = self.f(*args)
-        return res
+        if isinstance(args[0], tuple):
+            args = (tuple([args[0][0] + self.ppp, *args[0][1:]]),)
+            res = self.f(*args)
+            return res
+        else:
+            args = tuple([args[0] + self.ppp, *args[1:]])
+            res = self.f(*args)
+            return res
 
 
 class FuncModule1(Module):

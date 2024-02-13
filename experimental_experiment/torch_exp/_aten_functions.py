@@ -206,7 +206,12 @@ def aten_arange_start(
     device=None,
     pin_memory=None,
 ) -> T:
-    assert layout is None, f"arange not implemented for layout={layout!r} is not None"
+    import torch
+
+    assert layout in (
+        None,
+        torch.strided,
+    ), f"arange not implemented for layout={layout!r}"
     assert not pin_memory, "arange not implemented for pin_memory=True"
     return aten_arange(g, set_shape_type, outputs, start, end, dtype=dtype)
 
