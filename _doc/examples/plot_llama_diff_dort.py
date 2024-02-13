@@ -56,11 +56,11 @@ from experimental_experiment.torch_helper.dump_helper import (
     inputs_from_onnx_model,
     build_matching_inputs,
 )
-from experimental_experiment.torch_helper.debug_backend import onnx_debug_backend
 from experimental_experiment.torch_helper.training_helper import (
     train_loop,
     make_aot_ort,
 )
+from experimental_experiment.torch_dynamo import onnx_debug_backend
 
 has_cuda = has_cuda and torch.cuda.is_available()
 logging.disable(logging.ERROR)

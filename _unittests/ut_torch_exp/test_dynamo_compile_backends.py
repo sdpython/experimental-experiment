@@ -11,8 +11,7 @@ from experimental_experiment.ext_test_case import (
     ignore_warnings,
 )
 from experimental_experiment.torch_helper.dump_helper import assert_all_close
-from experimental_experiment.torch_helper.debug_backend import onnx_debug_backend
-from experimental_experiment.torch_helper.fast_backend import onnx_custom_backend
+from experimental_experiment.torch_dynamo import onnx_debug_backend, onnx_custom_backend
 
 
 def has_cuda():

@@ -2,6 +2,8 @@ import os
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 import numpy as np
 from onnx import ModelProto
+import torch
+from ..torch_exp.onnx_export import to_onnx
 
 
 def _get_session(
@@ -66,9 +68,6 @@ def onnx_debug_backend(
     onnx models, graph module as well the inputs and outputs when
     the model is run.
     """
-    import torch
-    from ..torch_exp.onnx_export import to_onnx
-
     input_names = (
         ["input"] if len(args) == 1 else [f"input{i}" for i in range(len(args))]
     )

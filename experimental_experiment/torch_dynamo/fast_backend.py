@@ -2,6 +2,10 @@ import os
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 import numpy as np
 from onnx import ModelProto
+import torch
+from torch._C import _from_dlpack
+from ..torch_exp.onnx_export import to_onnx
+from onnxruntime.capi import _pybind_state as ORTC
 
 
 def _get_session(
@@ -135,11 +139,6 @@ def onnx_custom_backend(
     onnx models, graph module as well the inputs and outputs when
     the model is run.
     """
-    import torch
-    from torch._C import _from_dlpack
-    from ..torch_exp.onnx_export import to_onnx
-    from onnxruntime.capi import _pybind_state as ORTC
-
     TORCH_DTYPE_TO_NUMPY_DTYPE = {
         torch.float16: np.float16,
         torch.float32: np.float32,
