@@ -26,7 +26,7 @@ from experimental_experiment.ext_test_case import (
 )
 from experimental_experiment.torch_exp._exceptions import FunctionNotFoundError
 from experimental_experiment.torch_helper.dump_helper import assert_all_close
-from experimental_experiment.torch_helper.debug_backend import onnx_debug_backend
+from experimental_experiment.torch_dynamo import onnx_debug_backend
 
 BATCH_SIZE = 2
 RNN_BATCH_SIZE = 7
