@@ -4,7 +4,7 @@
 Measure LLAMA speed
 ===================
 
-The script is calling many times the script ``onnxrt_backend_dev.llama.dort_bench.py``.
+The script is calling many times the script ``experimental_experiment.torch_dynamo.dort_bench.py``.
 
 ::
 
@@ -21,7 +21,7 @@ Run the following command to run one experiment and get the available options:
 
 ::
 
-    python -m onnxrt_backend_dev.llama.dort_bench --help
+    python -m experimental_experiment.torch_dynamo.dort_bench --help
 
 """
 
@@ -31,11 +31,11 @@ import pandas
 import matplotlib.pyplot as plt
 import itertools
 import torch
-from onnxrt_backend_dev.ext_test_case import unit_test_going
-from onnxrt_backend_dev.bench_run import run_benchmark, get_machine, BenchmarkError
-from onnxrt_backend_dev.args import get_parsed_args
+from experimental_experiment.ext_test_case import unit_test_going
+from experimental_experiment.bench_run import run_benchmark, get_machine, BenchmarkError
+from experimental_experiment.args import get_parsed_args
 
-script_name = "onnxrt_backend_dev.llama.dort_bench"
+script_name = "experimental_experiment.torch_dynamo.dort_bench"
 machine = {} if unit_test_going() else get_machine()
 
 
@@ -48,7 +48,7 @@ parsed_args = get_parsed_args(
     device=("cpu,cuda" if torch.cuda.is_available() else "cpu", "device to test"),
     num_hidden_layers=("1,2", "hidden layers to test"),
     mixed=("0,1", "boolean value to test (mixed precision or not)"),
-    script_name=("onnxrt_backend_dev.llama.dort_bench", "script to run"),
+    script_name=("experimental_experiment.torch_dynamo.dort_bench", "script to run"),
     dump=(0, "dump the models with env ONNXRT_DUMP_PATH"),
     check=(0, "just check the script is working, ignores all other parameters"),
     expose="backend,device,num_hidden_layers,mixed,scipt_name,repeat,warmup,dump,check",

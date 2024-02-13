@@ -47,7 +47,8 @@ import numpy as np
 import onnx
 from onnx_array_api.reference import compare_onnx_execution, ExtendedReferenceEvaluator
 import torch
-from experimental_experiment.ext_test_case import get_parsed_args, unit_test_going
+from experimental_experiment.ext_test_case import unit_test_going
+from experimental_experiment.args import get_parsed_args
 from experimental_experiment.torch_exp.onnx_export import to_onnx
 from experimental_experiment.convert.convert_helper import (
     optimize_model_proto,

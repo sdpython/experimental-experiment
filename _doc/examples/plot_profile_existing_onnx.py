@@ -11,7 +11,7 @@ Preparation
 import os
 import numpy as np
 import matplotlib.pyplot as plt
-from experimental_experiment.ext_test_case import get_parsed_args
+from experimental_experiment.args import get_parsed_args
 
 try:
     from onnx_extended.tools.js_profile import (

@@ -8,7 +8,7 @@ from experimental_experiment.ext_test_case import (
     skipif_ci_windows,
 )
 from experimental_experiment.torch_helper.dump_helper import dump_onnx, assert_all_close
-from experimental_experiment.torch_helper.debug_backend import onnx_debug_backend
+from experimental_experiment.torch_dynamo import onnx_debug_backend
 
 
 def torch_min(v: str) -> bool:
@@ -73,8 +73,10 @@ class TestDynamoLlama(ExtTestCase):
         backend_debug = lambda *args, **kwargs: onnx_debug_backend(  # noqa: E731
             *args,
             # dump_prefix=os.path.join(folder, "llama_debug"),
+            backend=impl,
             target_opset=18,
             storage=storage,
+            verbose=verbose,
             **kwargs,
         )
 
@@ -108,9 +110,13 @@ class TestDynamoLlama(ExtTestCase):
             baseline_result = model(*example_args)
             result = compiled_model(*example_args)
             assert_all_close(baseline_result, result, atol=atol, rtol=rtol)
-            if test_backward and test_backward != 1:
-                baseline_result.sum().backward()
-                result.sum().backward()
+            if test_backward is True:
+                if isinstance(baseline_result, tuple):
+                    baseline_result[0].sum().backward()
+                    result[0].sum().backward()
+                else:
+                    baseline_result.sum().backward()
+                    result.sum().backward()
                 base_grads = tuple(_.grad for _ in model.parameters())
                 grads = tuple(_.grad for _ in compiled_model.parameters())
                 assert_all_close(base_grads, grads, atol=atol, rtol=rtol)
@@ -387,7 +393,7 @@ class TestDynamoLlama(ExtTestCase):
     @ignore_warnings((UserWarning, DeprecationWarning))
     @skipif_ci_windows("torch.compile not supported on Windows")
     @unittest.skipIf(torch_min("2.2"), reason="missing kernel")
-    def test_llama_model_backward(self):
+    def test_llama_model_backward_undec(self):
         from experimental_experiment.torch_helper.llama_helper import (
             get_llama_model,
         )
@@ -447,6 +453,35 @@ class TestDynamoLlama(ExtTestCase):
             fullgraph=True,
             onnx_export="test_llama_model_backward_decomposition",
             decompositions=True,
+        )
+
+    @ignore_warnings((UserWarning, DeprecationWarning))
+    @skipif_ci_windows("torch.compile not supported on Windows")
+    @unittest.skipIf(torch_min("2.2"), reason="missing kernel")
+    def test_llama_model_backward_ref(self):
+        from experimental_experiment.torch_helper.llama_helper import (
+            get_llama_model,
+        )
+
+        model, example_args_collection = get_llama_model(
+            input_dims=[(2, 1024)] * 2,
+            hidden_size=16,
+            num_hidden_layers=1,
+            vocab_size=1024,
+            intermediate_size=16,
+            max_position_embeddings=1024,
+            num_attention_heads=2,
+            _attn_implementation="eager",
+        )
+        self.common_test_model(
+            model,
+            example_args_collection,
+            test_backward=True,
+            dynamic=False,
+            fullgraph=True,
+            onnx_export="test_llama_model_backward",
+            impl="ref",
+            verbose=10,
         )
 
 

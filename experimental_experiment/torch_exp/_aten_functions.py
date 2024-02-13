@@ -630,7 +630,13 @@ def aten_embedding_dense_backward(
 
     # grad = grad_output.masked_fill(mask, 0)
     grad = aten_masked_fill_Scalar(
-        g, set_shape_type, None, grad_output, mask, 0, name="embedding_dense_backward"
+        g,
+        set_shape_type,
+        None,
+        grad_output,
+        mask,
+        0,
+        name="embedding_dense_backward_masked_fill",
     )
 
     new_shape = (num_weights,) + g.get_shape(grad_output)[g.get_rank(indices) :]
