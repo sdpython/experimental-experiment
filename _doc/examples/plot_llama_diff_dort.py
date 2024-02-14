@@ -39,7 +39,8 @@ import onnx
 from onnx_array_api.reference import compare_onnx_execution, ExtendedReferenceEvaluator
 import torch
 from torch._dynamo.backends.common import aot_autograd
-from experimental_experiment.ext_test_case import get_parsed_args, unit_test_going
+from experimental_experiment.ext_test_case import unit_test_going
+from experimental_experiment.args import get_parsed_args
 from experimental_experiment.convert.convert_helper import (
     optimize_model_proto,
     ort_optimize,
@@ -56,11 +57,11 @@ from experimental_experiment.torch_helper.dump_helper import (
     inputs_from_onnx_model,
     build_matching_inputs,
 )
-from experimental_experiment.torch_helper.debug_backend import onnx_debug_backend
 from experimental_experiment.torch_helper.training_helper import (
     train_loop,
     make_aot_ort,
 )
+from experimental_experiment.torch_dynamo import onnx_debug_backend
 
 has_cuda = has_cuda and torch.cuda.is_available()
 logging.disable(logging.ERROR)

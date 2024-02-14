@@ -38,13 +38,13 @@ class DynamoInterpreter:
                 )
         if self.builder.verbose > 1:
             exa = (
-                f"{torch_dtype_to_onnx_dtype(example_value.dtype)}{example_value.shape}"
+                f"{torch_dtype_to_onnx_dtype(example_value.dtype)}'{tuple(example_value.shape)}"
                 if hasattr(example_value, "dtype")
                 else ""
             )
             v = node.meta.get("val", None) if hasattr(node, "meta") else None
             val = (
-                f"{torch_dtype_to_onnx_dtype(v.dtype)}{v.shape}"
+                f"{torch_dtype_to_onnx_dtype(v.dtype)}'{tuple(v.shape)}"
                 if hasattr(v, "dtype")
                 else ""
             )

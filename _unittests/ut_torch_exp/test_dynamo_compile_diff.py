@@ -46,9 +46,7 @@ class TestDynamoCompileDiff(ExtTestCase):
             inputs_from_onnx_model,
             build_matching_inputs,
         )
-        from experimental_experiment.torch_helper.debug_backend import (
-            onnx_debug_backend,
-        )
+        from experimental_experiment.torch_dynamo import onnx_debug_backend
 
         logging.disable(logging.ERROR)
 

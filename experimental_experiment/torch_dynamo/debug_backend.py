@@ -2,14 +2,16 @@ import os
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 import numpy as np
 from onnx import ModelProto
+import torch
+from ..torch_exp.onnx_export import to_onnx
 
 
 def _get_session(
-    onx: ModelProto, impl: str = "ref", exc: bool = True
+    onx: ModelProto, impl: str = "ref", exc: bool = True, verbose: int = 0
 ) -> Union["ReferenceEvaluator", "InferenceSession"]:  # noqa: F821
     if exc:
         try:
-            return _get_session(onx, impl, exc=False)
+            return _get_session(onx, impl, exc=False, verbose=verbose)
         except Exception as e:
             from onnx_array_api.plotting.text_plot import onnx_simple_text_plot
 
@@ -20,7 +22,7 @@ def _get_session(
     if impl == "ref":
         from onnx.reference import ReferenceEvaluator
 
-        return ReferenceEvaluator(onx, verbose=10)
+        return ReferenceEvaluator(onx, verbose=verbose)
     else:
         import onnxruntime
 
@@ -66,9 +68,6 @@ def onnx_debug_backend(
     onnx models, graph module as well the inputs and outputs when
     the model is run.
     """
-    import torch
-    from ..torch_exp.onnx_export import to_onnx
-
     input_names = (
         ["input"] if len(args) == 1 else [f"input{i}" for i in range(len(args))]
     )
@@ -102,7 +101,7 @@ def onnx_debug_backend(
             f.write(str(graph_module.graph))
             f.write("\n")
 
-    sess = _get_session(onx, backend, exc=raise_exc)
+    sess = _get_session(onx, backend, exc=raise_exc, verbose=verbose_backend)
 
     names = [i.name for i in onx.graph.input]
 

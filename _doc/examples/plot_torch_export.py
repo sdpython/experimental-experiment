@@ -68,11 +68,8 @@ import torch.nn.functional as F
 import experimental_experiment
 from experimental_experiment.torch_exp.onnx_export import to_onnx
 from experimental_experiment.plotting.memory import memory_peak_plot
-from experimental_experiment.ext_test_case import (
-    get_parsed_args,
-    measure_time,
-    get_figure,
-)
+from experimental_experiment.ext_test_case import measure_time, get_figure
+from experimental_experiment.args import get_parsed_args
 from experimental_experiment.memory_peak import start_spying_on
 from tqdm import tqdm
 

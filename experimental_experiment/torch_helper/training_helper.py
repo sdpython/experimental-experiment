@@ -1,16 +1,19 @@
 def make_aot_ort(dynamic: bool = False):
+    import onnxruntime
     from torch.onnx import (
         _OrtBackend as OrtBackend,
         _OrtBackendOptions as OrtBackendOptions,
         ExportOptions,
     )
 
+    ort_session_options = onnxruntime.SessionOptions()
+    # ort_session_options.log_severity_level = 1
+
     ort_backend = OrtBackend(
         options=OrtBackendOptions(
-            export_options=ExportOptions(
-                dynamic_shapes=dynamic,
-            )
-        )
+            export_options=ExportOptions(dynamic_shapes=dynamic),
+            ort_session_options=ort_session_options,
+        ),
     )
     return ort_backend, ort_backend
 
