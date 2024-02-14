@@ -26,6 +26,12 @@ def implements(name: str) -> bool:
     return hasattr(atf, name)
 
 
+def has_cuda():
+    import torch
+
+    return torch.cuda.is_available()
+
+
 class TestDynamoLlama(ExtTestCase):
     @ignore_warnings((UserWarning, DeprecationWarning))
     def test_aaaa(self):
@@ -55,6 +61,7 @@ class TestDynamoLlama(ExtTestCase):
         impl="ort",
         verbose: int = 0,
         decompositions=False,
+        mixed=False,
     ):
         import torch
 
@@ -112,16 +119,34 @@ class TestDynamoLlama(ExtTestCase):
             )
 
         for example_args in example_args_collection:
-            baseline_result = model(*example_args)
-            result = compiled_model(*example_args)
+            if mixed:
+                with torch.autocast(device_type="cuda", dtype=torch.float16):
+                    baseline_result = model(*example_args)
+                with torch.autocast(device_type="cuda", dtype=torch.float16):
+                    result = compiled_model(*example_args)
+            else:
+                baseline_result = model(*example_args)
+                result = compiled_model(*example_args)
             assert_all_close(baseline_result, result, atol=atol, rtol=rtol)
             if test_backward is True:
-                if isinstance(baseline_result, tuple):
-                    baseline_result[0].sum().backward()
-                    result[0].sum().backward()
+                if mixed:
+                    if isinstance(baseline_result, tuple):
+                        with torch.autocast(device_type="cuda", dtype=torch.float16):
+                            baseline_result[0].sum().backward()
+                        with torch.autocast(device_type="cuda", dtype=torch.float16):
+                            result[0].sum().backward()
+                    else:
+                        with torch.autocast(device_type="cuda", dtype=torch.float16):
+                            baseline_result.sum().backward()
+                        with torch.autocast(device_type="cuda", dtype=torch.float16):
+                            result.sum().backward()
                 else:
-                    baseline_result.sum().backward()
-                    result.sum().backward()
+                    if isinstance(baseline_result, tuple):
+                        baseline_result[0].sum().backward()
+                        result[0].sum().backward()
+                    else:
+                        baseline_result.sum().backward()
+                        result.sum().backward()
                 base_grads = tuple(_.grad for _ in model.parameters())
                 grads = tuple(_.grad for _ in compiled_model.parameters())
                 assert_all_close(base_grads, grads, atol=atol, rtol=rtol)
@@ -141,6 +166,7 @@ class TestDynamoLlama(ExtTestCase):
         decompositions: bool = False,
         atol: float = 1e-4,
         rtol: float = 1e-4,
+        mixed=False,
     ):
         storage = self._assert_model_numerically(
             model,
@@ -153,6 +179,7 @@ class TestDynamoLlama(ExtTestCase):
             decompositions=decompositions,
             atol=atol,
             rtol=rtol,
+            mixed=mixed,
         )
         self.assertIsInstance(storage, dict)
 
@@ -337,9 +364,7 @@ class TestDynamoLlama(ExtTestCase):
     @unittest.skip("aten_embedding receives the inputs in the other way")
     def test_llama_model_forward(self):
         import torch
-        from experimental_experiment.torch_helper.llama_helper import (
-            get_llama_model,
-        )
+        from experimental_experiment.torch_helper.llama_helper import get_llama_model
 
         input_dims = self.get_input_dims(False)
         model, example_args_collection = get_llama_model(input_dims=input_dims)
@@ -371,9 +396,7 @@ class TestDynamoLlama(ExtTestCase):
     @unittest.skipIf(torch_min("2.2"), reason="missing kernel")
     def test_llama_model_backward_forward(self):
         import torch
-        from experimental_experiment.torch_helper.llama_helper import (
-            get_llama_model,
-        )
+        from experimental_experiment.torch_helper.llama_helper import get_llama_model
 
         input_dims = self.get_input_dims(False)
         model, example_args_collection = get_llama_model(input_dims=input_dims)
@@ -403,9 +426,7 @@ class TestDynamoLlama(ExtTestCase):
     @skipif_ci_windows("torch.compile not supported on Windows")
     @unittest.skipIf(torch_min("2.2"), reason="missing kernel")
     def test_llama_model_backward_undec(self):
-        from experimental_experiment.torch_helper.llama_helper import (
-            get_llama_model,
-        )
+        from experimental_experiment.torch_helper.llama_helper import get_llama_model
 
         input_dims = self.get_input_dims(False)
         model, example_args_collection = get_llama_model(input_dims=input_dims)
@@ -425,9 +446,7 @@ class TestDynamoLlama(ExtTestCase):
         not implements("prims_collapsed_view"), reason="not yet implemented"
     )
     def test_llama_model_backward_decomposition(self):
-        from experimental_experiment.torch_helper.llama_helper import (
-            get_llama_model,
-        )
+        from experimental_experiment.torch_helper.llama_helper import get_llama_model
 
         input_dims = self.get_input_dims(False)
         model, example_args_collection = get_llama_model(input_dims=input_dims)
@@ -448,9 +467,7 @@ class TestDynamoLlama(ExtTestCase):
         not implements("prims_collapsed_view"), reason="not yet implemented"
     )
     def test_llama_model_backward_forward_decomposition(self):
-        from experimental_experiment.torch_helper.llama_helper import (
-            get_llama_model,
-        )
+        from experimental_experiment.torch_helper.llama_helper import get_llama_model
 
         input_dims = self.get_input_dims(False)
         model, example_args_collection = get_llama_model(input_dims=input_dims)
@@ -468,9 +485,7 @@ class TestDynamoLlama(ExtTestCase):
     @skipif_ci_windows("torch.compile not supported on Windows")
     @unittest.skipIf(torch_min("2.2"), reason="missing kernel")
     def test_llama_model_backward_ref(self):
-        from experimental_experiment.torch_helper.llama_helper import (
-            get_llama_model,
-        )
+        from experimental_experiment.torch_helper.llama_helper import get_llama_model
 
         model, example_args_collection = get_llama_model(
             input_dims=[(2, 1024)] * 2,
@@ -492,6 +507,76 @@ class TestDynamoLlama(ExtTestCase):
             impl="ref",
             verbose=0,
             atol=3e-2,
+        )
+
+    @ignore_warnings((UserWarning, DeprecationWarning))
+    @skipif_ci_windows("torch.compile not supported on Windows")
+    @unittest.skipIf(torch_min("2.2"), reason="missing kernel")
+    @unittest.skipIf(not has_cuda(), "cuda is needed for autocast")
+    def test_llama_model_backward_forward_mixed(self):
+        import torch
+        from experimental_experiment.torch_helper.llama_helper import get_llama_model
+
+        input_dims = self.get_input_dims(False)
+        model, example_args_collection = get_llama_model(input_dims=input_dims)
+
+        # onnxrt backend
+        with torch.autocast(device_type="cuda", dtype=torch.float16):
+            compiled_model = torch.compile(
+                copy.deepcopy(model),
+                backend="onnxrt",
+                dynamic=False,
+                fullgraph=True,
+            )
+
+        folder = "test_llama_model_backward_forward_mixed"
+        with dump_onnx("llama_onnxrt", folder=folder, clean=True):
+            compiled_model(*example_args_collection[0])
+
+        self.common_test_model(
+            model,
+            example_args_collection,
+            test_backward=1,
+            dynamic=False,
+            fullgraph=True,
+            onnx_export="test_llama_model_backward_forward_mixed",
+            impl="ort",
+            mixed=True,
+        )
+
+    @ignore_warnings((UserWarning, DeprecationWarning))
+    @skipif_ci_windows("torch.compile not supported on Windows")
+    @unittest.skipIf(torch_min("2.2"), reason="missing kernel")
+    @unittest.skipIf(not has_cuda(), "cuda is needed for autocast")
+    def test_llama_model_backward_mixed(self):
+        import torch
+        from experimental_experiment.torch_helper.llama_helper import get_llama_model
+
+        input_dims = self.get_input_dims(False)
+        model, example_args_collection = get_llama_model(input_dims=input_dims)
+
+        # onnxrt backend
+        with torch.autocast(device_type="cuda", dtype=torch.float16):
+            compiled_model = torch.compile(
+                copy.deepcopy(model),
+                backend="onnxrt",
+                dynamic=False,
+                fullgraph=True,
+            )
+
+        folder = "test_llama_model_backward_forward_mixed"
+        with dump_onnx("llama_onnxrt", folder=folder, clean=True):
+            compiled_model(*example_args_collection[0])
+
+        self.common_test_model(
+            model,
+            example_args_collection,
+            test_backward=True,
+            dynamic=False,
+            fullgraph=True,
+            onnx_export="test_llama_model_backward_mixed",
+            impl="ort",
+            mixed=True,
         )
 
 
