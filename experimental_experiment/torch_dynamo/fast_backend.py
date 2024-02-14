@@ -20,9 +20,13 @@ def _get_session(
 
     run_options = onnxruntime.RunOptions()
     run_options.add_run_config_entry("disable_synchronize_execution_providers", "1")
+    opts = onnxruntime.SessionOptions()
+    opts.add_session_config_entry("session.disable_aot_function_inlining", "1")
 
     return (
-        onnxruntime.InferenceSession(onx.SerializeToString(), providers=providers),
+        onnxruntime.InferenceSession(
+            onx.SerializeToString(), opts, providers=providers
+        ),
         run_options,
     )
 

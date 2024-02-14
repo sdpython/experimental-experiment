@@ -1985,8 +1985,13 @@ def aten__to_copy(
     non_blocking=False,
     memory_format=None,
 ) -> T:
-    assert layout is None, f"_to_copy implemented with layout={layout!r}"
-    assert device is None, f"_to_copy implemented with device={device!r}"
+    import torch
+
+    assert layout in (
+        None,
+        torch.strided,
+    ), f"_to_copy implemented with layout={layout!r}"
+    # assert device is None, f"_to_copy implemented with device={device!r}"
     assert pin_memory is None, f"_to_copy implemented with pin_memory={pin_memory!r}"
     assert not non_blocking, f"_to_copy implemented with non_blocking={non_blocking!r}"
     assert (

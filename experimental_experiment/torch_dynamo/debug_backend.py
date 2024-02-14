@@ -7,7 +7,11 @@ from ..torch_exp.onnx_export import to_onnx
 
 
 def _get_session(
-    onx: ModelProto, impl: str = "ref", exc: bool = True, verbose: int = 0
+    onx: ModelProto,
+    impl: str = "ref",
+    exc: bool = True,
+    verbose: int = 0,
+    providers: Optional[List[str]] = None,
 ) -> Union["ReferenceEvaluator", "InferenceSession"]:  # noqa: F821
     if exc:
         try:
@@ -26,8 +30,10 @@ def _get_session(
     else:
         import onnxruntime
 
+        providers = providers or ["CPUExecutionProvider"]
+
         return onnxruntime.InferenceSession(
-            onx.SerializeToString(), providers=["CPUExecutionProvider"]
+            onx.SerializeToString(), providers=providers
         )
 
 
@@ -101,16 +107,20 @@ def onnx_debug_backend(
             f.write(str(graph_module.graph))
             f.write("\n")
 
-    sess = _get_session(onx, backend, exc=raise_exc, verbose=verbose_backend)
+    sess = _get_session(
+        onx, backend, exc=raise_exc, verbose=verbose_backend, providers=providers
+    )
 
     names = [i.name for i in onx.graph.input]
 
     _dtype = {
+        np.dtype("float16"): torch.float16,
         np.dtype("float32"): torch.float32,
         np.dtype("float64"): torch.float64,
         np.dtype("int32"): torch.int32,
         np.dtype("int64"): torch.int64,
         np.dtype("bool"): torch.bool,
+        np.float16: torch.float16,
         np.float32: torch.float32,
         np.float64: torch.float64,
         np.int32: torch.int32,
@@ -134,13 +144,16 @@ def onnx_debug_backend(
         stor = None
 
     def run(*inputs, sess=sess, names=names, stor=stor):
-        xnp = [x.detach().numpy() for x in inputs]
+        max_device = max(x.get_device() for x in inputs)
+        xnp = [x.detach().cpu().numpy() for x in inputs]
         feeds = dict(zip(names, xnp))
         results = sess.run(None, feeds)
         res = tuple(torch.Tensor(y).to(_dtype[y.dtype]) for y in results)
         if stor:
             stor["inputs"].append(feeds)
             stor["outputs"].append(res)
+        if max_device >= 0:
+            res = tuple(x.to("cuda") for x in res)
         return res
 
     return run

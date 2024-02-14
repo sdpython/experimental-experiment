@@ -55,7 +55,7 @@ def assert_all_close(v1: Any, v2: Any, atol=1e-5, rtol=1e-5):
         assert_all_close(
             v1.detach().cpu().numpy(), v2.detach().cpu().numpy(), atol=atol, rtol=rtol
         )
-        assert torch.allclose(v1, v2, atol=atol, rtol=rtol, equal_nan=True)
+        assert torch.allclose(v1.cpu(), v2.cpu(), atol=atol, rtol=rtol, equal_nan=True)
     elif isinstance(v1, np.ndarray):
         assert isinstance(v2, np.ndarray), f"v2 is not an array but {type(v2)}"
         np.testing.assert_allclose(v1, v2, atol=atol, rtol=rtol)
@@ -190,3 +190,20 @@ def build_matching_inputs(
         raise RuntimeError(f"Unable to find key={key} among {list(feeds_rev)}")
 
     return feeds2
+
+
+def results_to_string(results: Any, indent: str = "") -> str:
+    """
+    Builds a string showing the type and shape of every tensor in it.
+    """
+    import torch
+
+    if isinstance(results, torch.Tensor):
+        return (
+            f"{indent}{results.dtype} {tuple(results.shape)} [sum={results.sum():1.3g}]"
+        )
+    if isinstance(results, tuple):
+        return f"{indent}{len(results)} results\n" + "\n".join(
+            map(lambda r: results_to_string(r, indent=indent + "  "), results)
+        )
+    raise RuntimeError(f"Unexpected type {type(results)} for results")

@@ -16,7 +16,8 @@ line-length = 88
 max-complexity = 10
 
 [tool.ruff.lint.per-file-ignores]
-"_doc/examples/plot_first_example.py" = ["E402", "F811"]
+"_doc/examples/plot_*.py" = ["E402"]
+"_doc/examples/plot_first_example.py" = ["F811"]
 "experimental_experiment/torch_bench/dort_bench.py" = ["E402"]
 "experimental_experiment/torch_dynamo/__init__.py" = ["F401"]
 "experimental_experiment/torch_exp/__init__.py" = ["F401"]

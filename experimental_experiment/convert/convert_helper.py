@@ -35,7 +35,7 @@ def optimize_model_proto(model_proto: ModelProto) -> ModelProto:
     from onnxrewriter.optimizer import optimize
     from onnxrewriter.rewriter.transformers import rewrite
 
-    # model_proto = inline_model_proto(model_proto)
+    model_proto = inline_model_proto(model_proto)
     model_proto = optimize(
         model_proto,
         num_iterations=2,
@@ -50,6 +50,7 @@ def ort_optimize(
     onnx_model: Union[str, ModelProto],
     output: str,
     providers: Union[str, List[str]] = "cpu",
+    disable_aot: bool = False,
 ):
     """
     Optimizes the model with onnxruntime.
@@ -57,11 +58,15 @@ def ort_optimize(
     :param onnx_model: ModelProto or file path
     :param output: path for the output
     :param providers: providers, cpu, cuda or a list of providers
+    :param disable_aot: disable AOT
     """
     import onnxruntime
 
     opts = onnxruntime.SessionOptions()
     opts.optimized_model_filepath = output
+    if disable_aot:
+        opts.add_session_config_entry("session.disable_aot_function_inlining", "1")
+
     if providers == "cpu":
         providers = ["CPUExecutionProvider"]
     elif providers == "cuda":
