@@ -1,5 +1,20 @@
+import subprocess
 from argparse import ArgumentParser, Namespace
 from typing import Dict, Optional, Tuple, Union
+
+
+def check_cuda_availability():
+    """
+    Checks if CUDA is available without pytorch or onnxruntime.
+    Calls `nvidia-smi`.
+    """
+    try:
+        result = subprocess.run(["nvidia-smi"], capture_output=True, text=True)
+        if result.returncode == 0:
+            return True
+        return False
+    except FileNotFoundError:
+        return False
 
 
 def get_parsed_args(

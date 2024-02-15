@@ -4,26 +4,43 @@
 Measure LLAMA speed
 ===================
 
-The script is calling many times the script ``experimental_experiment.torch_dynamo.dort_bench.py``.
+The script is calling many times the script ``experimental_experiment.torch_bench.dort_bench.py``.
 
 ::
 
-    python docs/examples/plot_llama_bench.py --help
+    python _doc/examples/plot_llama_bench.py --help
     
 For exemple, to check mixed precision on multiple backend:
 
 ::
 
-    python docs/examples/plot_llama_bench.py --device=cuda --num_hidden_layers=1 --mixed=1
+    python _doc/examples/plot_llama_bench.py --device=cuda --num_hidden_layers=1 --mixed=1
 
 
 Run the following command to run one experiment and get the available options:
 
 ::
 
-    python -m experimental_experiment.torch_dynamo.dort_bench --help
+    python -m experimental_experiment.torch_bench.dort_bench --help
 
 """
+
+from experimental_experiment.args import get_parsed_args, check_cuda_availability
+
+parsed_args = get_parsed_args(
+    "plot_llama_bench",
+    description=__doc__,
+    warmup=5,
+    repeat=5,
+    backend=("eager,inductor,ort,custom", "backend to test"),
+    device=("cpu,cuda" if check_cuda_availability() else "cpu", "device to test"),
+    num_hidden_layers=("1,2", "hidden layers to test"),
+    mixed=("0,1", "boolean value to test (mixed precision or not)"),
+    script_name=("experimental_experiment.torch_bench.dort_bench", "script to run"),
+    dump=(0, "dump the models with env ONNXRT_DUMP_PATH"),
+    check=(0, "just check the script is working, ignores all other parameters"),
+    expose="backend,device,num_hidden_layers,mixed,scipt_name,repeat,warmup,dump,check",
+)
 
 import onnxruntime  # noqa: F401
 import numpy as np
@@ -33,26 +50,11 @@ import itertools
 import torch
 from experimental_experiment.ext_test_case import unit_test_going
 from experimental_experiment.bench_run import run_benchmark, get_machine, BenchmarkError
-from experimental_experiment.args import get_parsed_args
 
-script_name = "experimental_experiment.torch_dynamo.dort_bench"
+script_name = "experimental_experiment.torch_bench.dort_bench"
 machine = {} if unit_test_going() else get_machine()
 
 
-parsed_args = get_parsed_args(
-    "plot_llama_bench",
-    description=__doc__,
-    warmup=5,
-    repeat=5,
-    backend=("eager,inductor,ort,custom", "backend to test"),
-    device=("cpu,cuda" if torch.cuda.is_available() else "cpu", "device to test"),
-    num_hidden_layers=("1,2", "hidden layers to test"),
-    mixed=("0,1", "boolean value to test (mixed precision or not)"),
-    script_name=("experimental_experiment.torch_dynamo.dort_bench", "script to run"),
-    dump=(0, "dump the models with env ONNXRT_DUMP_PATH"),
-    check=(0, "just check the script is working, ignores all other parameters"),
-    expose="backend,device,num_hidden_layers,mixed,scipt_name,repeat,warmup,dump,check",
-)
 repeat = parsed_args.repeat
 warmup = parsed_args.warmup
 

@@ -2,6 +2,7 @@ import itertools
 import os
 import unittest
 import numpy as np
+import onnxruntime  # noqa: F401
 import onnx.helper as oh
 from onnx import TensorProto, load
 from onnx.numpy_helper import from_array
@@ -23,7 +24,7 @@ class TestCheckOrtFloat16(ExtTestCase):
         model = oh.make_model(
             oh.make_graph(
                 [
-                    oh.make_node("Add", ["X", "I"], ["data"]),
+                    oh.make_node("CastLike", ["X", "I"], ["data"]),
                     oh.make_node(
                         "ScatterElements",
                         inputs=["data", "indices", "updates"],
@@ -35,7 +36,7 @@ class TestCheckOrtFloat16(ExtTestCase):
                 ],
                 "name",
                 [
-                    oh.make_tensor_value_info("X", itype, [None, None]),
+                    oh.make_tensor_value_info("X", TensorProto.FLOAT, [None, None]),
                     oh.make_tensor_value_info(
                         "indices", TensorProto.INT64, [None, None]
                     ),
@@ -62,15 +63,18 @@ class TestCheckOrtFloat16(ExtTestCase):
         onx = load(filename)
         names = [n.op_type for n in onx.graph.node]
         self.assertEqual(names, expected_names)
+        sonx = str(onx).replace(" ", "").replace("\n", "|")
+        sexp = 'op_type:"Cast"|attribute{|name:"to"|type:INT|i:%d|}' % itype
+        self.assertIn(sexp, sonx)
 
     @unittest.skipIf(not has_cuda(), reason="cuda not available")
     @ignore_warnings(DeprecationWarning)
     def test_scatter_cuda(self):
         default_value = [
-            "Add",
-            "MemcpyToHost",
+            "Cast",
+            # "MemcpyToHost",
             "ScatterElements",
-            "MemcpyFromHost",
+            # "MemcpyFromHost",
             "Sub",
         ]
         expected = {
@@ -93,7 +97,7 @@ class TestCheckOrtFloat16(ExtTestCase):
     @ignore_warnings(DeprecationWarning)
     def test_scatter_cpu(self):
         default_value = [
-            "Add",
+            "Cast",
             "ScatterElements",
             "Sub",
         ]
