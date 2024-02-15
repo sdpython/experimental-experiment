@@ -333,12 +333,12 @@ reorder_functions_in_proto(model_onnxrt)
 ####################################
 # Let's load the model and optimize them.
 
+debug = onnx.load(model_debug)
 try:
     onnxrt = optimize_model_proto(onnx.load(model_onnxrt))
 except ImportError as e:
     print("missing library", e)
-    onnxrt = model_debug
-debug = onnx.load(model_debug)
+    onnxrt = debug
 
 ###################################
 # Let's apply onnxruntime optimization
