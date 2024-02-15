@@ -330,6 +330,10 @@ def aten_atanh(g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T) 
 def aten_bmm(
     g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T, y: T
 ) -> T:
+    assert g.get_type(x) == g.get_type(y), (
+        f"type mismatch between {x!r}:{g.get_type(x)} and "
+        f"{y!r}:{g.get_type(y)}{g.get_debug_msg()}"
+    )
     return g.op.MatMul(x, y, outputs=outputs, name="bmm")
 
 

@@ -187,6 +187,10 @@ def onnx_custom_backend(
         return_builder=True,
     )
 
+    value = os.environ.get("ONNXRT_DUMP_PATH", None)
+    if value:
+        dump_prefix = value
+
     if dump_prefix:
         counter = 0
         name = f"{dump_prefix}_{counter}.onnx"

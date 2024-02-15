@@ -32,31 +32,30 @@ args = get_parsed_args(
     warmup=5,
     repeat=5,
     mixed=(0, "mixed precision (based on autocast)"),
-    export=(
-        "",
-        "export the model with dynamo and torch.script, " "use this as a prefix",
-    ),
+    export=("", "export the dynamo models"),
     target_opset=(18, "opset to convert into, use with backend=custom"),
     config=("default", "default or small to test"),
     expose="backend,repeat,warmup,device,num_hidden_layers,"
     "mixed,export,config,target_opset",
 )
 
+import os
 import time
-import onnxruntime
+import onnxruntime  # noqa: F401
 import numpy as np
 import torch
 import torch._dynamo.backends.registry
 from torch._dynamo.backends.common import aot_autograd
-from experimental_experiment.convert.convert_helper import optimize_model_proto
-from experimental_experiment.torch_dynamo import onnx_custom_backend, onnx_debug_backend
+from experimental_experiment.convert.convert_helper import ort_optimize
 from experimental_experiment.torch_helper.llama_helper import get_llama_model
 from experimental_experiment.torch_helper.training_helper import make_aot_ort
+from experimental_experiment.torch_helper.dump_helper import dump_onnx
 from experimental_experiment.torch_dynamo import get_decomposition_table
+from experimental_experiment.torch_dynamo import onnx_custom_backend, onnx_debug_backend
 
 
 if args.config == "small":
-    model, example_args_collection = get_llama_model(
+    config_dict = dict(
         input_dims=[(2, 1024)] * (args.repeat + args.warmup),
         hidden_size=16,
         num_hidden_layers=args.num_hidden_layers,
@@ -67,7 +66,7 @@ if args.config == "small":
         _attn_implementation="eager",
     )
 else:
-    model, example_args_collection = get_llama_model(
+    config_dict = dict(
         input_dims=[(2, 1024)] * (args.repeat + args.warmup),
         hidden_size=4096,
         num_hidden_layers=args.num_hidden_layers,
@@ -77,6 +76,10 @@ else:
         num_attention_heads=32,
         _attn_implementation="eager",
     )
+
+print(f"llama config={config_dict}")
+print(f"backend={args.backend}")
+model, example_args_collection = get_llama_model(**config_dict)
 
 
 device = args.device
@@ -130,37 +133,6 @@ def loop_iteration(is_cuda, inputs, compiled_model, loss):
         torch.cuda.synchronize()
 
 
-if args.export:
-    providers = (
-        ["CPUExecutionProvider"]
-        if device == "cpu"
-        else ["CUDAExecutionProvider", "CPUExecutionProvider"]
-    )
-
-    filename = f"{args.export}.script.onnx"
-    print("export with torch.onnx.export to {filename!r}")
-    input_names = ["input{i}" for i in range(len(example_args_collection[0]))]
-    torch.onnx.export(model, *example_args_collection[0], filename, input_names)
-
-    ofilename = f"{args.export}.script.opt.onnx"
-    print("onnxruntime optimization to {ofilename!r}")
-    opts = onnxruntime.SessionOptions()
-    opts.optimized_model_filepath = ofilename
-    sess = onnxruntime.InferenceSession(filename, opts, providers=providers)
-
-    filename = f"{args.export}.dynamo.onnx"
-    print("export with torch.onnx.dynamo_export to {filename!r}")
-    export_output = torch.onnx.dynamo_export(model, *args)
-    optimized_model = optimize_model_proto(export_output.model_proto)
-    with open(filename, "wb") as f:
-        f.write(optimized_model.SerializeToString())
-
-    ofilename = f"{args.export}.dynamo.opt.onnx"
-    print("onnxruntime optimization to {ofilename!r}")
-    opts = onnxruntime.SessionOptions()
-    opts.optimized_model_filepath = ofilename
-    sess = onnxruntime.InferenceSession(filename, opts, providers=providers)
-
 print("warmup")
 warmup_times = []
 is_cuda = args.device == "cuda"
@@ -169,10 +141,30 @@ for i in range(args.warmup):
     example_inputs = example_args_collection[i]
     inputs = [t.to("cuda") for t in example_inputs] if is_cuda else example_inputs
     start_time = time.perf_counter()
-    loop_iteration(is_cuda, inputs, compiled_model, loss)
+    if args.backend in ("ort", "custom", "debug") and i == 0 and args.export:
+        with dump_onnx(
+            f"dort-{args.export}-{args.backend}", folder="dump_dort_bench", clean=True
+        ):
+            loop_iteration(is_cuda, inputs, compiled_model, loss)
+        for onx in os.listdir("dump_dort_bench"):
+            if not onx.endswith(".onnx"):
+                continue
+            new_onx = onx.replace(".onnx", ".opt.onnx")
+            print(f"  ort_optimize {onx} -> {new_onx}")
+            ort_optimize(
+                os.path.join("dump_dort_bench", onx),
+                output=os.path.join("dump_dort_bench", new_onx),
+                providers=(
+                    ["CUDAExecutionProvider", "CPUExecutionProvider"]
+                    if is_cuda
+                    else ["CPUExecutionProvider"]
+                ),
+            )
+    else:
+        loop_iteration(is_cuda, inputs, compiled_model, loss)
     warmup_times.append(time.perf_counter() - start_time)
 
-warmup_time = time.perf_counter() - start_time
+warmup_time = sum(warmup_times)
 print(f"warmup done in {warmup_time}s.")
 
 print("measures")

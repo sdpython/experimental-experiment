@@ -185,11 +185,13 @@ def set_shape_type_reduce_op(
     g.set_rank(name, g.get_rank(x) + keepdim - 1)
 
 
-def _get_input_type(g: "GraphBuilder", x: Any) -> int:  # noqa: F821
+def _get_input_type(
+    g: "GraphBuilder", x: Any, python_default: bool  # noqa: F821
+) -> int:
     if isinstance(x, int):
-        return TensorProto.INT64
+        return TensorProto.INT64 if python_default else None
     if isinstance(x, float):
-        return TensorProto.FLOAT
+        return TensorProto.FLOAT if python_default else None
     if isinstance(x, str):
         return g.get_type(x)
     if isinstance(x, np.ndarray):
@@ -251,8 +253,15 @@ def prepare_inputs_homogeneous_operator(
     """
     Cast any inputs to ensure all inputs share the same type.
     """
-    dtypes_list = [_get_input_type(g, a) for a in args]
-    dtypes = set(dtypes_list)
+    dtypes_list = [_get_input_type(g, a, python_default=False) for a in args]
+    dtypes_list_not_none = [n for n in dtypes_list if n is not None]
+    if not dtypes_list_not_none:
+        # the type cannot be guessed from the input as it is only python types,
+        # let's include them
+        dtypes_list_not_none = [
+            _get_input_type(g, a, python_default=True) for a in args
+        ]
+    dtypes = set(dtypes_list_not_none)
     only = _get_compute_type(set(dtypes))
     inputs = []
     for dt, a in zip(dtypes_list, args):

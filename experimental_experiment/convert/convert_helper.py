@@ -35,7 +35,7 @@ def optimize_model_proto(model_proto: ModelProto) -> ModelProto:
     from onnxrewriter.optimizer import optimize
     from onnxrewriter.rewriter.transformers import rewrite
 
-    model_proto = inline_model_proto(model_proto)
+    # model_proto = inline_model_proto(model_proto)
     model_proto = optimize(
         model_proto,
         num_iterations=2,
