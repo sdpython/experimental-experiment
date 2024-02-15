@@ -24,9 +24,10 @@ args = get_parsed_args(
     model=("model.onnx", "model to load"),
     inputs=("model.onnx.mkl", "inputs for the model"),
     profile=(0, "runs the profiling"),
+    rewrite=(1, "rewrite again"),
     repeat=5,
     warmup=5,
-    expose="model,inputs,warmup,repeat,profile",
+    expose="model,inputs,warmup,repeat,profile,rewrite",
 )
 
 import pickle
@@ -46,6 +47,7 @@ from onnx_extended.tools.js_profile import (
 from experimental_experiment.torch_dynamo.fast_backend import (
     _run_onnx_session_with_ortvaluevector,
 )
+from experimental_experiment.convert.convert_helper import optimize_model_proto
 
 
 print(f"-- loading inputs {args.model}")
@@ -77,8 +79,18 @@ if args.profile in (1, "1"):
 run_options = RunOptions()
 run_options.add_run_config_entry("disable_synchronize_execution_providers", "1")
 
-print(f"-- loading model {args.model}")
-sess = InferenceSession(args.model, sess_options, providers=providers)
+if args.rewrite in (1, "1"):
+    model_model = args.model.replace(".onnx", ".rewrite.onnx")
+    print(f"-- optimize again into {model_model}")
+    proto = onnx.load(args.model)
+    new_proto = optimize_model_proto(proto)
+    onnx.save(new_proto, model_model)
+    print("-- done")
+else:
+    model_model = args.model
+
+print(f"-- loading model {model_model}")
+sess = InferenceSession(model_model, sess_options, providers=providers)
 print("-- done")
 
 TORCH_DTYPE_TO_NUMPY_DTYPE = {
@@ -162,7 +174,7 @@ if args.profile in (1, "1"):
 
     prof = sess.end_profiling()
     print(f"-- profiling name {prof}")
-    onx = onnx.load(args.model)
+    onx = onnx.load(model_model)
     n_nodes = len(onx.graph.node)
     print(
         "\n".join(
@@ -171,15 +183,15 @@ if args.profile in (1, "1"):
     )
 
     df = js_profile_to_dataframe(prof, first_it_out=True)
-    df.to_csv(f"{args.model}.csv")
-    df.to_excel(f"{args.model}.xlsx")
+    df.to_csv(f"{model_model}.csv")
+    df.to_excel(f"{model_model}.xlsx")
     for v in set(df["it==0"]):
         dfv = df[df["it==0"] == v]
         vs = "after" if v == 0 else "warmup"
         fig, ax = plt.subplots(1, 2, figsize=(10, max(5, n_nodes // 16)))
 
         plot_ort_profile(
-            dfv, ax[0], ax[1], f"profiling {vs} {n_nodes} nodes\n{args.model}"
+            dfv, ax[0], ax[1], f"profiling {vs} {n_nodes} nodes\n{model_model}"
         )
         fig.tight_layout()
-        fig.savefig(f"{args.model}_{vs}.png")
+        fig.savefig(f"{model_model}_{vs}.png")
