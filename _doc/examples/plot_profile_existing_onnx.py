@@ -84,11 +84,13 @@ for i in range(script_args.repeat):
 prof = sess.end_profiling()
 if js_profile_to_dataframe is not None:
     df = js_profile_to_dataframe(prof, first_it_out=True)
+    print(df.columns)
     df.to_csv("plot_profile_existing_onnx.csv")
     df.to_excel("plot_profile_existing_onnx.xlsx")
     fig, ax = plt.subplots(1, 2, figsize=(10, 5))
 
     plot_ort_profile(df, ax[0], ax[1], "dort")
+    fig.tight_layout()
     fig.savefig("plot_profile_existing_onnx.png")
 else:
     print("Install onnx-extended first.")
