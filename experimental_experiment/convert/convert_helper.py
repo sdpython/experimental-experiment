@@ -40,7 +40,6 @@ def optimize_model_proto(model_proto: ModelProto) -> ModelProto:
         model_proto,
         num_iterations=2,
         onnx_shape_inference=False,
-        function_aware_folding=True,
     )
     model_proto = rewrite(model_proto)
     return model_proto

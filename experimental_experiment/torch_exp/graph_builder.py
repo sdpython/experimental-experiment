@@ -273,12 +273,14 @@ class GraphBuilder:
         as_function: bool = False,
         optimization_options: Optional[OptimizationOptions] = None,
         args: Optional[List[Any]] = None,
+        ir_version: Optional[int] = None,
         verbose: int = 0,
     ):
         self.optimization_options = optimization_options or OptimizationOptions()
         self.as_function = as_function
         self.input_args = args
         self.verbose = verbose
+        self.ir_version = ir_version
         self._debug_msg = {}
 
         if isinstance(target_opset_or_existing_proto, (int, dict)):
@@ -307,6 +309,8 @@ class GraphBuilder:
                 )
             proto = target_opset_or_existing_proto
             self.opsets = {d.domain: d.version for d in proto.opset_import}
+            if self.ir_version is None:
+                self.ir_version = proto.ir_version
             self.nodes = list(proto.graph.node)
             self.initializers_dict = {i.name: i for i in proto.graph.initializer}
             self.initializers_dict.update(
@@ -1193,7 +1197,9 @@ class GraphBuilder:
         if self.verbose:
             print(f"[GraphBuilder-{self._hash()}.to_onnx] onh.make_model")
         model = oh.make_model(graph, opset_imports=opsets)
-        if "" in self.opsets:
+        if self.ir_version:
+            model.ir_version = self.ir_version
+        elif "" in self.opsets:
             model.ir_version = _default_OPSET_TO_IR_VERSION()[self.opsets[""]]
         if len(model.graph.node) == 0:
             raise RuntimeError(

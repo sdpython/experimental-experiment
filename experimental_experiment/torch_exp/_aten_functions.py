@@ -691,7 +691,7 @@ def aten_embedding_dense_backward(
     grad_weight = g.op.ConstantOfShape(
         np.array(new_shape, dtype=np.int64), name="embedding_dense_backward"
     )
-    indices_reshaped = g.op.Unsqueeze(
+    indices_reshaped = g.op.UnsqueezeAnyOpset(
         indices, np.array([0], dtype=np.int64), name="embedding_dense_backward"
     )
     res = g.op.ScatterElements(
@@ -963,8 +963,42 @@ def aten_index_Tensor(
         return aten_index_select(
             g, set_shape_type, outputs, x, dim=0, index=indices[0], name="index_Tensor"
         )
+    n_none = len(list(i for i in indices if i is None))
+    if n_none == len(indices) - 1:
+        # only one dimension is not None, the other must be added
+        position = min(i for i, v in enumerate(indices) if v is not None)
+        index = indices[position]
+        if isinstance(index, str):
+            temp = aten_index_select(
+                g,
+                set_shape_type,
+                None,
+                x,
+                dim=position,
+                index=index,
+                name="index_Tensor",
+            )
+            to_add = list(i for i in range(len(indices)) if i != position)
+            assert (
+                len(to_add) > 0
+            ), f"Unexpected value for to_add={to_add}, position={position}, indices={indices}"
+            res = g.op.UnsqueezeAnyOpset(
+                temp, np.array(to_add, dtype=np.int64), outputs=outputs
+            )
+            if set_shape_type:
+                g.set_type(res, g.get_type(x))
+                if g.has_shape(temp):
+                    shape = list(g.get_shape(temp))
+                    for i in to_add:
+                        shape.insert(i, 1)
+                    g.set_shape(res, tuple(shape))
+                else:
+                    g.set_rank(res, g.get_rank(temp) + 2)
+        return res
+
     raise RuntimeError(
-        f"aten_indices implemented yet for indices={indices}{g.get_debug_msg()}"
+        f"aten_index_Tensor not implemented yet for indices={indices}, "
+        f"n_none={n_none}{g.get_debug_msg()}"
     )
 
 
@@ -987,7 +1021,7 @@ def aten_index_put(
     assert g.has_shape(self), f"Missing shape for {self!r}{g.get_debug_msg()}"
 
     index = indices[0]  # tensor
-    new_index = g.op.Unsqueeze(index, np.array([-1], dtype=np.int64), name=name)
+    new_index = g.op.UnsqueezeAnyOpset(index, np.array([-1], dtype=np.int64), name=name)
 
     shape_self = g.get_shape(self)
 
@@ -1274,7 +1308,7 @@ def _aten_max_pool_with_indices_onnx(
         raise TypeError(f"Unexpected ceil_mode={ceil_mode}")
     is_unbatched_rank = g.rank(x) == unbatched_rank
     if is_unbatched_rank:
-        x = g.op.Unsqueeze(x, axes=0)
+        x = g.op.UnsqueezeAnyOpset(x, axes=0)
 
     pool_result, indices = g.op.MaxPool(
         x,
@@ -2264,7 +2298,7 @@ def prims_broadcast_in_dim(
         if x != -1:
             uns.append(idx + len(uns))
 
-    unsqueezed = g.op.Unsqueeze(
+    unsqueezed = g.op.UnsqueezeAnyOpset(
         a, np.array(uns, dtype=np.int64), name="broadcast_in_dim"
     )
     res = g.op.Expand(

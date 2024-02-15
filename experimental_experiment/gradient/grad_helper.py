@@ -392,6 +392,7 @@ def _onnx_derivative_fw(
     new_model.domain = grad_yield.domain
     new_model.model_version = grad_yield.model_version
     new_model.doc_string = grad_yield.doc_string
+    new_model.ir_version = onx.ir_version
     if hasattr(onx, "value_info"):
         graph.value_info.extend(grad_yield.value_info)
     del new_model.opset_import[:]
@@ -405,6 +406,7 @@ def _onnx_derivative_fw(
     g = GraphBuilder(new_model)
     g.optimize()
     onx_grad = g.to_onnx()
+    onx_grad.ir_version = new_model.ir_version
     if verbose > 0:
         print("[_onnx_derivative_fw] done")
     return onx_grad
@@ -458,6 +460,7 @@ def _onnx_derivative_loss(
         print(f"[_onnx_derivative_loss] load {path_name!r}")
     with open(path_name, "rb") as f:
         grad_onx = onnx.load(f)
+        grad_onx.ir_version = onx.ir_version
     if verbose > 0:
         print("[_onnx_derivative_loss] done")
     return grad_onx

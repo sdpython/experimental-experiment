@@ -6,6 +6,7 @@ import unittest
 import sys
 import packaging.version as pv
 import numpy as np
+import onnxruntime  # noqa: F401
 import torch
 import torch.nn as nn
 import torch.nn.functional as F

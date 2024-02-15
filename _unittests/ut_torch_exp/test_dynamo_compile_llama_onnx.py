@@ -2,6 +2,7 @@ import copy
 import unittest
 import packaging.version as pv
 from typing import Optional
+import onnxruntime  # noqa: F401
 from experimental_experiment.ext_test_case import (
     ExtTestCase,
     ignore_warnings,

@@ -4,6 +4,7 @@ import sys
 import unittest
 import warnings
 import packaging.version as pv
+import onnxruntime  # noqa: F401
 from onnx.reference import ReferenceEvaluator
 from experimental_experiment.ext_test_case import ExtTestCase, ignore_warnings
 from experimental_experiment.torch_exp.onnx_export import to_onnx

@@ -1,7 +1,6 @@
 import onnxruntime  # noqa: F401
 import unittest
 import logging
-from experimental_experiment.ext_test_case import ExtTestCase, ignore_warnings
 import numpy
 import onnx.defs
 from onnx.reference import ReferenceEvaluator
@@ -32,8 +31,9 @@ from experimental_experiment.gradient.grad_helper import (
 )
 from experimental_experiment.gradient.loss_helper import add_loss_output
 from experimental_experiment.gradient.ops import new_ops
+from experimental_experiment.ext_test_case import ExtTestCase, ignore_warnings
 
-opset = onnx.defs.onnx_opset_version() - 2
+opset = min(onnx.defs.onnx_opset_version() - 2, 18)
 
 
 class TestGradHelper(ExtTestCase):
@@ -96,6 +96,7 @@ class TestGradHelper(ExtTestCase):
             {"Y": FloatTensorType([None, 10])},
             target_opset=opv,
         )
+        onx.ir_version = 9
         new_onx = onnx_derivative(onx, options=DerivativeOptions.KeepYieldOp)
         types = set(n.op_type for n in new_onx.graph.node)
         self.assertIn("YieldOp", types)
@@ -117,7 +118,9 @@ class TestGradHelper(ExtTestCase):
             {"Y": FloatTensorType([None, 10])},
             target_opset=opv,
         )
+        onx.ir_version = 9
         new_onx = onnx_derivative(onx)
+        self.assertEqual(new_onx.ir_version, onx.ir_version)
         out_names = [o.name for o in new_onx.graph.output]
         self.assertNotIn("Y", out_names)
         self.check_runtime(new_onx, "test_grad_helper")
@@ -137,6 +140,7 @@ class TestGradHelper(ExtTestCase):
             {"Y": FloatTensorType([None, 10])},
             target_opset=opv,
         )
+        onx.ir_version = 9
         new_onx = onnx_derivative(onx, options=DerivativeOptions.KeepOutputs)
         self.check_runtime(new_onx, "test_grad_helper_nooutput")
 
@@ -151,6 +155,7 @@ class TestGradHelper(ExtTestCase):
             {"Y": FloatTensorType([None, 10])},
             target_opset=opv,
         )
+        onx.ir_version = 9
         new_onx = onnx_derivative(onx)
         self.check_runtime(new_onx, "test_grad_helper_mul")
 
@@ -169,6 +174,7 @@ class TestGradHelper(ExtTestCase):
             {"Y": FloatTensorType([None, 10])},
             target_opset=opv,
         )
+        onx.ir_version = 9
         new_onx = onnx_derivative(onx, weights=[])
         self.check_runtime(new_onx, "test_grad_helper_noweight")
 
@@ -193,6 +199,7 @@ class TestGradHelper(ExtTestCase):
             ),
             AssertionError,
         )
+        onx.ir_version = 9
         new_onx = onnx_derivative(
             onx,
             weights=[],
