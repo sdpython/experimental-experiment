@@ -19,6 +19,12 @@ Other example, same script but dumps the produces models.
 ::
 
     ONNXRT_DUMP_PATH="llama_dort_" python -m experimental_experiment.torch_bench.dort_bench --backend ort --device cuda
+
+Or simply this one:
+
+::
+
+    python -m experimental_experiment.torch_bench.dort_bench --backend custom --device cuda --export a -w 1
 """
 
 from experimental_experiment.args import get_parsed_args
@@ -34,7 +40,7 @@ args = get_parsed_args(
     mixed=(0, "mixed precision (based on autocast)"),
     export=("", "export the dynamo models"),
     target_opset=(18, "opset to convert into, use with backend=custom"),
-    config=("default", "default or small to test"),
+    config=("default", "default, medium, or small to test"),
     expose="backend,repeat,warmup,device,num_hidden_layers,"
     "mixed,export,config,target_opset",
 )
@@ -61,6 +67,17 @@ if args.config == "small":
         num_hidden_layers=args.num_hidden_layers,
         vocab_size=1024,
         intermediate_size=16,
+        max_position_embeddings=1024,
+        num_attention_heads=2,
+        _attn_implementation="eager",
+    )
+elif args.config == "medium":
+    config_dict = dict(
+        input_dims=[(2, 1024)] * (args.repeat + args.warmup),
+        hidden_size=1024,
+        num_hidden_layers=args.num_hidden_layers,
+        vocab_size=1024,
+        intermediate_size=1024,
         max_position_embeddings=1024,
         num_attention_heads=2,
         _attn_implementation="eager",

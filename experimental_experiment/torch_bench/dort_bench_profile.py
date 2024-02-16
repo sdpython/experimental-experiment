@@ -24,7 +24,7 @@ args = get_parsed_args(
     model=("model.onnx", "model to load"),
     inputs=("model.onnx.mkl", "inputs for the model"),
     profile=(0, "runs the profiling"),
-    rewrite=(1, "rewrite again"),
+    rewrite=(0, "rewrite again"),
     repeat=5,
     warmup=5,
     expose="model,inputs,warmup,repeat,profile,rewrite",
@@ -145,9 +145,9 @@ print(f"-- done: warmup time {warmup_time}")
 print(f"-- measure: {args.repeat}")
 times = []
 for i in range(args.repeat):
-    begin = time.perf_counter()
     if is_cuda:
         torch.cuda.synchronize()
+    begin = time.perf_counter()
     res = _run_onnx_session_with_ortvaluevector(
         ORTC.OrtValueVector,
         _from_dlpack,
