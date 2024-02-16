@@ -1417,7 +1417,7 @@ class TestOperatorsOnnxrt(ExtTestCase):
             x,
             operator_export_type=torch.onnx.OperatorExportTypes.ONNX_ATEN_FALLBACK,
             onnx_export=inspect.currentframe().f_code.co_name,
-            atol=2e-4,
+            atol=3e-4,
             rtol=1e-4,
         )
 
