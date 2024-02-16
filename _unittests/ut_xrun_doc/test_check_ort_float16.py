@@ -2,6 +2,7 @@ import itertools
 import json
 import os
 import unittest
+import packaging.version as pv
 import numpy as np
 import onnxruntime  # noqa: F401
 import onnx.helper as oh
@@ -17,7 +18,7 @@ def has_cuda():
 
 
 class TestCheckOrtFloat16(ExtTestCase):
-    def common_scatter(self, providers, dtype, reduction, expected_names):
+    def common_scatter(self, opset, providers, dtype, reduction, expected_names):
         from onnxruntime import InferenceSession, SessionOptions
 
         op_type = (
@@ -51,8 +52,8 @@ class TestCheckOrtFloat16(ExtTestCase):
                 [oh.make_tensor_value_info("Y", itype, [None] * ndim)],
                 [from_array(np.array([1], dtype=dtype), name="I")],
             ),
-            opset_imports=[oh.make_opsetid("", 18)],
-            ir_version=9,
+            opset_imports=[oh.make_opsetid("", opset)],
+            ir_version=8 if opset <= 18 else 9,
         )
 
         if not os.path.exists("temp_dump"):
@@ -68,7 +69,11 @@ class TestCheckOrtFloat16(ExtTestCase):
         self.assertExists(filename)
         onx = load(filename)
         names = [n.op_type for n in onx.graph.node]
-        self.assertEqual(names, expected_names)
+        if providers == ["CPUExecutionProvider"]:
+            # onnxruntime might introduces some intermediate cast.
+            if pv.Version(onnxruntime.__version__) <= pv.Version("1.17.1"):
+                raise unittest.SkipTest("float16 not supported on cpu")
+        self.assertEqual(expected_names, names)
 
         sonx = str(onx).replace(" ", "").replace("\n", "|")
         sexp = 'op_type:"Cast"|attribute{|name:"to"|type:INT|i:%d|}' % itype
@@ -103,7 +108,9 @@ class TestCheckOrtFloat16(ExtTestCase):
         opts.enable_profiling = True
         opts.optimized_model_filepath = filename
         sess = InferenceSession(model.SerializeToString(), opts, providers=providers)
-        sess.run(None, {"X": data, "indices": indices, "updates": updates})
+        got = sess.run(None, {"X": data, "indices": indices, "updates": updates})[0]
+        self.assertEqual(got.dtype, updates.dtype)
+        self.assertEqual(got.shape, data.shape)
         prof = sess.end_profiling()
 
         with open(prof, "r") as f:
@@ -151,13 +158,14 @@ class TestCheckOrtFloat16(ExtTestCase):
             (np.float32, "add"): default_value,
             (np.float16, "add"): default_value,
         }
-        for dtype, reduction in itertools.product(
-            [np.float32, np.float16], ["none", "add"]
+        for opset, dtype, reduction in itertools.product(
+            [16, 18], [np.float32, np.float16], ["none", "add"]
         ):
-            with self.subTest(dtype=dtype, reduction=reduction):
+            with self.subTest(dtype=dtype, reduction=reduction, opset=opset):
                 self.common_scatter(
+                    opset,
                     ["CUDAExecutionProvider"],
-                    np.float32,
+                    dtype,
                     reduction,
                     expected[dtype, reduction],
                 )
@@ -178,13 +186,14 @@ class TestCheckOrtFloat16(ExtTestCase):
             (np.float32, "add"): default_value,
             (np.float16, "add"): default_value,
         }
-        for dtype, reduction in itertools.product(
-            [np.float32, np.float16], ["none", "add"]
+        for opset, dtype, reduction in itertools.product(
+            [16, 18], [np.float32, np.float16], ["none", "add"]
         ):
-            with self.subTest(dtype=dtype, reduction=reduction):
+            with self.subTest(dtype=dtype, reduction=reduction, opset=opset):
                 self.common_scatter(
+                    opset,
                     ["CUDAExecutionProvider"],
-                    np.float32,
+                    dtype,
                     reduction,
                     expected[dtype, reduction],
                 )
@@ -202,13 +211,14 @@ class TestCheckOrtFloat16(ExtTestCase):
             (np.float32, "add"): default_value,
             (np.float16, "add"): default_value,
         }
-        for dtype, reduction in itertools.product(
-            [np.float32, np.float16], ["none", "add"]
+        for opset, dtype, reduction in itertools.product(
+            [16, 18], [np.float32, np.float16], ["none", "add"]
         ):
-            with self.subTest(dtype=dtype, reduction=reduction):
+            with self.subTest(dtype=dtype, reduction=reduction, opset=opset):
                 self.common_scatter(
+                    opset,
                     ["CPUExecutionProvider"],
-                    np.float32,
+                    dtype,
                     reduction,
                     expected[dtype, reduction],
                 )
@@ -226,13 +236,14 @@ class TestCheckOrtFloat16(ExtTestCase):
             (np.float32, "add"): default_value,
             (np.float16, "add"): default_value,
         }
-        for dtype, reduction in itertools.product(
-            [np.float32, np.float16], ["none", "add"]
+        for opset, dtype, reduction in itertools.product(
+            [16, 18], [np.float32, np.float16], ["none", "add"]
         ):
-            with self.subTest(dtype=dtype, reduction=reduction):
+            with self.subTest(dtype=dtype, reduction=reduction, opset=opset):
                 self.common_scatter(
+                    opset,
                     ["CPUExecutionProvider"],
-                    np.float32,
+                    dtype,
                     reduction,
                     expected[dtype, reduction],
                 )
