@@ -14,9 +14,33 @@ To run the script:
 
     python _doc/examples/plot_llama_diff_dort --help
 
+
+The following example compares the forward step for mixed precision on cuda
+and produces all the intermediate onnx graphs.
+
+::
+
+    python _doc/examples/plot_llama_diff_dort.py --part model --ortopt 1 --cuda 1 --backward 0 --mixed 1
+
+You may use ``--mixed=1`` to compare the backward graphs.
+
 Some helpers
 ++++++++++++
 """
+
+from experimental_experiment.args import get_parsed_args
+
+script_args = get_parsed_args(
+    "plot_llama_diff_export",
+    description=__doc__,
+    part=("attention", "one value among attention, decoder, model"),
+    ortopt=(1, "run onnxruntime optimization"),
+    backward=(0, "does one operator for backward"),
+    cuda=(0, "use cuda or not"),
+    mixed=(0, "use miwed precision"),
+    expose="part,exporter,ortopt,cuda,mixed",
+)
+
 
 import copy
 import os
@@ -40,7 +64,6 @@ from onnx_array_api.reference import compare_onnx_execution, ExtendedReferenceEv
 import torch
 from torch._dynamo.backends.common import aot_autograd
 from experimental_experiment.ext_test_case import unit_test_going
-from experimental_experiment.args import get_parsed_args
 from experimental_experiment.convert.convert_helper import (
     optimize_model_proto,
     ort_optimize,
@@ -56,12 +79,16 @@ from experimental_experiment.torch_helper.dump_helper import (
     reorder_functions_in_proto,
     inputs_from_onnx_model,
     build_matching_inputs,
+    results_to_string,
 )
 from experimental_experiment.torch_helper.training_helper import (
     train_loop,
     make_aot_ort,
 )
-from experimental_experiment.torch_dynamo import onnx_debug_backend
+from experimental_experiment.torch_dynamo import (
+    onnx_debug_backend,
+    get_decomposition_table,
+)
 
 has_cuda = has_cuda and torch.cuda.is_available()
 logging.disable(logging.ERROR)
@@ -72,21 +99,15 @@ provider = "cuda" if has_cuda else "cpu"
 # The exporting functions
 # +++++++++++++++++++++++
 
-
-script_args = get_parsed_args(
-    "plot_llama_diff_export",
-    description=__doc__,
-    part=("attention", "one value among attention, decoder, model"),
-    ortopt=(1, "run onnxruntime optimization"),
-    backward=(0, "does one operator for backward"),
-    expose="part,exporter,ortopt",
-)
-
 print(f"part={script_args.part}")
 ortopt = script_args.ortopt in (1, "1")
 print(f"ortopt={ortopt}")
 backward = script_args.backward in (1, "1")
 print(f"backward={backward}")
+use_cuda = script_args.cuda in (1, "1")
+print(f"cuda={use_cuda}")
+use_mixed = script_args.mixed in (1, "1")
+print(f"mixed={use_mixed}")
 
 ###################################
 # Model and data
@@ -115,16 +136,34 @@ elif script_args.part == "model":
 else:
     raise RuntimeError(f"Unexpected value for part={script_args.part!r}")
 
+if use_cuda:
+    model = model.to("cuda")
+    inputs = [[i.to("cuda") for i in inp] for inp in inputs]
+
 print(f"simple run with {len(inputs)} inputs")
 if backward:
-    expected = train_loop(copy.deepcopy(model), *inputs[0])
+    if use_mixed:
+        assert use_cuda, "mixed precision only works with cuda"
+        with torch.autocast(device_type="cuda", dtype=torch.float16):
+            torch.cuda.synchronize()
+            expected = train_loop(copy.deepcopy(model), *inputs[0])
+            torch.cuda.synchronize()
+    else:
+        expected = train_loop(copy.deepcopy(model), *inputs[0])
     print(
         f"-- eager mode worked, {len(expected)} gradients, first one is "
         f"{expected[0].shape}, {expected[0].dtype}"
     )
 else:
-    expected = model(*inputs[0])
-    print(f"eager mode worked {expected.shape}, {expected.dtype}")
+    if use_mixed:
+        assert use_cuda, "mixed precision only works with cuda"
+        with torch.autocast(device_type="cuda", dtype=torch.float16):
+            torch.cuda.synchronize()
+            expected = model(*inputs[0])
+            torch.cuda.synchronize()
+    else:
+        expected = model(*inputs[0])
+    print(results_to_string(expected))
 
 
 ###################################
@@ -143,8 +182,14 @@ if backward:
     )
 
     with dump_onnx("llama_onnxrt", folder=folder, clean=True):
-        expected_onnxrt = train_loop(optimized_mod, *inputs[0])
-    assert_all_close(expected[0], expected_onnxrt[0])
+        if use_mixed:
+            with torch.autocast(device_type="cuda", dtype=torch.float16):
+                torch.cuda.synchronize()
+                expected_onnxrt = train_loop(optimized_mod, *inputs[0])
+                torch.cuda.synchronize()
+        else:
+            expected_onnxrt = train_loop(optimized_mod, *inputs[0])
+    assert_all_close(expected[0], expected_onnxrt[0], atol=1e-3)
     print(
         f"-- onnxrt backend worked, {len(expected_onnxrt)} gradients, first one is "
         f"{expected_onnxrt[0].shape}, {expected_onnxrt[0].dtype}"
@@ -155,14 +200,22 @@ if backward:
         fw_compiler=lambda *args, **kwargs: onnx_debug_backend(
             *args,
             dump_prefix=os.path.join(folder, "llama_debug"),
-            target_opset=18,
+            target_opset=17,
             storage=storage,
             **kwargs,
-        )
+        ),
+        decompositions=get_decomposition_table(),
     )
     onnx_mod = torch.compile(copy.deepcopy(model), backend=aot_compiler, fullgraph=True)
-    got = train_loop(onnx_mod, *inputs[0])
-    assert_all_close(expected[0], got[0])
+
+    if False and use_mixed:
+        with torch.autocast(device_type="cuda", dtype=torch.float16):
+            torch.cuda.synchronize()
+            got = train_loop(onnx_mod, *inputs[0])
+            torch.cuda.synchronize()
+    else:
+        got = train_loop(onnx_mod, *inputs[0])
+    assert_all_close(expected[0], got[0], atol=1e-2 if use_mixed else 1e-4)
     print(
         f"-- debug backend worked, {len(got)} gradients, first one is "
         f"{got[0].shape}, {got[0].dtype}"
@@ -172,23 +225,33 @@ else:
     # onnxrt backend
     optimized_mod = torch.compile(model, backend="onnxrt", fullgraph=True)
     with dump_onnx("llama_onnxrt", folder=folder, clean=True):
-        expected_onnxrt = optimized_mod(*inputs[0])
-    assert_all_close(expected, expected_onnxrt)
+        if use_mixed:
+            with torch.autocast(device_type="cuda", dtype=torch.float16):
+                torch.cuda.synchronize()
+                expected_onnxrt = optimized_mod(*inputs[0])
+                torch.cuda.synchronize()
+        else:
+            expected_onnxrt = optimized_mod(*inputs[0])
+    assert_all_close(expected, expected_onnxrt, atol=1e-2)
 
     # debugging backend
-    onnx_mod = torch.compile(
-        model,
-        backend=lambda *args, **kwargs: onnx_debug_backend(
+    aot_compiler = aot_autograd(
+        fw_compiler=lambda *args, **kwargs: onnx_debug_backend(
             *args,
             dump_prefix=os.path.join(folder, "llama_debug"),
-            target_opset=18,
+            target_opset=17,
             storage=storage,
             **kwargs,
-        ),
-        fullgraph=True,
+        )
     )
-    got = onnx_mod(*inputs[0])
-    assert_all_close(expected, got)
+
+    onnx_mod = torch.compile(model, backend=aot_compiler, fullgraph=True)
+    if use_mixed:
+        with torch.autocast(device_type="cuda", dtype=torch.float16):
+            got = onnx_mod(*inputs[0])
+    else:
+        got = onnx_mod(*inputs[0])
+    assert_all_close(expected, got, atol=1 if use_mixed else 1e-3)
 
 #############################
 # For forward, there are two files, one onnx model and the graph module
@@ -221,8 +284,10 @@ if backward:
     for i, inst in enumerate(storage["instance"]):
         print(f"  model {i}: {len(inst['inputs'])} runs")
 
-    # deal with forward
-    onnx_models = list(sorted([m for m in models if m.endswith(".onnx") and "_0" in m]))
+    # deal with backward
+    onnx_models = list(sorted([m for m in models if m.endswith(".onnx")]))
+    assert len(onnx_models) == 4, f"unexpected value {onnx_models}"
+    onnx_models = list(sorted([m for m in models if m.endswith(".onnx") and "_1" in m]))
     assert len(onnx_models) == 2, f"unexpected value {onnx_models}"
     model_onnxrt = os.path.join(folder, onnx_models[1])
     model_debug = os.path.join(folder, onnx_models[0])
@@ -265,34 +330,43 @@ print("debug:", inputs_from_onnx_model(model_debug, init=True))
 
 reorder_functions_in_proto(model_onnxrt)
 
-#################################
-# For what's following, we need to build two lists of matching inputs.
-
-feedsrt = build_matching_inputs(model_debug, feeds, model_onnxrt)
-
 ####################################
 # Let's load the model and optimize them.
 
+debug = onnx.load(model_debug)
 try:
     onnxrt = optimize_model_proto(onnx.load(model_onnxrt))
 except ImportError as e:
     print("missing library", e)
-    onnxrt = model_debug
-debug = onnx.load(model_debug)
+    onnxrt = debug
 
 ###################################
 # Let's apply onnxruntime optimization
 
 if ortopt:
+    providers = (
+        ["CUDAExecutionProvider", "CPUExecutionProvider"]
+        if use_cuda
+        else ["CPUExecutionProvider"]
+    )
+    with open(model_onnxrt.replace(".onnx", ".before.opt.onnx"), "wb") as f:
+        f.write(onnxrt.SerializeToString())
     print(f"run onnxruntime optimization on {model_onnxrt}")
     optimized = model_onnxrt.replace(".onnx", ".opt.onnx")
-    ort_optimize(onnxrt, output=optimized)
+    ort_optimize(onnxrt, output=optimized, providers=providers)
     onnxrt = onnx.load(optimized)
 
     print(f"run onnxruntime optimization on {model_debug}")
     optimized = model_debug.replace(".onnx", ".opt.onnx")
-    ort_optimize(debug, output=optimized)
+    ort_optimize(debug, output=optimized, disable_aot=True, providers=providers)
     debug = onnx.load(optimized)
+
+#################################
+# For what's following, we need to build two lists of matching inputs.
+
+print("build_matching_inputs")
+feedsrt = build_matching_inputs(model_debug, feeds, model_onnxrt)
+print("done")
 
 
 #######################

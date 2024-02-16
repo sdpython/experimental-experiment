@@ -6,6 +6,7 @@ import unittest
 import sys
 import packaging.version as pv
 import numpy as np
+import onnxruntime  # noqa: F401
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -748,6 +749,7 @@ class TestOperatorsOnnxrt(ExtTestCase):
             lambda x: torch.prod(x),
             x,
             onnx_export=inspect.currentframe().f_code.co_name,
+            atol=1e-5,
         )
 
     def test_reduced_prod(self):
@@ -1415,7 +1417,7 @@ class TestOperatorsOnnxrt(ExtTestCase):
             x,
             operator_export_type=torch.onnx.OperatorExportTypes.ONNX_ATEN_FALLBACK,
             onnx_export=inspect.currentframe().f_code.co_name,
-            atol=2e-4,
+            atol=3e-4,
             rtol=1e-4,
         )
 

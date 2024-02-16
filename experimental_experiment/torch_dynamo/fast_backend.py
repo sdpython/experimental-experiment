@@ -1,4 +1,5 @@
 import os
+import pickle
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 import numpy as np
 from onnx import ModelProto
@@ -20,9 +21,14 @@ def _get_session(
 
     run_options = onnxruntime.RunOptions()
     run_options.add_run_config_entry("disable_synchronize_execution_providers", "1")
+    opts = onnxruntime.SessionOptions()
+    # opts.graph_optimization_level = onnxruntime.GraphOptimizationLevel.ORT_DISABLE_ALL
+    opts.add_session_config_entry("session.disable_aot_function_inlining", "1")
 
     return (
-        onnxruntime.InferenceSession(onx.SerializeToString(), providers=providers),
+        onnxruntime.InferenceSession(
+            onx.SerializeToString(), opts, providers=providers
+        ),
         run_options,
     )
 
@@ -105,6 +111,16 @@ def _run_onnx_session_with_ortvaluevector(
     return pth_outputs
 
 
+def _serialize(args: Any) -> Any:
+    if isinstance(args, torch.Tensor):
+        return args
+    if isinstance(args, tuple):
+        return tuple(_serialize(a) for a in args)
+    if isinstance(args, list):
+        return list(_serialize(a) for a in args)
+    raise RuntimeError(f"Unable to serialize type {type(args)}.")
+
+
 def onnx_custom_backend(
     graph_module: "torch.fx.GraphModule",  # noqa: F821
     args: List["torch.Tensor"],  # noqa: F821
@@ -154,6 +170,7 @@ def onnx_custom_backend(
     DEVICES = {
         -1: ORTC.OrtDevice(ORTC.OrtDevice.cpu(), ORTC.OrtDevice.default_memory(), 0)
     }
+
     providers = ["CPUExecutionProvider"]
     if torch.cuda.is_available():
         for i in range(torch.cuda.device_count()):
@@ -183,6 +200,11 @@ def onnx_custom_backend(
         return_builder=True,
     )
 
+    value = os.environ.get("ONNXRT_DUMP_PATH", None)
+    if value:
+        dump_prefix = value
+
+    dump_first_inputs = [False]
     if dump_prefix:
         counter = 0
         name = f"{dump_prefix}_{counter}.onnx"
@@ -196,6 +218,7 @@ def onnx_custom_backend(
         with open(name, "w") as f:
             f.write(str(graph_module.graph))
             f.write("\n")
+        dump_first_inputs = [True]
 
     sess, run_options = _get_session(onx, backend, providers, exc=raise_exc)
 
@@ -224,7 +247,13 @@ def onnx_custom_backend(
         stor=stor,
         input_names=input_names,
         output_names=output_names,
+        dump_first_inputs=dump_first_inputs,
     ):
+        if dump_first_inputs[0]:
+            dump_first_inputs[0] = False
+            with open(name + ".pkl", "wb") as f:
+                pickle.dump([input_names, _serialize(inputs), output_names], f)
+
         res = _run_onnx_session_with_ortvaluevector(
             ORTC.OrtValueVector,
             _from_dlpack,

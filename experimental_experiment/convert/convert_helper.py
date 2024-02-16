@@ -40,7 +40,6 @@ def optimize_model_proto(model_proto: ModelProto) -> ModelProto:
         model_proto,
         num_iterations=2,
         onnx_shape_inference=False,
-        function_aware_folding=True,
     )
     model_proto = rewrite(model_proto)
     return model_proto
@@ -50,6 +49,7 @@ def ort_optimize(
     onnx_model: Union[str, ModelProto],
     output: str,
     providers: Union[str, List[str]] = "cpu",
+    disable_aot: bool = False,
 ):
     """
     Optimizes the model with onnxruntime.
@@ -57,11 +57,15 @@ def ort_optimize(
     :param onnx_model: ModelProto or file path
     :param output: path for the output
     :param providers: providers, cpu, cuda or a list of providers
+    :param disable_aot: disable AOT
     """
     import onnxruntime
 
     opts = onnxruntime.SessionOptions()
     opts.optimized_model_filepath = output
+    if disable_aot:
+        opts.add_session_config_entry("session.disable_aot_function_inlining", "1")
+
     if providers == "cpu":
         providers = ["CPUExecutionProvider"]
     elif providers == "cuda":

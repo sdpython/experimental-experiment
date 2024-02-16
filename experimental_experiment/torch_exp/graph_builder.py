@@ -4,7 +4,7 @@ import numpy as np
 import onnx.helper as oh
 import onnx.numpy_helper as onh
 from onnx import AttributeProto, FunctionProto, ModelProto, NodeProto, TensorProto
-from onnx.reference import ReferenceEvaluator
+from onnx_array_api.reference import ExtendedReferenceEvaluator
 from ._aten_helper import dtype_to_tensor_dtype, _nice_shape
 from ._helper import make_hash
 
@@ -273,12 +273,14 @@ class GraphBuilder:
         as_function: bool = False,
         optimization_options: Optional[OptimizationOptions] = None,
         args: Optional[List[Any]] = None,
+        ir_version: Optional[int] = None,
         verbose: int = 0,
     ):
         self.optimization_options = optimization_options or OptimizationOptions()
         self.as_function = as_function
         self.input_args = args
         self.verbose = verbose
+        self.ir_version = ir_version
         self._debug_msg = {}
 
         if isinstance(target_opset_or_existing_proto, (int, dict)):
@@ -307,6 +309,8 @@ class GraphBuilder:
                 )
             proto = target_opset_or_existing_proto
             self.opsets = {d.domain: d.version for d in proto.opset_import}
+            if self.ir_version is None:
+                self.ir_version = proto.ir_version
             self.nodes = list(proto.graph.node)
             self.initializers_dict = {i.name: i for i in proto.graph.initializer}
             self.initializers_dict.update(
@@ -569,6 +573,10 @@ class GraphBuilder:
                 elem_type = TensorProto.FLOAT
             elif "float64" in st:
                 elem_type = TensorProto.DOUBLE
+            elif "bfloat16" in st:
+                elem_type = TensorProto.BFLOAT16
+            elif "float16" in st:
+                elem_type = TensorProto.FLOAT16
             elif "uint64" in st:
                 elem_type = TensorProto.UINT64
             elif "int64" in st:
@@ -1189,7 +1197,9 @@ class GraphBuilder:
         if self.verbose:
             print(f"[GraphBuilder-{self._hash()}.to_onnx] onh.make_model")
         model = oh.make_model(graph, opset_imports=opsets)
-        if "" in self.opsets:
+        if self.ir_version:
+            model.ir_version = self.ir_version
+        elif "" in self.opsets:
             model.ir_version = _default_OPSET_TO_IR_VERSION()[self.opsets[""]]
         if len(model.graph.node) == 0:
             raise RuntimeError(
@@ -1310,7 +1320,7 @@ class GraphBuilder:
             # bypassing onnx.numpy_helper.from_array, too slow
             output = self._apply_transpose(v, feeds)
         else:
-            ref = ReferenceEvaluator(v)
+            ref = ExtendedReferenceEvaluator(v)
             output = ref.run(None, feeds)
         return output, feeds
 
