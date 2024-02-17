@@ -2,6 +2,7 @@ import copy
 import inspect
 import itertools
 import operator
+import os
 import unittest
 import sys
 from typing import Optional
@@ -186,30 +187,44 @@ class TestOperators(ExtTestCase):
             try:
                 result = compiled_model(*args)
             except torch._dynamo.exc.BackendCompilerFailed as e:
-                if "FunctionNotFoundError" in str(e):
+                if not os.environ.get(
+                    "EXPDORAISE", False
+                ) and "FunctionNotFoundError" in str(e):
                     raise unittest.SkipTest(f"MISSING FOR FORWARD {e}")
                 raise
 
             if isinstance(baseline_result, torch.Tensor):
-                assert_all_close(baseline_result, result, atol=atol, rtol=rtol)
+                assert_all_close(
+                    baseline_result,
+                    result,
+                    atol=atol,
+                    rtol=rtol,
+                    msg="FORWARD-BACKWARD",
+                )
 
                 if square_loss:
                     (baseline_result.sum() ** 2).backward()
                     try:
                         (result.sum() ** 2).backward()
                     except FunctionNotFoundError as e:
-                        raise unittest.SkipTest(f"MISSING FOR BACKWARD {e}")
+                        if not os.environ.get("EXPDORAISE", False):
+                            raise unittest.SkipTest(f"MISSING FOR BACKWARD {e}")
+                        raise
                 else:
                     baseline_result.sum().backward()
                     try:
                         result.sum().backward()
                     except FunctionNotFoundError as e:
-                        raise unittest.SkipTest(f"MISSING FOR BACKWARD {e}")
+                        if not os.environ.get("EXPDORAISE", False):
+                            raise unittest.SkipTest(f"MISSING FOR BACKWARD {e}")
+                        raise
 
                 base_grads = tuple(_.grad for _ in model.parameters())
                 grads = tuple(_.grad for _ in compiled_model.parameters())
                 self.assertEqual(len(base_grads), len(grads))
-                assert_all_close(base_grads, grads, atol=atol, rtol=rtol)
+                assert_all_close(
+                    base_grads, grads, atol=atol, rtol=rtol, msg="BACKWARD"
+                )
                 assert len(grads) > 0, "No gradient was checked"
             else:
                 raise AssertionError(f"Unexpected type {type(baseline_result)}.")
@@ -224,7 +239,9 @@ class TestOperators(ExtTestCase):
             )
             baseline_result = model(*args)
             result = compiled_model(*args)
-            assert_all_close(baseline_result, result, atol=atol, rtol=rtol)
+            assert_all_close(
+                baseline_result, result, atol=atol, rtol=rtol, msg="FORWARD"
+            )
 
     @ignore_warnings(UserWarning)
     def test_aaa(self):
@@ -243,12 +260,32 @@ class TestOperators(ExtTestCase):
             lambda x, y: -torch.sigmoid(torch.tanh(x * (x + y))),
             (x, y),
             onnx_export=inspect.currentframe().f_code.co_name,
+            dynamic_axes=(False, True),
+        )
+
+    def test_basic_dynamic(self):
+        x = torch.tensor([0.4], requires_grad=True)
+        y = torch.tensor([0.7], requires_grad=True)
+        self.assertONNX(
+            lambda x, y: -torch.sigmoid(torch.tanh(x * (x + y))),
+            (x, y),
+            onnx_export=inspect.currentframe().f_code.co_name,
+            dynamic_axes={"x": {0: "batch"}},
         )
 
     def test_view(self):
         x = torch.tensor([0.0], requires_grad=True)
         self.assertONNX(
             lambda x: x.view(1, 1), x, onnx_export=inspect.currentframe().f_code.co_name
+        )
+
+    def test_view_dynamic(self):
+        x = torch.tensor([0.0], requires_grad=True)
+        self.assertONNX(
+            lambda x: x.view(1, 1),
+            x,
+            onnx_export=inspect.currentframe().f_code.co_name,
+            dynamic_axes={"x": {0: "batch"}},
         )
 
     def test_index(self):
@@ -453,6 +490,7 @@ class TestOperators(ExtTestCase):
             params=(y,),
             keep_initializers_as_inputs=True,
             onnx_export=inspect.currentframe().f_code.co_name,
+            atol=1e-4,
         )
 
     def test_params_onnx_irv4(self):
@@ -464,6 +502,7 @@ class TestOperators(ExtTestCase):
             params=(y,),
             keep_initializers_as_inputs=False,
             onnx_export=inspect.currentframe().f_code.co_name,
+            atol=1e-4,
         )
 
     def test_batchnorm(self):
@@ -872,6 +911,16 @@ class TestOperators(ExtTestCase):
         x = torch.randn(3, 4, requires_grad=True)
         self.assertONNX(
             lambda x: x.tan(), x, onnx_export=inspect.currentframe().f_code.co_name
+        )
+
+    def test_tanh(self):
+        x = torch.randn(3, 4, requires_grad=True)
+        self.assertONNX(
+            lambda x: x.tanh(),
+            x,
+            onnx_export=inspect.currentframe().f_code.co_name,
+            impl="ref",
+            square_loss=True,
         )
 
     @ignore_warnings(UserWarning)

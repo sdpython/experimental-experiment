@@ -2060,6 +2060,33 @@ def aten_t(
     return res
 
 
+def aten_tan(g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T) -> T:
+    res = g.make_node("Tan", [x], outputs)
+    if set_shape_type:
+        set_shape_type_unary_op(g, outputs[0], x)
+    return res
+
+
+def aten_tanh(g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T) -> T:
+    res = g.make_node("Tanh", [x], outputs)
+    if set_shape_type:
+        set_shape_type_unary_op(g, outputs[0], x)
+    return res
+
+
+def aten_tanh_backward(
+    g: GraphBuilder, set_shape_type: bool, outputs: List[str], out_grad: T, y: T
+) -> T:
+    # out_grad * (1 - y * y)
+    dtype = tensor_dtype_to_np_dtype(g.get_type(y))
+    yy = g.op.Pow(y, np.array([2], dtype=np.int64), name="tanh_backward")
+    _1yy = g.op.Sub(np.array([1], dtype=dtype), yy, name="tanh_backward")
+    res = g.op.Mul(out_grad, _1yy, outputs=outputs, name="tanh_backward")
+    if set_shape_type:
+        set_shape_type_unary_op(g, outputs[0], y)
+    return res
+
+
 def _aten_tensor_int1(
     g: GraphBuilder,
     set_shape_type: bool,
