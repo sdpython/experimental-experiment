@@ -2,6 +2,7 @@ import copy
 import inspect
 import itertools
 import operator
+import os
 import unittest
 import sys
 from typing import Optional
@@ -186,7 +187,9 @@ class TestOperators(ExtTestCase):
             try:
                 result = compiled_model(*args)
             except torch._dynamo.exc.BackendCompilerFailed as e:
-                if "FunctionNotFoundError" in str(e):
+                if not os.environ.get(
+                    "EXPDORAISE", False
+                ) and "FunctionNotFoundError" in str(e):
                     raise unittest.SkipTest(f"MISSING FOR FORWARD {e}")
                 raise
 
@@ -198,13 +201,17 @@ class TestOperators(ExtTestCase):
                     try:
                         (result.sum() ** 2).backward()
                     except FunctionNotFoundError as e:
-                        raise unittest.SkipTest(f"MISSING FOR BACKWARD {e}")
+                        if not os.environ.get("EXPDORAISE", False):
+                            raise unittest.SkipTest(f"MISSING FOR BACKWARD {e}")
+                        raise
                 else:
                     baseline_result.sum().backward()
                     try:
                         result.sum().backward()
                     except FunctionNotFoundError as e:
-                        raise unittest.SkipTest(f"MISSING FOR BACKWARD {e}")
+                        if not os.environ.get("EXPDORAISE", False):
+                            raise unittest.SkipTest(f"MISSING FOR BACKWARD {e}")
+                        raise
 
                 base_grads = tuple(_.grad for _ in model.parameters())
                 grads = tuple(_.grad for _ in compiled_model.parameters())
@@ -243,12 +250,32 @@ class TestOperators(ExtTestCase):
             lambda x, y: -torch.sigmoid(torch.tanh(x * (x + y))),
             (x, y),
             onnx_export=inspect.currentframe().f_code.co_name,
+            dynamic_axes=(False, True),
+        )
+
+    def test_basic_dynamic(self):
+        x = torch.tensor([0.4], requires_grad=True)
+        y = torch.tensor([0.7], requires_grad=True)
+        self.assertONNX(
+            lambda x, y: -torch.sigmoid(torch.tanh(x * (x + y))),
+            (x, y),
+            onnx_export=inspect.currentframe().f_code.co_name,
+            dynamic_axes={"x": {0: "batch"}},
         )
 
     def test_view(self):
         x = torch.tensor([0.0], requires_grad=True)
         self.assertONNX(
             lambda x: x.view(1, 1), x, onnx_export=inspect.currentframe().f_code.co_name
+        )
+
+    def test_view_dynamic(self):
+        x = torch.tensor([0.0], requires_grad=True)
+        self.assertONNX(
+            lambda x: x.view(1, 1),
+            x,
+            onnx_export=inspect.currentframe().f_code.co_name,
+            dynamic_axes={"x": {0: "batch"}},
         )
 
     def test_index(self):
