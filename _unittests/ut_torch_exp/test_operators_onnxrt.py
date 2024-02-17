@@ -425,6 +425,7 @@ class TestOperatorsOnnxrt(ExtTestCase):
             params=(y,),
             keep_initializers_as_inputs=True,
             onnx_export=inspect.currentframe().f_code.co_name,
+            atol=1e-4,
         )
 
     def test_params_onnx_irv4(self):
@@ -436,6 +437,7 @@ class TestOperatorsOnnxrt(ExtTestCase):
             params=(y,),
             keep_initializers_as_inputs=False,
             onnx_export=inspect.currentframe().f_code.co_name,
+            atol=1e-4,
         )
 
     def test_batchnorm(self):

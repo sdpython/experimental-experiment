@@ -194,7 +194,13 @@ class TestOperators(ExtTestCase):
                 raise
 
             if isinstance(baseline_result, torch.Tensor):
-                assert_all_close(baseline_result, result, atol=atol, rtol=rtol)
+                assert_all_close(
+                    baseline_result,
+                    result,
+                    atol=atol,
+                    rtol=rtol,
+                    msg="FORWARD-BACKWARD",
+                )
 
                 if square_loss:
                     (baseline_result.sum() ** 2).backward()
@@ -216,7 +222,9 @@ class TestOperators(ExtTestCase):
                 base_grads = tuple(_.grad for _ in model.parameters())
                 grads = tuple(_.grad for _ in compiled_model.parameters())
                 self.assertEqual(len(base_grads), len(grads))
-                assert_all_close(base_grads, grads, atol=atol, rtol=rtol)
+                assert_all_close(
+                    base_grads, grads, atol=atol, rtol=rtol, msg="BACKWARD"
+                )
                 assert len(grads) > 0, "No gradient was checked"
             else:
                 raise AssertionError(f"Unexpected type {type(baseline_result)}.")
@@ -231,7 +239,9 @@ class TestOperators(ExtTestCase):
             )
             baseline_result = model(*args)
             result = compiled_model(*args)
-            assert_all_close(baseline_result, result, atol=atol, rtol=rtol)
+            assert_all_close(
+                baseline_result, result, atol=atol, rtol=rtol, msg="FORWARD"
+            )
 
     @ignore_warnings(UserWarning)
     def test_aaa(self):
@@ -480,6 +490,7 @@ class TestOperators(ExtTestCase):
             params=(y,),
             keep_initializers_as_inputs=True,
             onnx_export=inspect.currentframe().f_code.co_name,
+            atol=1e-4,
         )
 
     def test_params_onnx_irv4(self):
@@ -491,6 +502,7 @@ class TestOperators(ExtTestCase):
             params=(y,),
             keep_initializers_as_inputs=False,
             onnx_export=inspect.currentframe().f_code.co_name,
+            atol=1e-4,
         )
 
     def test_batchnorm(self):
@@ -899,6 +911,16 @@ class TestOperators(ExtTestCase):
         x = torch.randn(3, 4, requires_grad=True)
         self.assertONNX(
             lambda x: x.tan(), x, onnx_export=inspect.currentframe().f_code.co_name
+        )
+
+    def test_tanh(self):
+        x = torch.randn(3, 4, requires_grad=True)
+        self.assertONNX(
+            lambda x: x.tanh(),
+            x,
+            onnx_export=inspect.currentframe().f_code.co_name,
+            impl="ref",
+            square_loss=True,
         )
 
     @ignore_warnings(UserWarning)

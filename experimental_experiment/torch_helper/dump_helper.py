@@ -39,7 +39,7 @@ def dump_onnx(prefix: str, folder: Optional[str] = None, clean: bool = False):
         os.environ["ONNXRT_DUMP_PATH"] = value or ""
 
 
-def assert_all_close(v1: Any, v2: Any, atol=1e-5, rtol=1e-5):
+def assert_all_close(v1: Any, v2: Any, atol=1e-5, rtol=1e-5, msg: str = ""):
     """
     Checks that the expected outputs and new outputs are the same.
 
@@ -48,6 +48,13 @@ def assert_all_close(v1: Any, v2: Any, atol=1e-5, rtol=1e-5):
 
     See :ref:`l-plot-onnxrt-diff` for an example.
     """
+    if msg:
+        try:
+            assert_all_close(v1, v2, atol=atol, rtol=rtol)
+        except AssertionError as e:
+            raise AssertionError(f"ERROR: {msg}") from e
+        return
+
     import torch
 
     if isinstance(v1, torch.Tensor):
