@@ -86,6 +86,17 @@ def aten_add_Tensor(
     return res
 
 
+def aten_and(
+    g: GraphBuilder, sts: bool, outputs: List[str], x: T, y: T, name="and"
+) -> T:
+    res, x, y = prepare_inputs_homogeneous_operator(
+        g, x, y, f=g.op.And, name=name, outputs=outputs
+    )
+    if sts:
+        set_type_shape_binary_op(g, outputs[0], x, y)
+    return res
+
+
 def aten_addmm(
     g: GraphBuilder,
     sts: bool,
@@ -1401,9 +1412,12 @@ def aten_mm(g: GraphBuilder, sts: bool, outputs: List[str], x: T, y: T) -> T:
 def aten_mul(
     g: GraphBuilder, sts: bool, outputs: List[str], x: T, y: T, name="mul"
 ) -> T:
-    res, x, y = prepare_inputs_homogeneous_operator(
-        g, x, y, f=g.op.Mul, name="mul", outputs=outputs
-    )
+    if g.get_type(x) == TensorProto.BOOL and g.get_type(y) == TensorProto.BOOL:
+        res = g.op.And(x, y, name="mul_and", outputs=outputs)
+    else:
+        res, x, y = prepare_inputs_homogeneous_operator(
+            g, x, y, f=g.op.Mul, name="mul", outputs=outputs
+        )
     if sts:
         set_type_shape_binary_op(g, res, x, y)
     return res
@@ -1508,6 +1522,9 @@ def aten_pow_Tensor_Scalar(
     g: GraphBuilder, sts: bool, outputs: List[str], x: T, exponent: T
 ) -> T:
     if isinstance(exponent, (int, float)):
+        if exponent == 1:
+            # The node is removed.
+            return g.op.Identity(x, outputs=outputs)
         exponent = np.array([exponent])
     if isinstance(exponent, np.ndarray):
         if g.has_type(x):
