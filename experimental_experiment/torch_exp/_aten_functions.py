@@ -1844,7 +1844,9 @@ def aten_slice_scatter(
         ), f"slice_scatter not implemented when shape={shape}{g.get_debug_msg()}"
 
         index_1 = np.arange(0, dim_shape)
-        if isinstance(start, int) and isinstance(end, int):
+        if (start is None or isinstance(start, int)) and (
+            end is None or isinstance(end, int)
+        ):
             if end is None:
                 index_2 = index_1[start::step]
             else:
@@ -1854,7 +1856,11 @@ def aten_slice_scatter(
             index_2 = g.op.Slice(
                 index_1,
                 g.get_dynamic_dimension(start),
-                g.get_dynamic_dimension(step),
+                (
+                    np.array([dim_shape], dtype=np.int64)
+                    if end is None
+                    else g.get_dynamic_dimension(end)
+                ),
                 np.array([0], dtype=np.int64),
                 np.array([step or 1], dtype=np.int64),
             )
@@ -1866,7 +1872,10 @@ def aten_slice_scatter(
             r = tuple(np.arange(1, v, 1))
             if isinstance(index_2, str):
                 # dynamic shapes
-                index_base = g.op.Expand(index_2, np.array(r, dtype=np.int64))
+                index_base = g.op.Expand(
+                    g.op.UnsqueezeAnyOpset(index_2, np.array([1], dtype=np.int64)),
+                    np.array(r, dtype=np.int64),
+                )
             else:
                 index_base = np.expand_dims(index_2, r)
         else:

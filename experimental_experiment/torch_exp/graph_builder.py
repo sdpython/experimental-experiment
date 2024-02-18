@@ -698,10 +698,23 @@ class GraphBuilder:
             )
         return name
 
-    def is_dynamic_shape(self, shape: DYNAMIC_SHAPE, verify: bool = True) -> bool:
-        return all(map(lambda x: self.is_dynamic_dimension(x, verify=verify), shape))
+    def is_dynamic_shape(
+        self, shape: DYNAMIC_SHAPE, verify: bool = True, allow_none: bool = False
+    ) -> bool:
+        return all(
+            map(
+                lambda x: self.is_dynamic_dimension(
+                    x, verify=verify, allow_none=allow_none
+                ),
+                shape,
+            )
+        )
 
-    def is_dynamic_dimension(self, dim: Any, verify: bool = True) -> bool:
+    def is_dynamic_dimension(
+        self, dim: Any, verify: bool = True, allow_none: bool = False
+    ) -> bool:
+        if allow_none and dim is None:
+            return True
         if not isinstance(dim, (int, self.torch.SymInt, str)):
             return False
         assert (
@@ -819,7 +832,9 @@ class GraphBuilder:
         ), f"Shape must be a tuple not {type(shape)}"
         if shape is None:
             return None
-        assert is_static_shape(shape) or self.is_dynamic_shape(shape), (
+        assert is_static_shape(shape) or self.is_dynamic_shape(
+            shape, allow_none=True
+        ), (
             f"Shape={shape} is not a shape, "
             f"name={name!r}, elem_type={elem_type}{self.get_debug_msg()}"
         )
