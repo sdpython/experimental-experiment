@@ -176,22 +176,39 @@ if args.profile in (1, "1"):
     print(f"-- profiling name {prof}")
     onx = onnx.load(model_model)
     n_nodes = len(onx.graph.node)
+    n_unique_nodes = len(set(n.name for n in onx.graph.node))
     print(
         "\n".join(
             f"{_align(n.op_type, 16)} - {n.input} -> {n.output}" for n in onx.graph.node
         )
     )
 
+    # first graph: aggregated profile
     df = js_profile_to_dataframe(prof, first_it_out=True)
     df.to_csv(f"{model_model}.csv")
     df.to_excel(f"{model_model}.xlsx")
+    assert set(df["it==0"]) == {0, 1}
     for v in set(df["it==0"]):
         dfv = df[df["it==0"] == v]
         vs = "after" if v == 0 else "warmup"
-        fig, ax = plt.subplots(1, 2, figsize=(10, max(5, n_nodes // 16)))
+        fig, ax = plt.subplots(1, 2, figsize=(10, max(5, n_unique_nodes // 12)))
 
         plot_ort_profile(
             dfv, ax[0], ax[1], f"profiling {vs} {n_nodes} nodes\n{model_model}"
         )
         fig.tight_layout()
         fig.savefig(f"{model_model}_{vs}.png")
+
+    # second graph: timeline
+    from onnx_extended.tools.js_profile import plot_ort_profile_timeline
+
+    fig, ax = plt.subplots(1, 1, figsize=(5, max(5, n_nodes)))
+    iteration = args.repeat - 2
+    plot_ort_profile_timeline(
+        df,
+        ax,
+        iteration=iteration,
+        title=f"profiling it={iteration} {n_nodes} nodes\n{model_model}",
+    )
+    fig.tight_layout()
+    fig.savefig(f"{model_model}_{iteration}_timeline.png")
