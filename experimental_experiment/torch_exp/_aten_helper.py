@@ -65,7 +65,7 @@ def broadcast_shape(sh1: Tuple[int, ...], sh2: Tuple[int, ...]) -> Tuple[int, ..
     return shape + sh2[len(shape) :]
 
 
-def set_shape_type_reshape(
+def set_type_shape_reshape(
     g: "GraphBuilder",  # noqa: F821
     name: str,
     input_name: str,
@@ -96,7 +96,7 @@ def set_shape_type_reshape(
         g.set_shape(name, tuple(new_shape))
 
 
-def set_shape_type_unary_op(
+def set_type_shape_unary_op(
     g: "GraphBuilder",  # noqa: F821
     name: str,
     input_name: str,
@@ -112,7 +112,7 @@ def set_shape_type_unary_op(
         g.set_rank(name, g.get_rank(input_name))
 
 
-def set_shape_type_binary_op(
+def set_type_shape_binary_op(
     g: "GraphBuilder",  # noqa: F821
     name: str,
     *input_names: List[str],
@@ -174,7 +174,7 @@ def set_shape_type_binary_op(
         g.set_rank(name, rank)
 
 
-def set_shape_type_reduce_op(
+def set_type_shape_reduce_op(
     g: "GraphBuilder",  # noqa: F821
     name: str,
     x: str,

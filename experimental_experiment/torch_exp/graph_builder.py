@@ -763,7 +763,7 @@ class GraphBuilder:
         attributes: Optional[List[AttributeProto]] = None,
         check: Optional[bool] = None,
         name: Optional[str] = None,
-        set_shape_type: bool = False,
+        set_type_shape: bool = False,
         **kwargs,
     ) -> Union[str, List[str]]:
         assert (
@@ -844,7 +844,7 @@ class GraphBuilder:
             node.attribute.extend(attributes)
 
         # constant handling, shape, type
-        self._make_node_set_shape_type_constant(node, set_shape_type=set_shape_type)
+        self._make_node_set_type_shape_constant(node, set_type_shape=set_type_shape)
 
         if self.verbose > 3:
             print(
@@ -889,7 +889,7 @@ class GraphBuilder:
                     del kwargs["axes"]
         return inputs, kwargs
 
-    def _make_node_set_shape_type_constant(self, node: NodeProto, set_shape_type: bool):
+    def _make_node_set_type_shape_constant(self, node: NodeProto, set_type_shape: bool):
         if node.op_type == "Constant":
             size = len(node.SerializeToString())
             if size >= self.optimization_options.constant_size:
@@ -929,7 +929,7 @@ class GraphBuilder:
                 if cst is not None:
                     self.set_type(node.output[0], dtype_to_tensor_dtype(cst[0].dtype))
                     self.set_shape(node.output[0], cst[0].shape)
-        elif set_shape_type:
+        elif set_type_shape:
             if node.op_type == "GatherElements":
                 if self.has_rank(node.input[0]) and self.has_rank(node.input[0]):
                     r1 = self.get_rank(node.input[0])
