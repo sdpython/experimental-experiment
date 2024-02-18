@@ -211,7 +211,11 @@ class TestDynamoLlama(ExtTestCase):
         )
 
         self.common_test_model(
-            MLP(), example_args_collection, False, False, onnx_export="test_ort_mlp"
+            MLP(),
+            example_args_collection,
+            test_backward=False,
+            dynamic=False,
+            onnx_export="test_ort_mlp",
         )
 
     @ignore_warnings((UserWarning, DeprecationWarning))
@@ -310,16 +314,31 @@ class TestDynamoLlama(ExtTestCase):
 
     @ignore_warnings((UserWarning, DeprecationWarning))
     @skipif_ci_windows("torch.compile not supported on Windows")
-    def test_llama_decoder_backward(self):
+    def test_llama_decoder_forward_dynamic(self):
         from experimental_experiment.torch_helper.llama_helper import get_llama_decoder
 
-        input_dims = self.get_input_dims(False)
+        input_dims = self.get_input_dims(True)
+        model, example_args_collection = get_llama_decoder(input_dims=input_dims)
+        self.common_test_model(
+            model,
+            example_args_collection,
+            test_backward=False,
+            dynamic=True,
+            onnx_export="test_llama_decoder_forward",
+        )
+
+    @ignore_warnings((UserWarning, DeprecationWarning))
+    @skipif_ci_windows("torch.compile not supported on Windows")
+    def test_llama_decoder_backward_dynamic(self):
+        from experimental_experiment.torch_helper.llama_helper import get_llama_decoder
+
+        input_dims = self.get_input_dims(True)
         model, example_args_collection = get_llama_decoder(input_dims=input_dims)
         self.common_test_model(
             model,
             example_args_collection,
             test_backward=True,
-            dynamic=False,
+            dynamic=True,
             onnx_export="test_llama_decoder_backward",
         )
 

@@ -1,3 +1,7 @@
+"""
+`sts` is an alias for `set_type_shape`.
+"""
+
 from typing import Any, List, Optional, Sequence, Tuple, Union
 import numpy as np
 from onnx import TensorProto
@@ -20,41 +24,39 @@ from .graph_builder import GraphBuilder
 T = str
 
 
-def aten_abs(g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T) -> T:
+def aten_abs(g: GraphBuilder, sts: bool, outputs: List[str], x: T) -> T:
     res = g.make_node("Abs", [x], outputs)
-    if set_shape_type:
+    if sts:
         set_shape_type_unary_op(g, outputs[0], x)
     return res
 
 
-def aten_acos(g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T) -> T:
+def aten_acos(g: GraphBuilder, sts: bool, outputs: List[str], x: T) -> T:
     res = g.make_node("Acos", [x], outputs)
-    if set_shape_type:
+    if sts:
         set_shape_type_unary_op(g, outputs[0], x)
     return res
 
 
-def aten_acosh(g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T) -> T:
+def aten_acosh(g: GraphBuilder, sts: bool, outputs: List[str], x: T) -> T:
     res = g.make_node("Acosh", [x], outputs)
-    if set_shape_type:
+    if sts:
         set_shape_type_unary_op(g, outputs[0], x)
     return res
 
 
-def aten_add(
-    g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T, y: T
-) -> T:
+def aten_add(g: GraphBuilder, sts: bool, outputs: List[str], x: T, y: T) -> T:
     res, x, y = prepare_inputs_homogeneous_operator(
         g, x, y, f=g.op.Add, name="add", outputs=outputs
     )
-    if set_shape_type:
+    if sts:
         set_shape_type_binary_op(g, outputs[0], x, y)
     return res
 
 
 def aten_add_Scalar(
     g: GraphBuilder,
-    set_shape_type: bool,
+    sts: bool,
     outputs: List[str],
     x: T,
     y: T,
@@ -63,14 +65,14 @@ def aten_add_Scalar(
     assert alpha in (None, 1), f"alpha={alpha}, not implemented"
     x, y = prepare_inputs_homogeneous_operator(g, x, y)
     res = g.op.Add(x, y, outputs=outputs, name="add_Scalar")
-    if set_shape_type:
+    if sts:
         set_shape_type_binary_op(g, outputs[0], x, y)
     return res
 
 
 def aten_add_Tensor(
     g: GraphBuilder,
-    set_shape_type: bool,
+    sts: bool,
     outputs: List[str],
     x: T,
     y: T,
@@ -79,14 +81,14 @@ def aten_add_Tensor(
     assert alpha in (None, 1), f"alpha={alpha}, not implemented"
     x, y = prepare_inputs_homogeneous_operator(g, x, y)
     res = g.op.Add(x, y, outputs=outputs, name="add_Tensor")
-    if set_shape_type:
+    if sts:
         set_shape_type_binary_op(g, outputs[0], x, y)
     return res
 
 
 def aten_addmm(
     g: GraphBuilder,
-    set_shape_type: bool,
+    sts: bool,
     outputs: List[str],
     a: T,
     b: T,
@@ -99,23 +101,18 @@ def aten_addmm(
     )
 
 
-def aten_alias(
-    g: GraphBuilder,
-    set_shape_type: bool,
-    outputs: List[str],
-    x: T,
-) -> T:
+def aten_alias(g: GraphBuilder, sts: bool, outputs: List[str], x: T) -> T:
     return g.make_node("Identity", [x], outputs, name="alias")
 
 
-def aten_all(g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T) -> T:
+def aten_all(g: GraphBuilder, sts: bool, outputs: List[str], x: T) -> T:
     res = g.op.Cast(
         g.op.ReduceMin(g.op.Cast(x, to=TensorProto.INT32, name="all"), name="all"),
         to=TensorProto.BOOL,
         outputs=outputs,
         name="all",
     )
-    if set_shape_type:
+    if sts:
         g.set_type(res, TensorProto.BOOL)
         g.set_shape(res, tuple())
     return res
@@ -123,7 +120,7 @@ def aten_all(g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T) ->
 
 def aten_arange(
     g: GraphBuilder,
-    set_shape_type: bool,
+    sts: bool,
     outputs: List[str],
     start: Optional[int] = None,
     end: Optional[int] = None,
@@ -186,7 +183,7 @@ def aten_arange(
     else:
         i_step = np.array(step, dtype=npdtype)
     res = g.op.Range(i_start, i_end, i_step, outputs=outputs, name="arange")
-    if set_shape_type:
+    if sts:
         g.set_type(res, itype)
         if isinstance(end, str) or isinstance(start, str) or isinstance(step, str):
             g.set_rank(res, 1)
@@ -197,7 +194,7 @@ def aten_arange(
 
 def aten_arange_start(
     g: GraphBuilder,
-    set_shape_type: bool,
+    sts: bool,
     outputs: List[str],
     start: Optional[int] = None,
     end: Optional[int] = None,
@@ -213,12 +210,12 @@ def aten_arange_start(
         torch.strided,
     ), f"arange not implemented for layout={layout!r}"
     assert not pin_memory, "arange not implemented for pin_memory=True"
-    return aten_arange(g, set_shape_type, outputs, start, end, dtype=dtype)
+    return aten_arange(g, sts, outputs, start, end, dtype=dtype)
 
 
 def aten_arange_start_step(
     g: GraphBuilder,
-    set_shape_type: bool,
+    sts: bool,
     outputs: List[str],
     start: Optional[int] = None,
     end: Optional[int] = None,
@@ -230,12 +227,12 @@ def aten_arange_start_step(
 ) -> T:
     assert layout is None, f"arange not implemented for layout={layout!r} is not None"
     assert not pin_memory, "arange not implemented for pin_memory=True"
-    return aten_arange(g, set_shape_type, outputs, start, end, step, dtype)
+    return aten_arange(g, sts, outputs, start, end, step, dtype)
 
 
 def aten_argmax(
     g: GraphBuilder,
-    set_shape_type: bool,
+    sts: bool,
     outputs: List[str],
     x: T,
     dim: Optional[int] = None,
@@ -254,7 +251,7 @@ def aten_argmax(
         )
     else:
         raise RuntimeError(f"Unexpected type {type(dim)} for dim")
-    if set_shape_type:
+    if sts:
         g.set_type(res, TensorProto.INT64)
         if dim is None:
             g.set_shape(res, (1,))
@@ -268,7 +265,7 @@ def aten_argmax(
 
 def aten_as_strided(
     g: GraphBuilder,
-    set_shape_type: bool,
+    sts: bool,
     outputs: List[str],
     x: T,
     size: List[int],
@@ -293,43 +290,41 @@ def aten_as_strided(
     xflat = g.op.Gather(flat, np_strided.astype(np.int64))
     res = g.op.Reshape(xflat, np.array(size, dtype=np.int64), outputs=outputs)
 
-    if set_shape_type:
+    if sts:
         g.set_type(res, g.get_type(x))
         g.set_shape(res, tuple(size))
     return res
 
 
-def aten_asin(g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T) -> T:
+def aten_asin(g: GraphBuilder, sts: bool, outputs: List[str], x: T) -> T:
     res = g.make_node("Asin", [x], outputs)
-    if set_shape_type:
+    if sts:
         set_shape_type_unary_op(g, outputs[0], x)
     return res
 
 
-def aten_asinh(g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T) -> T:
+def aten_asinh(g: GraphBuilder, sts: bool, outputs: List[str], x: T) -> T:
     res = g.make_node("Asinh", [x], outputs)
-    if set_shape_type:
+    if sts:
         set_shape_type_unary_op(g, outputs[0], x)
     return res
 
 
-def aten_atan(g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T) -> T:
+def aten_atan(g: GraphBuilder, sts: bool, outputs: List[str], x: T) -> T:
     res = g.make_node("Atan", [x], outputs)
-    if set_shape_type:
+    if sts:
         set_shape_type_unary_op(g, outputs[0], x)
     return res
 
 
-def aten_atanh(g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T) -> T:
+def aten_atanh(g: GraphBuilder, sts: bool, outputs: List[str], x: T) -> T:
     res = g.make_node("Atanh", [x], outputs)
-    if set_shape_type:
+    if sts:
         set_shape_type_unary_op(g, outputs[0], x)
     return res
 
 
-def aten_bmm(
-    g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T, y: T
-) -> T:
+def aten_bmm(g: GraphBuilder, sts: bool, outputs: List[str], x: T, y: T) -> T:
     assert g.get_type(x) == g.get_type(y), (
         f"type mismatch between {x!r}:{g.get_type(x)} and "
         f"{y!r}:{g.get_type(y)}{g.get_debug_msg()}"
@@ -338,14 +333,10 @@ def aten_bmm(
 
 
 def aten_cat(
-    g: GraphBuilder,
-    set_shape_type: bool,
-    outputs: List[str],
-    tensors: Tuple[T, ...],
-    dim: int = 0,
+    g: GraphBuilder, sts: bool, outputs: List[str], tensors: Tuple[T, ...], dim: int = 0
 ) -> T:
     res = g.op.Concat(*tensors, axis=dim, outputs=outputs, name="cat")
-    if set_shape_type:
+    if sts:
         dt0 = g.get_type(tensors[0])
         assert all(map(lambda t: g.get_type(t) == dt0, tensors))
         r0 = g.get_rank(tensors[0])
@@ -357,7 +348,7 @@ def aten_cat(
 
 def aten_clone(
     g: GraphBuilder,
-    set_shape_type: bool,
+    sts: bool,
     outputs: List[str],
     x: T,
     memory_format: Optional[str] = None,
@@ -375,7 +366,7 @@ def aten_clone(
 
 def aten_convolution(
     g: GraphBuilder,
-    set_shape_type: bool,
+    sts: bool,
     outputs: List[str],
     input: T,
     weight: T,
@@ -442,7 +433,7 @@ def aten_convolution(
         dilations=dilations,
         name="conv",
     )
-    if set_shape_type:
+    if sts:
         g.set_type(res, g.get_type(input))
         g.set_rank(res, g.get_rank(input))
     return res
@@ -450,7 +441,7 @@ def aten_convolution(
 
 def aten_conv2d(
     g: GraphBuilder,
-    set_shape_type: bool,
+    sts: bool,
     outputs: List[str],
     input: T,
     weight: T,
@@ -462,7 +453,7 @@ def aten_conv2d(
 ) -> T:
     return aten_convolution(
         g,
-        set_shape_type,
+        sts,
         outputs,
         input=input,
         weight=weight,
@@ -476,7 +467,7 @@ def aten_conv2d(
 
 def aten_copy(
     g: GraphBuilder,
-    set_shape_type: bool,
+    sts: bool,
     outputs: List[str],
     x: T,
     src: T,
@@ -488,44 +479,42 @@ def aten_copy(
     return g.op.CastLike(src, x, name="copy")
 
 
-def aten_cos(g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T) -> T:
+def aten_cos(g: GraphBuilder, sts: bool, outputs: List[str], x: T) -> T:
     res = g.make_node("Cos", [x], outputs)
-    if set_shape_type:
+    if sts:
         set_shape_type_unary_op(g, outputs[0], x)
     return res
 
 
-def aten_cosh(g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T) -> T:
+def aten_cosh(g: GraphBuilder, sts: bool, outputs: List[str], x: T) -> T:
     res = g.make_node("Cosh", [x], outputs)
-    if set_shape_type:
+    if sts:
         set_shape_type_unary_op(g, outputs[0], x)
     return res
 
 
-def aten_detach(g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T) -> T:
+def aten_detach(g: GraphBuilder, sts: bool, outputs: List[str], x: T) -> T:
     return g.make_node("Identity", [x], outputs, name="detach")
 
 
 def aten_div(
-    g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T, y: T, name="div"
+    g: GraphBuilder, sts: bool, outputs: List[str], x: T, y: T, name="div"
 ) -> T:
     res, x, y = prepare_inputs_homogeneous_operator(
         g, x, y, f=g.op.Div, name=name, outputs=outputs
     )
-    if set_shape_type:
+    if sts:
         set_shape_type_binary_op(g, outputs[0], x, y)
     return res
 
 
-def aten_div_Scalar(
-    g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T, y: T
-) -> T:
-    return aten_div(g, set_shape_type, outputs, x, y, name="div_Scalar")
+def aten_div_Scalar(g: GraphBuilder, sts: bool, outputs: List[str], x: T, y: T) -> T:
+    return aten_div(g, sts, outputs, x, y, name="div_Scalar")
 
 
 def aten_div_Tensor(
     g: GraphBuilder,
-    set_shape_type: bool,
+    sts: bool,
     outputs: List[str],
     x: T,
     y: T,
@@ -534,14 +523,14 @@ def aten_div_Tensor(
     assert alpha in (None, 1), f"alpha={alpha}, not implemented"
     x, y = prepare_inputs_homogeneous_operator(g, x, y)
     res = g.op.Div(x, y, outputs=outputs, name="div_Tensor")
-    if set_shape_type:
+    if sts:
         set_shape_type_binary_op(g, outputs[0], x, y)
     return res
 
 
 def aten_dropout(
     g: GraphBuilder,
-    set_shape_type: bool,
+    sts: bool,
     outputs: List[str],
     x: T,
     p: T = 0.5,  # float
@@ -555,14 +544,14 @@ def aten_dropout(
     if isinstance(training, bool):
         training = np.array(training, dtype=np.bool_)
     result, _ = g.op.Dropout(x, p, training, outputs=outputs)
-    if set_shape_type:
+    if sts:
         set_shape_type_unary_op(g, outputs[0], x)
     return result
 
 
 def aten_embedding(
     g: GraphBuilder,
-    set_shape_type: bool,
+    sts: bool,
     outputs: List[str],
     weight: T,
     indices: T,
@@ -591,7 +580,7 @@ def aten_embedding(
     )
 
     res = g.op.Gather(weight, indices, outputs=outputs, name="embedding")
-    if set_shape_type:
+    if sts:
         g.set_type(res, g.get_type(weight))
         g.set_rank(res, g.get_rank(weight) + g.get_rank(indices) - 1)
     return res
@@ -599,7 +588,7 @@ def aten_embedding(
 
 def aten_embedding_dense_backward(
     g: GraphBuilder,
-    set_shape_type: bool,
+    sts: bool,
     outputs: List[str],
     grad_output: T,
     indices: T,
@@ -681,7 +670,7 @@ def aten_embedding_dense_backward(
     # grad = grad_output.masked_fill(mask, 0)
     grad = aten_masked_fill_Scalar(
         g,
-        set_shape_type,
+        sts,
         None,
         grad_output,
         mask,
@@ -705,7 +694,7 @@ def aten_embedding_dense_backward(
         outputs=outputs,
         name="embedding_dense_backward",
     )
-    if set_shape_type:
+    if sts:
         g.set_type(res, g.get_type(grad_output))
         g.set_shape(res, new_shape)
     assert res is None, (
@@ -717,7 +706,7 @@ def aten_embedding_dense_backward(
 
 def aten_empty_like(
     g: GraphBuilder,
-    set_shape_type: bool,
+    sts: bool,
     outputs: List[str],
     x: T,
     dtype: Optional["torch.dtype"] = None,  # noqa: F821
@@ -740,7 +729,7 @@ def aten_empty_like(
         # simple case
         return aten_full(
             g,
-            set_shape_type,
+            sts,
             outputs,
             g.get_shape(x),
             0,
@@ -752,23 +741,21 @@ def aten_empty_like(
     )
 
 
-def aten_eq(g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T, y: T) -> T:
+def aten_eq(g: GraphBuilder, sts: bool, outputs: List[str], x: T, y: T) -> T:
     x, y = prepare_inputs_homogeneous_operator(g, x, y)
     res = g.op.Equal(x, y, outputs=outputs)
-    if set_shape_type:
+    if sts:
         set_shape_type_binary_op(g, outputs[0], x, y, cmp_op=True)
     return res
 
 
-def aten_eq_Scalar(
-    g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T, y: T
-) -> T:
-    return aten_eq(g, set_shape_type, outputs, x, y)
+def aten_eq_Scalar(g: GraphBuilder, sts: bool, outputs: List[str], x: T, y: T) -> T:
+    return aten_eq(g, sts, outputs, x, y)
 
 
 def aten_expand(
     g: GraphBuilder,
-    set_shape_type: bool,
+    sts: bool,
     outputs: List[str],
     x: T,
     sizes: List[int],
@@ -780,7 +767,7 @@ def aten_expand(
         res = g.op.Expand(
             x, np.array(sizes, dtype=np.int64), outputs=outputs, name=name
         )
-        if set_shape_type:
+        if sts:
             g.set_type(res, g.get_type(x))
             g.set_shape(res, tuple(sizes))
         return res
@@ -803,7 +790,7 @@ def aten_expand(
         res = g.op.Expand(
             x, np.array(new_shape, dtype=np.int64), outputs=outputs, name=f"{name}_neg"
         )
-        if set_shape_type:
+        if sts:
             g.set_type(res, g.get_type(x))
             g.set_shape(res, tuple(new_shape))
         return res
@@ -814,19 +801,17 @@ def aten_expand(
         outputs=outputs,
         name=f"{name}_neg2",
     )
-    if set_shape_type:
+    if sts:
         g.set_type(res, g.get_type(x))
         g.set_rank(res, len(sizes))
     return res
 
 
-def aten_fill_Scalar(
-    g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T, v: T
-) -> T:
+def aten_fill_Scalar(g: GraphBuilder, sts: bool, outputs: List[str], x: T, v: T) -> T:
     if g.has_shape(x) and all(map(lambda i: isinstance(i, int), g.get_shape(x))):
         return aten_full(
             g,
-            set_shape_type,
+            sts,
             outputs,
             g.get_shape(x),
             v,
@@ -840,7 +825,7 @@ def aten_fill_Scalar(
 
 def aten_flatten(
     g: GraphBuilder,
-    set_shape_type: bool,
+    sts: bool,
     outputs: List[str],
     x: T,
     start_dim: int = 1,
@@ -862,7 +847,7 @@ def aten_flatten(
     if end_dim == -1:
         return g.make_node("Flatten", [x], outputs)
     res = g.make_node("Flatten", [x], outputs, to=end_dim)
-    if set_shape_type:
+    if sts:
         g.set_type(res, g.get_type(x))
         if g.has_shape(x, full=True):
             g.set_shape(res, (int(np.prod(g.get_shape(x)))))
@@ -873,7 +858,7 @@ def aten_flatten(
 
 def aten_full(
     g: GraphBuilder,
-    set_shape_type: bool,
+    sts: bool,
     outputs: List[str],
     size: T,
     fill_value: float,
@@ -930,7 +915,7 @@ def aten_full(
     res = g.op.ConstantOfShape(
         tsize, value=from_array(value), outputs=outputs, name="name"
     )
-    if set_shape_type:
+    if sts:
         g.set_type(res, itype)
         if new_shape:
             g.set_shape(res, new_shape)
@@ -941,31 +926,29 @@ def aten_full(
     return res
 
 
-def aten_FunctionCtx(
-    g: GraphBuilder, set_shape_type: bool, outputs: List[str], *args, **kwargs
-):
+def aten_FunctionCtx(g: GraphBuilder, sts: bool, outputs: List[str], *args, **kwargs):
     if len(args) == 0 and len(kwargs) == 0:
         return
     raise NotImplementedError(f"args={args}, kwargs={kwargs}")
 
 
-def aten_gt(g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T, y: T) -> T:
+def aten_gt(g: GraphBuilder, sts: bool, outputs: List[str], x: T, y: T) -> T:
     x, y = prepare_inputs_homogeneous_operator(g, x, y)
     res = g.op.Greater(x, y, outputs=outputs)
-    if set_shape_type:
+    if sts:
         set_shape_type_binary_op(g, outputs[0], x, y, cmp_op=True)
     return res
 
 
 def aten_index_Tensor(
-    g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T, indices: List[int]
+    g: GraphBuilder, sts: bool, outputs: List[str], x: T, indices: List[int]
 ) -> T:
     assert isinstance(
         indices, (list, tuple)
     ), f"Unexpected type {type(indices)} for indices"
     if len(indices) == 1 and isinstance(indices[0], str):
         return aten_index_select(
-            g, set_shape_type, outputs, x, dim=0, index=indices[0], name="index_Tensor"
+            g, sts, outputs, x, dim=0, index=indices[0], name="index_Tensor"
         )
     n_none = len(list(i for i in indices if i is None))
     if n_none == len(indices) - 1:
@@ -975,7 +958,7 @@ def aten_index_Tensor(
         if isinstance(index, str):
             temp = aten_index_select(
                 g,
-                set_shape_type,
+                sts,
                 None,
                 x,
                 dim=position,
@@ -989,7 +972,7 @@ def aten_index_Tensor(
             res = g.op.UnsqueezeAnyOpset(
                 temp, np.array(to_add, dtype=np.int64), outputs=outputs
             )
-            if set_shape_type:
+            if sts:
                 g.set_type(res, g.get_type(x))
                 if g.has_shape(temp):
                     shape = list(g.get_shape(temp))
@@ -1008,7 +991,7 @@ def aten_index_Tensor(
 
 def aten_index_put(
     g: GraphBuilder,
-    set_shape_type: bool,
+    sts: bool,
     outputs: List[str],
     self: T,
     indices: List[T],
@@ -1042,7 +1025,7 @@ def aten_index_put(
     else:
         res = g.op.ScatterND(self, new_index, values, name=name)
 
-    if set_shape_type:
+    if sts:
         g.set_type(res, g.get_type(self))
         g.set_shape(res, g.get_shape(self))
     return result
@@ -1050,7 +1033,7 @@ def aten_index_put(
 
 def aten__unsafe_index_put(
     g: GraphBuilder,
-    set_shape_type: bool,
+    sts: bool,
     outputs: List[str],
     self: T,
     indices: List[T],
@@ -1059,7 +1042,7 @@ def aten__unsafe_index_put(
 ) -> T:
     return aten_index_put(
         g,
-        set_shape_type,
+        sts,
         outputs,
         self,
         indices,
@@ -1071,7 +1054,7 @@ def aten__unsafe_index_put(
 
 def aten_index_select(
     g: GraphBuilder,
-    set_shape_type: bool,
+    sts: bool,
     outputs: List[str],
     x: T,
     dim: int,
@@ -1079,7 +1062,7 @@ def aten_index_select(
     name: str = "index_select",
 ) -> T:
     res = g.op.Gather(x, index, axis=dim, outputs=outputs, name=name)
-    if set_shape_type:
+    if sts:
         g.set_type(res, g.get_type(x))
         if g.has_shape(x) and g.has_shape(index):
             shape = list(g.get_shape(x))
@@ -1092,12 +1075,7 @@ def aten_index_select(
 
 
 def aten_linear(
-    g: GraphBuilder,
-    set_shape_type: bool,
-    outputs: List[str],
-    x: T,
-    weight: T,
-    bias: T = None,
+    g: GraphBuilder, sts: bool, outputs: List[str], x: T, weight: T, bias: T = None
 ) -> T:
     weight_transposed = g.op.Transpose(weight, perm=[1, 0], name="linear")
     if bias:
@@ -1105,7 +1083,7 @@ def aten_linear(
         res = g.op.Add(res, bias, outputs=outputs)
     else:
         res = g.op.MatMul(x, weight_transposed, outputs=outputs, name="linear")
-    if set_shape_type:
+    if sts:
         g.set_type(res, g.get_type(x))
         if g.has_shape(x) and g.has_shape(weight):
             shape_x = g.get_shape(x)
@@ -1119,7 +1097,7 @@ def aten_linear(
 
 def aten__log_softmax(
     g: GraphBuilder,
-    set_shape_type: bool,
+    sts: bool,
     outputs: List[str],
     x: T,
     dim: int = -1,
@@ -1134,14 +1112,14 @@ def aten__log_softmax(
         itype = None
         xc = x
     res = g.op.LogSoftmax(xc, axis=dim, outputs=outputs)
-    if set_shape_type:
+    if sts:
         set_shape_type_unary_op(g, res, xc, itype=itype)
     return res
 
 
 def aten__log_softmax_backward_data(
     g: GraphBuilder,
-    set_shape_type: bool,
+    sts: bool,
     outputs: List[str],
     grad_output: T,
     output: T,
@@ -1171,39 +1149,33 @@ def aten__log_softmax_backward_data(
         outputs=outputs,
         name="log_softmax_backward_data",
     )
-    if set_shape_type:
+    if sts:
         set_shape_type_unary_op(g, res, grad_outputc, itype=itype)
     return res
 
 
-def aten_lt(
-    g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T, y: T, name="lt"
-) -> T:
+def aten_lt(g: GraphBuilder, sts: bool, outputs: List[str], x: T, y: T, name="lt") -> T:
     x, y = prepare_inputs_homogeneous_operator(g, x, y)
     res = g.op.Less(x, y, outputs=outputs, name=name)
-    if set_shape_type:
+    if sts:
         set_shape_type_binary_op(g, outputs[0], x, y, cmp_op=True)
     return res
 
 
-def aten_lt_Tensor(
-    g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T, y: T
-) -> T:
-    return aten_lt(g, set_shape_type, outputs, x, y, name="lt_Tensor")
+def aten_lt_Tensor(g: GraphBuilder, sts: bool, outputs: List[str], x: T, y: T) -> T:
+    return aten_lt(g, sts, outputs, x, y, name="lt_Tensor")
 
 
-def aten_matmul(
-    g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T, y: T
-) -> T:
+def aten_matmul(g: GraphBuilder, sts: bool, outputs: List[str], x: T, y: T) -> T:
     res = g.op.MatMul(x, y, outputs=outputs)
-    if set_shape_type:
+    if sts:
         set_shape_type_binary_op(g, outputs[0], x, y)
     return res
 
 
 def aten_masked_fill_Scalar(
     g: GraphBuilder,
-    set_shape_type: bool,
+    sts: bool,
     outputs: List[str],
     x: T,
     mask: T,
@@ -1218,7 +1190,7 @@ def aten_masked_fill_Scalar(
     dtx = g.get_type(x)
     avalue = np.array([value], dtype=tensor_dtype_to_np_dtype(dtx))
     res = g.op.Where(cmask, avalue, x, name=name)
-    if set_shape_type:
+    if sts:
         g.set_type(res, dtx)
         if g.has_shape(mask):
             g.set_shape(res, g.get_shape(mask))
@@ -1229,7 +1201,7 @@ def aten_masked_fill_Scalar(
 
 def _aten_max_pool_onnx(
     g: GraphBuilder,
-    set_shape_type: bool,
+    sts: bool,
     outputs: List[str],
     x: T,
     kernel_shape: Sequence[int],
@@ -1262,7 +1234,7 @@ def _aten_max_pool_onnx(
 
 def aten_max_pool2d(
     g: GraphBuilder,
-    set_shape_type: bool,
+    sts: bool,
     outputs: List[str],
     x: T,
     kernel_size: Sequence[int],
@@ -1279,7 +1251,7 @@ def aten_max_pool2d(
 
     return _aten_max_pool_onnx(
         g,
-        set_shape_type,
+        sts,
         outputs,
         x,
         kernel_shape,
@@ -1294,7 +1266,7 @@ def aten_max_pool2d(
 
 def _aten_max_pool_with_indices_onnx(
     g: GraphBuilder,
-    set_shape_type: bool,
+    sts: bool,
     outputs: List[str],
     x: T,
     kernel_size: Sequence[int],
@@ -1356,7 +1328,7 @@ def _aten_max_pool_with_indices_onnx(
 
 def aten_max_pool2d_with_indices(
     g: GraphBuilder,
-    set_shape_type: bool,
+    sts: bool,
     outputs: List[str],
     x: T,
     kernel_size: Sequence[int],
@@ -1375,7 +1347,7 @@ def aten_max_pool2d_with_indices(
 
     return _aten_max_pool_with_indices_onnx(
         g,
-        set_shape_type,
+        sts,
         outputs,
         x,
         kernel_shape,
@@ -1393,7 +1365,7 @@ def aten_max_pool2d_with_indices(
 
 def aten_mean_dim(
     g: GraphBuilder,
-    set_shape_type: bool,
+    sts: bool,
     outputs: List[str],
     x: T,
     dim: Optional[Union[int, List[int]]] = None,
@@ -1417,48 +1389,44 @@ def aten_mean_dim(
         result = g.op.ReduceMeanAnyOpset(
             xc, adim, keepdims=keepdim, outputs=outputs, name="mean_dim"
         )
-    if set_shape_type:
+    if sts:
         set_shape_type_reduce_op(g, outputs[0], x, keepdim=keepdim)
     return result
 
 
-def aten_mm(g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T, y: T) -> T:
+def aten_mm(g: GraphBuilder, sts: bool, outputs: List[str], x: T, y: T) -> T:
     return g.op.MatMul(x, y, outputs=outputs, name="mm")
 
 
 def aten_mul(
-    g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T, y: T, name="mul"
+    g: GraphBuilder, sts: bool, outputs: List[str], x: T, y: T, name="mul"
 ) -> T:
     res, x, y = prepare_inputs_homogeneous_operator(
         g, x, y, f=g.op.Mul, name="mul", outputs=outputs
     )
-    if set_shape_type:
+    if sts:
         set_shape_type_binary_op(g, res, x, y)
     return res
 
 
-def aten_mul_Scalar(
-    g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T, y: T
-) -> T:
-    return aten_mul(g, set_shape_type, outputs, x, y, name="mul_Scalar")
+def aten_mul_Scalar(g: GraphBuilder, sts: bool, outputs: List[str], x: T, y: T) -> T:
+    return aten_mul(g, sts, outputs, x, y, name="mul_Scalar")
 
 
-def aten_mul_Tensor(
-    g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T, y: T
-) -> T:
-    return aten_mul(g, set_shape_type, outputs, x, y, name="mul_Tensor")
+def aten_mul_Tensor(g: GraphBuilder, sts: bool, outputs: List[str], x: T, y: T) -> T:
+    return aten_mul(g, sts, outputs, x, y, name="mul_Tensor")
 
 
-def aten_neg(g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T) -> T:
+def aten_neg(g: GraphBuilder, sts: bool, outputs: List[str], x: T) -> T:
     res = g.make_node("Neg", [x], outputs)
-    if set_shape_type:
+    if sts:
         set_shape_type_unary_op(g, res, x)
     return res
 
 
 def aten_new_zeros(
     g: GraphBuilder,
-    set_shape_type: bool,
+    sts: bool,
     outputs: List[str],
     x: T,
     size: T,
@@ -1472,7 +1440,7 @@ def aten_new_zeros(
         dtype = onnx_dtype_to_torch_dtype(g.get_type(x))
     return aten_full(
         g,
-        set_shape_type,
+        sts,
         outputs,
         size,
         fill_value=None,
@@ -1486,7 +1454,7 @@ def aten_new_zeros(
 
 def aten_ones(
     g: GraphBuilder,
-    set_shape_type: bool,
+    sts: bool,
     outputs: List[str],
     size: T,
     dtype: int = TensorProto.FLOAT,
@@ -1519,7 +1487,7 @@ def aten_ones(
         outputs=outputs,
         name="ones",
     )
-    if set_shape_type:
+    if sts:
         g.set_type(res, dtype)
         if new_shape:
             g.set_shape(res, new_shape)
@@ -1527,7 +1495,7 @@ def aten_ones(
 
 
 def aten_permute(
-    g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T, dims: Sequence[int]
+    g: GraphBuilder, sts: bool, outputs: List[str], x: T, dims: Sequence[int]
 ) -> T:
     if not dims:
         return g.op.Transpose(x, outputs=outputs, name="permute")
@@ -1537,7 +1505,7 @@ def aten_permute(
 
 
 def aten_pow_Tensor_Scalar(
-    g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T, exponent: T
+    g: GraphBuilder, sts: bool, outputs: List[str], x: T, exponent: T
 ) -> T:
     if isinstance(exponent, (int, float)):
         exponent = np.array([exponent])
@@ -1547,18 +1515,18 @@ def aten_pow_Tensor_Scalar(
         else:
             exponent = g.op.CastLike(exponent, x)
     res = g.op.Pow(x, exponent, outputs=outputs)
-    if set_shape_type:
+    if sts:
         set_shape_type_unary_op(g, outputs[0], x)
     return res
 
 
-def aten_relu(g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T) -> T:
+def aten_relu(g: GraphBuilder, sts: bool, outputs: List[str], x: T) -> T:
     return g.op.Relu(x, outputs=outputs)
 
 
 def aten_repeat(
     g: GraphBuilder,
-    set_shape_type: bool,
+    sts: bool,
     outputs: List[str],
     x: T,
     repeats: T,
@@ -1575,7 +1543,7 @@ def aten_repeat(
         else:
             expanded = x
         res = g.op.Tile(expanded, irep, name=name)
-        if set_shape_type:
+        if sts:
             g.set_type(res, g.get_type(x))
             if g.has_shape(x):
                 shape = g.get_shape(x)
@@ -1590,46 +1558,41 @@ def aten_repeat(
     raise RuntimeError(f"Not implemented when repeats={repeats!r}")
 
 
-def aten_rsqrt(
-    g: GraphBuilder,
-    set_shape_type: bool,
-    outputs: List[str],
-    x: T,
-) -> T:
+def aten_rsqrt(g: GraphBuilder, sts: bool, outputs: List[str], x: T) -> T:
     ext = g.make_node("Sqrt", [x], name="rsqrt")
     res = g.make_node("Reciprocal", ext, outputs, name="rsqrt")
-    if set_shape_type:
+    if sts:
         set_shape_type_unary_op(g, outputs[0], x)
     return res
 
 
 def aten_rsub(
     g: GraphBuilder,
-    set_shape_type: bool,
+    sts: bool,
     outputs: List[str],
     x: T,
     y: T,
     alpha: float = 1,
 ) -> T:
     assert alpha == 1, f"Not implemented with alpha={alpha}"
-    return aten_sub(g, set_shape_type, outputs, y, x)
+    return aten_sub(g, sts, outputs, y, x)
 
 
 def aten_rsub_Scalar(
     g: GraphBuilder,
-    set_shape_type: bool,
+    sts: bool,
     outputs: List[str],
     x: T,
     y: T,
     alpha: float = 1,
 ) -> T:
     assert alpha == 1, f"Not implemented with alpha={alpha}"
-    return aten_sub(g, set_shape_type, outputs, y, x)
+    return aten_sub(g, sts, outputs, y, x)
 
 
 def aten_setitem(
     g: GraphBuilder,
-    set_shape_type: bool,
+    sts: bool,
     outputs: List[str],
     x: T,
     indices: Tuple[Any, ...],
@@ -1644,7 +1607,7 @@ def aten_setitem(
         s = indices[1]
         return aten_slice_scatter(
             g,
-            set_shape_type,
+            sts,
             outputs,
             x,
             values,
@@ -1655,7 +1618,7 @@ def aten_setitem(
             name="setitem",
         )
 
-    # if set_shape_type:
+    # if sts:
     #    g.set_type(res, g.get_type(x))
     #    if g.has_shape(x):
     #        g.set_shape(res, g.get_shape(x))
@@ -1667,15 +1630,15 @@ def aten_setitem(
     )
 
 
-def aten_sigmoid(g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T) -> T:
+def aten_sigmoid(g: GraphBuilder, sts: bool, outputs: List[str], x: T) -> T:
     res = g.op.Sigmoid(x, outputs=outputs)
-    if set_shape_type:
+    if sts:
         set_shape_type_unary_op(g, outputs[0], x)
     return res
 
 
 def aten_sigmoid_backward(
-    g: GraphBuilder, set_shape_type: bool, outputs: List[str], out_grad: T, y: T
+    g: GraphBuilder, sts: bool, outputs: List[str], out_grad: T, y: T
 ) -> T:
     """
     See https://github.com/pytorch/pytorch/blob/main/torch/_decomp/decompositions.py#L108.
@@ -1689,44 +1652,40 @@ def aten_sigmoid_backward(
     _1y = g.op.Sub(np.array([1], dtype=dtype), y, name="sigmoid_backward")
     y1y = g.op.Mul(y, _1y, name="sigmoid_backward")
     res = g.op.Mul(out_grad, y1y, outputs=outputs, name="sigmoid_backward")
-    if set_shape_type:
+    if sts:
         set_shape_type_unary_op(g, outputs[0], y)
     return res
 
 
 def aten_silu(
-    g: GraphBuilder,
-    set_shape_type: bool,
-    outputs: List[str],
-    x: T,
-    inplace: bool = False,
+    g: GraphBuilder, sts: bool, outputs: List[str], x: T, inplace: bool = False
 ) -> T:
     assert (
         not inplace
     ), f"inplace computation is not allowed with onnx{g.get_debug_msg()}"
     res = g.op.Mul(x, g.op.Sigmoid(x, name="silu"), outputs=outputs, name="silu")
-    if set_shape_type:
+    if sts:
         set_shape_type_unary_op(g, res, x)
     return res
 
 
-def aten_sin(g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T) -> T:
+def aten_sin(g: GraphBuilder, sts: bool, outputs: List[str], x: T) -> T:
     res = g.make_node("Sin", [x], outputs)
-    if set_shape_type:
+    if sts:
         set_shape_type_unary_op(g, outputs[0], x)
     return res
 
 
-def aten_sinh(g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T) -> T:
+def aten_sinh(g: GraphBuilder, sts: bool, outputs: List[str], x: T) -> T:
     res = g.make_node("Sinh", [x], outputs)
-    if set_shape_type:
+    if sts:
         set_shape_type_unary_op(g, outputs[0], x)
     return res
 
 
 def aten_slice_Tensor(
     g: GraphBuilder,
-    set_shape_type: bool,
+    sts: bool,
     outputs: List[str],
     x: T,
     dim: int = 0,
@@ -1752,7 +1711,7 @@ def aten_slice_Tensor(
     if step is not None and step != 1:
         inputs.append(np.array([step], dtype=np.int64))
     res = g.op.Slice(x, *inputs, outputs=outputs)
-    if set_shape_type:
+    if sts:
         dtype = g.get_type(inputs[0])
         shape = g.get_shape(inputs[0])
         new_shape = g._apply_slice_to_shape(
@@ -1765,7 +1724,7 @@ def aten_slice_Tensor(
 
 def aten_slice_backward(
     g: GraphBuilder,
-    set_shape_type: bool,
+    sts: bool,
     outputs: List[str],
     grad_output: T,
     input_sizes: List[int],
@@ -1811,7 +1770,7 @@ def aten_slice_backward(
 
     res = g.op.Concat(*inputs, axis=dim, name="slice_backward")
 
-    if set_shape_type:
+    if sts:
         g.set_type(res, g.get_type(grad_output))
         g.set_shape(res, tuple(input_sizes))
     return res
@@ -1819,7 +1778,7 @@ def aten_slice_backward(
 
 def aten_slice_scatter(
     g: GraphBuilder,
-    set_shape_type: bool,
+    sts: bool,
     outputs: List[str],
     x: T,
     src: T,
@@ -1866,7 +1825,7 @@ def aten_slice_scatter(
 
         # Step 4: final ScatterElements.
         res = g.op.ScatterElements(x, indices, src, axis=dim, name=name)
-        if set_shape_type:
+        if sts:
             g.set_type(res, g.get_type(x))
             g.set_shape(res, shape)
         return res
@@ -1878,7 +1837,7 @@ def aten_slice_scatter(
 
 def aten_softmax(
     g: GraphBuilder,
-    set_shape_type: bool,
+    sts: bool,
     outputs: List[str],
     x: T,
     dim: int = -1,
@@ -1891,14 +1850,14 @@ def aten_softmax(
         itype = None
         xc = x
     res = g.op.Softmax(xc, axis=dim, outputs=outputs)
-    if set_shape_type:
+    if sts:
         set_shape_type_unary_op(g, res, xc, itype=itype)
     return res
 
 
 def aten__softmax(
     g: GraphBuilder,
-    set_shape_type: bool,
+    sts: bool,
     outputs: List[str],
     x: T,
     dim: int = -1,
@@ -1906,14 +1865,14 @@ def aten__softmax(
 ) -> T:
     assert not half_to_float, f"Unexpected value for half_to_float={half_to_float!r}"
     res = g.op.Softmax(x, axis=dim, outputs=outputs, name="_softmax")
-    if set_shape_type:
+    if sts:
         set_shape_type_unary_op(g, res, x)
     return res
 
 
 def aten__softmax_backward_data(
     g: GraphBuilder,
-    set_shape_type: bool,
+    sts: bool,
     outputs: List[str],
     grad_output: T,
     y: T,
@@ -1938,33 +1897,33 @@ def aten__softmax_backward_data(
     )
     temp = g.op.Mul(y, sums, name="softmax_backward_data")
     res = g.op.Sub(new_grad_output, temp, outputs=outputs, name="softmax_backward_data")
-    if set_shape_type:
+    if sts:
         set_shape_type_unary_op(g, res, grad_outputc, itype=itype)
     return res
 
 
 def aten_sub(
-    g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T, y: T, name="sub"
+    g: GraphBuilder, sts: bool, outputs: List[str], x: T, y: T, name="sub"
 ) -> T:
     x, y = prepare_inputs_homogeneous_operator(g, x, y)
     res = g.op.Sub(x, y, outputs=outputs, name=name)
-    if set_shape_type:
+    if sts:
         set_shape_type_binary_op(g, outputs[0], x, y)
     return res
 
 
 def aten_sub_Tensor(
-    g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T, y: T, alpha: float
+    g: GraphBuilder, sts: bool, outputs: List[str], x: T, y: T, alpha: float
 ) -> T:
     assert (
         alpha == 1
     ), f"sub_Tensor not implemented for alpha={alpha}{g.get_debug_msg()}"
-    return aten_sub(g, set_shape_type, outputs, x, y, name="sub_Tensor")
+    return aten_sub(g, sts, outputs, x, y, name="sub_Tensor")
 
 
 def aten_sum(
     g: GraphBuilder,
-    set_shape_type: bool,
+    sts: bool,
     outputs: List[str],
     x: T,
     dim: Optional[Union[int, List[int]]] = None,
@@ -1988,14 +1947,14 @@ def aten_sum(
         result = g.op.ReduceSumAnyOpset(
             xc, adim, keepdims=keepdim, outputs=outputs, name="sum"
         )
-    if set_shape_type:
+    if sts:
         set_shape_type_reduce_op(g, outputs[0], x, keepdim=keepdim)
     return result
 
 
 def aten_sum_dim_IntList(
     g: GraphBuilder,
-    set_shape_type: bool,
+    sts: bool,
     outputs: List[str],
     x: T,
     dim: Optional[Union[int, List[int]]],
@@ -2003,9 +1962,9 @@ def aten_sum_dim_IntList(
     dtype: Optional["torch.dtype"] = None,  # noqa: F821
 ) -> T:
     if dtype is None:
-        return aten_sum(g, set_shape_type, outputs, x, dim, keepdim)
+        return aten_sum(g, sts, outputs, x, dim, keepdim)
 
-    res = aten_sum(g, set_shape_type, None, x, dim, keepdim)
+    res = aten_sum(g, sts, None, x, dim, keepdim)
     itype = torch_dtype_to_onnx_dtype(dtype)
     result = g.op.Cast(res, to=itype, outputs=outputs, name="sum_dim_IntList")
     return result
@@ -2013,7 +1972,7 @@ def aten_sum_dim_IntList(
 
 def aten__to_copy(
     g: GraphBuilder,
-    set_shape_type: bool,
+    sts: bool,
     outputs: List[str],
     x: T,
     dtype: Optional["torch.dtype"] = None,  # noqa: F821
@@ -2039,16 +1998,14 @@ def aten__to_copy(
         return g.op.Identity(x, outputs=outputs, name="_to_copy")
     itype = torch_dtype_to_onnx_dtype(dtype)
     res = g.op.Cast(x, to=itype, outputs=outputs, name="_to_copy")
-    if set_shape_type:
+    if sts:
         set_shape_type_unary_op(g, res, x, itype=itype)
     return res
 
 
-def aten_t(
-    g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T, name: str = "t"
-) -> T:
+def aten_t(g: GraphBuilder, sts: bool, outputs: List[str], x: T, name: str = "t") -> T:
     res = g.op.Transpose(x, perm=[1, 0], outputs=outputs, name=name)
-    if set_shape_type:
+    if sts:
         g.set_type(res, g.get_type(x))
         if g.has_shape(x):
             shape = list(g.get_shape(x))
@@ -2060,36 +2017,36 @@ def aten_t(
     return res
 
 
-def aten_tan(g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T) -> T:
+def aten_tan(g: GraphBuilder, sts: bool, outputs: List[str], x: T) -> T:
     res = g.make_node("Tan", [x], outputs)
-    if set_shape_type:
+    if sts:
         set_shape_type_unary_op(g, outputs[0], x)
     return res
 
 
-def aten_tanh(g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T) -> T:
+def aten_tanh(g: GraphBuilder, sts: bool, outputs: List[str], x: T) -> T:
     res = g.make_node("Tanh", [x], outputs)
-    if set_shape_type:
+    if sts:
         set_shape_type_unary_op(g, outputs[0], x)
     return res
 
 
 def aten_tanh_backward(
-    g: GraphBuilder, set_shape_type: bool, outputs: List[str], out_grad: T, y: T
+    g: GraphBuilder, sts: bool, outputs: List[str], out_grad: T, y: T
 ) -> T:
     # out_grad * (1 - y * y)
     dtype = tensor_dtype_to_np_dtype(g.get_type(y))
     yy = g.op.Pow(y, np.array([2], dtype=np.int64), name="tanh_backward")
     _1yy = g.op.Sub(np.array([1], dtype=dtype), yy, name="tanh_backward")
     res = g.op.Mul(out_grad, _1yy, outputs=outputs, name="tanh_backward")
-    if set_shape_type:
+    if sts:
         set_shape_type_unary_op(g, outputs[0], y)
     return res
 
 
 def _aten_tensor_int1(
     g: GraphBuilder,
-    set_shape_type: bool,
+    sts: bool,
     outputs: List[str],
     input_name: T,
     indices: Tuple[Any, ...],
@@ -2115,12 +2072,12 @@ def _aten_tensor_int1(
         outputs=outputs,
         axis=axes[0],
         name="getitem_int1",
-        set_shape_type=True,
+        sts=True,
     )
 
     if expand_axes:
         raise RuntimeError(f"Not implemented when expand_axes={expand_axes}.")
-    if set_shape_type:
+    if sts:
         dtype = g.get_type(input_name)
         g.set_type(res, dtype)
         if g.has_shape(input_name):
@@ -2145,7 +2102,7 @@ def _aten_tensor_int1(
 
 def aten_tensor(
     g: GraphBuilder,
-    set_shape_type: bool,
+    sts: bool,
     outputs: List[str],
     x: T,
     indices: Optional[Tuple[Any, ...]] = None,
@@ -2172,24 +2129,19 @@ def aten_tensor(
         if isinstance(indices[0], list) and all(
             map(lambda i: isinstance(i, int), indices[0])
         ):
-            return _aten_tensor_int1(g, set_shape_type, outputs, x, indices, [0], [])
+            return _aten_tensor_int1(g, sts, outputs, x, indices, [0], [])
     raise RuntimeError(
         f"Unable to handle getitem with indices={indices}{g.get_debug_msg()}"
     )
 
 
 def aten_transpose(
-    g: GraphBuilder,
-    set_shape_type: bool,
-    outputs: List[str],
-    input_name: T,
-    dim0: int,
-    dim1: int,
+    g: GraphBuilder, sts: bool, outputs: List[str], input_name: T, dim0: int, dim1: int
 ) -> T:
     perm = list(range(g.rank(input_name)))
     perm[dim0], perm[dim1] = perm[dim1], perm[dim0]
     res = g.make_node("Transpose", [input_name], outputs, perm=perm)
-    if set_shape_type:
+    if sts:
         g.set_type(outputs[0], g.get_type(input_name))
         if g.has_shape(input_name):
             shape = list(g.get_shape(input_name))
@@ -2202,31 +2154,27 @@ def aten_transpose(
 
 def aten_transpose_int(
     g: GraphBuilder,
-    set_shape_type: bool,
+    sts: bool,
     outputs: List[str],
     input_name: T,
     dim0: int,
     dim1: int,
 ) -> T:
-    return aten_transpose(g, set_shape_type, outputs, input_name, dim0, dim1)
+    return aten_transpose(g, sts, outputs, input_name, dim0, dim1)
 
 
-def aten_truediv(
-    g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T, y: T
-) -> T:
+def aten_truediv(g: GraphBuilder, sts: bool, outputs: List[str], x: T, y: T) -> T:
     x, y = prepare_inputs_homogeneous_operator(g, x, y)
     res = g.op.Div(x, y, outputs=outputs, name="truediv")
-    if set_shape_type:
+    if sts:
         set_shape_type_binary_op(g, outputs[0], x, y)
     return res
 
 
-def aten_unsqueeze(
-    g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T, dim: int
-) -> T:
+def aten_unsqueeze(g: GraphBuilder, sts: bool, outputs: List[str], x: T, dim: int) -> T:
     assert isinstance(dim, int), f"Not implemented for dim={dim!r}"
     res = g.op.UnsqueezeAnyOpset(x, np.array([dim], dtype=np.int64), outputs=outputs)
-    if set_shape_type:
+    if sts:
         g.set_type(res, g.get_type(x))
         if g.has_shape(x):
             shape = list(g.get_shape(x))
@@ -2239,7 +2187,7 @@ def aten_unsqueeze(
 
 def aten_view(
     g: GraphBuilder,
-    set_shape_type: bool,
+    sts: bool,
     outputs: List[str],
     x: T,
     size: T,
@@ -2252,26 +2200,26 @@ def aten_view(
             len(asize.shape) == 1
         ), f"Unexpected shape for view, size={size}{g.get_debug_msg()}"
         res = g.op.Reshape(x, asize, outputs=outputs, name=node_name)
-        if set_shape_type:
+        if sts:
             set_shape_type_reshape(g, res, x, asize)
         return res
 
     csize = g.op.Cast(size, to=TensorProto.INT64, name=node_name)
     res = g.op.Reshape(x, csize, outputs=outputs, name=node_name)
-    if set_shape_type:
+    if sts:
         set_shape_type_reshape(g, res, x, size)
     return res
 
 
 def aten__unsafe_view(
-    g: GraphBuilder, set_shape_type: bool, outputs: List[str], x: T, size: T
+    g: GraphBuilder, sts: bool, outputs: List[str], x: T, size: T
 ) -> T:
-    return aten_view(g, set_shape_type, outputs, x, size, node_name="_unsafe_view")
+    return aten_view(g, sts, outputs, x, size, node_name="_unsafe_view")
 
 
 def aten_zeros(
     g: GraphBuilder,
-    set_shape_type: bool,
+    sts: bool,
     outputs: List[str],
     size: T,
     dtype=None,
@@ -2282,7 +2230,7 @@ def aten_zeros(
 ) -> T:
     return aten_full(
         g,
-        set_shape_type,
+        sts,
         outputs,
         size,
         fill_value=None,
@@ -2296,7 +2244,7 @@ def aten_zeros(
 
 def prims_broadcast_in_dim(
     g: GraphBuilder,
-    set_shape_type: bool,
+    sts: bool,
     outputs: List[str],
     a: T,
     shape: List[int],
@@ -2339,7 +2287,7 @@ def prims_broadcast_in_dim(
         outputs=outputs,
     )
 
-    if set_shape_type:
+    if sts:
         g.set_type(res, g.get_type(a))
         g.set_shape(res, shape)
 
@@ -2348,25 +2296,21 @@ def prims_broadcast_in_dim(
 
 def prims_clone(
     g: GraphBuilder,
-    set_shape_type: bool,
+    sts: bool,
     outputs: List[str],
     x: T,
     memory_format: Optional[str] = None,
 ) -> T:
     return aten_clone(
-        g, set_shape_type, outputs, x, memory_format=memory_format, name="prims_clone"
+        g, sts, outputs, x, memory_format=memory_format, name="prims_clone"
     )
 
 
 def prims_transpose(
-    g: GraphBuilder,
-    set_shape_type: bool,
-    outputs: List[str],
-    input_name: T,
-    perm: List[int],
+    g: GraphBuilder, sts: bool, outputs: List[str], input_name: T, perm: List[int]
 ) -> T:
     res = g.make_node("Transpose", [input_name], outputs, perm=list(perm))
-    if set_shape_type:
+    if sts:
         g.set_type(outputs[0], g.get_type(input_name))
         if g.has_shape(input_name):
             shape = list(g.get_shape(input_name))
