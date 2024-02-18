@@ -752,9 +752,9 @@ def aten_empty_like(
     )
 
 
-def aten_eq(g: GraphBuilder, sts: bool, outputs: List[str], x: T, y: T) -> T:
+def aten_eq(g: GraphBuilder, sts: bool, outputs: List[str], x: T, y: T, name="eq") -> T:
     x, y = prepare_inputs_homogeneous_operator(g, x, y)
-    res = g.op.Equal(x, y, outputs=outputs)
+    res = g.op.Equal(x, y, outputs=outputs, name=name)
     if sts:
         set_type_shape_binary_op(g, outputs[0], x, y, cmp_op=True)
     return res
@@ -2320,6 +2320,64 @@ def prims_clone(
     return aten_clone(
         g, sts, outputs, x, memory_format=memory_format, name="prims_clone"
     )
+
+
+def prims_convert_element_type(
+    g: GraphBuilder,
+    sts: bool,
+    outputs: List[str],
+    x: T,
+    dtype: "torch.dtype",  # noqa: F821
+) -> T:
+    assert (
+        dtype is not None
+    ), f"dtype cannot be none for prims_convert_element_type{g.get_debug_msg()}"
+    onnx_to = torch_dtype_to_onnx_dtype(dtype)
+    if onnx_to == g.get_type(x):
+        return g.op.Identity(x, outputs=outputs, name="prims_convert_element_type")
+    res = g.make_node(
+        "Cast", [x], outputs, to=onnx_to, name="prims_convert_element_type"
+    )
+    return res
+
+
+def prims_collapse_view(
+    g: GraphBuilder, sts: bool, outputs: List[str], x: T, start: int, end: int
+) -> T:
+    assert g.has_shape(
+        x
+    ), f"collapse_view not implemented if x has no shape{g.get_debug_msg()}"
+    shape = g.get_shape(x)
+    start = (start + len(shape)) % len(shape)
+    end = (end + len(shape)) % len(shape)
+    new_shape = []
+    s = 1
+    for i in range(len(shape)):
+        if start <= i < end:
+            if i == start:
+                new_shape.append(-1)
+            s *= shape[i]
+        else:
+            new_shape.append(shape[i])
+    ashape = np.array(new_shape, dtype=np.int64)
+    res = g.op.Reshape(x, ashape, outputs=outputs)
+    if sts:
+        g.set_type(res, g.get_type(x))
+        ashape[ashape == -1] = s
+        g.set_shape(res, tuple(ashape))
+    return res
+
+
+def prims_eq(
+    g: GraphBuilder, sts: bool, outputs: List[str], x: T, y: T, name="prims_eq"
+) -> T:
+    return aten_eq(g, sts, outputs, x, y, name=name)
+
+
+def prims_mul(
+    g: GraphBuilder, sts: bool, outputs: List[str], x: T, y: T, name="prims_mul"
+) -> T:
+    return aten_mul(g, sts, outputs, x, y, name=name)
 
 
 def prims_transpose(

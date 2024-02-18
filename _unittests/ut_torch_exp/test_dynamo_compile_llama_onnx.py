@@ -21,12 +21,6 @@ def torch_min(v: str) -> bool:
     return pv.Version(torch.__version__) < pv.Version(v)
 
 
-def implements(name: str) -> bool:
-    import experimental_experiment.torch_exp._aten_functions as atf
-
-    return hasattr(atf, name)
-
-
 def has_cuda():
     import torch
 
@@ -462,9 +456,6 @@ class TestDynamoLlama(ExtTestCase):
     @ignore_warnings((UserWarning, DeprecationWarning))
     @skipif_ci_windows("torch.compile not supported on Windows")
     @unittest.skipIf(torch_min("2.2"), reason="missing kernel")
-    @unittest.skipIf(
-        not implements("prims_collapsed_view"), reason="not yet implemented"
-    )
     def test_llama_model_backward_decomposition(self):
         from experimental_experiment.torch_helper.llama_helper import get_llama_model
 
@@ -483,9 +474,6 @@ class TestDynamoLlama(ExtTestCase):
     @ignore_warnings((UserWarning, DeprecationWarning))
     @skipif_ci_windows("torch.compile not supported on Windows")
     @unittest.skipIf(torch_min("2.2"), reason="missing kernel")
-    @unittest.skipIf(
-        not implements("prims_collapsed_view"), reason="not yet implemented"
-    )
     def test_llama_model_backward_forward_decomposition(self):
         from experimental_experiment.torch_helper.llama_helper import get_llama_model
 
