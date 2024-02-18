@@ -3,10 +3,10 @@ import numpy as np
 from onnx.helper import tensor_dtype_to_np_dtype
 from ._aten_helper import (
     torch_dtype_to_onnx_dtype,
-    set_shape_type_binary_op,
-    set_shape_type_unary_op,
-    set_shape_type_reduce_op,
-    set_shape_type_reshape,
+    set_type_shape_binary_op,
+    set_type_shape_unary_op,
+    set_type_shape_reduce_op,
+    set_type_shape_reshape,
 )
 from .graph_builder import GraphBuilder
 from ._aten_functions import (
@@ -88,7 +88,7 @@ def aten_meth_masked_fill_(
             g.set_shape(value_cast, value.shape)
         else:
             raise RuntimeError(f"Unable to guess shape from type {type(value)}")
-        set_shape_type_binary_op(g, res, mask, value_cast, x, begin=1)
+        set_type_shape_binary_op(g, res, mask, value_cast, x, begin=1)
 
     return res
 
@@ -111,7 +111,7 @@ def aten_meth_mean(
         "ReduceMean", [x, cst], outputs, keepdims=1 if keepdim else 0, name=".mean"
     )
     if sts:
-        set_shape_type_reduce_op(g, outputs[0], x, keepdim=keepdim)
+        set_type_shape_reduce_op(g, outputs[0], x, keepdim=keepdim)
     return res
 
 
@@ -139,7 +139,7 @@ def aten_meth_pow(
         raise RuntimeError(f"Unexpected type {type(exponent)} for exponent.")
     res = g.make_node("Pow", [x, cst], outputs)
     if sts:
-        set_shape_type_unary_op(g, outputs[0], x)
+        set_type_shape_unary_op(g, outputs[0], x)
     return res
 
 
@@ -159,7 +159,7 @@ def aten_meth_reshape(
     cst = g.make_initializer("", np.array(shape, dtype=np.int64))
     res = g.make_node("Reshape", [input_name, cst], outputs)
     if sts:
-        set_shape_type_reshape(g, res, input_name, shape)
+        set_type_shape_reshape(g, res, input_name, shape)
     return res
 
 
@@ -257,5 +257,5 @@ def aten_meth_view(
     g.make_initializer(new_shape_name, np.array(args, dtype=np.int64))
     res = g.make_node("Reshape", [input_name, new_shape_name], outputs, name=".view")
     if sts:
-        set_shape_type_reshape(g, res, input_name, args)
+        set_type_shape_reshape(g, res, input_name, args)
     return res

@@ -844,7 +844,7 @@ class GraphBuilder:
             node.attribute.extend(attributes)
 
         # constant handling, shape, type
-        self._make_node_set_shape_type_constant(node, set_type_shape=set_type_shape)
+        self._make_node_set_type_shape_constant(node, set_type_shape=set_type_shape)
 
         if self.verbose > 3:
             print(
@@ -889,7 +889,7 @@ class GraphBuilder:
                     del kwargs["axes"]
         return inputs, kwargs
 
-    def _make_node_set_shape_type_constant(self, node: NodeProto, set_type_shape: bool):
+    def _make_node_set_type_shape_constant(self, node: NodeProto, set_type_shape: bool):
         if node.op_type == "Constant":
             size = len(node.SerializeToString())
             if size >= self.optimization_options.constant_size:
