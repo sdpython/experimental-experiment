@@ -4,6 +4,8 @@ import pprint
 import types
 from typing import Any, Callable, Dict, List, Tuple, Union
 import numpy as np
+from onnx import TensorProto
+from .annotations import all_int, is_static_shape
 from ._helper import make_hash
 from ._aten_helper import torch_dtype_to_onnx_dtype
 from .aten_functions import find_function
@@ -126,9 +128,13 @@ class DynamoInterpreter:
                     f"value is None, unable to retrieve target {node.target!r}"
                 )
             return self.builder.make_initializer(node.name, value)
+
+        if isinstance(val, self.torch.SymInt):
+            return self.builder.make_dynamic_object(node.name, val, shape_as_input=True)
+
         raise RuntimeError(
-            f"Unsupported type {type(val)} for a "
-            f"placeholder{self.builder.get_debug_msg()}."
+            f"Unsupported type {type(val)} for placeholder "
+            f"{getattr(node, 'target', '?')}{self.builder.get_debug_msg()}."
         )
 
     def output(self, node):
@@ -264,9 +270,7 @@ class DynamoInterpreter:
         expand_axes: List[int],
     ):
         assert isinstance(axes, list), f"Unexpected type {type(axes)} for axes"
-        assert all(
-            map(lambda i: isinstance(i, int), axes)
-        ), f"Expected only integer axis but got {axes}"
+        assert all_int(axes), f"Expected only integer axis but got {axes}"
         assert len(axes) == len(
             index_slice
         ), f"Length mismatch {len(axes)} != {len(index_slice)}"
@@ -399,8 +403,6 @@ class DynamoInterpreter:
         )
 
     def getitem(self, node: "torch.fx.Node"):  # noqa: F821
-        import torch
-
         args = node.args
         assert len(args) == 2
         node_output, index = args
@@ -449,9 +451,9 @@ class DynamoInterpreter:
                 expand_axes=[],
             )
 
-        if isinstance(index, torch.fx.immutable_collections.immutable_list):
+        if isinstance(index, self.torch.fx.immutable_collections.immutable_list):
             # something like x[[0, 2]]
-            if all(map(lambda x: isinstance(x, int), index)):
+            if all_int(index):
                 # something like x[[0, 1]]
                 axes = [0]
                 return self._getitem_int1(
@@ -524,9 +526,8 @@ class DynamoInterpreter:
             return new_list
         if i is Ellipsis:
             return i
-        import torch
 
-        if isinstance(i, torch.dtype):
+        if isinstance(i, self.torch.dtype):
             return i
         raise RuntimeError(
             f"Unexpected type (argument {i}) {type(i)} "
@@ -661,13 +662,26 @@ class DynamoInterpreter:
                 if isinstance(v, self.torch.Tensor):
                     shape = tuple(v.shape)
                     dtype = self.builder._get_type(v.dtype)
-                    self.builder.set_shape(r, shape, set_if_more_precise=True)
+                    if is_static_shape(shape):
+                        self.builder.set_shape(r, shape, set_if_more_precise=True)
+                    elif self.builder.has_rank(r):
+                        assert len(shape) == self.builder.get_rank(r), (
+                            f"Rank already set for {r!r}, but rank={self.builder.get_rank()} "
+                            f"differs for shape={shape!r}{self.builder.get_debug_msg()}"
+                        )
+                    else:
+                        self.builder.set_rank(r, len(shape))
                     self.builder.set_type(r, dtype)
                     if r in output_sets:
                         description.append(f"{r}:{dtype}:{shape}".replace(" ", ""))
+                elif isinstance(v, self.torch.SymInt):
+                    # this is a shape
+                    self.builder.set_rank(r, 1)
+                    self.builder.set_type(r, TensorProto.INT64)
                 else:
                     raise TypeError(
-                        f"Unexpected type in node {node!r}, type(val)={type(v)}."
+                        f"Unexpected type in node {node!r}, "
+                        f"type(val)={type(v)}{self.builder.get_debug_msg()}"
                     )
         if exa is not None and not isinstance(exa, tuple):
             description.append(f"~{exa.dtype}:{exa.shape}".replace(" ", ""))
@@ -689,12 +703,11 @@ class DynamoInterpreter:
                 f"\nVALUES\n{pprint.pformat(self.example_values_)}"
             )
 
-        import torch
         from .onnx_export import _make_builder_interpreter
 
         sub_module = node.graph.owning_module.get_submodule(node.target)
 
-        if not isinstance(sub_module, torch.nn.Module):
+        if not isinstance(sub_module, self.torch.nn.Module):
             raise NotImplementedError(
                 f"Not implemented for type {type(sub_module)}.\n{raise_msg()}"
             )
@@ -706,14 +719,14 @@ class DynamoInterpreter:
             args.append(val)
 
         if hasattr(sub_module, "graph") and isinstance(
-            sub_module, torch.fx.GraphModule
+            sub_module, self.torch.fx.GraphModule
         ):
             gm = sub_module
         else:
             # https://pytorch.org/docs/stable/fx.html
-            tracer_class = torch.fx.Tracer
+            tracer_class = self.torch.fx.Tracer
             graph = tracer_class().trace(sub_module)
-            gm = torch.fx.GraphModule(sub_module, graph)
+            gm = self.torch.fx.GraphModule(sub_module, graph)
 
         graph_module, builder, interpreter = _make_builder_interpreter(
             gm,

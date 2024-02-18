@@ -2,6 +2,7 @@ from typing import Any, Callable, List, Optional, Sequence, Set, Tuple
 import numpy as np
 from onnx import TensorProto, TensorShapeProto
 from onnx.helper import np_dtype_to_tensor_dtype, tensor_dtype_to_np_dtype
+from .annotations import STATIC_SHAPE, is_static_shape
 
 
 def _nice_shape(shape: TensorShapeProto) -> str:
@@ -47,7 +48,7 @@ def dtype_to_tensor_dtype(dt: "dtype") -> int:  # noqa: F821
     return torch_dtype_to_onnx_dtype(dt)
 
 
-def broadcast_shape(sh1: Tuple[int, ...], sh2: Tuple[int, ...]) -> Tuple[int, ...]:
+def broadcast_shape(sh1: STATIC_SHAPE, sh2: STATIC_SHAPE) -> STATIC_SHAPE:
     """
     Computes the shape for many broadcasting operators.
 
@@ -55,8 +56,8 @@ def broadcast_shape(sh1: Tuple[int, ...], sh2: Tuple[int, ...]) -> Tuple[int, ..
     :param sh2: second shape
     :return: resulting shape
     """
-    assert all(map(lambda i: isinstance(i, int), sh1)), f"Unexpected sh1={sh1}"
-    assert all(map(lambda i: isinstance(i, int), sh2)), f"Unexpected sh2={sh2}"
+    assert is_static_shape(sh1), f"Unexpected sh1={sh1}"
+    assert is_static_shape(sh2), f"Unexpected sh2={sh2}"
     if len(sh1) == len(sh2):
         return tuple(max(i, j) for i, j in zip(sh1, sh2))
     shape = tuple(max(i, j) for i, j in zip(sh1, sh2))
@@ -76,7 +77,7 @@ def set_type_shape_reshape(
     if isinstance(new_shape, str):
         if g.has_shape(new_shape):
             g.set_rank(name, len(g.get_shape(new_shape)))
-    elif not all(map(lambda i: isinstance(i, int), new_shape)):
+    elif not is_static_shape(new_shape):
         g.set_rank(name, len(new_shape))
     elif min(new_shape) == -1:
         if g.has_shape(input_name):
