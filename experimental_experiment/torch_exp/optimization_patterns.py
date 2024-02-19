@@ -62,6 +62,10 @@ class PatternOptimization:
 
 
 class UnsqueezeUnsqueezePattern(PatternOptimization):
+    """
+    Replaces the sequence Unsqueeze, Unsqueeze by Unsqueeze.
+    """
+
     def __init__(self):
         PatternOptimization.__init__(self)
 
@@ -97,3 +101,18 @@ class UnsqueezeUnsqueezePattern(PatternOptimization):
             return [new_node]
 
         return MatchResult(self, [node, next_node], apply)
+
+
+def get_default_patterns() -> List[PatternOptimization]:
+    """
+    Returns a default list of optimization patters.
+    It is equal to the following list.
+
+    .. runpython::
+        :showcode:
+
+        import pprint
+        from experimental_experiment.torch_exp.pattern_optimizations import get_default_patterns
+        pprint.pprint(get_default_patterns())
+    """
+    return [UnsqueezeUnsqueezePattern()]

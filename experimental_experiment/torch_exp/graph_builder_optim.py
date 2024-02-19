@@ -5,7 +5,7 @@ from ._onnx_helper import enumerate_subgraphs
 from .optimization_patterns import (
     MatchResult,
     PatternOptimization,
-    UnsqueezeUnsqueezePattern,
+    get_default_patterns,
 )
 
 
@@ -14,8 +14,6 @@ class GraphBuilderPatternOptimization:
     Implements optimization after the conversion is done.
     """
 
-    _default_patterns = [UnsqueezeUnsqueezePattern()]
-
     def __init__(
         self,
         builder: "GraphBuilder",  # noqa: F821
@@ -23,7 +21,7 @@ class GraphBuilderPatternOptimization:
         verbose: int = 0,
     ):
         self.builder = builder
-        self.patterns = patterns or self._default_patterns
+        self.patterns = patterns or get_default_patterns()
         self.verbose = verbose
         self._build()
 

@@ -21,7 +21,7 @@ class TestGraphPatternOptimization(ExtTestCase):
         self.assertIn("[GraphBuilderPatternOptimization.optimize] done after", out)
         self.assertIn("UnsqueezeUnsqueezePattern", out)
 
-        onx = gr.to_onnx()
+        onx = gr.to_onnx(optimize=False)
         after = [node for node in onx.graph.node if node.op_type == "Unsqueeze"]
         self.assertEqual(len(after), len(before) - 2)
 

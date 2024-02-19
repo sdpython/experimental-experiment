@@ -8,6 +8,7 @@ from onnx_array_api.reference import ExtendedReferenceEvaluator
 from ._aten_helper import dtype_to_tensor_dtype, _nice_shape
 from ._helper import make_hash
 from .graph_builder_optim import PatternOptimization, GraphBuilderPatternOptimization
+from .optimization_patterns import get_default_patterns
 
 
 def _default_OPSET_TO_IR_VERSION():
@@ -34,6 +35,55 @@ def _default_OPSET_TO_IR_VERSION():
         20: 9,
         21: 10,
     }
+
+
+class OptimizationOptions:
+    """
+    Defines all the optimization to apply.
+
+    :param remove_unused: remove all unused nodes, this must be true if
+        pattern optimization is enabled
+    :param constant_folding: folds constant as much as possible
+    :param constant_size: all node Constant above this threshold should be
+        defined as initializer
+    :param patterns: list of pattern optimization to apply to the graph,
+        it looks a a specific subsequence of nodes in a graph
+        and do some replacements,
+        `'default'` means a default list of optimization patterns are applied
+    :param max_iter: maximum number of iteration when doing pattern optimizations,
+        -1 to let it undefined
+    :param verbose: verbosity level (for pattern optimization)
+    """
+
+    def __init__(
+        self,
+        remove_unused: bool = True,
+        constant_folding: bool = False,
+        constant_size: int = 1024,
+        patterns: Union[str, List["PatternOptimization"]] = "default",
+        max_iter: int = -1,
+        verbose: int = 0,
+    ):
+        self.remove_unused = remove_unused
+        self.constant_folding = constant_folding
+        self.constant_size = constant_size
+        if isinstance(patterns, str):
+            assert patterns == "default", f"Unexpected value {patterns!r} for patterns"
+            self.patterns = get_default_patterns()
+        else:
+            assert isinstance(
+                patterns, list
+            ), f"Unexpected type {type(patterns)} for patterns"
+            self.patterns = patterns
+        self.max_iter = -1
+        self.verbose = verbose
+
+    def __repr__(self):
+        return (
+            f"{self.__class__.__name__}(remove_unused={self.remove_unused}, "
+            f"constant_folding={self.constant_folding}, "
+            f"constant_size={self.constant_size})"
+        )
 
 
 class Opset:
@@ -175,25 +225,6 @@ class Opset:
             return self.ReduceMean(*args, **kwargs)
         return self.ReduceMean(
             args[0], axes=self._iaxes("ReduceMean", args[1]), **kwargs
-        )
-
-
-class OptimizationOptions:
-    def __init__(
-        self,
-        remove_unused: bool = False,
-        constant_folding: bool = True,
-        constant_size: int = 1024,
-    ):
-        self.remove_unused = remove_unused
-        self.constant_folding = constant_folding
-        self.constant_size = constant_size
-
-    def __repr__(self):
-        return (
-            f"{self.__class__.__name__}(remove_unused={self.remove_unused}, "
-            f"constant_folding={self.constant_folding}, "
-            f"constant_size={self.constant_size})"
         )
 
 
@@ -1280,7 +1311,19 @@ class GraphBuilder:
             _check("D")
             if self.optimization_options.remove_unused:
                 self.remove_unused()
-                _check("D")
+                _check("E")
+        if self.optimization_options.patterns:
+            assert (
+                self.optimization_options.remove_unused
+            ), "remove_unused must be positive for pattern optimizations"
+            self.optimization_patterns(
+                self.optimization_options.max_iter,
+                patterns=self.optimization_options.patterns,
+                verbose=self.optimization_options.verbose,
+            )
+            _check("F")
+            self.remove_unused()
+            _check("G")
 
     def optimize_with_patterns(
         self,
