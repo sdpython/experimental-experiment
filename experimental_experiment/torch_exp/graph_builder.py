@@ -1077,6 +1077,9 @@ class GraphBuilder:
                 t = onh.from_array(v, name=k)
                 res.append(t)
                 continue
+            if isinstance(v, TensorProto):
+                res.append(v)
+                continue
             raise TypeError(
                 f"Unable to convert initializer {k!r} with type "
                 f"{type(v)} into a TensorProto."
@@ -1265,7 +1268,7 @@ class GraphBuilder:
         """
         assert not recursive, "Recursivity not implemented for optimize_with_patterns"
         gro = GraphBuilderPatternOptimization(self, verbose=verbose)
-        gro.optimize()
+        gro.optimize(max_iter=max_iter)
 
     def remove_unused(self):
         """

@@ -69,7 +69,7 @@ class GraphBuilderPatternOptimization:
                     for i in n.output:
                         sub_knowns.add(i)
 
-    def optimizes(self, max_iter=-1):
+    def optimize(self, max_iter=-1):
         """
         Optimizes the based on the given list of patterns.
 
