@@ -10,6 +10,7 @@ from onnx.numpy_helper import from_array
 from ._exceptions import FunctionNotFoundError
 from ._aten_helper import (
     _adjust_attributes_of_max_pool,
+    broadcast_shape,
     set_type_shape_unary_op,
     set_type_shape_binary_op,
     set_type_shape_reduce_op,
@@ -45,9 +46,11 @@ def aten_acosh(g: GraphBuilder, sts: bool, outputs: List[str], x: T) -> T:
     return res
 
 
-def aten_add(g: GraphBuilder, sts: bool, outputs: List[str], x: T, y: T) -> T:
+def aten_add(
+    g: GraphBuilder, sts: bool, outputs: List[str], x: T, y: T, name: str = "add"
+) -> T:
     res, x, y = prepare_inputs_homogeneous_operator(
-        g, x, y, f=g.op.Add, name="add", outputs=outputs
+        g, x, y, f=g.op.Add, name=name, outputs=outputs
     )
     if sts:
         set_type_shape_binary_op(g, outputs[0], x, y)
@@ -138,11 +141,20 @@ def aten_arange(
     step: int = 1,
     dtype: Optional["torch.dtype"] = None,  # noqa: F821
     layout=None,
-    device=None,
+    device: Optional["torch.device"] = None,  # noqa: F821
     pin_memory=None,
+    name: str = "arange",
+    requires_grad: bool = False,
 ) -> T:
-    assert layout is None, f"arange not implemented for layout={layout!r} is not None"
-    assert not pin_memory, "arange not implemented for pin_memory=True"
+    assert (
+        layout is None
+    ), f"arange not implemented for layout={layout!r} is not None{g.get_debug_msg()}"
+    assert (
+        not pin_memory
+    ), f"arange not implemented for pin_memory=True{g.get_debug_msg()}"
+    assert (
+        not requires_grad
+    ), f"arange not implemented when requires_grad is True{g.get_debug_msg()}"
     if start is not None and end is None:
         end = start
         start = 0
@@ -193,7 +205,7 @@ def aten_arange(
         i_step = step
     else:
         i_step = np.array(step, dtype=npdtype)
-    res = g.op.Range(i_start, i_end, i_step, outputs=outputs, name="arange")
+    res = g.op.Range(i_start, i_end, i_step, outputs=outputs, name=name)
     if sts:
         g.set_type(res, itype)
         if isinstance(end, str) or isinstance(start, str) or isinstance(step, str):
@@ -211,7 +223,7 @@ def aten_arange_start(
     end: Optional[int] = None,
     dtype: Optional["torch.dtype"] = None,  # noqa: F821
     layout=None,
-    device=None,
+    device: Optional["torch.device"] = None,  # noqa: F821
     pin_memory=None,
 ) -> T:
     import torch
@@ -233,7 +245,7 @@ def aten_arange_start_step(
     step: int = 1,
     dtype: Optional["torch.dtype"] = None,  # noqa: F821
     layout=None,
-    device=None,
+    device: Optional["torch.device"] = None,  # noqa: F821
     pin_memory=None,
 ) -> T:
     assert layout is None, f"arange not implemented for layout={layout!r} is not None"
@@ -344,9 +356,14 @@ def aten_bmm(g: GraphBuilder, sts: bool, outputs: List[str], x: T, y: T) -> T:
 
 
 def aten_cat(
-    g: GraphBuilder, sts: bool, outputs: List[str], tensors: Tuple[T, ...], dim: int = 0
+    g: GraphBuilder,
+    sts: bool,
+    outputs: List[str],
+    tensors: Tuple[T, ...],
+    dim: int = 0,
+    name="cat",
 ) -> T:
-    res = g.op.Concat(*tensors, axis=dim, outputs=outputs, name="cat")
+    res = g.op.Concat(*tensors, axis=dim, outputs=outputs, name=name)
     if sts:
         dt0 = g.get_type(tensors[0])
         assert all(map(lambda t: g.get_type(t) == dt0, tensors))
@@ -490,8 +507,10 @@ def aten_copy(
     return g.op.CastLike(src, x, name="copy")
 
 
-def aten_cos(g: GraphBuilder, sts: bool, outputs: List[str], x: T) -> T:
-    res = g.make_node("Cos", [x], outputs)
+def aten_cos(
+    g: GraphBuilder, sts: bool, outputs: List[str], x: T, name: str = "cos"
+) -> T:
+    res = g.make_node("Cos", [x], outputs, name=name)
     if sts:
         set_type_shape_unary_op(g, outputs[0], x)
     return res
@@ -722,7 +741,7 @@ def aten_empty_like(
     x: T,
     dtype: Optional["torch.dtype"] = None,  # noqa: F821
     layout=None,
-    device=None,
+    device: Optional["torch.device"] = None,  # noqa: F821
     pin_memory=None,
     memory_format=None,
 ) -> T:
@@ -873,9 +892,9 @@ def aten_full(
     outputs: List[str],
     size: T,
     fill_value: float,
-    dtype=None,
+    dtype: Optional["torch.dtype"] = None,  # noqa: F821
     layout=None,
-    device=None,
+    device: Optional["torch.device"] = None,  # noqa: F821
     pin_memory=None,
     name: str = "full",
 ) -> T:
@@ -1381,7 +1400,7 @@ def aten_mean_dim(
     x: T,
     dim: Optional[Union[int, List[int]]] = None,
     keepdim: bool = False,
-    dtype=None,
+    dtype: Optional["torch.dtype"] = None,  # noqa: F821
 ) -> T:
     if dtype is not None:
         itype = torch_dtype_to_onnx_dtype(dtype)
@@ -1431,8 +1450,8 @@ def aten_mul_Tensor(g: GraphBuilder, sts: bool, outputs: List[str], x: T, y: T) 
     return aten_mul(g, sts, outputs, x, y, name="mul_Tensor")
 
 
-def aten_neg(g: GraphBuilder, sts: bool, outputs: List[str], x: T) -> T:
-    res = g.make_node("Neg", [x], outputs)
+def aten_neg(g: GraphBuilder, sts: bool, outputs: List[str], x: T, name="neg") -> T:
+    res = g.make_node("Neg", [x], outputs, name=name)
     if sts:
         set_type_shape_unary_op(g, res, x)
     return res
@@ -1444,9 +1463,9 @@ def aten_new_zeros(
     outputs: List[str],
     x: T,
     size: T,
-    dtype=None,
+    dtype: Optional["torch.dtype"] = None,  # noqa: F821
     layout=None,
-    device=None,
+    device: Optional["torch.device"] = None,  # noqa: F821
     pin_memory=None,
     name: str = "seros",
 ) -> T:
@@ -1473,7 +1492,7 @@ def aten_ones(
     size: T,
     dtype: int = TensorProto.FLOAT,
     layout=None,
-    device=None,
+    device: Optional["torch.device"] = None,  # noqa: F821
     pin_memory=None,
 ) -> T:
     import torch
@@ -1686,8 +1705,8 @@ def aten_silu(
     return res
 
 
-def aten_sin(g: GraphBuilder, sts: bool, outputs: List[str], x: T) -> T:
-    res = g.make_node("Sin", [x], outputs)
+def aten_sin(g: GraphBuilder, sts: bool, outputs: List[str], x: T, name="sin") -> T:
+    res = g.make_node("Sin", [x], outputs, name=name)
     if sts:
         set_type_shape_unary_op(g, outputs[0], x)
     return res
@@ -1945,7 +1964,8 @@ def aten_sum(
     x: T,
     dim: Optional[Union[int, List[int]]] = None,
     keepdim: bool = False,
-    dtype=None,
+    dtype: Optional["torch.dtype"] = None,  # noqa: F821
+    name="sum",
 ) -> T:
     if dtype is not None:
         itype = torch_dtype_to_onnx_dtype(dtype)
@@ -1954,7 +1974,7 @@ def aten_sum(
         xc = x
     if dim is None:
         result = g.op.ReduceSumAnyOpset(
-            xc, keepdims=keepdim, outputs=outputs, name="sum"
+            xc, keepdims=keepdim, outputs=outputs, name=name
         )
     else:
         if isinstance(dim, int):
@@ -1962,7 +1982,7 @@ def aten_sum(
         else:
             adim = np.array(dim, dtype=np.int64)
         result = g.op.ReduceSumAnyOpset(
-            xc, adim, keepdims=keepdim, outputs=outputs, name="sum"
+            xc, adim, keepdims=keepdim, outputs=outputs, name=name
         )
     if sts:
         set_type_shape_reduce_op(g, outputs[0], x, keepdim=keepdim)
@@ -1994,7 +2014,7 @@ def aten__to_copy(
     x: T,
     dtype: Optional["torch.dtype"] = None,  # noqa: F821
     layout=None,
-    device=None,
+    device: Optional["torch.device"] = None,  # noqa: F821
     pin_memory=None,
     non_blocking=False,
     memory_format=None,
@@ -2238,9 +2258,9 @@ def aten_zeros(
     sts: bool,
     outputs: List[str],
     size: T,
-    dtype=None,
+    dtype: Optional["torch.dtype"] = None,  # noqa: F821
     layout=None,
-    device=None,
+    device: Optional["torch.device"] = None,  # noqa: F821
     pin_memory=None,
     name: str = "seros",
 ) -> T:
@@ -2256,6 +2276,12 @@ def aten_zeros(
         pin_memory=pin_memory,
         name=name,
     )
+
+
+def prims_add(
+    g: GraphBuilder, sts: bool, outputs: List[str], x: T, y: T, name="prims_add"
+) -> T:
+    return aten_add(g, sts, outputs, x, y, name=name)
 
 
 def prims_broadcast_in_dim(
@@ -2310,6 +2336,17 @@ def prims_broadcast_in_dim(
     return res
 
 
+def prims_cat(
+    g: GraphBuilder,
+    sts: bool,
+    outputs: List[str],
+    tensors: Tuple[T, ...],
+    dim: int = 0,
+    name: str = "prims_cat",
+) -> T:
+    return aten_cat(g, sts, outputs, tensors, dim=dim, name=name)
+
+
 def prims_clone(
     g: GraphBuilder,
     sts: bool,
@@ -2328,16 +2365,15 @@ def prims_convert_element_type(
     outputs: List[str],
     x: T,
     dtype: "torch.dtype",  # noqa: F821
+    name: str = "prims_convert_element_type",
 ) -> T:
     assert (
         dtype is not None
     ), f"dtype cannot be none for prims_convert_element_type{g.get_debug_msg()}"
     onnx_to = torch_dtype_to_onnx_dtype(dtype)
     if onnx_to == g.get_type(x):
-        return g.op.Identity(x, outputs=outputs, name="prims_convert_element_type")
-    res = g.make_node(
-        "Cast", [x], outputs, to=onnx_to, name="prims_convert_element_type"
-    )
+        return g.op.Identity(x, outputs=outputs, name=name)
+    res = g.make_node("Cast", [x], outputs, to=onnx_to, name=name)
     return res
 
 
@@ -2368,16 +2404,131 @@ def prims_collapse_view(
     return res
 
 
+def prims_cos(
+    g: GraphBuilder, sts: bool, outputs: List[str], x: T, name: str = "prims_cos"
+) -> T:
+    return aten_cos(g, sts, outputs, x, name=name)
+
+
+def prims_div(
+    g: GraphBuilder, sts: bool, outputs: List[str], x: T, y: T, name: str = "prims_div"
+) -> T:
+    return aten_div(g, sts, outputs, x, y, name=name)
+
+
 def prims_eq(
-    g: GraphBuilder, sts: bool, outputs: List[str], x: T, y: T, name="prims_eq"
+    g: GraphBuilder, sts: bool, outputs: List[str], x: T, y: T, name: str = "prims_eq"
 ) -> T:
     return aten_eq(g, sts, outputs, x, y, name=name)
 
 
+def prims_iota(
+    g: GraphBuilder,
+    sts: bool,
+    outputs: List[str],
+    length: int,
+    start: int = 0,
+    step: int = 1,
+    dtype: Optional["torch.dtype"] = None,  # noqa: F821
+    device: Optional["torch.device"] = None,  # noqa: F821
+    requires_grad: bool = False,
+) -> T:
+    assert isinstance(
+        length, int
+    ), f"not implemented when length={length!r}{g.get_debug_msg()}"
+    assert isinstance(
+        start, int
+    ), f"not implemented when start={start!r}{g.get_debug_msg()}"
+    assert isinstance(
+        step, int
+    ), f"not implemented when step={step!r}{g.get_debug_msg()}"
+    end = start + length * step
+    return aten_arange(
+        g,
+        sts,
+        outputs,
+        start,
+        end,
+        step,
+        dtype=dtype,
+        device=device,
+        requires_grad=requires_grad,
+        name="prims_iota",
+    )
+
+
 def prims_mul(
-    g: GraphBuilder, sts: bool, outputs: List[str], x: T, y: T, name="prims_mul"
+    g: GraphBuilder, sts: bool, outputs: List[str], x: T, y: T, name: str = "prims_mul"
 ) -> T:
     return aten_mul(g, sts, outputs, x, y, name=name)
+
+
+def prims_neg(
+    g: GraphBuilder, sts: bool, outputs: List[str], x: T, name="prims_neg"
+) -> T:
+    return aten_neg(g, sts, outputs, x, name=name)
+
+
+def prims_rsqrt(
+    g: GraphBuilder, sts: bool, outputs: List[str], x: T, name: str = "prims_rsqrt"
+) -> T:
+    res = g.op.Reciprocal(g.op.Sqrt(x, name=name), name=name, outputs=outputs)
+    if sts:
+        set_type_shape_unary_op(g, res, x)
+    return res
+
+
+def prims_sin(
+    g: GraphBuilder, sts: bool, outputs: List[str], x: T, name: str = "prims_sin"
+) -> T:
+    return aten_sin(g, sts, outputs, x, name=name)
+
+
+def prims_split_dim(
+    g: GraphBuilder,
+    sts: bool,
+    outputs: List[str],
+    x: T,
+    dim: int,
+    outer_length: int,
+    name: str = "prims_split_dim",
+):
+    assert (
+        len(outputs) == 1
+    ), f"Expecting 1 outputs but got {outputs}{g.get_debug_msg()}"
+    assert g.has_shape(
+        x
+    ), f"Not implemented when shape of {x!r} is unknown{g.get_debug_msg()}"
+    shape = g.get_shape(x)
+    shape_dim = shape[dim]
+    assert isinstance(
+        shape_dim, int
+    ), f"Not implemented for a dynamic dimension {shape_dim}{g.get_debug_msg()}"
+    assert (
+        shape_dim % outer_length == 0
+    ), f"shape_dim={shape_dim} not a multiple of outer_length={outer_length}{g.get_debug_msg()}"
+
+    inner_length = shape_dim // outer_length
+    new_shape = shape[0:dim] + (outer_length, inner_length) + shape[dim + 1 :]
+    res = g.op.Reshape(x, np.array(new_shape), outputs=outputs, name=name)
+    if sts:
+        g.set_type(res, g.get_type(x))
+        g.get_shape(res, tuple(new_shape))
+    return res
+
+
+def prims_sum(
+    g: GraphBuilder,
+    sts: bool,
+    outputs: List[str],
+    x: T,
+    dim: Optional[Union[int, List[int]]] = None,
+    keepdim: bool = False,
+    output_dtype: Optional["torch.dtype"] = None,  # noqa: F821
+) -> T:
+    return aten_sum(
+        g, sts, outputs, x, dim, keepdim=keepdim, dtype=output_dtype, name="prims_sum"
+    )
 
 
 def prims_transpose(
@@ -2394,4 +2545,27 @@ def prims_transpose(
             g.set_shape(outputs[0], tuple(new_shape))
         elif g.has_rank(input_name):
             g.set_rank(outputs[0], g.has_rank(input_name))
+    return res
+
+
+def prims_where(
+    g: GraphBuilder, sts: bool, outputs: List[str], condition: T, x: T, other: T
+) -> T:
+    assert not (isinstance(x, (int, float)) and isinstance(other, (int, float))), (
+        f"The two last arguments ({x}, {other}) are constant and cannot be used "
+        f"to infer types{g.get_debug_msg}"
+    )
+    assert isinstance(x, float) and isinstance(
+        other, str
+    ), f"No other case is implemented for where{g.get_debug_msg()}"
+    dtype = tensor_dtype_to_np_dtype(g.get_type(other))
+    ax = np.array([x], dtype=dtype)
+    res = g.op.Where(condition, ax, other, outputs=outputs, name="prims_where")
+    if sts:
+        g.set_type(res, g.get_type(other))
+        if g.has_shape(condition) and g.has_shape(other):
+            shape = broadcast_shape(g.get_shape(condition), g.get_shape(other))
+            g.set_shape(res, shape)
+        else:
+            g.set_rank(max(g.get_rank(condition), g.get_rank(other)))
     return res
