@@ -713,7 +713,6 @@ def aten_embedding_dense_backward(
 
     shape_output = g.get_shape(grad_output)
     new_shape = (num_weights,) + shape_output[rank_indices:]
-    print("****", shape_indices, shape_output, new_shape, num_weights, rank_indices)
     grad_weight = g.op.ConstantOfShape(
         np.array(new_shape, dtype=np.int64), name="embedding_dense_backward"
     )

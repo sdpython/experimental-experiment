@@ -5,7 +5,7 @@ import warnings
 import onnx
 from onnx.reference import ReferenceEvaluator
 from experimental_experiment.ext_test_case import ExtTestCase, ignore_warnings
-from experimental_experiment.torch_exp.onnx_export import to_onnx
+from experimental_experiment.torch_exp.onnx_export import to_onnx, OptimizationOptions
 
 
 def return_module_cls_conv():
@@ -90,8 +90,12 @@ def export_utils(
         model,
         tuple(args),
         input_names=["input"],
-        remove_unused=remove_unused,
-        constant_folding=constant_folding,
+        options=OptimizationOptions(
+            remove_unused=remove_unused,
+            constant_folding=constant_folding,
+            verbose=verbose,
+            patterns=None,
+        ),
         verbose=verbose,
     )
     with open(name, "wb") as f:
@@ -174,9 +178,17 @@ class TestOnnxExport(ExtTestCase):
         from onnx_array_api.plotting.text_plot import onnx_simple_text_plot
 
         model, input_tensor = return_module_cls_pool()
-        onx1 = to_onnx(model, (input_tensor,), input_names=["input"])
+        onx1 = to_onnx(
+            model,
+            (input_tensor,),
+            input_names=["input"],
+            options=OptimizationOptions(remove_unused=False, patterns=None),
+        )
         onx2 = to_onnx(
-            model, (input_tensor,), input_names=["input"], remove_unused=True
+            model,
+            (input_tensor,),
+            input_names=["input"],
+            options=OptimizationOptions(remove_unused=True),
         )
         self.assertGreater(len(onx1.graph.node), len(onx2.graph.node))
         p1 = [n for n in onx1.graph.node if n.op_type == "Identity"]
@@ -225,8 +237,7 @@ class TestOnnxExport(ExtTestCase):
             model,
             (input_tensor,),
             input_names=["input"],
-            remove_unused=True,
-            constant_folding=False,
+            options=OptimizationOptions(constant_folding=False),
         )
         self.assertGreater(
             len(onx1.graph.node),
@@ -242,8 +253,7 @@ class TestOnnxExport(ExtTestCase):
             model,
             (input_tensor,),
             input_names=["input"],
-            remove_unused=True,
-            constant_folding=True,
+            options=OptimizationOptions(constant_folding=True),
         )
         self.assertGreater(len(onx2.graph.node), 5)
         self.assertGreaterOrEqual(len(onx1.graph.node), len(onx2.graph.node))
