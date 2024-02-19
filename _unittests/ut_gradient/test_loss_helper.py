@@ -22,7 +22,7 @@ except ImportError:
     # onnxruntime not training
     training = None
 
-opset = onnx.defs.onnx_opset_version() - 2
+opset = min(18, onnx.defs.onnx_opset_version() - 2)
 
 
 class TestOrtTraining(ExtTestCase):

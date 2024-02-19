@@ -5,7 +5,7 @@ import numpy as np
 from onnx import ModelProto
 import torch
 from torch._C import _from_dlpack
-from ..torch_exp.onnx_export import to_onnx
+from ..torch_exp.onnx_export import to_onnx, OptimizationOptions
 from onnxruntime.capi import _pybind_state as ORTC
 
 
@@ -189,12 +189,18 @@ def onnx_custom_backend(
         verbose if isinstance(verbose, tuple) else (verbose, verbose)
     )
 
+    options = OptimizationOptions(
+        remove_unused=True,
+        constant_folding=False,
+        patterns="default",
+        verbose=verbose_onnx,
+    )
+
     onx, builder = to_onnx(
         graph_module,
         tuple(args),
         input_names=input_names,
-        remove_unused=True,
-        constant_folding=False,
+        options=options,
         verbose=verbose_onnx,
         target_opset=target_opset,
         return_builder=True,
