@@ -15,7 +15,12 @@ class TestGraphPatternOptimization(ExtTestCase):
         origin = self._get_model("dort-c-custom__0.onnx")
         before = [node for node in origin.graph.node if node.op_type == "Unsqueeze"]
         gr = GraphBuilder(origin)
-        gr.optimize_with_patterns()
+        res, out, err = self.capture(lambda: gr.optimize_with_patterns(verbose=10))
+        self.assertEmpty(err)
+        self.assertEmpty(res)
+        self.assertIn("[GraphBuilderPatternOptimization.optimize] done after", out)
+        self.assertIn("UnsqueezeUnsqueezePattern", out)
+
         onx = gr.to_onnx()
         after = [node for node in onx.graph.node if node.op_type == "Unsqueeze"]
         self.assertEqual(len(after), len(before) - 2)

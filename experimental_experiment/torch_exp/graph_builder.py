@@ -198,6 +198,29 @@ class OptimizationOptions:
 
 
 class GraphBuilder:
+    """
+    Simplifies the creation of a model.
+    Important attributes:
+
+    - `input_names: List[str]`: list of input names
+    - `as_function: bool`: the model must be exported as a function or as a model
+    - `optimization_options: OptimizationOptions`:
+    - `nodes: List[NodeProto]`: list of nodes
+    - `initializers_dict: Dict[str, Any]`: initializers
+    - `inputs: List[ValueInfoTensorProto]`: inputs
+    - `outputs: List[ValueInfoTensorProto]`: outputs
+    - `ir_version: int`: ir version
+    - `opsets: Dict[str, int]`: declared opsets
+
+    - `_unique_names`: used to create unused result names
+    - `_unique_node_names`: used to create unused node names
+    - `_known_names`: set of existing results names
+    - `_known_shapes: Dict[str, DYNAMIC_SHAPE]`: declared shapes
+    - `_known_types: Dict[str, int]`: declared element types
+    - `_known_ranks: Dict[str, int]`: declared ranks
+    - `constants_: Dict[str, Any]`: constant values
+    """
+
     def _hash(self) -> str:
         return make_hash(self)
 
@@ -279,7 +302,7 @@ class GraphBuilder:
     ):
         self.optimization_options = optimization_options or OptimizationOptions()
         self.as_function = as_function
-        self.input_args = args
+        assert args is None, "args is unused"
         self.verbose = verbose
         self.ir_version = ir_version
         self._debug_msg = {}
@@ -325,10 +348,10 @@ class GraphBuilder:
             self._known_shapes = {}
             self._known_types = {}
             self._known_ranks = {}
-            self._known_names = set()
             self.constants_ = {}
             self._unique_node_names = set()
             self._unique_names = set(self.input_names)
+            self._known_names = self._unique_names.copy()
 
             for k, v in self.initializers_dict.items():
                 self.constants_[k] = None
@@ -345,6 +368,10 @@ class GraphBuilder:
                     self.set_name(node.output[0])
                     self.set_shape(node.output[0], self._get_tensor_shape(node))
                     self.set_type(node.output[0], self._get_tensor_type(node))
+                else:
+                    for o in node.output:
+                        self.set_name(o)
+
         else:
             raise NotImplementedError(
                 f"{type(target_opset_or_existing_proto)} is not supported."
@@ -412,12 +439,15 @@ class GraphBuilder:
 
         if isinstance(value, torch.Tensor):
             return value.detach().numpy()
+        if isinstance(value, TensorProto):
+            return onh.to_array(value)
         raise TypeError(f"Unable to convert type {type(value)} into numpy array.")
 
     def set_name(self, name: str):
         assert isinstance(name, str), f"Unexpected type {type(name)} for name."
         assert name not in self._known_names, f"Name {name!r} already exists."
         self._known_names.add(name)
+        self._unique_names.add(name)
 
     def set_rank(self, name: str, value: int):
         assert isinstance(name, str), f"Unexpected type {type(name)} for name."
@@ -1466,3 +1496,44 @@ class GraphBuilder:
                 self.nodes.append(new_node)
             else:
                 self.nodes.append(node)
+
+    def insert_and_remove_nodes(
+        self, insert_at: int, new_nodes: List[NodeProto], removed: List[int]
+    ) -> List[NodeProto]:
+        """
+        Inserts new nodes and removes others.
+
+        :param insert_at: insert the new nodes at this position
+        :param new_nodes: list of nodes to insert
+        :param removed: list of nodes to removed (based on their positions)
+        :return: list of removed nodes
+        """
+        assert not removed or min(removed) >= insert_at, (
+            f"The position {insert_at} must be smaller than the position "
+            f"of the removed nodes {removed}"
+        )
+        memo = []
+        for i in reversed(sorted(removed)):
+            assert i < len(
+                self.nodes
+            ), f"Unable to remove node position {i}, there are {len(self.nodes)}"
+            memo.append(self.nodes[i])
+            del self.nodes[i]
+
+        n_existing = []
+        for node in new_nodes:
+            for i in node.input:
+                assert self.has_name(
+                    i
+                ), f"Input {i!r} does not exist for node {node.op_type!r}"
+            for o in node.output:
+                if self.has_name(o):
+                    # connecting to existing input
+                    n_existing.append(o)
+                else:
+                    self.set_name(o)
+        assert n_existing, "Any output of the new node is conncted to existing names."
+        for i, n in enumerate(new_nodes):
+            assert isinstance(n, NodeProto), f"Unexpected type {type(n)} for a node"
+            self.nodes.insert(insert_at + i, n)
+        return memo
