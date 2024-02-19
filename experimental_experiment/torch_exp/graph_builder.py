@@ -1,3 +1,4 @@
+import pprint
 from functools import partial
 from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 import numpy as np
@@ -5,6 +6,13 @@ import onnx.helper as oh
 import onnx.numpy_helper as onh
 from onnx import AttributeProto, FunctionProto, ModelProto, NodeProto, TensorProto
 from onnx_array_api.reference import ExtendedReferenceEvaluator
+from .annotations import (
+    DYNAMIC_SHAPE,
+    STATIC_SHAPE,
+    all_int,
+    is_static_dimension,
+    is_static_shape,
+)
 from ._aten_helper import dtype_to_tensor_dtype, _nice_shape
 from ._helper import make_hash
 from .graph_builder_optim import PatternOptimization, GraphBuilderPatternOptimization
@@ -90,6 +98,7 @@ class Opset:
     # defined for opset >= 18
     # name: number of expected outputs
     _implemented = {
+        "Abs": 1,
         "Add": 1,
         "And": 1,
         "ArgMax": 1,
@@ -258,11 +267,11 @@ class GraphBuilder:
 
     def _apply_slice_to_shape(
         self,
-        shape: Tuple[int],
+        shape: STATIC_SHAPE,
         indices: List[slice],
         axes: List[int],
         expand_axes: List[int],
-    ) -> Tuple[int]:
+    ) -> STATIC_SHAPE:
         assert isinstance(
             shape, tuple
         ), f"Unexpected type {type(shape)} for shape: {shape}"
@@ -299,7 +308,7 @@ class GraphBuilder:
                     f"axes={axes}, expand_axes={expand_axes}"
                 )
                 new_shape.append(dim)
-        elif all(map(lambda i: isinstance(i, int), indices)):
+        elif all_int(indices):
             assert len(axes) == 1, (
                 f"Unable to guess new shape from shape={shape}, "
                 f"indices={indices}, axes={axes}, expand_axes={expand_axes}"
@@ -332,12 +341,17 @@ class GraphBuilder:
         ir_version: Optional[int] = None,
         verbose: int = 0,
     ):
+        import torch
+
+        self.torch = torch
         self.optimization_options = optimization_options or OptimizationOptions()
         self.as_function = as_function
         self.input_args = args
         self.verbose = verbose
         self.ir_version = ir_version
         self._debug_msg = {}
+        self.dynamic_objects = {}
+        self.dynamic_objects_rev = {}
 
         if isinstance(target_opset_or_existing_proto, (int, dict)):
             self.opsets = (
@@ -416,9 +430,7 @@ class GraphBuilder:
         "Returns the opset for the main domain (assuming it is used)."
         return self.opsets[""]
 
-    def _get_tensor_shape(
-        self, proto: Union[NodeProto, TensorProto]
-    ) -> Tuple[int, ...]:
+    def _get_tensor_shape(self, proto: Union[NodeProto, TensorProto]) -> STATIC_SHAPE:
         if isinstance(proto, TensorProto):
             return tuple(proto.dims)
         if isinstance(proto, NodeProto):
@@ -467,9 +479,7 @@ class GraphBuilder:
         if isinstance(value, np.ndarray):
             return value
 
-        import torch
-
-        if isinstance(value, torch.Tensor):
+        if isinstance(value, self.torch.Tensor):
             return value.detach().numpy()
         if isinstance(value, TensorProto):
             return onh.to_array(value)
@@ -477,16 +487,20 @@ class GraphBuilder:
 
     def set_name(self, name: str):
         assert isinstance(name, str), f"Unexpected type {type(name)} for name."
-        assert name not in self._known_names, f"Name {name!r} already exists."
+        assert (
+            name not in self._known_names
+        ), f"Name {name!r} already exists{self.get_debug_msg()}"
         self._known_names.add(name)
         self._unique_names.add(name)
 
     def set_rank(self, name: str, value: int):
         assert isinstance(name, str), f"Unexpected type {type(name)} for name."
-        assert name not in self._known_ranks, f"Name {name!r} already exists."
+        assert (
+            name not in self._known_ranks
+        ), f"Name {name!r} already exists{self.get_debug_msg()}"
         self._known_ranks[name] = value
 
-    def is_more_precise(self, shape: Tuple[int, ...], base: Tuple[int, ...]) -> bool:
+    def is_more_precise(self, shape: STATIC_SHAPE, base: STATIC_SHAPE) -> bool:
         assert len(shape) == len(
             base
         ), f"Cannot compare shapes with different ranks {shape} and {base}"
@@ -502,16 +516,23 @@ class GraphBuilder:
     def set_shape(
         self,
         name: str,
-        shape: Tuple[int, ...],
+        shape: DYNAMIC_SHAPE,
         set_rank: bool = True,
         set_if_more_precise: bool = False,
+        for_onnx: bool = False,
     ):
         assert isinstance(name, str), f"Unexpected type {type(name)} for name."
-        self._check_shape(shape, 0, name=name)
+        assert "torch.Size" not in str(shape), (
+            f"Unexpected type {type(shape)} for a "
+            f"shape={shape}{self.get_debug_msg()}"
+        )
+        assert isinstance(shape, tuple), f"Unexpected shape type {type(shape)}"
+        shape = self.verify_shape(shape, 0, name=name, for_onnx=for_onnx)
+        assert isinstance(shape, tuple), f"Unexpected shape type {type(shape)}"
+        shape_int = [d for d in shape if isinstance(d, int)]
         assert (
-            len(shape) == 0 or None in shape or min(shape) >= 0
+            len(shape) == 0 or not shape_int or min(shape_int) >= 0
         ), f"Negative value in shape {shape} for {name!r}{self.get_debug_msg()}"
-        assert isinstance(shape, tuple), f"Unexpected shape type {type(shape)}."
         if name in self._known_shapes:
             old_shape = self._known_shapes[name]
             if len(shape) == len(old_shape) and set_if_more_precise:
@@ -567,7 +588,7 @@ class GraphBuilder:
             return False
         if full:
             shape = self._known_shapes[name]
-            return all(map(lambda i: isinstance(i, int), shape)) and min(shape) >= 0
+            return is_static_shape(shape) and min(shape) >= 0
         return True
 
     def has_type(self, name: str) -> bool:
@@ -664,6 +685,51 @@ class GraphBuilder:
                 raise ValueError(f"Unable to interpret elem_type {elem_type!r}.")
         return elem_type
 
+    def make_dynamic_object(
+        self, name: str, value: Any, shape_as_input: bool = False
+    ) -> str:
+        assert name not in self.dynamic_objects, (
+            f"Dynamic object {name!r}, value={value!r} "
+            f"is already there{self.get_debug_msg()}"
+        )
+        assert isinstance(
+            value, self.torch.SymInt
+        ), f"Unexpected type {type(value)} for value{self.get_debug_msg()}"
+        self.dynamic_objects[name] = value
+        key = str(value)
+        if key not in self.dynamic_objects_rev:
+            self.dynamic_objects_rev[key] = []
+        self.dynamic_objects_rev[str(value)].append((name, value))
+        if shape_as_input:
+            # torch.compile adds input for dynamic shapes
+            return self.make_tensor_input(name, TensorProto.INT64, (1,))
+        return name
+
+    def make_shape_from_results(self, shape: DYNAMIC_SHAPE, name="") -> str:
+        """
+        Creates a shape coming from intermediate results.
+        """
+        assert isinstance(
+            shape, (list, tuple)
+        ), f"Unexpected type {type(shape)} for shape{self.get_debug_msg()}"
+        if all_int(shape):
+            return self.make_initializer("", np.array(shape, dtype=np.int64))
+        conc = []
+        for d in shape:
+            if isinstance(d, int):
+                conc.append(self.make_initializer("", np.array([d], dtype=np.int64)))
+            elif isinstance(d, (str, self.torch.SymInt)):
+                name = str(d)
+                assert name in self.dynamic_objects or self.has_name(
+                    name
+                ), f"Unknonw dynamic object {d}-{name!r}{self.get_debug_msg()}"
+                conc.append(name)
+            else:
+                raise RuntimeError(
+                    f"Unexpected type {type(d)} for a dimension in {shape}{self.get_debug_msg()}"
+                )
+        return self.make_node("Concat", conc, axis=0, name=name)
+
     def make_initializer(
         self, name: str, value: Any, external: bool = False, msg: str = ""
     ) -> str:
@@ -703,9 +769,82 @@ class GraphBuilder:
             )
         return name
 
-    def make_tensor_input(
-        self, name: str, elem_type: Any, shape: Tuple[int, ...]
-    ) -> str:
+    def is_dynamic_shape(
+        self, shape: DYNAMIC_SHAPE, verify: bool = True, allow_none: bool = False
+    ) -> bool:
+        return all(
+            map(
+                lambda x: self.is_dynamic_dimension(
+                    x, verify=verify, allow_none=allow_none
+                ),
+                shape,
+            )
+        )
+
+    def is_dynamic_dimension(
+        self, dim: Any, verify: bool = True, allow_none: bool = False
+    ) -> bool:
+        if allow_none and dim is None:
+            return True
+        if not isinstance(dim, (int, self.torch.SymInt, str)):
+            return False
+        assert (
+            not verify
+            or is_static_dimension(dim)
+            or str(dim) in self.dynamic_objects
+            or str(dim) in self.dynamic_objects_rev
+            or self.has_name(str(dim))
+        ), f"dim={dim!r} (type={type(dim)}) not in found in {self.dynamic_objects}{self.get_debug_msg()}"
+        return True
+
+    def get_dynamic_dimension(self, dim: Any, keep_const: bool = True) -> Any:
+        if isinstance(dim, int):
+            if keep_const:
+                return np.array([dim], dtype=np.int64)
+            return self.make_initializer("", np.array([dim], dtype=np.int64))
+        assert isinstance(
+            dim, (str, self.torch.SymInt)
+        ), f"Unexpected type {type(dim)} for dim={dim}{self.get_debug_msg()}"
+        name = str(dim)
+        try:
+            value = int(name)
+            dyn = False
+        except ValueError:
+            dyn = True
+        if not dyn:
+            if keep_const:
+                return np.array([value], dtype=np.int64)
+            return self.make_initializer("", np.array([value], dtype=np.int64))
+        assert (
+            name in self.dynamic_objects
+        ), f"Unable to find dim={dim!r} in {self.dynamic_objects}{self.get_debug_msg()}"
+        return name
+
+    def verify_dynamic_shape(self, shape: Any, for_onnx: bool = True) -> DYNAMIC_SHAPE:
+        if is_static_shape(shape):
+            return tuple(shape)
+        new_shape = []
+        for d in shape:
+            if isinstance(d, int):
+                new_shape.append(d)
+                continue
+            if isinstance(d, (self.torch.SymInt, str)):
+                assert str(d) in self.dynamic_objects_rev, (
+                    f"Unable to find dimension {d!r} in {self.dynamic_objects_rev}"
+                    f"{self.get_debug_msg()}"
+                )
+                new_shape.append(str(d) if for_onnx else d)
+                continue
+            if for_onnx and d is None:
+                new_shape.append(None)
+                continue
+            raise RuntimeError(
+                f"Unexpected type {type(d)} in shape={shape} (for_onnx={for_onnx}"
+                f"{self.get_debug_msg()}"
+            )
+        return tuple(new_shape)
+
+    def make_tensor_input(self, name: str, elem_type: Any, shape: STATIC_SHAPE) -> str:
         if self.current_input < len(self.input_names):
             # The input needs to be renamed, an identity node is added.
             input_name = self.input_names[self.current_input]
@@ -716,13 +855,14 @@ class GraphBuilder:
             self.set_name(name)
         self.current_input += 1
         elem_type = self._get_type(elem_type)
-        self.inputs.append(oh.make_tensor_value_info(input_name, elem_type, shape))
+        dyn_shape = self.verify_dynamic_shape(shape)
+        self.inputs.append(oh.make_tensor_value_info(input_name, elem_type, dyn_shape))
         if self.verbose:
             print(
                 f"[GraphBuilder-{self._hash()}.make_tensor_input] {name}[{elem_type}:{shape}]"
             )
         if shape:
-            self.set_shape(name, shape)
+            self.set_shape(name, dyn_shape)
         if elem_type:
             self.set_type(name, elem_type)
         return name
@@ -731,7 +871,7 @@ class GraphBuilder:
         self,
         name: Union[str, List[str]],
         elem_type: Optional[int] = None,
-        shape: Optional[Tuple[int, ...]] = None,
+        shape: Optional[STATIC_SHAPE] = None,
         indexed: bool = True,
     ) -> Union[str, List[str]]:
         if isinstance(name, list):
@@ -746,19 +886,25 @@ class GraphBuilder:
         elem_type = self._get_type(elem_type, False)
         if not self.as_function and elem_type == 0:
             raise RuntimeError(f"Undefined element type for {name!r}.")
-        self._check_shape(shape, name=name, elem_type=elem_type)
+        shape = self.verify_shape(shape, name=name, elem_type=elem_type, for_onnx=True)
         self.outputs.append(oh.make_tensor_value_info(name, elem_type, shape))
         if self.verbose:
             print(
                 f"[GraphBuilder-{self._hash()}.make_tensor_output] {name}[{elem_type}:{shape}]"
             )
         if shape:
-            self.set_shape(name, shape)
+            self.set_shape(name, shape, for_onnx=True)
         if elem_type:
             self.set_type(name, elem_type)
         return name
 
-    def _check_shape(self, shape: Any, elem_type: int, name: Optional[str] = None):
+    def verify_shape(
+        self,
+        shape: Optional[DYNAMIC_SHAPE],
+        elem_type: int,
+        name: Optional[str] = None,
+        for_onnx: bool = False,
+    ) -> Optional[DYNAMIC_SHAPE]:
         assert isinstance(
             elem_type, int
         ), f"elem_type must be an integer not {type(elem_type)}"
@@ -767,11 +913,13 @@ class GraphBuilder:
         ), f"Shape must be a tuple not {type(shape)}"
         if shape is None:
             return None
-        for s in shape:
-            assert s is None or isinstance(s, (str, int)), (
-                f"One element of shape={shape} has type {type(s)}, "
-                f"name={name!r}, elem_type={elem_type}{self.get_debug_msg()}"
-            )
+        assert is_static_shape(shape) or self.is_dynamic_shape(
+            shape, allow_none=True
+        ), (
+            f"Shape={shape} is not a shape, "
+            f"name={name!r}, elem_type={elem_type}{self.get_debug_msg()}"
+        )
+        return self.verify_dynamic_shape(shape, for_onnx=for_onnx)
 
     def _get_symbol(self, i: str) -> str:
         k = 0
@@ -1085,9 +1233,8 @@ class GraphBuilder:
         self, arr: "torch.Tensor", name: str = None  # noqa: F821
     ) -> TensorProto:
         import sys
-        import torch
 
-        if not isinstance(arr, torch.Tensor):
+        if not isinstance(arr, self.torch.Tensor):
             raise TypeError(f"Unexpected type {type(arr)}.")
         if arr.is_sparse:
             raise NotImplementedError(
@@ -1122,11 +1269,9 @@ class GraphBuilder:
         return tensor
 
     def _build_initializers(self) -> List[TensorProto]:
-        import torch
-
         res = []
         for k, v in sorted(self.initializers_dict.items()):
-            if isinstance(v, torch.Tensor):
+            if isinstance(v, self.torch.Tensor):
                 # no string tensor
                 t = self.from_array(v, name=k)
                 res.append(t)
@@ -1171,7 +1316,10 @@ class GraphBuilder:
                 return t.ravel().tolist()
             raise RuntimeError(f"Values unknown for type {t}.")
 
-        rows = ["", "--DEBUG--"]
+        rows = ["", "--DEBUG--", "--SHAPE--"]
+        rows.append(f"dynamic_objects={pprint.pformat(self.dynamic_objects)}")
+        rows.append(f"dynamic_objects_rev={pprint.pformat(self.dynamic_objects_rev)}")
+        rows.append("--ONNX--")
         for k, v in self._debug_msg.items():
             rows.append(f"-- {k}")
             rows.append(str(v))
@@ -1387,8 +1535,6 @@ class GraphBuilder:
     def _apply_transpose(
         self, node: NodeProto, feeds: Dict[str, "torch.Tensor"]  # noqa: F821
     ) -> "torch.Tensor":  # noqa: F821
-        import torch
-
         perm = None
         for att in node.attribute:
             if att.name == "perm":
@@ -1398,8 +1544,8 @@ class GraphBuilder:
         assert len(perm) == 2, f"perm={perm} is not supported with torch"
         x = feeds[node.input[0]]
         if isinstance(x, np.ndarray):
-            x = torch.Tensor(x)
-        return [torch.transpose(x, *perm)]
+            x = self.torch.Tensor(x)
+        return [self.torch.transpose(x, *perm)]
 
     def compute_constant(
         self, name: str, exc: bool = True

@@ -177,7 +177,7 @@ def onnx_custom_backend(
             DEVICES[i] = ORTC.OrtDevice(
                 ORTC.OrtDevice.cuda(), ORTC.OrtDevice.default_memory(), i
             )
-        max_device = max(i.get_device() for i in args)
+        max_device = max(i.get_device() for i in args if hasattr(i, "get_device"))
         if max_device >= 0:
             providers = ["CUDAExecutionProvider", "CPUExecutionProvider"]
 
