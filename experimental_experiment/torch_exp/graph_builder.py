@@ -1316,7 +1316,7 @@ class GraphBuilder:
             assert (
                 self.optimization_options.remove_unused
             ), "remove_unused must be positive for pattern optimizations"
-            self.optimization_patterns(
+            self.optimize_with_patterns(
                 self.optimization_options.max_iter,
                 patterns=self.optimization_options.patterns,
                 verbose=self.optimization_options.verbose,
