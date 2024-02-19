@@ -3,7 +3,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 import numpy as np
 from onnx import ModelProto
 import torch
-from ..torch_exp.onnx_export import to_onnx
+from ..torch_exp.onnx_export import to_onnx, OptimizationOptions
 
 
 def _get_session(
@@ -82,12 +82,15 @@ def onnx_debug_backend(
         verbose if isinstance(verbose, tuple) else (verbose, verbose)
     )
 
+    options = OptimizationOptions(
+        remove_unused=True, constant_folding=False, patterns=None, verbose=verbose_onnx
+    )
+
     onx, builder = to_onnx(
         graph_module,
         tuple(args),
         input_names=input_names,
-        remove_unused=True,
-        constant_folding=False,
+        options=options,
         verbose=verbose_onnx,
         target_opset=target_opset,
         return_builder=True,
