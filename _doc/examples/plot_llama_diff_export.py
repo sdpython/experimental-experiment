@@ -49,7 +49,7 @@ from onnx_array_api.reference import compare_onnx_execution, ExtendedReferenceEv
 import torch
 from experimental_experiment.ext_test_case import unit_test_going
 from experimental_experiment.args import get_parsed_args
-from experimental_experiment.torch_exp.onnx_export import to_onnx
+from experimental_experiment.torch_exp.onnx_export import to_onnx, OptimizationOptions
 from experimental_experiment.convert.convert_helper import (
     optimize_model_proto,
     ort_optimize,
@@ -123,8 +123,10 @@ def export_custom(filename, model, *args):
         model,
         tuple(args),
         input_names=[f"input{i}" for i in range(len(args))],
-        remove_unused=True,
-        constant_folding=False,
+        options=OptimizationOptions(
+            remove_unused=True,
+            constant_folding=False,
+        ),
     )
     with open(filename, "wb") as f:
         f.write(new_model.SerializeToString())
