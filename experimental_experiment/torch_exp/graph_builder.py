@@ -1204,7 +1204,11 @@ class GraphBuilder:
             )
             for o, no in zip(node.output, new_outputs):
                 if builder.has_shape(o):
-                    self.set_shape(no, builder.get_shape(o))
+                    shape = builder.get_shape(o)
+                    if None in shape:
+                        self.set_rank(no, len(shape))
+                    else:
+                        self.set_shape(no, shape)
                 if builder.has_type(o):
                     self.set_type(no, builder.get_type(o))
 
