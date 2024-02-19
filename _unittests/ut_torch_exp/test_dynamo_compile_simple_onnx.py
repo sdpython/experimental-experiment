@@ -159,6 +159,7 @@ class TestDynamoCompileOnnx(ExtTestCase):
 
     @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
     @unittest.skipIf(not torch_recent_enough(), reason="export fails")
+    @ignore_warnings((UserWarning, DeprecationWarning))
     def test_simple_dort_2_ort(self):
         import torch
 

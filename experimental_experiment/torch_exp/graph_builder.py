@@ -15,6 +15,8 @@ from .annotations import (
 )
 from ._aten_helper import dtype_to_tensor_dtype, _nice_shape
 from ._helper import make_hash
+from .graph_builder_optim import PatternOptimization, GraphBuilderPatternOptimization
+from .optimization_patterns import get_default_patterns
 
 
 def _default_OPSET_TO_IR_VERSION():
@@ -41,6 +43,55 @@ def _default_OPSET_TO_IR_VERSION():
         20: 9,
         21: 10,
     }
+
+
+class OptimizationOptions:
+    """
+    Defines all the optimization to apply.
+
+    :param remove_unused: remove all unused nodes, this must be true if
+        pattern optimization is enabled
+    :param constant_folding: folds constant as much as possible
+    :param constant_size: all node Constant above this threshold should be
+        defined as initializer
+    :param patterns: list of pattern optimization to apply to the graph,
+        it looks a a specific subsequence of nodes in a graph
+        and do some replacements,
+        `'default'` means a default list of optimization patterns are applied
+    :param max_iter: maximum number of iteration when doing pattern optimizations,
+        -1 to let it undefined
+    :param verbose: verbosity level (for pattern optimization)
+    """
+
+    def __init__(
+        self,
+        remove_unused: bool = True,
+        constant_folding: bool = False,
+        constant_size: int = 1024,
+        patterns: Union[str, List["PatternOptimization"]] = "default",
+        max_iter: int = -1,
+        verbose: int = 0,
+    ):
+        self.remove_unused = remove_unused
+        self.constant_folding = constant_folding
+        self.constant_size = constant_size
+        if isinstance(patterns, str):
+            assert patterns == "default", f"Unexpected value {patterns!r} for patterns"
+            self.patterns = get_default_patterns()
+        else:
+            assert patterns is None or isinstance(
+                patterns, list
+            ), f"Unexpected type {type(patterns)} for patterns"
+            self.patterns = patterns
+        self.max_iter = -1
+        self.verbose = verbose
+
+    def __repr__(self):
+        return (
+            f"{self.__class__.__name__}(remove_unused={self.remove_unused}, "
+            f"constant_folding={self.constant_folding}, "
+            f"constant_size={self.constant_size})"
+        )
 
 
 class Opset:
@@ -186,26 +237,31 @@ class Opset:
         )
 
 
-class OptimizationOptions:
-    def __init__(
-        self,
-        remove_unused: bool = False,
-        constant_folding: bool = True,
-        constant_size: int = 1024,
-    ):
-        self.remove_unused = remove_unused
-        self.constant_folding = constant_folding
-        self.constant_size = constant_size
-
-    def __repr__(self):
-        return (
-            f"{self.__class__.__name__}(remove_unused={self.remove_unused}, "
-            f"constant_folding={self.constant_folding}, "
-            f"constant_size={self.constant_size})"
-        )
-
-
 class GraphBuilder:
+    """
+    Simplifies the creation of a model.
+    Important attributes:
+
+    - `input_names: List[str]`: list of input names
+    - `as_function: bool`: the model must be exported as a function or as a model
+    - `optimization_options: OptimizationOptions`:
+    - `nodes: List[NodeProto]`: list of nodes
+    - `initializers_dict: Dict[str, Any]`: initializers
+    - `inputs: List[ValueInfoTensorProto]`: inputs
+    - `outputs: List[ValueInfoTensorProto]`: outputs
+    - `ir_version: int`: ir version
+    - `opsets: Dict[str, int]`: declared opsets
+    - `input_args: List[T]`: input tensors when the class is used to convert an existing model
+
+    - `_unique_names`: used to create unused result names
+    - `_unique_node_names`: used to create unused node names
+    - `_known_names`: set of existing results names
+    - `_known_shapes: Dict[str, DYNAMIC_SHAPE]`: declared shapes
+    - `_known_types: Dict[str, int]`: declared element types
+    - `_known_ranks: Dict[str, int]`: declared ranks
+    - `constants_: Dict[str, Any]`: constant values
+    """
+
     def _hash(self) -> str:
         return make_hash(self)
 
@@ -338,10 +394,10 @@ class GraphBuilder:
             self._known_shapes = {}
             self._known_types = {}
             self._known_ranks = {}
-            self._known_names = set()
             self.constants_ = {}
             self._unique_node_names = set()
             self._unique_names = set(self.input_names)
+            self._known_names = self._unique_names.copy()
 
             for k, v in self.initializers_dict.items():
                 self.constants_[k] = None
@@ -358,6 +414,10 @@ class GraphBuilder:
                     self.set_name(node.output[0])
                     self.set_shape(node.output[0], self._get_tensor_shape(node))
                     self.set_type(node.output[0], self._get_tensor_type(node))
+                else:
+                    for o in node.output:
+                        self.set_name(o)
+
         else:
             raise NotImplementedError(
                 f"{type(target_opset_or_existing_proto)} is not supported."
@@ -421,6 +481,8 @@ class GraphBuilder:
 
         if isinstance(value, self.torch.Tensor):
             return value.detach().numpy()
+        if isinstance(value, TensorProto):
+            return onh.to_array(value)
         raise TypeError(f"Unable to convert type {type(value)} into numpy array.")
 
     def set_name(self, name: str):
@@ -429,6 +491,7 @@ class GraphBuilder:
             name not in self._known_names
         ), f"Name {name!r} already exists{self.get_debug_msg()}"
         self._known_names.add(name)
+        self._unique_names.add(name)
 
     def set_rank(self, name: str, value: int):
         assert isinstance(name, str), f"Unexpected type {type(name)} for name."
@@ -695,7 +758,7 @@ class GraphBuilder:
                 else ""
             )
             name = self.unique_name(f"init{itype}_s{sh}_{sh2}")
-        self.set_shape(name, value.shape)
+        self.set_shape(name, tuple(value.shape))
         self.set_type(name, itype)
         self.set_name(name)
         self.initializers_dict[name] = value
@@ -1076,7 +1139,7 @@ class GraphBuilder:
                 cst, _ = self.compute_constant(node.output[0], exc=False)
                 if cst is not None:
                     self.set_type(node.output[0], dtype_to_tensor_dtype(cst[0].dtype))
-                    self.set_shape(node.output[0], cst[0].shape)
+                    self.set_shape(node.output[0], tuple(cst[0].shape))
         elif set_type_shape:
             if node.op_type == "GatherElements":
                 if self.has_rank(node.input[0]) and self.has_rank(node.input[0]):
@@ -1141,7 +1204,11 @@ class GraphBuilder:
             )
             for o, no in zip(node.output, new_outputs):
                 if builder.has_shape(o):
-                    self.set_shape(no, builder.get_shape(o))
+                    shape = builder.get_shape(o)
+                    if None in shape:
+                        self.set_rank(no, len(shape))
+                    else:
+                        self.set_shape(no, shape)
                 if builder.has_type(o):
                     self.set_type(no, builder.get_type(o))
 
@@ -1220,6 +1287,9 @@ class GraphBuilder:
                     )
                 t = onh.from_array(v, name=k)
                 res.append(t)
+                continue
+            if isinstance(v, TensorProto):
+                res.append(v)
                 continue
             raise TypeError(
                 f"Unable to convert initializer {k!r} with type "
@@ -1393,7 +1463,38 @@ class GraphBuilder:
             _check("D")
             if self.optimization_options.remove_unused:
                 self.remove_unused()
-                _check("D")
+                _check("E")
+        if self.optimization_options.patterns:
+            assert (
+                self.optimization_options.remove_unused
+            ), "remove_unused must be positive for pattern optimizations"
+            self.optimize_with_patterns(
+                self.optimization_options.max_iter,
+                patterns=self.optimization_options.patterns,
+                verbose=self.optimization_options.verbose,
+            )
+            _check("F")
+            self.remove_unused()
+            _check("G")
+
+    def optimize_with_patterns(
+        self,
+        max_iter: int = -1,
+        patterns: Optional[List[PatternOptimization]] = None,
+        recursive: bool = False,
+        verbose: int = 0,
+    ):
+        """
+        Optimizes this graph with patterns.
+
+        :param max_iter:  maximum number of iterations to apply
+        :param patterns: list of pattern to apply, None for all of them
+        :param recursive: applies the pattern in subgraphs
+        :param verbose: verbosity
+        """
+        assert not recursive, "Recursivity not implemented for optimize_with_patterns"
+        gro = GraphBuilderPatternOptimization(self, verbose=verbose)
+        gro.optimize(max_iter=max_iter)
 
     def remove_unused(self):
         """
@@ -1589,3 +1690,44 @@ class GraphBuilder:
                 self.nodes.append(new_node)
             else:
                 self.nodes.append(node)
+
+    def insert_and_remove_nodes(
+        self, insert_at: int, new_nodes: List[NodeProto], removed: List[int]
+    ) -> List[NodeProto]:
+        """
+        Inserts new nodes and removes others.
+
+        :param insert_at: insert the new nodes at this position
+        :param new_nodes: list of nodes to insert
+        :param removed: list of nodes to removed (based on their positions)
+        :return: list of removed nodes
+        """
+        assert not removed or min(removed) >= insert_at, (
+            f"The position {insert_at} must be smaller than the position "
+            f"of the removed nodes {removed}"
+        )
+        memo = []
+        for i in reversed(sorted(removed)):
+            assert i < len(
+                self.nodes
+            ), f"Unable to remove node position {i}, there are {len(self.nodes)}"
+            memo.append(self.nodes[i])
+            del self.nodes[i]
+
+        n_existing = []
+        for node in new_nodes:
+            for i in node.input:
+                assert self.has_name(
+                    i
+                ), f"Input {i!r} does not exist for node {node.op_type!r}"
+            for o in node.output:
+                if self.has_name(o):
+                    # connecting to existing input
+                    n_existing.append(o)
+                else:
+                    self.set_name(o)
+        assert n_existing, "Any output of the new node is conncted to existing names."
+        for i, n in enumerate(new_nodes):
+            assert isinstance(n, NodeProto), f"Unexpected type {type(n)} for a node"
+            self.nodes.insert(insert_at + i, n)
+        return memo
