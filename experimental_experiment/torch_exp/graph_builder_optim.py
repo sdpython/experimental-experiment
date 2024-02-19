@@ -228,7 +228,7 @@ class GraphBuilderPatternOptimization:
                 n_removed -= rem
             if self.verbose > 1:
                 print(
-                    f"[GraphBuilderPatternOptimization.optimize] done all - {rem} + {add} nodes"
+                    f"[GraphBuilderPatternOptimization.optimize] done all - {n_removed} + {n_added} nodes"
                 )
             self._build()
 

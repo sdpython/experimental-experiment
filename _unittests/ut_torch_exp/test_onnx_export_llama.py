@@ -7,7 +7,7 @@ import packaging.version as pv
 import onnxruntime  # noqa: F401
 from onnx_array_api.reference import ExtendedReferenceEvaluator
 from experimental_experiment.ext_test_case import ExtTestCase, ignore_warnings
-from experimental_experiment.torch_exp.onnx_export import to_onnx
+from experimental_experiment.torch_exp.onnx_export import to_onnx, OptimizationOptions
 from experimental_experiment.torch_helper.llama_helper import (
     get_llama_attention,
     get_llama_decoder,
@@ -59,8 +59,12 @@ def export_utils(
         model,
         tuple(args),
         input_names=[f"input{i}" for i in range(len(args))],
-        remove_unused=remove_unused,
-        constant_folding=constant_folding,
+        options=OptimizationOptions(
+            remove_unused=remove_unused,
+            constant_folding=constant_folding,
+            verbose=verbose,
+            patterns=None,
+        ),
         verbose=verbose,
         return_builder=return_builder,
     )

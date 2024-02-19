@@ -4,7 +4,7 @@ from typing import List
 import packaging.version as pv
 from onnx.reference import ReferenceEvaluator
 from experimental_experiment.ext_test_case import ExtTestCase, ignore_warnings
-from experimental_experiment.torch_exp.onnx_export import to_onnx
+from experimental_experiment.torch_exp.onnx_export import to_onnx, OptimizationOptions
 
 
 def torch_recent_enough():
@@ -118,8 +118,9 @@ class TestDynamoCompileOnnx(ExtTestCase):
                 graph_module,
                 tuple(args),
                 input_names=input_names,
-                remove_unused=True,
-                constant_folding=True,
+                options=OptimizationOptions(
+                    remove_unused=True, constant_folding=True, verbose=4
+                ),
                 verbose=4,
             )
             try:
@@ -174,8 +175,10 @@ class TestDynamoCompileOnnx(ExtTestCase):
                 graph_module,
                 tuple(args),
                 input_names=input_names,
-                remove_unused=True,
-                constant_folding=True,
+                options=OptimizationOptions(
+                    remove_unused=True,
+                    constant_folding=True,
+                ),
             )
             try:
                 sess = InferenceSession(

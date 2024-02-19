@@ -66,7 +66,7 @@ import torch
 from torch import nn
 import torch.nn.functional as F
 import experimental_experiment
-from experimental_experiment.torch_exp.onnx_export import to_onnx
+from experimental_experiment.torch_exp.onnx_export import to_onnx, OptimizationOptions
 from experimental_experiment.plotting.memory import memory_peak_plot
 from experimental_experiment.ext_test_case import measure_time, get_figure
 from experimental_experiment.args import get_parsed_args
@@ -272,8 +272,10 @@ def export_cus_p2(filename, model, *args):
         model,
         tuple(args),
         input_names=["input"],
-        remove_unused=True,
-        constant_folding=True,
+        options=OptimizationOptions(
+            remove_unused=True,
+            constant_folding=True,
+        ),
     )
     with open(filename, "wb") as f:
         f.write(onx.SerializeToString())

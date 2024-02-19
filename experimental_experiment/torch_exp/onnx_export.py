@@ -156,8 +156,7 @@ def to_onnx(
     input_names: Optional[Sequence[str]] = None,
     target_opset: Optional[Union[int, Dict[str, int]]] = None,
     as_function: bool = False,
-    remove_unused: bool = False,
-    constant_folding: bool = False,
+    options: Optional[OptimizationOptions] = None,
     verbose: int = 0,
     return_builder: bool = False,
 ) -> Union[ModelProto, Tuple[ModelProto, GraphBuilder]]:
@@ -171,25 +170,21 @@ def to_onnx(
     :param input_names: input names
     :param target_opset: targeted opset or targeted opsets as a dictionary
     :param as_function: export as a ModelProto or a FunctionProto
-    :param remove_unused: if True, remove unused nodes
-    :param constant_folding: if True, fold constants,
-        constants are detected while converting the model
+    :param options: optimization options
     :param verbose: verbosity level
     :return: onnx model
     """
     if target_opset is None:
         target_opset = min(18, onnx_opset_version() - 1)
+    if options is None:
+        options = OptimizationOptions()
     graph_module, builder, interpreter = _make_builder_interpreter(
         mod=mod,
         args=args,
         input_names=input_names,
         target_opset=target_opset,
         as_function=as_function,
-        optimization_options=OptimizationOptions(
-            remove_unused=remove_unused,
-            constant_folding=constant_folding,
-            patterns=None,
-        ),
+        optimization_options=options,
         verbose=verbose,
     )
 
