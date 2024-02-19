@@ -7,6 +7,7 @@ from onnx import AttributeProto, FunctionProto, ModelProto, NodeProto, TensorPro
 from onnx_array_api.reference import ExtendedReferenceEvaluator
 from ._aten_helper import dtype_to_tensor_dtype, _nice_shape
 from ._helper import make_hash
+from .graph_builder_optim import PatternOptimization, GraphBuilderPatternOptimization
 
 
 def _default_OPSET_TO_IR_VERSION():
@@ -1246,6 +1247,25 @@ class GraphBuilder:
             if self.optimization_options.remove_unused:
                 self.remove_unused()
                 _check("D")
+
+    def optimize_with_patterns(
+        self,
+        max_iter: int = -1,
+        patterns: Optional[List[PatternOptimization]] = None,
+        recursive: bool = False,
+        verbose: int = 0,
+    ):
+        """
+        Optimizes this graph with patterns.
+
+        :param max_iter:  maximum number of iterations to apply
+        :param patterns: list of pattern to apply, None for all of them
+        :param recursive: applies the pattern in subgraphs
+        :param verbose: verbosity
+        """
+        assert not recursive, "Recursivity not implemented for optimize_with_patterns"
+        gro = GraphBuilderPatternOptimization(self, verbose=verbose)
+        gro.optimize()
 
     def remove_unused(self):
         """
