@@ -2,7 +2,7 @@ import os
 import sys
 import unittest
 from experimental_experiment.ext_test_case import ExtTestCase
-from experimental_experiment.torch_exp.onnx_export import to_onnx
+from experimental_experiment.torch_exp.onnx_export import to_onnx, OptimizationOptions
 
 
 def return_module_cls_pool():
@@ -101,8 +101,11 @@ def export_utils(
         model,
         tuple(args),
         input_names=["input"],
-        remove_unused=remove_unused,
-        constant_folding=constant_folding,
+        options=OptimizationOptions(
+            remove_unused=remove_unused,
+            constant_folding=constant_folding,
+            patterns=None,
+        ),
     )
     with open(name, "wb") as f:
         f.write(onx.SerializeToString())
