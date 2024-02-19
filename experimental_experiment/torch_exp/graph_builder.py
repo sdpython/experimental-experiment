@@ -1139,7 +1139,7 @@ class GraphBuilder:
                 cst, _ = self.compute_constant(node.output[0], exc=False)
                 if cst is not None:
                     self.set_type(node.output[0], dtype_to_tensor_dtype(cst[0].dtype))
-                    self.set_shape(node.output[0], cst[0].shape)
+                    self.set_shape(node.output[0], tuple(cst[0].shape))
         elif set_type_shape:
             if node.op_type == "GatherElements":
                 if self.has_rank(node.input[0]) and self.has_rank(node.input[0]):

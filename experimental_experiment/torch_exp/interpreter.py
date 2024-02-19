@@ -413,7 +413,7 @@ class DynamoInterpreter:
             if isinstance(val, self.torch.Tensor):
                 shape = val.shape
                 dtype = self.builder._get_type(val.dtype)
-                self.builder.set_shape(node.name, shape)
+                self.builder.set_shape(node.name, tuple(shape))
                 self.builder.set_type(node.name, dtype)
                 set_type_shape = False
             else:
