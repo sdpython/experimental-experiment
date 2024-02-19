@@ -8,7 +8,7 @@ from experimental_experiment.ext_test_case import (
     ignore_warnings,
     skipif_ci_windows,
 )
-from experimental_experiment.torch_helper.dump_helper import dump_onnx, assert_all_close
+from experimental_experiment.torch_helper.dump_helper import assert_all_close
 from experimental_experiment.torch_dynamo import (
     onnx_debug_backend,
     get_decomposition_table,
@@ -390,9 +390,9 @@ class TestDynamoLlama(ExtTestCase):
             dynamic=False,
             fullgraph=True,
         )
-        folder = "temp_llama_model_forward"
-        with dump_onnx("llama_onnxrt", folder=folder, clean=True):
-            compiled_model(*example_args_collection[0])
+        # folder = "temp_llama_model_forward"
+        # with dump_onnx("llama_onnxrt", folder=folder, clean=True):
+        compiled_model(*example_args_collection[0])
 
         self.common_test_model(
             model,
@@ -422,9 +422,9 @@ class TestDynamoLlama(ExtTestCase):
             dynamic=False,
             fullgraph=True,
         )
-        folder = "temp_llama_model_backward_forward"
-        with dump_onnx("llama_onnxrt", folder=folder, clean=True):
-            compiled_model(*example_args_collection[0])
+        # folder = "temp_llama_model_backward_forward"
+        # with dump_onnx("llama_onnxrt", folder=folder, clean=True):
+        compiled_model(*example_args_collection[0])
 
         self.common_test_model(
             model,
@@ -537,9 +537,9 @@ class TestDynamoLlama(ExtTestCase):
                 fullgraph=True,
             )
 
-        folder = "test_llama_model_backward_forward_mixed"
-        with dump_onnx("llama_onnxrt", folder=folder, clean=True):
-            compiled_model(*example_args_collection[0])
+        # folder = "test_llama_model_backward_forward_mixed"
+        # dump_onnx("llama_onnxrt", folder=folder, clean=True):
+        compiled_model(*example_args_collection[0])
 
         self.common_test_model(
             model,
@@ -572,9 +572,9 @@ class TestDynamoLlama(ExtTestCase):
                 fullgraph=True,
             )
 
-        folder = "test_llama_model_backward_forward_mixed"
-        with dump_onnx("llama_onnxrt", folder=folder, clean=True):
-            compiled_model(*example_args_collection[0])
+        # folder = "test_llama_model_backward_forward_mixed"
+        # with dump_onnx("llama_onnxrt", folder=folder, clean=True):
+        compiled_model(*example_args_collection[0])
 
         self.common_test_model(
             model,

@@ -144,8 +144,11 @@ def onnx_debug_backend(
         stor = None
 
     def run(*inputs, sess=sess, names=names, stor=stor):
-        max_device = max(x.get_device() for x in inputs)
-        xnp = [x.detach().cpu().numpy() for x in inputs]
+        max_device = max(x.get_device() for x in inputs if isinstance(x, torch.Tensor))
+        xnp = [
+            (x.detach().cpu().numpy() if isinstance(x, torch.Tensor) else np.array([x]))
+            for x in inputs
+        ]
         feeds = dict(zip(names, xnp))
         results = sess.run(None, feeds)
         res = tuple(torch.Tensor(y).to(_dtype[y.dtype]) for y in results)

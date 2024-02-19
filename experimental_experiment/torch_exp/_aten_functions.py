@@ -7,6 +7,13 @@ import numpy as np
 from onnx import TensorProto
 from onnx.helper import tensor_dtype_to_np_dtype
 from onnx.numpy_helper import from_array
+from .annotations import (
+    all_float,
+    all_int,
+    all_int_or_float,
+    is_static_dimension,
+    is_static_shape,
+)
 from ._exceptions import FunctionNotFoundError
 from ._aten_helper import (
     _adjust_attributes_of_max_pool,
@@ -165,10 +172,16 @@ def aten_arange(
 
         # coming from function arange in torch/_refs.__init__.py
         args = (start, end, step)
-        if all(isinstance(arg, IntLike) for arg in args):
-            dt = torch.int64
-        else:
-            dt = torch.get_default_dtype()
+        dt = torch.int64
+        for a in args:
+            if isinstance(a, IntLike):
+                continue
+            if isinstance(a, str):
+                it = g.get_type(a)
+                if it != TensorProto.INT64:
+                    dt = onnx_dtype_to_torch_dtype(it)
+        if dt is None:
+            dt = torch.get_default_dtype(dt)
         if dt is not None:
             dtype = torch_dtype_to_onnx_dtype(dt)
 
@@ -186,6 +199,12 @@ def aten_arange(
     else:
         itype = torch_dtype_to_onnx_dtype(dtype)
 
+    def _may_cast(a, it):
+        gi = g.get_type(a)
+        if gi == it:
+            return a
+        return g.op.Cast(a, to=it, name=name)
+
     dtype = onnx_dtype_to_torch_dtype(itype)
     npdtype = tensor_dtype_to_np_dtype(itype)
     if step is None:
@@ -193,18 +212,20 @@ def aten_arange(
     assert start is not None, "start cannot be None"
     assert end is not None, "end cannot be None"
     assert step is not None, "step cannot be None"
-    if isinstance(start, str):
-        i_start = start
-    else:
-        i_start = np.array(start, dtype=npdtype)
-    if isinstance(end, str):
-        i_end = end
-    else:
-        i_end = np.array(end, dtype=npdtype)
-    if isinstance(step, str):
-        i_step = step
-    else:
-        i_step = np.array(step, dtype=npdtype)
+    i_start = (
+        _may_cast(start, itype)
+        if isinstance(start, str)
+        else np.array(start, dtype=npdtype)
+    )
+    i_end = (
+        _may_cast(end, itype) if isinstance(end, str) else np.array(end, dtype=npdtype)
+    )
+    i_step = (
+        _may_cast(step, itype)
+        if isinstance(step, str)
+        else np.array(step, dtype=npdtype)
+    )
+
     res = g.op.Range(i_start, i_end, i_step, outputs=outputs, name=name)
     if sts:
         g.set_type(res, itype)
@@ -665,8 +686,8 @@ def aten_embedding_dense_backward(
     ), f"scale_grad_by_freq=True not implemented{g.get_debug_msg()}"
     assert g.has_shape(grad_output), f"missing shape for grad_output{g.get_debug_msg()}"
     assert g.has_shape(indices), f"missing shape for indices{g.get_debug_msg()}"
-    assert all(
-        map(lambda i: isinstance(i, int), g.get_shape(grad_output))
+    assert is_static_shape(
+        g.get_shape(grad_output)
     ), f"unknown shape for grad_output{g.get_debug_msg()}"
 
     # if scale_grad_by_freq:
@@ -755,7 +776,7 @@ def aten_empty_like(
         memory_format is None or memory_format == torch.preserve_format
     ), f"empty_like not implemented for memory_format={memory_format}"
 
-    if g.has_shape(x) and all(map(lambda i: isinstance(i, int), g.get_shape(x))):
+    if g.has_shape(x) and is_static_shape(g.get_shape(x)):
         # simple case
         return aten_full(
             g,
@@ -767,7 +788,8 @@ def aten_empty_like(
             name="empty_like",
         )
     raise RuntimeError(
-        f"empty_like is not implemented when shape is not fully known{g.get_debug_msg()}"
+        f"empty_like is not implemented when shape is not fully known "
+        f"for {x!r}{g.get_debug_msg()}"
     )
 
 
@@ -788,12 +810,14 @@ def aten_expand(
     sts: bool,
     outputs: List[str],
     x: T,
-    sizes: List[int],
+    sizes: Union[T, List[Union[int, str]]],
     implicit: bool = False,
     name: str = "expand",
 ) -> T:
     assert not implicit, f"Unexpected value for implicit={implicit!r}"
-    if min(sizes) >= 0:
+
+    if not isinstance(sizes, str) and all_int(sizes) and min(sizes) >= 0:
+        # static sizes
         res = g.op.Expand(
             x, np.array(sizes, dtype=np.int64), outputs=outputs, name=name
         )
@@ -802,7 +826,7 @@ def aten_expand(
             g.set_shape(res, tuple(sizes))
         return res
 
-    if g.has_shape(x):
+    if not isinstance(sizes, str) and g.has_shape(x):
         shape = g.get_shape(x)
         assert len(shape) == len(
             sizes
@@ -811,7 +835,7 @@ def aten_expand(
         for a, b in zip(shape, sizes):
             if b == -1:
                 assert isinstance(b, int), (
-                    f"Not implemented when the shape is not fullu known, "
+                    f"Not implemented when the shape is not fully known, "
                     f"shape={shape} for x as sizes={sizes}{g.get_debug_msg()}"
                 )
                 new_shape.append(a)
@@ -825,11 +849,17 @@ def aten_expand(
             g.set_shape(res, tuple(new_shape))
         return res
 
+    if isinstance(sizes, list):
+        # A combination of static and dynamic dimensions.
+        new_shape = g.make_shape_from_results(sizes, name=f"{name}_dyn")
+    else:
+        new_shape = sizes
+
     res = g.op.Expand(
         x,
-        np.abs(np.array(new_shape, dtype=np.int64)),
+        g.op.Abs(new_shape, name=f"{name}_dyn"),
         outputs=outputs,
-        name=f"{name}_neg2",
+        name=f"{name}_dyn",
     )
     if sts:
         g.set_type(res, g.get_type(x))
@@ -838,7 +868,7 @@ def aten_expand(
 
 
 def aten_fill_Scalar(g: GraphBuilder, sts: bool, outputs: List[str], x: T, v: T) -> T:
-    if g.has_shape(x) and all(map(lambda i: isinstance(i, int), g.get_shape(x))):
+    if g.has_shape(x) and is_static_shape(g.get_shape(x)):
         return aten_full(
             g,
             sts,
@@ -1568,30 +1598,35 @@ def aten_repeat(
     repeats: T,
     name: str = "repeat",
 ) -> T:
-    if isinstance(repeats, (tuple, list)) and all(
-        map(lambda i: isinstance(i, int), repeats)
-    ):
+    assert isinstance(repeats, (tuple, list))
+    if all_int(repeats):
         irep = np.array(repeats, dtype=np.int64)
-        if g.get_rank(x) != len(repeats):
-            expanded = g.op.Expand(
-                x, np.array((1,) * len(repeats), dtype=np.int64), name=name
-            )
-        else:
-            expanded = x
-        res = g.op.Tile(expanded, irep, name=name)
-        if sts:
-            g.set_type(res, g.get_type(x))
-            if g.has_shape(x):
-                shape = g.get_shape(x)
-                if len(shape) == len(repeats):
-                    new_shape = np.array(shape) * irep
-                    g.set_shape(res, tuple(map(int, new_shape)))
-                else:
-                    g.set_rank(res, len(repeats))
+    elif g.is_dynamic_shape(repeats):
+        # repeats is like a shape
+        irep = g.make_shape_from_results(repeats)
+    else:
+        raise RuntimeError(
+            f"repeat not implemented for repeats={repeats}{g.get_debug_msg()}"
+        )
+    if g.get_rank(x) != len(repeats):
+        expanded = g.op.Expand(
+            x, np.array((1,) * len(repeats), dtype=np.int64), name=name
+        )
+    else:
+        expanded = x
+    res = g.op.Tile(expanded, irep, name=name)
+    if sts:
+        g.set_type(res, g.get_type(x))
+        if g.has_shape(x) and all_int(repeats):
+            shape = g.get_shape(x)
+            if len(shape) == len(repeats):
+                new_shape = np.array(shape) * irep
+                g.set_shape(res, tuple(map(int, new_shape)))
             else:
                 g.set_rank(res, len(repeats))
-        return res
-    raise RuntimeError(f"Not implemented when repeats={repeats!r}")
+        else:
+            g.set_rank(res, len(repeats))
+    return res
 
 
 def aten_rsqrt(g: GraphBuilder, sts: bool, outputs: List[str], x: T) -> T:
@@ -1729,9 +1764,13 @@ def aten_slice_Tensor(
     end: Optional[int] = None,
     step: Optional[int] = None,
 ) -> T:
-    assert isinstance(dim, int), f"Not implemented for dim={dim!r}"
-    assert isinstance(start, int), f"Not implemented for start={start!r}"
-    assert end is None or isinstance(end, int), f"Not implemented for end={end!r}"
+    assert isinstance(dim, int), f"aten_slice_Tensor not implemented for dim={dim!r}"
+    assert g.is_dynamic_dimension(start), (
+        f"aten_slice_Tensor not implemented for start={start!r}" f"{g.get_debug_msg()}"
+    )
+    assert end is None or g.is_dynamic_dimension(end), (
+        f"aten_slice_Tensor not implemented for end={end!r}" f"{g.get_debug_msg()}"
+    )
     assert step is None or isinstance(step, int), f"Not implemented for step={step!r}"
     if end is None:
         end = start
@@ -1740,21 +1779,23 @@ def aten_slice_Tensor(
         # nothing to do
         return g.op.Identity(x, outputs=outputs)
     inputs = [
-        np.array([start], dtype=np.int64),
-        np.array([end], dtype=np.int64),
+        g.get_dynamic_dimension(start),
+        g.get_dynamic_dimension(end),
         np.array([dim], dtype=np.int64),
     ]
     if step is not None and step != 1:
         inputs.append(np.array([step], dtype=np.int64))
     res = g.op.Slice(x, *inputs, outputs=outputs)
     if sts:
-        dtype = g.get_type(inputs[0])
-        shape = g.get_shape(inputs[0])
-        new_shape = g._apply_slice_to_shape(
-            shape, slice(start, end, step), axes=[dim], expand_axes=[]
-        )
-        g.set_shape(res, new_shape)
-        g.set_type(res, dtype)
+        g.set_type(res, g.get_type(x))
+        if is_static_dimension(start) and is_static_dimension(end):
+            shape = g.get_shape(x)
+            new_shape = g._apply_slice_to_shape(
+                shape, slice(start, end, step), axes=[dim], expand_axes=[]
+            )
+            g.set_shape(res, new_shape)
+        else:
+            g.set_rank(res, g.get_rank(x))
     return res
 
 
@@ -1772,14 +1813,15 @@ def aten_slice_backward(
     assert (
         step == 1
     ), f"slice_backward not implemented for step={step}{g.get_debug_msg()}"
-    assert g.has_shape(
-        grad_output
-    ), f"slice_backward not implemented when grad_output has not shape{g.get_debug_msg()}"
+    assert g.has_shape(grad_output), (
+        f"slice_backward not implemented when grad_output "
+        f"has not shape{g.get_debug_msg()}"
+    )
 
     shape = g.get_shape(grad_output)
 
-    assert all(
-        map(lambda i: isinstance(i, int), shape)
+    assert is_static_shape(
+        shape
     ), f"slice_backward not implemented when shape={shape}{g.get_debug_msg()}"
 
     itype = g.get_type(grad_output)
@@ -1812,6 +1854,161 @@ def aten_slice_backward(
     return res
 
 
+def _aten_slice_scatter_static(
+    g: GraphBuilder,
+    sts: bool,
+    outputs: List[str],
+    x: T,
+    src: T,
+    dim: int = 0,
+    start: Optional[int] = None,
+    end: Optional[int] = None,
+    step: Optional[int] = None,
+    name="slice_scatter_static",
+) -> T:
+    assert g.has_shape(
+        x
+    ), f"This implementation only works if shape of {x!r} is known{g.get_debug_msg()}"
+    # step 1
+    assert start is None or g.is_dynamic_dimension(start), (
+        f"slice_scatter not implemented for start={start}" f"{g.get_debug_msg()}"
+    )
+    assert end is None or g.is_dynamic_dimension(end), (
+        f"slice_scatter not implemented for end={end}" f"{g.get_debug_msg()}"
+    )
+    assert step is None or is_static_dimension(step), (
+        f"slice_scatter not implemented for end={step}" f"{g.get_debug_msg()}"
+    )
+    shape = g.get_shape(x)
+    dim_shape = shape[dim]
+
+    assert is_static_dimension(
+        dim_shape
+    ), f"slice_scatter not implemented when shape={shape}{g.get_debug_msg()}"
+
+    index_1 = np.arange(0, dim_shape)
+    if (start is None or isinstance(start, int)) and (
+        end is None or isinstance(end, int)
+    ):
+        if end is None:
+            index_2 = index_1[start::step]
+        else:
+            index_2 = index_1[start or 0 : end : step]
+        index_2 = index_2.copy()
+    else:
+        index_2 = g.op.Slice(
+            index_1,
+            g.get_dynamic_dimension(start),
+            (
+                np.array([dim_shape], dtype=np.int64)
+                if end is None
+                else g.get_dynamic_dimension(end)
+            ),
+            np.array([0], dtype=np.int64),
+            np.array([step or 1], dtype=np.int64),
+        )
+
+    # step 2
+
+    v = (0 if dim < 0 else len(shape)) - dim
+    if v > 1:
+        r = tuple(np.arange(1, v, 1))
+        if isinstance(index_2, str):
+            # dynamic shapes
+            index_base = g.op.Expand(
+                g.op.UnsqueezeAnyOpset(index_2, np.array([1], dtype=np.int64)),
+                np.array(r, dtype=np.int64),
+            )
+        else:
+            index_base = np.expand_dims(index_2, r)
+    else:
+        index_base = index_2
+
+    # Step 3: Expand the indices.
+    shape_expand = g.op.ScatterElements(
+        np.array(shape, dtype=np.int64),
+        np.array([dim], dtype=np.int64),
+        np.array([1], dtype=np.int64),
+        name=name,
+    )
+    indices = g.op.Expand(index_base, shape_expand, name=name)
+
+    # Step 4: final ScatterElements.
+    res = g.op.ScatterElements(x, indices, src, axis=dim, name=name)
+    if sts:
+        g.set_type(res, g.get_type(x))
+        g.set_shape(res, shape)
+    return res
+
+
+def _aten_slice_scatter_dynamic(
+    g: GraphBuilder,
+    sts: bool,
+    outputs: List[str],
+    x: T,
+    src: T,
+    dim: int = 0,
+    start: Optional[int] = None,
+    end: Optional[int] = None,
+    step: Optional[int] = None,
+    name="slice_scatter_dynamic",
+) -> T:
+    # step 1
+    assert start is None or g.is_dynamic_dimension(start), (
+        f"slice_scatter not implemented for start={start}" f"{g.get_debug_msg()}"
+    )
+    assert end is None or g.is_dynamic_dimension(end), (
+        f"slice_scatter not implemented for end={end}" f"{g.get_debug_msg()}"
+    )
+    assert step is None or is_static_dimension(step), (
+        f"slice_scatter not implemented for end={step}" f"{g.get_debug_msg()}"
+    )
+
+    shape = g.op.Shape(x, name=name)
+    dim_shape = g.op.Gather(shape, np.array([dim], dtype=np.int64), name=name)
+
+    index_1 = g.op.Range(
+        np.array([0], dtype=np.int64),
+        dim_shape,
+        np.array([1], dtype=np.int64),
+        name=name,
+    )
+    index_2 = g.op.Slice(
+        index_1,
+        g.get_dynamic_dimension(start),
+        (dim_shape if end is None else g.get_dynamic_dimension(end)),
+        np.array([0], dtype=np.int64),
+        np.array([step or 1], dtype=np.int64),
+    )
+
+    # step 2
+
+    v = (0 if dim < 0 else g.get_rank(x)) - dim
+    if v > 1:
+        r = tuple(np.arange(1, v, 1))
+        index_base = g.op.Expand(
+            g.op.UnsqueezeAnyOpset(index_2, np.array([1], dtype=np.int64)),
+            np.array(r, dtype=np.int64),
+        )
+    else:
+        index_base = index_2
+    # Step 3: Expand the indices.
+    shape_expand = g.op.ScatterElements(
+        shape,
+        np.array([dim], dtype=np.int64),
+        np.array([1], dtype=np.int64),
+        name=name,
+    )
+    indices = g.op.Expand(index_base, shape_expand, name=name)
+
+    # Step 4: final ScatterElements.
+    res = g.op.ScatterElements(x, indices, src, axis=dim, name=name)
+    if sts:
+        g.set_type(res, g.get_type(x))
+        g.set_rank(res, g.get_rank(x))
+    return res
+
+
 def aten_slice_scatter(
     g: GraphBuilder,
     sts: bool,
@@ -1822,52 +2019,33 @@ def aten_slice_scatter(
     start: Optional[int] = None,
     end: Optional[int] = None,
     step: Optional[int] = None,
-    name="slice_scatter",
+    name: Optional[str] = None,
 ) -> T:
 
     if g.has_shape(x):
-        # step 1
-        shape = g.get_shape(x)
-        dim_shape = shape[dim]
-
-        assert isinstance(
-            dim_shape, int
-        ), f"slice_scatter not implemented when shape={shape}"
-
-        index_1 = np.arange(0, dim_shape)
-        if end is None:
-            index_2 = index_1[start::step]
-        else:
-            index_2 = index_1[start or 0 : end : step]
-        index_2 = index_2.copy()
-
-        # step 2
-
-        v = (0 if dim < 0 else len(shape)) - dim
-        if v > 1:
-            r = tuple(np.arange(1, v, 1))
-            index_base = np.expand_dims(index_2, r)
-        else:
-            index_base = index_2
-
-        # Step 3: Expand the indices.
-        shape_expand = g.op.ScatterElements(
-            np.array(shape, dtype=np.int64),
-            np.array([dim], dtype=np.int64),
-            np.array([1], dtype=np.int64),
-            name=name,
+        return _aten_slice_scatter_static(
+            g,
+            sts,
+            outputs,
+            x,
+            src,
+            dim,
+            start,
+            end,
+            step,
+            name=name or "slice_scatter_static",
         )
-        indices = g.op.Expand(index_base, shape_expand, name=name)
-
-        # Step 4: final ScatterElements.
-        res = g.op.ScatterElements(x, indices, src, axis=dim, name=name)
-        if sts:
-            g.set_type(res, g.get_type(x))
-            g.set_shape(res, shape)
-        return res
-    raise RuntimeError(
-        f"slice_scatter not implement when shape of {x!r} "
-        f"is not known.{g.get_debug_msg()}"
+    return _aten_slice_scatter_dynamic(
+        g,
+        sts,
+        outputs,
+        x,
+        src,
+        dim,
+        start,
+        end,
+        step,
+        name=name or "slice_scatter_dynamic",
     )
 
 
@@ -2091,12 +2269,8 @@ def _aten_tensor_int1(
     expand_axes: List[int],
 ) -> T:
     assert isinstance(axes, list), f"Unexpected type {type(axes)} for axes"
-    assert all(
-        map(lambda i: isinstance(i, int), axes)
-    ), f"Expected only integer axis but got {axes}"
-    assert all(
-        map(lambda i: isinstance(i, int), indices)
-    ), f"Expected only integer axis but got {indices}"
+    assert all_int(axes), f"Expected only integer axis but got {axes}"
+    assert all_int(indices), f"Expected only integer axis but got {indices}"
     assert len(axes) == 1, f"Length mismatch {len(axes)} != 1"
 
     # axes
@@ -2145,10 +2319,10 @@ def aten_tensor(
 ) -> T:
     if indices is None:
         # x is some data to convert into a Tensor
-        if isinstance(x, list) and all(map(lambda e: isinstance(e, (int, float)), x)):
-            if all(map(lambda e: isinstance(e, int), x)):
+        if isinstance(x, list) and all_int_or_float(x):
+            if all_int(x):
                 cst = np.array(x, dtype=np.int64)
-            elif all(map(lambda e: isinstance(e, float), x)):
+            elif all_float(x):
                 cst = np.array(x, dtype=np.float32)
             else:
                 raise RuntimeError(
@@ -2162,9 +2336,7 @@ def aten_tensor(
         )
 
     if isinstance(indices, tuple) and len(indices) == 1:
-        if isinstance(indices[0], list) and all(
-            map(lambda i: isinstance(i, int), indices[0])
-        ):
+        if isinstance(indices[0], list) and all_int(indices[0]):
             return _aten_tensor_int1(g, sts, outputs, x, indices, [0], [])
     raise RuntimeError(
         f"Unable to handle getitem with indices={indices}{g.get_debug_msg()}"
@@ -2231,10 +2403,18 @@ def aten_view(
 ) -> T:
     if isinstance(size, (int, tuple, list)):
         asize = [size] if isinstance(size, int) else list(size)
-        asize = np.array(asize, dtype=np.int64)
-        assert (
-            len(asize.shape) == 1
-        ), f"Unexpected shape for view, size={size}{g.get_debug_msg()}"
+        if is_static_shape(asize):
+            asize = np.array(asize, dtype=np.int64)
+            assert (
+                len(asize.shape) == 1
+            ), f"Unexpected shape for view, size={size}{g.get_debug_msg()}"
+        elif g.is_dynamic_shape(asize):
+            asize = g.make_shape_from_results(asize, name=node_name)
+            # TODO: check that the shape is just a number
+        else:
+            raise RuntimeError(
+                f"aten_view not implemented when size={size!r}{g.get_debug_msg()}"
+            )
         res = g.op.Reshape(x, asize, outputs=outputs, name=node_name)
         if sts:
             set_type_shape_reshape(g, res, x, asize)

@@ -39,10 +39,11 @@ args = get_parsed_args(
     repeat=5,
     mixed=(0, "mixed precision (based on autocast)"),
     export=("", "export the dynamo models"),
+    dynamic=("0", "use dynamic shapes"),
     target_opset=(18, "opset to convert into, use with backend=custom"),
     config=("default", "default, medium, or small to test"),
     expose="backend,repeat,warmup,device,num_hidden_layers,"
-    "mixed,export,config,target_opset",
+    "mixed,export,config,target_opset,dynamic",
 )
 
 import os
@@ -102,14 +103,20 @@ model, example_args_collection = get_llama_model(**config_dict)
 device = args.device
 model = model.eval().to(device)
 
+print(f"Build the compile model with backend={args.backend}")
+use_dynamic = args.dynamic in (1, "1", True, "True")
+print(f"dynamic={use_dynamic}")
 
 if args.backend == "ort":
-    local_aot_ort, local_ort = make_aot_ort(dynamic=True)
+    local_aot_ort, local_ort = make_aot_ort(dynamic=use_dynamic)
     compiled_model = torch.compile(model, backend=local_ort)
+
 elif args.backend == "inductor":
-    compiled_model = torch.compile(model, backend="inductor")
+    compiled_model = torch.compile(model, backend="inductor", dynamic=use_dynamic)
+
 elif args.backend == "eager":
     compiled_model = model
+
 elif args.backend == "custom":
     get_decomposition_table
     target_opset = args.target_opset
@@ -119,7 +126,10 @@ elif args.backend == "custom":
         ),
         decompositions=get_decomposition_table(),
     )
-    compiled_model = torch.compile(model, backend=aot_compiler, fullgraph=True)
+    compiled_model = torch.compile(
+        model, backend=aot_compiler, fullgraph=True, dynamic=use_dynamic
+    )
+
 elif args.backend == "debug":
     target_opset = args.target_opset
     print(f"-- debug backend, opset={target_opset}")
@@ -131,13 +141,16 @@ elif args.backend == "debug":
         ),
         decompositions=get_decomposition_table(),
     )
-    compiled_model = torch.compile(model, backend=aot_compiler, fullgraph=True)
+    compiled_model = torch.compile(
+        model, backend=aot_compiler, fullgraph=True, dynamic=use_dynamic
+    )
+
 else:
     raise ValueError(f"Unexpected backend={args.backend!r}.")
 
 
 def loop_iteration(is_cuda, inputs, compiled_model, loss):
-    if args.mixed and is_cuda:
+    if args.mixed in (1, "1", True, "True") and is_cuda:
         with torch.autocast(device_type="cuda", dtype=torch.float16):
             result = compiled_model(*inputs)
     else:
@@ -150,19 +163,23 @@ def loop_iteration(is_cuda, inputs, compiled_model, loss):
         torch.cuda.synchronize()
 
 
-print("warmup")
+print(f"warmup on device={args.device}")
 warmup_times = []
 is_cuda = args.device == "cuda"
 loss = torch.nn.MSELoss()
 for i in range(args.warmup):
     example_inputs = example_args_collection[i]
     inputs = [t.to("cuda") for t in example_inputs] if is_cuda else example_inputs
+    if is_cuda:
+        torch.cuda.synchronize()
     start_time = time.perf_counter()
+
     if args.backend in ("ort", "custom", "debug") and i == 0 and args.export:
         with dump_onnx(
             f"dort-{args.export}-{args.backend}", folder="dump_dort_bench", clean=True
         ):
             loop_iteration(is_cuda, inputs, compiled_model, loss)
+
         for onx in os.listdir("dump_dort_bench"):
             if not onx.endswith(".onnx"):
                 continue
@@ -179,6 +196,7 @@ for i in range(args.warmup):
             )
     else:
         loop_iteration(is_cuda, inputs, compiled_model, loss)
+
     warmup_times.append(time.perf_counter() - start_time)
 
 warmup_time = sum(warmup_times)
@@ -193,7 +211,8 @@ for example_inputs in example_args_collection[args.warmup :]:
     times.append(time.perf_counter() - start_time)
 
 print("measures done.")
-
+print(f"dynamic={args.dynamic}")
+print(f"mixed={args.mixed}")
 print(f"backend={args.backend}")
 print(f"num_hidden_layers={args.num_hidden_layers}")
 print(f"mixed={args.mixed}")
