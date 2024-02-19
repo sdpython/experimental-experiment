@@ -211,6 +211,7 @@ class GraphBuilder:
     - `outputs: List[ValueInfoTensorProto]`: outputs
     - `ir_version: int`: ir version
     - `opsets: Dict[str, int]`: declared opsets
+    - `input_args: List[T]`: input tensors when the class is used to convert an existing model
 
     - `_unique_names`: used to create unused result names
     - `_unique_node_names`: used to create unused node names
@@ -302,7 +303,7 @@ class GraphBuilder:
     ):
         self.optimization_options = optimization_options or OptimizationOptions()
         self.as_function = as_function
-        assert args is None, "args is unused"
+        self.input_args = args
         self.verbose = verbose
         self.ir_version = ir_version
         self._debug_msg = {}
