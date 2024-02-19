@@ -731,7 +731,6 @@ def aten_embedding_dense_backward(
 
     shape_output = g.get_shape(grad_output)
     new_shape = (num_weights,) + shape_output[rank_indices:]
-    print("****", shape_indices, shape_output, new_shape, num_weights, rank_indices)
     grad_weight = g.op.ConstantOfShape(
         np.array(new_shape, dtype=np.int64), name="embedding_dense_backward"
     )
@@ -793,6 +792,32 @@ def aten_empty_like(
     )
 
 
+def aten_empty_strided(
+    g: GraphBuilder,
+    sts: bool,
+    outputs: List[str],
+    size: T,
+    stride: T,
+    dtype: Optional["torch.dtype"] = None,  # noqa: F821
+    layout=None,
+    device: Optional["torch.device"] = None,  # noqa: F821
+    requires_grad: bool = False,
+    name: str = "empty_strided",
+) -> T:
+    # strided is unused.
+    return aten_zeros(
+        g,
+        sts,
+        outputs,
+        size,
+        dtype=dtype,
+        layout=layout,
+        device=device,
+        requires_grad=requires_grad,
+        name=name,
+    )
+
+
 def aten_eq(g: GraphBuilder, sts: bool, outputs: List[str], x: T, y: T, name="eq") -> T:
     x, y = prepare_inputs_homogeneous_operator(g, x, y)
     res = g.op.Equal(x, y, outputs=outputs, name=name)
@@ -803,6 +828,15 @@ def aten_eq(g: GraphBuilder, sts: bool, outputs: List[str], x: T, y: T, name="eq
 
 def aten_eq_Scalar(g: GraphBuilder, sts: bool, outputs: List[str], x: T, y: T) -> T:
     return aten_eq(g, sts, outputs, x, y)
+
+
+def aten_exp(
+    g: GraphBuilder, sts: bool, outputs: List[str], x: T, name: str = "exp"
+) -> T:
+    res = g.make_node("Exp", [x], outputs, name=name)
+    if sts:
+        set_type_shape_unary_op(g, outputs[0], x)
+    return res
 
 
 def aten_expand(
@@ -926,6 +960,7 @@ def aten_full(
     layout=None,
     device: Optional["torch.device"] = None,  # noqa: F821
     pin_memory=None,
+    requires_grad: bool = False,
     name: str = "full",
 ) -> T:
     import torch
@@ -934,6 +969,7 @@ def aten_full(
         f"full not implemented for layout={layout!r} is not None, "
         f"size={size!r}, dtype={dtype}{g.get_debug_msg()}"
     )
+    assert not requires_grad, "aten_full does not implement requires_grad"
     assert not pin_memory, "full not implemented for pin_memory=True"
     assert fill_value is None or isinstance(
         fill_value, (float, int)
@@ -984,6 +1020,45 @@ def aten_full(
     # fill_value = op.Cast(fill_value, to=dtype)
     # return op.Expand(fill_value, size)
     return res
+
+
+def aten_full_like(
+    g: GraphBuilder,
+    sts: bool,
+    outputs: List[str],
+    x: T,
+    fill_value: T,
+    dtype: Optional["torch.dtype"] = None,  # noqa: F821
+    layout=None,
+    device: Optional["torch.device"] = None,  # noqa: F821
+    pin_memory=None,
+    memory_format=None,
+) -> T:
+    import torch
+
+    assert (
+        layout is None
+    ), f"empty_like not implemented for layout={layout!r} is not None"
+    assert not pin_memory, "empty_like not implemented for pin_memory=True"
+    assert (
+        memory_format is None or memory_format == torch.preserve_format
+    ), f"empty_like not implemented for memory_format={memory_format}"
+
+    if g.has_shape(x) and is_static_shape(g.get_shape(x)):
+        # simple case
+        return aten_full(
+            g,
+            sts,
+            outputs,
+            g.get_shape(x),
+            fill_value,
+            dtype=dtype or g.get_type(x),
+            name="empty_like",
+        )
+    raise RuntimeError(
+        f"empty_like is not implemented when shape is not fully known "
+        f"for {x!r}{g.get_debug_msg()}"
+    )
 
 
 def aten_FunctionCtx(g: GraphBuilder, sts: bool, outputs: List[str], *args, **kwargs):
@@ -2442,7 +2517,8 @@ def aten_zeros(
     layout=None,
     device: Optional["torch.device"] = None,  # noqa: F821
     pin_memory=None,
-    name: str = "seros",
+    requires_grad: bool = False,
+    name: str = "zeros",
 ) -> T:
     return aten_full(
         g,
@@ -2454,6 +2530,7 @@ def aten_zeros(
         layout=layout,
         device=device,
         pin_memory=pin_memory,
+        requires_grad=requires_grad,
         name=name,
     )
 
@@ -2462,6 +2539,48 @@ def prims_add(
     g: GraphBuilder, sts: bool, outputs: List[str], x: T, y: T, name="prims_add"
 ) -> T:
     return aten_add(g, sts, outputs, x, y, name=name)
+
+
+def prims_amax(
+    g: GraphBuilder,
+    sts: bool,
+    outputs: List[str],
+    x: T,
+    dim: Optional[int] = None,
+    keepdim: bool = False,
+    output_dtype: Optional["torch.dtype"] = None,  # noqa: F821
+    name: str = "prims_amax",
+) -> T:
+    assert (
+        output_dtype is None
+    ), f"not implemented when output_dtype={output_dtype!r}{g.get_debug_msg()}"
+    if dim is None:
+        xf = g.op.Reshape(x, np.array([-1], dtype=np.int64))
+        res = g.op.Squeeze(
+            g.op.ArgMax(xf, keepdims=(1 if keepdim else 0)),
+            outputs=outputs,
+            name=name,
+        )
+    elif isinstance(dim, int):
+        res = g.op.ArgMax(
+            x, axis=dim, keepdims=1 if keepdim else 0, outputs=outputs, name=name
+        )
+    elif isinstance(dim, list) and len(dim) == 1 and isinstance(dim[0], int):
+        res = g.op.ArgMax(
+            x, axis=dim[0], keepdims=1 if keepdim else 0, outputs=outputs, name=name
+        )
+    else:
+        raise RuntimeError(f"Unexpected type {type(dim)} for dim")
+    if sts:
+        g.set_type(res, TensorProto.INT64)
+        if dim is None:
+            g.set_shape(res, (1,))
+        elif g.has_shape(x):
+            sh = g.get_shape(x)
+            g.set_shape(res, (sh[dim],))
+        else:
+            g.set_rank(res, 1)
+    return res
 
 
 def prims_broadcast_in_dim(
@@ -2596,10 +2715,49 @@ def prims_div(
     return aten_div(g, sts, outputs, x, y, name=name)
 
 
+def prims_empty_strided(
+    g: GraphBuilder,
+    sts: bool,
+    outputs: List[str],
+    size: T,
+    stride: T,
+    dtype: Optional["torch.dtype"] = None,  # noqa: F821
+    layout=None,
+    device: Optional["torch.device"] = None,  # noqa: F821
+    requires_grad: bool = False,
+    name: str = "prims_empty_strided",
+) -> T:
+    # strided is unused.
+    return aten_empty_strided(
+        g,
+        sts,
+        outputs,
+        size,
+        stride,
+        dtype=dtype,
+        layout=layout,
+        device=device,
+        requires_grad=requires_grad,
+        name=name,
+    )
+
+
 def prims_eq(
     g: GraphBuilder, sts: bool, outputs: List[str], x: T, y: T, name: str = "prims_eq"
 ) -> T:
     return aten_eq(g, sts, outputs, x, y, name=name)
+
+
+def prims_exp(
+    g: GraphBuilder, sts: bool, outputs: List[str], x: T, name: str = "prims_exp"
+) -> T:
+    return aten_exp(g, sts, outputs, x, name=name)
+
+
+def prims_gt(
+    g: GraphBuilder, sts: bool, outputs: List[str], x: T, y: T, name: str = "prims_gt"
+) -> T:
+    return aten_gt(g, sts, outputs, x, y, name=name)
 
 
 def prims_iota(
@@ -2635,6 +2793,12 @@ def prims_iota(
         requires_grad=requires_grad,
         name="prims_iota",
     )
+
+
+def prims_lt(
+    g: GraphBuilder, sts: bool, outputs: List[str], x: T, y: T, name: str = "prims_lt"
+) -> T:
+    return aten_lt(g, sts, outputs, x, y, name=name)
 
 
 def prims_mul(
@@ -2695,6 +2859,12 @@ def prims_split_dim(
         g.set_type(res, g.get_type(x))
         g.get_shape(res, tuple(new_shape))
     return res
+
+
+def prims_sub(
+    g: GraphBuilder, sts: bool, outputs: List[str], x: T, y: T, name: str = "prims_sub"
+) -> T:
+    return aten_sub(g, sts, outputs, x, y, name=name)
 
 
 def prims_sum(
