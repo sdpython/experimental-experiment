@@ -697,7 +697,7 @@ class GraphBuilder:
                 else ""
             )
             name = self.unique_name(f"init{itype}_s{sh}_{sh2}")
-        self.set_shape(name, value.shape)
+        self.set_shape(name, tuple(value.shape))
         self.set_type(name, itype)
         self.set_name(name)
         self.initializers_dict[name] = value
