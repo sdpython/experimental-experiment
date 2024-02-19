@@ -5,7 +5,7 @@ import unittest
 import warnings
 import packaging.version as pv
 import onnxruntime  # noqa: F401
-from onnx.reference import ReferenceEvaluator
+from onnx_array_api.reference import ExtendedReferenceEvaluator
 from experimental_experiment.ext_test_case import ExtTestCase, ignore_warnings
 from experimental_experiment.torch_exp.onnx_export import to_onnx
 from experimental_experiment.torch_helper.llama_helper import (
@@ -110,13 +110,13 @@ class TestOnnxExportLlama(ExtTestCase):
             f.write(onx.SerializeToString())
         xp = [x.numpy() for x in input_tensors]
         feeds = {f"input{i}": x for i, x in enumerate(xp)}
-        ref = ReferenceEvaluator(onx)
+        ref = ExtendedReferenceEvaluator(onx)
         try:
             results = ref.run(None, feeds)
         except Exception as e:
             print("--------------------")
             try:
-                ReferenceEvaluator(onx, verbose=10).run(None, feeds)
+                ExtendedReferenceEvaluator(onx, verbose=10).run(None, feeds)
             except Exception:
                 pass
             print("--------------------")
@@ -139,7 +139,7 @@ class TestOnnxExportLlama(ExtTestCase):
         onx = export_utils("test_llama_decoder", model, *input_tensors)
         xp = [x.numpy() for x in input_tensors]
         feeds = {f"input{i}": x for i, x in enumerate(xp)}
-        ref = ReferenceEvaluator(onx)
+        ref = ExtendedReferenceEvaluator(onx)
         results = ref.run(None, feeds)
         self.assertEqualArray(expected.detach().numpy(), results[0], atol=1e-5)
         self.check_model_ort(onx)
@@ -154,7 +154,7 @@ class TestOnnxExportLlama(ExtTestCase):
         onx = export_utils("test_llama_model", model, *input_tensors, dynamo=False)
         xp = [x.numpy() for x in input_tensors]
         feeds = {f"input{i}": x for i, x in enumerate(xp)}
-        ref = ReferenceEvaluator(onx)
+        ref = ExtendedReferenceEvaluator(onx)
         results = ref.run(None, feeds)
         self.assertEqualArray(expected[0].detach().numpy(), results[0], atol=1e-5)
         with open("test_llama_model.onnx", "wb") as f:

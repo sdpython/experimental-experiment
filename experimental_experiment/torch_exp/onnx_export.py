@@ -188,6 +188,7 @@ def to_onnx(
         optimization_options=OptimizationOptions(
             remove_unused=remove_unused,
             constant_folding=constant_folding,
+            patterns=None,
         ),
         verbose=verbose,
     )
