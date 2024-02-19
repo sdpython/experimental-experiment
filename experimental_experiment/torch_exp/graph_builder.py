@@ -71,7 +71,7 @@ class OptimizationOptions:
             assert patterns == "default", f"Unexpected value {patterns!r} for patterns"
             self.patterns = get_default_patterns()
         else:
-            assert isinstance(
+            assert patterns is None or isinstance(
                 patterns, list
             ), f"Unexpected type {type(patterns)} for patterns"
             self.patterns = patterns

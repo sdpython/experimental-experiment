@@ -4,7 +4,7 @@ import unittest
 import warnings
 import onnx
 from onnx.reference import ReferenceEvaluator
-from experimental_experiment.ext_test_case import ExtTestCase
+from experimental_experiment.ext_test_case import ExtTestCase, ignore_warnings
 from experimental_experiment.torch_exp.onnx_export import to_onnx
 
 
@@ -129,6 +129,7 @@ class TestOnnxExport(ExtTestCase):
             )
 
     @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
+    @ignore_warnings((UserWarning, DeprecationWarning))
     def test_simple_export_conv(self):
         model, input_tensor = return_module_cls_conv()
         names = export_utils("test_simple_export_conv", model, input_tensor)
@@ -141,6 +142,7 @@ class TestOnnxExport(ExtTestCase):
         self.assertEqualArray(results[0], results[1])
 
     @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
+    @ignore_warnings((UserWarning, DeprecationWarning))
     def test_simple_export_relu(self):
         model, input_tensor = return_module_cls_relu()
         names = export_utils("test_simple_export_relu", model, input_tensor)
@@ -153,6 +155,7 @@ class TestOnnxExport(ExtTestCase):
         self.assertEqualArray(results[0], results[1])
 
     @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
+    @ignore_warnings((UserWarning, DeprecationWarning))
     def test_simple_export_pool(self):
         from onnxruntime import InferenceSession
 
@@ -166,6 +169,7 @@ class TestOnnxExport(ExtTestCase):
         self.assertEqualArray(results[0], results[1])
 
     @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
+    @ignore_warnings((UserWarning, DeprecationWarning))
     def test_remove_unused_nodes(self):
         from onnx_array_api.plotting.text_plot import onnx_simple_text_plot
 
@@ -194,6 +198,7 @@ class TestOnnxExport(ExtTestCase):
         self.check_model_ort(onx2)
 
     @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
+    @ignore_warnings((UserWarning, DeprecationWarning))
     def test_simple_export_pool_unused(self):
         from onnxruntime import InferenceSession
 
@@ -209,6 +214,7 @@ class TestOnnxExport(ExtTestCase):
         self.assertEqualArray(results[0], results[1])
 
     @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
+    @ignore_warnings((UserWarning, DeprecationWarning))
     def test_constant_folding(self):
         try:
             from onnx_array_api.plotting.text_plot import onnx_simple_text_plot
@@ -268,6 +274,7 @@ class TestOnnxExport(ExtTestCase):
         self.check_model_ort(onx2)
 
     @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
+    @ignore_warnings((UserWarning, DeprecationWarning))
     def test_simple_export_pool_constant_folding(self):
         from onnxruntime import InferenceSession
 
