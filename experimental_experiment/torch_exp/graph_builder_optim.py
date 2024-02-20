@@ -134,6 +134,12 @@ class GraphBuilderPatternOptimization:
         """
         return self.builder.get_type(name)
 
+    def get_rank(self, name: str) -> int:
+        """
+        Returns the type of a result.
+        """
+        return self.builder.get_rank(name)
+
     def has_shape(self, name: str) -> bool:
         """
         Tells of a result has a shape.

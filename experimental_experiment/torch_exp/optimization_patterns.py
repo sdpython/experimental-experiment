@@ -75,7 +75,7 @@ class CastPattern(PatternOptimization):
         node: NodeProto,
         matched: List[MatchResult],
     ) -> Optional[MatchResult]:
-        if node.op_type != "Cast":
+        if node.op_type != "Cast" or node.domain != "":
             return None
         if not g.has_type(node.input[0]):
             itype = g.try_infer_type(node.input[0])
@@ -96,6 +96,82 @@ class CastPattern(PatternOptimization):
         return MatchResult(self, [node], apply)
 
 
+class ReshapeMatMulReshapePattern(PatternOptimization):
+    """
+    Replaces the sequence Reshape, Matmul, Reshape by Matmul.
+    """
+
+    def __init__(self):
+        PatternOptimization.__init__(self)
+
+    def match(
+        self,
+        g: "GraphBuilderPatternOptimization",  # noqa: F821
+        node: NodeProto,
+        matched: List[MatchResult],
+    ) -> Optional[MatchResult]:
+        if node.op_type != "MatMul" or node.domain != "":
+            return None
+        if g.is_used_by_subgraph(node.output[0]):
+            return None
+        if g.is_used_by_subgraph(node.input[0]):
+            return None
+        if g.is_used_by_subgraph(node.input[1]):
+            return None
+
+        next_nodes = g.next_nodes(node.output[0])
+        next_node = next_nodes[0]
+        if next_node.op_type != "Reshape" or node.domain != "":
+            return None
+
+        node_before_left = g.node_before(node.input[0])
+        node_before_right = g.node_before(node.input[1])
+        if (
+            node_before_left.op_type != "Reshape"
+            or node_before_left.domain != ""
+            or node_before_right.op_type != "Reshape"
+            or node_before_right.domain != ""
+        ):
+            return None
+
+        # condition on shapes
+        shape_left = g.get_constant(node_before_left.input[1])
+        shape_right = g.get_constant(node_before_right.input[1])
+        shape_final = g.get_constant(next_node.input[1])
+        if len(shape_final) < 4:
+            return None
+        ndim = len(shape_final)
+        if len(shape_left) != ndim - 1 or len(shape_right) != ndim - 1:
+            return None
+
+        rank_left = g.get_rank(node_before_left.input[0])
+        rank_right = g.get_rank(node_before_right.input[0])
+        if rank_left != ndim or rank_right != ndim:
+            return None
+
+        # At this stage, both Reshape before MatMul reduces the rank by 1
+        # and the Reshape after restores it. They can safely be removed.
+
+        def apply(
+            g: "GraphBuilder",  # noqa: F821
+            node_before_left: NodeProto,
+            node_before_right: NodeProto,
+            node: NodeProto,
+            next_node: NodeProto,
+        ) -> List[NodeProto]:
+            new_node = g.make_node(
+                "MatMul",
+                [node_before_left.input[0], node_before_left.input[1]],
+                next_node.output,
+                name=self.__class__.__name__,
+            )
+            return [new_node]
+
+        return MatchResult(
+            self, [node_before_left, node_before_right, node, next_node], apply
+        )
+
+
 class UnsqueezeUnsqueezePattern(PatternOptimization):
     """
     Replaces the sequence Unsqueeze, Unsqueeze by Unsqueeze.
@@ -110,7 +186,7 @@ class UnsqueezeUnsqueezePattern(PatternOptimization):
         node: NodeProto,
         matched: List[MatchResult],
     ) -> Optional[MatchResult]:
-        if node.op_type != "Unsqueeze":
+        if node.op_type != "Unsqueeze" or node.domain != "":
             return None
         if g.is_used_by_subgraph(node.output[0]):
             return None
@@ -118,7 +194,7 @@ class UnsqueezeUnsqueezePattern(PatternOptimization):
         if len(next_nodes) != 1:
             return None
         next_node = next_nodes[0]
-        if next_node.op_type != "Unsqueeze":
+        if next_node.op_type != "Unsqueeze" or node.domain != "":
             return None
 
         def apply(
@@ -150,7 +226,7 @@ def get_default_patterns() -> List[PatternOptimization]:
         from experimental_experiment.torch_exp.optimization_patterns import get_default_patterns
         pprint.pprint(get_default_patterns())
     """
-    return [CastPattern(), UnsqueezeUnsqueezePattern()]
+    return [CastPattern(), ReshapeMatMulReshapePattern(), UnsqueezeUnsqueezePattern()]
 
 
 def get_pattern(obj: Union[PatternOptimization, str]) -> PatternOptimization:
@@ -159,8 +235,10 @@ def get_pattern(obj: Union[PatternOptimization, str]) -> PatternOptimization:
     """
     if isinstance(obj, PatternOptimization):
         return obj
-    if obj == "UnsqueezeUnsqueeze":
-        return UnsqueezeUnsqueezePattern()
-    if obj == "Cast":
-        return CastPattern()
+
+    mapping = {
+        v.__class__.__name__.replace("Pattern", ""): v for v in get_default_patterns()
+    }
+    if obj in mapping:
+        return mapping[obj]
     raise RuntimeError(f"Unable to find pattern for {obj!r}.")

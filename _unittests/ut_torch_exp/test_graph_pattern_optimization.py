@@ -74,6 +74,25 @@ class TestGraphPatternOptimization(ExtTestCase):
         self.assertEqual(len(before), 14)
         self.assertEqual(len(after), 2)
 
+    def test_reshape_matmul_reshape(self):
+        origin = self._get_model("dort-c-custom__0.onnx")
+        before = [node for node in origin.graph.node if node.op_type == "Reshape"]
+        gr = GraphBuilder(
+            origin,
+            optimization_options=OptimizationOptions(patterns=["ReshapeMatMulReshape"]),
+            infer_shapes=True,
+        )
+        res, out, err = self.capture(lambda: gr.optimize_with_patterns(verbose=10))
+        self.assertEmpty(err)
+        self.assertEmpty(res)
+        self.assertIn("[GraphBuilderPatternOptimization.optimize] done after", out)
+        self.assertIn("ReshapeMatMulReshapePattern", out)
+
+        onx = gr.to_onnx(optimize=False)
+        after = [node for node in onx.graph.node if node.op_type == "Reshape"]
+        self.assertEqual(len(before), 24)
+        self.assertEqual(len(after), 18)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
