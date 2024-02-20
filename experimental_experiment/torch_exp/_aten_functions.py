@@ -1794,11 +1794,11 @@ def aten_slice_backward(
     assert (
         step == 1
     ), f"slice_backward not implemented for step={step}{g.get_debug_msg()}"
+    # TODO: handle dynamic shapes
     assert g.has_shape(grad_output), (
         f"slice_backward not implemented when grad_output "
         f"has not shape{g.get_debug_msg()}"
     )
-
     shape = g.get_shape(grad_output)
 
     assert is_static_shape(
