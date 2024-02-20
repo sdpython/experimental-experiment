@@ -1,4 +1,5 @@
 import pprint
+import textwrap
 from functools import partial
 from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 import numpy as np
@@ -61,6 +62,7 @@ class OptimizationOptions:
         `'default'` means a default list of optimization patterns are applied
     :param max_iter: maximum number of iteration when doing pattern optimizations,
         -1 to let it undefined
+    :param recursive: optimizes subgraphs and functions as well
     :param verbose: verbosity level (for pattern optimization)
     """
 
@@ -71,6 +73,7 @@ class OptimizationOptions:
         constant_size: int = 1024,
         patterns: Union[str, List["PatternOptimization"]] = "default",
         max_iter: int = -1,
+        recursive: bool = False,
         verbose: int = 0,
     ):
         self.remove_unused = remove_unused
@@ -88,12 +91,18 @@ class OptimizationOptions:
             )
         self.max_iter = -1
         self.verbose = verbose
+        self.recursive = recursive
 
     def __repr__(self):
-        return (
+        pats = "None" if self.patterns is None else [str(p) for p in self.patterns]
+        code = (
             f"{self.__class__.__name__}(remove_unused={self.remove_unused}, "
             f"constant_folding={self.constant_folding}, "
-            f"constant_size={self.constant_size})"
+            f"constant_size={self.constant_size}, verbose={self.verbose}, "
+            f"max_iter={self.max_iter}, recursive={self.recursive}, patterns={pats})"
+        )
+        return "\n".join(
+            textwrap.wrap(code, width=80, tabsize=4, subsequent_indent="    ")
         )
 
 
@@ -350,7 +359,9 @@ class GraphBuilder:
         import torch
 
         self.torch = torch
-        self.optimization_options = optimization_options or OptimizationOptions()
+        self.optimization_options = optimization_options or OptimizationOptions(
+            verbose=verbose
+        )
         self.as_function = as_function
         self.input_args = args
         self.verbose = verbose
@@ -1494,36 +1505,22 @@ class GraphBuilder:
             assert (
                 self.optimization_options.remove_unused
             ), "remove_unused must be positive for pattern optimizations"
-            self.optimize_with_patterns(
-                self.optimization_options.max_iter,
-                patterns=self.optimization_options.patterns,
-                verbose=self.optimization_options.verbose,
-            )
+            self.optimize_with_patterns()
             _check("F")
             self.remove_unused()
             _check("G")
 
-    def optimize_with_patterns(
-        self,
-        max_iter: int = -1,
-        patterns: Optional[List[PatternOptimization]] = None,
-        recursive: bool = False,
-        verbose: int = 0,
-    ):
+    def optimize_with_patterns(self):
         """
         Optimizes this graph with patterns.
-
-        :param max_iter:  maximum number of iterations to apply
-        :param patterns: list of pattern to apply, None for all of them,
-            None to select the patterns defined in `self.optimization_options`
-        :param recursive: applies the pattern in subgraphs
-        :param verbose: verbosity
         """
-        assert not recursive, "Recursivity not implemented for optimize_with_patterns"
-        if patterns is None:
-            patterns = self.optimization_options.patterns
-        gro = GraphBuilderPatternOptimization(self, verbose=verbose, patterns=patterns)
-        gro.optimize(max_iter=max_iter)
+        gro = GraphBuilderPatternOptimization(
+            self,
+            verbose=self.optimization_options.verbose,
+            patterns=self.optimization_options.patterns,
+            recursive=self.optimization_options.recursive,
+        )
+        gro.optimize(max_iter=self.optimization_options.max_iter)
 
     def remove_unused(self):
         """
@@ -1531,7 +1528,6 @@ class GraphBuilder:
         It does not look into subgraphs and assumes there is none.
         Everything is done in one pass.
         """
-
         # mark outputs
         marked = {o.name: set() for o in self.outputs}
         for node in reversed(self.nodes):
@@ -1556,9 +1552,12 @@ class GraphBuilder:
             for k, v in self.initializers_dict.items():
                 if k not in marked:
                     v = self.initializers_dict[k]
-                    print(
-                        f"[GraphBuilder.remove_unused] remove_initializer:{k}:{v.dtype}[{v.shape}]"
-                    )
+                    if hasattr(v, "dtype") and hasattr(v, "shape"):
+                        print(
+                            f"[GraphBuilder.remove_unused] remove_initializer:{k}:{v.dtype}[{v.shape}]"
+                        )
+                    else:
+                        print(f"[GraphBuilder.remove_unused] remove_initializer:{k}]")
         self.initializers_dict = {
             k: v for k, v in self.initializers_dict.items() if k in marked
         }
@@ -1736,12 +1735,12 @@ class GraphBuilder:
             f"of the removed nodes {removed}"
         )
         memo = []
-        for i in reversed(sorted(removed)):
+        for i in removed:
             assert i < len(
                 self.nodes
             ), f"Unable to remove node position {i}, there are {len(self.nodes)}"
             memo.append(self.nodes[i])
-            del self.nodes[i]
+            self.nodes[i] = None
 
         n_existing = []
         for node in new_nodes:
@@ -1759,6 +1758,7 @@ class GraphBuilder:
         for i, n in enumerate(new_nodes):
             assert isinstance(n, NodeProto), f"Unexpected type {type(n)} for a node"
             self.nodes.insert(insert_at + i, n)
+        self.nodes = [n for n in self.nodes if n is not None]
         return memo
 
     def _update_shape_types_with_proto(self, proto: ModelProto):
