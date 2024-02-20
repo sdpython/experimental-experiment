@@ -1,6 +1,6 @@
 from typing import Callable, Iterator, List, Optional, Union
 import numpy as np
-from onnx import NodeProto
+from onnx import NodeProto, helper as oh
 
 
 class MatchResult:
@@ -106,11 +106,65 @@ class LayerNormalizationPattern(PatternOptimization):
     ) -> Optional[MatchResult]:
         if node.op_type != "ReduceMean" or node.domain != "":
             return None
+        axis = g.get_constant_or_attribute(node, "axes", input_index=1)
+        print("**", axis)
+        node_pow = g.node_before(node.input[0])
+        if node_pow.op_type != "Pow" or node.domain != "":
+            return None
+        exponent = g.get_constant(node_pow.input[1])
+        if not g.is_value_equal_to_number(exponent, 2):
+            return None
+        node_add = g.next_node(node.output[0])
+        if node_add.op_type != "Add" or node_add.domain != "":
+            return None
+        epsilon = g.get_constant(node_add.input[1])
+        if not g.is_real_number(epsilon):
+            return None
+        node_sqrt = g.next_node(node_add.output[0])
+        if node_sqrt.op_type != "Sqrt" or node_sqrt.domain != "":
+            return None
+        node_reciprocal = g.next_node(node_sqrt.output[0])
+        if node_reciprocal.op_type != "Reciprocal" or node_reciprocal.domain != "":
+            return None
+        node_mul = g.next_node(node_reciprocal.output[0])
+        if node_mul.op_type != "Mul" or node_mul.domain != "":
+            return None
 
-        def apply(g: "GraphBuilder", node: NodeProto) -> List[NodeProto]:  # noqa: F821
+        if (
+            g.n_successors(node_pow.output[0]) != 1
+            or g.n_successors(node.output[0]) != 1
+            or g.n_successors(node_add.output[0]) != 1
+            or g.n_successors(node_sqrt.output[0]) != 1
+        ):
+            # intermediate results are used
+            return None
+
+        def apply(
+            g: "GraphBuilder",  # noqa: F821
+            node_pow: NodeProto,
+            node_mean: NodeProto,
+            node_add: NodeProto,
+            node_sqrt: NodeProto,
+            node_reciprocal: NodeProto,
+            node_mul: NodeProto,
+        ) -> List[NodeProto]:
+            itype = g.get_type(node.input[0])
+            dtype = oh.tensor_dtype_to_np_dtype(itype)
+            axis = g.get_constant_or_attribute(node, "axes", input_index=1)
+            epsilon = g.get_constant(node_add.input[1])
+            scale = g.make_initializer("", np.array([1], dtype=dtype))
+            bias = g.make_initializer("", np.array([0], dtype=dtype))
+            new_node = g.make_node(
+                "LayerNormalization",
+                [node_pow.input[0], scale, bias],
+                [node_mul.output[0], "", node_reciprocal],
+                axis=axis,
+                epsilon=epsilon,
+            )
             return [new_node]
 
-        return MatchResult(self, [node], apply)
+        nodes = [node_pow, node, node_add, node_sqrt, node_reciprocal, node_mul]
+        return MatchResult(self, nodes, apply)
 
 
 class ReshapeMatMulReshapePattern(PatternOptimization):
