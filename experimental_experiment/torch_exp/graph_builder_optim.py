@@ -20,11 +20,13 @@ class GraphBuilderPatternOptimization:
         self,
         builder: "GraphBuilder",  # noqa: F821
         patterns: Optional[List[PatternOptimization]] = None,
+        recursive: bool = False,
         verbose: int = 0,
     ):
         self.builder = builder
         self.patterns = patterns or get_default_patterns()
         self.verbose = verbose
+        self.recursive = recursive
         self._build()
 
     def iter_nodes(self) -> Iterator:
@@ -279,6 +281,9 @@ class GraphBuilderPatternOptimization:
 
         :param max_iter: maximum number of iterations
         """
+        assert (
+            not self.recursive
+        ), "GraphBuilderPatternOptimization.optimize does not implement recursivity"
         if max_iter == -1:
             max_iter = len(self.builder.nodes)
         if self.verbose > 0:
@@ -333,13 +338,13 @@ class GraphBuilderPatternOptimization:
                 rem = len(match.nodes)
                 if self.verbose > 2:
                     print(
-                        f"[GraphBuilderPatternOptimization.optimize] done {match}, - {rem} + {add} nodes"
+                        f"[GraphBuilderPatternOptimization.optimize] done {match}: -{rem} +{add} nodes"
                     )
                 n_added += add
-                n_removed -= rem
+                n_removed += rem
             if self.verbose > 1:
                 print(
-                    f"[GraphBuilderPatternOptimization.optimize] done all - {n_removed} + {n_added} nodes"
+                    f"[GraphBuilderPatternOptimization.optimize] done all: -{n_removed} +{n_added} nodes"
                 )
 
             # remove unncessary identity nodes

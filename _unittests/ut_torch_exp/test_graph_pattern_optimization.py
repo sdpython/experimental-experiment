@@ -1,7 +1,10 @@
 import os
 import unittest
+import numpy as np
 import onnx
-from onnx import TensorProto
+from onnx import TensorProto, helper as oh, numpy_helper as onh
+from onnx.checker import check_model
+from onnx_array_api.reference import ExtendedReferenceEvaluator
 from experimental_experiment.ext_test_case import ExtTestCase
 from experimental_experiment.torch_exp.graph_builder import (
     GraphBuilder,
@@ -44,9 +47,11 @@ class TestGraphPatternOptimization(ExtTestCase):
         before = [node for node in origin.graph.node if node.op_type == "Unsqueeze"]
         gr = GraphBuilder(
             origin,
-            optimization_options=OptimizationOptions(patterns=["UnsqueezeUnsqueeze"]),
+            optimization_options=OptimizationOptions(
+                patterns=["UnsqueezeUnsqueeze"], verbose=10
+            ),
         )
-        res, out, err = self.capture(lambda: gr.optimize_with_patterns(verbose=10))
+        res, out, err = self.capture(lambda: gr.optimize_with_patterns())
         self.assertEmpty(err)
         self.assertEmpty(res)
         self.assertIn("[GraphBuilderPatternOptimization.optimize] done after", out)
@@ -60,9 +65,10 @@ class TestGraphPatternOptimization(ExtTestCase):
         origin = self._get_model("dort-c-custom__0.onnx")
         before = [node for node in origin.graph.node if node.op_type == "Cast"]
         gr = GraphBuilder(
-            origin, optimization_options=OptimizationOptions(patterns=["Cast"])
+            origin,
+            optimization_options=OptimizationOptions(patterns=["Cast"], verbose=10),
         )
-        res, out, err = self.capture(lambda: gr.optimize_with_patterns(verbose=10))
+        res, out, err = self.capture(lambda: gr.optimize_with_patterns())
         self.assertEmpty(err)
         self.assertEmpty(res)
         self.assertIn("[GraphBuilderPatternOptimization.optimize] done after", out)
@@ -79,10 +85,12 @@ class TestGraphPatternOptimization(ExtTestCase):
         before = [node for node in origin.graph.node if node.op_type == "Reshape"]
         gr = GraphBuilder(
             origin,
-            optimization_options=OptimizationOptions(patterns=["ReshapeMatMulReshape"]),
+            optimization_options=OptimizationOptions(
+                patterns=["ReshapeMatMulReshape"], verbose=10
+            ),
             infer_shapes=True,
         )
-        res, out, err = self.capture(lambda: gr.optimize_with_patterns(verbose=10))
+        res, out, err = self.capture(lambda: gr.optimize_with_patterns())
         self.assertEmpty(err)
         self.assertEmpty(res)
         self.assertIn("[GraphBuilderPatternOptimization.optimize] done after", out)
@@ -92,6 +100,66 @@ class TestGraphPatternOptimization(ExtTestCase):
         after = [node for node in onx.graph.node if node.op_type == "Reshape"]
         self.assertEqual(len(before), 24)
         self.assertEqual(len(after), 18)
+
+    def _range(self, *shape):
+        n = np.prod(shape)
+        x = np.arange(n).astype(np.float32) / n
+        return x.reshape(tuple(shape)).astype(np.float32)
+
+    def test_execution(self):
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("Unsqueeze", ["X", "zero"], ["xu1"]),
+                    oh.make_node("Unsqueeze", ["xu1", "un"], ["xu2"]),
+                    oh.make_node("Reshape", ["xu2", "shape1"], ["xm1"]),
+                    oh.make_node("Reshape", ["Y", "shape2"], ["xm2c"]),
+                    oh.make_node("Cast", ["xm2c"], ["xm2"], to=1),
+                    oh.make_node("MatMul", ["xm1", "xm2"], ["xm"]),
+                    oh.make_node("Reshape", ["xm", "shape3"], ["Z"]),
+                ],
+                "dummy",
+                [
+                    oh.make_tensor_value_info("X", TensorProto.FLOAT, [32, 128]),
+                    oh.make_tensor_value_info("Y", TensorProto.FLOAT, [3, 5, 128, 64]),
+                ],
+                [oh.make_tensor_value_info("Z", TensorProto.FLOAT, [3, 5, 32, 64])],
+                [
+                    onh.from_array(np.array([0], dtype=np.int64), name="zero"),
+                    onh.from_array(np.array([1], dtype=np.int64), name="un"),
+                    onh.from_array(
+                        np.array([1, 32, 128], dtype=np.int64), name="shape1"
+                    ),
+                    onh.from_array(
+                        np.array([15, 128, 64], dtype=np.int64), name="shape2"
+                    ),
+                    onh.from_array(
+                        np.array([3, 5, 32, 64], dtype=np.int64), name="shape3"
+                    ),
+                ],
+            )
+        )
+        check_model(model)
+        feeds = {"X": self._range(32, 128), "Y": self._range(3, 5, 128, 64)}
+        ref = ExtendedReferenceEvaluator(model)
+        expected = ref.run(None, feeds)[0]
+
+        gr, _, __ = self.capture(
+            lambda: GraphBuilder(model, infer_shapes=True, verbose=10)
+        )
+        s = str(gr.optimization_options)
+        self.assertIn("OptimizationOptions(", s)
+        self.assertIn("CastPattern", s)
+        opt_onx, out, _ = self.capture(lambda: gr.to_onnx(optimize=True))
+        self.assertIn("remove_initializer:shape1", out)
+        self.assertEqual(
+            ["Unsqueeze", "MatMul"], [n.op_type for n in opt_onx.graph.node]
+        )
+        self.assertEqual(1, len(opt_onx.graph.initializer))
+
+        opt_ref = ExtendedReferenceEvaluator(opt_onx)
+        got = opt_ref.run(None, feeds)[0]
+        self.assertEqualArray(expected, got)
 
 
 if __name__ == "__main__":

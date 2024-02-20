@@ -120,6 +120,8 @@ class ReshapeMatMulReshapePattern(PatternOptimization):
             return None
 
         next_nodes = g.next_nodes(node.output[0])
+        if len(next_nodes) == 0:
+            return None
         next_node = next_nodes[0]
         if next_node.op_type != "Reshape" or node.domain != "":
             return None
@@ -135,21 +137,24 @@ class ReshapeMatMulReshapePattern(PatternOptimization):
             return None
 
         # condition on shapes
-        shape_left = g.get_constant(node_before_left.input[1])
-        shape_right = g.get_constant(node_before_right.input[1])
-        shape_final = g.get_constant(next_node.input[1])
+        shape_left = tuple(g.get_constant(node_before_left.input[1]))
+        shape_right = tuple(g.get_constant(node_before_right.input[1]))
+        shape_final = tuple(g.get_constant(next_node.input[1]))
         if len(shape_final) < 4:
             return None
         ndim = len(shape_final)
-        if len(shape_left) != ndim - 1 or len(shape_right) != ndim - 1:
+        if len(shape_left) != 3 or len(shape_right) != 3:
             return None
 
-        rank_left = g.get_rank(node_before_left.input[0])
-        rank_right = g.get_rank(node_before_right.input[0])
-        if rank_left != ndim or rank_right != ndim:
+        mshape_left = g.get_shape(node_before_left.input[0])
+        mshape_right = g.get_shape(node_before_right.input[0])
+        if len(mshape_left) != ndim or len(mshape_right) != ndim:
+            return None
+        if mshape_left[-2:] != shape_left[-2:] or mshape_right[-2:] != shape_right[-2:]:
             return None
 
         # At this stage, both Reshape before MatMul reduces the rank by 1
+        # without changing the two last dimensions
         # and the Reshape after restores it. They can safely be removed.
 
         def apply(
@@ -161,7 +166,7 @@ class ReshapeMatMulReshapePattern(PatternOptimization):
         ) -> List[NodeProto]:
             new_node = g.make_node(
                 "MatMul",
-                [node_before_left.input[0], node_before_left.input[1]],
+                [node_before_left.input[0], node_before_right.input[0]],
                 next_node.output,
                 name=self.__class__.__name__,
             )
