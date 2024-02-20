@@ -1552,7 +1552,7 @@ class GraphBuilder:
             for k, v in self.initializers_dict.items():
                 if k not in marked:
                     v = self.initializers_dict[k]
-                    if hasattr(v, "dtype") and hasattr("shape"):
+                    if hasattr(v, "dtype") and hasattr(v, "shape"):
                         print(
                             f"[GraphBuilder.remove_unused] remove_initializer:{k}:{v.dtype}[{v.shape}]"
                         )
