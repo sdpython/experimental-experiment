@@ -1,4 +1,4 @@
-from typing import Callable, Iterator, List, Optional
+from typing import Callable, Iterator, List, Optional, Union
 import numpy as np
 from onnx import NodeProto
 
@@ -61,6 +61,41 @@ class PatternOptimization:
         )
 
 
+class CastPattern(PatternOptimization):
+    """
+    Checks that a Cast is really needeD.
+    """
+
+    def __init__(self):
+        PatternOptimization.__init__(self)
+
+    def match(
+        self,
+        g: "GraphBuilderPatternOptimization",  # noqa: F821
+        node: NodeProto,
+        matched: List[MatchResult],
+    ) -> Optional[MatchResult]:
+        if node.op_type != "Cast":
+            return None
+        if not g.has_type(node.input[0]):
+            itype = g.try_infer_type(node.input[0])
+            if itype == 0:
+                return None
+        else:
+            itype = g.get_type(node.input[0])
+        att = g.get_attribute(node, "to")
+        if att.i != itype:
+            return None
+
+        def apply(g: "GraphBuilder", node: NodeProto) -> List[NodeProto]:  # noqa: F821
+            new_node = g.make_node(
+                "Identity", node.input, node.output, name=self.__class__.__name__
+            )
+            return [new_node]
+
+        return MatchResult(self, [node], apply)
+
+
 class UnsqueezeUnsqueezePattern(PatternOptimization):
     """
     Replaces the sequence Unsqueeze, Unsqueeze by Unsqueeze.
@@ -116,3 +151,16 @@ def get_default_patterns() -> List[PatternOptimization]:
         pprint.pprint(get_default_patterns())
     """
     return [UnsqueezeUnsqueezePattern()]
+
+
+def get_pattern(obj: Union[PatternOptimization, str]) -> PatternOptimization:
+    """
+    Returns an optimization pattern based on its name.
+    """
+    if isinstance(obj, PatternOptimization):
+        return obj
+    if obj == "UnsqueezeUnsqueeze":
+        return UnsqueezeUnsqueezePattern()
+    if obj == "Cast":
+        return CastPattern()
+    raise RuntimeError(f"Unable to find pattern for {obj!r}.")
