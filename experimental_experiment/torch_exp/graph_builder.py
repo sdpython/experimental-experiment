@@ -262,6 +262,8 @@ class GraphBuilder:
     - `_known_types: Dict[str, int]`: declared element types
     - `_known_ranks: Dict[str, int]`: declared ranks
     - `constants_: Dict[str, Any]`: constant values
+    - `dynamic_objects: Dict[str, torch.SymInt]`: list of dynamic dimension
+    - `dynamic_objects_rev: Dict[str, str]`: reverse dictionary to fasten lookups
     """
 
     def _hash(self) -> str:
@@ -342,6 +344,7 @@ class GraphBuilder:
         args: Optional[List[Any]] = None,
         ir_version: Optional[int] = None,
         verbose: int = 0,
+        infer_shapes: bool = False,
     ):
         import torch
 
@@ -357,6 +360,9 @@ class GraphBuilder:
 
         if isinstance(target_opset_or_existing_proto, (int, dict)):
             # starts a model from nothing
+            assert (
+                not infer_shapes
+            ), "infer_shapes is used if an existing model is loaded"
             self.opsets = (
                 {"": target_opset_or_existing_proto}
                 if isinstance(target_opset_or_existing_proto, int)
@@ -418,6 +424,10 @@ class GraphBuilder:
                         d.dim_param if d.dim_param else d.dim_value
                         for d in i.type.tensor_type.shape.dim
                     )
+                    for sh in shape:
+                        if isinstance(sh, int):
+                            continue
+                        self.make_dynamic_object(sh, self.torch.SymInt(sh))
                     self.set_shape(i.name, shape)
             for node in self.nodes:
                 self._unique_names |= set(node.output)
@@ -431,7 +441,8 @@ class GraphBuilder:
                 else:
                     for o in node.output:
                         self.set_name(o)
-
+            if infer_shapes:
+                self._update_shape_types_with_proto(target_opset_or_existing_proto)
         else:
             raise NotImplementedError(
                 f"{type(target_opset_or_existing_proto)} is not supported."
@@ -1748,3 +1759,9 @@ class GraphBuilder:
             assert isinstance(n, NodeProto), f"Unexpected type {type(n)} for a node"
             self.nodes.insert(insert_at + i, n)
         return memo
+
+    def _update_shape_types_with_proto(self, proto: ModelProto):
+        """
+        Updates the shapes and types for an existing model.
+        """
+        assert isinstance(proto, ModelProto), f"Unexpected type {type(proto)} for proto"

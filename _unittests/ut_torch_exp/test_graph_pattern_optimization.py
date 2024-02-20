@@ -32,6 +32,13 @@ class TestGraphPatternOptimization(ExtTestCase):
         dtype = gro.try_infer_type("_onx_mul028", exc=True)
         self.assertEqual(dtype, TensorProto.FLOAT)
 
+    def test_shape_inference0(self):
+        origin = self._get_model("dort-c-custom__0.onnx")
+        gr = GraphBuilder(origin, infer_shapes=True)
+        gro = GraphBuilderPatternOptimization(gr)
+        shape = gro.try_infer_shape("_onx_tile0", exc=True)
+        self.assertEqual(shape, (7, 7))
+
     def test_unsqueeze_unsqueeze(self):
         origin = self._get_model("dort-c-custom__0.onnx")
         before = [node for node in origin.graph.node if node.op_type == "Unsqueeze"]
