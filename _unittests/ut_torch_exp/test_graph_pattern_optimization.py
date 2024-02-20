@@ -37,7 +37,7 @@ class TestGraphPatternOptimization(ExtTestCase):
         gr = GraphBuilder(origin, infer_shapes=True)
         gro = GraphBuilderPatternOptimization(gr)
         shape = gro.try_infer_shape("_onx_tile0", exc=True)
-        self.assertEqual(shape, (7, 7))
+        self.assertEqual(shape, (2, 1, 1024, 1024))
 
     def test_unsqueeze_unsqueeze(self):
         origin = self._get_model("dort-c-custom__0.onnx")

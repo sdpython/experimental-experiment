@@ -4,6 +4,7 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 import numpy as np
 import onnx.helper as oh
 import onnx.numpy_helper as onh
+from onnx.shape_inference import infer_shapes
 from onnx import AttributeProto, FunctionProto, ModelProto, NodeProto, TensorProto
 from onnx_array_api.reference import ExtendedReferenceEvaluator
 from .annotations import (
@@ -1765,3 +1766,16 @@ class GraphBuilder:
         Updates the shapes and types for an existing model.
         """
         assert isinstance(proto, ModelProto), f"Unexpected type {type(proto)} for proto"
+        new_proto = infer_shapes(proto)
+        for val in new_proto.graph.value_info:
+            itype = val.type.tensor_type.elem_type
+            self.set_type(val.name, itype)
+            shape = tuple(
+                d.dim_param if d.dim_param else d.dim_value
+                for d in val.type.tensor_type.shape.dim
+            )
+            for sh in shape:
+                if isinstance(sh, int):
+                    continue
+                self.make_dynamic_object(sh, self.torch.SymInt(sh))
+            self.set_shape(val.name, shape)

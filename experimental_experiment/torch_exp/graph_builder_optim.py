@@ -134,6 +134,18 @@ class GraphBuilderPatternOptimization:
         """
         return self.builder.get_type(name)
 
+    def has_shape(self, name: str) -> bool:
+        """
+        Tells of a result has a shape.
+        """
+        return self.builder.has_shape(name)
+
+    def get_shape(self, name: str) -> int:
+        """
+        Returns the shape of a result.
+        """
+        return self.builder.get_shape(name)
+
     def node_before(self, name: str) -> NodeProto:
         """
         Returns the node producing this output.
@@ -179,6 +191,23 @@ class GraphBuilderPatternOptimization:
                 f"knowns types are {pprint.pformat(self.builder._known_types)}"
             )
         return 0
+
+    def try_infer_shape(self, name: str, exc: bool = False) -> int:
+        """
+        Tries to infer the type of a result.
+
+        :param name: name of the result for which to infer the type
+        :param exc: if True, raises an exception if something goes wrong
+        :return: type
+        """
+        if self.has_shape(name):
+            return self.get_shape(name)
+        if exc:
+            raise RuntimeError(
+                f"Unable to guess shape for {name!r}, "
+                f"knowns shapes are {pprint.pformat(self.builder._known_shapes)}"
+            )
+        return None
 
     def next_nodes(self, name: str) -> List[NodeProto]:
         """
