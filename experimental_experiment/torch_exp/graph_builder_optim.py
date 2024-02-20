@@ -1,3 +1,4 @@
+import pprint
 from typing import Any, Iterator, List, Optional, Union
 from onnx import AttributeProto, NodeProto
 import onnx.helper as oh
@@ -7,6 +8,7 @@ from .optimization_patterns import (
     PatternOptimization,
     get_default_patterns,
 )
+from .type_inference import infer_types
 
 
 class GraphBuilderPatternOptimization:
@@ -84,6 +86,17 @@ class GraphBuilderPatternOptimization:
         """
         return self.builder.get_constant(name)
 
+    def get_attribute(self, node: NodeProto, att_name: str) -> AttributeProto:
+        """
+        Returns an attribute for a node.
+        """
+        for att in node.attribute:
+            if att.name == att_name:
+                return att
+        raise RuntimeError(
+            f"Unable to find attribute {att_name!r} for node type {node.op_type!r} in node {node}"
+        )
+
     def get_constant_or_attribute(
         self, node: NodeProto, attribute: str, input_index: int
     ) -> Any:
@@ -108,6 +121,93 @@ class GraphBuilderPatternOptimization:
             node.input
         ), f"Input {input_index} does not exist in node {node}."
         return self.get_constant(node.input[input_index])
+
+    def has_type(self, name: str) -> bool:
+        """
+        Tells of a result has a type.
+        """
+        return self.builder.has_type(name)
+
+    def get_type(self, name: str) -> int:
+        """
+        Returns the type of a result.
+        """
+        return self.builder.get_type(name)
+
+    def has_shape(self, name: str) -> bool:
+        """
+        Tells of a result has a shape.
+        """
+        return self.builder.has_shape(name)
+
+    def get_shape(self, name: str) -> int:
+        """
+        Returns the shape of a result.
+        """
+        return self.builder.get_shape(name)
+
+    def node_before(self, name: str) -> NodeProto:
+        """
+        Returns the node producing this output.
+        """
+        predecessor = self.predecessors_[name]
+        return self.nodes_[predecessor]
+
+    def try_infer_type(self, name: str, exc: bool = False) -> int:
+        """
+        Tries to infer the type of a result.
+
+        :param name: name of the result for which to infer the type
+        :param exc: if True, raises an exception if something goes wrong
+        :return: type
+        """
+        if self.has_type(name):
+            it = self.get_type(name)
+            if exc and it == 0:
+                raise RuntimeError(
+                    f"Unable to guess type for {name!r}, "
+                    f"knowns types are {pprint.pformat(self.builder._known_types)}"
+                )
+            return it
+
+        node = self.node_before(name)
+        input_types = [
+            (self.get_type(i) if self.has_type(i) else 0) for i in node.input
+        ]
+        output_type = infer_types(node, input_types, name)
+        if output_type > 0:
+            return output_type
+
+        # second try with more depth
+        input_types = [self.try_infer_type(i, exc=exc) for i in node.input]
+        output_type = infer_types(node, input_types, name)
+        if output_type > 0:
+            return output_type
+
+        # no luck
+        if exc:
+            raise RuntimeError(
+                f"Unable to guess type for {name!r}, "
+                f"knowns types are {pprint.pformat(self.builder._known_types)}"
+            )
+        return 0
+
+    def try_infer_shape(self, name: str, exc: bool = False) -> int:
+        """
+        Tries to infer the type of a result.
+
+        :param name: name of the result for which to infer the type
+        :param exc: if True, raises an exception if something goes wrong
+        :return: type
+        """
+        if self.has_shape(name):
+            return self.get_shape(name)
+        if exc:
+            raise RuntimeError(
+                f"Unable to guess shape for {name!r}, "
+                f"knowns shapes are {pprint.pformat(self.builder._known_shapes)}"
+            )
+        return None
 
     def next_nodes(self, name: str) -> List[NodeProto]:
         """
@@ -187,6 +287,9 @@ class GraphBuilderPatternOptimization:
                     f"[GraphBuilderPatternOptimization.optimize] iteration {it}: "
                     f"{len(self.builder.nodes)} nodes"
                 )
+
+            # detects patterns
+
             found = False
             marked = set()
             matches = []
@@ -213,6 +316,8 @@ class GraphBuilderPatternOptimization:
                     f"[GraphBuilderPatternOptimization.optimize] applies {len(matches)} matches"
                 )
 
+            # applies patterns (they must be disjoined)
+
             n_added = 0
             n_removed = 0
             for match in matches:
@@ -230,7 +335,16 @@ class GraphBuilderPatternOptimization:
                 print(
                     f"[GraphBuilderPatternOptimization.optimize] done all - {n_removed} + {n_added} nodes"
                 )
+
+            # remove unncessary identity nodes
+
+            self.builder.remove_identity_nodes()
+
+            # rebuild the graph structure
+
             self._build()
+
+            # next iteration
 
             last_it = it + 1
             if not found:

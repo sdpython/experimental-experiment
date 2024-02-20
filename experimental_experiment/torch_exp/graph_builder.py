@@ -4,6 +4,7 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 import numpy as np
 import onnx.helper as oh
 import onnx.numpy_helper as onh
+from onnx.shape_inference import infer_shapes
 from onnx import AttributeProto, FunctionProto, ModelProto, NodeProto, TensorProto
 from onnx_array_api.reference import ExtendedReferenceEvaluator
 from .annotations import (
@@ -16,7 +17,7 @@ from .annotations import (
 from ._aten_helper import dtype_to_tensor_dtype, _nice_shape
 from ._helper import make_hash
 from .graph_builder_optim import PatternOptimization, GraphBuilderPatternOptimization
-from .optimization_patterns import get_default_patterns
+from .optimization_patterns import get_default_patterns, get_pattern
 
 
 def _default_OPSET_TO_IR_VERSION():
@@ -82,7 +83,9 @@ class OptimizationOptions:
             assert patterns is None or isinstance(
                 patterns, list
             ), f"Unexpected type {type(patterns)} for patterns"
-            self.patterns = patterns
+            self.patterns = (
+                None if patterns is None else [get_pattern(p) for p in patterns]
+            )
         self.max_iter = -1
         self.verbose = verbose
 
@@ -260,6 +263,8 @@ class GraphBuilder:
     - `_known_types: Dict[str, int]`: declared element types
     - `_known_ranks: Dict[str, int]`: declared ranks
     - `constants_: Dict[str, Any]`: constant values
+    - `dynamic_objects: Dict[str, torch.SymInt]`: list of dynamic dimension
+    - `dynamic_objects_rev: Dict[str, str]`: reverse dictionary to fasten lookups
     """
 
     def _hash(self) -> str:
@@ -340,6 +345,7 @@ class GraphBuilder:
         args: Optional[List[Any]] = None,
         ir_version: Optional[int] = None,
         verbose: int = 0,
+        infer_shapes: bool = False,
     ):
         import torch
 
@@ -354,6 +360,10 @@ class GraphBuilder:
         self.dynamic_objects_rev = {}
 
         if isinstance(target_opset_or_existing_proto, (int, dict)):
+            # starts a model from nothing
+            assert (
+                not infer_shapes
+            ), "infer_shapes is used if an existing model is loaded"
             self.opsets = (
                 {"": target_opset_or_existing_proto}
                 if isinstance(target_opset_or_existing_proto, int)
@@ -372,7 +382,9 @@ class GraphBuilder:
             self._known_ranks = {}
             self.constants_ = {}
             self._known_names = self._unique_names.copy()
+
         elif isinstance(target_opset_or_existing_proto, ModelProto):
+            # loads a model from nothing
             if input_names:
                 raise ValueError(
                     "input_names must be empty if the input is an existing model."
@@ -396,8 +408,8 @@ class GraphBuilder:
             self._known_ranks = {}
             self.constants_ = {}
             self._unique_node_names = set()
-            self._unique_names = set(self.input_names)
-            self._known_names = self._unique_names.copy()
+            self._unique_names = set()
+            self._known_names = set()
 
             for k, v in self.initializers_dict.items():
                 self.constants_[k] = None
@@ -405,6 +417,19 @@ class GraphBuilder:
                 self.set_name(k)
                 self.set_shape(k, self._get_tensor_shape(v))
                 self.set_type(k, self._get_tensor_type(v))
+            for i in self.inputs:
+                self.set_name(i.name)
+                self.set_type(i.name, i.type.tensor_type.elem_type)
+                if i.type.tensor_type.shape.dim:
+                    shape = tuple(
+                        d.dim_param if d.dim_param else d.dim_value
+                        for d in i.type.tensor_type.shape.dim
+                    )
+                    for sh in shape:
+                        if isinstance(sh, int):
+                            continue
+                        self.make_dynamic_object(sh, self.torch.SymInt(sh))
+                    self.set_shape(i.name, shape)
             for node in self.nodes:
                 self._unique_names |= set(node.output)
                 if node.name:
@@ -417,7 +442,8 @@ class GraphBuilder:
                 else:
                     for o in node.output:
                         self.set_name(o)
-
+            if infer_shapes:
+                self._update_shape_types_with_proto(target_opset_or_existing_proto)
         else:
             raise NotImplementedError(
                 f"{type(target_opset_or_existing_proto)} is not supported."
@@ -1488,12 +1514,15 @@ class GraphBuilder:
         Optimizes this graph with patterns.
 
         :param max_iter:  maximum number of iterations to apply
-        :param patterns: list of pattern to apply, None for all of them
+        :param patterns: list of pattern to apply, None for all of them,
+            None to select the patterns defined in `self.optimization_options`
         :param recursive: applies the pattern in subgraphs
         :param verbose: verbosity
         """
         assert not recursive, "Recursivity not implemented for optimize_with_patterns"
-        gro = GraphBuilderPatternOptimization(self, verbose=verbose)
+        if patterns is None:
+            patterns = self.optimization_options.patterns
+        gro = GraphBuilderPatternOptimization(self, verbose=verbose, patterns=patterns)
         gro.optimize(max_iter=max_iter)
 
     def remove_unused(self):
@@ -1731,3 +1760,22 @@ class GraphBuilder:
             assert isinstance(n, NodeProto), f"Unexpected type {type(n)} for a node"
             self.nodes.insert(insert_at + i, n)
         return memo
+
+    def _update_shape_types_with_proto(self, proto: ModelProto):
+        """
+        Updates the shapes and types for an existing model.
+        """
+        assert isinstance(proto, ModelProto), f"Unexpected type {type(proto)} for proto"
+        new_proto = infer_shapes(proto)
+        for val in new_proto.graph.value_info:
+            itype = val.type.tensor_type.elem_type
+            self.set_type(val.name, itype)
+            shape = tuple(
+                d.dim_param if d.dim_param else d.dim_value
+                for d in val.type.tensor_type.shape.dim
+            )
+            for sh in shape:
+                if isinstance(sh, int):
+                    continue
+                self.make_dynamic_object(sh, self.torch.SymInt(sh))
+            self.set_shape(val.name, shape)
