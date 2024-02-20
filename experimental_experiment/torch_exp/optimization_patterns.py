@@ -63,11 +63,8 @@ class PatternOptimization:
 
 class CastPattern(PatternOptimization):
     """
-    Checks that a Cast is really needeD.
+    Checks that a Cast is really needed.
     """
-
-    def __init__(self):
-        PatternOptimization.__init__(self)
 
     def match(
         self,
@@ -91,6 +88,26 @@ class CastPattern(PatternOptimization):
             new_node = g.make_node(
                 "Identity", node.input, node.output, name=self.__class__.__name__
             )
+            return [new_node]
+
+        return MatchResult(self, [node], apply)
+
+
+class LayerNormalizationPattern(PatternOptimization):
+    """
+    Replaces the sequence Pow(., 2) + ReduceMean + Add + Sqrt + Reciprocal + Mul by LayerNormalization
+    """
+
+    def match(
+        self,
+        g: "GraphBuilderPatternOptimization",  # noqa: F821
+        node: NodeProto,
+        matched: List[MatchResult],
+    ) -> Optional[MatchResult]:
+        if node.op_type != "ReduceMean" or node.domain != "":
+            return None
+
+        def apply(g: "GraphBuilder", node: NodeProto) -> List[NodeProto]:  # noqa: F821
             return [new_node]
 
         return MatchResult(self, [node], apply)
@@ -231,7 +248,12 @@ def get_default_patterns() -> List[PatternOptimization]:
         from experimental_experiment.torch_exp.optimization_patterns import get_default_patterns
         pprint.pprint(get_default_patterns())
     """
-    return [CastPattern(), ReshapeMatMulReshapePattern(), UnsqueezeUnsqueezePattern()]
+    return [
+        CastPattern(),
+        LayerNormalizationPattern(),
+        ReshapeMatMulReshapePattern(),
+        UnsqueezeUnsqueezePattern(),
+    ]
 
 
 def get_pattern(obj: Union[PatternOptimization, str]) -> PatternOptimization:
