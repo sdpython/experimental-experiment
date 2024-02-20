@@ -10,14 +10,20 @@ class MatchResult:
     :param pattern: object detecting the pattern
     :param nodes: nodes to be replaced
     :param apply: node computing the replacements
+    :param insert_at: insert the new nodes at this point if specified
     """
 
     def __init__(
-        self, pattern: "PatternOptimization", nodes: List[NodeProto], apply: Callable
+        self,
+        pattern: "PatternOptimization",
+        nodes: List[NodeProto],
+        apply: Callable,
+        insert_at: Optional[NodeProto] = None,
     ):
         self.pattern = pattern
         self.nodes = nodes
         self.apply = apply
+        self.insert_at = insert_at
 
     def __str__(self) -> str:
         types = [n.op_type for n in self.nodes]
@@ -112,11 +118,7 @@ class ReshapeMatMulReshapePattern(PatternOptimization):
     ) -> Optional[MatchResult]:
         if node.op_type != "MatMul" or node.domain != "":
             return None
-        if g.is_used_by_subgraph(node.output[0]):
-            return None
-        if g.is_used_by_subgraph(node.input[0]):
-            return None
-        if g.is_used_by_subgraph(node.input[1]):
+        if g.is_used_more_than_once(node.output[0]):
             return None
 
         next_nodes = g.next_nodes(node.output[0])
@@ -170,10 +172,18 @@ class ReshapeMatMulReshapePattern(PatternOptimization):
                 next_node.output,
                 name=self.__class__.__name__,
             )
-            return [new_node]
+            res = [new_node]
+            if g.is_used_more_than_once(node_before_left.output[0]):
+                res.append(node_before_left)
+            if g.is_used_more_than_once(node_before_right.output[0]):
+                res.append(node_before_right)
+            return res
 
         return MatchResult(
-            self, [node_before_left, node_before_right, node, next_node], apply
+            self,
+            [node_before_left, node_before_right, node, next_node],
+            apply,
+            insert_at=node,
         )
 
 
@@ -193,7 +203,7 @@ class UnsqueezeUnsqueezePattern(PatternOptimization):
     ) -> Optional[MatchResult]:
         if node.op_type != "Unsqueeze" or node.domain != "":
             return None
-        if g.is_used_by_subgraph(node.output[0]):
+        if g.is_used_more_than_once(node.output[0]):
             return None
         next_nodes = g.next_nodes(node.output[0])
         if len(next_nodes) != 1:

@@ -898,10 +898,17 @@ class GraphBuilder:
             print(
                 f"[GraphBuilder-{self._hash()}.make_tensor_input] {name}[{elem_type}:{shape}]"
             )
+        assert (
+            self.as_function or elem_type
+        ), f"elem_type={elem_type!r} must be specified for input {name!r}"
         if shape:
             self.set_shape(name, dyn_shape)
+            if input_name != name:
+                self.set_shape(input_name, dyn_shape)
         if elem_type:
             self.set_type(name, elem_type)
+            if input_name != name:
+                self.set_type(input_name, elem_type)
         return name
 
     def make_tensor_output(
@@ -1488,6 +1495,16 @@ class GraphBuilder:
             assert (
                 len(self.nodes) > 0
             ), f"The onnx model is empty (step {step}, no node).\n{self.get_debug_msg()}"
+            known = set(n.name for n in self.inputs)
+            known |= set(self.initializers_dict)
+            for node in self.nodes:
+                for i in node.input:
+                    assert (
+                        i in known
+                    ), f"Unknown input {i!r}, step {step!r}  in node {node}"
+                known |= set(node.output)
+            for o in self.outputs:
+                assert o.name in known, f"Unknown output {o.name!r}, step {step!r} "
 
         _check("A")
         self.remove_identity_nodes()
@@ -1548,7 +1565,7 @@ class GraphBuilder:
             if not (set(node.output) & marked_set):
                 removed.add(ind)
 
-        if self.verbose:
+        if self.optimization_options.verbose > 1:
             for k, v in self.initializers_dict.items():
                 if k not in marked:
                     v = self.initializers_dict[k]
@@ -1558,10 +1575,19 @@ class GraphBuilder:
                         )
                     else:
                         print(f"[GraphBuilder.remove_unused] remove_initializer:{k}]")
+
         self.initializers_dict = {
             k: v for k, v in self.initializers_dict.items() if k in marked
         }
         self.constants_ = {k: v for k, v in self.constants_.items() if k in marked}
+
+        if self.optimization_options.verbose > 2:
+            for i in removed:
+                node = self.nodes[i]
+                print(
+                    f"[GraphBuilder.remove_unused_node] remove {node.op_type}-{node.name} -> {node.output}"
+                )
+
         self.nodes = [node for i, node in enumerate(self.nodes) if i not in removed]
 
     def _apply_transpose(
@@ -1693,6 +1719,10 @@ class GraphBuilder:
         # second pass: replacements in initializer
         for k, v in replacements.items():
             if k in self.initializers_dict:
+                if self.optimization_options.verbose > 2:
+                    print(
+                        f"[GraphBuilder.remove_identity_nodes] rename initializer {k!r} by {v!r}"
+                    )
                 self.initializers_dict[v] = self.initializers_dict[k]
                 del self.initializers_dict[k]
                 assert self.constants_[v]
@@ -1707,6 +1737,16 @@ class GraphBuilder:
             if repi or repo:
                 new_inputs = [replacements.get(i, i) for i in node.input]
                 new_outputs = [replacements.get(i, i) for i in node.output]
+                assert not (set(new_inputs) & set(new_outputs)), (
+                    f"Node type {node.op_type}-{node.name} is incorrectly replaced "
+                    f"{node.input}->{new_inputs} and {node.output}->{new_outputs}\n"
+                    f"replacements are\n{pprint.pformat(replacements)}"
+                )
+                if self.optimization_options.verbose > 2:
+                    print(
+                        f"[GraphBuilder.remove_identity_nodes] node {node.op_type}-{node.name}:"
+                        f"{node.input}->{new_inputs}:{node.output}->{new_outputs}"
+                    )
                 new_node = oh.make_node(
                     node.op_type,
                     new_inputs,
@@ -1730,8 +1770,8 @@ class GraphBuilder:
         :param removed: list of nodes to removed (based on their positions)
         :return: list of removed nodes
         """
-        assert not removed or min(removed) >= insert_at, (
-            f"The position {insert_at} must be smaller than the position "
+        assert not removed or min(removed) <= insert_at, (
+            f"The position {insert_at} must be higher than the position "
             f"of the removed nodes {removed}"
         )
         memo = []

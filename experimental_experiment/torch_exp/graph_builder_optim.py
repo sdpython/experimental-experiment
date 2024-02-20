@@ -38,6 +38,7 @@ class GraphBuilderPatternOptimization:
         Builds successor and predecessor.
         """
         self.nodes_ = {}
+        self.outputs_ = {o.name for o in self.builder.outputs}
         for node in self.iter_nodes():
             self.nodes_[id(node)] = node
 
@@ -72,9 +73,27 @@ class GraphBuilderPatternOptimization:
 
     def is_used_by_subgraph(self, name: str) -> bool:
         """
-        Tells if a results is used by a subgraphs.
+        Tells if a result is used by a subgraphs.
         """
         return name in self.used_
+
+    def is_output(self, name: str) -> bool:
+        """
+        Tells if a result is an output.
+        """
+        return name in self.outputs_
+
+    def is_used_more_than_once(self, name: str) -> bool:
+        """
+        Tells if a result is used more than once in the current graph or in a subgraph
+        or if it is an output.
+        """
+        if self.is_used_by_subgraph(name):
+            return True
+        if self.is_output(name):
+            return True
+        suc = self.successors_[name]
+        return len(suc) > 1
 
     def is_constant(self, name: str) -> bool:
         """
@@ -158,6 +177,7 @@ class GraphBuilderPatternOptimization:
         """
         Returns the node producing this output.
         """
+        assert name in self.predecessors_, f"name {name!r} has no predecessor"
         predecessor = self.predecessors_[name]
         return self.nodes_[predecessor]
 
@@ -178,6 +198,13 @@ class GraphBuilderPatternOptimization:
                 )
             return it
 
+        assert (
+            name not in self.builder.initializers_dict
+        ), f"name {name!r} has no type but it is an initializer"
+        assert name not in self.builder.input_names, (
+            f"name {name!r} has no type but it is an input, "
+            f"known_types={pprint.pformat(self.builder._known_types)}"
+        )
         node = self.node_before(name)
         input_types = [
             (self.get_type(i) if self.has_type(i) else 0) for i in node.input
@@ -269,7 +296,10 @@ class GraphBuilderPatternOptimization:
         assert all(
             map(lambda i: i in positions, idn)
         ), f"One node in {idn} is not referenced"
-        insert_at = min(positions[i] for i in idn)
+        if match.insert_at is None:
+            insert_at = min(positions[i] for i in idn)
+        else:
+            insert_at = positions[id(match.insert_at)]
         new_nodes = match.apply(self, *match.nodes)
         removed = [positions[i] for i in idn]
         self.builder.insert_and_remove_nodes(insert_at, new_nodes, removed)
@@ -281,6 +311,22 @@ class GraphBuilderPatternOptimization:
 
         :param max_iter: maximum number of iterations
         """
+
+        def _check(step):
+            assert (
+                len(self.builder.nodes) > 0
+            ), f"The onnx model is empty (step {step}, no node)"
+            known = set(n.name for n in self.builder.inputs)
+            known |= set(self.builder.initializers_dict)
+            for node in self.builder.nodes:
+                for i in node.input:
+                    assert (
+                        i in known
+                    ), f"Unknown input {i!r}, step {step!r} in node {node}"
+                known |= set(node.output)
+            for o in self.builder.outputs:
+                assert o.name in known, f"Unknown output {o.name!r}, step {step!r}"
+
         assert (
             not self.recursive
         ), "GraphBuilderPatternOptimization.optimize does not implement recursivity"
@@ -334,12 +380,40 @@ class GraphBuilderPatternOptimization:
             for match in matches:
                 if self.verbose > 2:
                     print(f"[GraphBuilderPatternOptimization.optimize] apply {match}")
-                add = len(self.apply_match(match))
+
+                added_nodes = self.apply_match(match)
+                _check(str(match))
+                if self.verbose > 2:
+                    print(
+                        f"[GraphBuilderPatternOptimization.optimize] add "
+                        f"{[n.op_type for n in added_nodes]}"
+                    )
+                add = len(added_nodes)
+                added_outputs = set()
+                for n in added_nodes:
+                    added_outputs |= set(n.output)
+
                 rem = len(match.nodes)
+                removed_outputs = set()
+                for n in match.nodes:
+                    removed_outputs |= set(n.output)
+
+                full_removed = set(i for i in removed_outputs if i not in added_outputs)
+                for i in full_removed:
+                    assert not self.is_output(i), (
+                        f"Output {i!r} must not be removed, added_outputs={added_outputs},"
+                        f"removed_outputs={removed_outputs}"
+                    )
+
                 if self.verbose > 2:
                     print(
                         f"[GraphBuilderPatternOptimization.optimize] done {match}: -{rem} +{add} nodes"
                     )
+                    if self.verbose > 3:
+                        print(
+                            f"[GraphBuilderPatternOptimization.optimize] removed outputs {full_removed}"
+                        )
+
                 n_added += add
                 n_removed += rem
             if self.verbose > 1:
@@ -350,6 +424,7 @@ class GraphBuilderPatternOptimization:
             # remove unncessary identity nodes
 
             self.builder.remove_identity_nodes()
+            _check("remove_identity")
 
             # rebuild the graph structure
 
