@@ -45,7 +45,7 @@ class FuncModule(Module):
             params = ()
         super().__init__()
         self.f = f
-        self.ppp = Parameter(torch.Tensor([1]))
+        self.ppp = Parameter(torch.Tensor([1]).to(torch.float32))
         self.params = nn.ParameterList(list(params))
 
     def forward(self, *args):
@@ -59,7 +59,7 @@ class FuncModule0(Module):
     def __init__(self, f):
         super().__init__()
         self.f = f
-        self.ppp = Parameter(torch.Tensor([1]))
+        self.ppp = Parameter(torch.Tensor([1]).to(torch.float32))
 
     def forward(self, *args):
         if isinstance(args[0], tuple):
@@ -76,7 +76,7 @@ class FuncModule1(Module):
     def __init__(self, f):
         super().__init__()
         self.f = f
-        self.ppp = Parameter(torch.Tensor([1]))
+        self.ppp = Parameter(torch.Tensor([1]).to(torch.float32))
 
     def forward(self, *args):
         args = tuple([args[0], args[1] + self.ppp, *args[2:]])
@@ -695,6 +695,7 @@ class TestOperators(ExtTestCase):
             lambda x: torch.full_like(x, 2),
             x,
             onnx_export=inspect.currentframe().f_code.co_name,
+            test_backward=False,
         )
 
     def test_max(self):
@@ -851,10 +852,28 @@ class TestOperators(ExtTestCase):
         )
 
     def test_equal(self):
-        x = torch.randn(1, 2, 3, 1, requires_grad=False).int()
-        y = torch.randn(1, 4, requires_grad=False).int()
+        x = (
+            torch.randn(
+                1,
+                2,
+                3,
+                1,
+                requires_grad=False,
+            )
+            .to(torch.int32)
+            .to(torch.float32)
+        )
+        y = (
+            torch.randn(1, 2, 1, 1, requires_grad=False)
+            .to(torch.int32)
+            .to(torch.float32)
+        )
         self.assertONNX(
-            operator.eq, (x, y), onnx_export=inspect.currentframe().f_code.co_name
+            lambda x, y: x == y,
+            (x, y),
+            onnx_export=inspect.currentframe().f_code.co_name,
+            impl="ref",
+            test_backward=False,
         )
 
     def test_lt(self):
@@ -1354,12 +1373,13 @@ class TestOperators(ExtTestCase):
         )
 
     def test_ne(self):
-        x = torch.randn(1, 2, 3, 1, requires_grad=False).int()
-        y = torch.randn(1, 4, requires_grad=False).int()
+        x = torch.randn(1, 2, 3, 1, requires_grad=False).int().to(torch.float32)
+        y = torch.randn(1, 4, requires_grad=False).int().to(torch.float32)
         self.assertONNX(
             lambda x, y: torch.ne(x, y),
             (x, y),
             onnx_export=inspect.currentframe().f_code.co_name,
+            test_backward=False,
         )
 
     def test_reducemax(self):

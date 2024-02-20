@@ -600,6 +600,38 @@ def aten_dropout(
     return result
 
 
+def aten_elu(
+    g: GraphBuilder,
+    sts: bool,
+    outputs: List[str],
+    x: T,
+    alpha: float = 1.0,
+    scale: float = 1.0,
+    input_scale: int = 1,
+    inplace: bool = False,
+    name="elu",
+) -> T:
+    assert (
+        input_scale == 1
+    ), f"not implemented when input_scale={input_scale}{g.get_debug_msg()}"
+    assert (
+        not inplace
+    ), f"inplace computation is not allowed with onnx{g.get_debug_msg()}"
+    if scale == 1:
+        res = g.op.Elu(x, alpha=float(alpha), name=name, outputs=outputs)
+    else:
+        nptype = tensor_dtype_to_np_dtype(g.get_type(x))
+        res = g.op.Mul(
+            np.array([scale], dtype=nptype),
+            g.op.Elu(x, alpha=float(alpha), name=name),
+            name=name,
+            outputs=outputs,
+        )
+    if sts:
+        set_type_shape_unary_op(g, res, x)
+    return res
+
+
 def aten_embedding(
     g: GraphBuilder,
     sts: bool,
@@ -824,6 +856,12 @@ def aten_eq(g: GraphBuilder, sts: bool, outputs: List[str], x: T, y: T, name="eq
     if sts:
         set_type_shape_binary_op(g, outputs[0], x, y, cmp_op=True)
     return res
+
+
+def aten_eq_Tensor(
+    g: GraphBuilder, sts: bool, outputs: List[str], x: T, y: T, name="eq_Tensor"
+) -> T:
+    return aten_eq(g, sts, outputs, x, y, name=name)
 
 
 def aten_eq_Scalar(g: GraphBuilder, sts: bool, outputs: List[str], x: T, y: T) -> T:
@@ -1555,6 +1593,20 @@ def aten_mul_Tensor(g: GraphBuilder, sts: bool, outputs: List[str], x: T, y: T) 
     return aten_mul(g, sts, outputs, x, y, name="mul_Tensor")
 
 
+def aten_ne(g: GraphBuilder, sts: bool, outputs: List[str], x: T, y: T, name="ne") -> T:
+    x, y = prepare_inputs_homogeneous_operator(g, x, y)
+    res = g.op.Not(g.op.Equal(x, y, name=name), name=name, outputs=outputs)
+    if sts:
+        set_type_shape_binary_op(g, outputs[0], x, y, cmp_op=True)
+    return res
+
+
+def aten_ne_Tensor(
+    g: GraphBuilder, sts: bool, outputs: List[str], x: T, y: T, name="ne_Tensor"
+) -> T:
+    return aten_ne(g, sts, outputs, x, y, name=name)
+
+
 def aten_neg(g: GraphBuilder, sts: bool, outputs: List[str], x: T, name="neg") -> T:
     res = g.make_node("Neg", [x], outputs, name=name)
     if sts:
@@ -1643,7 +1695,23 @@ def aten_permute(
 
 
 def aten_pow_Tensor_Scalar(
-    g: GraphBuilder, sts: bool, outputs: List[str], x: T, exponent: T
+    g: GraphBuilder,
+    sts: bool,
+    outputs: List[str],
+    x: T,
+    exponent: T,
+    name: str = "pow_Tensor_Scalar",
+) -> T:
+    return aten_pow_Tensor_Tensor(g, sts, outputs, x, exponent, name=name)
+
+
+def aten_pow_Tensor_Tensor(
+    g: GraphBuilder,
+    sts: bool,
+    outputs: List[str],
+    x: T,
+    exponent: T,
+    name: str = "pow_Tensor_Tensor",
 ) -> T:
     if isinstance(exponent, (int, float)):
         if exponent == 1:
@@ -1654,8 +1722,16 @@ def aten_pow_Tensor_Scalar(
         if g.has_type(x):
             exponent = exponent.astype(tensor_dtype_to_np_dtype(g.get_type(x)))
         else:
-            exponent = g.op.CastLike(exponent, x)
-    res = g.op.Pow(x, exponent, outputs=outputs)
+            exponent = g.op.CastLike(exponent, x, name=name)
+    else:
+        assert isinstance(
+            exponent, str
+        ), f"unexpected type {type(exponent)} for exponent{g.get_debug_msg()}"
+        assert g.get_type(x) == g.get_type(exponent), (
+            f"type mismatch between {x!r} and {exponent!r}, "
+            f"{g.get_type(x)} != {g.get_type(exponent)}{g.get_debug_msg()}"
+        )
+    res = g.op.Pow(x, exponent, outputs=outputs, name=name)
     if sts:
         set_type_shape_unary_op(g, outputs[0], x)
     return res
@@ -1707,6 +1783,13 @@ def aten_repeat(
 def aten_rsqrt(g: GraphBuilder, sts: bool, outputs: List[str], x: T) -> T:
     ext = g.make_node("Sqrt", [x], name="rsqrt")
     res = g.make_node("Reciprocal", ext, outputs, name="rsqrt")
+    if sts:
+        set_type_shape_unary_op(g, outputs[0], x)
+    return res
+
+
+def aten_round(g: GraphBuilder, sts: bool, outputs: List[str], x: T) -> T:
+    res = g.make_node("Round", [x], outputs)
     if sts:
         set_type_shape_unary_op(g, outputs[0], x)
     return res
@@ -2188,6 +2271,13 @@ def aten__softmax_backward_data(
     res = g.op.Sub(new_grad_output, temp, outputs=outputs, name="softmax_backward_data")
     if sts:
         set_type_shape_unary_op(g, res, grad_outputc, itype=itype)
+    return res
+
+
+def aten_sqrt(g: GraphBuilder, sts: bool, outputs: List[str], x: T) -> T:
+    res = g.make_node("Sqrt", [x], name="sqrt")
+    if sts:
+        set_type_shape_unary_op(g, outputs[0], x)
     return res
 
 

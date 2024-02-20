@@ -35,6 +35,8 @@ def torch_dtype_to_onnx_dtype(to: "torch.dtype") -> int:  # noqa: F821
         return TensorProto.DOUBLE
     if to == torch.int64:
         return TensorProto.INT64
+    if to == torch.int32:
+        return TensorProto.INT32
     if to == torch.bool:
         return TensorProto.BOOL
     raise NotImplementedError(f"Unable to convert torch dtype {to!r} to onnx dtype.")

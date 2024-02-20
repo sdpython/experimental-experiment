@@ -110,6 +110,7 @@ class Opset:
         "ConstantOfShape": 1,
         "Div": 1,
         "Dropout": 2,
+        "Elu": 1,
         "Equal": 1,
         "Exp": 1,
         "Expand": 1,
@@ -127,6 +128,7 @@ class Opset:
         "Log": 1,
         "LogSoftmax": 1,
         "Neg": 1,
+        "Not": 1,
         "Or": 1,
         "Pow": 1,
         "Range": 1,
@@ -670,11 +672,11 @@ class GraphBuilder:
             elif "uint32" in st:
                 elem_type = TensorProto.UINT32
             elif "int32" in st:
-                elem_type = TensorProto.INT16
+                elem_type = TensorProto.INT32
             elif "uint16" in st:
                 elem_type = TensorProto.UINT16
             elif "int16" in st:
-                elem_type = TensorProto.INT32
+                elem_type = TensorProto.INT16
             elif "bool" in st:
                 elem_type = TensorProto.BOOL
             elif "uint8" in st:
