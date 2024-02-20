@@ -1,6 +1,7 @@
 from typing import Callable, Iterator, List, Optional, Union
 import numpy as np
 from onnx import NodeProto
+from .annotations import compatible_shapes, compatible_dimensions
 
 
 class MatchResult:
@@ -139,9 +140,9 @@ class ReshapeMatMulReshapePattern(PatternOptimization):
             return None
 
         # condition on shapes
-        shape_left = tuple(g.get_constant(node_before_left.input[1]))
-        shape_right = tuple(g.get_constant(node_before_right.input[1]))
-        shape_final = tuple(g.get_constant(next_node.input[1]))
+        shape_left = tuple(int(i) for i in g.get_constant(node_before_left.input[1]))
+        shape_right = tuple(int(i) for i in g.get_constant(node_before_right.input[1]))
+        shape_final = tuple(int(i) for i in g.get_constant(next_node.input[1]))
         if len(shape_final) < 4:
             return None
         ndim = len(shape_final)
@@ -152,7 +153,13 @@ class ReshapeMatMulReshapePattern(PatternOptimization):
         mshape_right = g.get_shape(node_before_right.input[0])
         if len(mshape_left) != ndim or len(mshape_right) != ndim:
             return None
-        if mshape_left[-2:] != shape_left[-2:] or mshape_right[-2:] != shape_right[-2:]:
+        if (
+            not compatible_shapes(mshape_left[-2:], shape_left[-2:])
+            or not compatible_shapes(mshape_right[-2:], shape_right[-2:])
+            or not compatible_dimensions(
+                mshape_left[-1], shape_left[-1], mshape_right[-2], shape_right[-2]
+            )
+        ):
             return None
 
         # At this stage, both Reshape before MatMul reduces the rank by 1

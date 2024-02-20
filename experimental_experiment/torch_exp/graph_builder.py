@@ -439,7 +439,8 @@ class GraphBuilder:
                     for sh in shape:
                         if isinstance(sh, int):
                             continue
-                        self.make_dynamic_object(sh, self.torch.SymInt(sh))
+                        if not self.has_dynamic_object(sh):
+                            self.make_dynamic_object(sh, self.torch.SymInt(sh))
                     self.set_shape(i.name, shape)
             for node in self.nodes:
                 self._unique_names |= set(node.output)
@@ -721,6 +722,9 @@ class GraphBuilder:
             elif exc:
                 raise ValueError(f"Unable to interpret elem_type {elem_type!r}.")
         return elem_type
+
+    def has_dynamic_object(self, name: str) -> bool:
+        return name in self.dynamic_objects
 
     def make_dynamic_object(
         self, name: str, value: Any, shape_as_input: bool = False
@@ -1817,5 +1821,6 @@ class GraphBuilder:
             for sh in shape:
                 if isinstance(sh, int):
                     continue
-                self.make_dynamic_object(sh, self.torch.SymInt(sh))
+                if not self.has_dynamic_object(sh):
+                    self.make_dynamic_object(sh, self.torch.SymInt(sh))
             self.set_shape(val.name, shape)
