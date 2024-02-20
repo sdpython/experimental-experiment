@@ -469,6 +469,8 @@ class TestDynamoLlama(ExtTestCase):
             fullgraph=True,
             onnx_export="test_llama_model_backward_decomposition",
             decompositions=True,
+            impl="ref",
+            verbose=10,
         )
 
     @ignore_warnings((UserWarning, DeprecationWarning))

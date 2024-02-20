@@ -327,7 +327,14 @@ def aten_as_strided(
     indices = np.arange(n).reshape(shape)
     with maybe_disable_fake_tensor_mode():
         tindices = torch.tensor(indices)
-        strided = torch.as_strided(tindices, size, stride, storage_offset)
+        try:
+            strided = torch.as_strided(tindices, size, stride, storage_offset)
+        except RuntimeError as e:
+            raise RuntimeError(
+                f"error with as_strided, x={x!r}, shape={shape!r}, n={n}, "
+                f"storage_offset={storage_offset}, "
+                f"size={size}, stride={stride}: {e}{g.get_debug_msg()}"
+            ) from e
         np_strided = strided.detach().numpy().ravel()
 
     flat = g.op.Reshape(x, np.array([-1], dtype=np.int64))
