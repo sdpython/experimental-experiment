@@ -101,7 +101,7 @@ def compatible_dimensions(*dims: Sequence[Union[int, str]]) -> bool:
         print(compatible_dimensions(1, 1))  # True
         print(compatible_dimensions(1, 2))  # False
         print(compatible_dimensions(1, "D"))  # True
-        print(compatible_dimensions(1, "D", "DD"))  # False
+        print(compatible_dimensions(1, "D", "DD"))  # True
     """
     assert all_int_or_str(
         dims
@@ -109,8 +109,5 @@ def compatible_dimensions(*dims: Sequence[Union[int, str]]) -> bool:
     unique = set(dims)
     ints = [i for i in unique if isinstance(i, int)]
     if len(ints) > 1:
-        return False
-    strs = [i for i in unique if isinstance(i, str)]
-    if len(strs) > 1:
         return False
     return True

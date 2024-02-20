@@ -36,7 +36,7 @@ class TestGraphPatternOptimization(ExtTestCase):
         self.assertTrue(compatible_dimensions(1, 1))
         self.assertTrue(compatible_dimensions(1, "D1"))
         self.assertFalse(compatible_dimensions(1, 2))
-        self.assertFalse(compatible_dimensions(1, "D1", "D2"))
+        self.assertTrue(compatible_dimensions(1, "D1", "D2"))
 
     def test_type_inference0(self):
         origin = self._get_model("dort-c-custom__0.onnx")
@@ -179,7 +179,7 @@ class TestGraphPatternOptimization(ExtTestCase):
         got = opt_ref.run(None, feeds)[0]
         self.assertEqualArray(expected, got)
 
-    def test_execution_dynamic(self):
+    def test_execution_dynamic_1(self):
         model = oh.make_model(
             oh.make_graph(
                 [
@@ -196,6 +196,61 @@ class TestGraphPatternOptimization(ExtTestCase):
                     oh.make_tensor_value_info("X", TensorProto.FLOAT, ["D32", "D128"]),
                     oh.make_tensor_value_info(
                         "Y", TensorProto.FLOAT, ["batch", "channel", "D128", "D64"]
+                    ),
+                ],
+                [
+                    oh.make_tensor_value_info(
+                        "Z", TensorProto.FLOAT, ["batch", "channel", "D32", "64"]
+                    )
+                ],
+                [
+                    onh.from_array(np.array([0], dtype=np.int64), name="zero"),
+                    onh.from_array(np.array([1], dtype=np.int64), name="un"),
+                    onh.from_array(
+                        np.array([1, 32, 128], dtype=np.int64), name="shape1"
+                    ),
+                    onh.from_array(
+                        np.array([15, 128, 64], dtype=np.int64), name="shape2"
+                    ),
+                    onh.from_array(
+                        np.array([3, 5, 32, 64], dtype=np.int64), name="shape3"
+                    ),
+                ],
+            )
+        )
+        check_model(model)
+        feeds = {"X": self._range(32, 128), "Y": self._range(3, 5, 128, 64)}
+        ref = ExtendedReferenceEvaluator(model)
+        expected = ref.run(None, feeds)[0]
+
+        gr = GraphBuilder(model, infer_shapes=True)
+        opt_onx = gr.to_onnx(optimize=True)
+        self.assertEqual(
+            ["Unsqueeze", "MatMul"], [n.op_type for n in opt_onx.graph.node]
+        )
+        self.assertEqual(1, len(opt_onx.graph.initializer))
+
+        opt_ref = ExtendedReferenceEvaluator(opt_onx)
+        got = opt_ref.run(None, feeds)[0]
+        self.assertEqualArray(expected, got)
+
+    def test_execution_dynamic_2(self):
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("Unsqueeze", ["X", "zero"], ["xu1"]),
+                    oh.make_node("Unsqueeze", ["xu1", "un"], ["xu2"]),
+                    oh.make_node("Reshape", ["xu2", "shape1"], ["xm1"]),
+                    oh.make_node("Reshape", ["Y", "shape2"], ["xm2c"]),
+                    oh.make_node("Cast", ["xm2c"], ["xm2"], to=1),
+                    oh.make_node("MatMul", ["xm1", "xm2"], ["xm"]),
+                    oh.make_node("Reshape", ["xm", "shape3"], ["Z"]),
+                ],
+                "dummy",
+                [
+                    oh.make_tensor_value_info("X", TensorProto.FLOAT, ["D32", "D128"]),
+                    oh.make_tensor_value_info(
+                        "Y", TensorProto.FLOAT, ["batch", "channel", "any", "D64"]
                     ),
                 ],
                 [
