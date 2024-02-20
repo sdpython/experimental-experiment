@@ -150,7 +150,7 @@ def get_default_patterns() -> List[PatternOptimization]:
         from experimental_experiment.torch_exp.optimization_patterns import get_default_patterns
         pprint.pprint(get_default_patterns())
     """
-    return [UnsqueezeUnsqueezePattern()]
+    return [CastPattern(), UnsqueezeUnsqueezePattern()]
 
 
 def get_pattern(obj: Union[PatternOptimization, str]) -> PatternOptimization:
