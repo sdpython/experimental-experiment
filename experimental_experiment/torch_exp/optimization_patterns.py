@@ -108,9 +108,6 @@ class ReshapeMatMulReshapePattern(PatternOptimization):
     Replaces the sequence Reshape, Matmul, Reshape by Matmul.
     """
 
-    def __init__(self):
-        PatternOptimization.__init__(self)
-
     def match(
         self,
         g: "GraphBuilderPatternOptimization",  # noqa: F821
@@ -165,6 +162,11 @@ class ReshapeMatMulReshapePattern(PatternOptimization):
         # At this stage, both Reshape before MatMul reduces the rank by 1
         # without changing the two last dimensions
         # and the Reshape after restores it. They can safely be removed.
+        if g.verbose > 3:
+            print(
+                f"[ReshapeMatMulReshapePattern] compatible shapes: mshape_left={mshape_left} "
+                f"shape_left={shape_left} | mshape_left={mshape_right} shape_left={shape_right}"
+            )
 
         def apply(
             g: "GraphBuilder",  # noqa: F821
