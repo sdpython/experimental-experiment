@@ -82,7 +82,9 @@ class OptimizationOptions:
             assert patterns is None or isinstance(
                 patterns, list
             ), f"Unexpected type {type(patterns)} for patterns"
-            self.patterns = [get_pattern(p) for p in patterns]
+            self.patterns = (
+                None if patterns is None else [get_pattern(p) for p in patterns]
+            )
         self.max_iter = -1
         self.verbose = verbose
 
