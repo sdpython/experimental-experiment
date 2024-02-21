@@ -30,13 +30,47 @@ PatternOptimization
 .. autoclass:: experimental_experiment.torch_exp.optimization_patterns.PatternOptimization
     :members:
 
-
 Patterns
 ========
+
+CastPattern
++++++++++++
+
+.. autoclass:: experimental_experiment.torch_exp.optimization_patterns.CastPattern
+    :members:
+
+ExpandPattern
++++++++++++++
+
+.. autoclass:: experimental_experiment.torch_exp.optimization_patterns.ExpandPattern
+    :members:
+
+ReshapeMatMulReshapePattern
++++++++++++++++++++++++++++
+
+.. autoclass:: experimental_experiment.torch_exp.optimization_patterns.ReshapeMatMulReshapePattern
+    :members:
+
+ReshapeReshapePattern
++++++++++++++++++++++
+
+.. autoclass:: experimental_experiment.torch_exp.optimization_patterns.ReshapeReshapePattern
+    :members:
+
+TransposeMatMulPattern
+++++++++++++++++++++++
+
+.. autoclass:: experimental_experiment.torch_exp.optimization_patterns.TransposeMatMulPattern
+    :members:
+
+TransposeTransposePattern
++++++++++++++++++++++++++
+
+.. autoclass:: experimental_experiment.torch_exp.optimization_patterns.TransposeTransposePattern
+    :members:
 
 UnsqueezeUnsqueezePattern
 +++++++++++++++++++++++++
 
 .. autoclass:: experimental_experiment.torch_exp.optimization_patterns.UnsqueezeUnsqueezePattern
     :members:
-
