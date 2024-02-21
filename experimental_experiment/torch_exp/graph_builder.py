@@ -268,6 +268,7 @@ class GraphBuilder:
     - `opsets: Dict[str, int]`: declared opsets
     - `input_args: List[T]`: input tensors when the class is used to convert an existing model
     - `functions: List[FunctionProto]`: list of functions to add to the model
+    - `value_info: List[ValueInfoProto]`: value info of the original model
 
     - `_unique_names`: used to create unused result names
     - `_unique_node_names`: used to create unused node names
@@ -307,6 +308,7 @@ class GraphBuilder:
         self.dynamic_objects = {}
         self.dynamic_objects_rev = {}
         self.functions = []
+        self.value_info = []
 
         if isinstance(target_opset_or_existing_proto, (int, dict)):
             # starts a model from nothing
@@ -348,6 +350,7 @@ class GraphBuilder:
                 {i.name: i for i in proto.graph.sparse_initializer}
             )
             self.functions = list(proto.functions)
+            self.value_info = list(proto.graph.value_info)
             self.inputs = list(proto.graph.input)
             self.outputs = list(proto.graph.output)
             self.input_names = [i.name for i in proto.graph.input]
@@ -1480,6 +1483,10 @@ class GraphBuilder:
                 f"The onnx model is empty after export to onnx (no node)."
                 f"\n{self.get_debug_msg()}"
             )
+        # restores the existing value_info
+        for val in self.value_info:
+            if self.has_name(val.name):
+                model.graph.value_info.append(val)
         return model
 
     def io_names(self):

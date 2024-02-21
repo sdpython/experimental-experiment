@@ -14,6 +14,12 @@ from .type_inference import infer_types
 class GraphBuilderPatternOptimization:
     """
     Implements optimization after the conversion is done.
+    The differences between the two models can be display with a
+    command line such as:
+
+    ::
+
+        python -m onnx_array_api compare -m1 <model.onnx> -m2 <optimized.onnx> -m nodes -c 80
     """
 
     def __init__(
