@@ -46,8 +46,9 @@ class TestGraphPatternOptimization(ExtTestCase):
         )
         optimized = gr.to_onnx()
         self._check_with_ort(onx)
-        with open(f"try-{filename}-optimized.onnx", "wb") as f:
-            f.write(optimized.SerializeToString())
+        if __name__ == "__main__":
+            with open(f"try-{filename}-optimized.onnx", "wb") as f:
+                f.write(optimized.SerializeToString())
         self._check_with_ort(optimized)
 
     def _get_model(self, name: str) -> onnx.ModelProto:
