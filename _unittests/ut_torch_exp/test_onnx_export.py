@@ -237,7 +237,7 @@ class TestOnnxExport(ExtTestCase):
             model,
             (input_tensor,),
             input_names=["input"],
-            options=OptimizationOptions(constant_folding=False),
+            options=OptimizationOptions(constant_folding=False, patterns=None),
         )
         self.assertGreater(
             len(onx1.graph.node),
@@ -253,7 +253,7 @@ class TestOnnxExport(ExtTestCase):
             model,
             (input_tensor,),
             input_names=["input"],
-            options=OptimizationOptions(constant_folding=True),
+            options=OptimizationOptions(constant_folding=True, patterns=None),
         )
         self.assertGreater(len(onx2.graph.node), 5)
         self.assertGreaterOrEqual(len(onx1.graph.node), len(onx2.graph.node))

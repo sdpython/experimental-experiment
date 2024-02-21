@@ -42,8 +42,9 @@ args = get_parsed_args(
     dynamic=("0", "use dynamic shapes"),
     target_opset=(18, "opset to convert into, use with backend=custom"),
     config=("default", "default, medium, or small to test"),
+    verbose=(0, "verbosity"),
     expose="backend,repeat,warmup,device,num_hidden_layers,"
-    "mixed,export,config,target_opset,dynamic",
+    "mixed,export,config,target_opset,dynamic,verbose",
 )
 
 import os
@@ -95,8 +96,10 @@ else:
         _attn_implementation="eager",
     )
 
+verbose = int(args.verbose)
 print(f"llama config={config_dict}")
 print(f"backend={args.backend}")
+print(f"verbose={args.verbose}")
 model, example_args_collection = get_llama_model(**config_dict)
 
 
@@ -122,7 +125,7 @@ elif args.backend == "custom":
     target_opset = args.target_opset
     aot_compiler = aot_autograd(
         fw_compiler=lambda *args, **kwargs: onnx_custom_backend(
-            *args, target_opset=target_opset, **kwargs
+            *args, target_opset=target_opset, verbose=verbose, **kwargs
         ),
         decompositions=get_decomposition_table(),
     )

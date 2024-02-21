@@ -40,10 +40,6 @@ import torch
 from torch._C import _from_dlpack
 from onnxruntime import InferenceSession, SessionOptions, RunOptions
 from onnxruntime.capi import _pybind_state as ORTC
-from onnx_extended.tools.js_profile import (
-    js_profile_to_dataframe,
-    plot_ort_profile,
-)
 from experimental_experiment.torch_dynamo.fast_backend import (
     _run_onnx_session_with_ortvaluevector,
 )
@@ -166,6 +162,11 @@ for i in range(args.repeat):
 print(f"-- times: {np.mean(times)} - {times}")
 
 if args.profile in (1, "1"):
+    from onnx_extended.tools.js_profile import (
+        js_profile_to_dataframe,
+        plot_ort_profile,
+    )
+    from onnx_extended.tools.js_profile import plot_ort_profile_timeline
 
     def _align(s, n):
         if len(s) >= n:
@@ -200,7 +201,6 @@ if args.profile in (1, "1"):
         fig.savefig(f"{model_model}_{vs}.png")
 
     # second graph: timeline
-    from onnx_extended.tools.js_profile import plot_ort_profile_timeline
 
     fig, ax = plt.subplots(1, 1, figsize=(5, max(5, n_nodes)))
     iteration = args.repeat - 2
