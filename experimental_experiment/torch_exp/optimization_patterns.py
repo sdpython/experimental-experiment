@@ -26,9 +26,22 @@ class MatchResult:
         self.apply = apply
         self.insert_at = insert_at
 
-    def __str__(self) -> str:
+    def to_string(self, short: bool = True) -> str:
         types = [n.op_type for n in self.nodes]
-        return f"MatchResult: {self.pattern} replaces {types}"
+        if short:
+            return f"MatchResult: {self.pattern} replaces {types}"
+        inputs = set()
+        outputs = set()
+        for node in self.nodes:
+            inputs |= set(node.input)
+            outputs |= set(node.output)
+        return (
+            f"MatchResult: {self.pattern} replaces {types}, "
+            f"inputs: {inputs}, outputs: {outputs}"
+        )
+
+    def __str__(self) -> str:
+        return self.to_string(short=True)
 
 
 class PatternOptimization:
@@ -73,9 +86,6 @@ class CastPattern(PatternOptimization):
     Checks that a Cast is really needeD.
     """
 
-    def __init__(self):
-        PatternOptimization.__init__(self)
-
     def match(
         self,
         g: "GraphBuilderPatternOptimization",  # noqa: F821
@@ -96,7 +106,10 @@ class CastPattern(PatternOptimization):
 
         def apply(g: "GraphBuilder", node: NodeProto) -> List[NodeProto]:  # noqa: F821
             new_node = g.make_node(
-                "Identity", node.input, node.output, name=self.__class__.__name__
+                "Identity",
+                node.input,
+                node.output,
+                name=f"{self.__class__.__name__}--{node.name}",
             )
             return [new_node]
 
@@ -179,7 +192,7 @@ class ReshapeMatMulReshapePattern(PatternOptimization):
                 "MatMul",
                 [node_before_left.input[0], node_before_right.input[0]],
                 next_node.output,
-                name=self.__class__.__name__,
+                name=f"{self.__class__.__name__}--{node.name}",
             )
             res = [new_node]
             if g.is_used_more_than_once(node_before_left.output[0]):
@@ -200,9 +213,6 @@ class UnsqueezeUnsqueezePattern(PatternOptimization):
     """
     Replaces the sequence Unsqueeze, Unsqueeze by Unsqueeze.
     """
-
-    def __init__(self):
-        PatternOptimization.__init__(self)
 
     def match(
         self,
@@ -231,7 +241,7 @@ class UnsqueezeUnsqueezePattern(PatternOptimization):
                 "Unsqueeze",
                 [node.input[0], new_axis],
                 next_node.output,
-                name=self.__class__.__name__,
+                name=f"{self.__class__.__name__}--{node.name}",
             )
             return [new_node]
 
