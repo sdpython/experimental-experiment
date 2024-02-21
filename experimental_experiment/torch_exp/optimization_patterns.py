@@ -281,6 +281,58 @@ class ReshapeReshapePattern(PatternOptimization):
         return MatchResult(self, [node, next_node], apply)
 
 
+class TransposeMatMulPattern(PatternOptimization):
+    """
+    Replaces the sequence Transpose, Matmul or Gemm into Gemm
+    """
+
+    def match(
+        self,
+        g: "GraphBuilderPatternOptimization",  # noqa: F821
+        node: NodeProto,
+        matched: List[MatchResult],
+    ) -> Optional[MatchResult]:
+        if node.op_type not in {"MatMul", "Gemm"} or node.domain != "":
+            return None
+        if not g.has_rank(node.input[0]) or not g.has_rank(node.input[1]):
+            return None
+        if g.get_rank(node.input[0]) != 2 or g.get_rank(node.input[1]) != 2:
+            return None
+
+        nodes_before = [g.node_before(node.input[0])
+                g.node_before(node.input[1])]
+        ns = [n for n in nodes_before if n.op_type == "Transpose" and node_right.domain == ""]
+        if len(ns) == 0:
+            return
+        
+
+        def apply(
+            g: "GraphBuilder",  # noqa: F821
+            node_before_left: NodeProto,
+            node_before_right: NodeProto,
+            node: NodeProto,
+            next_node: NodeProto,
+        ) -> List[NodeProto]:
+            new_node = g.make_node(
+                "MatMul",
+                [node_before_left.input[0], node_before_right.input[0]],
+                next_node.output,
+                name=f"{self.__class__.__name__}--{node.name}",
+            )
+            res = [new_node]
+            if g.is_used_more_than_once(node_before_left.output[0]):
+                res.append(node_before_left)
+            if g.is_used_more_than_once(node_before_right.output[0]):
+                res.append(node_before_right)
+            return res
+
+        return MatchResult(
+            self,
+            [node_before_left, node_before_right, node, next_node],
+            apply,
+            insert_at=node,
+        )
+
 class TransposeTransposePattern(PatternOptimization):
     """
     Removes two consecutive transpose if the second one put the tensor in origin shape.
@@ -402,6 +454,7 @@ def get_default_patterns() -> List[PatternOptimization]:
         ExpandPattern(),
         ReshapeMatMulReshapePattern(),
         ReshapeReshapePattern(),
+        TransposeMatMulPattern(),
         TransposeTransposePattern(),
         UnsqueezeUnsqueezePattern(),
     ]
