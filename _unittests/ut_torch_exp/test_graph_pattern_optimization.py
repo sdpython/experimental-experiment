@@ -448,6 +448,58 @@ class TestGraphPatternOptimization(ExtTestCase):
         got = opt_ref.run(None, feeds)[0]
         self.assertEqualArray(expected, got)
 
+    def test_transpose_transpose_dort(self):
+        origin = self._get_model("dort-c-custom__1.onnx")
+        before = [node for node in origin.graph.node if node.op_type == "Transpose"]
+        gr = GraphBuilder(
+            origin,
+            optimization_options=OptimizationOptions(
+                patterns=["TransposeTranspose"], verbose=0
+            ),
+        )
+        onx = gr.to_onnx(optimize=True)
+        after = [node for node in onx.graph.node if node.op_type == "Transpose"]
+        self.assertEqual(len(before) - 14, len(after))
+
+    def test_transpose_transpose_execution(self):
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("Reshape", ["X", "s1"], ["xs"]),
+                    oh.make_node("Transpose", ["xs"], ["r1"], perm=[1, 0, 3, 2]),
+                    oh.make_node("Transpose", ["r1"], ["xm1"], perm=[1, 0, 3, 2]),
+                    oh.make_node("MatMul", ["xm1", "Y"], ["Z"]),
+                ],
+                "dummy",
+                [
+                    oh.make_tensor_value_info("X", TensorProto.FLOAT, [32, 128]),
+                    oh.make_tensor_value_info("Y", TensorProto.FLOAT, [3, 5, 128, 64]),
+                ],
+                [oh.make_tensor_value_info("Z", TensorProto.FLOAT, [3, 5, 32, 64])],
+                [onh.from_array(np.array([1, 1, 32, 128], dtype=np.int64), name="s1")],
+            )
+        )
+        check_model(model)
+        feeds = {"X": self._range(32, 128), "Y": self._range(3, 5, 128, 64)}
+        ref = ExtendedReferenceEvaluator(model)
+        expected = ref.run(None, feeds)[0]
+
+        gr = GraphBuilder(
+            model,
+            infer_shapes=True,
+            optimization_options=OptimizationOptions(patterns=["TransposeTranspose"]),
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+        self.assertEqual(
+            ["Reshape", "MatMul"],
+            [n.op_type for n in opt_onx.graph.node],
+        )
+        self.assertEqual(1, len(opt_onx.graph.initializer))
+
+        opt_ref = ExtendedReferenceEvaluator(opt_onx)
+        got = opt_ref.run(None, feeds)[0]
+        self.assertEqualArray(expected, got)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
