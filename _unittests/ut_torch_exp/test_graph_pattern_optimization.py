@@ -378,6 +378,76 @@ class TestGraphPatternOptimization(ExtTestCase):
         got = opt_ref.run(None, feeds)[0]
         self.assertEqualArray(expected, got)
 
+    def test_reshape_reshape_dort(self):
+        origin = self._get_model("dort-c-custom__0.onnx")
+        before = [node for node in origin.graph.node if node.op_type == "Reshape"]
+        gr = GraphBuilder(
+            origin,
+            optimization_options=OptimizationOptions(
+                patterns=["ReshapeReshape"], verbose=0
+            ),
+        )
+        onx = gr.to_onnx(optimize=True)
+        after = [node for node in onx.graph.node if node.op_type == "Reshape"]
+        self.assertEqual(len(after), len(before) - 4)
+
+    def test_reshape_reshape_execution(self):
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("Reshape", ["X", "r1"], ["xu1"]),
+                    oh.make_node("Reshape", ["xu1", "r2"], ["xu2"]),
+                    oh.make_node("Reshape", ["xu2", "shape1"], ["xm1"]),
+                    oh.make_node("Reshape", ["Y", "shape2"], ["xm2c"]),
+                    oh.make_node("Cast", ["xm2c"], ["xm2"], to=1),
+                    oh.make_node("MatMul", ["xm1", "xm2"], ["xm"]),
+                    oh.make_node("Reshape", ["xm", "shape3"], ["Z"]),
+                ],
+                "dummy",
+                [
+                    oh.make_tensor_value_info("X", TensorProto.FLOAT, [32, 128]),
+                    oh.make_tensor_value_info("Y", TensorProto.FLOAT, [3, 5, 128, 64]),
+                ],
+                [oh.make_tensor_value_info("Z", TensorProto.FLOAT, [3, 5, 32, 64])],
+                [
+                    onh.from_array(np.array([-1], dtype=np.int64), name="r1"),
+                    onh.from_array(np.array([-1, 128], dtype=np.int64), name="r2"),
+                    onh.from_array(
+                        np.array([1, 32, 128], dtype=np.int64), name="shape1"
+                    ),
+                    onh.from_array(
+                        np.array([15, 128, 64], dtype=np.int64), name="shape2"
+                    ),
+                    onh.from_array(
+                        np.array([3, 5, 32, 64], dtype=np.int64), name="shape3"
+                    ),
+                ],
+            )
+        )
+        check_model(model)
+        feeds = {"X": self._range(32, 128), "Y": self._range(3, 5, 128, 64)}
+        ref = ExtendedReferenceEvaluator(model)
+        expected = ref.run(None, feeds)[0]
+
+        gr = GraphBuilder(
+            model,
+            infer_shapes=True,
+            optimization_options=OptimizationOptions(patterns=["ReshapeReshape"]),
+        )
+        s = str(gr.optimization_options)
+        self.assertIn("OptimizationOptions(", s)
+        self.assertIn("ReshapeReshapePattern", s)
+        opt_onx = gr.to_onnx(optimize=True)
+        self.assertEqual(
+            ["Reshape", "Reshape", "Cast", "MatMul", "Reshape"],
+            [n.op_type for n in opt_onx.graph.node],
+        )
+        self.assertEqual(3, len(opt_onx.graph.initializer))
+
+        opt_ref = ExtendedReferenceEvaluator(opt_onx)
+        got = opt_ref.run(None, feeds)[0]
+        self.assertEqualArray(expected, got)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
