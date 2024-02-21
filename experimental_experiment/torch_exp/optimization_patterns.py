@@ -27,12 +27,14 @@ class MatchResult:
         self.insert_at = insert_at
 
     def to_string(self, short: bool = True) -> str:
-        types = [n.op_type for n in self.nodes]
+        types = [n.op_type for n in self.nodes if n is not None]
         if short:
             return f"MatchResult: {self.pattern} replaces {types}"
         inputs = set()
         outputs = set()
         for node in self.nodes:
+            if node is None:
+                continue
             inputs |= set(node.input)
             outputs |= set(node.output)
         return (
@@ -301,29 +303,33 @@ class TransposeMatMulPattern(PatternOptimization):
 
         nodes_before = [g.node_before(node.input[0]), g.node_before(node.input[1])]
         ns = [
-            (n if n.op_type == "Transpose" and n.domain == "" else None)
+            (
+                n
+                if n is not None and n.op_type == "Transpose" and n.domain == ""
+                else None
+            )
             for n in nodes_before
         ]
-        if len([_ is not None for _ in ns]) == 0:
-            return
+        if len([_ for _ in ns if _ is not None]) == 0:
+            return None
 
         for n in ns:
             if n is None:
                 continue
-            perm = tuple(g.get_attribute("perm").ints)
+            perm = tuple(g.get_attribute(n, "perm").ints)
             if perm != (1, 0):
                 # unexpected transpose
                 return None
 
         # At this stage, one or two inputs are transposed before being used.
         # MatMul or Gemm are operating on 2D tensors.
-        nodes = [node, *ns]
+        nodes = [*ns, node]
 
         def apply(
             g: "GraphBuilder",  # noqa: F821
-            nodes: NodeProto,
             node_before_left: Optional[NodeProto],
             node_before_right: Optional[NodeProto],
+            nodes: NodeProto,
         ) -> List[NodeProto]:
 
             inputs = [
@@ -343,14 +349,17 @@ class TransposeMatMulPattern(PatternOptimization):
             transA = 0 if node_before_left is None else 1
             transB = 0 if node_before_right is None else 1
             keep = []
-            kwargs = {}
             for att in node.attribute:
                 if att.name in {"alpha", "beta"}:
                     keep.append(att)
                 elif att.name == "transA":
-                    kwargs["transA"] = (att.i + transA) % 2
+                    transA = (att.i + transA) % 2
                 elif att.name == "transB":
-                    kwargs["transB"] = (att.i + transB) % 2
+                    transB = (att.i + transB) % 2
+                else:
+                    raise NotImplementedError(
+                        f"Unexpected attribute {att.name!r}={att} for node={node}"
+                    )
 
             new_node = g.make_node(
                 "Gemm",

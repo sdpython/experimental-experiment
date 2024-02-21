@@ -370,7 +370,7 @@ class GraphBuilder:
                 self.set_name(k)
                 self.set_shape(k, self._get_tensor_shape(v))
                 self.set_type(k, self._get_tensor_type(v))
-            for i in self.inputs:
+            for i in self.inputs + self.outputs:
                 self.set_name(i.name)
                 self.set_type(i.name, i.type.tensor_type.elem_type)
                 if i.type.tensor_type.shape.dim:
@@ -390,12 +390,14 @@ class GraphBuilder:
                     self._unique_node_names.add(node.name)
                 if node.op_type == "Constant":
                     self.constants_[node.output[0]] = node
-                    self.set_name(node.output[0])
+                    if not self.has_name(node.output[0]):
+                        self.set_name(node.output[0])
                     self.set_shape(node.output[0], self._get_tensor_shape(node))
                     self.set_type(node.output[0], self._get_tensor_type(node))
                 else:
                     for o in node.output:
-                        self.set_name(o)
+                        if not self.has_name(o):
+                            self.set_name(o)
             if infer_shapes:
                 self._update_shape_types_with_proto(target_opset_or_existing_proto)
         else:
@@ -570,6 +572,7 @@ class GraphBuilder:
         set_rank: bool = True,
         set_if_more_precise: bool = False,
         for_onnx: bool = False,
+        exc: bool = False,
     ):
         assert isinstance(name, str), f"Unexpected type {type(name)} for name."
         assert "torch.Size" not in str(shape), (
@@ -592,10 +595,12 @@ class GraphBuilder:
                         f"{old_shape} != {shape}{self.get_debug_msg()}"
                     )
             elif shape != old_shape:
-                raise RuntimeError(
-                    f"Name {name!r} already exists and it is different "
-                    f"{old_shape} != {shape}{self.get_debug_msg()}"
-                )
+                if exc:
+                    raise RuntimeError(
+                        f"Name {name!r} already exists and its shape different "
+                        f"{old_shape} (old) != {shape}{self.get_debug_msg()}"
+                    )
+                return
             else:
                 return
         if self.verbose > 5:
@@ -1842,4 +1847,4 @@ class GraphBuilder:
                     continue
                 if not self.has_dynamic_object(sh):
                     self.make_dynamic_object(sh, self.torch.SymInt(sh))
-            self.set_shape(val.name, shape)
+            self.set_shape(val.name, shape, exc=False)
