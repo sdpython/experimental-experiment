@@ -299,39 +299,81 @@ class TransposeMatMulPattern(PatternOptimization):
         if g.get_rank(node.input[0]) != 2 or g.get_rank(node.input[1]) != 2:
             return None
 
-        nodes_before = [g.node_before(node.input[0])
-                g.node_before(node.input[1])]
-        ns = [n for n in nodes_before if n.op_type == "Transpose" and node_right.domain == ""]
-        if len(ns) == 0:
+        nodes_before = [g.node_before(node.input[0]), g.node_before(node.input[1])]
+        ns = [
+            (n if n.op_type == "Transpose" and n.domain == "" else None)
+            for n in nodes_before
+        ]
+        if len([_ is not None for _ in ns]) == 0:
             return
-        
+
+        for n in ns:
+            if n is None:
+                continue
+            perm = tuple(g.get_attribute("perm").ints)
+            if perm != (1, 0):
+                # unexpected transpose
+                return None
+
+        # At this stage, one or two inputs are transposed before being used.
+        # MatMul or Gemm are operating on 2D tensors.
+        nodes = [node, *ns]
 
         def apply(
             g: "GraphBuilder",  # noqa: F821
-            node_before_left: NodeProto,
-            node_before_right: NodeProto,
-            node: NodeProto,
-            next_node: NodeProto,
+            nodes: NodeProto,
+            node_before_left: Optional[NodeProto],
+            node_before_right: Optional[NodeProto],
         ) -> List[NodeProto]:
+
+            inputs = [
+                (
+                    node.input[0]
+                    if node_before_left is None
+                    else node_before_left.input[0]
+                ),
+                (
+                    node.input[1]
+                    if node_before_right is None
+                    else node_before_right.input[0]
+                ),
+                *node.input[2:],
+            ]
+
+            transA = 0 if node_before_left is None else 1
+            transB = 0 if node_before_right is None else 1
+            keep = []
+            kwargs = {}
+            for att in node.attribute:
+                if att.name in {"alpha", "beta"}:
+                    keep.append(att)
+                elif att.name == "transA":
+                    kwargs["transA"] = (att.i + transA) % 2
+                elif att.name == "transB":
+                    kwargs["transB"] = (att.i + transB) % 2
+
             new_node = g.make_node(
-                "MatMul",
-                [node_before_left.input[0], node_before_right.input[0]],
-                next_node.output,
+                "Gemm",
+                inputs,
+                node.output,
                 name=f"{self.__class__.__name__}--{node.name}",
+                transA=transA,
+                transB=transB,
             )
+            new_node.attribute.extend(keep)
             res = [new_node]
-            if g.is_used_more_than_once(node_before_left.output[0]):
+            if node_before_left is not None and g.is_used_more_than_once(
+                node_before_left.output[0]
+            ):
                 res.append(node_before_left)
-            if g.is_used_more_than_once(node_before_right.output[0]):
+            if node_before_right is not None and g.is_used_more_than_once(
+                node_before_right.output[0]
+            ):
                 res.append(node_before_right)
             return res
 
-        return MatchResult(
-            self,
-            [node_before_left, node_before_right, node, next_node],
-            apply,
-            insert_at=node,
-        )
+        return MatchResult(self, nodes, apply, insert_at=node)
+
 
 class TransposeTransposePattern(PatternOptimization):
     """
