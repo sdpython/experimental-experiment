@@ -2,10 +2,10 @@ import os
 import unittest
 import numpy as np
 import onnx
-from onnx import TensorProto, helper as oh, numpy_helper as onh
+from onnx import ModelProto, TensorProto, helper as oh, numpy_helper as onh
 from onnx.checker import check_model
 from onnx_array_api.reference import ExtendedReferenceEvaluator
-from experimental_experiment.ext_test_case import ExtTestCase
+from experimental_experiment.ext_test_case import ExtTestCase, ignore_warnings
 from experimental_experiment.torch_exp.graph_builder import (
     GraphBuilder,
     OptimizationOptions,
@@ -20,6 +20,37 @@ from experimental_experiment.torch_exp.annotations import (
 
 
 class TestGraphPatternOptimization(ExtTestCase):
+    def _check_with_ort(self, proto: ModelProto):
+        from onnxruntime import InferenceSession, get_available_providers
+
+        providers = ["CPUExecutionProvider"]
+        if "CUDAExecutionProvider" in get_available_providers():
+            providers.insert(0, "CUDAExecutionProvider")
+        InferenceSession(proto.SerializeToString(), providers=providers)
+
+    @ignore_warnings(DeprecationWarning)
+    def test_try_with_custom_model(self):
+        filename = "onnx_model_init_1.onnx"
+        if not os.path.exists(filename):
+            raise unittest.SkipTest(f"filename={filename!r} not found")
+        onx = onnx.load(filename)
+        gr = GraphBuilder(
+            onx,
+            infer_shapes=True,
+            verbose=0,
+            optimization_options=OptimizationOptions(
+                remove_identity=False,
+                verbose=10 if __name__ == "__main__" else 0,
+                patterns="default",
+            ),
+        )
+        optimized = gr.to_onnx()
+        self._check_with_ort(onx)
+        if __name__ == "__main__":
+            with open(f"try-{filename}-optimized.onnx", "wb") as f:
+                f.write(optimized.SerializeToString())
+        self._check_with_ort(optimized)
+
     def _get_model(self, name: str) -> onnx.ModelProto:
         p = os.path.join(os.path.dirname(__file__), "data", name)
         self.assertExists(p)

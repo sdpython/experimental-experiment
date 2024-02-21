@@ -14,6 +14,12 @@ from .type_inference import infer_types
 class GraphBuilderPatternOptimization:
     """
     Implements optimization after the conversion is done.
+    The differences between the two models can be display with a
+    command line such as:
+
+    ::
+
+        python -m onnx_array_api compare -m1 <model.onnx> -m2 <optimized.onnx> -m nodes -c 80
     """
 
     def __init__(
@@ -305,11 +311,13 @@ class GraphBuilderPatternOptimization:
         self.builder.insert_and_remove_nodes(insert_at, new_nodes, removed)
         return new_nodes
 
-    def optimize(self, max_iter=-1):
+    def optimize(self, max_iter=-1, remove_identity: bool = True):
         """
         Optimizes the based on the given list of patterns.
 
         :param max_iter: maximum number of iterations
+        :param remove_identity: remove identity nodes, it is better to keep it True,
+            not doing it might prevent other patterns to find a set of nodes to optimize
         """
 
         def _check(step):
@@ -379,13 +387,16 @@ class GraphBuilderPatternOptimization:
             n_removed = 0
             for match in matches:
                 if self.verbose > 2:
-                    print(f"[GraphBuilderPatternOptimization.optimize] apply {match}")
+                    print(
+                        f"[GraphBuilderPatternOptimization.optimize] "
+                        f"apply {match.to_string(short=False)}"
+                    )
 
                 added_nodes = self.apply_match(match)
                 _check(str(match))
                 if self.verbose > 2:
                     print(
-                        f"[GraphBuilderPatternOptimization.optimize] add "
+                        f"[GraphBuilderPatternOptimization.optimize] - add "
                         f"{[n.op_type for n in added_nodes]}"
                     )
                 add = len(added_nodes)
