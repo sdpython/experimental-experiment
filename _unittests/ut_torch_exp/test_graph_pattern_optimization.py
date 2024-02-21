@@ -458,7 +458,7 @@ class TestGraphPatternOptimization(ExtTestCase):
         )
         onx = gr.to_onnx(optimize=True)
         after = [node for node in onx.graph.node if node.op_type == "Expand"]
-        self.assertEqual(len(after), len(before) - 3)
+        self.assertEqual(len(after), len(before) - 5)
 
     def test_expand_execution(self):
         model = oh.make_model(
@@ -569,6 +569,103 @@ class TestGraphPatternOptimization(ExtTestCase):
         self.assertEqual(len(expected), len(got))
         for a, b in zip(expected, got):
             self.assertEqualArray(a, b)
+
+    def test_transpose_matmul_dort(self):
+        origin = self._get_model("dort-c-custom__0.onnx")
+        before = [node for node in origin.graph.node if node.op_type == "Transpose"]
+        gr = GraphBuilder(
+            origin,
+            infer_shapes=True,
+            optimization_options=OptimizationOptions(patterns=["TransposeMatMul"]),
+        )
+        onx = gr.to_onnx(optimize=True)
+        after = [node for node in onx.graph.node if node.op_type == "Transpose"]
+        self.assertEqual(len(before), len(after))
+        self.assertIn("Gemm", set(n.op_type for n in onx.graph.node))
+
+    def test_transpose_matmul_execution_matmul(self):
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("Transpose", ["X"], ["xm1"], perm=[1, 0]),
+                    oh.make_node("MatMul", ["xm1", "Y"], ["Z"]),
+                ],
+                "dummy",
+                [
+                    oh.make_tensor_value_info("X", TensorProto.FLOAT, [128, 32]),
+                    oh.make_tensor_value_info("Y", TensorProto.FLOAT, [128, 64]),
+                ],
+                [
+                    oh.make_tensor_value_info("Z", TensorProto.FLOAT, [32, 64]),
+                ],
+            )
+        )
+        check_model(model)
+        feeds = {"X": self._range(128, 32), "Y": self._range(128, 64)}
+        ref = ExtendedReferenceEvaluator(model)
+        expected = ref.run(None, feeds)
+
+        gr = GraphBuilder(
+            model,
+            infer_shapes=True,
+            optimization_options=OptimizationOptions(patterns=["TransposeMatMul"]),
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+        self.assertEqual(
+            ["Gemm"],
+            [n.op_type for n in opt_onx.graph.node],
+        )
+        self.assertEqual(0, len(opt_onx.graph.initializer))
+
+        opt_ref = ExtendedReferenceEvaluator(opt_onx)
+        got = opt_ref.run(None, feeds)
+        self.assertEqualArray(expected[0], got[0])
+
+    def test_transpose_matmul_execution_gemm(self):
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("Transpose", ["X"], ["xm1"], perm=[1, 0]),
+                    oh.make_node(
+                        "Gemm",
+                        ["xm1", "Y"],
+                        ["Z"],
+                        alpha=2.0,
+                        beta=0.0,
+                        transA=1,
+                        transB=1,
+                    ),
+                ],
+                "dummy",
+                [
+                    oh.make_tensor_value_info("X", TensorProto.FLOAT, [32, 128]),
+                    oh.make_tensor_value_info("Y", TensorProto.FLOAT, [64, 128]),
+                ],
+                [
+                    oh.make_tensor_value_info("Z", TensorProto.FLOAT, [32, 64]),
+                ],
+            )
+        )
+        check_model(model)
+        feeds = {"X": self._range(32, 128), "Y": self._range(64, 128)}
+        ref = ExtendedReferenceEvaluator(model)
+        expected = ref.run(None, feeds)
+
+        gr = GraphBuilder(
+            model,
+            infer_shapes=True,
+            optimization_options=OptimizationOptions(patterns=["TransposeMatMul"]),
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+        self.assertEqual(
+            ["Gemm"],
+            [n.op_type for n in opt_onx.graph.node],
+        )
+        self.assertEqual(0, len(opt_onx.graph.initializer))
+
+        opt_ref = ExtendedReferenceEvaluator(opt_onx)
+        got = opt_ref.run(None, feeds)
+        self.assertEqualArray(expected[0], got[0])
 
 
 if __name__ == "__main__":

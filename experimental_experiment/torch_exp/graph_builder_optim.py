@@ -151,7 +151,7 @@ class GraphBuilderPatternOptimization:
 
     def has_type(self, name: str) -> bool:
         """
-        Tells of a result has a type.
+        Tells if a result has a type.
         """
         return self.builder.has_type(name)
 
@@ -161,15 +161,21 @@ class GraphBuilderPatternOptimization:
         """
         return self.builder.get_type(name)
 
+    def has_rank(self, name: str) -> int:
+        """
+        Tells if a result has a rank.
+        """
+        return self.builder.has_rank(name)
+
     def get_rank(self, name: str) -> int:
         """
-        Returns the type of a result.
+        Returns the rank of a result.
         """
         return self.builder.get_rank(name)
 
     def has_shape(self, name: str) -> bool:
         """
-        Tells of a result has a shape.
+        Tells if a result has a shape.
         """
         return self.builder.has_shape(name)
 
@@ -182,8 +188,10 @@ class GraphBuilderPatternOptimization:
     def node_before(self, name: str) -> NodeProto:
         """
         Returns the node producing this output.
+        Returns None if it is an input or an initializer.
         """
-        assert name in self.predecessors_, f"name {name!r} has no predecessor"
+        if name not in self.predecessors_:
+            return None
         predecessor = self.predecessors_[name]
         return self.nodes_[predecessor]
 
@@ -294,7 +302,7 @@ class GraphBuilderPatternOptimization:
         Applies one match.
         Returns the new nodes.
         """
-        idn = [id(n) for n in match.nodes]
+        idn = [id(n) for n in match.nodes if n is not None]
         assert all(
             map(lambda i: i in self.nodes_, idn)
         ), f"One node in {idn} is not referenced"
@@ -404,9 +412,11 @@ class GraphBuilderPatternOptimization:
                 for n in added_nodes:
                     added_outputs |= set(n.output)
 
-                rem = len(match.nodes)
+                rem = len([n for n in match.nodes if n is not None])
                 removed_outputs = set()
                 for n in match.nodes:
+                    if n is None:
+                        continue
                     removed_outputs |= set(n.output)
 
                 full_removed = set(i for i in removed_outputs if i not in added_outputs)
@@ -420,7 +430,7 @@ class GraphBuilderPatternOptimization:
                     print(
                         f"[GraphBuilderPatternOptimization.optimize] done {match}: -{rem} +{add} nodes"
                     )
-                    if self.verbose > 3:
+                    if full_removed and self.verbose > 3:
                         print(
                             f"[GraphBuilderPatternOptimization.optimize] removed outputs {full_removed}"
                         )
