@@ -209,6 +209,44 @@ class ReshapeMatMulReshapePattern(PatternOptimization):
         )
 
 
+class ReshapeReshapePattern(PatternOptimization):
+    """
+    Replaces the sequence Reshape, Reshape by Reshape.
+    """
+
+    def match(
+        self,
+        g: "GraphBuilderPatternOptimization",  # noqa: F821
+        node: NodeProto,
+        matched: List[MatchResult],
+    ) -> Optional[MatchResult]:
+        if node.op_type != "Reshape" or node.domain != "":
+            return None
+        if g.is_used_more_than_once(node.output[0]):
+            return None
+        next_nodes = g.next_nodes(node.output[0])
+        if len(next_nodes) != 1:
+            return None
+        next_node = next_nodes[0]
+        if next_node.op_type != "Reshape" or node.domain != "":
+            return None
+        if next_node.input[0] != node.output[0]:
+            return None
+
+        def apply(
+            g: "GraphBuilder", node: NodeProto, next_node: NodeProto  # noqa: F821
+        ) -> List[NodeProto]:
+            new_node = g.make_node(
+                "Reshape",
+                [node.input[0], next_node.input[1]],
+                next_node.output,
+                name=f"{self.__class__.__name__}--{node.name}",
+            )
+            return [new_node]
+
+        return MatchResult(self, [node, next_node], apply)
+
+
 class UnsqueezeUnsqueezePattern(PatternOptimization):
     """
     Replaces the sequence Unsqueeze, Unsqueeze by Unsqueeze.
@@ -229,6 +267,8 @@ class UnsqueezeUnsqueezePattern(PatternOptimization):
             return None
         next_node = next_nodes[0]
         if next_node.op_type != "Unsqueeze" or node.domain != "":
+            return None
+        if next_node.input[0] != node.output[0]:
             return None
 
         def apply(
@@ -260,7 +300,12 @@ def get_default_patterns() -> List[PatternOptimization]:
         from experimental_experiment.torch_exp.optimization_patterns import get_default_patterns
         pprint.pprint(get_default_patterns())
     """
-    return [CastPattern(), ReshapeMatMulReshapePattern(), UnsqueezeUnsqueezePattern()]
+    return [
+        CastPattern(),
+        ReshapeMatMulReshapePattern(),
+        ReshapeReshapePattern(),
+        UnsqueezeUnsqueezePattern(),
+    ]
 
 
 def get_pattern(obj: Union[PatternOptimization, str]) -> PatternOptimization:
