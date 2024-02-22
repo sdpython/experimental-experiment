@@ -1695,7 +1695,7 @@ class GraphBuilder:
         else:
             ref = ExtendedReferenceEvaluator(v)
             output = ref.run(None, feeds)
-        for name, val in zip(v.input, output):
+        for name, val in zip(v.output, output):
             self.constants_computed_[name] = val
         return output, feeds
 
