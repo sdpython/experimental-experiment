@@ -310,7 +310,7 @@ class DynamoInterpreter:
                 if shape_name is None:
                     shape_name = self.builder.unique_name(f"{node.name}_shape")
                     self.builder.make_node(
-                        "Shape", [input_name], [shape_name], name="getitem_slice"
+                        "Shape", [input_name], [shape_name], name="getitem_sliceA"
                     )
 
                 aaxis = np.array([axis], dtype=np.int64)
@@ -322,7 +322,7 @@ class DynamoInterpreter:
                     "GatherElements",
                     [shape_name, axis_name],
                     [end_name],
-                    name="getitem_slice",
+                    name="getitem_sliceB",
                     set_type_shape=True,
                 )
                 ends.append(end_name)
@@ -337,7 +337,7 @@ class DynamoInterpreter:
             iends = [
                 i if isinstance(i, str) else np.array(i, dtype=np.int64) for i in ends
             ]
-            conc = self.builder.op.Concat(*iends, axis=0, name="getitem_slice")
+            conc = self.builder.op.Concat(*iends, axis=0, name="getitem_sliceC")
         else:
             conc = self.builder.make_initializer("", np.array(ends, dtype=np.int64))
 
@@ -356,27 +356,28 @@ class DynamoInterpreter:
         ]
 
         if expand_axes:
-            sliced = self.builder.make_node("Slice", inputs, name="getitem_slice")
+            sliced = self.builder.make_node("Slice", inputs, name="getitem_sliceD")
             res = self.builder.op.Unsqueeze(
                 sliced,
                 np.array(expand_axes, dtype=np.int64),
                 outputs=[node.name],
-                name="getitem_slice",
+                name="getitem_sliceD",
             )
         else:
             res = self.builder.make_node(
-                "Slice", inputs, [node.name], name="getitem_slice"
+                "Slice", inputs, [node.name], name="getitem_sliceE"
             )
         if set_type_shape:
             dtype = self.builder.get_type(inputs[0])
-            shape = self.builder.get_shape(inputs[0])
-            new_shape = self.builder._apply_slice_to_shape(
-                shape, index_slice, axes=axes, expand_axes=expand_axes
-            )
-            if self.builder.has_shape(
-                node.name
-            ) and new_shape != self.builder.get_shape(node.name):
-                raise RuntimeError(
+            self.builder.set_type(node.name, dtype)
+            if self.builder.has_shape(inputs[0]):
+                shape = self.builder.get_shape(inputs[0])
+                new_shape = self.builder._apply_slice_to_shape(
+                    shape, index_slice, axes=axes, expand_axes=expand_axes
+                )
+                assert not self.builder.has_shape(
+                    node.name
+                ) or new_shape == self.builder.get_shape(node.name), (
                     f"Shape for node {node.name!r} is already set to "
                     f"{self.builder.get_shape(node.name)} with type "
                     f"{self.builder.get_type(node.name)} (expecting {dtype}) "
@@ -384,8 +385,9 @@ class DynamoInterpreter:
                     f"axes={axes}, expand_axes={expand_axes}"
                     f"{self.builder.get_debug_msg()}"
                 )
-            self.builder.set_shape(node.name, new_shape)
-            self.builder.set_type(node.name, dtype)
+                self.builder.set_shape(node.name, new_shape)
+            else:
+                self.builder.set_rank(node.name, self.builder.get_rank(inputs[0]))
         return res
 
     def _getitem_int1(
@@ -431,7 +433,7 @@ class DynamoInterpreter:
         if hasattr(index, "name"):
             # A dynamic index (torch.fx.Node)
             res = self.builder.make_node(
-                "Gather", [result_name, index.name], [node.name], name="getitem"
+                "Gather", [result_name, index.name], [node.name], name="getitemA"
             )
             if set_type_shape:
                 self.builder.set_type(node.name, self.builder.get_type(result_name))
@@ -456,7 +458,7 @@ class DynamoInterpreter:
                     result_name, np.array([index], dtype=np.int64), name="getitem_index"
                 ),
                 np.array([0], dtype=np.int64),
-                name="getitem",
+                name="getitem_index",
                 outputs=[node.name],
             )
             if set_type_shape:

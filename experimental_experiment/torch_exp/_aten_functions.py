@@ -813,6 +813,7 @@ def aten_expand(
             sizes
         ), f"Unexpected shape={shape} for x as sizes={sizes}{g.get_debug_msg()}"
         new_shape = []
+        is_static = True
         for a, b in zip(shape, sizes):
             if b == -1:
                 assert isinstance(b, int), (
@@ -822,9 +823,13 @@ def aten_expand(
                 new_shape.append(a)
             else:
                 new_shape.append(b)
-        res = g.op.Expand(
-            x, np.array(new_shape, dtype=np.int64), outputs=outputs, name=f"{name}_neg"
+                is_static = False
+        i_new_shape = (
+            np.array(new_shape, dtype=np.int64)
+            if is_static
+            else g.make_shape_from_results(new_shape, name=f"{name}_neg")
         )
+        res = g.op.Expand(x, i_new_shape, outputs=outputs, name=f"{name}_neg")
         if sts:
             g.set_type(res, g.get_type(x))
             g.set_shape(res, tuple(new_shape))

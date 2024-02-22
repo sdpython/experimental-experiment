@@ -247,7 +247,8 @@ def aten_meth_transpose(
     perm = list(range(g.rank(input_name)))
     assert max(dim0, dim1) < len(perm), (
         f"aten_meth_transpose: unexpected perm={perm}, dim0={dim0}, dim1={dim1}, "
-        f"input_name={input_name!r}{g.get_debug_msg()}"
+        f"input_name={input_name!r}, rank={g.rank(input_name)}"
+        f"{g.get_debug_msg()}"
     )
     perm[dim0], perm[dim1] = perm[dim1], perm[dim0]
     res = g.make_node("Transpose", [input_name], outputs, perm=perm)
