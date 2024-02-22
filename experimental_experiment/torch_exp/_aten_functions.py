@@ -1790,44 +1790,70 @@ def aten_slice_backward(
     start: int,
     end: int,
     step: int,
+    name: str = "slice_backward",
 ) -> T:
     assert (
         step == 1
     ), f"slice_backward not implemented for step={step}{g.get_debug_msg()}"
-    # TODO: handle dynamic shapes
-    assert g.has_shape(grad_output), (
-        f"slice_backward not implemented when grad_output "
-        f"has not shape{g.get_debug_msg()}"
-    )
-    shape = g.get_shape(grad_output)
-
-    assert is_static_shape(
-        shape
-    ), f"slice_backward not implemented when shape={shape}{g.get_debug_msg()}"
 
     itype = g.get_type(grad_output)
     value = from_array(np.array([0], dtype=tensor_dtype_to_np_dtype(itype)))
+
     inputs = []
 
-    if start > 0:
-        cst_shape = list(shape)
-        cst_shape[dim] = start
-        cst = g.op.ConstantOfShape(
-            np.array(cst_shape, dtype=np.int64), value=value, name="slice_backward"
-        )
-        inputs.append(cst)
+    if g.has_shape(grad_output) and is_static_shape(g.get_shape(grad_output)):
+        name_s = f"{name}_static"
+        # static version
+        shape = g.get_shape(grad_output)
 
-    inputs.append(grad_output)
+        if start > 0:
+            cst_shape = list(shape)
+            cst_shape[dim] = start
+            cst = g.op.ConstantOfShape(
+                np.array(cst_shape, dtype=np.int64), value=value, name=name_s
+            )
+            inputs.append(cst)
 
-    if end < 9223372036854775807:
-        cst_shape = list(shape)
-        cst_shape[dim] = input_sizes[dim] - shape[dim] - start
-        cst = g.op.ConstantOfShape(
-            np.array(cst_shape, dtype=np.int64), value=value, name="slice_backward"
-        )
-        inputs.append(cst)
+        inputs.append(grad_output)
 
-    res = g.op.Concat(*inputs, axis=dim, name="slice_backward")
+        if end < 9223372036854775807:
+            cst_shape = list(shape)
+            cst_shape[dim] = input_sizes[dim] - shape[dim] - start
+            cst = g.op.ConstantOfShape(
+                np.array(cst_shape, dtype=np.int64), value=value, name=name_s
+            )
+            inputs.append(cst)
+
+    else:
+        name_d = f"{name}_dynamic"
+        # dynamic version
+        shape = g.op.Shape(grad_output, name=name_d)
+
+        if start > 0:
+            cst_shape = g.op.ScatterElements(
+                shape,
+                np.array([dim], dtype=np.int64),
+                np.array([start], dtype=np.int64),
+                axis=0,
+                name=name,
+            )
+            cst = g.op.ConstantOfShape(cst_shape, value=value, name=name_d)
+            inputs.append(cst)
+
+        inputs.append(grad_output)
+
+        if end < 9223372036854775807:
+            shape_dim = g.op.Gather(shape, np.array([dim], dtype=np.int64), name=name_d)
+            new_dim = g.op.Sub(
+                np.array([input_sizes[dim] - start], dtype=np.int64), shape_dim
+            )
+            cst_shape = g.op.ScatterElements(
+                shape, np.array([dim], dtype=np.int64), new_dim, axis=0, name=name_d
+            )
+            cst = g.op.ConstantOfShape(cst_shape, value=value, name=name_d)
+            inputs.append(cst)
+
+    res = g.op.Concat(*inputs, axis=dim, name=name)
 
     if sts:
         g.set_type(res, g.get_type(grad_output))

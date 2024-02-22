@@ -230,6 +230,7 @@ class TestDynamoLlamaDynamic(ExtTestCase):
             fullgraph=True,
             onnx_export="test_llama_attention_backward_forward_dynamic",
             impl="ort",
+            verbose=10,
         )
 
     @ignore_warnings((UserWarning, DeprecationWarning))
