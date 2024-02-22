@@ -301,6 +301,8 @@ class RotaryConcatPartPattern(PatternOptimization):
 
     .. runpython::
 
+        import numpy as np
+        from onnx import TensorProto
         from onnx_array_api.light_api import start
         from onnx_array_api.plotting.text_plot import onnx_simple_text_plot
 
