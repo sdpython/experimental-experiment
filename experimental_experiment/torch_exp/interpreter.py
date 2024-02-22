@@ -451,14 +451,18 @@ class DynamoInterpreter:
                     "Identity", [name_index], [node.name], name="getitem_tuple"
                 )
             # The user mean to access the first element of a tensor.
-            return self.builder.op.Squeeze(
+            res = self.builder.op.Squeeze(
                 self.builder.op.Gather(
-                    result_name, np.array([index], dtype=np.int64), name="getitem"
+                    result_name, np.array([index], dtype=np.int64), name="getitem_index"
                 ),
                 np.array([0], dtype=np.int64),
                 name="getitem",
                 outputs=[node.name],
             )
+            if set_type_shape:
+                self.builder.set_type(node.name, self.builder.get_type(result_name))
+                self.builder.set_rank(node.name, self.builder.get_rank(result_name) - 1)
+            return res
 
         if isinstance(index, slice):
             return self._getitem_slice(
@@ -703,7 +707,12 @@ class DynamoInterpreter:
                         f"type(val)={type(v)}{self.builder.get_debug_msg()}"
                     )
         if exa is not None and not isinstance(exa, tuple):
-            description.append(f"~{exa.dtype}:{exa.shape}".replace(" ", ""))
+            if hasattr(exa, "dtype"):
+                # a tensor
+                description.append(f"~{exa.dtype}:{exa.shape}".replace(" ", ""))
+            else:
+                # a SymInt
+                description.append(f"~SumInt:{exa!r}".replace(" ", ""))
         if last_node is not None and description:
             last_node.doc_string = "\n".join(description)
 

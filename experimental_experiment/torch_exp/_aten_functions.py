@@ -925,13 +925,13 @@ def aten_full(
     if isinstance(size, tuple):
         assert all(
             map(lambda x: isinstance(x, int), size)
-        ), f"Unexpected values for size={size}"
+        ), f"Unexpected values for size={size}-{[type(s) for s in size]}"
         tsize = np.array(size, dtype=np.int64)
         new_shape = size
     elif isinstance(size, list):
         assert all(
             map(lambda x: isinstance(x, int), size)
-        ), f"Unexpected values for size={size}"
+        ), f"Unexpected values for size={size}-{[type(s) for s in size]}"
         tsize = np.array(size, dtype=np.int64)
         new_shape = size
     else:

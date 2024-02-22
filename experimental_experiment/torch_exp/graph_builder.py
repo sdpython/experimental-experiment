@@ -825,7 +825,13 @@ class GraphBuilder:
                 assert name in self.dynamic_objects or self.has_name(
                     name
                 ), f"Unknonw dynamic object {d}-{name!r}{self.get_debug_msg()}"
-                conc.append(name)
+                if self.has_rank(name) and self.get_rank(name) == 0:
+                    r = self.op.Unsqueeze(name, np.array([0], dtype=np.int64))
+                    self.set_type(r, self.get_type(name))
+                    self.set_shape(r, (1,))
+                    conc.append(r)
+                else:
+                    conc.append(name)
             else:
                 raise RuntimeError(
                     f"Unexpected type {type(d)} for a dimension in {shape}{self.get_debug_msg()}"
