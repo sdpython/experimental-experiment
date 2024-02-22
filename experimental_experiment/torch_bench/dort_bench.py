@@ -98,11 +98,13 @@ else:
     )
 
 verbose = int(args.verbose)
-disabled_pattern = args.disable_pattern.split(",")
+disabled_pattern = [_ for _ in args.disable_pattern.split(",") if _]
 print(f"llama config={config_dict}")
 print(f"backend={args.backend}")
 print(f"verbose={args.verbose}")
-print(f"disabled_pattern={disabled_pattern!r}")
+print(f"mixed={args.mixed}")
+if args.backend == "custom":
+    print(f"disabled_pattern={disabled_pattern!r}")
 model, example_args_collection = get_llama_model(**config_dict)
 
 
