@@ -103,6 +103,13 @@ class DynamoInterpreter:
                     f"Unable to guess what node is, node={node}, "
                     f"meta={node.meta} {node.__dict__}."
                 )
+            if isinstance(example_value, self.builder.torch.SymInt):
+                # torch.SymInt
+                self.builder.make_dynamic_object(node.name, example_value)
+                return self.builder.make_tensor_input(
+                    node.name, elem_type=self.builder.torch.int64, shape=(1,)
+                )
+
             return self.builder.make_tensor_input(
                 node.name, elem_type=example_value.dtype, shape=example_value.shape
             )

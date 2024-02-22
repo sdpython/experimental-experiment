@@ -880,15 +880,23 @@ class GraphBuilder:
 
     def verify_dynamic_shape(self, shape: Any, for_onnx: bool = True) -> DYNAMIC_SHAPE:
         if is_static_shape(shape):
-            return tuple(shape)
+            return tuple(int(i) for i in shape)
         new_shape = []
         for d in shape:
             if isinstance(d, int):
                 new_shape.append(d)
                 continue
             if isinstance(d, (self.torch.SymInt, str)):
+                try:
+                    val_int = int(d)
+                    new_shape.append(val_int)
+                    continue
+                except TypeError:
+                    pass
                 assert str(d) in self.dynamic_objects_rev, (
-                    f"Unable to find dimension {d!r} in {self.dynamic_objects_rev}"
+                    f"Unable to find dimension {d!r} ({type(d)}) "
+                    f"in {self.dynamic_objects_rev}"
+                    f"{dir(d)}"
                     f"{self.get_debug_msg()}"
                 )
                 new_shape.append(str(d) if for_onnx else d)

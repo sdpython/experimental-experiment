@@ -214,6 +214,28 @@ class TestDynamoLlamaDynamic(ExtTestCase):
     @ignore_warnings((UserWarning, DeprecationWarning))
     @skipif_ci_windows("torch.compile not supported on Windows")
     @unittest.skipIf(torch_min("2.2"), reason="missing kernel")
+    def test_llama_attention_forward_dynamic(self):
+        from experimental_experiment.torch_helper.llama_helper import (
+            get_llama_attention,
+        )
+
+        input_dims = self.get_input_dims(True)
+        model, example_args_collection = get_llama_attention(input_dims=input_dims)
+
+        self.common_test_model(
+            model,
+            example_args_collection,
+            test_backward=False,
+            dynamic=True,
+            fullgraph=True,
+            onnx_export="test_llama_attention_backward_forward_dynamic",
+            impl="ort",
+            verbose=10,
+        )
+
+    @ignore_warnings((UserWarning, DeprecationWarning))
+    @skipif_ci_windows("torch.compile not supported on Windows")
+    @unittest.skipIf(torch_min("2.2"), reason="missing kernel")
     def test_llama_attention_backward_forward_dynamic(self):
         from experimental_experiment.torch_helper.llama_helper import (
             get_llama_attention,
