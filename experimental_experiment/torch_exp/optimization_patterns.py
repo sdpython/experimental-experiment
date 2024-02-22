@@ -732,7 +732,7 @@ def get_pattern_list(
     .. runpython::
         :showcode:
 
-        from experimental_experiment.torch_exp.optimisation_patterns import get_pattern_list
+        from experimental_experiment.torch_exp.optimization_patterns import get_pattern_list
         print(get_pattern_list("default", ["Cast"]))
     """
     if positive_list is None:
