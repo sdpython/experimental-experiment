@@ -43,6 +43,7 @@ args = get_parsed_args(
     target_opset=(18, "opset to convert into, use with backend=custom"),
     config=("default", "default, medium, or small to test"),
     verbose=(0, "verbosity"),
+    disable_pattern=("", "a list of optimization pattern to disable"),
     expose="backend,repeat,warmup,device,num_hidden_layers,"
     "mixed,export,config,target_opset,dynamic,verbose",
 )
@@ -97,9 +98,11 @@ else:
     )
 
 verbose = int(args.verbose)
+disabled_pattern = args.disable_pattern.split(",")
 print(f"llama config={config_dict}")
 print(f"backend={args.backend}")
 print(f"verbose={args.verbose}")
+print(f"disabled_pattern={disabled_pattern!r}")
 model, example_args_collection = get_llama_model(**config_dict)
 
 
@@ -125,7 +128,11 @@ elif args.backend == "custom":
     target_opset = args.target_opset
     aot_compiler = aot_autograd(
         fw_compiler=lambda *args, **kwargs: onnx_custom_backend(
-            *args, target_opset=target_opset, verbose=verbose, **kwargs
+            *args,
+            target_opset=target_opset,
+            verbose=verbose,
+            disable_pattern=disabled_pattern,
+            **kwargs,
         ),
         decompositions=get_decomposition_table(),
     )
@@ -140,7 +147,11 @@ elif args.backend == "debug":
         print(f"  input: {a.dtype}:{a.shape}")
     aot_compiler = aot_autograd(
         fw_compiler=lambda *args, **kwargs: onnx_debug_backend(
-            *args, target_opset=target_opset, backend="ref", **kwargs
+            *args,
+            target_opset=target_opset,
+            backend="ref",
+            disable_pattern=disabled_pattern,
+            **kwargs,
         ),
         decompositions=get_decomposition_table(),
     )

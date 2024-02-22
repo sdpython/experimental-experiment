@@ -17,9 +17,17 @@ from experimental_experiment.torch_exp.annotations import (
     compatible_shapes,
     compatible_dimensions,
 )
+from experimental_experiment.torch_exp.optimization_patterns import get_pattern_list
 
 
 class TestGraphPatternOptimization(ExtTestCase):
+    def test_get_pattern_list(self):
+        res = get_pattern_list(negative_list=["Cast"])
+        names = set(r.__class__.__name__ for r in res)
+        self.assertNotIn("CastPattern", names)
+        res = get_pattern_list(negative_list="default")
+        self.assertEqual(res, [])
+
     def _check_with_ort(self, proto: ModelProto):
         from onnxruntime import InferenceSession, get_available_providers
 
