@@ -259,7 +259,7 @@ def aten_meth_transpose(
             shape[dim0], shape[dim1] = shape[dim1], shape[dim0]
             g.set_shape(outputs[0], tuple(shape))
         elif g.has_rank(input_name):
-            g.set_rank(outputs[0], g.has_rank(input_name))
+            g.set_rank(outputs[0], g.get_rank(input_name))
     return res
 
 

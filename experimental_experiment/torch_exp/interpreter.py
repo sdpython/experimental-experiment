@@ -39,6 +39,7 @@ class DynamoInterpreter:
                     f"node.target={node.target}, node.meta={node.meta}."
                 )
         if self.builder.verbose > 1:
+            # verbose
             exa = (
                 f"{torch_dtype_to_onnx_dtype(example_value.dtype)}'{tuple(example_value.shape)}"
                 if hasattr(example_value, "dtype")
@@ -59,7 +60,16 @@ class DynamoInterpreter:
             )
             if "shapes_types" not in self.builder._debug_msg:
                 self.builder._debug_msg["shapes_types"] = {}
-            self.builder._debug_msg["shapes_types"][node.name] = (exa, val)
+
+        # debug
+        exa = (
+            ("example_value", example_value.dtype, example_value.shape)
+            if hasattr(example_value, "dtype")
+            else ""
+        )
+        v = node.meta.get("val", None) if hasattr(node, "meta") else None
+        val = ("val", v.dtype, v.shape) if hasattr(v, "dtype") else ""
+        self.builder._debug_msg["shapes_types"][node.name] = (exa, val)
 
         if node.op == "placeholder":
             return self.placeholder(node)
@@ -308,6 +318,7 @@ class DynamoInterpreter:
             assert isinstance(
                 aslice, slice
             ), f"Unexpected type {aslice} in {index_slice}"
+
             starts.append(aslice.start or 0)
 
             if aslice.stop is None:
@@ -343,8 +354,12 @@ class DynamoInterpreter:
             ]
             conc = self.builder.op.Concat(*iends, axis=0, name="getitem_sliceC")
         else:
+            assert all_int(ends), f"Unexpected value for ends={ends}{g.get_debug_msg()}"
             conc = self.builder.make_initializer("", np.array(ends, dtype=np.int64))
 
+        assert all_int(starts), f"Not implemented for starts={starts}{g.get_debug_msg()}"
+        assert all_int(steps), f"Not implemented for starts={steps}{g.get_debug_msg()}"
+        
         inputs = [
             input_name,
             self.builder.make_initializer(

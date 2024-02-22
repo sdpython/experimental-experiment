@@ -590,6 +590,8 @@ class GraphBuilder:
         self._unique_names.add(name)
 
     def set_rank(self, name: str, value: int):
+        assert isinstance(value, int), f"Unexpected rank type {type(value)} for {name!r}"
+        assert not isinstance(value, bool), f"Unexpected rank type {type(value)} for {name!r}"
         assert isinstance(name, str), f"Unexpected type {type(name)} for name."
         assert (
             name not in self._known_ranks
