@@ -30,7 +30,7 @@ class TestGraphPatternOptimization(ExtTestCase):
 
     @ignore_warnings(DeprecationWarning)
     def test_try_with_custom_model(self):
-        filename = "onnx_model_init_1.onnx"
+        filename = "onnx_model_1_3.onnx"
         if not os.path.exists(filename):
             raise unittest.SkipTest(f"filename={filename!r} not found")
         onx = onnx.load(filename)
@@ -41,7 +41,7 @@ class TestGraphPatternOptimization(ExtTestCase):
             optimization_options=OptimizationOptions(
                 remove_identity=False,
                 verbose=10 if __name__ == "__main__" else 0,
-                patterns="default",
+                patterns=None,
             ),
         )
         optimized = gr.to_onnx()
