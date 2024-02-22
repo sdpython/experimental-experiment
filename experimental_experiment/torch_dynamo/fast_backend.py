@@ -6,6 +6,7 @@ from onnx import ModelProto
 import torch
 from torch._C import _from_dlpack
 from ..torch_exp.onnx_export import to_onnx, OptimizationOptions
+from ..torch_exp.optimization_patterns import get_pattern_list
 from onnxruntime.capi import _pybind_state as ORTC
 
 
@@ -131,6 +132,7 @@ def onnx_custom_backend(
     providers: Optional[Tuple[str]] = None,
     raise_exc: bool = True,
     storage: Optional[Dict[str, Any]] = None,
+    disable_pattern: Optional[List[Union[str, type]]] = None,
 ) -> Callable:
     """
     Custom backend to export torch models into onnx
@@ -148,6 +150,7 @@ def onnx_custom_backend(
     :param providers: where to run the model, by default
     :param raise_exc: raise an exception whenever something goes wrong
     :param storage: to store any interesting objects during the process
+    :param disable_pattern: optimization pattern to disable
     :return: Callable
 
     See :ref:`l-plot-onnxrt-diff` for an example.
@@ -189,10 +192,12 @@ def onnx_custom_backend(
         verbose if isinstance(verbose, tuple) else (verbose, verbose)
     )
 
+    patterns = get_pattern_list("default", disable_pattern)
+
     options = OptimizationOptions(
         remove_unused=True,
         constant_folding=False,
-        patterns="default",
+        patterns=patterns,
         verbose=verbose_onnx,
     )
 
