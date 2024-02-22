@@ -1,6 +1,8 @@
-from typing import Any, Dict, List, Sequence
+from typing import Any, Dict, List, Optional, Sequence
 import numpy as np
+from onnx import TensorProto
 from onnx.helper import tensor_dtype_to_np_dtype
+from .annotations import all_int
 from ._aten_helper import (
     torch_dtype_to_onnx_dtype,
     set_type_shape_binary_op,
@@ -167,6 +169,30 @@ def aten_meth_sin(g: GraphBuilder, sts: bool, outputs: List[str], x: T) -> T:
     return aten_sin(g, sts, outputs, x)
 
 
+def aten_meth_size(
+    g: GraphBuilder,
+    sts: bool,
+    outputs: List[str],
+    x: T,
+    dim: Optional[int] = None,
+    name: str = ".size",
+) -> T:
+    if dim is None:
+        res = g.op.Shape(x, name=name, outputs=outputs)
+        if sts:
+            g.set_type(res, TensorProto.INT64)
+            g.set_shape(res, (g.get_rank(x),))
+        return res
+
+    s = g.op.Shape(x, name=name)
+    d = g.op.Gather(s, np.array([dim], dtype=np.int64), name=name)
+    res = g.op.Squeeze(d, np.array([0], dtype=np.int64), name=name, outputs=outputs)
+    if sts:
+        g.set_type(res, TensorProto.INT64)
+        g.set_shape(res, tuple())
+    return res
+
+
 def aten_meth_t(g: GraphBuilder, sts: bool, outputs: List[str], x: T) -> T:
     return aten_t(g, sts, outputs, x, name=".t")
 
@@ -219,6 +245,10 @@ def aten_meth_transpose(
     g: GraphBuilder, sts: bool, outputs: List[str], input_name: T, dim0: int, dim1: int
 ) -> T:
     perm = list(range(g.rank(input_name)))
+    assert max(dim0, dim1) < len(perm), (
+        f"aten_meth_transpose: unexpected perm={perm}, dim0={dim0}, dim1={dim1}, "
+        f"input_name={input_name!r}{g.get_debug_msg()}"
+    )
     perm[dim0], perm[dim1] = perm[dim1], perm[dim0]
     res = g.make_node("Transpose", [input_name], outputs, perm=perm)
     if sts:
@@ -253,9 +283,24 @@ def aten_meth_unsqueeze(
 def aten_meth_view(
     g: GraphBuilder, sts: bool, outputs: List[str], input_name: T, *args: Sequence[int]
 ) -> T:
-    new_shape_name = g.unique_name(f"{input_name}_view_shape")
-    g.make_initializer(new_shape_name, np.array(args, dtype=np.int64))
+    if all_int(args):
+        # static shape
+        new_shape_name = g.unique_name(f"{input_name}_view_shape")
+        g.make_initializer(new_shape_name, np.array(args, dtype=np.int64))
+        res = g.make_node(
+            "Reshape", [input_name, new_shape_name], outputs, name=".view"
+        )
+        if sts:
+            set_type_shape_reshape(g, res, input_name, args)
+        return res
+
+    new_shape_name = g.make_shape_from_results(args, name=".view")
     res = g.make_node("Reshape", [input_name, new_shape_name], outputs, name=".view")
     if sts:
-        set_type_shape_reshape(g, res, input_name, args)
+        g.set_type(new_shape_name, TensorProto.INT64)
+        g.set_shape(new_shape_name, (len(args),))
+        set_type_shape_reshape(g, res, input_name, new_shape_name)
+        assert g.get_rank(res) == len(
+            args
+        ), f"error in set_type_shape_reshape args={args!r}"
     return res

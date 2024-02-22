@@ -444,8 +444,20 @@ class DynamoInterpreter:
             return res
 
         if isinstance(index, int):
-            return self.builder.make_node(
-                "Identity", [f"{result_name}#{index}"], [node.name], name="getitem"
+            name_index = f"{result_name}#{index}"
+            if self.builder.has_name(name_index):
+                # The user to get a tensor a tuple of tensors
+                return self.builder.make_node(
+                    "Identity", [name_index], [node.name], name="getitem_tuple"
+                )
+            # The user mean to access the first element of a tensor.
+            return self.builder.op.Squeeze(
+                self.builder.op.Gather(
+                    result_name, np.array([index], dtype=np.int64), name="getitem"
+                ),
+                np.array([0], dtype=np.int64),
+                name="getitem",
+                outputs=[node.name],
             )
 
         if isinstance(index, slice):

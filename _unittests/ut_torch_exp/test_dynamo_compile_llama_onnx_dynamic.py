@@ -71,6 +71,7 @@ class TestDynamoLlamaDynamic(ExtTestCase):
         verbose: int = 0,
         decompositions=False,
         mixed=False,
+        raise_list=None,
     ):
         import torch
 
@@ -96,6 +97,7 @@ class TestDynamoLlamaDynamic(ExtTestCase):
             target_opset=18,
             storage=storage,
             verbose=verbose,
+            raise_list=raise_list,
             **kwargs,
         )
 
@@ -176,6 +178,7 @@ class TestDynamoLlamaDynamic(ExtTestCase):
         atol: float = 1e-4,
         rtol: float = 1e-4,
         mixed=False,
+        raise_list=None,
     ):
         storage = self._assert_model_numerically(
             model,
@@ -189,6 +192,7 @@ class TestDynamoLlamaDynamic(ExtTestCase):
             atol=atol,
             rtol=rtol,
             mixed=mixed,
+            raise_list=raise_list,
         )
         self.assertIsInstance(storage, dict)
 
@@ -231,6 +235,7 @@ class TestDynamoLlamaDynamic(ExtTestCase):
             onnx_export="test_llama_attention_backward_forward_dynamic",
             impl="ort",
             verbose=10,
+            # raise_list={"view"}
         )
 
     @ignore_warnings((UserWarning, DeprecationWarning))

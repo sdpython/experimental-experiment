@@ -72,8 +72,7 @@ def set_type_shape_reshape(
     input_name: str,
     new_shape: Sequence[int],
 ):
-    dtype = g.get_type(input_name)
-    g.set_type(name, dtype)
+    g.set_type(name, g.get_type(input_name))
     if isinstance(new_shape, str):
         if g.has_shape(new_shape):
             g.set_rank(name, len(g.get_shape(new_shape)))
