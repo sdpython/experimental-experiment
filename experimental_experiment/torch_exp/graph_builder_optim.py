@@ -107,11 +107,11 @@ class GraphBuilderPatternOptimization:
         """
         return self.builder.is_constant(name)
 
-    def get_constant(self, name: str) -> Any:
+    def get_computed_constant(self, name: str) -> Any:
         """
         Returns the value for the constant `name`.
         """
-        return self.builder.get_constant(name)
+        return self.builder.get_constant(name, computed_value=True)
 
     def get_attribute(self, node: NodeProto, att_name: str) -> AttributeProto:
         """
@@ -147,7 +147,7 @@ class GraphBuilderPatternOptimization:
         assert input_index < len(
             node.input
         ), f"Input {input_index} does not exist in node {node}."
-        return self.get_constant(node.input[input_index])
+        return self.get_computed_constant(node.input[input_index])
 
     def has_type(self, name: str) -> bool:
         """
