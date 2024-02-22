@@ -343,7 +343,11 @@ class DynamoInterpreter:
                 ends.append(end_name)
                 concat = True
             else:
-                ends.append(aslice.stop)
+                vstop = (
+                    aslice.stop.name if hasattr(aslice.stop, "name") else aslice.stop
+                )
+                concat |= isinstance(vstop, str)
+                ends.append(vstop)
 
             steps.append(aslice.step if aslice.step else 1)
 
@@ -354,12 +358,19 @@ class DynamoInterpreter:
             ]
             conc = self.builder.op.Concat(*iends, axis=0, name="getitem_sliceC")
         else:
-            assert all_int(ends), f"Unexpected value for ends={ends}{g.get_debug_msg()}"
+            assert all_int(ends), (
+                f"Unexpected value for ends={ends}: {[type(_) for _ in ends]}"
+                f"{self.builder.get_debug_msg()}"
+            )
             conc = self.builder.make_initializer("", np.array(ends, dtype=np.int64))
 
-        assert all_int(starts), f"Not implemented for starts={starts}{g.get_debug_msg()}"
-        assert all_int(steps), f"Not implemented for starts={steps}{g.get_debug_msg()}"
-        
+        assert all_int(
+            starts
+        ), f"Not implemented for starts={starts}{self.builder.get_debug_msg()}"
+        assert all_int(
+            steps
+        ), f"Not implemented for starts={steps}{self.builder.get_debug_msg()}"
+
         inputs = [
             input_name,
             self.builder.make_initializer(
@@ -389,7 +400,7 @@ class DynamoInterpreter:
         if set_type_shape:
             dtype = self.builder.get_type(inputs[0])
             self.builder.set_type(node.name, dtype)
-            if self.builder.has_shape(inputs[0]):
+            if not concat and self.builder.has_shape(inputs[0]):
                 shape = self.builder.get_shape(inputs[0])
                 new_shape = self.builder._apply_slice_to_shape(
                     shape, index_slice, axes=axes, expand_axes=expand_axes
@@ -482,7 +493,14 @@ class DynamoInterpreter:
             )
             if set_type_shape:
                 self.builder.set_type(node.name, self.builder.get_type(result_name))
-                self.builder.set_rank(node.name, self.builder.get_rank(result_name) - 1)
+                if self.builder.has_shape(result_name):
+                    self.builder.set_shape(
+                        node.name, self.builder.get_shape(result_name)[1:]
+                    )
+                else:
+                    self.builder.set_rank(
+                        node.name, self.builder.get_rank(result_name) - 1
+                    )
             return res
 
         if isinstance(index, slice):

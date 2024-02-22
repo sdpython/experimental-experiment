@@ -590,8 +590,12 @@ class GraphBuilder:
         self._unique_names.add(name)
 
     def set_rank(self, name: str, value: int):
-        assert isinstance(value, int), f"Unexpected rank type {type(value)} for {name!r}"
-        assert not isinstance(value, bool), f"Unexpected rank type {type(value)} for {name!r}"
+        assert isinstance(
+            value, int
+        ), f"Unexpected rank type {type(value)} for {name!r}"
+        assert not isinstance(
+            value, bool
+        ), f"Unexpected rank type {type(value)} for {name!r}"
         assert isinstance(name, str), f"Unexpected type {type(name)} for name."
         assert (
             name not in self._known_ranks
@@ -1081,16 +1085,9 @@ class GraphBuilder:
         name: str,
         **kwargs: Dict[str, Any],
     ):
-        if op_type == "Concat":
-            for i in inputs:
-                if self.has_rank(i) and self.get_rank(i) == 0:
-                    raise RuntimeError(
-                        f"Input {i} for node Concat has no rank{self.get_debug_msg()}"
-                    )
-        if op_type.startswith("Reduce"):
-            assert (
-                len(inputs) == 1 or "axes" not in kwargs
-            ), f"Operator {op_type} defines twice the axes{self.get_debug_msg()}"
+        assert not op_type.startswith("Reduce") or (
+            len(inputs) == 2 and "axes" in kwargs
+        ), f"Operator {op_type!r} defines twice the axes{self.get_debug_msg()}"
 
     def make_node(
         self,

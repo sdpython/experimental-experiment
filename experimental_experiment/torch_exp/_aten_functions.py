@@ -835,9 +835,9 @@ def aten_expand(
             g.set_shape(res, tuple(new_shape))
         return res
 
-    if isinstance(sizes, list):
+    if isinstance(sizes, (list, tuple)):
         # A combination of static and dynamic dimensions.
-        new_shape = g.make_shape_from_results(sizes, name=f"{name}_dyn")
+        new_shape = g.make_shape_from_results(list(sizes), name=f"{name}_dyn")
     else:
         new_shape = sizes
 
