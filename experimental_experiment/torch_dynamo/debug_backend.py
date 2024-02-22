@@ -1,5 +1,5 @@
 import os
-from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
 import numpy as np
 from onnx import ModelProto
 import torch
@@ -47,6 +47,7 @@ def onnx_debug_backend(
     providers: Optional[Tuple[str]] = None,
     raise_exc: bool = True,
     storage: Optional[Dict[str, Any]] = None,
+    raise_list: Optional[Set[str]] = None,
 ) -> Callable:
     """
     Custom backend to export torch models into onnx
@@ -67,6 +68,8 @@ def onnx_debug_backend(
     :param providers: where to run the model, by default
     :param raise_exc: raise an exception whenever something goes wrong
     :param storage: to store any interesting objects during the process
+    :param raise_list: the builder stops any time a name falls into that list,
+        this is a debbuging tool
     :return: Callable
 
     See :ref:`l-plot-onnxrt-diff` for an example.
@@ -94,6 +97,7 @@ def onnx_debug_backend(
         verbose=verbose_onnx,
         target_opset=target_opset,
         return_builder=True,
+        raise_list=raise_list,
     )
 
     if dump_prefix:

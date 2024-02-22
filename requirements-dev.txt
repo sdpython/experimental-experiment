@@ -17,6 +17,6 @@ sphinx
 sphinx-gallery
 sphinx-issues
 sphinx-runpython
-transformers!=4.38.0
+transformers!=4.38.0,!=4.38.1
 tqdm
 wheel

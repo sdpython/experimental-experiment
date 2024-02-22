@@ -124,6 +124,7 @@ class TestOperators(ExtTestCase):
         square_loss=False,
         use_decomposition=False,
         verbose=0,
+        raise_list=None,
     ):
         if sys.platform == "win32":
             raise unittest.SkipTest("Windows not supported yet.")
@@ -156,6 +157,7 @@ class TestOperators(ExtTestCase):
             storage=storage,
             backend=impl,
             verbose=verbose,
+            raise_list=raise_list,
             **kwargs,
         )
 
@@ -998,6 +1000,7 @@ class TestOperators(ExtTestCase):
             onnx_export=inspect.currentframe().f_code.co_name,
             impl="ref",
             test_backward=False,
+            raise_list=None,  # {"_onx_scatterelements0"},
         )
 
     def test_slice_scatter_1_backward(self):

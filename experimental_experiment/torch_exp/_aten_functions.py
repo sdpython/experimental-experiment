@@ -1982,7 +1982,7 @@ def _aten_slice_scatter_dynamic(
     )
     indices = g.op.Expand(index_base, shape_expand, name=name)
 
-    # Step 4: final ScatterElements.
+    # Step 4: final step
     res = g.op.ScatterElements(x, indices, src, axis=dim, name=name)
     if sts:
         g.set_type(res, g.get_type(x))
@@ -2003,7 +2003,7 @@ def aten_slice_scatter(
     name: Optional[str] = None,
 ) -> T:
 
-    if g.has_shape(x):
+    if g.has_shape(x) and is_static_shape(g.get_shape(x)):
         return _aten_slice_scatter_static(
             g,
             sts,

@@ -1,7 +1,7 @@
 import pprint
 import textwrap
 from functools import partial
-from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
+from typing import Any, Dict, List, Optional, Sequence, Set, Tuple, Union
 import numpy as np
 import onnx.helper as oh
 import onnx.numpy_helper as onh
@@ -277,8 +277,12 @@ class GraphBuilder:
     - `_known_types: Dict[str, int]`: declared element types
     - `_known_ranks: Dict[str, int]`: declared ranks
     - `constants_: Dict[str, Any]`: constant values
+    - `constants_computed_: Dict[str, Any]`: computed constant values
     - `dynamic_objects: Dict[str, torch.SymInt]`: list of dynamic dimension
     - `dynamic_objects_rev: Dict[str, str]`: reverse dictionary to fasten lookups
+
+    - `_raise_list: Set[str]`: the builder stop if a result falls in that list
+      (debugging tool)
     """
 
     def __init__(
@@ -293,6 +297,7 @@ class GraphBuilder:
         ir_version: Optional[int] = None,
         verbose: int = 0,
         infer_shapes: bool = False,
+        raise_list: Optional[Set[str]] = None,
     ):
         import torch
 
@@ -309,6 +314,8 @@ class GraphBuilder:
         self.dynamic_objects_rev = {}
         self.functions = []
         self.value_info = []
+        self._raise_list = raise_list or set()
+        self.constants_computed_ = {}
 
         if isinstance(target_opset_or_existing_proto, (int, dict)):
             # starts a model from nothing
@@ -398,6 +405,7 @@ class GraphBuilder:
                     for o in node.output:
                         if not self.has_name(o):
                             self.set_name(o)
+            self.constant_folding(convert_into_initializer=False)
             if infer_shapes:
                 self._update_shape_types_with_proto(target_opset_or_existing_proto)
         else:
@@ -518,26 +526,62 @@ class GraphBuilder:
         """Tells if a result is a constant."""
         return name in self.constants_
 
-    def get_constant(self, name: str, exc: bool = True) -> np.ndarray:
+    def get_constant(
+        self, name: str, exc: bool = True, computed_value: bool = False
+    ) -> Union[np.ndarray, NodeProto]:
+        """
+        The method returns the constant *name*. It is a tensor (numpy array)
+        or a NodeProto which must be evaluated.
+        If *computed_value* is True, the NodeProto is evaluated wuth the
+        ReferenceEvaluator.
+        """
         if not self.is_constant(name):
             raise ValueError(f"Result {name!r} is not a constant.")
+        possible_value = self.constants_[name]
+        if name in self.constants_computed_:
+            return self.constants_computed_[name]
+
+        if possible_value is not None:
+            assert isinstance(
+                possible_value, (np.ndarray, self.torch.Tensor, NodeProto)
+            ), (
+                f"Unexpected type {type(possible_value)} for a "
+                f"constant{self.get_debug_msg()}"
+            )
+            if computed_value and isinstance(possible_value, NodeProto):
+                res = self.compute_constant(name, exc=exc)[0]
+                if len(res) == 1:
+                    return res[0]
+                index = list(possible_value.output).index(name)
+                return res[index]
+            return possible_value
+
         if name not in self.initializers_dict:
             if exc:
                 raise ValueError(
                     f"Result {name!r} was never evaluated within method 'constant_folding'."
                 )
             return None
+
         value = self.initializers_dict[name]
+
         if isinstance(value, np.ndarray):
             return value
-
         if isinstance(value, self.torch.Tensor):
-            return value.detach().numpy()
+            v = value.detach().numpy()
+            self.constants_computed_[name] = v
+            return v
         if isinstance(value, TensorProto):
-            return onh.to_array(value)
+            v = onh.to_array(value)
+            self.constants_computed_[name] = v
+            return v
         raise TypeError(f"Unable to convert type {type(value)} into numpy array.")
 
     def set_name(self, name: str):
+        assert (
+            name not in self._raise_list
+        ), f"Name {name!r} is one of the name declared in the stop list{self.get_debug_msg()}"
+
         assert isinstance(name, str), f"Unexpected type {type(name)} for name."
         assert (
             name not in self._known_names
@@ -1635,13 +1679,13 @@ class GraphBuilder:
 
     def compute_constant(
         self, name: str, exc: bool = True
-    ) -> Tuple[np.ndarray, Dict[str, np.ndarray]]:
+    ) -> Tuple[np.ndarray, Optional[Dict[str, np.ndarray]]]:
         assert self.is_constant(name), f"Name {name!r} is not a constant."
         if name is self.initializers_dict:
-            return self.initializers_dict[name]
+            return self.initializers_dict[name], None
         v = self.constants_[name]
         assert isinstance(v, NodeProto), f"Unexpected type {type(v)} for name={name!r}"
-        feeds = {i: self.get_constant(i, exc=exc) for i in v.input}
+        feeds = {i: self.get_constant(i, exc=exc, computed_value=True) for i in v.input}
         for val in feeds.values():
             if val is None:
                 return None, None
@@ -1651,14 +1695,18 @@ class GraphBuilder:
         else:
             ref = ExtendedReferenceEvaluator(v)
             output = ref.run(None, feeds)
+        for name, val in zip(v.output, output):
+            self.constants_computed_[name] = val
         return output, feeds
 
-    def constant_folding(self):
+    def constant_folding(self, convert_into_initializer: bool = True):
         """
         Folds all constants. Constants are marked during the creation of the graph.
         There is no need to propagate this information.
-        """
 
+        :param convert_into_initializer: moves the constant as an initializer,
+            otherwise, just evaluates it
+        """
         updates = {}
         node_to_remove = set()
         for k, v in self.constants_.items():
@@ -1667,12 +1715,16 @@ class GraphBuilder:
                 continue
             # a node
             if all(map(self.is_constant, v.input)):
-                node_to_remove.add(tuple(v.output))
+                if convert_into_initializer:
+                    node_to_remove.add(tuple(v.output))
                 # node evaluation
                 output, feeds = self.compute_constant(k)
                 for name, value in zip(v.output, output):
                     updates[name] = None
-                    self.initializers_dict[name] = value
+                    if convert_into_initializer:
+                        self.initializers_dict[name] = value
+                    else:
+                        updates[name] = value
                     if self.verbose:
                         print(
                             f"[GraphBuilder.constant_folding] fold_constant:"
