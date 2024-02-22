@@ -891,7 +891,7 @@ class GraphBuilder:
                     val_int = int(d)
                     new_shape.append(val_int)
                     continue
-                except TypeError:
+                except (TypeError, ValueError):
                     pass
                 assert str(d) in self.dynamic_objects_rev, (
                     f"Unable to find dimension {d!r} ({type(d)}) "
