@@ -529,6 +529,12 @@ class GraphBuilder:
     def get_constant(
         self, name: str, exc: bool = True, computed_value: bool = False
     ) -> Union[np.ndarray, NodeProto]:
+        """
+        The method returns the constant *name*. It is a tensor (numpy array)
+        or a NodeProto which must be evaluated.
+        If *computed_value* is True, the NodeProto is evaluated wuth the
+        ReferenceEvaluator.
+        """
         if not self.is_constant(name):
             raise ValueError(f"Result {name!r} is not a constant.")
         possible_value = self.constants_[name]
