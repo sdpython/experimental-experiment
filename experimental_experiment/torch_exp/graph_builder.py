@@ -595,6 +595,8 @@ class GraphBuilder:
             name not in self._known_ranks
         ), f"Name {name!r} already exists{self.get_debug_msg()}"
         self._known_ranks[name] = value
+        if self.verbose > 5:
+            print(f"[GraphBuilder-{self._hash()}.set_rank] {name}:{value}")
 
     def is_more_precise(self, shape: STATIC_SHAPE, base: STATIC_SHAPE) -> bool:
         assert len(shape) == len(
@@ -1449,7 +1451,18 @@ class GraphBuilder:
         rows.append("--ONNX--")
         for k, v in self._debug_msg.items():
             rows.append(f"-- {k}")
-            rows.append(str(v))
+            if k == "shapes_types":
+                for kk, vv in v.items():
+                    rows.append(
+                        f"{kk}: {vv} --- "
+                        f"{self.get_type(kk) if self.has_type(kk) else ''}:"
+                        f"{self.get_rank(kk) if self.has_rank(kk) else ''}:"
+                        f"{self.get_shape(kk) if self.has_shape(kk) else ''}:"
+                    )
+            elif isinstance(v, dict):
+                rows.append(pprint.pformat(v))
+            else:
+                rows.append(str(v))
         rows.append("--")
         hs = self._hash()
         for io in self.inputs:

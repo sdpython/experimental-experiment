@@ -57,6 +57,10 @@ class DynamoInterpreter:
                 f"[DynamoInterpreter-{self._hash()}.run_node][{symbol}{a1}{a2}] "
                 f"{node.op}:{node.name}:{exa}:{val}"
             )
+            if "shapes_types" not in self.builder._debug_msg:
+                self.builder._debug_msg["shapes_types"] = {}
+            self.builder._debug_msg["shapes_types"][node.name] = (exa, val)
+
         if node.op == "placeholder":
             return self.placeholder(node)
         if node.op == "call_function":
@@ -793,6 +797,12 @@ class DynamoInterpreter:
                     builder.set_shape(name, val[i].shape)
                 if name not in builder._known_types:
                     builder.set_type(name, val[i].dtype)
+                if "shapes_types" not in self.builder._debug_msg:
+                    self.builder._debug_msg["shapes_types"] = {}
+                self.builder._debug_msg["shapes_types"][name] = (
+                    val[i].dtype,
+                    val[i].shape,
+                )
 
         self.builder.make_nodes(
             builder, args, output_names, prefix=f"_sub_{sub_module.__class__.__name__}_"
