@@ -57,6 +57,12 @@ ReshapeReshapePattern
 .. autoclass:: experimental_experiment.torch_exp.optimization_patterns.ReshapeReshapePattern
     :members:
 
+RotaryConcatPartPattern
++++++++++++++++++++++++
+
+.. autoclass:: experimental_experiment.torch_exp.optimization_patterns.RotaryConcatPartPattern
+    :members:
+
 TransposeMatMulPattern
 ++++++++++++++++++++++
 
