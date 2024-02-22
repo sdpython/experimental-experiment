@@ -1,5 +1,5 @@
 import warnings
-from typing import Any, Dict, Optional, Sequence, Tuple, Union
+from typing import Any, Dict, Optional, Sequence, Set, Tuple, Union
 from onnx import ModelProto
 from onnx.defs import onnx_opset_version
 from .interpreter import DynamoInterpreter
@@ -88,6 +88,7 @@ def _make_builder_interpreter(
     as_function: bool = False,
     optimization_options: Optional[OptimizationOptions] = None,
     verbose: int = 0,
+    raise_list: Optional[Set[str]] = None,
 ) -> Tuple["torch.fx.GraphModule", GraphBuilder, DynamoInterpreter]:  # noqa: F821
     """
     Exports a torch model into ONNX using
@@ -101,6 +102,8 @@ def _make_builder_interpreter(
     :param as_function: export as a ModelProto or a FunctionProto
     :param optimization_options: optimization options
     :param verbose: verbosity level
+    :param raise_list: the builder stops any time a name falls into that list,
+        this is a debbuging tool
     :return: onnx model
     """
 
@@ -139,6 +142,7 @@ def _make_builder_interpreter(
         optimization_options=optimization_options,
         args=args,
         verbose=verbose,
+        raise_list=raise_list,
     )
 
     def retrieve(
@@ -159,6 +163,7 @@ def to_onnx(
     options: Optional[OptimizationOptions] = None,
     verbose: int = 0,
     return_builder: bool = False,
+    raise_list: Optional[Set[str]] = None,
 ) -> Union[ModelProto, Tuple[ModelProto, GraphBuilder]]:
     """
     Exports a torch model into ONNX using
@@ -172,6 +177,9 @@ def to_onnx(
     :param as_function: export as a ModelProto or a FunctionProto
     :param options: optimization options
     :param verbose: verbosity level
+    :param return_builder: returns the builder as well
+    :param raise_list: the builder stops any time a name falls into that list,
+        this is a debbuging tool
     :return: onnx model
     """
     if target_opset is None:
@@ -186,6 +194,7 @@ def to_onnx(
         as_function=as_function,
         optimization_options=options,
         verbose=verbose,
+        raise_list=raise_list,
     )
 
     builder.process(graph_module, interpreter)

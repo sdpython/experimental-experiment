@@ -136,7 +136,7 @@ class ExpandPattern(PatternOptimization):
         shape = g.get_shape(node.input[0])
         if not all_int(shape):
             return None
-        new_shape = tuple(g.get_constant(node.input[1]))
+        new_shape = tuple(g.get_computed_constant(node.input[1]))
         if shape != new_shape:
             return
 
@@ -177,6 +177,8 @@ class ReshapeMatMulReshapePattern(PatternOptimization):
 
         node_before_left = g.node_before(node.input[0])
         node_before_right = g.node_before(node.input[1])
+        if node_before_left is None or node_before_right is None:
+            return None
         if (
             node_before_left.op_type != "Reshape"
             or node_before_left.domain != ""
@@ -186,9 +188,13 @@ class ReshapeMatMulReshapePattern(PatternOptimization):
             return None
 
         # condition on shapes
-        shape_left = tuple(int(i) for i in g.get_constant(node_before_left.input[1]))
-        shape_right = tuple(int(i) for i in g.get_constant(node_before_right.input[1]))
-        shape_final = tuple(int(i) for i in g.get_constant(next_node.input[1]))
+        shape_left = tuple(
+            int(i) for i in g.get_computed_constant(node_before_left.input[1])
+        )
+        shape_right = tuple(
+            int(i) for i in g.get_computed_constant(node_before_right.input[1])
+        )
+        shape_final = tuple(int(i) for i in g.get_computed_constant(next_node.input[1]))
         if len(shape_final) < 4:
             return None
         ndim = len(shape_final)
