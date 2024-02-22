@@ -177,6 +177,8 @@ class ReshapeMatMulReshapePattern(PatternOptimization):
 
         node_before_left = g.node_before(node.input[0])
         node_before_right = g.node_before(node.input[1])
+        if node_before_left is None or node_before_right is None:
+            return None
         if (
             node_before_left.op_type != "Reshape"
             or node_before_left.domain != ""

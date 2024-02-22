@@ -41,7 +41,7 @@ class TestGraphPatternOptimization(ExtTestCase):
             optimization_options=OptimizationOptions(
                 remove_identity=False,
                 verbose=10 if __name__ == "__main__" else 0,
-                patterns=None,
+                patterns="default",
             ),
         )
         optimized = gr.to_onnx()

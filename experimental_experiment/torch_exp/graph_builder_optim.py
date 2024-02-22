@@ -310,10 +310,11 @@ class GraphBuilderPatternOptimization:
         assert all(
             map(lambda i: i in positions, idn)
         ), f"One node in {idn} is not referenced"
-        if match.insert_at is None:
-            insert_at = min(positions[i] for i in idn)
-        else:
-            insert_at = positions[id(match.insert_at)]
+        insert_at = (
+            max(positions[i] for i in idn)
+            if match.insert_at is None
+            else positions[id(match.insert_at)]
+        )
         new_nodes = match.apply(self, *match.nodes)
         removed = [positions[i] for i in idn]
         self.builder.insert_and_remove_nodes(insert_at, new_nodes, removed)

@@ -398,6 +398,7 @@ class GraphBuilder:
                     for o in node.output:
                         if not self.has_name(o):
                             self.set_name(o)
+            self.constant_folding(convert_into_initializer=False)
             if infer_shapes:
                 self._update_shape_types_with_proto(target_opset_or_existing_proto)
         else:
@@ -521,16 +522,20 @@ class GraphBuilder:
     def get_constant(self, name: str, exc: bool = True) -> np.ndarray:
         if not self.is_constant(name):
             raise ValueError(f"Result {name!r} is not a constant.")
+        possible_value = self.constants_[name]
+        if possible_value is not None:
+            return possible_value
         if name not in self.initializers_dict:
             if exc:
                 raise ValueError(
                     f"Result {name!r} was never evaluated within method 'constant_folding'."
                 )
             return None
+
         value = self.initializers_dict[name]
+
         if isinstance(value, np.ndarray):
             return value
-
         if isinstance(value, self.torch.Tensor):
             return value.detach().numpy()
         if isinstance(value, TensorProto):
@@ -1653,10 +1658,13 @@ class GraphBuilder:
             output = ref.run(None, feeds)
         return output, feeds
 
-    def constant_folding(self):
+    def constant_folding(self, convert_into_initializer: bool = True):
         """
         Folds all constants. Constants are marked during the creation of the graph.
         There is no need to propagate this information.
+
+        :param convert_into_initializer: moves the constant as an initializer,
+            otherwise, just evaluates it
         """
 
         updates = {}
@@ -1667,12 +1675,16 @@ class GraphBuilder:
                 continue
             # a node
             if all(map(self.is_constant, v.input)):
-                node_to_remove.add(tuple(v.output))
+                if convert_into_initializer:
+                    node_to_remove.add(tuple(v.output))
                 # node evaluation
                 output, feeds = self.compute_constant(k)
                 for name, value in zip(v.output, output):
                     updates[name] = None
-                    self.initializers_dict[name] = value
+                    if convert_into_initializer:
+                        self.initializers_dict[name] = value
+                    else:
+                        updates[name] = value
                     if self.verbose:
                         print(
                             f"[GraphBuilder.constant_folding] fold_constant:"
