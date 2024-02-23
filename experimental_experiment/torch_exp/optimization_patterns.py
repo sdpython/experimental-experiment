@@ -102,7 +102,7 @@ def get_pattern_list(
         return positive_list
     if isinstance(negative_list, str):
         assert negative_list in _pattern, f"List {negative_list!r} is not defined."
-        negative_list = _pattern[positive_list]()
+        negative_list = _pattern[negative_list]()
     else:
         negative_list = [get_pattern(t) for t in negative_list]
 
