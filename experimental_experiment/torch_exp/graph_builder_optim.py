@@ -110,16 +110,19 @@ class GraphBuilderPatternOptimization:
         """
         return self.builder.get_constant(name, computed_value=True)
 
-    def get_attribute(self, node: NodeProto, att_name: str) -> AttributeProto:
+    def get_attribute(
+        self, node: NodeProto, att_name: str, exc: bool = True
+    ) -> AttributeProto:
         """
         Returns an attribute for a node.
         """
         for att in node.attribute:
             if att.name == att_name:
                 return att
-        raise RuntimeError(
-            f"Unable to find attribute {att_name!r} for node type {node.op_type!r} in node {node}"
-        )
+        assert (
+            not exc
+        ), f"Unable to find attribute {att_name!r} for node type {node.op_type!r} in node {node}"
+        return None
 
     def get_constant_or_attribute(
         self, node: NodeProto, attribute: str, input_index: int

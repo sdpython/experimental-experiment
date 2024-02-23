@@ -18,7 +18,7 @@ from .annotations import (
 from ._aten_helper import dtype_to_tensor_dtype, _nice_shape
 from ._helper import make_hash
 from .graph_builder_optim import PatternOptimization, GraphBuilderPatternOptimization
-from .optimization_patterns import get_default_patterns, get_pattern
+from .optimization_patterns import get_pattern, get_pattern_list
 
 
 def _default_OPSET_TO_IR_VERSION():
@@ -83,8 +83,7 @@ class OptimizationOptions:
         self.remove_identity = remove_identity
         self.constant_size = constant_size
         if isinstance(patterns, str):
-            assert patterns == "default", f"Unexpected value {patterns!r} for patterns"
-            self.patterns = get_default_patterns()
+            self.patterns = get_pattern_list(patterns)
         else:
             assert patterns is None or isinstance(
                 patterns, list
