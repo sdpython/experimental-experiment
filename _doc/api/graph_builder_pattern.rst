@@ -8,6 +8,11 @@ get_default_patterns
 
 .. autofunction:: experimental_experiment.torch_exp.optimization_patterns.get_default_patterns
 
+get_default_patterns
+====================
+
+.. autofunction:: experimental_experiment.torch_exp.optimization_patterns.get_pattern_list
+
 Classes
 =======
 
@@ -55,6 +60,12 @@ ReshapeReshapePattern
 +++++++++++++++++++++
 
 .. autoclass:: experimental_experiment.torch_exp.optimization_patterns.ReshapeReshapePattern
+    :members:
+
+RotaryConcatPartPattern
++++++++++++++++++++++++
+
+.. autoclass:: experimental_experiment.torch_exp.optimization_patterns.RotaryConcatPartPattern
     :members:
 
 TransposeMatMulPattern

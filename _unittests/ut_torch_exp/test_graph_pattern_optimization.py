@@ -17,9 +17,17 @@ from experimental_experiment.torch_exp.annotations import (
     compatible_shapes,
     compatible_dimensions,
 )
+from experimental_experiment.torch_exp.optimization_patterns import get_pattern_list
 
 
 class TestGraphPatternOptimization(ExtTestCase):
+    def test_get_pattern_list(self):
+        res = get_pattern_list(negative_list=["Cast"])
+        names = set(r.__class__.__name__ for r in res)
+        self.assertNotIn("CastPattern", names)
+        res = get_pattern_list(negative_list="default")
+        self.assertEqual(res, [])
+
     def _check_with_ort(self, proto: ModelProto):
         from onnxruntime import InferenceSession, get_available_providers
 
@@ -662,6 +670,144 @@ class TestGraphPatternOptimization(ExtTestCase):
             [n.op_type for n in opt_onx.graph.node],
         )
         self.assertEqual(0, len(opt_onx.graph.initializer))
+
+        opt_ref = ExtendedReferenceEvaluator(opt_onx)
+        got = opt_ref.run(None, feeds)
+        self.assertEqualArray(expected[0], got[0])
+
+    def test_rotary_concat_part_dort(self):
+        origin = self._get_model("dort-c-custom__1.onnx")
+        before = [
+            node for node in origin.graph.node if node.op_type == "ConstantOfShape"
+        ]
+        gr = GraphBuilder(
+            origin,
+            optimization_options=OptimizationOptions(
+                patterns=["RotaryConcatPart"], verbose=0
+            ),
+        )
+        onx = gr.to_onnx(optimize=True)
+        after = [node for node in onx.graph.node if node.op_type == "ConstantOfShape"]
+        self.assertEqual(len(before) - 4, len(after))
+
+    def test_rotary_concat_part_execution_1(self):
+        from onnx_array_api.light_api import start
+
+        def mk(shape):
+            return np.array(shape, dtype=np.int64)
+
+        model = (
+            start(opset=18, ir_version=9)
+            .cst(mk([2, 2, 1024, 256]), "shape")
+            .cst(mk([0]), "c0")
+            .cst(mk([256]), "c256")
+            .cst(mk([512]), "c512")
+            .cst(mk([3]), "c3")
+            .vin("X", TensorProto.FLOAT, ("a", "b", "c", "d"))
+            .bring("shape")
+            .ConstantOfShape()
+            .rename("C1")
+            .bring("shape")
+            .ConstantOfShape()
+            .rename("C2")
+            .bring("X", "c256", "c512", "c3")
+            .Slice()
+            .rename("S1")
+            .bring("C1", "S1")
+            .Concat(axis=3)
+            .rename("P1")
+            .bring("X", "c0", "c256", "c3")
+            .Slice()
+            .rename("notused")
+            .Neg()
+            .rename("S2")
+            .bring("S2", "C2")
+            .Concat(axis=3)
+            .rename("P2")
+            .bring("P1", "P2")
+            .Add()
+            .rename("Y")
+            .vout(TensorProto.FLOAT, ("a", "b", "c", "d"))
+            .to_onnx()
+        )
+        check_model(model)
+
+        feeds = {"X": self._range(2, 2, 1024, 512)}
+        ref = ExtendedReferenceEvaluator(model)
+        expected = ref.run(None, feeds)
+
+        gr = GraphBuilder(
+            model,
+            infer_shapes=True,
+            optimization_options=OptimizationOptions(patterns=["RotaryConcatPart"]),
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+        self.assertEqual(
+            ["Slice", "Slice", "Neg", "Concat"],
+            [n.op_type for n in opt_onx.graph.node],
+        )
+        self.assertEqual(4, len(opt_onx.graph.initializer))
+
+        opt_ref = ExtendedReferenceEvaluator(opt_onx)
+        got = opt_ref.run(None, feeds)
+        self.assertEqualArray(expected[0], got[0])
+
+    def test_rotary_concat_part_execution_2(self):
+        from onnx_array_api.light_api import start
+
+        def mk(shape):
+            return np.array(shape, dtype=np.int64)
+
+        model = (
+            start(opset=18, ir_version=9)
+            .cst(mk([2, 2, 1024, 256]), "shape")
+            .cst(mk([0]), "c0")
+            .cst(mk([256]), "c256")
+            .cst(mk([512]), "c512")
+            .cst(mk([3]), "c3")
+            .vin("X", TensorProto.FLOAT, ("a", "b", "c", "d"))
+            .bring("shape")
+            .ConstantOfShape()
+            .rename("C1")
+            .bring("shape")
+            .ConstantOfShape()
+            .rename("C2")
+            .bring("X", "c256", "c512", "c3")
+            .Slice()
+            .Neg()
+            .rename("S1")
+            .bring("C1", "S1")
+            .Concat(axis=3)
+            .rename("P1")
+            .bring("X", "c0", "c256", "c3")
+            .Slice()
+            .rename("S2")
+            .bring("S2", "C2")
+            .Concat(axis=3)
+            .rename("P2")
+            .bring("P1", "P2")
+            .Add()
+            .rename("Y")
+            .vout(TensorProto.FLOAT, ("a", "b", "c", "d"))
+            .to_onnx()
+        )
+        check_model(model)
+
+        feeds = {"X": self._range(2, 2, 1024, 512)}
+        ref = ExtendedReferenceEvaluator(model)
+        expected = ref.run(None, feeds)
+
+        gr = GraphBuilder(
+            model,
+            infer_shapes=True,
+            optimization_options=OptimizationOptions(patterns=["RotaryConcatPart"]),
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+        self.assertEqual(
+            ["Slice", "Slice", "Neg", "Concat"],
+            [n.op_type for n in opt_onx.graph.node],
+        )
+        self.assertEqual(4, len(opt_onx.graph.initializer))
 
         opt_ref = ExtendedReferenceEvaluator(opt_onx)
         got = opt_ref.run(None, feeds)

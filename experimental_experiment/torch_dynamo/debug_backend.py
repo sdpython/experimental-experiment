@@ -4,6 +4,7 @@ import numpy as np
 from onnx import ModelProto
 import torch
 from ..torch_exp.onnx_export import to_onnx, OptimizationOptions
+from ..torch_exp.optimization_patterns import get_pattern_list
 
 
 def _get_session(
@@ -48,6 +49,7 @@ def onnx_debug_backend(
     raise_exc: bool = True,
     storage: Optional[Dict[str, Any]] = None,
     raise_list: Optional[Set[str]] = None,
+    disable_pattern: Optional[List[Union[str, type]]] = "default",
 ) -> Callable:
     """
     Custom backend to export torch models into onnx
@@ -70,6 +72,7 @@ def onnx_debug_backend(
     :param storage: to store any interesting objects during the process
     :param raise_list: the builder stops any time a name falls into that list,
         this is a debbuging tool
+    :param disable_pattern: to disable optimization patterns, by default, all are disabled
     :return: Callable
 
     See :ref:`l-plot-onnxrt-diff` for an example.
@@ -85,8 +88,13 @@ def onnx_debug_backend(
         verbose if isinstance(verbose, tuple) else (verbose, verbose)
     )
 
+    patterns = get_pattern_list("default", disable_pattern)
+
     options = OptimizationOptions(
-        remove_unused=True, constant_folding=False, patterns=None, verbose=verbose_onnx
+        remove_unused=True,
+        constant_folding=False,
+        patterns=patterns,
+        verbose=verbose_onnx,
     )
 
     onx, builder = to_onnx(
