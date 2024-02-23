@@ -3,11 +3,8 @@ from typing import Any, Iterator, List, Optional, Union
 from onnx import AttributeProto, NodeProto
 import onnx.helper as oh
 from ._onnx_helper import enumerate_subgraphs
-from .optimization_patterns import (
-    MatchResult,
-    PatternOptimization,
-    get_default_patterns,
-)
+from .optimization_patterns_api import MatchResult, PatternOptimization
+from .optimization_patterns import get_default_patterns
 from .type_inference import infer_types
 
 
