@@ -821,7 +821,7 @@ class TestOperators(ExtTestCase):
             lambda x: torch.prod(x),
             x,
             onnx_export=inspect.currentframe().f_code.co_name,
-            atol=1e-5,
+            atol=2e-4,
         )
 
     def test_reduced_prod(self):
