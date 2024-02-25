@@ -318,6 +318,26 @@ class TestOperators(ExtTestCase):
             test_backward=False,
         )
 
+    def test_index_select_ort(self):
+        x = torch.arange(12, requires_grad=True, dtype=torch.float32).reshape((-1, 4))
+        self.assertONNX(
+            lambda x: torch.index_select(x.clone(), 1, torch.tensor([0, 2])),
+            x,
+            onnx_export=inspect.currentframe().f_code.co_name,
+            test_backward=False,
+            impl="ort",
+        )
+
+    def test_index_select_ref(self):
+        x = torch.arange(12, requires_grad=True, dtype=torch.float32).reshape((-1, 4))
+        self.assertONNX(
+            lambda x: torch.index_select(x.clone(), 1, torch.tensor([0, 2])),
+            x,
+            onnx_export=inspect.currentframe().f_code.co_name,
+            test_backward=False,
+            impl="ref",
+        )
+
     def test_type_as(self):
         x = torch.tensor([0.0], requires_grad=True)
         self.assertONNX(

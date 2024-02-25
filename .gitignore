@@ -10,13 +10,14 @@
 *.pkl
 *.xlsx
 *.sarif
+coverage.html/*
 temp*.onnx*
 temp_dump/*
-coverage.html/*
 dump_models/*
 temp_dump_models/*
 dump_dort_bench/*
 temp_llama_model_*/*
+test_*.txt
 _cache/*
 .coverage
 dist/*
