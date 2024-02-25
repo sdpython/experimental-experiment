@@ -184,6 +184,7 @@ class TestDynamoLlamaDynamic(ExtTestCase):
             model,
             example_args_collection,
             test_backward=test_backward,
+            dynamic=dynamic,
             fullgraph=fullgraph,
             onnx_export=onnx_export,
             impl=impl,
@@ -195,6 +196,33 @@ class TestDynamoLlamaDynamic(ExtTestCase):
             raise_list=raise_list,
         )
         self.assertIsInstance(storage, dict)
+        return storage
+
+    @ignore_warnings((UserWarning, DeprecationWarning))
+    @skipif_ci_windows("torch.compile not supported on Windows")
+    @unittest.skipIf(torch_min("2.2"), reason="missing kernel")
+    def test_llama_model_backward_forward_static(self):
+        from experimental_experiment.torch_helper.llama_helper import get_llama_model
+
+        input_dims = self.get_input_dims(True)
+        model, example_args_collection = get_llama_model(input_dims=input_dims)
+
+        stored = self.common_test_model(
+            model,
+            example_args_collection,
+            test_backward=1,
+            dynamic=False,
+            fullgraph=True,
+            onnx_export="test_llama_model_backward_forward",
+            impl="ort",
+        )
+        onx = stored["instance"][0]["onnx"]
+        builder = stored["instance"][0]["builder"]
+        if __name__ == "__main__":
+            with open("test_llama_model_backward_forward_static.onnx", "wb") as f:
+                f.write(onx.SerializeToString())
+            with open("test_llama_model_backward_forward_static.txt", "w") as f:
+                f.write(builder.get_debug_msg())
 
     @ignore_warnings((UserWarning, DeprecationWarning))
     @skipif_ci_windows("torch.compile not supported on Windows")

@@ -994,7 +994,7 @@ def aten_index_Tensor(
     ), f"Unexpected type {type(indices)} for indices"
     if len(indices) == 1 and isinstance(indices[0], str):
         return aten_index_select(
-            g, sts, outputs, x, dim=0, index=indices[0], name="index_Tensor"
+            g, sts, outputs, x, dim=0, index=indices[0], name="index1_Tensor"
         )
     n_none = len(list(i for i in indices if i is None))
     if n_none == len(indices) - 1:
@@ -1009,7 +1009,7 @@ def aten_index_Tensor(
                 x,
                 dim=position,
                 index=index,
-                name="index_Tensor",
+                name="index2_Tensor",
             )
             to_add = list(i for i in range(len(indices)) if i != position)
             assert (
