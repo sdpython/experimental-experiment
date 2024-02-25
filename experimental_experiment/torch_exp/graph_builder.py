@@ -1432,7 +1432,7 @@ class GraphBuilder:
         rows.append(f"dynamic_objects_rev={pprint.pformat(self.dynamic_objects_rev)}")
         rows.append("--ONNX--")
         for k, v in self._debug_msg.items():
-            rows.append(f"-- {k}")
+            rows.append(f"-- {k} --")
             if k == "shapes_types":
                 for kk, vv in v.items():
                     rows.append(
