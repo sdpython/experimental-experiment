@@ -16,35 +16,14 @@ from .annotations import (
     is_static_shape,
 )
 from ._aten_helper import dtype_to_tensor_dtype, _nice_shape
+from ._onnx_helper import (
+    choose_consistent_domain_opset,
+    compatible_opsets,
+    _default_OPSET_TO_IR_VERSION,
+)
 from ._helper import make_hash
 from .graph_builder_optim import PatternOptimization, GraphBuilderPatternOptimization
 from .optimization_patterns import get_pattern, get_pattern_list
-
-
-def _default_OPSET_TO_IR_VERSION():
-    return {
-        1: 3,
-        2: 3,
-        3: 3,
-        4: 3,
-        5: 3,
-        6: 3,
-        7: 3,
-        8: 4,
-        9: 4,
-        10: 5,
-        11: 6,
-        12: 7,
-        13: 7,
-        14: 7,
-        15: 8,
-        16: 8,
-        17: 8,
-        18: 8,
-        19: 9,
-        20: 9,
-        21: 10,
-    }
 
 
 class OptimizationOptions:
@@ -1839,7 +1818,11 @@ class GraphBuilder:
                 self.nodes.append(node)
 
     def insert_and_remove_nodes(
-        self, insert_at: int, new_nodes: List[NodeProto], removed: List[int]
+        self,
+        insert_at: int,
+        new_nodes: List[NodeProto],
+        removed: List[int],
+        opsets: Optional[Dict[str, int]] = None,
     ) -> List[NodeProto]:
         """
         Inserts new nodes and removes others.
@@ -1847,6 +1830,7 @@ class GraphBuilder:
         :param insert_at: insert the new nodes at this position
         :param new_nodes: list of nodes to insert
         :param removed: list of nodes to removed (based on their positions)
+        :param opsets: opsets used
         :return: list of removed nodes
         """
         assert not removed or min(removed) <= insert_at, (
@@ -1873,6 +1857,30 @@ class GraphBuilder:
                     n_existing.append(o)
                 else:
                     self.set_name(o)
+
+            node_domain = node.domain or ""
+            if node_domain in self.opsets:
+                if opsets and node_domain in opsets:
+                    assert compatible_opsets(
+                        node_domain,
+                        node.op_type,
+                        current=self.opsets[node_domain],
+                        new_version=opsets[node_domain],
+                    ), (
+                        f"Incompatible opset for node {node_domain!r} "
+                        f"from domain {node_domain!r}, "
+                        f"current is {self.opsets[node_domain]}, "
+                        f"new is {opsets[node_domain]}"
+                    )
+            else:
+                if opsets and node_domain in opsets:
+                    self.opsets[node_domain] = opsets[node_domain]
+                else:
+                    self.opsets[node_domain] = choose_consistent_domain_opset(
+                        node_domain,
+                        opsets=self.opsets,
+                    )
+
         assert n_existing, "Any output of the new node is conncted to existing names."
         for i, n in enumerate(new_nodes):
             assert isinstance(n, NodeProto), f"Unexpected type {type(n)} for a node"
