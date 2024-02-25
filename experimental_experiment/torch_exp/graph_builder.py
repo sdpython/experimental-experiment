@@ -1063,9 +1063,14 @@ class GraphBuilder:
         name: str,
         **kwargs: Dict[str, Any],
     ):
-        assert not op_type.startswith("Reduce") or (
-            len(inputs) == 2 and "axes" in kwargs
-        ), f"Operator {op_type!r} defines twice the axes{self.get_debug_msg()}"
+        assert (
+            not op_type.startswith("Reduce")
+            or (len(inputs) == 2 and "axes" not in kwargs)
+            or len(inputs) == 1
+        ), (
+            f"Operator {op_type!r} defines twice the axes, kwargs={kwargs}, "
+            f"len(inputs)={len(inputs)}, {self.get_debug_msg()}"
+        )
 
     def make_node(
         self,
@@ -1473,6 +1478,7 @@ class GraphBuilder:
         interpreter: "Interpreter",  # noqa: F821
     ):
         self._debug_msg["process.graph_module"] = graph_module.graph
+        self._debug_msg["shapes_types"] = {}
 
         # looks into output marked as "alias_of_input"
         # see https://pytorch.org/functorch/main/_modules/torch/_functorch/aot_autograd.html

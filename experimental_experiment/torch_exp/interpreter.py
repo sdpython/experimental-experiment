@@ -58,8 +58,6 @@ class DynamoInterpreter:
                 f"[DynamoInterpreter-{self._hash()}.run_node][{symbol}{a1}{a2}] "
                 f"{node.op}:{node.name}:{exa}:{val}"
             )
-            if "shapes_types" not in self.builder._debug_msg:
-                self.builder._debug_msg["shapes_types"] = {}
 
         # debug
         exa = (
