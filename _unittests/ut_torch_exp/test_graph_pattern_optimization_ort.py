@@ -2,7 +2,7 @@ import unittest
 import numpy as np
 from onnx import TensorProto, helper as oh, numpy_helper as onh
 from onnx.checker import check_model
-from experimental_experiment.ext_test_case import ExtTestCase
+from experimental_experiment.ext_test_case import ExtTestCase, skipif_ci_windows
 from experimental_experiment.torch_exp.graph_builder import (
     GraphBuilder,
     OptimizationOptions,
@@ -33,6 +33,7 @@ class TestGraphPatternOptimizationOrt(ExtTestCase):
             AssertionError,
         )
 
+    @skipif_ci_windows("get_all_schemas_with_history returns wrong values")
     def test_compatible_opsets(self):
         self.assertTrue(compatible_opsets("", "Slice", 18, 18))
         self.assertTrue(compatible_opsets("", "Slice", 18, 17))

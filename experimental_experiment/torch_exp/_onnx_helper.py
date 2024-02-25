@@ -78,6 +78,14 @@ def compatible_opsets(
                 res[domain][name] = {}
             res[domain][name][version] = schema
         _history = res
+
+    assert (
+        domain in _history
+    ), f"Unable to find domain {domain!r} in {list(sorted(_history))}."
+    assert op_type in _history[domain], (
+        f"Unable to find op_type {op_type!r}, domain={domain!r} "
+        f"in {list(sorted(_history[domain]))}"
+    )
     hist = _history[domain][op_type]
     version = list(sorted(hist))
     pos = np.searchsorted(version, current, side="right") - 1
