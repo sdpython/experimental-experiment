@@ -1002,7 +1002,7 @@ def aten_index_Tensor(
         position = min(i for i, v in enumerate(indices) if v is not None)
         index = indices[position]
         if isinstance(index, str):
-            temp = aten_index_select(
+            res = aten_index_select(
                 g,
                 sts,
                 None,
@@ -1015,19 +1015,19 @@ def aten_index_Tensor(
             assert (
                 len(to_add) > 0
             ), f"Unexpected value for to_add={to_add}, position={position}, indices={indices}"
-            res = g.op.UnsqueezeAnyOpset(
-                temp, np.array(to_add, dtype=np.int64), outputs=outputs
-            )
-            if sts:
-                g.set_type(res, g.get_type(x))
-                if g.has_shape(temp):
-                    shape = list(g.get_shape(temp))
-                    for i in to_add:
-                        shape.insert(i, 1)
-                    g.set_shape(res, tuple(shape))
-                else:
-                    g.set_rank(res, g.get_rank(temp) + 2)
-        return res
+            # res = g.op.UnsqueezeAnyOpset(
+            #     temp, np.array(to_add, dtype=np.int64), outputs=outputs
+            # )
+            # if sts:
+            #     g.set_type(res, g.get_type(x))
+            #     if g.has_shape(temp):
+            #         shape = list(g.get_shape(temp))
+            #         for i in to_add:
+            #            shape.insert(i, 1)
+            #         g.set_shape(res, tuple(shape))
+            #     else:
+            #         g.set_rank(res, g.get_rank(temp) + 2)
+            return res
 
     raise RuntimeError(
         f"aten_index_Tensor not implemented yet for indices={indices}, "
@@ -1771,7 +1771,7 @@ def aten_slice_Tensor(
     ]
     if step is not None and step != 1:
         inputs.append(np.array([step], dtype=np.int64))
-    res = g.op.Slice(x, *inputs, outputs=outputs)
+    res = g.op.Slice(x, *inputs, outputs=outputs, name="slice_Tensor")
     if sts:
         g.set_type(res, g.get_type(x))
         if is_static_dimension(start) and is_static_dimension(end):
