@@ -192,6 +192,7 @@ class DynamoInterpreter:
                         o = f"{output_name}_{i}"
                 if a_name is None:
                     # the gradient may need unused output
+                    o = f"{output_name}_NONE_{i}"
                     self.builder.make_node("Constant", [], [o], value_float=0)
                     outputs.append((None, o))
                 else:

@@ -152,7 +152,7 @@ def onnx_debug_backend(
     for o in onx.graph.output:
         b = "_dim_" in o.name
         rk = len(o.type.tensor_type.shape.dim)
-        is_dimension_out.append((b, rk, o.name))
+        is_dimension_out.append((b, rk, None if "_NONE_" in o.name else o.name))
 
     if storage is not None:
         stor = {}
@@ -213,6 +213,9 @@ def onnx_debug_backend(
         results = sess.run(None, feeds)
         res = []
         for y, (dim, rk, name) in zip(results, is_dimension_out):
+            if name is None:
+                res.append(None)
+                continue
             if dim:
                 assert len(y.shape) <= 1, (
                     f"Unexpected shape {y.shape} ({y}) for a dimension {name!r} "
@@ -225,7 +228,8 @@ def onnx_debug_backend(
                 si = create_symint(yi)
                 assert torch.sym_int(si)
                 res.append(yi)
-            elif max_device >= 0:
+                continue
+            if max_device >= 0:
                 res.append(torch.Tensor(y).to(_dtype[y.dtype]).to("cuda"))
             else:
                 res.append(torch.Tensor(y).to(_dtype[y.dtype]))

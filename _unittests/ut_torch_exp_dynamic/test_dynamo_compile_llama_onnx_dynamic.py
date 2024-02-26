@@ -320,7 +320,8 @@ class TestDynamoLlamaDynamic(ExtTestCase):
             onnx_export="tt_test_llama_model_backward_mixed_dynamic",
             impl="ref",
             mixed=True,
-            verbose=10,
+            verbose=0,
+            dump_prefix="tt_temp_llama_model_backward_mixed_dynamic",
         )
 
 
