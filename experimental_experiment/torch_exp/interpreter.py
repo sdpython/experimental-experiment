@@ -143,7 +143,7 @@ class DynamoInterpreter:
                 )
             if "nn_module_stack" not in node.meta:
                 return self.builder.make_tensor_input(
-                    node.name, elem_type=val.dtype, shape=val.shape
+                    node.name, elem_type=val.dtype, shape=val.shape, is_dimension=False
                 )
             value = self.retriever(node.target, val)
             if value is None:
@@ -151,10 +151,7 @@ class DynamoInterpreter:
                     dtype = val.dtype
                     shape = val.shape
                     return self.builder.make_tensor_input(
-                        node.name,
-                        dtype,
-                        shape,
-                        self.builder.get_is_dimension(node.name),
+                        node.name, dtype, shape, False
                     )
                 raise RuntimeError(
                     f"value is None, unable to retrieve target {node.target!r}"
@@ -238,7 +235,7 @@ class DynamoInterpreter:
                     shape=shape,
                     indexed=False,
                     is_dimension=self.builder.get_is_dimension(
-                        a, elem_type=elem_type, shape=shape
+                        a or o, elem_type=elem_type, shape=shape
                     ),
                 )
             return [_[1] for _ in outputs]

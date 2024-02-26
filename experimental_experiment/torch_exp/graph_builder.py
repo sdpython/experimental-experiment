@@ -633,9 +633,30 @@ class GraphBuilder:
                     if shape is not None and len(shape) >= 2:
                         return False
                     dtype = self.get_type(name)
-                    shape = self.get_shape(name)
-                    if dtype == TensorProto.INT64 and shape == (1,):
-                        return True
+                    if dtype in {
+                        TensorProto.FLOAT16,
+                        TensorProto.FLOAT,
+                        TensorProto.DOUBLE,
+                        TensorProto.BFLOAT16,
+                    }:
+                        return False
+                    if self.has_shape(name):
+                        shape = self.get_shape(name)
+                        if dtype == TensorProto.INT64 and shape == (1,):
+                            return True
+                    elif self.has_rank(name):
+                        if self.get_rank(name) > 1:
+                            return False
+                if isinstance(val1[0], tuple) and len(val1[0]) >= 1:
+                    v = val1[0]
+                    if (
+                        isinstance(v, tuple)
+                        and len(v) == 3
+                        and v[0] == "example_value"
+                        and len(self.dynamic_objects) == 0
+                    ):
+                        # No dynamic shape as input, so there shoud not be any dynamic shape as output.
+                        return False
             elif value[0] == "call_module":
                 if isinstance(value[1], tuple) and len(value[1]) == 2:
                     el_type, size = value[1]
@@ -647,14 +668,21 @@ class GraphBuilder:
                         return False
                     if len(size) >= 2:
                         return False
-
             raise RuntimeError(
                 f"Not implemented for name={name!r}, value={value!r} ({type(value)}), "
                 f"elem_type={elem_type}, shape={shape}{self.get_debug_msg()}"
             )
         else:
+            if elem_type in {
+                TensorProto.FLOAT16,
+                TensorProto.FLOAT,
+                TensorProto.DOUBLE,
+                TensorProto.BFLOAT16,
+            }:
+                return False
             raise RuntimeError(
-                f"Unable to gues if {name!r} is a dimension{self.get_debug_msg()}"
+                f"Unable to gues if {name!r}, elem_type={elem_type}, "
+                f"shape={shape} is a dimension{self.get_debug_msg()}"
             )
         assert not res or (
             (
