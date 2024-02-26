@@ -234,7 +234,18 @@ def onnx_custom_backend(
 
     input_names = [i.name for i in onx.graph.input]
     output_names = [i.name for i in onx.graph.output]
-    is_dimension = ["_dim_" in o.name for o in output_names]
+
+    is_dimension_in = []
+    for o in onx.graph.input:
+        b = "_dim_" in o.name
+        rk = len(o.type.tensor_type.shape.dim)
+        is_dimension_in.append((b, rk, o.name))
+
+    is_dimension_out = []
+    for o in onx.graph.output:
+        b = "_dim_" in o.name
+        rk = len(o.type.tensor_type.shape.dim)
+        is_dimension_out.append((b, rk, o.name))
 
     if storage is not None:
         stor = {}
@@ -244,7 +255,8 @@ def onnx_custom_backend(
             storage["instance"] = [stor]
         stor["graph_module"] = graph_module
         stor["onnx"] = onx
-        stor["is_dimension"] = is_dimension
+        stor["is_dimension_in"] = is_dimension_in
+        stor["is_dimension_out"] = is_dimension_out
         stor["builder"] = builder
         stor["sess"] = sess
         stor["inputs"] = []
@@ -260,12 +272,20 @@ def onnx_custom_backend(
         input_names=input_names,
         output_names=output_names,
         dump_first_inputs=dump_first_inputs,
-        is_dimension=is_dimension,
+        is_dimension_in=is_dimension_in,
+        is_dimension_out=is_dimension_out,
     ):
         if dump_first_inputs[0]:
             dump_first_inputs[0] = False
             with open(name + ".pkl", "wb") as f:
                 pickle.dump([input_names, _serialize(inputs), output_names], f)
+
+        assert not any(
+            [_[0] for _ in is_dimension_in]
+        ), f"Not implemented yet when one input is a dimension: {is_dimension_in}."
+        assert not any(
+            [_[0] for _ in is_dimension_out]
+        ), f"Not implemented yet when one output is a dimension: {is_dimension_out}."
 
         res = _run_onnx_session_with_ortvaluevector(
             ORTC.OrtValueVector,
@@ -278,9 +298,6 @@ def onnx_custom_backend(
             inputs,
             output_names,
         )
-        assert not any(
-            is_dimension
-        ), f"Not implemented yet when one output is a dimension {is_dimension}."
         if stor:
             stor["inputs"].append(args)
             stor["outputs"].append(res)
