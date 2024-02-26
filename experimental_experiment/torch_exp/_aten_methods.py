@@ -157,9 +157,18 @@ def aten_meth_reshape(
     outputs: List[str],
     input_name: T,
     *shape: List[int],
+    name: str = "reshape",
 ) -> T:
-    cst = g.make_initializer("", np.array(shape, dtype=np.int64))
-    res = g.make_node("Reshape", [input_name, cst], outputs)
+    if all_int(shape):
+        # static version
+        cst = g.make_initializer("", np.array(shape, dtype=np.int64))
+        res = g.make_node("Reshape", [input_name, cst], outputs, name=name)
+        if sts:
+            set_type_shape_reshape(g, res, input_name, shape)
+        return res
+    # dynamic version
+    dyn_shape = g.make_shape_from_results(shape, name=name)
+    res = g.make_node("Reshape", [input_name, dyn_shape], outputs, name=name)
     if sts:
         set_type_shape_reshape(g, res, input_name, shape)
     return res
@@ -178,15 +187,17 @@ def aten_meth_size(
     name: str = ".size",
 ) -> T:
     if dim is None:
-        res = g.op.Shape(x, name=name, outputs=outputs)
+        res = g.op.Shape(x, name=f"{name}A", outputs=outputs)
         if sts:
             g.set_type(res, TensorProto.INT64)
             g.set_shape(res, (g.get_rank(x),))
         return res
 
     s = g.op.Shape(x, name=name)
-    d = g.op.Gather(s, np.array([dim], dtype=np.int64), name=name)
-    res = g.op.Squeeze(d, np.array([0], dtype=np.int64), name=name, outputs=outputs)
+    d = g.op.Gather(s, np.array([dim], dtype=np.int64), name=f"{name}B")
+    res = g.op.Squeeze(
+        d, np.array([0], dtype=np.int64), name=f"{name}B", outputs=outputs
+    )
     if sts:
         g.set_type(res, TensorProto.INT64)
         g.set_shape(res, tuple())

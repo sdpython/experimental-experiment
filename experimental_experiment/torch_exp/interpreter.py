@@ -287,6 +287,7 @@ class DynamoInterpreter:
         set_type_shape: bool,
         axes: List[int],
         expand_axes: List[int],
+        name: str = "_getitem_slice",
     ):
         assert isinstance(axes, list), f"Unexpected type {type(axes)} for axes"
         assert all_int(axes), f"Expected only integer axis but got {axes}"
@@ -323,7 +324,7 @@ class DynamoInterpreter:
                 if shape_name is None:
                     shape_name = self.builder.unique_name(f"{node.name}_shape")
                     self.builder.make_node(
-                        "Shape", [input_name], [shape_name], name="getitem_sliceA"
+                        "Shape", [input_name], [shape_name], name=f"{name}A"
                     )
 
                 aaxis = np.array([axis], dtype=np.int64)
@@ -335,7 +336,7 @@ class DynamoInterpreter:
                     "GatherElements",
                     [shape_name, axis_name],
                     [end_name],
-                    name="getitem_sliceB",
+                    name=f"{name}B",
                     set_type_shape=True,
                 )
                 ends.append(end_name)
@@ -351,16 +352,39 @@ class DynamoInterpreter:
 
         # if concat: one end is coming from a shape
         if concat:
-            iends = [
-                i if isinstance(i, str) else np.array(i, dtype=np.int64) for i in ends
-            ]
-            conc = self.builder.op.Concat(*iends, axis=0, name="getitem_sliceC")
+            iends = []
+            for i in ends:
+                if isinstance(i, str):
+                    if self.builder.get_rank(i) == 0:
+                        iends.append(
+                            self.builder.op.Unsqueeze(
+                                i, np.array([0], dtype=np.int64), name=f"{name}C"
+                            )
+                        )
+                    else:
+                        assert self.builder.get_rank(i) == 1, (
+                            f"Unexpected rank={self.builder.get_rank(i)} for {i!r}"
+                            f"{self.builder.get_debug_msg()}"
+                        )
+                        iends.append(i)
+                else:
+                    assert isinstance(i, int), (
+                        f"Unexpected value for end={i!r}"
+                        f"{self.builder.get_debug_msg()}"
+                    )
+                    iends.append(np.array([i], dtype=np.int64) for i in ends)
+            if len(iends) > 1:
+                conc_ends = self.builder.op.Concat(*iends, axis=0, name=f"{name}D")
+            else:
+                conc_ends = self.builder.op.Identity(iends[0], name=f"{name}E")
         else:
             assert all_int(ends), (
                 f"Unexpected value for ends={ends}: {[type(_) for _ in ends]}"
                 f"{self.builder.get_debug_msg()}"
             )
-            conc = self.builder.make_initializer("", np.array(ends, dtype=np.int64))
+            conc_ends = self.builder.make_initializer(
+                "", np.array(ends, dtype=np.int64)
+            )
 
         assert all_int(
             starts
@@ -375,7 +399,7 @@ class DynamoInterpreter:
                 self.builder.unique_name(f"{node.name}_start"),
                 np.array(starts, dtype=np.int64),
             ),
-            conc,
+            conc_ends,
             axes_name,
             self.builder.make_initializer(
                 self.builder.unique_name(f"{node.name}_step"),
@@ -384,17 +408,15 @@ class DynamoInterpreter:
         ]
 
         if expand_axes:
-            sliced = self.builder.make_node("Slice", inputs, name="getitem_sliceD")
+            sliced = self.builder.make_node("Slice", inputs, name=f"{name}F")
             res = self.builder.op.Unsqueeze(
                 sliced,
                 np.array(expand_axes, dtype=np.int64),
                 outputs=[node.name],
-                name="getitem_sliceD",
+                name=f"{name}F",
             )
         else:
-            res = self.builder.make_node(
-                "Slice", inputs, [node.name], name="getitem_sliceE"
-            )
+            res = self.builder.make_node("Slice", inputs, [node.name], name=f"{name}G")
         if set_type_shape:
             dtype = self.builder.get_type(inputs[0])
             self.builder.set_type(node.name, dtype)
@@ -426,6 +448,7 @@ class DynamoInterpreter:
         set_type_shape: bool,
         axes: List[int],
         expand_axes: List[int],
+        name: str = "_getitem_int1",
     ):
         from ._aten_functions import _aten_tensor_int1
 
@@ -437,6 +460,7 @@ class DynamoInterpreter:
             indices,
             axes=axes,
             expand_axes=expand_axes,
+            name=name,
         )
 
     def getitem(self, node: "torch.fx.Node"):  # noqa: F821
@@ -478,15 +502,17 @@ class DynamoInterpreter:
             if self.builder.has_name(name_index):
                 # The user to get a tensor a tuple of tensors
                 return self.builder.make_node(
-                    "Identity", [name_index], [node.name], name="getitem_tuple"
+                    "Identity", [name_index], [node.name], name="getitemB_tuple"
                 )
             # The user mean to access the first element of a tensor.
             res = self.builder.op.Squeeze(
                 self.builder.op.Gather(
-                    result_name, np.array([index], dtype=np.int64), name="getitem_index"
+                    result_name,
+                    np.array([index], dtype=np.int64),
+                    name="getitemB_index",
                 ),
                 np.array([0], dtype=np.int64),
-                name="getitem_index",
+                name="getitemB_index",
                 outputs=[node.name],
             )
             if set_type_shape:
@@ -509,6 +535,7 @@ class DynamoInterpreter:
                 set_type_shape=set_type_shape,
                 axes=[0],
                 expand_axes=[],
+                name="_getitem_slice1",
             )
 
         if isinstance(index, self.torch.fx.immutable_collections.immutable_list):
@@ -523,6 +550,7 @@ class DynamoInterpreter:
                     set_type_shape=set_type_shape,
                     axes=axes,
                     expand_axes=[],
+                    name="_getitem_int1a",
                 )
 
         if isinstance(index, tuple):
@@ -556,6 +584,7 @@ class DynamoInterpreter:
                     set_type_shape=set_type_shape,
                     axes=axes,
                     expand_axes=expand_axes,
+                    name="_getitem_slice2",
                 )
 
         raise RuntimeError(

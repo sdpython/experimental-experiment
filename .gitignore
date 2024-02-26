@@ -12,6 +12,7 @@
 *.sarif
 coverage.html/*
 temp*.onnx*
+temp*.txt*
 temp_dump/*
 dump_models/*
 temp_dump_models/*

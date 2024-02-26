@@ -119,7 +119,7 @@ def onnx_debug_backend(
             f.write(onx.SerializeToString())
         name = f"{dump_prefix}_{counter}.txt"
         with open(name, "w") as f:
-            f.write(str(graph_module.graph))
+            f.write(builder.get_debug_msg())
             f.write("\n")
 
     sess = _get_session(

@@ -104,6 +104,12 @@ def aten_and(
     return res
 
 
+def aten_and_(
+    g: GraphBuilder, sts: bool, outputs: List[str], x: T, y: T, name="and"
+) -> T:
+    return aten_and(g, sts, outputs, x, y, name="and_")
+
+
 def aten_addmm(
     g: GraphBuilder,
     sts: bool,
@@ -368,6 +374,7 @@ def aten_bmm(g: GraphBuilder, sts: bool, outputs: List[str], x: T, y: T) -> T:
 def aten_cat(
     g: GraphBuilder, sts: bool, outputs: List[str], tensors: Tuple[T, ...], dim: int = 0
 ) -> T:
+    assert len(tensors) > 0, f"No tensor to concat{g.get_debug_msg()}"
     res = g.op.Concat(*tensors, axis=dim, outputs=outputs, name="cat")
     if sts:
         dt0 = g.get_type(tensors[0])
@@ -1499,6 +1506,21 @@ def aten_new_zeros(
         pin_memory=pin_memory,
         name=name,
     )
+
+
+def aten_not(
+    g: GraphBuilder, sts: bool, outputs: List[str], x: T, name: str = "not"
+) -> T:
+    res = g.make_node("Not", [x], outputs, name=name)
+    if sts:
+        set_type_shape_unary_op(g, res, x)
+    return res
+
+
+def aten_not_(
+    g: GraphBuilder, sts: bool, outputs: List[str], x: T, name: str = "not"
+) -> T:
+    return aten_not(g, sts, outputs, x, name="not_")
 
 
 def aten_ones(

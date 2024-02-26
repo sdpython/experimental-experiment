@@ -72,6 +72,7 @@ class TestDynamoLlamaDynamic(ExtTestCase):
         decompositions=False,
         mixed=False,
         raise_list=None,
+        dump_prefix=None,
     ):
         import torch
 
@@ -98,6 +99,7 @@ class TestDynamoLlamaDynamic(ExtTestCase):
             storage=storage,
             verbose=verbose,
             raise_list=raise_list,
+            dump_prefix=dump_prefix,
             **kwargs,
         )
 
@@ -179,6 +181,7 @@ class TestDynamoLlamaDynamic(ExtTestCase):
         rtol: float = 1e-4,
         mixed=False,
         raise_list=None,
+        dump_prefix=None,
     ):
         storage = self._assert_model_numerically(
             model,
@@ -194,6 +197,7 @@ class TestDynamoLlamaDynamic(ExtTestCase):
             rtol=rtol,
             mixed=mixed,
             raise_list=raise_list,
+            dump_prefix=dump_prefix,
         )
         self.assertIsInstance(storage, dict)
         return storage
@@ -254,17 +258,25 @@ class TestDynamoLlamaDynamic(ExtTestCase):
         input_dims = self.get_input_dims(True)
         model, example_args_collection = get_llama_attention(input_dims=input_dims)
 
-        self.common_test_model(
+        stored = self.common_test_model(
             model,
             example_args_collection,
             test_backward=False,
             dynamic=True,
             fullgraph=True,
-            onnx_export="test_llama_attention_backward_forward_dynamic",
+            onnx_export="test_llama_attention_forward_dynamic",
             impl="ort",
-            verbose=10,
+            # verbose=10,
+            dump_prefix="temp_llama_attention_forward_dynamic",
             # raise_list={"view"}
         )
+        onx = stored["instance"][0]["onnx"]
+        builder = stored["instance"][0]["builder"]
+        if __name__ == "__main__":
+            with open("test_llama_attention_forward_dynamic.onnx", "wb") as f:
+                f.write(onx.SerializeToString())
+            with open("test_llama_attention_forward_dynamic.txt", "w") as f:
+                f.write(builder.get_debug_msg())
 
     @ignore_warnings((UserWarning, DeprecationWarning))
     @skipif_ci_windows("torch.compile not supported on Windows")
