@@ -49,9 +49,10 @@ def _get_ortvalues_from_torch_tensors(
     shapes = []
     data_ptrs = []
     devices = []
-    max_device = -1
     dimensions = []
 
+    max_device = max(t.get_device() for t in tensors if isinstance(t, torch.Tensor))
+    sdev = "cpu" if max_device < 0 else f"cuda:{max_device}"
     new_tensors = []
     for tensor, (dim, rk, name) in zip(tensors, is_dimension_in):
         if dim:
@@ -63,7 +64,8 @@ def _get_ortvalues_from_torch_tensors(
                 t = torch.tensor([int(tensor)], dtype=torch.int64)
             else:
                 t = torch.tensor(int(tensor), dtype=torch.int64)
-            devices.append(devices_list[-1])
+            t = t.to(sdev)
+            devices.append(max_device)
             new_tensors.append(t)
             dimensions.append(t)
             shapes.append(t.size())
