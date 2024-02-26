@@ -58,6 +58,9 @@ class ExpandPattern(PatternOptimization):
         shape = g.get_shape(node.input[0])
         if not all_int(shape):
             return None
+        if not g.is_constant(node.input[1]):
+            # It may be a symbolic shape.
+            return None
         new_shape = tuple(g.get_computed_constant(node.input[1]))
         if shape != new_shape:
             return
@@ -110,12 +113,18 @@ class ReshapeMatMulReshapePattern(PatternOptimization):
             return None
 
         # condition on shapes
+        if not g.is_constant(node_before_left.input[1]):
+            return
         shape_left = tuple(
             int(i) for i in g.get_computed_constant(node_before_left.input[1])
         )
+        if not g.is_constant(node_before_right.input[1]):
+            return
         shape_right = tuple(
             int(i) for i in g.get_computed_constant(node_before_right.input[1])
         )
+        if not g.is_constant(next_node.input[1]):
+            return
         shape_final = tuple(int(i) for i in g.get_computed_constant(next_node.input[1]))
         if len(shape_final) < 4:
             return None

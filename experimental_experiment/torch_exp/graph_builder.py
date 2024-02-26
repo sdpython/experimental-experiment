@@ -516,7 +516,7 @@ class GraphBuilder:
         ReferenceEvaluator.
         """
         if not self.is_constant(name):
-            raise ValueError(f"Result {name!r} is not a constant.")
+            raise ValueError(f"Result {name!r} is not a constant{self.get_debug_msg()}")
         possible_value = self.constants_[name]
         if name in self.constants_computed_:
             return self.constants_computed_[name]

@@ -5,7 +5,7 @@ import numpy as np
 from onnx import ModelProto
 import torch
 from torch._C import _from_dlpack
-from ..torch_exp._torch_helper import create_input_names
+from ..torch_exp._torch_helper import create_input_names, create_symint
 from ..torch_exp.onnx_export import to_onnx, OptimizationOptions
 from ..torch_exp.optimization_patterns import get_pattern_list
 from onnxruntime.capi import _pybind_state as ORTC
@@ -41,7 +41,8 @@ def _get_ortvalues_from_torch_tensors(
     OrtValueVector: type,
     tensors: Tuple["torch.Tensor", ...],  # noqa: F821
     n_outputs: int,
-) -> Tuple[Tuple["torch.Tensor", ...], Tuple["OrtDevice", ...]]:  # noqa: F821
+    is_dimension_in: List[Tuple[bool, int, str]],
+) -> Tuple[Tuple["torch.Tensor", ...], Tuple["OrtDevice", ...], Any]:  # noqa: F821
     ortvalues = OrtValueVector()
     ortvalues.reserve(len(tensors))
     dtypes = []
@@ -49,27 +50,65 @@ def _get_ortvalues_from_torch_tensors(
     data_ptrs = []
     devices = []
     max_device = -1
+    dimensions = []
 
-    for tensor in tensors:
-        dtypes.append(torch_type_to_np_type[tensor.dtype])
-        shapes.append(tensor.size())
-        data_ptrs.append(tensor.data_ptr())
-        d = tensor.get_device()
-        devices.append(devices_list[d])
-        max_device = max(max_device, d)
+    new_tensors = []
+    for tensor, (dim, rk, name) in zip(tensors, is_dimension_in):
+        if dim:
+            assert isinstance(
+                tensor, (int, torch.SymInt)
+            ), f"Unexpected type {type(tensor)} for name={name!r}."
+            dtypes.append(np.int64)
+            if rk == 1:
+                t = torch.tensor([int(tensor)], dtype=torch.int64)
+            else:
+                t = torch.tensor(int(tensor), dtype=torch.int64)
+            devices.append(devices_list[-1])
+            new_tensors.append(t)
+            dimensions.append(t)
+            shapes.append(t.size())
+            data_ptrs.append(t.data_ptr())
+        else:
+            assert isinstance(tensor, torch.Tensor), (
+                f"Unexpected type {type(tensor)}, dim={dim}, rk={rk}, name={name!r}, "
+                f"len(tensors)={len(tensors)}, len(is_dimension_in)={len(is_dimension_in)}"
+            )
+            dtypes.append(torch_type_to_np_type[tensor.dtype])
+            shapes.append(tensor.size())
+            data_ptrs.append(tensor.data_ptr())
+            d = tensor.get_device()
+            devices.append(devices_list[d])
+            max_device = max(max_device, d)
+            new_tensors.append(tensor)
 
-    ortvalues.push_back_batch(tensors, data_ptrs, dtypes, shapes, devices)
-    return ortvalues, [devices_list[max_device] for i in range(n_outputs)]
+    ortvalues.push_back_batch(new_tensors, data_ptrs, dtypes, shapes, devices)
+    return ortvalues, [devices_list[max_device] for i in range(n_outputs)], dimensions
+
+
+def _post_process(output: Any, name: Optional[str], dim: bool) -> Any:
+    if name is None:
+        # None value required by torch
+        return None
+    if dim:
+        # a dimension to replace
+        if output.shape == (1,):
+            yi = int(output[0])
+        else:
+            yi = int(output)
+        return create_symint(yi)
+    return output
 
 
 def _ortvalues_to_torch_tensor(
-    from_dlpack: Callable, ortvalues: "onnxruntime.OrtValueVector"  # noqa: F821
+    from_dlpack: Callable,
+    ortvalues: "onnxruntime.OrtValueVector",  # noqa: F821
+    is_dimension_out: List[Tuple[bool, int, Optional[str]]],
 ) -> Tuple["torch.Tensor", ...]:  # noqa: F821
     if len(ortvalues) == 0:
         return tuple()
 
     res = ortvalues.to_dlpacks(from_dlpack)
-    return tuple(res)
+    return tuple(_post_process(r, d[2], d[0]) for r, d in zip(res, is_dimension_out))
 
 
 def _run_onnx_session_with_ortvaluevector(
@@ -82,34 +121,47 @@ def _run_onnx_session_with_ortvaluevector(
     input_names: Tuple[str, ...],
     inputs: Tuple["torch.Tensor", ...],  # noqa: F821
     output_names: List[str],
+    is_dimension_in: Optional[List[Tuple[bool, int, str]]] = None,
+    is_dimension_out: Optional[List[Tuple[bool, int, Optional[str]]]] = None,
     input_value_infos: Optional[Tuple["onnx.ValueInfoProto", ...]] = None,  # noqa: F821
 ) -> Tuple["torch.Tensor"]:  # noqa: F821
     # _nvtx_range_push("contiguous")
-    contiguous_inputs = tuple(a.contiguous() for a in inputs)
+    contiguous_inputs = tuple(
+        (a.contiguous() if isinstance(a, torch.Tensor) else a) for a in inputs
+    )
     # _nvtx_range_pop()
 
     # _nvtx_range_push("push_back_batch")
-    ort_inputs, output_devices = _get_ortvalues_from_torch_tensors(
+    ort_inputs, output_devices, dimensions = _get_ortvalues_from_torch_tensors(
         torch_type_to_np_type,
         devices,
         OrtValueVector,
         contiguous_inputs,
         len(output_names),
+        is_dimension_in,
     )
     # _nvtx_range_pop()
 
     # _nvtx_range_push("run_with_ortvaluevector")
     ort_outputs = OrtValueVector()
     sess.run_with_ortvaluevector(
-        run_options, input_names, ort_inputs, output_names, ort_outputs, output_devices
+        run_options,
+        input_names,
+        ort_inputs,
+        output_names,
+        ort_outputs,
+        output_devices,
     )
+
     # _nvtx_range_pop()
 
     # _nvtx_range_push("after run_with_ortvaluevector")
     # Map ORTValue to torch.Tensor.
-    pth_outputs = _ortvalues_to_torch_tensor(from_dlpack, ort_outputs)
+    pth_outputs = _ortvalues_to_torch_tensor(from_dlpack, ort_outputs, is_dimension_out)
     # _nvtx_range_pop()
 
+    # dimensions is only kept to avoid the garbage collector to delete temporary tensors
+    assert dimensions is not None
     return pth_outputs
 
 
@@ -120,6 +172,8 @@ def _serialize(args: Any) -> Any:
         return tuple(_serialize(a) for a in args)
     if isinstance(args, list):
         return list(_serialize(a) for a in args)
+    if isinstance(args, (int, torch.SymInt)):
+        return args
     raise RuntimeError(f"Unable to serialize type {type(args)}.")
 
 
@@ -245,7 +299,7 @@ def onnx_custom_backend(
     for o in onx.graph.output:
         b = "_dim_" in o.name
         rk = len(o.type.tensor_type.shape.dim)
-        is_dimension_out.append((b, rk, o.name))
+        is_dimension_out.append((b, rk, None if "_NONE_" in o.name else o.name))
 
     if storage is not None:
         stor = {}
@@ -280,13 +334,6 @@ def onnx_custom_backend(
             with open(name + ".pkl", "wb") as f:
                 pickle.dump([input_names, _serialize(inputs), output_names], f)
 
-        assert not any(
-            [_[0] for _ in is_dimension_in]
-        ), f"Not implemented yet when one input is a dimension: {is_dimension_in}."
-        assert not any(
-            [_[0] for _ in is_dimension_out]
-        ), f"Not implemented yet when one output is a dimension: {is_dimension_out}."
-
         res = _run_onnx_session_with_ortvaluevector(
             ORTC.OrtValueVector,
             _from_dlpack,
@@ -297,6 +344,8 @@ def onnx_custom_backend(
             input_names,
             inputs,
             output_names,
+            is_dimension_in,
+            is_dimension_out,
         )
         if stor:
             stor["inputs"].append(args)

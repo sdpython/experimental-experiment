@@ -227,7 +227,7 @@ def onnx_debug_backend(
                     yi = int(y)
                 si = create_symint(yi)
                 assert torch.sym_int(si)
-                res.append(yi)
+                res.append(si)
                 continue
             if max_device >= 0:
                 res.append(torch.Tensor(y).to(_dtype[y.dtype]).to("cuda"))

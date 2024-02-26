@@ -11,6 +11,7 @@ from experimental_experiment.ext_test_case import (
 from experimental_experiment.torch_helper.dump_helper import assert_all_close
 from experimental_experiment.torch_dynamo import (
     onnx_debug_backend,
+    onnx_custom_backend,
     get_decomposition_table,
 )
 
@@ -91,17 +92,30 @@ class TestDynamoLlamaDynamic(ExtTestCase):
             return (a,) if a is not None else tuple()
 
         storage = {}
-        backend_debug = lambda *args, **kwargs: onnx_debug_backend(  # noqa: E731
-            *args,
-            # dump_prefix=os.path.join(folder, "llama_debug"),
-            backend=impl,
-            target_opset=18,
-            storage=storage,
-            verbose=verbose,
-            raise_list=raise_list,
-            dump_prefix=dump_prefix,
-            **kwargs,
-        )
+
+        if impl == "fast":
+            backend_debug = lambda *args, **kwargs: onnx_custom_backend(  # noqa: E731
+                *args,
+                backend="ort",
+                target_opset=18,
+                storage=storage,
+                verbose=verbose,
+                dump_prefix=dump_prefix,
+                disable_pattern="default",
+                **kwargs,
+            )
+        else:
+            backend_debug = lambda *args, **kwargs: onnx_debug_backend(  # noqa: E731
+                *args,
+                # dump_prefix=os.path.join(folder, "llama_debug"),
+                backend=impl,
+                target_opset=18,
+                storage=storage,
+                verbose=verbose,
+                raise_list=raise_list,
+                dump_prefix=dump_prefix,
+                **kwargs,
+            )
 
         if test_backward:
             from torch._dynamo.backends.common import aot_autograd
@@ -305,7 +319,7 @@ class TestDynamoLlamaDynamic(ExtTestCase):
     @skipif_ci_windows("torch.compile not supported on Windows")
     @unittest.skipIf(torch_min("2.2"), reason="missing kernel")
     @unittest.skipIf(not has_cuda(), "cuda is needed for autocast")
-    def test_llama_model_backward_mixed_dynamic(self):
+    def test_llama_model_backward_mixed_dynamic_debug(self):
         from experimental_experiment.torch_helper.llama_helper import get_llama_model
 
         input_dims = self.get_input_dims(True)
@@ -320,8 +334,54 @@ class TestDynamoLlamaDynamic(ExtTestCase):
             onnx_export="tt_test_llama_model_backward_mixed_dynamic",
             impl="ref",
             mixed=True,
-            verbose=0,
+            # verbose=10,
             dump_prefix="tt_temp_llama_model_backward_mixed_dynamic",
+        )
+
+    @ignore_warnings((UserWarning, DeprecationWarning))
+    @skipif_ci_windows("torch.compile not supported on Windows")
+    @unittest.skipIf(torch_min("2.2"), reason="missing kernel")
+    @unittest.skipIf(not has_cuda(), "cuda is needed for autocast")
+    def test_llama_model_backward_mixed_dynamic_fast_backend(self):
+        from experimental_experiment.torch_helper.llama_helper import get_llama_model
+
+        input_dims = self.get_input_dims(True)
+        model, example_args_collection = get_llama_model(input_dims=input_dims)
+
+        self.common_test_model(
+            model,
+            example_args_collection,
+            test_backward=True,
+            dynamic=True,
+            fullgraph=True,
+            onnx_export="tt_test_llama_model_backward_mixed_dynamic_fastbackend",
+            impl="fast",
+            mixed=True,
+            verbose=0,
+            dump_prefix="tt_temp_llama_model_backward_mixed_dynamic_fastbackend",
+        )
+
+    @ignore_warnings((UserWarning, DeprecationWarning))
+    @skipif_ci_windows("torch.compile not supported on Windows")
+    @unittest.skipIf(torch_min("2.2"), reason="missing kernel")
+    @unittest.skipIf(not has_cuda(), "cuda is needed for autocast")
+    def test_llama_model_backward_dynamic_fast_backend(self):
+        from experimental_experiment.torch_helper.llama_helper import get_llama_model
+
+        input_dims = self.get_input_dims(True)
+        model, example_args_collection = get_llama_model(input_dims=input_dims)
+
+        self.common_test_model(
+            model,
+            example_args_collection,
+            test_backward=True,
+            dynamic=True,
+            fullgraph=True,
+            onnx_export="tt_test_llama_model_backward_dynamic_fastbackend",
+            impl="fast",
+            mixed=False,
+            verbose=0,
+            dump_prefix="tt_temp_llama_model_backward_dynamic_fastbackend",
         )
 
 
