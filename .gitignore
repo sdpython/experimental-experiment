@@ -11,8 +11,8 @@
 *.xlsx
 *.sarif
 coverage.html/*
-temp*.onnx*
 temp*.txt*
+tt_*.txt
 temp_dump/*
 dump_models/*
 temp_dump_models/*

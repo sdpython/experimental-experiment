@@ -5,6 +5,7 @@ import numpy as np
 from onnx import ModelProto
 import torch
 from torch._C import _from_dlpack
+from ..torch_exp._torch_helper import create_input_names
 from ..torch_exp.onnx_export import to_onnx, OptimizationOptions
 from ..torch_exp.optimization_patterns import get_pattern_list
 from onnxruntime.capi import _pybind_state as ORTC
@@ -184,9 +185,7 @@ def onnx_custom_backend(
         if max_device >= 0:
             providers = ["CUDAExecutionProvider", "CPUExecutionProvider"]
 
-    input_names = (
-        ["input"] if len(args) == 1 else [f"input{i}" for i in range(len(args))]
-    )
+    input_names = input_names = create_input_names(graph_module, args)
 
     verbose_onnx, verbose_backend = (
         verbose if isinstance(verbose, tuple) else (verbose, verbose)
@@ -235,6 +234,7 @@ def onnx_custom_backend(
 
     input_names = [i.name for i in onx.graph.input]
     output_names = [i.name for i in onx.graph.output]
+    is_dimension = ["_dim_" in o.name for o in output_names]
 
     if storage is not None:
         stor = {}
@@ -244,6 +244,7 @@ def onnx_custom_backend(
             storage["instance"] = [stor]
         stor["graph_module"] = graph_module
         stor["onnx"] = onx
+        stor["is_dimension"] = is_dimension
         stor["builder"] = builder
         stor["sess"] = sess
         stor["inputs"] = []
@@ -259,6 +260,7 @@ def onnx_custom_backend(
         input_names=input_names,
         output_names=output_names,
         dump_first_inputs=dump_first_inputs,
+        is_dimension=is_dimension,
     ):
         if dump_first_inputs[0]:
             dump_first_inputs[0] = False
@@ -276,6 +278,9 @@ def onnx_custom_backend(
             inputs,
             output_names,
         )
+        assert not any(
+            is_dimension
+        ), f"Not implemented yet when one output is a dimension {is_dimension}."
         if stor:
             stor["inputs"].append(args)
             stor["outputs"].append(res)

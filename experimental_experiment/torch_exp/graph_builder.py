@@ -316,6 +316,7 @@ class GraphBuilder:
             self._known_shapes = {}
             self._known_types = {}
             self._known_ranks = {}
+            self._known_torch_value = {}
             self.constants_ = {}
             self._known_names = self._unique_names.copy()
 
@@ -344,6 +345,7 @@ class GraphBuilder:
             self._known_shapes = {}
             self._known_types = {}
             self._known_ranks = {}
+            self._known_torch_value = {}
             self.constants_ = {}
             self._unique_node_names = set()
             self._unique_names = set()
@@ -595,6 +597,90 @@ class GraphBuilder:
                     return False
         return True
 
+    def get_is_dimension(
+        self,
+        name: str,
+        elem_type: Optional[int] = None,
+        shape: Optional[STATIC_SHAPE] = None,
+    ) -> bool:
+        """
+        Tells if a result is a dynamic dimension or not.
+        """
+        if name in self.dynamic_objects:
+            res = True
+        elif name in self._known_torch_value:
+            value = self._known_torch_value[name]
+            if value[0] == "run_node":
+                val1 = value[1]
+                exa, val = val1
+                if val is not None and len(val) == 3:
+                    el_type, size = val[1:]
+                    if el_type in (
+                        self.torch.float32,
+                        self.torch.float64,
+                        self.torch.float16,
+                    ):
+                        return False
+                    if len(size) >= 2:
+                        return False
+                else:
+                    if elem_type is not None and elem_type in (
+                        self.torch.float32,
+                        self.torch.float64,
+                        self.torch.float16,
+                    ):
+                        return False
+                    if shape is not None and len(shape) >= 2:
+                        return False
+                    dtype = self.get_type(name)
+                    shape = self.get_shape(name)
+                    if dtype == TensorProto.INT64 and shape == (1,):
+                        return True
+            elif value[0] == "call_module":
+                if isinstance(value[1], tuple) and len(value[1]) == 2:
+                    el_type, size = value[1]
+                    if el_type in (
+                        self.torch.float32,
+                        self.torch.float64,
+                        self.torch.float16,
+                    ):
+                        return False
+                    if len(size) >= 2:
+                        return False
+
+            raise RuntimeError(
+                f"Not implemented for name={name!r}, value={value!r} ({type(value)}), "
+                f"elem_type={elem_type}, shape={shape}{self.get_debug_msg()}"
+            )
+        else:
+            raise RuntimeError(
+                f"Unable to gues if {name!r} is a dimension{self.get_debug_msg()}"
+            )
+        assert not res or (
+            (
+                elem_type is None
+                or elem_type
+                in {
+                    TensorProto.INT64,
+                    TensorProto.INT32,
+                    TensorProto.UINT64,
+                    TensorProto.UINT32,
+                }
+            )
+            and (shape is None or (isinstance(shape, tuple) and len(shape) == 1))
+        ), (
+            f"Inconsistent result type for name={name!r}, is_dimension={res}, "
+            f"elem_type={elem_type}, shape={shape}{self.get_debug_msg()}"
+        )
+        return res
+
+    def set_shapes_types(
+        self, name: Union[str, "torch.fx.Node"], where: str, value: Any  # noqa: F821
+    ):
+        if hasattr(name, "name"):
+            name = name.name
+        self._known_torch_value[name] = (where, value)
+
     def set_shape(
         self,
         name: str,
@@ -728,13 +814,6 @@ class GraphBuilder:
         self._unique_node_names.add(name)
         return name
 
-    def _prepare_inputs(self, schema: Optional[Any], *inputs: List[Any]) -> List[str]:
-        input_names = []
-        for i in inputs:
-            self.make_input(i.name, i.dtype, i.shape)
-            input_names.append(i.name)
-        return input_names
-
     def _get_type(self, elem_type: Any, exc: bool = True) -> int:
         if not isinstance(elem_type, int):
             st = str(elem_type)
@@ -790,7 +869,9 @@ class GraphBuilder:
         self.dynamic_objects_rev[str(value)].append((name, value))
         if shape_as_input:
             # torch.compile adds input for dynamic shapes
-            return self.make_tensor_input(name, TensorProto.INT64, (1,))
+            return self.make_tensor_input(
+                name, TensorProto.INT64, (1,), is_dimension=True
+            )
         return name
 
     def make_shape_from_results(self, shape: DYNAMIC_SHAPE, name="") -> str:
@@ -946,7 +1027,19 @@ class GraphBuilder:
             )
         return tuple(new_shape)
 
-    def make_tensor_input(self, name: str, elem_type: Any, shape: STATIC_SHAPE) -> str:
+    def make_tensor_input(
+        self, name: str, elem_type: Any, shape: STATIC_SHAPE, is_dimension: bool
+    ) -> str:
+        """
+        Adds a tensor input to the onnx graph.
+
+        :param name: name
+        :param elem_type: element type
+        :param shape: shape
+        :param is_dimension: torch is using torch.SymInt to add a dynamic input
+            to the graph
+        :return: input name
+        """
         if self.current_input < len(self.input_names):
             # The input needs to be renamed, an identity node is added.
             input_name = self.input_names[self.current_input]
@@ -955,6 +1048,13 @@ class GraphBuilder:
             self.input_names.append(name)
             input_name = name
             self.set_name(name)
+        assert (is_dimension and "_dim_" in input_name) or (
+            not is_dimension and "_dim_" not in input_name
+        ), (
+            f"Inconsistence for input {name!r}, input_name={input_name!r}, "
+            f"elem_type={elem_type}, shape={shape!r}, is_dimension={is_dimension}"
+        )
+
         self.current_input += 1
         elem_type = self._get_type(elem_type)
         dyn_shape = self.verify_dynamic_shape(shape)
@@ -982,8 +1082,27 @@ class GraphBuilder:
         elem_type: Optional[int] = None,
         shape: Optional[STATIC_SHAPE] = None,
         indexed: bool = True,
+        is_dimension: bool = None,
     ) -> Union[str, List[str]]:
+        """
+        Adds a tensor output to the onnx graph.
+
+        :param name: name
+        :param elem_type: element type
+        :param shape: shape
+        :param indexed: the name must be indexed?
+        :param is_dimension: torch is using torch.SymInt to add a dynamic input
+            to the graph
+        :return: output name
+        """
+        assert is_dimension is not None, (
+            f"is_dimension must be specified for output name={name!r}, "
+            f"elem_type={elem_type}, shape={shape!r}."
+        )
         if isinstance(name, list):
+            assert (
+                not is_dimension
+            ), f"name={name!r} not compatible with is_dimension=True"
             res = []
             for n in name:
                 res.append(self.make_tensor_output(n, elem_type, shape))
@@ -992,6 +1111,14 @@ class GraphBuilder:
         assert (
             not indexed or "_" in name
         ), f"Name {name!r} is not indexed like 'output_0'{self.get_debug_msg()}"
+        assert (is_dimension and "_dim_" in name) or (
+            not is_dimension and "_dim_" not in name
+        ), (
+            f"Inconsistence for input {name!r}, "
+            f"elem_type={elem_type}, shape={shape!r}, "
+            f"is_dimension={is_dimension}"
+        )
+
         elem_type = self._get_type(elem_type, False)
         if not self.as_function and elem_type == 0:
             raise RuntimeError(f"Undefined element type for {name!r}.")
@@ -1430,18 +1557,18 @@ class GraphBuilder:
         rows = ["", "--DEBUG--", "--SHAPE--"]
         rows.append(f"dynamic_objects={pprint.pformat(self.dynamic_objects)}")
         rows.append(f"dynamic_objects_rev={pprint.pformat(self.dynamic_objects_rev)}")
+        rows.append("--TORCH-SHAPES--")
+        for kk, vv in self._known_torch_value.items():
+            rows.append(
+                f"{kk}: {vv} --- "
+                f"{self.get_type(kk) if self.has_type(kk) else ''}:"
+                f"{self.get_rank(kk) if self.has_rank(kk) else ''}:"
+                f"{self.get_shape(kk) if self.has_shape(kk) else ''}:"
+            )
         rows.append("--ONNX--")
         for k, v in self._debug_msg.items():
             rows.append(f"-- {k} --")
-            if k == "shapes_types":
-                for kk, vv in v.items():
-                    rows.append(
-                        f"{kk}: {vv} --- "
-                        f"{self.get_type(kk) if self.has_type(kk) else ''}:"
-                        f"{self.get_rank(kk) if self.has_rank(kk) else ''}:"
-                        f"{self.get_shape(kk) if self.has_shape(kk) else ''}:"
-                    )
-            elif isinstance(v, dict):
+            if isinstance(v, dict):
                 rows.append(pprint.pformat(v))
             else:
                 rows.append(str(v))
@@ -1478,7 +1605,6 @@ class GraphBuilder:
         interpreter: "Interpreter",  # noqa: F821
     ):
         self._debug_msg["process.graph_module"] = graph_module.graph
-        self._debug_msg["shapes_types"] = {}
 
         # looks into output marked as "alias_of_input"
         # see https://pytorch.org/functorch/main/_modules/torch/_functorch/aot_autograd.html

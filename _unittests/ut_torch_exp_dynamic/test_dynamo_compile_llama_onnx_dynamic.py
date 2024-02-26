@@ -205,7 +205,7 @@ class TestDynamoLlamaDynamic(ExtTestCase):
     @ignore_warnings((UserWarning, DeprecationWarning))
     @skipif_ci_windows("torch.compile not supported on Windows")
     @unittest.skipIf(torch_min("2.2"), reason="missing kernel")
-    def test_llama_model_backward_forward_static(self):
+    def test_llama_model_b_forward_static(self):
         from experimental_experiment.torch_helper.llama_helper import get_llama_model
 
         input_dims = self.get_input_dims(True)
@@ -217,7 +217,7 @@ class TestDynamoLlamaDynamic(ExtTestCase):
             test_backward=1,
             dynamic=False,
             fullgraph=True,
-            onnx_export="test_llama_model_backward_forward",
+            onnx_export="tt_test_llama_model_backward_forward",
             impl="ort",
         )
         onx = stored["instance"][0]["onnx"]
@@ -231,7 +231,7 @@ class TestDynamoLlamaDynamic(ExtTestCase):
     @ignore_warnings((UserWarning, DeprecationWarning))
     @skipif_ci_windows("torch.compile not supported on Windows")
     @unittest.skipIf(torch_min("2.2"), reason="missing kernel")
-    def test_llama_model_backward_forward_dynamic(self):
+    def test_llama_model_b_forward_dynamic(self):
         from experimental_experiment.torch_helper.llama_helper import get_llama_model
 
         input_dims = self.get_input_dims(True)
@@ -243,7 +243,7 @@ class TestDynamoLlamaDynamic(ExtTestCase):
             test_backward=1,
             dynamic=True,
             fullgraph=True,
-            onnx_export="test_llama_model_backward_forward_dynamic",
+            onnx_export="tt_test_llama_model_backward_forward_dynamic",
             impl="ort",
         )
 
@@ -264,10 +264,10 @@ class TestDynamoLlamaDynamic(ExtTestCase):
             test_backward=False,
             dynamic=True,
             fullgraph=True,
-            onnx_export="test_llama_attention_forward_dynamic",
+            onnx_export="tt_test_llama_attention_forward_dynamic",
             impl="ort",
             # verbose=10,
-            dump_prefix="temp_llama_attention_forward_dynamic",
+            dump_prefix="tt_temp_llama_attention_forward_dynamic",
             # raise_list={"view"}
         )
         onx = stored["instance"][0]["onnx"]
@@ -281,7 +281,7 @@ class TestDynamoLlamaDynamic(ExtTestCase):
     @ignore_warnings((UserWarning, DeprecationWarning))
     @skipif_ci_windows("torch.compile not supported on Windows")
     @unittest.skipIf(torch_min("2.2"), reason="missing kernel")
-    def test_llama_attention_backward_forward_dynamic(self):
+    def test_llama_attention_b_forward_dynamic(self):
         from experimental_experiment.torch_helper.llama_helper import (
             get_llama_attention,
         )
@@ -295,10 +295,10 @@ class TestDynamoLlamaDynamic(ExtTestCase):
             test_backward=1,
             dynamic=True,
             fullgraph=True,
-            onnx_export="test_llama_attention_backward_forward_dynamic",
+            onnx_export="tt_test_llama_attention_backward_forward_dynamic",
             impl="ref",
-            verbose=10,
-            dump_prefix="temp_llama_attention_backward_forward_dynamic",
+            verbose=0,
+            dump_prefix="tt_temp_llama_attention_backward_forward_dynamic",
         )
 
     @ignore_warnings((UserWarning, DeprecationWarning))
@@ -317,7 +317,7 @@ class TestDynamoLlamaDynamic(ExtTestCase):
             test_backward=True,
             dynamic=True,
             fullgraph=True,
-            onnx_export="test_llama_model_backward_mixed_dynamic",
+            onnx_export="tt_test_llama_model_backward_mixed_dynamic",
             impl="ort",
             mixed=True,
         )

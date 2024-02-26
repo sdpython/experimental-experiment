@@ -11,6 +11,7 @@ from .annotations import (
     all_float,
     all_int,
     all_int_or_float,
+    all_int_or_str,
     is_static_dimension,
     is_static_shape,
 )
@@ -941,11 +942,14 @@ def aten_full(
         tsize = np.array(size, dtype=np.int64)
         new_shape = size
     elif isinstance(size, list):
-        assert all(
-            map(lambda x: isinstance(x, int), size)
+        assert all_int_or_str(
+            size
         ), f"Unexpected values for size={size}-{[type(s) for s in size]}"
-        tsize = np.array(size, dtype=np.int64)
-        new_shape = size
+        if all_int(size):
+            tsize = np.array(size, dtype=np.int64)
+            new_shape = size
+        else:
+            tsize = g.make_shape_from_results(size, name=name)
     else:
         raise RuntimeError(f"Unexpected type {type(size)} for size.")
 

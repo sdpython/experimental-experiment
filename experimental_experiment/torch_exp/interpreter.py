@@ -67,7 +67,7 @@ class DynamoInterpreter:
         )
         v = node.meta.get("val", None) if hasattr(node, "meta") else None
         val = ("val", v.dtype, v.shape) if hasattr(v, "dtype") else ""
-        self.builder._debug_msg["shapes_types"][node.name] = (exa, val)
+        self.builder.set_shapes_types(node.name, "run_node", (exa, val))
 
         if node.op == "placeholder":
             return self.placeholder(node)
@@ -109,7 +109,9 @@ class DynamoInterpreter:
                 example_value = self.builder.input_args[index_input]
 
             if self.builder.as_function and example_value is None:
-                return self.builder.make_tensor_input(node.name, None, None)
+                return self.builder.make_tensor_input(
+                    node.name, None, None, is_dimension=False
+                )
             if example_value is None:
                 raise RuntimeError(
                     f"Unable to guess what node is, node={node}, "
@@ -119,11 +121,17 @@ class DynamoInterpreter:
                 # torch.SymInt
                 self.builder.make_dynamic_object(node.name, example_value)
                 return self.builder.make_tensor_input(
-                    node.name, elem_type=self.builder.torch.int64, shape=(1,)
+                    node.name,
+                    elem_type=self.builder.torch.int64,
+                    shape=(1,),
+                    is_dimension=True,
                 )
 
             return self.builder.make_tensor_input(
-                node.name, elem_type=example_value.dtype, shape=example_value.shape
+                node.name,
+                elem_type=example_value.dtype,
+                shape=example_value.shape,
+                is_dimension=False,
             )
 
         if isinstance(val, self.torch.Tensor):
@@ -131,7 +139,7 @@ class DynamoInterpreter:
             if stack_trace is None:
                 # torch 2.1.0 and 2.2.0 behave differently.
                 return self.builder.make_tensor_input(
-                    node.name, elem_type=val.dtype, shape=val.shape
+                    node.name, elem_type=val.dtype, shape=val.shape, is_dimension=False
                 )
             if "nn_module_stack" not in node.meta:
                 return self.builder.make_tensor_input(
@@ -142,7 +150,12 @@ class DynamoInterpreter:
                 if ".FakeTensor" in str(type(val)):
                     dtype = val.dtype
                     shape = val.shape
-                    return self.builder.make_tensor_input(node.name, dtype, shape)
+                    return self.builder.make_tensor_input(
+                        node.name,
+                        dtype,
+                        shape,
+                        self.builder.get_is_dimension(node.name),
+                    )
                 raise RuntimeError(
                     f"value is None, unable to retrieve target {node.target!r}"
                 )
@@ -171,16 +184,22 @@ class DynamoInterpreter:
         else:
             outputs = []
             for i, a in enumerate(output):
-                o = f"{output_name}_{i}"
                 if a is None:
+                    a_name = None
+                    o = f"{output_name}_{i}"
+                else:
+                    a_name = a if isinstance(a, str) else a.name
+                    if self.builder.get_is_dimension(a_name):
+                        o = f"{output_name}_dim_{i}"
+                    else:
+                        o = f"{output_name}_{i}"
+                if a_name is None:
                     # the gradient may need unused output
                     self.builder.make_node("Constant", [], [o], value_float=0)
                     outputs.append((None, o))
                 else:
-                    if hasattr(a, "name"):
-                        a = a.name
-                    self.builder.make_node("Identity", [a], [o], check=False)
-                    outputs.append((a, o))
+                    self.builder.make_node("Identity", [a_name], [o], check=False)
+                    outputs.append((a_name, o))
 
         val = node.meta.get("val", None)
 
@@ -214,7 +233,13 @@ class DynamoInterpreter:
                             f"{self.builder.get_debug_msg()}"
                         )
                 self.builder.make_tensor_output(
-                    o, elem_type=elem_type, shape=shape, indexed=False
+                    o,
+                    elem_type=elem_type,
+                    shape=shape,
+                    indexed=False,
+                    is_dimension=self.builder.get_is_dimension(
+                        a, elem_type=elem_type, shape=shape
+                    ),
                 )
             return [_[1] for _ in outputs]
 
@@ -765,8 +790,9 @@ class DynamoInterpreter:
                         description.append(f"{r}:{dtype}:{shape}".replace(" ", ""))
                 elif isinstance(v, self.torch.SymInt):
                     # this is a shape
-                    self.builder.set_rank(r, 1)
+                    self.builder.set_shape(r, (1,))
                     self.builder.set_type(r, TensorProto.INT64)
+                    self.builder.make_dynamic_object(r, v)
                 else:
                     raise TypeError(
                         f"Unexpected type in node {node!r}, "
@@ -857,11 +883,8 @@ class DynamoInterpreter:
                     builder.set_shape(name, val[i].shape)
                 if name not in builder._known_types:
                     builder.set_type(name, val[i].dtype)
-                if "shapes_types" not in self.builder._debug_msg:
-                    self.builder._debug_msg["shapes_types"] = {}
-                self.builder._debug_msg["shapes_types"][name] = (
-                    val[i].dtype,
-                    val[i].shape,
+                self.builder.set_shapes_types(
+                    node.name, "call_module", (val[i].dtype, val[i].shape)
                 )
 
         self.builder.make_nodes(
