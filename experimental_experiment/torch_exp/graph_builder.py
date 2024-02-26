@@ -920,18 +920,26 @@ class GraphBuilder:
                 assert name in self.dynamic_objects or self.has_name(
                     name
                 ), f"Unknonw dynamic object {d}-{name!r}{self.get_debug_msg()}"
-                if self.has_rank(name) and self.get_rank(name) == 0:
-                    r = self.op.Unsqueeze(name, np.array([0], dtype=np.int64))
-                    self.set_type(r, self.get_type(name))
-                    self.set_shape(r, (1,))
-                    conc.append(r)
+                if self.has_rank(name):
+                    assert (
+                        self.get_rank(name) <= 1
+                    ), f"Unexpected rank={self.get_rank(name)} for a shape{self.get_debug_msg()}"
+                    if self.get_rank(name) == 0:
+                        r = self.op.Unsqueeze(
+                            name, np.array([0], dtype=np.int64), name=f"_mkshape_{name}"
+                        )
+                        self.set_type(r, self.get_type(name))
+                        self.set_shape(r, (1,))
+                        conc.append(r)
+                    else:
+                        conc.append(name)
                 else:
                     conc.append(name)
             else:
                 raise RuntimeError(
                     f"Unexpected type {type(d)} for a dimension in {shape}{self.get_debug_msg()}"
                 )
-        return self.make_node("Concat", conc, axis=0, name=name)
+        return self.make_node("Concat", conc, axis=0, name=f"_mkshape_{name}")
 
     def make_initializer(
         self, name: str, value: Any, external: bool = False, msg: str = ""

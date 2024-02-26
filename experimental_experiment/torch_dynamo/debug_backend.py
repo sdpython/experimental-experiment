@@ -3,7 +3,7 @@ from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
 import numpy as np
 from onnx import ModelProto
 import torch
-from ..torch_exp._torch_helper import create_input_names
+from ..torch_exp._torch_helper import create_input_names, create_symint
 from ..torch_exp.onnx_export import to_onnx, OptimizationOptions
 from ..torch_exp.optimization_patterns import get_pattern_list
 
@@ -142,7 +142,17 @@ def onnx_debug_backend(
         np.bool_: torch.bool,
     }
 
-    is_dimension = ["_dim_" in o.name for o in onx.graph.output]
+    is_dimension_in = []
+    for o in onx.graph.input:
+        b = "_dim_" in o.name
+        rk = len(o.type.tensor_type.shape.dim)
+        is_dimension_in.append((b, rk, o.name))
+
+    is_dimension_out = []
+    for o in onx.graph.output:
+        b = "_dim_" in o.name
+        rk = len(o.type.tensor_type.shape.dim)
+        is_dimension_out.append((b, rk, o.name))
 
     if storage is not None:
         stor = {}
@@ -152,7 +162,8 @@ def onnx_debug_backend(
             storage["instance"] = [stor]
         stor["graph_module"] = graph_module
         stor["onnx"] = onx
-        stor["is_dimension"] = is_dimension
+        stor["is_dimension_in"] = is_dimension_in
+        stor["is_dimension_out"] = is_dimension_out
         stor["builder"] = builder
         stor["sess"] = sess
         stor["inputs"] = []
@@ -160,18 +171,60 @@ def onnx_debug_backend(
     else:
         stor = None
 
-    def run(*inputs, sess=sess, names=names, stor=stor, is_dimension=is_dimension):
+    def run(
+        *inputs,
+        sess=sess,
+        names=names,
+        stor=stor,
+        is_dimension_in=is_dimension_in,
+        is_dimension_out=is_dimension_out,
+    ):
         max_device = max(x.get_device() for x in inputs if isinstance(x, torch.Tensor))
-        xnp = [
-            (x.detach().cpu().numpy() if isinstance(x, torch.Tensor) else np.array([x]))
-            for x in inputs
-        ]
+
+        xnp = []
+        for x, (dim, rk, name) in zip(inputs, is_dimension_in):
+            if isinstance(x, torch.Tensor):
+                assert not dim, (
+                    f"Input {name!r} is declared as a dimension but is not, "
+                    f"dim={dim}, rk={rk}, dtype={x.dtype}, shape={x.shape}"
+                )
+                nx = x.detach().cpu().numpy()
+            elif isinstance(x, (torch.SymInt, int)):
+                assert dim and rk <= 1, (
+                    f"Input {name!r} is not declared as a dimension but is, "
+                    f"dim={dim}, rk={rk}, x={x}, type={type(x)}, names={names}"
+                )
+                if isinstance(x, int):
+                    vi = x
+                else:
+                    vi = int(x)
+                nx = np.array(vi, dtype=np.int64)
+                if rk == 1:
+                    nx = nx.reshape((-1,))
+            else:
+                raise AssertionError(f"Unexpected input type {type(x)}")
+            assert nx.dtype not in (
+                object,
+                np.object_,
+            ), f"unexpected dtype {nx.dtype} for an input"
+            xnp.append(nx)
+
         feeds = dict(zip(names, xnp))
         results = sess.run(None, feeds)
         res = []
-        for y, dim in zip(results, is_dimension):
+        for y, (dim, rk, name) in zip(results, is_dimension_out):
             if dim:
-                res.append(torch.SymInt(y))
+                assert len(y.shape) <= 1, (
+                    f"Unexpected shape {y.shape} ({y}) for a dimension {name!r} "
+                    f"(rk={rk})"
+                )
+                if y.shape == (1,):
+                    yi = int(y[0])
+                else:
+                    yi = int(y)
+                si = create_symint(yi)
+                assert torch.sym_int(si)
+                res.append(yi)
             elif max_device >= 0:
                 res.append(torch.Tensor(y).to(_dtype[y.dtype]).to("cuda"))
             else:

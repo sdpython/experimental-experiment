@@ -318,8 +318,9 @@ class TestDynamoLlamaDynamic(ExtTestCase):
             dynamic=True,
             fullgraph=True,
             onnx_export="tt_test_llama_model_backward_mixed_dynamic",
-            impl="ort",
+            impl="ref",
             mixed=True,
+            verbose=10,
         )
 
 
