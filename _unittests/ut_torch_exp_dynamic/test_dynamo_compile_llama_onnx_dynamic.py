@@ -14,6 +14,7 @@ from experimental_experiment.torch_dynamo import (
     onnx_custom_backend,
     get_decomposition_table,
 )
+from experimental_experiment.torch_helper.training_helper import make_aot_ort
 
 
 def torch_min(v: str) -> bool:
@@ -74,76 +75,72 @@ class TestDynamoLlamaDynamic(ExtTestCase):
         mixed=False,
         raise_list=None,
         dump_prefix=None,
+        disable_pattern=None,
     ):
         import torch
 
         assert onnx_export, "No export name was given"
 
-        class backend:
-            def __init__(self):
-                self.execution_count = 0
-
-        def _flatten(a):
-            if isinstance(a, tuple):
-                r = []
-                for i in a:
-                    r.extend(_flatten(i))
-                return tuple(_ for _ in r if _ is not None)
-            return (a,) if a is not None else tuple()
-
         storage = {}
 
-        if impl == "fast":
-            backend_debug = lambda *args, **kwargs: onnx_custom_backend(  # noqa: E731
-                *args,
-                backend="ort",
-                target_opset=18,
-                storage=storage,
-                verbose=verbose,
-                dump_prefix=dump_prefix,
-                disable_pattern="default",
-                **kwargs,
-            )
+        if impl == "onnxrt":
+            local_aot_ort, local_ort = make_aot_ort(dynamic=dynamic)
+            compiled_model = torch.compile(copy.deepcopy(model), backend=local_ort)
         else:
-            backend_debug = lambda *args, **kwargs: onnx_debug_backend(  # noqa: E731
-                *args,
-                # dump_prefix=os.path.join(folder, "llama_debug"),
-                backend=impl,
-                target_opset=18,
-                storage=storage,
-                verbose=verbose,
-                raise_list=raise_list,
-                dump_prefix=dump_prefix,
-                **kwargs,
-            )
-
-        if test_backward:
-            from torch._dynamo.backends.common import aot_autograd
-
-            if decompositions:
-                aot_compiler = aot_autograd(
-                    fw_compiler=backend_debug,
-                    decompositions=torch._decomp.decomposition_table,
+            if impl == "fast":
+                backend_debug = (  # noqa: E731
+                    lambda *args, **kwargs: onnx_custom_backend(
+                        *args,
+                        backend="ort",
+                        target_opset=18,
+                        storage=storage,
+                        verbose=verbose,
+                        dump_prefix=dump_prefix,
+                        disable_pattern=disable_pattern,
+                        **kwargs,
+                    )
                 )
             else:
-                aot_compiler = aot_autograd(
-                    fw_compiler=backend_debug, decompositions=get_decomposition_table()
+                backend_debug = lambda *args, **kwargs: onnx_debug_backend(  # noqa: E731
+                    *args,
+                    # dump_prefix=os.path.join(folder, "llama_debug"),
+                    backend=impl,
+                    target_opset=18,
+                    storage=storage,
+                    verbose=verbose,
+                    raise_list=raise_list,
+                    dump_prefix=dump_prefix,
+                    **kwargs,
                 )
 
-            compiled_model = torch.compile(
-                copy.deepcopy(model),
-                backend=aot_compiler,
-                dynamic=dynamic,
-                fullgraph=fullgraph,
-            )
-        else:
-            assert fullgraph
-            compiled_model = torch.compile(
-                copy.deepcopy(model),
-                backend=backend_debug,
-                dynamic=dynamic,
-                fullgraph=fullgraph,
-            )
+            if test_backward:
+                from torch._dynamo.backends.common import aot_autograd
+
+                if decompositions:
+                    aot_compiler = aot_autograd(
+                        fw_compiler=backend_debug,
+                        decompositions=torch._decomp.decomposition_table,
+                    )
+                else:
+                    aot_compiler = aot_autograd(
+                        fw_compiler=backend_debug,
+                        decompositions=get_decomposition_table(),
+                    )
+
+                compiled_model = torch.compile(
+                    copy.deepcopy(model),
+                    backend=aot_compiler,
+                    dynamic=dynamic,
+                    fullgraph=fullgraph,
+                )
+            else:
+                assert fullgraph
+                compiled_model = torch.compile(
+                    copy.deepcopy(model),
+                    backend=backend_debug,
+                    dynamic=dynamic,
+                    fullgraph=fullgraph,
+                )
 
         for example_args in example_args_collection:
             if mixed:
@@ -196,6 +193,7 @@ class TestDynamoLlamaDynamic(ExtTestCase):
         mixed=False,
         raise_list=None,
         dump_prefix=None,
+        disable_pattern=None,
     ):
         storage = self._assert_model_numerically(
             model,
@@ -212,6 +210,7 @@ class TestDynamoLlamaDynamic(ExtTestCase):
             mixed=mixed,
             raise_list=raise_list,
             dump_prefix=dump_prefix,
+            disable_pattern=disable_pattern,
         )
         self.assertIsInstance(storage, dict)
         return storage
@@ -382,6 +381,71 @@ class TestDynamoLlamaDynamic(ExtTestCase):
             mixed=False,
             verbose=0,
             dump_prefix="tt_temp_llama_model_backward_dynamic_fastbackend",
+        )
+
+    @ignore_warnings((UserWarning, DeprecationWarning))
+    @skipif_ci_windows("torch.compile not supported on Windows")
+    @unittest.skipIf(torch_min("2.2"), reason="missing kernel")
+    @unittest.skipIf(not has_cuda(), "cuda is needed for autocast")
+    def test_llama_model_backward_mixed_dynamic_fast_backend_1024(self):
+        from experimental_experiment.torch_helper.llama_helper import get_llama_model
+
+        input_dims = [(2, 1014)]
+        model, example_args_collection = get_llama_model(
+            input_dims=input_dims,
+            num_hidden_layers=2,
+            hidden_size=1024,
+            vocab_size=1024,
+            intermediate_size=1024,
+            max_position_embeddings=1024,
+            num_attention_heads=2,
+        )
+
+        self.common_test_model(
+            model,
+            example_args_collection,
+            test_backward=True,
+            dynamic=True,
+            fullgraph=True,
+            onnx_export="tt_test_llama_model_backward_mixed_dynamic_fastbackend_1024",
+            impl="fast",
+            mixed=False,
+            verbose=0,
+            dump_prefix="tt_test_llama_model_backward_mixed_dynamic_fastbackend_1024",
+            disable_pattern="default",
+            atol=(1e-2, 0.8),
+        )
+
+    @ignore_warnings((UserWarning, DeprecationWarning))
+    @skipif_ci_windows("torch.compile not supported on Windows")
+    @unittest.skipIf(torch_min("2.2"), reason="missing kernel")
+    @unittest.skipIf(not has_cuda(), "cuda is needed for autocast")
+    def test_llama_model_backward_mixed_dynamic_onnxrt_1024(self):
+        from experimental_experiment.torch_helper.llama_helper import get_llama_model
+
+        input_dims = [(2, 1014)]
+        model, example_args_collection = get_llama_model(
+            input_dims=input_dims,
+            num_hidden_layers=2,
+            hidden_size=1024,
+            vocab_size=1024,
+            intermediate_size=1024,
+            max_position_embeddings=1024,
+            num_attention_heads=2,
+        )
+
+        self.common_test_model(
+            model,
+            example_args_collection,
+            test_backward=True,
+            dynamic=True,
+            fullgraph=True,
+            onnx_export="tt_test_llama_model_backward_mixed_dynamic_onnxrt_1024",
+            impl="onnxrt",
+            mixed=False,
+            verbose=0,
+            dump_prefix="tt_test_llama_model_backward_mixed_dynamic_onnxrt_1024",
+            atol=(1e-2, 0.8),
         )
 
 
