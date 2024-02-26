@@ -296,8 +296,9 @@ class TestDynamoLlamaDynamic(ExtTestCase):
             dynamic=True,
             fullgraph=True,
             onnx_export="test_llama_attention_backward_forward_dynamic",
-            impl="ort",
+            impl="ref",
             verbose=10,
+            dump_prefix="temp_llama_attention_backward_forward_dynamic",
         )
 
     @ignore_warnings((UserWarning, DeprecationWarning))

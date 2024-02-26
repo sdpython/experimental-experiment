@@ -2300,6 +2300,7 @@ def _aten_tensor_int1(
     indices: Tuple[Any, ...],
     axes: List[int],
     expand_axes: List[int],
+    name: str = "_aten_tensor_int1",
 ) -> T:
     assert isinstance(axes, list), f"Unexpected type {type(axes)} for axes"
     assert all_int(axes), f"Expected only integer axis but got {axes}"
@@ -2315,7 +2316,7 @@ def _aten_tensor_int1(
         [input_name, indices_name],
         outputs=outputs,
         axis=axes[0],
-        name="getitem_int1",
+        name=name,
     )
 
     if expand_axes:
