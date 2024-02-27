@@ -279,8 +279,15 @@ def prepare_inputs_homogeneous_operator(
         # No cast.
         res = f(*inputs, outputs=outputs, name=name)
     else:
+        assert dtype_to_tensor_dtype, (
+            f"Unable to determine the type to Cast back into "
+            f"dtypes_list={dtypes_list}, only={only}{g.get_debug_msg()}"
+        )
         res = g.op.Cast(
-            f(*inputs, name=name), to=dtypes_list[0], outputs=outputs, name=name
+            f(*inputs, name=name),
+            to=dtypes_list_not_none[0],
+            outputs=outputs,
+            name=name,
         )
     return tuple([res, *inputs])
 

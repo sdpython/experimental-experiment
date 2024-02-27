@@ -1256,11 +1256,20 @@ class GraphBuilder:
     ):
         assert (
             not op_type.startswith("Reduce")
+            or domain != ""
             or (len(inputs) == 2 and "axes" not in kwargs)
             or len(inputs) == 1
         ), (
             f"Operator {op_type!r} defines twice the axes, kwargs={kwargs}, "
-            f"len(inputs)={len(inputs)}, {self.get_debug_msg()}"
+            f"len(inputs)={len(inputs)}{self.get_debug_msg()}"
+        )
+        assert (
+            op_type != "Cast"
+            or domain != ""
+            or ("to" in kwargs and kwargs["to"] is not None)
+        ), (
+            f"Operator Cast needs arguments to but kwargs={kwargs}"
+            f"{self.get_debug_msg()}"
         )
 
     def make_node(
