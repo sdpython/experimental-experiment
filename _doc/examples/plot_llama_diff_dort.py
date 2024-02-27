@@ -345,7 +345,7 @@ except ImportError as e:
 
 if ortopt:
     providers = (
-        ["CUDAExecutionProvider", "CPUExecutionProvider"]
+        [("CUDAExecutionProvider", {}), ("CPUExecutionProvider", {})]
         if use_cuda
         else ["CPUExecutionProvider"]
     )

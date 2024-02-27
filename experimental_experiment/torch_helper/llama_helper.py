@@ -188,7 +188,6 @@ def get_llama_model(
             self.model = LlamaModel(config)
 
         def forward(self, input_ids, attention_mask):
-            assert attention_mask is not None
             model_output = self.model(input_ids, attention_mask=attention_mask)
             return model_output.to_tuple()
 

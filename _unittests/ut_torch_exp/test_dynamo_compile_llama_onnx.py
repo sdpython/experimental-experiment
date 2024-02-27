@@ -68,18 +68,6 @@ class TestDynamoLlama(ExtTestCase):
 
         assert onnx_export, "No export name was given"
 
-        class backend:
-            def __init__(self):
-                self.execution_count = 0
-
-        def _flatten(a):
-            if isinstance(a, tuple):
-                r = []
-                for i in a:
-                    r.extend(_flatten(i))
-                return tuple(_ for _ in r if _ is not None)
-            return (a,) if a is not None else tuple()
-
         storage = {}
         backend_debug = lambda *args, **kwargs: onnx_debug_backend(  # noqa: E731
             *args,
