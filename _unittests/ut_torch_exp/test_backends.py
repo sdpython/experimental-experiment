@@ -4,7 +4,6 @@ import onnx.helper as oh
 from onnx import TensorProto
 import torch
 from experimental_experiment.ext_test_case import ExtTestCase, ignore_warnings
-from experimental_experiment.torch_helper.dump_helper import assert_all_close
 
 
 def has_cuda():
@@ -19,6 +18,7 @@ class TestBackend(ExtTestCase):
     def test_onnx_custom_backend_dump(self):
         import onnxruntime
         from experimental_experiment.torch_dynamo.fast_backend import OrtBackend
+        from experimental_experiment.torch_helper.dump_helper import assert_all_close
 
         model = oh.make_model(
             oh.make_graph(
