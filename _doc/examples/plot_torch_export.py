@@ -506,7 +506,7 @@ def benchmark(shape):
             [_ for _ in os.listdir(".") if ".onnx" in _ and _.startswith("plot_torch")],
             [
                 ["CPUExecutionProvider"],
-                [("CUDAExecutionProvider", {}), ("CPUExecutionProvider", {})],
+                ["CUDAExecutionProvider", "CPUExecutionProvider"],
             ],
             ["0", "1"],
         )
