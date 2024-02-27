@@ -43,6 +43,7 @@ args = get_parsed_args(
     target_opset=(18, "opset to convert into, use with backend=custom"),
     config=("default", "default, medium, or small to test"),
     verbose=(0, "verbosity"),
+    disable_pattern=("", "a list of optimization pattern to disable"),
     expose="backend,repeat,warmup,device,num_hidden_layers,"
     "mixed,export,config,target_opset,dynamic,verbose",
 )
@@ -85,6 +86,7 @@ elif args.config == "medium":
         _attn_implementation="eager",
     )
 else:
+    assert args.config == "large", f"unexpected config={args.config!r}"
     config_dict = dict(
         input_dims=[(2, 1024)] * (args.repeat + args.warmup),
         hidden_size=4096,
@@ -97,9 +99,13 @@ else:
     )
 
 verbose = int(args.verbose)
+disabled_pattern = [_ for _ in args.disable_pattern.split(",") if _]
 print(f"llama config={config_dict}")
 print(f"backend={args.backend}")
 print(f"verbose={args.verbose}")
+print(f"mixed={args.mixed}")
+if args.backend == "custom":
+    print(f"disabled_pattern={disabled_pattern!r}")
 model, example_args_collection = get_llama_model(**config_dict)
 
 
@@ -125,7 +131,11 @@ elif args.backend == "custom":
     target_opset = args.target_opset
     aot_compiler = aot_autograd(
         fw_compiler=lambda *args, **kwargs: onnx_custom_backend(
-            *args, target_opset=target_opset, verbose=verbose, **kwargs
+            *args,
+            target_opset=target_opset,
+            verbose=verbose,
+            disable_pattern=disabled_pattern,
+            **kwargs,
         ),
         decompositions=get_decomposition_table(),
     )
@@ -140,7 +150,11 @@ elif args.backend == "debug":
         print(f"  input: {a.dtype}:{a.shape}")
     aot_compiler = aot_autograd(
         fw_compiler=lambda *args, **kwargs: onnx_debug_backend(
-            *args, target_opset=target_opset, backend="ref", **kwargs
+            *args,
+            target_opset=target_opset,
+            backend="ref",
+            disable_pattern=disabled_pattern,
+            **kwargs,
         ),
         decompositions=get_decomposition_table(),
     )
@@ -192,7 +206,7 @@ for i in range(args.warmup):
                 os.path.join("dump_dort_bench", onx),
                 output=os.path.join("dump_dort_bench", new_onx),
                 providers=(
-                    ["CUDAExecutionProvider", "CPUExecutionProvider"]
+                    [("CUDAExecutionProvider", {}), ("CPUExecutionProvider", {})]
                     if is_cuda
                     else ["CPUExecutionProvider"]
                 ),

@@ -74,11 +74,12 @@ def set_type_shape_reshape(
     input_name: str,
     new_shape: Sequence[int],
 ):
-    dtype = g.get_type(input_name)
-    g.set_type(name, dtype)
+    g.set_type(name, g.get_type(input_name))
     if isinstance(new_shape, str):
         if g.has_shape(new_shape):
-            g.set_rank(name, len(g.get_shape(new_shape)))
+            sh = g.get_shape(new_shape)
+            assert len(sh) == 1, f"Unexpected value {sh} for shape={new_shape!r}"
+            g.set_rank(name, sh[0])
     elif not is_static_shape(new_shape):
         g.set_rank(name, len(new_shape))
     elif min(new_shape) == -1:

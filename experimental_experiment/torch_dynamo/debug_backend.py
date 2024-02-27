@@ -1,9 +1,12 @@
 import os
-from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
 import numpy as np
 from onnx import ModelProto
 import torch
+from ..torch_exp._torch_helper import create_input_names
 from ..torch_exp.onnx_export import to_onnx, OptimizationOptions
+from ..torch_exp.optimization_patterns import get_pattern_list
+from .backend_helper import get_dimensions
 
 
 def _get_session(
@@ -39,7 +42,7 @@ def _get_session(
 
 def onnx_debug_backend(
     graph_module: "torch.fx.GraphModule",  # noqa: F821
-    args: List["torch.Tensor"],  # noqa: F821
+    args: List[Union["torch.Tensor", "torch.SymInt"]],  # noqa: F821
     target_opset: Optional[int] = None,
     backend: str = "ort",
     verbose: Union[int, Tuple[int, int]] = 0,
@@ -47,6 +50,8 @@ def onnx_debug_backend(
     providers: Optional[Tuple[str]] = None,
     raise_exc: bool = True,
     storage: Optional[Dict[str, Any]] = None,
+    raise_list: Optional[Set[str]] = None,
+    disable_pattern: Optional[List[Union[str, type]]] = "default",
 ) -> Callable:
     """
     Custom backend to export torch models into onnx
@@ -67,6 +72,9 @@ def onnx_debug_backend(
     :param providers: where to run the model, by default
     :param raise_exc: raise an exception whenever something goes wrong
     :param storage: to store any interesting objects during the process
+    :param raise_list: the builder stops any time a name falls into that list,
+        this is a debbuging tool
+    :param disable_pattern: to disable optimization patterns, by default, all are disabled
     :return: Callable
 
     See :ref:`l-plot-onnxrt-diff` for an example.
@@ -74,16 +82,19 @@ def onnx_debug_backend(
     onnx models, graph module as well the inputs and outputs when
     the model is run.
     """
-    input_names = (
-        ["input"] if len(args) == 1 else [f"input{i}" for i in range(len(args))]
-    )
+    input_names = create_input_names(graph_module, args)
 
     verbose_onnx, verbose_backend = (
         verbose if isinstance(verbose, tuple) else (verbose, verbose)
     )
 
+    patterns = get_pattern_list("default", disable_pattern)
+
     options = OptimizationOptions(
-        remove_unused=True, constant_folding=False, patterns=None, verbose=verbose_onnx
+        remove_unused=True,
+        constant_folding=False,
+        patterns=patterns,
+        verbose=verbose_onnx,
     )
 
     onx, builder = to_onnx(
@@ -94,6 +105,7 @@ def onnx_debug_backend(
         verbose=verbose_onnx,
         target_opset=target_opset,
         return_builder=True,
+        raise_list=raise_list,
     )
 
     if dump_prefix:
@@ -107,7 +119,7 @@ def onnx_debug_backend(
             f.write(onx.SerializeToString())
         name = f"{dump_prefix}_{counter}.txt"
         with open(name, "w") as f:
-            f.write(str(graph_module.graph))
+            f.write(builder.get_debug_msg())
             f.write("\n")
 
     sess = _get_session(
@@ -131,6 +143,8 @@ def onnx_debug_backend(
         np.bool_: torch.bool,
     }
 
+    is_dimension_in, is_dimension_out = get_dimensions(onx)
+
     if storage is not None:
         stor = {}
         if "instance" in storage:
@@ -139,6 +153,8 @@ def onnx_debug_backend(
             storage["instance"] = [stor]
         stor["graph_module"] = graph_module
         stor["onnx"] = onx
+        stor["is_dimension_in"] = is_dimension_in
+        stor["is_dimension_out"] = is_dimension_out
         stor["builder"] = builder
         stor["sess"] = sess
         stor["inputs"] = []
@@ -146,20 +162,69 @@ def onnx_debug_backend(
     else:
         stor = None
 
-    def run(*inputs, sess=sess, names=names, stor=stor):
+    def run(
+        *inputs,
+        sess=sess,
+        names=names,
+        stor=stor,
+        is_dimension_in=is_dimension_in,
+        is_dimension_out=is_dimension_out,
+    ):
         max_device = max(x.get_device() for x in inputs if isinstance(x, torch.Tensor))
-        xnp = [
-            (x.detach().cpu().numpy() if isinstance(x, torch.Tensor) else np.array([x]))
-            for x in inputs
-        ]
+
+        xnp = []
+        for x, (dim, rk, name) in zip(inputs, is_dimension_in):
+            if isinstance(x, torch.Tensor):
+                assert not dim, (
+                    f"Input {name!r} is declared as a dimension but is not, "
+                    f"dim={dim}, rk={rk}, dtype={x.dtype}, shape={x.shape}"
+                )
+                nx = x.detach().cpu().numpy()
+            elif isinstance(x, (torch.SymInt, int)):
+                assert dim and rk <= 1, (
+                    f"Input {name!r} is not declared as a dimension but is, "
+                    f"dim={dim}, rk={rk}, x={x}, type={type(x)}, names={names}"
+                )
+                if isinstance(x, int):
+                    vi = x
+                else:
+                    vi = int(x)
+                nx = np.array(vi, dtype=np.int64)
+                if rk == 1:
+                    nx = nx.reshape((-1,))
+            else:
+                raise AssertionError(f"Unexpected input type {type(x)}")
+            assert nx.dtype not in (
+                object,
+                np.object_,
+            ), f"unexpected dtype {nx.dtype} for an input"
+            xnp.append(nx)
+
         feeds = dict(zip(names, xnp))
         results = sess.run(None, feeds)
-        res = tuple(torch.Tensor(y).to(_dtype[y.dtype]) for y in results)
+        res = []
+        for y, (dim, rk, name) in zip(results, is_dimension_out):
+            if name is None:
+                res.append(None)
+                continue
+            if dim:
+                assert len(y.shape) <= 1, (
+                    f"Unexpected shape {y.shape} ({y}) for a dimension {name!r} "
+                    f"(rk={rk})"
+                )
+                if y.shape == (1,):
+                    yi = int(y[0])
+                else:
+                    yi = int(y)
+                res.append(yi)
+                continue
+            if max_device >= 0:
+                res.append(torch.Tensor(y).to(_dtype[y.dtype]).to("cuda"))
+            else:
+                res.append(torch.Tensor(y).to(_dtype[y.dtype]))
         if stor:
             stor["inputs"].append(feeds)
             stor["outputs"].append(res)
-        if max_device >= 0:
-            res = tuple(x.to("cuda") for x in res)
         return res
 
     return run

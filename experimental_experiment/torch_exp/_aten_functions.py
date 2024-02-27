@@ -11,6 +11,7 @@ from .annotations import (
     all_float,
     all_int,
     all_int_or_float,
+    all_int_or_str,
     is_static_dimension,
     is_static_shape,
 )
@@ -105,6 +106,12 @@ def aten_and(
     if sts:
         set_type_shape_binary_op(g, outputs[0], x, y)
     return res
+
+
+def aten_and_(
+    g: GraphBuilder, sts: bool, outputs: List[str], x: T, y: T, name="and"
+) -> T:
+    return aten_and(g, sts, outputs, x, y, name="and_")
 
 
 def aten_addmm(
@@ -391,7 +398,8 @@ def aten_cat(
     dim: int = 0,
     name="cat",
 ) -> T:
-    res = g.op.Concat(*tensors, axis=dim, outputs=outputs, name=name)
+    assert len(tensors) > 0, f"No tensor to concat{g.get_debug_msg()}"
+    res = g.op.Concat(*tensors, axis=dim, outputs=outputs, name="cat")
     if sts:
         dt0 = g.get_type(tensors[0])
         assert all(map(lambda t: g.get_type(t) == dt0, tensors))
@@ -911,6 +919,7 @@ def aten_expand(
             sizes
         ), f"Unexpected shape={shape} for x as sizes={sizes}{g.get_debug_msg()}"
         new_shape = []
+        is_static = True
         for a, b in zip(shape, sizes):
             if b == -1:
                 assert isinstance(b, int), (
@@ -920,17 +929,21 @@ def aten_expand(
                 new_shape.append(a)
             else:
                 new_shape.append(b)
-        res = g.op.Expand(
-            x, np.array(new_shape, dtype=np.int64), outputs=outputs, name=f"{name}_neg"
+                is_static = False
+        i_new_shape = (
+            np.array(new_shape, dtype=np.int64)
+            if is_static
+            else g.make_shape_from_results(new_shape, name=f"{name}_neg")
         )
+        res = g.op.Expand(x, i_new_shape, outputs=outputs, name=f"{name}_neg")
         if sts:
             g.set_type(res, g.get_type(x))
             g.set_shape(res, tuple(new_shape))
         return res
 
-    if isinstance(sizes, list):
+    if isinstance(sizes, (list, tuple)):
         # A combination of static and dynamic dimensions.
-        new_shape = g.make_shape_from_results(sizes, name=f"{name}_dyn")
+        new_shape = g.make_shape_from_results(list(sizes), name=f"{name}_dyn")
     else:
         new_shape = sizes
 
@@ -1025,15 +1038,18 @@ def aten_full(
     if isinstance(size, tuple):
         assert all(
             map(lambda x: isinstance(x, int), size)
-        ), f"Unexpected values for size={size}"
+        ), f"Unexpected values for size={size}-{[type(s) for s in size]}"
         tsize = np.array(size, dtype=np.int64)
         new_shape = size
     elif isinstance(size, list):
-        assert all(
-            map(lambda x: isinstance(x, int), size)
-        ), f"Unexpected values for size={size}"
-        tsize = np.array(size, dtype=np.int64)
-        new_shape = size
+        assert all_int_or_str(
+            size
+        ), f"Unexpected values for size={size}-{[type(s) for s in size]}"
+        if all_int(size):
+            tsize = np.array(size, dtype=np.int64)
+            new_shape = size
+        else:
+            tsize = g.make_shape_from_results(size, name=name)
     else:
         raise RuntimeError(f"Unexpected type {type(size)} for size.")
 
@@ -1128,7 +1144,7 @@ def aten_index_Tensor(
     ), f"Unexpected type {type(indices)} for indices"
     if len(indices) == 1 and isinstance(indices[0], str):
         return aten_index_select(
-            g, sts, outputs, x, dim=0, index=indices[0], name="index_Tensor"
+            g, sts, outputs, x, dim=0, index=indices[0], name="index1_Tensor"
         )
     n_none = len(list(i for i in indices if i is None))
     if n_none == len(indices) - 1:
@@ -1136,32 +1152,32 @@ def aten_index_Tensor(
         position = min(i for i, v in enumerate(indices) if v is not None)
         index = indices[position]
         if isinstance(index, str):
-            temp = aten_index_select(
+            res = aten_index_select(
                 g,
                 sts,
                 None,
                 x,
                 dim=position,
                 index=index,
-                name="index_Tensor",
+                name="index2_Tensor",
             )
             to_add = list(i for i in range(len(indices)) if i != position)
             assert (
                 len(to_add) > 0
             ), f"Unexpected value for to_add={to_add}, position={position}, indices={indices}"
-            res = g.op.UnsqueezeAnyOpset(
-                temp, np.array(to_add, dtype=np.int64), outputs=outputs
-            )
-            if sts:
-                g.set_type(res, g.get_type(x))
-                if g.has_shape(temp):
-                    shape = list(g.get_shape(temp))
-                    for i in to_add:
-                        shape.insert(i, 1)
-                    g.set_shape(res, tuple(shape))
-                else:
-                    g.set_rank(res, g.get_rank(temp) + 2)
-        return res
+            # res = g.op.UnsqueezeAnyOpset(
+            #     temp, np.array(to_add, dtype=np.int64), outputs=outputs
+            # )
+            # if sts:
+            #     g.set_type(res, g.get_type(x))
+            #     if g.has_shape(temp):
+            #         shape = list(g.get_shape(temp))
+            #         for i in to_add:
+            #            shape.insert(i, 1)
+            #         g.set_shape(res, tuple(shape))
+            #     else:
+            #         g.set_rank(res, g.get_rank(temp) + 2)
+            return res
 
     raise RuntimeError(
         f"aten_index_Tensor not implemented yet for indices={indices}, "
@@ -1649,6 +1665,21 @@ def aten_new_zeros(
     )
 
 
+def aten_not(
+    g: GraphBuilder, sts: bool, outputs: List[str], x: T, name: str = "not"
+) -> T:
+    res = g.make_node("Not", [x], outputs, name=name)
+    if sts:
+        set_type_shape_unary_op(g, res, x)
+    return res
+
+
+def aten_not_(
+    g: GraphBuilder, sts: bool, outputs: List[str], x: T, name: str = "not"
+) -> T:
+    return aten_not(g, sts, outputs, x, name="not_")
+
+
 def aten_ones(
     g: GraphBuilder,
     sts: bool,
@@ -1950,7 +1981,7 @@ def aten_slice_Tensor(
     ]
     if step is not None and step != 1:
         inputs.append(np.array([step], dtype=np.int64))
-    res = g.op.Slice(x, *inputs, outputs=outputs)
+    res = g.op.Slice(x, *inputs, outputs=outputs, name="slice_Tensor")
     if sts:
         g.set_type(res, g.get_type(x))
         if is_static_dimension(start) and is_static_dimension(end):
@@ -1974,44 +2005,70 @@ def aten_slice_backward(
     start: int,
     end: int,
     step: int,
+    name: str = "slice_backward",
 ) -> T:
     assert (
         step == 1
     ), f"slice_backward not implemented for step={step}{g.get_debug_msg()}"
-    assert g.has_shape(grad_output), (
-        f"slice_backward not implemented when grad_output "
-        f"has not shape{g.get_debug_msg()}"
-    )
-
-    shape = g.get_shape(grad_output)
-
-    assert is_static_shape(
-        shape
-    ), f"slice_backward not implemented when shape={shape}{g.get_debug_msg()}"
 
     itype = g.get_type(grad_output)
     value = from_array(np.array([0], dtype=tensor_dtype_to_np_dtype(itype)))
+
     inputs = []
 
-    if start > 0:
-        cst_shape = list(shape)
-        cst_shape[dim] = start
-        cst = g.op.ConstantOfShape(
-            np.array(cst_shape, dtype=np.int64), value=value, name="slice_backward"
-        )
-        inputs.append(cst)
+    if g.has_shape(grad_output) and is_static_shape(g.get_shape(grad_output)):
+        name_s = f"{name}_static"
+        # static version
+        shape = g.get_shape(grad_output)
 
-    inputs.append(grad_output)
+        if start > 0:
+            cst_shape = list(shape)
+            cst_shape[dim] = start
+            cst = g.op.ConstantOfShape(
+                np.array(cst_shape, dtype=np.int64), value=value, name=name_s
+            )
+            inputs.append(cst)
 
-    if end < 9223372036854775807:
-        cst_shape = list(shape)
-        cst_shape[dim] = input_sizes[dim] - shape[dim] - start
-        cst = g.op.ConstantOfShape(
-            np.array(cst_shape, dtype=np.int64), value=value, name="slice_backward"
-        )
-        inputs.append(cst)
+        inputs.append(grad_output)
 
-    res = g.op.Concat(*inputs, axis=dim, name="slice_backward")
+        if end < 9223372036854775807:
+            cst_shape = list(shape)
+            cst_shape[dim] = input_sizes[dim] - shape[dim] - start
+            cst = g.op.ConstantOfShape(
+                np.array(cst_shape, dtype=np.int64), value=value, name=name_s
+            )
+            inputs.append(cst)
+
+    else:
+        name_d = f"{name}_dynamic"
+        # dynamic version
+        shape = g.op.Shape(grad_output, name=name_d)
+
+        if start > 0:
+            cst_shape = g.op.ScatterElements(
+                shape,
+                np.array([dim], dtype=np.int64),
+                np.array([start], dtype=np.int64),
+                axis=0,
+                name=name,
+            )
+            cst = g.op.ConstantOfShape(cst_shape, value=value, name=name_d)
+            inputs.append(cst)
+
+        inputs.append(grad_output)
+
+        if end < 9223372036854775807:
+            shape_dim = g.op.Gather(shape, np.array([dim], dtype=np.int64), name=name_d)
+            new_dim = g.op.Sub(
+                np.array([input_sizes[dim] - start], dtype=np.int64), shape_dim
+            )
+            cst_shape = g.op.ScatterElements(
+                shape, np.array([dim], dtype=np.int64), new_dim, axis=0, name=name_d
+            )
+            cst = g.op.ConstantOfShape(cst_shape, value=value, name=name_d)
+            inputs.append(cst)
+
+    res = g.op.Concat(*inputs, axis=dim, name=name)
 
     if sts:
         g.set_type(res, g.get_type(grad_output))
@@ -2166,7 +2223,7 @@ def _aten_slice_scatter_dynamic(
     )
     indices = g.op.Expand(index_base, shape_expand, name=name)
 
-    # Step 4: final ScatterElements.
+    # Step 4: final step
     res = g.op.ScatterElements(x, indices, src, axis=dim, name=name)
     if sts:
         g.set_type(res, g.get_type(x))
@@ -2187,7 +2244,7 @@ def aten_slice_scatter(
     name: Optional[str] = None,
 ) -> T:
 
-    if g.has_shape(x):
+    if g.has_shape(x) and is_static_shape(g.get_shape(x)):
         return _aten_slice_scatter_static(
             g,
             sts,
@@ -2439,6 +2496,7 @@ def _aten_tensor_int1(
     indices: Tuple[Any, ...],
     axes: List[int],
     expand_axes: List[int],
+    name: str = "_aten_tensor_int1",
 ) -> T:
     assert isinstance(axes, list), f"Unexpected type {type(axes)} for axes"
     assert all_int(axes), f"Expected only integer axis but got {axes}"
@@ -2454,7 +2512,7 @@ def _aten_tensor_int1(
         [input_name, indices_name],
         outputs=outputs,
         axis=axes[0],
-        name="getitem_int1",
+        name=name,
     )
 
     if expand_axes:

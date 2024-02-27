@@ -8,6 +8,11 @@ get_default_patterns
 
 .. autofunction:: experimental_experiment.torch_exp.optimization_patterns.get_default_patterns
 
+get_default_patterns
+====================
+
+.. autofunction:: experimental_experiment.torch_exp.optimization_patterns.get_pattern_list
+
 Classes
 =======
 
@@ -21,22 +26,62 @@ GraphBuilderPatternOptimization
 MatchResult
 +++++++++++
 
-.. autoclass:: experimental_experiment.torch_exp.optimization_patterns.MatchResult
+.. autoclass:: experimental_experiment.torch_exp.optimization_patterns_api.MatchResult
     :members:
 
 PatternOptimization
 +++++++++++++++++++
 
-.. autoclass:: experimental_experiment.torch_exp.optimization_patterns.PatternOptimization
+.. autoclass:: experimental_experiment.torch_exp.optimization_patterns_api.PatternOptimization
     :members:
-
 
 Patterns
 ========
 
+CastPattern
++++++++++++
+
+.. autoclass:: experimental_experiment.torch_exp._optimization_onnx_patterns.CastPattern
+    :members:
+
+ExpandPattern
++++++++++++++
+
+.. autoclass:: experimental_experiment.torch_exp._optimization_onnx_patterns.ExpandPattern
+    :members:
+
+ReshapeMatMulReshapePattern
++++++++++++++++++++++++++++
+
+.. autoclass:: experimental_experiment.torch_exp._optimization_onnx_patterns.ReshapeMatMulReshapePattern
+    :members:
+
+ReshapeReshapePattern
++++++++++++++++++++++
+
+.. autoclass:: experimental_experiment.torch_exp._optimization_onnx_patterns.ReshapeReshapePattern
+    :members:
+
+RotaryConcatPartPattern
++++++++++++++++++++++++
+
+.. autoclass:: experimental_experiment.torch_exp._optimization_onnx_patterns.RotaryConcatPartPattern
+    :members:
+
+TransposeMatMulPattern
+++++++++++++++++++++++
+
+.. autoclass:: experimental_experiment.torch_exp._optimization_onnx_patterns.TransposeMatMulPattern
+    :members:
+
+TransposeTransposePattern
++++++++++++++++++++++++++
+
+.. autoclass:: experimental_experiment.torch_exp._optimization_onnx_patterns.TransposeTransposePattern
+    :members:
+
 UnsqueezeUnsqueezePattern
 +++++++++++++++++++++++++
 
-.. autoclass:: experimental_experiment.torch_exp.optimization_patterns.UnsqueezeUnsqueezePattern
+.. autoclass:: experimental_experiment.torch_exp._optimization_onnx_patterns.UnsqueezeUnsqueezePattern
     :members:
-

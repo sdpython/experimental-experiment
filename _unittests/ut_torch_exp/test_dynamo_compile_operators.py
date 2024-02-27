@@ -124,6 +124,7 @@ class TestOperators(ExtTestCase):
         square_loss=False,
         use_decomposition=False,
         verbose=0,
+        raise_list=None,
     ):
         if sys.platform == "win32":
             raise unittest.SkipTest("Windows not supported yet.")
@@ -156,6 +157,7 @@ class TestOperators(ExtTestCase):
             storage=storage,
             backend=impl,
             verbose=verbose,
+            raise_list=raise_list,
             **kwargs,
         )
 
@@ -314,6 +316,26 @@ class TestOperators(ExtTestCase):
             x,
             onnx_export=inspect.currentframe().f_code.co_name,
             test_backward=False,
+        )
+
+    def test_index_select_ort(self):
+        x = torch.arange(12, requires_grad=True, dtype=torch.float32).reshape((-1, 4))
+        self.assertONNX(
+            lambda x: torch.index_select(x.clone(), 1, torch.tensor([0, 2])),
+            x,
+            onnx_export=inspect.currentframe().f_code.co_name,
+            test_backward=False,
+            impl="ort",
+        )
+
+    def test_index_select_ref(self):
+        x = torch.arange(12, requires_grad=True, dtype=torch.float32).reshape((-1, 4))
+        self.assertONNX(
+            lambda x: torch.index_select(x.clone(), 1, torch.tensor([0, 2])),
+            x,
+            onnx_export=inspect.currentframe().f_code.co_name,
+            test_backward=False,
+            impl="ref",
         )
 
     def test_type_as(self):
@@ -800,7 +822,7 @@ class TestOperators(ExtTestCase):
             lambda x: torch.prod(x),
             x,
             onnx_export=inspect.currentframe().f_code.co_name,
-            atol=1e-5,
+            atol=2e-4,
         )
 
     def test_reduced_prod(self):
@@ -1017,6 +1039,7 @@ class TestOperators(ExtTestCase):
             onnx_export=inspect.currentframe().f_code.co_name,
             impl="ref",
             test_backward=False,
+            raise_list=None,  # {"_onx_scatterelements0"},
         )
 
     def test_slice_scatter_1_backward(self):

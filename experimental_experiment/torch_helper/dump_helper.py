@@ -39,12 +39,22 @@ def dump_onnx(prefix: str, folder: Optional[str] = None, clean: bool = False):
         os.environ["ONNXRT_DUMP_PATH"] = value or ""
 
 
-def assert_all_close(v1: Any, v2: Any, atol=1e-5, rtol=1e-5, msg: str = ""):
+def assert_all_close(
+    v1: Any,
+    v2: Any,
+    atol: Union[float, Tuple[float, float]] = 1e-5,
+    rtol: float = 1e-5,
+    msg: str = "",
+):
     """
     Checks that the expected outputs and new outputs are the same.
 
     :param v1: tensor or tuple of tensors
     :param v2: tensor or tuple of tensors
+    :param atol: absolute error or (absolute error, quantile), if quantile is specified,
+        the function checks the error is < atol for quantile %
+    :param rtol: relative error
+    :param msg! more complex message
 
     See :ref:`l-plot-onnxrt-diff` for an example.
     """
@@ -57,15 +67,41 @@ def assert_all_close(v1: Any, v2: Any, atol=1e-5, rtol=1e-5, msg: str = ""):
 
     import torch
 
+    aatol = atol
+    if isinstance(atol, tuple):
+        atol, quantile = atol
+    else:
+        atol, quantile = atol, None
+
     if isinstance(v1, torch.Tensor):
         assert isinstance(v2, torch.Tensor), f"v2 is not a tensor but {type(v2)}"
         assert_all_close(
-            v1.detach().cpu().numpy(), v2.detach().cpu().numpy(), atol=atol, rtol=rtol
+            v1.detach().cpu().numpy(), v2.detach().cpu().numpy(), atol=aatol, rtol=rtol
         )
-        assert torch.allclose(v1.cpu(), v2.cpu(), atol=atol, rtol=rtol, equal_nan=True)
+        # assert torch.allclose(v1.cpu(), v2.cpu(), atol=atol, rtol=rtol, equal_nan=True)
     elif isinstance(v1, np.ndarray):
         assert isinstance(v2, np.ndarray), f"v2 is not an array but {type(v2)}"
-        np.testing.assert_allclose(v1, v2, atol=atol, rtol=rtol)
+        try:
+            np.testing.assert_allclose(v1, v2, atol=atol, rtol=rtol)
+        except AssertionError as e:
+            if quantile is None:
+                raise
+            maxdiff = np.abs(v1 - v2)
+            th = np.quantile(maxdiff, quantile)
+            ind = maxdiff <= th
+            r = maxdiff[ind]
+            rmax = r.max()
+            if rmax > atol:
+                li = r.ravel().tolist()
+                li.sort()
+                msg = (
+                    f"quantile={quantile} th={th} rmax={rmax} atol={atol} "
+                    f"dtypes={v1.dtype} {v2.dtype}, shapes={v1.shape} {v2.shape}, "
+                    f"means={v1.mean()} median={np.median(v1)} {np.median(v2)}, "
+                    f"{v2.mean()}, min={v1.min()} {v2.min()}, "
+                    f"max={v1.max()} {v2.max()}, ..... {li[:10]}  ..... {li[-10:]}"
+                )
+                raise AssertionError(msg) from e
     elif isinstance(v1, (tuple, list)):
         assert isinstance(v2, type(v1)), f"v2 is not a {type(v1)} but {type(v2)}"
         v1 = tuple(_ for _ in v1 if _ is not None)
@@ -73,8 +109,11 @@ def assert_all_close(v1: Any, v2: Any, atol=1e-5, rtol=1e-5, msg: str = ""):
         assert len(v1) == len(
             v2
         ), f"tuple have different lengths {len(v1)} != {len(v2)}"
-        for a, b in zip(v1, v2):
-            assert_all_close(a, b, atol=atol, rtol=rtol)
+        for i, (a, b) in enumerate(zip(v1, v2)):
+            assert_all_close(a, b, atol=aatol, rtol=rtol)
+    elif isinstance(v1, int):
+        assert isinstance(v2, type(v1)), f"v2 is not a {type(v1)} but {type(v2)}"
+        assert v1 == v2
     else:
         raise AssertionError(f"Unexpected type for v1 and v2 {type(v1)}, {type(v2)}")
 

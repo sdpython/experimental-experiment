@@ -3,11 +3,8 @@ from typing import Any, Iterator, List, Optional, Union
 from onnx import AttributeProto, NodeProto
 import onnx.helper as oh
 from ._onnx_helper import enumerate_subgraphs
-from .optimization_patterns import (
-    MatchResult,
-    PatternOptimization,
-    get_default_patterns,
-)
+from .optimization_patterns_api import MatchResult, PatternOptimization
+from .optimization_patterns import get_default_patterns
 from .type_inference import infer_types
 
 
@@ -107,22 +104,25 @@ class GraphBuilderPatternOptimization:
         """
         return self.builder.is_constant(name)
 
-    def get_constant(self, name: str) -> Any:
+    def get_computed_constant(self, name: str) -> Any:
         """
         Returns the value for the constant `name`.
         """
-        return self.builder.get_constant(name)
+        return self.builder.get_constant(name, computed_value=True)
 
-    def get_attribute(self, node: NodeProto, att_name: str) -> AttributeProto:
+    def get_attribute(
+        self, node: NodeProto, att_name: str, exc: bool = True
+    ) -> AttributeProto:
         """
         Returns an attribute for a node.
         """
         for att in node.attribute:
             if att.name == att_name:
                 return att
-        raise RuntimeError(
-            f"Unable to find attribute {att_name!r} for node type {node.op_type!r} in node {node}"
-        )
+        assert (
+            not exc
+        ), f"Unable to find attribute {att_name!r} for node type {node.op_type!r} in node {node}"
+        return None
 
     def get_constant_or_attribute(
         self, node: NodeProto, attribute: str, input_index: int
@@ -147,7 +147,7 @@ class GraphBuilderPatternOptimization:
         assert input_index < len(
             node.input
         ), f"Input {input_index} does not exist in node {node}."
-        return self.get_constant(node.input[input_index])
+        return self.get_computed_constant(node.input[input_index])
 
     def has_type(self, name: str) -> bool:
         """
@@ -310,10 +310,11 @@ class GraphBuilderPatternOptimization:
         assert all(
             map(lambda i: i in positions, idn)
         ), f"One node in {idn} is not referenced"
-        if match.insert_at is None:
-            insert_at = min(positions[i] for i in idn)
-        else:
-            insert_at = positions[id(match.insert_at)]
+        insert_at = (
+            max(positions[i] for i in idn)
+            if match.insert_at is None
+            else positions[id(match.insert_at)]
+        )
         new_nodes = match.apply(self, *match.nodes)
         removed = [positions[i] for i in idn]
         self.builder.insert_and_remove_nodes(insert_at, new_nodes, removed)

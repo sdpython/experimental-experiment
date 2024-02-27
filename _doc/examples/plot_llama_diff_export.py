@@ -199,7 +199,7 @@ if ortopt:
 providers = (
     ["CPUExecutionProvider"]
     if provider == "cpu"
-    else ["CUDAExecutionProvider", "CPUExecutionProvider"]
+    else [("CUDAExecutionProvider", {}), ("CPUExecutionProvider", {})]
 )
 
 model1 = onnx.load(file1)
@@ -257,14 +257,22 @@ def clean_name(name):
 
 
 if sess2 is not None:
-    np_inputs = [i.detach().numpy() for i in inputs[0]]
-    res1, res2, align, dc = compare_onnx_execution(
-        model1, model2, inputs=np_inputs, verbose=1, raise_exc=False
-    )
-    for r in res2:
-        r.name = clean_name(r.name)
-    text = dc.to_str(res1, res2, align, column_size=90)
-    print(text)
+    try:
+        np_inputs = [i.detach().numpy() for i in inputs[0]]
+        res1, res2, align, dc = compare_onnx_execution(
+            model1, model2, inputs=np_inputs, verbose=1, raise_exc=False
+        )
+        for r in res2:
+            r.name = clean_name(r.name)
+        text = dc.to_str(res1, res2, align, column_size=90)
+        print(text)
+    except AssertionError as e:
+        if (
+            "Unexpected type <class 'list'> for value, it must be a numpy array."
+            not in str(e)
+        ):
+            raise
+        print(e)
 
 #################################
 # See :ref:`l-long-outputs-llama-diff-export` for a better view.
