@@ -70,7 +70,7 @@ def ort_optimize(
     if providers == "cpu":
         providers = ["CPUExecutionProvider"]
     elif providers == "cuda":
-        providers = ["CUDAExecutionProvider", "CPUExecutionProvider"]
+        providers = [("CUDAExecutionProvider", {}), ("CPUExecutionProvider", {})]
     assert isinstance(providers, list), f"Unexpected value for providers={providers!r}"
     onnxruntime.InferenceSession(
         (

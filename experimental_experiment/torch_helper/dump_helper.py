@@ -111,6 +111,9 @@ def assert_all_close(
         ), f"tuple have different lengths {len(v1)} != {len(v2)}"
         for i, (a, b) in enumerate(zip(v1, v2)):
             assert_all_close(a, b, atol=aatol, rtol=rtol)
+    elif isinstance(v1, int):
+        assert isinstance(v2, type(v1)), f"v2 is not a {type(v1)} but {type(v2)}"
+        assert v1 == v2
     else:
         raise AssertionError(f"Unexpected type for v1 and v2 {type(v1)}, {type(v2)}")
 

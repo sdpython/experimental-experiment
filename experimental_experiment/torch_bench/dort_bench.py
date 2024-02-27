@@ -206,7 +206,7 @@ for i in range(args.warmup):
                 os.path.join("dump_dort_bench", onx),
                 output=os.path.join("dump_dort_bench", new_onx),
                 providers=(
-                    ["CUDAExecutionProvider", "CPUExecutionProvider"]
+                    [("CUDAExecutionProvider", {}), ("CPUExecutionProvider", {})]
                     if is_cuda
                     else ["CPUExecutionProvider"]
                 ),

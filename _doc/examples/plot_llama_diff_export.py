@@ -199,7 +199,7 @@ if ortopt:
 providers = (
     ["CPUExecutionProvider"]
     if provider == "cpu"
-    else ["CUDAExecutionProvider", "CPUExecutionProvider"]
+    else [("CUDAExecutionProvider", {}), ("CPUExecutionProvider", {})]
 )
 
 model1 = onnx.load(file1)
