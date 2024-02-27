@@ -89,8 +89,14 @@ class TestBackend(ExtTestCase):
             raise unittest.SkipTest("debug_data does not exist")
         for providers in [
             ["CPUExecutionProvider"],
-            [("CUDAExecutionProvider", {}), ("CPUExecutionProvider", {})],
+            (
+                [("CUDAExecutionProvider", {}), ("CPUExecutionProvider", {})]
+                if has_cuda()
+                else None
+            ),
         ]:
+            if providers is None:
+                continue
             new_bck, new_inputs = OrtBackend.replay_dumped_data(
                 "debug_data", providers=providers
             )
