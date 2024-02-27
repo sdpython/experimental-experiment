@@ -258,6 +258,7 @@ class GraphBuilder:
     - `constants_computed_: Dict[str, Any]`: computed constant values
     - `dynamic_objects: Dict[str, torch.SymInt]`: list of dynamic dimension
     - `dynamic_objects_rev: Dict[str, str]`: reverse dictionary to fasten lookups
+    - `_cache_shape: Dict[key,str]`: cache concatenation of shapes
 
     - `_raise_list: Set[str]`: the builder stop if a result falls in that list
       (debugging tool)
@@ -294,6 +295,7 @@ class GraphBuilder:
         self.value_info = []
         self._raise_list = raise_list or set()
         self.constants_computed_ = {}
+        self._cache_shape = {}
 
         if isinstance(target_opset_or_existing_proto, (int, dict)):
             # starts a model from nothing
@@ -911,6 +913,25 @@ class GraphBuilder:
         ), f"Unexpected type {type(shape)} for shape{self.get_debug_msg()}"
         if all_int(shape):
             return self.make_initializer("", np.array(shape, dtype=np.int64))
+
+        key = []
+        for d in shape:
+            if isinstance(d, int):
+                key.append(d)
+            elif isinstance(d, (str, self.torch.SymInt)):
+                key.append(d)
+                name = str(d)
+                key.append(name)
+            else:
+                raise RuntimeError(
+                    f"Unexpected type {type(d)} for a dimension in {shape}{self.get_debug_msg()}"
+                )
+
+        key = tuple(["Concat"] + key)
+        if key in self._cache_shape:
+            # The same shape was already requested.
+            return self._cache_shape[key]
+
         conc = []
         for d in shape:
             if isinstance(d, int):
@@ -939,7 +960,10 @@ class GraphBuilder:
                 raise RuntimeError(
                     f"Unexpected type {type(d)} for a dimension in {shape}{self.get_debug_msg()}"
                 )
-        return self.make_node("Concat", conc, axis=0, name=f"_mkshape_{name}")
+
+        res = self.make_node("Concat", conc, axis=0, name=f"_mkshape_{name}")
+        self._cache_shape[key] = res
+        return res
 
     def make_initializer(
         self, name: str, value: Any, external: bool = False, msg: str = ""
