@@ -259,6 +259,7 @@ class GraphBuilder:
     - `dynamic_objects: Dict[str, torch.SymInt]`: list of dynamic dimension
     - `dynamic_objects_rev: Dict[str, str]`: reverse dictionary to fasten lookups
     - `_cache_shape: Dict[key,str]`: cache concatenation of shapes
+    - `_values: Dict[key,str]`: cache initializer value to merge those which are equal
 
     - `_raise_list: Set[str]`: the builder stop if a result falls in that list
       (debugging tool)
@@ -296,6 +297,7 @@ class GraphBuilder:
         self._raise_list = raise_list or set()
         self.constants_computed_ = {}
         self._cache_shape = {}
+        self._values = {}
 
         if isinstance(target_opset_or_existing_proto, (int, dict)):
             # starts a model from nothing
@@ -359,6 +361,9 @@ class GraphBuilder:
                 self.set_name(k)
                 self.set_shape(k, self._get_tensor_shape(v))
                 self.set_type(k, self._get_tensor_type(v))
+                key = self.make_key(v)
+                if key not in self._values:
+                    self._values[key] = k
             for i in self.inputs + self.outputs:
                 self.set_name(i.name)
                 self.set_type(i.name, i.type.tensor_type.elem_type)
@@ -396,6 +401,24 @@ class GraphBuilder:
             )
 
         self.op = Opset(self, self.opsets[""])
+
+    def make_key(self, value: Any) -> Optional[Tuple[Union[str, int], ...]]:
+        """
+        Builds a key identifying a value.
+        Returns None if it is none possible.
+        """
+        if isinstance(value, TensorProto):
+            return self.make_key(onh.to_array(value))
+        if isinstance(value, self.torch.Tensor):
+            if value.dtype == self.torch.int64:
+                return self.make_key(value.detach().cpu().numpy())
+            return None
+        if isinstance(value, int):
+            return int, value
+        if isinstance(value, np.ndarray):
+            if value.dtype == np.int64 and value.size < 8:
+                return tuple([value.dtype, value.shape, tuple(value.ravel().tolist())])
+        return None
 
     @property
     def main_opset(self):
@@ -984,6 +1007,13 @@ class GraphBuilder:
                 f"Initializer name={name!r}, "
                 f"unexpected type {type(value)} for value={value!r} ({msg})."
             )
+
+        key = self.make_key(value)
+        if key and key in self._values:
+            if name == "":
+                return self._values[key]
+            return self.make_node("Identity", [self._values[key]], [name])
+
         itype = self._get_type(value.dtype)
         if name == "":
             sh = "x".join(map(str, value.shape))
@@ -1002,6 +1032,8 @@ class GraphBuilder:
             print(
                 f"[GraphBuilder-{self._hash()}.make_initializer] {name}[{value.dtype}:{value.shape}]"
             )
+        if key:
+            self._values[key] = name
         return name
 
     def is_dynamic_shape(
