@@ -5,10 +5,11 @@ import numpy as np
 from onnx import ModelProto
 import torch
 from torch._C import _from_dlpack
-from ..torch_exp._torch_helper import create_input_names, create_symint
+from onnxruntime.capi import _pybind_state as ORTC
+from ..torch_exp._torch_helper import create_input_names
 from ..torch_exp.onnx_export import to_onnx, OptimizationOptions
 from ..torch_exp.optimization_patterns import get_pattern_list
-from onnxruntime.capi import _pybind_state as ORTC
+from .backend_helper import get_dimensions
 
 
 def _get_session(
@@ -51,9 +52,10 @@ def _get_ortvalues_from_torch_tensors(
     devices = []
     dimensions = []
 
-    max_device = max(t.get_device() for t in tensors if isinstance(t, torch.Tensor))
+    max_device = -1
     assert isinstance(max_device, int), f"unexpected type for device={max_device!r}"
-    sdev = "cpu" if max_device < 0 else f"cuda:{max_device}"
+    assert tensors is not None, "tensors cannot be None"
+    assert is_dimension_in is not None, "is_dimension_in cannot be None"
     new_tensors = []
     for tensor, (dim, rk, name) in zip(tensors, is_dimension_in):
         if dim:
@@ -61,12 +63,15 @@ def _get_ortvalues_from_torch_tensors(
                 tensor, (int, torch.SymInt)
             ), f"Unexpected type {type(tensor)} for name={name!r}."
             dtypes.append(np.int64)
-            if rk == 1:
-                t = torch.tensor([int(tensor)], dtype=torch.int64)
-            else:
-                t = torch.tensor(int(tensor), dtype=torch.int64)
-            t = t.to(sdev)
-            devices.append(devices_list[max_device])
+            ti = int(tensor)
+            assert ti != 0, (
+                f"Null value for a dimension ti={ti}, "
+                f"tensor={tensor}, rk={rk}, name={name!r}, "
+                f"type(tensor)={type(tensor)}, "
+                f"dimension={[t for t in tensors if isinstance(t, (int,torch.SymInt))]}"
+            )
+            t = torch.tensor([ti] if rk == 1 else ti, dtype=torch.int64)
+            devices.append(devices_list[-1])
             new_tensors.append(t)
             dimensions.append(t)
             shapes.append(t.size())
@@ -82,6 +87,7 @@ def _get_ortvalues_from_torch_tensors(
             d = tensor.get_device()
             devices.append(devices_list[d])
             new_tensors.append(tensor)
+            max_device = max(max_device, tensor.get_device())
 
     ortvalues.push_back_batch(new_tensors, data_ptrs, dtypes, shapes, devices)
     return ortvalues, [devices_list[max_device] for i in range(n_outputs)], dimensions
@@ -97,7 +103,7 @@ def _post_process(output: Any, name: Optional[str], dim: bool) -> Any:
             yi = int(output[0])
         else:
             yi = int(output)
-        return create_symint(yi)
+        return yi
     return output
 
 
@@ -203,7 +209,7 @@ def onnx_custom_backend(
     :param backend: only `'ort'` is allowed
     :param verbose: adjust verbosity, if tuple, if gives different verbosity level
         to the exporter and the runtime
-    :param dump_prefix
+    :param dump_prefix: to dump the models and the inputs
     :param providers: where to run the model, by default
     :param raise_exc: raise an exception whenever something goes wrong
     :param storage: to store any interesting objects during the process
@@ -270,7 +276,7 @@ def onnx_custom_backend(
     if value:
         dump_prefix = value
 
-    dump_first_inputs = [False]
+    dump_first_inputs = [None]
     if dump_prefix:
         counter = 0
         name = f"{dump_prefix}_{counter}.onnx"
@@ -284,24 +290,13 @@ def onnx_custom_backend(
         with open(name, "w") as f:
             f.write(str(graph_module.graph))
             f.write("\n")
-        dump_first_inputs = [True]
+        dump_first_inputs = [name]
 
     sess, run_options = _get_session(onx, backend, providers, exc=raise_exc)
 
     input_names = [i.name for i in onx.graph.input]
     output_names = [i.name for i in onx.graph.output]
-
-    is_dimension_in = []
-    for o in onx.graph.input:
-        b = "_dim_" in o.name
-        rk = len(o.type.tensor_type.shape.dim)
-        is_dimension_in.append((b, rk, o.name))
-
-    is_dimension_out = []
-    for o in onx.graph.output:
-        b = "_dim_" in o.name
-        rk = len(o.type.tensor_type.shape.dim)
-        is_dimension_out.append((b, rk, None if "_NONE_" in o.name else o.name))
+    is_dimension_in, is_dimension_out = get_dimensions(onx)
 
     if storage is not None:
         stor = {}
@@ -332,7 +327,8 @@ def onnx_custom_backend(
         is_dimension_out=is_dimension_out,
     ):
         if dump_first_inputs[0]:
-            dump_first_inputs[0] = False
+            name = dump_first_inputs[0]
+            dump_first_inputs[0] = None
             with open(name + ".pkl", "wb") as f:
                 pickle.dump([input_names, _serialize(inputs), output_names], f)
 
@@ -349,6 +345,10 @@ def onnx_custom_backend(
             is_dimension_in,
             is_dimension_out,
         )
+        for x, name in zip(res, output_names):
+            if isinstance(x, (torch.SymInt, int)):
+                assert x != 0, f"Dimension is null for name={name!r}"
+
         if stor:
             stor["inputs"].append(args)
             stor["outputs"].append(res)

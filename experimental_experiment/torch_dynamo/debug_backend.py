@@ -3,9 +3,10 @@ from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
 import numpy as np
 from onnx import ModelProto
 import torch
-from ..torch_exp._torch_helper import create_input_names, create_symint
+from ..torch_exp._torch_helper import create_input_names
 from ..torch_exp.onnx_export import to_onnx, OptimizationOptions
 from ..torch_exp.optimization_patterns import get_pattern_list
+from .backend_helper import get_dimensions
 
 
 def _get_session(
@@ -142,17 +143,7 @@ def onnx_debug_backend(
         np.bool_: torch.bool,
     }
 
-    is_dimension_in = []
-    for o in onx.graph.input:
-        b = "_dim_" in o.name
-        rk = len(o.type.tensor_type.shape.dim)
-        is_dimension_in.append((b, rk, o.name))
-
-    is_dimension_out = []
-    for o in onx.graph.output:
-        b = "_dim_" in o.name
-        rk = len(o.type.tensor_type.shape.dim)
-        is_dimension_out.append((b, rk, None if "_NONE_" in o.name else o.name))
+    is_dimension_in, is_dimension_out = get_dimensions(onx)
 
     if storage is not None:
         stor = {}
@@ -225,9 +216,7 @@ def onnx_debug_backend(
                     yi = int(y[0])
                 else:
                     yi = int(y)
-                si = create_symint(yi)
-                assert torch.sym_int(si)
-                res.append(si)
+                res.append(yi)
                 continue
             if max_device >= 0:
                 res.append(torch.Tensor(y).to(_dtype[y.dtype]).to("cuda"))
