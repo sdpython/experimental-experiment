@@ -183,7 +183,7 @@ class OrtBackend:
         return res
 
     def _get_ortvalues_from_torch_tensors(
-        self, tensors: Tuple["torch.Tensor", ...], n_outputs: int  # noqa: F821
+        self, tensors: Tuple["torch.Tensor", ...]  # noqa: F821
     ) -> Tuple[Tuple["torch.Tensor", ...], Tuple["OrtDevice", ...], Any]:  # noqa: F821
         ortvalues = self.OrtValueVector()
         ortvalues.reserve(len(tensors))
@@ -230,11 +230,15 @@ class OrtBackend:
                 max_device = max(max_device, tensor.get_device())
 
         ortvalues.push_back_batch(new_tensors, data_ptrs, dtypes, shapes, devices)
-        return (
-            ortvalues,
-            [self.devices[max_device] for i in range(n_outputs)],
-            dimensions,
-        )
+        output_devices = []
+        for dim, rk, name in self.is_dimension_out:
+            if dim:
+                dev = self.devices[-1]
+            else:
+                dev = self.devices[max_device]
+            output_devices.append(dev)
+
+        return (ortvalues, output_devices, dimensions)
 
     def _ortvalues_to_torch_tensor(
         self, ortvalues: "onnxruntime.OrtValueVector"  # noqa: F821
@@ -258,7 +262,7 @@ class OrtBackend:
 
         # _nvtx_range_push("push_back_batch")
         ort_inputs, output_devices, dimensions = self._get_ortvalues_from_torch_tensors(
-            contiguous_inputs, len(self.output_names)
+            contiguous_inputs
         )
         # _nvtx_range_pop()
 
