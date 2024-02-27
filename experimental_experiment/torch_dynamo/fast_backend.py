@@ -352,7 +352,7 @@ class OrtBackend:
                 if torch.cuda.is_available()
                 else ["CPUExecutionProvider"]
             )
-            device = 0
+            device = 0 if torch.cuda.is_available() else -1
         else:
             device = 0 if "CUDAExecutionProvider" in providers else -1
 
