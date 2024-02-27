@@ -3,7 +3,12 @@ import unittest
 import onnx.helper as oh
 from onnx import TensorProto
 import torch
-from experimental_experiment.ext_test_case import ExtTestCase, ignore_warnings
+from experimental_experiment.ext_test_case import (
+    ExtTestCase,
+    ignore_warnings,
+    skipif_ci_windows,
+    skipif_ci_apple,
+)
 
 
 def has_cuda():
@@ -15,6 +20,8 @@ def has_cuda():
 class TestBackend(ExtTestCase):
 
     @ignore_warnings(DeprecationWarning)
+    @skipif_ci_windows("onnxruntime-training not available")
+    @skipif_ci_apple("onnxruntime-training not available")
     def test_onnx_custom_backend_dump(self):
         import onnxruntime
         from experimental_experiment.torch_dynamo.fast_backend import OrtBackend
