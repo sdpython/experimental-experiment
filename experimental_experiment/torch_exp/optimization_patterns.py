@@ -55,12 +55,22 @@ def get_onnxruntime_patterns() -> List[PatternOptimization]:
     ]
 
 
-def get_pattern(obj: Union[PatternOptimization, str]) -> PatternOptimization:
+def get_pattern(
+    obj: Union[PatternOptimization, str], as_list: bool = False
+) -> PatternOptimization:
     """
     Returns an optimization pattern based on its name.
     """
     if isinstance(obj, PatternOptimization):
-        return obj
+        return [obj] if as_list else obj
+
+    if isinstance(obj, str):
+        _pattern = dict(
+            default=get_default_patterns, onnxruntime=get_onnxruntime_patterns
+        )
+        if obj in _pattern:
+            assert as_list, f"Returns a list for obj={obj!r}, as_list must be True."
+            return _pattern[obj]()
 
     mapping = {
         v.__class__.__name__.replace("Pattern", ""): v for v in get_default_patterns()
@@ -72,7 +82,7 @@ def get_pattern(obj: Union[PatternOptimization, str]) -> PatternOptimization:
         }
     )
     if obj in mapping:
-        return mapping[obj]
+        return [mapping[obj]] if as_list else mapping[obj]
     raise RuntimeError(f"Unable to find pattern for {obj!r}.")
 
 
@@ -89,27 +99,28 @@ def get_pattern_list(
         from experimental_experiment.torch_exp.optimization_patterns import get_pattern_list
         print(get_pattern_list("default", ["Cast"]))
     """
-    _pattern = dict(default=get_default_patterns, onnxruntime=get_onnxruntime_patterns)
     if positive_list is None:
         return []
     if isinstance(positive_list, str):
-        assert positive_list in _pattern, f"List {positive_list!r} is not defined."
-        positive_list = _pattern[positive_list]()
+        pos_list = get_pattern(positive_list, as_list=True)
     else:
-        positive_list = [get_pattern(t) for t in positive_list]
+        pos_list = []
+        for t in positive_list:
+            pos_list.extend(get_pattern(t, as_list=True))
 
     if negative_list is None:
-        return positive_list
-    if isinstance(negative_list, str):
-        assert negative_list in _pattern, f"List {negative_list!r} is not defined."
-        negative_list = _pattern[negative_list]()
-    else:
-        negative_list = [get_pattern(t) for t in negative_list]
+        return pos_list
 
-    disabled = [get_pattern(t) for t in negative_list]
+    if isinstance(positive_list, str):
+        neg_list = get_pattern(negative_list, as_list=True)
+    else:
+        neg_list = []
+        for t in negative_list:
+            neg_list.extend(get_pattern(t, as_list=True))
+
     res = []
-    for p in positive_list:
-        if p in disabled:
+    for p in pos_list:
+        if p in neg_list:
             continue
         res.append(p)
     return res

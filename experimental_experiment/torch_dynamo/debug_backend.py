@@ -51,7 +51,8 @@ def onnx_debug_backend(
     raise_exc: bool = True,
     storage: Optional[Dict[str, Any]] = None,
     raise_list: Optional[Set[str]] = None,
-    disable_pattern: Optional[List[Union[str, type]]] = "default",
+    enable_pattern: Optional[Union[str, List[Union[str, type]]]] = "default",
+    disable_pattern: Optional[Union[str, List[Union[str, type]]]] = None,
 ) -> Callable:
     """
     Custom backend to export torch models into onnx
@@ -74,7 +75,8 @@ def onnx_debug_backend(
     :param storage: to store any interesting objects during the process
     :param raise_list: the builder stops any time a name falls into that list,
         this is a debbuging tool
-    :param disable_pattern: to disable optimization patterns, by default, all are disabled
+    :param enable_pattern: optimization patterns to enable
+    :param disable_pattern: optimization patterns to disable
     :return: Callable
 
     See :ref:`l-plot-onnxrt-diff` for an example.
@@ -88,7 +90,7 @@ def onnx_debug_backend(
         verbose if isinstance(verbose, tuple) else (verbose, verbose)
     )
 
-    patterns = get_pattern_list("default", disable_pattern)
+    patterns = get_pattern_list(enable_pattern, disable_pattern)
 
     options = OptimizationOptions(
         remove_unused=True,
