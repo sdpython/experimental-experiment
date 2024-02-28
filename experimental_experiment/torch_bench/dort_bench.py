@@ -43,9 +43,11 @@ args = get_parsed_args(
     target_opset=(18, "opset to convert into, use with backend=custom"),
     config=("default", "default, medium, or small to test"),
     verbose=(0, "verbosity"),
-    disable_pattern=("", "a list of optimization pattern to disable"),
+    disable_pattern=("", "a list of optimization patterns to disable"),
+    enable_pattern=("default", "list of optimization patterns to enable"),
     expose="backend,repeat,warmup,device,num_hidden_layers,"
-    "mixed,export,config,target_opset,dynamic,verbose",
+    "mixed,export,config,target_opset,dynamic,verbose,"
+    "enable_pattern,disable_pattern",
 )
 
 import os
@@ -100,12 +102,14 @@ else:
 
 verbose = int(args.verbose)
 disabled_pattern = [_ for _ in args.disable_pattern.split(",") if _]
+enable_pattern = [_ for _ in args.enable_pattern.split(",") if _]
 print(f"llama config={config_dict}")
 print(f"backend={args.backend}")
 print(f"verbose={args.verbose}")
 print(f"mixed={args.mixed}")
 if args.backend == "custom":
     print(f"disabled_pattern={disabled_pattern!r}")
+    print(f"enable_pattern={enable_pattern!r}")
 model, example_args_collection = get_llama_model(**config_dict)
 
 
@@ -134,6 +138,7 @@ elif args.backend == "custom":
             *args,
             target_opset=target_opset,
             verbose=verbose,
+            enable_pattern=enable_pattern,
             disable_pattern=disabled_pattern,
             **kwargs,
         ),
@@ -153,6 +158,7 @@ elif args.backend == "debug":
             *args,
             target_opset=target_opset,
             backend="ref",
+            enable_pattern=enable_pattern,
             disable_pattern=disabled_pattern,
             **kwargs,
         ),
