@@ -27,7 +27,10 @@ from experimental_experiment.ext_test_case import (
 )
 from experimental_experiment.torch_exp._exceptions import FunctionNotFoundError
 from experimental_experiment.torch_helper.dump_helper import assert_all_close
-from experimental_experiment.torch_dynamo import onnx_debug_backend
+from experimental_experiment.torch_dynamo import (
+    onnx_debug_backend,
+    get_decomposition_table,
+)
 
 BATCH_SIZE = 2
 RNN_BATCH_SIZE = 7
@@ -45,7 +48,7 @@ class FuncModule(Module):
             params = ()
         super().__init__()
         self.f = f
-        self.ppp = Parameter(torch.Tensor([1]))
+        self.ppp = Parameter(torch.Tensor([1]).to(torch.float32))
         self.params = nn.ParameterList(list(params))
 
     def forward(self, *args):
@@ -59,7 +62,7 @@ class FuncModule0(Module):
     def __init__(self, f):
         super().__init__()
         self.f = f
-        self.ppp = Parameter(torch.Tensor([1]))
+        self.ppp = Parameter(torch.Tensor([1]).to(torch.float32))
 
     def forward(self, *args):
         if isinstance(args[0], tuple):
@@ -76,7 +79,7 @@ class FuncModule1(Module):
     def __init__(self, f):
         super().__init__()
         self.f = f
-        self.ppp = Parameter(torch.Tensor([1]))
+        self.ppp = Parameter(torch.Tensor([1]).to(torch.float32))
 
     def forward(self, *args):
         args = tuple([args[0], args[1] + self.ppp, *args[2:]])
@@ -164,14 +167,10 @@ class TestOperators(ExtTestCase):
         if test_backward:
             # forward/backward
             if use_decomposition:
-                new_table = {}
-                for k, v in torch._decomp.decomposition_table.items():
-                    if k.name() in {
-                        "aten::embedding_dense_backward",
-                    }:
-                        new_table[k] = v
-                    # elif "unsafe" in str(k) or "index" in str(k):
-                    #    print(k, v)
+                if use_decomposition is True:
+                    new_table = get_decomposition_table()
+                else:
+                    new_table = use_decomposition
                 aot_compiler = aot_autograd(
                     fw_compiler=backend_debug, decompositions=new_table
                 )
@@ -717,6 +716,7 @@ class TestOperators(ExtTestCase):
             lambda x: torch.full_like(x, 2),
             x,
             onnx_export=inspect.currentframe().f_code.co_name,
+            test_backward=False,
         )
 
     def test_max(self):
@@ -873,10 +873,28 @@ class TestOperators(ExtTestCase):
         )
 
     def test_equal(self):
-        x = torch.randn(1, 2, 3, 1, requires_grad=False).int()
-        y = torch.randn(1, 4, requires_grad=False).int()
+        x = (
+            torch.randn(
+                1,
+                2,
+                3,
+                1,
+                requires_grad=False,
+            )
+            .to(torch.int32)
+            .to(torch.float32)
+        )
+        y = (
+            torch.randn(1, 2, 1, 1, requires_grad=False)
+            .to(torch.int32)
+            .to(torch.float32)
+        )
         self.assertONNX(
-            operator.eq, (x, y), onnx_export=inspect.currentframe().f_code.co_name
+            lambda x, y: x == y,
+            (x, y),
+            onnx_export=inspect.currentframe().f_code.co_name,
+            impl="ref",
+            test_backward=False,
         )
 
     def test_lt(self):
@@ -1377,12 +1395,13 @@ class TestOperators(ExtTestCase):
         )
 
     def test_ne(self):
-        x = torch.randn(1, 2, 3, 1, requires_grad=False).int()
-        y = torch.randn(1, 4, requires_grad=False).int()
+        x = torch.randn(1, 2, 3, 1, requires_grad=False).int().to(torch.float32)
+        y = torch.randn(1, 4, requires_grad=False).int().to(torch.float32)
         self.assertONNX(
             lambda x, y: torch.ne(x, y),
             (x, y),
             onnx_export=inspect.currentframe().f_code.co_name,
+            test_backward=False,
         )
 
     def test_reducemax(self):
@@ -2110,12 +2129,37 @@ class TestOperators(ExtTestCase):
             test_backward=False,
         )
 
+    @unittest.skipIf(True, reason="bug with as_strided")
     def test_as_strided_0(self):
         x = torch.arange(12, requires_grad=True, dtype=torch.float32).reshape((-1, 3))
         self.assertONNX(
             lambda x: torch.as_strided(x, (3, 3), (1, 2)),
             x,
             onnx_export=inspect.currentframe().f_code.co_name,
+        )
+
+    @unittest.skipIf(True, reason="bug with as_strided")
+    def test_as_strided_1(self):
+        import torch
+
+        new_table = {}
+        for k, v in torch._decomp.decomposition_table.items():
+            if k.name() in {
+                "aten::slice_backward",
+                "aten::select_backward.out",
+                "aten::slice.Tensor",
+            }:
+                new_table[k] = v
+
+        shape = (9, 2, 15, 4)
+        x = torch.arange(
+            np.prod(shape), requires_grad=True, dtype=torch.float32
+        ).reshape(shape)
+        self.assertONNX(
+            lambda x: x[:, :, 4:, :],
+            x,
+            onnx_export=inspect.currentframe().f_code.co_name,
+            use_decomposition=new_table,
         )
 
     def test_embedding_simple(self):

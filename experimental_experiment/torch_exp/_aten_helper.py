@@ -35,6 +35,8 @@ def torch_dtype_to_onnx_dtype(to: "torch.dtype") -> int:  # noqa: F821
         return TensorProto.DOUBLE
     if to == torch.int64:
         return TensorProto.INT64
+    if to == torch.int32:
+        return TensorProto.INT32
     if to == torch.bool:
         return TensorProto.BOOL
     raise NotImplementedError(f"Unable to convert torch dtype {to!r} to onnx dtype.")
@@ -273,12 +275,19 @@ def prepare_inputs_homogeneous_operator(
         inputs.append(_cast_inputs(g, a, only, name=name))
     if f is None:
         return tuple(inputs)
-    if inputs == args:
+    if tuple(inputs) == tuple(args):
         # No cast.
         res = f(*inputs, outputs=outputs, name=name)
     else:
+        assert dtype_to_tensor_dtype, (
+            f"Unable to determine the type to Cast back into "
+            f"dtypes_list={dtypes_list}, only={only}{g.get_debug_msg()}"
+        )
         res = g.op.Cast(
-            f(*inputs, name=name), to=dtypes_list[0], outputs=outputs, name=name
+            f(*inputs, name=name),
+            to=dtypes_list_not_none[0],
+            outputs=outputs,
+            name=name,
         )
     return tuple([res, *inputs])
 

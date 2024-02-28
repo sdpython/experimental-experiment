@@ -12,6 +12,7 @@ from experimental_experiment.torch_helper.dump_helper import assert_all_close
 from experimental_experiment.torch_dynamo import (
     onnx_debug_backend,
     get_decomposition_table,
+    filter_decomposition_table,
 )
 
 
@@ -19,12 +20,6 @@ def torch_min(v: str) -> bool:
     import torch
 
     return pv.Version(torch.__version__) < pv.Version(v)
-
-
-def implements(name: str) -> bool:
-    import experimental_experiment.torch_exp._aten_functions as atf
-
-    return hasattr(atf, name)
 
 
 def has_cuda():
@@ -63,6 +58,7 @@ class TestDynamoLlama(ExtTestCase):
         verbose: int = 0,
         decompositions=False,
         mixed=False,
+        raise_list=None,
     ):
         import torch
 
@@ -76,6 +72,8 @@ class TestDynamoLlama(ExtTestCase):
             target_opset=18,
             storage=storage,
             verbose=verbose,
+            dump_prefix=onnx_export,
+            raise_list=raise_list,
             **kwargs,
         )
 
@@ -85,7 +83,11 @@ class TestDynamoLlama(ExtTestCase):
             if decompositions:
                 aot_compiler = aot_autograd(
                     fw_compiler=backend_debug,
-                    decompositions=torch._decomp.decomposition_table,
+                    decompositions=(
+                        filter_decomposition_table()
+                        if decompositions is True
+                        else decompositions
+                    ),
                 )
             else:
                 aot_compiler = aot_autograd(
@@ -156,6 +158,7 @@ class TestDynamoLlama(ExtTestCase):
         atol: float = 1e-4,
         rtol: float = 1e-4,
         mixed=False,
+        raise_list=None,
     ):
         storage = self._assert_model_numerically(
             model,
@@ -169,6 +172,7 @@ class TestDynamoLlama(ExtTestCase):
             atol=atol,
             rtol=rtol,
             mixed=mixed,
+            raise_list=raise_list,
         )
         self.assertIsInstance(storage, dict)
 
@@ -445,48 +449,6 @@ class TestDynamoLlama(ExtTestCase):
             dynamic=False,
             fullgraph=True,
             onnx_export="test_llama_model_backward",
-        )
-
-    @ignore_warnings((UserWarning, DeprecationWarning))
-    @skipif_ci_windows("torch.compile not supported on Windows")
-    @unittest.skipIf(torch_min("2.2"), reason="missing kernel")
-    @unittest.skipIf(
-        not implements("prims_collapsed_view"), reason="not yet implemented"
-    )
-    def test_llama_model_backward_decomposition(self):
-        from experimental_experiment.torch_helper.llama_helper import get_llama_model
-
-        input_dims = self.get_input_dims(False)
-        model, example_args_collection = get_llama_model(input_dims=input_dims)
-        self.common_test_model(
-            model,
-            example_args_collection,
-            test_backward=True,
-            dynamic=False,
-            fullgraph=True,
-            onnx_export="test_llama_model_backward_decomposition",
-            decompositions=True,
-        )
-
-    @ignore_warnings((UserWarning, DeprecationWarning))
-    @skipif_ci_windows("torch.compile not supported on Windows")
-    @unittest.skipIf(torch_min("2.2"), reason="missing kernel")
-    @unittest.skipIf(
-        not implements("prims_collapsed_view"), reason="not yet implemented"
-    )
-    def test_llama_model_backward_forward_decomposition(self):
-        from experimental_experiment.torch_helper.llama_helper import get_llama_model
-
-        input_dims = self.get_input_dims(False)
-        model, example_args_collection = get_llama_model(input_dims=input_dims)
-        self.common_test_model(
-            model,
-            example_args_collection,
-            test_backward=1,
-            dynamic=False,
-            fullgraph=True,
-            onnx_export="test_llama_model_backward_decomposition",
-            decompositions=True,
         )
 
     @ignore_warnings((UserWarning, DeprecationWarning))

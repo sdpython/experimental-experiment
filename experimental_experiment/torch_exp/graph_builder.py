@@ -103,6 +103,7 @@ class Opset:
         "ConstantOfShape": 1,
         "Div": 1,
         "Dropout": 2,
+        "Elu": 1,
         "Equal": 1,
         "Exp": 1,
         "Expand": 1,
@@ -120,9 +121,11 @@ class Opset:
         "Log": 1,
         "LogSoftmax": 1,
         "Neg": 1,
+        "Not": 1,
         "Or": 1,
         "Pow": 1,
         "Range": 1,
+        "Reciprocal": 1,
         "ReduceMax": 1,
         "ReduceMean": 1,
         "ReduceMin": 1,
@@ -135,6 +138,7 @@ class Opset:
         "Sigmoid": 1,
         "Slice": 1,
         "Softmax": 1,
+        "Sqrt": 1,
         "Squeeze": 1,
         "Sub": 1,
         "Tile": 1,
@@ -203,6 +207,24 @@ class Opset:
             )
         return iaxes
 
+    def ReduceMaxAnyOpset(self, *args, **kwargs):
+        if len(args) == 1:
+            return self.ReduceMax(*args, **kwargs)
+        assert len(args) == 2, f"ReduceMaxAnyOpset expects 2 arguments not {len(args)}"
+        if self.builder.main_opset >= 18:
+            return self.ReduceMax(*args, **kwargs)
+        return self.ReduceMax(args[0], axes=self._iaxes("ReduceMax", args[1]), **kwargs)
+
+    def ReduceMeanAnyOpset(self, *args, **kwargs):
+        if len(args) == 1:
+            return self.ReduceMean(*args, **kwargs)
+        assert len(args) == 2, f"ReduceMeanAnyOpset expects 2 arguments not {len(args)}"
+        if self.builder.main_opset >= 18:
+            return self.ReduceMean(*args, **kwargs)
+        return self.ReduceMean(
+            args[0], axes=self._iaxes("ReduceMean", args[1]), **kwargs
+        )
+
     def UnsqueezeAnyOpset(self, *args, **kwargs):
         if len(args) == 1 and len(kwargs) == 0:
             return self.Unsqueeze(*args)
@@ -218,16 +240,6 @@ class Opset:
         if self.builder.main_opset >= 13:
             return self.ReduceSum(*args, **kwargs)
         return self.ReduceSum(args[0], axes=self._iaxes("ReduceSum", args[1]), **kwargs)
-
-    def ReduceMeanAnyOpset(self, *args, **kwargs):
-        if len(args) == 1:
-            return self.ReduceMean(*args, **kwargs)
-        assert len(args) == 2, f"ReduceMeanAnyOpset expects 2 arguments not {len(args)}"
-        if self.builder.main_opset >= 18:
-            return self.ReduceMean(*args, **kwargs)
-        return self.ReduceMean(
-            args[0], axes=self._iaxes("ReduceMean", args[1]), **kwargs
-        )
 
 
 class GraphBuilder:
@@ -885,11 +897,11 @@ class GraphBuilder:
             elif "uint32" in st:
                 elem_type = TensorProto.UINT32
             elif "int32" in st:
-                elem_type = TensorProto.INT16
+                elem_type = TensorProto.INT32
             elif "uint16" in st:
                 elem_type = TensorProto.UINT16
             elif "int16" in st:
-                elem_type = TensorProto.INT32
+                elem_type = TensorProto.INT16
             elif "bool" in st:
                 elem_type = TensorProto.BOOL
             elif "uint8" in st:
@@ -1284,11 +1296,20 @@ class GraphBuilder:
     ):
         assert (
             not op_type.startswith("Reduce")
+            or domain != ""
             or (len(inputs) == 2 and "axes" not in kwargs)
             or len(inputs) == 1
         ), (
             f"Operator {op_type!r} defines twice the axes, kwargs={kwargs}, "
-            f"len(inputs)={len(inputs)}, {self.get_debug_msg()}"
+            f"len(inputs)={len(inputs)}{self.get_debug_msg()}"
+        )
+        assert (
+            op_type != "Cast"
+            or domain != ""
+            or ("to" in kwargs and kwargs["to"] is not None)
+        ), (
+            f"Operator Cast needs arguments to but kwargs={kwargs}"
+            f"{self.get_debug_msg()}"
         )
 
     def make_node(
