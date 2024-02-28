@@ -27,7 +27,10 @@ from experimental_experiment.ext_test_case import (
 )
 from experimental_experiment.torch_exp._exceptions import FunctionNotFoundError
 from experimental_experiment.torch_helper.dump_helper import assert_all_close
-from experimental_experiment.torch_dynamo import onnx_debug_backend
+from experimental_experiment.torch_dynamo import (
+    onnx_debug_backend,
+    get_decomposition_table,
+)
 
 BATCH_SIZE = 2
 RNN_BATCH_SIZE = 7
@@ -164,14 +167,10 @@ class TestOperators(ExtTestCase):
         if test_backward:
             # forward/backward
             if use_decomposition:
-                new_table = {}
-                for k, v in torch._decomp.decomposition_table.items():
-                    if k.name() in {
-                        "aten::embedding_dense_backward",
-                    }:
-                        new_table[k] = v
-                    # elif "unsafe" in str(k) or "index" in str(k):
-                    #    print(k, v)
+                if use_decomposition is True:
+                    new_table = get_decomposition_table()
+                else:
+                    new_table = use_decomposition
                 aot_compiler = aot_autograd(
                     fw_compiler=backend_debug, decompositions=new_table
                 )
@@ -2158,7 +2157,7 @@ class TestOperators(ExtTestCase):
             lambda x: x[:, :, 4:, :],
             x,
             onnx_export=inspect.currentframe().f_code.co_name,
-            decomp=new_table,
+            use_decomposition=new_table,
         )
 
     def test_embedding_simple(self):

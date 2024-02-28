@@ -457,6 +457,39 @@ class TestDynamoLlama(ExtTestCase):
     def test_llama_model_backward_decomposition(self):
         from experimental_experiment.torch_helper.llama_helper import get_llama_model
 
+        import torch
+
+        sorted_list = list(torch._decomp.decomposition_table.items())
+        disable = {
+            "aten::slice_backward",
+            "aten::select_backward.out",
+            "aten::slice.Tensor",
+        }
+        new_list = [(k, v) for k, v in sorted_list if k.name() not in disable]
+        begin = 700
+        end = min(703, len(new_list))
+        for i in range(0, end, 1):
+            k, v = new_list[i]
+            if i < begin:
+                continue
+            msg = f"i={i+1}/{len(new_list)}-{k.name()}-{new_list[i]}"
+            with self.subTest(msg=msg):
+                decomp = dict(new_list[: i + 1])
+
+                input_dims = self.get_input_dims(False)
+                model, example_args_collection = get_llama_model(input_dims=input_dims)
+                self.common_test_model(
+                    model,
+                    example_args_collection,
+                    test_backward=True,
+                    dynamic=False,
+                    fullgraph=True,
+                    onnx_export="test_llama_model_backward_decomposition",
+                    decompositions=decomp,
+                    impl="ref",
+                    # verbose=10,
+                )
+
         input_dims = self.get_input_dims(False)
         model, example_args_collection = get_llama_model(input_dims=input_dims)
         self.common_test_model(
@@ -468,7 +501,7 @@ class TestDynamoLlama(ExtTestCase):
             onnx_export="test_llama_model_backward_decomposition",
             decompositions=True,
             impl="ref",
-            verbose=10,
+            # verbose=10,
         )
 
     @ignore_warnings((UserWarning, DeprecationWarning))

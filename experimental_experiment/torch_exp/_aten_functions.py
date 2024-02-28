@@ -146,6 +146,21 @@ def aten_all(g: GraphBuilder, sts: bool, outputs: List[str], x: T) -> T:
     return res
 
 
+def aten_amax(
+    g: GraphBuilder,
+    sts: bool,
+    outputs: List[str],
+    x: T,
+    dim: Optional[int] = None,
+    keepdim: bool = False,
+    output_dtype: Optional["torch.dtype"] = None,  # noqa: F821
+    name: str = "aten_amax",
+) -> T:
+    return prims_amax(
+        g, sts, outputs, x, dim, keepdim, output_dtype=output_dtype, name=name
+    )
+
+
 def aten_arange(
     g: GraphBuilder,
     sts: bool,
@@ -276,7 +291,12 @@ def aten_arange_start_step(
     device: Optional["torch.device"] = None,  # noqa: F821
     pin_memory=None,
 ) -> T:
-    assert layout is None, f"arange not implemented for layout={layout!r} is not None"
+    import torch
+
+    assert layout in (
+        None,
+        torch.strided,
+    ), f"arange not implemented for layout={layout!r} is not None"
     assert not pin_memory, "arange not implemented for pin_memory=True"
     return aten_arange(g, sts, outputs, start, end, step, dtype)
 
@@ -791,13 +811,13 @@ def aten_embedding_dense_backward(
         outputs=outputs,
         name="embedding_dense_backward",
     )
-    if sts:
-        g.set_type(res, g.get_type(grad_output))
-        g.set_shape(res, new_shape)
-    assert res is None, (
+    assert res is not None, (
         "aten_embedding_dense_backward is not correctly implemented, "
         "use get_decomposition_table."
     )
+    if sts:
+        g.set_type(res, g.get_type(grad_output))
+        g.set_shape(res, new_shape)
     return res
 
 
@@ -839,6 +859,38 @@ def aten_empty_like(
     )
 
 
+def aten_empty_permuted(
+    g: GraphBuilder,
+    sts: bool,
+    outputs: List[str],
+    size: T,
+    physical_layout: T,
+    dtype: Optional["torch.dtype"] = None,  # noqa: F821
+    layout=None,
+    device: Optional["torch.device"] = None,  # noqa: F821
+    requires_grad: bool = False,
+    pin_memory: bool = False,
+    name: str = "empty_permuted",
+) -> T:
+    # strided is unused.
+    assert list(physical_layout) == list(range(len(physical_layout))), (
+        f"empty_permuted not implemented when physical_layout={physical_layout}, "
+        f"size={size}{g.get_debug_msg()}"
+    )
+    return aten_zeros(
+        g,
+        sts,
+        outputs,
+        size,
+        dtype=dtype,
+        layout=layout,
+        device=device,
+        pin_memory=pin_memory,
+        requires_grad=requires_grad,
+        name=name,
+    )
+
+
 def aten_empty_strided(
     g: GraphBuilder,
     sts: bool,
@@ -849,6 +901,7 @@ def aten_empty_strided(
     layout=None,
     device: Optional["torch.device"] = None,  # noqa: F821
     requires_grad: bool = False,
+    pin_memory: bool = False,
     name: str = "empty_strided",
 ) -> T:
     # strided is unused.
@@ -860,6 +913,7 @@ def aten_empty_strided(
         dtype=dtype,
         layout=layout,
         device=device,
+        pin_memory=pin_memory,
         requires_grad=requires_grad,
         name=name,
     )
@@ -2826,7 +2880,13 @@ def prims_convert_element_type(
 
 
 def prims_collapse_view(
-    g: GraphBuilder, sts: bool, outputs: List[str], x: T, start: int, end: int
+    g: GraphBuilder,
+    sts: bool,
+    outputs: List[str],
+    x: T,
+    start: int,
+    end: int,
+    name: str = "prims_collapse_view",
 ) -> T:
     assert g.has_shape(
         x
@@ -2837,14 +2897,14 @@ def prims_collapse_view(
     new_shape = []
     s = 1
     for i in range(len(shape)):
-        if start <= i < end:
+        if start <= i <= end:
             if i == start:
                 new_shape.append(-1)
             s *= shape[i]
         else:
             new_shape.append(shape[i])
     ashape = np.array(new_shape, dtype=np.int64)
-    res = g.op.Reshape(x, ashape, outputs=outputs)
+    res = g.op.Reshape(x, ashape, outputs=outputs, name=name)
     if sts:
         g.set_type(res, g.get_type(x))
         ashape[ashape == -1] = s
