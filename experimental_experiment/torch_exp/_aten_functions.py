@@ -309,7 +309,6 @@ def aten_argmax(
     dim: Optional[int] = None,
     keepdim: bool = False,
 ) -> T:
-    assert False, f"The implementation is still incorrect{g.get_debug_msg()}"
     if dim is None:
         xf = g.op.Reshape(x, np.array([-1], dtype=np.int64))
         res = g.op.Squeeze(
@@ -344,6 +343,8 @@ def aten_as_strided(
     stride: List[int],
     storage_offset: Optional[int] = None,
 ) -> T:
+    assert False, f"The implementation is still incorrect{g.get_debug_msg()}"
+
     import torch
     from torch.fx.experimental.proxy_tensor import maybe_disable_fake_tensor_mode
 

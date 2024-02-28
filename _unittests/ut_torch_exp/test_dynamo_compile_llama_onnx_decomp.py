@@ -210,6 +210,14 @@ class TestDynamoLlama(ExtTestCase):
             onnx_export="test_ort_mlp",
         )
 
+    @classmethod
+    def get_input_dims(cls, dynamic: bool):
+        if dynamic:
+            input_dims = ((2, 8), (4, 7), (9, 15))
+        else:
+            input_dims = ((9, 15), (9, 15), (9, 15))
+        return input_dims
+
     @ignore_warnings((UserWarning, DeprecationWarning))
     @skipif_ci_windows("torch.compile not supported on Windows")
     @unittest.skipIf(torch_min("2.2"), reason="missing kernel")
