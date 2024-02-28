@@ -81,6 +81,9 @@ def get_pattern(
             for v in get_onnxruntime_patterns()
         }
     )
+    if isinstance(obj, list):
+        assert as_list, f"obj={obj!r} is already a list"
+        return [mapping[s] for s in obj]
     if obj in mapping:
         return [mapping[obj]] if as_list else mapping[obj]
     raise RuntimeError(f"Unable to find pattern for {obj!r}.")
