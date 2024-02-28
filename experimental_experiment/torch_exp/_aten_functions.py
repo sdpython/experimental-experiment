@@ -2962,6 +2962,17 @@ def prims_neg(
     return aten_neg(g, sts, outputs, x, name=name)
 
 
+def prims_pow(
+    g: GraphBuilder,
+    sts: bool,
+    outputs: List[str],
+    x: T,
+    exponent: T,
+    name: str = "prims_pow",
+) -> T:
+    return aten_pow_Tensor_Tensor(g, sts, outputs, x, exponent, name=name)
+
+
 def prims_rsqrt(
     g: GraphBuilder, sts: bool, outputs: List[str], x: T, name: str = "prims_rsqrt"
 ) -> T:
@@ -3045,6 +3056,10 @@ def prims_transpose(
         elif g.has_rank(input_name):
             g.set_rank(outputs[0], g.has_rank(input_name))
     return res
+
+
+def prims_view_of(g: GraphBuilder, sts: bool, outputs: List[str], x: T) -> T:
+    return g.op.Identity(x, outputs=outputs, name="prims_view_of")
 
 
 def prims_where(

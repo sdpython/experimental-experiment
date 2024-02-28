@@ -44,7 +44,7 @@ def get_decomposition_table():
     return new_table
 
 
-def filter_decomposition_table(existing_table: Optional[Dict]) -> Dict:
+def filter_decomposition_table(existing_table: Optional[Dict] = None) -> Dict:
     """
     Returns the decomposition table when some conversions because
     their translation in ONNX is less efficient.
@@ -78,10 +78,13 @@ def filter_decomposition_table(existing_table: Optional[Dict]) -> Dict:
 
         pprint.pprint(filter_decomposition_table())
     """
-    import torch
+    if existing_table is None:
+        import torch
+
+        existing_table = torch._decomp.decomposition_table.items()
 
     new_table = {}
-    for k, v in torch._decomp.decomposition_table.items():
+    for k, v in existing_table:
         if k.name() in {
             "aten::slice_backward",
             "aten::select_backward.out",
