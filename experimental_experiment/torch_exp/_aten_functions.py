@@ -2710,31 +2710,25 @@ def prims_amax(
         output_dtype is None
     ), f"not implemented when output_dtype={output_dtype!r}{g.get_debug_msg()}"
     if dim is None:
-        xf = g.op.Reshape(x, np.array([-1], dtype=np.int64))
-        res = g.op.Squeeze(
-            g.op.ArgMax(xf, keepdims=(1 if keepdim else 0)),
-            outputs=outputs,
-            name=name,
-        )
+        res = g.op.ReduceMaxAnyOpset(x, keepdims=1 if keepdim else 0, outputs=outputs)
     elif isinstance(dim, int):
-        res = g.op.ArgMax(
-            x, axis=dim, keepdims=1 if keepdim else 0, outputs=outputs, name=name
+        res = g.op.ReduceMaxAnyOpset(
+            x,
+            np.array([dim], dtype=np.int64),
+            keepdims=1 if keepdim else 0,
+            outputs=outputs,
         )
-    elif isinstance(dim, list) and len(dim) == 1 and isinstance(dim[0], int):
-        res = g.op.ArgMax(
-            x, axis=dim[0], keepdims=1 if keepdim else 0, outputs=outputs, name=name
+    elif isinstance(dim, list) and all_int(dim):
+        res = g.op.ReduceMaxAnyOpset(
+            x,
+            np.array(dim, dtype=np.int64),
+            keepdims=1 if keepdim else 0,
+            outputs=outputs,
         )
     else:
         raise RuntimeError(f"Unexpected type {type(dim)} for dim")
     if sts:
-        g.set_type(res, TensorProto.INT64)
-        if dim is None:
-            g.set_shape(res, (1,))
-        elif g.has_shape(x):
-            sh = g.get_shape(x)
-            g.set_shape(res, (sh[dim],))
-        else:
-            g.set_rank(res, 1)
+        set_type_shape_reduce_op(g, outputs[0], x, keepdim=keepdim)
     return res
 
 
@@ -2771,7 +2765,7 @@ def prims_broadcast_in_dim(
     uns = []
     for idx, x in enumerate(s):
         if x != -1:
-            uns.append(idx + len(uns))
+            uns.append(idx)
 
     unsqueezed = g.op.UnsqueezeAnyOpset(
         a, np.array(uns, dtype=np.int64), name="broadcast_in_dim"

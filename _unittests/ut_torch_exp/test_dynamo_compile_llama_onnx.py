@@ -12,6 +12,7 @@ from experimental_experiment.torch_helper.dump_helper import assert_all_close
 from experimental_experiment.torch_dynamo import (
     onnx_debug_backend,
     get_decomposition_table,
+    filter_decomposition_table,
 )
 
 
@@ -57,6 +58,7 @@ class TestDynamoLlama(ExtTestCase):
         verbose: int = 0,
         decompositions=False,
         mixed=False,
+        raise_list=None,
     ):
         import torch
 
@@ -70,6 +72,8 @@ class TestDynamoLlama(ExtTestCase):
             target_opset=18,
             storage=storage,
             verbose=verbose,
+            dump_prefix=onnx_export,
+            raise_list=raise_list,
             **kwargs,
         )
 
@@ -79,7 +83,11 @@ class TestDynamoLlama(ExtTestCase):
             if decompositions:
                 aot_compiler = aot_autograd(
                     fw_compiler=backend_debug,
-                    decompositions=torch._decomp.decomposition_table,
+                    decompositions=(
+                        filter_decomposition_table()
+                        if decompositions is True
+                        else decompositions
+                    ),
                 )
             else:
                 aot_compiler = aot_autograd(
@@ -150,6 +158,7 @@ class TestDynamoLlama(ExtTestCase):
         atol: float = 1e-4,
         rtol: float = 1e-4,
         mixed=False,
+        raise_list=None,
     ):
         storage = self._assert_model_numerically(
             model,
@@ -163,6 +172,7 @@ class TestDynamoLlama(ExtTestCase):
             atol=atol,
             rtol=rtol,
             mixed=mixed,
+            raise_list=raise_list,
         )
         self.assertIsInstance(storage, dict)
 
@@ -464,7 +474,64 @@ class TestDynamoLlama(ExtTestCase):
     @ignore_warnings((UserWarning, DeprecationWarning))
     @skipif_ci_windows("torch.compile not supported on Windows")
     @unittest.skipIf(torch_min("2.2"), reason="missing kernel")
-    def test_llama_model_backward_forward_decomposition(self):
+    def test_llama_model_backward_forward_decomposition_yes(self):
+        from experimental_experiment.torch_helper.llama_helper import get_llama_model
+
+        import torch
+
+        sorted_list = list(torch._decomp.decomposition_table.items())
+        disable = {
+            "aten::slice_backward",
+            "aten::select_backward.out",
+            "aten::slice.Tensor",
+        }
+        new_list = [(k, v) for k, v in sorted_list if k.name() not in disable]
+        begin = 69
+        end = min(72, len(new_list))
+        for i in range(0, end, 1):
+            k, v = new_list[i]
+            if i < begin:
+                continue
+            msg = f"i={i+1}/{len(new_list)}-{k.name()}-{new_list[i]}"
+            with self.subTest(msg=msg):
+                decomp = dict(new_list[: i + 1])
+
+                input_dims = self.get_input_dims(False)
+                model, example_args_collection = get_llama_model(input_dims=input_dims)
+                self.common_test_model(
+                    model,
+                    example_args_collection,
+                    test_backward=1,
+                    dynamic=False,
+                    fullgraph=True,
+                    onnx_export="test_llama_model_backward_decomposition_yes",
+                    decompositions=decomp,
+                    atol=1e-4,
+                    # impl="ref",
+                    # verbose=10,
+                    # raise_list={"mul_2"},
+                )
+
+        input_dims = self.get_input_dims(False)
+        model, example_args_collection = get_llama_model(input_dims=input_dims)
+        self.common_test_model(
+            model,
+            example_args_collection,
+            test_backward=1,
+            dynamic=False,
+            fullgraph=True,
+            onnx_export="test_llama_model_backward_decomposition_yes",
+            decompositions=filter_decomposition_table(),
+            atol=1e-4,
+            # impl="ref",
+            # verbose=10,
+            # raise_list={"mul_2"},
+        )
+
+    @ignore_warnings((UserWarning, DeprecationWarning))
+    @skipif_ci_windows("torch.compile not supported on Windows")
+    @unittest.skipIf(torch_min("2.2"), reason="missing kernel")
+    def test_llama_model_backward_forward_decomposition_no(self):
         from experimental_experiment.torch_helper.llama_helper import get_llama_model
 
         input_dims = self.get_input_dims(False)
@@ -475,8 +542,12 @@ class TestDynamoLlama(ExtTestCase):
             test_backward=1,
             dynamic=False,
             fullgraph=True,
-            onnx_export="test_llama_model_backward_decomposition",
-            decompositions=True,
+            onnx_export="test_llama_model_backward_decomposition_no",
+            decompositions=False,
+            atol=1e-4,
+            # impl="ref",
+            # verbose=10,
+            # raise_list={"mul_2"},
         )
 
     @ignore_warnings((UserWarning, DeprecationWarning))

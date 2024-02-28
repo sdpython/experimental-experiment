@@ -207,6 +207,24 @@ class Opset:
             )
         return iaxes
 
+    def ReduceMaxAnyOpset(self, *args, **kwargs):
+        if len(args) == 1:
+            return self.ReduceMax(*args, **kwargs)
+        assert len(args) == 2, f"ReduceMaxAnyOpset expects 2 arguments not {len(args)}"
+        if self.builder.main_opset >= 18:
+            return self.ReduceMax(*args, **kwargs)
+        return self.ReduceMax(args[0], axes=self._iaxes("ReduceMax", args[1]), **kwargs)
+
+    def ReduceMeanAnyOpset(self, *args, **kwargs):
+        if len(args) == 1:
+            return self.ReduceMean(*args, **kwargs)
+        assert len(args) == 2, f"ReduceMeanAnyOpset expects 2 arguments not {len(args)}"
+        if self.builder.main_opset >= 18:
+            return self.ReduceMean(*args, **kwargs)
+        return self.ReduceMean(
+            args[0], axes=self._iaxes("ReduceMean", args[1]), **kwargs
+        )
+
     def UnsqueezeAnyOpset(self, *args, **kwargs):
         if len(args) == 1 and len(kwargs) == 0:
             return self.Unsqueeze(*args)
@@ -222,16 +240,6 @@ class Opset:
         if self.builder.main_opset >= 13:
             return self.ReduceSum(*args, **kwargs)
         return self.ReduceSum(args[0], axes=self._iaxes("ReduceSum", args[1]), **kwargs)
-
-    def ReduceMeanAnyOpset(self, *args, **kwargs):
-        if len(args) == 1:
-            return self.ReduceMean(*args, **kwargs)
-        assert len(args) == 2, f"ReduceMeanAnyOpset expects 2 arguments not {len(args)}"
-        if self.builder.main_opset >= 18:
-            return self.ReduceMean(*args, **kwargs)
-        return self.ReduceMean(
-            args[0], axes=self._iaxes("ReduceMean", args[1]), **kwargs
-        )
 
 
 class GraphBuilder:

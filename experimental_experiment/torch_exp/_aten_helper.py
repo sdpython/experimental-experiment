@@ -275,7 +275,7 @@ def prepare_inputs_homogeneous_operator(
         inputs.append(_cast_inputs(g, a, only, name=name))
     if f is None:
         return tuple(inputs)
-    if inputs == args:
+    if tuple(inputs) == tuple(args):
         # No cast.
         res = f(*inputs, outputs=outputs, name=name)
     else:

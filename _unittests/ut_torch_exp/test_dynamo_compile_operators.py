@@ -2138,6 +2138,29 @@ class TestOperators(ExtTestCase):
             onnx_export=inspect.currentframe().f_code.co_name,
         )
 
+    def test_as_strided_1(self):
+        import torch
+
+        new_table = {}
+        for k, v in torch._decomp.decomposition_table.items():
+            if k.name() in {
+                "aten::slice_backward",
+                "aten::select_backward.out",
+                "aten::slice.Tensor",
+            }:
+                new_table[k] = v
+
+        shape = (9, 2, 15, 4)
+        x = torch.arange(
+            np.prod(shape), requires_grad=True, dtype=torch.float32
+        ).reshape(shape)
+        self.assertONNX(
+            lambda x: x[:, :, 4:, :],
+            x,
+            onnx_export=inspect.currentframe().f_code.co_name,
+            decomp=new_table,
+        )
+
     def test_embedding_simple(self):
         ix = torch.tensor([[1, 2, 4, 5], [4, 3, 2, 9]], dtype=torch.int64)
         embedding_matrix = torch.arange(
