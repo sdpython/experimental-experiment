@@ -913,36 +913,36 @@ class TestGraphPatternOptimization(ExtTestCase):
                         "ConstantOfShape",
                         ["shape"],
                         ["one"],
-                        value=onh.from_array(np.array([0], dtype=np.float32)),
+                        value=onh.from_array(np.array([1], dtype=np.float32)),
                     ),
                     oh.make_node("Sub", ["one", "X"], ["x1"]),
                     oh.make_node("Mul", ["x1", "Y"], ["Z"]),
                 ],
                 "dummy",
                 [
-                    oh.make_tensor_value_info("X", TensorProto.FLOAT, ["a", 16]),
-                    oh.make_tensor_value_info("Y", TensorProto.FLOAT, ["a", 16]),
+                    oh.make_tensor_value_info("X", TensorProto.FLOAT, ["a", 6]),
+                    oh.make_tensor_value_info("Y", TensorProto.FLOAT, ["a", 6]),
                 ],
-                [oh.make_tensor_value_info("Z", TensorProto.FLOAT, ["a", 16])],
+                [oh.make_tensor_value_info("Z", TensorProto.FLOAT, ["a", 6])],
                 [
-                    onh.from_array(np.array([0], dtype=np.int64), name="zero"),
+                    onh.from_array(np.array([1, 6], dtype=np.int64), name="shape"),
                 ],
             )
         )
         check_model(model)
 
-        feeds = {"X": self._range(3, 3), "Y": self._range(3, 3)}
+        feeds = {"X": self._range(11, 6), "Y": self._range(11, 6)}
         ref = ExtendedReferenceEvaluator(model)
         expected = ref.run(None, feeds)
 
         gr = GraphBuilder(
             model,
             infer_shapes=True,
-            optimization_options=OptimizationOptions(patterns=["MulMulMul"]),
+            optimization_options=OptimizationOptions(patterns=["Sub1Mul"]),
         )
         opt_onx = gr.to_onnx(optimize=True)
         self.assertEqual(
-            ["Mul", "Mul"],
+            ["Mul", "Sub"],
             [n.op_type for n in opt_onx.graph.node],
         )
         self.assertEqual(1, len(opt_onx.graph.initializer))
