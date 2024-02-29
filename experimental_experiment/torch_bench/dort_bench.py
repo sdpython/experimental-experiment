@@ -57,6 +57,7 @@ import numpy as np
 import torch
 import torch._dynamo.backends.registry
 from torch._dynamo.backends.common import aot_autograd
+import transformers
 from experimental_experiment.convert.convert_helper import ort_optimize
 from experimental_experiment.torch_helper.llama_helper import get_llama_model
 from experimental_experiment.torch_helper.training_helper import make_aot_ort
@@ -88,7 +89,7 @@ elif args.config == "medium":
         _attn_implementation="eager",
     )
 else:
-    assert args.config == "large", f"unexpected config={args.config!r}"
+    assert args.config in ("large", "default"), f"unexpected config={args.config!r}"
     config_dict = dict(
         input_dims=[(2, 1024)] * (args.repeat + args.warmup),
         hidden_size=4096,
@@ -244,6 +245,21 @@ print(f"device={args.device}")
 print(f"avg={np.mean(times)}")
 print(f"times={times}")
 print(f"warmup_times={warmup_times}")
-print(f":time,{np.mean(times)};")
+print("-----------")
+
+idims = "x".join(map(str, config_dict["input_dims"][0]))
+del config_dict["input_dims"]
+vals = "-".join(map(str, config_dict.values()))
+print(f":llama,{idims}-{vals};")
+print(f":config,{args.config};")
+print(f":mixed,{args.mixed};")
+print(f":dynamic,{use_dynamic};")
+print(f":backend,{args.backend};")
+print(f":repeat,{args.repeat};")
+print(f":warmup,{args.warmup};")
+print(f":torch,{torch.__version__};")
+print(f":transformers,{transformers.__version__};")
+if args.backend in {"custom"}:
+    print(f":patterns,+{args.enable_pattern}-{args.disable_pattern};")
 print(f":warmup_time,{sum(warmup_times)};")
-print(f":torch,{torch.__file__};")
+print(f":time,{np.mean(times)};")
