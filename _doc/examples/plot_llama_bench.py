@@ -50,7 +50,6 @@ import onnxruntime  # noqa: F401
 import numpy as np
 import pandas
 import matplotlib.pyplot as plt
-from matplotlib.ticker import MaxNLocator
 import itertools
 import torch
 from experimental_experiment.ext_test_case import unit_test_going
@@ -253,7 +252,6 @@ if data_collected:
     df[["warmup_time"]].plot.barh(
         ax=ax, title=f"lower better\n{llama}\nwarmup time\n{ver}"
     )
-    ax.xaxis.set_major_locator(MaxNLocator(nbins=ax.get_xticks() * 2))
     ax.grid(True)
 
     fig.tight_layout()
@@ -269,7 +267,6 @@ if data_collected:
     mi, ma = df["time"].min(), df["time"].max()
     mi = mi - (ma - mi) / 10
     ax.set_xlim(left=mi)
-    ax.xaxis.set_major_locator(MaxNLocator(nbins=ax.get_xticks() * 2))
     ax.grid(True)
 
     fig.tight_layout()
@@ -284,7 +281,6 @@ if data_collected:
     df[["increase"]].plot.barh(
         ax=ax, title=f"lower better\n{llama}\ncomparison to eager %"
     )
-    ax.xaxis.set_major_locator(MaxNLocator(nbins=ax.get_xticks() * 2))
     ax.grid(True)
 
     fig.tight_layout()
