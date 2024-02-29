@@ -522,7 +522,7 @@ class Sub1MulPattern(PatternOptimization):
         node_left = g.node_before(node.input[0])
         node_right = g.node_before(node.input[1])
         op_left = None if node_left is None else node_left.op_type
-        op_right = None if node_right is None else node_left.op_right
+        op_right = None if node_right is None else node_right.op_type
         if op_left != "Sub" and op_right != "Sub":
             return None
         cst_left, cst_right = None, None
@@ -537,6 +537,7 @@ class Sub1MulPattern(PatternOptimization):
                 cst_right = cst
 
         if cst_left is None and cst_right is None:
+            print(g.builder._known_shapes)
             return None
 
         nodes = [node, node_left, node_right]

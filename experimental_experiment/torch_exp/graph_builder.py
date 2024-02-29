@@ -311,6 +311,20 @@ class GraphBuilder:
         self._cache_shape = {}
         self._values = {}
 
+        self.nodes = []
+        self.initializers_dict = {}
+        self.inputs = []
+        self.outputs = []
+
+        self._known_shapes = {}
+        self._known_types = {}
+        self._known_ranks = {}
+        self._known_torch_value = {}
+        self._known_names = set()
+        self._unique_names = set()
+        self._unique_node_names = set()
+        self.constants_ = {}
+
         if isinstance(target_opset_or_existing_proto, (int, dict)):
             # starts a model from nothing
             assert (
@@ -321,19 +335,9 @@ class GraphBuilder:
                 if isinstance(target_opset_or_existing_proto, int)
                 else target_opset_or_existing_proto
             )
-            self.nodes = []
-            self.initializers_dict = {}
-            self.inputs = []
-            self.outputs = []
             self.input_names = input_names or []
-            self._unique_names = set(self.input_names)
-            self._unique_node_names = set()
             self.current_input = 0
-            self._known_shapes = {}
-            self._known_types = {}
-            self._known_ranks = {}
-            self._known_torch_value = {}
-            self.constants_ = {}
+            self._unique_names = set(self.input_names)
             self._known_names = self._unique_names.copy()
 
         elif isinstance(target_opset_or_existing_proto, ModelProto):
@@ -342,68 +346,8 @@ class GraphBuilder:
                 raise ValueError(
                     "input_names must be empty if the input is an existing model."
                 )
-            proto = target_opset_or_existing_proto
-            self.opsets = {d.domain: d.version for d in proto.opset_import}
-            if self.ir_version is None:
-                self.ir_version = proto.ir_version
-            self.nodes = list(proto.graph.node)
-            self.initializers_dict = {i.name: i for i in proto.graph.initializer}
-            self.initializers_dict.update(
-                {i.name: i for i in proto.graph.sparse_initializer}
-            )
-            self.functions = list(proto.functions)
-            self.value_info = list(proto.graph.value_info)
-            self.inputs = list(proto.graph.input)
-            self.outputs = list(proto.graph.output)
-            self.input_names = [i.name for i in proto.graph.input]
             self.current_input = len(self.inputs)
-            # This should be improve.
-            self._known_shapes = {}
-            self._known_types = {}
-            self._known_ranks = {}
-            self._known_torch_value = {}
-            self.constants_ = {}
-            self._unique_node_names = set()
-            self._unique_names = set()
-            self._known_names = set()
-
-            for k, v in self.initializers_dict.items():
-                self.constants_[k] = None
-                self._unique_names.add(k)
-                self.set_name(k)
-                self.set_shape(k, self._get_tensor_shape(v))
-                self.set_type(k, self._get_tensor_type(v))
-                key = self.make_key(v)
-                if key not in self._values:
-                    self._values[key] = k
-            for i in self.inputs + self.outputs:
-                self.set_name(i.name)
-                self.set_type(i.name, i.type.tensor_type.elem_type)
-                if i.type.tensor_type.shape.dim:
-                    shape = tuple(
-                        d.dim_param if d.dim_param else d.dim_value
-                        for d in i.type.tensor_type.shape.dim
-                    )
-                    for sh in shape:
-                        if isinstance(sh, int):
-                            continue
-                        if not self.has_dynamic_object(sh):
-                            self.make_dynamic_object(sh, self.torch.SymInt(sh))
-                    self.set_shape(i.name, shape)
-            for node in self.nodes:
-                self._unique_names |= set(node.output)
-                if node.name:
-                    self._unique_node_names.add(node.name)
-                if node.op_type == "Constant":
-                    self.constants_[node.output[0]] = node
-                    if not self.has_name(node.output[0]):
-                        self.set_name(node.output[0])
-                    self.set_shape(node.output[0], self._get_tensor_shape(node))
-                    self.set_type(node.output[0], self._get_tensor_type(node))
-                else:
-                    for o in node.output:
-                        if not self.has_name(o):
-                            self.set_name(o)
+            self._update_structures_with_proto(target_opset_or_existing_proto)
             self.constant_folding(convert_into_initializer=False)
             if infer_shapes:
                 self._update_shape_types_with_proto(target_opset_or_existing_proto)
@@ -2178,3 +2122,71 @@ class GraphBuilder:
                 if not self.has_dynamic_object(sh):
                     self.make_dynamic_object(sh, self.torch.SymInt(sh))
             self.set_shape(val.name, shape, exc=False)
+
+    def _update_structures_with_proto(self, proto: ModelProto):
+        """
+        Updates the shapes and types for an existing model.
+        """
+        self.opsets = {d.domain: d.version for d in proto.opset_import}
+        if self.ir_version is None:
+            self.ir_version = proto.ir_version
+        self.nodes = list(proto.graph.node)
+        self.initializers_dict = {i.name: i for i in proto.graph.initializer}
+        self.initializers_dict.update(
+            {i.name: i for i in proto.graph.sparse_initializer}
+        )
+        self.functions = list(proto.functions)
+        self.value_info = list(proto.graph.value_info)
+        self.inputs = list(proto.graph.input)
+        self.outputs = list(proto.graph.output)
+        self.input_names = [i.name for i in proto.graph.input]
+
+        for k, v in self.initializers_dict.items():
+            self.constants_[k] = None
+            self._unique_names.add(k)
+            self.set_name(k)
+            self.set_shape(k, self._get_tensor_shape(v))
+            self.set_type(k, self._get_tensor_type(v))
+            key = self.make_key(v)
+            if key not in self._values:
+                self._values[key] = k
+
+        for i in self.inputs + self.outputs:
+            self.set_name(i.name)
+            self.set_type(i.name, i.type.tensor_type.elem_type)
+            if i.type.tensor_type.shape.dim:
+                shape = tuple(
+                    d.dim_param if d.dim_param else d.dim_value
+                    for d in i.type.tensor_type.shape.dim
+                )
+                for sh in shape:
+                    if isinstance(sh, int):
+                        continue
+                    if not self.has_dynamic_object(sh):
+                        self.make_dynamic_object(sh, self.torch.SymInt(sh))
+                self.set_shape(i.name, shape)
+
+        for node in self.nodes:
+            self._unique_names |= set(node.output)
+            if node.name:
+                self._unique_node_names.add(node.name)
+            if node.op_type == "Constant":
+                self.constants_[node.output[0]] = node
+                if not self.has_name(node.output[0]):
+                    self.set_name(node.output[0])
+                self.set_shape(node.output[0], self._get_tensor_shape(node))
+                self.set_type(node.output[0], self._get_tensor_type(node))
+            elif node.op_type == "ConstantOfShape" and self.is_constant(node.input[0]):
+                self.constants_[node.output[0]] = node
+                if not self.has_name(node.output[0]):
+                    self.set_name(node.output[0])
+                self.set_shape(node.output[0], self.get_shape(node.input[0]))
+                if len(node.attribute) == 0:
+                    self.set_type(node.output[0], TensorProto.FLOAT)
+                else:
+                    value = node.attribute[0].t
+                    self.set_type(node.output[0], value.data_type)
+            else:
+                for o in node.output:
+                    if not self.has_name(o):
+                        self.set_name(o)
