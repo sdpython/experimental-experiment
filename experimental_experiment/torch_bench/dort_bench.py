@@ -260,6 +260,6 @@ print(f":warmup,{args.warmup};")
 print(f":torch,{torch.__version__};")
 print(f":transformers,{transformers.__version__};")
 if args.backend in {"custom"}:
-    print(f":patterns,+{args.enable_pattern}-{args.disable_pattern}")
+    print(f":patterns,+{args.enable_pattern}-{args.disable_pattern};")
 print(f":warmup_time,{sum(warmup_times)};")
 print(f":time,{np.mean(times)};")

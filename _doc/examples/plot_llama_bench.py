@@ -34,7 +34,7 @@ parsed_args = get_parsed_args(
     repeat=5,
     backend=("eager,inductor,ort,custom", "backend to test"),
     device=("cpu,cuda" if check_cuda_availability() else "cpu", "device to test"),
-    num_hidden_layers=("1,2", "hidden layers to test"),
+    num_hidden_layers=("2", "hidden layers to test"),
     mixed=("0,1", "boolean value to test (mixed precision or not)"),
     dynamic=("0,1", "boolean value to test dynamic shapes or not"),
     script_name=("experimental_experiment.torch_bench.dort_bench", "script to run"),
@@ -153,9 +153,32 @@ except BenchmarkError as e:
     print(e)
     data_collected = False
 
+#########################
+# Let's process the data.
+
 if data_collected:
+
+    def make_legend(row):
+        row = row.to_dict()
+        val = [row["device"], row["backend"], f"h{row['num_hidden_layers']}"]
+        if row["mixed"]:
+            val.append("mixed")
+        if row["dynamic"]:
+            val.append("dyn")
+        if row["patterns"] and "nan" not in str(row["patterns"]):
+            val.append(f"({row['patterns']})")
+        s = "-".join(map(str, val))
+        assert "nan" not in s, f"Legend {s!r} is wrong, row={row}"
+        return s
+
     df = pandas.DataFrame(data)
-    df = df.drop(["ERROR", "OUTPUT"], axis=1)
+    df = df.drop(["OUTPUT"], axis=1)
+    df["ERROR"] = df["ERROR"].apply(lambda s: s.replace("\n", " "))
+    df["legend"] = df.apply(make_legend, axis=1)
+    filename = "plot_llama_bench_with_errors.csv"
+    df.to_csv(filename, index=False)
+
+    df = df.drop(["ERROR", "CMD"], axis=1)
     filename = "plot_llama_bench.csv"
     df.to_csv(filename, index=False)
     df = pandas.read_csv(filename)  # to cast type
@@ -173,36 +196,38 @@ for c in ["time", "warmup_time"]:
     if c not in df.columns:
         df[c] = np.nan
 
+########################################
+# Simplified data
 
-def make_legend(row):
-    row = row.to_dict()
-    print(row)
-    val = [row["device"], row["backend"], f"h{row['num_hidden_layers']}"]
-    if row["mixed"]:
-        val.append("mixed")
-    if row["dynamic"]:
-        val.append("dyn")
-    if row["pattern"]:
-        val.append(row["pattern"])
-    return "-".join(val)
-
-
-df["legend"] = df.apply(make_legend, axis=1)
+print(df.sort_values("legend"))
 
 ###############################
 # Plot.
 
 if data_collected:
-    fig, ax = plt.subplots(2, 1, figsize=(12, 5))
-
+    min_eager = df[df.legend.str.contains("eager")]["time"].min()
     torch_version = list(set(df["torch"]))
     transformers_version = list(set(df["transformers"]))
-    ver = f"{torch_version} - {transformers_version}"
+    ver = f"{torch_version[0]} - {transformers_version[0]}"
+    llama = list(set(df["llama"]))[0]
+
+    fig, ax = plt.subplots(3, 1, figsize=(3 * df.shape[0] * 2, 5))
 
     # warmup time
     df = df.sort_values("time").set_index("legend")
-    df["warmup_time"].plot.hist(ax=ax[0], title="warmup time\n{ver}")
-    df["time"].plot.hist(ax=ax[1], title="iteration time\n{ver}")
+    df[["warmup_time"]].plot.barh(ax=ax[0], title=f"warmup time\n{ver}")
 
+    # time
+    df[["time"]].plot.barh(ax=ax[1], title=f"iteration time\n{ver}")
+    mi, ma = df["time"].min(), df["time"].max()
+    mi = mi - (ma - mi) / 10
+    ax[1].set_xlim(left=mi)
+
+    # comparison
+    df["time"]
+    df["increase"] = (df["time"] / min_eager - 1) * 100
+    df[["increase"]].plot.barh(ax=ax[2], title="comparison to eager %")
+
+    fig.suptitle(f"lower better\n{llama}")
     fig.tight_layout()
     fig.savefig("plot_llama_bench.png")
