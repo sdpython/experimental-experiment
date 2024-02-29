@@ -89,7 +89,7 @@ elif args.config == "medium":
         _attn_implementation="eager",
     )
 else:
-    assert args.config == "large", f"unexpected config={args.config!r}"
+    assert args.config in ("large", "default"), f"unexpected config={args.config!r}"
     config_dict = dict(
         input_dims=[(2, 1024)] * (args.repeat + args.warmup),
         hidden_size=4096,

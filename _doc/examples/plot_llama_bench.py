@@ -64,7 +64,16 @@ warmup = parsed_args.warmup
 
 
 def make_config(
-    backend, device, num_hidden_layers, repeat, mixed, dynamic, config, warmup, pattern
+    backend,
+    device,
+    num_hidden_layers,
+    repeat,
+    mixed,
+    dynamic,
+    config,
+    warmup,
+    pattern,
+    existing=None,
 ):
     cf = dict(
         backend=backend,
@@ -76,6 +85,12 @@ def make_config(
         config=config,
         warmup=warmup,
     )
+
+    if existing is not None and backend != "custom":
+        for ex in existing:
+            if cf == ex:
+                return None
+
     if pattern == "none":
         opt = dict(disable_pattern="default")
     elif pattern == "default":
@@ -108,7 +123,7 @@ if parsed_args.check not in (1, "1"):
     ):
         if mixed == 1 and device == "cpu":
             continue
-        if machine.get("capability", (0, 0)) >= (7, 0) and backend == "inductor":
+        if machine.get("capability", (0, 0)) < (7, 0) and backend == "inductor":
             continue
         configs.append(
             make_config(
@@ -121,8 +136,10 @@ if parsed_args.check not in (1, "1"):
                 config=parsed_args.config,
                 warmup=warmup,
                 pattern=pattern,
+                existing=configs,
             )
         )
+        configs = [cf for cf in configs if cf]
         print(f"config {len(configs)}: {configs[-1]}")
 else:
     verbose = 5
@@ -202,32 +219,49 @@ for c in ["time", "warmup_time"]:
 print(df.sort_values("legend"))
 
 ###############################
-# Plot.
+# Plot warmup time.
+
+min_eager = df[df.legend.str.contains("eager")]["time"].min()
+torch_version = list(set(df["torch"]))
+transformers_version = list(set(df["transformers"]))
+ver = f"{torch_version[0]} - {transformers_version[0]}"
+llama = list(set(df["llama"]))[0]
 
 if data_collected:
-    min_eager = df[df.legend.str.contains("eager")]["time"].min()
-    torch_version = list(set(df["torch"]))
-    transformers_version = list(set(df["transformers"]))
-    ver = f"{torch_version[0]} - {transformers_version[0]}"
-    llama = list(set(df["llama"]))[0]
+    fig, ax = plt.subplots(3, 1, figsize=(12, df.shape[0] // 3))
 
-    fig, ax = plt.subplots(3, 1, figsize=(3 * df.shape[0] * 2, 5))
-
-    # warmup time
     df = df.sort_values("time").set_index("legend")
-    df[["warmup_time"]].plot.barh(ax=ax[0], title=f"warmup time\n{ver}")
+    df[["warmup_time"]].plot.barh(ax=ax, title=f"warmup time\n{ver}")
 
-    # time
-    df[["time"]].plot.barh(ax=ax[1], title=f"iteration time\n{ver}")
+    fig.suptitle(f"lower better\n{llama}")
+    fig.tight_layout()
+    fig.savefig("plot_llama_bench_warmup_time.png")
+
+###############################
+# Plot time.
+
+if data_collected:
+    fig, ax = plt.subplots(3, 1, figsize=(12, df.shape[0] // 3))
+
+    df[["time"]].plot.barh(ax=ax, title=f"iteration time\n{ver}")
     mi, ma = df["time"].min(), df["time"].max()
     mi = mi - (ma - mi) / 10
     ax[1].set_xlim(left=mi)
 
-    # comparison
+    fig.suptitle(f"lower better\n{llama}")
+    fig.tight_layout()
+    fig.savefig("plot_llama_bench_time.png")
+
+###############################
+# Plot increase.
+
+if data_collected:
+    fig, ax = plt.subplots(3, 1, figsize=(12, df.shape[0] // 3))
+
     df["time"]
     df["increase"] = (df["time"] / min_eager - 1) * 100
     df[["increase"]].plot.barh(ax=ax[2], title="comparison to eager %")
 
     fig.suptitle(f"lower better\n{llama}")
     fig.tight_layout()
-    fig.savefig("plot_llama_bench.png")
+    fig.savefig("plot_llama_bench_relative.png")
