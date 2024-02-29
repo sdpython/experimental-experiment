@@ -30,16 +30,20 @@ from experimental_experiment.args import get_parsed_args, check_cuda_availabilit
 parsed_args = get_parsed_args(
     "plot_llama_bench",
     description=__doc__,
-    warmup=5,
+    warmup=3,
     repeat=5,
     backend=("eager,inductor,ort,custom", "backend to test"),
-    device=("cpu,cuda" if check_cuda_availability() else "cpu", "device to test"),
-    num_hidden_layers=("1,2", "hidden layers to test"),
+    device=("cuda" if check_cuda_availability() else "cpu", "device to test"),
+    num_hidden_layers=("2", "hidden layers to test"),
     mixed=("0,1", "boolean value to test (mixed precision or not)"),
+    dynamic=("0,1", "boolean value to test dynamic shapes or not"),
     script_name=("experimental_experiment.torch_bench.dort_bench", "script to run"),
     dump=(0, "dump the models with env ONNXRT_DUMP_PATH"),
     check=(0, "just check the script is working, ignores all other parameters"),
-    expose="backend,device,num_hidden_layers,mixed,scipt_name,repeat,warmup,dump,check",
+    config=("medium", "configuration to use, default or medium"),
+    patterns=("none,default,onnxruntime", "optimization patterns to use"),
+    expose="backend,device,num_hidden_layers,mixed,scipt_name,repeat,"
+    "warmup,dump,check,config,patterns,dynamic",
 )
 
 import onnxruntime  # noqa: F401
@@ -58,25 +62,88 @@ machine = {} if unit_test_going() else get_machine()
 repeat = parsed_args.repeat
 warmup = parsed_args.warmup
 
-if machine.get("capability", (0, 0)) >= (7, 0) and parsed_args.check not in (1, "1"):
+
+def make_config(
+    backend,
+    device,
+    num_hidden_layers,
+    repeat,
+    mixed,
+    dynamic,
+    config,
+    warmup,
+    pattern,
+    existing=None,
+):
+    cf = dict(
+        backend=backend,
+        device=device,
+        num_hidden_layers=num_hidden_layers,
+        repeat=repeat,
+        mixed=mixed,
+        dynamic=dynamic,
+        config=config,
+        warmup=warmup,
+    )
+
+    if existing and backend != "custom":
+        for ex in existing:
+            if not ex:
+                continue
+            equal = True
+            for k in cf:
+                if cf[k] != ex[k]:
+                    equal = False
+                    break
+            if equal:
+                return None
+
+    if pattern == "none":
+        opt = dict(disable_pattern="default")
+    elif pattern == "default":
+        opt = dict(enable_pattern="default")
+    elif pattern == "onnxruntime":
+        opt = dict(enable_pattern="onnxruntime")
+    else:
+        raise AssertionError(f"unexpected value for pattern={pattern!r}")
+    cf.update(opt)
+    return cf
+
+
+if parsed_args.check not in (1, "1"):
     verbose = 1
     configs = []
-    for backend, device, num_hidden_layers, mixed in itertools.product(
+    for (
+        backend,
+        device,
+        num_hidden_layers,
+        mixed,
+        dynamic,
+        pattern,
+    ) in itertools.product(
         parsed_args.backend.split(","),
         parsed_args.device.split(","),
         list(map(int, parsed_args.num_hidden_layers.split(","))),
         list(map(int, parsed_args.mixed.split(","))),
+        list(map(int, parsed_args.dynamic.split(","))),
+        parsed_args.patterns.split(","),
     ):
         if mixed == 1 and device == "cpu":
             continue
+        if machine.get("capability", (0, 0)) < (7, 0) and backend == "inductor":
+            continue
         configs.append(
-            dict(
+            make_config(
                 backend=backend,
                 device=device,
                 num_hidden_layers=num_hidden_layers,
                 repeat=repeat,
                 mixed=mixed,
+                dynamic=dynamic,
+                config=parsed_args.config,
                 warmup=warmup,
+                pattern=pattern,
+                existing=configs,
             )
         )
 else:
@@ -89,10 +156,22 @@ else:
             num_hidden_layers=1,
             repeat=1,
             mixed=0,
+            dynamic=0,
             warmup=1,
             config="small",
         ),
     ]
+
+################################
+# All configurations to consider.
+
+configs = [cf for cf in configs if cf]
+for i, cf in enumerate(configs):
+    print(f"config {i+1}: {cf}")
+
+################################
+# Running configuration.
+
 
 try:
     data = run_benchmark(
@@ -107,13 +186,44 @@ except BenchmarkError as e:
     print(e)
     data_collected = False
 
+#########################
+# Let's process the data.
+
 if data_collected:
+
+    def make_legend(row):
+        row = row.to_dict()
+        val = [row["device"], row["backend"], f"h{row['num_hidden_layers']}"]
+        if row["mixed"]:
+            val.append("mixed")
+        if row["dynamic"]:
+            val.append("dyn")
+        if row["patterns"] and "nan" not in str(row["patterns"]):
+            val.append(f"({row['patterns']})")
+        s = "-".join(map(str, val))
+        assert "nan" not in s, f"Legend {s!r} is wrong, row={row}"
+        return s
+
     df = pandas.DataFrame(data)
-    df = df.drop(["ERROR", "OUTPUT"], axis=1)
+    df = df.drop(["OUTPUT", "ERROR"], axis=1)
+    df["legend"] = df.apply(make_legend, axis=1)
+    df["time"] = df["time"].astype(float)
+    min_eager = df[df.legend.str.contains("eager")]["time"].dropna().min()
+    df["increase"] = df["time"] / min_eager - 1
+    # df["ERROR"] = df["ERROR"].apply(lambda s: s.replace("\n", " "))
+    filename = "plot_llama_bench_with_cmd.csv"
+    df.to_csv(filename, index=False)
+
+    df = df.drop(["CMD"], axis=1)
     filename = "plot_llama_bench.csv"
     df.to_csv(filename, index=False)
     df = pandas.read_csv(filename)  # to cast type
     print(df)
+
+########################
+# First lines.
+
+print(df.head(2).T)
 
 ################################
 # More simple
@@ -121,68 +231,57 @@ if data_collected:
 for c in ["time", "warmup_time"]:
     if c not in df.columns:
         df[c] = np.nan
-columns = ["backend", "num_hidden_layers", "mixed", "time", "device", "warmup_time"]
-if data_collected:
-    try:
-        dfs = df[columns]
-    except KeyError as e:
-        raise RuntimeError(f"Missing columns in {df.columns}\n{df.head().T}") from e
-    print(dfs)
+
+########################################
+# Simplified data
+
+print(df.sort_values("legend"))
 
 ###############################
-# Plot.
+# Plot warmup time.
+
+torch_version = list(set(df["torch"].dropna()))
+transformers_version = list(set(df["transformers"].dropna()))
+ver = f"{torch_version[0]} - {transformers_version[0]}"
+llama = list(set(df["llama"].dropna()))[0]
 
 if data_collected:
-    fig, ax = plt.subplots(2, 3, figsize=(10, 9))
+    fig, ax = plt.subplots(1, 1, figsize=(12, df.shape[0] // 3 + 1))
 
-    # warmup time
-
-    piv = dfs[(dfs.device == "cpu") & (dfs.mixed == 0)].pivot(
-        index="num_hidden_layers", columns="backend", values="warmup_time"
+    df = df.sort_values("time").set_index("legend")
+    df[["warmup_time"]].plot.barh(
+        ax=ax, title=f"lower better\n{llama}\nwarmup time\n{ver}"
     )
-    if len(piv) > 0:
-        piv.plot(title="llama with dort on cpu\nwarmup time", ax=ax[0, 0])
-
-    piv = dfs[(dfs.device == "cuda") & (dfs.mixed == 0)].pivot(
-        index="num_hidden_layers", columns="backend", values="warmup_time"
-    )
-    if len(piv) > 0:
-        piv.plot(title="llama with dort on cuda\nwarmup time", ax=ax[0, 1])
-
-    piv = dfs[(dfs.device == "cuda") & (dfs.mixed == 0)].pivot(
-        index="num_hidden_layers", columns="backend", values="warmup_time"
-    )
-    if len(piv) > 0:
-        piv.plot(title="llama with dort on cuda (mixed)\nwarmup time", ax=ax[0, 2])
-
-    # time
-
-    piv = dfs[(dfs.device == "cpu") & (dfs.mixed == 0)].pivot(
-        index="num_hidden_layers", columns="backend", values="time"
-    )
-    if len(piv) > 0:
-        piv.plot(
-            title=f"llama with dort on cpu\ntraining time for {repeat} iterations",
-            ax=ax[1, 0],
-        )
-
-    piv = dfs[(dfs.device == "cuda") & (dfs.mixed == 0)].pivot(
-        index="num_hidden_layers", columns="backend", values="time"
-    )
-    if len(piv) > 0:
-        piv.plot(
-            title=f"llama with dort on cuda\ntraining time for {repeat} iterations",
-            ax=ax[1, 1],
-        )
-
-    piv = dfs[(dfs.device == "cuda") & (dfs.mixed == 1)].pivot(
-        index="num_hidden_layers", columns="backend", values="time"
-    )
-    if len(piv) > 0:
-        piv.plot(
-            title=f"llama with dort on cuda (mixed)\ntraining time for {repeat} iterations",
-            ax=ax[1, 2],
-        )
+    ax.grid(True)
 
     fig.tight_layout()
-    fig.savefig("plot_llama_bench.png")
+    fig.savefig("plot_llama_bench_warmup_time.png")
+
+###############################
+# Plot time.
+
+if data_collected:
+    fig, ax = plt.subplots(1, 1, figsize=(12, df.shape[0] // 3 + 1))
+
+    df[["time"]].plot.barh(ax=ax, title=f"lower better\n{llama}\niteration time\n{ver}")
+    mi, ma = df["time"].min(), df["time"].max()
+    mi = mi - (ma - mi) / 10
+    ax.set_xlim(left=mi)
+    ax.grid(True)
+
+    fig.tight_layout()
+    fig.savefig("plot_llama_bench_time.png")
+
+###############################
+# Plot increase.
+
+if data_collected:
+    fig, ax = plt.subplots(1, 1, figsize=(12, df.shape[0] // 3 + 1))
+
+    df[["increase"]].plot.barh(
+        ax=ax, title=f"lower better\n{llama}\ncomparison to eager %"
+    )
+    ax.grid(True)
+
+    fig.tight_layout()
+    fig.savefig("plot_llama_bench_relative.png")
