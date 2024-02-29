@@ -30,16 +30,20 @@ from experimental_experiment.args import get_parsed_args, check_cuda_availabilit
 parsed_args = get_parsed_args(
     "plot_llama_bench",
     description=__doc__,
-    warmup=5,
+    warmup=3,
     repeat=5,
     backend=("eager,inductor,ort,custom", "backend to test"),
     device=("cpu,cuda" if check_cuda_availability() else "cpu", "device to test"),
     num_hidden_layers=("1,2", "hidden layers to test"),
     mixed=("0,1", "boolean value to test (mixed precision or not)"),
+    dynamic=("0,1", "boolean value to test dynamic shapes or not"),
     script_name=("experimental_experiment.torch_bench.dort_bench", "script to run"),
     dump=(0, "dump the models with env ONNXRT_DUMP_PATH"),
     check=(0, "just check the script is working, ignores all other parameters"),
-    expose="backend,device,num_hidden_layers,mixed,scipt_name,repeat,warmup,dump,check",
+    config=("default", "configuration to use, default or medium"),
+    patterns=("none,default,onnxruntime", "optimization patterns to use"),
+    expose="backend,device,num_hidden_layers,mixed,scipt_name,repeat,"
+    "warmup,dump,check,config,patterns,dynamic",
 )
 
 import onnxruntime  # noqa: F401
@@ -58,27 +62,68 @@ machine = {} if unit_test_going() else get_machine()
 repeat = parsed_args.repeat
 warmup = parsed_args.warmup
 
-if machine.get("capability", (0, 0)) >= (7, 0) and parsed_args.check not in (1, "1"):
+
+def make_config(
+    backend, device, num_hidden_layers, repeat, mixed, dynamic, config, warmup, pattern
+):
+    cf = dict(
+        backend=backend,
+        device=device,
+        num_hidden_layers=num_hidden_layers,
+        repeat=repeat,
+        mixed=mixed,
+        dynamic=dynamic,
+        config=config,
+        warmup=warmup,
+    )
+    if pattern == "none":
+        opt = dict(disable_pattern="default")
+    elif pattern == "default":
+        opt = dict(enable_pattern="default")
+    elif pattern == "onnxruntime":
+        opt = dict(enable_pattern="onnxruntime")
+    else:
+        raise AssertionError(f"unexpected value for pattern={pattern!r}")
+    cf.update(opt)
+    return cf
+
+
+if parsed_args.check not in (1, "1"):
     verbose = 1
     configs = []
-    for backend, device, num_hidden_layers, mixed in itertools.product(
+    for (
+        backend,
+        device,
+        num_hidden_layers,
+        mixed,
+        dynamic,
+        pattern,
+    ) in itertools.product(
         parsed_args.backend.split(","),
         parsed_args.device.split(","),
         list(map(int, parsed_args.num_hidden_layers.split(","))),
         list(map(int, parsed_args.mixed.split(","))),
+        list(map(int, parsed_args.dynamic.split(","))),
+        parsed_args.patterns.split(","),
     ):
         if mixed == 1 and device == "cpu":
             continue
+        if machine.get("capability", (0, 0)) >= (7, 0) and backend == "inductor":
+            continue
         configs.append(
-            dict(
+            make_config(
                 backend=backend,
                 device=device,
                 num_hidden_layers=num_hidden_layers,
                 repeat=repeat,
                 mixed=mixed,
+                dynamic=dynamic,
+                config=parsed_args.config,
                 warmup=warmup,
+                pattern=pattern,
             )
         )
+        print(f"config {len(configs)}: {configs[-1]}")
 else:
     verbose = 5
     device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -89,6 +134,7 @@ else:
             num_hidden_layers=1,
             repeat=1,
             mixed=0,
+            dynamic=0,
             warmup=1,
             config="small",
         ),
@@ -115,74 +161,48 @@ if data_collected:
     df = pandas.read_csv(filename)  # to cast type
     print(df)
 
+########################
+# First lines.
+
+print(df.head(2).T)
+
 ################################
 # More simple
 
 for c in ["time", "warmup_time"]:
     if c not in df.columns:
         df[c] = np.nan
-columns = ["backend", "num_hidden_layers", "mixed", "time", "device", "warmup_time"]
-if data_collected:
-    try:
-        dfs = df[columns]
-    except KeyError as e:
-        raise RuntimeError(f"Missing columns in {df.columns}\n{df.head().T}") from e
-    print(dfs)
+
+
+def make_legend(row):
+    row = row.to_dict()
+    print(row)
+    val = [row["device"], row["backend"], f"h{row['num_hidden_layers']}"]
+    if row["mixed"]:
+        val.append("mixed")
+    if row["dynamic"]:
+        val.append("dyn")
+    if row["pattern"]:
+        val.append(row["pattern"])
+    return "-".join(val)
+
+
+df["legend"] = df.apply(make_legend, axis=1)
 
 ###############################
 # Plot.
 
 if data_collected:
-    fig, ax = plt.subplots(2, 3, figsize=(10, 9))
+    fig, ax = plt.subplots(2, 1, figsize=(12, 5))
+
+    torch_version = list(set(df["torch"]))
+    transformers_version = list(set(df["transformers"]))
+    ver = f"{torch_version} - {transformers_version}"
 
     # warmup time
-
-    piv = dfs[(dfs.device == "cpu") & (dfs.mixed == 0)].pivot(
-        index="num_hidden_layers", columns="backend", values="warmup_time"
-    )
-    if len(piv) > 0:
-        piv.plot(title="llama with dort on cpu\nwarmup time", ax=ax[0, 0])
-
-    piv = dfs[(dfs.device == "cuda") & (dfs.mixed == 0)].pivot(
-        index="num_hidden_layers", columns="backend", values="warmup_time"
-    )
-    if len(piv) > 0:
-        piv.plot(title="llama with dort on cuda\nwarmup time", ax=ax[0, 1])
-
-    piv = dfs[(dfs.device == "cuda") & (dfs.mixed == 0)].pivot(
-        index="num_hidden_layers", columns="backend", values="warmup_time"
-    )
-    if len(piv) > 0:
-        piv.plot(title="llama with dort on cuda (mixed)\nwarmup time", ax=ax[0, 2])
-
-    # time
-
-    piv = dfs[(dfs.device == "cpu") & (dfs.mixed == 0)].pivot(
-        index="num_hidden_layers", columns="backend", values="time"
-    )
-    if len(piv) > 0:
-        piv.plot(
-            title=f"llama with dort on cpu\ntraining time for {repeat} iterations",
-            ax=ax[1, 0],
-        )
-
-    piv = dfs[(dfs.device == "cuda") & (dfs.mixed == 0)].pivot(
-        index="num_hidden_layers", columns="backend", values="time"
-    )
-    if len(piv) > 0:
-        piv.plot(
-            title=f"llama with dort on cuda\ntraining time for {repeat} iterations",
-            ax=ax[1, 1],
-        )
-
-    piv = dfs[(dfs.device == "cuda") & (dfs.mixed == 1)].pivot(
-        index="num_hidden_layers", columns="backend", values="time"
-    )
-    if len(piv) > 0:
-        piv.plot(
-            title=f"llama with dort on cuda (mixed)\ntraining time for {repeat} iterations",
-            ax=ax[1, 2],
-        )
+    df = df.sort_values("time").set_index("legend")
+    df["warmup_time"].plot.hist(ax=ax[0], title="warmup time\n{ver}")
+    df["time"].plot.hist(ax=ax[1], title="iteration time\n{ver}")
 
     fig.tight_layout()
     fig.savefig("plot_llama_bench.png")
