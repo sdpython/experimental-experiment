@@ -34,6 +34,7 @@ class CastPattern(PatternOptimization):
                 node.input,
                 node.output,
                 name=f"{self.__class__.__name__}--{node.name}",
+                doc_string=node.doc_string,
             )
             return [new_node]
 
@@ -71,6 +72,7 @@ class ExpandPattern(PatternOptimization):
                 node.input,
                 node.output,
                 name=f"{self.__class__.__name__}--{node.name}",
+                doc_string=node.doc_string,
             )
             return [new_node]
 
@@ -257,6 +259,7 @@ class ReshapeMatMulReshapePattern(PatternOptimization):
                 [node_before_left.input[0], node_before_right.input[0]],
                 next_node.output,
                 name=f"{self.__class__.__name__}--{node.name}",
+                doc_string=next_node.doc_string,
             )
             res = [new_node]
             if g.is_used_more_than_once(node_before_left.output[0]):
@@ -305,6 +308,7 @@ class ReshapeReshapePattern(PatternOptimization):
                 [node.input[0], next_node.input[1]],
                 next_node.output,
                 name=f"{self.__class__.__name__}--{node.name}",
+                doc_string=next_node.doc_string,
             )
             return [new_node]
 
@@ -490,6 +494,7 @@ class RotaryConcatPartPattern(PatternOptimization):
                 concat_inputs,
                 node.output,
                 axis=int(axis),
+                doc_string=node.doc_string,
             )
             return [slice_left, slice_right, neg, concat]
 
@@ -581,6 +586,7 @@ class TransposeMatMulPattern(PatternOptimization):
                 name=f"{self.__class__.__name__}--{node.name}",
                 transA=transA,
                 transB=transB,
+                doc_string=node.doc_string,
             )
             new_node.attribute.extend(keep)
             res = [new_node]
@@ -651,6 +657,7 @@ class TransposeTransposePattern(PatternOptimization):
                     [node.input[0]],
                     next_node.output,
                     name=f"{self.__class__.__name__}--{node.name}",
+                    doc_string=next_node.doc_string,
                 )
             ]
             if g.is_used_more_than_once(node.output[0]):
@@ -695,6 +702,7 @@ class UnsqueezeUnsqueezePattern(PatternOptimization):
                 [node.input[0], new_axis],
                 next_node.output,
                 name=f"{self.__class__.__name__}--{node.name}",
+                doc_string=next_node.doc_string,
             )
             return [new_node]
 
