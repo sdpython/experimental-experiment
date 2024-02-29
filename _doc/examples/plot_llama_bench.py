@@ -40,7 +40,7 @@ parsed_args = get_parsed_args(
     script_name=("experimental_experiment.torch_bench.dort_bench", "script to run"),
     dump=(0, "dump the models with env ONNXRT_DUMP_PATH"),
     check=(0, "just check the script is working, ignores all other parameters"),
-    config=("default", "configuration to use, default or medium"),
+    config=("medium", "configuration to use, default or medium"),
     patterns=("none,default,onnxruntime", "optimization patterns to use"),
     expose="backend,device,num_hidden_layers,mixed,scipt_name,repeat,"
     "warmup,dump,check,config,patterns,dynamic",
