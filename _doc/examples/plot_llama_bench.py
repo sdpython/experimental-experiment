@@ -50,6 +50,7 @@ import onnxruntime  # noqa: F401
 import numpy as np
 import pandas
 import matplotlib.pyplot as plt
+from matplotlib.ticker import MaxNLocator
 import itertools
 import torch
 from experimental_experiment.ext_test_case import unit_test_going
@@ -86,9 +87,16 @@ def make_config(
         warmup=warmup,
     )
 
-    if existing is not None and backend != "custom":
+    if existing and backend != "custom":
         for ex in existing:
-            if cf == ex:
+            if not ex:
+                continue
+            equal = True
+            for k in cf:
+                if cf[k] != ex[k]:
+                    equal = False
+                    break
+            if equal:
                 return None
 
     if pattern == "none":
@@ -139,8 +147,6 @@ if parsed_args.check not in (1, "1"):
                 existing=configs,
             )
         )
-        configs = [cf for cf in configs if cf]
-        print(f"config {len(configs)}: {configs[-1]}")
 else:
     verbose = 5
     device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -156,6 +162,17 @@ else:
             config="small",
         ),
     ]
+
+################################
+# All configurations to consider.
+
+configs = [cf for cf in configs if cf]
+for i, cf in enumerate(configs):
+    print(f"config {i+1}: {cf}")
+
+################################
+# Running configuration.
+
 
 try:
     data = run_benchmark(
@@ -189,13 +206,16 @@ if data_collected:
         return s
 
     df = pandas.DataFrame(data)
-    df = df.drop(["OUTPUT"], axis=1)
-    df["ERROR"] = df["ERROR"].apply(lambda s: s.replace("\n", " "))
+    df = df.drop(["OUTPUT", "ERROR"], axis=1)
     df["legend"] = df.apply(make_legend, axis=1)
-    filename = "plot_llama_bench_with_errors.csv"
+    df["time"] = df["time"].astype(float)
+    min_eager = df[df.legend.str.contains("eager")]["time"].dropna().min()
+    df["increase"] = df["time"] / min_eager - 1
+    # df["ERROR"] = df["ERROR"].apply(lambda s: s.replace("\n", " "))
+    filename = "plot_llama_bench_with_cmd.csv"
     df.to_csv(filename, index=False)
 
-    df = df.drop(["ERROR", "CMD"], axis=1)
+    df = df.drop(["CMD"], axis=1)
     filename = "plot_llama_bench.csv"
     df.to_csv(filename, index=False)
     df = pandas.read_csv(filename)  # to cast type
@@ -221,19 +241,21 @@ print(df.sort_values("legend"))
 ###############################
 # Plot warmup time.
 
-min_eager = df[df.legend.str.contains("eager")]["time"].min()
-torch_version = list(set(df["torch"]))
-transformers_version = list(set(df["transformers"]))
+torch_version = list(set(df["torch"].dropna()))
+transformers_version = list(set(df["transformers"].dropna()))
 ver = f"{torch_version[0]} - {transformers_version[0]}"
-llama = list(set(df["llama"]))[0]
+llama = list(set(df["llama"].dropna()))[0]
 
 if data_collected:
-    fig, ax = plt.subplots(3, 1, figsize=(12, df.shape[0] // 3))
+    fig, ax = plt.subplots(1, 1, figsize=(12, df.shape[0] // 3 + 1))
 
     df = df.sort_values("time").set_index("legend")
-    df[["warmup_time"]].plot.barh(ax=ax, title=f"warmup time\n{ver}")
+    df[["warmup_time"]].plot.barh(
+        ax=ax, title=f"lower better\n{llama}\nwarmup time\n{ver}"
+    )
+    ax.xaxis.set_major_locator(MaxNLocator(nbins=ax.get_xticks() * 2))
+    ax.grid(True)
 
-    fig.suptitle(f"lower better\n{llama}")
     fig.tight_layout()
     fig.savefig("plot_llama_bench_warmup_time.png")
 
@@ -241,14 +263,15 @@ if data_collected:
 # Plot time.
 
 if data_collected:
-    fig, ax = plt.subplots(3, 1, figsize=(12, df.shape[0] // 3))
+    fig, ax = plt.subplots(1, 1, figsize=(12, df.shape[0] // 3 + 1))
 
-    df[["time"]].plot.barh(ax=ax, title=f"iteration time\n{ver}")
+    df[["time"]].plot.barh(ax=ax, title=f"lower better\n{llama}\niteration time\n{ver}")
     mi, ma = df["time"].min(), df["time"].max()
     mi = mi - (ma - mi) / 10
-    ax[1].set_xlim(left=mi)
+    ax.set_xlim(left=mi)
+    ax.xaxis.set_major_locator(MaxNLocator(nbins=ax.get_xticks() * 2))
+    ax.grid(True)
 
-    fig.suptitle(f"lower better\n{llama}")
     fig.tight_layout()
     fig.savefig("plot_llama_bench_time.png")
 
@@ -256,12 +279,13 @@ if data_collected:
 # Plot increase.
 
 if data_collected:
-    fig, ax = plt.subplots(3, 1, figsize=(12, df.shape[0] // 3))
+    fig, ax = plt.subplots(1, 1, figsize=(12, df.shape[0] // 3 + 1))
 
-    df["time"]
-    df["increase"] = (df["time"] / min_eager - 1) * 100
-    df[["increase"]].plot.barh(ax=ax[2], title="comparison to eager %")
+    df[["increase"]].plot.barh(
+        ax=ax, title=f"lower better\n{llama}\ncomparison to eager %"
+    )
+    ax.xaxis.set_major_locator(MaxNLocator(nbins=ax.get_xticks() * 2))
+    ax.grid(True)
 
-    fig.suptitle(f"lower better\n{llama}")
     fig.tight_layout()
     fig.savefig("plot_llama_bench_relative.png")
