@@ -279,6 +279,9 @@ class GraphBuilderPatternOptimization:
         )
         return new_name
 
+    def unique_name(self, prefix: str) -> str:
+        return self.builder.unique_name(prefix)
+
     def make_node(
         self,
         op_type: str,
