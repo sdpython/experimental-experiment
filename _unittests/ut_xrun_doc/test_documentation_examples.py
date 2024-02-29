@@ -78,10 +78,14 @@ class TestDocumentationExamples(ExtTestCase):
                 continue
             reason = None
 
-            if name in {"plot_torch_export.py"}:
+            if name in {"plot_torch_export.py", "test_plot_llama_bench.py"}:
                 if sys.platform in {"win32"}:
                     # dynamo not supported on windows
                     reason = "windows not supported"
+
+            if name in {"test_plot_llama_bench.py"}:
+                if sys.platform in {"apple"}:
+                    reason = "apple not supported"
 
             if not reason and name in {"plot_convolutation_matmul.py"}:
                 if sys.platform in {"win32"}:
