@@ -905,6 +905,52 @@ class TestGraphPatternOptimization(ExtTestCase):
         got = opt_ref.run(None, feeds)
         self.assertEqualArray(expected[0], got[0], atol=1e-5)
 
+    def test_sub1_mul(self):
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node(
+                        "ConstantOfShape",
+                        ["shape"],
+                        ["one"],
+                        value=onh.from_array(np.array([0], dtype=np.float32)),
+                    ),
+                    oh.make_node("Sub", ["one", "X"], ["x1"]),
+                    oh.make_node("Mul", ["x1", "Y"], ["Z"]),
+                ],
+                "dummy",
+                [
+                    oh.make_tensor_value_info("X", TensorProto.FLOAT, ["a", 16]),
+                    oh.make_tensor_value_info("Y", TensorProto.FLOAT, ["a", 16]),
+                ],
+                [oh.make_tensor_value_info("Z", TensorProto.FLOAT, ["a", 16])],
+                [
+                    onh.from_array(np.array([0], dtype=np.int64), name="zero"),
+                ],
+            )
+        )
+        check_model(model)
+
+        feeds = {"X": self._range(3, 3), "Y": self._range(3, 3)}
+        ref = ExtendedReferenceEvaluator(model)
+        expected = ref.run(None, feeds)
+
+        gr = GraphBuilder(
+            model,
+            infer_shapes=True,
+            optimization_options=OptimizationOptions(patterns=["MulMulMul"]),
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+        self.assertEqual(
+            ["Mul", "Mul"],
+            [n.op_type for n in opt_onx.graph.node],
+        )
+        self.assertEqual(1, len(opt_onx.graph.initializer))
+
+        opt_ref = ExtendedReferenceEvaluator(opt_onx)
+        got = opt_ref.run(None, feeds)
+        self.assertEqualArray(expected[0], got[0], atol=1e-5)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

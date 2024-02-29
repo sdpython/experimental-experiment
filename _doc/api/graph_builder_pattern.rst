@@ -50,6 +50,12 @@ ExpandPattern
 .. autoclass:: experimental_experiment.torch_exp._optimization_onnx_patterns.ExpandPattern
     :members:
 
+MulMulMulPattern
+++++++++++++++++
+
+.. autoclass:: experimental_experiment.torch_exp._optimization_onnx_patterns.MulMulMulPattern
+    :members:
+
 ReshapeMatMulReshapePattern
 +++++++++++++++++++++++++++
 
@@ -66,6 +72,12 @@ RotaryConcatPartPattern
 +++++++++++++++++++++++
 
 .. autoclass:: experimental_experiment.torch_exp._optimization_onnx_patterns.RotaryConcatPartPattern
+    :members:
+
+Sub1MulPattern
+++++++++++++++
+
+.. autoclass:: experimental_experiment.torch_exp._optimization_onnx_patterns.Sub1MulPattern
     :members:
 
 TransposeMatMulPattern
