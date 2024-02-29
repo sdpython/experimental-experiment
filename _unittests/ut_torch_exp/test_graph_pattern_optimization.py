@@ -813,6 +813,98 @@ class TestGraphPatternOptimization(ExtTestCase):
         got = opt_ref.run(None, feeds)
         self.assertEqualArray(expected[0], got[0])
 
+    def test_mul_mul_mul(self):
+        from onnx_array_api.light_api import start
+
+        def mk(shape):
+            return np.array(shape, dtype=np.float32)
+
+        model = (
+            start(opset=18, ir_version=9)
+            .cst(mk([2]), "cst1")
+            .cst(mk([3]), "cst2")
+            .vin("X", TensorProto.FLOAT, ("a", "b"))
+            .vin("Y", TensorProto.FLOAT, ("a", "b"))
+            .bring("X", "cst1")
+            .Mul()
+            .rename("xc")
+            .bring("Y", "cst2")
+            .Mul()
+            .rename("yc")
+            .bring("xc", "yc")
+            .Mul()
+            .rename("Z")
+            .vout(TensorProto.FLOAT, ("a", "b"))
+            .to_onnx()
+        )
+        check_model(model)
+
+        feeds = {"X": self._range(3, 3), "Y": self._range(3, 3)}
+        ref = ExtendedReferenceEvaluator(model)
+        expected = ref.run(None, feeds)
+
+        gr = GraphBuilder(
+            model,
+            infer_shapes=True,
+            optimization_options=OptimizationOptions(patterns=["MulMulMul"]),
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+        self.assertEqual(
+            ["Mul", "Mul"],
+            [n.op_type for n in opt_onx.graph.node],
+        )
+        self.assertEqual(1, len(opt_onx.graph.initializer))
+
+        opt_ref = ExtendedReferenceEvaluator(opt_onx)
+        got = opt_ref.run(None, feeds)
+        self.assertEqualArray(expected[0], got[0], atol=1e-5)
+
+    def test_div_div_mul(self):
+        from onnx_array_api.light_api import start
+
+        def mk(shape):
+            return np.array(shape, dtype=np.float32)
+
+        model = (
+            start(opset=18, ir_version=9)
+            .cst(mk([2]), "cst1")
+            .cst(mk([3]), "cst2")
+            .vin("X", TensorProto.FLOAT, ("a", "b"))
+            .vin("Y", TensorProto.FLOAT, ("a", "b"))
+            .bring("X", "cst1")
+            .Div()
+            .rename("xc")
+            .bring("Y", "cst2")
+            .Div()
+            .rename("yc")
+            .bring("xc", "yc")
+            .Mul()
+            .rename("Z")
+            .vout(TensorProto.FLOAT, ("a", "b"))
+            .to_onnx()
+        )
+        check_model(model)
+
+        feeds = {"X": self._range(3, 3), "Y": self._range(3, 3)}
+        ref = ExtendedReferenceEvaluator(model)
+        expected = ref.run(None, feeds)
+
+        gr = GraphBuilder(
+            model,
+            infer_shapes=True,
+            optimization_options=OptimizationOptions(patterns=["MulMulMul"]),
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+        self.assertEqual(
+            ["Mul", "Mul"],
+            [n.op_type for n in opt_onx.graph.node],
+        )
+        self.assertEqual(1, len(opt_onx.graph.initializer))
+
+        opt_ref = ExtendedReferenceEvaluator(opt_onx)
+        got = opt_ref.run(None, feeds)
+        self.assertEqualArray(expected[0], got[0], atol=1e-5)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

@@ -3,6 +3,7 @@ from .optimization_patterns_api import PatternOptimization
 from ._optimization_onnx_patterns import (
     CastPattern,
     ExpandPattern,
+    MulMulMulPattern,
     ReshapeMatMulReshapePattern,
     ReshapeReshapePattern,
     RotaryConcatPartPattern,
@@ -27,6 +28,7 @@ def get_default_patterns() -> List[PatternOptimization]:
     return [
         CastPattern(),
         ExpandPattern(),
+        MulMulMulPattern(),
         ReshapeMatMulReshapePattern(),
         ReshapeReshapePattern(),
         RotaryConcatPartPattern(),
