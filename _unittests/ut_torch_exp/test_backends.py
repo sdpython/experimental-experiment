@@ -136,6 +136,7 @@ class TestBackend(ExtTestCase):
                             ), f"unexpected type {type(r)} for name={name!r}"
                             assert r != 0, f"unexpected value {r} for name={name!r}"
 
+    @skipif_ci_windows("no torch dynamo")
     def test_transforms_debug(self):
         from experimental_experiment.torch_dynamo import onnx_debug_backend
 
@@ -175,6 +176,8 @@ class TestBackend(ExtTestCase):
         self.assertEqualArray(expected, got, atol=1e-5)
         self.assertNotEmpty(stored)
 
+    @skipif_ci_apple("no onnxruntime-training")
+    @skipif_ci_windows("no torch dynamo")
     def test_transforms_custom(self):
         from experimental_experiment.torch_dynamo import onnx_custom_backend
 
