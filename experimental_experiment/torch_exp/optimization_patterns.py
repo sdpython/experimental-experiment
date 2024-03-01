@@ -103,8 +103,9 @@ def get_pattern_list(
     .. runpython::
         :showcode:
 
+        import pprint
         from experimental_experiment.torch_exp.optimization_patterns import get_pattern_list
-        print(get_pattern_list("default", ["Cast"]))
+        pprint(get_pattern_list("default", ["Cast"]))
     """
     if positive_list is None:
         return []
