@@ -1751,7 +1751,12 @@ class GraphBuilder:
         rows.append("")
         return "\n".join(rows)
 
-    def optimize(self):
+    def optimize(self) -> List[Dict[str, Any]]:
+        """
+        Optimizes a graph.
+        Returns the list of applied processed.
+        """
+
         def _check(step):
             assert (
                 len(self.nodes) > 0
@@ -1767,29 +1772,44 @@ class GraphBuilder:
             for o in self.outputs:
                 assert o.name in known, f"Unknown output {o.name!r}, step {step!r} "
 
+        statistics = []
+
         _check("A")
         if self.optimization_options.remove_identity:
-            self.remove_identity_nodes()
+            n = self.remove_identity_nodes()
             _check("B")
+            if n:
+                statistics.append(dict(pattern="remove_identity_nodes", removed=n))
         if self.optimization_options.remove_unused:
-            self.remove_unused()
+            n = self.remove_unused()
             _check("C")
+            if n:
+                statistics.append(dict(pattern="remove_unused", removed=n))
         if self.optimization_options.constant_folding:
-            self.constant_folding()
+            n = self.constant_folding()
             _check("D")
+            if n:
+                statistics.append(dict(pattern="constant_folding", removed=n))
             if self.optimization_options.remove_unused:
-                self.remove_unused()
+                n = self.remove_unused()
                 _check("E")
+                if n:
+                    statistics.append(dict(pattern="remove_unused", removed=n))
         if self.optimization_options.patterns:
             assert (
                 self.optimization_options.remove_unused
             ), "remove_unused must be positive for pattern optimizations"
-            self.optimize_with_patterns()
+            res = self.optimize_with_patterns()
             _check("F")
-            self.remove_unused()
+            statistics.extend(res)
+            n = self.remove_unused()
             _check("G")
+            if n:
+                statistics.append(dict(pattern="remove_unused", removed=n))
 
-    def optimize_with_patterns(self):
+        return statistics
+
+    def optimize_with_patterns(self) -> List[Dict[str, Any]]:
         """
         Optimizes this graph with patterns.
         """
@@ -1799,17 +1819,19 @@ class GraphBuilder:
             patterns=self.optimization_options.patterns,
             recursive=self.optimization_options.recursive,
         )
-        gro.optimize(
+        return gro.optimize(
             max_iter=self.optimization_options.max_iter,
             remove_identity=self.optimization_options.remove_identity,
         )
 
-    def remove_unused(self):
+    def remove_unused(self) -> int:
         """
         Simple function to remove unused nodes.
         It does not look into subgraphs and assumes there is none.
         Everything is done in one pass.
+        Returns the number of removed nodes.
         """
+        start = len(self.nodes)
         # mark outputs
         marked = {o.name: set() for o in self.outputs}
         for node in reversed(self.nodes):
@@ -1854,6 +1876,7 @@ class GraphBuilder:
                 )
 
         self.nodes = [node for i, node in enumerate(self.nodes) if i not in removed]
+        return start - len(self.nodes)
 
     def _apply_transpose(
         self, node: NodeProto, feeds: Dict[str, "torch.Tensor"]  # noqa: F821
@@ -1892,14 +1915,16 @@ class GraphBuilder:
             self.constants_computed_[name] = val
         return output, feeds
 
-    def constant_folding(self, convert_into_initializer: bool = True):
+    def constant_folding(self, convert_into_initializer: bool = True) -> int:
         """
         Folds all constants. Constants are marked during the creation of the graph.
         There is no need to propagate this information.
 
         :param convert_into_initializer: moves the constant as an initializer,
             otherwise, just evaluates it
+        :return: number of removed nodes
         """
+        start = len(self.nodes)
         updates = {}
         node_to_remove = set()
         for k, v in self.constants_.items():
@@ -1932,12 +1957,14 @@ class GraphBuilder:
                 continue
             new_nodes.append(node)
         self.nodes = new_nodes
+        return start - len(self.nodes)
 
-    def remove_identity_nodes(self):
+    def remove_identity_nodes(self) -> int:
         """
-        Removes identity nodes.
+        Removes identity nodes. Returns the number of removed nodes.
         """
         # first pass: detect replacements
+        start = len(self.nodes)
         new_nodes = []
         input_names = set(i.name for i in self.inputs)
         output_names = set(i.name for i in self.outputs)
@@ -2031,6 +2058,8 @@ class GraphBuilder:
                 self.nodes.append(new_node)
             else:
                 self.nodes.append(node)
+
+        return start - len(self.nodes)
 
     def insert_and_remove_nodes(
         self,

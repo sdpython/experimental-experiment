@@ -976,6 +976,51 @@ class TestGraphPatternOptimization(ExtTestCase):
         new_node_list = [(n.op_type, tuple(n.output)) for n in onx.graph.node]
         self.assertNotEqual(node_list, new_node_list)
 
+    def test_statistics(self):
+        from onnx_array_api.light_api import start
+
+        def mk(shape):
+            return np.array(shape, dtype=np.float32)
+
+        model = (
+            start(opset=18, ir_version=9)
+            .cst(mk([2]), "cst1")
+            .cst(mk([3]), "cst2")
+            .vin("X", TensorProto.FLOAT, ("a", "b"))
+            .vin("Y", TensorProto.FLOAT, ("a", "b"))
+            .bring("X", "cst1")
+            .Div()
+            .rename("xc")
+            .bring("Y", "cst2")
+            .Div()
+            .rename("yc")
+            .bring("xc", "yc")
+            .Mul()
+            .rename("Z")
+            .vout(TensorProto.FLOAT, ("a", "b"))
+            .to_onnx()
+        )
+        check_model(model)
+
+        gr = GraphBuilder(
+            model,
+            infer_shapes=True,
+            optimization_options=OptimizationOptions(patterns=["MulMulMul"]),
+        )
+        stats = gr.optimize()
+        self.assertEqual(
+            stats,
+            [
+                {
+                    "pattern": "MulMulMulPattern",
+                    "added": 2,
+                    "removed": 3,
+                    "iteration": 0,
+                    "match_index": 0,
+                }
+            ],
+        )
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
