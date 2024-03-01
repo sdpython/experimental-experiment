@@ -3,7 +3,7 @@ from .patterns_api import MatchResult, PatternOptimization
 
 # onnx patterns
 from .onnx_cast import CastPattern
-from .onnx_expand import ExpandPattern
+from .onnx_expand import ExpandPattern, ExpandBroadcastPattern
 from .onnx_mul import MulMulMulPattern
 from .onnx_matmul import ReshapeMatMulReshapePattern, TransposeMatMulPattern
 from .onnx_reshape import ReshapeReshapePattern

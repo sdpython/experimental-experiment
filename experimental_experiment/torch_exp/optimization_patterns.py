@@ -3,6 +3,7 @@ from .patterns import (
     PatternOptimization,
     CastPattern,
     ExpandPattern,
+    ExpandBroadcastPattern,
     MulMulMulPattern,
     ReshapeMatMulReshapePattern,
     ReshapeReshapePattern,
@@ -29,6 +30,7 @@ def get_default_patterns() -> List[PatternOptimization]:
     return [
         CastPattern(),
         ExpandPattern(),
+        ExpandBroadcastPattern(),
         MulMulMulPattern(),
         ReshapeMatMulReshapePattern(),
         ReshapeReshapePattern(),

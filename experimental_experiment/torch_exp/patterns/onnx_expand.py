@@ -71,8 +71,13 @@ class ExpandBroadcastPattern(PatternOptimization):
             # More than one output, not handled right now.
             return None
 
-        next_op = g.next_node(node.output[0])
-        if node.op_type not in {
+        next_nodes = g.next_nodes(node.output[0])
+        assert (
+            len(next_nodes) == 1
+        ), "The previous test should have cleared out this case."
+        next_node = next_nodes[0]
+
+        if next_node.op_type not in {
             "Add",
             "Div",
             "Mul",
@@ -90,17 +95,18 @@ class ExpandBroadcastPattern(PatternOptimization):
             # Not an element wise operator.
             return None
 
-        if next_op.input[0] == node.output[0]:
-            other = g.get_shape(next_op.input[1])
+        if next_node.input[0] == node.output[0]:
+            other = next_node.input[1]
         else:
-            other = g.get_shape(next_op.input[0])
+            other = next_node.input[0]
 
         if not g.has_shape(other):
             return None
 
         other_shape = g.get_shape(other)
-        if new_shpae != other_shape:
+        if new_shape != other_shape:
             # Expand does not expand to the shape of the other element.
+            print("j6")
             return None
         if len(shape) != len(other_shape):
             # Different ranks.
@@ -109,11 +115,9 @@ class ExpandBroadcastPattern(PatternOptimization):
             if not (a == b or a == 1 or b == 1):
                 return None
 
-        nodes = [node, next_node]
-
         def apply(
-            g: "GraphBuilder", node: NodeProto, next_node: NodeProto
-        ) -> List[NodeProto]:  # noqa: F821
+            g: "GraphBuilder", node: NodeProto, next_node: NodeProto  # noqa: F821
+        ) -> List[NodeProto]:
             if next_node.input[0] == node.output[0]:
                 inputs = [node.input[0], next_node.input[1]]
             else:
@@ -128,4 +132,4 @@ class ExpandBroadcastPattern(PatternOptimization):
                 )
             ]
 
-        return MatchResult(self, nodes, apply, insert_at=next_node)
+        return MatchResult(self, [node, next_node], apply, insert_at=next_node)
