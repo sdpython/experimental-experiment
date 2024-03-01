@@ -77,21 +77,25 @@ class ExpandBroadcastPattern(PatternOptimization):
         ), "The previous test should have cleared out this case."
         next_node = next_nodes[0]
 
-        if next_node.op_type not in {
-            "Add",
-            "Div",
-            "Mul",
-            "Sub",
-            "And",
-            "Or",
-            "Mod",
-            "Equal",
-            "Greater",
-            "GreaterOrEqual",
-            "Less",
-            "LessOrEqual",
-            "Xor",
-        }:
+        if (
+            next_node.op_type
+            not in {
+                "Add",
+                "Div",
+                "Mul",
+                "Sub",
+                "And",
+                "Or",
+                "Mod",
+                "Equal",
+                "Greater",
+                "GreaterOrEqual",
+                "Less",
+                "LessOrEqual",
+                "Xor",
+            }
+            and next_node.domain != ""
+        ):
             # Not an element wise operator.
             return None
 
@@ -106,7 +110,6 @@ class ExpandBroadcastPattern(PatternOptimization):
         other_shape = g.get_shape(other)
         if new_shape != other_shape:
             # Expand does not expand to the shape of the other element.
-            print("j6")
             return None
         if len(shape) != len(other_shape):
             # Different ranks.

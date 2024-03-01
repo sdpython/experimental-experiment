@@ -191,14 +191,14 @@ plot_dot(storage["instance"][0]["onnx"])
 
 
 ################################
-# The brackward graph.
+# The backward graph.
 
 plot_dot(storage["instance"][1]["onnx"])
 
 
 ################################
-# What about dynamic shape?
-# =========================
+# What about dynamic shapes?
+# ==========================
 #
 # Any input or output having `_dim_` in its name is a dynamic dimension.
 # Any output having `_NONE_` in its name is replace by None.
@@ -223,7 +223,7 @@ plot_dot(storage["instance"][0]["onnx"])
 
 
 ################################
-# The brackward graph.
+# The backward graph.
 
 plot_dot(storage["instance"][1]["onnx"])
 
