@@ -588,6 +588,8 @@ class Sub1MulPattern(PatternOptimization):
                 )
                 keep_node = node_left
 
+            if keep_node is None:
+                return [mul_node, sub_node]
             return [keep_node, mul_node, sub_node]
 
         return MatchResult(self, nodes, apply)
