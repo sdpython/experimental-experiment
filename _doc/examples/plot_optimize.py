@@ -81,3 +81,9 @@ print(onnx_simple_text_plot(optimized_proto))
 # And visually.
 
 plot_dot(optimized_proto)
+
+#################################
+# The first list of patterns optimizes the graph with only
+# standard onnx operators: :ref:`l-pattern-optimization-onnx`.
+# The second list is specific to :pekg:`onnxruntime`:
+# :ref:`l-pattern-optimization-ort`.
