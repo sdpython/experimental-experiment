@@ -1,6 +1,6 @@
 from typing import List, Optional, Union
-from .optimization_patterns_api import PatternOptimization
-from ._optimization_onnx_patterns import (
+from .patterns import (
+    PatternOptimization,
     CastPattern,
     ExpandPattern,
     MulMulMulPattern,
@@ -52,7 +52,7 @@ def get_onnxruntime_patterns() -> List[PatternOptimization]:
         from experimental_experiment.torch_exp.optimization_patterns import get_onnxruntime_patterns
         pprint.pprint(get_onnxruntime_patterns())
     """
-    from ._optimization_ort_patterns import ConstantOfShapeScatterNDPattern
+    from .patterns import ConstantOfShapeScatterNDPattern
 
     return [
         ConstantOfShapeScatterNDPattern(),

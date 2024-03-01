@@ -201,3 +201,13 @@ for i, inst in enumerate(storage["instance"]):
     print(f"-- model {i} running on {inst['providers']}")
     print()
     print(onnx_simple_text_plot(inst["onnx"]))
+
+################################
+# Pattern Optimizations
+# =====================
+#
+# By default, once exported into onnx, a model is optimized by
+# looking for patterns. Each of them locally replaces a couple of
+# nodes to optimize the computation
+# (see :ref:`<l-pattern-optimization-onnx>` and
+# # :ref:`<l-pattern-optimization-ort>`).

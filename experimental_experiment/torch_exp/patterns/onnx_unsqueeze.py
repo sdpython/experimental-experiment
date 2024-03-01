@@ -1,8 +1,8 @@
 from typing import List, Optional, Tuple
 import numpy as np
 from onnx import NodeProto
-from .annotations import all_int, compatible_shapes, compatible_dimensions
-from .optimization_patterns_api import MatchResult, PatternOptimization
+from ..annotations import all_int, compatible_shapes, compatible_dimensions
+from .patterns_api import MatchResult, PatternOptimization
 
 
 class CastPattern(PatternOptimization):
