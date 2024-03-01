@@ -23,7 +23,7 @@ from experimental_experiment.torch_exp.graph_builder import (
 
 filename = (
     os.path.join(os.path.dirname(__file__), "data", "dort-c-custom__1.onnx")
-    if __file__
+    if "__file__" in globals()
     else "data/dort-c-custom__1.onnx"
 )
 proto = onnx.load(filename)
