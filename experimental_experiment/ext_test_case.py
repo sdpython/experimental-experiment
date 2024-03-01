@@ -126,7 +126,7 @@ def measure_time(
         from experimental_experiment.ext_test_case import measure_time
 
         res = measure_time(lambda: cos(0.5))
-        pprint(res)
+        pprint.pprint(res)
 
     See `Timer.repeat <https://docs.python.org/3/library/
     timeit.html?timeit.Timer.repeat>`_
