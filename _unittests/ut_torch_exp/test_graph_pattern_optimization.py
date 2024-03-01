@@ -963,6 +963,19 @@ class TestGraphPatternOptimization(ExtTestCase):
     def test_sub1_mul_right(self):
         self.common_sub1_mul("right")
 
+    def test_sub1_mul_data(self):
+        origin = self._get_model("basic_static_1.onnx")
+        check_model(origin)
+        node_list = [(n.op_type, tuple(n.output)) for n in origin.graph.node]
+        gr = GraphBuilder(
+            origin,
+            optimization_options=OptimizationOptions(patterns=["Sub1Mul"]),
+        )
+        onx = gr.to_onnx(optimize=True)
+        check_model(onx)
+        new_node_list = [(n.op_type, tuple(n.output)) for n in onx.graph.node]
+        self.assertNotEqual(node_list, new_node_list)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

@@ -570,6 +570,7 @@ class Sub1MulPattern(PatternOptimization):
                     name=f"{self.__class__.__name__}--{node.name}",
                     doc_string=node.doc_string,
                 )
+                keep_node = node_right
             else:
                 # rewrite `Y x (1 - X)` into `Y - (Y - X)`
                 mul_node = g.make_node(
@@ -585,8 +586,9 @@ class Sub1MulPattern(PatternOptimization):
                     name=f"{self.__class__.__name__}--{node.name}",
                     doc_string=node.doc_string,
                 )
+                keep_node = node_left
 
-            return [mul_node, sub_node]
+            return [keep_node, mul_node, sub_node]
 
         return MatchResult(self, nodes, apply)
 
