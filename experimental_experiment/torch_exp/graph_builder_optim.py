@@ -1,5 +1,5 @@
 import pprint
-from typing import Any, Iterator, List, Optional, Union
+from typing import Any, Dict, Iterator, List, Optional, Union
 from onnx import AttributeProto, NodeProto
 import onnx.helper as oh
 from ._onnx_helper import enumerate_subgraphs
@@ -323,13 +323,16 @@ class GraphBuilderPatternOptimization:
         self.builder.insert_and_remove_nodes(insert_at, new_nodes, removed)
         return new_nodes
 
-    def optimize(self, max_iter=-1, remove_identity: bool = True):
+    def optimize(
+        self, max_iter=-1, remove_identity: bool = True
+    ) -> List[Dict[str, Any]]:
         """
         Optimizes the based on the given list of patterns.
 
         :param max_iter: maximum number of iterations
         :param remove_identity: remove identity nodes, it is better to keep it True,
             not doing it might prevent other patterns to find a set of nodes to optimize
+        :return: the method returns informations about the applied processes.
         """
 
         def _check(step):
@@ -357,6 +360,9 @@ class GraphBuilderPatternOptimization:
                 f"[GraphBuilderPatternOptimization.optimize] start with "
                 f"{len(self.builder.nodes)} nodes and {len(self.patterns)} patterns"
             )
+
+        statistics = []
+
         last_it = 0
         for it in range(max_iter):
             if self.verbose > 0:
@@ -387,7 +393,7 @@ class GraphBuilderPatternOptimization:
                         print(
                             f"[GraphBuilderPatternOptimization.optimize] match={match}"
                         )
-                    matches.append(match)
+                    matches.append((pattern, match))
             if self.verbose > 1:
                 print(
                     f"[GraphBuilderPatternOptimization.optimize] applies {len(matches)} matches"
@@ -397,7 +403,7 @@ class GraphBuilderPatternOptimization:
 
             n_added = 0
             n_removed = 0
-            for match in matches:
+            for im, (pattern, match) in enumerate(matches):
                 if self.verbose > 2:
                     print(
                         f"[GraphBuilderPatternOptimization.optimize] "
@@ -439,6 +445,15 @@ class GraphBuilderPatternOptimization:
                             f"[GraphBuilderPatternOptimization.optimize] removed outputs {full_removed}"
                         )
 
+                obs = dict(
+                    pattern=str(pattern),
+                    added=add,
+                    removed=rem,
+                    iteration=it,
+                    match_index=im,
+                )
+                statistics.append(obs)
+
                 n_added += add
                 n_removed += rem
             if self.verbose > 1:
@@ -448,7 +463,15 @@ class GraphBuilderPatternOptimization:
 
             # remove unncessary identity nodes
 
-            self.builder.remove_identity_nodes()
+            id_removed = self.builder.remove_identity_nodes()
+            if id_removed:
+                statistics.append(
+                    dict(
+                        pattern="remove_identity_nodes",
+                        iteration=it,
+                        removed=id_removed,
+                    )
+                )
             _check("remove_identity")
 
             # rebuild the graph structure
@@ -466,3 +489,5 @@ class GraphBuilderPatternOptimization:
                 f"[GraphBuilderPatternOptimization.optimize] done after {last_it} iterations with "
                 f"{len(self.builder.nodes)} nodes"
             )
+
+        return statistics

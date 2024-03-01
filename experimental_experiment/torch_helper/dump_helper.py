@@ -54,7 +54,7 @@ def assert_all_close(
     :param atol: absolute error or (absolute error, quantile), if quantile is specified,
         the function checks the error is < atol for quantile %
     :param rtol: relative error
-    :param msg! more complex message
+    :param msg: more complex message
 
     See :ref:`l-plot-onnxrt-diff` for an example.
     """

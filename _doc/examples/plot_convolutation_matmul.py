@@ -210,7 +210,7 @@ fold
 
 
 model = (
-    start()
+    start(ir_version=9, opset=18)
     .vin("X", shape=[1, 1, None, None])
     .cst(kernel[np.newaxis, np.newaxis, ...])
     .rename("W")
@@ -261,7 +261,7 @@ res
 
 
 model = (
-    start()
+    start(ir_version=9, opset=18)
     .vin("X", shape=[1, 1, None, None])
     .cst(kernel[np.newaxis, np.newaxis, ...])
     .rename("W")
