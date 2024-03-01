@@ -83,7 +83,7 @@ class TestDocumentationExamples(ExtTestCase):
                     # dynamo not supported on windows
                     reason = "windows not supported"
 
-            if name in {"plot_llama_bench.py", "torch_custom_backend.py"}:
+            if name in {"plot_llama_bench.py", "plot_torch_custom_backend.py"}:
                 if sys.platform in {"win32"}:
                     # dynamo not supported on windows
                     reason = "windows not supported, onnxruntime-training not available"
