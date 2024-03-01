@@ -94,7 +94,7 @@ class ExpandBroadcastPattern(PatternOptimization):
                 "LessOrEqual",
                 "Xor",
             }
-            and next_node.domain != ""
+            or next_node.domain != ""
         ):
             # Not an element wise operator.
             return None
