@@ -35,8 +35,8 @@ parsed_args = get_parsed_args(
     backend=("eager,inductor,ort,custom", "backend to test"),
     device=("cuda" if check_cuda_availability() else "cpu", "device to test"),
     num_hidden_layers=("2", "hidden layers to test"),
-    mixed=("0,1", "boolean value to test (mixed precision or not)"),
-    dynamic=("0,1", "boolean value to test dynamic shapes or not"),
+    mixed=("0", "boolean value to test (mixed precision or not)"),
+    dynamic=("0", "boolean value to test dynamic shapes or not"),
     script_name=("experimental_experiment.torch_bench.dort_bench", "script to run"),
     dump=(0, "dump the models with env ONNXRT_DUMP_PATH"),
     check=(0, "just check the script is working, ignores all other parameters"),
@@ -198,7 +198,7 @@ if data_collected:
             val.append("mixed")
         if row["dynamic"]:
             val.append("dyn")
-        if row["patterns"] and "nan" not in str(row["patterns"]):
+        if "patterns" in row and row["patterns"] and "nan" not in str(row["patterns"]):
             val.append(f"({row['patterns']})")
         s = "-".join(map(str, val))
         assert "nan" not in s, f"Legend {s!r} is wrong, row={row}"

@@ -53,6 +53,9 @@ def onnx_debug_backend(
     raise_list: Optional[Set[str]] = None,
     enable_pattern: Optional[Union[str, List[Union[str, type]]]] = "default",
     disable_pattern: Optional[Union[str, List[Union[str, type]]]] = None,
+    pre_ort_model_transforms: Optional[
+        Union[Callable[ModelProto, ModelProto], List[Callable[ModelProto, ModelProto]]]
+    ] = None,
 ) -> Callable:
     """
     Custom backend to export torch models into onnx
@@ -77,6 +80,7 @@ def onnx_debug_backend(
         this is a debbuging tool
     :param enable_pattern: optimization patterns to enable
     :param disable_pattern: optimization patterns to disable
+    :param pre_ort_model_transforms: list of transformations applied on the final ModelProto
     :return: Callable
 
     See :ref:`l-plot-onnxrt-diff` for an example.
@@ -109,6 +113,12 @@ def onnx_debug_backend(
         return_builder=True,
         raise_list=raise_list,
     )
+
+    if pre_ort_model_transforms is not None:
+        if not isinstance(pre_ort_model_transforms, list):
+            pre_ort_model_transforms = [pre_ort_model_transforms]
+        for tr in pre_ort_model_transforms:
+            onx = tr(onx)
 
     if dump_prefix:
         counter = 0

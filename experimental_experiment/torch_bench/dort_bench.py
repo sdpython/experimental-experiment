@@ -132,7 +132,6 @@ elif args.backend == "eager":
     compiled_model = model
 
 elif args.backend == "custom":
-    get_decomposition_table
     target_opset = args.target_opset
     aot_compiler = aot_autograd(
         fw_compiler=lambda *args, **kwargs: onnx_custom_backend(

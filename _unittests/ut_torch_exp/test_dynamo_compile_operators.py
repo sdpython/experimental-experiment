@@ -128,6 +128,7 @@ class TestOperators(ExtTestCase):
         use_decomposition=False,
         verbose=0,
         raise_list=None,
+        save_onnx=False,
     ):
         if sys.platform == "win32":
             raise unittest.SkipTest("Windows not supported yet.")
@@ -244,6 +245,11 @@ class TestOperators(ExtTestCase):
                 baseline_result, result, atol=atol, rtol=rtol, msg="FORWARD"
             )
 
+        if save_onnx:
+            for i, inst in enumerate(storage["instance"]):
+                with open(f"{onnx_export}_{i}.onnx", "wb") as f:
+                    f.write(inst["onnx"].SerializeToString())
+
     @ignore_warnings(UserWarning)
     def test_aaa(self):
         x = torch.rand(3, 4, requires_grad=True)
@@ -254,7 +260,7 @@ class TestOperators(ExtTestCase):
             verbose=6,
         )
 
-    def test_basic(self):
+    def test_basic_static(self):
         x = torch.tensor([0.4], requires_grad=True)
         y = torch.tensor([0.7], requires_grad=True)
         self.assertONNX(
@@ -262,6 +268,8 @@ class TestOperators(ExtTestCase):
             (x, y),
             onnx_export=inspect.currentframe().f_code.co_name,
             dynamic_axes=(False, True),
+            impl="ref",
+            save_onnx=False,
         )
 
     def test_basic_dynamic(self):
