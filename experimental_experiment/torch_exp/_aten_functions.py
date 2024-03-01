@@ -1831,8 +1831,16 @@ def aten_pow_Tensor_Tensor(
     return res
 
 
-def aten_relu(g: GraphBuilder, sts: bool, outputs: List[str], x: T) -> T:
-    return g.op.Relu(x, outputs=outputs)
+def aten_relu(
+    g: GraphBuilder, sts: bool, outputs: List[str], x: T, inplace: bool = False
+) -> T:
+    assert (
+        not inplace
+    ), f"inplace computation is not allowed with onnx{g.get_debug_msg()}"
+    res = g.op.Relu(x, outputs=outputs)
+    if sts:
+        set_type_shape_unary_op(g, outputs[0], x)
+    return res
 
 
 def aten_repeat(
