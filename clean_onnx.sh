@@ -12,3 +12,4 @@ rm _doc/examples/ort*.onnx
 rm _doc/examples/*.json
 rm _doc/examples/*.png
 rm _doc/examples/*.csv
+rm _doc/examples/*.xlsx
