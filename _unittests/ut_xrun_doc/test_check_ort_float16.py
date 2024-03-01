@@ -205,11 +205,19 @@ class TestCheckOrtFloat16(ExtTestCase):
             "ScatterElements",
             "Sub",
         ]
+        default_value_16 = [
+            "Cast",
+            "Cast",
+            "ScatterElements",
+            "Cast",
+            "Sub",
+            "Cast",
+        ]
         expected = {
             (np.float32, "none"): default_value,
-            (np.float16, "none"): default_value,
+            (np.float16, "none"): default_value_16,
             (np.float32, "add"): default_value,
-            (np.float16, "add"): default_value,
+            (np.float16, "add"): default_value_16,
         }
         for opset, dtype, reduction in itertools.product(
             [16, 18], [np.float32, np.float16], ["none", "add"]
@@ -227,14 +235,22 @@ class TestCheckOrtFloat16(ExtTestCase):
     def test_scatternd_cpu(self):
         default_value = [
             "Cast",
-            "ScatterElements",
+            "ScatterND",
             "Sub",
+        ]
+        default_value_16 = [
+            "Cast",
+            "Cast",
+            "ScatterND",
+            "Cast",
+            "Sub",
+            "Cast",
         ]
         expected = {
             (np.float32, "none"): default_value,
-            (np.float16, "none"): default_value,
+            (np.float16, "none"): default_value_16,
             (np.float32, "add"): default_value,
-            (np.float16, "add"): default_value,
+            (np.float16, "add"): default_value_16,
         }
         for opset, dtype, reduction in itertools.product(
             [16, 18], [np.float32, np.float16], ["none", "add"]
