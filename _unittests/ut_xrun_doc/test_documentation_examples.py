@@ -88,7 +88,10 @@ class TestDocumentationExamples(ExtTestCase):
                     # dynamo not supported on windows
                     reason = "onnxruntime-training not available"
 
-            if not reason and name in {"plot_convolutation_matmul.py"}:
+            if not reason and name in {
+                "plot_convolutation_matmul.py",
+                "plot_optimize.py",
+            }:
                 if sys.platform in {"win32"}:
                     # dynamo not supported on windows
                     reason = "graphviz not installed"

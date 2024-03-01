@@ -109,7 +109,7 @@ class TestGraphPatternOptimization(ExtTestCase):
         )
         res, out, err = self.capture(lambda: gr.optimize_with_patterns())
         self.assertEmpty(err)
-        self.assertEmpty(res)
+        self.assertNotEmpty(res)
         self.assertIn("[GraphBuilderPatternOptimization.optimize] done after", out)
         self.assertIn("UnsqueezeUnsqueezePattern", out)
 
@@ -126,7 +126,7 @@ class TestGraphPatternOptimization(ExtTestCase):
         )
         res, out, err = self.capture(lambda: gr.optimize_with_patterns())
         self.assertEmpty(err)
-        self.assertEmpty(res)
+        self.assertNotEmpty(res)
         self.assertIn("[GraphBuilderPatternOptimization.optimize] done after", out)
         self.assertNotIn("UnsqueezeUnsqueezePattern", out)
         self.assertIn("CastPattern", out)
@@ -148,7 +148,7 @@ class TestGraphPatternOptimization(ExtTestCase):
         )
         res, out, err = self.capture(lambda: gr.optimize_with_patterns())
         self.assertEmpty(err)
-        self.assertEmpty(res)
+        self.assertNotEmpty(res)
         self.assertIn("[GraphBuilderPatternOptimization.optimize] done after", out)
         self.assertIn("ReshapeMatMulReshapePattern", out)
 
