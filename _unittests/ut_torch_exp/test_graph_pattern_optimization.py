@@ -1021,6 +1021,23 @@ class TestGraphPatternOptimization(ExtTestCase):
             ],
         )
 
+    def test_sub2_mul_data(self):
+        origin = self._get_model("dort-cus-custom__1_sub.onnx")
+        node_list = [(n.op_type, tuple(n.output)) for n in origin.graph.node]
+        gr = GraphBuilder(
+            origin,
+            optimization_options=OptimizationOptions(patterns=["Sub1Mul"]),
+        )
+        stat = gr.optimize()
+        self.assertEqual(len(stat), 3)
+        onx = gr.to_onnx(optimize=False)
+        csts = [i for i in onx.graph.node if "Constant" in i.op_type]
+        cst_output = set(i.output[0] for i in csts)
+        self.assertNotIn("fill", cst_output)
+        self.assertNotIn("fill_1", cst_output)
+        new_node_list = [(n.op_type, tuple(n.output)) for n in onx.graph.node]
+        self.assertNotEqual(node_list, new_node_list)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

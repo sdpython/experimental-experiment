@@ -17,16 +17,18 @@ class Sub1MulPattern(PatternOptimization):
     ) -> Optional[MatchResult]:
         if node.op_type != "Mul" or node.domain != "":
             return None
-        if g.is_used_more_than_once(node.input[0]) or g.is_used_more_than_once(
-            node.input[1]
-        ):
-            return None
+
         node_left = g.node_before(node.input[0])
         node_right = g.node_before(node.input[1])
         op_left = None if node_left is None else node_left.op_type
         op_right = None if node_right is None else node_right.op_type
         if op_left != "Sub" and op_right != "Sub":
             return None
+        if (op_left == "Sub" and g.is_used_more_than_once(node.input[0])) or (
+            op_right == "Sub" and g.is_used_more_than_once(node.input[1])
+        ):
+            return None
+
         cst_left, cst_right = None, None
         if op_left == "Sub" and g.is_constant(node_left.input[0]):
             cst = g.get_computed_constant(node_left.input[0])
@@ -39,7 +41,6 @@ class Sub1MulPattern(PatternOptimization):
                 cst_right = cst
 
         if cst_left is None and cst_right is None:
-            print(g.builder._known_shapes)
             return None
 
         nodes = [node, node_left, node_right]
