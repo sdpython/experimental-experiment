@@ -240,6 +240,11 @@ class ExtTestCase(unittest.TestCase):
     ):
         self.assertEqual(expected.dtype, value.dtype)
         self.assertEqual(expected.shape, value.shape)
+        if hasattr(expected, "detach"):
+            expected = expected.detach().cpu().numpy()
+        if hasattr(value, "detach"):
+            value = value.detach().cpu().numpy()
+
         try:
             assert_allclose(expected, value, atol=atol, rtol=rtol)
         except AssertionError as e:

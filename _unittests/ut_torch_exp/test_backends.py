@@ -1,3 +1,4 @@
+import copy
 import os
 import unittest
 import onnx.helper as oh
@@ -134,6 +135,84 @@ class TestBackend(ExtTestCase):
                                 r, int
                             ), f"unexpected type {type(r)} for name={name!r}"
                             assert r != 0, f"unexpected value {r} for name={name!r}"
+
+    def test_transforms_debug(self):
+        from experimental_experiment.torch_dynamo import onnx_debug_backend
+
+        stored = []
+
+        def store_model(m):
+            stored.append(m)
+            return m
+
+        class MLP(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.layers = torch.nn.Sequential(
+                    torch.nn.Linear(10, 32),
+                    torch.nn.Sigmoid(),
+                    torch.nn.Linear(32, 1),
+                )
+
+            def forward(self, x):
+                return self.layers(x)
+
+        x = torch.randn(3, 10, dtype=torch.float32)
+
+        mlp = MLP()
+        expected = mlp(x)
+
+        compiled_model = torch.compile(
+            copy.deepcopy(mlp),
+            backend=lambda *args, **kwargs: onnx_debug_backend(
+                *args, target_opset=18, pre_ort_model_transforms=store_model, **kwargs
+            ),
+            dynamic=False,
+            fullgraph=True,
+        )
+
+        got = compiled_model(x)
+        self.assertEqualArray(expected, got, atol=1e-5)
+        self.assertNotEmpty(stored)
+
+    def test_transforms_custom(self):
+        from experimental_experiment.torch_dynamo import onnx_custom_backend
+
+        stored = []
+
+        def store_model(m):
+            stored.append(m)
+            return m
+
+        class MLP(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.layers = torch.nn.Sequential(
+                    torch.nn.Linear(10, 32),
+                    torch.nn.Sigmoid(),
+                    torch.nn.Linear(32, 1),
+                )
+
+            def forward(self, x):
+                return self.layers(x)
+
+        x = torch.randn(3, 10, dtype=torch.float32)
+
+        mlp = MLP()
+        expected = mlp(x)
+
+        compiled_model = torch.compile(
+            copy.deepcopy(mlp),
+            backend=lambda *args, **kwargs: onnx_custom_backend(
+                *args, target_opset=18, pre_ort_model_transforms=store_model, **kwargs
+            ),
+            dynamic=False,
+            fullgraph=True,
+        )
+
+        got = compiled_model(x)
+        self.assertEqualArray(expected, got, atol=1e-5)
+        self.assertNotEmpty(stored)
 
 
 if __name__ == "__main__":

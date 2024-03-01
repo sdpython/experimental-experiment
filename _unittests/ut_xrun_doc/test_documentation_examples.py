@@ -84,9 +84,9 @@ class TestDocumentationExamples(ExtTestCase):
                     reason = "windows not supported"
 
             if name in {"plot_llama_bench.py", "plot_torch_custom_backend.py"}:
-                if sys.platform in {"win32"}:
+                if sys.platform in {"win32", "darwin"}:
                     # dynamo not supported on windows
-                    reason = "windows not supported, onnxruntime-training not available"
+                    reason = "onnxruntime-training not available"
 
             if not reason and name in {"plot_convolutation_matmul.py"}:
                 if sys.platform in {"win32"}:

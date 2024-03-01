@@ -385,6 +385,9 @@ def onnx_custom_backend(
     storage: Optional[Dict[str, Any]] = None,
     enable_pattern: Optional[Union[str, List[Union[str, type]]]] = "default",
     disable_pattern: Optional[Union[str, List[Union[str, type]]]] = None,
+    pre_ort_model_transforms: Optional[
+        Union[Callable[ModelProto, ModelProto], List[Callable[ModelProto, ModelProto]]]
+    ] = None,
 ) -> Callable:
     """
     Custom backend to export torch models into onnx
@@ -404,6 +407,7 @@ def onnx_custom_backend(
     :param storage: to store any interesting objects during the process
     :param enable_pattern: optimization patterns to enable
     :param disable_pattern: optimization patterns to disable
+    :param pre_ort_model_transforms: list of transformations applied on the final ModelProto
     :return: Callable
 
     See :ref:`l-plot-onnxrt-diff` or :ref:`l-plot-custom-backend` for examples.
@@ -450,6 +454,12 @@ def onnx_custom_backend(
         target_opset=target_opset,
         return_builder=True,
     )
+
+    if pre_ort_model_transforms is not None:
+        if not isinstance(pre_ort_model_transforms, list):
+            pre_ort_model_transforms = [pre_ort_model_transforms]
+        for tr in pre_ort_model_transforms:
+            onx = tr(onx)
 
     value = os.environ.get("ONNXRT_DUMP_PATH", None)
     if value:
