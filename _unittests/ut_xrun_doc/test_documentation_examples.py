@@ -92,7 +92,7 @@ class TestDocumentationExamples(ExtTestCase):
                 "plot_convolutation_matmul.py",
                 "plot_optimize.py",
             }:
-                if sys.platform in {"win32"}:
+                if sys.platform in {"win32", "darwin"}:
                     # dynamo not supported on windows
                     reason = "graphviz not installed"
 
