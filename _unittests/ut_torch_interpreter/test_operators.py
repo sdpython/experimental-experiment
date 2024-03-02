@@ -1,3 +1,9 @@
+"""
+to fail on error, use::
+
+    EXPDORAISE=1 python _unittests/ut_torch_interpreter/test_operators.py -k relu -f
+"""
+
 import copy
 import inspect
 import itertools
@@ -5,6 +11,7 @@ import operator
 import os
 import unittest
 import sys
+import warnings
 from typing import Optional
 import packaging.version as pv
 import numpy as np
@@ -135,120 +142,125 @@ class TestOperators(ExtTestCase):
         assert isinstance(onnx_export, str), f"Export onnx is wrong for f={f}"
         if isinstance(args, torch.Tensor):
             args = [args]
-        if isinstance(f, nn.Module):
-            model = FuncModuleModule(f)
-        elif input_index is None:
-            if params is None:
-                params = ()
-            model = FuncModule(f, params)
-        elif input_index == 0:
-            assert params is None, f"not implemented with params={params}"
-            model = FuncModule0(f)
-        elif input_index == 1:
-            assert params is None, f"not implemented with params={params}"
-            model = FuncModule1(f)
-        else:
-            assert input_index in (
-                0,
-                1,
-            ), f"Not implemented for input_index={input_index}"
-        model.eval()
-        storage = {}
 
-        backend_debug = lambda *args, **kwargs: onnx_debug_backend(  # noqa: E731
-            *args,
-            target_opset=opset_version,
-            storage=storage,
-            backend=impl,
-            verbose=verbose,
-            raise_list=raise_list,
-            **kwargs,
-        )
-
-        if test_backward:
-            # forward/backward
-            if use_decomposition:
-                if use_decomposition is True:
-                    new_table = get_decomposition_table()
-                else:
-                    new_table = use_decomposition
-                aot_compiler = aot_autograd(
-                    fw_compiler=backend_debug, decompositions=new_table
-                )
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", UserWarning)
+            if isinstance(f, nn.Module):
+                model = FuncModuleModule(f)
+            elif input_index is None:
+                if params is None:
+                    params = ()
+                model = FuncModule(f, params)
+            elif input_index == 0:
+                assert params is None, f"not implemented with params={params}"
+                model = FuncModule0(f)
+            elif input_index == 1:
+                assert params is None, f"not implemented with params={params}"
+                model = FuncModule1(f)
             else:
-                aot_compiler = aot_autograd(fw_compiler=backend_debug)
+                assert input_index in (
+                    0,
+                    1,
+                ), f"Not implemented for input_index={input_index}"
+            model.eval()
+            storage = {}
 
-            compiled_model = torch.compile(
-                copy.deepcopy(model),
-                backend=aot_compiler,
-                dynamic=dynamic_axes not in (None, False),
-                fullgraph=fullgraph,
+            backend_debug = lambda *args, **kwargs: onnx_debug_backend(  # noqa: E731
+                *args,
+                target_opset=opset_version,
+                storage=storage,
+                backend=impl,
+                verbose=verbose,
+                raise_list=raise_list,
+                **kwargs,
             )
 
-            baseline_result = model(*args)
-            try:
+            if test_backward:
+                # forward/backward
+                if use_decomposition:
+                    if use_decomposition is True:
+                        new_table = get_decomposition_table()
+                    else:
+                        new_table = use_decomposition
+                    aot_compiler = aot_autograd(
+                        fw_compiler=backend_debug, decompositions=new_table
+                    )
+                else:
+                    aot_compiler = aot_autograd(fw_compiler=backend_debug)
+
+                compiled_model = torch.compile(
+                    copy.deepcopy(model),
+                    backend=aot_compiler,
+                    dynamic=dynamic_axes not in (None, False),
+                    fullgraph=fullgraph,
+                )
+
+                baseline_result = model(*args)
+                try:
+                    result = compiled_model(*args)
+                except torch._dynamo.exc.BackendCompilerFailed as e:
+                    if not os.environ.get(
+                        "EXPDORAISE", False
+                    ) and "FunctionNotFoundError" in str(e):
+                        raise unittest.SkipTest(f"MISSING FOR FORWARD {e}")
+                    raise
+
+                if isinstance(baseline_result, torch.Tensor):
+                    assert_all_close(
+                        baseline_result,
+                        result,
+                        atol=atol,
+                        rtol=rtol,
+                        msg="FORWARD-BACKWARD",
+                    )
+
+                    if square_loss:
+                        (baseline_result.sum() ** 2).backward()
+                        try:
+                            (result.sum() ** 2).backward()
+                        except FunctionNotFoundError as e:
+                            if not os.environ.get("EXPDORAISE", False):
+                                raise unittest.SkipTest(f"MISSING FOR BACKWARD {e}")
+                            raise
+                    else:
+                        baseline_result.sum().backward()
+                        try:
+                            result.sum().backward()
+                        except FunctionNotFoundError as e:
+                            if not os.environ.get("EXPDORAISE", False):
+                                raise unittest.SkipTest(f"MISSING FOR BACKWARD {e}")
+                            raise
+
+                    base_grads = tuple(_.grad for _ in model.parameters())
+                    grads = tuple(_.grad for _ in compiled_model.parameters())
+                    self.assertEqual(len(base_grads), len(grads))
+                    assert_all_close(
+                        base_grads, grads, atol=atol, rtol=rtol, msg="BACKWARD"
+                    )
+                    assert len(grads) > 0, "No gradient was checked"
+                else:
+                    raise AssertionError(f"Unexpected type {type(baseline_result)}.")
+            else:
+                assert (
+                    not use_decomposition
+                ), "not implemented for use_decomposition=True"
+                # forward only
+                compiled_model = torch.compile(
+                    copy.deepcopy(model),
+                    backend=backend_debug,
+                    dynamic=dynamic_axes not in (None, False),
+                    fullgraph=fullgraph,
+                )
+                baseline_result = model(*args)
                 result = compiled_model(*args)
-            except torch._dynamo.exc.BackendCompilerFailed as e:
-                if not os.environ.get(
-                    "EXPDORAISE", False
-                ) and "FunctionNotFoundError" in str(e):
-                    raise unittest.SkipTest(f"MISSING FOR FORWARD {e}")
-                raise
-
-            if isinstance(baseline_result, torch.Tensor):
                 assert_all_close(
-                    baseline_result,
-                    result,
-                    atol=atol,
-                    rtol=rtol,
-                    msg="FORWARD-BACKWARD",
+                    baseline_result, result, atol=atol, rtol=rtol, msg="FORWARD"
                 )
 
-                if square_loss:
-                    (baseline_result.sum() ** 2).backward()
-                    try:
-                        (result.sum() ** 2).backward()
-                    except FunctionNotFoundError as e:
-                        if not os.environ.get("EXPDORAISE", False):
-                            raise unittest.SkipTest(f"MISSING FOR BACKWARD {e}")
-                        raise
-                else:
-                    baseline_result.sum().backward()
-                    try:
-                        result.sum().backward()
-                    except FunctionNotFoundError as e:
-                        if not os.environ.get("EXPDORAISE", False):
-                            raise unittest.SkipTest(f"MISSING FOR BACKWARD {e}")
-                        raise
-
-                base_grads = tuple(_.grad for _ in model.parameters())
-                grads = tuple(_.grad for _ in compiled_model.parameters())
-                self.assertEqual(len(base_grads), len(grads))
-                assert_all_close(
-                    base_grads, grads, atol=atol, rtol=rtol, msg="BACKWARD"
-                )
-                assert len(grads) > 0, "No gradient was checked"
-            else:
-                raise AssertionError(f"Unexpected type {type(baseline_result)}.")
-        else:
-            assert not use_decomposition, "not implemented for use_decomposition=True"
-            # forward only
-            compiled_model = torch.compile(
-                copy.deepcopy(model),
-                backend=backend_debug,
-                dynamic=dynamic_axes not in (None, False),
-                fullgraph=fullgraph,
-            )
-            baseline_result = model(*args)
-            result = compiled_model(*args)
-            assert_all_close(
-                baseline_result, result, atol=atol, rtol=rtol, msg="FORWARD"
-            )
-
-        if save_onnx:
-            for i, inst in enumerate(storage["instance"]):
-                with open(f"{onnx_export}_{i}.onnx", "wb") as f:
-                    f.write(inst["onnx"].SerializeToString())
+            if save_onnx:
+                for i, inst in enumerate(storage["instance"]):
+                    with open(f"{onnx_export}_{i}.onnx", "wb") as f:
+                        f.write(inst["onnx"].SerializeToString())
 
     @ignore_warnings(UserWarning)
     def test_aaa(self):
@@ -1300,6 +1312,12 @@ class TestOperators(ExtTestCase):
             onnx_export=inspect.currentframe().f_code.co_name,
         )
 
+    def test_relu(self):
+        x = torch.randn(1, 2, 3, 4)
+        self.assertONNX(
+            torch.nn.ReLU(), x, onnx_export=inspect.currentframe().f_code.co_name
+        )
+
     @unittest.skipIf(
         pv.Version(torch.__version__) < pv.Version("2.3.0"),
         reason="rrelu_with_noise() missing 2 required positional arguments: 'lower' and 'upper'",
@@ -1307,7 +1325,10 @@ class TestOperators(ExtTestCase):
     def test_rrelu(self):
         x = torch.randn(1, 2, 3, 4)
         self.assertONNX(
-            torch.nn.RReLU(), x, onnx_export=inspect.currentframe().f_code.co_name
+            torch.nn.RReLU(),
+            x,
+            onnx_export=inspect.currentframe().f_code.co_name,
+            use_decomposition=True,
         )
 
     def test_prelu(self):
