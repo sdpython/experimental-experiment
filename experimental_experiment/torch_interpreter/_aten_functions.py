@@ -844,8 +844,10 @@ def aten_empty_like(
         layout is None
     ), f"empty_like not implemented for layout={layout!r} is not None"
     assert not pin_memory, "empty_like not implemented for pin_memory=True"
-    assert (
-        memory_format is None or memory_format == torch.preserve_format
+    assert memory_format in (
+        None,
+        torch.preserve_format,
+        torch.contiguous_format,
     ), f"empty_like not implemented for memory_format={memory_format}"
 
     if g.has_shape(x) and is_static_shape(g.get_shape(x)):
@@ -1327,6 +1329,55 @@ def aten_index_select(
             g.set_shape(res, tuple(shape))
         else:
             g.set_rank(res, g.get_rank(x))
+    return res
+
+
+def aten_leaky_relu(
+    g: GraphBuilder,
+    sts: bool,
+    outputs: List[str],
+    a: T,
+    negative_slope: float = 0.01,
+    inplace: bool = False,
+    name: str = "leaky_relu",
+) -> T:
+    assert not inplace, f"inplace not implemented for leaky_relu{g.get_debug_msg()}"
+
+    dtype = tensor_dtype_to_np_dtype(g.get_type(a))
+    slope = np.array([negative_slope], dtype=dtype)
+    res = g.op.Where(
+        g.op.Greater(a, np.array([0], dtype=dtype), name=name),
+        a,
+        g.op.Mul(a, slope, name=name),
+        outputs=outputs,
+        name=name,
+    )
+    if sts:
+        set_type_shape_unary_op(g, res, a)
+    return res
+
+
+def aten_leaky_relu_backward(
+    g: GraphBuilder,
+    sts: bool,
+    outputs: List[str],
+    grad_output: T,
+    x: T,
+    negative_slope: float,
+    self_is_result: bool,
+    name="leaky_relu_backward",
+) -> T:
+    dtype = tensor_dtype_to_np_dtype(g.get_type(grad_output))
+    slope = np.array([negative_slope], dtype=dtype)
+    res = g.op.Where(
+        g.op.Greater(x, np.array([0], dtype=dtype), name=name),
+        grad_output,
+        g.op.Mul(grad_output, slope, name=name),
+        outputs=outputs,
+        name=name,
+    )
+    if sts:
+        set_type_shape_unary_op(g, res, x)
     return res
 
 
@@ -1835,6 +1886,48 @@ def aten_pow_Tensor_Tensor(
     return res
 
 
+def aten__prelu_kernel(
+    g: GraphBuilder, sts: bool, outputs: List[str], x: T, weight: T
+) -> T:
+    dtype = tensor_dtype_to_np_dtype(g.get_type(x))
+    res = g.op.Where(
+        g.op.Greater(x, np.array([0], dtype=dtype), name="_prelu_kernel"),
+        x,
+        g.op.Mul(x, weight, name="_prelu_kernel"),
+        outputs=outputs,
+        name="_prelu_kernel",
+    )
+    if sts:
+        set_type_shape_unary_op(g, res, x)
+    return res
+
+
+def aten__prelu_kernel_backward(
+    g: GraphBuilder, sts: bool, outputs: List[str], grad_output: T, x: T, weight: T
+) -> Tuple[T, T]:
+    dtype = tensor_dtype_to_np_dtype(g.get_type(x))
+    zero = g.make_initializer("zero", np.array([0], dtype=dtype))
+    xg0 = g.op.Greater(x, zero, name="_prelu_kernel_backward")
+    input_grad = g.op.Where(
+        xg0,
+        grad_output,
+        g.op.Mul(weight, grad_output, name="_prelu_kernel_backward"),
+        name="_prelu_kernel_backward",
+        outputs=outputs[:1],
+    )
+    weight_grad = g.op.Where(
+        xg0,
+        zero,
+        g.op.Mul(x, grad_output, name="_prelu_kernel_backward"),
+        name="_prelu_kernel_backward",
+        outputs=outputs[1:],
+    )
+    if sts:
+        set_type_shape_unary_op(g, input_grad, x)
+        set_type_shape_unary_op(g, weight_grad, weight)
+    return input_grad, weight_grad
+
+
 def aten_relu(
     g: GraphBuilder, sts: bool, outputs: List[str], x: T, inplace: bool = False
 ) -> T:
@@ -1845,6 +1938,29 @@ def aten_relu(
     if sts:
         set_type_shape_unary_op(g, outputs[0], x)
     return res
+
+
+def aten_rrelu_with_noise_backward(
+    g: GraphBuilder,
+    sts: bool,
+    outputs: List[str],
+    grad_output: T,
+    x: T,
+    noise: T,
+    lower: float,
+    upper: float,
+    training: bool,
+    self_is_result: bool,
+    name: str = "rrelu_with_noise_backward",
+) -> T:
+    assert not training, f"Not implemented if training is True{g.get_debug_msg()}"
+
+    # if training and upper - lower > 1e-6:
+    #     return grad_output.mul(noise)
+    negative_slope = (lower + upper) / 2
+    return aten_leaky_relu_backward(
+        g, sts, outputs, grad_output, x, negative_slope, self_is_result, name=name
+    )
 
 
 def aten_repeat(
@@ -2526,6 +2642,28 @@ def aten_t(g: GraphBuilder, sts: bool, outputs: List[str], x: T, name: str = "t"
             g.set_shape(res, tuple(shape))
         else:
             g.set_rank(res, g.get_rank(x))
+    return res
+
+
+def aten_threshold_backward(
+    g: GraphBuilder,
+    sts: bool,
+    outputs: List[str],
+    grad_output: T,
+    x: T,
+    threshold: float,
+    name: str = "threshold_backward",
+) -> T:
+    dtype = tensor_dtype_to_np_dtype(g.get_type(grad_output))
+    res = g.op.Where(
+        g.op.LessOrEqual(x, np.array([threshold], dtype=dtype), name=name),
+        np.array([0], dtype=dtype),
+        grad_output,
+        outputs=outputs,
+        name=name,
+    )
+    if sts:
+        set_type_shape_unary_op(g, res, x)
     return res
 
 
