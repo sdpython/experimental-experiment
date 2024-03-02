@@ -1320,7 +1320,10 @@ class TestOperators(ExtTestCase):
     def test_rrelu(self):
         x = torch.randn(1, 2, 3, 4)
         self.assertONNX(
-            torch.nn.RReLU(), x, onnx_export=inspect.currentframe().f_code.co_name
+            torch.nn.RReLU(),
+            x,
+            onnx_export=inspect.currentframe().f_code.co_name,
+            use_decomposition=True,
         )
 
     def test_prelu(self):

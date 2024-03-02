@@ -1940,29 +1940,6 @@ def aten_relu(
     return res
 
 
-def aten_rrelu_with_noise(
-    g: GraphBuilder,
-    sts: bool,
-    outputs: List[str],
-    x: T,
-    noise: T,
-    lower: float = 0.125,
-    upper: float = 0.3333333333333333,
-    training: bool = False,
-    generator: Optional["torch.Generator"] = None,  # noqa: F821
-) -> T:
-    assert generator is None, f"Not implemented if generator is None{g.get_debug_msg()}"
-    assert not training, f"Not implemented if training is True{g.get_debug_msg()}"
-    # if training:
-    #    not_positive = self <= 0
-    #    r = aten.uniform(self, lower, upper)
-    #    output = torch.where(not_positive, self * r, self)
-    #    noise.copy_(torch.where(not_positive, r, 1))
-    #    return output
-
-    return aten_leaky_relu(g, sts, outputs, x, (lower + upper) / 2, name="rrelu")
-
-
 def aten_rrelu_with_noise_backward(
     g: GraphBuilder,
     sts: bool,
