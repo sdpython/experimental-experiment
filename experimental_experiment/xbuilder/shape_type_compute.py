@@ -14,8 +14,15 @@ def broadcast_shape(sh1: STATIC_SHAPE, sh2: STATIC_SHAPE) -> STATIC_SHAPE:
     :param sh2: second shape
     :return: resulting shape
     """
-    assert is_static_shape(sh1), f"Unexpected sh1={sh1}"
-    assert is_static_shape(sh2), f"Unexpected sh2={sh2}"
+    if sh1 == sh2:
+        return sh1
+    if sh1 == (1,) and len(sh2) >= 1:
+        return sh2
+    if sh2 == (1,) and len(sh1) >= 1:
+        return sh1
+    assert is_static_shape(sh1) and is_static_shape(
+        sh2
+    ), f"Unexpected sh1={sh1}, sh2={sh2}"
     if len(sh1) == len(sh2):
         return tuple(max(i, j) for i, j in zip(sh1, sh2))
     shape = tuple(max(i, j) for i, j in zip(sh1, sh2))
@@ -132,6 +139,24 @@ def set_type_shape_binary_op(
             break
     if rank is not None:
         g.set_rank(name, rank)
+
+
+def set_type_shape_matmul(g: "GraphBuilder", name: str, x: str, y: str):  # noqa: F821
+    g.set_type(name, g.get_type(x))
+    if g.has_shape(x) and g.has_shape(y):
+        sh1 = g.get_shape(x)
+        sh2 = g.get_shape(y)
+        assert len(sh1) == len(sh2), (
+            f"not implemented when shapes are {sh1} and " f"{sh2}{g.get_debug_msg()}"
+        )
+        new_shape = []
+        for a, b in max(sh1[:-2], sh2[:-2]):
+            new_shape.append(max(a, b))
+        new_shape.append(sh1[-2])
+        new_shape.append(sh2[-1])
+        g.set_shape(name, tuple(new_shape))
+    else:
+        g.set_rank(name, max(g.get_rank(x), g.get_rank(y)))
 
 
 def set_type_shape_reduce_op(

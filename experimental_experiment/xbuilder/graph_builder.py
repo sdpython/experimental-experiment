@@ -1616,7 +1616,7 @@ class GraphBuilder:
             return s
 
         if not self._debug_msg:
-            rows = []
+            rows = [""]
             for n in self.nodes:
                 if n is None:
                     continue
@@ -2171,6 +2171,7 @@ class GraphBuilder:
         """
         assert isinstance(proto, ModelProto), f"Unexpected type {type(proto)} for proto"
         new_proto = infer_shapes(proto)
+
         for val in new_proto.graph.value_info:
             itype = val.type.tensor_type.elem_type
             self.set_type(val.name, itype)

@@ -27,6 +27,7 @@ from ..xbuilder.shape_type_compute import (
     set_type_shape_binary_op,
     set_type_shape_reduce_op,
     set_type_shape_reshape,
+    set_type_shape_matmul,
     prepare_inputs_homogeneous_operator,
 )
 from ._exceptions import FunctionNotFoundError
@@ -411,7 +412,10 @@ def aten_bmm(g: GraphBuilder, sts: bool, outputs: List[str], x: T, y: T) -> T:
         f"type mismatch between {x!r}:{g.get_type(x)} and "
         f"{y!r}:{g.get_type(y)}{g.get_debug_msg()}"
     )
-    return g.op.MatMul(x, y, outputs=outputs, name="bmm")
+    res = g.op.MatMul(x, y, outputs=outputs, name="bmm")
+    if sts:
+        set_type_shape_matmul(g, res, x, y)
+    return res
 
 
 def aten_cat(
@@ -1384,6 +1388,7 @@ def aten_linear(
     weight_transposed = g.op.Transpose(weight, perm=[1, 0], name="linear")
     if bias:
         res = g.op.MatMul(x, weight_transposed)
+        set_type_shape_matmul(g, res, x, weight_transposed)
         res = g.op.Add(res, bias, outputs=outputs)
     else:
         res = g.op.MatMul(x, weight_transposed, outputs=outputs, name="linear")
@@ -1435,23 +1440,26 @@ def aten__log_softmax_backward_data(
         grad_outputc = g.op.Cast(
             grad_output, to=itype, name="log_softmax_backward_data"
         )
+        set_type_shape_unary_op(g, grad_outputc, grad_output, itype)
     else:
         itype = None
         grad_outputc = grad_output
 
     vexp = g.op.Exp(output, name="log_softmax_backward_data")
     red = g.op.ReduceSum(
-        grad_output,
+        grad_outputc,
         np.array([dim], dtype=np.int64),
         keepdims=True,
         name="log_softmax_backward_data",
     )
     vmul = g.op.Mul(vexp, red, name="log_softmax_backward_data")
-    res = g.op.Sub(grad_output, vmul, outputs=outputs, name="log_softmax_backward_data")
+    res = g.op.Sub(
+        grad_outputc, vmul, outputs=outputs, name="log_softmax_backward_data"
+    )
 
     set_type_shape_unary_op(g, vexp, output)
     set_type_shape_unary_op(g, vmul, vexp)
-    set_type_shape_reduce_op(g, red, grad_output, keepdim=1, axes=(dim,))
+    set_type_shape_reduce_op(g, red, grad_outputc, keepdim=1, axes=(dim,))
     if sts:
         set_type_shape_unary_op(g, res, grad_outputc, itype=itype)
     return res
@@ -1698,7 +1706,10 @@ def aten_mean_dim(
 
 
 def aten_mm(g: GraphBuilder, sts: bool, outputs: List[str], x: T, y: T) -> T:
-    return g.op.MatMul(x, y, outputs=outputs, name="mm")
+    res = g.op.MatMul(x, y, outputs=outputs, name="mm")
+    if sts:
+        set_type_shape_matmul(g, res, x, y)
+    return res
 
 
 def aten_mul(
