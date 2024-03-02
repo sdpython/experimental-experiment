@@ -1038,6 +1038,68 @@ class TestGraphPatternOptimization(ExtTestCase):
         new_node_list = [(n.op_type, tuple(n.output)) for n in onx.graph.node]
         self.assertNotEqual(node_list, new_node_list)
 
+    def common_expand_broadcast(self, side):
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("Expand", ["X", "shape"], ["i1"]),
+                    oh.make_node(
+                        "Mul", ["i1", "Y"] if side == "left" else ["Y", "i1"], ["Z"]
+                    ),
+                ],
+                "dummy",
+                [
+                    oh.make_tensor_value_info("X", TensorProto.FLOAT, [1, 4, 1]),
+                    oh.make_tensor_value_info("Y", TensorProto.FLOAT, [2, 4, 6]),
+                ],
+                [oh.make_tensor_value_info("Z", TensorProto.FLOAT, [2, 4, 6])],
+                [
+                    onh.from_array(np.array([2, 4, 6], dtype=np.int64), name="shape"),
+                ],
+            )
+        )
+        check_model(model)
+
+        feeds = {"X": self._range(1, 4, 1), "Y": self._range(2, 4, 6, bias=0.5)}
+        ref = ExtendedReferenceEvaluator(model)
+        expected = ref.run(None, feeds)
+
+        gr = GraphBuilder(
+            model,
+            infer_shapes=True,
+            optimization_options=OptimizationOptions(patterns=["ExpandBroadcast"]),
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+        self.assertEqual(
+            ["Mul"],
+            [n.op_type for n in opt_onx.graph.node],
+        )
+        self.assertEqual(0, len(opt_onx.graph.initializer))
+
+        opt_ref = ExtendedReferenceEvaluator(opt_onx)
+        got = opt_ref.run(None, feeds)
+        self.assertEqualArray(expected[0], got[0], atol=1e-5)
+
+    def test_expand_broadcast_left(self):
+        self.common_expand_broadcast("left")
+
+    def test_expand_broadcast_right(self):
+        self.common_expand_broadcast("right")
+
+    def test_expand_broadcast_data(self):
+        origin = self._get_model("dort-cus-custom__1_sub.onnx")
+        node_list = [n.op_type for n in origin.graph.node]
+        gr = GraphBuilder(
+            origin,
+            infer_shapes=True,
+            optimization_options=OptimizationOptions(patterns=["ExpandBroadcast"]),
+        )
+        stat = gr.optimize()
+        self.assertEqual(len(stat), 5)
+        onx = gr.to_onnx(optimize=False)
+        new_node_list = [n.op_type for n in onx.graph.node]
+        self.assertNotEqual(node_list, new_node_list)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
