@@ -7,7 +7,7 @@ import numpy as np
 from onnx import TensorProto
 from onnx.helper import tensor_dtype_to_np_dtype
 from onnx.numpy_helper import from_array
-from .annotations import (
+from ..xbuilder.annotations import (
     all_float,
     all_int,
     all_int_or_float,
@@ -15,6 +15,11 @@ from .annotations import (
     is_static_dimension,
     is_static_shape,
 )
+from ..xbuilder._dtype_helper import (
+    onnx_dtype_to_torch_dtype,
+    torch_dtype_to_onnx_dtype,
+)
+from ..xbuilder.graph_builder import GraphBuilder
 from ._exceptions import FunctionNotFoundError
 from ._aten_helper import (
     _adjust_attributes_of_max_pool,
@@ -23,11 +28,8 @@ from ._aten_helper import (
     set_type_shape_binary_op,
     set_type_shape_reduce_op,
     set_type_shape_reshape,
-    onnx_dtype_to_torch_dtype,
     prepare_inputs_homogeneous_operator,
-    torch_dtype_to_onnx_dtype,
 )
-from .graph_builder import GraphBuilder
 
 
 T = str

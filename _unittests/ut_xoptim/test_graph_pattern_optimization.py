@@ -10,7 +10,7 @@ from experimental_experiment.xbuilder.graph_builder import (
     GraphBuilder,
     OptimizationOptions,
 )
-from experimental_experiment.xbuilder.graph_builder_optim import (
+from experimental_experiment.xoptim.graph_builder_optim import (
     GraphBuilderPatternOptimization,
 )
 from experimental_experiment.xbuilder.annotations import (
@@ -60,7 +60,9 @@ class TestGraphPatternOptimization(ExtTestCase):
         self._check_with_ort(optimized)
 
     def _get_model(self, name: str) -> onnx.ModelProto:
-        p = os.path.join(os.path.dirname(__file__), "data", name)
+        p = os.path.join(
+            os.path.dirname(__file__), "..", "ut_torch_interpreter", "data", name
+        )
         self.assertExists(p)
         return onnx.load(p)
 

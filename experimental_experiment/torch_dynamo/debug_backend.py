@@ -4,7 +4,8 @@ import numpy as np
 from onnx import ModelProto
 import torch
 from ..torch_interpreter._torch_helper import create_input_names
-from ..torch_interpreter.onnx_export import to_onnx, OptimizationOptions
+from ..xbuilder import OptimizationOptions
+from ..torch_interpreter import to_onnx
 from ..xoptim.patterns import get_pattern_list
 from .backend_helper import get_dimensions
 

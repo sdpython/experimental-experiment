@@ -1,7 +1,7 @@
 from typing import List, Optional
 from onnx import NodeProto
 from onnx.numpy_helper import to_array
-from .patterns_api import MatchResult, PatternOptimization
+from ..patterns.patterns_api import MatchResult, PatternOptimization
 
 
 class ConstantOfShapeScatterNDPattern(PatternOptimization):

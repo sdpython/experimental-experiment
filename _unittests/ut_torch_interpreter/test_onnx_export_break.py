@@ -2,7 +2,8 @@ import os
 import sys
 import unittest
 from experimental_experiment.ext_test_case import ExtTestCase
-from experimental_experiment.torch_interpreter import to_onnx, OptimizationOptions
+from experimental_experiment.torch_interpreter import to_onnx
+from experimental_experiment.xbuilder import OptimizationOptions
 
 
 def return_module_cls_pool():

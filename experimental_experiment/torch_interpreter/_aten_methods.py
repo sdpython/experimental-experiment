@@ -2,7 +2,8 @@ from typing import Any, Dict, List, Optional, Sequence
 import numpy as np
 from onnx import TensorProto
 from onnx.helper import tensor_dtype_to_np_dtype
-from .annotations import all_int
+from ..xbuilder.annotations import all_int
+from ..xbuilder.graph_builder import GraphBuilder
 from ._aten_helper import (
     torch_dtype_to_onnx_dtype,
     set_type_shape_binary_op,
@@ -10,7 +11,6 @@ from ._aten_helper import (
     set_type_shape_reduce_op,
     set_type_shape_reshape,
 )
-from .graph_builder import GraphBuilder
 from ._aten_functions import (
     aten_cos,
     aten_expand,

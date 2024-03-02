@@ -5,7 +5,8 @@ import warnings
 import onnx
 from onnx.reference import ReferenceEvaluator
 from experimental_experiment.ext_test_case import ExtTestCase, ignore_warnings
-from experimental_experiment.torch_interpreter import to_onnx, OptimizationOptions
+from experimental_experiment.xbuilder import OptimizationOptions
+from experimental_experiment.torch_interpreter import to_onnx
 
 
 def return_module_cls_conv():
