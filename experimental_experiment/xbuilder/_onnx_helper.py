@@ -1,6 +1,6 @@
 from typing import Dict, Iterator, Optional, Tuple
 import numpy as np
-from onnx import AttributeProto, GraphProto, NodeProto
+from onnx import AttributeProto, GraphProto, NodeProto, TensorShapeProto
 from onnx.defs import onnx_opset_version, get_all_schemas_with_history
 
 
@@ -50,6 +50,13 @@ def enumerate_subgraphs(
 
 
 _history = None
+
+
+def _nice_shape(shape: TensorShapeProto) -> str:
+    els = []
+    for sh in shape.dim:
+        els.append(str(sh.dim_value) if sh.HasField("dim_value") else sh.dim_param)
+    return "x".join(els)
 
 
 def compatible_opsets(

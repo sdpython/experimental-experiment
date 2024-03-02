@@ -1,6 +1,6 @@
 from typing import List, Optional
 from onnx import NodeProto
-from ..annotations import all_int
+from ...xbuilder.annotations import all_int
 from .patterns_api import MatchResult, PatternOptimization
 
 

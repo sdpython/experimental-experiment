@@ -1,6 +1,6 @@
 from typing import List, Optional
 from onnx import NodeProto
-from ..annotations import compatible_shapes, compatible_dimensions
+from ...xbuilder.annotations import compatible_shapes, compatible_dimensions
 from .patterns_api import MatchResult, PatternOptimization
 
 

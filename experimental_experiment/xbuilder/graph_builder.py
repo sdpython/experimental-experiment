@@ -15,15 +15,14 @@ from .annotations import (
     is_static_dimension,
     is_static_shape,
 )
-from ._aten_helper import dtype_to_tensor_dtype, _nice_shape
 from ._onnx_helper import (
     choose_consistent_domain_opset,
     compatible_opsets,
     _default_OPSET_TO_IR_VERSION,
+    _nice_shape,
 )
+from ._dtype_helper import dtype_to_tensor_dtype
 from ._helper import make_hash
-from .graph_builder_optim import PatternOptimization, GraphBuilderPatternOptimization
-from .optimization_patterns import get_pattern, get_pattern_list
 
 
 class OptimizationOptions:
@@ -52,7 +51,7 @@ class OptimizationOptions:
         constant_folding: bool = False,
         constant_size: int = 1024,
         remove_identity: bool = True,
-        patterns: Union[str, List["PatternOptimization"]] = "default",
+        patterns: Union[str, List["PatternOptimization"]] = "default",  # noqa: F821
         max_iter: int = -1,
         recursive: bool = False,
         verbose: int = 0,
@@ -62,11 +61,15 @@ class OptimizationOptions:
         self.remove_identity = remove_identity
         self.constant_size = constant_size
         if isinstance(patterns, str):
+            from .xoptim.patterns import get_pattern_list
+
             self.patterns = get_pattern_list(patterns)
         else:
             assert patterns is None or isinstance(
                 patterns, list
             ), f"Unexpected type {type(patterns)} for patterns"
+            from .xoptim.patterns import get_pattern
+
             self.patterns = (
                 None if patterns is None else [get_pattern(p) for p in patterns]
             )
@@ -1813,6 +1816,8 @@ class GraphBuilder:
         """
         Optimizes this graph with patterns.
         """
+        from ..xoptim import GraphBuilderPatternOptimization
+
         gro = GraphBuilderPatternOptimization(
             self,
             verbose=self.optimization_options.verbose,
