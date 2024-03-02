@@ -7,9 +7,10 @@ from onnx.numpy_helper import from_array, to_array
 import torch
 from torch._C import _from_dlpack
 from onnxruntime.capi import _pybind_state as ORTC
-from ..torch_exp._torch_helper import create_input_names
-from ..torch_exp.onnx_export import to_onnx, OptimizationOptions
-from ..torch_exp.optimization_patterns import get_pattern_list
+from ..xbuilder import OptimizationOptions
+from ..torch_interpreter import to_onnx
+from ..torch_interpreter._torch_helper import create_input_names
+from ..xoptim.patterns import get_pattern_list
 from .backend_helper import get_dimensions
 
 
