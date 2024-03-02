@@ -109,3 +109,9 @@ ConstantOfShapeScatterNDPattern
 
 .. autoclass:: experimental_experiment.xoptim.patterns_ort.constant_of_shape_scatter_nd.ConstantOfShapeScatterNDPattern
     :members:
+
+FusedMatMulPattern
+++++++++++++++++++
+
+.. autoclass:: experimental_experiment.xoptim.patterns_ort.fused_matmul.FusedMatMulPattern
+    :members:

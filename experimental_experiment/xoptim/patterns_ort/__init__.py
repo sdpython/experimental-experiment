@@ -14,7 +14,9 @@ def get_onnxruntime_patterns() -> List["PatternOptimization"]:  # noqa: F821
         pprint.pprint(get_onnxruntime_patterns())
     """
     from .constant_of_shape_scatter_nd import ConstantOfShapeScatterNDPattern
+    from .fused_matmul import FusedMatMulPattern
 
     return [
         ConstantOfShapeScatterNDPattern(),
+        FusedMatMulPattern(),
     ]

@@ -15,6 +15,13 @@ from experimental_experiment.xbuilder._onnx_helper import (
 
 
 class TestGraphPatternOptimizationOrt(ExtTestCase):
+    def _range(self, *shape, bias: float = None):
+        n = np.prod(shape)
+        x = np.arange(n).astype(np.float32) / n
+        if bias:
+            x = x + bias
+        return x.reshape(tuple(shape)).astype(np.float32)
+
     def test_get_pattern_list(self):
         res = get_pattern_list("onnxruntime")
         names = set(r.__class__.__name__ for r in res)
@@ -66,7 +73,12 @@ class TestGraphPatternOptimizationOrt(ExtTestCase):
                     ),
                 ],
                 [oh.make_tensor_value_info("Z", TensorProto.FLOAT, [None, None, None])],
-            )
+            ),
+            opset_imports=[
+                oh.make_opsetid("", 18),
+                oh.make_opsetid("com.microsoft", 1),
+            ],
+            ir_version=9,
         )
         check_model(model)
         gr = GraphBuilder(
@@ -86,6 +98,86 @@ class TestGraphPatternOptimizationOrt(ExtTestCase):
         opsets = {v.domain: v.version for v in opt_onx.opset_import}
         self.assertIn("com.microsoft", opsets)
         self.assertEqual(opsets["com.microsoft"], 1)
+
+    def common_fused_matmul(self, side):
+        from onnxruntime import InferenceSession
+
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("Transpose", ["X"], ["xm1"], perm=[0, 1, 3, 2]),
+                    oh.make_node(
+                        "MatMul",
+                        ["xm1", "Y"] if side == "left" else ["Y", "xm1"],
+                        ["Z"],
+                    ),
+                ],
+                "dummy",
+                [
+                    oh.make_tensor_value_info(
+                        "X",
+                        TensorProto.FLOAT,
+                        [2, 2, 128, 32] if side == "left" else [2, 2, 32, 128],
+                    ),
+                    oh.make_tensor_value_info(
+                        "Y",
+                        TensorProto.FLOAT,
+                        [2, 2, 128, 64] if side == "left" else [2, 2, 64, 128],
+                    ),
+                ],
+                [
+                    oh.make_tensor_value_info(
+                        "Z",
+                        TensorProto.FLOAT,
+                        [2, 2, 32, 64] if side == "left" else [2, 2, 64, 32],
+                    ),
+                ],
+            ),
+            opset_imports=[
+                oh.make_opsetid("", 18),
+                oh.make_opsetid("com.microsoft", 1),
+            ],
+            ir_version=9,
+        )
+        check_model(model)
+        feeds = (
+            {"X": self._range(2, 2, 128, 32), "Y": self._range(2, 2, 128, 64)}
+            if side == "left"
+            else {"X": self._range(2, 2, 32, 128), "Y": self._range(2, 2, 64, 128)}
+        )
+        print(feeds["X"].shape, feeds["Y"].shape)
+        if side == "left":
+            assert feeds["X"][0, 0].T @ feeds["Y"][0, 0] is not None
+        else:
+            assert feeds["Y"][0, 0] @ feeds["X"][0, 0].T is not None
+        ref = InferenceSession(
+            model.SerializeToString(), providers=["CPUExecutionProvider"]
+        )
+        expected = ref.run(None, feeds)
+
+        gr = GraphBuilder(
+            model,
+            infer_shapes=True,
+            optimization_options=OptimizationOptions(patterns=["FusedMatMul"]),
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+        self.assertEqual(
+            ["FusedMatMul"],
+            [n.op_type for n in opt_onx.graph.node],
+        )
+        self.assertEqual(0, len(opt_onx.graph.initializer))
+
+        opt_ref = InferenceSession(
+            model.SerializeToString(), providers=["CPUExecutionProvider"]
+        )
+        got = opt_ref.run(None, feeds)
+        self.assertEqualArray(expected[0], got[0])
+
+    def test_fused_matmul_left(self):
+        self.common_fused_matmul("left")
+
+    def test_fused_matmul_right(self):
+        self.common_fused_matmul("right")
 
 
 if __name__ == "__main__":
