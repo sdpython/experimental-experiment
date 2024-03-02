@@ -13,6 +13,7 @@ import unittest
 import sys
 import warnings
 from typing import Optional
+import packaging.version as pv
 import numpy as np
 import torch
 import torch.nn as nn
@@ -1317,6 +1318,10 @@ class TestOperators(ExtTestCase):
             torch.nn.ReLU(), x, onnx_export=inspect.currentframe().f_code.co_name
         )
 
+    @unittest.skipIf(
+        pv.Version(torch.__version__) < pv.Version("2.3.0"),
+        reason="rrelu_with_noise() missing 2 required positional arguments: 'lower' and 'upper'",
+    )
     def test_rrelu(self):
         x = torch.randn(1, 2, 3, 4)
         self.assertONNX(
