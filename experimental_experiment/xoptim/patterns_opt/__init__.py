@@ -16,7 +16,7 @@ def get_onnxruntime_patterns() -> List[PatternOptimization]:
         :showcode:
 
         import pprint
-        from experimental_experiment.torch_exp.optimization_patterns import get_onnxruntime_patterns
+        from experimental_experiment.xoptim.patterns_ort import get_onnxruntime_patterns
         pprint.pprint(get_onnxruntime_patterns())
     """
     return [

@@ -24,7 +24,7 @@ def get_default_patterns() -> List[PatternOptimization]:
         :showcode:
 
         import pprint
-        from experimental_experiment.torch_exp.optimization_patterns import get_default_patterns
+        from experimental_experiment.xoptim.patterns import get_default_patterns
         pprint.pprint(get_default_patterns())
     """
     return [
@@ -89,7 +89,7 @@ def get_pattern_list(
         :showcode:
 
         import pprint
-        from experimental_experiment.torch_exp.optimization_patterns import get_pattern_list
+        from experimental_experiment.xoptim.patterns import get_pattern_list
         pprint.pprint(get_pattern_list("default", ["Cast"]))
     """
     if positive_list is None:

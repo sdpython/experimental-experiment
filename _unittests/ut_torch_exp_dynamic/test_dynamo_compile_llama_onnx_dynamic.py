@@ -24,7 +24,7 @@ def torch_min(v: str) -> bool:
 
 
 def implements(name: str) -> bool:
-    import experimental_experiment.torch_exp._aten_functions as atf
+    import experimental_experiment.torch_interpreter._aten_functions as atf
 
     return hasattr(atf, name)
 

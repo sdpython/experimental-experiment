@@ -2,8 +2,7 @@ import warnings
 from typing import Any, Dict, Optional, Sequence, Set, Tuple, Union
 from onnx import ModelProto
 from onnx.defs import onnx_opset_version
-from .interpreter import DynamoInterpreter
-from .graph_builder import GraphBuilder, OptimizationOptions
+from ..xbuilder.graph_builder import GraphBuilder, OptimizationOptions
 
 
 def _retrieve(
@@ -89,7 +88,7 @@ def _make_builder_interpreter(
     optimization_options: Optional[OptimizationOptions] = None,
     verbose: int = 0,
     raise_list: Optional[Set[str]] = None,
-) -> Tuple["torch.fx.GraphModule", GraphBuilder, DynamoInterpreter]:  # noqa: F821
+) -> Tuple["torch.fx.GraphModule", GraphBuilder, "DynamoInterpreter"]:  # noqa: F821
     """
     Exports a torch model into ONNX using
     `dynamo export
@@ -149,6 +148,8 @@ def _make_builder_interpreter(
         name, value, weights=weights, buffers=buffers, mapping=mapping, builder=builder
     ):
         return _retrieve(name, value, weights, buffers, mapping, builder)
+
+    from .interpreter import DynamoInterpreter
 
     interpreter = DynamoInterpreter(builder, retrieve)
     return graph_module, builder, interpreter

@@ -6,5 +6,5 @@ interpreter
 DynamoInterpreter
 =================
 
-.. autoclass:: experimental_experiment.torch_exp.interpreter.DynamoInterpreter
+.. autoclass:: experimental_experiment.torch_interpret.interpreter.DynamoInterpreter
     :members:

@@ -3,9 +3,9 @@ from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
 import numpy as np
 from onnx import ModelProto
 import torch
-from ..torch_exp._torch_helper import create_input_names
-from ..torch_exp.onnx_export import to_onnx, OptimizationOptions
-from ..torch_exp.optimization_patterns import get_pattern_list
+from ..torch_interpreter._torch_helper import create_input_names
+from ..torch_interpreter.onnx_export import to_onnx, OptimizationOptions
+from ..xoptim.patterns import get_pattern_list
 from .backend_helper import get_dimensions
 
 

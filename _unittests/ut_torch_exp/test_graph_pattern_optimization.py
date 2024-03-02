@@ -6,18 +6,18 @@ from onnx import ModelProto, TensorProto, helper as oh, numpy_helper as onh
 from onnx.checker import check_model
 from onnx_array_api.reference import ExtendedReferenceEvaluator
 from experimental_experiment.ext_test_case import ExtTestCase, ignore_warnings
-from experimental_experiment.torch_exp.graph_builder import (
+from experimental_experiment.xbuilder.graph_builder import (
     GraphBuilder,
     OptimizationOptions,
 )
-from experimental_experiment.torch_exp.graph_builder_optim import (
+from experimental_experiment.xbuilder.graph_builder_optim import (
     GraphBuilderPatternOptimization,
 )
-from experimental_experiment.torch_exp.annotations import (
+from experimental_experiment.xbuilder.annotations import (
     compatible_shapes,
     compatible_dimensions,
 )
-from experimental_experiment.torch_exp.optimization_patterns import get_pattern_list
+from experimental_experiment.xoptim.patterns import get_pattern_list
 
 
 class TestGraphPatternOptimization(ExtTestCase):

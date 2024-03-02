@@ -3,12 +3,12 @@ import numpy as np
 from onnx import TensorProto, helper as oh, numpy_helper as onh
 from onnx.checker import check_model
 from experimental_experiment.ext_test_case import ExtTestCase, skipif_ci_windows
-from experimental_experiment.torch_exp.graph_builder import (
+from experimental_experiment.xbuilder.graph_builder import (
     GraphBuilder,
     OptimizationOptions,
 )
-from experimental_experiment.torch_exp.optimization_patterns import get_pattern_list
-from experimental_experiment.torch_exp._onnx_helper import (
+from experimental_experiment.xoptim.patterns import get_pattern_list
+from experimental_experiment.xbuilder._onnx_helper import (
     choose_consistent_domain_opset,
     compatible_opsets,
 )

@@ -14,7 +14,7 @@ import torch.onnx
 from torch.autograd import Function
 from torch.nn import functional, Module, Parameter
 from experimental_experiment.ext_test_case import ExtTestCase, ignore_warnings
-from experimental_experiment.torch_exp._exceptions import FunctionNotFoundError
+from experimental_experiment.torch_interpreter import FunctionNotFoundError
 
 BATCH_SIZE = 2
 RNN_BATCH_SIZE = 7

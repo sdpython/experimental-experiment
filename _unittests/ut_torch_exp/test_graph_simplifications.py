@@ -3,7 +3,7 @@ import onnx
 import onnx.helper as oh
 from onnx import TensorProto
 from experimental_experiment.ext_test_case import ExtTestCase
-from experimental_experiment.torch_exp.graph_builder import GraphBuilder
+from experimental_experiment.xbuilder.graph_builder import GraphBuilder
 
 
 class TestGraphSimplification(ExtTestCase):

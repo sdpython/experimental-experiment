@@ -4,7 +4,8 @@ from typing import List
 import packaging.version as pv
 from onnx.reference import ReferenceEvaluator
 from experimental_experiment.ext_test_case import ExtTestCase, ignore_warnings
-from experimental_experiment.torch_exp.onnx_export import to_onnx, OptimizationOptions
+from experimental_experiment.torch_interpreter import to_onnx
+from experimental_experiment.xbuilder import OptimizationOptions
 
 
 def torch_recent_enough():
