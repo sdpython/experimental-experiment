@@ -23,6 +23,8 @@ from onnx_array_api.plotting.text_plot import onnx_simple_text_plot
 from onnx_array_api.plotting.graphviz_helper import plot_dot
 import torch
 from torch._dynamo.backends.common import aot_autograd
+
+# from torch._functorch._aot_autograd.utils import make_boxed_func
 from experimental_experiment.torch_dynamo import (
     onnx_custom_backend,
     get_decomposition_table,
@@ -34,7 +36,7 @@ class MLP(torch.nn.Module):
         super().__init__()
         self.layers = torch.nn.Sequential(
             torch.nn.Linear(10, 32),
-            torch.nn.Sigmoid(),
+            torch.nn.ReLU(),
             torch.nn.Linear(32, 1),
         )
 
