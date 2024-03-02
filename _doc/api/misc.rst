@@ -3,8 +3,8 @@
 Others...
 =========
 
-xbuilder.annotations
-====================
+xbuilder.shape_helper
+=====================
 
 compatible_dimensions
 +++++++++++++++++++++
@@ -14,7 +14,7 @@ compatible_dimensions
 compatible_shapes
 +++++++++++++++++
 
-.. autofunction:: experimental_experiment.xbuilder.annotations.compatible_shapes
+.. autofunction:: experimental_experiment.xbuilder.shape_helper.compatible_shapes
 
 xbuilder._onnx_helper
 +++++++++++++++++++++

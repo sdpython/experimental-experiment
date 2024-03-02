@@ -2,7 +2,7 @@ from typing import Any, Callable, List, Optional, Sequence, Set, Tuple
 import numpy as np
 from onnx import TensorProto
 from onnx.helper import np_dtype_to_tensor_dtype, tensor_dtype_to_np_dtype
-from ..xbuilder.annotations import STATIC_SHAPE, is_static_shape
+from ..xbuilder.shape_helper import STATIC_SHAPE, is_static_shape
 from ..xbuilder._dtype_helper import dtype_to_tensor_dtype, torch_dtype_to_onnx_dtype
 
 

@@ -7,7 +7,7 @@ import numpy as np
 from onnx import TensorProto
 from onnx.helper import tensor_dtype_to_np_dtype
 from onnx.numpy_helper import from_array
-from ..xbuilder.annotations import (
+from ..xbuilder.shape_helper import (
     all_float,
     all_int,
     all_int_or_float,

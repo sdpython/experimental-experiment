@@ -5,7 +5,7 @@ import types
 from typing import Any, Callable, Dict, List, Tuple, Union
 import numpy as np
 from onnx import TensorProto
-from ..xbuilder.annotations import all_int, is_static_shape
+from ..xbuilder.shape_helper import all_int, is_static_shape
 from ..xbuilder._helper import make_hash
 from ..xbuilder._dtype_helper import torch_dtype_to_onnx_dtype
 from .aten_functions import find_function
