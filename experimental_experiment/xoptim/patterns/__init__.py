@@ -14,9 +14,6 @@ from .onnx_sub import Sub1MulPattern
 from .onnx_transpose import TransposeTransposePattern
 from .onnx_unsqueeze import UnsqueezeUnsqueezePattern
 
-# ort patterns
-from .ort_constant_of_shape_scatter_nd import ConstantOfShapeScatterNDPattern
-
 
 def get_default_patterns() -> List[PatternOptimization]:
     """
@@ -45,23 +42,6 @@ def get_default_patterns() -> List[PatternOptimization]:
     ]
 
 
-def get_onnxruntime_patterns() -> List[PatternOptimization]:
-    """
-    Returns a default list of optimization patters for onnxruntime.
-    It is equal to the following list.
-
-    .. runpython::
-        :showcode:
-
-        import pprint
-        from experimental_experiment.torch_exp.optimization_patterns import get_onnxruntime_patterns
-        pprint.pprint(get_onnxruntime_patterns())
-    """
-    return [
-        ConstantOfShapeScatterNDPattern(),
-    ]
-
-
 def get_pattern(
     obj: Union[PatternOptimization, str], as_list: bool = False
 ) -> PatternOptimization:
@@ -70,6 +50,8 @@ def get_pattern(
     """
     if isinstance(obj, PatternOptimization):
         return [obj] if as_list else obj
+
+    from ..patterns_ort import get_onnxruntime_patterns
 
     if isinstance(obj, str):
         _pattern = dict(
