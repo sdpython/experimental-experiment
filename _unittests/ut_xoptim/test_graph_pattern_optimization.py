@@ -60,9 +60,7 @@ class TestGraphPatternOptimization(ExtTestCase):
         self._check_with_ort(optimized)
 
     def _get_model(self, name: str) -> onnx.ModelProto:
-        p = os.path.join(
-            os.path.dirname(__file__), "..", "ut_torch_interpreter", "data", name
-        )
+        p = os.path.join(os.path.dirname(__file__), "..", "ut_xbuilder", "data", name)
         self.assertExists(p)
         return onnx.load(p)
 

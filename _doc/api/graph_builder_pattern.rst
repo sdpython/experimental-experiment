@@ -18,7 +18,7 @@ Classes
 GraphBuilderPatternOptimization
 +++++++++++++++++++++++++++++++
 
-.. autoclass:: experimental_experiment.xbuilder.graph_builder_optim.GraphBuilderPatternOptimization
+.. autoclass:: experimental_experiment.xoptim.graph_builder_optim.GraphBuilderPatternOptimization
     :members:
 
 
@@ -107,5 +107,5 @@ Ort Patterns
 ConstantOfShapeScatterNDPattern
 +++++++++++++++++++++++++++++++
 
-.. autoclass:: experimental_experiment.xoptim.patterns.ConstantOfShapeScatterNDPattern
+.. autoclass:: experimental_experiment.xoptim.patterns_ort.constant_of_shape_scatter_nd.ConstantOfShapeScatterNDPattern
     :members:

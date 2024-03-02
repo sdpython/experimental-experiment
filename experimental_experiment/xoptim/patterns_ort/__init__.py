@@ -13,7 +13,7 @@ def get_onnxruntime_patterns() -> List["PatternOptimization"]:  # noqa: F821
         from experimental_experiment.xoptim.patterns_ort import get_onnxruntime_patterns
         pprint.pprint(get_onnxruntime_patterns())
     """
-    from .ort_constant_of_shape_scatter_nd import ConstantOfShapeScatterNDPattern
+    from .constant_of_shape_scatter_nd import ConstantOfShapeScatterNDPattern
 
     return [
         ConstantOfShapeScatterNDPattern(),
