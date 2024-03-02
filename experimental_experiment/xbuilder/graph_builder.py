@@ -388,6 +388,31 @@ class GraphBuilder:
             new_shape.insert(e, 1)
         return tuple(new_shape)
 
+    def _apply_reshape_to_shape(
+        self, input_shape: DYNAMIC_SHAPE, new_shape: STATIC_SHAPE
+    ) -> DYNAMIC_SHAPE:
+        """
+        Returns the shape of the output of a node Reshape.
+        """
+        assert isinstance(
+            input_shape, tuple
+        ), f"unexpected type {type(input_shape)} for input_shape."
+        assert isinstance(
+            new_shape, tuple
+        ), f"unexpected type {type(new_shape)} for input_shape."
+        assert all_int(new_shape), f"unexpected type for a dimension in {new_shape}"
+        if -1 not in new_shape:
+            return new_shape
+        if all_int(input_shape):
+            size = int(np.prod(input_shape))
+            div = np.prod([i for i in new_shape if i != -1])
+            if div == 0:
+                return tuple((int(i) if i >= 0 else 0) for i in new_shape)
+            return tuple((int(i) if i >= 0 else int(size // div)) for i in new_shape)
+        raise RuntimeError(
+            f"Not implemented yet for input_shape={input_shape} and new_shape={new_shape}."
+        )
+
     def _get_tensor_shape(self, proto: Union[NodeProto, TensorProto]) -> STATIC_SHAPE:
         if isinstance(proto, TensorProto):
             return tuple(proto.dims)
@@ -428,14 +453,36 @@ class GraphBuilder:
         return name in self.constants_
 
     def get_constant(
-        self, name: str, exc: bool = True, computed_value: bool = False
+        self,
+        name: str,
+        exc: bool = True,
+        computed_value: bool = False,
+        as_shape: bool = False,
     ) -> Union[np.ndarray, NodeProto]:
         """
         The method returns the constant *name*. It is a tensor (numpy array)
         or a NodeProto which must be evaluated.
         If *computed_value* is True, the NodeProto is evaluated wuth the
         ReferenceEvaluator.
+
+        :param name: constant name
+        :param exc: raise an exception if anything is impossible to do
+        :param computed_value: compute the value if not a constant
+        :param as_shape: returns a tuple for a shape
+        :return: value
         """
+        if as_shape:
+            res = self.get_constant(
+                name, exc, computed_value=computed_value, as_shape=False
+            )
+            new_res = []
+            for i in res:
+                if isinstance(i, str):
+                    new_res.append(i)
+                else:
+                    new_res.append(int(i))
+            return tuple(new_res)
+
         if not self.is_constant(name):
             raise ValueError(f"Result {name!r} is not a constant{self.get_debug_msg()}")
         possible_value = self.constants_[name]
@@ -1140,7 +1187,7 @@ class GraphBuilder:
         assert is_static_shape(shape) or self.is_dynamic_shape(
             shape, allow_none=True
         ), (
-            f"Shape={shape} is not a shape, "
+            f"Shape={shape} is not a shape (type={[type(i) for i in shape]}), "
             f"name={name!r}, elem_type={elem_type}{self.get_debug_msg()}"
         )
         return self.verify_dynamic_shape(shape, for_onnx=for_onnx)
@@ -1332,6 +1379,8 @@ class GraphBuilder:
         return inputs, kwargs
 
     def _make_node_set_type_shape_constant(self, node: NodeProto, set_type_shape: bool):
+        if node.domain != "":
+            return
         if node.op_type == "Constant":
             size = len(node.SerializeToString())
             if size >= self.optimization_options.constant_size:
@@ -1380,6 +1429,32 @@ class GraphBuilder:
                         f"(GatherElements:{node.input}){self.get_debug_msg()}"
                     )
                     self.set_rank(node.output[0], r1)
+
+    def _make_node_set_type_shape(self, node: NodeProto):
+        if node.domain != "":
+            return
+        if node.op_type == "Reshape":
+            k = node.output[0]
+            self.set_type(k, self.get_type(node.input[0]))
+            shape_set = False
+            if self.is_constant(node.input[1]):
+                cst = tuple(
+                    self.get_constant(node.input[1], computed_value=True, as_shape=True)
+                )
+                if all_int(cst):
+                    if -1 not in cst:
+                        self.set_shape(k, cst)
+                        shape_set = True
+                    elif all_int(cst) and self.has_shape(node.input[0]):
+                        sh = self.get_shape(node.input[0])
+                        new_shape = self._apply_reshape_to_shape(sh, cst)
+                        if new_shape is not None:
+                            self.set_shape(k, new_shape)
+                            shape_set = True
+            if not shape_set:
+                if self.has_shape(node.input[1]):
+                    rk = self.get_shape(node.input[1])
+                    self.set_rank(k, rk[0])
 
     def make_nodes(
         self,
@@ -1529,13 +1604,21 @@ class GraphBuilder:
         return res
 
     def get_debug_msg(self) -> str:
-        if not self._debug_msg:
-            return ""
-
         def _align(s, length):
             if len(s) < length:
                 s += " " * (length - len(s))
             return s
+
+        if not self._debug_msg:
+            rows = []
+            for n in self.nodes:
+                if n is None:
+                    continue
+                rows.append(
+                    f"{_align(n.op_type, 20)}: {','.join(n.input)} -> "
+                    f"{','.join(n.output)} --- {n.name}"
+                )
+            return "\n".join(rows)
 
         def _size(t):
             if hasattr(t, "numel"):
@@ -2071,6 +2154,8 @@ class GraphBuilder:
         for i, n in enumerate(new_nodes):
             assert isinstance(n, NodeProto), f"Unexpected type {type(n)} for a node"
             self.nodes.insert(insert_at + i, n)
+            self._make_node_set_type_shape_constant(n, True)
+            self._make_node_set_type_shape(n)
         self.nodes = [n for n in self.nodes if n is not None]
         return memo
 

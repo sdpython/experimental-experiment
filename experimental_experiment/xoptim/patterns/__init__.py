@@ -8,7 +8,7 @@ from .onnx_cast import CastPattern
 from .onnx_expand import ExpandPattern, ExpandBroadcastPattern
 from .onnx_mul import MulMulMulPattern
 from .onnx_matmul import ReshapeMatMulReshapePattern, TransposeMatMulPattern
-from .onnx_reshape import ReshapeReshapePattern
+from .onnx_reshape import Reshape2Of3Pattern, ReshapeReshapePattern
 from .onnx_rotary import RotaryConcatPartPattern
 from .onnx_sub import Sub1MulPattern
 from .onnx_transpose import TransposeTransposePattern
@@ -33,6 +33,7 @@ def get_default_patterns() -> List[PatternOptimization]:
         ExpandBroadcastPattern(),
         MulMulMulPattern(),
         ReshapeMatMulReshapePattern(),
+        Reshape2Of3Pattern(),
         ReshapeReshapePattern(),
         RotaryConcatPartPattern(),
         Sub1MulPattern(),

@@ -293,7 +293,12 @@ class GraphBuilderPatternOptimization:
     ) -> NodeProto:
         name = self.builder.unique_node_name(name)
         proto = oh.make_node(
-            op_type, inputs, outputs, domain=domain, name=name, **kwargs
+            op_type,
+            inputs,
+            outputs,
+            domain=domain,
+            name=name,
+            **kwargs,
         )
         if attributes:
             proto.attribute.extend(attributes)
