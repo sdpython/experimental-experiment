@@ -139,10 +139,22 @@ def set_type_shape_reduce_op(
     name: str,
     x: str,
     keepdim: int,
+    axes: Optional[Tuple[int]] = None,
 ):
     assert keepdim in {0, 1}, f"keepdim={keepdim} must be in {{0, 1}}"
     g.set_type(name, g.get_type(x))
-    g.set_rank(name, g.get_rank(x) + keepdim - 1)
+    if axes is None or not g.has_shape(x):
+        g.set_rank(name, g.get_rank(x) + keepdim - 1)
+    else:
+        shape = list(g.get_shape(x))
+        for d in axes:
+            assert d < len(shape), (
+                f"shape mismatch for a reduce op shape={shape}, "
+                f"axes={axes}{g.get_debug_msg()}"
+            )
+            shape[d] = 1 if keepdim else None
+        shape = tuple(_ for _ in shape if _ is not None)
+        g.set_shape(name, shape)
 
 
 def _get_input_type(
@@ -239,12 +251,9 @@ def prepare_inputs_homogeneous_operator(
             f"Unable to determine the type to Cast back into "
             f"dtypes_list={dtypes_list}, only={only}{g.get_debug_msg()}"
         )
-        res = g.op.Cast(
-            f(*inputs, name=name),
-            to=dtypes_list_not_none[0],
-            outputs=outputs,
-            name=name,
-        )
+        tr = f(*inputs, name=name)
+        set_type_shape_binary_op(g, tr, *inputs)
+        res = g.op.Cast(tr, to=dtypes_list_not_none[0], outputs=outputs, name=name)
     return tuple([res, *inputs])
 
 

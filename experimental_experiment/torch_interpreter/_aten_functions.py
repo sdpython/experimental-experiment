@@ -660,12 +660,9 @@ def aten_elu(
         res = g.op.Elu(x, alpha=float(alpha), name=name, outputs=outputs)
     else:
         nptype = tensor_dtype_to_np_dtype(g.get_type(x))
-        res = g.op.Mul(
-            np.array([scale], dtype=nptype),
-            g.op.Elu(x, alpha=float(alpha), name=name),
-            name=name,
-            outputs=outputs,
-        )
+        elu = g.op.Elu(x, alpha=float(alpha), name=name)
+        res = g.op.Mul(np.array([scale], dtype=nptype), elu, name=name, outputs=outputs)
+        set_type_shape_unary_op(g, elu, x)
     if sts:
         set_type_shape_unary_op(g, res, x)
     return res
@@ -1441,21 +1438,20 @@ def aten__log_softmax_backward_data(
     else:
         itype = None
         grad_outputc = grad_output
-    res = g.op.Sub(
+
+    vexp = g.op.Exp(output, name="log_softmax_backward_data")
+    red = g.op.ReduceSum(
         grad_output,
-        g.op.Mul(
-            g.op.Exp(output, name="log_softmax_backward_data"),
-            g.op.ReduceSum(
-                grad_output,
-                np.array([dim], dtype=np.int64),
-                keepdims=True,
-                name="log_softmax_backward_data",
-            ),
-            name="log_softmax_backward_data",
-        ),
-        outputs=outputs,
+        np.array([dim], dtype=np.int64),
+        keepdims=True,
         name="log_softmax_backward_data",
     )
+    vmul = g.op.Mul(vexp, red, name="log_softmax_backward_data")
+    res = g.op.Sub(grad_output, vmul, outputs=outputs, name="log_softmax_backward_data")
+
+    set_type_shape_unary_op(g, vexp, output)
+    set_type_shape_unary_op(g, vmul, vexp)
+    set_type_shape_reduce_op(g, red, grad_output, keepdim=1, axes=(dim,))
     if sts:
         set_type_shape_unary_op(g, res, grad_outputc, itype=itype)
     return res
@@ -1729,16 +1725,21 @@ def aten_mul_Tensor(g: GraphBuilder, sts: bool, outputs: List[str], x: T, y: T) 
 
 def aten_ne(g: GraphBuilder, sts: bool, outputs: List[str], x: T, y: T, name="ne") -> T:
     x, y = prepare_inputs_homogeneous_operator(g, x, y)
-    res = g.op.Not(g.op.Equal(x, y, name=name), name=name, outputs=outputs)
+    eq = g.op.Equal(x, y, name=name)
+    res = g.op.Not(eq, name=name, outputs=outputs)
     if sts:
-        set_type_shape_binary_op(g, outputs[0], x, y, cmp_op=True)
+        set_type_shape_binary_op(g, eq, x, y, cmp_op=True)
+        set_type_shape_unary_op(g, res, eq)
     return res
 
 
 def aten_ne_Tensor(
     g: GraphBuilder, sts: bool, outputs: List[str], x: T, y: T, name="ne_Tensor"
 ) -> T:
-    return aten_ne(g, sts, outputs, x, y, name=name)
+    res = aten_ne(g, sts, outputs, x, y, name=name)
+    if sts:
+        set_type_shape_binary_op(g, outputs[0], x, y, cmp_op=True)
+    return res
 
 
 def aten_neg(g: GraphBuilder, sts: bool, outputs: List[str], x: T, name="neg") -> T:
@@ -1890,13 +1891,11 @@ def aten__prelu_kernel(
     g: GraphBuilder, sts: bool, outputs: List[str], x: T, weight: T
 ) -> T:
     dtype = tensor_dtype_to_np_dtype(g.get_type(x))
-    res = g.op.Where(
-        g.op.Greater(x, np.array([0], dtype=dtype), name="_prelu_kernel"),
-        x,
-        g.op.Mul(x, weight, name="_prelu_kernel"),
-        outputs=outputs,
-        name="_prelu_kernel",
-    )
+    ge = g.op.Greater(x, np.array([0], dtype=dtype), name="_prelu_kernel")
+    mu = g.op.Mul(x, weight, name="_prelu_kernel")
+    res = g.op.Where(ge, x, mu, outputs=outputs, name="_prelu_kernel")
+    set_type_shape_unary_op(g, ge, x, TensorProto.BOOL)
+    set_type_shape_unary_op(g, mu, weight)
     if sts:
         set_type_shape_unary_op(g, res, x)
     return res
@@ -1908,20 +1907,21 @@ def aten__prelu_kernel_backward(
     dtype = tensor_dtype_to_np_dtype(g.get_type(x))
     zero = g.make_initializer("zero", np.array([0], dtype=dtype))
     xg0 = g.op.Greater(x, zero, name="_prelu_kernel_backward")
+    mu1 = g.op.Mul(weight, grad_output, name="_prelu_kernel_backward")
     input_grad = g.op.Where(
         xg0,
         grad_output,
-        g.op.Mul(weight, grad_output, name="_prelu_kernel_backward"),
+        mu1,
         name="_prelu_kernel_backward",
         outputs=outputs[:1],
     )
+    mu2 = g.op.Mul(x, grad_output, name="_prelu_kernel_backward")
     weight_grad = g.op.Where(
-        xg0,
-        zero,
-        g.op.Mul(x, grad_output, name="_prelu_kernel_backward"),
-        name="_prelu_kernel_backward",
-        outputs=outputs[1:],
+        xg0, zero, mu2, name="_prelu_kernel_backward", outputs=outputs[1:]
     )
+    set_type_shape_unary_op(g, xg0, x, TensorProto.BOOL)
+    set_type_shape_unary_op(g, mu1, weight)
+    set_type_shape_unary_op(g, mu2, x)
     if sts:
         set_type_shape_unary_op(g, input_grad, x)
         set_type_shape_unary_op(g, weight_grad, weight)
@@ -2026,7 +2026,7 @@ def aten_rsub(
     alpha: float = 1,
 ) -> T:
     assert alpha == 1, f"Not implemented with alpha={alpha}"
-    return aten_sub(g, sts, outputs, y, x)
+    return aten_sub(g, sts, outputs, y, x, name="rsub")
 
 
 def aten_rsub_Scalar(
@@ -2038,7 +2038,7 @@ def aten_rsub_Scalar(
     alpha: float = 1,
 ) -> T:
     assert alpha == 1, f"Not implemented with alpha={alpha}"
-    return aten_sub(g, sts, outputs, y, x)
+    return aten_sub(g, sts, outputs, y, x, name="rsub_Scalar")
 
 
 def aten_setitem(
@@ -2103,8 +2103,11 @@ def aten_sigmoid_backward(
     _1y = g.op.Sub(np.array([1], dtype=dtype), y, name="sigmoid_backward")
     y1y = g.op.Mul(y, _1y, name="sigmoid_backward")
     res = g.op.Mul(out_grad, y1y, outputs=outputs, name="sigmoid_backward")
+
+    set_type_shape_unary_op(g, _1y, y)
+    set_type_shape_unary_op(g, y1y, y)
     if sts:
-        set_type_shape_unary_op(g, outputs[0], y)
+        set_type_shape_unary_op(g, res, y)
     return res
 
 
@@ -2535,7 +2538,7 @@ def aten_sub(
     x, y = prepare_inputs_homogeneous_operator(g, x, y)
     res = g.op.Sub(x, y, outputs=outputs, name=name)
     if sts:
-        set_type_shape_binary_op(g, outputs[0], x, y)
+        set_type_shape_binary_op(g, res, x, y)
     return res
 
 
@@ -2655,13 +2658,11 @@ def aten_threshold_backward(
     name: str = "threshold_backward",
 ) -> T:
     dtype = tensor_dtype_to_np_dtype(g.get_type(grad_output))
+    le = g.op.LessOrEqual(x, np.array([threshold], dtype=dtype), name=name)
     res = g.op.Where(
-        g.op.LessOrEqual(x, np.array([threshold], dtype=dtype), name=name),
-        np.array([0], dtype=dtype),
-        grad_output,
-        outputs=outputs,
-        name=name,
+        le, np.array([0], dtype=dtype), grad_output, outputs=outputs, name=name
     )
+    set_type_shape_unary_op(g, le, x, TensorProto.BOOL)
     if sts:
         set_type_shape_unary_op(g, res, x)
     return res
@@ -2689,8 +2690,11 @@ def aten_tanh_backward(
     yy = g.op.Pow(y, np.array([2], dtype=np.int64), name="tanh_backward")
     _1yy = g.op.Sub(np.array([1], dtype=dtype), yy, name="tanh_backward")
     res = g.op.Mul(out_grad, _1yy, outputs=outputs, name="tanh_backward")
+
+    set_type_shape_unary_op(g, yy, y)
+    set_type_shape_unary_op(g, _1yy, y)
     if sts:
-        set_type_shape_unary_op(g, outputs[0], y)
+        set_type_shape_unary_op(g, res, y)
     return res
 
 

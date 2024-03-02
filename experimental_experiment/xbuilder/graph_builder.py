@@ -14,11 +14,13 @@ from .shape_helper import (
     is_static_dimension,
     is_static_shape,
 )
+from .shape_type_compute import set_type_shape_binary_op
 from ._onnx_helper import (
     choose_consistent_domain_opset,
     compatible_opsets,
     _default_OPSET_TO_IR_VERSION,
     _nice_shape,
+    element_wise_op_types,
 )
 from ._dtype_helper import dtype_to_tensor_dtype
 from ._helper import make_hash
@@ -216,6 +218,8 @@ class GraphBuilder:
     - `_raise_list: Set[str]`: the builder stop if a result falls in that list
       (debugging tool)
     """
+
+    _op_element_wise_types = element_wise_op_types()
 
     def __init__(
         self,
@@ -1455,6 +1459,8 @@ class GraphBuilder:
                 if self.has_shape(node.input[1]):
                     rk = self.get_shape(node.input[1])
                     self.set_rank(k, rk[0])
+        if node.op_type in self._op_element_wise_types:
+            set_type_shape_binary_op(self, node.output[0], *node.input)
 
     def make_nodes(
         self,

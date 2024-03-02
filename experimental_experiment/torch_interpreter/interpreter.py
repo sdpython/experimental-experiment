@@ -85,6 +85,8 @@ class DynamoInterpreter:
         raise ValueError(f"Unable to process node kind {node.op!r} ({node}).")
 
     def get_attr(self, node: "torch.fx.Node"):  # noqa: F821
+        if self.builder.verbose > 1:
+            print(f"[DynamoInterpreter-{self._hash()}.get_attr][{node.name}]")
         try:
             init = getattr(node.graph.owning_module, node.target)
         except AttributeError as e:
@@ -96,6 +98,8 @@ class DynamoInterpreter:
         return node.name
 
     def placeholder(self, node: "torch.fx.Node"):  # noqa: F821
+        if self.builder.verbose > 1:
+            print(f"[DynamoInterpreter-{self._hash()}.placeholder][{node.name}]")
         val = node.meta.get("val", None)
 
         if val is None:
@@ -168,6 +172,8 @@ class DynamoInterpreter:
 
     def output(self, node):
         output_name = node.name
+        if self.builder.verbose > 1:
+            print(f"[DynamoInterpreter-{self._hash()}.output][{output_name}]")
         declared = node.args
         assert len(declared) == 1, (
             f"declared must have one element: {declared}, output_name={output_name}"
@@ -487,6 +493,8 @@ class DynamoInterpreter:
         )
 
     def getitem(self, node: "torch.fx.Node"):  # noqa: F821
+        if self.builder.verbose > 1:
+            print(f"[DynamoInterpreter-{self._hash()}.getitem]")
         args = node.args
         assert len(args) == 2
         node_output, index = args
@@ -655,6 +663,8 @@ class DynamoInterpreter:
         fct = find_function(
             aten_name, args=node.args, kwargs=node.kwargs, graph_builder=self.builder
         )
+        if self.builder.verbose > 1:
+            print(f"[DynamoInterpreter-{self._hash()}.call_function][{fct.__name__}]")
 
         args = [self._process_arg(node, aten_name, a) for a in fx_args]
         output_names = self._get_output_names(node)
@@ -682,6 +692,8 @@ class DynamoInterpreter:
 
     def call_method(self, node: "torch.fx.Node"):  # noqa: F821
         method_name = node.target
+        if self.builder.verbose > 1:
+            print(f"[DynamoInterpreter-{self._hash()}.call_method][{method_name}]")
         assert isinstance(
             node.args, tuple
         ), f"Unexpected type {type(node.args)} for node.args."
@@ -835,6 +847,11 @@ class DynamoInterpreter:
         for a in named_args:
             val = a.meta.get("example_value", None)
             args.append(val)
+
+        if self.builder.verbose > 1:
+            print(
+                f"[DynamoInterpreter-{self._hash()}.call_module] class [{type(sub_module)}]"
+            )
 
         if hasattr(sub_module, "graph") and isinstance(
             sub_module, self.torch.fx.GraphModule
