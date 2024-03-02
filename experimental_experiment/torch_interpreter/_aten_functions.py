@@ -20,8 +20,7 @@ from ..xbuilder._dtype_helper import (
     torch_dtype_to_onnx_dtype,
 )
 from ..xbuilder.graph_builder import GraphBuilder
-from ._exceptions import FunctionNotFoundError
-from ._aten_helper import (
+from ..xbuilder.shape_type_compute import (
     _adjust_attributes_of_max_pool,
     broadcast_shape,
     set_type_shape_unary_op,
@@ -30,6 +29,7 @@ from ._aten_helper import (
     set_type_shape_reshape,
     prepare_inputs_homogeneous_operator,
 )
+from ._exceptions import FunctionNotFoundError
 
 
 T = str
