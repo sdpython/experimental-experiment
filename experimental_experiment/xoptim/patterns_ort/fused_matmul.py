@@ -5,7 +5,7 @@ from ..patterns.patterns_api import MatchResult, PatternOptimization
 
 class FusedMatMulPattern(PatternOptimization):
     """
-    Replaces the sequence Transpose, Matmul or Gemm into Gemm
+    Replaces the sequence Transpose, Matmul into FusedMatMul.
     """
 
     def match(
