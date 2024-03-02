@@ -25,7 +25,7 @@ from experimental_experiment.ext_test_case import (
     ignore_warnings,
     requires_torch,
 )
-from experimental_experiment.torch_exp._exceptions import FunctionNotFoundError
+from experimental_experiment.torch_interpreter import FunctionNotFoundError
 from experimental_experiment.torch_helper.dump_helper import assert_all_close
 from experimental_experiment.torch_dynamo import (
     onnx_debug_backend,

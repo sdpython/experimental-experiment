@@ -1,7 +1,7 @@
 from typing import List, Optional, Union
 
 # API
-from .patterns_api import MatchResult, PatternOptimization
+from .patterns_api import MatchResult, PatternOptimization  # noqa: F401
 
 # onnx patterns
 from .onnx_cast import CastPattern
@@ -16,8 +16,6 @@ from .onnx_unsqueeze import UnsqueezeUnsqueezePattern
 
 # ort patterns
 from .ort_constant_of_shape_scatter_nd import ConstantOfShapeScatterNDPattern
-
-
 
 
 def get_default_patterns() -> List[PatternOptimization]:
@@ -59,8 +57,6 @@ def get_onnxruntime_patterns() -> List[PatternOptimization]:
         from experimental_experiment.torch_exp.optimization_patterns import get_onnxruntime_patterns
         pprint.pprint(get_onnxruntime_patterns())
     """
-    from .patterns import ConstantOfShapeScatterNDPattern
-
     return [
         ConstantOfShapeScatterNDPattern(),
     ]
