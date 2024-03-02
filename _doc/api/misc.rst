@@ -9,7 +9,7 @@ xbuilder.annotations
 compatible_dimensions
 +++++++++++++++++++++
 
-.. autofunction:: experimental_experiment.xbuilder.annotations.compatible_dimensions
+.. autofunction:: experimental_experiment.xbuilder.shape_helper.compatible_dimensions
 
 compatible_shapes
 +++++++++++++++++
