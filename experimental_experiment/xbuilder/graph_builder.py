@@ -2193,16 +2193,17 @@ class GraphBuilder:
         last_position = 0
         new_nodes_p = []
         for node in new_nodes:
-            min_position = max(first_at.get(i, -1) for i in node.input)
+            min0_position = max(first_at.get(i, -1) for i in node.input)
             max_position = min(needed_at.get(o, N) for o in node.output)
-            min_position = max(min_position + 1, last_position)
+            min_position = max(min0_position + 1, last_position)
             assert min_position <= max_position, (
                 f"Unable to insert node {self.print_node(node)}, "
-                f"min_position={min_position}, max_position={max_position}, "
-                f"len(nodes)={len(self.nodes)}."
+                f"min_position={min_position}, true_min_position={min0_position}, "
+                f"max_position={max_position}, len(nodes)={len(self.nodes)}"
             )
             new_nodes_p.append((min_position, node))
             last_position = min_position
+        assert len(new_nodes) == len(new_nodes_p)
 
         # do the addition
         for i, (p, n) in enumerate(new_nodes_p):

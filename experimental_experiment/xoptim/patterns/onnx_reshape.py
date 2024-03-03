@@ -68,9 +68,11 @@ class Reshape2Of3Pattern(PatternOptimization):
             return None
 
         next_nodes = g.next_nodes(node.output[0])
-        if len(next_nodes) != 1:
+        if len(next_nodes) > 1 or (
+            len(next_nodes) == 0 and not g.is_output(node.output[0])
+        ):
             return None
-        next_node = next_nodes[0]
+        next_node = None if len(next_nodes) == 0 else next_nodes[0]
         type_out = None if next_node is None else next_node.op_type
 
         node_left = g.node_before(node.input[0])
@@ -110,13 +112,20 @@ class Reshape2Of3Pattern(PatternOptimization):
             node: NodeProto,
         ) -> List[NodeProto]:
 
-            res = []
             compute_shape_name = (
                 node_left.input[1] if node_right is None else node_right.input[1]
             )
             final_shape_name = (
                 compute_shape_name if next_node is None else next_node.input[1]
             )
+
+            res = []
+            if node_left is not None and g.is_used_more_than_once(node_left.output[0]):
+                res.append(node_left)
+            if node_right is not None and g.is_used_more_than_once(
+                node_right.output[0]
+            ):
+                res.append(node_right)
 
             if node_left is None:
                 left_name = g.unique_name(f"{self.__class__.__name__}L_{node.input[0]}")
@@ -140,41 +149,40 @@ class Reshape2Of3Pattern(PatternOptimization):
             else:
                 right_name = node_right.input[0]
 
-            main_node = g.make_node(
-                node.op_type,
-                [left_name, right_name],
-                [node.output[0]] if next_node is None else [next_node.output[0]],
-            )
-            res.append(main_node)
-
-            if node_left is not None and g.is_used_more_than_once(node_left.output[0]):
-                res.append(node_left)
-            if node_right is not None and g.is_used_more_than_once(
-                node_right.output[0]
-            ):
-                res.append(node_right)
-            if g.is_used_more_than_once(node.output[0]):
-                res.append(
-                    g.make_node(
-                        "Reshape",
-                        [main_node.output[0], compute_shape_name],
-                        [node.output[0]],
-                    )
+            if next_node is None:
+                # Reshape is needed.
+                new_name = g.unique_name(f"{self.__class__.__name__}L_{node.output[0]}")
+                res.extend(
+                    [
+                        g.make_node(
+                            node.op_type,
+                            [left_name, right_name],
+                            [new_name],
+                        ),
+                        g.make_node(
+                            "Reshape",
+                            [new_name, final_shape_name],
+                            [node.output[0]],
+                        ),
+                    ]
                 )
+            else:
+                main_node = g.make_node(
+                    node.op_type,
+                    [left_name, right_name],
+                    [next_node.output[0]],
+                )
+                res.append(main_node)
 
-            # node_inputs = [
-            #     _ for _ in [node_left, node_right, node, next_node] if _ is not None
-            # ]
-            # assert len(res) <= len(node_inputs), (
-            #     f"Too many new nodes:\n-- removed --:\n"
-            #     f"{self._eol.join(map(self.print_node, node_inputs))}"
-            #     f"\n-- added --\n{self._eol.join(map(self.print_node, res))}"
-            # )
+                if g.is_used_more_than_once(node.output[0]):
+                    res.append(
+                        g.make_node(
+                            "Reshape",
+                            [main_node.output[0], compute_shape_name],
+                            [node.output[0]],
+                        )
+                    )
+
             return res
 
-        return MatchResult(
-            self,
-            nodes,
-            apply,
-            insert_at=None,
-        )
+        return MatchResult(self, nodes, apply)
