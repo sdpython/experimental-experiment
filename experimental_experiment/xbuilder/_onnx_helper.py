@@ -177,10 +177,26 @@ def element_wise_op_types() -> Set[str]:
         "And",
         "Or",
         "Mod",
+        "Xor",
+    }
+
+
+def element_wise_op_cmp_types() -> Set[str]:
+    """
+    Returns the list of element-wise operators
+    doing comparisons.
+
+    .. runpython::
+        :showcode:
+
+        import pprint
+        from experimental_experiment.xbuilder._onnx_helper import element_wise_op_cmp_types
+        pprint.pprint(element_wise_op_cmp_types())
+    """
+    return {
         "Equal",
         "Greater",
         "GreaterOrEqual",
         "Less",
         "LessOrEqual",
-        "Xor",
     }

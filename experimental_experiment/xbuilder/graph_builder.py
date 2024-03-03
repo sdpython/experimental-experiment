@@ -21,6 +21,7 @@ from ._onnx_helper import (
     _default_OPSET_TO_IR_VERSION,
     _nice_shape,
     element_wise_op_types,
+    element_wise_op_cmp_types,
 )
 from ._dtype_helper import dtype_to_tensor_dtype
 from ._helper import make_hash
@@ -220,6 +221,7 @@ class GraphBuilder:
     """
 
     _op_element_wise_types = element_wise_op_types()
+    _op_element_wise_cmp_types = element_wise_op_cmp_types()
 
     def __init__(
         self,
@@ -1459,7 +1461,9 @@ class GraphBuilder:
                 if self.has_shape(node.input[1]):
                     rk = self.get_shape(node.input[1])
                     self.set_rank(k, rk[0])
-        if node.op_type in self._op_element_wise_types:
+        if node.op_type in self._op_element_wise_cmp_types:
+            set_type_shape_binary_op(self, node.output[0], *node.input, cmp_op=True)
+        elif node.op_type in self._op_element_wise_types:
             set_type_shape_binary_op(self, node.output[0], *node.input)
 
     def make_nodes(

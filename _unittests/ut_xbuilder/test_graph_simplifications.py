@@ -8,7 +8,7 @@ from experimental_experiment.xbuilder.graph_builder import GraphBuilder
 
 class TestGraphSimplification(ExtTestCase):
     def call_optimizer(self, onx):
-        gr = GraphBuilder(onx)
+        gr = GraphBuilder(onx, infer_shapes=True)
         gr.remove_unused()
         return gr.to_onnx()
 
