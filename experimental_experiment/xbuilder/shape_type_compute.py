@@ -279,6 +279,8 @@ def prepare_inputs_homogeneous_operator(
         tr = f(*inputs, name=name)
         set_type_shape_binary_op(g, tr, *inputs)
         res = g.op.Cast(tr, to=dtypes_list_not_none[0], outputs=outputs, name=name)
+        if outputs is None:
+            set_type_shape_unary_op(g, res, tr, itype=dtypes_list_not_none[0])
     return tuple([res, *inputs])
 
 
