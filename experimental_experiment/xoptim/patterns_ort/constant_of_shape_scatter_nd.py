@@ -47,4 +47,4 @@ class ConstantOfShapeScatterNDPattern(PatternOptimization):
             )
             return [new_node]
 
-        return MatchResult(self, [node_before, node], apply)
+        return MatchResult(self, [node_before, node], apply, insert_at=node)

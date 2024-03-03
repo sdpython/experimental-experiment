@@ -5,7 +5,7 @@ import warnings
 from contextlib import redirect_stderr, redirect_stdout
 from io import StringIO
 from timeit import Timer
-from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, Union
 
 import numpy
 from numpy.testing import assert_allclose
@@ -229,6 +229,18 @@ class ExtTestCase(unittest.TestCase):
             return AssertionError(
                 f"{a} < {b}, a not greater or equal than b\n{msg or ''}"
             )
+
+    def assertEqualArrays(
+        self,
+        expected: Sequence[numpy.ndarray],
+        value: Sequence[numpy.ndarray],
+        atol: float = 0,
+        rtol: float = 0,
+        msg: Optional[str] = None,
+    ):
+        self.assertEqual(len(expected), len(value))
+        for a, b in zip(expected, value):
+            self.assertEqualArray(a, b, atol=atol, rtol=rtol)
 
     def assertEqualArray(
         self,

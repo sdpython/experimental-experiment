@@ -43,4 +43,4 @@ class UnsqueezeUnsqueezePattern(PatternOptimization):
             )
             return [new_node]
 
-        return MatchResult(self, [node, next_node], apply)
+        return MatchResult(self, [node, next_node], apply, insert_at=node)

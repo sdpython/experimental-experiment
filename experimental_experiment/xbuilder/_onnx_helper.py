@@ -1,10 +1,14 @@
-from typing import Dict, Iterator, Optional, Tuple
+from typing import Dict, Iterator, Optional, Set, Tuple
 import numpy as np
 from onnx import AttributeProto, GraphProto, NodeProto, TensorShapeProto
 from onnx.defs import onnx_opset_version, get_all_schemas_with_history
 
 
 def _default_OPSET_TO_IR_VERSION() -> Dict[int, int]:
+    """
+    Returns the dictionary mapping the main opset
+    to the corresponding `ir_version`.
+    """
     return {
         1: 3,
         2: 3,
@@ -152,3 +156,47 @@ def choose_consistent_domain_opset(
     if domain != "ai.onnx.ml":
         return 1
     return _get_default_opset_for_domain(domain)
+
+
+def element_wise_op_types() -> Set[str]:
+    """
+    Returns the list of element-wise operators.
+
+    .. runpython::
+        :showcode:
+
+        import pprint
+        from experimental_experiment.xbuilder._onnx_helper import element_wise_op_types
+        pprint.pprint(element_wise_op_types())
+    """
+    return {
+        "Add",
+        "Div",
+        "Mul",
+        "Sub",
+        "And",
+        "Or",
+        "Mod",
+        "Xor",
+    }
+
+
+def element_wise_op_cmp_types() -> Set[str]:
+    """
+    Returns the list of element-wise operators
+    doing comparisons.
+
+    .. runpython::
+        :showcode:
+
+        import pprint
+        from experimental_experiment.xbuilder._onnx_helper import element_wise_op_cmp_types
+        pprint.pprint(element_wise_op_cmp_types())
+    """
+    return {
+        "Equal",
+        "Greater",
+        "GreaterOrEqual",
+        "Less",
+        "LessOrEqual",
+    }

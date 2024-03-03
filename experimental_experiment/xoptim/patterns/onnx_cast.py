@@ -36,4 +36,4 @@ class CastPattern(PatternOptimization):
             )
             return [new_node]
 
-        return MatchResult(self, [node], apply)
+        return MatchResult(self, [node], apply, insert_at=node)

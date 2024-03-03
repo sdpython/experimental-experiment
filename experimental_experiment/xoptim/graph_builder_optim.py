@@ -293,7 +293,12 @@ class GraphBuilderPatternOptimization:
     ) -> NodeProto:
         name = self.builder.unique_node_name(name)
         proto = oh.make_node(
-            op_type, inputs, outputs, domain=domain, name=name, **kwargs
+            op_type,
+            inputs,
+            outputs,
+            domain=domain,
+            name=name,
+            **kwargs,
         )
         if attributes:
             proto.attribute.extend(attributes)
@@ -305,21 +310,35 @@ class GraphBuilderPatternOptimization:
         Returns the new nodes.
         """
         idn = [id(n) for n in match.nodes if n is not None]
+
         assert all(
             map(lambda i: i in self.nodes_, idn)
         ), f"One node in {idn} is not referenced"
+
         positions = {id(n): i for i, n in enumerate(self.iter_nodes())}
+
         assert all(
             map(lambda i: i in positions, idn)
         ), f"One node in {idn} is not referenced"
-        insert_at = (
-            max(positions[i] for i in idn)
-            if match.insert_at is None
-            else positions[id(match.insert_at)]
+
+        removed = [positions[i] for i in idn]
+        position_insert = (
+            None if match.insert_at is None else positions[id(match.insert_at)]
         )
         new_nodes = match.apply(self, *match.nodes)
-        removed = [positions[i] for i in idn]
-        self.builder.insert_and_remove_nodes(insert_at, new_nodes, removed)
+        self.builder.insert_and_remove_nodes(position_insert, new_nodes, removed)
+
+        if self.verbose >= 10:
+            print(f"[GraphBuilderPatternOptimization.apply_match] {match}")
+            for node in match.nodes:
+                if node is None:
+                    continue
+                print(f"  - {node.op_type}: {node.input} -> {node.output}")
+            for node in new_nodes:
+                if node is None:
+                    continue
+                print(f"  + {node.op_type}: {node.input} -> {node.output}")
+
         return new_nodes
 
     def optimize(

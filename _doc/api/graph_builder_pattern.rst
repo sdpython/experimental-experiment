@@ -63,6 +63,12 @@ ReshapeMatMulReshapePattern
 .. autoclass:: experimental_experiment.xoptim.patterns.ReshapeMatMulReshapePattern
     :members:
 
+Reshape2Of3Pattern
+++++++++++++++++++
+
+.. autoclass:: experimental_experiment.xoptim.patterns.Reshape2Of3Pattern
+    :members:
+
 ReshapeReshapePattern
 +++++++++++++++++++++
 

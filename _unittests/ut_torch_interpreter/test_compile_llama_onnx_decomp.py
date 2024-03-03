@@ -255,7 +255,7 @@ class TestDynamoLlama(ExtTestCase):
                     decompositions=decomp,
                     impl="ref",
                     atol=1e-3,
-                    # verbose=10,
+                    verbose=0,
                 )
 
         input_dims = self.get_input_dims(False)
