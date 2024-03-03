@@ -41,7 +41,7 @@ class ReshapeReshapePattern(PatternOptimization):
             )
             return [new_node]
 
-        return MatchResult(self, [node, next_node], apply)
+        return MatchResult(self, [node, next_node], apply, insert_at=next_node)
 
 
 class Reshape2Of3Pattern(PatternOptimization):
@@ -119,7 +119,7 @@ class Reshape2Of3Pattern(PatternOptimization):
             )
 
             if node_left is None:
-                left_name = g.unique_name(f"{node.input[0]}_reshaped")
+                left_name = g.unique_name(f"{self.__class__.__name__}L_{node.input[0]}")
                 res.append(
                     g.make_node(
                         "Reshape", [node.input[0], final_shape_name], [left_name]
@@ -129,7 +129,9 @@ class Reshape2Of3Pattern(PatternOptimization):
                 left_name = node_left.input[0]
 
             if node_right is None:
-                right_name = g.unique_name(f"{node.input[1]}_reshaped")
+                right_name = g.unique_name(
+                    f"{self.__class__.__name__}R_{node.input[1]}"
+                )
                 res.append(
                     g.make_node(
                         "Reshape", [node.input[1], final_shape_name], [right_name]
@@ -159,11 +161,20 @@ class Reshape2Of3Pattern(PatternOptimization):
                         [node.output[0]],
                     )
                 )
+
+            # node_inputs = [
+            #     _ for _ in [node_left, node_right, node, next_node] if _ is not None
+            # ]
+            # assert len(res) <= len(node_inputs), (
+            #     f"Too many new nodes:\n-- removed --:\n"
+            #     f"{self._eol.join(map(self.print_node, node_inputs))}"
+            #     f"\n-- added --\n{self._eol.join(map(self.print_node, res))}"
+            # )
             return res
 
         return MatchResult(
             self,
             nodes,
             apply,
-            insert_at=node,
+            insert_at=None,
         )

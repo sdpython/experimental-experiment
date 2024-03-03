@@ -322,6 +322,10 @@ class GraphBuilder:
                 return tuple([value.dtype, value.shape, tuple(value.ravel().tolist())])
         return None
 
+    @classmethod
+    def print_node(cls, node: NodeProto):
+        return f"{node.op_type}: {node.input} -> {node.output}"
+
     @property
     def main_opset(self):
         "Returns the opset for the main domain (assuming it is used)."
@@ -1850,7 +1854,7 @@ class GraphBuilder:
 
         gro = GraphBuilderPatternOptimization(
             self,
-            verbose=self.optimization_options.verbose,
+            verbose=max(self.verbose, self.optimization_options.verbose),
             patterns=self.optimization_options.patterns,
             recursive=self.optimization_options.recursive,
         )
@@ -2098,7 +2102,7 @@ class GraphBuilder:
 
     def insert_and_remove_nodes(
         self,
-        insert_at: int,
+        insert_at: Optional[int],
         new_nodes: List[NodeProto],
         removed: List[int],
         opsets: Optional[Dict[str, int]] = None,
@@ -2106,13 +2110,14 @@ class GraphBuilder:
         """
         Inserts new nodes and removes others.
 
-        :param insert_at: insert the new nodes at this position
+        :param insert_at: insert the new nodes at this position,
+            if empty, the function guesses where to add them
         :param new_nodes: list of nodes to insert
         :param removed: list of nodes to removed (based on their positions)
         :param opsets: opsets used
         :return: list of removed nodes
         """
-        assert not removed or min(removed) <= insert_at, (
+        assert insert_at is None or not removed or min(removed) <= insert_at, (
             f"The position {insert_at} must be higher than the position "
             f"of the removed nodes {removed}"
         )
@@ -2161,12 +2166,50 @@ class GraphBuilder:
                     )
 
         assert n_existing, "Any output of the new node is conncted to existing names."
-        for i, n in enumerate(new_nodes):
+        if insert_at is not None:
+            for i, n in enumerate(new_nodes):
+                assert isinstance(n, NodeProto), f"Unexpected type {type(n)} for a node"
+                self.nodes.insert(insert_at + i, n)
+                self._make_node_set_type_shape_constant(n, True)
+                self._make_node_set_type_shape(n)
+            self.nodes = [n for n in self.nodes if n is not None]
+            return memo
+
+        # Needs to insert the nodes at the right location.
+        # Let's find out where the best position is.
+        self.nodes = [n for n in self.nodes if n is not None]
+        needed_at = {}
+        first_at = {}
+        for i, node in enumerate(self.nodes):
+            for name in node.input:
+                if name not in needed_at:
+                    needed_at[name] = i
+            for name in node.output:
+                if name not in first_at:
+                    first_at[name] = i
+
+        # guess the position to insert the nodes at
+        N = len(self.nodes)
+        last_position = 0
+        new_nodes_p = []
+        for node in new_nodes:
+            min_position = max(first_at.get(i, -1) for i in node.input)
+            max_position = min(needed_at.get(o, N) for o in node.output)
+            min_position = max(min_position + 1, last_position)
+            assert min_position <= max_position, (
+                f"Unable to insert node {self.print_node(node)}, "
+                f"min_position={min_position}, max_position={max_position}, "
+                f"len(nodes)={len(self.nodes)}."
+            )
+            new_nodes_p.append((min_position, node))
+            last_position = min_position
+
+        # do the addition
+        for i, (p, n) in enumerate(new_nodes_p):
             assert isinstance(n, NodeProto), f"Unexpected type {type(n)} for a node"
-            self.nodes.insert(insert_at + i, n)
+            self.nodes.insert(p + i, n)
             self._make_node_set_type_shape_constant(n, True)
             self._make_node_set_type_shape(n)
-        self.nodes = [n for n in self.nodes if n is not None]
         return memo
 
     def _update_shape_types_with_proto(self, proto: ModelProto):

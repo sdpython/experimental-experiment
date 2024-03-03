@@ -465,7 +465,7 @@ class TestGraphPatternOptimization(ExtTestCase):
         gr = GraphBuilder(
             origin,
             infer_shapes=True,
-            optimization_options=OptimizationOptions(patterns=["Expand"], verbose=0),
+            optimization_options=OptimizationOptions(patterns=["Expand"]),
         )
         onx = gr.to_onnx(optimize=True)
         after = [node for node in onx.graph.node if node.op_type == "Expand"]
