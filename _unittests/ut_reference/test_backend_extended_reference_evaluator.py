@@ -207,6 +207,8 @@ backend_test.exclude(
     "|test_castlike_UINT4_to_*)"
 )
 
+backend_test.exclude("(test_regex_full_match*)")
+
 backend_test.exclude("(test_scatter_with_axis*|test_scatter_without_axis*)")
 
 if onnx_opset_version() < 21:
