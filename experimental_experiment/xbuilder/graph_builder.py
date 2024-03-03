@@ -555,6 +555,14 @@ class GraphBuilder:
             value, bool
         ), f"Unexpected rank type {type(value)} for {name!r}"
         assert isinstance(name, str), f"Unexpected type {type(name)} for name."
+        if name in self._known_ranks:
+            assert value == self._known_ranks[name], (
+                f"Inconsistent ranks for {name!r}, previous value is "
+                f"{self._known_ranks[name]}, new value is {value}{self.get_debug_msg()}"
+            )
+            if self.verbose > 5:
+                print(f"[GraphBuilder-{self._hash()}.set_rank] (again) {name}:{value}")
+            return
         assert (
             name not in self._known_ranks
         ), f"Name {name!r} already exists{self.get_debug_msg()}"
@@ -1680,9 +1688,12 @@ class GraphBuilder:
                 f"[GraphBuilder-{hs}.make_initializer] {name}[{init.dtype}:{init.shape}{sval}]"
             )
         for node in self.nodes:
+            if node is None:
+                continue
             rows.append(
                 f"[GraphBuilder-{hs}.make_node] "
-                f"{_align(node.name, 15)} [{self._debug_string_inputs(node.input, node.output, 6)}] "
+                f"{_align(node.name, 15)} "
+                f"[{self._debug_string_inputs(node.input, node.output, 6)}] "
                 f"{node.op_type}:{node.input}->{node.output}"
             )
         for io in self.outputs:
