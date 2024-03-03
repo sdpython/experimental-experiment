@@ -6,7 +6,7 @@ import onnx.helper as oh
 import onnx.numpy_helper as onh
 from onnx.shape_inference import infer_shapes
 from onnx import AttributeProto, FunctionProto, ModelProto, NodeProto, TensorProto
-from onnx_array_api.reference import ExtendedReferenceEvaluator
+from experimental_experiment.reference import ExtendedReferenceEvaluator
 from .shape_helper import (
     DYNAMIC_SHAPE,
     STATIC_SHAPE,

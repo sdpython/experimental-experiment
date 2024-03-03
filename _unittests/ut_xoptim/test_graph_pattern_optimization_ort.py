@@ -12,6 +12,7 @@ from experimental_experiment.xbuilder._onnx_helper import (
     choose_consistent_domain_opset,
     compatible_opsets,
 )
+from experimental_experiment.reference import ExtendedReferenceEvaluator
 
 
 class TestGraphPatternOptimizationOrt(ExtTestCase):
@@ -93,11 +94,24 @@ class TestGraphPatternOptimizationOrt(ExtTestCase):
             ["ScatterNDOfShape"],
             [n.op_type for n in opt_onx.graph.node],
         )
+
+        feeds = {
+            "shape": np.array([5, 6], dtype=np.int64),
+            "indices": np.array([[0], [1], [0]], dtype=np.int64),
+            "updates": np.arange(18).reshape((3, 6)).astype(np.float32),
+        }
+        ref1 = ExtendedReferenceEvaluator(model)
+        expected = ref1.run(None, feeds)
+
         self.assertEqual(0, len(opt_onx.graph.initializer))
         check_model(opt_onx)
         opsets = {v.domain: v.version for v in opt_onx.opset_import}
         self.assertIn("com.microsoft", opsets)
         self.assertEqual(opsets["com.microsoft"], 1)
+
+        ref2 = ExtendedReferenceEvaluator(opt_onx)
+        got = ref2.run(None, feeds)
+        self.assertEqualArray(expected[0], got[0])
 
     def common_fused_matmul(self, side):
         from onnxruntime import InferenceSession

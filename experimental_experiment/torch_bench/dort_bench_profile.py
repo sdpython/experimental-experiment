@@ -117,7 +117,7 @@ is_cuda = max_device >= 0
 
 if args.debug:
     print("-- debugging")
-    from onnx_array_api.reference import ExtendedReferenceEvaluator
+    from experimental_experiment.reference import ExtendedReferenceEvaluator
 
     ref = ExtendedReferenceEvaluator(model_model, verbose=10)
     feeds = dict(
