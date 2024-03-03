@@ -2518,18 +2518,22 @@ def aten__softmax_backward_data(
         grad_outputc = g.op.Cast(
             grad_output, to=itype, name="log_softmax_backward_data"
         )
+        set_type_shape_unary_op(g, grad_outputc, grad_output, itype=itype)
     else:
         itype = None
         grad_outputc = grad_output
 
     new_grad_output = g.op.Mul(grad_outputc, y)
+    set_type_shape_unary_op(g, new_grad_output, grad_outputc)
     sums = g.op.ReduceSum(
         new_grad_output,
         np.array([dim], dtype=np.int64),
         keepdims=1,
         name="softmax_backward_data",
     )
+    set_type_shape_reduce_op(g, sums, new_grad_output, keepdim=1, axes=(dim,))
     temp = g.op.Mul(y, sums, name="softmax_backward_data")
+    set_type_shape_unary_op(g, temp, y)
     res = g.op.Sub(new_grad_output, temp, outputs=outputs, name="softmax_backward_data")
     if sts:
         set_type_shape_unary_op(g, res, grad_outputc, itype=itype)

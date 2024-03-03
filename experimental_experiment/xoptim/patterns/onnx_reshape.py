@@ -61,6 +61,14 @@ class Reshape2Of3Pattern(PatternOptimization):
         if node.op_type not in self._op_types or node.domain != "":
             return None
 
+        if (
+            not g.has_shape(node.output[0])
+            or not g.has_shape(node.input[0])
+            or not g.has_shape(node.input[1])
+        ):
+            # Shapes are missing. They should be populated as much as possible.
+            return None
+
         shape_out = g.get_shape(node.output[0])
         shape_in = g.get_shape(node.input[0]), g.get_shape(node.input[1])
         if not (shape_out == shape_in[0] == shape_in[1]):
