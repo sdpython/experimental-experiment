@@ -7,6 +7,7 @@ API
     :maxdepth: 1
 
     gradient
+    reference
     graph_builder
     graph_builder_pattern
     interpreter

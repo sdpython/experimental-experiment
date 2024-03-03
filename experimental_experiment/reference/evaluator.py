@@ -11,6 +11,7 @@ from .ops.op_fused_matmul import FusedMatMul
 from .ops.op_memcpy_host import MemcpyFromHost, MemcpyToHost
 from .ops.op_quick_gelu import QuickGelu
 from .ops.op_scatter_elements import ScatterElements
+from .ops.op_scatternd_of_shape import ScatterNDOfShape
 from .ops.op_slice import Slice_1, Slice_10
 
 
@@ -20,15 +21,25 @@ logger = getLogger("experimental-experiment-eval")
 class ExtendedReferenceEvaluator(ReferenceEvaluator):
     """
     This class replaces the python implementation by custom implementation.
-    The Array API extends many operator to all types not supported
-    by the onnx specifications. The evaluator allows to test
+    The evaluator allows to test
     scenarios outside what an onnx backend bound to the official onnx
-    operators definition could do.
+    operators definition could do such as optimization patterns
+    involving onnxruntime contrib operators.
 
     ::
 
-        from experiment_experiment.reference import ExtendedReferenceEvaluator
+        from experimental_experiment.reference import ExtendedReferenceEvaluator
         ref = ExtendedReferenceEvaluator(...)
+
+    The class overloads or adds the following operators by default:
+
+    .. runpython::
+        :showcode:
+
+        import pprint
+        from experimental_experiment.reference import ExtendedReferenceEvaluator
+
+        pprint.pprint(ExtendedReferenceEvaluator.default_ops)
     """
 
     default_ops = [
@@ -41,6 +52,7 @@ class ExtendedReferenceEvaluator(ReferenceEvaluator):
         MemcpyToHost,
         QuickGelu,
         ScatterElements,
+        ScatterNDOfShape,
         Slice_1,
         Slice_10,
     ]
