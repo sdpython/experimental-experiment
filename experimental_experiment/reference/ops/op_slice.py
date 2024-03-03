@@ -1,11 +1,8 @@
-from typing import Optional
-import numpy as np
-from onnx.reference.ops._op import OpRun
 from onnx.reference.ops.op_slice import SliceCommon
 
 
 class Slice_10(SliceCommon):
-    def __init__(self, onnx_node, run_params):  # type: ignore
+    def __init__(self, onnx_node, run_params):
         SliceCommon.__init__(self, onnx_node, run_params)
 
 

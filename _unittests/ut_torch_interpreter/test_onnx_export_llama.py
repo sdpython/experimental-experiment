@@ -5,7 +5,7 @@ import unittest
 import warnings
 import packaging.version as pv
 import onnxruntime  # noqa: F401
-from onnx_array_api.reference import ExtendedReferenceEvaluator
+from experimental_experiment.reference import ExtendedReferenceEvaluator
 from experimental_experiment.ext_test_case import ExtTestCase, ignore_warnings
 from experimental_experiment.xbuilder import OptimizationOptions
 from experimental_experiment.torch_interpreter import to_onnx

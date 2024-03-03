@@ -4,7 +4,7 @@ import numpy as np
 import onnx
 from onnx import ModelProto, TensorProto, helper as oh, numpy_helper as onh
 from onnx.checker import check_model
-from onnx_array_api.reference import ExtendedReferenceEvaluator
+from experimental_experiment.reference import ExtendedReferenceEvaluator
 from experimental_experiment.ext_test_case import ExtTestCase, ignore_warnings
 from experimental_experiment.xbuilder.graph_builder import (
     GraphBuilder,
