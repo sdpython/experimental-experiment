@@ -347,7 +347,7 @@ class TestDynamoLlama(ExtTestCase):
             decompositions=False,
             atol=1e-4,
             # impl="ref",
-            verbose=10,
+            # verbose=10,
             # raise_list={"mul_2"},
         )
 

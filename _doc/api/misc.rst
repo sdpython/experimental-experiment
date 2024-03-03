@@ -17,7 +17,7 @@ compatible_shapes
 .. autofunction:: experimental_experiment.xbuilder.shape_helper.compatible_shapes
 
 xbuilder._onnx_helper
-+++++++++++++++++++++
+=====================
 
 choose_consistent_domain_opset
 ++++++++++++++++++++++++++++++
@@ -28,3 +28,13 @@ compatible_opsets
 +++++++++++++++++
 
 .. autofunction:: experimental_experiment.xbuilder._onnx_helper.compatible_opsets
+
+element_wise_op_types
++++++++++++++++++++++
+
+.. autofunction:: experimental_experiment.xbuilder._onnx_helper.element_wise_op_types
+
+element_wise_op_cmp_types
++++++++++++++++++++++++++
+
+.. autofunction:: experimental_experiment.xbuilder._onnx_helper.element_wise_op_cmp_types
