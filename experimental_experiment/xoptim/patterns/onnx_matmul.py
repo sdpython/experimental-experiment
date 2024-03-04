@@ -526,7 +526,6 @@ class TransposeReshapeMatMulPattern(PatternOptimization):
         shape = list(g.get_computed_constant((node_left or node_right).input[1]))
         shape[-2], shape[-1] = shape[-1], shape[-2]
         shape_name = g.make_initializer("", np.array(shape, dtype=np.int64))
-        print(shape_name, shape)
 
         if node_right is None:
             # left side
