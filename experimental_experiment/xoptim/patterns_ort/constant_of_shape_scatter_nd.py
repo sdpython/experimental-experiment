@@ -36,16 +36,17 @@ class ConstantOfShapeScatterNDPattern(PatternOptimization):
             if arr[0] != 0:
                 return self.none(node, inspect.currentframe().f_lineno)
 
-        def apply(
-            g: "GraphBuilder", node_before: NodeProto, node: NodeProto  # noqa: F821
-        ) -> List[NodeProto]:
-            new_node = g.make_node(
-                "ScatterNDOfShape",
-                [node_before.input[0], *node.input[1:]],
-                node.output,
-                name=f"{self.__class__.__name__}--{node.name}",
-                domain="com.microsoft",
-            )
-            return [new_node]
+        return MatchResult(self, [node_before, node], self.apply, insert_at=node)
 
-        return MatchResult(self, [node_before, node], apply, insert_at=node)
+    @classmethod
+    def apply(
+        cls, g: "GraphBuilder", node_before: NodeProto, node: NodeProto  # noqa: F821
+    ) -> List[NodeProto]:
+        new_node = g.make_node(
+            "ScatterNDOfShape",
+            [node_before.input[0], *node.input[1:]],
+            node.output,
+            name=f"{cls.__class__.__name__}--{node.name}",
+            domain="com.microsoft",
+        )
+        return [new_node]

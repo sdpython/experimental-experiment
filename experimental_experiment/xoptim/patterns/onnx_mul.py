@@ -52,45 +52,47 @@ class MulMulMulPattern(PatternOptimization):
 
         nodes = [node, node_left, node_right]
 
-        def apply(
-            g: "GraphBuilder",  # noqa: F821
-            node: NodeProto,
-            node_left: NodeProto,
-            node_right: NodeProto,
-        ) -> List[NodeProto]:
+        return MatchResult(self, nodes, self.apply)
 
-            new_node = g.make_node(
-                node.op_type,
-                [node_left.input[0], node_right.input[0]],
-                [g.unique_name(f"{self.__class__.__name__}--{node.output[0]}")],
-                name=f"{self.__class__.__name__}--{node.name}",
-            )
-            cst_left = g.get_computed_constant(node_left.input[1])
-            cst_right = g.get_computed_constant(node_right.input[1])
-            if node_left.op_type == "Div":
-                cst_left = np.reciprocal(cst_left)
-            if node_right.op_type == "Div":
-                cst_right = np.reciprocal(cst_right)
+    @classmethod
+    def apply(
+        cls,
+        g: "GraphBuilder",  # noqa: F821
+        node: NodeProto,
+        node_left: NodeProto,
+        node_right: NodeProto,
+    ) -> List[NodeProto]:
 
-            if not isinstance(cst_left, np.ndarray):
-                cst_left = np.array(cst_left)
-            if not isinstance(cst_right, np.ndarray):
-                cst_right = np.array(cst_right)
-            assert (
-                cst_left.dtype == cst_right.dtype
-            ), f"Type mismatch left is {cst_left.dtype}, right is {cst_right.dtype}"
-            new_value = cst_left * cst_right
-            if not isinstance(new_value, np.ndarray):
-                new_value = np.array(new_value)
-            new_cst = g.make_initializer("", new_value)
+        new_node = g.make_node(
+            node.op_type,
+            [node_left.input[0], node_right.input[0]],
+            [g.unique_name(f"{cls.__class__.__name__}--{node.output[0]}")],
+            name=f"{cls.__class__.__name__}--{node.name}",
+        )
+        cst_left = g.get_computed_constant(node_left.input[1])
+        cst_right = g.get_computed_constant(node_right.input[1])
+        if node_left.op_type == "Div":
+            cst_left = np.reciprocal(cst_left)
+        if node_right.op_type == "Div":
+            cst_right = np.reciprocal(cst_right)
 
-            new_node2 = g.make_node(
-                "Mul",
-                [new_node.output[0], new_cst],
-                node.output,
-                name=f"{self.__class__.__name__}--{node.name}-Cst",
-            )
+        if not isinstance(cst_left, np.ndarray):
+            cst_left = np.array(cst_left)
+        if not isinstance(cst_right, np.ndarray):
+            cst_right = np.array(cst_right)
+        assert (
+            cst_left.dtype == cst_right.dtype
+        ), f"Type mismatch left is {cst_left.dtype}, right is {cst_right.dtype}"
+        new_value = cst_left * cst_right
+        if not isinstance(new_value, np.ndarray):
+            new_value = np.array(new_value)
+        new_cst = g.make_initializer("", new_value)
 
-            return [new_node, new_node2]
+        new_node2 = g.make_node(
+            "Mul",
+            [new_node.output[0], new_cst],
+            node.output,
+            name=f"{cls.__class__.__name__}--{node.name}-Cst",
+        )
 
-        return MatchResult(self, nodes, apply)
+        return [new_node, new_node2]

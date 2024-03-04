@@ -27,14 +27,15 @@ class CastPattern(PatternOptimization):
         if att.i != itype:
             return self.none(node, inspect.currentframe().f_lineno)
 
-        def apply(g: "GraphBuilder", node: NodeProto) -> List[NodeProto]:  # noqa: F821
-            new_node = g.make_node(
-                "Identity",
-                node.input,
-                node.output,
-                name=f"{self.__class__.__name__}--{node.name}",
-                doc_string=node.doc_string,
-            )
-            return [new_node]
+        return MatchResult(self, [node], self.apply, insert_at=node)
 
-        return MatchResult(self, [node], apply, insert_at=node)
+    @classmethod
+    def apply(cls, g: "GraphBuilder", node: NodeProto) -> List[NodeProto]:  # noqa: F821
+        new_node = g.make_node(
+            "Identity",
+            node.input,
+            node.output,
+            name=f"{cls.__class__.__name__}--{node.name}",
+            doc_string=node.doc_string,
+        )
+        return [new_node]

@@ -49,20 +49,21 @@ class TransposeTransposePattern(PatternOptimization):
         if on != first:
             return self.none(node, inspect.currentframe().f_lineno)
 
-        def apply(
-            g: "GraphBuilder", node: NodeProto, next_node: NodeProto  # noqa: F821
-        ) -> List[NodeProto]:
-            new_nodes = [
-                g.make_node(
-                    "Identity",
-                    [node.input[0]],
-                    next_node.output,
-                    name=f"{self.__class__.__name__}--{node.name}",
-                    doc_string=next_node.doc_string,
-                )
-            ]
-            if g.is_used_more_than_once(node.output[0]):
-                new_nodes.append(node)
-            return new_nodes
+        return MatchResult(self, [node, next_node], self.apply)
 
-        return MatchResult(self, [node, next_node], apply)
+    @classmethod
+    def apply(
+        cls, g: "GraphBuilder", node: NodeProto, next_node: NodeProto  # noqa: F821
+    ) -> List[NodeProto]:
+        new_nodes = [
+            g.make_node(
+                "Identity",
+                [node.input[0]],
+                next_node.output,
+                name=f"{cls.__class__.__name__}--{node.name}",
+                doc_string=next_node.doc_string,
+            )
+        ]
+        if g.is_used_more_than_once(node.output[0]):
+            new_nodes.append(node)
+        return new_nodes

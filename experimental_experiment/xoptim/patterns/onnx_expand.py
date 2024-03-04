@@ -104,21 +104,22 @@ class ExpandBroadcastPattern(PatternOptimization):
             if not (a == b or a == 1 or b == 1):
                 return self.none(node, inspect.currentframe().f_lineno)
 
-        def apply(
-            g: "GraphBuilder", node: NodeProto, next_node: NodeProto  # noqa: F821
-        ) -> List[NodeProto]:
-            if next_node.input[0] == node.output[0]:
-                inputs = [node.input[0], next_node.input[1]]
-            else:
-                inputs = [next_node.input[0], node.input[0]]
-            return [
-                g.make_node(
-                    next_node.op_type,
-                    inputs,
-                    next_node.output,
-                    name=f"{self.__class__.__name__}--{node.name}",
-                    doc_string=next_node.doc_string,
-                )
-            ]
+        return MatchResult(self, [node, next_node], self.apply, insert_at=next_node)
 
-        return MatchResult(self, [node, next_node], apply, insert_at=next_node)
+    @classmethod
+    def apply(
+        cls, g: "GraphBuilder", node: NodeProto, next_node: NodeProto  # noqa: F821
+    ) -> List[NodeProto]:
+        if next_node.input[0] == node.output[0]:
+            inputs = [node.input[0], next_node.input[1]]
+        else:
+            inputs = [next_node.input[0], node.input[0]]
+        return [
+            g.make_node(
+                next_node.op_type,
+                inputs,
+                next_node.output,
+                name=f"{cls.__class__.__name__}--{node.name}",
+                doc_string=next_node.doc_string,
+            )
+        ]

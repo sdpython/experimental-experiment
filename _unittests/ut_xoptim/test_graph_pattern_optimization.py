@@ -164,7 +164,7 @@ class TestGraphPatternOptimization(ExtTestCase):
             x = x + bias
         return x.reshape(tuple(shape)).astype(np.float32)
 
-    def test_execution_static(self):
+    def test_reshape_matmul_reshape_static(self):
         model = oh.make_model(
             oh.make_graph(
                 [
@@ -203,7 +203,15 @@ class TestGraphPatternOptimization(ExtTestCase):
         expected = ref.run(None, feeds)[0]
 
         gr, _, __ = self.capture(
-            lambda: GraphBuilder(model, infer_shapes=True, verbose=10)
+            lambda: GraphBuilder(
+                model,
+                infer_shapes=True,
+                optimization_options=OptimizationOptions(
+                    patterns=["Cast", "ReshapeMatMulReshape", "UnsqueezeUnsqueeze"],
+                    verbose=10,
+                ),
+                verbose=10,
+            )
         )
         s = str(gr.optimization_options)
         self.assertIn("OptimizationOptions(", s)
@@ -220,7 +228,7 @@ class TestGraphPatternOptimization(ExtTestCase):
         got = opt_ref.run(None, feeds)[0]
         self.assertEqualArray(expected, got)
 
-    def test_execution_dynamic_1(self):
+    def test_reshpae_matmul_reshape_dynamic_1(self):
         model = oh.make_model(
             oh.make_graph(
                 [
@@ -264,7 +272,13 @@ class TestGraphPatternOptimization(ExtTestCase):
         ref = ExtendedReferenceEvaluator(model)
         expected = ref.run(None, feeds)[0]
 
-        gr = GraphBuilder(model, infer_shapes=True)
+        gr = GraphBuilder(
+            model,
+            optimization_options=OptimizationOptions(
+                patterns=["Cast", "ReshapeMatMulReshape", "UnsqueezeUnsqueeze"],
+            ),
+            infer_shapes=True,
+        )
         opt_onx = gr.to_onnx(optimize=True)
         self.assertEqual(
             ["Unsqueeze", "MatMul"], [n.op_type for n in opt_onx.graph.node]
@@ -275,7 +289,7 @@ class TestGraphPatternOptimization(ExtTestCase):
         got = opt_ref.run(None, feeds)[0]
         self.assertEqualArray(expected, got)
 
-    def test_execution_dynamic_2(self):
+    def test_reshape_matmul_reshape_dynamic_2(self):
         model = oh.make_model(
             oh.make_graph(
                 [
@@ -319,7 +333,13 @@ class TestGraphPatternOptimization(ExtTestCase):
         ref = ExtendedReferenceEvaluator(model)
         expected = ref.run(None, feeds)[0]
 
-        gr = GraphBuilder(model, infer_shapes=True)
+        gr = GraphBuilder(
+            model,
+            optimization_options=OptimizationOptions(
+                patterns=["Cast", "ReshapeMatMulReshape", "UnsqueezeUnsqueeze"]
+            ),
+            infer_shapes=True,
+        )
         opt_onx = gr.to_onnx(optimize=True)
         self.assertEqual(
             ["Unsqueeze", "MatMul"], [n.op_type for n in opt_onx.graph.node]
@@ -330,7 +350,7 @@ class TestGraphPatternOptimization(ExtTestCase):
         got = opt_ref.run(None, feeds)[0]
         self.assertEqualArray(expected, got)
 
-    def test_execution_keep_intermediate(self):
+    def test_reshape_matmul_reshape_keep_intermediate(self):
         model = oh.make_model(
             oh.make_graph(
                 [
@@ -372,7 +392,15 @@ class TestGraphPatternOptimization(ExtTestCase):
         expected = ref.run(None, feeds)[0]
 
         gr, _, __ = self.capture(
-            lambda: GraphBuilder(model, infer_shapes=True, verbose=10)
+            lambda: GraphBuilder(
+                model,
+                optimization_options=OptimizationOptions(
+                    patterns=["Cast", "ReshapeMatMulReshape", "UnsqueezeUnsqueeze"],
+                    verbose=10,
+                ),
+                infer_shapes=True,
+                verbose=10,
+            )
         )
         s = str(gr.optimization_options)
         self.assertIn("OptimizationOptions(", s)

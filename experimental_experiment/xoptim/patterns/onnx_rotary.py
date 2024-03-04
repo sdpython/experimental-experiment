@@ -149,44 +149,46 @@ class RotaryConcatPartPattern(PatternOptimization):
             node,
         ]
 
-        def apply(
-            g: "GraphBuilder",  # noqa: F821
-            cst_left: NodeProto,
-            slice_left: NodeProto,
-            neg_left: Optional[NodeProto],
-            concat_left: NodeProto,
-            cst_right: NodeProto,
-            slice_right: NodeProto,
-            neg_right: Optional[NodeProto],
-            concat_right: NodeProto,
-            node: NodeProto,
-        ) -> List[NodeProto]:
-            axis = g.get_computed_constant(slice_left.input[3])[0]
-            if neg_left is None:
-                neg_out = neg_right.output[0]
-                pos = list(concat_right.input).index(neg_out)
-                concat_inputs = (
-                    [neg_right.output[0], slice_left.output[0]]
-                    if pos == 0
-                    else [slice_left.output[0], neg_right.output[0]]
-                )
-                neg = neg_right
-            else:
-                neg_out = neg_left.output[0]
-                pos = list(concat_left.input).index(neg_out)
-                concat_inputs = (
-                    [neg_left.output[0], slice_right.output[0]]
-                    if pos == 0
-                    else [slice_right.output[0], neg_left.output[0]]
-                )
-                neg = neg_left
-            concat = g.make_node(
-                "Concat",
-                concat_inputs,
-                node.output,
-                axis=int(axis),
-                doc_string=node.doc_string,
-            )
-            return [slice_left, slice_right, neg, concat]
+        return MatchResult(self, nodes, self.apply)
 
-        return MatchResult(self, nodes, apply)
+    @classmethod
+    def apply(
+        cls,
+        g: "GraphBuilder",  # noqa: F821
+        cst_left: NodeProto,
+        slice_left: NodeProto,
+        neg_left: Optional[NodeProto],
+        concat_left: NodeProto,
+        cst_right: NodeProto,
+        slice_right: NodeProto,
+        neg_right: Optional[NodeProto],
+        concat_right: NodeProto,
+        node: NodeProto,
+    ) -> List[NodeProto]:
+        axis = g.get_computed_constant(slice_left.input[3])[0]
+        if neg_left is None:
+            neg_out = neg_right.output[0]
+            pos = list(concat_right.input).index(neg_out)
+            concat_inputs = (
+                [neg_right.output[0], slice_left.output[0]]
+                if pos == 0
+                else [slice_left.output[0], neg_right.output[0]]
+            )
+            neg = neg_right
+        else:
+            neg_out = neg_left.output[0]
+            pos = list(concat_left.input).index(neg_out)
+            concat_inputs = (
+                [neg_left.output[0], slice_right.output[0]]
+                if pos == 0
+                else [slice_right.output[0], neg_left.output[0]]
+            )
+            neg = neg_left
+        concat = g.make_node(
+            "Concat",
+            concat_inputs,
+            node.output,
+            axis=int(axis),
+            doc_string=node.doc_string,
+        )
+        return [slice_left, slice_right, neg, concat]

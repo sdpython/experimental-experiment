@@ -53,70 +53,68 @@ class FusedMatMulPattern(PatternOptimization):
         # MatMul or Gemm are operating on 2D tensors.
         nodes = [*ns, node]
 
-        def apply(
-            g: "GraphBuilder",  # noqa: F821
-            node_before_left: Optional[NodeProto],
-            node_before_right: Optional[NodeProto],
-            nodes: NodeProto,
-        ) -> List[NodeProto]:
+        return MatchResult(self, nodes, self.apply, insert_at=node)
 
-            inputs = [
-                (
-                    node.input[0]
-                    if node_before_left is None
-                    else node_before_left.input[0]
-                ),
-                (
-                    node.input[1]
-                    if node_before_right is None
-                    else node_before_right.input[0]
-                ),
-                *node.input[2:],
-            ]
+    @classmethod
+    def apply(
+        cls,
+        g: "GraphBuilder",  # noqa: F821
+        node_before_left: Optional[NodeProto],
+        node_before_right: Optional[NodeProto],
+        node: NodeProto,
+    ) -> List[NodeProto]:
 
-            transA = 0 if node_before_left is None else 1
-            transB = 0 if node_before_right is None else 1
-            transBatchA = 0
-            transBatchB = 0
-            keep = []
-            for att in node.attribute:
-                if att.name in {"alpha", "beta"}:
-                    keep.append(att)
-                elif att.name == "transA":
-                    transA = (att.i + transA) % 2
-                elif att.name == "transB":
-                    transB = (att.i + transB) % 2
-                elif att.name == "transBatchA":
-                    transBatchA = att.i
-                elif att.name == "transBatchB":
-                    transBatchB = att.i
-                else:
-                    raise NotImplementedError(
-                        f"Unexpected attribute {att.name!r}={att} for node={node}"
-                    )
+        inputs = [
+            (node.input[0] if node_before_left is None else node_before_left.input[0]),
+            (
+                node.input[1]
+                if node_before_right is None
+                else node_before_right.input[0]
+            ),
+            *node.input[2:],
+        ]
 
-            new_node = g.make_node(
-                "FusedMatMul",
-                inputs,
-                node.output,
-                name=f"{self.__class__.__name__}--{node.name}",
-                transA=transA,
-                transB=transB,
-                transBatchA=transBatchA,
-                transBatchB=transBatchB,
-                doc_string=node.doc_string,
-                domain="com.microsoft",
-            )
-            new_node.attribute.extend(keep)
-            res = [new_node]
-            if node_before_left is not None and g.is_used_more_than_once(
-                node_before_left.output[0]
-            ):
-                res.append(node_before_left)
-            if node_before_right is not None and g.is_used_more_than_once(
-                node_before_right.output[0]
-            ):
-                res.append(node_before_right)
-            return res
+        transA = 0 if node_before_left is None else 1
+        transB = 0 if node_before_right is None else 1
+        transBatchA = 0
+        transBatchB = 0
+        keep = []
+        for att in node.attribute:
+            if att.name in {"alpha", "beta"}:
+                keep.append(att)
+            elif att.name == "transA":
+                transA = (att.i + transA) % 2
+            elif att.name == "transB":
+                transB = (att.i + transB) % 2
+            elif att.name == "transBatchA":
+                transBatchA = att.i
+            elif att.name == "transBatchB":
+                transBatchB = att.i
+            else:
+                raise NotImplementedError(
+                    f"Unexpected attribute {att.name!r}={att} for node={node}"
+                )
 
-        return MatchResult(self, nodes, apply, insert_at=node)
+        new_node = g.make_node(
+            "FusedMatMul",
+            inputs,
+            node.output,
+            name=f"{cls.__class__.__name__}--{node.name}",
+            transA=transA,
+            transB=transB,
+            transBatchA=transBatchA,
+            transBatchB=transBatchB,
+            doc_string=node.doc_string,
+            domain="com.microsoft",
+        )
+        new_node.attribute.extend(keep)
+        res = [new_node]
+        if node_before_left is not None and g.is_used_more_than_once(
+            node_before_left.output[0]
+        ):
+            res.append(node_before_left)
+        if node_before_right is not None and g.is_used_more_than_once(
+            node_before_right.output[0]
+        ):
+            res.append(node_before_right)
+        return res

@@ -29,19 +29,20 @@ class UnsqueezeUnsqueezePattern(PatternOptimization):
         if next_node.input[0] != node.output[0]:
             return self.none(node, inspect.currentframe().f_lineno)
 
-        def apply(
-            g: "GraphBuilder", node: NodeProto, next_node: NodeProto  # noqa: F821
-        ) -> List[NodeProto]:
-            axis1 = g.get_constant_or_attribute(node, "axis", 1)
-            axis2 = g.get_constant_or_attribute(next_node, "axis", 1)
-            new_axis = g.make_initializer("", np.hstack([axis1, axis2]))
-            new_node = g.make_node(
-                "Unsqueeze",
-                [node.input[0], new_axis],
-                next_node.output,
-                name=f"{self.__class__.__name__}--{node.name}",
-                doc_string=next_node.doc_string,
-            )
-            return [new_node]
+        return MatchResult(self, [node, next_node], self.apply, insert_at=node)
 
-        return MatchResult(self, [node, next_node], apply, insert_at=node)
+    @classmethod
+    def apply(
+        cls, g: "GraphBuilder", node: NodeProto, next_node: NodeProto  # noqa: F821
+    ) -> List[NodeProto]:
+        axis1 = g.get_constant_or_attribute(node, "axis", 1)
+        axis2 = g.get_constant_or_attribute(next_node, "axis", 1)
+        new_axis = g.make_initializer("", np.hstack([axis1, axis2]))
+        new_node = g.make_node(
+            "Unsqueeze",
+            [node.input[0], new_axis],
+            next_node.output,
+            name=f"{cls.__class__.__name__}--{node.name}",
+            doc_string=next_node.doc_string,
+        )
+        return [new_node]

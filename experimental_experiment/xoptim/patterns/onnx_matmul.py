@@ -83,33 +83,35 @@ class ReshapeMatMulReshapePattern(PatternOptimization):
                 f"shape_left={shape_left} | mshape_left={mshape_right} shape_left={shape_right}"
             )
 
-        def apply(
-            g: "GraphBuilder",  # noqa: F821
-            node_before_left: NodeProto,
-            node_before_right: NodeProto,
-            node: NodeProto,
-            next_node: NodeProto,
-        ) -> List[NodeProto]:
-            new_node = g.make_node(
-                "MatMul",
-                [node_before_left.input[0], node_before_right.input[0]],
-                next_node.output,
-                name=f"{self.__class__.__name__}--{node.name}",
-                doc_string=next_node.doc_string,
-            )
-            res = [new_node]
-            if g.is_used_more_than_once(node_before_left.output[0]):
-                res.append(node_before_left)
-            if g.is_used_more_than_once(node_before_right.output[0]):
-                res.append(node_before_right)
-            return res
-
         return MatchResult(
             self,
             [node_before_left, node_before_right, node, next_node],
-            apply,
+            self.apply,
             insert_at=node,
         )
+
+    @classmethod
+    def apply(
+        cls,
+        g: "GraphBuilder",  # noqa: F821
+        node_before_left: NodeProto,
+        node_before_right: NodeProto,
+        node: NodeProto,
+        next_node: NodeProto,
+    ) -> List[NodeProto]:
+        new_node = g.make_node(
+            "MatMul",
+            [node_before_left.input[0], node_before_right.input[0]],
+            next_node.output,
+            name=f"{cls.__class__.__name__}--{node.name}",
+            doc_string=next_node.doc_string,
+        )
+        res = [new_node]
+        if g.is_used_more_than_once(node_before_left.output[0]):
+            res.append(node_before_left)
+        if g.is_used_more_than_once(node_before_right.output[0]):
+            res.append(node_before_right)
+        return res
 
 
 class TransposeMatMulPattern(PatternOptimization):
@@ -154,64 +156,62 @@ class TransposeMatMulPattern(PatternOptimization):
         # MatMul or Gemm are operating on 2D tensors.
         nodes = [*ns, node]
 
-        def apply(
-            g: "GraphBuilder",  # noqa: F821
-            node_before_left: Optional[NodeProto],
-            node_before_right: Optional[NodeProto],
-            nodes: NodeProto,
-        ) -> List[NodeProto]:
+        return MatchResult(self, nodes, self.apply, insert_at=node)
 
-            inputs = [
-                (
-                    node.input[0]
-                    if node_before_left is None
-                    else node_before_left.input[0]
-                ),
-                (
-                    node.input[1]
-                    if node_before_right is None
-                    else node_before_right.input[0]
-                ),
-                *node.input[2:],
-            ]
+    @classmethod
+    def apply(
+        cls,
+        g: "GraphBuilder",  # noqa: F821
+        node_before_left: Optional[NodeProto],
+        node_before_right: Optional[NodeProto],
+        node: NodeProto,
+    ) -> List[NodeProto]:
 
-            transA = 0 if node_before_left is None else 1
-            transB = 0 if node_before_right is None else 1
-            keep = []
-            for att in node.attribute:
-                if att.name in {"alpha", "beta"}:
-                    keep.append(att)
-                elif att.name == "transA":
-                    transA = (att.i + transA) % 2
-                elif att.name == "transB":
-                    transB = (att.i + transB) % 2
-                else:
-                    raise NotImplementedError(
-                        f"Unexpected attribute {att.name!r}={att} for node={node}"
-                    )
+        inputs = [
+            (node.input[0] if node_before_left is None else node_before_left.input[0]),
+            (
+                node.input[1]
+                if node_before_right is None
+                else node_before_right.input[0]
+            ),
+            *node.input[2:],
+        ]
 
-            new_node = g.make_node(
-                "Gemm",
-                inputs,
-                node.output,
-                name=f"{self.__class__.__name__}--{node.name}",
-                transA=transA,
-                transB=transB,
-                doc_string=node.doc_string,
-            )
-            new_node.attribute.extend(keep)
-            res = [new_node]
-            if node_before_left is not None and g.is_used_more_than_once(
-                node_before_left.output[0]
-            ):
-                res.append(node_before_left)
-            if node_before_right is not None and g.is_used_more_than_once(
-                node_before_right.output[0]
-            ):
-                res.append(node_before_right)
-            return res
+        transA = 0 if node_before_left is None else 1
+        transB = 0 if node_before_right is None else 1
+        keep = []
+        for att in node.attribute:
+            if att.name in {"alpha", "beta"}:
+                keep.append(att)
+            elif att.name == "transA":
+                transA = (att.i + transA) % 2
+            elif att.name == "transB":
+                transB = (att.i + transB) % 2
+            else:
+                raise NotImplementedError(
+                    f"Unexpected attribute {att.name!r}={att} for node={node}"
+                )
 
-        return MatchResult(self, nodes, apply, insert_at=node)
+        new_node = g.make_node(
+            "Gemm",
+            inputs,
+            node.output,
+            name=f"{cls.__class__.__name__}--{node.name}",
+            transA=transA,
+            transB=transB,
+            doc_string=node.doc_string,
+        )
+        new_node.attribute.extend(keep)
+        res = [new_node]
+        if node_before_left is not None and g.is_used_more_than_once(
+            node_before_left.output[0]
+        ):
+            res.append(node_before_left)
+        if node_before_right is not None and g.is_used_more_than_once(
+            node_before_right.output[0]
+        ):
+            res.append(node_before_right)
+        return res
 
 
 class MatMulReshape2Of3Pattern(PatternOptimization):
@@ -303,127 +303,119 @@ class MatMulReshape2Of3Pattern(PatternOptimization):
 
         nodes = [node_left, node_right, node, next_node]
 
-        def apply(
-            g: "GraphBuilder",  # noqa: F821
-            node_left: NodeProto,
-            node_right: NodeProto,
-            node: NodeProto,
-            next_node: NodeProto,
-        ) -> List[NodeProto]:
+        return MatchResult(self, nodes, self.apply)
 
-            res = []
+    @classmethod
+    def apply(
+        cls,
+        g: "GraphBuilder",  # noqa: F821
+        node_left: NodeProto,
+        node_right: NodeProto,
+        node: NodeProto,
+        next_node: NodeProto,
+    ) -> List[NodeProto]:
 
-            shape_left_left = (
-                None if node_left is None else g.get_shape(node_left.input[0])
-            )
-            shape_right_right = (
-                None if node_right is None else g.get_shape(node_right.input[0])
-            )
+        res = []
 
-            shape_left = g.get_shape(node.input[0])
-            shape_right = g.get_shape(node.input[1])
+        shape_left_left = None if node_left is None else g.get_shape(node_left.input[0])
+        shape_right_right = (
+            None if node_right is None else g.get_shape(node_right.input[0])
+        )
 
-            the_shape_left = shape_left_left or shape_left
-            the_shape_right = shape_right_right or shape_right
+        shape_left = g.get_shape(node.input[0])
+        shape_right = g.get_shape(node.input[1])
 
-            # node left
-            if node_left is None:
-                expected_shape = the_shape_right[:-2] + shape_left[-2:]
-                if the_shape_left != expected_shape:
-                    shape_name = g.make_initializer(
-                        "", np.array(expected_shape, dtype=np.int64)
-                    )
-                    left_name = g.unique_name(
-                        f"{self.__class__.__name__}L_{node.input[0]}"
-                    )
-                    res.append(
-                        g.make_node("Reshape", [node.input[0], shape_name], [left_name])
-                    )
-                else:
-                    left_name = node.input[0]
-            elif g.is_used_more_than_once(node_left.output[0]):
-                res.append(node_left)
-                left_name = node_left.input[0]
+        the_shape_left = shape_left_left or shape_left
+        the_shape_right = shape_right_right or shape_right
+
+        # node left
+        if node_left is None:
+            expected_shape = the_shape_right[:-2] + shape_left[-2:]
+            if the_shape_left != expected_shape:
+                shape_name = g.make_initializer(
+                    "", np.array(expected_shape, dtype=np.int64)
+                )
+                left_name = g.unique_name(f"{cls.__class__.__name__}L_{node.input[0]}")
+                res.append(
+                    g.make_node("Reshape", [node.input[0], shape_name], [left_name])
+                )
             else:
-                left_name = node_left.input[0]
+                left_name = node.input[0]
+        elif g.is_used_more_than_once(node_left.output[0]):
+            res.append(node_left)
+            left_name = node_left.input[0]
+        else:
+            left_name = node_left.input[0]
 
-            # node right
-            if node_right is None:
-                expected_shape = the_shape_left[:-2] + shape_right[-2:]
-                if the_shape_right != expected_shape:
-                    shape_name = g.make_initializer(
-                        "", np.array(expected_shape, dtype=np.int64)
-                    )
-                    right_name = g.unique_name(
-                        f"{self.__class__.__name__}L_{node.input[0]}"
-                    )
-                    res.append(
-                        g.make_node(
-                            "Reshape", [node.input[1], shape_name], [right_name]
-                        )
-                    )
-                else:
-                    right_name = node.input[1]
-            elif g.is_used_more_than_once(node_right.output[0]):
-                res.append(node_right)
-                right_name = node_right.input[0]
+        # node right
+        if node_right is None:
+            expected_shape = the_shape_left[:-2] + shape_right[-2:]
+            if the_shape_right != expected_shape:
+                shape_name = g.make_initializer(
+                    "", np.array(expected_shape, dtype=np.int64)
+                )
+                right_name = g.unique_name(f"{cls.__class__.__name__}L_{node.input[0]}")
+                res.append(
+                    g.make_node("Reshape", [node.input[1], shape_name], [right_name])
+                )
             else:
-                right_name = node_right.input[0]
+                right_name = node.input[1]
+        elif g.is_used_more_than_once(node_right.output[0]):
+            res.append(node_right)
+            right_name = node_right.input[0]
+        else:
+            right_name = node_right.input[0]
 
-            if next_node is None:
-                # Reshape is needed.
-                previous_shape = shape_left[:-1] + (shape_right[-1],)
-                new_shape = the_shape_left[:-1] + (the_shape_right[-1],)
-                if previous_shape != new_shape:
-                    new_name = g.unique_name(
-                        f"{self.__class__.__name__}L_{node.output[0]}"
-                    )
-                    previous_shape_name = g.make_initializer(
-                        "", np.array(previous_shape, dtype=np.int64)
-                    )
-                    res.extend(
-                        [
-                            g.make_node(
-                                node.op_type,
-                                [left_name, right_name],
-                                [new_name],
-                            ),
-                            g.make_node(
-                                "Reshape",
-                                [new_name, previous_shape_name],
-                                [node.output[0]],
-                            ),
-                        ]
-                    )
-                else:
-                    res.appens(
+        if next_node is None:
+            # Reshape is needed.
+            previous_shape = shape_left[:-1] + (shape_right[-1],)
+            new_shape = the_shape_left[:-1] + (the_shape_right[-1],)
+            if previous_shape != new_shape:
+                new_name = g.unique_name(f"{cls.__class__.__name__}L_{node.output[0]}")
+                previous_shape_name = g.make_initializer(
+                    "", np.array(previous_shape, dtype=np.int64)
+                )
+                res.extend(
+                    [
                         g.make_node(
                             node.op_type,
                             [left_name, right_name],
-                            [node.output[0]],
-                        )
-                    )
-            else:
-                main_node = g.make_node(
-                    node.op_type,
-                    [left_name, right_name],
-                    [next_node.output[0]],
-                )
-                res.append(main_node)
-
-                if g.is_used_more_than_once(node.output[0]):
-                    previous_shape = shape_left[:-1] + (shape_right[-1],)
-                    previous_shape_name = g.make_initializer(
-                        "", np.array(previous_shape, dtype=np.int64)
-                    )
-                    res.append(
+                            [new_name],
+                        ),
                         g.make_node(
                             "Reshape",
-                            [main_node.output[0], previous_shape_name],
+                            [new_name, previous_shape_name],
                             [node.output[0]],
-                        )
+                        ),
+                    ]
+                )
+            else:
+                res.appens(
+                    g.make_node(
+                        node.op_type,
+                        [left_name, right_name],
+                        [node.output[0]],
                     )
+                )
+        else:
+            main_node = g.make_node(
+                node.op_type,
+                [left_name, right_name],
+                [next_node.output[0]],
+            )
+            res.append(main_node)
 
-            return res
+            if g.is_used_more_than_once(node.output[0]):
+                previous_shape = shape_left[:-1] + (shape_right[-1],)
+                previous_shape_name = g.make_initializer(
+                    "", np.array(previous_shape, dtype=np.int64)
+                )
+                res.append(
+                    g.make_node(
+                        "Reshape",
+                        [main_node.output[0], previous_shape_name],
+                        [node.output[0]],
+                    )
+                )
 
-        return MatchResult(self, nodes, apply)
+        return res
