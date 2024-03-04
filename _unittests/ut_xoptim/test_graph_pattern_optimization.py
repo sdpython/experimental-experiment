@@ -1,5 +1,6 @@
 import os
 import unittest
+import packaging.version as pv
 import numpy as np
 import onnx
 from onnx import ModelProto, TensorProto, helper as oh, numpy_helper as onh
@@ -1362,6 +1363,10 @@ class TestGraphPatternOptimization(ExtTestCase):
         got = opt_ref.run(None, feeds)[0]
         self.assertEqualArray(expected, got)
 
+    @unittest.skipIf(
+        pv.Version(onnx.__version__) < pv.Version("1.17"),
+        reason="bug in shape inference",
+    )
     def test_matmul_reshape_2of3_static_3_keep(self):
         model = oh.make_model(
             oh.make_graph(
@@ -1390,6 +1395,7 @@ class TestGraphPatternOptimization(ExtTestCase):
             )
         )
         check_model(model)
+        onnx.shape_inference.infer_shapes(model)
         feeds = {"X": self._range(2, 2, 3, 4), "Y": self._range(2, 2, 4, 3)}
         ref = ExtendedReferenceEvaluator(model)
         expected = ref.run(None, feeds)
