@@ -872,7 +872,7 @@ class TestGraphPatternOptimization(ExtTestCase):
         gr = GraphBuilder(
             model,
             infer_shapes=True,
-            optimization_options=OptimizationOptions(patterns=["MulMulMul"]),
+            optimization_options=OptimizationOptions(patterns=["MulMulMulScalar"]),
         )
         opt_onx = gr.to_onnx(optimize=True)
         self.assertEqual(
@@ -918,7 +918,7 @@ class TestGraphPatternOptimization(ExtTestCase):
         gr = GraphBuilder(
             model,
             infer_shapes=True,
-            optimization_options=OptimizationOptions(patterns=["MulMulMul"]),
+            optimization_options=OptimizationOptions(patterns=["MulMulMulScalar"]),
         )
         opt_onx = gr.to_onnx(optimize=True)
         self.assertEqual(
@@ -1029,14 +1029,14 @@ class TestGraphPatternOptimization(ExtTestCase):
         gr = GraphBuilder(
             model,
             infer_shapes=True,
-            optimization_options=OptimizationOptions(patterns=["MulMulMul"]),
+            optimization_options=OptimizationOptions(patterns=["MulMulMulScalar"]),
         )
         stats = gr.optimize()
         self.assertEqual(
             stats,
             [
                 {
-                    "pattern": "MulMulMulPattern",
+                    "pattern": "MulMulMulScalarPattern",
                     "added": 2,
                     "removed": 3,
                     "iteration": 0,

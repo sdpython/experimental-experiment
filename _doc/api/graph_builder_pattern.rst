@@ -51,10 +51,10 @@ ExpandPattern
 .. autoclass:: experimental_experiment.xoptim.patterns.ExpandPattern
     :members:
 
-MulMulMulPattern
-++++++++++++++++
+MulMulMulScalarPattern
++++++++++++++++++++++++
 
-.. autoclass:: experimental_experiment.xoptim.patterns.MulMulMulPattern
+.. autoclass:: experimental_experiment.xoptim.patterns.MulMulMulScalarPattern
     :members:
 
 ReshapeMatMulReshapePattern
