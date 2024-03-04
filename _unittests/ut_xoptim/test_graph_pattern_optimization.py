@@ -1374,7 +1374,7 @@ class TestGraphPatternOptimization(ExtTestCase):
                 "dummy",
                 [
                     oh.make_tensor_value_info("X", TensorProto.FLOAT, [2, 2, 3, 4]),
-                    oh.make_tensor_value_info("Y", TensorProto.FLOAT, [2, 2, 3, 4]),
+                    oh.make_tensor_value_info("Y", TensorProto.FLOAT, [2, 2, 4, 3]),
                 ],
                 [
                     oh.make_tensor_value_info("Z", TensorProto.FLOAT, [2, 2, 3, 3]),
