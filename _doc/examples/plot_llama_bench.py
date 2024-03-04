@@ -42,8 +42,9 @@ parsed_args = get_parsed_args(
     check=(0, "just check the script is working, ignores all other parameters"),
     config=("medium", "configuration to use, default or medium"),
     patterns=("none,default,onnxruntime", "optimization patterns to use"),
+    disable_pattern=("none", "pattern or patterns to disable"),
     expose="backend,device,num_hidden_layers,mixed,scipt_name,repeat,"
-    "warmup,dump,check,config,patterns,dynamic",
+    "warmup,dump,check,config,patterns,dynamic,disable_pattern",
 )
 
 import onnxruntime  # noqa: F401
@@ -73,6 +74,7 @@ def make_config(
     config,
     warmup,
     pattern,
+    disable_pattern,
     existing=None,
 ):
     cf = dict(
@@ -107,6 +109,11 @@ def make_config(
     else:
         raise AssertionError(f"unexpected value for pattern={pattern!r}")
     cf.update(opt)
+    if disable_pattern != "none":
+        if "disable_pattern" in cf:
+            cf["disable_pattern"] += f",{disable_pattern}"
+        else:
+            cf["disable_pattern"] = disable_pattern
     return cf
 
 
@@ -143,6 +150,7 @@ if parsed_args.check not in (1, "1"):
                 config=parsed_args.config,
                 warmup=warmup,
                 pattern=pattern,
+                disable_pattern=parsed_args.disable_pattern,
                 existing=configs,
             )
         )
@@ -191,6 +199,12 @@ except BenchmarkError as e:
 
 if data_collected:
 
+    def clean_pattern(s):
+        if "+default" in s:
+            s = s.replace("ConstantOfShapeScatterND","")
+        s = s.replace("+default-default", "")        
+        return s
+
     def make_legend(row):
         row = row.to_dict()
         val = [row["device"], row["backend"], f"h{row['num_hidden_layers']}"]
@@ -199,7 +213,7 @@ if data_collected:
         if row["dynamic"]:
             val.append("dyn")
         if "patterns" in row and row["patterns"] and "nan" not in str(row["patterns"]):
-            val.append(f"({row['patterns']})")
+            val.append(f"({clean_pattern(row['patterns'])})")
         s = "-".join(map(str, val))
         assert "nan" not in s, f"Legend {s!r} is wrong, row={row}"
         return s

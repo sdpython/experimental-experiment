@@ -1,5 +1,6 @@
 import os
 import pprint
+import time
 from typing import Any, Dict, Iterator, List, Optional, Union
 from onnx import AttributeProto, NodeProto
 import onnx.helper as oh
@@ -17,6 +18,8 @@ class GraphBuilderPatternOptimization:
     ::
 
         python -m onnx_array_api compare -m1 <model.onnx> -m2 <optimized.onnx> -m nodes -c 80
+
+    This class assumes a pattern cannot reuse an existing name.
     """
 
     def __init__(
@@ -31,6 +34,10 @@ class GraphBuilderPatternOptimization:
         self.verbose = max(verbose, int(os.environ.get("LOG_PATTERN_OPTIMIZE", "0")))
         self.recursive = recursive
         self._build()
+        # This assume a name is given once and
+        # no constant can replace an existing one.
+        # _build method should not change it.
+        self._cache_computed_constant = {}
 
     def iter_nodes(self) -> Iterator:
         for node in self.builder.nodes:
@@ -104,11 +111,34 @@ class GraphBuilderPatternOptimization:
         """
         return self.builder.is_constant(name)
 
-    def get_computed_constant(self, name: str) -> Any:
+    def get_computed_constant(
+        self, name: str, statistics: Optional[List[str]] = None
+    ) -> Any:
         """
         Returns the value for the constant `name`.
         """
-        return self.builder.get_constant(name, computed_value=True)
+        if name in self._cache_computed_constant:
+            value = self._cache_computed_constant[name]
+        else:
+            value = self.builder.get_constant(name, computed_value=True)
+            self._cache_computed_constant[name] = value
+        if statistics is None:
+            return value
+        stats = []
+        for st in statistics:
+            key = name, st
+            if key in self._cache_computed_constant:
+                stat = self._cache_computed_constant[key]
+            else:
+                if st == "min":
+                    stat = value.min()
+                elif st == "max":
+                    stat = value.max()
+                else:
+                    raise RuntimeError(f"Unknown statistics {st!r} for {name!r}.")
+                self._cache_computed_constant[key] = stat
+            stats.append(stat)
+        return stats
 
     def get_attribute(
         self, node: NodeProto, att_name: str, exc: bool = True
@@ -374,6 +404,7 @@ class GraphBuilderPatternOptimization:
                 f"{len(self.builder.nodes)} nodes and {len(self.patterns)} patterns"
             )
 
+        begin_all = time.perf_counter()
         statistics = []
 
         last_it = 0
@@ -389,7 +420,9 @@ class GraphBuilderPatternOptimization:
             found = False
             marked = set()
             matches = []
+            durations = {}
             for pattern in self.patterns:
+                begin = time.perf_counter()
                 for match in pattern.enumerate_matches(self):
                     bypass = False
                     for n in match.nodes:
@@ -407,9 +440,14 @@ class GraphBuilderPatternOptimization:
                             f"[GraphBuilderPatternOptimization.optimize] match={match}"
                         )
                     matches.append((pattern, match))
-            if self.verbose > 1:
+                durations[str(pattern)] = time.perf_counter() - begin
+
+            if self.verbose > 0 and matches:
+                rev = max([(v, k) for k, v in durations.items()])
+                revs = f"{rev[-1]}:{rev[0]:.3f}"
                 print(
-                    f"[GraphBuilderPatternOptimization.optimize] applies {len(matches)} matches"
+                    f"[GraphBuilderPatternOptimization.optimize] applies {len(matches)} matches, "
+                    f"[0]={str(matches[0][-1])} - time={sum(durations.values()):.3f} | max_time={revs}"
                 )
 
             # applies patterns (they must be disjoined)
@@ -417,7 +455,7 @@ class GraphBuilderPatternOptimization:
             n_added = 0
             n_removed = 0
             for im, (pattern, match) in enumerate(matches):
-                if self.verbose > 2:
+                if self.verbose > 3:
                     print(
                         f"[GraphBuilderPatternOptimization.optimize] "
                         f"apply {match.to_string(short=False)}"
@@ -425,7 +463,7 @@ class GraphBuilderPatternOptimization:
 
                 added_nodes = self.apply_match(match)
                 _check(str(match))
-                if self.verbose > 2:
+                if self.verbose > 3:
                     print(
                         f"[GraphBuilderPatternOptimization.optimize] - add "
                         f"{[n.op_type for n in added_nodes]}"
@@ -449,11 +487,11 @@ class GraphBuilderPatternOptimization:
                         f"removed_outputs={removed_outputs}"
                     )
 
-                if self.verbose > 2:
+                if self.verbose > 3:
                     print(
                         f"[GraphBuilderPatternOptimization.optimize] done {match}: -{rem} +{add} nodes"
                     )
-                    if full_removed and self.verbose > 3:
+                    if full_removed and self.verbose > 4:
                         print(
                             f"[GraphBuilderPatternOptimization.optimize] removed outputs {full_removed}"
                         )
@@ -464,12 +502,13 @@ class GraphBuilderPatternOptimization:
                     removed=rem,
                     iteration=it,
                     match_index=im,
+                    time_in=durations[str(pattern)],
                 )
                 statistics.append(obs)
 
                 n_added += add
                 n_removed += rem
-            if self.verbose > 1:
+            if self.verbose > 2:
                 print(
                     f"[GraphBuilderPatternOptimization.optimize] done all: -{n_removed} +{n_added} nodes"
                 )
@@ -498,9 +537,10 @@ class GraphBuilderPatternOptimization:
                 break
 
         if self.verbose > 0:
+            duration = time.perf_counter() - begin_all
             print(
                 f"[GraphBuilderPatternOptimization.optimize] done after {last_it} iterations with "
-                f"{len(self.builder.nodes)} nodes"
+                f"{len(self.builder.nodes)} nodes in {duration:.3f}"
             )
 
         return statistics
