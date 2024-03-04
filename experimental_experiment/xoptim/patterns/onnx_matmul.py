@@ -10,214 +10,6 @@ from ...xbuilder.shape_helper import (
 from .patterns_api import MatchResult, PatternOptimization
 
 
-class ReshapeMatMulReshapePattern(PatternOptimization):
-    """
-    Replaces the sequence Reshape, Matmul, Reshape by Matmul.
-    """
-
-    def match(
-        self,
-        g: "GraphBuilderPatternOptimization",  # noqa: F821
-        node: NodeProto,
-        matched: List[MatchResult],
-    ) -> Optional[MatchResult]:
-        if node.op_type != "MatMul" or node.domain != "":
-            return self.none()
-        if g.is_used_more_than_once(node.output[0]):
-            return self.none(node, inspect.currentframe().f_lineno)
-
-        next_nodes = g.next_nodes(node.output[0])
-        if len(next_nodes) == 0:
-            return self.none(node, inspect.currentframe().f_lineno)
-        next_node = next_nodes[0]
-        if next_node.op_type != "Reshape" or node.domain != "":
-            return self.none(node, inspect.currentframe().f_lineno)
-
-        node_before_left = g.node_before(node.input[0])
-        node_before_right = g.node_before(node.input[1])
-        if node_before_left is None or node_before_right is None:
-            return self.none(node, inspect.currentframe().f_lineno)
-        if (
-            node_before_left.op_type != "Reshape"
-            or node_before_left.domain != ""
-            or node_before_right.op_type != "Reshape"
-            or node_before_right.domain != ""
-        ):
-            return self.none(node, inspect.currentframe().f_lineno)
-
-        # condition on shapes
-        if not g.is_constant(node_before_left.input[1]):
-            return
-        shape_left = tuple(
-            int(i) for i in g.get_computed_constant(node_before_left.input[1])
-        )
-        if not g.is_constant(node_before_right.input[1]):
-            return
-        shape_right = tuple(
-            int(i) for i in g.get_computed_constant(node_before_right.input[1])
-        )
-        if not g.is_constant(next_node.input[1]):
-            return
-        shape_final = tuple(int(i) for i in g.get_computed_constant(next_node.input[1]))
-        if len(shape_final) < 4:
-            return self.none(node, inspect.currentframe().f_lineno)
-        ndim = len(shape_final)
-        if len(shape_left) != 3 or len(shape_right) != 3:
-            return self.none(node, inspect.currentframe().f_lineno)
-
-        mshape_left = g.get_shape(node_before_left.input[0])
-        mshape_right = g.get_shape(node_before_right.input[0])
-        if len(mshape_left) != ndim or len(mshape_right) != ndim:
-            return self.none(node, inspect.currentframe().f_lineno)
-        if (
-            not compatible_shapes(mshape_left[-2:], shape_left[-2:])
-            or not compatible_shapes(mshape_right[-2:], shape_right[-2:])
-            or not compatible_dimensions(
-                mshape_left[-1], shape_left[-1], mshape_right[-2], shape_right[-2]
-            )
-        ):
-            return self.none(node, inspect.currentframe().f_lineno)
-
-        # At this stage, both Reshape before MatMul reduces the rank by 1
-        # without changing the two last dimensions
-        # and the Reshape after restores it. They can safely be removed.
-        if g.verbose > 3:
-            print(
-                f"[ReshapeMatMulReshapePattern] compatible shapes: mshape_left={mshape_left} "
-                f"shape_left={shape_left} | mshape_left={mshape_right} shape_left={shape_right}"
-            )
-
-        return MatchResult(
-            self,
-            [node_before_left, node_before_right, node, next_node],
-            self.apply,
-            insert_at=node,
-        )
-
-    @classmethod
-    def apply(
-        cls,
-        g: "GraphBuilder",  # noqa: F821
-        node_before_left: NodeProto,
-        node_before_right: NodeProto,
-        node: NodeProto,
-        next_node: NodeProto,
-    ) -> List[NodeProto]:
-        new_node = g.make_node(
-            "MatMul",
-            [node_before_left.input[0], node_before_right.input[0]],
-            next_node.output,
-            name=f"{cls.__class__.__name__}--{node.name}",
-            doc_string=next_node.doc_string,
-        )
-        res = [new_node]
-        if g.is_used_more_than_once(node_before_left.output[0]):
-            res.append(node_before_left)
-        if g.is_used_more_than_once(node_before_right.output[0]):
-            res.append(node_before_right)
-        return res
-
-
-class TransposeMatMulPattern(PatternOptimization):
-    """
-    Replaces the sequence Transpose, Matmul or Gemm into Gemm
-    """
-
-    def match(
-        self,
-        g: "GraphBuilderPatternOptimization",  # noqa: F821
-        node: NodeProto,
-        matched: List[MatchResult],
-    ) -> Optional[MatchResult]:
-        if node.op_type not in {"MatMul", "Gemm"} or node.domain != "":
-            return self.none()
-        if not g.has_rank(node.input[0]) or not g.has_rank(node.input[1]):
-            return self.none(node, inspect.currentframe().f_lineno)
-        if g.get_rank(node.input[0]) != 2 or g.get_rank(node.input[1]) != 2:
-            return self.none(node, inspect.currentframe().f_lineno)
-
-        nodes_before = [g.node_before(node.input[0]), g.node_before(node.input[1])]
-        ns = [
-            (
-                n
-                if n is not None and n.op_type == "Transpose" and n.domain == ""
-                else None
-            )
-            for n in nodes_before
-        ]
-        if len([_ for _ in ns if _ is not None]) == 0:
-            return self.none(node, inspect.currentframe().f_lineno)
-
-        for n in ns:
-            if n is None:
-                continue
-            perm = tuple(g.get_attribute(n, "perm").ints)
-            if perm != (1, 0):
-                # unexpected transpose
-                return self.none(node, inspect.currentframe().f_lineno)
-
-        # At this stage, one or two inputs are transposed before being used.
-        # MatMul or Gemm are operating on 2D tensors.
-        nodes = [*ns, node]
-
-        return MatchResult(self, nodes, self.apply, insert_at=node)
-
-    @classmethod
-    def apply(
-        cls,
-        g: "GraphBuilder",  # noqa: F821
-        node_before_left: Optional[NodeProto],
-        node_before_right: Optional[NodeProto],
-        node: NodeProto,
-    ) -> List[NodeProto]:
-
-        inputs = [
-            (node.input[0] if node_before_left is None else node_before_left.input[0]),
-            (
-                node.input[1]
-                if node_before_right is None
-                else node_before_right.input[0]
-            ),
-            *node.input[2:],
-        ]
-
-        transA = 0 if node_before_left is None else 1
-        transB = 0 if node_before_right is None else 1
-        keep = []
-        for att in node.attribute:
-            if att.name in {"alpha", "beta"}:
-                keep.append(att)
-            elif att.name == "transA":
-                transA = (att.i + transA) % 2
-            elif att.name == "transB":
-                transB = (att.i + transB) % 2
-            else:
-                raise NotImplementedError(
-                    f"Unexpected attribute {att.name!r}={att} for node={node}"
-                )
-
-        new_node = g.make_node(
-            "Gemm",
-            inputs,
-            node.output,
-            name=f"{cls.__class__.__name__}--{node.name}",
-            transA=transA,
-            transB=transB,
-            doc_string=node.doc_string,
-        )
-        new_node.attribute.extend(keep)
-        res = [new_node]
-        if node_before_left is not None and g.is_used_more_than_once(
-            node_before_left.output[0]
-        ):
-            res.append(node_before_left)
-        if node_before_right is not None and g.is_used_more_than_once(
-            node_before_right.output[0]
-        ):
-            res.append(node_before_right)
-        return res
-
-
 class MatMulReshape2Of3Pattern(PatternOptimization):
     """
     Replaces the reshapes around a matmul
@@ -431,5 +223,344 @@ class MatMulReshape2Of3Pattern(PatternOptimization):
                         [node.output[0]],
                     )
                 )
+
+        return res
+
+
+class ReshapeMatMulReshapePattern(PatternOptimization):
+    """
+    Replaces the sequence Reshape, Matmul, Reshape by Matmul.
+    """
+
+    def match(
+        self,
+        g: "GraphBuilderPatternOptimization",  # noqa: F821
+        node: NodeProto,
+        matched: List[MatchResult],
+    ) -> Optional[MatchResult]:
+        if node.op_type != "MatMul" or node.domain != "":
+            return self.none()
+        if g.is_used_more_than_once(node.output[0]):
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        next_nodes = g.next_nodes(node.output[0])
+        if len(next_nodes) == 0:
+            return self.none(node, inspect.currentframe().f_lineno)
+        next_node = next_nodes[0]
+        if next_node.op_type != "Reshape" or node.domain != "":
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        node_before_left = g.node_before(node.input[0])
+        node_before_right = g.node_before(node.input[1])
+        if node_before_left is None or node_before_right is None:
+            return self.none(node, inspect.currentframe().f_lineno)
+        if (
+            node_before_left.op_type != "Reshape"
+            or node_before_left.domain != ""
+            or node_before_right.op_type != "Reshape"
+            or node_before_right.domain != ""
+        ):
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        # condition on shapes
+        if not g.is_constant(node_before_left.input[1]):
+            return
+        shape_left = tuple(
+            int(i) for i in g.get_computed_constant(node_before_left.input[1])
+        )
+        if not g.is_constant(node_before_right.input[1]):
+            return
+        shape_right = tuple(
+            int(i) for i in g.get_computed_constant(node_before_right.input[1])
+        )
+        if not g.is_constant(next_node.input[1]):
+            return
+        shape_final = tuple(int(i) for i in g.get_computed_constant(next_node.input[1]))
+        if len(shape_final) < 4:
+            return self.none(node, inspect.currentframe().f_lineno)
+        ndim = len(shape_final)
+        if len(shape_left) != 3 or len(shape_right) != 3:
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        mshape_left = g.get_shape(node_before_left.input[0])
+        mshape_right = g.get_shape(node_before_right.input[0])
+        if len(mshape_left) != ndim or len(mshape_right) != ndim:
+            return self.none(node, inspect.currentframe().f_lineno)
+        if (
+            not compatible_shapes(mshape_left[-2:], shape_left[-2:])
+            or not compatible_shapes(mshape_right[-2:], shape_right[-2:])
+            or not compatible_dimensions(
+                mshape_left[-1], shape_left[-1], mshape_right[-2], shape_right[-2]
+            )
+        ):
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        # At this stage, both Reshape before MatMul reduces the rank by 1
+        # without changing the two last dimensions
+        # and the Reshape after restores it. They can safely be removed.
+        if g.verbose > 3:
+            print(
+                f"[ReshapeMatMulReshapePattern] compatible shapes: mshape_left={mshape_left} "
+                f"shape_left={shape_left} | mshape_left={mshape_right} shape_left={shape_right}"
+            )
+
+        return MatchResult(
+            self,
+            [node_before_left, node_before_right, node, next_node],
+            self.apply,
+            insert_at=node,
+        )
+
+    @classmethod
+    def apply(
+        cls,
+        g: "GraphBuilder",  # noqa: F821
+        node_before_left: NodeProto,
+        node_before_right: NodeProto,
+        node: NodeProto,
+        next_node: NodeProto,
+    ) -> List[NodeProto]:
+        new_node = g.make_node(
+            "MatMul",
+            [node_before_left.input[0], node_before_right.input[0]],
+            next_node.output,
+            name=f"{cls.__class__.__name__}--{node.name}",
+            doc_string=next_node.doc_string,
+        )
+        res = [new_node]
+        if g.is_used_more_than_once(node_before_left.output[0]):
+            res.append(node_before_left)
+        if g.is_used_more_than_once(node_before_right.output[0]):
+            res.append(node_before_right)
+        return res
+
+
+class TransposeMatMulPattern(PatternOptimization):
+    """
+    Replaces the sequence Transpose, Matmul or Gemm into Gemm
+    """
+
+    def match(
+        self,
+        g: "GraphBuilderPatternOptimization",  # noqa: F821
+        node: NodeProto,
+        matched: List[MatchResult],
+    ) -> Optional[MatchResult]:
+        if node.op_type not in {"MatMul", "Gemm"} or node.domain != "":
+            return self.none()
+        if not g.has_rank(node.input[0]) or not g.has_rank(node.input[1]):
+            return self.none(node, inspect.currentframe().f_lineno)
+        if g.get_rank(node.input[0]) != 2 or g.get_rank(node.input[1]) != 2:
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        nodes_before = [g.node_before(node.input[0]), g.node_before(node.input[1])]
+        ns = [
+            (
+                n
+                if n is not None and n.op_type == "Transpose" and n.domain == ""
+                else None
+            )
+            for n in nodes_before
+        ]
+        if len([_ for _ in ns if _ is not None]) == 0:
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        for n in ns:
+            if n is None:
+                continue
+            perm = tuple(g.get_attribute(n, "perm").ints)
+            if perm != (1, 0):
+                # unexpected transpose
+                return self.none(node, inspect.currentframe().f_lineno)
+
+        # At this stage, one or two inputs are transposed before being used.
+        # MatMul or Gemm are operating on 2D tensors.
+        nodes = [*ns, node]
+
+        return MatchResult(self, nodes, self.apply, insert_at=node)
+
+    @classmethod
+    def apply(
+        cls,
+        g: "GraphBuilder",  # noqa: F821
+        node_before_left: Optional[NodeProto],
+        node_before_right: Optional[NodeProto],
+        node: NodeProto,
+    ) -> List[NodeProto]:
+
+        inputs = [
+            (node.input[0] if node_before_left is None else node_before_left.input[0]),
+            (
+                node.input[1]
+                if node_before_right is None
+                else node_before_right.input[0]
+            ),
+            *node.input[2:],
+        ]
+
+        transA = 0 if node_before_left is None else 1
+        transB = 0 if node_before_right is None else 1
+        keep = []
+        for att in node.attribute:
+            if att.name in {"alpha", "beta"}:
+                keep.append(att)
+            elif att.name == "transA":
+                transA = (att.i + transA) % 2
+            elif att.name == "transB":
+                transB = (att.i + transB) % 2
+            else:
+                raise NotImplementedError(
+                    f"Unexpected attribute {att.name!r}={att} for node={node}"
+                )
+
+        new_node = g.make_node(
+            "Gemm",
+            inputs,
+            node.output,
+            name=f"{cls.__class__.__name__}--{node.name}",
+            transA=transA,
+            transB=transB,
+            doc_string=node.doc_string,
+        )
+        new_node.attribute.extend(keep)
+        res = [new_node]
+        if node_before_left is not None and g.is_used_more_than_once(
+            node_before_left.output[0]
+        ):
+            res.append(node_before_left)
+        if node_before_right is not None and g.is_used_more_than_once(
+            node_before_right.output[0]
+        ):
+            res.append(node_before_right)
+        return res
+
+
+class TransposeReshapeMatMulPattern(PatternOptimization):
+    """
+    Replaces the sequence Transpose, Reshape, Matmul into
+    Reshape, Transpose, Matmul if possible. Another optimizer
+    will optimizes this sequence by using Gemm or better.
+    """
+
+    def check_transpose_node(self, g: "GraphBuilder", name: str) -> bool:  # noqa: F821
+        if g.is_used_more_than_once(name):
+            return False
+        node = g.node_before(name)
+        if node is None or node.op_type != "Reshape":
+            return False
+        if g.is_used_more_than_once(node.input[0]):
+            return False
+        node_node = g.node_before(node.input[0])
+        if node_node is None or node_node.op_type != "Transpose":
+            return False
+        perm = tuple(g.get_attribute(node_node, "perm").ints)
+        id_perm = tuple(range(len(perm)))
+        if perm[:-2] != id_perm[:-2] or (perm[-1], perm[-2]) != id_perm[-2:]:
+            return False
+        return True
+
+    def match(
+        self,
+        g: "GraphBuilderPatternOptimization",  # noqa: F821
+        node: NodeProto,
+        matched: List[MatchResult],
+        left_first: bool = True,
+    ) -> Optional[MatchResult]:
+        if node.op_type != "MatMul" or node.domain != "":
+            return self.none()
+
+        left = self.check_transpose_node(g, node.input[0])
+        right = self.check_transpose_node(g, node.input[1])
+        if left and left_first:
+            # even right is ok, it will be handled by another call to the optimizer.
+            side = "left"
+        elif right:
+            side = "right"
+        else:
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        if side == "left":
+            node_left = g.node_before(node.input[0])
+            node_left_tr = g.node_before(node_left.input[0])
+            node_right = None
+            node_right_tr = None
+            shape_name = node_left.input[1]
+        else:
+            node_left = None
+            node_left_tr = None
+            node_right = g.node_before(node.input[1])
+            node_right_tr = g.node_before(node_right.input[0])
+            shape_name = node_right.input[1]
+
+        if not g.is_constant(shape_name):
+            if left_first and right:
+                return self.match(g, node, matched, left_first=False)
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        shape_before = g.get_shape((node_left or node_right).input[0])
+        shape_after = g.get_shape((node_left or node_right).output[0])
+        if shape_before[-2:] != shape_after[-2:]:
+            # the two last dimension are not modified by the reshape
+            if left_first and right:
+                return self.match(g, node, matched, left_first=False)
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        return MatchResult(
+            self,
+            [node, node_left, node_left_tr, node_right, node_right_tr],
+            self.apply,
+            insert_at=node,
+        )
+
+    @classmethod
+    def apply(
+        cls,
+        g: "GraphBuilder",  # noqa: F821
+        node: NodeProto,
+        node_left: Optional[NodeProto],
+        node_left_tr: Optional[NodeProto],
+        node_right: Optional[NodeProto],
+        node_right_tr: Optional[NodeProto],
+    ) -> List[NodeProto]:
+
+        shape = list(g.get_computed_constant((node_left or node_right).input[1]))
+        shape[-2], shape[-1] = shape[-1], shape[-2]
+        shape_name = g.make_initializer("", np.array(shape, dtype=np.int64))
+        print(shape_name, shape)
+
+        if node_right is None:
+            # left side
+
+            perm = list(range(g.get_rank(node.input[0])))
+            perm[-2], perm[-1] = perm[-1], perm[-2]
+            left_name = g.unique_name(
+                f"{cls.__class__.__name__}L_{node_left_tr.input[0]}"
+            )
+            res = [
+                g.make_node(
+                    "Reshape", [node_left_tr.input[0], shape_name], [left_name]
+                ),
+                g.make_node(
+                    "Transpose", [left_name], [node.input[0]], perm=tuple(perm)
+                ),
+                node,
+            ]
+
+        else:
+            # right side
+            perm = list(range(g.get_rank(node.input[1])))
+            perm[-2], perm[-1] = perm[-1], perm[-2]
+            right_name = g.unique_name(
+                f"{cls.__class__.__name__}L_{node_right_tr.input[0]}"
+            )
+            res = [
+                g.make_node(
+                    "Reshape", [node_right_tr.input[0], shape_name], [right_name]
+                ),
+                g.make_node(
+                    "Transpose", [right_name], [node.input[1]], perm=tuple(perm)
+                ),
+                node,
+            ]
 
         return res
