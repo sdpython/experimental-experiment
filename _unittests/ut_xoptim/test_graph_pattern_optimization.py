@@ -228,7 +228,7 @@ class TestGraphPatternOptimization(ExtTestCase):
         got = opt_ref.run(None, feeds)[0]
         self.assertEqualArray(expected, got)
 
-    def test_reshpae_matmul_reshape_dynamic_1(self):
+    def test_reshape_matmul_reshape_dynamic_1(self):
         model = oh.make_model(
             oh.make_graph(
                 [

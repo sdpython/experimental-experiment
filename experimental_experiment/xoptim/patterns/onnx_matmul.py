@@ -2,7 +2,11 @@ import inspect
 from typing import List, Optional, Tuple
 import numpy as np
 from onnx import NodeProto
-from ...xbuilder.shape_helper import compatible_shapes, compatible_dimensions
+from ...xbuilder.shape_helper import (
+    compatible_shapes,
+    compatible_dimensions,
+    is_static_shape,
+)
 from .patterns_api import MatchResult, PatternOptimization
 
 
@@ -223,8 +227,16 @@ class MatMulReshape2Of3Pattern(PatternOptimization):
     """
 
     @classmethod
-    def same_size(cls, sh1: Tuple[int, ...], sh2: Tuple[int, ...]) -> bool:
-        return np.prod(sh1) == np.prod(sh2)
+    def same_size(
+        cls,
+        g: "GraphBuilderPatternOptimization",  # noqa: F821,
+        sh1: Tuple[int, ...],
+        sh2: Tuple[int, ...],
+    ) -> bool:
+        # We cannot handle all the case.
+        if is_static_shape(sh1) and is_static_shape(sh2):
+            return np.prod(sh1) == np.prod(sh2)
+        return sh1 == sh2
 
     def match(
         self,
@@ -278,10 +290,10 @@ class MatMulReshape2Of3Pattern(PatternOptimization):
 
         if (
             shape_left_left is not None
-            and not self.same_size(shape_left[-2:], shape_left_left[-2:])
+            and not self.same_size(g, shape_left[-2:], shape_left_left[-2:])
         ) or (
             shape_right_right is not None
-            and not self.same_size(shape_right[-2:], shape_right_right[-2:])
+            and not self.same_size(g, shape_right[-2:], shape_right_right[-2:])
         ):
             # last dimension are the same
             return self.none(node, inspect.currentframe().f_lineno)
