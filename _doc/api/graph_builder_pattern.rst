@@ -57,6 +57,12 @@ MulMulMulPattern
 .. autoclass:: experimental_experiment.xoptim.patterns.MulMulMulPattern
     :members:
 
+ReduceReshapePattern
+++++++++++++++++++++
+
+.. autoclass:: experimental_experiment.xoptim.patterns.ReduceReshapePattern
+    :members:
+
 ReshapeMatMulReshapePattern
 +++++++++++++++++++++++++++
 

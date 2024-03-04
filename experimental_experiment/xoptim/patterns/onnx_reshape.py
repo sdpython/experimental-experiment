@@ -5,6 +5,96 @@ from ...xbuilder._onnx_helper import element_wise_op_types
 from .patterns_api import MatchResult, PatternOptimization
 
 
+class ReduceReshapePattern(PatternOptimization):
+    """
+    Replaces the sequence Reduce* Reshape if reshape is only
+    introduces to deal with a dimension kept because keepdim=1.
+    """
+
+    def match(
+        self,
+        g: "GraphBuilderPatternOptimization",  # noqa: F821
+        node: NodeProto,
+        matched: List[MatchResult],
+    ) -> Optional[MatchResult]:
+        if not node.op_type.startswith("Reduce") or node.domain != "":
+            return self.none()
+
+        if g.is_used_more_than_once(node.output[0]):
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        att = g.get_attribute(node, "keepdims", exc=False)
+        keepdims = 1 if att is None else att.i
+        if keepdims == 0:
+            # not keeping the dimension so Reshape means to restore them.
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        if len(node.input) == 2:
+            if not g.is_constant(node.input[1]):
+                return self.none(node, inspect.currentframe().f_lineno)
+            axes = tuple(g.get_computed_constant(node.input[1]))
+        else:
+            att = g.get_attribute(node, "axes", exc=False)
+            axes = (
+                tuple(range(g.get_rank(node.input[0])))
+                if att is None
+                else tuple(att.ints)
+            )
+
+        next_nodes = g.next_nodes(node.output[0])
+        if len(next_nodes) != 1:
+            return self.none(node, inspect.currentframe().f_lineno)
+        next_node = next_nodes[0]
+        if next_node.op_type != "Reshape" or node.domain != "":
+            return self.none(node, inspect.currentframe().f_lineno)
+        if next_node.input[0] != node.output[0]:
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        if g.get_rank(node.input[0]) != g.get_rank(next_node.output[0]) + len(axes):
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        if g.get_rank(next_node.output[0]) > 1:
+            if not g.has_shape(node.input[0]):
+                return self.none(node, inspect.currentframe().f_lineno)
+            set_axes = set(axes)
+            shape = g.get_shape(node.input[0])
+            reduced_shape = [s for i, s in enumerate(shape) if i not in set_axes]
+            reshaped_shape = g.get_shape(next_node.output[0])
+            if reduced_shape != reshaped_shape:
+                print(reduced_shape, reshaped_shape, axes)
+                return self.none(node, inspect.currentframe().f_lineno)
+
+        return MatchResult(self, [node, next_node], self.apply, insert_at=node)
+
+    @classmethod
+    def apply(
+        cls, g: "GraphBuilder", node: NodeProto, next_node: NodeProto  # noqa: F821
+    ) -> List[NodeProto]:
+        axes = g.get_attribute(node, "axes", exc=False)
+        if axes is None:
+            new_node = g.make_node(
+                node.op_type,
+                node.input,
+                next_node.output,
+                keepdims=0,
+                name=f"{cls.__class__.__name__}--{node.name}",
+                doc_string=node.doc_string,
+            )
+            return [new_node]
+
+        # older opset
+        new_node = g.make_node(
+            node.op_type,
+            node.input,
+            next_node.output,
+            keepdims=0,
+            axes=list(axes.ints),
+            name=f"{cls.__class__.__name__}--{node.name}",
+            doc_string=node.doc_string,
+        )
+        return [new_node]
+
+
 class ReshapeReshapePattern(PatternOptimization):
     """
     Replaces the sequence Reshape, Reshape by Reshape.

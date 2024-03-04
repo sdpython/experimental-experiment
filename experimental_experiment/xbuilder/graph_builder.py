@@ -207,6 +207,8 @@ class GraphBuilder:
     - `functions: List[FunctionProto]`: list of functions to add to the model
     - `value_info: List[ValueInfoProto]`: value info of the original model
 
+    Computed attributes:
+
     - `_unique_names`: used to create unused result names
     - `_unique_node_names`: used to create unused node names
     - `_known_names`: set of existing results names
@@ -219,6 +221,8 @@ class GraphBuilder:
     - `dynamic_objects_rev: Dict[str, str]`: reverse dictionary to fasten lookups
     - `_cache_shape: Dict[key,str]`: cache concatenation of shapes
     - `_values: Dict[key,str]`: cache initializer value to merge those which are equal
+
+    Debugging attributes:
 
     - `_raise_list: Set[str]`: the builder stop if a result falls in that list
       (debugging tool)
