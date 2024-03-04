@@ -871,7 +871,7 @@ class TestGraphPatternOptimization(ExtTestCase):
         gr = GraphBuilder(
             model,
             infer_shapes=True,
-            optimization_options=OptimizationOptions(patterns=["MulMulMul"]),
+            optimization_options=OptimizationOptions(patterns=["MulMulMulScalar"]),
         )
         opt_onx = gr.to_onnx(optimize=True)
         self.assertEqual(
@@ -917,7 +917,7 @@ class TestGraphPatternOptimization(ExtTestCase):
         gr = GraphBuilder(
             model,
             infer_shapes=True,
-            optimization_options=OptimizationOptions(patterns=["MulMulMul"]),
+            optimization_options=OptimizationOptions(patterns=["MulMulMulScalar"]),
         )
         opt_onx = gr.to_onnx(optimize=True)
         self.assertEqual(
@@ -1028,14 +1028,14 @@ class TestGraphPatternOptimization(ExtTestCase):
         gr = GraphBuilder(
             model,
             infer_shapes=True,
-            optimization_options=OptimizationOptions(patterns=["MulMulMul"]),
+            optimization_options=OptimizationOptions(patterns=["MulMulMulScalar"]),
         )
         stats = gr.optimize()
         self.assertEqual(
             stats,
             [
                 {
-                    "pattern": "MulMulMulPattern",
+                    "pattern": "MulMulMulScalarPattern",
                     "added": 2,
                     "removed": 3,
                     "iteration": 0,
@@ -1628,7 +1628,7 @@ class TestGraphPatternOptimization(ExtTestCase):
         )
         opt_onx = gr.to_onnx(optimize=True)
         self.assertEqual(["ReduceSum", "Cos"], [n.op_type for n in opt_onx.graph.node])
-        self.assertEqual(1, len(opt_onx.graph.initializer))
+        self.assertEqual(0, len(opt_onx.graph.initializer))
 
         opt_ref = ExtendedReferenceEvaluator(opt_onx)
         got = opt_ref.run(None, feeds)[0]

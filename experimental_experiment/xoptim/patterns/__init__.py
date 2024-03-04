@@ -6,7 +6,7 @@ from .patterns_api import MatchResult, PatternOptimization  # noqa: F401
 # onnx patterns
 from .onnx_cast import CastPattern
 from .onnx_expand import ExpandPattern, ExpandBroadcastPattern
-from .onnx_mul import MulMulMulPattern
+from .onnx_mul import MulMulMulScalarPattern
 from .onnx_matmul import (
     ReshapeMatMulReshapePattern,
     TransposeMatMulPattern,
@@ -39,7 +39,7 @@ def get_default_patterns() -> List[PatternOptimization]:
         CastPattern(),
         ExpandPattern(),
         ExpandBroadcastPattern(),
-        MulMulMulPattern(),
+        MulMulMulScalarPattern(),
         ReduceReshapePattern(),
         ReshapeMatMulReshapePattern(),
         Reshape2Of3Pattern(),
