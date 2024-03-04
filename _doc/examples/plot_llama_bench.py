@@ -201,8 +201,8 @@ if data_collected:
 
     def clean_pattern(s):
         if "+default" in s:
-            s = s.replace("ConstantOfShapeScatterND","")
-        s = s.replace("+default-default", "")        
+            s = s.replace("ConstantOfShapeScatterND", "")
+        s = s.replace("+default-default", "")
         return s
 
     def make_legend(row):
