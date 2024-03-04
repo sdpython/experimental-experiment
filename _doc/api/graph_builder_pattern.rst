@@ -105,6 +105,12 @@ TransposeMatMulPattern
 .. autoclass:: experimental_experiment.xoptim.patterns.TransposeMatMulPattern
     :members:
 
+TransposeReshapeMatMulPattern
++++++++++++++++++++++++++++++
+
+.. autoclass:: experimental_experiment.xoptim.patterns.TransposeReshapeMatMulPattern
+    :members:
+
 TransposeTransposePattern
 +++++++++++++++++++++++++
 
