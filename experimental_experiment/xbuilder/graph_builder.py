@@ -1501,7 +1501,7 @@ class GraphBuilder:
             set_type_shape_gemm(
                 self,
                 node.output[0],
-                *node.input,
+                *node.input[:2],
                 transA=self.get_attribute(node, "transA").i,
                 transB=self.get_attribute(node, "transB").i,
             )

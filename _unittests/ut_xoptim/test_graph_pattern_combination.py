@@ -265,6 +265,7 @@ class TestGraphPatternCombination(ExtTestCase):
                     "MatMulReshape2Of3",
                     "ReshapeReshape",
                 ],
+                verbose=10,
             ),
             infer_shapes=True,
         )
