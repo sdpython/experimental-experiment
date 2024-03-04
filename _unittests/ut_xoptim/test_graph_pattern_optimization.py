@@ -1,6 +1,5 @@
 import os
 import unittest
-import packaging.version as pv
 import numpy as np
 import onnx
 from onnx import ModelProto, TensorProto, helper as oh, numpy_helper as onh
@@ -1363,10 +1362,6 @@ class TestGraphPatternOptimization(ExtTestCase):
         got = opt_ref.run(None, feeds)[0]
         self.assertEqualArray(expected, got)
 
-    @unittest.skipIf(
-        pv.Version(onnx.__version__) < pv.Version("1.17"),
-        reason="bug in shape inference",
-    )
     def test_matmul_reshape_2of3_static_3_keep(self):
         model = oh.make_model(
             oh.make_graph(
@@ -1526,6 +1521,151 @@ class TestGraphPatternOptimization(ExtTestCase):
         opt_onx = gr.to_onnx(optimize=True)
         self.assertEqual(["MatMul", "Reshape"], [n.op_type for n in opt_onx.graph.node])
         self.assertEqual(1, len(opt_onx.graph.initializer))
+
+        opt_ref = ExtendedReferenceEvaluator(opt_onx)
+        got = opt_ref.run(None, feeds)[0]
+        self.assertEqualArray(expected, got)
+
+    def test_reduce_reshape(self):
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("ReduceSum", ["X", "axes"], ["xr"], keepdims=1),
+                    oh.make_node("Reshape", ["xr", "shape"], ["Y"]),
+                ],
+                "dummy",
+                [
+                    oh.make_tensor_value_info("X", TensorProto.FLOAT, [3, 2]),
+                ],
+                [oh.make_tensor_value_info("Y", TensorProto.FLOAT, [3])],
+                [
+                    onh.from_array(np.array([1], dtype=np.int64), name="axes"),
+                    onh.from_array(np.array([3], dtype=np.int64), name="shape"),
+                ],
+            )
+        )
+        check_model(model)
+        feeds = {"X": self._range(3, 2)}
+        ref = ExtendedReferenceEvaluator(model)
+        expected = ref.run(None, feeds)[0]
+
+        gr = GraphBuilder(
+            model,
+            infer_shapes=True,
+            optimization_options=OptimizationOptions(patterns=["ReduceReshape"]),
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+        self.assertEqual(["ReduceSum"], [n.op_type for n in opt_onx.graph.node])
+        self.assertEqual(1, len(opt_onx.graph.initializer))
+
+        opt_ref = ExtendedReferenceEvaluator(opt_onx)
+        got = opt_ref.run(None, feeds)[0]
+        self.assertEqualArray(expected, got)
+
+    def test_reduce_reshape_2d(self):
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("ReduceSum", ["X", "axes"], ["xr"], keepdims=1),
+                    oh.make_node("Reshape", ["xr", "shape"], ["Y"]),
+                ],
+                "dummy",
+                [
+                    oh.make_tensor_value_info("X", TensorProto.FLOAT, [4, 3, 2]),
+                ],
+                [oh.make_tensor_value_info("Y", TensorProto.FLOAT, [3])],
+                [
+                    onh.from_array(np.array([0, 2], dtype=np.int64), name="axes"),
+                    onh.from_array(np.array([3], dtype=np.int64), name="shape"),
+                ],
+            )
+        )
+        check_model(model)
+        feeds = {"X": self._range(4, 3, 2)}
+        ref = ExtendedReferenceEvaluator(model)
+        expected = ref.run(None, feeds)[0]
+
+        gr = GraphBuilder(
+            model,
+            infer_shapes=True,
+            optimization_options=OptimizationOptions(patterns=["ReduceReshape"]),
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+        self.assertEqual(["ReduceSum"], [n.op_type for n in opt_onx.graph.node])
+        self.assertEqual(1, len(opt_onx.graph.initializer))
+
+        opt_ref = ExtendedReferenceEvaluator(opt_onx)
+        got = opt_ref.run(None, feeds)[0]
+        self.assertEqualArray(expected, got)
+
+    def test_reduce_reshape_all(self):
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("ReduceSum", ["X"], ["xr"], keepdims=1),
+                    oh.make_node("Reshape", ["xr", "shape"], ["yr"]),
+                    oh.make_node("Cos", ["yr"], ["Y"]),
+                ],
+                "dummy",
+                [
+                    oh.make_tensor_value_info("X", TensorProto.FLOAT, [3, 2]),
+                ],
+                [oh.make_tensor_value_info("Y", TensorProto.FLOAT, [])],
+                [
+                    onh.from_array(np.array([], dtype=np.int64), name="shape"),
+                ],
+            )
+        )
+        check_model(model)
+        feeds = {"X": self._range(3, 2)}
+        ref = ExtendedReferenceEvaluator(model)
+        expected = ref.run(None, feeds)[0]
+
+        gr = GraphBuilder(
+            model,
+            infer_shapes=True,
+            optimization_options=OptimizationOptions(patterns=["ReduceReshape"]),
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+        self.assertEqual(["ReduceSum", "Cos"], [n.op_type for n in opt_onx.graph.node])
+        self.assertEqual(0, len(opt_onx.graph.initializer))
+
+        opt_ref = ExtendedReferenceEvaluator(opt_onx)
+        got = opt_ref.run(None, feeds)[0]
+        self.assertEqualArray(expected, got)
+
+    def test_reduce_reshape_opset10(self):
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("ReduceSum", ["X"], ["xr"], keepdims=1, axes=[1]),
+                    oh.make_node("Reshape", ["xr", "shape"], ["Y"]),
+                ],
+                "dummy",
+                [
+                    oh.make_tensor_value_info("X", TensorProto.FLOAT, [3, 2]),
+                ],
+                [oh.make_tensor_value_info("Y", TensorProto.FLOAT, [3])],
+                [
+                    onh.from_array(np.array([1], dtype=np.int64), name="axes"),
+                    onh.from_array(np.array([3], dtype=np.int64), name="shape"),
+                ],
+            ),
+            opset_imports=[oh.make_opsetid("", 10)],
+        )
+        check_model(model)
+        feeds = {"X": self._range(3, 2)}
+        ref = ExtendedReferenceEvaluator(model)
+        expected = ref.run(None, feeds)[0]
+
+        gr = GraphBuilder(
+            model,
+            infer_shapes=True,
+            optimization_options=OptimizationOptions(patterns=["ReduceReshape"]),
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+        self.assertEqual(["ReduceSum"], [n.op_type for n in opt_onx.graph.node])
+        self.assertEqual(0, len(opt_onx.graph.initializer))
 
         opt_ref = ExtendedReferenceEvaluator(opt_onx)
         got = opt_ref.run(None, feeds)[0]
