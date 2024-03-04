@@ -1,3 +1,4 @@
+import inspect
 from typing import List, Optional
 from onnx import NodeProto
 from ...xbuilder._onnx_helper import element_wise_op_types
@@ -17,18 +18,18 @@ class ExpandPattern(PatternOptimization):
         matched: List[MatchResult],
     ) -> Optional[MatchResult]:
         if node.op_type != "Expand" or node.domain != "":
-            return None
+            return self.none()
         if not g.has_shape(node.input[0]):
-            return None
+            return self.none(node, inspect.currentframe().f_lineno)
         shape = g.get_shape(node.input[0])
         if not all_int(shape):
-            return None
+            return self.none(node, inspect.currentframe().f_lineno)
         if not g.is_constant(node.input[1]):
             # It may be a symbolic shape.
-            return None
+            return self.none(node, inspect.currentframe().f_lineno)
         new_shape = tuple(g.get_computed_constant(node.input[1]))
         if shape != new_shape:
-            return
+            return self.none(node, inspect.currentframe().f_lineno)
 
         def apply(g: "GraphBuilder", node: NodeProto) -> List[NodeProto]:  # noqa: F821
             new_node = g.make_node(
@@ -59,20 +60,20 @@ class ExpandBroadcastPattern(PatternOptimization):
         matched: List[MatchResult],
     ) -> Optional[MatchResult]:
         if node.op_type != "Expand" or node.domain != "":
-            return None
+            return self.none()
         if not g.has_shape(node.input[0]):
-            return None
+            return self.none(node, inspect.currentframe().f_lineno)
         shape = g.get_shape(node.input[0])
         if not all_int(shape):
-            return None
+            return self.none(node, inspect.currentframe().f_lineno)
         if not g.is_constant(node.input[1]):
             # It may be a symbolic shape.
-            return None
+            return self.none(node, inspect.currentframe().f_lineno)
         new_shape = tuple(g.get_computed_constant(node.input[1]))
 
         if g.is_used_more_than_once(node.output[0]):
             # More than one output, not handled right now.
-            return None
+            return self.none(node, inspect.currentframe().f_lineno)
 
         next_nodes = g.next_nodes(node.output[0])
         assert (
@@ -82,7 +83,7 @@ class ExpandBroadcastPattern(PatternOptimization):
 
         if next_node.op_type not in self._op_types or next_node.domain != "":
             # Not an element wise operator.
-            return None
+            return self.none(node, inspect.currentframe().f_lineno)
 
         if next_node.input[0] == node.output[0]:
             other = next_node.input[1]
@@ -90,18 +91,18 @@ class ExpandBroadcastPattern(PatternOptimization):
             other = next_node.input[0]
 
         if not g.has_shape(other):
-            return None
+            return self.none(node, inspect.currentframe().f_lineno)
 
         other_shape = g.get_shape(other)
         if new_shape != other_shape:
             # Expand does not expand to the shape of the other element.
-            return None
+            return self.none(node, inspect.currentframe().f_lineno)
         if len(shape) != len(other_shape):
             # Different ranks.
-            return None
+            return self.none(node, inspect.currentframe().f_lineno)
         for a, b in zip(shape, other_shape):
             if not (a == b or a == 1 or b == 1):
-                return None
+                return self.none(node, inspect.currentframe().f_lineno)
 
         def apply(
             g: "GraphBuilder", node: NodeProto, next_node: NodeProto  # noqa: F821

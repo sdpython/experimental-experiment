@@ -1,3 +1,4 @@
+import inspect
 from typing import List, Optional
 from onnx import NodeProto
 from ..patterns.patterns_api import MatchResult, PatternOptimization
@@ -17,14 +18,14 @@ class FusedMatMulPattern(PatternOptimization):
         if (node.op_type != "MatMul" or node.domain != "") and (
             node.op_type != "FusedMatMul" or node.domain != "com.microsoft"
         ):
-            return None
+            return self.none()
         if not g.has_rank(node.input[0]) or not g.has_rank(node.input[1]):
-            return None
+            return self.none(node, inspect.currentframe().f_lineno)
         if g.get_rank(node.input[0]) < 2 or g.get_rank(node.input[1]) < 2:
-            return None
+            return self.none(node, inspect.currentframe().f_lineno)
         if g.get_rank(node.input[0]) <= 2 and g.get_rank(node.input[1]) <= 2:
             # Regular Gemm.
-            return None
+            return self.none(node, inspect.currentframe().f_lineno)
 
         nodes_before = [g.node_before(node.input[0]), g.node_before(node.input[1])]
         ns = [
@@ -36,7 +37,7 @@ class FusedMatMulPattern(PatternOptimization):
             for n in nodes_before
         ]
         if len([_ for _ in ns if _ is not None]) == 0:
-            return None
+            return self.none(node, inspect.currentframe().f_lineno)
 
         for n in ns:
             if n is None:
@@ -46,7 +47,7 @@ class FusedMatMulPattern(PatternOptimization):
             expecting[-2], expecting[-1] = expecting[-1], expecting[-2]
             if perm != expecting:
                 # unexpected transpose
-                return None
+                return self.none(node, inspect.currentframe().f_lineno)
 
         # At this stage, one or two inputs are transposed before being used.
         # MatMul or Gemm are operating on 2D tensors.

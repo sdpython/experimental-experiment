@@ -1,3 +1,4 @@
+import inspect
 from typing import List, Optional
 from onnx import NodeProto
 from .patterns_api import MatchResult, PatternOptimization
@@ -16,18 +17,18 @@ class Sub1MulPattern(PatternOptimization):
         matched: List[MatchResult],
     ) -> Optional[MatchResult]:
         if node.op_type != "Mul" or node.domain != "":
-            return None
+            return self.none()
 
         node_left = g.node_before(node.input[0])
         node_right = g.node_before(node.input[1])
         op_left = None if node_left is None else node_left.op_type
         op_right = None if node_right is None else node_right.op_type
         if op_left != "Sub" and op_right != "Sub":
-            return None
+            return self.none(node, inspect.currentframe().f_lineno)
         if (op_left == "Sub" and g.is_used_more_than_once(node.input[0])) or (
             op_right == "Sub" and g.is_used_more_than_once(node.input[1])
         ):
-            return None
+            return self.none(node, inspect.currentframe().f_lineno)
 
         cst_left, cst_right = None, None
         if op_left == "Sub" and g.is_constant(node_left.input[0]):
@@ -41,7 +42,7 @@ class Sub1MulPattern(PatternOptimization):
                 cst_right = cst
 
         if cst_left is None and cst_right is None:
-            return None
+            return self.none(node, inspect.currentframe().f_lineno)
 
         nodes = [node, node_left, node_right]
 

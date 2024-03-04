@@ -1,3 +1,4 @@
+import os
 from typing import Callable, Iterator, List, Optional
 from onnx import NodeProto
 
@@ -47,12 +48,18 @@ class MatchResult:
 class PatternOptimization:
     """
     Defines an optimization pattern.
+    Function match should return None if the match does not happen
+    or better ``self.none(node, inspect.currentframe().f_lineno)``.
+    That allows the user to know which line rejected a specific pattern
+    by setting environment variable ``PATTERN_OPTIMIZATION=10``.
 
-    :param description:
+    :param verbose: determine the verbosity, this can be also dermine by setting up
+        environment variable ``PATTERN_OPTIMIZATION=10``
     """
 
-    def __init__(self):
-        pass
+    def __init__(self, verbose: int = 0):
+        value = os.environ.get("PATTERN_OPTIMIZATION", "0")
+        self.verbose = max(verbose, int(value))
 
     def __str__(self) -> str:
         return self.__class__.__name__
@@ -85,3 +92,19 @@ class PatternOptimization:
         raise NotImplementedError(
             f"This function must be overloaded in class {self.__class__}."
         )
+
+    def none(
+        self,
+        node: Optional[NodeProto] = None,
+        lineno: Optional[int] = None,
+        msg: str = "",
+    ):
+        """
+        Called by every method `match` rejecting a pattern.
+        """
+        if node and self.verbose:
+            if self.verbose >= 10:
+                print(
+                    f"[{self.__class__.__name__}.match] NONE - line: {lineno}:"
+                    f"{os.path.split(self.__class__.__module__)[-1]}{msg}"
+                )

@@ -1,3 +1,4 @@
+import inspect
 from typing import List, Optional
 from onnx import NodeProto
 from .patterns_api import MatchResult, PatternOptimization
@@ -15,16 +16,16 @@ class CastPattern(PatternOptimization):
         matched: List[MatchResult],
     ) -> Optional[MatchResult]:
         if node.op_type != "Cast" or node.domain != "":
-            return None
+            return self.none()
         if not g.has_type(node.input[0]):
             itype = g.try_infer_type(node.input[0])
             if itype == 0:
-                return None
+                return self.none(node, inspect.currentframe().f_lineno)
         else:
             itype = g.get_type(node.input[0])
         att = g.get_attribute(node, "to")
         if att.i != itype:
-            return None
+            return self.none(node, inspect.currentframe().f_lineno)
 
         def apply(g: "GraphBuilder", node: NodeProto) -> List[NodeProto]:  # noqa: F821
             new_node = g.make_node(

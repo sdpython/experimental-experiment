@@ -1,3 +1,4 @@
+import inspect
 from typing import List, Optional
 import numpy as np
 from onnx import NodeProto
@@ -16,17 +17,17 @@ class UnsqueezeUnsqueezePattern(PatternOptimization):
         matched: List[MatchResult],
     ) -> Optional[MatchResult]:
         if node.op_type != "Unsqueeze" or node.domain != "":
-            return None
+            return self.none()
         if g.is_used_more_than_once(node.output[0]):
-            return None
+            return self.none(node, inspect.currentframe().f_lineno)
         next_nodes = g.next_nodes(node.output[0])
         if len(next_nodes) != 1:
-            return None
+            return self.none(node, inspect.currentframe().f_lineno)
         next_node = next_nodes[0]
         if next_node.op_type != "Unsqueeze" or node.domain != "":
-            return None
+            return self.none(node, inspect.currentframe().f_lineno)
         if next_node.input[0] != node.output[0]:
-            return None
+            return self.none(node, inspect.currentframe().f_lineno)
 
         def apply(
             g: "GraphBuilder", node: NodeProto, next_node: NodeProto  # noqa: F821
