@@ -5,7 +5,7 @@ from onnx import NodeProto
 from .patterns_api import MatchResult, PatternOptimization
 
 
-class MulMulMulPattern(PatternOptimization):
+class MulMulMulScalarPattern(PatternOptimization):
     """
     Replaces the sequence {Div | Mul} and  {Div | Mul} + {Div | Mul} with {Div | Mul} Mul.
     """
