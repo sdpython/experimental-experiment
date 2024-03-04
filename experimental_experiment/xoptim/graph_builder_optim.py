@@ -1,3 +1,4 @@
+import os
 import pprint
 from typing import Any, Dict, Iterator, List, Optional, Union
 from onnx import AttributeProto, NodeProto
@@ -27,7 +28,7 @@ class GraphBuilderPatternOptimization:
     ):
         self.builder = builder
         self.patterns = patterns or get_default_patterns()
-        self.verbose = verbose
+        self.verbose = max(verbose, int(os.environ.get("LOG_PATTERN_OPTIMIZE", "0")))
         self.recursive = recursive
         self._build()
 
@@ -115,13 +116,7 @@ class GraphBuilderPatternOptimization:
         """
         Returns an attribute for a node.
         """
-        for att in node.attribute:
-            if att.name == att_name:
-                return att
-        assert (
-            not exc
-        ), f"Unable to find attribute {att_name!r} for node type {node.op_type!r} in node {node}"
-        return None
+        return self.builder.get_attribute(node, att_name, exc=exc)
 
     def get_constant_or_attribute(
         self, node: NodeProto, attribute: str, input_index: int

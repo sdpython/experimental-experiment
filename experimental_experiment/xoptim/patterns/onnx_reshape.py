@@ -1,3 +1,4 @@
+import inspect
 from typing import List, Optional
 from onnx import NodeProto
 from ...xbuilder._onnx_helper import element_wise_op_types
@@ -16,32 +17,33 @@ class ReshapeReshapePattern(PatternOptimization):
         matched: List[MatchResult],
     ) -> Optional[MatchResult]:
         if node.op_type != "Reshape" or node.domain != "":
-            return None
+            return self.none()
 
         if g.is_used_more_than_once(node.output[0]):
-            return None
+            return self.none(node, inspect.currentframe().f_lineno)
         next_nodes = g.next_nodes(node.output[0])
         if len(next_nodes) != 1:
-            return None
+            return self.none(node, inspect.currentframe().f_lineno)
         next_node = next_nodes[0]
         if next_node.op_type != "Reshape" or node.domain != "":
-            return None
+            return self.none(node, inspect.currentframe().f_lineno)
         if next_node.input[0] != node.output[0]:
-            return None
+            return self.none(node, inspect.currentframe().f_lineno)
 
-        def apply(
-            g: "GraphBuilder", node: NodeProto, next_node: NodeProto  # noqa: F821
-        ) -> List[NodeProto]:
-            new_node = g.make_node(
-                "Reshape",
-                [node.input[0], next_node.input[1]],
-                next_node.output,
-                name=f"{self.__class__.__name__}--{node.name}",
-                doc_string=next_node.doc_string,
-            )
-            return [new_node]
+        return MatchResult(self, [node, next_node], self.apply, insert_at=next_node)
 
-        return MatchResult(self, [node, next_node], apply, insert_at=next_node)
+    @classmethod
+    def apply(
+        cls, g: "GraphBuilder", node: NodeProto, next_node: NodeProto  # noqa: F821
+    ) -> List[NodeProto]:
+        new_node = g.make_node(
+            "Reshape",
+            [node.input[0], next_node.input[1]],
+            next_node.output,
+            name=f"{cls.__class__.__name__}--{node.name}",
+            doc_string=next_node.doc_string,
+        )
+        return [new_node]
 
 
 class Reshape2Of3Pattern(PatternOptimization):
@@ -59,7 +61,7 @@ class Reshape2Of3Pattern(PatternOptimization):
         matched: List[MatchResult],
     ) -> Optional[MatchResult]:
         if node.op_type not in self._op_types or node.domain != "":
-            return None
+            return self.none()
 
         if (
             not g.has_shape(node.output[0])
@@ -67,19 +69,19 @@ class Reshape2Of3Pattern(PatternOptimization):
             or not g.has_shape(node.input[1])
         ):
             # Shapes are missing. They should be populated as much as possible.
-            return None
+            return self.none(node, inspect.currentframe().f_lineno)
 
         shape_out = g.get_shape(node.output[0])
         shape_in = g.get_shape(node.input[0]), g.get_shape(node.input[1])
         if not (shape_out == shape_in[0] == shape_in[1]):
             # Broadcasting is involved.
-            return None
+            return self.none(node, inspect.currentframe().f_lineno)
 
         next_nodes = g.next_nodes(node.output[0])
         if len(next_nodes) > 1 or (
             len(next_nodes) == 0 and not g.is_output(node.output[0])
         ):
-            return None
+            return self.none(node, inspect.currentframe().f_lineno)
         next_node = None if len(next_nodes) == 0 else next_nodes[0]
         type_out = None if next_node is None else next_node.op_type
 
@@ -91,7 +93,7 @@ class Reshape2Of3Pattern(PatternOptimization):
         types = [type_left, type_right, type_out, node.op_type]
         n_reshape = len([_ for _ in types if _ == "Reshape"])
         if n_reshape < 2:
-            return None
+            return self.none(node, inspect.currentframe().f_lineno)
 
         if node_left is not None and node_left.op_type != "Reshape":
             node_left = None
@@ -108,89 +110,88 @@ class Reshape2Of3Pattern(PatternOptimization):
 
         if len(set(_ for _ in shapes if _ is not None)) != 1:
             # Not the same shapes.
-            return None
+            return self.none(node, inspect.currentframe().f_lineno)
 
         nodes = [node_left, node_right, next_node, node]
 
-        def apply(
-            g: "GraphBuilder",  # noqa: F821
-            node_left: NodeProto,
-            node_right: NodeProto,
-            next_node: NodeProto,
-            node: NodeProto,
-        ) -> List[NodeProto]:
+        return MatchResult(self, nodes, self.apply)
 
-            compute_shape_name = (
-                node_left.input[1] if node_right is None else node_right.input[1]
+    @classmethod
+    def apply(
+        cls,
+        g: "GraphBuilder",  # noqa: F821
+        node_left: NodeProto,
+        node_right: NodeProto,
+        next_node: NodeProto,
+        node: NodeProto,
+    ) -> List[NodeProto]:
+
+        compute_shape_name = (
+            node_left.input[1] if node_right is None else node_right.input[1]
+        )
+        final_shape_name = (
+            compute_shape_name if next_node is None else next_node.input[1]
+        )
+
+        res = []
+
+        # node left
+        if node_left is None:
+            left_name = g.unique_name(f"{cls.__class__.__name__}L_{node.input[0]}")
+            res.append(
+                g.make_node("Reshape", [node.input[0], final_shape_name], [left_name])
             )
-            final_shape_name = (
-                compute_shape_name if next_node is None else next_node.input[1]
+        elif g.is_used_more_than_once(node_left.output[0]):
+            res.append(node_left)
+            left_name = node_left.input[0]
+        else:
+            left_name = node_left.input[0]
+
+        # node right
+        if node_right is None:
+            right_name = g.unique_name(f"{cls.__class__.__name__}R_{node.input[1]}")
+            res.append(
+                g.make_node("Reshape", [node.input[1], final_shape_name], [right_name])
             )
+        elif g.is_used_more_than_once(node_right.output[0]):
+            res.append(node_right)
+            right_name = node_right.input[0]
+        else:
+            right_name = node_right.input[0]
 
-            res = []
-            if node_left is not None and g.is_used_more_than_once(node_left.output[0]):
-                res.append(node_left)
-            if node_right is not None and g.is_used_more_than_once(
-                node_right.output[0]
-            ):
-                res.append(node_right)
+        # node and next node
+        if next_node is None:
+            # Reshape is needed.
+            new_name = g.unique_name(f"{cls.__class__.__name__}L_{node.output[0]}")
+            res.extend(
+                [
+                    g.make_node(
+                        node.op_type,
+                        [left_name, right_name],
+                        [new_name],
+                    ),
+                    g.make_node(
+                        "Reshape",
+                        [new_name, final_shape_name],
+                        [node.output[0]],
+                    ),
+                ]
+            )
+        else:
+            main_node = g.make_node(
+                node.op_type,
+                [left_name, right_name],
+                [next_node.output[0]],
+            )
+            res.append(main_node)
 
-            if node_left is None:
-                left_name = g.unique_name(f"{self.__class__.__name__}L_{node.input[0]}")
+            if g.is_used_more_than_once(node.output[0]):
                 res.append(
                     g.make_node(
-                        "Reshape", [node.input[0], final_shape_name], [left_name]
+                        "Reshape",
+                        [main_node.output[0], compute_shape_name],
+                        [node.output[0]],
                     )
                 )
-            else:
-                left_name = node_left.input[0]
 
-            if node_right is None:
-                right_name = g.unique_name(
-                    f"{self.__class__.__name__}R_{node.input[1]}"
-                )
-                res.append(
-                    g.make_node(
-                        "Reshape", [node.input[1], final_shape_name], [right_name]
-                    )
-                )
-            else:
-                right_name = node_right.input[0]
-
-            if next_node is None:
-                # Reshape is needed.
-                new_name = g.unique_name(f"{self.__class__.__name__}L_{node.output[0]}")
-                res.extend(
-                    [
-                        g.make_node(
-                            node.op_type,
-                            [left_name, right_name],
-                            [new_name],
-                        ),
-                        g.make_node(
-                            "Reshape",
-                            [new_name, final_shape_name],
-                            [node.output[0]],
-                        ),
-                    ]
-                )
-            else:
-                main_node = g.make_node(
-                    node.op_type,
-                    [left_name, right_name],
-                    [next_node.output[0]],
-                )
-                res.append(main_node)
-
-                if g.is_used_more_than_once(node.output[0]):
-                    res.append(
-                        g.make_node(
-                            "Reshape",
-                            [main_node.output[0], compute_shape_name],
-                            [node.output[0]],
-                        )
-                    )
-
-            return res
-
-        return MatchResult(self, nodes, apply)
+        return res

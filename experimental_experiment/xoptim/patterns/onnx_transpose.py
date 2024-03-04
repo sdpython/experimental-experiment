@@ -1,3 +1,4 @@
+import inspect
 from typing import List, Optional, Tuple
 from onnx import NodeProto
 from .patterns_api import MatchResult, PatternOptimization
@@ -23,14 +24,14 @@ class TransposeTransposePattern(PatternOptimization):
         matched: List[MatchResult],
     ) -> Optional[MatchResult]:
         if node.op_type != "Transpose" or node.domain != "":
-            return None
+            return self.none()
         next_nodes = g.next_nodes(node.output[0])
         next_node = None
         for n in next_nodes:
             if n.op_type == "Transpose":
                 next_node = n
         if next_node is None:
-            return None
+            return self.none(node, inspect.currentframe().f_lineno)
 
         # Three consecutive transpose are not expected but let's continue
         # as if it could be possible.
@@ -46,22 +47,23 @@ class TransposeTransposePattern(PatternOptimization):
         for p in perms:
             self.apply_transpose(p, on)
         if on != first:
-            return None
+            return self.none(node, inspect.currentframe().f_lineno)
 
-        def apply(
-            g: "GraphBuilder", node: NodeProto, next_node: NodeProto  # noqa: F821
-        ) -> List[NodeProto]:
-            new_nodes = [
-                g.make_node(
-                    "Identity",
-                    [node.input[0]],
-                    next_node.output,
-                    name=f"{self.__class__.__name__}--{node.name}",
-                    doc_string=next_node.doc_string,
-                )
-            ]
-            if g.is_used_more_than_once(node.output[0]):
-                new_nodes.append(node)
-            return new_nodes
+        return MatchResult(self, [node, next_node], self.apply)
 
-        return MatchResult(self, [node, next_node], apply)
+    @classmethod
+    def apply(
+        cls, g: "GraphBuilder", node: NodeProto, next_node: NodeProto  # noqa: F821
+    ) -> List[NodeProto]:
+        new_nodes = [
+            g.make_node(
+                "Identity",
+                [node.input[0]],
+                next_node.output,
+                name=f"{cls.__class__.__name__}--{node.name}",
+                doc_string=next_node.doc_string,
+            )
+        ]
+        if g.is_used_more_than_once(node.output[0]):
+            new_nodes.append(node)
+        return new_nodes

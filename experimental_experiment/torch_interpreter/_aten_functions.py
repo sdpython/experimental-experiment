@@ -2159,12 +2159,12 @@ def aten_slice_Tensor(
     step: Optional[int] = None,
 ) -> T:
     assert isinstance(dim, int), f"aten_slice_Tensor not implemented for dim={dim!r}"
-    assert g.is_dynamic_dimension(start), (
-        f"aten_slice_Tensor not implemented for start={start!r}" f"{g.get_debug_msg()}"
-    )
-    assert end is None or g.is_dynamic_dimension(end), (
-        f"aten_slice_Tensor not implemented for end={end!r}" f"{g.get_debug_msg()}"
-    )
+    assert g.is_dynamic_dimension(
+        start
+    ), f"aten_slice_Tensor not implemented for start={start!r}{g.get_debug_msg()}"
+    assert end is None or g.is_dynamic_dimension(
+        end
+    ), f"aten_slice_Tensor not implemented for end={end!r}{g.get_debug_msg()}"
     assert step is None or isinstance(step, int), f"Not implemented for step={step!r}"
     if end is None:
         end = start
@@ -2290,15 +2290,15 @@ def _aten_slice_scatter_static(
         x
     ), f"This implementation only works if shape of {x!r} is known{g.get_debug_msg()}"
     # step 1
-    assert start is None or g.is_dynamic_dimension(start), (
-        f"slice_scatter not implemented for start={start}" f"{g.get_debug_msg()}"
-    )
-    assert end is None or g.is_dynamic_dimension(end), (
-        f"slice_scatter not implemented for end={end}" f"{g.get_debug_msg()}"
-    )
-    assert step is None or is_static_dimension(step), (
-        f"slice_scatter not implemented for end={step}" f"{g.get_debug_msg()}"
-    )
+    assert start is None or g.is_dynamic_dimension(
+        start
+    ), f"slice_scatter not implemented for start={start}{g.get_debug_msg()}"
+    assert end is None or g.is_dynamic_dimension(
+        end
+    ), f"slice_scatter not implemented for end={end}{g.get_debug_msg()}"
+    assert step is None or is_static_dimension(
+        step
+    ), f"slice_scatter not implemented for end={step}{g.get_debug_msg()}"
     shape = g.get_shape(x)
     dim_shape = shape[dim]
 
@@ -2374,15 +2374,15 @@ def _aten_slice_scatter_dynamic(
     name="slice_scatter_dynamic",
 ) -> T:
     # step 1
-    assert start is None or g.is_dynamic_dimension(start), (
-        f"slice_scatter not implemented for start={start}" f"{g.get_debug_msg()}"
-    )
-    assert end is None or g.is_dynamic_dimension(end), (
-        f"slice_scatter not implemented for end={end}" f"{g.get_debug_msg()}"
-    )
-    assert step is None or is_static_dimension(step), (
-        f"slice_scatter not implemented for end={step}" f"{g.get_debug_msg()}"
-    )
+    assert start is None or g.is_dynamic_dimension(
+        start
+    ), f"slice_scatter not implemented for start={start}{g.get_debug_msg()}"
+    assert end is None or g.is_dynamic_dimension(
+        end
+    ), f"slice_scatter not implemented for end={end}{g.get_debug_msg()}"
+    assert step is None or is_static_dimension(
+        step
+    ), f"slice_scatter not implemented for end={step}{g.get_debug_msg()}"
 
     shape = g.op.Shape(x, name=name)
     dim_shape = g.op.Gather(shape, np.array([dim], dtype=np.int64), name=name)

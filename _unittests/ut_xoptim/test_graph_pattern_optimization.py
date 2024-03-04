@@ -1,5 +1,6 @@
 import os
 import unittest
+import packaging.version as pv
 import numpy as np
 import onnx
 from onnx import ModelProto, TensorProto, helper as oh, numpy_helper as onh
@@ -164,7 +165,7 @@ class TestGraphPatternOptimization(ExtTestCase):
             x = x + bias
         return x.reshape(tuple(shape)).astype(np.float32)
 
-    def test_execution_static(self):
+    def test_reshape_matmul_reshape_static(self):
         model = oh.make_model(
             oh.make_graph(
                 [
@@ -203,7 +204,15 @@ class TestGraphPatternOptimization(ExtTestCase):
         expected = ref.run(None, feeds)[0]
 
         gr, _, __ = self.capture(
-            lambda: GraphBuilder(model, infer_shapes=True, verbose=10)
+            lambda: GraphBuilder(
+                model,
+                infer_shapes=True,
+                optimization_options=OptimizationOptions(
+                    patterns=["Cast", "ReshapeMatMulReshape", "UnsqueezeUnsqueeze"],
+                    verbose=10,
+                ),
+                verbose=10,
+            )
         )
         s = str(gr.optimization_options)
         self.assertIn("OptimizationOptions(", s)
@@ -220,7 +229,7 @@ class TestGraphPatternOptimization(ExtTestCase):
         got = opt_ref.run(None, feeds)[0]
         self.assertEqualArray(expected, got)
 
-    def test_execution_dynamic_1(self):
+    def test_reshape_matmul_reshape_dynamic_1(self):
         model = oh.make_model(
             oh.make_graph(
                 [
@@ -264,7 +273,13 @@ class TestGraphPatternOptimization(ExtTestCase):
         ref = ExtendedReferenceEvaluator(model)
         expected = ref.run(None, feeds)[0]
 
-        gr = GraphBuilder(model, infer_shapes=True)
+        gr = GraphBuilder(
+            model,
+            optimization_options=OptimizationOptions(
+                patterns=["Cast", "ReshapeMatMulReshape", "UnsqueezeUnsqueeze"],
+            ),
+            infer_shapes=True,
+        )
         opt_onx = gr.to_onnx(optimize=True)
         self.assertEqual(
             ["Unsqueeze", "MatMul"], [n.op_type for n in opt_onx.graph.node]
@@ -275,7 +290,7 @@ class TestGraphPatternOptimization(ExtTestCase):
         got = opt_ref.run(None, feeds)[0]
         self.assertEqualArray(expected, got)
 
-    def test_execution_dynamic_2(self):
+    def test_reshape_matmul_reshape_dynamic_2(self):
         model = oh.make_model(
             oh.make_graph(
                 [
@@ -319,7 +334,13 @@ class TestGraphPatternOptimization(ExtTestCase):
         ref = ExtendedReferenceEvaluator(model)
         expected = ref.run(None, feeds)[0]
 
-        gr = GraphBuilder(model, infer_shapes=True)
+        gr = GraphBuilder(
+            model,
+            optimization_options=OptimizationOptions(
+                patterns=["Cast", "ReshapeMatMulReshape", "UnsqueezeUnsqueeze"]
+            ),
+            infer_shapes=True,
+        )
         opt_onx = gr.to_onnx(optimize=True)
         self.assertEqual(
             ["Unsqueeze", "MatMul"], [n.op_type for n in opt_onx.graph.node]
@@ -330,7 +351,7 @@ class TestGraphPatternOptimization(ExtTestCase):
         got = opt_ref.run(None, feeds)[0]
         self.assertEqualArray(expected, got)
 
-    def test_execution_keep_intermediate(self):
+    def test_reshape_matmul_reshape_keep_intermediate(self):
         model = oh.make_model(
             oh.make_graph(
                 [
@@ -372,7 +393,15 @@ class TestGraphPatternOptimization(ExtTestCase):
         expected = ref.run(None, feeds)[0]
 
         gr, _, __ = self.capture(
-            lambda: GraphBuilder(model, infer_shapes=True, verbose=10)
+            lambda: GraphBuilder(
+                model,
+                optimization_options=OptimizationOptions(
+                    patterns=["Cast", "ReshapeMatMulReshape", "UnsqueezeUnsqueeze"],
+                    verbose=10,
+                ),
+                infer_shapes=True,
+                verbose=10,
+            )
         )
         s = str(gr.optimization_options)
         self.assertIn("OptimizationOptions(", s)
@@ -393,9 +422,7 @@ class TestGraphPatternOptimization(ExtTestCase):
         before = [node for node in origin.graph.node if node.op_type == "Reshape"]
         gr = GraphBuilder(
             origin,
-            optimization_options=OptimizationOptions(
-                patterns=["ReshapeReshape"], verbose=0
-            ),
+            optimization_options=OptimizationOptions(patterns=["ReshapeReshape"]),
             infer_shapes=True,
         )
         onx = gr.to_onnx(optimize=True)
@@ -529,9 +556,7 @@ class TestGraphPatternOptimization(ExtTestCase):
         before = [node for node in origin.graph.node if node.op_type == "Transpose"]
         gr = GraphBuilder(
             origin,
-            optimization_options=OptimizationOptions(
-                patterns=["TransposeTranspose"], verbose=0
-            ),
+            optimization_options=OptimizationOptions(patterns=["TransposeTranspose"]),
         )
         onx = gr.to_onnx(optimize=True)
         after = [node for node in onx.graph.node if node.op_type == "Transpose"]
@@ -685,9 +710,7 @@ class TestGraphPatternOptimization(ExtTestCase):
         ]
         gr = GraphBuilder(
             origin,
-            optimization_options=OptimizationOptions(
-                patterns=["RotaryConcatPart"], verbose=0
-            ),
+            optimization_options=OptimizationOptions(patterns=["RotaryConcatPart"]),
         )
         onx = gr.to_onnx(optimize=True)
         after = [node for node in onx.graph.node if node.op_type == "ConstantOfShape"]
@@ -1101,7 +1124,7 @@ class TestGraphPatternOptimization(ExtTestCase):
         new_node_list = [n.op_type for n in onx.graph.node]
         self.assertNotEqual(node_list, new_node_list)
 
-    def test_reshape_2of3_static_3(self):
+    def test_mul_reshape_2of3_static_3(self):
         model = oh.make_model(
             oh.make_graph(
                 [
@@ -1141,7 +1164,7 @@ class TestGraphPatternOptimization(ExtTestCase):
         got = opt_ref.run(None, feeds)[0]
         self.assertEqualArray(expected, got)
 
-    def test_reshape_2of3_static_3_keep(self):
+    def test_mul_reshape_2of3_static_3_keep(self):
         model = oh.make_model(
             oh.make_graph(
                 [
@@ -1184,7 +1207,7 @@ class TestGraphPatternOptimization(ExtTestCase):
         got = opt_ref.run(None, feeds)
         self.assertEqualArrays(expected, got)
 
-    def test_reshape_2of3_static_2_left(self):
+    def test_mul_reshape_2of3_static_2_left(self):
         model = oh.make_model(
             oh.make_graph(
                 [
@@ -1222,7 +1245,7 @@ class TestGraphPatternOptimization(ExtTestCase):
         got = opt_ref.run(None, feeds)[0]
         self.assertEqualArray(expected, got)
 
-    def test_reshape_2of3_static_2_right(self):
+    def test_mul_reshape_2of3_static_2_right(self):
         model = oh.make_model(
             oh.make_graph(
                 [
@@ -1260,7 +1283,7 @@ class TestGraphPatternOptimization(ExtTestCase):
         got = opt_ref.run(None, feeds)[0]
         self.assertEqualArray(expected, got)
 
-    def test_reshape_2of3_static_2_left_right(self):
+    def test_mul_reshape_2of3_static_2_left_right(self):
         model = oh.make_model(
             oh.make_graph(
                 [
@@ -1288,12 +1311,220 @@ class TestGraphPatternOptimization(ExtTestCase):
         gr = GraphBuilder(
             model,
             infer_shapes=True,
-            optimization_options=OptimizationOptions(
-                patterns=["Reshape2Of3"], verbose=0
-            ),
+            optimization_options=OptimizationOptions(patterns=["Reshape2Of3"]),
         )
         opt_onx = gr.to_onnx(optimize=True)
         self.assertEqual(["Mul", "Reshape"], [n.op_type for n in opt_onx.graph.node])
+        self.assertEqual(1, len(opt_onx.graph.initializer))
+
+        opt_ref = ExtendedReferenceEvaluator(opt_onx)
+        got = opt_ref.run(None, feeds)[0]
+        self.assertEqualArray(expected, got)
+
+    def test_matmul_reshape_2of3_static_3(self):
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("Reshape", ["X", "shape1"], ["xr"]),
+                    oh.make_node("Reshape", ["Y", "shape2"], ["yr"]),
+                    oh.make_node("MatMul", ["xr", "yr"], ["xrr"]),
+                    oh.make_node("Reshape", ["xrr", "shape3"], ["Z"]),
+                ],
+                "dummy",
+                [
+                    oh.make_tensor_value_info("X", TensorProto.FLOAT, [2, 2, 3, 4]),
+                    oh.make_tensor_value_info("Y", TensorProto.FLOAT, [2, 2, 4, 3]),
+                ],
+                [oh.make_tensor_value_info("Z", TensorProto.FLOAT, [2, 2, 3, 3])],
+                [
+                    onh.from_array(np.array([-1, 3, 4], dtype=np.int64), name="shape1"),
+                    onh.from_array(np.array([-1, 4, 3], dtype=np.int64), name="shape2"),
+                    onh.from_array(
+                        np.array([2, 2, 3, 3], dtype=np.int64), name="shape3"
+                    ),
+                ],
+            )
+        )
+        check_model(model)
+        feeds = {"X": self._range(2, 2, 3, 4), "Y": self._range(2, 2, 4, 3)}
+        ref = ExtendedReferenceEvaluator(model)
+        expected = ref.run(None, feeds)[0]
+
+        gr = GraphBuilder(
+            model,
+            infer_shapes=True,
+            optimization_options=OptimizationOptions(patterns=["MatMulReshape2Of3"]),
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+        self.assertEqual(["MatMul"], [n.op_type for n in opt_onx.graph.node])
+        self.assertEqual(0, len(opt_onx.graph.initializer))
+
+        opt_ref = ExtendedReferenceEvaluator(opt_onx)
+        got = opt_ref.run(None, feeds)[0]
+        self.assertEqualArray(expected, got)
+
+    @unittest.skipIf(
+        pv.Version(onnx.__version__) < pv.Version("1.17"),
+        reason="bug in shape inference",
+    )
+    def test_matmul_reshape_2of3_static_3_keep(self):
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("Reshape", ["X", "shape1"], ["xr"]),
+                    oh.make_node("Reshape", ["Y", "shape2"], ["yr"]),
+                    oh.make_node("MatMul", ["xr", "yr"], ["xrr"]),
+                    oh.make_node("Reshape", ["xrr", "shape3"], ["Z"]),
+                ],
+                "dummy",
+                [
+                    oh.make_tensor_value_info("X", TensorProto.FLOAT, [2, 2, 3, 4]),
+                    oh.make_tensor_value_info("Y", TensorProto.FLOAT, [2, 2, 4, 3]),
+                ],
+                [
+                    oh.make_tensor_value_info("Z", TensorProto.FLOAT, [2, 2, 3, 3]),
+                    oh.make_tensor_value_info("xrr", TensorProto.FLOAT, [4, 3, 3]),
+                ],
+                [
+                    onh.from_array(np.array([-1, 3, 4], dtype=np.int64), name="shape1"),
+                    onh.from_array(np.array([-1, 4, 3], dtype=np.int64), name="shape2"),
+                    onh.from_array(
+                        np.array([2, 2, 3, 3], dtype=np.int64), name="shape3"
+                    ),
+                ],
+            )
+        )
+        check_model(model)
+        onnx.shape_inference.infer_shapes(model)
+        feeds = {"X": self._range(2, 2, 3, 4), "Y": self._range(2, 2, 4, 3)}
+        ref = ExtendedReferenceEvaluator(model)
+        expected = ref.run(None, feeds)
+
+        gr = GraphBuilder(
+            model,
+            infer_shapes=True,
+            optimization_options=OptimizationOptions(patterns=["MatMulReshape2Of3"]),
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+        self.assertEqual(["MatMul", "Reshape"], [n.op_type for n in opt_onx.graph.node])
+        self.assertEqual(1, len(opt_onx.graph.initializer))
+
+        opt_ref = ExtendedReferenceEvaluator(opt_onx)
+        got = opt_ref.run(None, feeds)
+        self.assertEqualArrays(expected, got)
+
+    def test_matmul_reshape_2of3_static_2_left(self):
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("Reshape", ["X", "shape1"], ["xr1"]),
+                    oh.make_node("MatMul", ["xr1", "Y"], ["xr"]),
+                    oh.make_node("Reshape", ["xr", "shape3"], ["Z"]),
+                ],
+                "dummy",
+                [
+                    oh.make_tensor_value_info("X", TensorProto.FLOAT, [2, 2, 3, 4]),
+                    oh.make_tensor_value_info("Y", TensorProto.FLOAT, [4, 4, 3]),
+                ],
+                [oh.make_tensor_value_info("Z", TensorProto.FLOAT, [2, 2, 3, 3])],
+                [
+                    onh.from_array(np.array([4, 3, 4], dtype=np.int64), name="shape1"),
+                    onh.from_array(
+                        np.array([2, 2, 3, 3], dtype=np.int64), name="shape3"
+                    ),
+                ],
+            )
+        )
+        check_model(model)
+        feeds = {"X": self._range(2, 2, 3, 4), "Y": self._range(4, 4, 3)}
+        ref = ExtendedReferenceEvaluator(model)
+        expected = ref.run(None, feeds)[0]
+
+        gr = GraphBuilder(
+            model,
+            infer_shapes=True,
+            optimization_options=OptimizationOptions(patterns=["MatMulReshape2Of3"]),
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+        self.assertEqual(["Reshape", "MatMul"], [n.op_type for n in opt_onx.graph.node])
+        self.assertEqual(1, len(opt_onx.graph.initializer))
+
+        opt_ref = ExtendedReferenceEvaluator(opt_onx)
+        got = opt_ref.run(None, feeds)[0]
+        self.assertEqualArray(expected, got)
+
+    def test_matmul_reshape_2of3_static_2_right(self):
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("Reshape", ["X", "shape1"], ["xr1"]),
+                    oh.make_node("MatMul", ["Y", "xr1"], ["xr"]),
+                    oh.make_node("Reshape", ["xr", "shape3"], ["Z"]),
+                ],
+                "dummy",
+                [
+                    oh.make_tensor_value_info("X", TensorProto.FLOAT, [2, 2, 4, 3]),
+                    oh.make_tensor_value_info("Y", TensorProto.FLOAT, [4, 3, 4]),
+                ],
+                [oh.make_tensor_value_info("Z", TensorProto.FLOAT, [2, 2, 3, 3])],
+                [
+                    onh.from_array(np.array([-1, 4, 3], dtype=np.int64), name="shape1"),
+                    onh.from_array(
+                        np.array([2, 2, 3, 3], dtype=np.int64), name="shape3"
+                    ),
+                ],
+            )
+        )
+        check_model(model)
+        feeds = {"X": self._range(2, 2, 4, 3), "Y": self._range(4, 3, 4)}
+        ref = ExtendedReferenceEvaluator(model)
+        expected = ref.run(None, feeds)[0]
+
+        gr = GraphBuilder(
+            model,
+            infer_shapes=True,
+            optimization_options=OptimizationOptions(patterns=["MatMulReshape2Of3"]),
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+        self.assertEqual(["Reshape", "MatMul"], [n.op_type for n in opt_onx.graph.node])
+        self.assertEqual(1, len(opt_onx.graph.initializer))
+
+        opt_ref = ExtendedReferenceEvaluator(opt_onx)
+        got = opt_ref.run(None, feeds)[0]
+        self.assertEqualArray(expected, got)
+
+    def test_matmul_reshape_2of3_static_2_left_right(self):
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("Reshape", ["X", "shape1"], ["xr1"]),
+                    oh.make_node("Reshape", ["Y", "shape2"], ["yr1"]),
+                    oh.make_node("MatMul", ["xr1", "yr1"], ["Z"]),
+                ],
+                "dummy",
+                [
+                    oh.make_tensor_value_info("X", TensorProto.FLOAT, [2, 2, 3, 4]),
+                    oh.make_tensor_value_info("Y", TensorProto.FLOAT, [2, 2, 4, 3]),
+                ],
+                [oh.make_tensor_value_info("Z", TensorProto.FLOAT, [4, 3, 3])],
+                [
+                    onh.from_array(np.array([-1, 3, 4], dtype=np.int64), name="shape1"),
+                    onh.from_array(np.array([-1, 4, 3], dtype=np.int64), name="shape2"),
+                ],
+            )
+        )
+        check_model(model)
+        feeds = {"X": self._range(2, 2, 3, 4), "Y": self._range(2, 2, 4, 3)}
+        ref = ExtendedReferenceEvaluator(model)
+        expected = ref.run(None, feeds)[0]
+
+        gr = GraphBuilder(
+            model,
+            infer_shapes=True,
+            optimization_options=OptimizationOptions(patterns=["MatMulReshape2Of3"]),
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+        self.assertEqual(["MatMul", "Reshape"], [n.op_type for n in opt_onx.graph.node])
         self.assertEqual(1, len(opt_onx.graph.initializer))
 
         opt_ref = ExtendedReferenceEvaluator(opt_onx)
