@@ -77,7 +77,7 @@ class ReduceReshapePattern(PatternOptimization):
                 node.input,
                 next_node.output,
                 keepdims=0,
-                name=f"{cls.__class__.__name__}--{node.name}",
+                name=f"{cls.__name__}--{node.name}",
                 doc_string=node.doc_string,
             )
             return [new_node]
@@ -89,7 +89,7 @@ class ReduceReshapePattern(PatternOptimization):
             next_node.output,
             keepdims=0,
             axes=list(axes.ints),
-            name=f"{cls.__class__.__name__}--{node.name}",
+            name=f"{cls.__name__}--{node.name}",
             doc_string=node.doc_string,
         )
         return [new_node]
@@ -130,7 +130,7 @@ class ReshapeReshapePattern(PatternOptimization):
             "Reshape",
             [node.input[0], next_node.input[1]],
             next_node.output,
-            name=f"{cls.__class__.__name__}--{node.name}",
+            name=f"{cls.__name__}--{node.name}",
             doc_string=next_node.doc_string,
         )
         return [new_node]

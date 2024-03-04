@@ -80,13 +80,13 @@ class Sub1MulPattern(PatternOptimization):
                 "Mul",
                 [node_left.input[1], node.input[1]],
                 [g.unique_name(f"{cls.__class__.__name__}--{node.output[0]}")],
-                name=f"{cls.__class__.__name__}--{node.name}",
+                name=f"{cls.__name__}--{node.name}",
             )
             sub_node = g.make_node(
                 "Sub",
                 [node.input[1], mul_node.output[0]],
                 node.output,
-                name=f"{cls.__class__.__name__}--{node.name}",
+                name=f"{cls.__name__}--{node.name}",
                 doc_string=node.doc_string,
             )
             keep_node = node_right
@@ -96,13 +96,13 @@ class Sub1MulPattern(PatternOptimization):
                 "Mul",
                 [node.input[0], node_right.input[1]],
                 [g.unique_name(f"{cls.__class__.__name__}--{node.output[0]}")],
-                name=f"{cls.__class__.__name__}--{node.name}",
+                name=f"{cls.__name__}--{node.name}",
             )
             sub_node = g.make_node(
                 "Sub",
                 [node.input[0], mul_node.output[0]],
                 node.output,
-                name=f"{cls.__class__.__name__}--{node.name}",
+                name=f"{cls.__name__}--{node.name}",
                 doc_string=node.doc_string,
             )
             keep_node = node_left

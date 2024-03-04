@@ -19,6 +19,14 @@ class FusedMatMulPattern(PatternOptimization):
             node.op_type != "FusedMatMul" or node.domain != "com.microsoft"
         ):
             return self.none()
+
+        if node.op_type == "FusedMatMul":
+            transA = g.get_attribute(node, "transA", exc=False) or 0
+            transB = g.get_attribute(node, "transB", exc=False) or 0
+            if transA != transB:
+                # one side is already transposed.
+                return self.none(node, inspect.currentframe().f_lineno)
+
         if not g.has_rank(node.input[0]) or not g.has_rank(node.input[1]):
             return self.none(node, inspect.currentframe().f_lineno)
         if g.get_rank(node.input[0]) < 2 or g.get_rank(node.input[1]) < 2:
@@ -52,6 +60,9 @@ class FusedMatMulPattern(PatternOptimization):
         # At this stage, one or two inputs are transposed before being used.
         # MatMul or Gemm are operating on 2D tensors.
         nodes = [*ns, node]
+        if nodes[0] is not None and nodes[1] is not None:
+            # Both are available, we only transpose one.
+            nodes[0] = None
 
         return MatchResult(self, nodes, self.apply, insert_at=node)
 
@@ -99,7 +110,7 @@ class FusedMatMulPattern(PatternOptimization):
             "FusedMatMul",
             inputs,
             node.output,
-            name=f"{cls.__class__.__name__}--{node.name}",
+            name=f"{cls.__name__}--{node.name}",
             transA=transA,
             transB=transB,
             transBatchA=transBatchA,

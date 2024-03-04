@@ -324,7 +324,7 @@ class ReshapeMatMulReshapePattern(PatternOptimization):
             "MatMul",
             [node_before_left.input[0], node_before_right.input[0]],
             next_node.output,
-            name=f"{cls.__class__.__name__}--{node.name}",
+            name=f"{cls.__name__}--{node.name}",
             doc_string=next_node.doc_string,
         )
         res = [new_node]
@@ -417,7 +417,7 @@ class TransposeMatMulPattern(PatternOptimization):
             "Gemm",
             inputs,
             node.output,
-            name=f"{cls.__class__.__name__}--{node.name}",
+            name=f"{cls.__name__}--{node.name}",
             transA=transA,
             transB=transB,
             doc_string=node.doc_string,

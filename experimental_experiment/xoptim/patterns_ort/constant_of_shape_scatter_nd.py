@@ -46,7 +46,7 @@ class ConstantOfShapeScatterNDPattern(PatternOptimization):
             "ScatterNDOfShape",
             [node_before.input[0], *node.input[1:]],
             node.output,
-            name=f"{cls.__class__.__name__}--{node.name}",
+            name=f"{cls.__name__}--{node.name}",
             domain="com.microsoft",
         )
         return [new_node]
