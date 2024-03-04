@@ -403,6 +403,11 @@ class GraphBuilderPatternOptimization:
                 f"[GraphBuilderPatternOptimization.optimize] start with "
                 f"{len(self.builder.nodes)} nodes and {len(self.patterns)} patterns"
             )
+            for i, pattern in enumerate(self.patterns):
+                print(
+                    f"[GraphBuilderPatternOptimization.optimize] "
+                    f"use pattern {i+1}/{len(self.patterns)} - {pattern}"
+                )
 
         begin_all = time.perf_counter()
         statistics = []

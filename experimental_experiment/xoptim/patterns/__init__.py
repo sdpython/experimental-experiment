@@ -1,3 +1,4 @@
+import pprint
 from typing import List, Optional, Union
 
 # API
@@ -70,6 +71,15 @@ def get_pattern(
         _pattern = dict(
             default=get_default_patterns, onnxruntime=get_onnxruntime_patterns
         )
+        sep = "," if "," in obj else ("+" if "+" in obj else None)
+        if sep:
+            assert as_list, f"Returns a list for obj={obj!r}, as_list must be True."
+            objs = obj.split(sep)
+            res = []
+            for o in objs:
+                res.extend(get_pattern(o, as_list=True))
+            return res
+
         if obj in _pattern:
             assert as_list, f"Returns a list for obj={obj!r}, as_list must be True."
             return _pattern[obj]()
@@ -85,10 +95,18 @@ def get_pattern(
     )
     if isinstance(obj, list):
         assert as_list, f"obj={obj!r} is already a list"
-        return [mapping[s] for s in obj]
+        res = []
+        for s in obj:
+            if isinstance(s, str) and s in mapping:
+                res.append(mapping[s])
+            else:
+                res.extend(get_pattern(s, as_list=True))
+        return res
     if obj in mapping:
         return [mapping[obj]] if as_list else mapping[obj]
-    raise RuntimeError(f"Unable to find pattern for {obj!r}.")
+    raise RuntimeError(
+        f"Unable to find pattern for {obj!r} among {pprint.pformat(mapping)}."
+    )
 
 
 def get_pattern_list(
@@ -107,22 +125,11 @@ def get_pattern_list(
     """
     if positive_list is None:
         return []
-    if isinstance(positive_list, str):
-        pos_list = get_pattern(positive_list, as_list=True)
-    else:
-        pos_list = []
-        for t in positive_list:
-            pos_list.extend(get_pattern(t, as_list=True))
-
+    pos_list = get_pattern(positive_list, as_list=True)
     if negative_list is None:
         return pos_list
 
-    if isinstance(positive_list, str):
-        neg_list = get_pattern(negative_list, as_list=True)
-    else:
-        neg_list = []
-        for t in negative_list:
-            neg_list.extend(get_pattern(t, as_list=True))
+    neg_list = get_pattern(negative_list, as_list=True)
 
     res = []
     for p in pos_list:

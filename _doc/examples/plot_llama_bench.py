@@ -41,7 +41,7 @@ parsed_args = get_parsed_args(
     dump=(0, "dump the models with env ONNXRT_DUMP_PATH"),
     check=(0, "just check the script is working, ignores all other parameters"),
     config=("medium", "configuration to use, default or medium"),
-    patterns=("none,default,onnxruntime", "optimization patterns to use"),
+    patterns=("none,default,default+onnxruntime", "optimization patterns to use"),
     disable_pattern=("none", "pattern or patterns to disable"),
     expose="backend,device,num_hidden_layers,mixed,scipt_name,repeat,"
     "warmup,dump,check,config,patterns,dynamic,disable_pattern",
@@ -102,10 +102,8 @@ def make_config(
 
     if pattern == "none":
         opt = dict(disable_pattern="default")
-    elif pattern == "default":
-        opt = dict(enable_pattern="default")
-    elif pattern == "onnxruntime":
-        opt = dict(enable_pattern="onnxruntime")
+    elif pattern in ("default", "default+onnxruntime"):
+        opt = dict(enable_pattern=pattern)
     else:
         raise AssertionError(f"unexpected value for pattern={pattern!r}")
     cf.update(opt)

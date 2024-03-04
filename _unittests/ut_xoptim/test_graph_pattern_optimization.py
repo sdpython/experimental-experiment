@@ -28,6 +28,24 @@ class TestGraphPatternOptimization(ExtTestCase):
         res = get_pattern_list(negative_list="default")
         self.assertEqual(res, [])
 
+    def test_get_pattern_list_plus(self):
+        res1 = get_pattern_list("default")
+        self.assertGreater(len(res1), 4)
+        res2 = get_pattern_list("onnxruntime")
+        self.assertGreater(len(res2), 1)
+        res = get_pattern_list("default+onnxruntime")
+        self.assertGreater(len(res), 3)
+        self.assertEqual(res1 + res2, res)
+
+    def test_get_pattern_list_plus_list(self):
+        res1 = get_pattern_list("default")
+        self.assertGreater(len(res1), 4)
+        res2 = get_pattern_list("onnxruntime")
+        self.assertGreater(len(res2), 1)
+        res = get_pattern_list(["default+onnxruntime"])
+        self.assertGreater(len(res), 3)
+        self.assertEqual(res1 + res2, res)
+
     def _check_with_ort(self, proto: ModelProto):
         from onnxruntime import InferenceSession, get_available_providers
 
