@@ -1031,6 +1031,7 @@ class TestGraphPatternOptimization(ExtTestCase):
             optimization_options=OptimizationOptions(patterns=["MulMulMulScalar"]),
         )
         stats = gr.optimize()
+        stats = [{k: v for k, v in st.items() if k != "time_in"} for st in stats]
         self.assertEqual(
             stats,
             [
@@ -1706,7 +1707,7 @@ class TestGraphPatternOptimization(ExtTestCase):
         )
         self.assertEqual(1, len(opt_onx.graph.initializer))
 
-        opt_ref = ExtendedReferenceEvaluator(opt_onx, verbose=10)
+        opt_ref = ExtendedReferenceEvaluator(opt_onx)
         got = opt_ref.run(None, feeds)[0]
         self.assertEqualArray(expected, got)
 
@@ -1745,7 +1746,7 @@ class TestGraphPatternOptimization(ExtTestCase):
         )
         self.assertEqual(1, len(opt_onx.graph.initializer))
 
-        opt_ref = ExtendedReferenceEvaluator(opt_onx, verbose=10)
+        opt_ref = ExtendedReferenceEvaluator(opt_onx)
         got = opt_ref.run(None, feeds)[0]
         self.assertEqualArray(expected, got)
 
