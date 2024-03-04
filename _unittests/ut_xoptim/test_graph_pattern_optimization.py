@@ -1378,7 +1378,7 @@ class TestGraphPatternOptimization(ExtTestCase):
                 ],
                 [
                     oh.make_tensor_value_info("Z", TensorProto.FLOAT, [2, 2, 3, 3]),
-                    oh.make_tensor_value_info("xrr", TensorProto.FLOAT, [4, 3, 4]),
+                    oh.make_tensor_value_info("xrr", TensorProto.FLOAT, [4, 3, 3]),
                 ],
                 [
                     onh.from_array(np.array([-1, 3, 4], dtype=np.int64), name="shape1"),
