@@ -300,14 +300,16 @@ class MatMulReshape2Of3Pattern(PatternOptimization):
 
         the_shape_left = shape_left_left or shape_left
         the_shape_right = shape_right_right or shape_right
-        if the_shape_left[:-2] != the_shape_right[:-2]:
+        if not self.same_size(g, the_shape_left[:-2], the_shape_right[:-2]):
             # first dimension are the same
             return self.none(node, inspect.currentframe().f_lineno)
 
         if next_node is not None:
             next_shape = g.get_shape(next_node.output[0])
             matmul_shape = the_shape_left[:-1] + (shape_right[-1],)
-            if matmul_shape != next_shape:
+            if matmul_shape[-2:] != next_shape[-2:] or not self.same_size(
+                g, matmul_shape[:-2], next_shape[:-2]
+            ):
                 return self.none(node, inspect.currentframe().f_lineno)
 
         # The pattern is not handling the reshape after the matmul,

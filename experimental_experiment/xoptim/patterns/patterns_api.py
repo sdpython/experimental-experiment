@@ -51,14 +51,14 @@ class PatternOptimization:
     Function match should return None if the match does not happen
     or better ``self.none(node, inspect.currentframe().f_lineno)``.
     That allows the user to know which line rejected a specific pattern
-    by setting environment variable ``PATTERN_OPTIMIZATION=10``.
+    by setting environment variable ``LOG_PATTERN_OPTIMIZE=10``.
 
     :param verbose: determine the verbosity, this can be also dermine by setting up
-        environment variable ``PATTERN_OPTIMIZATION=10``
+        environment variable ``LOG_PATTERN_OPTIMIZE=10``
     """
 
     def __init__(self, verbose: int = 0):
-        value = os.environ.get("PATTERN_OPTIMIZATION", "0")
+        value = os.environ.get("LOG_PATTERN_OPTIMIZE", "0")
         self.verbose = max(verbose, int(value))
 
     def __str__(self) -> str:

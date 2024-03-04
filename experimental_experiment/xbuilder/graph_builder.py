@@ -14,7 +14,11 @@ from .shape_helper import (
     is_static_dimension,
     is_static_shape,
 )
-from .shape_type_compute import set_type_shape_binary_op
+from .shape_type_compute import (
+    set_type_shape_binary_op,
+    set_type_shape_matmul,
+    set_type_shape_gemm,
+)
 from ._onnx_helper import (
     choose_consistent_domain_opset,
     compatible_opsets,
@@ -1448,6 +1452,20 @@ class GraphBuilder:
                     )
                     self.set_rank(node.output[0], r1)
 
+    def get_attribute(
+        self, node: NodeProto, att_name: str, exc: bool = True
+    ) -> AttributeProto:
+        """
+        Returns an attribute for a node.
+        """
+        for att in node.attribute:
+            if att.name == att_name:
+                return att
+        assert (
+            not exc
+        ), f"Unable to find attribute {att_name!r} for node type {node.op_type!r} in node {node}"
+        return None
+
     def _make_node_set_type_shape(self, node: NodeProto):
         if node.domain != "":
             return
@@ -1473,10 +1491,20 @@ class GraphBuilder:
                 if self.has_shape(node.input[1]):
                     rk = self.get_shape(node.input[1])
                     self.set_rank(k, rk[0])
-        if node.op_type in self._op_element_wise_cmp_types:
+        elif node.op_type in self._op_element_wise_cmp_types:
             set_type_shape_binary_op(self, node.output[0], *node.input, cmp_op=True)
         elif node.op_type in self._op_element_wise_types:
             set_type_shape_binary_op(self, node.output[0], *node.input)
+        elif node.op_type == "MatMul":
+            set_type_shape_matmul(self, node.output[0], *node.input)
+        elif node.op_type == "Gemm":
+            set_type_shape_gemm(
+                self,
+                node.output[0],
+                *node.input,
+                transA=self.get_attribute(node, "transA").i,
+                transB=self.get_attribute(node, "transB").i,
+            )
 
     def make_nodes(
         self,

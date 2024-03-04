@@ -2,7 +2,7 @@ from typing import Any, Callable, List, Optional, Sequence, Set, Tuple
 import numpy as np
 from onnx import TensorProto
 from onnx.helper import np_dtype_to_tensor_dtype, tensor_dtype_to_np_dtype
-from ..xbuilder.shape_helper import STATIC_SHAPE, is_static_shape
+from ..xbuilder.shape_helper import STATIC_SHAPE, is_static_shape, all_int
 from ..xbuilder._dtype_helper import dtype_to_tensor_dtype, torch_dtype_to_onnx_dtype
 
 
@@ -146,15 +146,44 @@ def set_type_shape_matmul(g: "GraphBuilder", name: str, x: str, y: str):  # noqa
     if g.has_shape(x) and g.has_shape(y):
         sh1 = g.get_shape(x)
         sh2 = g.get_shape(y)
-        assert len(sh1) == len(sh2), (
-            f"not implemented when shapes are {sh1} and " f"{sh2}{g.get_debug_msg()}"
-        )
+        assert len(sh1) == len(
+            sh2
+        ), f"not implemented when shapes are {sh1} and {sh2}{g.get_debug_msg()}"
         new_shape = []
-        for a, b in max(sh1[:-2], sh2[:-2]):
-            new_shape.append(max(a, b))
+        for a, b in zip(sh1[:-2], sh2[:-2]):
+            if all_int((a, b)) or a == b:
+                new_shape.append(max(a, b))
+            elif a == 1:
+                new_shape.append(b)
+            elif b == 1:
+                new_shape.append(a)
+            else:
+                # unable to decide, falls back to rank
+                g.set_rank(name, max(g.get_rank(x), g.get_rank(y)))
+                return
+
         new_shape.append(sh1[-2])
         new_shape.append(sh2[-1])
         g.set_shape(name, tuple(new_shape))
+        return
+
+    g.set_rank(name, max(g.get_rank(x), g.get_rank(y)))
+
+
+def set_type_shape_gemm(
+    g: "GraphBuilder", name: str, x: str, y: str, transA: int, transB: int  # noqa: F821
+):
+    if transA == 0 and transB == 0:
+        return set_type_shape_matmul(g, name, x, y)
+    g.set_type(name, g.get_type(x))
+    if g.has_shape(x) and g.has_shape(y):
+        sh1 = g.get_shape(x)
+        sh2 = g.get_shape(y)
+        assert len(sh1) == len(
+            sh2
+        ), f"not implemented when shapes are {sh1} and {sh2}{g.get_debug_msg()}"
+        new_shape = (sh1[-1] if transA else sh1[-2], sh2[-2] if transB else sh2[-1])
+        g.set_shape(name, new_shape)
     else:
         g.set_rank(name, max(g.get_rank(x), g.get_rank(y)))
 
