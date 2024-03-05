@@ -1100,6 +1100,9 @@ class GraphBuilder:
     def verify_dynamic_shape(
         self, shape: Any, for_onnx: bool = True, name: Optional[str] = None
     ) -> DYNAMIC_SHAPE:
+        """
+        The implementation of this method should be revisited.
+        """
         if is_static_shape(shape):
             return tuple(int(i) for i in shape)
         new_shape = []
@@ -1121,8 +1124,16 @@ class GraphBuilder:
                     pass
 
                 if value is None:
+                    # Is it an integer?
                     try:
                         val_int = int(d)
+                        value = val_int
+                    except (TypeError, ValueError):
+                        pass
+                else:
+                    # maybe an expression which is a single integer
+                    try:
+                        val_int = int(value)
                         value = val_int
                     except (TypeError, ValueError):
                         pass
