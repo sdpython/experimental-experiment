@@ -47,6 +47,7 @@ class TestDynamoCompileDiff(ExtTestCase):
             build_matching_inputs,
         )
         from experimental_experiment.torch_dynamo import onnx_debug_backend
+        from experimental_experiment.torch_helper.training_helper import make_aot_ort
 
         logging.disable(logging.ERROR)
 
@@ -62,7 +63,8 @@ class TestDynamoCompileDiff(ExtTestCase):
         folder = "temp_dump_models"
         storage = {}
 
-        optimized_mod = torch.compile(model, backend="onnxrt", fullgraph=True)
+        local_aot_ort, _ = make_aot_ort(dynamic=True, rewrite=True)
+        optimized_mod = torch.compile(model, backend=local_aot_ort, fullgraph=True)
         with dump_onnx("llama_onnxrt", folder=folder, clean=True):
             expected_onnxrt = optimized_mod(*inputs[0])
         assert_all_close(expected, expected_onnxrt)

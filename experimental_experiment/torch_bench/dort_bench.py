@@ -122,7 +122,7 @@ use_dynamic = args.dynamic in (1, "1", True, "True")
 print(f"dynamic={use_dynamic}")
 
 if args.backend == "ort":
-    local_aot_ort, local_ort = make_aot_ort(dynamic=use_dynamic)
+    local_aot_ort, local_ort = make_aot_ort(dynamic=use_dynamic, rewriter=True)
     compiled_model = torch.compile(model, backend=local_ort)
 
 elif args.backend == "inductor":
