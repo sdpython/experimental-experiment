@@ -42,7 +42,7 @@ class UnsqueezeUnsqueezePattern(PatternOptimization):
             "Unsqueeze",
             [node.input[0], new_axis],
             next_node.output,
-            name=f"{cls.__class__.__name__}--{node.name}",
+            name=f"{cls.__name__}--{node.name}",
             doc_string=next_node.doc_string,
         )
         return [new_node]

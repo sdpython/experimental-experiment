@@ -1,6 +1,6 @@
 """
-Evaluate different ways to export a torch model to ONNX
-=======================================================
+201: Evaluate different ways to export a torch model to ONNX
+============================================================
 
 The example evaluates the performance of onnxruntime of a simple
 torch model after it was converted into ONNX through different processes:
@@ -119,6 +119,7 @@ script_args = get_parsed_args(
 
 if script_args.scenario in (None, "small"):
     script_args.maxtime = 0.1
+
 print(f"scenario={script_args.scenario or 'small'}")
 print(f"warmup={script_args.warmup}")
 print(f"repeat={script_args.repeat}")

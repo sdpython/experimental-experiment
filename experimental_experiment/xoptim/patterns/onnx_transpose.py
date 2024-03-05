@@ -60,7 +60,7 @@ class TransposeTransposePattern(PatternOptimization):
                 "Identity",
                 [node.input[0]],
                 next_node.output,
-                name=f"{cls.__class__.__name__}--{node.name}",
+                name=f"{cls.__name__}--{node.name}",
                 doc_string=next_node.doc_string,
             )
         ]

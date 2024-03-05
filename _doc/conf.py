@@ -131,6 +131,7 @@ epkg_dictionary = {
     "sphinx-gallery": "https://github.com/sphinx-gallery/sphinx-gallery",
     "torch": "https://pytorch.org/docs/stable/torch.html",
     "torch.compiler": "https://pytorch.org/docs/stable/torch.compiler.html",
+    "torch.export.export": "https://pytorch.org/docs/stable/export.html#torch.export.export",
     "torch.onnx": "https://pytorch.org/docs/stable/onnx.html",
     "transformers": "https://huggingface.co/docs/transformers/en/index",
 }

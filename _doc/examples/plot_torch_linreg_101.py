@@ -1,7 +1,7 @@
 """
-=================
-Linear Regression
-=================
+=========================================
+101: Linear Regression and export to ONNX
+=========================================
 
 :epkg:`scikit-learn` and :epkg:`torch` to train a linear regression.
 
@@ -9,11 +9,16 @@ data
 ====
 """
 
+import numpy as np
 from sklearn.datasets import make_regression
 from sklearn.linear_model import LinearRegression, SGDRegressor
 from sklearn.metrics import mean_squared_error, r2_score
 from sklearn.model_selection import train_test_split
 import torch
+from onnxruntime import InferenceSession
+from onnx_array_api.plotting.graphviz_helper import plot_dot
+from experimental_experiment.torch_interpreter import to_onnx
+
 
 X, y = make_regression(1000, n_features=5, noise=10.0, n_informative=2)
 print(X.shape, y.shape)
@@ -129,3 +134,24 @@ print(f"TorchLinearRegression: tl2={tl2}, tr2={tr2}")
 print("coefficients:")
 for p in model.parameters():
     print(p)
+
+
+################################
+# Conversion to ONNX
+# ==================
+#
+# Let's convert it to ONNX.
+
+onx = to_onnx(model, (torch.Tensor(X_test[:2]),), input_names=["x"])
+
+################################
+# Let's check it is work.
+
+sess = InferenceSession(onx.SerializeToString(), providers=["CPUExecutionProvider"])
+res = sess.run(None, {"x": X_test.astype(np.float32)[:2]})
+print(res)
+
+#############################
+# And the model.
+
+plot_dot(onx)

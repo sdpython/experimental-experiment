@@ -1,7 +1,7 @@
 """
-=====================================
-Convolution and Matrix Multiplication
-=====================================
+==========================================
+102: Convolution and Matrix Multiplication
+==========================================
 
 The `convolution <https://en.wikipedia.org/wiki/Kernel_(image_processing)>`_
 is a well known image transformation used to transform an image.

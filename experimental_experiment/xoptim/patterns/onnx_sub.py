@@ -23,23 +23,30 @@ class Sub1MulPattern(PatternOptimization):
         node_right = g.node_before(node.input[1])
         op_left = None if node_left is None else node_left.op_type
         op_right = None if node_right is None else node_right.op_type
+
         if op_left != "Sub" and op_right != "Sub":
             return self.none(node, inspect.currentframe().f_lineno)
+
         if (op_left == "Sub" and g.is_used_more_than_once(node.input[0])) or (
             op_right == "Sub" and g.is_used_more_than_once(node.input[1])
         ):
             return self.none(node, inspect.currentframe().f_lineno)
 
         cst_left, cst_right = None, None
+
         if op_left == "Sub" and g.is_constant(node_left.input[0]):
-            cst = g.get_computed_constant(node_left.input[0])
-            if cst.min() == cst.max() == 1:
-                cst_left = cst
+            cst_min, cst_max = g.get_computed_constant(
+                node_left.input[0], ["min", "max"]
+            )
+            if cst_min == cst_max == 1:
+                cst_left = cst_min
 
         if op_right == "Sub" and g.is_constant(node_right.input[0]):
-            cst = g.get_computed_constant(node_right.input[0])
-            if cst.min() == cst.max() == 1:
-                cst_right = cst
+            cst_min, cst_max = g.get_computed_constant(
+                node_right.input[0], ["min", "max"]
+            )
+            if cst_min == cst_max == 1:
+                cst_right = cst_min
 
         if cst_left is None and cst_right is None:
             return self.none(node, inspect.currentframe().f_lineno)
@@ -73,13 +80,13 @@ class Sub1MulPattern(PatternOptimization):
                 "Mul",
                 [node_left.input[1], node.input[1]],
                 [g.unique_name(f"{cls.__class__.__name__}--{node.output[0]}")],
-                name=f"{cls.__class__.__name__}--{node.name}",
+                name=f"{cls.__name__}--{node.name}",
             )
             sub_node = g.make_node(
                 "Sub",
                 [node.input[1], mul_node.output[0]],
                 node.output,
-                name=f"{cls.__class__.__name__}--{node.name}",
+                name=f"{cls.__name__}--{node.name}",
                 doc_string=node.doc_string,
             )
             keep_node = node_right
@@ -89,13 +96,13 @@ class Sub1MulPattern(PatternOptimization):
                 "Mul",
                 [node.input[0], node_right.input[1]],
                 [g.unique_name(f"{cls.__class__.__name__}--{node.output[0]}")],
-                name=f"{cls.__class__.__name__}--{node.name}",
+                name=f"{cls.__name__}--{node.name}",
             )
             sub_node = g.make_node(
                 "Sub",
                 [node.input[0], mul_node.output[0]],
                 node.output,
-                name=f"{cls.__class__.__name__}--{node.name}",
+                name=f"{cls.__name__}--{node.name}",
                 doc_string=node.doc_string,
             )
             keep_node = node_left

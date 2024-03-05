@@ -67,7 +67,7 @@ class MulMulMulScalarPattern(PatternOptimization):
             node.op_type,
             [node_left.input[0], node_right.input[0]],
             [g.unique_name(f"{cls.__class__.__name__}--{node.output[0]}")],
-            name=f"{cls.__class__.__name__}--{node.name}",
+            name=f"{cls.__name__}--{node.name}",
         )
         cst_left = g.get_computed_constant(node_left.input[1])
         cst_right = g.get_computed_constant(node_right.input[1])
@@ -92,7 +92,7 @@ class MulMulMulScalarPattern(PatternOptimization):
             "Mul",
             [new_node.output[0], new_cst],
             node.output,
-            name=f"{cls.__class__.__name__}--{node.name}-Cst",
+            name=f"{cls.__name__}--{node.name}-Cst",
         )
 
         return [new_node, new_node2]

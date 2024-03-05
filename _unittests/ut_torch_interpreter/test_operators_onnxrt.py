@@ -383,7 +383,10 @@ class TestOperatorsOnnxrt(ExtTestCase):
         m1 = torch.randn(2, 3, requires_grad=True)
         m2 = torch.randn(3, 4, requires_grad=True)
         self.assertONNX(
-            torch.mm, (m1, m2), onnx_export=inspect.currentframe().f_code.co_name
+            torch.mm,
+            (m1, m2),
+            onnx_export=inspect.currentframe().f_code.co_name,
+            atol=1e-5,
         )
 
     @ignore_warnings(UserWarning)

@@ -35,7 +35,7 @@ class CastPattern(PatternOptimization):
             "Identity",
             node.input,
             node.output,
-            name=f"{cls.__class__.__name__}--{node.name}",
+            name=f"{cls.__name__}--{node.name}",
             doc_string=node.doc_string,
         )
         return [new_node]

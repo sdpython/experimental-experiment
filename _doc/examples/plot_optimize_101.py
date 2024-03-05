@@ -1,7 +1,7 @@
 """
-==================
-Graph Optimization
-==================
+=======================
+101: Graph Optimization
+=======================
 
 This example shows how to optimize a graph using pattern optimization.
 The graph was obtained by running a dummy llama model.
@@ -85,5 +85,5 @@ plot_dot(optimized_proto)
 #################################
 # The first list of patterns optimizes the graph with only
 # standard onnx operators: :ref:`l-pattern-optimization-onnx`.
-# The second list is specific to :pekg:`onnxruntime`:
+# The second list is specific to :epkg:`onnxruntime`:
 # :ref:`l-pattern-optimization-ort`.

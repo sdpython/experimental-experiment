@@ -28,6 +28,24 @@ class TestGraphPatternOptimization(ExtTestCase):
         res = get_pattern_list(negative_list="default")
         self.assertEqual(res, [])
 
+    def test_get_pattern_list_plus(self):
+        res1 = get_pattern_list("default")
+        self.assertGreater(len(res1), 4)
+        res2 = get_pattern_list("onnxruntime")
+        self.assertGreater(len(res2), 1)
+        res = get_pattern_list("default+onnxruntime")
+        self.assertGreater(len(res), 3)
+        self.assertEqual(res1 + res2, res)
+
+    def test_get_pattern_list_plus_list(self):
+        res1 = get_pattern_list("default")
+        self.assertGreater(len(res1), 4)
+        res2 = get_pattern_list("onnxruntime")
+        self.assertGreater(len(res2), 1)
+        res = get_pattern_list(["default+onnxruntime"])
+        self.assertGreater(len(res), 3)
+        self.assertEqual(res1 + res2, res)
+
     def _check_with_ort(self, proto: ModelProto):
         from onnxruntime import InferenceSession, get_available_providers
 
@@ -1031,6 +1049,7 @@ class TestGraphPatternOptimization(ExtTestCase):
             optimization_options=OptimizationOptions(patterns=["MulMulMulScalar"]),
         )
         stats = gr.optimize()
+        stats = [{k: v for k, v in st.items() if k != "time_in"} for st in stats]
         self.assertEqual(
             stats,
             [
@@ -1706,7 +1725,7 @@ class TestGraphPatternOptimization(ExtTestCase):
         )
         self.assertEqual(1, len(opt_onx.graph.initializer))
 
-        opt_ref = ExtendedReferenceEvaluator(opt_onx, verbose=10)
+        opt_ref = ExtendedReferenceEvaluator(opt_onx)
         got = opt_ref.run(None, feeds)[0]
         self.assertEqualArray(expected, got)
 
@@ -1745,7 +1764,7 @@ class TestGraphPatternOptimization(ExtTestCase):
         )
         self.assertEqual(1, len(opt_onx.graph.initializer))
 
-        opt_ref = ExtendedReferenceEvaluator(opt_onx, verbose=10)
+        opt_ref = ExtendedReferenceEvaluator(opt_onx)
         got = opt_ref.run(None, feeds)[0]
         self.assertEqualArray(expected, got)
 
