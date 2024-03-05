@@ -88,6 +88,7 @@ def _make_builder_interpreter(
     optimization_options: Optional[OptimizationOptions] = None,
     verbose: int = 0,
     raise_list: Optional[Set[str]] = None,
+    dynamic_shapes: Optional[Union[Dict[str, Any], Tuple[Any]]] = None,
 ) -> Tuple["torch.fx.GraphModule", GraphBuilder, "DynamoInterpreter"]:  # noqa: F821
     """
     Exports a torch model into ONNX using
@@ -103,6 +104,7 @@ def _make_builder_interpreter(
     :param verbose: verbosity level
     :param raise_list: the builder stops any time a name falls into that list,
         this is a debbuging tool
+    :param dynamic_shapes: see :epkg:`torch.export.export`
     :return: onnx model
     """
 
@@ -117,7 +119,7 @@ def _make_builder_interpreter(
         buffers = dict(graph_module.named_buffers())
         mapping = {}
     else:
-        exported_mod = torch.export.export(mod, args)
+        exported_mod = torch.export.export(mod, args, dynamic_shapes=dynamic_shapes)
         graph_module = exported_mod.graph_module
         try:
             weights = dict(exported_mod.named_parameters())
@@ -165,6 +167,7 @@ def to_onnx(
     verbose: int = 0,
     return_builder: bool = False,
     raise_list: Optional[Set[str]] = None,
+    dynamic_shapes: Optional[Union[Dict[str, Any], Tuple[Any]]] = None,
 ) -> Union[ModelProto, Tuple[ModelProto, GraphBuilder]]:
     """
     Exports a torch model into ONNX using
@@ -181,6 +184,7 @@ def to_onnx(
     :param return_builder: returns the builder as well
     :param raise_list: the builder stops any time a name falls into that list,
         this is a debbuging tool
+    :param dynamic_shapes: see :epkg:`torch.export.export`
     :return: onnx model
     """
     if target_opset is None:
@@ -196,6 +200,7 @@ def to_onnx(
         optimization_options=options,
         verbose=verbose,
         raise_list=raise_list,
+        dynamic_shapes=dynamic_shapes,
     )
 
     builder.process(graph_module, interpreter)

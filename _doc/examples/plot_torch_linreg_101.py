@@ -142,13 +142,13 @@ for p in model.parameters():
 #
 # Let's convert it to ONNX.
 
-onx = to_onnx(model, (torch.Tensor(X_test[:2]),), input_names=["input"])
+onx = to_onnx(model, (torch.Tensor(X_test[:2]),), input_names=["x"])
 
 ################################
 # Let's check it is work.
 
 sess = InferenceSession(onx.SerializeToString(), providers=["CPUExecutionProvider"])
-res = sess.run(None, {"input": X_test.astype(np.float32)[:2]})
+res = sess.run(None, {"x": X_test.astype(np.float32)[:2]})
 print(res)
 
 #############################
