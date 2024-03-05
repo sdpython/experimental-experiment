@@ -15,6 +15,7 @@ from torch.autograd import Function
 from torch.nn import functional, Module, Parameter
 from experimental_experiment.ext_test_case import ExtTestCase, ignore_warnings
 from experimental_experiment.torch_interpreter import FunctionNotFoundError
+from experimental_experiment.torch_helper.training_helper import make_aot_ort
 
 BATCH_SIZE = 2
 RNN_BATCH_SIZE = 7
@@ -53,23 +54,6 @@ class FuncModuleModule(Module):
         x = args[0] + self.ppp
         res = self.mod(x, *args[1:])
         return res
-
-
-def make_aot_ort(dynamic: bool = False):
-    from torch.onnx import (
-        _OrtBackend as OrtBackend,
-        _OrtBackendOptions as OrtBackendOptions,
-        ExportOptions,
-    )
-
-    ort_backend = OrtBackend(
-        options=OrtBackendOptions(
-            export_options=ExportOptions(
-                dynamic_shapes=dynamic,
-            )
-        )
-    )
-    return ort_backend, ort_backend
 
 
 class TestOperatorsOnnxrt(ExtTestCase):

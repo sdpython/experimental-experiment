@@ -175,7 +175,7 @@ storage = {}
 
 if backward:
     # onnxrt backend
-    local_aot_ort, _ = make_aot_ort(dynamic=False)
+    local_aot_ort, _ = make_aot_ort(dynamic=False, rewrite=True)
 
     optimized_mod = torch.compile(
         copy.deepcopy(model), backend=local_aot_ort, dynamic=False, fullgraph=True
@@ -223,7 +223,8 @@ if backward:
 
 else:
     # onnxrt backend
-    optimized_mod = torch.compile(model, backend="onnxrt", fullgraph=True)
+    local_aot_ort, _ = make_aot_ort(dynamic=True, rewrite=True)
+    optimized_mod = torch.compile(model, backend=local_aot_ort, fullgraph=True)
     with dump_onnx("llama_onnxrt", folder=folder, clean=True):
         if use_mixed:
             with torch.autocast(device_type="cuda", dtype=torch.float16):

@@ -58,6 +58,7 @@ from experimental_experiment.plotting.memory import memory_peak_plot
 from experimental_experiment.ext_test_case import measure_time, get_figure
 from experimental_experiment.args import get_parsed_args
 from experimental_experiment.memory_peak import start_spying_on
+from experimental_experiment.torch_helper.training_helper import make_aot_ort
 from tqdm import tqdm
 
 has_cuda = has_cuda and torch.cuda.is_available()
@@ -258,11 +259,9 @@ def get_torch_dort(model, *args):
     with contextlib.redirect_stdout(io.StringIO()):
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            optimized_mod = torch.compile(model, backend="onnxrt", fullgraph=True)
+            local_aot_ort, _ = make_aot_ort(dynamic=True, rewrite=True)
+            optimized_mod = torch.compile(model, backend=local_aot_ort, fullgraph=True)
             run(optimized_mod, *args)
-            # from onnxruntime.training.torchdynamo.register_backend import aot_ort
-            # compiled_model = torch._dynamo.optimize(aot_ort)(model)
-            # optimized_mod = torch.compile(model, backend="onnxrt", fullgraph=True)
             assert run(optimized_mod, *args)
             return optimized_mod
 
@@ -378,13 +377,9 @@ for k, v in supported_exporters.items():
     for i in range(int(script_args.repeat1)):
         model, input_tensors = create_model_and_input()
         torch._dynamo.reset()
-        if k == "opti":
-            os.environ["ONNX_OPTIMIZER"] = "1"
         begin = time.perf_counter()
         run(model, *input_tensors)
         duration = time.perf_counter() - begin
-        if k == "opti":
-            os.environ["ONNX_OPTIMIZER"] = "0"
         times.append(duration)
         del model
         gc.collect()
@@ -414,13 +409,9 @@ for k, v in supported_exporters.items():
         model = model.cuda()
         input_tensors = [i.cuda() for i in input_tensors]
         torch._dynamo.reset()
-        if k == "opti":
-            os.environ["ONNX_OPTIMIZER"] = "1"
         begin = time.perf_counter()
         run(model, *input_tensors)
         duration = time.perf_counter() - begin
-        if k == "opti":
-            os.environ["ONNX_OPTIMIZER"] = "0"
         times.append(duration)
         del model
         gc.collect()
@@ -571,11 +562,7 @@ def benchmark(shape):
             exported_model=exported_model,
             input_tensors=input_tensors,
         ):
-            if "opti" in export_fct.__name__:
-                os.environ["ONNX_OPTIMIZER"] = "1"
             res = run(exported_model, *input_tensors)
-            if "opti" in export_fct.__name__:
-                os.environ["ONNX_OPTIMIZER"] = "0"
             return res
 
         stat = start_spying_on(cuda=1 if has_cuda else 0)

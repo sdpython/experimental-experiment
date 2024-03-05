@@ -1,4 +1,7 @@
-def make_aot_ort(dynamic: bool = False):
+import warnings
+
+
+def make_aot_ort(dynamic: bool = False, rewrite: bool = "try"):
     import onnxruntime
     from torch.onnx import (
         _OrtBackend as OrtBackend,
@@ -9,12 +12,35 @@ def make_aot_ort(dynamic: bool = False):
     ort_session_options = onnxruntime.SessionOptions()
     # ort_session_options.log_severity_level = 1
 
-    ort_backend = OrtBackend(
-        options=OrtBackendOptions(
+    if rewrite == "try":
+        import packaging.version as pv
+        from torch import __version__ as torch_version
+
+        if pv.Version(torch_version) < pv.Version("2.3"):
+            warnings.warn("option pre_ort_model_transforms not available in torch {e}")
+            rewrite = False
+        else:
+            try:
+                import onnxrewriter  # noqa: F401
+            except ImportError:
+                warnings.warn("unable to rewrite a model with onnx-rewriter due to {e}")
+                rewrite = False
+
+    if rewrite:
+        from ..convert.convert_helper import optimize_model_proto
+
+        options = OrtBackendOptions(
             export_options=ExportOptions(dynamic_shapes=dynamic),
             ort_session_options=ort_session_options,
-        ),
-    )
+            pre_ort_model_transforms=[optimize_model_proto],
+        )
+    else:
+        options = OrtBackendOptions(
+            export_options=ExportOptions(dynamic_shapes=dynamic),
+            ort_session_options=ort_session_options,
+        )
+
+    ort_backend = OrtBackend(options=options)
     return ort_backend, ort_backend
 
 
