@@ -119,6 +119,7 @@ script_args = get_parsed_args(
 
 if script_args.scenario in (None, "small"):
     script_args.maxtime = 0.1
+
 print(f"scenario={script_args.scenario or 'small'}")
 print(f"warmup={script_args.warmup}")
 print(f"repeat={script_args.repeat}")
