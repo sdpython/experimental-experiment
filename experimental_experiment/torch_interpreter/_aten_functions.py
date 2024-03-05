@@ -37,6 +37,7 @@ T = str
 
 
 def aten_abs(g: GraphBuilder, sts: bool, outputs: List[str], x: T) -> T:
+    "abs"
     res = g.make_node("Abs", [x], outputs)
     if sts:
         set_type_shape_unary_op(g, outputs[0], x)
@@ -44,6 +45,7 @@ def aten_abs(g: GraphBuilder, sts: bool, outputs: List[str], x: T) -> T:
 
 
 def aten_acos(g: GraphBuilder, sts: bool, outputs: List[str], x: T) -> T:
+    "acos"
     res = g.make_node("Acos", [x], outputs)
     if sts:
         set_type_shape_unary_op(g, outputs[0], x)
@@ -51,6 +53,7 @@ def aten_acos(g: GraphBuilder, sts: bool, outputs: List[str], x: T) -> T:
 
 
 def aten_acosh(g: GraphBuilder, sts: bool, outputs: List[str], x: T) -> T:
+    "acosh"
     res = g.make_node("Acosh", [x], outputs)
     if sts:
         set_type_shape_unary_op(g, outputs[0], x)
@@ -60,6 +63,7 @@ def aten_acosh(g: GraphBuilder, sts: bool, outputs: List[str], x: T) -> T:
 def aten_add(
     g: GraphBuilder, sts: bool, outputs: List[str], x: T, y: T, name: str = "add"
 ) -> T:
+    "add"
     res, x, y = prepare_inputs_homogeneous_operator(
         g, x, y, f=g.op.Add, name=name, outputs=outputs
     )
@@ -76,6 +80,7 @@ def aten_add_Scalar(
     y: T,
     alpha: Optional[Any] = None,
 ) -> T:
+    "add"
     assert alpha in (None, 1), f"alpha={alpha}, not implemented"
     x, y = prepare_inputs_homogeneous_operator(g, x, y)
     res = g.op.Add(x, y, outputs=outputs, name="add_Scalar")
@@ -92,6 +97,7 @@ def aten_add_Tensor(
     y: T,
     alpha: Optional[Any] = None,
 ) -> T:
+    "add"
     assert alpha in (None, 1), f"alpha={alpha}, not implemented"
     x, y = prepare_inputs_homogeneous_operator(g, x, y)
     res = g.op.Add(x, y, outputs=outputs, name="add_Tensor")
@@ -103,6 +109,7 @@ def aten_add_Tensor(
 def aten_and(
     g: GraphBuilder, sts: bool, outputs: List[str], x: T, y: T, name="and"
 ) -> T:
+    "and"
     res, x, y = prepare_inputs_homogeneous_operator(
         g, x, y, f=g.op.And, name=name, outputs=outputs
     )
@@ -114,6 +121,7 @@ def aten_and(
 def aten_and_(
     g: GraphBuilder, sts: bool, outputs: List[str], x: T, y: T, name="and"
 ) -> T:
+    "and"
     return aten_and(g, sts, outputs, x, y, name="and_")
 
 
@@ -127,16 +135,19 @@ def aten_addmm(
     beta: float = 1.0,
     alpha: float = 1.0,
 ) -> T:
+    "gemm"
     return g.op.Gemm(
         b, c, a, alpha=float(alpha), beta=float(beta), outputs=outputs, name="addmm"
     )
 
 
 def aten_alias(g: GraphBuilder, sts: bool, outputs: List[str], x: T) -> T:
+    "identity"
     return g.make_node("Identity", [x], outputs, name="alias")
 
 
 def aten_all(g: GraphBuilder, sts: bool, outputs: List[str], x: T) -> T:
+    "cast"
     res = g.op.Cast(
         g.op.ReduceMin(g.op.Cast(x, to=TensorProto.INT32, name="all"), name="all"),
         to=TensorProto.BOOL,
@@ -159,6 +170,7 @@ def aten_amax(
     output_dtype: Optional["torch.dtype"] = None,  # noqa: F821
     name: str = "aten_amax",
 ) -> T:
+    "reducemax"
     return prims_amax(
         g, sts, outputs, x, dim, keepdim, output_dtype=output_dtype, name=name
     )
@@ -178,6 +190,7 @@ def aten_arange(
     name: str = "arange",
     requires_grad: bool = False,
 ) -> T:
+    "arange"
     assert (
         layout is None
     ), f"arange not implemented for layout={layout!r} is not None{g.get_debug_msg()}"
@@ -272,6 +285,7 @@ def aten_arange_start(
     device: Optional["torch.device"] = None,  # noqa: F821
     pin_memory=None,
 ) -> T:
+    "arange"
     import torch
 
     assert layout in (
@@ -294,6 +308,7 @@ def aten_arange_start_step(
     device: Optional["torch.device"] = None,  # noqa: F821
     pin_memory=None,
 ) -> T:
+    "arange"
     import torch
 
     assert layout in (
@@ -312,6 +327,7 @@ def aten_argmax(
     dim: Optional[int] = None,
     keepdim: bool = False,
 ) -> T:
+    "argmax"
     if dim is None:
         xf = g.op.Reshape(x, np.array([-1], dtype=np.int64))
         res = g.op.Squeeze(
@@ -346,6 +362,7 @@ def aten_as_strided(
     stride: List[int],
     storage_offset: Optional[int] = None,
 ) -> T:
+    "as_strided"
     assert False, f"The implementation is still incorrect{g.get_debug_msg()}"
 
     import torch
@@ -380,6 +397,7 @@ def aten_as_strided(
 
 
 def aten_asin(g: GraphBuilder, sts: bool, outputs: List[str], x: T) -> T:
+    "asin"
     res = g.make_node("Asin", [x], outputs)
     if sts:
         set_type_shape_unary_op(g, outputs[0], x)
@@ -387,6 +405,7 @@ def aten_asin(g: GraphBuilder, sts: bool, outputs: List[str], x: T) -> T:
 
 
 def aten_asinh(g: GraphBuilder, sts: bool, outputs: List[str], x: T) -> T:
+    "asinh"
     res = g.make_node("Asinh", [x], outputs)
     if sts:
         set_type_shape_unary_op(g, outputs[0], x)
@@ -394,6 +413,7 @@ def aten_asinh(g: GraphBuilder, sts: bool, outputs: List[str], x: T) -> T:
 
 
 def aten_atan(g: GraphBuilder, sts: bool, outputs: List[str], x: T) -> T:
+    "atan"
     res = g.make_node("Atan", [x], outputs)
     if sts:
         set_type_shape_unary_op(g, outputs[0], x)
@@ -401,6 +421,7 @@ def aten_atan(g: GraphBuilder, sts: bool, outputs: List[str], x: T) -> T:
 
 
 def aten_atanh(g: GraphBuilder, sts: bool, outputs: List[str], x: T) -> T:
+    "atanh"
     res = g.make_node("Atanh", [x], outputs)
     if sts:
         set_type_shape_unary_op(g, outputs[0], x)
@@ -408,6 +429,7 @@ def aten_atanh(g: GraphBuilder, sts: bool, outputs: List[str], x: T) -> T:
 
 
 def aten_bmm(g: GraphBuilder, sts: bool, outputs: List[str], x: T, y: T) -> T:
+    "bmm"
     assert g.get_type(x) == g.get_type(y), (
         f"type mismatch between {x!r}:{g.get_type(x)} and "
         f"{y!r}:{g.get_type(y)}{g.get_debug_msg()}"
@@ -426,6 +448,7 @@ def aten_cat(
     dim: int = 0,
     name="cat",
 ) -> T:
+    "concat"
     assert len(tensors) > 0, f"No tensor to concat{g.get_debug_msg()}"
     res = g.op.Concat(*tensors, axis=dim, outputs=outputs, name="cat")
     if sts:
@@ -446,6 +469,7 @@ def aten_clone(
     memory_format: Optional[str] = None,
     name="clone",
 ) -> T:
+    "identity"
     import torch
 
     assert (
@@ -470,6 +494,7 @@ def aten_convolution(
     output_padding: Sequence[int] = (0,),
     groups: int = 1,
 ) -> T:
+    "conv"
     if transposed:
         raise FunctionNotFoundError(
             f"aten_convolution does not support transposed={transposed}."
@@ -543,6 +568,7 @@ def aten_conv2d(
     dilation: Sequence[int] = (1, 1),
     groups: int = 1,
 ) -> T:
+    "conv"
     return aten_convolution(
         g,
         sts,
@@ -565,6 +591,7 @@ def aten_copy(
     src: T,
     non_blocking: bool = False,
 ) -> T:
+    "identity"
     assert not non_blocking, "copy implemented when non_blocking is True"
     if g.get_type(x) == g.get_type(src):
         return g.op.Identity(src, name="copy")
@@ -574,6 +601,7 @@ def aten_copy(
 def aten_cos(
     g: GraphBuilder, sts: bool, outputs: List[str], x: T, name: str = "cos"
 ) -> T:
+    "cos"
     res = g.make_node("Cos", [x], outputs, name=name)
     if sts:
         set_type_shape_unary_op(g, outputs[0], x)
@@ -581,6 +609,7 @@ def aten_cos(
 
 
 def aten_cosh(g: GraphBuilder, sts: bool, outputs: List[str], x: T) -> T:
+    "cosh"
     res = g.make_node("Cosh", [x], outputs)
     if sts:
         set_type_shape_unary_op(g, outputs[0], x)
@@ -588,12 +617,14 @@ def aten_cosh(g: GraphBuilder, sts: bool, outputs: List[str], x: T) -> T:
 
 
 def aten_detach(g: GraphBuilder, sts: bool, outputs: List[str], x: T) -> T:
+    "identity"
     return g.make_node("Identity", [x], outputs, name="detach")
 
 
 def aten_div(
     g: GraphBuilder, sts: bool, outputs: List[str], x: T, y: T, name="div"
 ) -> T:
+    "div"
     res, x, y = prepare_inputs_homogeneous_operator(
         g, x, y, f=g.op.Div, name=name, outputs=outputs
     )
@@ -603,6 +634,7 @@ def aten_div(
 
 
 def aten_div_Scalar(g: GraphBuilder, sts: bool, outputs: List[str], x: T, y: T) -> T:
+    "div"
     return aten_div(g, sts, outputs, x, y, name="div_Scalar")
 
 
@@ -614,6 +646,7 @@ def aten_div_Tensor(
     y: T,
     alpha: Optional[Any] = None,
 ) -> T:
+    "div"
     assert alpha in (None, 1), f"alpha={alpha}, not implemented"
     x, y = prepare_inputs_homogeneous_operator(g, x, y)
     res = g.op.Div(x, y, outputs=outputs, name="div_Tensor")
@@ -630,6 +663,7 @@ def aten_dropout(
     p: T = 0.5,  # float
     training: T = True,  # bool
 ) -> T:
+    "dropout"
     if len(outputs) == 1:
         outputs = outputs.copy()
         outputs.append("")
@@ -654,6 +688,7 @@ def aten_elu(
     inplace: bool = False,
     name="elu",
 ) -> T:
+    "elu"
     assert (
         input_scale == 1
     ), f"not implemented when input_scale={input_scale}{g.get_debug_msg()}"
@@ -684,6 +719,7 @@ def aten_embedding(
     scale_grad_by_freq: bool = False,
     sparse: bool = False,
 ) -> T:
+    "embedding"
     if (
         (padding_idx is not None and padding_idx >= 0)
         or scale_grad_by_freq
@@ -720,6 +756,8 @@ def aten_embedding_dense_backward(
     scale_grad_by_freq: bool,
 ) -> T:
     """
+    embedding
+
     ::
 
         def _unsqueeze_to_dim(x: Tensor, dim: int) -> Tensor:
@@ -839,6 +877,7 @@ def aten_empty_like(
     pin_memory=None,
     memory_format=None,
 ) -> T:
+    "constantofshape"
     import torch
 
     assert (
@@ -881,6 +920,7 @@ def aten_empty_permuted(
     pin_memory: bool = False,
     name: str = "empty_permuted",
 ) -> T:
+    "constantofshape"
     # strided is unused.
     assert list(physical_layout) == list(range(len(physical_layout))), (
         f"empty_permuted not implemented when physical_layout={physical_layout}, "
@@ -913,6 +953,7 @@ def aten_empty_strided(
     pin_memory: bool = False,
     name: str = "empty_strided",
 ) -> T:
+    "constantofshape"
     # strided is unused.
     return aten_zeros(
         g,
@@ -929,6 +970,7 @@ def aten_empty_strided(
 
 
 def aten_eq(g: GraphBuilder, sts: bool, outputs: List[str], x: T, y: T, name="eq") -> T:
+    "equal"
     x, y = prepare_inputs_homogeneous_operator(g, x, y)
     res = g.op.Equal(x, y, outputs=outputs, name=name)
     if sts:
@@ -939,16 +981,19 @@ def aten_eq(g: GraphBuilder, sts: bool, outputs: List[str], x: T, y: T, name="eq
 def aten_eq_Tensor(
     g: GraphBuilder, sts: bool, outputs: List[str], x: T, y: T, name="eq_Tensor"
 ) -> T:
+    "equal"
     return aten_eq(g, sts, outputs, x, y, name=name)
 
 
 def aten_eq_Scalar(g: GraphBuilder, sts: bool, outputs: List[str], x: T, y: T) -> T:
+    "equal"
     return aten_eq(g, sts, outputs, x, y)
 
 
 def aten_exp(
     g: GraphBuilder, sts: bool, outputs: List[str], x: T, name: str = "exp"
 ) -> T:
+    "exp"
     res = g.make_node("Exp", [x], outputs, name=name)
     if sts:
         set_type_shape_unary_op(g, outputs[0], x)
@@ -964,6 +1009,7 @@ def aten_expand(
     implicit: bool = False,
     name: str = "expand",
 ) -> T:
+    "expand"
     assert not implicit, f"Unexpected value for implicit={implicit!r}"
 
     if not isinstance(sizes, str) and all_int(sizes) and min(sizes) >= 0:
@@ -1023,6 +1069,7 @@ def aten_expand(
 
 
 def aten_fill_Scalar(g: GraphBuilder, sts: bool, outputs: List[str], x: T, v: T) -> T:
+    "constantofshape"
     if g.has_shape(x) and is_static_shape(g.get_shape(x)):
         return aten_full(
             g,
@@ -1046,6 +1093,7 @@ def aten_flatten(
     start_dim: int = 1,
     end_dim: int = -1,
 ) -> T:
+    "flatten"
     if start_dim != 0:
         if start_dim == 1 and end_dim == -1:
             shape = g.op.Shape(x, name="flatten")
@@ -1084,6 +1132,7 @@ def aten_full(
     requires_grad: bool = False,
     name: str = "full",
 ) -> T:
+    "constantofshape"
     import torch
 
     assert layout in (None, torch.strided), (
@@ -1158,6 +1207,7 @@ def aten_full_like(
     pin_memory=None,
     memory_format=None,
 ) -> T:
+    "constantofshape"
     import torch
 
     assert (
@@ -1192,6 +1242,7 @@ def aten_FunctionCtx(g: GraphBuilder, sts: bool, outputs: List[str], *args, **kw
 
 
 def aten_gt(g: GraphBuilder, sts: bool, outputs: List[str], x: T, y: T) -> T:
+    "greater"
     x, y = prepare_inputs_homogeneous_operator(g, x, y)
     res = g.op.Greater(x, y, outputs=outputs)
     if sts:
@@ -1202,6 +1253,7 @@ def aten_gt(g: GraphBuilder, sts: bool, outputs: List[str], x: T, y: T) -> T:
 def aten_index_Tensor(
     g: GraphBuilder, sts: bool, outputs: List[str], x: T, indices: List[int]
 ) -> T:
+    "[...,:, ...]"
     assert isinstance(
         indices, (list, tuple)
     ), f"Unexpected type {type(indices)} for indices"
@@ -1258,6 +1310,7 @@ def aten_index_put(
     accumulate: bool = False,
     name="aten_index_put",
 ) -> T:
+    "[...,:, ...]"
     assert isinstance(
         indices, list
     ), f"Unexpected type {type(indices)}{g.get_debug_msg()}"
@@ -1299,6 +1352,7 @@ def aten__unsafe_index_put(
     values: T,
     accumulate: bool = False,
 ) -> T:
+    "[...,:, ...]"
     return aten_index_put(
         g,
         sts,
@@ -1320,6 +1374,7 @@ def aten_index_select(
     index: T,
     name: str = "index_select",
 ) -> T:
+    "[...,:, ...]"
     res = g.op.Gather(x, index, axis=dim, outputs=outputs, name=name)
     if sts:
         g.set_type(res, g.get_type(x))
@@ -1342,6 +1397,7 @@ def aten_leaky_relu(
     inplace: bool = False,
     name: str = "leaky_relu",
 ) -> T:
+    "leaky relu"
     assert not inplace, f"inplace not implemented for leaky_relu{g.get_debug_msg()}"
 
     dtype = tensor_dtype_to_np_dtype(g.get_type(a))
@@ -1368,6 +1424,7 @@ def aten_leaky_relu_backward(
     self_is_result: bool,
     name="leaky_relu_backward",
 ) -> T:
+    "leaky relu"
     dtype = tensor_dtype_to_np_dtype(g.get_type(grad_output))
     slope = np.array([negative_slope], dtype=dtype)
     res = g.op.Where(
@@ -1385,6 +1442,7 @@ def aten_leaky_relu_backward(
 def aten_linear(
     g: GraphBuilder, sts: bool, outputs: List[str], x: T, weight: T, bias: T = None
 ) -> T:
+    "linear"
     weight_transposed = g.op.Transpose(weight, perm=[1, 0], name="linear")
     if bias:
         res = g.op.MatMul(x, weight_transposed)
@@ -1413,6 +1471,7 @@ def aten__log_softmax(
     unnamed: bool = False,
     dtype: Optional["torch.dtype"] = None,  # noqa: F821
 ) -> T:
+    "logsoftmax"
     assert not unnamed, "Not implemented when the third parameter is False"
     if dtype is not None:
         itype = torch_dtype_to_onnx_dtype(dtype)
@@ -1435,6 +1494,7 @@ def aten__log_softmax_backward_data(
     dim: int,
     input_dtype: Optional["torch.dtype"] = None,  # noqa: F821
 ):
+    "logsoftmax backward"
     if input_dtype is not None:
         itype = torch_dtype_to_onnx_dtype(input_dtype)
         grad_outputc = g.op.Cast(
@@ -1466,6 +1526,7 @@ def aten__log_softmax_backward_data(
 
 
 def aten_lt(g: GraphBuilder, sts: bool, outputs: List[str], x: T, y: T, name="lt") -> T:
+    "less"
     x, y = prepare_inputs_homogeneous_operator(g, x, y)
     res = g.op.Less(x, y, outputs=outputs, name=name)
     if sts:
@@ -1474,10 +1535,12 @@ def aten_lt(g: GraphBuilder, sts: bool, outputs: List[str], x: T, y: T, name="lt
 
 
 def aten_lt_Tensor(g: GraphBuilder, sts: bool, outputs: List[str], x: T, y: T) -> T:
+    "less"
     return aten_lt(g, sts, outputs, x, y, name="lt_Tensor")
 
 
 def aten_matmul(g: GraphBuilder, sts: bool, outputs: List[str], x: T, y: T) -> T:
+    "matmul"
     res = g.op.MatMul(x, y, outputs=outputs)
     if sts:
         set_type_shape_binary_op(g, outputs[0], x, y)
@@ -1493,6 +1556,7 @@ def aten_masked_fill_Scalar(
     value,
     name="masked_fill_Scalar",
 ) -> T:
+    "masked"
     dt = g.get_type(mask)
     if dt != TensorProto.BOOL:
         cmask = g.op.Cast(mask, to=TensorProto.BOOL, name=name)
@@ -1523,6 +1587,7 @@ def _aten_max_pool_onnx(
     unbatched_rank: int,
     name: str,
 ) -> T:
+    "maxpool"
     # self_rank_is_unbatched_rank = Rank(self) == unbatched_rank
     # if self_rank_is_unbatched_rank:  # C,H,W -> N,C,H,W and N=1
     #     self = op.Unsqueeze(self, op.Constant(value_ints=[0]))
@@ -1554,6 +1619,7 @@ def aten_max_pool2d(
     dilation: Sequence[int] = (1, 1),
     ceil_mode: bool = False,
 ) -> T:
+    "maxpool"
     expand_size = 2
 
     kernel_shape, strides, pads, dilations = _adjust_attributes_of_max_pool(
@@ -1591,6 +1657,7 @@ def _aten_max_pool_with_indices_onnx(
     n_dims_axes: Sequence[int],
     name: str,
 ) -> Tuple[T, T]:
+    "maxpool"
     if isinstance(ceil_mode, str):
         raise TypeError(f"Unexpected ceil_mode={ceil_mode}")
     is_unbatched_rank = g.rank(x) == unbatched_rank
@@ -1648,6 +1715,7 @@ def aten_max_pool2d_with_indices(
     dilation: Sequence[int] = (1, 1),
     ceil_mode: bool = False,
 ) -> Tuple[T, T]:
+    "maxpool"
     assert isinstance(padding, (tuple, list))
     assert isinstance(ceil_mode, (bool, int))
     expand_size = 2
@@ -1683,6 +1751,7 @@ def aten_mean_dim(
     keepdim: bool = False,
     dtype: Optional["torch.dtype"] = None,  # noqa: F821
 ) -> T:
+    "reducemean"
     if dtype is not None:
         itype = torch_dtype_to_onnx_dtype(dtype)
         xc = g.op.Cast(x, to=itype)
@@ -1706,6 +1775,7 @@ def aten_mean_dim(
 
 
 def aten_mm(g: GraphBuilder, sts: bool, outputs: List[str], x: T, y: T) -> T:
+    "matmul"
     res = g.op.MatMul(x, y, outputs=outputs, name="mm")
     if sts:
         set_type_shape_matmul(g, res, x, y)
@@ -1715,6 +1785,7 @@ def aten_mm(g: GraphBuilder, sts: bool, outputs: List[str], x: T, y: T) -> T:
 def aten_mul(
     g: GraphBuilder, sts: bool, outputs: List[str], x: T, y: T, name="mul"
 ) -> T:
+    "mul"
     if g.get_type(x) == TensorProto.BOOL and g.get_type(y) == TensorProto.BOOL:
         res = g.op.And(x, y, name="mul_and", outputs=outputs)
     else:
@@ -1727,14 +1798,17 @@ def aten_mul(
 
 
 def aten_mul_Scalar(g: GraphBuilder, sts: bool, outputs: List[str], x: T, y: T) -> T:
+    "mul"
     return aten_mul(g, sts, outputs, x, y, name="mul_Scalar")
 
 
 def aten_mul_Tensor(g: GraphBuilder, sts: bool, outputs: List[str], x: T, y: T) -> T:
+    "mul"
     return aten_mul(g, sts, outputs, x, y, name="mul_Tensor")
 
 
 def aten_ne(g: GraphBuilder, sts: bool, outputs: List[str], x: T, y: T, name="ne") -> T:
+    "not equal"
     x, y = prepare_inputs_homogeneous_operator(g, x, y)
     eq = g.op.Equal(x, y, name=name)
     res = g.op.Not(eq, name=name, outputs=outputs)
@@ -1747,6 +1821,7 @@ def aten_ne(g: GraphBuilder, sts: bool, outputs: List[str], x: T, y: T, name="ne
 def aten_ne_Tensor(
     g: GraphBuilder, sts: bool, outputs: List[str], x: T, y: T, name="ne_Tensor"
 ) -> T:
+    "not equal"
     res = aten_ne(g, sts, outputs, x, y, name=name)
     if sts:
         set_type_shape_binary_op(g, outputs[0], x, y, cmp_op=True)
@@ -1754,6 +1829,7 @@ def aten_ne_Tensor(
 
 
 def aten_neg(g: GraphBuilder, sts: bool, outputs: List[str], x: T, name="neg") -> T:
+    "neg"
     res = g.make_node("Neg", [x], outputs, name=name)
     if sts:
         set_type_shape_unary_op(g, res, x)
@@ -1772,6 +1848,7 @@ def aten_new_zeros(
     pin_memory=None,
     name: str = "seros",
 ) -> T:
+    "constantofshape"
     if dtype is None:
         dtype = onnx_dtype_to_torch_dtype(g.get_type(x))
     return aten_full(
@@ -1791,6 +1868,7 @@ def aten_new_zeros(
 def aten_not(
     g: GraphBuilder, sts: bool, outputs: List[str], x: T, name: str = "not"
 ) -> T:
+    "not"
     res = g.make_node("Not", [x], outputs, name=name)
     if sts:
         set_type_shape_unary_op(g, res, x)
@@ -1800,6 +1878,7 @@ def aten_not(
 def aten_not_(
     g: GraphBuilder, sts: bool, outputs: List[str], x: T, name: str = "not"
 ) -> T:
+    "not"
     return aten_not(g, sts, outputs, x, name="not_")
 
 
@@ -1813,6 +1892,7 @@ def aten_ones(
     device: Optional["torch.device"] = None,  # noqa: F821
     pin_memory=None,
 ) -> T:
+    "constantofshape"
     import torch
 
     assert layout is None, f"ones not implemented for layout={layout!r} is not None"
@@ -1848,6 +1928,7 @@ def aten_ones(
 def aten_permute(
     g: GraphBuilder, sts: bool, outputs: List[str], x: T, dims: Sequence[int]
 ) -> T:
+    "transpose"
     if not dims:
         return g.op.Transpose(x, outputs=outputs, name="permute")
 
@@ -1863,6 +1944,7 @@ def aten_pow_Tensor_Scalar(
     exponent: T,
     name: str = "pow_Tensor_Scalar",
 ) -> T:
+    "pow"
     return aten_pow_Tensor_Tensor(g, sts, outputs, x, exponent, name=name)
 
 
@@ -1874,6 +1956,7 @@ def aten_pow_Tensor_Tensor(
     exponent: T,
     name: str = "pow_Tensor_Tensor",
 ) -> T:
+    "pow"
     if isinstance(exponent, (int, float)):
         if exponent == 1:
             # The node is removed.
@@ -1901,6 +1984,7 @@ def aten_pow_Tensor_Tensor(
 def aten__prelu_kernel(
     g: GraphBuilder, sts: bool, outputs: List[str], x: T, weight: T
 ) -> T:
+    "prelu"
     dtype = tensor_dtype_to_np_dtype(g.get_type(x))
     ge = g.op.Greater(x, np.array([0], dtype=dtype), name="_prelu_kernel")
     mu = g.op.Mul(x, weight, name="_prelu_kernel")
@@ -1915,6 +1999,7 @@ def aten__prelu_kernel(
 def aten__prelu_kernel_backward(
     g: GraphBuilder, sts: bool, outputs: List[str], grad_output: T, x: T, weight: T
 ) -> Tuple[T, T]:
+    "prelu backward"
     dtype = tensor_dtype_to_np_dtype(g.get_type(x))
     zero = g.make_initializer("zero", np.array([0], dtype=dtype))
     xg0 = g.op.Greater(x, zero, name="_prelu_kernel_backward")
@@ -1942,6 +2027,7 @@ def aten__prelu_kernel_backward(
 def aten_relu(
     g: GraphBuilder, sts: bool, outputs: List[str], x: T, inplace: bool = False
 ) -> T:
+    "relu"
     assert (
         not inplace
     ), f"inplace computation is not allowed with onnx{g.get_debug_msg()}"
@@ -1964,6 +2050,7 @@ def aten_rrelu_with_noise_backward(
     self_is_result: bool,
     name: str = "rrelu_with_noise_backward",
 ) -> T:
+    "rrelu"
     assert not training, f"Not implemented if training is True{g.get_debug_msg()}"
 
     # if training and upper - lower > 1e-6:
@@ -1982,6 +2069,7 @@ def aten_repeat(
     repeats: T,
     name: str = "repeat",
 ) -> T:
+    "repeat"
     assert isinstance(repeats, (tuple, list))
     if all_int(repeats):
         irep = np.array(repeats, dtype=np.int64)
@@ -2014,6 +2102,7 @@ def aten_repeat(
 
 
 def aten_rsqrt(g: GraphBuilder, sts: bool, outputs: List[str], x: T) -> T:
+    "rqsrt"
     ext = g.make_node("Sqrt", [x], name="rsqrt")
     res = g.make_node("Reciprocal", ext, outputs, name="rsqrt")
     if sts:
@@ -2022,6 +2111,7 @@ def aten_rsqrt(g: GraphBuilder, sts: bool, outputs: List[str], x: T) -> T:
 
 
 def aten_round(g: GraphBuilder, sts: bool, outputs: List[str], x: T) -> T:
+    "round"
     res = g.make_node("Round", [x], outputs)
     if sts:
         set_type_shape_unary_op(g, outputs[0], x)
@@ -2036,6 +2126,7 @@ def aten_rsub(
     y: T,
     alpha: float = 1,
 ) -> T:
+    "rsub"
     assert alpha == 1, f"Not implemented with alpha={alpha}"
     return aten_sub(g, sts, outputs, y, x, name="rsub")
 
@@ -2048,6 +2139,7 @@ def aten_rsub_Scalar(
     y: T,
     alpha: float = 1,
 ) -> T:
+    "rsub"
     assert alpha == 1, f"Not implemented with alpha={alpha}"
     return aten_sub(g, sts, outputs, y, x, name="rsub_Scalar")
 
@@ -2060,6 +2152,7 @@ def aten_setitem(
     indices: Tuple[Any, ...],
     values: T,
 ) -> T:
+    "scatter"
     if (
         isinstance(indices, tuple)
         and len(indices) == 2
@@ -2093,6 +2186,7 @@ def aten_setitem(
 
 
 def aten_sigmoid(g: GraphBuilder, sts: bool, outputs: List[str], x: T) -> T:
+    "sigmoid"
     res = g.op.Sigmoid(x, outputs=outputs)
     if sts:
         set_type_shape_unary_op(g, outputs[0], x)
@@ -2103,6 +2197,8 @@ def aten_sigmoid_backward(
     g: GraphBuilder, sts: bool, outputs: List[str], out_grad: T, y: T
 ) -> T:
     """
+    sigmoid backward
+
     See https://github.com/pytorch/pytorch/blob/main/torch/_decomp/decompositions.py#L108.
     conj_physical = identity for real number.
 
@@ -2125,6 +2221,7 @@ def aten_sigmoid_backward(
 def aten_silu(
     g: GraphBuilder, sts: bool, outputs: List[str], x: T, inplace: bool = False
 ) -> T:
+    "silu"
     assert (
         not inplace
     ), f"inplace computation is not allowed with onnx{g.get_debug_msg()}"
@@ -2135,6 +2232,7 @@ def aten_silu(
 
 
 def aten_sin(g: GraphBuilder, sts: bool, outputs: List[str], x: T, name="sin") -> T:
+    "sin"
     res = g.make_node("Sin", [x], outputs, name=name)
     if sts:
         set_type_shape_unary_op(g, outputs[0], x)
@@ -2142,6 +2240,7 @@ def aten_sin(g: GraphBuilder, sts: bool, outputs: List[str], x: T, name="sin") -
 
 
 def aten_sinh(g: GraphBuilder, sts: bool, outputs: List[str], x: T) -> T:
+    "sinh"
     res = g.make_node("Sinh", [x], outputs)
     if sts:
         set_type_shape_unary_op(g, outputs[0], x)
@@ -2158,6 +2257,7 @@ def aten_slice_Tensor(
     end: Optional[int] = None,
     step: Optional[int] = None,
 ) -> T:
+    "slice"
     assert isinstance(dim, int), f"aten_slice_Tensor not implemented for dim={dim!r}"
     assert g.is_dynamic_dimension(
         start
@@ -2205,6 +2305,7 @@ def aten_slice_backward(
     step: int,
     name: str = "slice_backward",
 ) -> T:
+    "slice backward"
     assert (
         step == 1
     ), f"slice_backward not implemented for step={step}{g.get_debug_msg()}"
@@ -2286,6 +2387,7 @@ def _aten_slice_scatter_static(
     step: Optional[int] = None,
     name="slice_scatter_static",
 ) -> T:
+    "slice scatter"
     assert g.has_shape(
         x
     ), f"This implementation only works if shape of {x!r} is known{g.get_debug_msg()}"
@@ -2373,6 +2475,7 @@ def _aten_slice_scatter_dynamic(
     step: Optional[int] = None,
     name="slice_scatter_dynamic",
 ) -> T:
+    "slice scatter"
     # step 1
     assert start is None or g.is_dynamic_dimension(
         start
@@ -2441,7 +2544,7 @@ def aten_slice_scatter(
     step: Optional[int] = None,
     name: Optional[str] = None,
 ) -> T:
-
+    "slice scatter"
     if g.has_shape(x) and is_static_shape(g.get_shape(x)):
         return _aten_slice_scatter_static(
             g,
@@ -2477,6 +2580,7 @@ def aten_softmax(
     dim: int = -1,
     dtype: Optional["torch.dtype"] = None,  # noqa: F821
 ) -> T:
+    "softmax"
     if dtype is not None:
         itype = torch_dtype_to_onnx_dtype(dtype)
         xc = g.op.Cast(x, to=itype, name="softmax")
@@ -2497,6 +2601,7 @@ def aten__softmax(
     dim: int = -1,
     half_to_float: bool = False,
 ) -> T:
+    "softmax"
     assert not half_to_float, f"Unexpected value for half_to_float={half_to_float!r}"
     res = g.op.Softmax(x, axis=dim, outputs=outputs, name="_softmax")
     if sts:
@@ -2513,6 +2618,7 @@ def aten__softmax_backward_data(
     dim: int,
     input_dtype: Optional["torch.dtype"] = None,  # noqa: F821
 ) -> T:
+    "softmax backward"
     if input_dtype is not None:
         itype = torch_dtype_to_onnx_dtype(input_dtype)
         grad_outputc = g.op.Cast(
@@ -2541,6 +2647,7 @@ def aten__softmax_backward_data(
 
 
 def aten_sqrt(g: GraphBuilder, sts: bool, outputs: List[str], x: T) -> T:
+    "sqrt"
     res = g.make_node("Sqrt", [x], name="sqrt")
     if sts:
         set_type_shape_unary_op(g, outputs[0], x)
@@ -2550,6 +2657,7 @@ def aten_sqrt(g: GraphBuilder, sts: bool, outputs: List[str], x: T) -> T:
 def aten_sub(
     g: GraphBuilder, sts: bool, outputs: List[str], x: T, y: T, name="sub"
 ) -> T:
+    "sub"
     x, y = prepare_inputs_homogeneous_operator(g, x, y)
     res = g.op.Sub(x, y, outputs=outputs, name=name)
     if sts:
@@ -2560,6 +2668,7 @@ def aten_sub(
 def aten_sub_Tensor(
     g: GraphBuilder, sts: bool, outputs: List[str], x: T, y: T, alpha: float
 ) -> T:
+    "sub"
     assert (
         alpha == 1
     ), f"sub_Tensor not implemented for alpha={alpha}{g.get_debug_msg()}"
@@ -2576,6 +2685,7 @@ def aten_sum(
     dtype: Optional["torch.dtype"] = None,  # noqa: F821
     name="sum",
 ) -> T:
+    "reducesum"
     if dtype is not None:
         itype = torch_dtype_to_onnx_dtype(dtype)
         xc = g.op.Cast(x, to=itype)
@@ -2607,6 +2717,7 @@ def aten_sum_dim_IntList(
     keepdim: bool,
     dtype: Optional["torch.dtype"] = None,  # noqa: F821
 ) -> T:
+    "reducesum"
     if dtype is None:
         return aten_sum(g, sts, outputs, x, dim, keepdim)
 
@@ -2628,6 +2739,7 @@ def aten__to_copy(
     non_blocking=False,
     memory_format=None,
 ) -> T:
+    "identity"
     import torch
 
     assert layout in (
@@ -2650,6 +2762,7 @@ def aten__to_copy(
 
 
 def aten_t(g: GraphBuilder, sts: bool, outputs: List[str], x: T, name: str = "t") -> T:
+    "transpose"
     res = g.op.Transpose(x, perm=[1, 0], outputs=outputs, name=name)
     if sts:
         g.set_type(res, g.get_type(x))
@@ -2672,6 +2785,7 @@ def aten_threshold_backward(
     threshold: float,
     name: str = "threshold_backward",
 ) -> T:
+    "lessorequal"
     dtype = tensor_dtype_to_np_dtype(g.get_type(grad_output))
     le = g.op.LessOrEqual(x, np.array([threshold], dtype=dtype), name=name)
     res = g.op.Where(
@@ -2684,6 +2798,7 @@ def aten_threshold_backward(
 
 
 def aten_tan(g: GraphBuilder, sts: bool, outputs: List[str], x: T) -> T:
+    "tan"
     res = g.make_node("Tan", [x], outputs)
     if sts:
         set_type_shape_unary_op(g, outputs[0], x)
@@ -2691,6 +2806,7 @@ def aten_tan(g: GraphBuilder, sts: bool, outputs: List[str], x: T) -> T:
 
 
 def aten_tanh(g: GraphBuilder, sts: bool, outputs: List[str], x: T) -> T:
+    "tanh"
     res = g.make_node("Tanh", [x], outputs)
     if sts:
         set_type_shape_unary_op(g, outputs[0], x)
@@ -2700,6 +2816,7 @@ def aten_tanh(g: GraphBuilder, sts: bool, outputs: List[str], x: T) -> T:
 def aten_tanh_backward(
     g: GraphBuilder, sts: bool, outputs: List[str], out_grad: T, y: T
 ) -> T:
+    "tanh backward"
     # out_grad * (1 - y * y)
     dtype = tensor_dtype_to_np_dtype(g.get_type(y))
     yy = g.op.Pow(y, np.array([2], dtype=np.int64), name="tanh_backward")
@@ -2772,6 +2889,7 @@ def aten_tensor(
     x: T,
     indices: Optional[Tuple[Any, ...]] = None,
 ) -> T:
+    "[..., :, ...]"
     if indices is None:
         # x is some data to convert into a Tensor
         if isinstance(x, list) and all_int_or_float(x):
@@ -2801,6 +2919,7 @@ def aten_tensor(
 def aten_transpose(
     g: GraphBuilder, sts: bool, outputs: List[str], input_name: T, dim0: int, dim1: int
 ) -> T:
+    "transpose"
     perm = list(range(g.rank(input_name)))
     perm[dim0], perm[dim1] = perm[dim1], perm[dim0]
     res = g.make_node("Transpose", [input_name], outputs, perm=perm)
@@ -2823,10 +2942,12 @@ def aten_transpose_int(
     dim0: int,
     dim1: int,
 ) -> T:
+    "transpose"
     return aten_transpose(g, sts, outputs, input_name, dim0, dim1)
 
 
 def aten_truediv(g: GraphBuilder, sts: bool, outputs: List[str], x: T, y: T) -> T:
+    "truediv"
     x, y = prepare_inputs_homogeneous_operator(g, x, y)
     res = g.op.Div(x, y, outputs=outputs, name="truediv")
     if sts:
@@ -2835,6 +2956,7 @@ def aten_truediv(g: GraphBuilder, sts: bool, outputs: List[str], x: T, y: T) -> 
 
 
 def aten_unsqueeze(g: GraphBuilder, sts: bool, outputs: List[str], x: T, dim: int) -> T:
+    "unsqueeze"
     assert isinstance(dim, int), f"Not implemented for dim={dim!r}"
     res = g.op.UnsqueezeAnyOpset(x, np.array([dim], dtype=np.int64), outputs=outputs)
     if sts:
@@ -2856,6 +2978,7 @@ def aten_view(
     size: T,
     node_name: str = "view",
 ) -> T:
+    "slice"
     if isinstance(size, (int, tuple, list)):
         asize = [size] if isinstance(size, int) else list(size)
         if is_static_shape(asize):
@@ -2885,6 +3008,7 @@ def aten_view(
 def aten__unsafe_view(
     g: GraphBuilder, sts: bool, outputs: List[str], x: T, size: T
 ) -> T:
+    "slice"
     return aten_view(g, sts, outputs, x, size, node_name="_unsafe_view")
 
 
@@ -2900,6 +3024,7 @@ def aten_zeros(
     requires_grad: bool = False,
     name: str = "zeros",
 ) -> T:
+    "constantofshape"
     return aten_full(
         g,
         sts,
@@ -2918,6 +3043,7 @@ def aten_zeros(
 def prims_add(
     g: GraphBuilder, sts: bool, outputs: List[str], x: T, y: T, name="prims_add"
 ) -> T:
+    "add"
     return aten_add(g, sts, outputs, x, y, name=name)
 
 
@@ -2931,6 +3057,7 @@ def prims_amax(
     output_dtype: Optional["torch.dtype"] = None,  # noqa: F821
     name: str = "prims_amax",
 ) -> T:
+    "reducemax"
     assert (
         output_dtype is None
     ), f"not implemented when output_dtype={output_dtype!r}{g.get_debug_msg()}"
@@ -2966,6 +3093,8 @@ def prims_broadcast_in_dim(
     broadcast_dimensions: List[int],
 ) -> T:
     """
+    broadcast
+
     ::
 
         s = list(shape)
@@ -3017,6 +3146,7 @@ def prims_cat(
     dim: int = 0,
     name: str = "prims_cat",
 ) -> T:
+    "concat"
     return aten_cat(g, sts, outputs, tensors, dim=dim, name=name)
 
 
@@ -3027,6 +3157,7 @@ def prims_clone(
     x: T,
     memory_format: Optional[str] = None,
 ) -> T:
+    "identity"
     return aten_clone(
         g, sts, outputs, x, memory_format=memory_format, name="prims_clone"
     )
@@ -3040,6 +3171,7 @@ def prims_convert_element_type(
     dtype: "torch.dtype",  # noqa: F821
     name: str = "prims_convert_element_type",
 ) -> T:
+    "cast"
     assert (
         dtype is not None
     ), f"dtype cannot be none for prims_convert_element_type{g.get_debug_msg()}"
@@ -3059,6 +3191,7 @@ def prims_collapse_view(
     end: int,
     name: str = "prims_collapse_view",
 ) -> T:
+    "reshape"
     assert g.has_shape(
         x
     ), f"collapse_view not implemented if x has no shape{g.get_debug_msg()}"
@@ -3086,12 +3219,14 @@ def prims_collapse_view(
 def prims_cos(
     g: GraphBuilder, sts: bool, outputs: List[str], x: T, name: str = "prims_cos"
 ) -> T:
+    "cos"
     return aten_cos(g, sts, outputs, x, name=name)
 
 
 def prims_div(
     g: GraphBuilder, sts: bool, outputs: List[str], x: T, y: T, name: str = "prims_div"
 ) -> T:
+    "div"
     return aten_div(g, sts, outputs, x, y, name=name)
 
 
@@ -3107,6 +3242,7 @@ def prims_empty_strided(
     requires_grad: bool = False,
     name: str = "prims_empty_strided",
 ) -> T:
+    "constantofshape"
     # strided is unused.
     return aten_empty_strided(
         g,
@@ -3125,18 +3261,21 @@ def prims_empty_strided(
 def prims_eq(
     g: GraphBuilder, sts: bool, outputs: List[str], x: T, y: T, name: str = "prims_eq"
 ) -> T:
+    "equal"
     return aten_eq(g, sts, outputs, x, y, name=name)
 
 
 def prims_exp(
     g: GraphBuilder, sts: bool, outputs: List[str], x: T, name: str = "prims_exp"
 ) -> T:
+    "exp"
     return aten_exp(g, sts, outputs, x, name=name)
 
 
 def prims_gt(
     g: GraphBuilder, sts: bool, outputs: List[str], x: T, y: T, name: str = "prims_gt"
 ) -> T:
+    "greater"
     return aten_gt(g, sts, outputs, x, y, name=name)
 
 
@@ -3151,6 +3290,7 @@ def prims_iota(
     device: Optional["torch.device"] = None,  # noqa: F821
     requires_grad: bool = False,
 ) -> T:
+    "arange"
     assert isinstance(
         length, int
     ), f"not implemented when length={length!r}{g.get_debug_msg()}"
@@ -3178,18 +3318,21 @@ def prims_iota(
 def prims_lt(
     g: GraphBuilder, sts: bool, outputs: List[str], x: T, y: T, name: str = "prims_lt"
 ) -> T:
+    "less"
     return aten_lt(g, sts, outputs, x, y, name=name)
 
 
 def prims_mul(
     g: GraphBuilder, sts: bool, outputs: List[str], x: T, y: T, name: str = "prims_mul"
 ) -> T:
+    "mul"
     return aten_mul(g, sts, outputs, x, y, name=name)
 
 
 def prims_neg(
     g: GraphBuilder, sts: bool, outputs: List[str], x: T, name="prims_neg"
 ) -> T:
+    "neg"
     return aten_neg(g, sts, outputs, x, name=name)
 
 
@@ -3201,12 +3344,14 @@ def prims_pow(
     exponent: T,
     name: str = "prims_pow",
 ) -> T:
+    "pow"
     return aten_pow_Tensor_Tensor(g, sts, outputs, x, exponent, name=name)
 
 
 def prims_rsqrt(
     g: GraphBuilder, sts: bool, outputs: List[str], x: T, name: str = "prims_rsqrt"
 ) -> T:
+    "rqsrt"
     res = g.op.Reciprocal(g.op.Sqrt(x, name=name), name=name, outputs=outputs)
     if sts:
         set_type_shape_unary_op(g, res, x)
@@ -3216,6 +3361,7 @@ def prims_rsqrt(
 def prims_sin(
     g: GraphBuilder, sts: bool, outputs: List[str], x: T, name: str = "prims_sin"
 ) -> T:
+    "sim"
     return aten_sin(g, sts, outputs, x, name=name)
 
 
@@ -3228,6 +3374,7 @@ def prims_split_dim(
     outer_length: int,
     name: str = "prims_split_dim",
 ):
+    "split"
     assert (
         len(outputs) == 1
     ), f"Expecting 1 outputs but got {outputs}{g.get_debug_msg()}"
@@ -3255,6 +3402,7 @@ def prims_split_dim(
 def prims_sub(
     g: GraphBuilder, sts: bool, outputs: List[str], x: T, y: T, name: str = "prims_sub"
 ) -> T:
+    "sub"
     return aten_sub(g, sts, outputs, x, y, name=name)
 
 
@@ -3267,6 +3415,7 @@ def prims_sum(
     keepdim: bool = False,
     output_dtype: Optional["torch.dtype"] = None,  # noqa: F821
 ) -> T:
+    "reducesum"
     return aten_sum(
         g, sts, outputs, x, dim, keepdim=keepdim, dtype=output_dtype, name="prims_sum"
     )
@@ -3275,6 +3424,7 @@ def prims_sum(
 def prims_transpose(
     g: GraphBuilder, sts: bool, outputs: List[str], input_name: T, perm: List[int]
 ) -> T:
+    "transpose"
     res = g.make_node("Transpose", [input_name], outputs, perm=list(perm))
     if sts:
         g.set_type(outputs[0], g.get_type(input_name))
@@ -3290,12 +3440,14 @@ def prims_transpose(
 
 
 def prims_view_of(g: GraphBuilder, sts: bool, outputs: List[str], x: T) -> T:
+    "identity"
     return g.op.Identity(x, outputs=outputs, name="prims_view_of")
 
 
 def prims_where(
     g: GraphBuilder, sts: bool, outputs: List[str], condition: T, x: T, other: T
 ) -> T:
+    "where"
     assert not (isinstance(x, (int, float)) and isinstance(other, (int, float))), (
         f"The two last arguments ({x}, {other}) are constant and cannot be used "
         f"to infer types{g.get_debug_msg}"

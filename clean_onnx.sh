@@ -15,3 +15,7 @@ rm _doc/examples/*.json
 rm _doc/examples/*.png
 rm _doc/examples/*.csv
 rm _doc/examples/*.xlsx
+rm _doc/examples/dummy*.onnx
+rm _doc/examples/*.opt.onnx
+rm _doc/examples/*.dynamo.onnx
+rm _doc/examples/*.script.onnx
