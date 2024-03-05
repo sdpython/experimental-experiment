@@ -206,6 +206,7 @@ class GraphBuilder:
     - `input_args: List[T]`: input tensors when the class is used to convert an existing model
     - `functions: List[FunctionProto]`: list of functions to add to the model
     - `value_info: List[ValueInfoProto]`: value info of the original model
+    - `dynamic_shapes: Union[Dict[str, Any], Tuple[Any]]]`: dynamic_shapes informations
 
     Computed attributes:
 
@@ -221,6 +222,8 @@ class GraphBuilder:
     - `dynamic_objects_rev: Dict[str, str]`: reverse dictionary to fasten lookups
     - `_cache_shape: Dict[key,str]`: cache concatenation of shapes
     - `_values: Dict[key,str]`: cache initializer value to merge those which are equal
+    - `_dynamic_alias: Dict[str,str]`: used when the user gives a different
+        name to the dynamic shapes
 
     Debugging attributes:
 
@@ -244,6 +247,7 @@ class GraphBuilder:
         verbose: int = 0,
         infer_shapes: bool = False,
         raise_list: Optional[Set[str]] = None,
+        dynamic_shapes: Optional[Union[Dict[str, Any], Tuple[Any]]] = None,
     ):
         import torch
 
@@ -256,6 +260,7 @@ class GraphBuilder:
         self.verbose = verbose
         self.ir_version = ir_version
         self._debug_msg = {}
+        self.dynamic_shapes = dynamic_shapes
         self.dynamic_objects = {}
         self.dynamic_objects_rev = {}
         self.functions = []
@@ -264,6 +269,7 @@ class GraphBuilder:
         self.constants_computed_ = {}
         self._cache_shape = {}
         self._values = {}
+        self._dynamic_alias = {}
 
         self.nodes = []
         self.initializers_dict = {}
@@ -278,6 +284,20 @@ class GraphBuilder:
         self._unique_names = set()
         self._unique_node_names = set()
         self.constants_ = {}
+
+        if self.dynamic_shapes:
+            for _, v in self.dynamic_shapes.items():
+                for __, vv in v.items():
+                    if "_Dim" in str(type(vv)):
+                        name = vv.__name__
+                    else:
+                        name = vv
+                    assert isinstance(name, str), (
+                        f"Unexpected type {type(v)}:{v} for dynamic "
+                        f"dimension in {_!r}, name is {name!r}"
+                    )
+                    if not self.has_dynamic_object(name):
+                        self.make_dynamic_object(name, self.torch.SymInt(name))
 
         if isinstance(target_opset_or_existing_proto, (int, dict)):
             # starts a model from nothing
@@ -1024,13 +1044,19 @@ class GraphBuilder:
             return True
         if not isinstance(dim, (int, self.torch.SymInt, str)):
             return False
+        if str(dim) in self._dynamic_alias:
+            dim = self._dynamic_alias[str(dim)]
         assert (
             not verify
             or is_static_dimension(dim)
             or str(dim) in self.dynamic_objects
             or str(dim) in self.dynamic_objects_rev
             or self.has_name(str(dim))
-        ), f"dim={dim!r} (type={type(dim)}) not in found in {self.dynamic_objects}{self.get_debug_msg()}"
+        ), (
+            f"dim={dim!r} (type={type(dim)}) not in found in "
+            f"{self.dynamic_objects}, self.dynamic_shapes={self.dynamic_shapes}, "
+            f"self._dynamic_alias={self._dynamic_alias}{self.get_debug_msg()}"
+        )
         return True
 
     def get_dynamic_dimension(self, dim: Any, keep_const: bool = True) -> Any:
@@ -1056,28 +1082,69 @@ class GraphBuilder:
         ), f"Unable to find dim={dim!r} in {self.dynamic_objects}{self.get_debug_msg()}"
         return name
 
-    def verify_dynamic_shape(self, shape: Any, for_onnx: bool = True) -> DYNAMIC_SHAPE:
+    def _get_dynamic_dimension(self, name: str, dim: int) -> Optional[str]:
+        if self.dynamic_shapes is None:
+            return None
+        if name not in self.dynamic_shapes:
+            return None
+        dyn = self.dynamic_shapes[name]
+        if dim not in dyn:
+            return None
+        v = dyn[dim]
+        if "_Dim" in str(type(v)):
+            name = v.__name__
+        else:
+            name = v
+        return name
+
+    def verify_dynamic_shape(
+        self, shape: Any, for_onnx: bool = True, name: Optional[str] = None
+    ) -> DYNAMIC_SHAPE:
         if is_static_shape(shape):
             return tuple(int(i) for i in shape)
         new_shape = []
-        for d in shape:
+        for dim, d in enumerate(shape):
             if isinstance(d, int):
                 new_shape.append(d)
                 continue
             if isinstance(d, (self.torch.SymInt, str)):
-                try:
-                    val_int = int(d)
-                    new_shape.append(val_int)
+                dyn_name = self._get_dynamic_dimension(name, dim)
+                if dyn_name is not None:
+                    new_shape.append(dyn_name)
                     continue
-                except (TypeError, ValueError):
+
+                value = None
+                try:
+                    dyn_val = str(d.node._expr)
+                    value = dyn_val
+                except AttributeError:
                     pass
-                assert str(d) in self.dynamic_objects_rev, (
+
+                if value is None:
+                    try:
+                        val_int = int(d)
+                        value = val_int
+                    except (TypeError, ValueError):
+                        pass
+
+                if isinstance(value, int):
+                    new_shape.append(value)
+                    continue
+
+                if value is None:
+                    value = str(d)
+
+                if value in self._dynamic_alias:
+                    value = self._dynamic_alias[value]
+
+                assert value in self.dynamic_objects_rev, (
                     f"Unable to find dimension {d!r} ({type(d)}) "
-                    f"in {self.dynamic_objects_rev}"
+                    f"in {self.dynamic_objects_rev} "
+                    f"or {self._dynamic_alias} "
                     f"{dir(d)}"
                     f"{self.get_debug_msg()}"
                 )
-                new_shape.append(str(d) if for_onnx else d)
+                new_shape.append(value if for_onnx else d)
                 continue
             if for_onnx and d is None:
                 new_shape.append(None)
@@ -1118,11 +1185,26 @@ class GraphBuilder:
 
         self.current_input += 1
         elem_type = self._get_type(elem_type)
-        dyn_shape = self.verify_dynamic_shape(shape)
+        dyn_shape = self.verify_dynamic_shape(shape, name=input_name)
+
+        if shape is not None:
+            tuple_shape = tuple(shape)
+            assert len(tuple_shape) == len(
+                dyn_shape
+            ), f"mismatch between shape={shape}, dynamic_shape={dyn_shape}"
+            for a, b in zip(tuple_shape, dyn_shape):
+                if a == b:
+                    continue
+                sa = str(a)
+                sb = str(b)
+                if sa == sb:
+                    continue
+                self._dynamic_alias[sa] = sb
+
         self.inputs.append(oh.make_tensor_value_info(input_name, elem_type, dyn_shape))
         if self.verbose:
             print(
-                f"[GraphBuilder-{self._hash()}.make_tensor_input] {name}[{elem_type}:{shape}]"
+                f"[GraphBuilder-{self._hash()}.make_tensor_input] {input_name}[{elem_type}:{dyn_shape}]"
             )
         assert (
             self.as_function or elem_type
@@ -1183,14 +1265,16 @@ class GraphBuilder:
         elem_type = self._get_type(elem_type, False)
         if not self.as_function and elem_type == 0:
             raise RuntimeError(f"Undefined element type for {name!r}.")
-        shape = self.verify_shape(shape, name=name, elem_type=elem_type, for_onnx=True)
-        self.outputs.append(oh.make_tensor_value_info(name, elem_type, shape))
+        dyn_shape = self.verify_shape(
+            shape, name=name, elem_type=elem_type, for_onnx=True
+        )
+        self.outputs.append(oh.make_tensor_value_info(name, elem_type, dyn_shape))
         if self.verbose:
             print(
-                f"[GraphBuilder-{self._hash()}.make_tensor_output] {name}[{elem_type}:{shape}]"
+                f"[GraphBuilder-{self._hash()}.make_tensor_output] {name}[{elem_type}:{dyn_shape}]"
             )
-        if shape:
-            self.set_shape(name, shape, for_onnx=True)
+        if dyn_shape:
+            self.set_shape(name, dyn_shape, for_onnx=True)
         if elem_type:
             self.set_type(name, elem_type)
         return name
@@ -1216,7 +1300,8 @@ class GraphBuilder:
             f"Shape={shape} is not a shape (type={[type(i) for i in shape]}), "
             f"name={name!r}, elem_type={elem_type}{self.get_debug_msg()}"
         )
-        return self.verify_dynamic_shape(shape, for_onnx=for_onnx)
+        new_shape = self.verify_dynamic_shape(shape, for_onnx=for_onnx, name=name)
+        return new_shape
 
     def _get_symbol(self, i: str) -> str:
         k = 0
@@ -1541,9 +1626,10 @@ class GraphBuilder:
             self.set_shape(name, builder._known_shapes[init])
             self.set_type(name, builder._known_types[init])
 
-        assert len(input_names) == len(
-            builder.inputs
-        ), f"Inconsistency between input_names={input_names} and inputs={builder.inputs}."
+        assert len(input_names) == len(builder.inputs), (
+            f"Inconsistency between input_names={input_names} "
+            f"and inputs={builder.inputs}"
+        )
         for name, inp in zip(input_names, builder.inputs):
             new_name = self.unique_name(f"{prefix}{inp.name}")
             renaming[inp.name] = new_name
@@ -1691,6 +1777,8 @@ class GraphBuilder:
         rows = ["", "--DEBUG--", "--SHAPE--"]
         rows.append(f"dynamic_objects={pprint.pformat(self.dynamic_objects)}")
         rows.append(f"dynamic_objects_rev={pprint.pformat(self.dynamic_objects_rev)}")
+        rows.append(f"dynamic_alias={pprint.pformat(self._dynamic_alias)}")
+        rows.append(f"dynamic_shapes={pprint.pformat(self.dynamic_shapes)}")
         rows.append("--TORCH-SHAPES--")
         for kk, vv in self._known_torch_value.items():
             rows.append(

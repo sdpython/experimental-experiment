@@ -114,12 +114,20 @@ def _make_builder_interpreter(
         import torch.export
 
     if isinstance(mod, torch.fx.GraphModule):
+        if verbose > 0:
+            print(f"[_make_builder_interpreter] use existing {type(mod)}")
         graph_module = mod
         weights = dict(graph_module.named_parameters())
         buffers = dict(graph_module.named_buffers())
         mapping = {}
     else:
         exported_mod = torch.export.export(mod, args, dynamic_shapes=dynamic_shapes)
+        if verbose > 0:
+            msg = ", ".join(f"{a.dtype}:{tuple(a.shape)})" for a in args)
+            print(f"[_make_builder_interpreter] args={msg}")
+            print(f"[_make_builder_interpreter] dynamic_shapes={dynamic_shapes}")
+            if verbose > 2:
+                print(f"[_make_builder_interpreter] exported_mod {exported_mod}")
         graph_module = exported_mod.graph_module
         try:
             weights = dict(exported_mod.named_parameters())
@@ -144,6 +152,7 @@ def _make_builder_interpreter(
         args=args,
         verbose=verbose,
         raise_list=raise_list,
+        dynamic_shapes=dynamic_shapes,
     )
 
     def retrieve(

@@ -79,7 +79,6 @@ def export_utils(
     remove_unused=False,
     constant_folding=True,
     verbose=0,
-    dynamic_shapes=None,
 ):
     import torch
 
@@ -97,7 +96,7 @@ def export_utils(
     onx = to_onnx(
         model,
         tuple(args),
-        input_names=["x" if dynamic_shapes else "input"],
+        input_names=["input"],
         options=OptimizationOptions(
             remove_unused=remove_unused,
             constant_folding=constant_folding,
@@ -105,7 +104,6 @@ def export_utils(
             patterns=None,
         ),
         verbose=verbose,
-        dynamic_shapes=dynamic_shapes,
     )
     with open(name, "wb") as f:
         f.write(onx.SerializeToString())
@@ -179,28 +177,6 @@ class TestOnnxExport(ExtTestCase):
         for name in names:
             ref = InferenceSession(name, providers=["CPUExecutionProvider"])
             results.append(ref.run(None, {"input": x})[0])
-        self.assertEqualArray(results[0], results[1])
-
-    @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
-    @unittest.skipIf(True, reason="not working")
-    @ignore_warnings((UserWarning, DeprecationWarning))
-    def test_simple_export_poold_dynamic(self):
-        import torch
-        from onnxruntime import InferenceSession
-
-        model, input_tensor = return_module_cls_pool()
-        batch = torch.export.Dim("batch")
-        names = export_utils(
-            "test_simple_export_pool_dynamic",
-            model,
-            input_tensor,
-            dynamic_shapes={"x": {0: batch}},
-        )
-        x = input_tensor.numpy()
-        results = []
-        for name in names:
-            ref = InferenceSession(name, providers=["CPUExecutionProvider"])
-            results.append(ref.run(None, {"x": x})[0])
         self.assertEqualArray(results[0], results[1])
 
     @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")

@@ -5,7 +5,7 @@ import types
 from typing import Any, Callable, Dict, List, Tuple, Union
 import numpy as np
 from onnx import TensorProto
-from ..xbuilder.shape_helper import all_int, is_static_shape
+from ..xbuilder.shape_helper import all_int
 from ..xbuilder._helper import make_hash
 from ..xbuilder._dtype_helper import torch_dtype_to_onnx_dtype
 from .aten_functions import find_function
@@ -786,7 +786,7 @@ class DynamoInterpreter:
                 if isinstance(v, self.torch.Tensor):
                     shape = tuple(v.shape)
                     dtype = self.builder._get_type(v.dtype)
-                    if is_static_shape(shape):
+                    if self.builder.is_dynamic_shape(shape):
                         self.builder.set_shape(r, shape, set_if_more_precise=True)
                     elif self.builder.has_rank(r):
                         assert len(shape) == self.builder.get_rank(r), (
