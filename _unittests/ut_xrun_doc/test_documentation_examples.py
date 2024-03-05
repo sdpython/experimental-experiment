@@ -116,14 +116,18 @@ class TestDocumentationExamples(ExtTestCase):
                 # "plot_convolutation_matmul.py",
                 # "plot_profile_existing_onnx.py",
                 # "test_plot_torch_dort.py",
-                "plot_torch_aot.py",
-                "plot_torch_dort.py",
+                "plot_torch_aot_201.py",
+                "plot_torch_dort_201.py",
                 # "plot_torch_export.py",
             }:
                 # too long
                 reason = "not working yet or too long"
 
-            if not reason and is_apple() and name in {"plot_convolutation_matmul.py"}:
+            if (
+                not reason
+                and is_apple()
+                and name in {"plot_convolutation_matmul_102.py"}
+            ):
                 reason = "dot is missing"
 
             if reason:
