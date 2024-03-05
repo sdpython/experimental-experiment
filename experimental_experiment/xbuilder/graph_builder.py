@@ -1148,9 +1148,20 @@ class GraphBuilder:
                 if value in self._dynamic_alias:
                     value = self._dynamic_alias[value]
 
+                if value not in self.dynamic_objects_rev:
+                    # The dynamic dimension does not seem to be registered.
+                    # Maybe it is constant.
+                    try:
+                        val_int = int(d)
+                        value = val_int
+                        new_shape.append(value)
+                        continue
+                    except (TypeError, ValueError):
+                        pass
+
                 assert value in self.dynamic_objects_rev, (
-                    f"Unable to find dimension {d!r} ({type(d)}) "
-                    f"in {self.dynamic_objects_rev} "
+                    f"value={value!r}, unable to find dimension {d!r} ({type(d)}) "
+                    f"(str(d)={str(d)!r}) in {self.dynamic_objects_rev} "
                     f"or {self._dynamic_alias} "
                     f"{dir(d)}"
                     f"{self.get_debug_msg()}"

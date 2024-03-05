@@ -16,13 +16,17 @@ def broadcast_shape(sh1: STATIC_SHAPE, sh2: STATIC_SHAPE) -> STATIC_SHAPE:
     """
     if sh1 == sh2:
         return sh1
+    if len(sh1) == 0:
+        return sh2
+    if len(sh2) == 0:
+        return sh1
     if sh1 == (1,) and len(sh2) >= 1:
         return sh2
     if sh2 == (1,) and len(sh1) >= 1:
         return sh1
     assert is_static_shape(sh1) and is_static_shape(
         sh2
-    ), f"Unexpected sh1={sh1}, sh2={sh2}"
+    ), "Not implemented for sh1={sh1}, sh2={sh2}"
     if len(sh1) == len(sh2):
         return tuple(max(i, j) for i, j in zip(sh1, sh2))
     shape = tuple(max(i, j) for i, j in zip(sh1, sh2))

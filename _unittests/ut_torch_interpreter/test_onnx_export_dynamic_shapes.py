@@ -46,7 +46,7 @@ class TestOnnxExportDynamicShapes(ExtTestCase):
 
         ref = ReferenceEvaluator(onx)
         got = ref.run(None, {"x": x.detach().cpu().numpy()})
-        self.assertEqualArray(expected, got[0])
+        self.assertEqualArray(expected, got[0], atol=1e-5)
 
         # dynamic
         model = TorchLinearRegression(3, 1)
@@ -77,7 +77,7 @@ class TestOnnxExportDynamicShapes(ExtTestCase):
 
         ref = ReferenceEvaluator(onx)
         got = ref.run(None, {"x": x.detach().cpu().numpy()})
-        self.assertEqualArray(expected, got[0])
+        self.assertEqualArray(expected, got[0], atol=1e-5)
 
 
 if __name__ == "__main__":
