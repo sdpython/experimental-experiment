@@ -13,6 +13,7 @@ API
     interpreter
     onnx_export
     aten_function
+    aten_method
     convert
     torch_helper
     torch_dynamo

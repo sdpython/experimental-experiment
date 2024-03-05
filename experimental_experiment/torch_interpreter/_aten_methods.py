@@ -24,12 +24,14 @@ T = str
 
 
 def aten_meth_bool(g: GraphBuilder, sts: bool, outputs: List[str], x: T) -> T:
+    "cast"
     import torch
 
     return aten_meth_to(g, sts, outputs, x, dtype=torch.bool)
 
 
 def aten_meth_clone(g: GraphBuilder, sts: bool, outputs: List[str], x: T) -> T:
+    "identity"
     assert x != outputs[0], (
         f"Input and output are the same x={x!r}, "
         f"outputs={outputs!r}{g.get_debug_msg()}"
@@ -38,28 +40,34 @@ def aten_meth_clone(g: GraphBuilder, sts: bool, outputs: List[str], x: T) -> T:
 
 
 def aten_meth_contiguous(g: GraphBuilder, sts: bool, outputs: List[str], x: T) -> T:
+    "identity"
     return g.make_node("Identity", [x], outputs, name=".contiguous")
 
 
 def aten_meth_cos(g: GraphBuilder, sts: bool, outputs: List[str], x: T) -> T:
+    "cos"
     return aten_cos(g, sts, outputs, x)
 
 
 def aten_meth_cpu(g: GraphBuilder, sts: bool, outputs: List[str], x: T) -> T:
+    "identity"
     return g.make_node("Identity", [x], outputs, name="cpu")
 
 
 def aten_meth_eq(g: GraphBuilder, sts: bool, outputs: List[str], x: T, y: T) -> T:
+    "equal"
     return aten_eq(g, sts, outputs, x, y)
 
 
 def aten_meth_expand(
     g: GraphBuilder, sts: bool, outputs: List[str], x: T, *dims: List[int]
 ) -> T:
+    "expand"
     return aten_expand(g, sts, outputs, x, dims, name=".expand")
 
 
 def aten_meth_float(g: GraphBuilder, sts: bool, outputs: List[str], x: T) -> T:
+    "cast"
     import torch
 
     return aten_meth_to(g, sts, outputs, x, dtype=torch.float32)
@@ -68,12 +76,14 @@ def aten_meth_float(g: GraphBuilder, sts: bool, outputs: List[str], x: T) -> T:
 def aten_meth_masked_fill(
     g: GraphBuilder, sts: bool, outputs: List[str], x: T, mask: T, value: Any
 ) -> T:
+    "constantofshape"
     return aten_meth_masked_fill_(g, sts, outputs, x, mask, value)
 
 
 def aten_meth_masked_fill_(
     g: GraphBuilder, sts: bool, outputs: List[str], x: T, mask: T, value: Any
 ) -> T:
+    "masked"
     value_cast = g.op.CastLike(value, x, name=".masked_fill")
     res = g.op.Where(mask, value_cast, x, name=".masked_fill")
     if sts:
@@ -103,6 +113,7 @@ def aten_meth_mean(
     dim: T,
     keepdim: bool = False,
 ) -> T:
+    "reducemean"
     if isinstance(dim, int):
         cst = g.make_initializer("", np.array([dim], dtype=np.int64))
     elif isinstance(dim, tuple):
@@ -124,6 +135,7 @@ def aten_meth_pow(
     x: T,
     exponent: T,
 ) -> T:
+    "pow"
     assert isinstance(
         x, str
     ), f"Unexpected type {type(x)} (x={x!r}, exponent={exponent!r})"
@@ -148,6 +160,7 @@ def aten_meth_pow(
 def aten_meth_repeat(
     g: GraphBuilder, sts: bool, outputs: List[str], x: T, *repeats: List[int]
 ) -> T:
+    "repeat"
     return aten_repeat(g, sts, outputs, x, repeats, name=".repeat")
 
 
@@ -159,6 +172,7 @@ def aten_meth_reshape(
     *shape: List[int],
     name: str = "reshape",
 ) -> T:
+    "reshape"
     if all_int(shape):
         # static version
         cst = g.make_initializer("", np.array(shape, dtype=np.int64))
@@ -175,6 +189,7 @@ def aten_meth_reshape(
 
 
 def aten_meth_sin(g: GraphBuilder, sts: bool, outputs: List[str], x: T) -> T:
+    "sin"
     return aten_sin(g, sts, outputs, x)
 
 
@@ -186,6 +201,7 @@ def aten_meth_size(
     dim: Optional[int] = None,
     name: str = ".size",
 ) -> T:
+    "size"
     if dim is None:
         res = g.op.Shape(x, name=f"{name}A", outputs=outputs)
         if sts:
@@ -205,6 +221,7 @@ def aten_meth_size(
 
 
 def aten_meth_t(g: GraphBuilder, sts: bool, outputs: List[str], x: T) -> T:
+    "transpose"
     return aten_t(g, sts, outputs, x, name=".t")
 
 
@@ -216,6 +233,7 @@ def aten_meth_to(
     *args: List[Any],
     **kwargs: Dict[str, Any],
 ) -> T:
+    "cast"
     import torch
 
     dtype = kwargs.get("dtype", None)
@@ -255,6 +273,7 @@ def aten_meth_to(
 def aten_meth_transpose(
     g: GraphBuilder, sts: bool, outputs: List[str], input_name: T, dim0: int, dim1: int
 ) -> T:
+    "transpose"
     perm = list(range(g.rank(input_name)))
     assert max(dim0, dim1) < len(perm), (
         f"aten_meth_transpose: unexpected perm={perm}, dim0={dim0}, dim1={dim1}, "
@@ -277,6 +296,7 @@ def aten_meth_transpose(
 def aten_meth_unsqueeze(
     g: GraphBuilder, sts: bool, outputs: List[str], input_name: T, dim: int
 ) -> T:
+    "unsqueeze"
     new_name = g.unique_name(f"{input_name}_axes")
     g.make_initializer(new_name, np.array([dim], dtype=np.int64))
     res = g.make_node("Unsqueeze", [input_name, new_name], outputs)
@@ -295,6 +315,7 @@ def aten_meth_unsqueeze(
 def aten_meth_view(
     g: GraphBuilder, sts: bool, outputs: List[str], input_name: T, *args: Sequence[int]
 ) -> T:
+    "view"
     if all_int(args):
         # static shape
         new_shape_name = g.unique_name(f"{input_name}_view_shape")
