@@ -250,12 +250,12 @@ class ExtTestCase(unittest.TestCase):
         rtol: float = 0,
         msg: Optional[str] = None,
     ):
-        self.assertEqual(expected.dtype, value.dtype)
-        self.assertEqual(expected.shape, value.shape)
         if hasattr(expected, "detach"):
             expected = expected.detach().cpu().numpy()
         if hasattr(value, "detach"):
             value = value.detach().cpu().numpy()
+        self.assertEqual(expected.dtype, value.dtype)
+        self.assertEqual(expected.shape, value.shape)
 
         try:
             assert_allclose(expected, value, atol=atol, rtol=rtol)
