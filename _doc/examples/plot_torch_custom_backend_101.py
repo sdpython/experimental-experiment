@@ -1,9 +1,9 @@
 """
 .. _l-plot-custom-backend:
 
-==========================
-A custom backend for torch
-==========================
+===============================
+101: A custom backend for torch
+===============================
 
 This example leverages the examples introduced on this page
 `Custom Backends <https://pytorch.org/docs/stable/torch.compiler_custom_backends.html>`_.

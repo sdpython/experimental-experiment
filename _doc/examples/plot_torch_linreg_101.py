@@ -1,7 +1,7 @@
 """
-=================
-Linear Regression
-=================
+=========================================
+101: Linear Regression and export to ONNX
+=========================================
 
 :epkg:`scikit-learn` and :epkg:`torch` to train a linear regression.
 

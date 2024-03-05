@@ -1,8 +1,8 @@
 """
 .. _l-plot-llama-bench:
 
-Measure LLAMA speed
-===================
+102: Measure LLAMA speed
+========================
 
 The script is calling many times the script ``experimental_experiment.torch_bench.dort_bench.py``.
 
