@@ -78,25 +78,25 @@ class TestDocumentationExamples(ExtTestCase):
                 continue
             reason = None
 
-            if name in {"plot_torch_export.py"}:
+            if name in {"plot_torch_export_201.py"}:
                 if sys.platform in {"win32"}:
                     # dynamo not supported on windows
                     reason = "windows not supported"
 
-            if name in {"plot_llama_bench.py", "plot_torch_custom_backend.py"}:
+            if name in {"plot_llama_bench_102.py", "plot_torch_custom_backend_101.py"}:
                 if sys.platform in {"win32", "darwin"}:
                     # dynamo not supported on windows
                     reason = "onnxruntime-training not available"
 
             if not reason and name in {
-                "plot_convolutation_matmul.py",
-                "plot_optimize.py",
+                "plot_convolutation_matmul_102.py",
+                "plot_optimize_101.py",
             }:
                 if sys.platform in {"win32", "darwin"}:
                     # dynamo not supported on windows
                     reason = "graphviz not installed"
 
-            if name in {"plot_llama_bench.py"}:
+            if name in {"plot_llama_bench_102.py"}:
                 if sys.platform in {"darwin"}:
                     reason = "apple not supported"
 
@@ -105,9 +105,9 @@ class TestDocumentationExamples(ExtTestCase):
                 and not has_rewriter
                 and name
                 in {
-                    "plot_torch_export.py",
-                    "plot_llama_diff_export.py",
-                    "plot_llama_diff_dort.py",
+                    "plot_torch_export_201.py",
+                    "plot_llama_diff_export_301.py",
+                    "plot_llama_diff_dort_301.py",
                 }
             ):
                 reason = "missing onnx-rewriter"

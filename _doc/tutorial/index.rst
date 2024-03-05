@@ -2,3 +2,8 @@
 ========
 Tutorial
 ========
+
+.. toctree::
+    
+    pytorch
+    onnx
