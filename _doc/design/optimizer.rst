@@ -22,7 +22,7 @@ leaving too much to do to the developper which tries to add a new pattern.
 Patterns
 ========
 
-Patterns must inherit from class:`PatternOptimization
+Patterns must inherit from :class:`PatternOptimization
 <experimental_experiment.xoptim.patterns.PatternOptimization>`.
 This class defines two methods.
 
@@ -33,7 +33,7 @@ PatternOptimization.match
 
     def match(
         self,
-        g: "GraphBuilderPatternOptimization",  # noqa: F821
+        g: "GraphBuilderPatternOptimization",
         node: NodeProto,
         matched: List[MatchResult],
     ) -> Optional[MatchResult]:
@@ -43,7 +43,7 @@ PatternOptimization.match
   it holds all the existing nodes, is able to return any information
   about type, shape, the node before, the node after another one.
 * ``node``: the matching must determine if some nodes around this one
-  are part of set of nodes this pattern optmizer can rewrite.
+  are part of set of nodes this pattern optimizer can rewrite.
   From there, the function explores wherever it needs,
   checking any condition it needs.
 * ``matched``: usually unused, it returns of nodes already matching
@@ -90,7 +90,7 @@ PatternOptimization.apply
 
     @classmethod
     def apply(
-        cls, g: "GraphBuilder", *nodes: Sequence[NodeProto]  # noqa: F821
+        cls, g: "GraphBuilder", *nodes: Sequence[NodeProto]
     ) -> List[NodeProto]:
 
 The method does the rewriting. It assumes it can happen.
@@ -298,8 +298,7 @@ There exists some predefined lists of patterns:
 * ``default``: includes all patterns using only standard onnx patterns.
 * ``onnxruntime``: patterns specific to :epkg:`onnxruntime`, the final model
   may be executed by onnxruntime and possibly only onnxruntime as it may
-  introduce patterns from :epkg:`Supported Operators and Data Types`
-  <https://github.com/microsoft/onnxruntime/blob/main/docs/OperatorKernels.md>`_
+  introduce patterns from :epkg:`Supported Operators and Data Types`.
 
 .. runpython::
     :showcode:
@@ -359,3 +358,9 @@ Function :func:`to_onnx <experimental_experiment.torch_interpreter.to_onnx>`
 converts a torch model into ONNX. While doing so, it stores the shape
 information coming from torch. There is no need to run shape inference
 on the onnx model it generates before optimizing it.
+
+Available Patterns
+==================
+
+They may be found at :ref:`l-pattern-optimization-onnx`
+and :ref:`l-pattern-optimization-ort`.

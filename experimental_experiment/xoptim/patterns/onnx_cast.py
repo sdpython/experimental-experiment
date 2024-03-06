@@ -17,13 +17,16 @@ class CastPattern(PatternOptimization):
     ) -> Optional[MatchResult]:
         if node.op_type != "Cast" or node.domain != "":
             return self.none()
+
         if not g.has_type(node.input[0]):
             itype = g.try_infer_type(node.input[0])
             if itype == 0:
                 return self.none(node, inspect.currentframe().f_lineno)
         else:
             itype = g.get_type(node.input[0])
+
         att = g.get_attribute(node, "to")
+
         if att.i != itype:
             return self.none(node, inspect.currentframe().f_lineno)
 
