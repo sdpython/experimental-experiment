@@ -359,8 +359,56 @@ converts a torch model into ONNX. While doing so, it stores the shape
 information coming from torch. There is no need to run shape inference
 on the onnx model it generates before optimizing it.
 
-Available Patterns
-==================
+Available Patterns and API
+==========================
 
-They may be found at :ref:`l-pattern-optimization-onnx`
+All patterns may be found at :ref:`l-pattern-optimization-onnx`
 and :ref:`l-pattern-optimization-ort`.
+
+When writing a pattern, walking along the graph or checking the shape
+is very common. Class :class:`GraphBuilderPatternOptimization
+<experimental_experiment.xoptim.GraphBuilderPatternOptimization>`
+provides the following methods.
+
+Opsets
+++++++
+
+Patterns must rewrite using the nodes of the opset defined in the model.
+
+* :meth:`main_opset <experimental_experiment.xoptim.GraphBuilderPatternOptimization.main_opset>`: returns the opset
+
+Shapes, Types
++++++++++++++
+
+* :meth:`has_type <experimental_experiment.xoptim.GraphBuilderPatternOptimization.has_type>`: tells if a result type is known
+* :meth:`get_type <experimental_experiment.xoptim.GraphBuilderPatternOptimization.get_type>`: returns a result type, fails if not known
+* :meth:`has_shape <experimental_experiment.xoptim.GraphBuilderPatternOptimization.has_shape>`: tells if a result shape is known
+* :meth:`get_shape <experimental_experiment.xoptim.GraphBuilderPatternOptimization.get_shape>`: returns a result shape, fails if not known
+* :meth:`has_rank <experimental_experiment.xoptim.GraphBuilderPatternOptimization.has_rank>`: tells if a result rank is known
+* :meth:`get_rank <experimental_experiment.xoptim.GraphBuilderPatternOptimization.get_rank>`: returns a result rank, fails if not known
+* :meth:`try_infer_type <experimental_experiment.xoptim.GraphBuilderPatternOptimization.try_infer_type>`: returns a type if it can be guessed
+* :meth:`try_infer_shape <experimental_experiment.xoptim.GraphBuilderPatternOptimization.try_infer_shape>`: returns a shape if it can be guessed
+
+Constants
++++++++++
+
+* :meth:`is_constant <experimental_experiment.xoptim.GraphBuilderPatternOptimization.is_constant>`:
+  tells if a node is a constant (it may be a constant, an initializer or any value built on other constants)
+* :meth:`get_computed_constant <experimental_experiment.xoptim.GraphBuilderPatternOptimization.get_computed_constant>`:
+  returns the constant, computes it is a constant built from other constants
+* :meth:`get_attribute <experimental_experiment.xoptim.GraphBuilderPatternOptimization.get_attribute>`:
+  returns an attribute of a node
+
+Graph
++++++
+
+* :meth:`next_nodes <experimental_experiment.xoptim.GraphBuilderPatternOptimization.next_nodes>`:
+  returns the node consuming this result
+* :meth:`node_before <experimental_experiment.xoptim.GraphBuilderPatternOptimization.node_before>`:
+  returns the node producing the result
+* :meth:`is_output <experimental_experiment.xoptim.GraphBuilderPatternOptimization.is_output>`:
+  tells if a result is an output
+* :meth:`is_used_by_subgraph <experimental_experiment.xoptim.GraphBuilderPatternOptimization.is_used_by_subgraph>`:
+  tells if a result is used by a subgraph
+* :meth:`is_used_more_than_once <experimental_experiment.xoptim.GraphBuilderPatternOptimization.is_used_more_than_once>`:
+  tells if a result is used more than once
