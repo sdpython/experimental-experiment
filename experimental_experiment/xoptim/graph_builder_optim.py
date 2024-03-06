@@ -492,12 +492,18 @@ class GraphBuilderPatternOptimization:
                 )
 
             if self.verbose > 0 and matches:
-                rev = max([(v, k) for k, v in durations.items()])
-                revs = f"{rev[-1]}:{rev[0]:.3f}"
-                print(
-                    f"[GraphBuilderPatternOptimization.optimize] applies {len(matches)} matches, "
-                    f"[0]={str(matches[0][-1])} - time={sum(durations.values()):.3f} | max_time={revs}"
-                )
+                if durations:
+                    rev = max([(v, k) for k, v in durations.items()])
+                    revs = f"{rev[-1]}:{rev[0]:.3f}"
+                    print(
+                        f"[GraphBuilderPatternOptimization.optimize] applies {len(matches)} matches, "
+                        f"[0]={str(matches[0][-1])} - time={sum(durations.values()):.3f} | max_time={revs}"
+                    )
+                else:
+                    print(
+                        f"[GraphBuilderPatternOptimization.optimize] applies {len(matches)} matches, "
+                        f"[0]={str(matches[0][-1])}"
+                    )
 
             # applies patterns (they must be disjoined)
 
