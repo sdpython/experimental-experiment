@@ -1,1 +1,1 @@
-from .graph_bulder_optim import GraphBuilderPatternOptimization
+from .graph_builder_optim import GraphBuilderPatternOptimization

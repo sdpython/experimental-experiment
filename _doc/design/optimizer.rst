@@ -3,7 +3,7 @@ Pattern Optimizer
 =================
 
 The pattern optimizer is implemented by class :class:`GraphBuilderPatternOptimization
-<experimental_experiment.xoptim.graph_builder_optim>`.
+<experimental_experiment.xoptim.GraphBuilderPatternOptimization>`.
 It searches for a specific sequence of nodes in the graph and
 replaces it by another one without changing the inputs or the long_outputs
 of the graph. The goal of the optimizer is to make the whole computation
@@ -32,14 +32,14 @@ PatternOptimization.match
 ::
 
     def match(
-            self,
-            g: "GraphBuilderPatternOptimization",  # noqa: F821
-            node: NodeProto,
-            matched: List[MatchResult],
-        ) -> Optional[MatchResult]:
+        self,
+        g: "GraphBuilderPatternOptimization",  # noqa: F821
+        node: NodeProto,
+        matched: List[MatchResult],
+    ) -> Optional[MatchResult]:
 
 * ``g`` is a :class:`GraphBuilderPatternOptimization
-  <experimental_experiment.xoptim.graph_builder_optim>`,
+  <experimental_experiment.xoptim.GraphBuilderPatternOptimization>`,
   it holds all the existing nodes, is able to return any information
   about type, shape, the node before, the node after another one.
 * ``node``: the matching must determine if some nodes around this one
@@ -125,6 +125,8 @@ An iteration is:
 
     builds all successors and predecessors
 
+    # Step 1: match
+
     for all patterns P:
 
         for all nodes n:
@@ -134,34 +136,226 @@ An iteration is:
                 if no node already scheduled to be rewritten by another match:
                     matches.append(r)
     
-        for all matches r:
-            apply the match r
+    # Step 2: apply
+
+    for all matches r:
+        apply the match r
+
+    # Step 3: clean
+
+    remove unused nodes
+    remove identity nodes
 
 This algorithm may apply more than one rewriting at each iteration
 but it guarantees the local structure when applying the rewriting was
 not altered by another one.
 
+Adding a pattern
+================
+
+See :pr:`80` about the addition of a new pattern.
+
 Example
 =======
 
-    .. gdot::
-        :script: DOT-SECTION
+Simple API
+++++++++++
 
-        from onnx_array_api.plotting.dot_plot import to_dot
+We consider the following simple model:
 
-        opset = onnx_opset_version() - 2
-        X, y = make_regression(100, n_features=10, bias=2, random_state=0)
-        X = X.astype(numpy.float32)
-        y = y.astype(numpy.float32)
-        w = (numpy.random.rand(y.shape[0]) + 1).astype(X.dtype)
-        X_train, _, y_train, __, w_train, ___ = train_test_split(X, y, w)
-        reg = LinearRegression()
-        reg.fit(X_train, y_train, sample_weight=w_train)
-        reg.coef_ = reg.coef_.reshape((1, -1))
-        onx = to_onnx(reg, X_train, target_opset=opset, black_op={"LinearRegressor"})
+.. runpython::
+    :showcode:
 
-        onx_loss = add_loss_output(
-            onx, weight_name="weight", score_name="elastic", l1_weight=0.1, l2_weight=0.9
-        )
+    import torch
+    from onnx_array_api.plotting.text_plot import onnx_simple_text_plot
+    from experimental_experiment.xbuilder import OptimizationOptions
+    from experimental_experiment.torch_interpreter import to_onnx
 
-        print("DOT-SECTION", to_dot(onx_loss))
+
+    class MLP(torch.nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.layers = torch.nn.Sequential(
+                torch.nn.Linear(10, 32),
+                torch.nn.ReLU(),
+                torch.nn.Linear(32, 1),
+            )
+
+        def forward(self, x):
+            return self.layers(x)
+
+
+    x = torch.rand(3, 10)
+    onx = to_onnx(
+        MLP(), (x,), input_names=["x"], options=OptimizationOptions(patterns=None)
+    )
+    with open("temp_doc_mlp.onnx", "wb") as f:
+        f.write(onx.SerializeToString())
+    print(onnx_simple_text_plot(onx))
+
+Which we can renders as follows:
+
+.. gdot::
+    :script: DOT-SECTION
+
+    import onnx
+    from onnx_array_api.plotting.dot_plot import to_dot
+
+    onx = onnx.load("temp_doc_mlp.onnx")
+
+    print("DOT-SECTION", to_dot(onx))
+
+We then apply the optimizations by writing the following code:
+
+.. runpython::
+    :showcode:
+
+    import onnx
+    from onnx_array_api.plotting.text_plot import onnx_simple_text_plot
+    from experimental_experiment.xbuilder import GraphBuilder
+
+    onx = onnx.load("temp_doc_mlp.onnx")
+
+    # The model is placed in a GraphBuilder.
+    # It creates dictionnaires to store shapes, ranks, types
+    # to make it easier to the optimizers to find the information
+    # they need. It still uses NodeProto to store nodes
+    gr = GraphBuilder(onx, infer_shapes=True)
+
+    # Let's optimize.
+    opt_onx = gr.to_onnx(optimize=True)
+    with open("temp_doc_mlp_opt.onnx", "wb") as f:
+        f.write(opt_onx.SerializeToString())
+    print(onnx_simple_text_plot(opt_onx))
+
+Which renders as follows:
+
+.. gdot::
+    :script: DOT-SECTION
+
+    import onnx
+    from onnx_array_api.plotting.dot_plot import to_dot
+
+    onx = onnx.load("temp_doc_mlp_opt.onnx")
+
+    print("DOT-SECTION", to_dot(onx))
+
+Verbosity
++++++++++
+
+.. runpython::
+    :showcode:
+
+    import onnx
+    from onnx_array_api.plotting.text_plot import onnx_simple_text_plot
+    from experimental_experiment.xbuilder import GraphBuilder
+
+    onx = onnx.load("temp_doc_mlp.onnx")
+
+    gr = GraphBuilder(onx, infer_shapes=True, verbose=1)
+    opt_onx = gr.to_onnx(optimize=True)
+
+With more verbosity:
+
+.. runpython::
+    :showcode:
+
+    import onnx
+    from onnx_array_api.plotting.text_plot import onnx_simple_text_plot
+    from experimental_experiment.xbuilder import GraphBuilder
+
+    onx = onnx.load("temp_doc_mlp.onnx")
+
+    gr = GraphBuilder(onx, infer_shapes=True, verbose=11)
+    opt_onx = gr.to_onnx(optimize=True)
+
+Select the pattern to use
++++++++++++++++++++++++++
+
+Class :class:`OptimizationOptions <experimental_experiment.xbuilder.OptimizationOptions>`
+is used to enable or disable patterns.
+
+.. runpython::
+    :showcode:
+
+    import onnx
+    from onnx_array_api.plotting.text_plot import onnx_simple_text_plot
+    from experimental_experiment.xbuilder import GraphBuilder, OptimizationOptions
+
+    onx = onnx.load("temp_doc_mlp.onnx")
+
+    gr = GraphBuilder(
+        onx,
+        infer_shapes=True,
+        optimization_options=OptimizationOptions(
+            patterns="TransposeTranspose,TransposeMatMul", verbose=1
+        ),
+    )
+    opt_onx = gr.to_onnx(optimize=True)
+
+There exists some predefined lists of patterns:
+
+* ``default``: includes all patterns using only standard onnx patterns.
+* ``onnxruntime``: patterns specific to :epkg:`onnxruntime`, the final model
+  may be executed by onnxruntime and possibly only onnxruntime as it may
+  introduce patterns from :epkg:`Supported Operators and Data Types`
+  <https://github.com/microsoft/onnxruntime/blob/main/docs/OperatorKernels.md>`_
+
+.. runpython::
+    :showcode:
+
+    import onnx
+    from onnx_array_api.plotting.text_plot import onnx_simple_text_plot
+    from experimental_experiment.xbuilder import GraphBuilder, OptimizationOptions
+
+    onx = onnx.load("temp_doc_mlp.onnx")
+
+    gr = GraphBuilder(
+        onx,
+        infer_shapes=True,
+        optimization_options=OptimizationOptions(
+            patterns="default+onnxruntime", verbose=1
+        ),
+    )
+    opt_onx = gr.to_onnx(optimize=True)
+
+Statistics
+++++++++++
+
+This can be used to see when a pattern is applied and how long it takes.
+
+.. runpython::
+    :showcode:
+
+    import pandas
+    import onnx
+    from onnx_array_api.plotting.text_plot import onnx_simple_text_plot
+    from experimental_experiment.xbuilder import GraphBuilder, OptimizationOptions
+
+    onx = onnx.load("temp_doc_mlp.onnx")
+
+    gr = GraphBuilder(
+        onx,
+        infer_shapes=True,
+        optimization_options=OptimizationOptions(patterns="default"),
+    )
+    stat = gr.optimize()
+
+    print(pandas.DataFrame(stat))
+
+Shape inference
+===============
+
+The optimizers require to know the shape to ensure they can rewrite
+some nodes and avoid producing a model which does not return the
+same results. If it is missing, some patterns cannot match for sure.
+They won't match.
+
+This information can be built by running shape inference
+on the onnx models. That's what is done is the previous examples.
+However, the best case is when this information comes from torch.
+
+Function :func:`to_onnx <experimental_experiment.torch_interpreter.to_onnx>`
+converts a torch model into ONNX. While doing so, it stores the shape
+information coming from torch. There is no need to run shape inference
+on the onnx model it generates before optimizing it.

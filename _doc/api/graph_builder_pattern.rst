@@ -18,7 +18,7 @@ Classes
 GraphBuilderPatternOptimization
 +++++++++++++++++++++++++++++++
 
-.. autoclass:: experimental_experiment.xoptim.graph_builder_optim.GraphBuilderPatternOptimization
+.. autoclass:: experimental_experiment.xoptim.GraphBuilderPatternOptimization
     :members:
 
 

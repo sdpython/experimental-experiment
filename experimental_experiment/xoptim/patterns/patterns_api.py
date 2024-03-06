@@ -1,5 +1,5 @@
 import os
-from typing import Callable, Iterator, List, Optional
+from typing import Callable, Iterator, List, Optional, Sequence
 from onnx import NodeProto
 
 
@@ -93,7 +93,7 @@ class PatternOptimization:
         Determines nodes around *node* which can be rewritten.
 
         :param g: is a :class:`GraphBuilderPatternOptimization
-            <experimental_experiment.xoptim.graph_builder_optim>`,
+            <experimental_experiment.xoptim.GraphBuilderPatternOptimization>`,
             it holds all the existing nodes, is able to return any information
             about type, shape, the node before, the node after another one.
         :param node: the matching must determine if some nodes around this one
