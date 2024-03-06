@@ -51,6 +51,18 @@ ExpandPattern
 .. autoclass:: experimental_experiment.xoptim.patterns.ExpandPattern
     :members:
 
+ExpandBroadcastPattern
+++++++++++++++++++++++
+
+.. autoclass:: experimental_experiment.xoptim.patterns.ExpandBroadcastPattern
+    :members:
+
+ExpandSwapPattern
++++++++++++++++++
+
+.. autoclass:: experimental_experiment.xoptim.patterns.ExpandSwapPattern
+    :members:
+
 MatMulReshape2Of3Pattern
 ++++++++++++++++++++++++
 

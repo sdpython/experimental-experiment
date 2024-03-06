@@ -1768,6 +1768,108 @@ class TestGraphPatternOptimization(ExtTestCase):
         got = opt_ref.run(None, feeds)[0]
         self.assertEqualArray(expected, got)
 
+    def test_expand_forward_exp(self):
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("Expand", ["X", "shape"], ["xs"]),
+                    oh.make_node("Exp", ["xs"], ["Z"]),
+                ],
+                "dummy",
+                [
+                    oh.make_tensor_value_info("X", TensorProto.FLOAT, [1, 5, 7]),
+                ],
+                [oh.make_tensor_value_info("Z", TensorProto.FLOAT, [3, 5, 7])],
+                [onh.from_array(np.array([3, 1, 1], dtype=np.int64), name="shape")],
+            )
+        )
+        check_model(model)
+        feeds = {"X": self._range(1, 5, 7)}
+        ref = ExtendedReferenceEvaluator(model)
+        expected = ref.run(None, feeds)[0]
+
+        gr = GraphBuilder(
+            model,
+            infer_shapes=True,
+            optimization_options=OptimizationOptions(patterns=["ExpandSwap"]),
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+        self.assertEqual(["Exp", "Expand"], [n.op_type for n in opt_onx.graph.node])
+        self.assertEqual(1, len(opt_onx.graph.initializer))
+
+        opt_ref = ExtendedReferenceEvaluator(opt_onx)
+        got = opt_ref.run(None, feeds)[0]
+        self.assertEqualArray(expected, got)
+
+    def test_expand_forward_pow(self):
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("Expand", ["X", "shape"], ["xs"]),
+                    oh.make_node("Pow", ["xs", "p"], ["Z"]),
+                ],
+                "dummy",
+                [
+                    oh.make_tensor_value_info("X", TensorProto.FLOAT, [1, 5, 7]),
+                ],
+                [oh.make_tensor_value_info("Z", TensorProto.FLOAT, [3, 5, 7])],
+                [
+                    onh.from_array(np.array([3, 1, 1], dtype=np.int64), name="shape"),
+                    onh.from_array(np.array([2], dtype=np.int64), name="p"),
+                ],
+            )
+        )
+        check_model(model)
+        feeds = {"X": self._range(1, 5, 7)}
+        ref = ExtendedReferenceEvaluator(model)
+        expected = ref.run(None, feeds)[0]
+
+        gr = GraphBuilder(
+            model,
+            infer_shapes=True,
+            optimization_options=OptimizationOptions(patterns=["ExpandSwap"]),
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+        self.assertEqual(["Pow", "Expand"], [n.op_type for n in opt_onx.graph.node])
+        self.assertEqual(2, len(opt_onx.graph.initializer))
+
+        opt_ref = ExtendedReferenceEvaluator(opt_onx)
+        got = opt_ref.run(None, feeds)[0]
+        self.assertEqualArray(expected, got)
+
+    def test_expand_forward_cast(self):
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("Expand", ["X", "shape"], ["xs"]),
+                    oh.make_node("Cast", ["xs"], ["Z"], to=TensorProto.FLOAT16),
+                ],
+                "dummy",
+                [
+                    oh.make_tensor_value_info("X", TensorProto.FLOAT, [1, 5, 7]),
+                ],
+                [oh.make_tensor_value_info("Z", TensorProto.FLOAT16, [3, 5, 7])],
+                [onh.from_array(np.array([3, 1, 1], dtype=np.int64), name="shape")],
+            )
+        )
+        check_model(model)
+        feeds = {"X": self._range(1, 5, 7)}
+        ref = ExtendedReferenceEvaluator(model)
+        expected = ref.run(None, feeds)[0]
+
+        gr = GraphBuilder(
+            model,
+            infer_shapes=True,
+            optimization_options=OptimizationOptions(patterns=["ExpandSwap"]),
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+        self.assertEqual(["Cast", "Expand"], [n.op_type for n in opt_onx.graph.node])
+        self.assertEqual(1, len(opt_onx.graph.initializer))
+
+        opt_ref = ExtendedReferenceEvaluator(opt_onx)
+        got = opt_ref.run(None, feeds)[0]
+        self.assertEqualArray(expected, got)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

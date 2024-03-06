@@ -200,3 +200,63 @@ def element_wise_op_cmp_types() -> Set[str]:
         "Less",
         "LessOrEqual",
     }
+
+
+def unary_like_op_types() -> Set[str]:
+    """
+    Returns the list of unary *like* operators.
+    They do not change the shape. They may change the type.
+
+    .. runpython::
+        :showcode:
+
+        import pprint
+        from experimental_experiment.xbuilder._onnx_helper import unary_like_op_types
+        pprint.pprint(unary_like_op_types())
+    """
+    return {
+        "Abs",
+        "Acos",
+        "Acosh",
+        "Asin",
+        "Asinh",
+        "Atan",
+        "Atanh",
+        "BitShift",
+        "Cast",
+        "CastLike",
+        "Ceil",
+        "Celu",
+        "Clip",
+        "Cos",
+        "Cosh",
+        "DequantizeLinear",
+        "DynamicQuantizeLinear",
+        "Elu",
+        "Erf",
+        "Exp",
+        "IsInf",
+        "Log",
+        "LogSoftmax",
+        "Neg",
+        "Not",
+        "PRelu",
+        "Pow",
+        "QuantizeLinear",
+        "Reciprocal",
+        "Relu",
+        "Round",
+        "Selu",
+        "Sign",
+        "Sin",
+        "Sinh",
+        "Softmax",
+        "SoftmaxCrossEntropyLoss",
+        "Softplus",
+        "Softsign",
+        "Sqrt",
+        "Tan",
+        "Tanh",
+        "ThresholdRelu",
+        "Trilu",
+    }
