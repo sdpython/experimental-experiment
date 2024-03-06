@@ -1,0 +1,7 @@
+======
+Design
+======
+
+.. toctree::
+    
+    optimizer

@@ -23,3 +23,4 @@ max-complexity = 10
 "experimental_experiment/torch_dynamo/__init__.py" = ["F401"]
 "experimental_experiment/torch_interpreter/__init__.py" = ["F401"]
 "experimental_experiment/xbuilder/__init__.py" = ["F401"]
+"experimental_experiment/xoptim/__init__.py" = ["F401"]

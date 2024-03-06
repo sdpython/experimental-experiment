@@ -2003,7 +2003,7 @@ class GraphBuilder:
         """
         Optimizes this graph with patterns.
         """
-        from ..xoptim.graph_builder_optim import GraphBuilderPatternOptimization
+        from ..xoptim import GraphBuilderPatternOptimization
 
         gro = GraphBuilderPatternOptimization(
             self,

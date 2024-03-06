@@ -89,6 +89,33 @@ class PatternOptimization:
         node: NodeProto,
         matched: List[MatchResult],
     ) -> Optional[MatchResult]:
+        """
+        Determines nodes around *node* which can be rewritten.
+
+        :param g: is a :class:`GraphBuilderPatternOptimization
+            <experimental_experiment.xoptim.graph_builder_optim>`,
+            it holds all the existing nodes, is able to return any information
+            about type, shape, the node before, the node after another one.
+        :param node: the matching must determine if some nodes around this one
+            are part of set of nodes this pattern optmizer can rewrite.
+            From there, the function explores wherever it needs,
+            checking any condition it needs.
+        :param matched: usually unused, it returns of nodes already matching
+            a pattern
+
+        The method must not modify the graph.
+        The method returns None if no match is found or an instance
+        of class :class:`MatchResult
+        <experimental_experiment.xoptim.patterns.MatchResult>`. It must contain:
+
+        * a list of nodes involved in the rewriting. It does not mean all
+          of them will be removed but all of them are needed to do the rewriting
+          and must not be impacted by other pattern optimizer.
+        * A function doing the rewriting (usually method *apply* of the pattern class).
+        * An existing node where the rewritten nodes can be inserted.
+          Knowing it makes it faster to rewriter. If not specified, the optimizer
+          will automatically determine the position of the new nodes.
+        """
         raise NotImplementedError(
             f"This function must be overloaded in class {self.__class__}."
         )
@@ -100,11 +127,39 @@ class PatternOptimization:
         msg: str = "",
     ):
         """
-        Called by every method `match` rejecting a pattern.
+        It may be useful which reason made a pattern matching fail.
+        Instead of returning None, method *match* can return the following
+        expression:
+
+        ::
+
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        By setting the verbosity (see next Section), the user may then know
+        which lines in the code returned None and which condition failed.
         """
         if node and self.verbose:
             if self.verbose >= 10:
                 print(
                     f"[{self.__class__.__name__}.match] NONE - line: {lineno}:"
-                    f"{os.path.split(self.__class__.__module__)[-1]}{msg}"
+                    f"{os.path.split(self.__class__.__module__)[-1]}, op_type={node.op_type}{msg}"
                 )
+
+    @classmethod
+    def apply(
+        cls, g: "GraphBuilder", *nodes: Sequence[NodeProto]  # noqa: F821
+    ) -> List[NodeProto]:
+        """
+        The method does the rewriting. It assumes it can happen.
+        It takes a list of nodes impacted by the rewriting assumes no other
+        pattern optimizer will be modify them. It receives the list of nodes
+        returned by method *apply*. Since it is a list of argument, method
+        *match* can include None values. The method returns the new nodes.
+        The optimizer considers that any node given to this function is removed
+        from the graph, and any node returned by it are added.
+        If a received node must be kept, it must be added to the list of returned node.
+
+        :param nodes: nodes returned by method *match*, there are then removed
+        :return: nodes to add to graph.
+        """
+        raise NotImplementedError(f"This function must be overloaded in class {cls}.")

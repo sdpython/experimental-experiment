@@ -376,6 +376,32 @@ class GraphBuilderPatternOptimization:
         :param remove_identity: remove identity nodes, it is better to keep it True,
             not doing it might prevent other patterns to find a set of nodes to optimize
         :return: the method returns informations about the applied processes.
+
+        The algorithm runs multiple iteration until the graph is not evolving
+        or `max_iter` is reached. By default, it is equal to the number of nodes.
+        An iteration is:
+
+        ::
+
+            matches = []
+
+            builds all successors and predecessors
+
+            for all patterns P:
+
+                for all nodes n:
+
+                    r = p.match(n)
+                    if r:
+                        if no node already scheduled to be rewritten by another match:
+                            matches.append(r)
+
+                for all matches r:
+                    apply the match r
+
+        This algorithm may apply more than one rewriting at each iteration
+        but it guarantees the local structure when applying the rewriting was
+        not altered by another one.
         """
 
         def _check(step):
