@@ -259,5 +259,4 @@ def unary_like_op_types() -> Set[str]:
         "Tanh",
         "ThresholdRelu",
         "Trilu",
-        "Where",
     }
