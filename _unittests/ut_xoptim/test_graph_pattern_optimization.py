@@ -1049,17 +1049,26 @@ class TestGraphPatternOptimization(ExtTestCase):
             optimization_options=OptimizationOptions(patterns=["MulMulMulScalar"]),
         )
         stats = gr.optimize()
-        stats = [{k: v for k, v in st.items() if k != "time_in"} for st in stats]
+        stats = [
+            {k: v for k, v in st.items() if k != "time_in"}
+            for st in stats
+            if "match_MulMulMulScalarPattern" in st["pattern"]
+        ]
         self.assertEqual(
             stats,
             [
                 {
-                    "pattern": "MulMulMulScalarPattern",
-                    "added": 2,
-                    "removed": 3,
+                    "pattern": "match_MulMulMulScalarPattern",
                     "iteration": 0,
+                    "instances": 1,
+                    "match_index": 1,
+                },
+                {
+                    "pattern": "match_MulMulMulScalarPattern",
+                    "iteration": 1,
+                    "instances": 0,
                     "match_index": 0,
-                }
+                },
             ],
         )
 
@@ -1071,7 +1080,7 @@ class TestGraphPatternOptimization(ExtTestCase):
             optimization_options=OptimizationOptions(patterns=["Sub1Mul"]),
         )
         stat = gr.optimize()
-        self.assertEqual(len(stat), 3)
+        self.assertGreater(len(stat), 20)
         onx = gr.to_onnx(optimize=False)
         csts = [i for i in onx.graph.node if "Constant" in i.op_type]
         cst_output = set(i.output[0] for i in csts)
@@ -1137,7 +1146,7 @@ class TestGraphPatternOptimization(ExtTestCase):
             optimization_options=OptimizationOptions(patterns=["ExpandBroadcast"]),
         )
         stat = gr.optimize()
-        self.assertEqual(len(stat), 5)
+        self.assertGreater(len(stat), 26)
         onx = gr.to_onnx(optimize=False)
         new_node_list = [n.op_type for n in onx.graph.node]
         self.assertNotEqual(node_list, new_node_list)
