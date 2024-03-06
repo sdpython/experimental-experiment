@@ -1,4 +1,5 @@
 import pprint
+import time
 from functools import partial
 from typing import Any, Dict, List, Optional, Sequence, Set, Tuple, Union
 import numpy as np
@@ -1947,7 +1948,8 @@ class GraphBuilder:
         Returns the list of applied processed.
         """
 
-        def _check(step):
+        def _check(stats, step):
+            begin = time.perf_counter()
             assert (
                 len(self.nodes) > 0
             ), f"The onnx model is empty (step {step}, no node).\n{self.get_debug_msg()}"
@@ -1961,41 +1963,83 @@ class GraphBuilder:
                 known |= set(node.output)
             for o in self.outputs:
                 assert o.name in known, f"Unknown output {o.name!r}, step {step!r} "
+            stats.append(
+                dict(pattern=f"check_{step}", time_in=time.perf_counter() - begin)
+            )
 
         statistics = []
 
-        _check("A")
+        _check(statistics, "A")
         if self.optimization_options.remove_identity:
+            begin = time.perf_counter()
             n = self.remove_identity_nodes()
-            _check("B")
-            if n:
-                statistics.append(dict(pattern="remove_identity_nodes", removed=n))
+            statistics.append(
+                dict(
+                    pattern="remove_identity_nodes",
+                    removed=n,
+                    time_in=time.perf_counter() - begin,
+                )
+            )
+            _check(statistics, "B")
         if self.optimization_options.remove_unused:
+            begin = time.perf_counter()
             n = self.remove_unused()
-            _check("C")
-            if n:
-                statistics.append(dict(pattern="remove_unused", removed=n))
+            statistics.append(
+                dict(
+                    pattern="remove_unused",
+                    removed=n,
+                    time_in=time.perf_counter() - begin,
+                )
+            )
+            _check(statistics, "C")
         if self.optimization_options.constant_folding:
+            begin = time.perf_counter()
             n = self.constant_folding()
-            _check("D")
-            if n:
-                statistics.append(dict(pattern="constant_folding", removed=n))
+            statistics.append(
+                dict(
+                    pattern="constant_folding",
+                    removed=n,
+                    time_in=time.perf_counter() - begin,
+                )
+            )
+            _check(statistics, "D")
             if self.optimization_options.remove_unused:
+                begin = time.perf_counter()
                 n = self.remove_unused()
-                _check("E")
-                if n:
-                    statistics.append(dict(pattern="remove_unused", removed=n))
+                statistics.append(
+                    dict(
+                        pattern="remove_unused",
+                        removed=n,
+                        time_in=time.perf_counter() - begin,
+                    )
+                )
+                _check(statistics, "E")
         if self.optimization_options.patterns:
             assert (
                 self.optimization_options.remove_unused
             ), "remove_unused must be positive for pattern optimizations"
+            n = len(self.nodes)
+            begin = time.perf_counter()
             res = self.optimize_with_patterns()
-            _check("F")
             statistics.extend(res)
+            statistics.append(
+                dict(
+                    pattern="pattern_optimization",
+                    removed=n - len(self.nodes),
+                    time_in=time.perf_counter() - begin,
+                )
+            )
+            _check(statistics, "F")
+            begin = time.perf_counter()
             n = self.remove_unused()
-            _check("G")
-            if n:
-                statistics.append(dict(pattern="remove_unused", removed=n))
+            statistics.append(
+                dict(
+                    pattern="remove_unused",
+                    removed=n,
+                    time_in=time.perf_counter() - begin,
+                )
+            )
+            _check(statistics, "G")
 
         return statistics
 
