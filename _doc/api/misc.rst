@@ -38,3 +38,8 @@ element_wise_op_cmp_types
 +++++++++++++++++++++++++
 
 .. autofunction:: experimental_experiment.xbuilder._onnx_helper.element_wise_op_cmp_types
+
+unary_like_op_types
++++++++++++++++++++
+
+.. autofunction:: experimental_experiment.xbuilder._onnx_helper.unary_like_op_types
