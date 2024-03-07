@@ -11,7 +11,6 @@ from ..xbuilder.shape_helper import (
     all_float,
     all_int,
     all_int_or_float,
-    all_int_or_str,
     is_static_dimension,
     is_static_shape,
 )
@@ -891,20 +890,15 @@ def aten_empty_like(
         torch.contiguous_format,
     ), f"empty_like not implemented for memory_format={memory_format}"
 
-    if g.has_shape(x) and is_static_shape(g.get_shape(x)):
-        # simple case
-        return aten_full(
-            g,
-            sts,
-            outputs,
-            g.get_shape(x),
-            0,
-            dtype=dtype or g.get_type(x),
-            name="empty_like",
-        )
-    raise RuntimeError(
-        f"empty_like is not implemented when shape is not fully known "
-        f"for {x!r}{g.get_debug_msg()}"
+    # simple case
+    return aten_full(
+        g,
+        sts,
+        outputs,
+        g.get_shape(x),
+        0,
+        dtype=dtype or g.get_type(x),
+        name="empty_like",
     )
 
 
@@ -1148,21 +1142,20 @@ def aten_full(
 
     new_shape = None
 
-    if isinstance(size, tuple):
-        assert all(
-            map(lambda x: isinstance(x, int), size)
-        ), f"Unexpected values for size={size}-{[type(s) for s in size]}"
+    if isinstance(size, tuple) and all_int(size):
         tsize = np.array(size, dtype=np.int64)
         new_shape = size
-    elif isinstance(size, list):
-        assert all_int_or_str(
-            size
-        ), f"Unexpected values for size={size}-{[type(s) for s in size]}"
+    elif isinstance(size, (list, tuple)):
         if all_int(size):
             tsize = np.array(size, dtype=np.int64)
             new_shape = size
         else:
             tsize = g.make_shape_from_results(size, name=name)
+    elif isinstance(size, str):
+        if g.has_shape(size) and is_static_shape(size):
+            tsize = np.array(g.get_shape(size), dtype=np.int64)
+        else:
+            tsize = g.op.Shape(size, name=name)
     else:
         raise RuntimeError(f"Unexpected type {type(size)} for size.")
 

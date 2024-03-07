@@ -222,15 +222,15 @@ def to_onnx(
 
     if verbose:
         t = time.perf_counter()
-        print(f"[to_onnx] done in {t - begin} s")
-        print("[to_onnx] start creating the node after")
+        print(f"[to_onnx] graph module done in {t - begin} s")
+        print("[to_onnx] start creating the onnx nodes")
         begin = t
 
     builder.process(graph_module, interpreter)
 
     if verbose:
         t = time.perf_counter()
-        print(f"[to_onnx] done in {t - begin} s")
+        print(f"[to_onnx] onnx nodes done in {t - begin} s")
         print("[to_onnx] start conversion to onnx (before optimization)")
         begin = t
 
@@ -238,7 +238,7 @@ def to_onnx(
 
     if verbose:
         t = time.perf_counter()
-        print(f"[to_onnx] done in {t - begin} s")
+        print(f"[to_onnx] to_onnx done in {t - begin} s")
 
     if return_builder:
         return onx, builder

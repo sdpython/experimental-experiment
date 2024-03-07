@@ -12,6 +12,7 @@ from .shape_helper import (
     DYNAMIC_SHAPE,
     STATIC_SHAPE,
     all_int,
+    all_int_or_str,
     is_static_dimension,
     is_static_shape,
 )
@@ -932,14 +933,17 @@ class GraphBuilder:
             if isinstance(d, int):
                 key.append(d)
             elif isinstance(d, (str, self.torch.SymInt)):
-                key.append(d)
-                name = str(d)
-                key.append(name)
+                value = self._torch_sym_int(d)
+                key.append(value)
             else:
                 raise RuntimeError(
                     f"Unexpected type {type(d)} for a dimension in {shape}{self.get_debug_msg()}"
                 )
 
+        assert all_int_or_str(key), (
+            f"Unexpected key {key} type are {[type(_) for _ in key]}, "
+            f"shape={shape}{self.get_debug_msg()}"
+        )
         key = tuple(["Concat"] + key)
         if key in self._cache_shape:
             # The same shape was already requested.
@@ -950,10 +954,19 @@ class GraphBuilder:
             if isinstance(d, int):
                 conc.append(self.make_initializer("", np.array([d], dtype=np.int64)))
             elif isinstance(d, (str, self.torch.SymInt)):
-                name = str(d)
+                value = self._torch_sym_int(d)
+                if value in self.dynamic_objects_rev:
+                    name = self.dynamic_objects_rev[value][0]
+                    assert not isinstance(name, tuple)
+                else:
+                    name = value
+                if isinstance(name, self.torch.SymInt):
+                    name = self._torch_sym_int(name)
+                    assert not isinstance(name, self.torch.SymInt)
+                assert not isinstance(name, self.torch.SymInt)
                 assert name in self.dynamic_objects or self.has_name(
                     name
-                ), f"Unknonw dynamic object {d}-{name!r}{self.get_debug_msg()}"
+                ), f"Unknown dynamic object {d!r}-{name!r}{self.get_debug_msg()}"
                 if self.has_rank(name):
                     assert (
                         self.get_rank(name) <= 1
@@ -1098,6 +1111,84 @@ class GraphBuilder:
             name = v
         return name
 
+    def _torch_sym_int(self, d):
+        assert isinstance(
+            d, (self.torch.SymInt, str)
+        ), f"unexpected type for d={d}, type={type(d)}"
+        value = None
+        try:
+            dyn_val = str(d.node._expr)
+            value = dyn_val
+        except AttributeError:
+            pass
+
+        if value is None:
+            # Is it an integer?
+            try:
+                val_int = int(d)
+                value = val_int
+            except (TypeError, ValueError):
+                pass
+        else:
+            # maybe an expression which is a single integer
+            try:
+                val_int = int(value)
+                value = val_int
+            except (TypeError, ValueError):
+                pass
+
+        if isinstance(value, int):
+            assert not isinstance(value, self.torch.SymInt)
+            return value
+
+        if value is None:
+            value = str(d)
+
+        if value in self._dynamic_alias:
+            value = self._dynamic_alias[value]
+
+        if value not in self.dynamic_objects_rev:
+            # The dynamic dimension does not seem to be registered.
+            # Maybe it is constant.
+            try:
+                val_int = int(d)
+                value = val_int
+                return value
+            except (TypeError, ValueError):
+                pass
+
+        if value in self.dynamic_objects:
+            assert not isinstance(value, self.torch.SymInt)
+            return value
+        assert value in self.dynamic_objects_rev, (
+            f"value={value!r}, unable to find dimension {d!r} ({type(d)}) "
+            f"(str(d)={str(d)!r}) in {self.dynamic_objects_rev} "
+            f"or {self._dynamic_alias} "
+            f"{dir(d)}"
+            f"{self.get_debug_msg()}"
+        )
+        assert not isinstance(value, self.torch.SymInt)
+        new_value = self.dynamic_objects_rev[value]
+        assert isinstance(new_value, list), (
+            f"Unexpected type {type(new_value)} for value={value!r}, d={d}"
+            f"{self.get_debug_msg()}"
+        )
+        assert len(new_value) == 1, (
+            f"Unexpected number of items in {new_value}, value={value!r}, d={d}"
+            f"{self.get_debug_msg()}"
+        )
+        final = new_value[0]
+        assert isinstance(final, tuple) or len(final) != 2, (
+            f"Unexpected type {type(final)}, final={final}, value={value}, d={d}"
+            f"{self.get_debug_msg()}"
+        )
+        name = final[0]
+        assert isinstance(name, str), (
+            f"Unexpected type {type(name)}, name={final}, value={value}, d={d}"
+            f"{self.get_debug_msg()}"
+        )
+        return name
+
     def verify_dynamic_shape(
         self, shape: Any, for_onnx: bool = True, name: Optional[str] = None
     ) -> DYNAMIC_SHAPE:
@@ -1117,56 +1208,7 @@ class GraphBuilder:
                     new_shape.append(dyn_name)
                     continue
 
-                value = None
-                try:
-                    dyn_val = str(d.node._expr)
-                    value = dyn_val
-                except AttributeError:
-                    pass
-
-                if value is None:
-                    # Is it an integer?
-                    try:
-                        val_int = int(d)
-                        value = val_int
-                    except (TypeError, ValueError):
-                        pass
-                else:
-                    # maybe an expression which is a single integer
-                    try:
-                        val_int = int(value)
-                        value = val_int
-                    except (TypeError, ValueError):
-                        pass
-
-                if isinstance(value, int):
-                    new_shape.append(value)
-                    continue
-
-                if value is None:
-                    value = str(d)
-
-                if value in self._dynamic_alias:
-                    value = self._dynamic_alias[value]
-
-                if value not in self.dynamic_objects_rev:
-                    # The dynamic dimension does not seem to be registered.
-                    # Maybe it is constant.
-                    try:
-                        val_int = int(d)
-                        value = val_int
-                        new_shape.append(value)
-                        continue
-                    except (TypeError, ValueError):
-                        pass
-
-                assert value in self.dynamic_objects_rev, (
-                    f"value={value!r}, unable to find dimension {d!r} ({type(d)}) "
-                    f"(str(d)={str(d)!r}) in {self.dynamic_objects_rev} "
-                    f"or {self._dynamic_alias} "
-                    f"{dir(d)}"
-                    f"{self.get_debug_msg()}"
-                )
+                value = self._torch_sym_int(d)
                 new_shape.append(value if for_onnx else d)
                 continue
             if for_onnx and d is None:

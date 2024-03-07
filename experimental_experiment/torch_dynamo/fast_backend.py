@@ -463,7 +463,7 @@ def onnx_custom_backend(
 
     if verbose:
         print(
-            f"[onnx_custom_backend] done in {time.perf_counter() - begin} with "
+            f"[onnx_custom_backend] to_onnx done in {time.perf_counter() - begin} with "
             f"{len(onx.graph.node)} nodes and {onx.functions} local functions."
         )
 
@@ -480,7 +480,8 @@ def onnx_custom_backend(
 
             if verbose:
                 print(
-                    f"[onnx_custom_backend] done in {time.perf_counter() - begin} with "
+                    f"[onnx_custom_backend] pre_ort_model_transforms "
+                    f"done in {time.perf_counter() - begin} with "
                     f"{len(onx.graph.node)} nodes and {len(onx.functions)} local functions."
                 )
 
@@ -511,7 +512,9 @@ def onnx_custom_backend(
     sess, run_options = _get_session(onx, backend, providers, exc=raise_exc)
 
     if verbose:
-        print(f"[onnx_custom_backend] done in {time.perf_counter() - begin}")
+        print(
+            f"[onnx_custom_backend] InferenceSession done in {time.perf_counter() - begin}"
+        )
 
     input_names = [i.name for i in onx.graph.input]
     output_names = [i.name for i in onx.graph.output]

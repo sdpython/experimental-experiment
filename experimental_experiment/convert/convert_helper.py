@@ -50,7 +50,9 @@ def optimize_model_proto(model_proto: ModelProto, verbose: int = 0) -> ModelProt
     model_proto = inline_model_proto(model_proto)
 
     if verbose:
-        print(f"[optimize_model_proto] done in {time.perf_counter() - begin} seconds.")
+        print(
+            f"[optimize_model_proto] inliner done in {time.perf_counter() - begin} seconds."
+        )
         print(
             f"[optimize_model_proto] starts optimize with "
             f"{len(model_proto.graph.node)} nodes and "
@@ -67,7 +69,9 @@ def optimize_model_proto(model_proto: ModelProto, verbose: int = 0) -> ModelProt
     )
 
     if verbose:
-        print(f"[optimize_model_proto] done in {time.perf_counter() - begin} seconds.")
+        print(
+            f"[optimize_model_proto] optimize done in {time.perf_counter() - begin} seconds."
+        )
         print(
             f"[optimize_model_proto] starts rewrite with "
             f"{len(model_proto.graph.node)} nodes and "
@@ -81,7 +85,7 @@ def optimize_model_proto(model_proto: ModelProto, verbose: int = 0) -> ModelProt
 
         if verbose:
             print(
-                f"[optimize_model_proto] done in {time.perf_counter() - begin} "
+                f"[optimize_model_proto] rewrite done in {time.perf_counter() - begin} "
                 f"seconds with {len(model_proto.graph.node)} and "
                 f"{len(model_proto.functions)} local functions"
             )
