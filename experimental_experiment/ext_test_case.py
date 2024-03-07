@@ -2,11 +2,10 @@ import os
 import sys
 import unittest
 import warnings
-from argparse import ArgumentParser, Namespace
 from contextlib import redirect_stderr, redirect_stdout
 from io import StringIO
 from timeit import Timer
-from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, Union
 
 import numpy
 from numpy.testing import assert_allclose
@@ -127,7 +126,7 @@ def measure_time(
         from experimental_experiment.ext_test_case import measure_time
 
         res = measure_time(lambda: cos(0.5))
-        pprint(res)
+        pprint.pprint(res)
 
     See `Timer.repeat <https://docs.python.org/3/library/
     timeit.html?timeit.Timer.repeat>`_
@@ -225,9 +224,23 @@ class ExtTestCase(unittest.TestCase):
         if not os.path.exists(name):
             raise AssertionError(f"File or folder {name!r} does not exists.")
 
-    def assertGreaterOrEqual(self, a, b):
+    def assertGreaterOrEqual(self, a, b, msg=None):
         if a < b:
-            return AssertionError(f"{a} < {b}, a not greater or equal than b.")
+            return AssertionError(
+                f"{a} < {b}, a not greater or equal than b\n{msg or ''}"
+            )
+
+    def assertEqualArrays(
+        self,
+        expected: Sequence[numpy.ndarray],
+        value: Sequence[numpy.ndarray],
+        atol: float = 0,
+        rtol: float = 0,
+        msg: Optional[str] = None,
+    ):
+        self.assertEqual(len(expected), len(value))
+        for a, b in zip(expected, value):
+            self.assertEqualArray(a, b, atol=atol, rtol=rtol)
 
     def assertEqualArray(
         self,
@@ -237,12 +250,19 @@ class ExtTestCase(unittest.TestCase):
         rtol: float = 0,
         msg: Optional[str] = None,
     ):
+        if hasattr(expected, "detach"):
+            expected = expected.detach().cpu().numpy()
+        if hasattr(value, "detach"):
+            value = value.detach().cpu().numpy()
         self.assertEqual(expected.dtype, value.dtype)
         self.assertEqual(expected.shape, value.shape)
+
         try:
             assert_allclose(expected, value, atol=atol, rtol=rtol)
         except AssertionError as e:
-            raise AssertionError(msg) from e
+            if msg:
+                raise AssertionError(msg) from e
+            raise
 
     def assertAlmostEqual(
         self,
@@ -330,95 +350,45 @@ class ExtTestCase(unittest.TestCase):
             raise AssertionError(msg) from e
 
 
-def get_parsed_args(
-    name: str,
-    scenarios: Optional[Dict[str, str]] = None,
-    description: Optional[str] = None,
-    epilog: Optional[str] = None,
-    number: int = 10,
-    repeat: int = 10,
-    warmup: int = 5,
-    sleep: float = 0.1,
-    tries: int = 2,
-    expose: Optional[str] = None,
-    **kwargs: Dict[str, Tuple[Union[int, str, float], str]],
-) -> Namespace:
+def get_figure(ax):
     """
-    Returns parsed arguments for examples in this package.
-
-    :param name: script name
-    :param scenarios: list of available scenarios
-    :param description: parser description
-    :param epilog: text at the end of the parser
-    :param number: default value for number parameter
-    :param repeat: default value for repeat parameter
-    :param warmup: default value for warmup parameter
-    :param sleep: default value for sleep parameter
-    :param expose: if empty, keeps all the parameters,
-        if not None, only publish kwargs contains, otherwise the list
-        of parameters to publish separated by a comma
-    :param kwargs: additional parameters,
-        example: `n_trees=(10, "number of trees to train")`
-    :return: parser
+    Returns the figure of a matplotlib figure.
     """
-    if description is None:
-        description = f"Available options for {name}.py."
-    if epilog is None:
-        epilog = ""
-    parser = ArgumentParser(prog=name, description=description, epilog=epilog)
-    if expose is not None:
-        to_publish = set(expose.split(",")) if expose else set()
-        if scenarios is not None:
-            rows = ", ".join(f"{k}: {v}" for k, v in scenarios.items())
-            parser.add_argument(
-                "-s", "--scenario", help=f"Available scenarios: {rows}."
-            )
-        if not to_publish or "number" in to_publish:
-            parser.add_argument(
-                "-n",
-                "--number",
-                help=f"number of executions to measure, default is {number}",
-                type=int,
-                default=number,
-            )
-        if not to_publish or "repeat" in to_publish:
-            parser.add_argument(
-                "-r",
-                "--repeat",
-                help=f"number of times to repeat the measure, default is {repeat}",
-                type=int,
-                default=repeat,
-            )
-        if not to_publish or "warmup" in to_publish:
-            parser.add_argument(
-                "-w",
-                "--warmup",
-                help=f"number of times to repeat the measure, default is {warmup}",
-                type=int,
-                default=warmup,
-            )
-        if not to_publish or "sleep" in to_publish:
-            parser.add_argument(
-                "-S",
-                "--sleep",
-                help=f"sleeping time between two configurations, default is {sleep}",
-                type=float,
-                default=sleep,
-            )
-        if not to_publish or "tries" in to_publish:
-            parser.add_argument(
-                "-t",
-                "--tries",
-                help=f"number of tries for each configurations, default is {tries}",
-                type=int,
-                default=tries,
-            )
-    for k, v in kwargs.items():
-        parser.add_argument(
-            f"--{k}",
-            help=f"{v[1]}, default is {v[0]}",
-            type=type(v[0]),
-            default=v[0],
-        )
+    if hasattr(ax, "get_figure"):
+        return ax.get_figure()
+    if len(ax.shape) == 0:
+        return ax.get_figure()
+    if len(ax.shape) == 1:
+        return ax[0].get_figure()
+    if len(ax.shape) == 2:
+        return ax[0, 0].get_figure()
+    raise RuntimeError(f"Unexpected shape {ax.shape} for axis.")
 
-    return parser.parse_args()
+
+def dump_dort_onnx(fn):
+    prefix = fn.__name__
+    folder = "tests_dump"
+    if not os.path.exists(folder):
+        os.mkdir(folder)
+
+    def wrapped(self):
+        value = os.environ.get("ONNXRT_DUMP_PATH", None)
+        os.environ["ONNXRT_DUMP_PATH"] = os.path.join(folder, f"{prefix}_")
+        res = fn(self)
+        os.environ["ONNXRT_DUMP_PATH"] = value or ""
+        return res
+
+    return wrapped
+
+
+def requires_torch(version: str, msg: str) -> Callable:
+    """
+    Skips a unit test if torch is not recent enough.
+    """
+    import packaging.version as pv
+    import torch
+
+    if pv.Version(torch.__version__) < pv.Version(version):
+        msg = f"Test does not work on azure pipeline (Windows). {msg}"
+        return unittest.skip(msg)
+    return lambda x: x

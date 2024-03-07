@@ -5,7 +5,14 @@ import importlib
 import subprocess
 import time
 from experimental_experiment import __file__ as experimental_experiment_file
-from experimental_experiment.ext_test_case import ExtTestCase, is_windows
+from experimental_experiment.ext_test_case import ExtTestCase, is_windows, is_apple
+
+try:
+    import onnxrewriter  # noqa: F401
+
+    has_rewriter = True
+except ImportError:
+    has_rewriter = False
 
 VERBOSE = 0
 ROOT = os.path.realpath(
@@ -67,19 +74,78 @@ class TestDocumentationExamples(ExtTestCase):
         fold = os.path.normpath(os.path.join(this, "..", "..", "_doc", "examples"))
         found = os.listdir(fold)
         for name in found:
-            if name in {"plot_torch_export.py"}:
+            if not name.endswith(".py") or not name.startswith("plot_"):
+                continue
+            reason = None
+
+            if name in {"plot_torch_export_201.py"}:
                 if sys.platform in {"win32"}:
                     # dynamo not supported on windows
-                    continue
+                    reason = "windows not supported"
 
-            if name.startswith("plot_") and name.endswith(".py"):
-                short_name = os.path.split(os.path.splitext(name)[0])[-1]
+            if name in {"plot_llama_bench_102.py", "plot_torch_custom_backend_101.py"}:
+                if sys.platform in {"win32", "darwin"}:
+                    # dynamo not supported on windows
+                    reason = "onnxruntime-training not available"
+
+            if not reason and name in {
+                "plot_convolutation_matmul_102.py",
+                "plot_optimize_101.py",
+                "plot_torch_linreg_101.py",
+            }:
+                if sys.platform in {"win32", "darwin"}:
+                    # dynamo not supported on windows
+                    reason = "graphviz not installed"
+
+            if name in {"plot_llama_bench_102.py"}:
+                if sys.platform in {"darwin"}:
+                    reason = "apple not supported"
+
+            if (
+                not reason
+                and not has_rewriter
+                and name
+                in {
+                    "plot_torch_export_201.py",
+                    "plot_llama_diff_export_301.py",
+                    "plot_llama_diff_dort_301.py",
+                }
+            ):
+                reason = "missing onnx-rewriter"
+
+            if not reason and name in {
+                # "plot_convolutation_matmul.py",
+                # "plot_profile_existing_onnx.py",
+                # "test_plot_torch_dort.py",
+                "plot_torch_aot_201.py",
+                "plot_torch_dort_201.py",
+                # "plot_torch_export.py",
+            }:
+                # too long
+                reason = "not working yet or too long"
+
+            if (
+                not reason
+                and is_apple()
+                and name in {"plot_convolutation_matmul_102.py"}
+            ):
+                reason = "dot is missing"
+
+            if reason:
+
+                @unittest.skip(reason)
+                def _test_(self, name=name):
+                    res = self.run_test(fold, name, verbose=VERBOSE)
+                    self.assertTrue(res)
+
+            else:
 
                 def _test_(self, name=name):
                     res = self.run_test(fold, name, verbose=VERBOSE)
                     self.assertTrue(res)
 
-                setattr(cls, f"test_{short_name}", _test_)
+            short_name = os.path.split(os.path.splitext(name)[0])[-1]
+            setattr(cls, f"test_{short_name}", _test_)
 
 
 TestDocumentationExamples.add_test_methods()

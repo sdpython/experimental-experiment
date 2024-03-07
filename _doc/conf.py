@@ -35,7 +35,7 @@ html_logo = "_static/logo.png"
 source_suffix = ".rst"
 master_doc = "index"
 project = "experimental-experiment"
-copyright = "2023"
+copyright = "2023-2024"
 author = "Xavier Dupré"
 version = __version__
 release = __version__
@@ -69,14 +69,20 @@ latex_elements = {
 }
 
 intersphinx_mapping = {
+    "experimental_experiment": (
+        "https://sdpython.github.io/doc/experimental-experiment/dev/",
+        None,
+    ),
     "matplotlib": ("https://matplotlib.org/", None),
     "numpy": ("https://numpy.org/doc/stable", None),
     "onnx": ("https://onnx.ai/onnx/", None),
+    "onnx_array_api": ("https://sdpython.github.io/doc/onnx-array-api/dev/", None),
+    "onnx_extended": ("https://sdpython.github.io/doc/onnx-extended/dev/", None),
     "pandas": ("https://pandas.pydata.org/pandas-docs/stable/", None),
     "python": (f"https://docs.python.org/{sys.version_info.major}", None),
     "scipy": ("https://docs.scipy.org/doc/scipy/reference", None),
     "sklearn": ("https://scikit-learn.org/stable/", None),
-    "sklearn-onnx": ("https://onnx.ai/sklearn-onnx/", None),
+    "skl2onnx": ("https://onnx.ai/sklearn-onnx/", None),
     "torch": ("https://pytorch.org/docs/stable/", None),
 }
 
@@ -106,14 +112,16 @@ sphinx_gallery_conf = {
 epkg_dictionary = {
     "DOT": "https://graphviz.org/doc/info/lang.html",
     "JIT": "https://en.wikipedia.org/wiki/Just-in-time_compilation",
+    "numpy": "https://numpy.org/",
     "onnx": "https://onnx.ai/onnx/",
     "onnx.helper": "https://onnx.ai/onnx/api/helper.html",
     "ONNX": "https://onnx.ai/",
     "ONNX Operators": "https://onnx.ai/onnx/operators/",
+    "onnxrt backend": "https://pytorch.org/docs/stable/onnx_dynamo_onnxruntime_backend.html",
     "onnxruntime": "https://onnxruntime.ai/",
     "onnxruntime-training": "https://onnxruntime.ai/docs/get-started/training-on-device.html",
-    "numpy": "https://numpy.org/",
     "onnx-array-api": ("https://sdpython.github.io/doc/onnx-array-api/dev/"),
+    "onnx-rewriter": "https://github.com/microsoft/onnxscript",
     "onnxscript": "https://github.com/microsoft/onnxscript",
     "python": "https://www.python.org/",
     "pytorch": "https://pytorch.org/",
@@ -121,6 +129,10 @@ epkg_dictionary = {
     "scipy": "https://scipy.org/",
     "sklearn-onnx": "https://onnx.ai/sklearn-onnx/",
     "sphinx-gallery": "https://github.com/sphinx-gallery/sphinx-gallery",
+    "Supported Operators and Data Types": "https://github.com/microsoft/onnxruntime/blob/main/docs/OperatorKernels.md",
     "torch": "https://pytorch.org/docs/stable/torch.html",
+    "torch.compiler": "https://pytorch.org/docs/stable/torch.compiler.html",
+    "torch.export.export": "https://pytorch.org/docs/stable/export.html#torch.export.export",
     "torch.onnx": "https://pytorch.org/docs/stable/onnx.html",
+    "transformers": "https://huggingface.co/docs/transformers/en/index",
 }

@@ -28,11 +28,15 @@ experimental-experiment: fuzzy work
 
 **experimental-experiment** is mostly to experiment ideas.
 
+Source are `sdpython/experimental-experiment
+<https://github.com/sdpython/experimental-experiment>`_.
+
 .. toctree::
     :maxdepth: 1
     :caption: Contents
 
     tutorial/index
+    design/index
     api/index
     auto_examples/index
 
@@ -42,7 +46,9 @@ experimental-experiment: fuzzy work
 
     CHANGELOGS
     license
+    long_outputs
 
 Older versions
 ++++++++++++++
 
+* `0.1.0 <../v0.1.0/index.html>`_

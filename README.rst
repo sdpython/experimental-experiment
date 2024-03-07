@@ -37,7 +37,7 @@ pytorch nightly build should be installed, see
 
 ::
 
-    git clone https://github.com/xadupre/experimental-experiment.git
+    git clone https://github.com/sdpython/experimental-experiment.git
     pip install onnxruntime-gpu pynvml
     pip install -r requirements-dev.txt    
     export PYTHONPATH=$PYTHONPATH:<this folder>
@@ -55,3 +55,8 @@ all the graphs, the data used to draw them, and the models.
 ::
 
     python _doc/examples/plot_torch_export.py -s large
+
+Documentation
++++++++++++++
+
+See `experimental-experiment <https://sdpython.github.io/doc/experimental-experiment/dev/>`_.
