@@ -112,6 +112,7 @@ sphinx_gallery_conf = {
 epkg_dictionary = {
     "DOT": "https://graphviz.org/doc/info/lang.html",
     "JIT": "https://en.wikipedia.org/wiki/Just-in-time_compilation",
+    "numpy": "https://numpy.org/",
     "onnx": "https://onnx.ai/onnx/",
     "onnx.helper": "https://onnx.ai/onnx/api/helper.html",
     "ONNX": "https://onnx.ai/",
@@ -119,7 +120,6 @@ epkg_dictionary = {
     "onnxrt backend": "https://pytorch.org/docs/stable/onnx_dynamo_onnxruntime_backend.html",
     "onnxruntime": "https://onnxruntime.ai/",
     "onnxruntime-training": "https://onnxruntime.ai/docs/get-started/training-on-device.html",
-    "numpy": "https://numpy.org/",
     "onnx-array-api": ("https://sdpython.github.io/doc/onnx-array-api/dev/"),
     "onnx-rewriter": "https://github.com/microsoft/onnxscript",
     "onnxscript": "https://github.com/microsoft/onnxscript",
@@ -129,6 +129,7 @@ epkg_dictionary = {
     "scipy": "https://scipy.org/",
     "sklearn-onnx": "https://onnx.ai/sklearn-onnx/",
     "sphinx-gallery": "https://github.com/sphinx-gallery/sphinx-gallery",
+    "Supported Operators and Data Types": "https://github.com/microsoft/onnxruntime/blob/main/docs/OperatorKernels.md",
     "torch": "https://pytorch.org/docs/stable/torch.html",
     "torch.compiler": "https://pytorch.org/docs/stable/torch.compiler.html",
     "torch.export.export": "https://pytorch.org/docs/stable/export.html#torch.export.export",

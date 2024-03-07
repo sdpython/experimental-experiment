@@ -127,7 +127,7 @@ class ExpandBroadcastPattern(PatternOptimization):
 
 class ExpandSwapPattern(PatternOptimization):
     """
-    Tries to move a node Expand forward in a the graph.
+    Tries to move a node Expand forward in the graph.
     Expand + Exp can be changed into Exp + Expand.
     Then Exp applies on a tensor of a smaller or equal size.
     """

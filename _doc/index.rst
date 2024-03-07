@@ -36,6 +36,7 @@ Source are `sdpython/experimental-experiment
     :caption: Contents
 
     tutorial/index
+    design/index
     api/index
     auto_examples/index
 

@@ -376,9 +376,36 @@ class GraphBuilderPatternOptimization:
         :param remove_identity: remove identity nodes, it is better to keep it True,
             not doing it might prevent other patterns to find a set of nodes to optimize
         :return: the method returns informations about the applied processes.
+
+        The algorithm runs multiple iteration until the graph is not evolving
+        or `max_iter` is reached. By default, it is equal to the number of nodes.
+        An iteration is:
+
+        ::
+
+            matches = []
+
+            builds all successors and predecessors
+
+            for all patterns P:
+
+                for all nodes n:
+
+                    r = p.match(n)
+                    if r:
+                        if no node already scheduled to be rewritten by another match:
+                            matches.append(r)
+
+                for all matches r:
+                    apply the match r
+
+        This algorithm may apply more than one rewriting at each iteration
+        but it guarantees the local structure when applying the rewriting was
+        not altered by another one.
         """
 
-        def _check(step):
+        def _check(statistics, step, iteration, code):
+            begin = time.perf_counter()
             assert (
                 len(self.builder.nodes) > 0
             ), f"The onnx model is empty (step {step}, no node)"
@@ -392,6 +419,13 @@ class GraphBuilderPatternOptimization:
                 known |= set(node.output)
             for o in self.builder.outputs:
                 assert o.name in known, f"Unknown output {o.name!r}, step {step!r}"
+            statistics.append(
+                dict(
+                    pattern=f"check_pattern_{code}",
+                    time_in=time.perf_counter() - begin,
+                    iteration=iteration,
+                )
+            )
 
         assert (
             not self.recursive
@@ -428,6 +462,7 @@ class GraphBuilderPatternOptimization:
             durations = {}
             for pattern in self.patterns:
                 begin = time.perf_counter()
+                before = len(matches)
                 for match in pattern.enumerate_matches(self):
                     bypass = False
                     for n in match.nodes:
@@ -445,15 +480,30 @@ class GraphBuilderPatternOptimization:
                             f"[GraphBuilderPatternOptimization.optimize] match={match}"
                         )
                     matches.append((pattern, match))
-                durations[str(pattern)] = time.perf_counter() - begin
+
+                statistics.append(
+                    dict(
+                        pattern=f"match_{pattern}",
+                        iteration=it,
+                        instances=len(matches) - before,
+                        time_in=time.perf_counter() - begin,
+                        match_index=len(matches),
+                    )
+                )
 
             if self.verbose > 0 and matches:
-                rev = max([(v, k) for k, v in durations.items()])
-                revs = f"{rev[-1]}:{rev[0]:.3f}"
-                print(
-                    f"[GraphBuilderPatternOptimization.optimize] applies {len(matches)} matches, "
-                    f"[0]={str(matches[0][-1])} - time={sum(durations.values()):.3f} | max_time={revs}"
-                )
+                if durations:
+                    rev = max([(v, k) for k, v in durations.items()])
+                    revs = f"{rev[-1]}:{rev[0]:.3f}"
+                    print(
+                        f"[GraphBuilderPatternOptimization.optimize] applies {len(matches)} matches, "
+                        f"[0]={str(matches[0][-1])} - time={sum(durations.values()):.3f} | max_time={revs}"
+                    )
+                else:
+                    print(
+                        f"[GraphBuilderPatternOptimization.optimize] applies {len(matches)} matches, "
+                        f"[0]={str(matches[0][-1])}"
+                    )
 
             # applies patterns (they must be disjoined)
 
@@ -466,8 +516,9 @@ class GraphBuilderPatternOptimization:
                         f"apply {match.to_string(short=False)}"
                     )
 
+                begin = time.perf_counter()
                 added_nodes = self.apply_match(match)
-                _check(str(match))
+
                 if self.verbose > 3:
                     print(
                         f"[GraphBuilderPatternOptimization.optimize] - add "
@@ -502,14 +553,16 @@ class GraphBuilderPatternOptimization:
                         )
 
                 obs = dict(
-                    pattern=str(pattern),
+                    pattern=f"apply_{pattern}",
                     added=add,
                     removed=rem,
                     iteration=it,
                     match_index=im,
-                    time_in=durations[str(pattern)],
+                    instances=1,
+                    time_in=time.perf_counter() - begin,
                 )
                 statistics.append(obs)
+                _check(statistics, str(match), it, "A")
 
                 n_added += add
                 n_removed += rem
@@ -518,22 +571,32 @@ class GraphBuilderPatternOptimization:
                     f"[GraphBuilderPatternOptimization.optimize] done all: -{n_removed} +{n_added} nodes"
                 )
 
-            # remove unncessary identity nodes
+            # remove unnecessary identity nodes
 
+            begin = time.perf_counter()
             id_removed = self.builder.remove_identity_nodes()
-            if id_removed:
-                statistics.append(
-                    dict(
-                        pattern="remove_identity_nodes",
-                        iteration=it,
-                        removed=id_removed,
-                    )
+            statistics.append(
+                dict(
+                    pattern="remove_identity_nodes",
+                    iteration=it,
+                    removed=id_removed,
+                    time_in=time.perf_counter() - begin,
                 )
-            _check("remove_identity")
+            )
+            _check(statistics, "remove_identity", it, "B")
 
             # rebuild the graph structure
 
+            begin = time.perf_counter()
             self._build()
+            statistics.append(
+                dict(
+                    pattern="build_for_pattern",
+                    iteration=it,
+                    removed=id_removed,
+                    time_in=time.perf_counter() - begin,
+                )
+            )
 
             # next iteration
 

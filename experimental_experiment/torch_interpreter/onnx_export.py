@@ -1,3 +1,4 @@
+import time
 import warnings
 from typing import Any, Dict, Optional, Sequence, Set, Tuple, Union
 from onnx import ModelProto
@@ -177,6 +178,7 @@ def to_onnx(
     return_builder: bool = False,
     raise_list: Optional[Set[str]] = None,
     dynamic_shapes: Optional[Union[Dict[str, Any], Tuple[Any]]] = None,
+    optimize: bool = True,
 ) -> Union[ModelProto, Tuple[ModelProto, GraphBuilder]]:
     """
     Exports a torch model into ONNX using
@@ -194,12 +196,18 @@ def to_onnx(
     :param raise_list: the builder stops any time a name falls into that list,
         this is a debbuging tool
     :param dynamic_shapes: see :epkg:`torch.export.export`
+    :param optimize: optimize the model before exporting into onnx
     :return: onnx model
     """
     if target_opset is None:
         target_opset = min(18, onnx_opset_version() - 1)
     if options is None:
         options = OptimizationOptions()
+    begin = time.perf_counter()
+
+    if verbose:
+        print("[to_onnx] build the graph module")
+
     graph_module, builder, interpreter = _make_builder_interpreter(
         mod=mod,
         args=args,
@@ -212,8 +220,26 @@ def to_onnx(
         dynamic_shapes=dynamic_shapes,
     )
 
+    if verbose:
+        t = time.perf_counter()
+        print(f"[to_onnx] done in {t - begin} s")
+        print("[to_onnx] start creating the node after")
+        begin = t
+
     builder.process(graph_module, interpreter)
-    onx = builder.to_onnx()
+
+    if verbose:
+        t = time.perf_counter()
+        print(f"[to_onnx] done in {t - begin} s")
+        print("[to_onnx] start conversion to onnx (before optimization)")
+        begin = t
+
+    onx = builder.to_onnx(optimize=optimize)
+
+    if verbose:
+        t = time.perf_counter()
+        print(f"[to_onnx] done in {t - begin} s")
+
     if return_builder:
         return onx, builder
     return onx
