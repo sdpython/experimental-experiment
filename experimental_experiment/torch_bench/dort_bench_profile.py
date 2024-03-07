@@ -81,7 +81,7 @@ if args.rewrite in (1, "1"):
     model_model = args.model.replace(".onnx", ".rewrite.onnx")
     print(f"-- optimize again into {model_model}")
     proto = onnx.load(args.model)
-    new_proto = optimize_model_proto(proto)
+    new_proto = optimize_model_proto(proto, verbose=args.verbose)
     onnx.save(new_proto, model_model)
     print("-- done")
 else:

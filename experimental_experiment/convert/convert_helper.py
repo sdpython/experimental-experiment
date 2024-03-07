@@ -1,3 +1,4 @@
+import time
 import warnings
 from typing import List, Union
 from onnx import ModelProto
@@ -15,11 +16,12 @@ def inline_model_proto(model_proto: ModelProto) -> ModelProto:
     return inline_local_functions(model_proto)
 
 
-def optimize_model_proto(model_proto: ModelProto) -> ModelProto:
+def optimize_model_proto(model_proto: ModelProto, verbose: int = 0) -> ModelProto:
     """
     Optimizes a model proto to optimize onnxruntime.
 
     :param model_proto: ModelProto
+    :param verbose: verbosity
     :return: optimized model
 
     You should run that before calling this function
@@ -34,17 +36,56 @@ def optimize_model_proto(model_proto: ModelProto) -> ModelProto:
         onnx_model = optimize_model_proto(onnx_model)
     """
     from onnxrewriter.optimizer import optimize
-    from onnxrewriter.rewriter.transformers import rewrite
+    from onnxrewriter.rewriter import rewrite
 
-    # model_proto = inline_model_proto(model_proto)
+    begin = time.perf_counter()
+
+    if verbose:
+        print(
+            f"[optimize_model_proto] starts inliner with "
+            f"{len(model_proto.graph.node)} nodes and "
+            f"{len(model_proto.functions)} local functions"
+        )
+
+    model_proto = inline_model_proto(model_proto)
+
+    if verbose:
+        print(f"[optimize_model_proto] done in {time.perf_counter() - begin} seconds.")
+        print(
+            f"[optimize_model_proto] starts optimize with "
+            f"{len(model_proto.graph.node)} nodes and "
+            f"{len(model_proto.functions)} local functions"
+        )
+
+    begin = time.perf_counter()
+
     model_proto = optimize(
         model_proto,
         num_iterations=2,
         onnx_shape_inference=False,
         # function_aware_folding=True,
     )
+
+    if verbose:
+        print(f"[optimize_model_proto] done in {time.perf_counter() - begin} seconds.")
+        print(
+            f"[optimize_model_proto] starts rewrite with "
+            f"{len(model_proto.graph.node)} nodes and "
+            f"{len(model_proto.functions)} local functions"
+        )
+
+    begin = time.perf_counter()
+
     try:
         model_proto = rewrite(model_proto)
+
+        if verbose:
+            print(
+                f"[optimize_model_proto] done in {time.perf_counter() - begin} "
+                f"seconds with {len(model_proto.graph.node)} and "
+                f"{len(model_proto.functions)} local functions"
+            )
+
     except ValueError as e:
         warnings.warn(
             f"onnxrewrite.rewrite failed due to {e}, "
@@ -52,6 +93,11 @@ def optimize_model_proto(model_proto: ModelProto) -> ModelProto:
         )
         with open("bug-onnxrewriter.onnx", "wb") as f:
             f.write(model_proto.SerializeToString())
+        if verbose:
+            print(
+                f"[optimize_model_proto] failed in {time.perf_counter() - begin} "
+                f"seconds (see 'bug-onnxrewriter.onnx')."
+            )
 
     return model_proto
 

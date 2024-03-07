@@ -1,7 +1,7 @@
 import warnings
 
 
-def make_aot_ort(dynamic: bool = False, rewrite: bool = "try"):
+def make_aot_ort(dynamic: bool = False, rewrite: bool = "try", verbose: int = 0):
     import onnxruntime
     from torch.onnx import (
         _OrtBackend as OrtBackend,
@@ -32,7 +32,11 @@ def make_aot_ort(dynamic: bool = False, rewrite: bool = "try"):
         options = OrtBackendOptions(
             export_options=ExportOptions(dynamic_shapes=dynamic),
             ort_session_options=ort_session_options,
-            pre_ort_model_transforms=[optimize_model_proto],
+            pre_ort_model_transforms=[
+                lambda *args, v=verbose, **kwargs: optimize_model_proto(
+                    *args, verbose=v, **kwargs
+                )
+            ],
         )
     else:
         options = OrtBackendOptions(

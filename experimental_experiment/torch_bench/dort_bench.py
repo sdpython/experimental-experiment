@@ -122,7 +122,9 @@ use_dynamic = args.dynamic in (1, "1", True, "True")
 print(f"dynamic={use_dynamic}")
 
 if args.backend == "ort":
-    local_aot_ort, local_ort = make_aot_ort(dynamic=use_dynamic, rewriter=True)
+    local_aot_ort, local_ort = make_aot_ort(
+        dynamic=use_dynamic, rewrite=True, verbose=args.verbose
+    )
     compiled_model = torch.compile(model, backend=local_ort)
 
 elif args.backend == "inductor":
@@ -177,6 +179,12 @@ def loop_iteration(is_cuda, inputs, compiled_model, loss):
         with torch.autocast(device_type="cuda", dtype=torch.float16):
             result = compiled_model(*inputs)
     else:
+        assert args.mixed not in (
+            1,
+            "1",
+            True,
+            "True",
+        ), f"not implemented with is_cuda={is_cuda}, mixed={args.mixed}"
         result = compiled_model(*inputs)
 
     # dummy_target = torch.ones_like(result[0], memory_format=torch.contiguous_format)
