@@ -14,6 +14,7 @@ API
     onnx_export
     aten_function
     aten_method
+    prims_function
     convert
     torch_helper
     torch_dynamo
