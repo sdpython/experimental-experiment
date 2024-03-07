@@ -10,6 +10,7 @@ from experimental_experiment.ext_test_case import (
     requires_torch,
 )
 from experimental_experiment.torch_helper.dump_helper import assert_all_close
+from experimental_experiment.torch_helper.training_helper import make_aot_ort
 
 
 def has_cuda():
@@ -22,23 +23,6 @@ def torch_min(v: str) -> bool:
     import torch
 
     return pv.Version(torch.__version__) < pv.Version(v)
-
-
-def make_aot_ort(dynamic: bool = False):
-    from torch.onnx import (
-        _OrtBackend as OrtBackend,
-        _OrtBackendOptions as OrtBackendOptions,
-        ExportOptions,
-    )
-
-    ort_backend = OrtBackend(
-        options=OrtBackendOptions(
-            export_options=ExportOptions(
-                dynamic_shapes=dynamic,
-            )
-        )
-    )
-    return ort_backend, ort_backend
 
 
 class TestLlama(ExtTestCase):

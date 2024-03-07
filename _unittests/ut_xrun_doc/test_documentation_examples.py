@@ -78,24 +78,37 @@ class TestDocumentationExamples(ExtTestCase):
                 continue
             reason = None
 
-            if name in {"plot_torch_export.py"}:
+            if name in {"plot_torch_export_201.py"}:
                 if sys.platform in {"win32"}:
                     # dynamo not supported on windows
                     reason = "windows not supported"
 
-            if not reason and name in {"plot_convolutation_matmul.py"}:
-                if sys.platform in {"win32"}:
+            if name in {"plot_llama_bench_102.py", "plot_torch_custom_backend_101.py"}:
+                if sys.platform in {"win32", "darwin"}:
+                    # dynamo not supported on windows
+                    reason = "onnxruntime-training not available"
+
+            if not reason and name in {
+                "plot_convolutation_matmul_102.py",
+                "plot_optimize_101.py",
+                "plot_torch_linreg_101.py",
+            }:
+                if sys.platform in {"win32", "darwin"}:
                     # dynamo not supported on windows
                     reason = "graphviz not installed"
+
+            if name in {"plot_llama_bench_102.py"}:
+                if sys.platform in {"darwin"}:
+                    reason = "apple not supported"
 
             if (
                 not reason
                 and not has_rewriter
                 and name
                 in {
-                    "plot_torch_export.py",
-                    "plot_llama_diff_export.py",
-                    "plot_llama_diff_dort.py",
+                    "plot_torch_export_201.py",
+                    "plot_llama_diff_export_301.py",
+                    "plot_llama_diff_dort_301.py",
                 }
             ):
                 reason = "missing onnx-rewriter"
@@ -104,14 +117,18 @@ class TestDocumentationExamples(ExtTestCase):
                 # "plot_convolutation_matmul.py",
                 # "plot_profile_existing_onnx.py",
                 # "test_plot_torch_dort.py",
-                "plot_torch_aot.py",
-                "plot_torch_dort.py",
+                "plot_torch_aot_201.py",
+                "plot_torch_dort_201.py",
                 # "plot_torch_export.py",
             }:
                 # too long
                 reason = "not working yet or too long"
 
-            if not reason and is_apple() and name in {"plot_convolutation_matmul.py"}:
+            if (
+                not reason
+                and is_apple()
+                and name in {"plot_convolutation_matmul_102.py"}
+            ):
                 reason = "dot is missing"
 
             if reason:

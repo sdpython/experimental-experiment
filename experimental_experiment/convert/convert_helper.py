@@ -1,3 +1,4 @@
+import warnings
 from typing import List, Union
 from onnx import ModelProto
 from onnx.inliner import inline_local_functions
@@ -40,8 +41,18 @@ def optimize_model_proto(model_proto: ModelProto) -> ModelProto:
         model_proto,
         num_iterations=2,
         onnx_shape_inference=False,
+        # function_aware_folding=True,
     )
-    model_proto = rewrite(model_proto)
+    try:
+        model_proto = rewrite(model_proto)
+    except ValueError as e:
+        warnings.warn(
+            f"onnxrewrite.rewrite failed due to {e}, "
+            f"saving the model into 'bug-onnxrewriter.onnx'"
+        )
+        with open("bug-onnxrewriter.onnx", "wb") as f:
+            f.write(model_proto.SerializeToString())
+
     return model_proto
 
 
@@ -69,7 +80,7 @@ def ort_optimize(
     if providers == "cpu":
         providers = ["CPUExecutionProvider"]
     elif providers == "cuda":
-        providers = ["CUDAExecutionProvider", "CPUExecutionProvider"]
+        providers = [("CUDAExecutionProvider", {}), ("CPUExecutionProvider", {})]
     assert isinstance(providers, list), f"Unexpected value for providers={providers!r}"
     onnxruntime.InferenceSession(
         (

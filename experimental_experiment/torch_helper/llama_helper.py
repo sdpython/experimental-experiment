@@ -188,13 +188,13 @@ def get_llama_model(
             self.model = LlamaModel(config)
 
         def forward(self, input_ids, attention_mask):
-            assert attention_mask is not None
             model_output = self.model(input_ids, attention_mask=attention_mask)
             return model_output.to_tuple()
 
     def generate_example_inputs(batch: int, seq: int, vocab_size: int):
         input_ids = ids_tensor([batch, seq], vocab_size)
         input_mask = torch.tril(torch.ones(batch, seq, dtype=torch.float32))
+        assert input_mask.dtype == torch.float32
         return input_ids, input_mask
 
     example_args_collection = []

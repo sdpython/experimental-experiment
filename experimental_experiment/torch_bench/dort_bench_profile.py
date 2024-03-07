@@ -25,9 +25,10 @@ args = get_parsed_args(
     inputs=("model.onnx.mkl", "inputs for the model"),
     profile=(0, "runs the profiling"),
     rewrite=(0, "rewrite again"),
+    debug=(0, "run a backend to debug"),
     repeat=5,
     warmup=5,
-    expose="model,inputs,warmup,repeat,profile,rewrite",
+    expose="model,inputs,warmup,repeat,profile,rewrite,debug",
 )
 
 import pickle
@@ -40,14 +41,11 @@ import torch
 from torch._C import _from_dlpack
 from onnxruntime import InferenceSession, SessionOptions, RunOptions
 from onnxruntime.capi import _pybind_state as ORTC
-from onnx_extended.tools.js_profile import (
-    js_profile_to_dataframe,
-    plot_ort_profile,
-)
 from experimental_experiment.torch_dynamo.fast_backend import (
     _run_onnx_session_with_ortvaluevector,
 )
 from experimental_experiment.convert.convert_helper import optimize_model_proto
+from experimental_experiment.torch_dynamo.backend_helper import get_dimensions
 
 
 print(f"-- loading inputs {args.model}")
@@ -68,7 +66,7 @@ for i, t in enumerate(inputs[1]):
         print(f"input {i}: type={type(t)}")
 
 providers = (
-    ["CUDAExecutionProvider", "CPUExecutionProvider"]
+    [("CUDAExecutionProvider", {}), ("CPUExecutionProvider", {})]
     if max_device >= 0
     else ["CPUExecutionProvider"]
 )
@@ -90,6 +88,8 @@ else:
     model_model = args.model
 
 print(f"-- loading model {model_model}")
+onnx_model = onnx.load(model_model)
+is_dimension_in, is_dimension_out = get_dimensions(onnx_model)
 sess = InferenceSession(model_model, sess_options, providers=providers)
 print("-- done")
 
@@ -115,6 +115,27 @@ input_names, output_names = inputs[0], inputs[2]
 inputs = inputs[1]
 is_cuda = max_device >= 0
 
+if args.debug:
+    print("-- debugging")
+    from experimental_experiment.reference import ExtendedReferenceEvaluator
+
+    ref = ExtendedReferenceEvaluator(model_model, verbose=10)
+    feeds = dict(
+        zip(
+            input_names,
+            map(
+                lambda t: (
+                    t.detach().cpu().numpy()
+                    if isinstance(t, torch.Tensor)
+                    else np.array([int(t)], dtype=np.int64)
+                ),
+                inputs,
+            ),
+        )
+    )
+    ref.run(None, feeds)
+    print("-- end debugging")
+
 print(f"-- warmup: {args.warmup}")
 begin = time.perf_counter()
 for i in range(args.warmup):
@@ -130,14 +151,21 @@ for i in range(args.warmup):
         input_names,
         inputs,
         output_names,
+        is_dimension_in=is_dimension_in,
+        is_dimension_out=is_dimension_out,
     )
     if is_cuda:
         torch.cuda.synchronize()
     if i == 0:
         for ti, t in enumerate(res):
-            print(
-                f"  output {ti}: device={t.get_device()} dtype={t.dtype} - shape={t.shape}"
-            )
+            if isinstance(t, torch.Tensor):
+                print(
+                    f"  output {ti}: device={t.get_device()} "
+                    f"dtype={t.dtype} - shape={t.shape}"
+                )
+            elif isinstance(t, torch.SymInt):
+                print(f"  output {ti}: dimension {t}")
+
 warmup_time = time.perf_counter() - begin
 print(f"-- done: warmup time {warmup_time}")
 
@@ -158,6 +186,8 @@ for i in range(args.repeat):
         input_names,
         inputs,
         output_names,
+        is_dimension_in=is_dimension_in,
+        is_dimension_out=is_dimension_out,
     )
     if is_cuda:
         torch.cuda.synchronize()
@@ -166,6 +196,11 @@ for i in range(args.repeat):
 print(f"-- times: {np.mean(times)} - {times}")
 
 if args.profile in (1, "1"):
+    from onnx_extended.tools.js_profile import (
+        js_profile_to_dataframe,
+        plot_ort_profile,
+    )
+    from onnx_extended.tools.js_profile import plot_ort_profile_timeline
 
     def _align(s, n):
         if len(s) >= n:
@@ -200,7 +235,6 @@ if args.profile in (1, "1"):
         fig.savefig(f"{model_model}_{vs}.png")
 
     # second graph: timeline
-    from onnx_extended.tools.js_profile import plot_ort_profile_timeline
 
     fig, ax = plt.subplots(1, 1, figsize=(5, max(5, n_nodes)))
     iteration = args.repeat - 2

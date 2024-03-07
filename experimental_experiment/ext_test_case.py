@@ -5,7 +5,7 @@ import warnings
 from contextlib import redirect_stderr, redirect_stdout
 from io import StringIO
 from timeit import Timer
-from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, Union
 
 import numpy
 from numpy.testing import assert_allclose
@@ -126,7 +126,7 @@ def measure_time(
         from experimental_experiment.ext_test_case import measure_time
 
         res = measure_time(lambda: cos(0.5))
-        pprint(res)
+        pprint.pprint(res)
 
     See `Timer.repeat <https://docs.python.org/3/library/
     timeit.html?timeit.Timer.repeat>`_
@@ -230,6 +230,18 @@ class ExtTestCase(unittest.TestCase):
                 f"{a} < {b}, a not greater or equal than b\n{msg or ''}"
             )
 
+    def assertEqualArrays(
+        self,
+        expected: Sequence[numpy.ndarray],
+        value: Sequence[numpy.ndarray],
+        atol: float = 0,
+        rtol: float = 0,
+        msg: Optional[str] = None,
+    ):
+        self.assertEqual(len(expected), len(value))
+        for a, b in zip(expected, value):
+            self.assertEqualArray(a, b, atol=atol, rtol=rtol)
+
     def assertEqualArray(
         self,
         expected: numpy.ndarray,
@@ -238,8 +250,13 @@ class ExtTestCase(unittest.TestCase):
         rtol: float = 0,
         msg: Optional[str] = None,
     ):
+        if hasattr(expected, "detach"):
+            expected = expected.detach().cpu().numpy()
+        if hasattr(value, "detach"):
+            value = value.detach().cpu().numpy()
         self.assertEqual(expected.dtype, value.dtype)
         self.assertEqual(expected.shape, value.shape)
+
         try:
             assert_allclose(expected, value, atol=atol, rtol=rtol)
         except AssertionError as e:

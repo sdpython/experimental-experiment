@@ -42,8 +42,12 @@ args = get_parsed_args(
     dynamic=("0", "use dynamic shapes"),
     target_opset=(18, "opset to convert into, use with backend=custom"),
     config=("default", "default, medium, or small to test"),
+    verbose=(0, "verbosity"),
+    disable_pattern=("", "a list of optimization patterns to disable"),
+    enable_pattern=("default", "list of optimization patterns to enable"),
     expose="backend,repeat,warmup,device,num_hidden_layers,"
-    "mixed,export,config,target_opset,dynamic",
+    "mixed,export,config,target_opset,dynamic,verbose,"
+    "enable_pattern,disable_pattern",
 )
 
 import os
@@ -53,6 +57,7 @@ import numpy as np
 import torch
 import torch._dynamo.backends.registry
 from torch._dynamo.backends.common import aot_autograd
+import transformers
 from experimental_experiment.convert.convert_helper import ort_optimize
 from experimental_experiment.torch_helper.llama_helper import get_llama_model
 from experimental_experiment.torch_helper.training_helper import make_aot_ort
@@ -84,6 +89,7 @@ elif args.config == "medium":
         _attn_implementation="eager",
     )
 else:
+    assert args.config in ("large", "default"), f"unexpected config={args.config!r}"
     config_dict = dict(
         input_dims=[(2, 1024)] * (args.repeat + args.warmup),
         hidden_size=4096,
@@ -95,8 +101,16 @@ else:
         _attn_implementation="eager",
     )
 
+verbose = int(args.verbose)
+disabled_pattern = [_ for _ in args.disable_pattern.split(",") if _]
+enable_pattern = [_ for _ in args.enable_pattern.split(",") if _]
 print(f"llama config={config_dict}")
 print(f"backend={args.backend}")
+print(f"verbose={args.verbose}")
+print(f"mixed={args.mixed}")
+if args.backend == "custom":
+    print(f"disabled_pattern={disabled_pattern!r}")
+    print(f"enable_pattern={enable_pattern!r}")
 model, example_args_collection = get_llama_model(**config_dict)
 
 
@@ -108,7 +122,7 @@ use_dynamic = args.dynamic in (1, "1", True, "True")
 print(f"dynamic={use_dynamic}")
 
 if args.backend == "ort":
-    local_aot_ort, local_ort = make_aot_ort(dynamic=use_dynamic)
+    local_aot_ort, local_ort = make_aot_ort(dynamic=use_dynamic, rewriter=True)
     compiled_model = torch.compile(model, backend=local_ort)
 
 elif args.backend == "inductor":
@@ -118,11 +132,15 @@ elif args.backend == "eager":
     compiled_model = model
 
 elif args.backend == "custom":
-    get_decomposition_table
     target_opset = args.target_opset
     aot_compiler = aot_autograd(
         fw_compiler=lambda *args, **kwargs: onnx_custom_backend(
-            *args, target_opset=target_opset, **kwargs
+            *args,
+            target_opset=target_opset,
+            verbose=verbose,
+            enable_pattern=enable_pattern,
+            disable_pattern=disabled_pattern,
+            **kwargs,
         ),
         decompositions=get_decomposition_table(),
     )
@@ -137,7 +155,12 @@ elif args.backend == "debug":
         print(f"  input: {a.dtype}:{a.shape}")
     aot_compiler = aot_autograd(
         fw_compiler=lambda *args, **kwargs: onnx_debug_backend(
-            *args, target_opset=target_opset, backend="ref", **kwargs
+            *args,
+            target_opset=target_opset,
+            backend="ref",
+            enable_pattern=enable_pattern,
+            disable_pattern=disabled_pattern,
+            **kwargs,
         ),
         decompositions=get_decomposition_table(),
     )
@@ -189,7 +212,7 @@ for i in range(args.warmup):
                 os.path.join("dump_dort_bench", onx),
                 output=os.path.join("dump_dort_bench", new_onx),
                 providers=(
-                    ["CUDAExecutionProvider", "CPUExecutionProvider"]
+                    [("CUDAExecutionProvider", {}), ("CPUExecutionProvider", {})]
                     if is_cuda
                     else ["CPUExecutionProvider"]
                 ),
@@ -221,6 +244,21 @@ print(f"device={args.device}")
 print(f"avg={np.mean(times)}")
 print(f"times={times}")
 print(f"warmup_times={warmup_times}")
-print(f":time,{np.mean(times)};")
+print("-----------")
+
+idims = "x".join(map(str, config_dict["input_dims"][0]))
+del config_dict["input_dims"]
+vals = "-".join(map(str, config_dict.values()))
+print(f":llama,{idims}-{vals};")
+print(f":config,{args.config};")
+print(f":mixed,{args.mixed};")
+print(f":dynamic,{use_dynamic};")
+print(f":backend,{args.backend};")
+print(f":repeat,{args.repeat};")
+print(f":warmup,{args.warmup};")
+print(f":torch,{torch.__version__};")
+print(f":transformers,{transformers.__version__};")
+if args.backend in {"custom"}:
+    print(f":patterns,+{args.enable_pattern}-{args.disable_pattern};")
 print(f":warmup_time,{sum(warmup_times)};")
-print(f":torch,{torch.__file__};")
+print(f":time,{np.mean(times)};")
