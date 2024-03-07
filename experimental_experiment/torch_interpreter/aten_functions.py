@@ -1,12 +1,22 @@
 from typing import Any, Callable, Dict, Optional
-from . import _aten_functions
+from . import _aten_functions, _prims_functions
 from ._exceptions import FunctionNotFoundError
 
 
 def _register() -> Dict[str, Callable]:
     res = {}
     for k, v in _aten_functions.__dict__.items():
-        if k.startswith("aten_") or k.startswith("prims_"):
+        if k.startswith("aten_"):
+            other_key = "::".join(k.split("_", maxsplit=1))
+            options = {k: v, other_key: v}
+            for c in options:
+                if c in res:
+                    raise RuntimeError(
+                        f"Alias {c!r} for function {v} is already taken by {res[k]}."
+                    )
+            res.update(options)
+    for k, v in _prims_functions.__dict__.items():
+        if k.startswith("prims_"):
             other_key = "::".join(k.split("_", maxsplit=1))
             options = {k: v, other_key: v}
             for c in options:
