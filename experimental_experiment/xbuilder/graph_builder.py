@@ -1143,14 +1143,39 @@ class GraphBuilder:
             return
 
         if node.op_type == "Shape":
-            assert len(node.attribute) == 0, (
-                f"Not implemented when node shape has attribute "
-                f"{node}{self.get_debug_msg()}"
-            )
-            if self.has_shape(node.input[0]):
-                self.set_value_shape(node.output[0], self.get_shape(node.input[0]))
+            if len(node.attribute) == 0:
+                if self.has_shape(node.input[0]):
+                    self.set_value_shape(node.output[0], self.get_shape(node.input[0]))
+                else:
+                    self.set_value_shape(node.output[0], node.output[0])
             else:
-                self.set_value_shape(node.output[0], node.output[0])
+                start = self.get_attribute(node, "start", exc=False) or 0
+                end = self.get_attribute(node, "end", exc=False)
+                if end is None:
+                    if self.has_rank(node.input[0]):
+                        end = self.get_rank(node.input[0])
+                    else:
+                        end = ""
+                if self.has_shape(node.input[0]):
+                    shape = self.get_shape(node.input[0])
+                    assert start.i < len(shape), (
+                        f"Shape mismatch, start={start.i}, shape of {node.input[0]!r} "
+                        f"is {shape}{self.get_debug_msg()}"
+                    )
+                    if end is None:
+                        self.set_value_shape(node.output[0], shape[start.i :])
+                    else:
+                        assert end.i < len(shape), (
+                            f"Shape mismatch, end={end.i}, shape of {node.input[0]!r} "
+                            f"is {shape}{self.get_debug_msg()}"
+                        )
+                        self.set_value_shape(node.output[0], shape[start.i : end.i])
+                elif end is None:
+                    self.set_value_shape(node.output[0], f"{node.input[0]}[{start.i}:]")
+                else:
+                    self.set_value_shape(
+                        node.output[0], f"{node.input[0]}[{start.i}:{end.i}]"
+                    )
             return
 
         if node.op_type == "Gather":
