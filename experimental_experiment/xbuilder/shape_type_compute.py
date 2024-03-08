@@ -120,7 +120,7 @@ def set_type_shape_binary_op(
             shape = (
                 input_shape if shape is None else broadcast_shape(shape, input_shape)
             )
-        elif shape is not None:
+        else:
             # one shape is missing
             shape = None
             break

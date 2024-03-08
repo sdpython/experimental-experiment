@@ -30,6 +30,28 @@ Some helpers
 ++++++++++++
 """
 
+from experimental_experiment.args import get_parsed_args
+
+
+script_args = get_parsed_args(
+    "plot_torch_export",
+    description=__doc__,
+    scenarios={
+        "small": "small model to test",
+        "middle": "55Mb model",
+        "large": "1Gb model",
+    },
+    warmup=5,
+    repeat=5,
+    maxtime=(
+        2,
+        "maximum time to run a model to measure the computation time, "
+        "it is 0.1 when scenario is small",
+    ),
+    expose="scenarios,repeat,warmup",
+)
+
+
 import contextlib
 import itertools
 import os
@@ -70,7 +92,6 @@ from experimental_experiment.torch_interpreter import to_onnx
 from experimental_experiment.xbuilder import OptimizationOptions
 from experimental_experiment.plotting.memory import memory_peak_plot
 from experimental_experiment.ext_test_case import measure_time, get_figure
-from experimental_experiment.args import get_parsed_args
 from experimental_experiment.memory_peak import start_spying_on
 from tqdm import tqdm
 
@@ -98,24 +119,6 @@ pprint.pprint(system_info())
 #####################################
 # Scripts arguments
 
-
-script_args = get_parsed_args(
-    "plot_torch_export",
-    description=__doc__,
-    scenarios={
-        "small": "small model to test",
-        "middle": "55Mb model",
-        "large": "1Gb model",
-    },
-    warmup=5,
-    repeat=5,
-    maxtime=(
-        2,
-        "maximum time to run a model to measure the computation time, "
-        "it is 0.1 when scenario is small",
-    ),
-    expose="scenarios,repeat,warmup",
-)
 
 if script_args.scenario in (None, "small"):
     script_args.maxtime = 0.1
@@ -256,9 +259,12 @@ def export_dynopt(filename, model, *args):
             export_output = torch.onnx.dynamo_export(model, *args)
             model_onnx = export_output.model_proto
 
-            from onnxrewriter.optimizer import optimize
+            from experimental_experiment.convert.convert_helper import (
+                optimize_model_proto,
+            )
 
-            optimized_model = optimize(model_onnx)
+            optimized_model = optimize_model_proto(model_onnx)
+
             with open(filename, "wb") as f:
                 f.write(optimized_model.SerializeToString())
 

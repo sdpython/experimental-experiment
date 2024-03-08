@@ -12,6 +12,7 @@ from .shape_helper import (
     DYNAMIC_SHAPE,
     STATIC_SHAPE,
     all_int,
+    all_int_or_str,
     is_static_dimension,
     is_static_shape,
 )
@@ -216,6 +217,8 @@ class GraphBuilder:
     - `_known_names`: set of existing results names
     - `_known_shapes: Dict[str, DYNAMIC_SHAPE]`: declared shapes
     - `_known_types: Dict[str, int]`: declared element types
+    - `_known_value_shape: Dict[str, Any]`: if a result is a shape or not
+      (for example the output of operator Shape)
     - `_known_ranks: Dict[str, int]`: declared ranks
     - `constants_: Dict[str, Any]`: constant values
     - `constants_computed_: Dict[str, Any]`: computed constant values
@@ -284,6 +287,7 @@ class GraphBuilder:
         self._known_names = set()
         self._unique_names = set()
         self._unique_node_names = set()
+        self._known_value_shape = {}
         self.constants_ = {}
 
         if self.dynamic_shapes:
@@ -833,6 +837,22 @@ class GraphBuilder:
         )
         return self._known_types[name]
 
+    def value_as_shape(self, name: str) -> bool:
+        if name in self._known_value_shape:
+            return self._known_value_shape[name]
+        return None
+
+    def set_value_shape(self, name: str, value: Any):
+        assert (
+            name not in self._known_value_shape
+        ), f"Shape value for {name!r} (value={value!r}) is already registered."
+        assert value not in {
+            tuple()
+        }, f"Unexpected value for shape {name!r}, value={value}{self.get_debug_msg()}"
+        if self.verbose > 2:
+            print(f"[GraphBuilder-{self._hash()}.set_value_shape] {name}[{value}]")
+        self._known_value_shape[name] = value
+
     def unique_name(self, prefix: str) -> str:
         if prefix in self._unique_names:
             i = 2
@@ -906,6 +926,10 @@ class GraphBuilder:
             value, self.torch.SymInt
         ), f"Unexpected type {type(value)} for value{self.get_debug_msg()}"
         self.dynamic_objects[name] = value
+        assert (
+            name not in self._known_value_shape
+        ), f"Shape value for {name!r} was already registered."
+        self._known_value_shape[name] = name
         key = str(value)
         if key not in self.dynamic_objects_rev:
             self.dynamic_objects_rev[key] = []
@@ -932,14 +956,17 @@ class GraphBuilder:
             if isinstance(d, int):
                 key.append(d)
             elif isinstance(d, (str, self.torch.SymInt)):
-                key.append(d)
-                name = str(d)
-                key.append(name)
+                value = self._torch_sym_int(d)
+                key.append(value)
             else:
                 raise RuntimeError(
                     f"Unexpected type {type(d)} for a dimension in {shape}{self.get_debug_msg()}"
                 )
 
+        assert all_int_or_str(key), (
+            f"Unexpected key {key} type are {[type(_) for _ in key]}, "
+            f"shape={shape}{self.get_debug_msg()}"
+        )
         key = tuple(["Concat"] + key)
         if key in self._cache_shape:
             # The same shape was already requested.
@@ -950,10 +977,19 @@ class GraphBuilder:
             if isinstance(d, int):
                 conc.append(self.make_initializer("", np.array([d], dtype=np.int64)))
             elif isinstance(d, (str, self.torch.SymInt)):
-                name = str(d)
+                value = self._torch_sym_int(d)
+                if value in self.dynamic_objects_rev:
+                    name = self.dynamic_objects_rev[value][0]
+                    assert not isinstance(name, tuple)
+                else:
+                    name = value
+                if isinstance(name, self.torch.SymInt):
+                    name = self._torch_sym_int(name)
+                    assert not isinstance(name, self.torch.SymInt)
+                assert not isinstance(name, self.torch.SymInt)
                 assert name in self.dynamic_objects or self.has_name(
                     name
-                ), f"Unknonw dynamic object {d}-{name!r}{self.get_debug_msg()}"
+                ), f"Unknown dynamic object {d!r}-{name!r}{self.get_debug_msg()}"
                 if self.has_rank(name):
                     assert (
                         self.get_rank(name) <= 1
@@ -1038,6 +1074,162 @@ class GraphBuilder:
             )
         )
 
+    def update_value_shape_with_node(self, node):
+        if node.domain != "":
+            return
+        if node.op_type not in {
+            "Concat",
+            "Gather",
+            "Shape",
+            "Add",
+            "Mul",
+            "Div",
+            "Sub",
+            "Mod",
+            "Slice",
+            "Abs",
+            "Range",
+            "Scatter",
+            "Squeeze",
+            "Identity",
+            "Unsqueeze",
+            "Greater",
+            "Less",
+            "GreaterOrEqual",
+            "LessOrEqual",
+            "Equal",
+            "Not",
+        }:
+            return
+
+        if node.op_type == "Identity":
+            value = self.value_as_shape(node.input[0])
+            if value is not None:
+                self.set_value_shape(node.output[0], value)
+            return
+
+        if node.op_type == "Squeeze":
+            if self.is_constant(node.input[1]):
+                y = self.value_as_shape(node.input[0])
+                if y is None:
+                    return
+                i = self.get_constant(node.input[1])
+                if isinstance(i, int):
+                    ii = i
+                elif (
+                    isinstance(i, np.ndarray)
+                    and i.dtype == np.int64
+                    and i.shape in ((1,), tuple())
+                ):
+                    ii = int(i[0]) if i.shape == (1,) else int(i)
+                else:
+                    raise RuntimeError(
+                        f"Not implemented when node Squeeze with inputs={node.input}, "
+                        f"y={y!r}, i={i!r}{self.get_debug_msg()}"
+                    )
+                assert (
+                    ii == 0
+                ), f"A shape should only have one axis i={i}, y={y}{self.get_debug_msg()}"
+                if isinstance(y, str):
+                    self.set_value_shape(node.output[0], f"squeeze({y})")
+                    return
+                if isinstance(y, int):
+                    self.set_value_shape(node.output[0], y)
+                    return
+                assert isinstance(
+                    y, tuple
+                ), f"Unexpected type {type(y)} for y={y} and i={i}{self.get_debug_msg()}"
+                self.set_value_shape(node.output[0], y[0])
+            return
+
+        if node.op_type == "Shape":
+            if len(node.attribute) == 0:
+                if self.has_shape(node.input[0]):
+                    self.set_value_shape(node.output[0], self.get_shape(node.input[0]))
+                else:
+                    self.set_value_shape(node.output[0], node.output[0])
+            else:
+                start = self.get_attribute(node, "start", exc=False) or 0
+                end = self.get_attribute(node, "end", exc=False)
+                if end is None:
+                    if self.has_rank(node.input[0]):
+                        end = self.get_rank(node.input[0])
+                    else:
+                        end = ""
+                if self.has_shape(node.input[0]):
+                    shape = self.get_shape(node.input[0])
+                    assert start.i < len(shape), (
+                        f"Shape mismatch, start={start.i}, shape of {node.input[0]!r} "
+                        f"is {shape}{self.get_debug_msg()}"
+                    )
+                    if end is None:
+                        self.set_value_shape(node.output[0], shape[start.i :])
+                    else:
+                        assert end.i < len(shape), (
+                            f"Shape mismatch, end={end.i}, shape of {node.input[0]!r} "
+                            f"is {shape}{self.get_debug_msg()}"
+                        )
+                        self.set_value_shape(node.output[0], shape[start.i : end.i])
+                elif end is None:
+                    self.set_value_shape(node.output[0], f"{node.input[0]}[{start.i}:]")
+                else:
+                    self.set_value_shape(
+                        node.output[0], f"{node.input[0]}[{start.i}:{end.i}]"
+                    )
+            return
+
+        if node.op_type == "Gather":
+            if self.is_constant(node.input[1]):
+                y = self.value_as_shape(node.input[0])
+                if y is None:
+                    return
+                i = self.get_constant(node.input[1])
+                if isinstance(y, str) and isinstance(i, int):
+                    self.set_value_shape(node.output[0], f"{y}[{i}]")
+                    return
+                if (
+                    isinstance(y, str)
+                    and isinstance(i, np.ndarray)
+                    and i.dtype == np.int64
+                    and i.shape in ((1,), tuple())
+                ):
+                    ii = int(i[0]) if i.shape == (1,) else int(i)
+                    self.set_value_shape(node.output[0], f"{y}[{ii}]")
+                    return
+                if isinstance(y, tuple) and isinstance(i, int):
+                    self.set_value_shape(node.output[0], y[i])
+                    return
+                if (
+                    isinstance(y, tuple)
+                    and isinstance(i, np.ndarray)
+                    and i.dtype == np.int64
+                    and i.shape in ((1,), tuple())
+                ):
+                    ii = int(i[0]) if i.shape == (1,) else int(i)
+                    assert ii < len(y), (
+                        f"Unexpected value for y={y!r}, i={i!r} in node Gather "
+                        f"with inputs={node.input}{self.get_debug_msg()}"
+                    )
+                    self.set_value_shape(node.output[0], y[ii])
+                    return
+                raise RuntimeError(
+                    f"Not implemented when node Gather with inputs={node.input}, "
+                    f"y={y!r}, i={i!r}{self.get_debug_msg()}"
+                )
+            return
+
+        values = [self.value_as_shape(x) for x in node.input[0]]
+        if any(map(lambda x: x is None, values)):
+            # it is not a shape
+            return
+        if node.op_type == "Concat":
+            self.set_shape_value(node.output[0], tuple(values))
+            return
+        raise RuntimeError(
+            f"Unable to compute a shape for node {node.op_type!r} "
+            f"with inputs={node.input}{self.get_debug_msg()}"
+        )
+
     def is_dynamic_dimension(
         self, dim: Any, verify: bool = True, allow_none: bool = False
     ) -> bool:
@@ -1098,6 +1290,90 @@ class GraphBuilder:
             name = v
         return name
 
+    def _torch_sym_int(self, d):
+        assert isinstance(
+            d, (self.torch.SymInt, str)
+        ), f"unexpected type for d={d}, type={type(d)}"
+        value = None
+        try:
+            dyn_val = str(d.node._expr)
+            value = dyn_val
+        except AttributeError:
+            pass
+
+        if value is None:
+            # Is it an integer?
+            try:
+                val_int = int(d)
+                value = val_int
+            except (TypeError, ValueError):
+                pass
+        else:
+            # maybe an expression which is a single integer
+            try:
+                val_int = int(value)
+                value = val_int
+            except (TypeError, ValueError):
+                pass
+
+        if isinstance(value, int):
+            assert not isinstance(value, self.torch.SymInt)
+            return value
+
+        if value is None:
+            value = str(d)
+
+        if value in self._dynamic_alias:
+            value = self._dynamic_alias[value]
+
+        if value not in self.dynamic_objects_rev:
+            # The dynamic dimension does not seem to be registered.
+            # Maybe it is constant.
+            try:
+                val_int = int(d)
+                value = val_int
+                return value
+            except (TypeError, ValueError):
+                pass
+
+        if value in self.dynamic_objects:
+            assert not isinstance(value, self.torch.SymInt)
+            return value
+        assert value in self.dynamic_objects_rev or value in self._known_value_shape, (
+            f"value={value!r}, unable to find dimension {d!r} ({type(d)}) "
+            f"(str(d)={str(d)!r}) in {self.dynamic_objects_rev} "
+            f"or {self._dynamic_alias} or {self._known_value_shape}"
+            f"{dir(d)}"
+            f"{self.get_debug_msg()}"
+        )
+        assert not isinstance(
+            value, self.torch.SymInt
+        ), f"Unexpected type {type(value)} for d={d!r}"
+        if value in self.dynamic_objects_rev:
+            new_value = self.dynamic_objects_rev[value]
+            assert isinstance(new_value, list), (
+                f"Unexpected type {type(new_value)} for value={value!r}, d={d}"
+                f"{self.get_debug_msg()}"
+            )
+            assert len(new_value) == 1, (
+                f"Unexpected number of items in {new_value}, value={value!r}, d={d}"
+                f"{self.get_debug_msg()}"
+            )
+            final = new_value[0]
+            assert isinstance(final, tuple) or len(final) != 2, (
+                f"Unexpected type {type(final)}, final={final}, value={value}, d={d}"
+                f"{self.get_debug_msg()}"
+            )
+            name = final[0]
+            assert isinstance(name, str), (
+                f"Unexpected type {type(name)}, name={final}, value={value}, d={d}"
+                f"{self.get_debug_msg()}"
+            )
+            return name
+
+        # Its value is in self._known_value_shape. We still return its name.
+        return value
+
     def verify_dynamic_shape(
         self, shape: Any, for_onnx: bool = True, name: Optional[str] = None
     ) -> DYNAMIC_SHAPE:
@@ -1117,56 +1393,7 @@ class GraphBuilder:
                     new_shape.append(dyn_name)
                     continue
 
-                value = None
-                try:
-                    dyn_val = str(d.node._expr)
-                    value = dyn_val
-                except AttributeError:
-                    pass
-
-                if value is None:
-                    # Is it an integer?
-                    try:
-                        val_int = int(d)
-                        value = val_int
-                    except (TypeError, ValueError):
-                        pass
-                else:
-                    # maybe an expression which is a single integer
-                    try:
-                        val_int = int(value)
-                        value = val_int
-                    except (TypeError, ValueError):
-                        pass
-
-                if isinstance(value, int):
-                    new_shape.append(value)
-                    continue
-
-                if value is None:
-                    value = str(d)
-
-                if value in self._dynamic_alias:
-                    value = self._dynamic_alias[value]
-
-                if value not in self.dynamic_objects_rev:
-                    # The dynamic dimension does not seem to be registered.
-                    # Maybe it is constant.
-                    try:
-                        val_int = int(d)
-                        value = val_int
-                        new_shape.append(value)
-                        continue
-                    except (TypeError, ValueError):
-                        pass
-
-                assert value in self.dynamic_objects_rev, (
-                    f"value={value!r}, unable to find dimension {d!r} ({type(d)}) "
-                    f"(str(d)={str(d)!r}) in {self.dynamic_objects_rev} "
-                    f"or {self._dynamic_alias} "
-                    f"{dir(d)}"
-                    f"{self.get_debug_msg()}"
-                )
+                value = self._torch_sym_int(d)
                 new_shape.append(value if for_onnx else d)
                 continue
             if for_onnx and d is None:
@@ -1475,6 +1702,8 @@ class GraphBuilder:
                 f"[{self._debug_string_inputs(node.input, output_names)}] "
                 f"{node.op_type}:{node.input}->{node.output}"
             )
+
+        self.update_value_shape_with_node(node)
 
         # add the node
         for o in node.output:
@@ -1802,6 +2031,7 @@ class GraphBuilder:
         rows.append(f"dynamic_objects_rev={pprint.pformat(self.dynamic_objects_rev)}")
         rows.append(f"dynamic_alias={pprint.pformat(self._dynamic_alias)}")
         rows.append(f"dynamic_shapes={pprint.pformat(self.dynamic_shapes)}")
+        rows.append(f"_known_value_shape={pprint.pformat(self._known_value_shape)}")
         rows.append("--TORCH-SHAPES--")
         for kk, vv in self._known_torch_value.items():
             rows.append(
@@ -2473,9 +2703,16 @@ class GraphBuilder:
                     if not self.has_dynamic_object(sh):
                         self.make_dynamic_object(sh, self.torch.SymInt(sh))
                 self.set_shape(i.name, shape)
+            if (
+                self.get_type(i.name) == TensorProto.INT64
+                and self.get_shape(i.name) in ((1,), tuple)
+                and "dim" in i.name
+            ):
+                self.set_value_shape(i, (i.name,))
 
         for node in self.nodes:
             self._unique_names |= set(node.output)
+            self.update_value_shape_with_node(node)
             if node.name:
                 self._unique_node_names.add(node.name)
             if node.op_type == "Constant":

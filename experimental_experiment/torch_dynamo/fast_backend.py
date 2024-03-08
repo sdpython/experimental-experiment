@@ -1,5 +1,6 @@
 import os
 import pickle
+import time
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 import numpy as np
 from onnx import ModelProto, TensorProto, load
@@ -430,6 +431,8 @@ def onnx_custom_backend(
         max_device = max(i.get_device() for i in args if hasattr(i, "get_device"))
         if max_device >= 0:
             providers = [("CUDAExecutionProvider", {}), ("CPUExecutionProvider", {})]
+    else:
+        max_device = -1
 
     input_names = input_names = create_input_names(graph_module, args)
 
@@ -446,6 +449,17 @@ def onnx_custom_backend(
         verbose=verbose_onnx,
     )
 
+    begin = time.perf_counter()
+    if verbose:
+        if max_device >= 0:
+            print(
+                f"[onnx_custom_backend] CUDA memory "
+                f"allocated={torch.cuda.memory_allocated(max_device)}, "
+                f"reserved={torch.cuda.memory_reserved(max_device)}, "
+                f"max_device={max_device}"
+            )
+        print("[onnx_custom_backend] starts conversion to onnx.")
+
     onx, builder = to_onnx(
         graph_module,
         tuple(args),
@@ -456,11 +470,50 @@ def onnx_custom_backend(
         return_builder=True,
     )
 
+    if verbose:
+        print(
+            f"[onnx_custom_backend] to_onnx done in {time.perf_counter() - begin} with "
+            f"{len(onx.graph.node)} nodes and {onx.functions} local functions."
+        )
+        if max_device >= 0:
+            print(
+                f"[onnx_custom_backend] CUDA memory "
+                f"allocated={torch.cuda.memory_allocated(max_device)}, "
+                f"reserved={torch.cuda.memory_reserved(max_device)}, "
+                f"max_device={max_device}"
+            )
+
     if pre_ort_model_transforms is not None:
+
         if not isinstance(pre_ort_model_transforms, list):
             pre_ort_model_transforms = [pre_ort_model_transforms]
         for tr in pre_ort_model_transforms:
+            begin = time.perf_counter()
+            if verbose:
+                if max_device >= 0:
+                    print(
+                        f"[onnx_custom_backend] CUDA memory "
+                        f"allocated={torch.cuda.memory_allocated(max_device)}, "
+                        f"reserved={torch.cuda.memory_reserved(max_device)}, "
+                        f"max_device={max_device}"
+                    )
+                print(f"[onnx_custom_backend] starts pre_ort_model_transforms {tr}")
+
             onx = tr(onx)
+
+            if verbose:
+                print(
+                    f"[onnx_custom_backend] pre_ort_model_transforms "
+                    f"done in {time.perf_counter() - begin} with "
+                    f"{len(onx.graph.node)} nodes and {len(onx.functions)} local functions."
+                )
+                if max_device >= 0:
+                    print(
+                        f"[onnx_custom_backend] CUDA memory "
+                        f"allocated={torch.cuda.memory_allocated(max_device)}, "
+                        f"reserved={torch.cuda.memory_reserved(max_device)}, "
+                        f"max_device={max_device}"
+                    )
 
     value = os.environ.get("ONNXRT_DUMP_PATH", None)
     if value:
@@ -482,7 +535,30 @@ def onnx_custom_backend(
             f.write("\n")
         dump_first_inputs = name
 
+    begin = time.perf_counter()
+    if verbose:
+        if max_device >= 0:
+            print(
+                f"[onnx_custom_backend] CUDA memory "
+                f"allocated={torch.cuda.memory_allocated(max_device)}, "
+                f"reserved={torch.cuda.memory_reserved(max_device)}, "
+                f"max_device={max_device}"
+            )
+        print("[onnx_custom_backend] starts creating InferenceSession")
+
     sess, run_options = _get_session(onx, backend, providers, exc=raise_exc)
+
+    if verbose:
+        print(
+            f"[onnx_custom_backend] InferenceSession done in {time.perf_counter() - begin}"
+        )
+        if max_device >= 0:
+            print(
+                f"[onnx_custom_backend] CUDA memory "
+                f"allocated={torch.cuda.memory_allocated(max_device)}, "
+                f"reserved={torch.cuda.memory_reserved(max_device)}, "
+                f"max_device={max_device}"
+            )
 
     input_names = [i.name for i in onx.graph.input]
     output_names = [i.name for i in onx.graph.output]

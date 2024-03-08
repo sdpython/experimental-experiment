@@ -25,6 +25,17 @@ Some helpers
 ++++++++++++
 """
 
+from experimental_experiment.args import get_parsed_args
+
+script_args = get_parsed_args(
+    "plot_llama_diff_export",
+    description=__doc__,
+    part=("model", "one value among attention, decoder, model"),
+    exporter=("dynamo", "one value among dynamo, custom"),
+    ortopt=(1, "run onnxruntime optimization"),
+    expose="part,exporter,ortopt",
+)
+
 import contextlib
 import os
 import io
@@ -48,7 +59,6 @@ import onnx
 from onnx_array_api.reference import compare_onnx_execution, ExtendedReferenceEvaluator
 import torch
 from experimental_experiment.ext_test_case import unit_test_going
-from experimental_experiment.args import get_parsed_args
 from experimental_experiment.torch_interpreter import to_onnx
 from experimental_experiment.xbuilder import OptimizationOptions
 from experimental_experiment.convert.convert_helper import (
@@ -71,15 +81,6 @@ provider = "cuda" if has_cuda else "cpu"
 # The exporting functions
 # +++++++++++++++++++++++
 
-
-script_args = get_parsed_args(
-    "plot_llama_diff_export",
-    description=__doc__,
-    part=("attention", "one value among attention, decoder, model"),
-    exporter=("dynamo", "one value among dynamo, custom"),
-    ortopt=(1, "run onnxruntime optimization"),
-    expose="part,exporter,ortopt",
-)
 
 print(f"part={script_args.part}")
 print(f"exporter={script_args.exporter}")
@@ -111,7 +112,7 @@ def export_dynamo(filename, model, *args):
     try:
         new_model = optimize_model_proto(model)
     except ImportError as e:
-        print("skipping optimization, missing package:", e)
+        print("skipping optimization, missing package or failure:", e)
         new_model = model
     with open(filename, "wb") as f:
         f.write(new_model.SerializeToString())
@@ -164,7 +165,14 @@ else:
 
 print(f"simple run with {len(inputs)} inputs")
 expected = model(*inputs[0])
-print(f"eager mode worked {expected.shape}, {expected.dtype}")
+if isinstance(expected, tuple):
+    for t in expected:
+        if not isinstance(t, tuple):
+            print(f"eager worked {t.shape}, {t.dtype}")
+        else:
+            print(f"eager worked {type(t)}")
+else:
+    print(f"eager mode worked {expected.shape}, {expected.dtype}")
 
 
 ###################################
@@ -241,8 +249,12 @@ except NotImplementedError as e:
 got1 = sess1.run(None, feeds1)
 got2 = got1 if sess2 is None else sess2.run(None, feeds2)
 
-diff1 = np.abs(expected.detach().numpy() - got1[0]).max()
-diff2 = np.abs(expected.detach().numpy() - got2[0]).max()
+if isinstance(expected, tuple):
+    diff1 = np.abs(expected[0].detach().numpy() - got1[0]).max()
+    diff2 = np.abs(expected[0].detach().numpy() - got2[0]).max()
+else:
+    diff1 = np.abs(expected.detach().numpy() - got1[0]).max()
+    diff2 = np.abs(expected.detach().numpy() - got2[0]).max()
 
 print(f"Error with the eager model and the reference evaluator: {diff1}, {diff2}")
 
