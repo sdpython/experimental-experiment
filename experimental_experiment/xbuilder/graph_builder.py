@@ -2679,8 +2679,8 @@ class GraphBuilder:
                         self.make_dynamic_object(sh, self.torch.SymInt(sh))
                 self.set_shape(i.name, shape)
             if (
-                self.get_type(i) == TensorProto.INT64
-                and self.get_shape(i) in ((1,), tuple)
+                self.get_type(i.name) == TensorProto.INT64
+                and self.get_shape(i.name) in ((1,), tuple)
                 and "dim" in i.name
             ):
                 self.set_value_shape(i, (i.name,))
