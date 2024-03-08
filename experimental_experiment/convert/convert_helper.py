@@ -86,7 +86,7 @@ def optimize_model_proto(model_proto: ModelProto, verbose: int = 0) -> ModelProt
         if verbose:
             print(
                 f"[optimize_model_proto] rewrite done in {time.perf_counter() - begin} "
-                f"seconds with {len(model_proto.graph.node)} and "
+                f"seconds with {len(model_proto.graph.node)} nodes and "
                 f"{len(model_proto.functions)} local functions"
             )
 

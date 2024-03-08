@@ -111,11 +111,25 @@ print(f"mixed={args.mixed}")
 if args.backend == "custom":
     print(f"disabled_pattern={disabled_pattern!r}")
     print(f"enable_pattern={enable_pattern!r}")
-model, example_args_collection = get_llama_model(**config_dict)
 
+
+is_cuda = args.device == "cuda"
+if is_cuda:
+    print(
+        f"CUDA no model: memory allocated={torch.cuda.memory_allocated(0)}, "
+        f"reserved={torch.cuda.memory_reserved(0)}"
+    )
+
+model, example_args_collection = get_llama_model(**config_dict)
 
 device = args.device
 model = model.eval().to(device)
+
+if is_cuda:
+    print(
+        f"CUDA model loaded: memory allocated={torch.cuda.memory_allocated(0)}, "
+        f"reserved={torch.cuda.memory_reserved(0)}"
+    )
 
 print(f"Build the compile model with backend={args.backend}")
 use_dynamic = args.dynamic in (1, "1", True, "True")
@@ -195,8 +209,12 @@ def loop_iteration(is_cuda, inputs, compiled_model, loss):
 
 
 print(f"warmup on device={args.device}")
+if is_cuda:
+    print(
+        f"CUDA memory allocated={torch.cuda.memory_allocated(0)}, "
+        f"reserved={torch.cuda.memory_reserved(0)}"
+    )
 warmup_times = []
-is_cuda = args.device == "cuda"
 loss = torch.nn.MSELoss()
 for i in range(args.warmup):
     example_inputs = example_args_collection[i]
@@ -232,6 +250,12 @@ for i in range(args.warmup):
 
 warmup_time = sum(warmup_times)
 print(f"warmup done in {warmup_time}s.")
+if is_cuda:
+    print(
+        f"memory allocated={torch.cuda.memory_allocated(0)}, "
+        f"reserved={torch.cuda.memory_reserved(0)}"
+    )
+
 
 print("measures")
 times = []
