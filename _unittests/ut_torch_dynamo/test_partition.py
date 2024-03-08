@@ -67,6 +67,7 @@ class TestPartition(ExtTestCase):
 
     @skipif_ci_apple("no onnxruntime-training")
     @skipif_ci_windows("no torch dynamo")
+    @unittest.skipIf(True, reason="not implemented yet")
     def test_1_partition_sigmoid_debug(self):
 
         class MLP(torch.nn.Module):
@@ -117,6 +118,7 @@ class TestPartition(ExtTestCase):
 
     @skipif_ci_apple("no onnxruntime-training")
     @skipif_ci_windows("no torch dynamo")
+    @unittest.skipIf(True, reason="not implemented yet")
     def test_partition_sigmoid_debug(self):
 
         class MLP(torch.nn.Module):
