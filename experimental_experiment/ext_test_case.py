@@ -1,4 +1,6 @@
+import glob
 import os
+import re
 import sys
 import unittest
 import warnings
@@ -392,3 +394,96 @@ def requires_torch(version: str, msg: str) -> Callable:
         msg = f"Test does not work on azure pipeline (Windows). {msg}"
         return unittest.skip(msg)
     return lambda x: x
+
+
+def statistics_on_file(filename: str) -> Dict[str, Union[int, float, str]]:
+    """
+    Computes statistics on a file.
+
+    .. runpython::
+        :showcode:
+
+        import pprint
+        from experimental_experiment.ext_test_case import statistics_on_file, __file__
+
+        pprint.pprint(statistics_on_file(__file__))
+    """
+    assert os.path.exists(filename), f"File {filename!r} does not exists."
+
+    ext = os.path.splitext(filename)[-1]
+    if ext not in {".py", ".rst", ".md", ".txt"}:
+        size = os.stat(filename).st_size
+        return {"size": size}
+    with open(filename, "r", encoding="utf-8") as f:
+        n_line = 0
+        n_ch = 0
+        for line in f.readlines():
+            s = line.strip("\n\r\t ")
+            if s:
+                n_line += 1
+                n_ch += len(s.replace(" ", ""))
+
+    stat = dict(lines=n_line, chars=n_ch, ext=ext)
+    if ext != ".py":
+        return stat
+    # add statistics on python syntax?
+    return stat
+
+
+def statistics_on_folder(
+    folder: Union[str, List[str]],
+    pattern: str = ".*[.]((py|rst))$",
+    aggregation: int = 0,
+) -> List[Dict[str, Union[int, float, str]]]:
+    """
+    Computes statistics on files in a folder.
+
+    :param folder: folder or folders to investigate
+    :param pattern: file pattern
+    :param aggregation: show the first subfolders
+    :return: list of dictionaries
+
+    .. runpython::
+        :showcode:
+
+        import os
+        import pprint
+        from experimental_experiment.ext_test_case import statistics_on_folder, __file__
+
+        pprint.pprint(statistics_on_folder(os.path.dirname(__file__)))
+    """
+    if isinstance(folder, list):
+        rows = []
+        for fo in folder:
+            last = fo.replace("\\", "/").split("/")[-1]
+            r = statistics_on_folder(
+                fo, pattern=pattern, aggregation=max(aggregation - 1, 0)
+            )
+            if aggregation == 0:
+                rows.extend(r)
+                continue
+            for line in r:
+                line["dir"] = os.path.join(last, line["dir"])
+            rows.extend(r)
+        return rows
+
+    rows = []
+    reg = re.compile(pattern)
+    for name in glob.glob("**/*", root_dir=folder, recursive=True):
+        if not reg.match(name):
+            continue
+        if os.path.isdir(os.path.join(folder, name)):
+            continue
+        n = name.replace("\\", "/")
+        spl = n.split("/")
+        level = len(spl)
+        stat = statistics_on_file(os.path.join(folder, name))
+        stat["name"] = name
+        if aggregation <= 0:
+            rows.append(stat)
+            continue
+        spl = os.path.dirname(name).replace("\\", "/").split("/")
+        level = "/".join(spl[:aggregation])
+        stat["dir"] = level
+        rows.append(stat)
+    return rows
