@@ -13,6 +13,7 @@
 coverage.html/*
 temp*.txt*
 tt_*.txt
+tt.py
 temp_dump/*
 temp_data/*
 debug_data/*

@@ -20,6 +20,32 @@ API
     torch_dynamo
     misc
 
+**Versions**
+
+The documentation was generated with the following versions.
+
+.. runpython::
+    :showcode:
+
+    import onnx
+    import onnx_array_api
+    import onnxruntime
+    import torch
+    import transformers
+    import onnxscript
+    try:
+        import onnxrewriter
+    except ImportError:
+        onnxrewriter = None
+
+    for pck in [onnx, onnx_array_api, onnxruntime, torch, transformers, onnxscript, onnxrewriter]:
+        if pck is None:
+            continue
+        try:
+            print(f"{pck.__name__}: {pck.__version__}")
+        except AttributeError as e:
+            print(f"{pck.__name__}: {e}")
+
 **Statistics**
 
 .. runpython::

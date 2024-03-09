@@ -30,7 +30,7 @@ from experimental_experiment.args import get_parsed_args
 script_args = get_parsed_args(
     "plot_llama_diff_export",
     description=__doc__,
-    part=("model", "one value among attention, decoder, model"),
+    part=("attention", "one value among attention, decoder, model"),
     exporter=("dynamo", "one value among dynamo, custom"),
     ortopt=(1, "run onnxruntime optimization"),
     expose="part,exporter,ortopt",
@@ -107,11 +107,7 @@ def export_dynamo(filename, model, *args):
     with contextlib.redirect_stdout(io.StringIO()):
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            try:
-                export_output = torch.onnx.dynamo_export(model, *args)
-            except torch.onnx.OnnxExporterError as e:
-                print("skipping conversion, failure:", e)
-                return None
+            export_output = torch.onnx.dynamo_export(model, *args)
             model = export_output.model_proto
     try:
         new_model = optimize_model_proto(model)
