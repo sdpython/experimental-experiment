@@ -112,6 +112,7 @@ sphinx_gallery_conf = {
 epkg_dictionary = {
     "DOT": "https://graphviz.org/doc/info/lang.html",
     "JIT": "https://en.wikipedia.org/wiki/Just-in-time_compilation",
+    "GraphModule": "https://pytorch.org/docs/stable/fx.html#torch.fx.GraphModule",
     "numpy": "https://numpy.org/",
     "onnx": "https://onnx.ai/onnx/",
     "onnx.helper": "https://onnx.ai/onnx/api/helper.html",
