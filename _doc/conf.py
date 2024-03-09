@@ -132,6 +132,7 @@ epkg_dictionary = {
     "sklearn-onnx": "https://onnx.ai/sklearn-onnx/",
     "sphinx-gallery": "https://github.com/sphinx-gallery/sphinx-gallery",
     "Supported Operators and Data Types": "https://github.com/microsoft/onnxruntime/blob/main/docs/OperatorKernels.md",
+    "sympy": "https://www.sympy.org/en/index.html",
     "torch": "https://pytorch.org/docs/stable/torch.html",
     "torch.compiler": "https://pytorch.org/docs/stable/torch.compiler.html",
     "torch.export.export": "https://pytorch.org/docs/stable/export.html#torch.export.export",

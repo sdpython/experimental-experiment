@@ -2105,6 +2105,11 @@ class GraphBuilder:
         return res
 
     def get_debug_msg(self) -> str:
+        """
+        Returns a string providing as much information as possible
+        to help the developper understand why a conversion failed.
+        """
+
         def _align(s, length):
             if len(s) < length:
                 s += " " * (length - len(s))
@@ -2204,6 +2209,15 @@ class GraphBuilder:
     def to_onnx(
         self, as_function: bool = False, optimize: bool = True
     ) -> Union[FunctionProto, ModelProto]:
+        """
+        Conversion to onnx. Only then the initializer are converted into
+        TensorProto.
+
+        :param as_function: converts the graph as a FunctionProto or a ModelProto
+        :param optimize: disable or enable the optimization,
+            the optimization are set when the class constructor is called
+        :return: the proto
+        """
         if len(self.nodes) == 0:
             raise RuntimeError(
                 f"The onnx model is empty (no node).\n{self.get_debug_msg()}"

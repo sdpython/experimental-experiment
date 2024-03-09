@@ -28,7 +28,7 @@ This second backend calls the reference implementation through class
 :class:`ExtendedReferenceEvaluator
 <experimental_experiment.reference.ExtendedReferenceEvaluator>`.
 This class extends :class:`ReferenceEvaluator <onnx.reference.ReferenceEvaluator>`
-from package :epkg:`onnx.`
+from package :epkg:`onnx`.
 
 One objective: SPEED
 ====================
@@ -522,6 +522,8 @@ Example
 And visually:
 
 .. gdot::
+    :script: DOT-SECTION
+    :process:
 
     import torch
     from onnx_array_api.plotting.dot_plot import to_dot
