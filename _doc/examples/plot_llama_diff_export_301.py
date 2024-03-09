@@ -107,7 +107,11 @@ def export_dynamo(filename, model, *args):
     with contextlib.redirect_stdout(io.StringIO()):
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            export_output = torch.onnx.dynamo_export(model, *args)
+            try:
+                export_output = torch.onnx.dynamo_export(model, *args)
+            except torch.onnx.OnnxExporterError as e:
+                print("skipping conversion, failure:", e)
+                return None
             model = export_output.model_proto
     try:
         new_model = optimize_model_proto(model)

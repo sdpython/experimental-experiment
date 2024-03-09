@@ -25,33 +25,33 @@ API
 .. runpython::
     :showcode:
 
-        import os
-        import pandas
-        import experimental_experiment
-        from experimental_experiment.ext_test_case import (
-            statistics_on_file,
-            statistics_on_folder,
-        )
+    import os
+    import pandas
+    import experimental_experiment
+    from experimental_experiment.ext_test_case import (
+        statistics_on_file,
+        statistics_on_folder,
+    )
 
-        root = os.path.dirname(experimental_experiment.__file__)
-        stat = statistics_on_folder(
-            [
-                root,
-                os.path.join(root, "..", "_doc"),
-                os.path.join(root, "..", "_unittests"),
-            ],
-            aggregation=2,
-        )
+    root = os.path.dirname(experimental_experiment.__file__)
+    stat = statistics_on_folder(
+        [
+            root,
+            os.path.join(root, "..", "_doc"),
+            os.path.join(root, "..", "_unittests"),
+        ],
+        aggregation=2,
+    )
 
-        df = pandas.DataFrame(stat)
-        gr = df.drop("name", axis=1).groupby(["ext", "dir"]).sum().reset_index()
-        gr = gr[gr["dir"] != "_doc/auto_examples"]
-        print(gr)
-        print("--------------------")
-        total = (
-            gr[gr["dir"].str.contains("experimental_experiment/")]
-            .drop(["ext", "dir"], axis=1)
-            .sum(axis=0)
-        )
-        print(total)
+    df = pandas.DataFrame(stat)
+    gr = df.drop("name", axis=1).groupby(["ext", "dir"]).sum().reset_index()
+    gr = gr[gr["dir"] != "_doc/auto_examples"]
+    print(gr)
+    print("--------------------")
+    total = (
+        gr[gr["dir"].str.contains("experimental_experiment/")]
+        .drop(["ext", "dir"], axis=1)
+        .sum(axis=0)
+    )
+    print(total)
 
