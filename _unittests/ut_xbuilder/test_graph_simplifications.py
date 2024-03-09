@@ -114,6 +114,21 @@ class TestGraphSimplification(ExtTestCase):
         y = ref.run(None, {"X": x})[0]
         self.assertEqual(y.dtype, np.float32)
 
+    def test_builder_api2(self):
+        gr = GraphBuilder(18, ir_version=9)
+        gr.make_tensor_input("X", TensorProto.FLOAT, ("a", "b"), is_dimension=False)
+        mm = gr.op.MatMul("X", np.array([[0.4, 0.5, 0.6]], dtype=np.float32).T)
+        out = gr.op.Add(mm, np.array([0.4, 0.5, 0.6], dtype=np.float32), outputs=["Y"])
+        gr.make_tensor_output(
+            out, TensorProto.FLOAT, ("a",), indexed=False, is_dimension=False
+        )
+        onx = gr.to_onnx()
+
+        ref = ExtendedReferenceEvaluator(onx)
+        x = np.random.rand(10, 3).astype(np.float32)
+        y = ref.run(None, {"X": x})[0]
+        self.assertEqual(y.dtype, np.float32)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

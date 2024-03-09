@@ -2110,17 +2110,6 @@ class GraphBuilder:
                 s += " " * (length - len(s))
             return s
 
-        if not self._debug_msg:
-            rows = [""]
-            for n in self.nodes:
-                if n is None:
-                    continue
-                rows.append(
-                    f"{_align(n.op_type, 20)}: {','.join(n.input)} -> "
-                    f"{','.join(n.output)} --- {n.name}"
-                )
-            return "\n".join(rows)
-
         def _size(t):
             if hasattr(t, "numel"):
                 return t.numel()
