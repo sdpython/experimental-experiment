@@ -12,6 +12,14 @@ def make_aot_ort(dynamic: bool = False, rewrite: bool = "try", verbose: int = 0)
     ort_session_options = onnxruntime.SessionOptions()
     # ort_session_options.log_severity_level = 1
 
+    if rewrite is True:
+        # we switch to try if torch is not recent enough.
+        import packaging.version as pv
+        from torch import __version__ as torch_version
+
+        if pv.Version(torch_version) < pv.Version("2.3"):
+            rewrite = "try"
+
     if rewrite == "try":
         import packaging.version as pv
         from torch import __version__ as torch_version
