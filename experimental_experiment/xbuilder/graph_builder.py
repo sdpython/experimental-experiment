@@ -364,6 +364,18 @@ class GraphBuilder:
         "Returns the opset for the main domain (assuming it is used)."
         return self.opsets[""]
 
+    def get_opset(self, domain: str) -> int:
+        """
+        Returns the opset version for a specific domain.
+
+        :param domain: domain name
+        :return: version
+        """
+        assert (
+            domain in self.opset
+        ), f"Domain {domain!r} is not registered{self.get_debug_msg()}."
+        return self.opset[domain]
+
     def _hash(self) -> str:
         return make_hash(self)
 
@@ -569,6 +581,7 @@ class GraphBuilder:
         raise TypeError(f"Unable to convert type {type(value)} into numpy array.")
 
     def set_name(self, name: str):
+        """Adds a name to the list of known names."""
         assert (
             name not in self._raise_list
         ), f"Name {name!r} is one of the name declared in the stop list{self.get_debug_msg()}"
@@ -581,6 +594,12 @@ class GraphBuilder:
         self._unique_names.add(name)
 
     def set_rank(self, name: str, value: int):
+        """
+        Sets the rank for a result.
+
+        :param name: result name
+        :param value: rank
+        """
         assert isinstance(
             value, int
         ), f"Unexpected rank type {type(value)} for {name!r}"
@@ -737,6 +756,17 @@ class GraphBuilder:
         for_onnx: bool = False,
         exc: bool = False,
     ):
+        """
+        Sets the shape for a result. It is exists, it checks the new shape
+        is equal to the existing one.
+
+        :param name: result name
+        :param shape: shape
+        :param set_rank: set the rank as well
+        :param set_if_more_precise: change the shape if it is more precise
+        :param for_onnx: if True, shape can't allow `torch.SymInt`
+        :param exc: raise an exception if inconsistency
+        """
         assert isinstance(name, str), f"Unexpected type {type(name)} for name."
         assert "torch.Size" not in str(shape), (
             f"Unexpected type {type(shape)} for a "
@@ -773,6 +803,13 @@ class GraphBuilder:
             self.set_rank(name, len(shape))
 
     def set_type(self, name: str, dtype: int):
+        """
+        Sets the shape for a result. It is exists, it checks the new shape
+        is equal to the existing one.
+
+        :param name: name
+        :param dtype: element type (an integer, ONNX)
+        """
         assert isinstance(name, str), f"Unexpected type {type(name)} for name."
         if isinstance(dtype, int):
             int_type = dtype
@@ -789,18 +826,22 @@ class GraphBuilder:
         self._known_types[name] = int_type
 
     def rank(self, name: str) -> int:
+        """Shortcut to :meth:`get_rank`."""
         assert isinstance(name, str), f"Unexpected type {type(name)} for name."
         return self.get_rank(name)
 
     def has_name(self, name: str) -> bool:
+        """Tells if a result exists."""
         assert isinstance(name, str), f"Unexpected type {type(name)} for name."
         return name in self._known_names
 
     def has_rank(self, name: str) -> bool:
+        """Tells if a result has a rank."""
         assert isinstance(name, str), f"Unexpected type {type(name)} for name."
         return name in self._known_ranks
 
     def has_shape(self, name: str, full=False) -> bool:
+        """Tells if a result has a shape."""
         assert isinstance(name, str), f"Unexpected type {type(name)} for name."
         if name not in self._known_shapes:
             return False
@@ -810,10 +851,12 @@ class GraphBuilder:
         return True
 
     def has_type(self, name: str) -> bool:
+        """Tells if a result has a type. This should be always true."""
         assert isinstance(name, str), f"Unexpected type {type(name)} for name."
         return name in self._known_types
 
     def get_rank(self, name: str) -> int:
+        """Returns the rank of a result."""
         assert isinstance(name, str), f"Unexpected type {type(name)} for name."
         assert name in self._known_ranks, (
             f"Rank is unknown for result {name!r}, "
@@ -822,6 +865,7 @@ class GraphBuilder:
         return self._known_ranks[name]
 
     def get_shape(self, name: str) -> int:
+        """Returns the shape of a result."""
         assert isinstance(name, str), f"Unexpected type {type(name)} for name."
         assert name in self._known_shapes, (
             f"Shape is unknown for result {name!r}, "
@@ -830,6 +874,7 @@ class GraphBuilder:
         return self._known_shapes[name]
 
     def get_type(self, name: str) -> int:
+        """Returns the type of a result."""
         assert isinstance(name, str), f"Unexpected type {type(name)} for name."
         assert name in self._known_types, (
             f"Type is unknown for result {name!r}, "
@@ -838,11 +883,18 @@ class GraphBuilder:
         return self._known_types[name]
 
     def value_as_shape(self, name: str) -> bool:
+        """Returns the value of a result if it is a shape."""
         if name in self._known_value_shape:
             return self._known_value_shape[name]
         return None
 
     def set_value_shape(self, name: str, value: Any):
+        """
+        Sets the value for a shape result.
+
+        :param name: name
+        :param value: it cannot be empty
+        """
         assert (
             name not in self._known_value_shape
         ), f"Shape value for {name!r} (value={value!r}) is already registered."
@@ -913,11 +965,21 @@ class GraphBuilder:
         return elem_type
 
     def has_dynamic_object(self, name: str) -> bool:
+        """Tells if a result is a dynamic object, `torch.SymInt` for torch."""
         return name in self.dynamic_objects
 
     def make_dynamic_object(
         self, name: str, value: Any, shape_as_input: bool = False
     ) -> str:
+        """
+        Creates a dynamic shapes.
+
+        :param name: name
+        :param value: value
+        :param shape_as_input: adds the name to the list of the inputs
+            of the onnx model
+        :return: the name
+        """
         assert name not in self.dynamic_objects, (
             f"Dynamic object {name!r}, value={value!r} "
             f"is already there{self.get_debug_msg()}"
@@ -1017,6 +1079,19 @@ class GraphBuilder:
     def make_initializer(
         self, name: str, value: Any, external: bool = False, msg: str = ""
     ) -> str:
+        """
+        Adds an initializer to the graph.
+        The function detects duplicated small containers, only if they are
+        integers. Other type might be used as weights. Even similar, they could
+        change after training.
+
+        :param name: name, if empty (`""`), a unique names is given, if not empty,
+            it is more like a prefix, the method might change it to make it unique
+        :param value: value (TensorProto)
+        :param external: external initializer or not (not stored in the graph model)
+        :param msg: added to the error message if something goes wrong
+        :return: name of the initializer
+        """
         if external:
             raise NotImplementedError("External initializers are not implemented yet.")
         if isinstance(value, int):
@@ -1290,7 +1365,7 @@ class GraphBuilder:
             name = v
         return name
 
-    def _torch_sym_int(self, d):
+    def _torch_sym_int(self, d, add: bool = False):
         assert isinstance(
             d, (self.torch.SymInt, str)
         ), f"unexpected type for d={d}, type={type(d)}"
@@ -1339,6 +1414,15 @@ class GraphBuilder:
         if value in self.dynamic_objects:
             assert not isinstance(value, self.torch.SymInt)
             return value
+
+        if (
+            value not in self.dynamic_objects_rev
+            and value not in self._known_value_shape
+            and add
+        ):
+            self.dynamic_objects[value] = value
+            self.dynamic_objects_rev[value] = [value]
+
         assert value in self.dynamic_objects_rev or value in self._known_value_shape, (
             f"value={value!r}, unable to find dimension {d!r} ({type(d)}) "
             f"(str(d)={str(d)!r}) in {self.dynamic_objects_rev} "
@@ -1375,7 +1459,11 @@ class GraphBuilder:
         return value
 
     def verify_dynamic_shape(
-        self, shape: Any, for_onnx: bool = True, name: Optional[str] = None
+        self,
+        shape: Any,
+        for_onnx: bool = True,
+        name: Optional[str] = None,
+        add: bool = True,
     ) -> DYNAMIC_SHAPE:
         """
         The implementation of this method should be revisited.
@@ -1393,7 +1481,7 @@ class GraphBuilder:
                     new_shape.append(dyn_name)
                     continue
 
-                value = self._torch_sym_int(d)
+                value = self._torch_sym_int(d, add=add)
                 new_shape.append(value if for_onnx else d)
                 continue
             if for_onnx and d is None:
@@ -1435,7 +1523,7 @@ class GraphBuilder:
 
         self.current_input += 1
         elem_type = self._get_type(elem_type)
-        dyn_shape = self.verify_dynamic_shape(shape, name=input_name)
+        dyn_shape = self.verify_dynamic_shape(shape, name=input_name, add=True)
 
         if shape is not None:
             tuple_shape = tuple(shape)
@@ -1616,6 +1704,24 @@ class GraphBuilder:
         set_type_shape: bool = False,
         **kwargs,
     ) -> Union[str, List[str]]:
+        """
+        Adds a node in the graph.
+
+        :param op_type: operator type
+        :param inputs: input names
+        :param outputs: output names, may be None, in that case,
+            the builder chooses them for the user
+        :param domain: domain
+        :param attributes: list of attributes to add as AttributeProto
+        :param check: do some verification
+        :param name: node name
+        :param set_type_shape: tries to set the shape and the type of
+            the new results aftr the node is added, it is not possible
+            for every node, there is no tool which determines the output shape
+            of just one node
+        :param kwargs: additional attributes to add the node
+        :return: output names
+        """
         assert (
             not kwargs or not attributes
         ), f"Only attributes or kwargs can be filled for node {op_type!r}."
@@ -1934,6 +2040,9 @@ class GraphBuilder:
     def from_array(
         self, arr: "torch.Tensor", name: str = None  # noqa: F821
     ) -> TensorProto:
+        """
+        Converts a torch Tensor into a TensorProto.
+        """
         import sys
 
         if not isinstance(arr, self.torch.Tensor):
@@ -1996,21 +2105,15 @@ class GraphBuilder:
         return res
 
     def get_debug_msg(self) -> str:
+        """
+        Returns a string providing as much information as possible
+        to help the developper understand why a conversion failed.
+        """
+
         def _align(s, length):
             if len(s) < length:
                 s += " " * (length - len(s))
             return s
-
-        if not self._debug_msg:
-            rows = [""]
-            for n in self.nodes:
-                if n is None:
-                    continue
-                rows.append(
-                    f"{_align(n.op_type, 20)}: {','.join(n.input)} -> "
-                    f"{','.join(n.output)} --- {n.name}"
-                )
-            return "\n".join(rows)
 
         def _size(t):
             if hasattr(t, "numel"):
@@ -2106,6 +2209,15 @@ class GraphBuilder:
     def to_onnx(
         self, as_function: bool = False, optimize: bool = True
     ) -> Union[FunctionProto, ModelProto]:
+        """
+        Conversion to onnx. Only then the initializer are converted into
+        TensorProto.
+
+        :param as_function: converts the graph as a FunctionProto or a ModelProto
+        :param optimize: disable or enable the optimization,
+            the optimization are set when the class constructor is called
+        :return: the proto
+        """
         if len(self.nodes) == 0:
             raise RuntimeError(
                 f"The onnx model is empty (no node).\n{self.get_debug_msg()}"

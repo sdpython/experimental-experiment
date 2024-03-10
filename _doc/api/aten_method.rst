@@ -1,3 +1,4 @@
+.. _l-aten-methods:
 
 ============
 aten_methods

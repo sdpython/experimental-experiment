@@ -1,9 +1,11 @@
 import unittest
+import numpy as np
 import onnx
 import onnx.helper as oh
 from onnx import TensorProto
 from experimental_experiment.ext_test_case import ExtTestCase
 from experimental_experiment.xbuilder.graph_builder import GraphBuilder
+from experimental_experiment.reference import ExtendedReferenceEvaluator
 
 
 class TestGraphSimplification(ExtTestCase):
@@ -92,6 +94,40 @@ class TestGraphSimplification(ExtTestCase):
         self.assertEqual(onx.graph.node[0].op_type, "Softmax")
         self.assertEqual(onx.graph.node[1].op_type, "Identity")
         self.assertEqual(len(model.graph.output), 2)
+
+    def test_builder(self):
+        gr = GraphBuilder(18, ir_version=9)
+        gr.make_tensor_input("X", TensorProto.FLOAT, ("a", "b"), is_dimension=False)
+        weight = gr.make_initializer(
+            "", np.array([[0.4, 0.5, 0.6]], dtype=np.float32).T
+        )
+        bias = gr.make_initializer("", np.array([[0.4, 0.5, 0.6]], dtype=np.float32))
+        mm = gr.make_node("MatMul", ["X", weight])
+        out = gr.make_node("Add", [mm, bias], ["Y"])
+        gr.make_tensor_output(
+            out, TensorProto.FLOAT, ("a",), indexed=False, is_dimension=False
+        )
+        onx = gr.to_onnx()
+
+        ref = ExtendedReferenceEvaluator(onx)
+        x = np.random.rand(10, 3).astype(np.float32)
+        y = ref.run(None, {"X": x})[0]
+        self.assertEqual(y.dtype, np.float32)
+
+    def test_builder_api2(self):
+        gr = GraphBuilder(18, ir_version=9)
+        gr.make_tensor_input("X", TensorProto.FLOAT, ("a", "b"), is_dimension=False)
+        mm = gr.op.MatMul("X", np.array([[0.4, 0.5, 0.6]], dtype=np.float32).T)
+        out = gr.op.Add(mm, np.array([0.4, 0.5, 0.6], dtype=np.float32), outputs=["Y"])
+        gr.make_tensor_output(
+            out, TensorProto.FLOAT, ("a",), indexed=False, is_dimension=False
+        )
+        onx = gr.to_onnx()
+
+        ref = ExtendedReferenceEvaluator(onx)
+        x = np.random.rand(10, 3).astype(np.float32)
+        y = ref.run(None, {"X": x})[0]
+        self.assertEqual(y.dtype, np.float32)
 
 
 if __name__ == "__main__":

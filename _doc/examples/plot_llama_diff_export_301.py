@@ -30,7 +30,7 @@ from experimental_experiment.args import get_parsed_args
 script_args = get_parsed_args(
     "plot_llama_diff_export",
     description=__doc__,
-    part=("model", "one value among attention, decoder, model"),
+    part=("attention", "one value among attention, decoder, model"),
     exporter=("dynamo", "one value among dynamo, custom"),
     ortopt=(1, "run onnxruntime optimization"),
     expose="part,exporter,ortopt",

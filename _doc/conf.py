@@ -110,8 +110,10 @@ sphinx_gallery_conf = {
 }
 
 epkg_dictionary = {
+    "aten functions": "https://pytorch.org/cppdocs/api/namespace_at.html#functions",
     "DOT": "https://graphviz.org/doc/info/lang.html",
     "JIT": "https://en.wikipedia.org/wiki/Just-in-time_compilation",
+    "GraphModule": "https://pytorch.org/docs/stable/fx.html#torch.fx.GraphModule",
     "numpy": "https://numpy.org/",
     "onnx": "https://onnx.ai/onnx/",
     "onnx.helper": "https://onnx.ai/onnx/api/helper.html",
@@ -130,6 +132,7 @@ epkg_dictionary = {
     "sklearn-onnx": "https://onnx.ai/sklearn-onnx/",
     "sphinx-gallery": "https://github.com/sphinx-gallery/sphinx-gallery",
     "Supported Operators and Data Types": "https://github.com/microsoft/onnxruntime/blob/main/docs/OperatorKernels.md",
+    "sympy": "https://www.sympy.org/en/index.html",
     "torch": "https://pytorch.org/docs/stable/torch.html",
     "torch.compiler": "https://pytorch.org/docs/stable/torch.compiler.html",
     "torch.export.export": "https://pytorch.org/docs/stable/export.html#torch.export.export",

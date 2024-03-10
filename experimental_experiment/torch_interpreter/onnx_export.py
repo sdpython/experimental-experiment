@@ -14,6 +14,11 @@ def _retrieve(
     mapping: Dict[str, Tuple[str, bool]],
     graph_builder: "GraphBuilder",  # noqa: F821
 ) -> "torch.Tensor":  # noqa: F821
+    """
+    Sent to the :class:`DynamoInterpreter
+    <experimental_experiment.torch_interpreter.interpreter.DynamoInterpreter>`.
+    It retrieves the weights.
+    """
     if name not in mapping:
         import torch
 

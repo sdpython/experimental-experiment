@@ -134,9 +134,13 @@ def aten_addmm(
     alpha: float = 1.0,
 ) -> T:
     "gemm"
-    return g.op.Gemm(
+    res = g.op.Gemm(
         b, c, a, alpha=float(alpha), beta=float(beta), outputs=outputs, name="addmm"
     )
+    if sts:
+        g.set_type(res, g.get_type(b))
+        g.set_rank(res, 2)
+    return res
 
 
 def aten_alias(g: GraphBuilder, sts: bool, outputs: List[str], x: T) -> T:

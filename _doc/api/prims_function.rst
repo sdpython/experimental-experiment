@@ -1,3 +1,4 @@
+.. _l-aten-prims:
 
 ==========
 aten_prims
