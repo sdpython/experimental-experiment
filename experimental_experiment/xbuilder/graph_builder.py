@@ -6,7 +6,14 @@ import numpy as np
 import onnx.helper as oh
 import onnx.numpy_helper as onh
 from onnx.shape_inference import infer_shapes
-from onnx import AttributeProto, FunctionProto, ModelProto, NodeProto, TensorProto
+from onnx import (
+    AttributeProto,
+    FunctionProto,
+    GraphProto,
+    ModelProto,
+    NodeProto,
+    TensorProto,
+)
 from experimental_experiment.reference import ExtendedReferenceEvaluator
 from .shape_helper import (
     DYNAMIC_SHAPE,
@@ -2071,12 +2078,13 @@ class GraphBuilder:
                 f"[GraphBuilder-{self._hash()}.from_array] {tensor.data_type}[{arr_cpu.shape}]"
             )
 
-        raw = np_arr.tobytes()
-        tensor.raw_data = raw
-
         if sys.byteorder == "big":
+            tensor.raw_data = np_arr.tobytes()
             np_dtype = oh.tensor_dtype_to_np_dtype(tensor.data_type)
             np.byteswap(np.frombuffer(tensor.raw_data, dtype=np_dtype), inplace=True)
+        else:
+            tensor.raw_data = np_arr.tobytes()
+
         return tensor
 
     def _build_initializers(self) -> List[TensorProto]:
@@ -2242,22 +2250,41 @@ class GraphBuilder:
             )
 
         if self.verbose:
-            print(f"[GraphBuilder-{self._hash()}.to_onnx] onh.make_graph")
-        graph = oh.make_graph(
-            self.nodes, "experiment", self.inputs, self.outputs, dense
-        )
-        if self.verbose:
-            print(f"[GraphBuilder-{self._hash()}.to_onnx] onh.make_model")
-        model = oh.make_model(graph, opset_imports=opsets, functions=self.functions)
+            print(f"[GraphBuilder-{self._hash()}.to_onnx] make_model")
+
+        # graph = oh.make_graph(
+        #    self.nodes, "experiment", self.inputs, self.outputs, dense
+        # )
+
+        model = ModelProto()
+        model.graph.CopyFrom(GraphProto())
+
+        model.graph.node.extend(self.nodes)
+        model.graph.name = "experiment"
+        model.graph.input.extend(self.inputs)
+        model.graph.output.extend(self.outputs)
+        model.graph.initializer.extend(dense)
+
+        # graph.sparse_initializer.extend(sparse_initializer)
+        # graph.value_info.extend(value_info)
+        # graph.doc_string = doc_string
+
+        model.opset_import.extend(opsets)
+        model.functions.extend(self.functions)
+
+        # model = oh.make_model(graph, opset_imports=opsets, functions=self.functions)
+
         if self.ir_version:
             model.ir_version = self.ir_version
         elif "" in self.opsets:
             model.ir_version = _default_OPSET_TO_IR_VERSION()[self.opsets[""]]
+
         if len(model.graph.node) == 0:
             raise RuntimeError(
                 f"The onnx model is empty after export to onnx (no node)."
                 f"\n{self.get_debug_msg()}"
             )
+
         # restores the existing value_info
         for val in self.value_info:
             if self.has_name(val.name):
