@@ -2,7 +2,7 @@ import inspect
 import operator
 import pprint
 import types
-from typing import Any, Callable, Dict, List, Tuple, Union
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 import numpy as np
 from onnx import TensorProto
 from ..xbuilder.shape_helper import all_int
@@ -21,19 +21,24 @@ class DynamoInterpreter:
     :param retriever: callable to help retrieve the weights in a module,
         see function `_retrieve
         <experimental_experiment.torch_interpreter.onnx_export._retrieve>`.
+    :param dispatcher: see :class:`experimental_experiment.torch_interpreter.Dispatcher`
     """
 
     def _hash(self) -> str:
         return make_hash(self)
 
     def __init__(
-        self, graph_builder: "GraphBuilder", retriever: Callable  # noqa: F821
+        self,
+        graph_builder: "GraphBuilder",  # noqa: F821
+        retriever: Callable,
+        dispatcher: Optional["Dispatcher"] = None,  # noqa: F821
     ):
         import torch
 
         self.torch = torch
         self.builder = graph_builder
         self.retriever = retriever
+        self.dispatcher = dispatcher
         self.example_values_ = {}
 
     def run_node(self, node: "torch.fx.Node"):  # noqa: F821
@@ -692,9 +697,16 @@ class DynamoInterpreter:
         aten_name = self._get_aten_name(node)
         if aten_name == "getitem":
             return self.getitem(node)
-        fct = find_function(
-            aten_name, args=node.args, kwargs=node.kwargs, graph_builder=self.builder
-        )
+        fct = None
+        if self.dispatcher is not None:
+            fct = self.dispatcher.find_function(aten_name)
+        if fct is None:
+            fct = find_function(
+                aten_name,
+                args=node.args,
+                kwargs=node.kwargs,
+                graph_builder=self.builder,
+            )
         if self.builder.verbose > 1:
             print(f"[DynamoInterpreter-{self._hash()}.call_function][{fct.__name__}]")
 
@@ -733,6 +745,10 @@ class DynamoInterpreter:
             node.args, tuple
         ), f"Unexpected type {type(node.args)} for node.args."
 
+        fct = None
+        print("####", f"aten_meth_{method_name}")
+        if self.dispatcher is not None:
+            fct = self.dispatcher.find_method(f"aten_meth_{method_name}")
         fct = find_method(
             f"aten_meth_{method_name}",
             args=node.args,

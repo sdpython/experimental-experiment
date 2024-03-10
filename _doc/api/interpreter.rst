@@ -9,6 +9,12 @@ DynamoInterpreter
 .. autoclass:: experimental_experiment.torch_interpreter.interpreter.DynamoInterpreter
     :members:
 
+Dispatcher
+==========
+
+.. autoclass:: experimental_experiment.torch_interpreter.interpreter.Dispatcher
+    :members:
+
 Retriever
 =========
 
