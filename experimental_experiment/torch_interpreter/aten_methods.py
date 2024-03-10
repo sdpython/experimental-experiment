@@ -1,6 +1,5 @@
 from typing import Any, Callable, Dict, Optional
 from . import _aten_methods
-from ._exceptions import FunctionNotFoundError
 
 
 def _register() -> Dict[str, Callable]:
@@ -20,23 +19,10 @@ def _register() -> Dict[str, Callable]:
 registered_methods = _register()
 
 
-def find_method(
-    name: Any,
-    args: Optional[Any] = None,
-    kwargs: Optional[Dict[str, Any]] = None,
-    graph_builder: Optional["GraphBuilder"] = None,  # noqa: F821
-) -> Callable:
+def find_method(name: Any) -> Optional[Callable]:
     if isinstance(name, str):
         if name not in registered_methods:
-            raise RuntimeError(
-                f"Unable find method {name!r}, "
-                f"args={args}, kwargs={kwargs}"
-                f"{'' if graph_builder is None else graph_builder.get_debug_msg()}"
-            )
+            return None
         return registered_methods[name]
 
-    raise FunctionNotFoundError(
-        f"Unable to interpret method {type(name)}: {name!r}, "
-        f"args={args}, kwargs={kwargs}"
-        f"{'' if graph_builder is None else graph_builder.get_debug_msg()}"
-    )
+    return None

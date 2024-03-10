@@ -1,6 +1,5 @@
-from typing import Any, Callable, Dict, Optional
+from typing import Any, Callable, Dict, List, Optional, Tuple
 from . import _aten_functions, _prims_functions
-from ._exceptions import FunctionNotFoundError
 
 
 def _register() -> Dict[str, Callable]:
@@ -31,28 +30,19 @@ def _register() -> Dict[str, Callable]:
 registered_functions = _register()
 
 
-def find_function(
-    name: Any,
-    args: Optional[Any] = None,
-    kwargs: Optional[Dict[str, Any]] = None,
-    graph_builder: Optional["GraphBuilder"] = None,  # noqa: F821
-) -> Callable:
+def find_function(name: Any) -> Tuple[Optional[Callable], List[str], List[str]]:
     if isinstance(name, str):
         if name not in registered_functions:
-            raise RuntimeError(
-                f"Unable find function {name!r}, "
-                f"args={args}, kwargs={kwargs}"
-                f"{'' if graph_builder is None else graph_builder.get_debug_msg()}"
-            )
-        return registered_functions[name]
+            return None, [name], []
+        return registered_functions[name], [name], []
 
     lookup = []
     if isinstance(name, type(abs)):
         # example: conv2d or _VariableFunctionsClass.conv2d
         new_name = f"aten_{name.__name__.replace('.', '_')}"
-        if new_name in registered_functions:
-            return registered_functions[new_name]
         lookup.append(new_name)
+        if new_name in registered_functions:
+            return registered_functions[new_name], lookup, []
 
     lookup_names = ["__qualname__", "__name__"]
     for att in lookup_names:
@@ -60,11 +50,6 @@ def find_function(
             v = getattr(name, att).replace(".", "_")
             lookup.append(v)
             if v in registered_functions:
-                return registered_functions[v]
+                return registered_functions[v], lookup, lookup_names
 
-    raise FunctionNotFoundError(
-        f"Unable to interpret function {type(name)}: {name!r}, searched for "
-        f"{lookup} and attributes {lookup_names}, "
-        f"args={args}, kwargs={kwargs}"
-        f"{'' if graph_builder is None else graph_builder.get_debug_msg()}"
-    )
+    return None, lookup, lookup_names

@@ -2,12 +2,13 @@ import inspect
 import operator
 import pprint
 import types
-from typing import Any, Callable, Dict, List, Tuple, Union
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 import numpy as np
 from onnx import TensorProto
 from ..xbuilder.shape_helper import all_int
 from ..xbuilder._helper import make_hash
 from ..xbuilder._dtype_helper import torch_dtype_to_onnx_dtype
+from ._exceptions import FunctionNotFoundError
 from .aten_functions import find_function
 from .aten_methods import find_method
 
@@ -21,19 +22,24 @@ class DynamoInterpreter:
     :param retriever: callable to help retrieve the weights in a module,
         see function `_retrieve
         <experimental_experiment.torch_interpreter.onnx_export._retrieve>`.
+    :param dispatcher: see :class:`experimental_experiment.torch_interpreter.Dispatcher`
     """
 
     def _hash(self) -> str:
         return make_hash(self)
 
     def __init__(
-        self, graph_builder: "GraphBuilder", retriever: Callable  # noqa: F821
+        self,
+        graph_builder: "GraphBuilder",  # noqa: F821
+        retriever: Callable,
+        dispatcher: Optional["Dispatcher"] = None,  # noqa: F821
     ):
         import torch
 
         self.torch = torch
         self.builder = graph_builder
         self.retriever = retriever
+        self.dispatcher = dispatcher
         self.example_values_ = {}
 
     def run_node(self, node: "torch.fx.Node"):  # noqa: F821
@@ -692,9 +698,25 @@ class DynamoInterpreter:
         aten_name = self._get_aten_name(node)
         if aten_name == "getitem":
             return self.getitem(node)
-        fct = find_function(
-            aten_name, args=node.args, kwargs=node.kwargs, graph_builder=self.builder
-        )
+        fct, lookup, lookup_names = None, None, None
+        if self.dispatcher is not None:
+            fct = self.dispatcher.find_function(aten_name)
+            lookup_names = [aten_name]
+        if fct is None:
+            fct, lookup, lookup_names = find_function(aten_name)
+        if self.dispatcher is not None:
+            fct = self.dispatcher.fallback(
+                aten_name, fct, node.args, node.kwargs, self.builder
+            )
+
+        if fct is None:
+            raise FunctionNotFoundError(
+                f"Unable to interpret function {type(aten_name)}: "
+                f"{aten_name!r}, searched for "
+                f"{lookup} and attributes {lookup_names}, "
+                f"args={node.args}, kwargs={node.kwargs}"
+                f"{self.builder.get_debug_msg()}"
+            )
         if self.builder.verbose > 1:
             print(f"[DynamoInterpreter-{self._hash()}.call_function][{fct.__name__}]")
 
@@ -702,7 +724,9 @@ class DynamoInterpreter:
         output_names = self._get_output_names(node)
         can_set = self._can_set_shape_and_type(node)
         n_nodes = len(self.builder.nodes) + len(self.builder.initializers_dict)
+
         res = fct(self.builder, not can_set, output_names, *args, **fx_kwargs)
+
         n_nodes_after = len(self.builder.nodes) + len(self.builder.initializers_dict)
         if res is None:
             if len(node.users) == 0:
@@ -733,18 +757,26 @@ class DynamoInterpreter:
             node.args, tuple
         ), f"Unexpected type {type(node.args)} for node.args."
 
-        fct = find_method(
-            f"aten_meth_{method_name}",
-            args=node.args,
-            kwargs=node.kwargs,
-            graph_builder=self.builder,
-        )
+        fct = None
+        if self.dispatcher is not None:
+            fct = self.dispatcher.find_method(f"aten_meth_{method_name}")
+        name_fct = f"aten_meth_{method_name}"
+        fct = find_method(name_fct)
+        if self.dispatcher is not None:
+            fct = self.dispatcher.fallback(
+                name_fct, fct, node.args, node.kwargs, self.builder
+            )
+        if fct is None:
+            raise FunctionNotFoundError(
+                f"Unable to interpret method {name_fct!r}, "
+                f"args={node.args}, kwargs={node.kwargs}, "
+                f"dispatcher={self.dispatcher}"
+                f"{self.builder.get_debug_msg()}"
+            )
+
         args = [getattr(node.args[0], "name", node.args[0])]
         for i in node.args[1:]:
-            if hasattr(i, "name"):
-                args.append(i.name)
-            else:
-                args.append(i)
+            args.append(i.name if hasattr(i, "name") else i)
 
         kwargs = node.kwargs
         output_names = self._get_output_names(node)

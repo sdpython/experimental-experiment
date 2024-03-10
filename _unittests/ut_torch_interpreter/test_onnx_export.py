@@ -1,12 +1,17 @@
+import contextlib
 import os
-import sys
 import unittest
 import warnings
+from io import StringIO
 import onnx
 from onnx.reference import ReferenceEvaluator
-from experimental_experiment.ext_test_case import ExtTestCase, ignore_warnings
+from experimental_experiment.ext_test_case import (
+    ExtTestCase,
+    ignore_warnings,
+    skipif_ci_windows,
+)
 from experimental_experiment.xbuilder import OptimizationOptions
-from experimental_experiment.torch_interpreter import to_onnx
+from experimental_experiment.torch_interpreter import to_onnx, Dispatcher
 
 
 def return_module_cls_conv():
@@ -139,7 +144,7 @@ class TestOnnxExport(ExtTestCase):
                 f"due to {e}\n{onnx_simple_text_plot(name)}"
             )
 
-    @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
+    @skipif_ci_windows("torch dynamo not supported on windows")
     @ignore_warnings((UserWarning, DeprecationWarning))
     def test_simple_export_conv(self):
         model, input_tensor = return_module_cls_conv()
@@ -152,7 +157,7 @@ class TestOnnxExport(ExtTestCase):
             self.check_model_ort(name)
         self.assertEqualArray(results[0], results[1])
 
-    @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
+    @skipif_ci_windows("torch dynamo not supported on windows")
     @ignore_warnings((UserWarning, DeprecationWarning))
     def test_simple_export_relu(self):
         model, input_tensor = return_module_cls_relu()
@@ -165,7 +170,7 @@ class TestOnnxExport(ExtTestCase):
             self.check_model_ort(name)
         self.assertEqualArray(results[0], results[1])
 
-    @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
+    @skipif_ci_windows("torch dynamo not supported on windows")
     @ignore_warnings((UserWarning, DeprecationWarning))
     def test_simple_export_pool(self):
         from onnxruntime import InferenceSession
@@ -179,7 +184,7 @@ class TestOnnxExport(ExtTestCase):
             results.append(ref.run(None, {"input": x})[0])
         self.assertEqualArray(results[0], results[1])
 
-    @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
+    @skipif_ci_windows("torch dynamo not supported on windows")
     @ignore_warnings((UserWarning, DeprecationWarning))
     def test_remove_unused_nodes(self):
         from onnx_array_api.plotting.text_plot import onnx_simple_text_plot
@@ -216,7 +221,7 @@ class TestOnnxExport(ExtTestCase):
         )
         self.check_model_ort(onx2)
 
-    @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
+    @skipif_ci_windows("torch dynamo not supported on windows")
     @ignore_warnings((UserWarning, DeprecationWarning))
     def test_simple_export_pool_unused(self):
         from onnxruntime import InferenceSession
@@ -232,7 +237,7 @@ class TestOnnxExport(ExtTestCase):
             results.append(ref.run(None, {"input": x})[0])
         self.assertEqualArray(results[0], results[1])
 
-    @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
+    @skipif_ci_windows("torch dynamo not supported on windows")
     @ignore_warnings((UserWarning, DeprecationWarning))
     def test_constant_folding(self):
         try:
@@ -290,7 +295,7 @@ class TestOnnxExport(ExtTestCase):
         )
         self.check_model_ort(onx2)
 
-    @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
+    @skipif_ci_windows("torch dynamo not supported on windows")
     @ignore_warnings((UserWarning, DeprecationWarning))
     def test_simple_export_pool_constant_folding(self):
         from onnxruntime import InferenceSession
@@ -326,6 +331,74 @@ class TestOnnxExport(ExtTestCase):
             ref = InferenceSession(name, providers=["CPUExecutionProvider"])
             results.append(ref.run(None, {"input": x})[0])
         self.assertEqualArray(results[0], results[1])
+
+    @skipif_ci_windows("torch dynamo not supported on windows")
+    def test_dispatcher_function(self):
+        import torch
+
+        T = str
+
+        class NotFoundUTError(Exception):
+            pass
+
+        def aten_celu(g, sts: bool, outputs, x: T, alpha=1.0, inplace=False) -> T:
+            assert not inplace, f"not implemented if inplace=True{g.get_debug_msg()}"
+            raise NotFoundUTError("not implemented")
+
+        class Neuron(torch.nn.Module):
+            def __init__(self, n_dims: int, n_targets: int):
+                super(Neuron, self).__init__()
+                self.linear = torch.nn.Linear(n_dims, n_targets)
+
+            def forward(self, x):
+                return torch.celu(self.linear(x))
+
+        x = torch.rand(5, 3)
+        model = Neuron(3, 1)
+
+        dispatcher = Dispatcher({"aten::celu": aten_celu}, verbose=3)
+
+        s = StringIO()
+        with contextlib.redirect_stdout(s):
+            self.assertRaise(
+                lambda: to_onnx(model, (x,), input_names=["x"], dispatcher=dispatcher),
+                NotFoundUTError,
+            )
+        self.assertIn("[Dispatcher.find_function]", s.getvalue())
+
+    @skipif_ci_windows("torch dynamo not supported on windows")
+    def test_dispatcher_method(self):
+        import torch
+
+        T = str
+
+        class NotFoundUTError(Exception):
+            pass
+
+        def aten_celu(g, sts: bool, outputs, x: T, alpha=1.0, inplace=False) -> T:
+            assert not inplace, f"not implemented if inplace=True{g.get_debug_msg()}"
+            raise NotFoundUTError("not implemented")
+
+        class Neuron(torch.nn.Module):
+            def __init__(self, n_dims: int, n_targets: int):
+                super(Neuron, self).__init__()
+                self.linear = torch.nn.Linear(n_dims, n_targets)
+
+            def forward(self, x):
+                return torch.celu(self.linear(x))
+
+        x = torch.rand(5, 3)
+        model = Neuron(3, 1)
+
+        dispatcher = Dispatcher({"aten::celu": aten_celu}, verbose=3)
+
+        s = StringIO()
+        with contextlib.redirect_stdout(s):
+            self.assertRaise(
+                lambda: to_onnx(model, (x,), input_names=["x"], dispatcher=dispatcher),
+                NotFoundUTError,
+            )
+        self.assertIn("[Dispatcher.find_function]", s.getvalue())
 
 
 if __name__ == "__main__":
