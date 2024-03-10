@@ -2278,14 +2278,20 @@ class GraphBuilder:
             # Let's try to minimize the time.
             for k, v in self.initializers_dict.items():
 
-                if self.verbose:
-                    print(
-                        f"[GraphBuilder-{self._hash()}._build_initializers] {type(v)}-{k}:{v.dtype}[{v.shape}]"
-                    )
                 if isinstance(v, TensorProto):
+                    if self.verbose:
+                        print(
+                            f"[GraphBuilder-{self._hash()}._build_initializers] "
+                            f"TensorProto-{k}:{v.data_type}[{tuple(v.dims)}]"
+                        )
                     model.graph.initializer.append(v)
                     continue
 
+                if self.verbose:
+                    print(
+                        f"[GraphBuilder-{self._hash()}._build_initializers] "
+                        f"{type(v)}-{k}:{v.dtype}[{v.shape}]"
+                    )
                 if isinstance(v, np.ndarray):
                     itype = dtype_to_tensor_dtype(v.dtype)
                     if itype in {
