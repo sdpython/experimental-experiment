@@ -406,6 +406,7 @@ def onnx_custom_backend(
         Union[Callable[ModelProto, ModelProto], List[Callable[ModelProto, ModelProto]]]
     ] = None,
     ort_optimization_level: Optional[str] = None,
+    dispatcher: Optional["Dispatcher"] = None,  # noqa: F821
 ) -> Callable:
     """
     Custom backend to export torch models into onnx
@@ -428,6 +429,7 @@ def onnx_custom_backend(
     :param pre_ort_model_transforms: list of transformations applied on the final ModelProto
     :param ort_optimization_level: graph optimization level for onnxruntime,
         the default value is the same as what :epkg:`onnxruntime` defines
+    :param dispatcher: see :class:`experimental_experiment.torch_interpreter.Dispatcher`
     :return: Callable
 
     See :ref:`l-plot-onnxrt-diff` or :ref:`l-plot-custom-backend` for examples.
@@ -486,6 +488,7 @@ def onnx_custom_backend(
         verbose=verbose_onnx,
         target_opset=target_opset,
         return_builder=True,
+        dispatcher=dispatcher,
     )
 
     if verbose:

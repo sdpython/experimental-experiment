@@ -1,4 +1,4 @@
-from typing import Any, Callable, Dict, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 
 class Dispatcher:
@@ -44,7 +44,6 @@ class Dispatcher:
         such as :func:`aten_elu
         <experimental_experiment.torch_interpreter._aten_functions.aten_elu>`.
         """
-        print("---", name)
         key = self._get_function_name(name)
         if key not in self.registered_functions:
             if self.verbose > 2:
@@ -66,7 +65,6 @@ class Dispatcher:
         such as :func:`aten_elu
         <experimental_experiment.torch_interpreter._aten_functions.aten_elu>`.
         """
-        print("++++", name)
         if name not in self.registered_functions:
             if self.verbose > 2:
                 print(
@@ -75,3 +73,25 @@ class Dispatcher:
             return None
 
         return self.registered_functions[name]
+
+    def fallback(
+        self,
+        name: Any,
+        fct: Optional[Callable],
+        args: List[Any],
+        kwargs: Dict[str, Any],
+        builder: "GraphBuilder",  # noqa: F821
+    ) -> Optional[Callable]:
+        """
+        The function is called after the function converting an aten function
+        into ONNX. *fct* is this function. It can be changed and just
+        set when mapping was found.
+
+        :param name: object or str
+        :param fct: function found so far
+        :param args: known arguments coming from the graph module
+        :param kwargs: known named arguments coming from the graph module
+        :param builder: GraphBuilder
+        :return: callable
+        """
+        return fct
