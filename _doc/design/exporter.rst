@@ -33,7 +33,7 @@ from package :epkg:`onnx`.
 One objective: SPEED
 ====================
 
-The only objective for this exporter is **speed**. It must fast as the
+The only objective for this exporter is **speed**. It must be fast as the
 size of the model to convert grows fast. The exporter may be one piece
 of the backend calling :epkg:`onnxruntime`. This only objective implies
 a few constraints.
@@ -41,8 +41,8 @@ a few constraints.
 **multi-opset support**
 
 The converter must support the conversion to different
-`opset <https://onnx.ai/onnx/intro/concepts.html#what-is-an-opset-version>`_
-to avoid using the :func:`onnx.version_converter.convert_version` which
+:epkg:`opsets` to avoid using the
+:func:`onnx.version_converter.convert_version` which
 does not fully work when the model includes other domain than the main one.
 
 **use shape and type information**
@@ -54,7 +54,7 @@ happens.
 
 **no decorators, no code interpretation**
 
-Writing efficient code is easier when the code you is the code you get.
+Writing efficient code is easier when *the code you see is the code you get*.
 A decorator hides some logic a developper must take into account
 to avoid writing non efficient code. On the same level, translating
 a python code into ONNX requires extra logic the developper does not
@@ -71,7 +71,7 @@ GraphBuilder
 ============
 
 :class:`GraphBuilder <experimental_experiment.xbuilder.GraphBuilder>`
-start from empty or take an existing graph as an input.
+starts from empty or take an existing graph as an input.
 In that case, the builder is usually used by an optimizer.
 
 Internal containers
@@ -258,9 +258,9 @@ At the end the following lines appear.
 
     [GraphBuilder-EAQ.make_node] N1              [##:-  ] MatMul:['X', 'init1_s3x1_']->['_onx_matmul0']
 
-It says one node named `N1` was created. `##` means the shape and type are
+It says one node named ``N1`` was created. ``##`` means the shape and type are
 known for the two inputs it has. `-` means nothing is known for the output.
-When the type is specified, it shows the following.
+When the type is specified, it shows the following:
 
 .. runpython::
     :showcode:
@@ -283,7 +283,7 @@ When the type is specified, it shows the following.
     gr.make_tensor_output(out, TensorProto.FLOAT, ("a",), indexed=False, is_dimension=False)
     onx = gr.to_onnx()
 
-It shows `U` when the type and rank are known, `#` if the type and shape are known.
+It shows ``U`` when the type and rank are known, ``#`` if the type and shape are known.
 
 ::
 
@@ -364,7 +364,7 @@ called :epkg:`aten functions`. It looks like the following:
     graph = torch.export.export(model, (x,))
     print(graph)    
 
-The called function such as `torch.ops.aten.addmm.default` are well
+The called function such as ``torch.ops.aten.addmm.default`` are well
 identified and those cannot be converted into ONNX.
 The interpret just maps this string to a function creating
 the onnx implementation :func:`aten_addmm
@@ -444,16 +444,16 @@ as shown in this function.
             set_type_shape_unary_op(g, outputs[0], x)
         return res  
 
-The boolean `sts` is False when the graph given by torch contains
+The boolean ``sts`` is ``False`` when the graph given by torch contains
 information about shape and type. In that case, the interpreter will
 give them to the graph builder.
 
 Different Implementations
 +++++++++++++++++++++++++
 
-In the following case, the function adds a node `Identity`
-or `CastLike` depending on the types. `CastLike` is only needed when types
-are different. And the graph builder will remove the Identity node.
+In the following case, the function adds a node ``Identity``
+or ``CastLike`` depending on the types. ``CastLike`` is only needed when types
+are different. And the graph builder will remove the ``Identity`` node.
 
 ::
 
@@ -481,7 +481,7 @@ node comes from.
 Functions
 +++++++++
 
-All the avaialable functions are listed in one the those three pages:
+All the available functions are listed in one the those three pages:
 
 * :ref:`l-aten-functions`: functions
 
@@ -574,8 +574,8 @@ give you some information why it failed.
     onx = to_onnx(model, (x,), input_names=["x"])    
 
 In particular, the first line of the error message. This one tells you there is currently no known
-conversion of function `aten.celu`. A function `aten_celu` must be added
-to the file `experimental_experiment.torch_interpreter._aten_functions`.
+conversion of function ``aten.celu``. A function ``aten_celu`` must be added
+to the file ``experimental_experiment.torch_interpreter._aten_functions``.
 
 ::
 
@@ -612,7 +612,7 @@ are known.
     [GraphBuilder-BQU.make_node] t               [#:#   ] Transpose:['arg0_1']->['t']
     [GraphBuilder-BQU.make_node] addmm           [###:# ] Gemm:['arg2_1', 't', 'arg1_1']->['addmm']
 
-There is also this section starting with `--TORCH-SHAPE--`
+There is also this section starting with ``--TORCH-SHAPE--``
 which shows which shapes are given by torch.
 
 ::

@@ -126,6 +126,7 @@ Dynamo Exporter
     :process:
 
     import time
+    import warnings
 
     begin = time.perf_counter()
     import onnx
@@ -180,14 +181,16 @@ Dynamo Exporter
     model = Neuron(3, 1)
     x = torch.rand(5, 3)
 
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
 
-    begin = time.perf_counter()
-    onx = torch.onnx.dynamo_export(model, x)
-    print(f"time to export 1x --- {time.perf_counter() - begin}")
+        begin = time.perf_counter()
+        onx = torch.onnx.dynamo_export(model, x)
+        print(f"time to export 1x --- {time.perf_counter() - begin}")
 
-    begin = time.perf_counter()
-    onx = torch.onnx.dynamo_export(model, x)
-    print(f"time to export 2x --- {time.perf_counter() - begin}")
+        begin = time.perf_counter()
+        onx = torch.onnx.dynamo_export(model, x)
+        print(f"time to export 2x --- {time.perf_counter() - begin}")
 
 With a bigger model:
 

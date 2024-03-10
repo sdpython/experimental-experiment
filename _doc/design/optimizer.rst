@@ -94,8 +94,9 @@ PatternOptimization.apply
     ) -> List[NodeProto]:
 
 The method does the rewriting. It assumes it can happen.
-It takes a list of nodes impacted by the rewriting assumes no other
-pattern optimizer will be modify them. It receives the list of nodes
+It takes a list of nodes impacted by the rewriting. It assumes no other
+pattern optimizer modified them or will modify them.
+It receives the list of nodes
 returned by method *apply*. Since it is a list of argument, method
 *match* can include None values. The method returns the new nodes.
 The optimizer considers that any node given to this function is removed
@@ -342,13 +343,46 @@ This can be used to see when a pattern is applied and how long it takes.
 
     print(pandas.DataFrame(stat))
 
+It can be aggregated:
+
+.. runpython::
+    :showcode:
+
+    import pandas
+    import onnx
+    from onnx_array_api.plotting.text_plot import onnx_simple_text_plot
+    from experimental_experiment.xbuilder import GraphBuilder, OptimizationOptions
+
+    onx = onnx.load("temp_doc_mlp.onnx")
+
+    gr = GraphBuilder(
+        onx,
+        infer_shapes=True,
+        optimization_options=OptimizationOptions(patterns="default"),
+    )
+    stat = gr.optimize()
+
+    df = pandas.DataFrame(stat)
+    for c in df.columns:
+        if "time" not in c and "pattern" not in c:
+            df[c] = df[c].fillna(0).astype(int)
+    aggs = {
+        "time_in": "sum",
+        "added": "sum",
+        "removed": "sum",
+        "iteration": "max",
+        "match_index": "max",
+        "instances": "sum",
+    }
+    print(df.groupby("pattern").agg(aggs))
+
 Shape inference
 ===============
 
-The optimizers require to know the shape to ensure they can rewrite
+The optimizers require to know the shapes to ensure they can rewrite
 some nodes and avoid producing a model which does not return the
-same results. If it is missing, some patterns cannot match for sure.
-They won't match.
+same results. If it is missing, some patterns cannot match for sure
+and they will not match.
 
 This information can be built by running shape inference
 on the onnx models. That's what is done is the previous examples.

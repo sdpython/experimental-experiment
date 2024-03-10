@@ -10,6 +10,7 @@
 *.pkl
 *.xlsx
 *.sarif
+*.svg
 coverage.html/*
 temp*.txt*
 tt_*.txt

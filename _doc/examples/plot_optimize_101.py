@@ -60,18 +60,15 @@ for c in df.columns:
     if "time" not in c and "pattern" not in c:
         df[c] = df[c].fillna(0).astype(int)
 
-print(
-    df.groupby("pattern").agg(
-        {
-            "time_in": "sum",
-            "added": "sum",
-            "removed": "sum",
-            "iteration": "max",
-            "match_index": "max",
-            "instances": "sum",
-        }
-    )
-)
+aggs = {
+    "time_in": "sum",
+    "added": "sum",
+    "removed": "sum",
+    "iteration": "max",
+    "match_index": "max",
+    "instances": "sum",
+}
+print(df.groupby("pattern").agg(aggs))
 
 ##############################
 # The total is:

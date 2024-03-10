@@ -52,3 +52,10 @@ Older versions
 ++++++++++++++
 
 * `0.1.0 <../v0.1.0/index.html>`_
+
+The documentation was updated on:
+
+.. runpython::
+    
+    import datetime
+    print(datetime.datetime.now())

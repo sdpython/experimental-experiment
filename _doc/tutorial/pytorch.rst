@@ -6,7 +6,7 @@ pytorch and onnx
 Design
 ======
 
-
+See :ref:`l-design`.
 
 Examples
 ========

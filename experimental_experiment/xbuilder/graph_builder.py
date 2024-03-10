@@ -1,12 +1,20 @@
 import pprint
 import time
+import sys
 from functools import partial
 from typing import Any, Dict, List, Optional, Sequence, Set, Tuple, Union
 import numpy as np
 import onnx.helper as oh
 import onnx.numpy_helper as onh
 from onnx.shape_inference import infer_shapes
-from onnx import AttributeProto, FunctionProto, ModelProto, NodeProto, TensorProto
+from onnx import (
+    AttributeProto,
+    FunctionProto,
+    GraphProto,
+    ModelProto,
+    NodeProto,
+    TensorProto,
+)
 from experimental_experiment.reference import ExtendedReferenceEvaluator
 from .shape_helper import (
     DYNAMIC_SHAPE,
@@ -2064,19 +2072,25 @@ class GraphBuilder:
         tensor = TensorProto()
         tensor.dims.extend(arr_cpu.shape)
         tensor.name = name
-        tensor.data_type = self._get_type(arr_cpu.dtype)
+        itype = self._get_type(arr_cpu.dtype)
+        assert not hasattr(TensorProto, "INT4") or itype not in {
+            TensorProto.INT4,
+            TensorProto.UINT4,
+        }, f"Type {arr.dtype} is not supported yet for name={name!r}"
+        tensor.data_type = itype
 
         if self.verbose and np.prod(arr_cpu.shape) > 100:
             print(
                 f"[GraphBuilder-{self._hash()}.from_array] {tensor.data_type}[{arr_cpu.shape}]"
             )
 
-        raw = np_arr.tobytes()
-        tensor.raw_data = raw
-
         if sys.byteorder == "big":
+            tensor.raw_data = np_arr.tobytes()
             np_dtype = oh.tensor_dtype_to_np_dtype(tensor.data_type)
             np.byteswap(np.frombuffer(tensor.raw_data, dtype=np_dtype), inplace=True)
+        else:
+            tensor.raw_data = np_arr.tobytes()
+
         return tensor
 
     def _build_initializers(self) -> List[TensorProto]:
@@ -2230,7 +2244,6 @@ class GraphBuilder:
         )
         assert not as_function, "Export as FunctionProto is not tested yet."
 
-        dense = self._build_initializers()
         opsets = [oh.make_opsetid(*o) for o in self.opsets.items()]
         if as_function:
             return oh.make_function(
@@ -2242,22 +2255,98 @@ class GraphBuilder:
             )
 
         if self.verbose:
-            print(f"[GraphBuilder-{self._hash()}.to_onnx] onh.make_graph")
-        graph = oh.make_graph(
-            self.nodes, "experiment", self.inputs, self.outputs, dense
-        )
-        if self.verbose:
-            print(f"[GraphBuilder-{self._hash()}.to_onnx] onh.make_model")
-        model = oh.make_model(graph, opset_imports=opsets, functions=self.functions)
+            print(f"[GraphBuilder-{self._hash()}.to_onnx] make_model")
+
+        # graph = oh.make_graph(
+        #    self.nodes, "experiment", self.inputs, self.outputs, dense
+        # )
+
+        model = ModelProto()
+        model.graph.CopyFrom(GraphProto())
+
+        model.graph.node.extend(self.nodes)
+        model.graph.name = "experiment"
+        model.graph.input.extend(self.inputs)
+        model.graph.output.extend(self.outputs)
+
+        # initializer
+
+        if sys.byteorder == "big":
+            dense = self._build_initializers()
+            model.graph.initializer.extend(dense)
+        else:
+            # Let's try to minimize the time.
+            for k, v in self.initializers_dict.items():
+
+                if isinstance(v, TensorProto):
+                    if self.verbose:
+                        print(
+                            f"[GraphBuilder-{self._hash()}._build_initializers] "
+                            f"TensorProto-{k}:{v.data_type}[{tuple(v.dims)}]"
+                        )
+                    model.graph.initializer.append(v)
+                    continue
+
+                if self.verbose:
+                    print(
+                        f"[GraphBuilder-{self._hash()}._build_initializers] "
+                        f"{type(v)}-{k}:{v.dtype}[{v.shape}]"
+                    )
+                if isinstance(v, np.ndarray):
+                    itype = dtype_to_tensor_dtype(v.dtype)
+                    if itype in {
+                        TensorProto.BOOL,
+                        TensorProto.STRING,
+                        TensorProto.UNDEFINED,
+                        TensorProto.COMPLEX64,
+                        TensorProto.COMPLEX128,
+                        getattr(TensorProto, "UINT4", 0),
+                        getattr(TensorProto, "INT4", 0),
+                    }:
+                        t = onh.from_array(v, name=k)
+                        model.graph.initializer.append(t)
+                        continue
+
+                    from_np = True
+                else:
+                    assert isinstance(
+                        v, self.torch.Tensor
+                    ), f"tensor {k!r} has un unexpected type {type(v)}"
+                    from_np = False
+                    itype = dtype_to_tensor_dtype(v.dtype)
+
+                # How to avoid a copy?
+                if from_np:
+                    tensor = TensorProto()
+                    tensor.name = k
+                    tensor.dims.extend(v.shape)
+                    tensor.data_type = itype
+                    tensor.raw_data = v.tobytes()
+                else:
+                    tensor = self.from_array(v, name=k)
+
+                model.graph.initializer.append(tensor)
+
+        # graph.sparse_initializer.extend(sparse_initializer)
+        # graph.value_info.extend(value_info)
+        # graph.doc_string = doc_string
+
+        model.opset_import.extend(opsets)
+        model.functions.extend(self.functions)
+
+        # model = oh.make_model(graph, opset_imports=opsets, functions=self.functions)
+
         if self.ir_version:
             model.ir_version = self.ir_version
         elif "" in self.opsets:
             model.ir_version = _default_OPSET_TO_IR_VERSION()[self.opsets[""]]
+
         if len(model.graph.node) == 0:
             raise RuntimeError(
                 f"The onnx model is empty after export to onnx (no node)."
                 f"\n{self.get_debug_msg()}"
             )
+
         # restores the existing value_info
         for val in self.value_info:
             if self.has_name(val.name):
