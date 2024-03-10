@@ -2073,7 +2073,7 @@ class GraphBuilder:
         tensor.dims.extend(arr_cpu.shape)
         tensor.name = name
         itype = self._get_type(arr_cpu.dtype)
-        assert itype not in {
+        assert not hasattr(TensorProto, "INT4") or itype not in {
             TensorProto.INT4,
             TensorProto.UINT4,
         }, f"Type {arr.dtype} is not supported yet for name={name!r}"
@@ -2300,8 +2300,8 @@ class GraphBuilder:
                         TensorProto.UNDEFINED,
                         TensorProto.COMPLEX64,
                         TensorProto.COMPLEX128,
-                        TensorProto.UINT4,
-                        TensorProto.INT4,
+                        getattr(TensorProto, "UINT4", 0),
+                        getattr(TensorProto, "INT4", 0),
                     }:
                         t = onh.from_array(v, name=k)
                         model.graph.initializer.append(t)
