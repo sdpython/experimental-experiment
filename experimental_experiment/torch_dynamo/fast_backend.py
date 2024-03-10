@@ -19,6 +19,7 @@ def _get_session(
     onx: ModelProto,
     impl: str = "ort",
     providers: Optional[List[str]] = None,
+    ort_optimization_level: Optional[str] = None,
     exc: bool = True,
 ) -> Tuple[Union["ReferenceEvaluator", "InferenceSession"], "RunOptions"]:  # noqa: F821
     assert impl == "ort", f"Unexpected impl={impl!r}"
@@ -28,7 +29,14 @@ def _get_session(
     run_options = onnxruntime.RunOptions()
     run_options.add_run_config_entry("disable_synchronize_execution_providers", "1")
     opts = onnxruntime.SessionOptions()
-    # opts.graph_optimization_level = onnxruntime.GraphOptimizationLevel.ORT_DISABLE_ALL
+    if ort_optimization_level is not None:
+        assert hasattr(onnxruntime.GraphOptimizationLevel, ort_optimization_level), (
+            f"Unexpected value {ort_optimization_level!r} for GraphOptimizationLevel, "
+            f"expecting one of the values in {dir(onnxruntime.GraphOptimizationLevel)}"
+        )
+        opts.graph_optimization_level = getattr(
+            onnxruntime.GraphOptimizationLevel, ort_optimization_level
+        )
     opts.add_session_config_entry("session.disable_aot_function_inlining", "1")
 
     return (
@@ -329,6 +337,7 @@ class OrtBackend:
         test_case: int = 0,
         providers: Optional[List[str]] = None,
         impl: str = "ort",
+        ort_optimization_level: Optional[str] = None,
     ) -> Tuple["OrtBackend", List[Any]]:
         """
         Loads the data save by :meth:`dump_for_debug`.
@@ -358,7 +367,13 @@ class OrtBackend:
         else:
             device = 0 if "CUDAExecutionProvider" in providers else -1
 
-        sess, run_options = _get_session(onx, impl, providers, exc=True)
+        sess, run_options = _get_session(
+            onx,
+            impl,
+            providers,
+            exc=True,
+            ort_optimization_level=ort_optimization_level,
+        )
         bck = OrtBackend(sess, run_options=run_options, onnx_model=onx)
 
         new_inputs = []
@@ -390,6 +405,7 @@ def onnx_custom_backend(
     pre_ort_model_transforms: Optional[
         Union[Callable[ModelProto, ModelProto], List[Callable[ModelProto, ModelProto]]]
     ] = None,
+    ort_optimization_level: Optional[str] = None,
 ) -> Callable:
     """
     Custom backend to export torch models into onnx
@@ -410,6 +426,8 @@ def onnx_custom_backend(
     :param enable_pattern: optimization patterns to enable
     :param disable_pattern: optimization patterns to disable
     :param pre_ort_model_transforms: list of transformations applied on the final ModelProto
+    :param ort_optimization_level: graph optimization level for onnxruntime,
+        the default value is the same as what :epkg:`onnxruntime` defines
     :return: Callable
 
     See :ref:`l-plot-onnxrt-diff` or :ref:`l-plot-custom-backend` for examples.
@@ -546,7 +564,13 @@ def onnx_custom_backend(
             )
         print("[onnx_custom_backend] starts creating InferenceSession")
 
-    sess, run_options = _get_session(onx, backend, providers, exc=raise_exc)
+    sess, run_options = _get_session(
+        onx,
+        backend,
+        providers,
+        exc=raise_exc,
+        ort_optimization_level=ort_optimization_level,
+    )
 
     if verbose:
         print(

@@ -2,7 +2,7 @@
 Supported Models
 ================
 
-This projects was starting with LLaMa.
+This projects was started with LLaMa.
 
 .. toctree::
 

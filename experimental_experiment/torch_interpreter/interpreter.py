@@ -98,6 +98,9 @@ class DynamoInterpreter:
         raise ValueError(f"Unable to process node kind {node.op!r} ({node}).")
 
     def get_attr(self, node: "torch.fx.Node"):  # noqa: F821
+        """
+        Retrieves an attribute.
+        """
         if self.builder.verbose > 1:
             print(f"[DynamoInterpreter-{self._hash()}.get_attr][{node.name}]")
         try:
@@ -111,6 +114,11 @@ class DynamoInterpreter:
         return node.name
 
     def placeholder(self, node: "torch.fx.Node"):  # noqa: F821
+        """
+        placeholder for an input. The interpreter adds an Identity node
+        between the input names he wants and the name it has in the
+        graph module.
+        """
         if self.builder.verbose > 1:
             print(f"[DynamoInterpreter-{self._hash()}.placeholder][{node.name}]")
         val = node.meta.get("val", None)
@@ -184,6 +192,9 @@ class DynamoInterpreter:
         )
 
     def output(self, node):
+        """
+        Adds an output to the graph.
+        """
         output_name = node.name
         if self.builder.verbose > 1:
             print(f"[DynamoInterpreter-{self._hash()}.output][{output_name}]")
@@ -506,6 +517,11 @@ class DynamoInterpreter:
         )
 
     def getitem(self, node: "torch.fx.Node"):  # noqa: F821
+        """
+        Called when the brackets ``something[...]`` appears.
+        The index may be another variable, an integer, a slice,
+        a tuple, a list.
+        """
         if self.builder.verbose > 1:
             print(f"[DynamoInterpreter-{self._hash()}.getitem]")
         args = node.args
@@ -669,6 +685,9 @@ class DynamoInterpreter:
         )
 
     def call_function(self, node: "torch.fx.Node"):  # noqa: F821
+        """
+        Called for a function.
+        """
         fx_args, fx_kwargs = self._fill_in_default_kwargs(node)
         aten_name = self._get_aten_name(node)
         if aten_name == "getitem":
@@ -704,6 +723,9 @@ class DynamoInterpreter:
         return res
 
     def call_method(self, node: "torch.fx.Node"):  # noqa: F821
+        """
+        Called for a method.
+        """
         method_name = node.target
         if self.builder.verbose > 1:
             print(f"[DynamoInterpreter-{self._hash()}.call_method][{method_name}]")
@@ -832,6 +854,10 @@ class DynamoInterpreter:
             last_node.doc_string = "\n".join(description)
 
     def call_module(self, node: "torch.fx.Node"):  # noqa: F821
+        """
+        Called for a module.
+        """
+
         def raise_msg():
             return (
                 f"node={node}\n--\nnode.__dict__={pprint.pformat(node.__dict__)}"

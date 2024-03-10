@@ -16,10 +16,17 @@ def _get_session(
     exc: bool = True,
     verbose: int = 0,
     providers: Optional[List[str]] = None,
+    ort_optimization_level: Optional[str] = None,
 ) -> Union["ReferenceEvaluator", "InferenceSession"]:  # noqa: F821
     if exc:
         try:
-            return _get_session(onx, impl, exc=False, verbose=verbose)
+            return _get_session(
+                onx,
+                impl,
+                exc=False,
+                verbose=verbose,
+                ort_optimization_level=ort_optimization_level,
+            )
         except Exception as e:
             from onnx_array_api.plotting.text_plot import onnx_simple_text_plot
 
@@ -28,16 +35,29 @@ def _get_session(
             ) from e
 
     if impl == "ref":
-        from onnx.reference import ReferenceEvaluator
 
-        return ReferenceEvaluator(onx, verbose=verbose)
+        from ..reference import ExtendedReferenceEvaluator
+
+        return ExtendedReferenceEvaluator(onx, verbose=verbose)
     else:
         import onnxruntime
 
         providers = providers or ["CPUExecutionProvider"]
+        opts = onnxruntime.SessionOptions()
+        if ort_optimization_level is not None:
+            if ort_optimization_level is not None:
+                assert hasattr(
+                    onnxruntime.GraphOptimizationLevel, ort_optimization_level
+                ), (
+                    f"Unexpected value {ort_optimization_level!r} for GraphOptimizationLevel, "
+                    f"expecting one of the values in {dir(onnxruntime.GraphOptimizationLevel)}"
+                )
+                opts.graph_optimization_level = getattr(
+                    onnxruntime.GraphOptimizationLevel, ort_optimization_level
+                )
 
         return onnxruntime.InferenceSession(
-            onx.SerializeToString(), providers=providers
+            onx.SerializeToString(), opts, providers=providers
         )
 
 
@@ -57,6 +77,7 @@ def onnx_debug_backend(
     pre_ort_model_transforms: Optional[
         Union[Callable[ModelProto, ModelProto], List[Callable[ModelProto, ModelProto]]]
     ] = None,
+    ort_optimization_level: Optional[str] = None,
 ) -> Callable:
     """
     Custom backend to export torch models into onnx
@@ -82,6 +103,8 @@ def onnx_debug_backend(
     :param enable_pattern: optimization patterns to enable
     :param disable_pattern: optimization patterns to disable
     :param pre_ort_model_transforms: list of transformations applied on the final ModelProto
+    :param ort_optimization_level: graph optimization level for onnxruntime,
+        the default value is the same as what :epkg:`onnxruntime` defines
     :return: Callable
 
     See :ref:`l-plot-onnxrt-diff` for an example.
@@ -136,7 +159,12 @@ def onnx_debug_backend(
             f.write("\n")
 
     sess = _get_session(
-        onx, backend, exc=raise_exc, verbose=verbose_backend, providers=providers
+        onx,
+        backend,
+        exc=raise_exc,
+        verbose=verbose_backend,
+        providers=providers,
+        ort_optimization_level=ort_optimization_level,
     )
 
     names = [i.name for i in onx.graph.input]

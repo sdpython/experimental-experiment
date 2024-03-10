@@ -414,14 +414,18 @@ def statistics_on_file(filename: str) -> Dict[str, Union[int, float, str]]:
     if ext not in {".py", ".rst", ".md", ".txt"}:
         size = os.stat(filename).st_size
         return {"size": size}
+    alpha = set("abcdefghijklmnopqrstuvwxyz0123456789")
     with open(filename, "r", encoding="utf-8") as f:
         n_line = 0
         n_ch = 0
         for line in f.readlines():
             s = line.strip("\n\r\t ")
             if s:
-                n_line += 1
                 n_ch += len(s.replace(" ", ""))
+                ch = set(s.lower()) & alpha
+                if ch:
+                    # It avoid counting line with only a bracket, a comma.
+                    n_line += 1
 
     stat = dict(lines=n_line, chars=n_ch, ext=ext)
     if ext != ".py":

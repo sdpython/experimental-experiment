@@ -125,6 +125,7 @@ epkg_dictionary = {
     "onnx-array-api": ("https://sdpython.github.io/doc/onnx-array-api/dev/"),
     "onnx-rewriter": "https://github.com/microsoft/onnxscript",
     "onnxscript": "https://github.com/microsoft/onnxscript",
+    "opsets": "ttps://onnx.ai/onnx/intro/concepts.html#what-is-an-opset-version",
     "python": "https://www.python.org/",
     "pytorch": "https://pytorch.org/",
     "scikit-learn": "https://scikit-learn.org/stable/",

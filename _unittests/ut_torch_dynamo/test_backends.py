@@ -217,6 +217,51 @@ class TestBackend(ExtTestCase):
         self.assertEqualArray(expected, got, atol=1e-5)
         self.assertNotEmpty(stored)
 
+    @skipif_ci_apple("no onnxruntime-training")
+    @skipif_ci_windows("no torch dynamo")
+    def test_ort_graph_no_optimization(self):
+        from experimental_experiment.torch_dynamo import onnx_custom_backend
+
+        stored = []
+
+        def store_model(m):
+            stored.append(m)
+            return m
+
+        class MLP(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.layers = torch.nn.Sequential(
+                    torch.nn.Linear(10, 32),
+                    torch.nn.Sigmoid(),
+                    torch.nn.Linear(32, 1),
+                )
+
+            def forward(self, x):
+                return self.layers(x)
+
+        x = torch.randn(3, 10, dtype=torch.float32)
+
+        mlp = MLP()
+        expected = mlp(x)
+
+        compiled_model = torch.compile(
+            copy.deepcopy(mlp),
+            backend=lambda *args, **kwargs: onnx_custom_backend(
+                *args,
+                target_opset=18,
+                pre_ort_model_transforms=store_model,
+                ort_optimization_level="ORT_DISABLE_ALL",
+                **kwargs,
+            ),
+            dynamic=False,
+            fullgraph=True,
+        )
+
+        got = compiled_model(x)
+        self.assertEqualArray(expected, got, atol=1e-5)
+        self.assertNotEmpty(stored)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
