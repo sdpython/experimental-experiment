@@ -1,12 +1,15 @@
 import contextlib
 import os
-import sys
 import unittest
 import warnings
 from io import StringIO
 import onnx
 from onnx.reference import ReferenceEvaluator
-from experimental_experiment.ext_test_case import ExtTestCase, ignore_warnings
+from experimental_experiment.ext_test_case import (
+    ExtTestCase,
+    ignore_warnings,
+    skipif_ci_windows,
+)
 from experimental_experiment.xbuilder import OptimizationOptions
 from experimental_experiment.torch_interpreter import to_onnx, Dispatcher
 
@@ -141,7 +144,7 @@ class TestOnnxExport(ExtTestCase):
                 f"due to {e}\n{onnx_simple_text_plot(name)}"
             )
 
-    @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
+    @skipif_ci_windows("torch dynamo not supported on windows")
     @ignore_warnings((UserWarning, DeprecationWarning))
     def test_simple_export_conv(self):
         model, input_tensor = return_module_cls_conv()
@@ -154,7 +157,7 @@ class TestOnnxExport(ExtTestCase):
             self.check_model_ort(name)
         self.assertEqualArray(results[0], results[1])
 
-    @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
+    @skipif_ci_windows("torch dynamo not supported on windows")
     @ignore_warnings((UserWarning, DeprecationWarning))
     def test_simple_export_relu(self):
         model, input_tensor = return_module_cls_relu()
@@ -167,7 +170,7 @@ class TestOnnxExport(ExtTestCase):
             self.check_model_ort(name)
         self.assertEqualArray(results[0], results[1])
 
-    @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
+    @skipif_ci_windows("torch dynamo not supported on windows")
     @ignore_warnings((UserWarning, DeprecationWarning))
     def test_simple_export_pool(self):
         from onnxruntime import InferenceSession
@@ -181,7 +184,7 @@ class TestOnnxExport(ExtTestCase):
             results.append(ref.run(None, {"input": x})[0])
         self.assertEqualArray(results[0], results[1])
 
-    @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
+    @skipif_ci_windows("torch dynamo not supported on windows")
     @ignore_warnings((UserWarning, DeprecationWarning))
     def test_remove_unused_nodes(self):
         from onnx_array_api.plotting.text_plot import onnx_simple_text_plot
@@ -218,7 +221,7 @@ class TestOnnxExport(ExtTestCase):
         )
         self.check_model_ort(onx2)
 
-    @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
+    @skipif_ci_windows("torch dynamo not supported on windows")
     @ignore_warnings((UserWarning, DeprecationWarning))
     def test_simple_export_pool_unused(self):
         from onnxruntime import InferenceSession
@@ -234,7 +237,7 @@ class TestOnnxExport(ExtTestCase):
             results.append(ref.run(None, {"input": x})[0])
         self.assertEqualArray(results[0], results[1])
 
-    @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
+    @skipif_ci_windows("torch dynamo not supported on windows")
     @ignore_warnings((UserWarning, DeprecationWarning))
     def test_constant_folding(self):
         try:
@@ -292,7 +295,7 @@ class TestOnnxExport(ExtTestCase):
         )
         self.check_model_ort(onx2)
 
-    @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
+    @skipif_ci_windows("torch dynamo not supported on windows")
     @ignore_warnings((UserWarning, DeprecationWarning))
     def test_simple_export_pool_constant_folding(self):
         from onnxruntime import InferenceSession
@@ -329,6 +332,7 @@ class TestOnnxExport(ExtTestCase):
             results.append(ref.run(None, {"input": x})[0])
         self.assertEqualArray(results[0], results[1])
 
+    @skipif_ci_windows("torch dynamo not supported on windows")
     def test_dispatcher_function(self):
         import torch
 
@@ -362,6 +366,7 @@ class TestOnnxExport(ExtTestCase):
             )
         self.assertIn("[Dispatcher.find_function]", s.getvalue())
 
+    @skipif_ci_windows("torch dynamo not supported on windows")
     def test_dispatcher_method(self):
         import torch
 
