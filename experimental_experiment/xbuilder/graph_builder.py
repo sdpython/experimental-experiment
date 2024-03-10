@@ -1,5 +1,6 @@
 import pprint
 import time
+import sys
 from functools import partial
 from typing import Any, Dict, List, Optional, Sequence, Set, Tuple, Union
 import numpy as np
@@ -2071,7 +2072,12 @@ class GraphBuilder:
         tensor = TensorProto()
         tensor.dims.extend(arr_cpu.shape)
         tensor.name = name
-        tensor.data_type = self._get_type(arr_cpu.dtype)
+        itype = self._get_type(arr_cpu.dtype)
+        assert itype not in {
+            TensorProto.INT4,
+            TensorProto.UINT4,
+        }, f"Type {arr.dtype} is not supported yet for name={name!r}"
+        tensor.data_type = itype
 
         if self.verbose and np.prod(arr_cpu.shape) > 100:
             print(
@@ -2238,7 +2244,6 @@ class GraphBuilder:
         )
         assert not as_function, "Export as FunctionProto is not tested yet."
 
-        dense = self._build_initializers()
         opsets = [oh.make_opsetid(*o) for o in self.opsets.items()]
         if as_function:
             return oh.make_function(
@@ -2263,7 +2268,58 @@ class GraphBuilder:
         model.graph.name = "experiment"
         model.graph.input.extend(self.inputs)
         model.graph.output.extend(self.outputs)
-        model.graph.initializer.extend(dense)
+
+        # initializer
+
+        if sys.byteorder == "big":
+            dense = self._build_initializers()
+            model.graph.initializer.extend(dense)
+        else:
+            # Let's try to minimize the time.
+            for k, v in self.initializers_dict.items():
+
+                if self.verbose:
+                    print(
+                        f"[GraphBuilder-{self._hash()}._build_initializers] {type(v)}-{k}:{v.dtype}[{v.shape}]"
+                    )
+                if isinstance(v, TensorProto):
+                    model.graph.initializer.append(v)
+                    continue
+
+                if isinstance(v, np.ndarray):
+                    itype = dtype_to_tensor_dtype(v.dtype)
+                    if itype in {
+                        TensorProto.BOOL,
+                        TensorProto.STRING,
+                        TensorProto.UNDEFINED,
+                        TensorProto.COMPLEX64,
+                        TensorProto.COMPLEX128,
+                        TensorProto.UINT4,
+                        TensorProto.INT4,
+                    }:
+                        t = onh.from_array(v, name=k)
+                        model.graph.initializer.append(t)
+                        continue
+
+                    from_np = True
+                else:
+                    assert isinstance(
+                        v, self.torch.Tensor
+                    ), f"tensor {k!r} has un unexpected type {type(v)}"
+                    from_np = False
+                    itype = dtype_to_tensor_dtype(v.dtype)
+
+                # How to avoid a copy?
+                if from_np:
+                    tensor = TensorProto()
+                    tensor.name = k
+                    tensor.dims.extend(v.shape)
+                    tensor.data_type = itype
+                    tensor.raw_data = v.tobytes()
+                else:
+                    tensor = self.from_array(v, name=k)
+
+                model.graph.initializer.append(tensor)
 
         # graph.sparse_initializer.extend(sparse_initializer)
         # graph.value_info.extend(value_info)
