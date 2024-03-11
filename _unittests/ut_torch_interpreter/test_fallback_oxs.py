@@ -78,14 +78,14 @@ class TestFallbackOxs(ExtTestCase):
         mod.op, mod.IsScalar = old_value
 
         gr.make_tensor_output(
-            y, TensorProto.FLOAT, (1, "b"), indexed=False, is_dimension=False
+            y, TensorProto.INT64, (1, "b"), indexed=False, is_dimension=False
         )
         onx = gr.to_onnx()
 
         ext = ExtendedReferenceEvaluator(onx)
         x = np.random.rand(3, 4).astype(np.int64)
         y = ext.run(None, {"X": x})[0]
-        self.assertEqual(x.shape, y.shape)
+        self.assertEqual((1, 4), y.shape)
 
 
 if __name__ == "__main__":

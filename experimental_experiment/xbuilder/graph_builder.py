@@ -28,6 +28,8 @@ from .shape_type_compute import (
     set_type_shape_binary_op,
     set_type_shape_matmul,
     set_type_shape_gemm,
+    set_type_shape_unary_op,
+    set_type_shape_reduce_op,
 )
 from ._onnx_helper import (
     choose_consistent_domain_opset,
@@ -36,6 +38,7 @@ from ._onnx_helper import (
     _nice_shape,
     element_wise_op_types,
     element_wise_op_cmp_types,
+    unary_like_op_types,
 )
 from ._dtype_helper import dtype_to_tensor_dtype
 from ._helper import make_hash
@@ -243,8 +246,9 @@ class GraphBuilder:
       (debugging tool)
     """
 
-    _op_element_wise_types = element_wise_op_types()
-    _op_element_wise_cmp_types = element_wise_op_cmp_types()
+    _op_type_element_wise_types = element_wise_op_types()
+    _op_type_element_wise_cmp_types = element_wise_op_cmp_types()
+    _op_type_unary_like = unary_like_op_types()
 
     def __init__(
         self,
@@ -1823,6 +1827,9 @@ class GraphBuilder:
         for o in node.output:
             self.set_name(o)
         self.nodes.append(node)
+
+        self._make_node_set_type_shape(node)
+
         if len(output_names) == 1:
             return output_names[0]
         return output_names
@@ -1946,9 +1953,11 @@ class GraphBuilder:
                 if self.has_shape(node.input[1]):
                     rk = self.get_shape(node.input[1])
                     self.set_rank(k, rk[0])
-        elif node.op_type in self._op_element_wise_cmp_types:
+        elif node.op_type in self._op_type_unary_like:
+            set_type_shape_unary_op(self, node.output[0], node.input[0])
+        elif node.op_type in self._op_type_element_wise_cmp_types:
             set_type_shape_binary_op(self, node.output[0], *node.input, cmp_op=True)
-        elif node.op_type in self._op_element_wise_types:
+        elif node.op_type in self._op_type_element_wise_types:
             set_type_shape_binary_op(self, node.output[0], *node.input)
         elif node.op_type == "MatMul":
             set_type_shape_matmul(self, node.output[0], *node.input)
@@ -1959,6 +1968,36 @@ class GraphBuilder:
                 *node.input[:2],
                 transA=self.get_attribute(node, "transA").i,
                 transB=self.get_attribute(node, "transB").i,
+            )
+        elif node.op_type.startswith("Reduce"):
+            keepdim = self.get_attribute(node, "keepdims", exc=False)
+            axes = self.get_attribute(node, "axes", exc=False)
+            if axes is None:
+                if len(node.input) == 2:
+                    assert self.is_constant(node.input[1]), (
+                        f"axes from node {node.op_type}, name={node.name!r} is not a constant, "
+                        f"the new shape cannot be infered{self.get_debug_msg()}"
+                    )
+                    cst = self.get_constant(node.input[1])
+                    assert isinstance(cst, np.ndarray), (
+                        f"Unexpected type {type(cst)} for {node.input[1]!r}, "
+                        f"unable to set type and shape for node {node.op_type} "
+                        f"with name={node.name!r}{self.get_debug_msg()}"
+                    )
+                    iaxes = (
+                        (int(cst),)
+                        if len(cst.shape) == 0
+                        else tuple(int(i) for i in cst)
+                    )
+            else:
+                iaxes = tuple(axes.ints)
+
+            set_type_shape_reduce_op(
+                self,
+                node.output[0],
+                node.input[0],
+                keepdim=None if keepdim is None else keepdim.i,
+                axes=iaxes,
             )
 
     def make_nodes(
