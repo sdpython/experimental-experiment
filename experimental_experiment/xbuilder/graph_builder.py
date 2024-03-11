@@ -53,6 +53,7 @@ class Opset:
         "ArgMin": 1,
         "Cast": 1,
         "CastLike": 1,
+        "Celu": 1,
         "Concat": 1,
         "Constant": 1,
         "ConstantOfShape": 1,
@@ -104,8 +105,7 @@ class Opset:
         "Where": 1,
     }
 
-    def __init__(self, builder: "GraphBuilder", opset: int):
-        self.opset = opset
+    def __init__(self, builder: "GraphBuilder"):
         self.builder = builder
 
     def __getattr__(self, name):
@@ -343,7 +343,7 @@ class GraphBuilder:
                 f"{type(target_opset_or_existing_proto)} is not supported."
             )
 
-        self.op = Opset(self, self.opsets[""])
+        self.op = Opset(self)
 
     def make_key(self, value: Any) -> Optional[Tuple[Union[str, int], ...]]:
         """
