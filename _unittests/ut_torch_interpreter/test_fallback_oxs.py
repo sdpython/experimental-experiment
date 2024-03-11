@@ -1,7 +1,7 @@
 import unittest
 import numpy as np
 from onnx import TensorProto
-from experimental_experiment.ext_test_case import ExtTestCase
+from experimental_experiment.ext_test_case import ExtTestCase, skipif_ci_windows
 from experimental_experiment.xbuilder.graph_builder import GraphBuilder
 from experimental_experiment.torch_interpreter.oxs_opset import OxsOpset, Var
 from experimental_experiment.reference import ExtendedReferenceEvaluator
@@ -158,6 +158,7 @@ class TestFallbackOxs(ExtTestCase):
 
         mod.op, mod.IsScalar = old_value
 
+    @skipif_ci_windows("dynamo not supported on Windows")
     def test_fallback_oxs(self):
         import torch
         from experimental_experiment.torch_interpreter import to_onnx
