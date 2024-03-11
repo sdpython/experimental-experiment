@@ -23,14 +23,7 @@ from .shape_helper import (
     is_static_dimension,
     is_static_shape,
 )
-from .shape_type_compute import (
-    set_type_shape_binary_op,
-    set_type_shape_matmul,
-    set_type_shape_gemm,
-    set_type_shape_unary_op,
-    set_type_shape_reduce_op,
-    set_shape_type_op_any,
-)
+from .shape_type_compute import set_shape_type_op_any
 from ._onnx_helper import (
     choose_consistent_domain_opset,
     compatible_opsets,
@@ -721,7 +714,7 @@ class GraphBuilder:
         """Returns the rank of a result."""
         assert isinstance(name, str), f"Unexpected type {type(name)} for name."
         assert name in self._known_ranks, (
-            f"Rank is unknown for result {name!r}, "
+            f"rank is unknown for result {name!r}, "
             f"known_shapes={self._known_ranks}{self.get_debug_msg()}"
         )
         return self._known_ranks[name]
@@ -1517,6 +1510,18 @@ class GraphBuilder:
     def _debug_string_inputs(
         self, inputs: List[str], outputs: List[str], align: Optional[int] = None
     ) -> str:
+        """
+        Meaning:
+
+        - ``"-"``: (0) none
+        - ``"T"``: (1) type
+        - ``"R"``: (2) rank
+        - ``"U"``: (3) rank + type
+        - ``"S"``: (4) shape
+        - ``"V"``: (5) shape + type
+        - ``"W"``: (6) shape + rank
+        - ``"#"``: (7) shape + type + rank
+        """
         st = ""
         c = "-TRUSVW#"
         for i in inputs:
@@ -1782,89 +1787,7 @@ class GraphBuilder:
     def _make_node_set_type_shape(self, node: NodeProto):
         if node.domain != "":
             return
-        if node.op_type == "Reshape":
-            k = node.output[0]
-            self.set_type(k, self.get_type(node.input[0]))
-            shape_set = False
-            if self.is_constant(node.input[1]):
-                cst = tuple(
-                    self.get_constant(node.input[1], computed_value=True, as_shape=True)
-                )
-                if all_int(cst):
-                    if -1 not in cst:
-                        self.set_shape(k, cst)
-                        shape_set = True
-                    elif all_int(cst) and self.has_shape(node.input[0]):
-                        sh = self.get_shape(node.input[0])
-                        new_shape = self._apply_reshape_to_shape(sh, cst)
-                        if new_shape is not None:
-                            self.set_shape(k, new_shape)
-                            shape_set = True
-            if not shape_set:
-                if self.has_shape(node.input[1]):
-                    rk = self.get_shape(node.input[1])
-                    self.set_rank(k, rk[0])
-        elif node.op_type.startswith("Reduce"):
-            keepdim = self.get_attribute(node, "keepdims", exc=False)
-            axes = self.get_attribute(node, "axes", exc=False)
-            if axes is None:
-                if len(node.input) == 2:
-                    assert self.is_constant(node.input[1]), (
-                        f"axes from node {node.op_type}, name={node.name!r} is not a constant, "
-                        f"the new shape cannot be infered{self.get_debug_msg()}"
-                    )
-                    cst = self.get_constant(node.input[1])
-                    assert isinstance(cst, np.ndarray), (
-                        f"Unexpected type {type(cst)} for {node.input[1]!r}, "
-                        f"unable to set type and shape for node {node.op_type} "
-                        f"with name={node.name!r}{self.get_debug_msg()}"
-                    )
-                    iaxes = (
-                        (int(cst),)
-                        if len(cst.shape) == 0
-                        else tuple(int(i) for i in cst)
-                    )
-            else:
-                iaxes = tuple(axes.ints)
-
-            set_type_shape_reduce_op(
-                self,
-                node.output[0],
-                node.input[0],
-                keepdim=None if keepdim is None else keepdim.i,
-                axes=iaxes,
-            )
-        elif node.op_type == "MatMul":
-            set_type_shape_matmul(self, node.output[0], *node.input)
-        elif node.op_type == "Gemm":
-            transA = self.get_attribute(node, "transA", exc=False)
-            transB = self.get_attribute(node, "transB", exc=False)
-            set_type_shape_gemm(
-                self,
-                node.output[0],
-                *node.input[:2],
-                transA=0 if transA is None else transA.i,
-                transB=0 if transB is None else transB.i,
-            )
-        elif node.op_type == "Cast":
-            set_type_shape_unary_op(
-                self,
-                node.output[0],
-                node.input[0],
-                itype=self.get_attribute(node, "to").i,
-            )
-        elif node.op_type == "CastLike":
-            set_type_shape_unary_op(
-                self, node.output[0], node.input[0], itype=self.get_type(node.input[1])
-            )
-        elif node.op_type in self._op_type_element_wise_cmp_types:
-            set_type_shape_binary_op(self, node.output[0], *node.input, cmp_op=True)
-        elif node.op_type in self._op_type_element_wise_types:
-            set_type_shape_binary_op(self, node.output[0], *node.input)
-        elif node.op_type in self._op_type_unary_like:
-            set_type_shape_unary_op(self, node.output[0], node.input[0])
-        else:
-            set_shape_type_op_any(self, node)
+        set_shape_type_op_any(self, node)
 
     def make_nodes(
         self,

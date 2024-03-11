@@ -7,9 +7,13 @@ def print_import_time():
     """
     import time
 
+    def _sys_in(mod):
+        if mod in sys.modules:
+            print(f"{mod!r} already imported")
+
     ####################
 
-    assert "onnx" not in sys.modules
+    _sys_in("onnx")
     begin = time.perf_counter()
     import onnx
 
@@ -17,7 +21,7 @@ def print_import_time():
 
     ####################
 
-    assert "onnx_array_api" not in sys.modules
+    _sys_in("onnx_array_api")
     begin = time.perf_counter()
     import onnx_array_api
 
@@ -25,7 +29,7 @@ def print_import_time():
 
     ####################
 
-    assert "torch" not in sys.modules
+    _sys_in("torch")
     begin = time.perf_counter()
     import torch
 
@@ -33,17 +37,15 @@ def print_import_time():
 
     ####################
 
-    if "torch.export" in sys.modules:
-        print("torch.export was imported.")
-    else:
-        begin = time.perf_counter()
-        import torch.export
+    _sys_in("torch.export")
+    begin = time.perf_counter()
+    import torch.export
 
-        print(f"time to import torch.export --- {time.perf_counter() - begin}")
+    print(f"time to import torch.export --- {time.perf_counter() - begin}")
 
     ####################
 
-    assert "onnxscript" not in sys.modules
+    _sys_in("onnxscript")
     begin = time.perf_counter()
     import onnxscript
 
@@ -51,7 +53,7 @@ def print_import_time():
 
     ####################
 
-    assert "onnxruntime" not in sys.modules
+    _sys_in("onnxruntime")
     begin = time.perf_counter()
     import onnxruntime
 
@@ -59,17 +61,15 @@ def print_import_time():
 
     ####################
 
-    if "torch.onnx" in sys.modules:
-        print("torch.onnx was imported.")
-    else:
-        begin = time.perf_counter()
-        import torch.onnx
+    _sys_in("torch.onnx")
+    begin = time.perf_counter()
+    import torch.onnx
 
-        print(f"time to import torch.onnx --- {time.perf_counter() - begin}")
+    print(f"time to import torch.onnx --- {time.perf_counter() - begin}")
 
     ####################
 
-    assert "torch._dynamo" not in sys.modules
+    _sys_in("torch._dynamo")
     begin = time.perf_counter()
     import torch._dynamo
 
@@ -77,20 +77,22 @@ def print_import_time():
 
     #
 
-    assert "experimental_experiment.torch_interpreter" not in sys.modules
+    _sys_in("time to import experimental_experiment.torch_interpreter")
     begin = time.perf_counter()
     import experimental_experiment.torch_interpreter
 
     print(
-        f"time to import experimental_experiment.torch_interpreter --- {time.perf_counter() - begin}"
+        f"time to import experimental_experiment.torch_interpreter "
+        f"--- {time.perf_counter() - begin}"
     )
 
     #
 
-    assert "experimental_experiment.torch_interpreter.aten_functions" not in sys.modules
+    _sys_in("experimental_experiment.torch_interpreter.aten_functions")
     begin = time.perf_counter()
     import experimental_experiment.torch_interpreter.aten_functions
 
     print(
-        f"time to import experimental_experiment.torch_interpreter.aten_functions --- {time.perf_counter() - begin}"
+        f"time to import experimental_experiment.torch_interpreter."
+        f"aten_functions --- {time.perf_counter() - begin}"
     )
