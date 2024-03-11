@@ -24,16 +24,31 @@ def broadcast_shape(sh1: STATIC_SHAPE, sh2: STATIC_SHAPE) -> STATIC_SHAPE:
         return sh2
     if sh2 == (1,) and len(sh1) >= 1:
         return sh1
-    assert is_static_shape(sh1) and is_static_shape(
-        sh2
-    ), "Not implemented for sh1={sh1}, sh2={sh2}"
-    if len(sh1) == len(sh2):
-        return tuple(max(i, j) for i, j in zip(sh1, sh2))
     if len(sh1) < len(sh2):
         sh1 = (1,) * (len(sh2) - len(sh1)) + sh1
     elif len(sh1) > len(sh2):
         sh2 = (1,) * (len(sh1) - len(sh2)) + sh2
-    return tuple(max(i, j) for i, j in zip(sh1, sh2))
+    new_shape = []
+    for a, b in zip(sh1, sh2):
+        if isinstance(a, int):
+            if isinstance(b, int):
+                d = max(a, b)
+            elif a == 1:
+                d = b
+            else:
+                d = None
+        else:
+            if isinstance(b, int):
+                if b == 1:
+                    d = a
+                else:
+                    d = None
+            else:
+                d = None
+        if d is None:
+            raise RuntimeError(f"Not implemented for sh1={sh1}, sh2={sh2}")
+        new_shape.append(d)
+    return tuple(new_shape)
 
 
 def set_type_shape_reshape(
