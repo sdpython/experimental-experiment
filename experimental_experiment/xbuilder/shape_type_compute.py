@@ -121,9 +121,6 @@ def set_type_shape_binary_op(
                 break
         assert dtype, f"Unable to guess type from {input_names}{g.get_debug_msg()}"
         g.set_type(name, dtype)
-        assert (
-            dtype != TensorProto.BOOL
-        ), f"dtype is bool, does not work with a binary operator{g.get_debug_msg()}"
 
     # shape
     shape = None
@@ -242,6 +239,8 @@ def _get_input_type(
     g: "GraphBuilder", x: Any, python_default: bool  # noqa: F821
 ) -> int:
     if isinstance(x, int):
+        if x is True or x is False:
+            return TensorProto.BOOL
         return TensorProto.INT64 if python_default else None
     if isinstance(x, float):
         return TensorProto.FLOAT if python_default else None
@@ -290,7 +289,10 @@ def _cast_inputs(
             g.set_rank(res, g.get_rank(a))
         return res
     if isinstance(a, (int, float)):
-        a = np.array(a)
+        if a is True or a is False:
+            a = np.array(a, dtype=np.bool_)
+        else:
+            a = np.array(a)
     if isinstance(a, np.ndarray):
         return g.make_initializer("", a.astype(tensor_dtype_to_np_dtype(itype)))
     raise RuntimeError(f"Unexpected type {type(a)}, itype={itype}.")
@@ -315,7 +317,10 @@ def prepare_inputs_homogeneous_operator(
             _get_input_type(g, a, python_default=True) for a in args
         ]
     dtypes = set(dtypes_list_not_none)
-    only = _get_compute_type(set(dtypes))
+    if len(dtypes) == 1:
+        only = list(dtypes)[0]
+    else:
+        only = _get_compute_type(set(dtypes))
     inputs = []
     for dt, a in zip(dtypes_list, args):
         if dt == only and isinstance(a, str):

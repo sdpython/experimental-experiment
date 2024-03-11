@@ -673,8 +673,9 @@ class GraphBuilder:
         if name in self._known_types:
             if int_type != self._known_types[name]:
                 raise RuntimeError(
-                    f"Type for name {name!r} already exists and it is different "
-                    f"{self._known_types[name]} != {int_type}."
+                    f"Type for name {name!r} already exists and it is different, "
+                    f"known is {self._known_types[name]} != {int_type} (new)"
+                    f"{self.get_debug_msg()}"
                 )
         if self.verbose > 5:
             print(f"[GraphBuilder-{self._hash()}.set_type] {name}:{int_type}")
