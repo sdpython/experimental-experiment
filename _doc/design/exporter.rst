@@ -492,6 +492,9 @@ All the available functions are listed in one the those three pages:
 Every function added to these modules is automatically added
 to the list of known converter functions.
 
+Pratice
+=======
+
 Example
 +++++++
 
@@ -658,5 +661,37 @@ It just needs to be added when calling function
         input_names=["x"],
         dynamic_shapes={"x": {0: torch.export.Dim("batch")}},
     )
+
+    print(onnx_simple_text_plot(onx))
+
+Fallback
+++++++++
+
+The current library does not always have a converting function
+for evert aten functions implemented in torch. A mechanism exists
+to intercept the function returned by the interpreter and replace it
+by a function coming from another source such as :epkg:`onnx-script`.
+
+.. runpython::
+    :showcode:
+
+    import torch
+    from onnx_array_api.plotting.text_plot import onnx_simple_text_plot
+    from experimental_experiment.torch_interpreter import to_onnx
+    from experimental_experiment.torch_interpreter.oxs_dispatcher import OxsDispatcher
+
+    class Neuron(torch.nn.Module):
+        def __init__(self, n_dims: int, n_targets: int):
+            super(Neuron, self).__init__()
+            self.linear = torch.nn.Linear(n_dims, n_targets)
+
+        def forward(self, x):
+            return torch.celu(self.linear(x))
+
+
+    x = torch.rand(5, 3)
+    model = Neuron(3, 1)
+
+    onx = to_onnx(model, (x,), input_names=["x"], dispatcher=OxsDispatcher(verbose=2))  
 
     print(onnx_simple_text_plot(onx))

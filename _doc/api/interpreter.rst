@@ -15,6 +15,12 @@ Dispatcher
 .. autoclass:: experimental_experiment.torch_interpreter.interpreter.Dispatcher
     :members:
 
+OxsDispatcher
+=============
+
+.. autoclass:: experimental_experiment.torch_interpreter.oxs_dispatcher.OxsDispatcher
+    :members:
+
 OxsOpset
 ========
 

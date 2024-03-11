@@ -5,9 +5,15 @@ from .oxs_opset import OxsOpset, Var
 
 class OxsDispatcher(Dispatcher):
     """
-    Used to changes the way class :class:`DynamoInterpreter
+    If class :class:`DynamoInterpreter
     <experimental_experiment.torch_interpreter.DynamoInterpreter>`
-    selects the function translating aten function or module.
+    cannot find any converting function for a specific function,
+    it tries to find an existing one in :epkg:`onnxscript`.
+    The converting function from onnxscript is run in trace only mode.
+    The variable and functions op, Rank, IsScalar are replaced by
+    `op = OwsOpset()`, `op.Rank`, `op.Scalar`.
+    onnxscript may have multiple overloaded functions.
+    Right now, it takes the first one.
 
     :param registered_functions: registered functions
     :param verbose: verbose
@@ -87,12 +93,23 @@ class OxsDispatcher(Dispatcher):
             return None
 
         regfct = default_registry[key]
+        assert len(regfct.overloads) > 0, (
+            f"Unable to find onnxscript submodule {fct.function.__module__!r}. "
+            f"onnxscript has a function with no overloaded instances, "
+            f"key={key!r}, name={name!r}{builder.get_debug_msg()}"
+        )
         fct = regfct.overloads[0]
         assert fct.function.__module__ in self.submodules, (
             f"Unable to find onnxscript submodule {fct.function.__module__!r}. "
             f"The fallback to onnxscript is not implemented yet for function "
             f"key={key!r}, name={name!r}{builder.get_debug_msg()}"
         )
+
+        if self.verbose > 1:
+            print(
+                f"[OxsDispatcher.fallback] found {len(regfct.overloads)} for "
+                f"{key!r} ({name!r}), taking the first one."
+            )
 
         def wrapper(g, sts, outputs, *args, _fct=fct, _dispatcher=self, **kwargs):
             op = OxsOpset(g)
