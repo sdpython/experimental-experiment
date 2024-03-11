@@ -166,6 +166,11 @@ def set_type_shape_matmul(g: "GraphBuilder", name: str, x: str, y: str):  # noqa
     if g.has_shape(x) and g.has_shape(y):
         sh1 = g.get_shape(x)
         sh2 = g.get_shape(y)
+        if len(sh1) >= 2 and len(sh2) >= 2 and len(sh1) != len(sh2):
+            if len(sh1) < len(sh2):
+                sh1 = (1,) * (len(sh2) - len(sh1)) + sh1
+            else:
+                sh2 = (1,) * (len(sh1) - len(sh2)) + sh2
         assert len(sh1) == len(
             sh2
         ), f"not implemented when shapes are {sh1} and {sh2}{g.get_debug_msg()}"
@@ -218,9 +223,9 @@ def set_type_shape_reduce_op(
     assert keepdim in {0, 1}, f"keepdim={keepdim} must be in {{0, 1}}"
     g.set_type(name, g.get_type(x))
     if axes is None:
-        g.set_rank(name, keepdim)
+        g.set_rank(name, int(keepdim))
     elif not g.has_shape(x):
-        g.set_rank(name, g.get_rank(x) - keepdim * len(axes))
+        g.set_rank(name, g.get_rank(x) - int(keepdim) * len(axes))
     else:
         shape = list(g.get_shape(x))
         for d in axes:
@@ -488,7 +493,7 @@ def _set_shape_type_op_any_gather_elements(
         i_shape = self.get_shape(node.input[1])
         new_shape = list(shape)
         new_shape[axis] = i_shape[axis]
-        self.set_shape(node.output[0], new_shape)
+        self.set_shape(node.output[0], tuple(new_shape))
     else:
         self.set_rank(node.output[0], self.get_rank(node.input[0]))
 

@@ -120,11 +120,17 @@ def aten_meth_mean(
         cst = g.make_initializer("", np.array(dim, dtype=np.int64))
     else:
         raise RuntimeError(f"Unexpected type {type(dim)} for dim.")
-    res = g.make_node(
-        "ReduceMean", [x, cst], outputs, keepdims=1 if keepdim else 0, name=".mean"
+    res = g.op.ReduceMeanAnyOpset(
+        x, cst, outputs=outputs, keepdims=1 if keepdim else 0, name=".mean"
     )
     if sts:
-        set_type_shape_reduce_op(g, outputs[0], x, keepdim=keepdim)
+        set_type_shape_reduce_op(
+            g,
+            outputs[0],
+            x,
+            keepdim=keepdim,
+            axes=(dim,) if isinstance(dim, int) else dim,
+        )
     return res
 
 
