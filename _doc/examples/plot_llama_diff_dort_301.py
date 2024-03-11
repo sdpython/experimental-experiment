@@ -38,7 +38,8 @@ script_args = get_parsed_args(
     backward=(0, "does one operator for backward"),
     cuda=(0, "use cuda or not"),
     mixed=(0, "use miwed precision"),
-    expose="part,exporter,ortopt,cuda,mixed",
+    opset=(18, "onnx opset"),
+    expose="part,exporter,ortopt,cuda,mixed,opset",
 )
 
 
@@ -108,6 +109,8 @@ use_cuda = script_args.cuda in (1, "1")
 print(f"cuda={use_cuda}")
 use_mixed = script_args.mixed in (1, "1")
 print(f"mixed={use_mixed}")
+opset = int(script_args.opset)
+print(f"opset={opset}")
 
 ###################################
 # Model and data
@@ -200,7 +203,7 @@ if backward:
         fw_compiler=lambda *args, **kwargs: onnx_debug_backend(
             *args,
             dump_prefix=os.path.join(folder, "llama_debug"),
-            target_opset=17,
+            target_opset=opset,
             storage=storage,
             **kwargs,
         ),

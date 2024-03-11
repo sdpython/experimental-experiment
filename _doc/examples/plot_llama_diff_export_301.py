@@ -33,7 +33,8 @@ script_args = get_parsed_args(
     part=("attention", "one value among attention, decoder, model"),
     exporter=("dynamo", "one value among dynamo, custom"),
     ortopt=(1, "run onnxruntime optimization"),
-    expose="part,exporter,ortopt",
+    opset=(18, "onnx opset"),
+    expose="part,exporter,ortopt,opset",
 )
 
 import contextlib
@@ -86,6 +87,8 @@ print(f"part={script_args.part}")
 print(f"exporter={script_args.exporter}")
 ortopt = script_args.ortopt in (1, "1")
 print(f"ortopt={ortopt}")
+opset = int(script_args.opset)
+print(f"opset={opset}")
 
 
 def opt_filename(filename: str) -> str:
@@ -97,7 +100,9 @@ def export_script(filename, model, *args):
     with contextlib.redirect_stdout(io.StringIO()):
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            torch.onnx.export(model, args, filename, input_names=["input"])
+            torch.onnx.export(
+                model, args, filename, input_names=["input"], opset_version=opset
+            )
     if ortopt:
         onx = onnx.load(filename)
         ort_optimize(onx, opt_filename(filename), providers=provider)
@@ -129,6 +134,7 @@ def export_custom(filename, model, *args):
             remove_unused=True,
             constant_folding=False,
         ),
+        target_opset=opset,
     )
     with open(filename, "wb") as f:
         f.write(new_model.SerializeToString())
