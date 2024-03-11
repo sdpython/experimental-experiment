@@ -1239,13 +1239,36 @@ def aten_FunctionCtx(g: GraphBuilder, sts: bool, outputs: List[str], *args, **kw
     raise NotImplementedError(f"args={args}, kwargs={kwargs}")
 
 
-def aten_gt(g: GraphBuilder, sts: bool, outputs: List[str], x: T, y: T) -> T:
-    "greater"
-    x, y = prepare_inputs_homogeneous_operator(g, x, y)
-    res = g.op.Greater(x, y, outputs=outputs)
+def aten_ge(
+    g: GraphBuilder, sts: bool, outputs: List[str], x: T, y: T, name: str = "ge"
+) -> T:
+    "greater or equal"
+    x, y = prepare_inputs_homogeneous_operator(g, x, y, name=name)
+    res = g.op.GreaterOrEqual(x, y, outputs=outputs, name=name)
     if sts:
         set_type_shape_binary_op(g, outputs[0], x, y, cmp_op=True)
     return res
+
+
+def aten_ge_Tensor(g: GraphBuilder, sts: bool, outputs: List[str], x: T, y: T) -> T:
+    "greater or equal"
+    return aten_ge(g, sts, outputs, x, y, name="ge_Tensor")
+
+
+def aten_gt(
+    g: GraphBuilder, sts: bool, outputs: List[str], x: T, y: T, name: str = "gt"
+) -> T:
+    "greater"
+    x, y = prepare_inputs_homogeneous_operator(g, x, y, name=name)
+    res = g.op.Greater(x, y, outputs=outputs, name=name)
+    if sts:
+        set_type_shape_binary_op(g, outputs[0], x, y, cmp_op=True)
+    return res
+
+
+def aten_gt_Tensor(g: GraphBuilder, sts: bool, outputs: List[str], x: T, y: T) -> T:
+    "greater"
+    return aten_gt(g, sts, outputs, x, y, name="gt_Tensor")
 
 
 def aten_index_Tensor(

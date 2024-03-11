@@ -50,12 +50,14 @@ OP_BOOL_SUPPORTED = False
 
 
 class FuncModule(Module):
-    def __init__(self, f, params=None):
+    def __init__(self, f, params=None, dtype=torch.float32):
         if params is None:
             params = ()
         super().__init__()
         self.f = f
-        self.ppp = Parameter(torch.Tensor([1]).to(torch.float32))
+        rg = dtype == torch.float32
+        val = torch.ones((1,), requires_grad=rg, dtype=dtype)
+        self.ppp = Parameter(val, requires_grad=rg)
         self.params = nn.ParameterList(list(params))
 
     def forward(self, *args):
@@ -146,16 +148,24 @@ class TestOperators(ExtTestCase):
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", UserWarning)
             if isinstance(f, nn.Module):
+                if verbose:
+                    print("[assertONNX] +FuncModuleModule")
                 model = FuncModuleModule(f)
             elif input_index is None:
                 if params is None:
                     params = ()
-                model = FuncModule(f, params)
+                if verbose:
+                    print("[assertONNX] +FuncModule")
+                model = FuncModule(f, params, dtype=args[0].dtype)
             elif input_index == 0:
                 assert params is None, f"not implemented with params={params}"
+                if verbose:
+                    print("[assertONNX] +FuncModule0")
                 model = FuncModule0(f)
             elif input_index == 1:
                 assert params is None, f"not implemented with params={params}"
+                if verbose:
+                    print("[assertONNX] +FuncModule1")
                 model = FuncModule1(f)
             else:
                 assert input_index in (
@@ -164,6 +174,10 @@ class TestOperators(ExtTestCase):
                 ), f"Not implemented for input_index={input_index}"
             model.eval()
             storage = {}
+
+            if verbose >= 10:
+                for i, arg in enumerate(args):
+                    print(f"[assertONNX] i={i}, arg={arg.dtype}:{arg.shape}")
 
             backend_debug = lambda *args, **kwargs: onnx_debug_backend(  # noqa: E731
                 *args,
@@ -942,11 +956,24 @@ class TestOperators(ExtTestCase):
             operator.le, (x, y), onnx_export=inspect.currentframe().f_code.co_name
         )
 
-    def test_ge(self):
-        x = torch.randn(3, 4, requires_grad=False).int()
-        y = torch.randn(3, 4, requires_grad=False).int()
+    def test_op_ge_int(self):
+        x = torch.randn(3, 4, requires_grad=False).to(torch.int64)
+        y = torch.randn(3, 4, requires_grad=False).to(torch.int64)
         self.assertONNX(
-            operator.ge, (x, y), onnx_export=inspect.currentframe().f_code.co_name
+            operator.ge,
+            (x, y),
+            onnx_export=inspect.currentframe().f_code.co_name,
+            test_backward=False,
+        )
+
+    def test_op_gef(self):
+        x = torch.randn(3, 4, requires_grad=False, dtype=torch.float32)
+        y = torch.randn(3, 4, requires_grad=False, dtype=torch.float32)
+        self.assertONNX(
+            operator.ge,
+            (x, y),
+            onnx_export=inspect.currentframe().f_code.co_name,
+            test_backward=False,
         )
 
     def test_exp(self):

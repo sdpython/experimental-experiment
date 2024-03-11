@@ -1,14 +1,9 @@
 from functools import partial
-from typing import Callable, Dict, List, Optional, Union
+from typing import List, Optional, Union
+import numpy as np
 
 
-class OxsOpset:
-    """
-    Bridge with :epkg:`onnxscript`.
-
-    :param builder: builder
-    """
-
+class Opset:
     # defined for opset >= 18
     # name: number of expected outputs
     _implemented = {
@@ -73,40 +68,6 @@ class OxsOpset:
 
     def __init__(self, builder: "GraphBuilder"):  # noqa: F821
         self.builder = builder
-        self._submodule = None
-
-    @property
-    def submodules(self) -> Dict[str, Callable]:
-        """
-        Returns the submodules implementing torch functions.
-        """
-        if self._submodule is not None:
-            return self._submodule
-        from onnxscript.function_libs.torch_lib.ops import (
-            core,
-            fft,
-            linalg,
-            nested,
-            nn,
-            prims,
-            sparse,
-            special,
-            vision,
-        )
-
-        subs = {
-            "onnxscript.function_libs.torch_lib.ops.core": core,
-            "onnxscript.function_libs.torch_lib.ops.fft": fft,
-            "onnxscript.function_libs.torch_lib.ops.linalg": linalg,
-            "onnxscript.function_libs.torch_lib.ops.nested": nested,
-            "onnxscript.function_libs.torch_lib.ops.nn": nn,
-            "onnxscript.function_libs.torch_lib.ops.prims": prims,
-            "onnxscript.function_libs.torch_lib.ops.sparse": sparse,
-            "onnxscript.function_libs.torch_lib.ops.special": special,
-            "onnxscript.function_libs.torch_lib.ops.vision": vision,
-        }
-        self._submodule = subs
-        return subs
 
     def __getattr__(self, name):
         if name in self._implemented:
@@ -119,24 +80,6 @@ class OxsOpset:
                 f"you can still use this operator with method 'make_node'."
             ) from e
 
-    def IsScalar(self, name: str) -> bool:
-        if self.builder.has_shape(name):
-            shape = self.builder.get_shape(name)
-            return shape in (tuple(), (1,))
-        if self.builder.has_rank(name):
-            rank = self.builder.get_rank(name)
-            if rank == 0:
-                return True
-        raise RuntimeError(
-            f"Unable to tell if {name!r} is scalar{self.builder.get_debug_msg()}"
-        )
-
-    def Rank(self, name: str) -> int:
-        assert self.builder.has_rank(
-            name
-        ), f"Rank is missing for name={name!r}{self.builder.get_debug_msg()}"
-        return self.builder.get_rank(name)
-
     def make_node(
         self,
         op_type: str,
@@ -146,17 +89,6 @@ class OxsOpset:
         name: Optional[str] = None,
         **kwargs,
     ):
-        """
-        Creates a node.
-
-        :param op_type: type
-        :param inputs: inputs
-        :param outputs: outputs
-        :param domain: domain
-        :param name: name
-        :param kwargs: additional arguments
-        :return: output name
-        """
         if outputs is None:
             outputs = self._implemented[op_type]
         if inputs is None:
@@ -180,3 +112,49 @@ class OxsOpset:
         return self.builder.make_node(
             op_type, new_inputs, outputs=outputs, domain=domain, name=name, **kwargs
         )
+
+    @staticmethod
+    def _iaxes(op_type, axes) -> int:
+        if isinstance(axes, np.ndarray):
+            iaxes = axes.tolist()
+        elif isinstance(axes, int):
+            iaxes = [axes]
+        else:
+            raise RuntimeError(
+                f"Unable to call {op_type} on a dynamic input axis={axes}"
+            )
+        return iaxes
+
+    def ReduceMaxAnyOpset(self, *args, **kwargs):
+        if len(args) == 1:
+            return self.ReduceMax(*args, **kwargs)
+        assert len(args) == 2, f"ReduceMaxAnyOpset expects 2 arguments not {len(args)}"
+        if self.builder.main_opset >= 18:
+            return self.ReduceMax(*args, **kwargs)
+        return self.ReduceMax(args[0], axes=self._iaxes("ReduceMax", args[1]), **kwargs)
+
+    def ReduceMeanAnyOpset(self, *args, **kwargs):
+        if len(args) == 1:
+            return self.ReduceMean(*args, **kwargs)
+        assert len(args) == 2, f"ReduceMeanAnyOpset expects 2 arguments not {len(args)}"
+        if self.builder.main_opset >= 18:
+            return self.ReduceMean(*args, **kwargs)
+        return self.ReduceMean(
+            args[0], axes=self._iaxes("ReduceMean", args[1]), **kwargs
+        )
+
+    def UnsqueezeAnyOpset(self, *args, **kwargs):
+        if len(args) == 1 and len(kwargs) == 0:
+            return self.Unsqueeze(*args)
+        assert len(args) == 2, f"UnsqueezeAnyOpset expects 2 arguments not {len(args)}"
+        if self.builder.main_opset >= 13:
+            return self.Unsqueeze(*args, **kwargs)
+        return self.Unsqueeze(args[0], axes=self._iaxes("Unsqueeze", args[1]), **kwargs)
+
+    def ReduceSumAnyOpset(self, *args, **kwargs):
+        if len(args) == 1:
+            return self.ReduceSum(*args, **kwargs)
+        assert len(args) == 2, f"ReduceSumAnyOpset expects 2 arguments not {len(args)}"
+        if self.builder.main_opset >= 13:
+            return self.ReduceSum(*args, **kwargs)
+        return self.ReduceSum(args[0], axes=self._iaxes("ReduceSum", args[1]), **kwargs)

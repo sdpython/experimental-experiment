@@ -87,6 +87,43 @@ class TestFallbackOxs(ExtTestCase):
         y = ext.run(None, {"X": x})[0]
         self.assertEqual((1, 4), y.shape)
 
+    def test_rank(self):
+        from onnxscript.function_libs.torch_lib.registration import default_registry
+        import onnxscript.function_libs.torch_lib.ops.core
+        import onnxscript.function_libs.torch_lib.ops.nn
+
+        mods = {
+            "onnxscript.function_libs.torch_lib.ops.core": onnxscript.function_libs.torch_lib.ops.core,
+            "onnxscript.function_libs.torch_lib.ops.nn": onnxscript.function_libs.torch_lib.ops.nn,
+        }
+
+        reg = default_registry
+        f = reg["aten::atleast_2d"]
+        self.assertGreater(len(f.overloads), 0)
+        fct = f.overloads[0]
+        mod = mods[fct.function.__module__]
+
+        gr = GraphBuilder(18, ir_version=9)
+        gr.make_tensor_input("X", TensorProto.INT64, ("a"), is_dimension=False)
+
+        old_value = [mod.op, mod.Rank]
+
+        mod.op = OxsOpset(gr)
+        mod.Rank = mod.op.Rank
+        y = gr.op.Identity(fct.function("X"), outputs=["Y"])
+
+        mod.op, mod.Rank = old_value
+
+        gr.make_tensor_output(
+            y, TensorProto.INT64, (1, "a"), indexed=False, is_dimension=False
+        )
+        onx = gr.to_onnx()
+
+        ext = ExtendedReferenceEvaluator(onx)
+        x = np.random.rand(12).astype(np.int64)
+        y = ext.run(None, {"X": x})[0]
+        self.assertEqual((1, 12), y.shape)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

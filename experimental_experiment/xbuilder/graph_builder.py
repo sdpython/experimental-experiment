@@ -1,7 +1,6 @@
 import pprint
 import time
 import sys
-from functools import partial
 from typing import Any, Dict, List, Optional, Sequence, Set, Tuple, Union
 import numpy as np
 import onnx.helper as oh
@@ -43,163 +42,8 @@ from ._onnx_helper import (
 from ._dtype_helper import dtype_to_tensor_dtype
 from ._helper import make_hash
 from .optimization_options import OptimizationOptions
-
-
-class Opset:
-    # defined for opset >= 18
-    # name: number of expected outputs
-    _implemented = {
-        "Abs": 1,
-        "Add": 1,
-        "And": 1,
-        "ArgMax": 1,
-        "ArgMin": 1,
-        "Cast": 1,
-        "CastLike": 1,
-        "Celu": 1,
-        "Concat": 1,
-        "Constant": 1,
-        "ConstantOfShape": 1,
-        "Div": 1,
-        "Dropout": 2,
-        "Elu": 1,
-        "Equal": 1,
-        "Exp": 1,
-        "Expand": 1,
-        "Flatten": 1,
-        "Gather": 1,
-        "GatherElements": 1,
-        "GatherND": 1,
-        "Gemm": 1,
-        "Greater": 1,
-        "GreaterOrEqual": 1,
-        "Identity": 1,
-        "MatMul": 1,
-        "MaxPool": 2,
-        "Mul": 1,
-        "Less": 1,
-        "LessOrEqual": 1,
-        "Log": 1,
-        "LogSoftmax": 1,
-        "Neg": 1,
-        "Not": 1,
-        "Or": 1,
-        "Pow": 1,
-        "Range": 1,
-        "Reciprocal": 1,
-        "ReduceMax": 1,
-        "ReduceMean": 1,
-        "ReduceMin": 1,
-        "ReduceSum": 1,
-        "Relu": 1,
-        "Reshape": 1,
-        "ScatterElements": 1,
-        "ScatterND": 1,
-        "Shape": 1,
-        "Sigmoid": 1,
-        "Slice": 1,
-        "Softmax": 1,
-        "Sqrt": 1,
-        "Squeeze": 1,
-        "Sub": 1,
-        "Tile": 1,
-        "Transpose": 1,
-        "Unsqueeze": 1,
-        "Where": 1,
-    }
-
-    def __init__(self, builder: "GraphBuilder"):
-        self.builder = builder
-
-    def __getattr__(self, name):
-        if name in self._implemented:
-            return partial(self.make_node, name)
-        try:
-            return super().__getattr__(name)
-        except AttributeError as e:
-            raise AttributeError(
-                f"Unable to access attribute {name!r}, "
-                f"you can still use this operator with method 'make_node'."
-            ) from e
-
-    def make_node(
-        self,
-        op_type: str,
-        *inputs: Optional[Union[str, List[str]]],
-        outputs: Optional[Union[int, List[str], str]] = None,
-        domain: str = "",
-        name: Optional[str] = None,
-        **kwargs,
-    ):
-        if outputs is None:
-            outputs = self._implemented[op_type]
-        if inputs is None:
-            inputs = []
-        new_inputs = []
-        for i in inputs:
-            assert not isinstance(
-                i, (list, tuple)
-            ), f"Wrong inputs for operator {op_type!r}: {inputs!r}"
-            if isinstance(i, str):
-                new_inputs.append(i)
-            elif hasattr(i, "name"):
-                # torch.fx.Node
-                new_inputs.append(i.name)
-            else:
-                cst_name = self.builder.make_initializer(
-                    "", i, msg=f"input {i} of op_type={op_type!r}"
-                )
-                new_inputs.append(cst_name)
-
-        return self.builder.make_node(
-            op_type, new_inputs, outputs=outputs, domain=domain, name=name, **kwargs
-        )
-
-    @staticmethod
-    def _iaxes(op_type, axes) -> int:
-        if isinstance(axes, np.ndarray):
-            iaxes = axes.tolist()
-        elif isinstance(axes, int):
-            iaxes = [axes]
-        else:
-            raise RuntimeError(
-                f"Unable to call {op_type} on a dynamic input axis={axes}"
-            )
-        return iaxes
-
-    def ReduceMaxAnyOpset(self, *args, **kwargs):
-        if len(args) == 1:
-            return self.ReduceMax(*args, **kwargs)
-        assert len(args) == 2, f"ReduceMaxAnyOpset expects 2 arguments not {len(args)}"
-        if self.builder.main_opset >= 18:
-            return self.ReduceMax(*args, **kwargs)
-        return self.ReduceMax(args[0], axes=self._iaxes("ReduceMax", args[1]), **kwargs)
-
-    def ReduceMeanAnyOpset(self, *args, **kwargs):
-        if len(args) == 1:
-            return self.ReduceMean(*args, **kwargs)
-        assert len(args) == 2, f"ReduceMeanAnyOpset expects 2 arguments not {len(args)}"
-        if self.builder.main_opset >= 18:
-            return self.ReduceMean(*args, **kwargs)
-        return self.ReduceMean(
-            args[0], axes=self._iaxes("ReduceMean", args[1]), **kwargs
-        )
-
-    def UnsqueezeAnyOpset(self, *args, **kwargs):
-        if len(args) == 1 and len(kwargs) == 0:
-            return self.Unsqueeze(*args)
-        assert len(args) == 2, f"UnsqueezeAnyOpset expects 2 arguments not {len(args)}"
-        if self.builder.main_opset >= 13:
-            return self.Unsqueeze(*args, **kwargs)
-        return self.Unsqueeze(args[0], axes=self._iaxes("Unsqueeze", args[1]), **kwargs)
-
-    def ReduceSumAnyOpset(self, *args, **kwargs):
-        if len(args) == 1:
-            return self.ReduceSum(*args, **kwargs)
-        assert len(args) == 2, f"ReduceSumAnyOpset expects 2 arguments not {len(args)}"
-        if self.builder.main_opset >= 13:
-            return self.ReduceSum(*args, **kwargs)
-        return self.ReduceSum(args[0], axes=self._iaxes("ReduceSum", args[1]), **kwargs)
+from .expression_dimension import Expression, parse_expression
+from .graph_builder_opset import Opset
 
 
 class GraphBuilder:
@@ -476,6 +320,11 @@ class GraphBuilder:
             if div == 0:
                 return tuple((int(i) if i >= 0 else 0) for i in new_shape)
             return tuple((int(i) if i >= 0 else int(size // div)) for i in new_shape)
+        if all_int_or_str(input_shape):
+            if new_shape == (1, -1):
+                # common case
+                return (1, "*".join(map(str, input_shape)))
+
         raise RuntimeError(
             f"Not implemented yet for input_shape={input_shape} and new_shape={new_shape}."
         )
@@ -830,7 +679,7 @@ class GraphBuilder:
         if name in self._known_types:
             if int_type != self._known_types[name]:
                 raise RuntimeError(
-                    f"Name {name!r} already exists and it is different "
+                    f"Type for name {name!r} already exists and it is different "
                     f"{self._known_types[name]} != {int_type}."
                 )
         if self.verbose > 5:
@@ -1332,6 +1181,7 @@ class GraphBuilder:
             or str(dim) in self.dynamic_objects
             or str(dim) in self.dynamic_objects_rev
             or self.has_name(str(dim))
+            or self.parse_dimension_expression(dim)
         ), (
             f"dim={dim!r} (type={type(dim)}) not in found in "
             f"{self.dynamic_objects}, self.dynamic_shapes={self.dynamic_shapes}, "
@@ -1953,21 +1803,23 @@ class GraphBuilder:
                 if self.has_shape(node.input[1]):
                     rk = self.get_shape(node.input[1])
                     self.set_rank(k, rk[0])
-        elif node.op_type in self._op_type_unary_like:
-            set_type_shape_unary_op(self, node.output[0], node.input[0])
         elif node.op_type in self._op_type_element_wise_cmp_types:
             set_type_shape_binary_op(self, node.output[0], *node.input, cmp_op=True)
         elif node.op_type in self._op_type_element_wise_types:
             set_type_shape_binary_op(self, node.output[0], *node.input)
+        elif node.op_type in self._op_type_unary_like:
+            set_type_shape_unary_op(self, node.output[0], node.input[0])
         elif node.op_type == "MatMul":
             set_type_shape_matmul(self, node.output[0], *node.input)
         elif node.op_type == "Gemm":
+            transA = self.get_attribute(node, "transA", exc=False)
+            transB = self.get_attribute(node, "transB", exc=False)
             set_type_shape_gemm(
                 self,
                 node.output[0],
                 *node.input[:2],
-                transA=self.get_attribute(node, "transA").i,
-                transB=self.get_attribute(node, "transB").i,
+                transA=0 if transA is None else transA.i,
+                transB=0 if transB is None else transB.i,
             )
         elif node.op_type.startswith("Reduce"):
             keepdim = self.get_attribute(node, "keepdims", exc=False)
@@ -2975,3 +2827,13 @@ class GraphBuilder:
                 for o in node.output:
                     if not self.has_name(o):
                         self.set_name(o)
+
+    def parse_dimension_expression(self, expr: str, exc: bool = True) -> Expression:
+        """
+        Parses an expression involving dimension.
+
+        :param expr: expr
+        :param exc: raises an exception if it fails
+        :return: an expression or None if exc is False and the parsing failed
+        """
+        return parse_expression(expr, exc=exc, context=self.dynamic_objects)
