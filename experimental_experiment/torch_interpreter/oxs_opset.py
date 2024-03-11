@@ -2,6 +2,58 @@ from functools import partial
 from typing import Callable, Dict, List, Optional, Union
 
 
+class Var:
+    """
+    Traceable variable name.
+    """
+
+    def __init__(
+        self, name: str, builder: Optional["GraphBuilder"] = None  # noqa: F821
+    ):
+        assert isinstance(name, str), f"Unexpected type {type(name)} for name"
+        self.name = name
+        self.builder = builder
+
+    def __repr__(self) -> str:
+        return f"{self.__class__.__name__}({self.name!r})"
+
+    def _raise(self, name):
+        if self.builder is None:
+            raise RuntimeError(
+                f"The function being traced required to executed "
+                f"with real Tensor. {self!r} cannot be evaluated with method {name!r}."
+            )
+        raise RuntimeError(
+            f"The function being traced required to executed "
+            f"with real Tensor. {self!r} cannot be evaluated with method {name!r}."
+            f"{self.builder.get_debug_msg()}"
+        )
+
+    def __eq__(self, _) -> str:
+        return self._raise("__eq__")
+
+    def __lt__(self, _) -> str:
+        return self._raise("__lt__")
+
+    def __gt__(self, _) -> str:
+        return self._raise("__gt__")
+
+    def __le__(self, _) -> str:
+        return self._raise("__le__")
+
+    def __ge__(self, _) -> str:
+        return self._raise("__ge__")
+
+    def __int__(self, _) -> str:
+        return self._raise("__int__")
+
+    def __getitem__(self, _) -> str:
+        return self._raise("__getitem__")
+
+    def __len__(self, _) -> str:
+        return self._raise("__len__")
+
+
 class OxsOpset:
     """
     Bridge with :epkg:`onnxscript`.
@@ -60,6 +112,7 @@ class OxsOpset:
         "ScatterND": 1,
         "Shape": 1,
         "Sigmoid": 1,
+        "Size": 1,
         "Slice": 1,
         "Softmax": 1,
         "Sqrt": 1,
@@ -120,6 +173,7 @@ class OxsOpset:
             ) from e
 
     def IsScalar(self, name: str) -> bool:
+        name = name if isinstance(name, str) else name.name
         if self.builder.has_shape(name):
             shape = self.builder.get_shape(name)
             return shape in (tuple(), (1,))
@@ -132,6 +186,7 @@ class OxsOpset:
         )
 
     def Rank(self, name: str) -> int:
+        name = name if isinstance(name, str) else name.name
         assert self.builder.has_rank(
             name
         ), f"Rank is missing for name={name!r}{self.builder.get_debug_msg()}"
@@ -177,6 +232,9 @@ class OxsOpset:
                 )
                 new_inputs.append(cst_name)
 
-        return self.builder.make_node(
+        out = self.builder.make_node(
             op_type, new_inputs, outputs=outputs, domain=domain, name=name, **kwargs
         )
+        if isinstance(out, tuple):
+            return tuple(Var(o, self.builder) for o in out)
+        return Var(out, self.builder)

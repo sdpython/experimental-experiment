@@ -440,6 +440,12 @@ def _set_shape_type_op_any_cast(self: "GraphBuilder", node: NodeProto):  # noqa:
     )
 
 
+def _set_shape_type_op_any_sign(self: "GraphBuilder", node: NodeProto):  # noqa: F821
+    set_type_shape_unary_op(
+        self, node.output[0], node.input[0], itype=TensorProto.INT64
+    )
+
+
 def _set_shape_type_op_any_castlike(
     self: "GraphBuilder", node: NodeProto  # noqa: F821
 ):
@@ -498,6 +504,7 @@ _set_shape_type_op_any_known = {
     "MatMul": _set_shape_type_op_any_matmul,
     "MaxPool": _set_shape_type_op_any_maxpool,
     "Reshape": _set_shape_type_op_any_reshape,
+    "Sign": _set_shape_type_op_any_sign,
 }
 
 
@@ -507,11 +514,11 @@ def set_shape_type_op_any(self: "GraphBuilder", node: NodeProto):  # noqa: F821
     """
     if node.op_type.startswith("Reduce"):
         _set_shape_type_op_any_reduce(self, node)
+    elif node.op_type in _set_shape_type_op_any_known:
+        _set_shape_type_op_any_known[node.op_type](self, node)
     elif node.op_type in self._op_type_element_wise_cmp_types:
         set_type_shape_binary_op(self, node.output[0], *node.input, cmp_op=True)
     elif node.op_type in self._op_type_element_wise_types:
         set_type_shape_binary_op(self, node.output[0], *node.input)
     elif node.op_type in self._op_type_unary_like:
         set_type_shape_unary_op(self, node.output[0], node.input[0])
-    elif node.op_type in _set_shape_type_op_any_known:
-        _set_shape_type_op_any_known[node.op_type](self, node)
