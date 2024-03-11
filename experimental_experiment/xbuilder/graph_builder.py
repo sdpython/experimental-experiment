@@ -1,7 +1,6 @@
 import pprint
 import time
 import sys
-from functools import partial
 from typing import Any, Dict, List, Optional, Sequence, Set, Tuple, Union
 import numpy as np
 import onnx.helper as oh
@@ -24,11 +23,7 @@ from .shape_helper import (
     is_static_dimension,
     is_static_shape,
 )
-from .shape_type_compute import (
-    set_type_shape_binary_op,
-    set_type_shape_matmul,
-    set_type_shape_gemm,
-)
+from .shape_type_compute import set_shape_type_op_any
 from ._onnx_helper import (
     choose_consistent_domain_opset,
     compatible_opsets,
@@ -36,167 +31,13 @@ from ._onnx_helper import (
     _nice_shape,
     element_wise_op_types,
     element_wise_op_cmp_types,
+    unary_like_op_types,
 )
 from ._dtype_helper import dtype_to_tensor_dtype
 from ._helper import make_hash
 from .optimization_options import OptimizationOptions
-
-
-class Opset:
-    # defined for opset >= 18
-    # name: number of expected outputs
-    _implemented = {
-        "Abs": 1,
-        "Add": 1,
-        "And": 1,
-        "ArgMax": 1,
-        "ArgMin": 1,
-        "Cast": 1,
-        "CastLike": 1,
-        "Concat": 1,
-        "Constant": 1,
-        "ConstantOfShape": 1,
-        "Div": 1,
-        "Dropout": 2,
-        "Elu": 1,
-        "Equal": 1,
-        "Exp": 1,
-        "Expand": 1,
-        "Flatten": 1,
-        "Gather": 1,
-        "GatherElements": 1,
-        "GatherND": 1,
-        "Gemm": 1,
-        "Greater": 1,
-        "GreaterOrEqual": 1,
-        "Identity": 1,
-        "MatMul": 1,
-        "MaxPool": 2,
-        "Mul": 1,
-        "Less": 1,
-        "LessOrEqual": 1,
-        "Log": 1,
-        "LogSoftmax": 1,
-        "Neg": 1,
-        "Not": 1,
-        "Or": 1,
-        "Pow": 1,
-        "Range": 1,
-        "Reciprocal": 1,
-        "ReduceMax": 1,
-        "ReduceMean": 1,
-        "ReduceMin": 1,
-        "ReduceSum": 1,
-        "Relu": 1,
-        "Reshape": 1,
-        "ScatterElements": 1,
-        "ScatterND": 1,
-        "Shape": 1,
-        "Sigmoid": 1,
-        "Slice": 1,
-        "Softmax": 1,
-        "Sqrt": 1,
-        "Squeeze": 1,
-        "Sub": 1,
-        "Tile": 1,
-        "Transpose": 1,
-        "Unsqueeze": 1,
-        "Where": 1,
-    }
-
-    def __init__(self, builder: "GraphBuilder", opset: int):
-        self.opset = opset
-        self.builder = builder
-
-    def __getattr__(self, name):
-        if name in self._implemented:
-            return partial(self.make_node, name)
-        try:
-            return super().__getattr__(name)
-        except AttributeError as e:
-            raise AttributeError(
-                f"Unable to access attribute {name!r}, "
-                f"you can still use this operator with method 'make_node'."
-            ) from e
-
-    def make_node(
-        self,
-        op_type: str,
-        *inputs: Optional[Union[str, List[str]]],
-        outputs: Optional[Union[int, List[str], str]] = None,
-        domain: str = "",
-        name: Optional[str] = None,
-        **kwargs,
-    ):
-        if outputs is None:
-            outputs = self._implemented[op_type]
-        if inputs is None:
-            inputs = []
-        new_inputs = []
-        for i in inputs:
-            assert not isinstance(
-                i, (list, tuple)
-            ), f"Wrong inputs for operator {op_type!r}: {inputs!r}"
-            if isinstance(i, str):
-                new_inputs.append(i)
-            elif hasattr(i, "name"):
-                # torch.fx.Node
-                new_inputs.append(i.name)
-            else:
-                cst_name = self.builder.make_initializer(
-                    "", i, msg=f"input {i} of op_type={op_type!r}"
-                )
-                new_inputs.append(cst_name)
-
-        return self.builder.make_node(
-            op_type, new_inputs, outputs=outputs, domain=domain, name=name, **kwargs
-        )
-
-    @staticmethod
-    def _iaxes(op_type, axes) -> int:
-        if isinstance(axes, np.ndarray):
-            iaxes = axes.tolist()
-        elif isinstance(axes, int):
-            iaxes = [axes]
-        else:
-            raise RuntimeError(
-                f"Unable to call {op_type} on a dynamic input axis={axes}"
-            )
-        return iaxes
-
-    def ReduceMaxAnyOpset(self, *args, **kwargs):
-        if len(args) == 1:
-            return self.ReduceMax(*args, **kwargs)
-        assert len(args) == 2, f"ReduceMaxAnyOpset expects 2 arguments not {len(args)}"
-        if self.builder.main_opset >= 18:
-            return self.ReduceMax(*args, **kwargs)
-        return self.ReduceMax(args[0], axes=self._iaxes("ReduceMax", args[1]), **kwargs)
-
-    def ReduceMeanAnyOpset(self, *args, **kwargs):
-        if len(args) == 1:
-            return self.ReduceMean(*args, **kwargs)
-        assert len(args) == 2, f"ReduceMeanAnyOpset expects 2 arguments not {len(args)}"
-        if self.builder.main_opset >= 18:
-            return self.ReduceMean(*args, **kwargs)
-        return self.ReduceMean(
-            args[0], axes=self._iaxes("ReduceMean", args[1]), **kwargs
-        )
-
-    def UnsqueezeAnyOpset(self, *args, **kwargs):
-        if len(args) == 1 and len(kwargs) == 0:
-            return self.Unsqueeze(*args)
-        assert len(args) == 2, f"UnsqueezeAnyOpset expects 2 arguments not {len(args)}"
-        if self.builder.main_opset >= 13:
-            return self.Unsqueeze(*args, **kwargs)
-        return self.Unsqueeze(args[0], axes=self._iaxes("Unsqueeze", args[1]), **kwargs)
-
-    def ReduceSumAnyOpset(self, *args, **kwargs):
-        if len(args) == 1:
-            return self.ReduceSum(*args, **kwargs)
-        assert len(args) == 2, f"ReduceSumAnyOpset expects 2 arguments not {len(args)}"
-        if self.builder.main_opset >= 13:
-            return self.ReduceSum(*args, **kwargs)
-        return self.ReduceSum(args[0], axes=self._iaxes("ReduceSum", args[1]), **kwargs)
+from .expression_dimension import Expression, parse_expression
+from .graph_builder_opset import Opset
 
 
 class GraphBuilder:
@@ -243,8 +84,9 @@ class GraphBuilder:
       (debugging tool)
     """
 
-    _op_element_wise_types = element_wise_op_types()
-    _op_element_wise_cmp_types = element_wise_op_cmp_types()
+    _op_type_element_wise_types = element_wise_op_types()
+    _op_type_element_wise_cmp_types = element_wise_op_cmp_types()
+    _op_type_unary_like = unary_like_op_types()
 
     def __init__(
         self,
@@ -343,7 +185,7 @@ class GraphBuilder:
                 f"{type(target_opset_or_existing_proto)} is not supported."
             )
 
-        self.op = Opset(self, self.opsets[""])
+        self.op = Opset(self)
 
     def make_key(self, value: Any) -> Optional[Tuple[Union[str, int], ...]]:
         """
@@ -472,6 +314,11 @@ class GraphBuilder:
             if div == 0:
                 return tuple((int(i) if i >= 0 else 0) for i in new_shape)
             return tuple((int(i) if i >= 0 else int(size // div)) for i in new_shape)
+        if all_int_or_str(input_shape):
+            if new_shape == (1, -1):
+                # common case
+                return (1, "*".join(map(str, input_shape)))
+
         raise RuntimeError(
             f"Not implemented yet for input_shape={input_shape} and new_shape={new_shape}."
         )
@@ -826,8 +673,9 @@ class GraphBuilder:
         if name in self._known_types:
             if int_type != self._known_types[name]:
                 raise RuntimeError(
-                    f"Name {name!r} already exists and it is different "
-                    f"{self._known_types[name]} != {int_type}."
+                    f"Type for name {name!r} already exists and it is different, "
+                    f"known is {self._known_types[name]} != {int_type} (new)"
+                    f"{self.get_debug_msg()}"
                 )
         if self.verbose > 5:
             print(f"[GraphBuilder-{self._hash()}.set_type] {name}:{int_type}")
@@ -867,7 +715,7 @@ class GraphBuilder:
         """Returns the rank of a result."""
         assert isinstance(name, str), f"Unexpected type {type(name)} for name."
         assert name in self._known_ranks, (
-            f"Rank is unknown for result {name!r}, "
+            f"rank is unknown for result {name!r}, "
             f"known_shapes={self._known_ranks}{self.get_debug_msg()}"
         )
         return self._known_ranks[name]
@@ -1328,6 +1176,7 @@ class GraphBuilder:
             or str(dim) in self.dynamic_objects
             or str(dim) in self.dynamic_objects_rev
             or self.has_name(str(dim))
+            or self.parse_dimension_expression(dim)
         ), (
             f"dim={dim!r} (type={type(dim)}) not in found in "
             f"{self.dynamic_objects}, self.dynamic_shapes={self.dynamic_shapes}, "
@@ -1662,6 +1511,18 @@ class GraphBuilder:
     def _debug_string_inputs(
         self, inputs: List[str], outputs: List[str], align: Optional[int] = None
     ) -> str:
+        """
+        Meaning:
+
+        - ``"-"``: (0) none
+        - ``"T"``: (1) type
+        - ``"R"``: (2) rank
+        - ``"U"``: (3) rank + type
+        - ``"S"``: (4) shape
+        - ``"V"``: (5) shape + type
+        - ``"W"``: (6) shape + rank
+        - ``"#"``: (7) shape + type + rank
+        """
         st = ""
         c = "-TRUSVW#"
         for i in inputs:
@@ -1823,6 +1684,9 @@ class GraphBuilder:
         for o in node.output:
             self.set_name(o)
         self.nodes.append(node)
+
+        self._make_node_set_type_shape(node)
+
         if len(output_names) == 1:
             return output_names[0]
         return output_names
@@ -1924,42 +1788,7 @@ class GraphBuilder:
     def _make_node_set_type_shape(self, node: NodeProto):
         if node.domain != "":
             return
-        if node.op_type == "Reshape":
-            k = node.output[0]
-            self.set_type(k, self.get_type(node.input[0]))
-            shape_set = False
-            if self.is_constant(node.input[1]):
-                cst = tuple(
-                    self.get_constant(node.input[1], computed_value=True, as_shape=True)
-                )
-                if all_int(cst):
-                    if -1 not in cst:
-                        self.set_shape(k, cst)
-                        shape_set = True
-                    elif all_int(cst) and self.has_shape(node.input[0]):
-                        sh = self.get_shape(node.input[0])
-                        new_shape = self._apply_reshape_to_shape(sh, cst)
-                        if new_shape is not None:
-                            self.set_shape(k, new_shape)
-                            shape_set = True
-            if not shape_set:
-                if self.has_shape(node.input[1]):
-                    rk = self.get_shape(node.input[1])
-                    self.set_rank(k, rk[0])
-        elif node.op_type in self._op_element_wise_cmp_types:
-            set_type_shape_binary_op(self, node.output[0], *node.input, cmp_op=True)
-        elif node.op_type in self._op_element_wise_types:
-            set_type_shape_binary_op(self, node.output[0], *node.input)
-        elif node.op_type == "MatMul":
-            set_type_shape_matmul(self, node.output[0], *node.input)
-        elif node.op_type == "Gemm":
-            set_type_shape_gemm(
-                self,
-                node.output[0],
-                *node.input[:2],
-                transA=self.get_attribute(node, "transA").i,
-                transB=self.get_attribute(node, "transB").i,
-            )
+        set_shape_type_op_any(self, node)
 
     def make_nodes(
         self,
@@ -2129,19 +1958,38 @@ class GraphBuilder:
                 s += " " * (length - len(s))
             return s
 
+        def _dtype(t):
+            if hasattr(t, "dtype"):
+                return t.dtype
+            if hasattr(t, "data_type"):
+                return t.data_type
+            raise RuntimeError(f"dtype unknown for type {type(t)}-{t}.")
+
+        def _shape(t):
+            if hasattr(t, "shape"):
+                return t.dtype
+            if hasattr(t, "dims"):
+                return tuple(t.dims)
+            raise RuntimeError(f"dtype unknown for type {type(t)}-{t}.")
+
         def _size(t):
             if hasattr(t, "numel"):
                 return t.numel()
             if hasattr(t, "size"):
                 return t.size
-            raise RuntimeError(f"Size unknown for type {t}.")
+            if hasattr(t, "dims"):
+                return np.prod(tuple(t.dims))
+            raise RuntimeError(f"Size unknown for type {type(t)}-{t}.")
 
         def _values(t):
             if hasattr(t, "detach"):
                 return t.detach().numpy().ravel().tolist()
             if hasattr(t, "size"):
                 return t.ravel().tolist()
-            raise RuntimeError(f"Values unknown for type {t}.")
+            if hasattr(t, "dims"):
+                a = onh.to_array(t)
+                return a.ravel().tolist()
+            raise RuntimeError(f"Values unknown for type {type(t)}-{t}.")
 
         rows = ["", "--DEBUG--", "--SHAPE--"]
         rows.append(f"dynamic_objects={pprint.pformat(self.dynamic_objects)}")
@@ -2175,7 +2023,8 @@ class GraphBuilder:
         for name, init in self.initializers_dict.items():
             sval = "" if _size(init) > 5 else f":{_values(init)}"
             rows.append(
-                f"[GraphBuilder-{hs}.make_initializer] {name}[{init.dtype}:{init.shape}{sval}]"
+                f"[GraphBuilder-{hs}.make_initializer] "
+                f"{name}[{_dtype(init)}:{_shape(init)}{sval}]"
             )
         for node in self.nodes:
             if node is None:
@@ -2936,3 +2785,13 @@ class GraphBuilder:
                 for o in node.output:
                     if not self.has_name(o):
                         self.set_name(o)
+
+    def parse_dimension_expression(self, expr: str, exc: bool = True) -> Expression:
+        """
+        Parses an expression involving dimension.
+
+        :param expr: expr
+        :param exc: raises an exception if it fails
+        :return: an expression or None if exc is False and the parsing failed
+        """
+        return parse_expression(expr, exc=exc, context=self.dynamic_objects)

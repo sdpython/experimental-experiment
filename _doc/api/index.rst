@@ -19,6 +19,7 @@ API
     torch_helper
     torch_dynamo
     misc
+    dimension
 
 **Versions**
 

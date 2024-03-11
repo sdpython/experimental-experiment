@@ -1,6 +1,6 @@
 from typing import Any, Callable, List, Optional, Sequence, Set, Tuple
 import numpy as np
-from onnx import TensorProto
+from onnx import NodeProto, TensorProto
 from onnx.helper import np_dtype_to_tensor_dtype, tensor_dtype_to_np_dtype
 from ..xbuilder.shape_helper import STATIC_SHAPE, is_static_shape, all_int
 from ..xbuilder._dtype_helper import dtype_to_tensor_dtype, torch_dtype_to_onnx_dtype
@@ -24,15 +24,31 @@ def broadcast_shape(sh1: STATIC_SHAPE, sh2: STATIC_SHAPE) -> STATIC_SHAPE:
         return sh2
     if sh2 == (1,) and len(sh1) >= 1:
         return sh1
-    assert is_static_shape(sh1) and is_static_shape(
-        sh2
-    ), "Not implemented for sh1={sh1}, sh2={sh2}"
-    if len(sh1) == len(sh2):
-        return tuple(max(i, j) for i, j in zip(sh1, sh2))
-    shape = tuple(max(i, j) for i, j in zip(sh1, sh2))
-    if len(sh1) > len(shape):
-        return shape + sh1[len(shape) :]
-    return shape + sh2[len(shape) :]
+    if len(sh1) < len(sh2):
+        sh1 = (1,) * (len(sh2) - len(sh1)) + sh1
+    elif len(sh1) > len(sh2):
+        sh2 = (1,) * (len(sh1) - len(sh2)) + sh2
+    new_shape = []
+    for a, b in zip(sh1, sh2):
+        if isinstance(a, int):
+            if isinstance(b, int):
+                d = max(a, b)
+            elif a == 1:
+                d = b
+            else:
+                d = None
+        else:
+            if isinstance(b, int):
+                if b == 1:
+                    d = a
+                else:
+                    d = None
+            else:
+                d = None
+        if d is None:
+            raise RuntimeError(f"Not implemented for sh1={sh1}, sh2={sh2}")
+        new_shape.append(d)
+    return tuple(new_shape)
 
 
 def set_type_shape_reshape(
@@ -105,9 +121,6 @@ def set_type_shape_binary_op(
                 break
         assert dtype, f"Unable to guess type from {input_names}{g.get_debug_msg()}"
         g.set_type(name, dtype)
-        assert (
-            dtype != TensorProto.BOOL
-        ), f"dtype is bool, does not work with a binary operator{g.get_debug_msg()}"
 
     # shape
     shape = None
@@ -150,6 +163,11 @@ def set_type_shape_matmul(g: "GraphBuilder", name: str, x: str, y: str):  # noqa
     if g.has_shape(x) and g.has_shape(y):
         sh1 = g.get_shape(x)
         sh2 = g.get_shape(y)
+        if len(sh1) >= 2 and len(sh2) >= 2 and len(sh1) != len(sh2):
+            if len(sh1) < len(sh2):
+                sh1 = (1,) * (len(sh2) - len(sh1)) + sh1
+            else:
+                sh2 = (1,) * (len(sh1) - len(sh2)) + sh2
         assert len(sh1) == len(
             sh2
         ), f"not implemented when shapes are {sh1} and {sh2}{g.get_debug_msg()}"
@@ -170,8 +188,8 @@ def set_type_shape_matmul(g: "GraphBuilder", name: str, x: str, y: str):  # noqa
         new_shape.append(sh2[-1])
         g.set_shape(name, tuple(new_shape))
         return
-
-    g.set_rank(name, max(g.get_rank(x), g.get_rank(y)))
+    if g.has_rank(x) and g.has_rank(y):
+        g.set_rank(name, max(g.get_rank(x), g.get_rank(y)))
 
 
 def set_type_shape_gemm(
@@ -201,8 +219,10 @@ def set_type_shape_reduce_op(
 ):
     assert keepdim in {0, 1}, f"keepdim={keepdim} must be in {{0, 1}}"
     g.set_type(name, g.get_type(x))
-    if axes is None or not g.has_shape(x):
-        g.set_rank(name, g.get_rank(x) + keepdim - 1)
+    if axes is None:
+        g.set_rank(name, int(keepdim))
+    elif not g.has_shape(x):
+        g.set_rank(name, g.get_rank(x) - int(keepdim) * len(axes))
     else:
         shape = list(g.get_shape(x))
         for d in axes:
@@ -219,6 +239,8 @@ def _get_input_type(
     g: "GraphBuilder", x: Any, python_default: bool  # noqa: F821
 ) -> int:
     if isinstance(x, int):
+        if x is True or x is False:
+            return TensorProto.BOOL
         return TensorProto.INT64 if python_default else None
     if isinstance(x, float):
         return TensorProto.FLOAT if python_default else None
@@ -267,7 +289,10 @@ def _cast_inputs(
             g.set_rank(res, g.get_rank(a))
         return res
     if isinstance(a, (int, float)):
-        a = np.array(a)
+        if a is True or a is False:
+            a = np.array(a, dtype=np.bool_)
+        else:
+            a = np.array(a)
     if isinstance(a, np.ndarray):
         return g.make_initializer("", a.astype(tensor_dtype_to_np_dtype(itype)))
     raise RuntimeError(f"Unexpected type {type(a)}, itype={itype}.")
@@ -292,7 +317,10 @@ def prepare_inputs_homogeneous_operator(
             _get_input_type(g, a, python_default=True) for a in args
         ]
     dtypes = set(dtypes_list_not_none)
-    only = _get_compute_type(set(dtypes))
+    if len(dtypes) == 1:
+        only = list(dtypes)[0]
+    else:
+        only = _get_compute_type(set(dtypes))
     inputs = []
     for dt, a in zip(dtypes_list, args):
         if dt == only and isinstance(a, str):
@@ -358,3 +386,166 @@ def _adjust_attributes_of_max_pool(
         strides = stride
 
     return (kernel_shape, strides, pads, dilations)
+
+
+def _set_shape_type_op_any_reshape(self: "GraphBuilder", node: NodeProto):  # noqa: F821
+    k = node.output[0]
+    self.set_type(k, self.get_type(node.input[0]))
+    shape_set = False
+    if self.is_constant(node.input[1]):
+        cst = tuple(
+            self.get_constant(node.input[1], computed_value=True, as_shape=True)
+        )
+        if all_int(cst):
+            if -1 not in cst:
+                self.set_shape(k, cst)
+                shape_set = True
+            elif all_int(cst) and self.has_shape(node.input[0]):
+                sh = self.get_shape(node.input[0])
+                new_shape = self._apply_reshape_to_shape(sh, cst)
+                if new_shape is not None:
+                    self.set_shape(k, new_shape)
+                    shape_set = True
+    if not shape_set:
+        if self.has_shape(node.input[1]):
+            rk = self.get_shape(node.input[1])
+            self.set_rank(k, rk[0])
+
+
+def _set_shape_type_op_any_reduce(self: "GraphBuilder", node: NodeProto):  # noqa: F821
+    keepdim = self.get_attribute(node, "keepdims", exc=False)
+    axes = self.get_attribute(node, "axes", exc=False)
+    if axes is None:
+        if len(node.input) == 2:
+            assert self.is_constant(node.input[1]), (
+                f"axes from node {node.op_type}, name={node.name!r} is not a constant, "
+                f"the new shape cannot be infered{self.get_debug_msg()}"
+            )
+            cst = self.get_constant(node.input[1])
+            assert isinstance(cst, np.ndarray), (
+                f"Unexpected type {type(cst)} for {node.input[1]!r}, "
+                f"unable to set type and shape for node {node.op_type} "
+                f"with name={node.name!r}{self.get_debug_msg()}"
+            )
+            iaxes = (int(cst),) if len(cst.shape) == 0 else tuple(int(i) for i in cst)
+        else:
+            iaxes = None
+    else:
+        iaxes = tuple(axes.ints)
+
+    set_type_shape_reduce_op(
+        self,
+        node.output[0],
+        node.input[0],
+        keepdim=None if keepdim is None else keepdim.i,
+        axes=iaxes,
+    )
+
+
+def _set_shape_type_op_any_matmul(self: "GraphBuilder", node: NodeProto):  # noqa: F821
+    set_type_shape_matmul(self, node.output[0], *node.input)
+
+
+def _set_shape_type_op_any_gemm(self: "GraphBuilder", node: NodeProto):  # noqa: F821
+    transA = self.get_attribute(node, "transA", exc=False)
+    transB = self.get_attribute(node, "transB", exc=False)
+    set_type_shape_gemm(
+        self,
+        node.output[0],
+        *node.input[:2],
+        transA=0 if transA is None else transA.i,
+        transB=0 if transB is None else transB.i,
+    )
+
+
+def _set_shape_type_op_any_cast(self: "GraphBuilder", node: NodeProto):  # noqa: F821
+    set_type_shape_unary_op(
+        self,
+        node.output[0],
+        node.input[0],
+        itype=self.get_attribute(node, "to").i,
+    )
+
+
+def _set_shape_type_op_any_sign(self: "GraphBuilder", node: NodeProto):  # noqa: F821
+    set_type_shape_unary_op(
+        self, node.output[0], node.input[0], itype=TensorProto.INT64
+    )
+
+
+def _set_shape_type_op_any_castlike(
+    self: "GraphBuilder", node: NodeProto  # noqa: F821
+):
+    set_type_shape_unary_op(
+        self, node.output[0], node.input[0], itype=self.get_type(node.input[1])
+    )
+
+
+def _set_shape_type_op_any_maxpool(self: "GraphBuilder", node: NodeProto):  # noqa: F821
+    self.set_type(node.output[0], self.get_type(node.input[0]))
+    if len(node.output) > 1:
+        self.set_type(node.output[1], TensorProto.INT64)
+
+
+def _set_shape_type_op_any_gather_elements(
+    self: "GraphBuilder", node: NodeProto  # noqa: F821
+):
+    self.set_type(node.output[0], self.get_type(node.input[0]))
+    if self.has_shape(node.input[0]) and self.has_shape(node.input[1]):
+        shape = self.get_shape(node.input[0])
+        att_axis = self.get_attribute(node, "axis", exc=False)
+        axis = 0 if att_axis is None else att_axis.i
+        i_shape = self.get_shape(node.input[1])
+        new_shape = list(shape)
+        new_shape[axis] = i_shape[axis]
+        self.set_shape(node.output[0], tuple(new_shape))
+    else:
+        self.set_rank(node.output[0], self.get_rank(node.input[0]))
+
+
+def _set_shape_type_op_any_concat(self: "GraphBuilder", node: NodeProto):  # noqa: F821
+    self.set_type(node.output[0], self.get_type(node.input[0]))
+    if all(map(lambda s: self.has_shape(s), node.input)):
+        axis = self.get_attribute(node, "axis").i
+        shapes = list(self.get_shape(i) for i in node.input)
+        new_shape = list(shapes[0])
+        dims = [sh[axis] for sh in shapes]
+        if all_int(dims):
+            new_shape[axis] = sum(dims)
+        else:
+            new_shape[axis] = "+".join(map(str, dims))
+        self.set_shape(node.output[0], tuple(new_shape))
+    else:
+        ranks = list(self.get_rank(i) for i in node.input)
+        assert (
+            len(set(ranks)) == 1
+        ), f"Unexpected ranks={ranks} for node {node.op_type!r}{self.get_debug_msg()}"
+        self.set_rank(node.output[0], ranks[0])
+
+
+_set_shape_type_op_any_known = {
+    "Cast": _set_shape_type_op_any_cast,
+    "Concat": _set_shape_type_op_any_concat,
+    "GatherElements": _set_shape_type_op_any_gather_elements,
+    "Gemm": _set_shape_type_op_any_gemm,
+    "MatMul": _set_shape_type_op_any_matmul,
+    "MaxPool": _set_shape_type_op_any_maxpool,
+    "Reshape": _set_shape_type_op_any_reshape,
+    "Sign": _set_shape_type_op_any_sign,
+}
+
+
+def set_shape_type_op_any(self: "GraphBuilder", node: NodeProto):  # noqa: F821
+    """
+    Sets the shape and type if it can.
+    """
+    if node.op_type.startswith("Reduce"):
+        _set_shape_type_op_any_reduce(self, node)
+    elif node.op_type in _set_shape_type_op_any_known:
+        _set_shape_type_op_any_known[node.op_type](self, node)
+    elif node.op_type in self._op_type_element_wise_cmp_types:
+        set_type_shape_binary_op(self, node.output[0], *node.input, cmp_op=True)
+    elif node.op_type in self._op_type_element_wise_types:
+        set_type_shape_binary_op(self, node.output[0], *node.input)
+    elif node.op_type in self._op_type_unary_like:
+        set_type_shape_unary_op(self, node.output[0], node.input[0])
