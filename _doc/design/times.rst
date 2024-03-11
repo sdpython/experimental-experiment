@@ -2,6 +2,92 @@
 Times
 =====
 
+fx_mode
+=======
+
+symbolic
+++++++++
+
+.. runpython::
+    :showcode:
+
+    import time
+    import warnings
+    import numpy as np
+    from transformers import LlamaConfig
+    from transformers.models.llama.modeling_llama import LlamaModel
+    import onnx
+    import onnxruntime
+    import torch
+    import torch._dynamo
+    import torch.export
+    import onnxscript
+    import torch.onnx
+    import experimental_experiment
+    import experimental_experiment.torch_interpreter
+    import experimental_experiment.torch_interpreter.aten_functions
+    from experimental_experiment.torch_helper.llama_helper import get_llama_decoder
+
+    begin = time.perf_counter()
+    print("creating model")
+    model, example_args_collection = get_llama_decoder(
+        input_dims=[(2, 1024)],
+        hidden_size=4096,
+        num_hidden_layers=2,
+        vocab_size=32000,
+        intermediate_size=11008,
+        max_position_embeddings=2048,
+        num_attention_heads=32,
+        _attn_implementation="eager",
+    )
+
+    torch._dynamo.reset()
+    begin = time.perf_counter()
+    torch._dynamo.export(model, tracing_mode="symbolic")(*example_args_collection[0])
+    print(f"time to export symbolic --- {time.perf_counter() - begin}")
+
+fake
+++++
+
+.. runpython::
+    :showcode:
+
+    import time
+    import warnings
+    import numpy as np
+    from transformers import LlamaConfig
+    from transformers.models.llama.modeling_llama import LlamaModel
+    import onnx
+    import onnxruntime
+    import torch
+    import torch._dynamo
+    import torch.export
+    import onnxscript
+    import torch.onnx
+    import experimental_experiment
+    import experimental_experiment.torch_interpreter
+    import experimental_experiment.torch_interpreter.aten_functions
+    from experimental_experiment.torch_helper.llama_helper import get_llama_decoder
+
+    begin = time.perf_counter()
+    print("creating model")
+    model, example_args_collection = get_llama_decoder(
+        input_dims=[(2, 1024)],
+        hidden_size=4096,
+        num_hidden_layers=2,
+        vocab_size=32000,
+        intermediate_size=11008,
+        max_position_embeddings=2048,
+        num_attention_heads=32,
+        _attn_implementation="eager",
+    )
+
+    torch._dynamo.reset()
+    begin = time.perf_counter()
+    torch._dynamo.export(model, tracing_mode="fake")(*example_args_collection[0])
+    print(f"time to export fake --- {time.perf_counter() - begin}")
+
+
 Custom Exporter
 ===============
 

@@ -388,6 +388,8 @@ class TestOperators(ExtTestCase):
     def test_add_broadcast(self):
         x = torch.randn(2, 3, requires_grad=True).double()
         y = torch.randn(3, requires_grad=True).double()
+        r = x + y
+        print(r.type, r.shape)
         self.assertONNX(
             operator.add, (x, y), onnx_export=inspect.currentframe().f_code.co_name
         )
@@ -809,6 +811,7 @@ class TestOperators(ExtTestCase):
             lambda x: torch.mean(x, dim=0, dtype=torch.double),
             x,
             onnx_export=inspect.currentframe().f_code.co_name,
+            verbose=20,
         )
 
     def test_sum(self):
@@ -943,10 +946,13 @@ class TestOperators(ExtTestCase):
         )
 
     def test_gt(self):
-        x = torch.randn(1, 2, 3, 1, requires_grad=False).int()
-        y = torch.randn(1, 4, requires_grad=False).int()
+        x = torch.randn(1, 2, 3, 1, requires_grad=False).to(torch.int64)
+        y = torch.randn(1, 4, requires_grad=False).to(torch.int64)
         self.assertONNX(
-            operator.gt, (x, y), onnx_export=inspect.currentframe().f_code.co_name
+            operator.gt,
+            (x, y),
+            onnx_export=inspect.currentframe().f_code.co_name,
+            test_backward=False,
         )
 
     def test_le(self):
