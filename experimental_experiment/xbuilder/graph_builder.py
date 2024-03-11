@@ -1804,12 +1804,6 @@ class GraphBuilder:
                 if self.has_shape(node.input[1]):
                     rk = self.get_shape(node.input[1])
                     self.set_rank(k, rk[0])
-        elif node.op_type in self._op_type_element_wise_cmp_types:
-            set_type_shape_binary_op(self, node.output[0], *node.input, cmp_op=True)
-        elif node.op_type in self._op_type_element_wise_types:
-            set_type_shape_binary_op(self, node.output[0], *node.input)
-        elif node.op_type in self._op_type_unary_like:
-            set_type_shape_unary_op(self, node.output[0], node.input[0])
         elif node.op_type.startswith("Reduce"):
             keepdim = self.get_attribute(node, "keepdims", exc=False)
             axes = self.get_attribute(node, "axes", exc=False)
@@ -1852,6 +1846,23 @@ class GraphBuilder:
                 transA=0 if transA is None else transA.i,
                 transB=0 if transB is None else transB.i,
             )
+        elif node.op_type == "Cast":
+            set_type_shape_unary_op(
+                self,
+                node.output[0],
+                node.input[0],
+                itype=self.get_attribute(node, "to").i,
+            )
+        elif node.op_type == "CastLike":
+            set_type_shape_unary_op(
+                self, node.output[0], node.input[0], itype=self.get_type(node.input[1])
+            )
+        elif node.op_type in self._op_type_element_wise_cmp_types:
+            set_type_shape_binary_op(self, node.output[0], *node.input, cmp_op=True)
+        elif node.op_type in self._op_type_element_wise_types:
+            set_type_shape_binary_op(self, node.output[0], *node.input)
+        elif node.op_type in self._op_type_unary_like:
+            set_type_shape_unary_op(self, node.output[0], node.input[0])
         else:
             set_shape_type_op_any(self, node)
 

@@ -77,6 +77,7 @@ def set_type_shape_unary_op(
     """
     Sets the shape and type for an unary operator (abs, exp, ...).
     """
+    print("----", name, itype, itype or g.get_type(input_name))
     g.set_type(name, itype or g.get_type(input_name))
     if g.has_shape(input_name):
         g.set_shape(name, g.get_shape(input_name))

@@ -811,7 +811,6 @@ class TestOperators(ExtTestCase):
             lambda x: torch.mean(x, dim=0, dtype=torch.double),
             x,
             onnx_export=inspect.currentframe().f_code.co_name,
-            verbose=20,
         )
 
     def test_sum(self):
