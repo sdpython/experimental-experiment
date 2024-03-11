@@ -1,5 +1,6 @@
 import os
 import unittest
+import packaging.version as pv
 import numpy as np
 import onnx
 from onnx import ModelProto, TensorProto, helper as oh, numpy_helper as onh
@@ -1627,6 +1628,10 @@ class TestGraphPatternOptimization(ExtTestCase):
         got = opt_ref.run(None, feeds)[0]
         self.assertEqualArray(expected, got)
 
+    @unittest.skipIf(
+        pv.Version(onnx.__version__) < pv.Version("1.16.0"),
+        reason="shape inference differs",
+    )
     def test_reduce_reshape_all(self):
         model = oh.make_model(
             oh.make_graph(
