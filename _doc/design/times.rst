@@ -12,47 +12,12 @@ With a very simple model:
     :process:
 
     import time
+    from experimental_experiment.checks import print_import_time
 
-    begin = time.perf_counter()
-    import onnx
-    print(f"time to import onnx --- {time.perf_counter() - begin}")
+    print_import_time()
 
-    begin = time.perf_counter()
-    import onnxruntime
-    print(f"time to import onnxruntime --- {time.perf_counter() - begin}")
-
-    begin = time.perf_counter()
     import torch
-    print(f"time to import torch --- {time.perf_counter() - begin}")
-
-    begin = time.perf_counter()
-    import torch._dynamo
-    print(f"time to import torch._dynamo --- {time.perf_counter() - begin}")
-
-    begin = time.perf_counter()
-    import torch.export
-    print(f"time to import torch.export --- {time.perf_counter() - begin}")
-
-    begin = time.perf_counter()
-    import onnxscript
-    print(f"time to import onnxscript --- {time.perf_counter() - begin}")
-
-    begin = time.perf_counter()
-    import torch.onnx
-    print(f"time to import torch.onnx --- {time.perf_counter() - begin}")
-
-    begin = time.perf_counter()
-    import experimental_experiment
-    print(f"time to import experimental_experiment --- {time.perf_counter() - begin}")
-
-    begin = time.perf_counter()
     import experimental_experiment.torch_interpreter
-    print(f"time to import experimental_experiment.torch_interpreter --- {time.perf_counter() - begin}")
-
-    begin = time.perf_counter()
-    import experimental_experiment.torch_interpreter.aten_functions
-    print(f"time to import experimental_experiment.torch_interpreter.aten_functions --- {time.perf_counter() - begin}")
-
 
     class Neuron(torch.nn.Module):
         def __init__(self, n_dims: int, n_targets: int):
@@ -65,7 +30,6 @@ With a very simple model:
 
     model = Neuron(3, 1)
     x = torch.rand(5, 3)
-
 
     begin = time.perf_counter()
     onx = experimental_experiment.torch_interpreter.to_onnx(model, (x,))
@@ -128,46 +92,12 @@ Dynamo Exporter
     import time
     import warnings
 
-    begin = time.perf_counter()
-    import onnx
-    print(f"time to import onnx --- {time.perf_counter() - begin}")
+    from experimental_experiment.checks import print_import_time
 
-    begin = time.perf_counter()
-    import onnxruntime
-    print(f"time to import onnxruntime --- {time.perf_counter() - begin}")
+    print_import_time()
 
-    begin = time.perf_counter()
     import torch
-    print(f"time to import torch --- {time.perf_counter() - begin}")
-
-    begin = time.perf_counter()
-    import torch._dynamo
-    print(f"time to import torch._dynamo --- {time.perf_counter() - begin}")
-
-    begin = time.perf_counter()
-    import torch.export
-    print(f"time to import torch.export --- {time.perf_counter() - begin}")
-
-    begin = time.perf_counter()
-    import onnxscript
-    print(f"time to import onnxscript --- {time.perf_counter() - begin}")
-
-    begin = time.perf_counter()
-    import torch.onnx
-    print(f"time to import torch.onnx --- {time.perf_counter() - begin}")
-
-    begin = time.perf_counter()
-    import experimental_experiment
-    print(f"time to import experimental_experiment --- {time.perf_counter() - begin}")
-
-    begin = time.perf_counter()
     import experimental_experiment.torch_interpreter
-    print(f"time to import experimental_experiment.torch_interpreter --- {time.perf_counter() - begin}")
-
-    begin = time.perf_counter()
-    import experimental_experiment.torch_interpreter.aten_functions
-    print(f"time to import experimental_experiment.torch_interpreter.aten_functions --- {time.perf_counter() - begin}")
-
 
     class Neuron(torch.nn.Module):
         def __init__(self, n_dims: int, n_targets: int):

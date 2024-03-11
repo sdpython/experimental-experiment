@@ -29,6 +29,7 @@ from .shape_type_compute import (
     set_type_shape_gemm,
     set_type_shape_unary_op,
     set_type_shape_reduce_op,
+    set_shape_type_op_any,
 )
 from ._onnx_helper import (
     choose_consistent_domain_opset,
@@ -1809,18 +1810,6 @@ class GraphBuilder:
             set_type_shape_binary_op(self, node.output[0], *node.input)
         elif node.op_type in self._op_type_unary_like:
             set_type_shape_unary_op(self, node.output[0], node.input[0])
-        elif node.op_type == "MatMul":
-            set_type_shape_matmul(self, node.output[0], *node.input)
-        elif node.op_type == "Gemm":
-            transA = self.get_attribute(node, "transA", exc=False)
-            transB = self.get_attribute(node, "transB", exc=False)
-            set_type_shape_gemm(
-                self,
-                node.output[0],
-                *node.input[:2],
-                transA=0 if transA is None else transA.i,
-                transB=0 if transB is None else transB.i,
-            )
         elif node.op_type.startswith("Reduce"):
             keepdim = self.get_attribute(node, "keepdims", exc=False)
             axes = self.get_attribute(node, "axes", exc=False)
@@ -1851,6 +1840,20 @@ class GraphBuilder:
                 keepdim=None if keepdim is None else keepdim.i,
                 axes=iaxes,
             )
+        elif node.op_type == "MatMul":
+            set_type_shape_matmul(self, node.output[0], *node.input)
+        elif node.op_type == "Gemm":
+            transA = self.get_attribute(node, "transA", exc=False)
+            transB = self.get_attribute(node, "transB", exc=False)
+            set_type_shape_gemm(
+                self,
+                node.output[0],
+                *node.input[:2],
+                transA=0 if transA is None else transA.i,
+                transB=0 if transB is None else transB.i,
+            )
+        else:
+            set_shape_type_op_any(self, node)
 
     def make_nodes(
         self,

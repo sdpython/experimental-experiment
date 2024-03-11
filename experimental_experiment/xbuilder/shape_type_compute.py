@@ -1,6 +1,6 @@
 from typing import Any, Callable, List, Optional, Sequence, Set, Tuple
 import numpy as np
-from onnx import TensorProto
+from onnx import NodeProto, TensorProto
 from onnx.helper import np_dtype_to_tensor_dtype, tensor_dtype_to_np_dtype
 from ..xbuilder.shape_helper import STATIC_SHAPE, is_static_shape, all_int
 from ..xbuilder._dtype_helper import dtype_to_tensor_dtype, torch_dtype_to_onnx_dtype
@@ -358,3 +358,13 @@ def _adjust_attributes_of_max_pool(
         strides = stride
 
     return (kernel_shape, strides, pads, dilations)
+
+
+def set_shape_type_op_any(g: "GraphBuilder", node: NodeProto):  # noqa: F821
+    """
+    Sets the shape and type if it can.
+    """
+    if node.op_type == "MaxPool":
+        g.set_type(node.output[0], g.get_type(node.input[0]))
+        if len(node.output) > 1:
+            g.set_type(node.output[1], TensorProto.INT64)
