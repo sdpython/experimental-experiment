@@ -158,6 +158,29 @@ class TestFallbackOxs(ExtTestCase):
 
         mod.op, mod.IsScalar = old_value
 
+    def test_fallback_oxs(self):
+        import torch
+        from experimental_experiment.torch_interpreter import to_onnx
+        from experimental_experiment.torch_interpreter.oxs_dispatcher import (
+            OxsDispatcher,
+        )
+
+        class Neuron(torch.nn.Module):
+            def __init__(self, n_dims: int, n_targets: int):
+                super(Neuron, self).__init__()
+                self.linear = torch.nn.Linear(n_dims, n_targets)
+
+            def forward(self, x):
+                return torch.celu(self.linear(x))
+
+        x = torch.rand(5, 3)
+        model = Neuron(3, 1)
+
+        onx = to_onnx(model, (x,), input_names=["x"], dispatcher=OxsDispatcher())
+        ext = ExtendedReferenceEvaluator(onx)
+        got = ext.run(None, {"x": x.numpy()})[0]
+        self.assertEqual(got.shape, (5, 1))
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

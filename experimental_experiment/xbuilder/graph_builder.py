@@ -1957,19 +1957,38 @@ class GraphBuilder:
                 s += " " * (length - len(s))
             return s
 
+        def _dtype(t):
+            if hasattr(t, "dtype"):
+                return t.dtype
+            if hasattr(t, "data_type"):
+                return t.data_type
+            raise RuntimeError(f"dtype unknown for type {type(t)}-{t}.")
+
+        def _shape(t):
+            if hasattr(t, "shape"):
+                return t.dtype
+            if hasattr(t, "dims"):
+                return tuple(t.dims)
+            raise RuntimeError(f"dtype unknown for type {type(t)}-{t}.")
+
         def _size(t):
             if hasattr(t, "numel"):
                 return t.numel()
             if hasattr(t, "size"):
                 return t.size
-            raise RuntimeError(f"Size unknown for type {t}.")
+            if hasattr(t, "dims"):
+                return np.prod(tuple(t.dims))
+            raise RuntimeError(f"Size unknown for type {type(t)}-{t}.")
 
         def _values(t):
             if hasattr(t, "detach"):
                 return t.detach().numpy().ravel().tolist()
             if hasattr(t, "size"):
                 return t.ravel().tolist()
-            raise RuntimeError(f"Values unknown for type {t}.")
+            if hasattr(t, "dims"):
+                a = onh.to_array(t)
+                return a.ravel().tolist()
+            raise RuntimeError(f"Values unknown for type {type(t)}-{t}.")
 
         rows = ["", "--DEBUG--", "--SHAPE--"]
         rows.append(f"dynamic_objects={pprint.pformat(self.dynamic_objects)}")
@@ -2003,7 +2022,8 @@ class GraphBuilder:
         for name, init in self.initializers_dict.items():
             sval = "" if _size(init) > 5 else f":{_values(init)}"
             rows.append(
-                f"[GraphBuilder-{hs}.make_initializer] {name}[{init.dtype}:{init.shape}{sval}]"
+                f"[GraphBuilder-{hs}.make_initializer] "
+                f"{name}[{_dtype(init)}:{_shape(init)}{sval}]"
             )
         for node in self.nodes:
             if node is None:

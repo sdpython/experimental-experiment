@@ -217,8 +217,10 @@ def set_type_shape_reduce_op(
 ):
     assert keepdim in {0, 1}, f"keepdim={keepdim} must be in {{0, 1}}"
     g.set_type(name, g.get_type(x))
-    if axes is None or not g.has_shape(x):
-        g.set_rank(name, g.get_rank(x) + keepdim - 1)
+    if axes is None:
+        g.set_rank(name, keepdim)
+    elif not g.has_shape(x):
+        g.set_rank(name, g.get_rank(x) - keepdim * len(axes))
     else:
         shape = list(g.get_shape(x))
         for d in axes:

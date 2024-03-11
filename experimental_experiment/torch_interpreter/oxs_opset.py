@@ -1,5 +1,5 @@
 from functools import partial
-from typing import Callable, Dict, List, Optional, Union
+from typing import List, Optional, Union
 
 
 class Var:
@@ -126,40 +126,6 @@ class OxsOpset:
 
     def __init__(self, builder: "GraphBuilder"):  # noqa: F821
         self.builder = builder
-        self._submodule = None
-
-    @property
-    def submodules(self) -> Dict[str, Callable]:
-        """
-        Returns the submodules implementing torch functions.
-        """
-        if self._submodule is not None:
-            return self._submodule
-        from onnxscript.function_libs.torch_lib.ops import (
-            core,
-            fft,
-            linalg,
-            nested,
-            nn,
-            prims,
-            sparse,
-            special,
-            vision,
-        )
-
-        subs = {
-            "onnxscript.function_libs.torch_lib.ops.core": core,
-            "onnxscript.function_libs.torch_lib.ops.fft": fft,
-            "onnxscript.function_libs.torch_lib.ops.linalg": linalg,
-            "onnxscript.function_libs.torch_lib.ops.nested": nested,
-            "onnxscript.function_libs.torch_lib.ops.nn": nn,
-            "onnxscript.function_libs.torch_lib.ops.prims": prims,
-            "onnxscript.function_libs.torch_lib.ops.sparse": sparse,
-            "onnxscript.function_libs.torch_lib.ops.special": special,
-            "onnxscript.function_libs.torch_lib.ops.vision": vision,
-        }
-        self._submodule = subs
-        return subs
 
     def __getattr__(self, name):
         if name in self._implemented:
@@ -212,6 +178,10 @@ class OxsOpset:
         :param kwargs: additional arguments
         :return: output name
         """
+        assert (
+            not op_type.startswith("Reduce") or self.builder.main_opset >= 18
+        ), f"Reduce operator {op_type!r} is not tested for opset < 18{self.builder.get_debug_msg()}"
+
         if outputs is None:
             outputs = self._implemented[op_type]
         if inputs is None:
