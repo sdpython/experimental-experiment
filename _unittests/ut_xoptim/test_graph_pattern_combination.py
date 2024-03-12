@@ -275,7 +275,7 @@ class TestGraphPatternCombination(ExtTestCase):
         opt_onx, out, _ = self.capture(lambda: gr.to_onnx(optimize=True))
         self.assertIn("remove_initializer:shape2", out)
         self.assertEqual(
-            ["Unsqueeze", "MatMul", "Reshape"], [n.op_type for n in opt_onx.graph.node]
+            ["Unsqueeze", "Reshape", "MatMul"], [n.op_type for n in opt_onx.graph.node]
         )
         self.assertEqual(2, len(opt_onx.graph.initializer))
 
