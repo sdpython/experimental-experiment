@@ -2666,26 +2666,55 @@ class GraphBuilder:
                     first_at[name] = i
 
         # guess the position to insert the nodes at
+        # the order of the new nodes is consistent but it may have to be changed
+        # if it does not fit the existing order
+        insert_needed_at = {}
+        insert_first_at = {}
         N = len(self.nodes)
-        last_position = 0
+        inserted_at = []
         new_nodes_p = []
-        for node in new_nodes:
-            min0_position = max(first_at.get(i, -1) for i in node.input)
+        for init, node in enumerate(new_nodes):
+            min_position = max(first_at.get(i, -1) for i in node.input) + 1
             max_position = min(needed_at.get(o, N) for o in node.output)
-            min_position = max(min0_position + 1, last_position)
+
             assert min_position <= max_position, (
                 f"Unable to insert node {self.print_node(node)}, "
-                f"min_position={min_position}, true_min_position={min0_position}, "
-                f"max_position={max_position}, len(nodes)={len(self.nodes)}"
+                f"min_position={min_position}, max_position={max_position}, "
+                f"len(nodes)={len(self.nodes)}, previous insertions={inserted_at}, "
+                f"insert_needed_at={insert_needed_at}, insert_first_at={insert_first_at}, "
+                f"inserted_at={inserted_at}"
             )
-            new_nodes_p.append((min_position, node))
-            last_position = min_position
+
+            local_min_position = max(insert_first_at.get(i, -1) for i in node.input)
+            local_max_position = min(insert_needed_at.get(o, N) for o in node.output)
+
+            assert local_min_position <= local_max_position, (
+                f"Unable to insert node {self.print_node(node)}, "
+                f"local_min_position={local_min_position}, local_max_position={local_max_position}, "
+                f"len(nodes)={len(self.nodes)}, previous insertions={inserted_at}, "
+                f"insert_needed_at={insert_needed_at}, insert_first_at={insert_first_at}"
+            )
+
+            insert_position = max(min_position, local_min_position)
+
+            new_nodes_p.append((insert_position, init, node))
+            for i in node.input:
+                insert_needed_at[i] = min(
+                    insert_position, insert_needed_at.get(i, insert_position)
+                )
+            for i in node.output:
+                insert_first_at[i] = min(
+                    insert_position, insert_first_at.get(i, insert_position)
+                )
+
         assert len(new_nodes) == len(new_nodes_p)
+        new_nodes_p.sort()
 
         # do the addition
-        for i, (p, n) in enumerate(new_nodes_p):
+        for p, _, n in reversed(new_nodes_p):
             assert isinstance(n, NodeProto), f"Unexpected type {type(n)} for a node"
-            self.nodes.insert(p + i, n)
+            self.nodes.insert(p, n)
+        for _, _, n in new_nodes_p:
             self._make_node_set_type_shape_constant(n, True)
             self._make_node_set_type_shape(n)
         return memo

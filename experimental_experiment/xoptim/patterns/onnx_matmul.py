@@ -308,7 +308,6 @@ class ReshapeMatMulReshapePattern(PatternOptimization):
             self,
             [node_before_left, node_before_right, node, next_node],
             self.apply,
-            insert_at=node,
         )
 
     @classmethod
@@ -320,6 +319,11 @@ class ReshapeMatMulReshapePattern(PatternOptimization):
         node: NodeProto,
         next_node: NodeProto,
     ) -> List[NodeProto]:
+        res = []
+        if g.is_used_more_than_once(node_before_left.output[0]):
+            res.append(node_before_left)
+        if g.is_used_more_than_once(node_before_right.output[0]):
+            res.append(node_before_right)
         new_node = g.make_node(
             "MatMul",
             [node_before_left.input[0], node_before_right.input[0]],
@@ -327,11 +331,7 @@ class ReshapeMatMulReshapePattern(PatternOptimization):
             name=f"{cls.__name__}--{node.name}",
             doc_string=next_node.doc_string,
         )
-        res = [new_node]
-        if g.is_used_more_than_once(node_before_left.output[0]):
-            res.append(node_before_left)
-        if g.is_used_more_than_once(node_before_right.output[0]):
-            res.append(node_before_right)
+        res.append(new_node)
         return res
 
 

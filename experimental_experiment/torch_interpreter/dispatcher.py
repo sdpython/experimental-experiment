@@ -4,7 +4,7 @@ from typing import Any, Callable, Dict, List, Optional
 class Dispatcher:
     """
     Used to changes the way class :class:`DynamoInterpreter
-    <experimental_experiment.torch_interpreter.DynamoInterpreter>`
+    <experimental_experiment.torch_interpreter.interpreter.DynamoInterpreter>`
     selects the function translating aten function or module.
 
     :param registered_functions: registered functions
