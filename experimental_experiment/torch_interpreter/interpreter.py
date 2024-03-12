@@ -22,7 +22,7 @@ class DynamoInterpreter:
     :param retriever: callable to help retrieve the weights in a module,
         see function `_retrieve
         <experimental_experiment.torch_interpreter.onnx_export._retrieve>`.
-    :param dispatcher: see :class:`experimental_experiment.torch_interpreter.dispatcher.Dispatcher`
+    :param dispatcher: see :class:`experimental_experiment.torch_interpreter.Dispatcher`
     """
 
     def _hash(self) -> str:
