@@ -80,6 +80,8 @@ class TestGraphPatternOptimization(ExtTestCase):
 
     def _get_model(self, name: str) -> onnx.ModelProto:
         p = os.path.join(os.path.dirname(__file__), "..", "ut_xbuilder", "data", name)
+        if not os.path.exists(p):
+            p = os.path.join(os.path.dirname(__file__), "data", name)
         self.assertExists(p)
         return onnx.load(p)
 
@@ -729,6 +731,20 @@ class TestGraphPatternOptimization(ExtTestCase):
         gr = GraphBuilder(
             origin,
             optimization_options=OptimizationOptions(patterns=["RotaryConcatPart"]),
+            infer_shapes=True,
+        )
+        onx = gr.to_onnx(optimize=True)
+        after = [node for node in onx.graph.node if node.op_type == "ConstantOfShape"]
+        self.assertEqual(len(before) - 4, len(after))
+
+    def test_rotary_concat_part_plug(self):
+        origin = self._get_model("dort-pres-plug_1.onnx")
+        before = [
+            node for node in origin.graph.node if node.op_type == "ConstantOfShape"
+        ]
+        gr = GraphBuilder(
+            origin,
+            optimization_options=OptimizationOptions(patterns=["RotaryConcatPart"], verbose=20),
             infer_shapes=True,
         )
         onx = gr.to_onnx(optimize=True)

@@ -231,7 +231,7 @@ for i in range(args.warmup):
         torch.cuda.synchronize()
     start_time = time.perf_counter()
 
-    if args.backend in ("ort", "custom", "debug") and i == 0 and args.export:
+    if args.backend in ("ort", "custom", "debug", "plug") and i == 0 and args.export:
         with dump_onnx(
             f"dort-{args.export}-{args.backend}", folder="dump_dort_bench", clean=True
         ):
