@@ -20,7 +20,6 @@ API
     torch_dynamo
     misc
     dimension
-    torchtry
 
 **Versions**
 
