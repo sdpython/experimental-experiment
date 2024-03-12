@@ -42,14 +42,15 @@ Look for substring ``TODO:``.
             # TODO: Insert these lines
             ##########################
 
-            use_other_rewriter = bool(os.environ.get("ONNXRT_CHANGE_REWRITER", None))
+            use_other_rewriter = os.environ.get("ONNXRT_CHANGE_REWRITER", None) in (1, "1")
             if use_other_rewriter:
                 from experimental_experiment.torch_interpreter import to_onnx
                 from experimental_experiment.torch_interpreter._torch_helper import create_input_names
                 from experimental_experiment.xbuilder import OptimizationOptions
+                from experimental_experiment.torch_interpreter.oxs_dispatcher import OxsDispatcher
                 
                 input_names = input_names = create_input_names(graph_module, args)
-                dispatcher = None
+                dispatcher = OxsDispatcher()
                 target_opset = self._resolved_onnx_exporter_options.onnx_registry.opset_version
                 options = OptimizationOptions(
                     remove_unused=True,
@@ -265,6 +266,89 @@ Look for substring ``TODO:``.
 Examples
 ========
 
+Baseline
+++++++++
+
+.. runpython::
+    :showcode:
+    :process:
+
+    import os
+    import warnings
+    import numpy as np
+    import onnx
+    import torch
+    import torch.onnx
+    from experimental_experiment.torch_helper.training_helper import (
+        make_aot_ort,
+        train_loop,
+    )
+    from experimental_experiment.torch_helper.dump_helper import dump_onnx
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        from transformers import LlamaConfig
+        from transformers.models.llama.modeling_llama import LlamaModel
+
+
+    def ids_tensor(shape, vocab_size):
+        total_dims = 1
+        for dim in shape:
+            total_dims *= dim
+
+        values = []
+        for _ in range(total_dims):
+            values.append(np.random.randint(0, vocab_size - 1))
+
+        return torch.tensor(data=values, dtype=torch.long).view(shape).contiguous()
+
+
+    config = LlamaConfig(
+        hidden_size=16,
+        num_hidden_layers=1,
+        vocab_size=1024,
+        intermediate_size=16,
+        max_position_embeddings=1024,
+        num_attention_heads=2,
+    )
+    config._attn_implementation = "eager"
+
+    model = LlamaModel(config)
+
+    batch, seq, vocab_size = 2, 1024, 1024
+
+    input_ids = ids_tensor([batch, seq], vocab_size)
+    input_mask = torch.tril(torch.ones(batch, seq, dtype=torch.float32))
+
+    model(input_ids, input_mask)
+
+    local_aot_ort, _ = make_aot_ort(
+        dynamic=True,
+        rewrite=True,
+        verbose=1,
+    )
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        optimized_mod = torch.compile(model, backend=local_aot_ort, fullgraph=True)
+        with dump_onnx("dort-llama-ort", folder="dump_llama", clean=True):
+            train_loop(optimized_mod, input_ids, input_mask)
+
+    names = [_ for _ in os.listdir("dump_llama") if _.endswith(".onnx")]
+    print("------------------------------------------")
+    print(f"exported model: {names}")
+    for name in names:
+        print()
+        print("NODES in {name!r}")
+        onx = onnx.load(os.path.join("dump_llama", name))
+        for i, node in enumerate(onx.graph.node):
+            print(
+                f"{i+1}/{len(onx.graph.node)}: {node.op_type} {node.input} -> {node.output}"
+            )
+
+With the custom exporter
+++++++++++++++++++++++++
+
 .. runpython::
     :showcode:
     :process:
@@ -326,7 +410,7 @@ Examples
 
     local_aot_ort, _ = make_aot_ort(
         dynamic=True,
-        rewrite=True,
+        rewrite=False,
         verbose=1,
     )
 
@@ -347,3 +431,6 @@ Examples
             print(
                 f"{i+1}/{len(onx.graph.node)}: {node.op_type} {node.input} -> {node.output}"
             )
+
+    os.environ["ONNXRT_CHANGE_REWRITER"] = "0"
+

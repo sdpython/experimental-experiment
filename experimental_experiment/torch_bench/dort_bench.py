@@ -32,7 +32,7 @@ from experimental_experiment.args import get_parsed_args
 args = get_parsed_args(
     "experimental_experiment.torch_bench.dort_bench",
     description=__doc__,
-    backend=("ort", "'ort' or 'inductor' or 'eager' or 'custom'"),
+    backend=("ort", "'ort' or 'inductor' or 'eager', 'plug', or 'custom'"),
     device=("cpu", "'cpu' or 'cuda'"),
     num_hidden_layers=(1, "number of hidden layers"),
     warmup=5,
@@ -138,6 +138,14 @@ print(f"dynamic={use_dynamic}")
 if args.backend == "ort":
     local_aot_ort, local_ort = make_aot_ort(
         dynamic=use_dynamic, rewrite=True, verbose=args.verbose
+    )
+    compiled_model = torch.compile(model, backend=local_ort)
+
+elif args.backend == "plug":
+    os.environ["ONNXRT_CHANGE_REWRITER"] = "1"
+
+    local_aot_ort, local_ort = make_aot_ort(
+        dynamic=use_dynamic, rewrite=False, verbose=args.verbose
     )
     compiled_model = torch.compile(model, backend=local_ort)
 

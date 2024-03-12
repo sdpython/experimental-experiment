@@ -12,7 +12,7 @@ DynamoInterpreter
 Dispatcher
 ==========
 
-.. autoclass:: experimental_experiment.torch_interpreter.interpreter.Dispatcher
+.. autoclass:: experimental_experiment.torch_interpreter.Dispatcher
     :members:
 
 OxsDispatcher
