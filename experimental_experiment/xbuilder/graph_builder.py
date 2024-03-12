@@ -1682,9 +1682,7 @@ class GraphBuilder:
                         f"[GraphBuilder-{self._hash()}.make_node] duplicated constant detected for "
                         f"{node.op_type}:{node.input}->{node.output}"
                     )
-                node = oh.make_node(
-                    "Identity", [origin.output[0]], [node.output[0]]
-                )
+                node = oh.make_node("Identity", [origin.output[0]], [node.output[0]])
                 self.constants_alias_[node.output[0]] = origin.output[0]
             else:
                 self.add_constant_node(node)
@@ -2872,8 +2870,10 @@ class GraphBuilder:
             for att in node.attribute:
                 key.append(att.SerializeToString())
             return b"|".join(key)
-        
-        raise RuntimeError(f"Unexpected node type {node.op_type!r}{self.get_debug_msg()}")
+
+        raise RuntimeError(
+            f"Unexpected node type {node.op_type!r}{self.get_debug_msg()}"
+        )
 
     def add_constant_node(self, node: NodeProto) -> Optional[bytes]:
         """
