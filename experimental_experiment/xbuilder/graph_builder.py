@@ -69,6 +69,8 @@ class GraphBuilder:
     - `_known_value_shape: Dict[str, Any]`: if a result is a shape or not
       (for example the output of operator Shape)
     - `_known_ranks: Dict[str, int]`: declared ranks
+    - `constants_node_: Dict[bytes, NodeProto]`: constant node
+    - `constants_alias_: Dict[str, str]`: alias for constant
     - `constants_: Dict[str, Any]`: constant values
     - `constants_computed_: Dict[str, Any]`: computed constant values
     - `dynamic_objects: Dict[str, torch.SymInt]`: list of dynamic dimension
@@ -124,6 +126,8 @@ class GraphBuilder:
         self._cache_shape = {}
         self._values = {}
         self._dynamic_alias = {}
+        self.constants_node_ = {}
+        self.constants_alias_ = {}
 
         self.nodes = []
         self.initializers_dict = {}
@@ -1668,6 +1672,23 @@ class GraphBuilder:
         if attributes:
             node.attribute.extend(attributes)
 
+        if node.domain == "" and node.op_type in {"Constant", "ConstantOfShape"}:
+            # A exact constant may be already existing,
+            # In that case, we just return an identity node.
+            origin = self.is_exact_same_constant(node)
+            if origin is not None:
+                if self.verbose > 2:
+                    print(
+                        f"[GraphBuilder-{self._hash()}.make_node] duplicated constant detected for "
+                        f"{node.op_type}:{node.input}->{node.output}"
+                    )
+                node = oh.make_node(
+                    "Identity", [origin.output[0]], [node.output[0]]
+                )
+                self.constants_alias_[node.output[0]] = origin.output[0]
+            else:
+                self.add_constant_node(node)
+
         # constant handling, shape, type
         self._make_node_set_type_shape_constant(node, set_type_shape=set_type_shape)
 
@@ -2800,6 +2821,7 @@ class GraphBuilder:
                     self.set_name(node.output[0])
                 self.set_shape(node.output[0], self._get_tensor_shape(node))
                 self.set_type(node.output[0], self._get_tensor_type(node))
+                self.add_constant_node(node)
             elif node.op_type == "ConstantOfShape" and self.is_constant(node.input[0]):
                 self.constants_[node.output[0]] = node
                 if not self.has_name(node.output[0]):
@@ -2810,6 +2832,7 @@ class GraphBuilder:
                 else:
                     value = node.attribute[0].t
                     self.set_type(node.output[0], value.data_type)
+                self.add_constant_node(node)
             else:
                 for o in node.output:
                     if not self.has_name(o):
@@ -2824,3 +2847,59 @@ class GraphBuilder:
         :return: an expression or None if exc is False and the parsing failed
         """
         return parse_expression(expr, exc=exc, context=self.dynamic_objects)
+
+    def _constant_key(self, node: NodeProto) -> Optional[bytes]:
+        """
+        Builds a unique key for a constant.
+        Returns None if the constant if too big.
+        """
+        if node.op_type == "ConstantOfShape":
+            # We assume initializer are fused.
+            name = node.input[0]
+            while name in self.constants_alias_:
+                name = self.constants_alias_[name]
+            key = [node.op_type.encode(), name.encode()]
+            for att in node.attribute:
+                key.append(att.SerializeToString())
+            return b"|".join(key)
+        if node.op_type == "Constant":
+            shape = self._get_tensor_shape(node)
+            size = np.prod(shape) if shape else 1
+            if size > self.optimization_options.constant_size:
+                # It would be too long.
+                return None
+            key = [node.op_type.encode()]
+            for att in node.attribute:
+                key.append(att.SerializeToString())
+            return b"|".join(key)
+        
+        raise RuntimeError(f"Unexpected node type {node.op_type!r}{self.get_debug_msg()}")
+
+    def add_constant_node(self, node: NodeProto) -> Optional[bytes]:
+        """
+        Adds a constant node. Any constant equivalent to this one
+        will be fused.
+        `self.optimization_options.constant_fusing` must be True.
+        """
+        if not self.optimization_options.constant_fusing:
+            return None
+        key = self._constant_key(node)
+        assert key not in self.constants_node_, (
+            f"A constant with the same key {key!r} was already added"
+            f"{self.get_debug_msg()}"
+        )
+        self.constants_node_[key] = node
+        return key
+
+    def is_exact_same_constant(self, node: NodeProto) -> Optional[NodeProto]:
+        """
+        Adds a constant node. Any constant equivalent to this one
+        will be fused.
+        `self.optimization_options.constant_fusing` must be True.
+        """
+        if not self.optimization_options.constant_fusing:
+            return None
+        key = self._constant_key(node)
+        if key in self.constants_node_:
+            return self.constants_node_[key]
+        return None

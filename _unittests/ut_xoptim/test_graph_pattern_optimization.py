@@ -744,7 +744,9 @@ class TestGraphPatternOptimization(ExtTestCase):
         ]
         gr = GraphBuilder(
             origin,
-            optimization_options=OptimizationOptions(patterns=["RotaryConcatPart"], verbose=20),
+            optimization_options=OptimizationOptions(
+                patterns=["RotaryConcatPart"], verbose=20
+            ),
             infer_shapes=True,
         )
         onx = gr.to_onnx(optimize=True)
