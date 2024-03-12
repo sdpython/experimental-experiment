@@ -39,6 +39,8 @@ Source are `sdpython/experimental-experiment
     design/index
     api/index
     auto_examples/index
+    models/index
+    times
 
 .. toctree::
     :maxdepth: 1
