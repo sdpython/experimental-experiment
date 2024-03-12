@@ -351,7 +351,6 @@ class GraphBuilderPatternOptimization:
             None if match.insert_at is None else positions[id(match.insert_at)]
         )
         new_nodes = match.apply(self, *match.nodes)
-        self.builder.insert_and_remove_nodes(position_insert, new_nodes, removed)
 
         if self.verbose >= 10:
             print(f"[GraphBuilderPatternOptimization.apply_match] {match}")
@@ -364,7 +363,35 @@ class GraphBuilderPatternOptimization:
                     continue
                 print(f"  + {node.op_type}: {node.input} -> {node.output}")
 
+        self.builder.insert_and_remove_nodes(position_insert, new_nodes, removed)
+        if self.verbose >= 10:
+            print(f"[GraphBuilderPatternOptimization.apply_match] {match} applied.")
         return new_nodes
+
+    def _check_graph(self, statistics, step, iteration, code):
+        begin = time.perf_counter()
+        assert (
+            len(self.builder.nodes) > 0
+        ), f"The onnx model is empty (step {step}, no node)"
+        known = set(n.name for n in self.builder.inputs)
+        known |= set(self.builder.initializers_dict)
+        for p, node in enumerate(self.builder.nodes):
+            for i in node.input:
+                assert i in known, (
+                    f"Unknown input {i!r}, step {step!r} at position {p} "
+                    f"in node {node.op_type} "
+                    f"[{node.name}]: {node.input} -> {node.output}"
+                )
+            known |= set(node.output)
+        for o in self.builder.outputs:
+            assert o.name in known, f"Unknown output {o.name!r}, step {step!r}"
+        statistics.append(
+            dict(
+                pattern=f"check_pattern_{code}",
+                time_in=time.perf_counter() - begin,
+                iteration=iteration,
+            )
+        )
 
     def optimize(
         self, max_iter=-1, remove_identity: bool = True
@@ -403,29 +430,6 @@ class GraphBuilderPatternOptimization:
         but it guarantees the local structure when applying the rewriting was
         not altered by another one.
         """
-
-        def _check(statistics, step, iteration, code):
-            begin = time.perf_counter()
-            assert (
-                len(self.builder.nodes) > 0
-            ), f"The onnx model is empty (step {step}, no node)"
-            known = set(n.name for n in self.builder.inputs)
-            known |= set(self.builder.initializers_dict)
-            for node in self.builder.nodes:
-                for i in node.input:
-                    assert (
-                        i in known
-                    ), f"Unknown input {i!r}, step {step!r} in node {node}"
-                known |= set(node.output)
-            for o in self.builder.outputs:
-                assert o.name in known, f"Unknown output {o.name!r}, step {step!r}"
-            statistics.append(
-                dict(
-                    pattern=f"check_pattern_{code}",
-                    time_in=time.perf_counter() - begin,
-                    iteration=iteration,
-                )
-            )
 
         assert (
             not self.recursive
@@ -562,7 +566,7 @@ class GraphBuilderPatternOptimization:
                     time_in=time.perf_counter() - begin,
                 )
                 statistics.append(obs)
-                _check(statistics, str(match), it, "A")
+                self._check_graph(statistics, str(match), it, "A")
 
                 n_added += add
                 n_removed += rem
@@ -583,7 +587,7 @@ class GraphBuilderPatternOptimization:
                     time_in=time.perf_counter() - begin,
                 )
             )
-            _check(statistics, "remove_identity", it, "B")
+            self._check_graph(statistics, "remove_identity", it, "B")
 
             # rebuild the graph structure
 

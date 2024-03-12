@@ -82,7 +82,6 @@ Example about custom ops in onnxrt
     from typing import List
     import numpy as np
     import onnx
-
     # from onnx_array_api.plotting.text_plot import onnx_simple_text_plot
     import torch
     import torch.onnx
@@ -92,7 +91,6 @@ Example about custom ops in onnxrt
         train_loop,
     )
     from experimental_experiment.torch_helper.dump_helper import dump_onnx
-
     # from experimental_experiment.torch_interpreter import to_onnx
 
     with warnings.catch_warnings():
