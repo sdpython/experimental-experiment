@@ -267,6 +267,7 @@ Examples
 
 .. runpython::
     :showcode:
+    :process:
 
     import os
     import warnings

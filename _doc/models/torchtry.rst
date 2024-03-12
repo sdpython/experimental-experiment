@@ -8,6 +8,7 @@ Example about torch._dynamo.export
 
 .. runpython::
     :showcode:
+    :process:
 
     import numpy as np
     from onnx_array_api.plotting.text_plot import onnx_simple_text_plot
@@ -76,6 +77,7 @@ Example about custom ops in onnxrt
 
 .. runpython::
     :showcode:
+    :process:
 
     import os
     import warnings
@@ -197,7 +199,10 @@ Example about custom ops in onnxrt
 
 
     aten_conversion_changes = {
-        (scaled_dot_product_efficient_attention, "_scaled_dot_product_efficient_attention"),
+        (
+            scaled_dot_product_efficient_attention,
+            "_scaled_dot_product_efficient_attention"
+        ),
         (
             scaled_dot_product_attention_backward,
             "_scaled_dot_product_efficient_attention_backward",
@@ -226,6 +231,7 @@ Example about custom ops in onnxrt
         onx = onnx.load(os.path.join("dump_llama", name))
         for i, node in enumerate(onx.graph.node):
             print(
-                f"{i+1}/{len(onx.graph.node)}: {node.op_type} {node.input} -> {node.output}"
+                f"{i+1}/{len(onx.graph.node)}: "
+                f"{node.op_type} {node.input} -> {node.output}"
             )
 
