@@ -93,9 +93,16 @@ class RotaryConcatPartPattern(PatternOptimization):
         cst_right = [n for n in concat_right_before if n.op_type == "ConstantOfShape"][
             0
         ]
-        if g.is_used_more_than_once(cst_left.output[0]) or g.is_used_more_than_once(
-            cst_right.output[0]
+        if cst_left.output[0] == cst_right.output[0] and not g.is_used_only_by(
+            cst_left.output[0], concat_left, concat_right
         ):
+            # Node ConstantOfShape could be fused into a single one.
+            return self.none(node, inspect.currentframe().f_lineno)
+        if cst_left.output[0] != cst_right.output[0] and (
+            g.is_used_more_than_once(cst_left.output[0])
+            or g.is_used_more_than_once(cst_right.output[0])
+        ):
+            # Node ConstantOfShape are distinct, we check they are only used once.
             return self.none(node, inspect.currentframe().f_lineno)
 
         tl = [n for n in concat_right_before if n.op_type == "Neg"]

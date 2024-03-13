@@ -25,7 +25,7 @@ from .onnx_transpose import TransposeTransposePattern
 from .onnx_unsqueeze import UnsqueezeUnsqueezePattern
 
 
-def get_default_patterns() -> List[PatternOptimization]:
+def get_default_patterns(verbose: int = 0) -> List[PatternOptimization]:
     """
     Returns a default list of optimization patters.
     It is equal to the following list.
@@ -38,27 +38,27 @@ def get_default_patterns() -> List[PatternOptimization]:
         pprint.pprint(get_default_patterns())
     """
     return [
-        CastPattern(),
-        ExpandPattern(),
-        ExpandBroadcastPattern(),
-        ExpandSwapPattern(),
-        MulMulMulScalarPattern(),
-        ReduceReshapePattern(),
-        ReshapeMatMulReshapePattern(),
-        Reshape2Of3Pattern(),
-        MatMulReshape2Of3Pattern(),
-        ReshapeReshapePattern(),
-        RotaryConcatPartPattern(),
-        Sub1MulPattern(),
-        TransposeMatMulPattern(),
-        TransposeReshapeMatMulPattern(),
-        TransposeTransposePattern(),
-        UnsqueezeUnsqueezePattern(),
+        CastPattern(verbose=verbose),
+        ExpandPattern(verbose=verbose),
+        ExpandBroadcastPattern(verbose=verbose),
+        ExpandSwapPattern(verbose=verbose),
+        MulMulMulScalarPattern(verbose=verbose),
+        ReduceReshapePattern(verbose=verbose),
+        ReshapeMatMulReshapePattern(verbose=verbose),
+        Reshape2Of3Pattern(verbose=verbose),
+        MatMulReshape2Of3Pattern(verbose=verbose),
+        ReshapeReshapePattern(verbose=verbose),
+        RotaryConcatPartPattern(verbose=verbose),
+        Sub1MulPattern(verbose=verbose),
+        TransposeMatMulPattern(verbose=verbose),
+        TransposeReshapeMatMulPattern(verbose=verbose),
+        TransposeTransposePattern(verbose=verbose),
+        UnsqueezeUnsqueezePattern(verbose=verbose),
     ]
 
 
 def get_pattern(
-    obj: Union[PatternOptimization, str], as_list: bool = False
+    obj: Union[PatternOptimization, str], as_list: bool = False, verbose: int = 0
 ) -> PatternOptimization:
     """
     Returns an optimization pattern based on its name.
@@ -78,20 +78,21 @@ def get_pattern(
             objs = obj.split(sep)
             res = []
             for o in objs:
-                res.extend(get_pattern(o, as_list=True))
+                res.extend(get_pattern(o, as_list=True, verbose=verbose))
             return res
 
         if obj in _pattern:
             assert as_list, f"Returns a list for obj={obj!r}, as_list must be True."
-            return _pattern[obj]()
+            return _pattern[obj](verbose=verbose)
 
     mapping = {
-        v.__class__.__name__.replace("Pattern", ""): v for v in get_default_patterns()
+        v.__class__.__name__.replace("Pattern", ""): v
+        for v in get_default_patterns(verbose=verbose)
     }
     mapping.update(
         {
             v.__class__.__name__.replace("Pattern", ""): v
-            for v in get_onnxruntime_patterns()
+            for v in get_onnxruntime_patterns(verbose=verbose)
         }
     )
     if isinstance(obj, list):
@@ -101,7 +102,7 @@ def get_pattern(
             if isinstance(s, str) and s in mapping:
                 res.append(mapping[s])
             else:
-                res.extend(get_pattern(s, as_list=True))
+                res.extend(get_pattern(s, as_list=True, verbose=verbose))
         return res
     if obj in mapping:
         return [mapping[obj]] if as_list else mapping[obj]
@@ -113,6 +114,7 @@ def get_pattern(
 def get_pattern_list(
     positive_list: Optional[Union[str, List[Union[str, type]]]] = "default",
     negative_list: Optional[Union[str, List[Union[str, type]]]] = None,
+    verbose: int = 0,
 ):
     """
     Builds a list of patterns based on two lists, negative and positive.
@@ -126,11 +128,11 @@ def get_pattern_list(
     """
     if positive_list is None:
         return []
-    pos_list = get_pattern(positive_list, as_list=True)
+    pos_list = get_pattern(positive_list, as_list=True, verbose=verbose)
     if negative_list is None:
         return pos_list
 
-    neg_list = get_pattern(negative_list, as_list=True)
+    neg_list = get_pattern(negative_list, as_list=True, verbose=verbose)
 
     res = []
     for p in pos_list:

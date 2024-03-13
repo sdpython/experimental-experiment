@@ -446,3 +446,5 @@ Graph
   tells if a result is used by a subgraph
 * :meth:`is_used_more_than_once <experimental_experiment.xoptim.GraphBuilderPatternOptimization.is_used_more_than_once>`:
   tells if a result is used more than once
+* :meth:`is_used_only_by <experimental_experiment.xoptim.GraphBuilderPatternOptimization.is_used_only_by>`:
+  tells if a result is only used by specific nodes

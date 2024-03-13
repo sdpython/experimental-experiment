@@ -2808,33 +2808,66 @@ class GraphBuilder:
             ):
                 self.set_value_shape(i, (i.name,))
 
+        need_identity_removal = False
+        new_nodes = []
         for node in self.nodes:
             self._unique_names |= set(node.output)
             self.update_value_shape_with_node(node)
             if node.name:
                 self._unique_node_names.add(node.name)
             if node.op_type == "Constant":
-                self.constants_[node.output[0]] = node
-                if not self.has_name(node.output[0]):
-                    self.set_name(node.output[0])
-                self.set_shape(node.output[0], self._get_tensor_shape(node))
-                self.set_type(node.output[0], self._get_tensor_type(node))
-                self.add_constant_node(node)
-            elif node.op_type == "ConstantOfShape" and self.is_constant(node.input[0]):
-                self.constants_[node.output[0]] = node
-                if not self.has_name(node.output[0]):
-                    self.set_name(node.output[0])
-                self.set_shape(node.output[0], self.get_shape(node.input[0]))
-                if len(node.attribute) == 0:
-                    self.set_type(node.output[0], TensorProto.FLOAT)
+                exist = self.is_exact_same_constant(node)
+                if exist is not None:
+                    node = oh.make_node("Identity", [exist.output[0]], [node.output[0]])
+                    replaced = True
+                    need_identity_removal = True
                 else:
-                    value = node.attribute[0].t
-                    self.set_type(node.output[0], value.data_type)
-                self.add_constant_node(node)
+                    self.add_constant_node(node)
+                    replaced = False
+
+                self.constants_[node.output[0]] = node
+                if not self.has_name(node.output[0]):
+                    self.set_name(node.output[0])
+
+                if replaced:
+                    self.set_type(node.output[0], self.get_type(node.input[0]))
+                    self.set_shape(node.output[0], self.get_shape(node.input[0]))
+                else:
+                    self.set_shape(node.output[0], self._get_tensor_shape(node))
+                    self.set_type(node.output[0], self._get_tensor_type(node))
+
+            elif node.op_type == "ConstantOfShape" and self.is_constant(node.input[0]):
+                exist = self.is_exact_same_constant(node)
+                if exist is not None:
+                    node = oh.make_node("Identity", [exist.output[0]], [node.output[0]])
+                    replaced = True
+                    need_identity_removal = True
+                else:
+                    self.add_constant_node(node)
+                    replaced = False
+
+                self.constants_[node.output[0]] = node
+                if not self.has_name(node.output[0]):
+                    self.set_name(node.output[0])
+                if replaced:
+                    self.set_type(node.output[0], self.get_type(node.input[0]))
+                    self.set_shape(node.output[0], self.get_shape(node.input[0]))
+                else:
+                    self.set_shape(node.output[0], self.get_shape(node.input[0]))
+                    if len(node.attribute) == 0:
+                        self.set_type(node.output[0], TensorProto.FLOAT)
+                    else:
+                        value = node.attribute[0].t
+                        self.set_type(node.output[0], value.data_type)
             else:
                 for o in node.output:
                     if not self.has_name(o):
                         self.set_name(o)
+            new_nodes.append(node)
+        self.nodes = new_nodes
+
+        if need_identity_removal:
+            self.remove_identity_nodes()
 
     def parse_dimension_expression(self, expr: str, exc: bool = True) -> Expression:
         """

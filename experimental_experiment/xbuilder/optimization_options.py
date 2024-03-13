@@ -44,7 +44,7 @@ class OptimizationOptions:
         if isinstance(patterns, str):
             from ..xoptim.patterns import get_pattern_list
 
-            self.patterns = get_pattern_list(patterns)
+            self.patterns = get_pattern_list(patterns, verbose=verbose)
         else:
             assert patterns is None or isinstance(
                 patterns, list
@@ -52,7 +52,9 @@ class OptimizationOptions:
             from ..xoptim.patterns import get_pattern
 
             self.patterns = (
-                None if patterns is None else [get_pattern(p) for p in patterns]
+                None
+                if patterns is None
+                else [get_pattern(p, verbose=verbose) for p in patterns]
             )
         self.max_iter = -1
         self.verbose = verbose

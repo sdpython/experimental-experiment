@@ -1,7 +1,9 @@
 from typing import List
 
 
-def get_onnxruntime_patterns() -> List["PatternOptimization"]:  # noqa: F821
+def get_onnxruntime_patterns(
+    verbose: int = 0,
+) -> List["PatternOptimization"]:  # noqa: F821
     """
     Returns a default list of optimization patters for onnxruntime.
     It is equal to the following list.
@@ -17,6 +19,6 @@ def get_onnxruntime_patterns() -> List["PatternOptimization"]:  # noqa: F821
     from .fused_matmul import FusedMatMulPattern
 
     return [
-        ConstantOfShapeScatterNDPattern(),
-        FusedMatMulPattern(),
+        ConstantOfShapeScatterNDPattern(verbose=verbose),
+        FusedMatMulPattern(verbose=verbose),
     ]
