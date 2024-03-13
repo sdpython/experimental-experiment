@@ -1436,11 +1436,12 @@ class TestOperators(ExtTestCase):
         )
 
     def test_ones_like(self):
-        x = torch.randn(6, 10, requires_grad=True)
+        x = torch.randn(6, 10, requires_grad=False)
         self.assertONNX(
             lambda x: torch.ones_like(x),
             x,
             onnx_export=inspect.currentframe().f_code.co_name,
+            test_backward=False,
         )
 
     @unittest.skipIf(

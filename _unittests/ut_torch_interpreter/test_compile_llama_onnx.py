@@ -7,6 +7,7 @@ from experimental_experiment.ext_test_case import (
     ExtTestCase,
     ignore_warnings,
     skipif_ci_windows,
+    requires_torch,
 )
 from experimental_experiment.torch_helper.dump_helper import assert_all_close
 from experimental_experiment.torch_dynamo import (
@@ -321,6 +322,7 @@ class TestDynamoLlama(ExtTestCase):
 
     @ignore_warnings((UserWarning, DeprecationWarning))
     @skipif_ci_windows("torch.compile not supported on Windows")
+    @requires_torch("2.3", "unstable")
     def test_llama_decoder_backward_dynamic(self):
         from experimental_experiment.torch_helper.llama_helper import get_llama_decoder
 

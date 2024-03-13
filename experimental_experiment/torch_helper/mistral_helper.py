@@ -80,22 +80,8 @@ def get_mistral_model(
     """
     Returns a model.
     See `MistralConfig
-    <https://huggingface.co/docs/transformers/v4.37.2/en/model_doc/mistral2#transformers.MistralConfig>`_.
+    <https://huggingface.co/docs/transformers/main/en/model_doc/mistral#transformers.MistralConfig>`_.
     The parameters are chosen for a unit test configuration.
-    For benchmark, a bigger one should be used.
-    Commented out, the default value from :epkg:`transformers`.
-
-    ::
-
-        kwargs = dict(
-            input_dims=[(2, 1024)] * 2,
-            num_hidden_layers=1,  # 32
-            hidden_size=512,  # 4096
-            vocab_size=4000,  # 32000
-            intermediate_size=2000,  # 11008
-            max_position_embeddings=2048,
-            num_attention_heads=8,  # 32
-        )
     """
     import torch
     from transformers import MistralConfig
@@ -123,8 +109,6 @@ def get_mistral_model(
             return model_output.to_tuple()
 
     def generate_example_inputs(batch: int, seq: int, vocab_size: int):
-        input_ids = ids_tensor([batch, seq], vocab_size)
-        input_mask = torch.tril(torch.ones(batch, seq, dtype=torch.float32))
         (
             input_ids,
             token_type_ids,
