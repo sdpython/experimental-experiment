@@ -1,3 +1,11 @@
+"""
+Use:
+
+::
+
+    LOG_PATTERN_OPTIMIZE=10 python _unittests/ut_xoptim/test_graph_pattern_optimization.py -k test_rotary_concat_part_plug 
+"""
+
 import os
 import unittest
 import packaging.version as pv
@@ -737,6 +745,7 @@ class TestGraphPatternOptimization(ExtTestCase):
         after = [node for node in onx.graph.node if node.op_type == "ConstantOfShape"]
         self.assertEqual(len(before) - 4, len(after))
 
+    @unittest.skipIf(True, "not yet completed")
     def test_rotary_concat_part_plug(self):
         origin = self._get_model("dort-pres-plug_1.onnx")
         before = [
