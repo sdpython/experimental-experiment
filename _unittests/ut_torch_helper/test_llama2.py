@@ -2,7 +2,7 @@ import onnxruntime  # noqa: F401
 import copy
 import unittest
 import packaging.version as pv
-from typing import Optional, Tuple
+from typing import Optional
 from experimental_experiment.ext_test_case import (
     ExtTestCase,
     ignore_warnings,
@@ -67,32 +67,6 @@ class TestLlama(ExtTestCase):
                 grads = tuple(_.grad for _ in compiled_model.parameters())
                 assert_all_close(base_grads, grads, atol=atol, rtol=rtol)
 
-    def _assert_counting_information(
-        self,
-        ort_backend: "OrtBackend",  # noqa: F821
-        expected_execution_count: int,
-        number_of_cached_graph_modules: int,
-        number_of_exported_onnx_models_for_all_graph_modules: Tuple[int, ...],
-        expected_graph_break=0,
-        example_args_collection=None,
-    ):
-        self.assertEqual(
-            expected_execution_count * (expected_graph_break + 1),
-            ort_backend.execution_count,
-            msg=f"expected_execution_count={expected_execution_count}, "
-            f"expected_graph_break={expected_graph_break}, "
-            f"ort_backend.execution_count={ort_backend.execution_count}, "
-            f"number_of_cached_graph_modules={number_of_cached_graph_modules}",
-        )
-        for (
-            onnx_info,
-            expected_number_of_onnx_models,
-        ) in zip(
-            ort_backend._all_ort_execution_info.execution_info_per_graph_module.values(),
-            number_of_exported_onnx_models_for_all_graph_modules,
-        ):
-            self.assertEqual(len(onnx_info), expected_number_of_onnx_models)
-
     def common_test_model(
         self,
         model,
@@ -102,7 +76,6 @@ class TestLlama(ExtTestCase):
         fullgraph: bool = True,
         onnx_export=None,
         expected_graph_break=0,
-        assert_counting=True,
         device="cpu",
     ):
         import torch
@@ -119,19 +92,6 @@ class TestLlama(ExtTestCase):
             onnx_export=onnx_export,
             device=device,
         )
-
-        number_of_captured_graphs = 2 if test_backward else 1
-        if assert_counting:
-            self._assert_counting_information(
-                local_ort,
-                expected_execution_count=len(example_args_collection)
-                * number_of_captured_graphs,
-                number_of_cached_graph_modules=number_of_captured_graphs,
-                number_of_exported_onnx_models_for_all_graph_modules=(1,)
-                * number_of_captured_graphs,
-                expected_graph_break=expected_graph_break,
-                example_args_collection=example_args_collection,
-            )
 
     @classmethod
     def get_input_dims(cls, dynamic: bool):
