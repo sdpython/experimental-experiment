@@ -348,6 +348,21 @@ class TestDynamoLlamaSdpa(ExtTestCase):
             mixed=True,
         )
 
+    @ignore_warnings((UserWarning, DeprecationWarning))
+    @skipif_ci_windows("torch.compile not supported on Windows")
+    def test_llama_decoder_forward_dynamic(self):
+        from experimental_experiment.torch_helper.llama_helper import get_llama_decoder
+
+        input_dims = self.get_input_dims(True)
+        model, example_args_collection = get_llama_decoder(input_dims=input_dims)
+        self.common_test_model(
+            model,
+            example_args_collection,
+            test_backward=False,
+            dynamic=True,
+            onnx_export="test_llama_decoder_forward_sdpa",
+        )
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

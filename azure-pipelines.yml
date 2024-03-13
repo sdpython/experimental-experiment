@@ -1,5 +1,5 @@
 jobs:
-- job: 'TestLinuxWheelPip'
+- job: 'TestLinuxWheelPip-4.37.2'
   pool:
     vmImage: 'ubuntu-latest'
   strategy:

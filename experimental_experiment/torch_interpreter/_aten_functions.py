@@ -882,24 +882,11 @@ def aten_empty_like(
     memory_format=None,
 ) -> T:
     "constantofshape"
-    import torch
-
-    assert (
-        layout is None
-    ), f"empty_like not implemented for layout={layout!r} is not None"
-    assert not pin_memory, "empty_like not implemented for pin_memory=True"
-    assert memory_format in (
-        None,
-        torch.preserve_format,
-        torch.contiguous_format,
-    ), f"empty_like not implemented for memory_format={memory_format}"
-
-    # simple case
     return aten_full(
         g,
         sts,
         outputs,
-        g.get_shape(x),
+        x,
         0,
         dtype=dtype or g.get_type(x),
         name="empty_like",
@@ -1228,6 +1215,7 @@ def aten_full_like(
     device: Optional["torch.device"] = None,  # noqa: F821
     pin_memory=None,
     memory_format=None,
+    name: str = "full_like",
 ) -> T:
     "constantofshape"
     import torch
@@ -1249,11 +1237,16 @@ def aten_full_like(
             g.get_shape(x),
             fill_value,
             dtype=dtype or g.get_type(x),
-            name="empty_like",
+            name=name,
         )
-    raise RuntimeError(
-        f"empty_like is not implemented when shape is not fully known "
-        f"for {x!r}{g.get_debug_msg()}"
+    return aten_full(
+        g,
+        sts,
+        outputs,
+        g.op.Shape(x, name="full_like"),
+        fill_value,
+        dtype=dtype or g.get_type(x),
+        name=name,
     )
 
 
@@ -1932,10 +1925,11 @@ def aten_ones(
     sts: bool,
     outputs: List[str],
     size: T,
-    dtype: int = TensorProto.FLOAT,
+    dtype: int = None,
     layout=None,
     device: Optional["torch.device"] = None,  # noqa: F821
     pin_memory=None,
+    name: str = "ones",
 ) -> T:
     "constantofshape"
     import torch
@@ -1961,13 +1955,36 @@ def aten_ones(
         isize,
         value=from_array(np.array([1], dtype=tensor_dtype_to_np_dtype(dtype))),
         outputs=outputs,
-        name="ones",
+        name=name,
     )
     if sts:
         g.set_type(res, dtype)
         if new_shape:
             g.set_shape(res, new_shape)
     return res
+
+
+def aten_ones_like(
+    g: GraphBuilder,
+    sts: bool,
+    outputs: List[str],
+    x: T,
+    dtype: Optional["torch.dtype"] = None,  # noqa: F821
+    layout=None,
+    device: Optional["torch.device"] = None,  # noqa: F821
+    pin_memory=None,
+    memory_format=None,
+) -> T:
+    "constantofshape"
+    return aten_full_like(
+        g,
+        sts,
+        outputs,
+        x,
+        1,
+        dtype=dtype or g.get_type(x),
+        name="ones_like",
+    )
 
 
 def aten_permute(
@@ -3010,6 +3027,16 @@ def aten_truediv(g: GraphBuilder, sts: bool, outputs: List[str], x: T, y: T) -> 
     res = g.op.Div(x, y, outputs=outputs, name="truediv")
     if sts:
         set_type_shape_binary_op(g, outputs[0], x, y)
+    return res
+
+
+def aten_triu(
+    g: GraphBuilder, sts: bool, outputs: List[str], x: T, diagonal: int = 0
+) -> T:
+    """trilu"""
+    res = g.op.Trilu(x, diagonal, upper=1, name="triu")
+    if sts:
+        set_type_shape_unary_op(g, res, x)
     return res
 
 

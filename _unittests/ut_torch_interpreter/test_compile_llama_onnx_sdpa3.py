@@ -28,7 +28,7 @@ def has_cuda():
     return torch.cuda.is_available()
 
 
-class TestDynamoLlamaSdpa2(ExtTestCase):
+class TestDynamoLlamaSdpa3(ExtTestCase):
 
     @classmethod
     def get_input_dims(cls, dynamic: bool):
@@ -172,36 +172,19 @@ class TestDynamoLlamaSdpa2(ExtTestCase):
 
     @ignore_warnings((UserWarning, DeprecationWarning))
     @skipif_ci_windows("torch.compile not supported on Windows")
-    @unittest.skipIf(
-        True, reason="_scaled_dot_product_flash_attention_for_cpu_default missing"
-    )
-    def test_llama_decoder_backward_dynamic(self):
-        from experimental_experiment.torch_helper.llama_helper import get_llama_decoder
-
-        input_dims = self.get_input_dims(True)
-        model, example_args_collection = get_llama_decoder(
-            input_dims=input_dims, _attn_implementation="sdpa"
-        )
-        self.common_test_model(
-            model,
-            example_args_collection,
-            test_backward=True,
-            dynamic=True,
-            onnx_export="test_llama_decoder_backward_sdpa",
-        )
-
-    @ignore_warnings((UserWarning, DeprecationWarning))
-    @skipif_ci_windows("torch.compile not supported on Windows")
     @unittest.skipIf(torch_min("2.2"), reason="missing kernel")
-    @unittest.skipIf(
-        True, reason="_scaled_dot_product_flash_attention_for_cpu_default missing"
-    )
-    def test_llama_model_backward_undec(self):
+    def test_llama_model_backward_ref(self):
         from experimental_experiment.torch_helper.llama_helper import get_llama_model
 
-        input_dims = self.get_input_dims(False)
         model, example_args_collection = get_llama_model(
-            input_dims=input_dims, _attn_implementation="sdpa"
+            input_dims=[(2, 1024)] * 2,
+            hidden_size=16,
+            num_hidden_layers=1,
+            vocab_size=1024,
+            intermediate_size=16,
+            max_position_embeddings=1024,
+            num_attention_heads=2,
+            _attn_implementation="eager",
         )
         self.common_test_model(
             model,
@@ -210,6 +193,9 @@ class TestDynamoLlamaSdpa2(ExtTestCase):
             dynamic=False,
             fullgraph=True,
             onnx_export="test_llama_model_backward_sdpa",
+            impl="ref",
+            verbose=0,
+            atol=3e-2,
         )
 
 

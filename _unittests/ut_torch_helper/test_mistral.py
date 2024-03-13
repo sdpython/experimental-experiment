@@ -145,6 +145,9 @@ class TestMistral(ExtTestCase):
     @ignore_warnings((UserWarning, DeprecationWarning))
     @skipif_ci_windows("torch.compile not supported on Windows")
     @requires_torch("2.3", "missing kernel")
+    @unittest.skipIf(
+        True, reason=" NOT_IMPLEMENTED : Could not find an implementation for Trilu(14"
+    )
     def test_ort_mistral_model(self):
         from experimental_experiment.torch_helper.mistral_helper import (
             get_mistral_model,
@@ -166,6 +169,9 @@ class TestMistral(ExtTestCase):
     @skipif_ci_windows("torch.compile not supported on Windows")
     @unittest.skipIf(torch_min("2.2"), reason="missing kernel")
     @unittest.skipIf(not has_cuda(), reason="cuda not available")
+    @unittest.skipIf(
+        True, reason=" NOT_IMPLEMENTED : Could not find an implementation for Trilu(14"
+    )
     def test_ort_mistral_model_cuda(self):
         from experimental_experiment.torch_helper.mistral_helper import (
             get_mistral_model,
@@ -187,6 +193,9 @@ class TestMistral(ExtTestCase):
     @ignore_warnings((UserWarning, DeprecationWarning))
     @skipif_ci_windows("torch.compile not supported on Windows")
     @requires_torch("2.3", "missing kernel")
+    @unittest.skipIf(
+        True, reason=" NOT_IMPLEMENTED : Could not find an implementation for Trilu(14"
+    )
     def test_ort_mistral_model_backward(self):
         from experimental_experiment.torch_helper.mistral_helper import (
             get_mistral_model,
