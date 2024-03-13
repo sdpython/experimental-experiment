@@ -3,12 +3,12 @@ import inspect
 import itertools
 import unittest
 import sys
-import packaging.version as pv
 import torch
 from torch._dynamo.backends.common import aot_autograd
 from experimental_experiment.ext_test_case import (
     ExtTestCase,
     ignore_warnings,
+    requires_torch,
 )
 from experimental_experiment.torch_helper.dump_helper import assert_all_close
 from experimental_experiment.torch_dynamo import onnx_debug_backend, onnx_custom_backend
@@ -18,10 +18,6 @@ def has_cuda():
     import torch
 
     return torch.cuda.is_available()
-
-
-def torch_version():
-    return ".".join(torch.__version__.split(".")[:2])
 
 
 class FuncModule(torch.nn.Module):
@@ -226,10 +222,7 @@ class TestDynamoCompileBackend(ExtTestCase):
                     verbose=verbose,
                 )
 
-    @unittest.skipIf(
-        pv.Version(torch_version()) < pv.Version("2.2.1"),
-        reason="onnxrt not fully implemented",
-    )
+    @requires_torch("2.2.1", "onnxrt not fully implemented")
     @ignore_warnings((UserWarning, RuntimeWarning, DeprecationWarning))
     def test_aaaa_forward_cpu(self):
         x = torch.rand(3, 4, requires_grad=True)
@@ -242,10 +235,7 @@ class TestDynamoCompileBackend(ExtTestCase):
             test_backward=False,
         )
 
-    @unittest.skipIf(
-        pv.Version(torch_version()) < pv.Version("2.2.1"),
-        reason="onnxrt not fully implemented",
-    )
+    @requires_torch("2.2.1", "onnxrt not fully implemented")
     @ignore_warnings((UserWarning, RuntimeWarning, DeprecationWarning))
     def test_aaaa_backward_cpu(self):
         x = torch.rand(3, 4, requires_grad=True)
@@ -258,10 +248,7 @@ class TestDynamoCompileBackend(ExtTestCase):
             test_backward=True,
         )
 
-    @unittest.skipIf(
-        pv.Version(torch_version()) < pv.Version("2.2.1"),
-        reason="onnxrt not fully implemented",
-    )
+    @requires_torch("2.2.1", "onnxrt not fully implemented")
     @unittest.skipIf(not has_cuda(), reason="needs cuda")
     @ignore_warnings((UserWarning, RuntimeWarning, DeprecationWarning))
     def test_aaaa_backward_cuda(self):

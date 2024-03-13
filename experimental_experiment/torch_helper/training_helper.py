@@ -36,7 +36,7 @@ def make_aot_ort(
         import packaging.version as pv
         from torch import __version__ as torch_version
 
-        if pv.Version(torch_version) < pv.Version("2.3"):
+        if pv.Version(".".join(torch_version.split(".")[:2])) < pv.Version("2.3"):
             rewrite = "try"
 
     if rewrite == "try":

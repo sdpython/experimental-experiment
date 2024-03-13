@@ -390,8 +390,8 @@ def requires_torch(version: str, msg: str) -> Callable:
     import packaging.version as pv
     import torch
 
-    if pv.Version(torch.__version__) < pv.Version(version):
-        msg = f"Test does not work on azure pipeline (Windows). {msg}"
+    if pv.Version(".".join(torch.__version__.split(".")[:2])) < pv.Version(version):
+        msg = f"torch version {torch.__version__} < {version}: {msg}"
         return unittest.skip(msg)
     return lambda x: x
 
