@@ -281,4 +281,8 @@ class RotaryConcatPartPattern(PatternOptimization):
             node,
         ]
 
+        # still returning None for the time begin
+        if nodes:
+            return self.none(node, inspect.currentframe().f_lineno)
+
         return MatchResult(self, nodes, self.apply_scatter)

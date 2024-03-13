@@ -968,6 +968,20 @@ def aten_empty_strided(
     )
 
 
+def aten__enter_autocast(
+    g: GraphBuilder, sts: bool, outputs: List[str], *args: List[Any]
+) -> T:
+    """
+    Returns the function returns a dummy which will be removed
+    after the graph is created.
+    """
+    assert all(map(lambda x: not isinstance(x, str) or x in {"cpu", "cuda"}, args)), (
+        f"The function should not take any tensors as input but types are "
+        f"{[type(_) for _ in args]}: {args}{g.get_debug_msg()}"
+    )
+    return g.make_node("Constant", [], value_floats=[0], name="_enter_autocast")
+
+
 def aten_eq(g: GraphBuilder, sts: bool, outputs: List[str], x: T, y: T, name="eq") -> T:
     "equal"
     x, y = prepare_inputs_homogeneous_operator(g, x, y)
@@ -997,6 +1011,16 @@ def aten_exp(
     if sts:
         set_type_shape_unary_op(g, outputs[0], x)
     return res
+
+
+def aten__exit_autocast(
+    g: GraphBuilder, sts: bool, outputs: List[str], output_of_enter_auto_cast: T
+) -> T:
+    """
+    Returns the function returns a dummy which will be removed
+    after the graph is created.
+    """
+    return g.make_node("Identity", [output_of_enter_auto_cast], name="_exit_autocast")
 
 
 def aten_expand(
@@ -2163,6 +2187,19 @@ def aten_rsub_Scalar(
     "rsub"
     assert alpha == 1, f"Not implemented with alpha={alpha}"
     return aten_sub(g, sts, outputs, y, x, name="rsub_Scalar")
+
+
+def aten__set_grad_enabled(
+    g: GraphBuilder, sts: bool, outputs: List[str], enable: bool
+) -> T:
+    """
+    Returns the function returns a dummy which will be removed
+    after the graph is created.
+    """
+    assert isinstance(
+        enable, bool
+    ), f"Unexpected type for enable={enable!r}{g.get_debug_msg()}"
+    return g.make_node("Constant", [], value_floats=[0], name="_set_grad_enabled")
 
 
 def aten_setitem(
