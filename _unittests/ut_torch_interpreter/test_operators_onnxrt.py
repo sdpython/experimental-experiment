@@ -4,7 +4,6 @@ import itertools
 import operator
 import unittest
 import sys
-import packaging.version as pv
 import numpy as np
 import onnxruntime  # noqa: F401
 import torch
@@ -13,7 +12,11 @@ import torch.nn.functional as F
 import torch.onnx
 from torch.autograd import Function
 from torch.nn import functional, Module, Parameter
-from experimental_experiment.ext_test_case import ExtTestCase, ignore_warnings
+from experimental_experiment.ext_test_case import (
+    ExtTestCase,
+    ignore_warnings,
+    requires_torch,
+)
 from experimental_experiment.torch_interpreter import FunctionNotFoundError
 from experimental_experiment.torch_helper.training_helper import make_aot_ort
 
@@ -1134,9 +1137,9 @@ class TestOperatorsOnnxrt(ExtTestCase):
             lambda x: x.sum(-1), x, onnx_export=inspect.currentframe().f_code.co_name
         )
 
-    @unittest.skipIf(
-        pv.Version(torch.__version__) < pv.Version("2.3.0"),
-        reason="rrelu_with_noise() missing 2 required positional arguments: 'lower' and 'upper'",
+    @requires_torch(
+        "2.3.0",
+        "rrelu_with_noise() missing 2 required positional arguments: 'lower' and 'upper'",
     )
     def test_rrelu(self):
         x = torch.randn(1, 2, 3, 4)

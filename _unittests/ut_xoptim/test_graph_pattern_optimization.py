@@ -8,13 +8,16 @@ Use:
 
 import os
 import unittest
-import packaging.version as pv
 import numpy as np
 import onnx
 from onnx import ModelProto, TensorProto, helper as oh, numpy_helper as onh
 from onnx.checker import check_model
 from experimental_experiment.reference import ExtendedReferenceEvaluator
-from experimental_experiment.ext_test_case import ExtTestCase, ignore_warnings
+from experimental_experiment.ext_test_case import (
+    ExtTestCase,
+    ignore_warnings,
+    requires_onnx,
+)
 from experimental_experiment.xbuilder.graph_builder import (
     GraphBuilder,
     OptimizationOptions,
@@ -1655,10 +1658,7 @@ class TestGraphPatternOptimization(ExtTestCase):
         got = opt_ref.run(None, feeds)[0]
         self.assertEqualArray(expected, got)
 
-    @unittest.skipIf(
-        pv.Version(onnx.__version__) < pv.Version("1.16.0"),
-        reason="shape inference differs",
-    )
+    @requires_onnx("1.16.0", "shape inference differs")
     def test_reduce_reshape_all(self):
         model = oh.make_model(
             oh.make_graph(

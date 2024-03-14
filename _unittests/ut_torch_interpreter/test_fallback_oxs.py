@@ -209,15 +209,18 @@ class TestFallbackOxs(ExtTestCase):
             expected = model(*input_tensors)
             self.assertNotEmpty(expected)
 
-            onx = to_onnx(
-                model,
-                input_tensors,
-                input_names=[f"input{i}" for i in range(len(input_tensors))],
-                options=OptimizationOptions(patterns=None),
-                verbose=0,
-                dispatcher=OxsDebugDispatcher(verbose=2, raise_exc=False),
+            onx, out, _ = self.capture(
+                lambda: to_onnx(
+                    model,
+                    input_tensors,
+                    input_names=[f"input{i}" for i in range(len(input_tensors))],
+                    options=OptimizationOptions(patterns=None),
+                    verbose=0,
+                    dispatcher=OxsDebugDispatcher(verbose=2, raise_exc=False),
+                )
             )
             self.assertIsInstance(onx, ModelProto)
+            self.assertIn("verified", out)
 
 
 if __name__ == "__main__":

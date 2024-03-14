@@ -1,17 +1,11 @@
 import unittest
-import packaging.version as pv
 from experimental_experiment.ext_test_case import (
     ExtTestCase,
     ignore_warnings,
     skipif_ci_apple,
     skipif_ci_windows,
+    requires_torch,
 )
-
-
-def torch_recent_enough():
-    import torch
-
-    return pv.Version(".".join(torch.__version__.split(".")[:2])) >= pv.Version("2.2")
 
 
 def return_module_cls_pool():
@@ -42,7 +36,7 @@ def return_module_cls_pool():
 class TestDynamoOnnxRtBackend(ExtTestCase):
     @skipif_ci_apple("crash on apple")
     @skipif_ci_windows("not supported yet on Windows")
-    @unittest.skipIf(not torch_recent_enough(), reason="export fails")
+    @requires_torch("2.2", "export fails")
     @ignore_warnings((DeprecationWarning, UserWarning))
     def test_onnxrt_tutorial_0a(self):
         from onnxruntime import InferenceSession
@@ -78,7 +72,7 @@ class TestDynamoOnnxRtBackend(ExtTestCase):
 
     @skipif_ci_apple("crash on apple")
     @skipif_ci_windows("not supported yet on Windows")
-    @unittest.skipIf(not torch_recent_enough(), reason="export fails")
+    @requires_torch("2.2", "export fails")
     @ignore_warnings((DeprecationWarning, UserWarning))
     def test_onnxrt_tutorial_0b(self):
         from onnxruntime import InferenceSession
@@ -119,7 +113,7 @@ class TestDynamoOnnxRtBackend(ExtTestCase):
 
     @skipif_ci_apple("crash on apple")
     @skipif_ci_windows("not supported yet on Windows")
-    @unittest.skipIf(not torch_recent_enough(), reason="export fails")
+    @requires_torch("2.2", "export fails")
     @unittest.skip(
         "FAIL : Type Error: Type (tensor(int64)) of output arg "
         "(max_pool2d_with_indices_1) of node "
@@ -151,7 +145,7 @@ class TestDynamoOnnxRtBackend(ExtTestCase):
 
     @skipif_ci_apple("crash on apple")
     @skipif_ci_windows("not supported yet on Windows")
-    @unittest.skipIf(not torch_recent_enough(), reason="export fails")
+    @requires_torch("2.2", "export fails")
     @unittest.skip(
         "FAIL : Type Error: Type (tensor(int64)) of output arg "
         "(max_pool2d_with_indices_1) of node "
@@ -180,7 +174,7 @@ class TestDynamoOnnxRtBackend(ExtTestCase):
 
     @skipif_ci_apple("crash on apple")
     @skipif_ci_windows("not supported yet on Windows")
-    @unittest.skipIf(not torch_recent_enough(), reason="export fails")
+    @requires_torch("2.2", "export fails")
     @unittest.skip(
         "FAIL : Type Error: Type (tensor(int64)) of output arg "
         "(max_pool2d_with_indices_1) of node "

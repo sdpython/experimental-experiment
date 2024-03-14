@@ -396,6 +396,34 @@ def requires_torch(version: str, msg: str) -> Callable:
     return lambda x: x
 
 
+def requires_onnxruntime(version: str, msg: str) -> Callable:
+    """
+    Skips a unit test if onnxruntime is not recent enough.
+    """
+    import packaging.version as pv
+    import onnxruntime
+
+    if pv.Version(".".join(onnxruntime.__version__.split(".")[:2])) < pv.Version(
+        version
+    ):
+        msg = f"onnxruntime version {onnxruntime.__version__} < {version}: {msg}"
+        return unittest.skip(msg)
+    return lambda x: x
+
+
+def requires_onnx(version: str, msg: str) -> Callable:
+    """
+    Skips a unit test if onnx is not recent enough.
+    """
+    import packaging.version as pv
+    import onnx
+
+    if pv.Version(".".join(onnx.__version__.split(".")[:2])) < pv.Version(version):
+        msg = f"onnx version {onnx.__version__} < {version}: {msg}"
+        return unittest.skip(msg)
+    return lambda x: x
+
+
 def statistics_on_file(filename: str) -> Dict[str, Union[int, float, str]]:
     """
     Computes statistics on a file.

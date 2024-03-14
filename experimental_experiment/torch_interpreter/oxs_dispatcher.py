@@ -15,7 +15,6 @@ class OxsDispatcher(Dispatcher):
     onnxscript may have multiple overloaded functions.
     Right now, it takes the first one.
 
-    :param registered_functions: registered functions
     :param verbose: verbose
     """
 
@@ -168,7 +167,36 @@ class OxsDebugDispatcher(OxsDispatcher):
     """
     Tries the fallback even if is not necessary to check
     it is working.
-    """
+
+    :param verbose: verbosity
+    :param raise_exc: fail or raise an exception
+
+    The class can be used the following way.
+
+    .. runpython::
+        :showcode:
+        :process:
+
+        import torch
+        from experimental_experiment.torch_helper.llama_helper import get_llama_model
+        from experimental_experiment.xbuilder import OptimizationOptions
+        from experimental_experiment.torch_interpreter import to_onnx
+        from experimental_experiment.torch_interpreter.oxs_dispatcher import (
+            OxsDebugDispatcher,
+        )
+
+        with torch.no_grad():
+            model, input_tensors = get_llama_model()
+            input_tensors = input_tensors[0]
+
+            to_onnx(
+                model,
+                input_tensors,
+                input_names=[f"input{i}" for i in range(len(input_tensors))],
+                options=OptimizationOptions(patterns=None),
+                verbose=0,
+                dispatcher=OxsDebugDispatcher(verbose=2, raise_exc=False),
+            )"""
 
     def __init__(self, verbose: int = 0, raise_exc: bool = True):
         super(OxsDispatcher, self).__init__({}, verbose=verbose)

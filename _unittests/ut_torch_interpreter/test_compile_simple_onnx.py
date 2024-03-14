@@ -1,17 +1,14 @@
 import sys
 import unittest
 from typing import List
-import packaging.version as pv
 from onnx.reference import ReferenceEvaluator
-from experimental_experiment.ext_test_case import ExtTestCase, ignore_warnings
+from experimental_experiment.ext_test_case import (
+    ExtTestCase,
+    ignore_warnings,
+    requires_torch,
+)
 from experimental_experiment.torch_interpreter import to_onnx
 from experimental_experiment.xbuilder import OptimizationOptions
-
-
-def torch_recent_enough():
-    import torch
-
-    return pv.Version(".".join(torch.__version__.split(".")[:2])) >= pv.Version("2.2")
 
 
 def return_module_cls_pool():
@@ -59,7 +56,7 @@ class TestDynamoCompileOnnx(ExtTestCase):
         OrtBackend.clear_cached_instances()
 
     @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
-    @unittest.skipIf(not torch_recent_enough(), reason="export fails")
+    @requires_torch("2.2", "export fails")
     @ignore_warnings((UserWarning, DeprecationWarning))
     def test_simple_dort_0(self):
         import torch
@@ -106,7 +103,7 @@ class TestDynamoCompileOnnx(ExtTestCase):
         self.assertEqualArray(expected.detach().numpy(), got.detach().numpy())
 
     @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
-    @unittest.skipIf(not torch_recent_enough(), reason="export fails")
+    @requires_torch("2.2", "export fails")
     def test_simple_dort_2_onnx(self):
         import torch
 
@@ -160,7 +157,7 @@ class TestDynamoCompileOnnx(ExtTestCase):
         self.assertEqual(expected.shape, got.shape)
 
     @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
-    @unittest.skipIf(not torch_recent_enough(), reason="export fails")
+    @requires_torch("2.2", "export fails")
     @ignore_warnings((UserWarning, DeprecationWarning))
     def test_simple_dort_2_ort(self):
         import torch
