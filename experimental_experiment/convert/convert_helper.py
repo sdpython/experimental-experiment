@@ -16,12 +16,15 @@ def inline_model_proto(model_proto: ModelProto) -> ModelProto:
     return inline_local_functions(model_proto)
 
 
-def optimize_model_proto(model_proto: ModelProto, verbose: int = 0) -> ModelProto:
+def optimize_model_proto(
+    model_proto: ModelProto, verbose: int = 0, onnx_shape_inference: bool = False
+) -> ModelProto:
     """
     Optimizes a model proto to optimize onnxruntime.
 
     :param model_proto: ModelProto
     :param verbose: verbosity
+    :param onnx_shape_inference: enable shape inference
     :return: optimized model
 
     You should run that before calling this function
@@ -64,7 +67,7 @@ def optimize_model_proto(model_proto: ModelProto, verbose: int = 0) -> ModelProt
     model_proto = optimize(
         model_proto,
         num_iterations=2,
-        onnx_shape_inference=False,
+        onnx_shape_inference=onnx_shape_inference,
         # function_aware_folding=True,
     )
 

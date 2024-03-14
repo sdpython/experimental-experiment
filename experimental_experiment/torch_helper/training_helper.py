@@ -75,7 +75,7 @@ def make_aot_ort(
             ort_session_options=ort_session_options,
             pre_ort_model_transforms=[
                 lambda *args, v=verbose, **kwargs: optimize_model_proto(
-                    *args, verbose=v, **kwargs
+                    *args, verbose=v, onnx_shape_inference=True, **kwargs
                 )
             ],
         )
@@ -83,6 +83,7 @@ def make_aot_ort(
         options = OrtBackendOptions(
             export_options=export_options,
             ort_session_options=ort_session_options,
+            onnx_shape_inference=True,
         )
 
     ort_backend = OrtBackend(options=options)

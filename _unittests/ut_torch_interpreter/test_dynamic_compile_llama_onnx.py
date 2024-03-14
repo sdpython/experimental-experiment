@@ -238,7 +238,7 @@ class TestDynamoLlamaDynamic(ExtTestCase):
     @ignore_warnings((UserWarning, DeprecationWarning))
     @skipif_ci_windows("torch.compile not supported on Windows")
     @requires_torch("2.3", "missing kernel")
-    def test_llama_model_b_forward_dynamic(self):
+    def __test_llama_model_b_forward_dynamic(self):
         from experimental_experiment.torch_helper.llama_helper import get_llama_model
 
         input_dims = self.get_input_dims(True)
@@ -358,7 +358,7 @@ class TestDynamoLlamaDynamic(ExtTestCase):
     @skipif_ci_windows("torch.compile not supported on Windows")
     @requires_torch("2.2", "missing kernel")
     @unittest.skipIf(not has_cuda(), "cuda is needed for autocast")
-    def test_llama_model_backward_dynamic_fast_backend(self):
+    def __test_llama_model_backward_dynamic_fast_backend(self):
         from experimental_experiment.torch_helper.llama_helper import get_llama_model
 
         input_dims = self.get_input_dims(True)

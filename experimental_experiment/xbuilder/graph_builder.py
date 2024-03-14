@@ -612,7 +612,6 @@ class GraphBuilder:
         shape: DYNAMIC_SHAPE,
         set_rank: bool = True,
         set_if_more_precise: bool = False,
-        for_onnx: bool = False,
         exc: bool = False,
     ):
         """
@@ -623,7 +622,6 @@ class GraphBuilder:
         :param shape: shape
         :param set_rank: set the rank as well
         :param set_if_more_precise: change the shape if it is more precise
-        :param for_onnx: if True, shape can't allow `torch.SymInt`
         :param exc: raise an exception if inconsistency
         """
         assert isinstance(name, str), f"Unexpected type {type(name)} for name."
@@ -632,7 +630,11 @@ class GraphBuilder:
             f"shape={shape}{self.get_debug_msg()}"
         )
         assert isinstance(shape, tuple), f"Unexpected shape type {type(shape)}"
-        shape = self.verify_shape(shape, 0, name=name, for_onnx=for_onnx)
+        shape = self.verify_shape(shape, 0, name=name)
+        assert all(map(lambda t: not isinstance(t, self.torch.SymInt), shape)), (
+            f"Unexpected type for a shape, shape={shape}, types={[type(_) for _ in shape]}"
+            f"{self.get_debug_msg()}"
+        )
         assert isinstance(shape, tuple), f"Unexpected shape type {type(shape)}"
         shape_int = [d for d in shape if isinstance(d, int)]
         assert (
@@ -1322,7 +1324,6 @@ class GraphBuilder:
     def verify_dynamic_shape(
         self,
         shape: Any,
-        for_onnx: bool = True,
         name: Optional[str] = None,
         add: bool = True,
     ) -> DYNAMIC_SHAPE:
@@ -1343,15 +1344,14 @@ class GraphBuilder:
                     continue
 
                 value = self._torch_sym_int(d, add=add)
-                new_shape.append(value if for_onnx else d)
+                assert (
+                    value is not None
+                ), f"Unexpected type {type(d)} in shape={shape}{self.get_debug_msg()}"
+                new_shape.append(value)
                 continue
-            if for_onnx and d is None:
-                new_shape.append(None)
-                continue
-            raise RuntimeError(
-                f"Unexpected type {type(d)} in shape={shape} (for_onnx={for_onnx}"
-                f"{self.get_debug_msg()}"
-            )
+            assert (
+                d is not None
+            ), f"Unexpected type {type(d)} in shape={shape}{self.get_debug_msg()}"
         return tuple(new_shape)
 
     def make_tensor_input(
@@ -1464,16 +1464,14 @@ class GraphBuilder:
         elem_type = self._get_type(elem_type, False)
         if not self.as_function and elem_type == 0:
             raise RuntimeError(f"Undefined element type for {name!r}.")
-        dyn_shape = self.verify_shape(
-            shape, name=name, elem_type=elem_type, for_onnx=True
-        )
+        dyn_shape = self.verify_shape(shape, name=name, elem_type=elem_type)
         self.outputs.append(oh.make_tensor_value_info(name, elem_type, dyn_shape))
         if self.verbose:
             print(
                 f"[GraphBuilder-{self._hash()}.make_tensor_output] {name}[{elem_type}:{dyn_shape}]"
             )
         if dyn_shape:
-            self.set_shape(name, dyn_shape, for_onnx=True)
+            self.set_shape(name, dyn_shape)
         if elem_type:
             self.set_type(name, elem_type)
         return name
@@ -1483,7 +1481,6 @@ class GraphBuilder:
         shape: Optional[DYNAMIC_SHAPE],
         elem_type: int,
         name: Optional[str] = None,
-        for_onnx: bool = False,
     ) -> Optional[DYNAMIC_SHAPE]:
         assert isinstance(
             elem_type, int
@@ -1499,7 +1496,7 @@ class GraphBuilder:
             f"Shape={shape} is not a shape (type={[type(i) for i in shape]}), "
             f"name={name!r}, elem_type={elem_type}{self.get_debug_msg()}"
         )
-        new_shape = self.verify_dynamic_shape(shape, for_onnx=for_onnx, name=name)
+        new_shape = self.verify_dynamic_shape(shape, name=name)
         return new_shape
 
     def _get_symbol(self, i: str) -> str:

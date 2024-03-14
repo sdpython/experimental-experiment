@@ -46,7 +46,10 @@ def broadcast_shape(sh1: STATIC_SHAPE, sh2: STATIC_SHAPE) -> STATIC_SHAPE:
             else:
                 d = None
         if d is None:
-            raise RuntimeError(f"Not implemented for sh1={sh1}, sh2={sh2}")
+            raise RuntimeError(
+                f"Not implemented for sh1={sh1}, sh2={sh2}, a={a}, b={b}, "
+                f"type(a)={type(a)}, type(b)={type(b)}"
+            )
         new_shape.append(d)
     return tuple(new_shape)
 

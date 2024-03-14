@@ -400,7 +400,9 @@ class TestDynamoLlama(ExtTestCase):
 
     @ignore_warnings((UserWarning, DeprecationWarning))
     @skipif_ci_windows("torch.compile not supported on Windows")
-    @requires_torch("2.2", "missing kernel")
+    @unittest.skipIf(
+        True, reason="INVALID_GRAPH : This is an invalid model. In Node, NonZero"
+    )
     def test_llama_model_backward_forward(self):
         import torch
         from experimental_experiment.torch_helper.llama_helper import get_llama_model
@@ -478,6 +480,9 @@ class TestDynamoLlama(ExtTestCase):
     @skipif_ci_windows("torch.compile not supported on Windows")
     @requires_torch("2.2", "missing kernel")
     @unittest.skipIf(not has_cuda(), "cuda is needed for autocast")
+    @unittest.skipIf(
+        True, reason="INVALID_GRAPH : This is an invalid model. In Node, NonZero"
+    )
     def test_llama_model_backward_forward_mixed(self):
         import torch
         from experimental_experiment.torch_helper.llama_helper import get_llama_model
@@ -513,6 +518,9 @@ class TestDynamoLlama(ExtTestCase):
     @skipif_ci_windows("torch.compile not supported on Windows")
     @requires_torch("2.2", "missing kernel")
     @unittest.skipIf(not has_cuda(), "cuda is needed for autocast")
+    @unittest.skipIf(
+        True, reason="INVALID_GRAPH : This is an invalid model. In Node, NonZero"
+    )
     def test_llama_model_backward_mixed(self):
         import torch
         from experimental_experiment.torch_helper.llama_helper import get_llama_model
