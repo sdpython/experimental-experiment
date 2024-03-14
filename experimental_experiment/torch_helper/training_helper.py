@@ -83,7 +83,6 @@ def make_aot_ort(
         options = OrtBackendOptions(
             export_options=export_options,
             ort_session_options=ort_session_options,
-            onnx_shape_inference=False,
         )
 
     ort_backend = OrtBackend(options=options)
