@@ -135,33 +135,39 @@ class TestOnnxExportLlama(ExtTestCase):
     @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
     @ignore_warnings(DeprecationWarning)
     def test_llama_decoder(self):
-        model, input_tensors = get_llama_decoder()
-        input_tensors = input_tensors[0]
-        expected = model(*input_tensors)
-        onx = export_utils("test_llama_decoder", model, *input_tensors)
-        xp = [x.numpy() for x in input_tensors]
-        feeds = {f"input{i}": x for i, x in enumerate(xp)}
-        ref = ExtendedReferenceEvaluator(onx)
-        results = ref.run(None, feeds)
-        self.assertEqualArray(expected.detach().numpy(), results[0], atol=1e-5)
-        self.check_model_ort(onx)
+        import torch
+
+        with torch.no_grad():
+            model, input_tensors = get_llama_decoder()
+            input_tensors = input_tensors[0]
+            expected = model(*input_tensors)
+            onx = export_utils("test_llama_decoder", model, *input_tensors)
+            xp = [x.numpy() for x in input_tensors]
+            feeds = {f"input{i}": x for i, x in enumerate(xp)}
+            ref = ExtendedReferenceEvaluator(onx)
+            results = ref.run(None, feeds)
+            self.assertEqualArray(expected.detach().numpy(), results[0], atol=1e-5)
+            self.check_model_ort(onx)
 
     @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
     @requires_torch("2.3", "bug")
     @ignore_warnings(DeprecationWarning)
     def test_llama_model(self):
-        model, input_tensors = get_llama_model()
-        input_tensors = input_tensors[0]
-        expected = model(*input_tensors)
-        onx = export_utils("test_llama_model", model, *input_tensors, dynamo=False)
-        xp = [x.numpy() for x in input_tensors]
-        feeds = {f"input{i}": x for i, x in enumerate(xp)}
-        ref = ExtendedReferenceEvaluator(onx)
-        results = ref.run(None, feeds)
-        self.assertEqualArray(expected[0].detach().numpy(), results[0], atol=1e-5)
-        with open("test_llama_model.onnx", "wb") as f:
-            f.write(onx.SerializeToString())
-        self.check_model_ort(onx)
+        import torch
+
+        with torch.no_grad():
+            model, input_tensors = get_llama_model()
+            input_tensors = input_tensors[0]
+            expected = model(*input_tensors)
+            onx = export_utils("test_llama_model", model, *input_tensors, dynamo=False)
+            xp = [x.numpy() for x in input_tensors]
+            feeds = {f"input{i}": x for i, x in enumerate(xp)}
+            ref = ExtendedReferenceEvaluator(onx)
+            results = ref.run(None, feeds)
+            self.assertEqualArray(expected[0].detach().numpy(), results[0], atol=1e-5)
+            with open("test_llama_model.onnx", "wb") as f:
+                f.write(onx.SerializeToString())
+            self.check_model_ort(onx)
 
 
 if __name__ == "__main__":

@@ -1,7 +1,6 @@
 import onnxruntime  # noqa: F401
 import copy
 import unittest
-import packaging.version as pv
 from typing import Optional, Tuple
 from experimental_experiment.ext_test_case import (
     ExtTestCase,
@@ -17,12 +16,6 @@ def has_cuda():
     import torch
 
     return torch.cuda.is_available()
-
-
-def torch_min(v: str) -> bool:
-    import torch
-
-    return pv.Version(torch.__version__) < pv.Version(v)
 
 
 class TestMistral(ExtTestCase):
@@ -167,7 +160,7 @@ class TestMistral(ExtTestCase):
 
     @ignore_warnings((UserWarning, DeprecationWarning))
     @skipif_ci_windows("torch.compile not supported on Windows")
-    @unittest.skipIf(torch_min("2.2"), reason="missing kernel")
+    @requires_torch("missing kernel")
     @unittest.skipIf(not has_cuda(), reason="cuda not available")
     @unittest.skipIf(
         True, reason=" NOT_IMPLEMENTED : Could not find an implementation for Trilu(14"
@@ -216,7 +209,7 @@ class TestMistral(ExtTestCase):
 
     @ignore_warnings((UserWarning, DeprecationWarning))
     @skipif_ci_windows("torch.compile not supported on Windows")
-    @unittest.skipIf(torch_min("2.2"), reason="missing kernel")
+    @requires_torch("missing kernel")
     @unittest.skipIf(not has_cuda(), reason="cuda not available")
     def test_ort_mistral_model_backward_cuda(self):
         from experimental_experiment.torch_helper.mistral_helper import (

@@ -1,7 +1,6 @@
 import onnxruntime  # noqa: F401
 import copy
 import unittest
-import packaging.version as pv
 from typing import Optional
 from experimental_experiment.ext_test_case import (
     ExtTestCase,
@@ -16,12 +15,6 @@ def has_cuda():
     import torch
 
     return torch.cuda.is_available()
-
-
-def torch_min(v: str) -> bool:
-    import torch
-
-    return pv.Version(torch.__version__) < pv.Version(v)
 
 
 class TestLlama(ExtTestCase):

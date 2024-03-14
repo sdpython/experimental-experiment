@@ -1,6 +1,5 @@
 import copy
 import unittest
-import packaging.version as pv
 from typing import Optional
 import onnxruntime  # noqa: F401
 from experimental_experiment.ext_test_case import (
@@ -15,12 +14,6 @@ from experimental_experiment.torch_dynamo import (
     get_decomposition_table,
     filter_decomposition_table,
 )
-
-
-def torch_min(v: str) -> bool:
-    import torch
-
-    return pv.Version(torch.__version__) < pv.Version(v)
 
 
 def has_cuda():
@@ -213,7 +206,7 @@ class TestDynamoLlama(ExtTestCase):
 
     @ignore_warnings((UserWarning, DeprecationWarning))
     @skipif_ci_windows("torch.compile not supported on Windows")
-    @unittest.skipIf(torch_min("2.2"), reason="missing kernel")
+    @requires_torch("2.2", "missing kernel")
     def test_mlp_backward_ort(self):
         import torch
 
@@ -248,7 +241,7 @@ class TestDynamoLlama(ExtTestCase):
 
     @ignore_warnings((UserWarning, DeprecationWarning))
     @skipif_ci_windows("torch.compile not supported on Windows")
-    @unittest.skipIf(torch_min("2.2"), reason="missing kernel")
+    @requires_torch("2.2", "missing kernel")
     def test_mlp_backward_ref(self):
         import torch
 
@@ -374,7 +367,7 @@ class TestDynamoLlama(ExtTestCase):
 
     @ignore_warnings((UserWarning, DeprecationWarning))
     @skipif_ci_windows("torch.compile not supported on Windows")
-    @unittest.skipIf(torch_min("2.2"), reason="missing kernel")
+    @requires_torch("2.2", "missing kernel")
     @unittest.skip("aten_embedding receives the inputs in the other way")
     def test_llama_model_forward(self):
         import torch
@@ -407,7 +400,7 @@ class TestDynamoLlama(ExtTestCase):
 
     @ignore_warnings((UserWarning, DeprecationWarning))
     @skipif_ci_windows("torch.compile not supported on Windows")
-    @unittest.skipIf(torch_min("2.2"), reason="missing kernel")
+    @requires_torch("2.2", "missing kernel")
     def test_llama_model_backward_forward(self):
         import torch
         from experimental_experiment.torch_helper.llama_helper import get_llama_model
@@ -433,12 +426,12 @@ class TestDynamoLlama(ExtTestCase):
             dynamic=False,
             fullgraph=True,
             onnx_export="test_llama_model_backward_forward",
-            impl="ort",
+            impl="ref",
         )
 
     @ignore_warnings((UserWarning, DeprecationWarning))
     @skipif_ci_windows("torch.compile not supported on Windows")
-    @unittest.skipIf(torch_min("2.2"), reason="missing kernel")
+    @requires_torch("2.2", "missing kernel")
     def test_llama_model_backward_undec(self):
         from experimental_experiment.torch_helper.llama_helper import get_llama_model
 
@@ -455,7 +448,7 @@ class TestDynamoLlama(ExtTestCase):
 
     @ignore_warnings((UserWarning, DeprecationWarning))
     @skipif_ci_windows("torch.compile not supported on Windows")
-    @unittest.skipIf(torch_min("2.2"), reason="missing kernel")
+    @requires_torch("2.2", "missing kernel")
     def test_llama_model_backward_ref(self):
         from experimental_experiment.torch_helper.llama_helper import get_llama_model
 
@@ -483,7 +476,7 @@ class TestDynamoLlama(ExtTestCase):
 
     @ignore_warnings((UserWarning, DeprecationWarning))
     @skipif_ci_windows("torch.compile not supported on Windows")
-    @unittest.skipIf(torch_min("2.2"), reason="missing kernel")
+    @requires_torch("2.2", "missing kernel")
     @unittest.skipIf(not has_cuda(), "cuda is needed for autocast")
     def test_llama_model_backward_forward_mixed(self):
         import torch
@@ -518,7 +511,7 @@ class TestDynamoLlama(ExtTestCase):
 
     @ignore_warnings((UserWarning, DeprecationWarning))
     @skipif_ci_windows("torch.compile not supported on Windows")
-    @unittest.skipIf(torch_min("2.2"), reason="missing kernel")
+    @requires_torch("2.2", "missing kernel")
     @unittest.skipIf(not has_cuda(), "cuda is needed for autocast")
     def test_llama_model_backward_mixed(self):
         import torch

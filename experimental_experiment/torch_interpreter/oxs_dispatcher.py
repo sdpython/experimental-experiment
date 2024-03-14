@@ -86,7 +86,7 @@ class OxsDispatcher(Dispatcher):
             key = "aten::" + key[6:]
 
         if key not in default_registry:
-            if self.verbose > 1:
+            if self.verbose > 2:
                 print(
                     "[OxsDispatcher.fallback] unable to find any fallback for {name!r} or {key!r}"
                 )
@@ -105,10 +105,10 @@ class OxsDispatcher(Dispatcher):
             f"key={key!r}, name={name!r}{builder.get_debug_msg()}"
         )
 
-        if self.verbose > 1:
+        if self.verbose > 3:
             print(
-                f"[OxsDispatcher.fallback] found {len(regfct.overloads)} for "
-                f"{key!r} ({name!r}), taking the first one."
+                f"[OxsDispatcher.fallback] found {len(regfct.overloads)} "
+                f"overloads for {key!r} ({name!r}), taking the first one."
             )
 
         def wrapper(g, sts, outputs, *args, _fct=fct, _dispatcher=self, **kwargs):
@@ -162,3 +162,69 @@ class OxsDispatcher(Dispatcher):
     def _restore_oxs(self, old):
         for k, v in self.submodules.items():
             v.op, v.IsScalar, v.Rank = old[k]
+
+
+class OxsDebugDispatcher(OxsDispatcher):
+    """
+    Tries the fallback even if is not necessary to check
+    it is working.
+    """
+
+    def __init__(self, verbose: int = 0, raise_exc: bool = True):
+        super(OxsDispatcher, self).__init__({}, verbose=verbose)
+        self._submodule = None
+        self.raise_exc = raise_exc
+
+    def fallback(
+        self,
+        name: Any,
+        fct: Optional[Callable],
+        args: List[Any],
+        kwargs: Dict[str, Any],
+        builder: "GraphBuilder",  # noqa: F821
+    ) -> Optional[Callable]:
+        if self.raise_exc:
+            res = OxsDispatcher.fallback(self, name, None, args, kwargs, builder)
+            res(builder, False, None, *args, **kwargs)
+            if self.verbose > 1:
+                print(
+                    f"[OxsDebugDispatcher.fallback] fallback "
+                    f"verified for {name!r}: {res}"
+                )
+        else:
+            try:
+                res = OxsDispatcher.fallback(self, name, None, args, kwargs, builder)
+            except (
+                AssertionError,
+                AttributeError,
+                RuntimeError,
+                TypeError,
+                ValueError,
+            ) as e:
+                if self.verbose > 1:
+                    print(
+                        f"[OxsDebugDispatcher.fallback] fallback "
+                        f"failed for {name!r} with e={e}"
+                    )
+                return fct
+            try:
+                res(builder, False, None, *args, **kwargs)
+            except (
+                AssertionError,
+                AttributeError,
+                RuntimeError,
+                TypeError,
+                ValueError,
+            ) as e:
+                if self.verbose > 1:
+                    print(
+                        f"[OxsDebugDispatcher.fallback] fallback "
+                        f"unverified for {name!r} with e={e}"
+                    )
+                return fct
+        if self.verbose > 1:
+            print(
+                f"[OxsDebugDispatcher.fallback] fallback verified "
+                f"for {name!r} with {res}"
+            )
+        return fct or res

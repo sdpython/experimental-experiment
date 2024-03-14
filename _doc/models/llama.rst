@@ -36,16 +36,16 @@ LLaMa
     )
     config._attn_implementation = "eager"
 
-    model = LlamaModel(config)
-
-    batch, seq, vocab_size = 2, 1024, 1024
-
-    input_ids = ids_tensor([batch, seq], vocab_size)
-    input_mask = torch.tril(torch.ones(batch, seq, dtype=torch.float32))
-
-    model(input_ids, input_mask)
-
-    onx = to_onnx(model, (input_ids, input_mask))
-    print(onnx_simple_text_plot(onx))
-
+    with torch.no_grad():
     
+        model = LlamaModel(config)
+
+        batch, seq, vocab_size = 2, 1024, 1024
+
+        input_ids = ids_tensor([batch, seq], vocab_size)
+        input_mask = torch.tril(torch.ones(batch, seq, dtype=torch.float32))
+
+        model(input_ids, input_mask)
+
+        onx = to_onnx(model, (input_ids, input_mask))
+        print(onnx_simple_text_plot(onx))

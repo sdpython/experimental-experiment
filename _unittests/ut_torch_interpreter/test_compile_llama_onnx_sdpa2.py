@@ -1,12 +1,12 @@
 import copy
 import unittest
-import packaging.version as pv
 from typing import Optional
 import onnxruntime  # noqa: F401
 from experimental_experiment.ext_test_case import (
     ExtTestCase,
     ignore_warnings,
     skipif_ci_windows,
+    requires_torch,
 )
 from experimental_experiment.torch_helper.dump_helper import assert_all_close
 from experimental_experiment.torch_dynamo import (
@@ -14,12 +14,6 @@ from experimental_experiment.torch_dynamo import (
     get_decomposition_table,
     filter_decomposition_table,
 )
-
-
-def torch_min(v: str) -> bool:
-    import torch
-
-    return pv.Version(torch.__version__) < pv.Version(v)
 
 
 def has_cuda():
@@ -192,7 +186,7 @@ class TestDynamoLlamaSdpa2(ExtTestCase):
 
     @ignore_warnings((UserWarning, DeprecationWarning))
     @skipif_ci_windows("torch.compile not supported on Windows")
-    @unittest.skipIf(torch_min("2.2"), reason="missing kernel")
+    @requires_torch("2.2", "missing kernel")
     @unittest.skipIf(
         True, reason="_scaled_dot_product_flash_attention_for_cpu_default missing"
     )
@@ -210,6 +204,34 @@ class TestDynamoLlamaSdpa2(ExtTestCase):
             dynamic=False,
             fullgraph=True,
             onnx_export="test_llama_model_backward_sdpa",
+        )
+
+    @ignore_warnings((UserWarning, DeprecationWarning))
+    @skipif_ci_windows("torch.compile not supported on Windows")
+    @requires_torch("2.2", "missing kernel")
+    def test_llama_model_backward_ref(self):
+        from experimental_experiment.torch_helper.llama_helper import get_llama_model
+
+        model, example_args_collection = get_llama_model(
+            input_dims=[(2, 1024)] * 2,
+            hidden_size=16,
+            num_hidden_layers=1,
+            vocab_size=1024,
+            intermediate_size=16,
+            max_position_embeddings=1024,
+            num_attention_heads=2,
+            _attn_implementation="eager",
+        )
+        self.common_test_model(
+            model,
+            example_args_collection,
+            test_backward=True,
+            dynamic=False,
+            fullgraph=True,
+            onnx_export="test_llama_model_backward_sdpa",
+            impl="ref",
+            verbose=0,
+            atol=3e-2,
         )
 
 

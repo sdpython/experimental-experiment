@@ -2422,11 +2422,10 @@ class GraphBuilder:
                 perm = tuple(att.ints)
                 break
         assert perm, f"perm not here in node {node}"
-        assert len(perm) == 2, f"perm={perm} is not supported with torch"
         x = feeds[node.input[0]]
         if isinstance(x, np.ndarray):
             x = self.torch.Tensor(x)
-        return [self.torch.transpose(x, *perm)]
+        return [self.torch.permute(x, perm)]
 
     def compute_constant(
         self, name: str, exc: bool = True

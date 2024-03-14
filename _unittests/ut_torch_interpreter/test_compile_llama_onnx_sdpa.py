@@ -1,6 +1,5 @@
 import copy
 import unittest
-import packaging.version as pv
 from typing import Optional
 import onnxruntime  # noqa: F401
 from experimental_experiment.ext_test_case import (
@@ -15,12 +14,6 @@ from experimental_experiment.torch_dynamo import (
     get_decomposition_table,
     filter_decomposition_table,
 )
-
-
-def torch_min(v: str) -> bool:
-    import torch
-
-    return pv.Version(torch.__version__) < pv.Version(v)
 
 
 def has_cuda():
@@ -249,7 +242,7 @@ class TestDynamoLlamaSdpa(ExtTestCase):
 
     @ignore_warnings((UserWarning, DeprecationWarning))
     @skipif_ci_windows("torch.compile not supported on Windows")
-    @unittest.skipIf(torch_min("2.2"), reason="missing kernel")
+    @requires_torch("2.2", "missing kernel")
     @unittest.skipIf(
         True, reason="_scaled_dot_product_flash_attention_for_cpu_default missing"
     )
@@ -275,7 +268,7 @@ class TestDynamoLlamaSdpa(ExtTestCase):
 
     @ignore_warnings((UserWarning, DeprecationWarning))
     @skipif_ci_windows("torch.compile not supported on Windows")
-    @unittest.skipIf(torch_min("2.2"), reason="missing kernel")
+    @requires_torch("2.2", "missing kernel")
     @unittest.skipIf(
         True, reason="_scaled_dot_product_flash_attention_for_cpu_default missing"
     )
@@ -299,7 +292,7 @@ class TestDynamoLlamaSdpa(ExtTestCase):
 
     @ignore_warnings((UserWarning, DeprecationWarning))
     @skipif_ci_windows("torch.compile not supported on Windows")
-    @unittest.skipIf(torch_min("2.2"), reason="missing kernel")
+    @requires_torch("2.2", "missing kernel")
     @unittest.skipIf(not has_cuda(), "cuda is needed for autocast")
     @unittest.skipIf(
         True, reason="_scaled_dot_product_flash_attention_for_cpu_default missing"
@@ -325,7 +318,7 @@ class TestDynamoLlamaSdpa(ExtTestCase):
 
     @ignore_warnings((UserWarning, DeprecationWarning))
     @skipif_ci_windows("torch.compile not supported on Windows")
-    @unittest.skipIf(torch_min("2.2"), reason="missing kernel")
+    @requires_torch("2.2", "missing kernel")
     @unittest.skipIf(not has_cuda(), "cuda is needed for autocast")
     @unittest.skipIf(
         True, reason="_scaled_dot_product_flash_attention_for_cpu_default missing"

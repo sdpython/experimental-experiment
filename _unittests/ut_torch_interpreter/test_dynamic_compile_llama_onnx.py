@@ -1,12 +1,12 @@
 import copy
 import unittest
-import packaging.version as pv
 from typing import Optional
 import onnxruntime  # noqa: F401
 from experimental_experiment.ext_test_case import (
     ExtTestCase,
     ignore_warnings,
     skipif_ci_windows,
+    requires_torch,
 )
 from experimental_experiment.torch_helper.dump_helper import assert_all_close
 from experimental_experiment.torch_dynamo import (
@@ -15,12 +15,6 @@ from experimental_experiment.torch_dynamo import (
     get_decomposition_table,
 )
 from experimental_experiment.torch_helper.training_helper import make_aot_ort
-
-
-def torch_min(v: str) -> bool:
-    import torch
-
-    return pv.Version(torch.__version__) < pv.Version(v)
 
 
 def implements(name: str) -> bool:
@@ -217,7 +211,7 @@ class TestDynamoLlamaDynamic(ExtTestCase):
 
     @ignore_warnings((UserWarning, DeprecationWarning))
     @skipif_ci_windows("torch.compile not supported on Windows")
-    @unittest.skipIf(torch_min("2.2"), reason="missing kernel")
+    @requires_torch("2.2", "missing kernel")
     def test_llama_model_b_forward_static(self):
         from experimental_experiment.torch_helper.llama_helper import get_llama_model
 
@@ -243,7 +237,7 @@ class TestDynamoLlamaDynamic(ExtTestCase):
 
     @ignore_warnings((UserWarning, DeprecationWarning))
     @skipif_ci_windows("torch.compile not supported on Windows")
-    @unittest.skipIf(torch_min("2.3"), reason="missing kernel")
+    @requires_torch("2.3", "missing kernel")
     def test_llama_model_b_forward_dynamic(self):
         from experimental_experiment.torch_helper.llama_helper import get_llama_model
 
@@ -262,7 +256,7 @@ class TestDynamoLlamaDynamic(ExtTestCase):
 
     @ignore_warnings((UserWarning, DeprecationWarning))
     @skipif_ci_windows("torch.compile not supported on Windows")
-    @unittest.skipIf(torch_min("2.2"), reason="missing kernel")
+    @requires_torch("2.2", "missing kernel")
     def test_llama_attention_forward_dynamic(self):
         from experimental_experiment.torch_helper.llama_helper import (
             get_llama_attention,
@@ -293,7 +287,7 @@ class TestDynamoLlamaDynamic(ExtTestCase):
 
     @ignore_warnings((UserWarning, DeprecationWarning))
     @skipif_ci_windows("torch.compile not supported on Windows")
-    @unittest.skipIf(torch_min("2.3"), reason="missing kernel")
+    @requires_torch("2.3", "missing kernel")
     def test_llama_attention_b_forward_dynamic(self):
         from experimental_experiment.torch_helper.llama_helper import (
             get_llama_attention,
@@ -316,7 +310,7 @@ class TestDynamoLlamaDynamic(ExtTestCase):
 
     @ignore_warnings((UserWarning, DeprecationWarning))
     @skipif_ci_windows("torch.compile not supported on Windows")
-    @unittest.skipIf(torch_min("2.2"), reason="missing kernel")
+    @requires_torch("2.2", "missing kernel")
     @unittest.skipIf(not has_cuda(), "cuda is needed for autocast")
     def test_llama_model_backward_mixed_dynamic_debug(self):
         from experimental_experiment.torch_helper.llama_helper import get_llama_model
@@ -339,7 +333,7 @@ class TestDynamoLlamaDynamic(ExtTestCase):
 
     @ignore_warnings((UserWarning, DeprecationWarning))
     @skipif_ci_windows("torch.compile not supported on Windows")
-    @unittest.skipIf(torch_min("2.2"), reason="missing kernel")
+    @requires_torch("2.2", "missing kernel")
     @unittest.skipIf(not has_cuda(), "cuda is needed for autocast")
     def test_llama_model_backward_mixed_dynamic_fast_backend(self):
         from experimental_experiment.torch_helper.llama_helper import get_llama_model
@@ -362,7 +356,7 @@ class TestDynamoLlamaDynamic(ExtTestCase):
 
     @ignore_warnings((UserWarning, DeprecationWarning))
     @skipif_ci_windows("torch.compile not supported on Windows")
-    @unittest.skipIf(torch_min("2.2"), reason="missing kernel")
+    @requires_torch("2.2", "missing kernel")
     @unittest.skipIf(not has_cuda(), "cuda is needed for autocast")
     def test_llama_model_backward_dynamic_fast_backend(self):
         from experimental_experiment.torch_helper.llama_helper import get_llama_model
@@ -385,7 +379,7 @@ class TestDynamoLlamaDynamic(ExtTestCase):
 
     @ignore_warnings((UserWarning, DeprecationWarning))
     @skipif_ci_windows("torch.compile not supported on Windows")
-    @unittest.skipIf(torch_min("2.2"), reason="missing kernel")
+    @requires_torch("2.2", "missing kernel")
     @unittest.skipIf(not has_cuda(), "cuda is needed for autocast")
     def test_llama_model_backward_mixed_dynamic_fast_backend_1024(self):
         from experimental_experiment.torch_helper.llama_helper import get_llama_model
@@ -418,7 +412,7 @@ class TestDynamoLlamaDynamic(ExtTestCase):
 
     @ignore_warnings((UserWarning, DeprecationWarning))
     @skipif_ci_windows("torch.compile not supported on Windows")
-    @unittest.skipIf(torch_min("2.2"), reason="missing kernel")
+    @requires_torch("2.2", "missing kernel")
     @unittest.skipIf(not has_cuda(), "cuda is needed for autocast")
     def test_llama_model_backward_mixed_dynamic_onnxrt_1024(self):
         from experimental_experiment.torch_helper.llama_helper import get_llama_model
