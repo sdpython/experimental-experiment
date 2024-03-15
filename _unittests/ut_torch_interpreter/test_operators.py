@@ -124,7 +124,6 @@ class TestOperators(ExtTestCase):
         rtol=1e-6,
         opset_version=None,
         test_backward=True,
-        operator_export_type=None,
         impl="ort",
         #
         input_names=None,
@@ -683,26 +682,24 @@ class TestOperators(ExtTestCase):
 
         class MyFun(Function):
             @staticmethod
-            def symbolic(g, x, onnx_export=inspect.currentframe().f_code.co_name):
-                return g.at(
-                    "add", x, x, onnx_export=inspect.currentframe().f_code.co_name
-                )
+            def symbolic(g, x):
+                return g.at("add", x, x)
 
             @staticmethod
-            def forward(ctx, x, onnx_export=inspect.currentframe().f_code.co_name):
+            def forward(ctx, x):
                 return x + x
 
         class MyModule(Module):
-            def forward(self, x, onnx_export=inspect.currentframe().f_code.co_name):
+            def forward(self, x):
                 return MyFun.apply(x)
 
-        self.assertONNX(
-            MyModule(),
-            x,
-            operator_export_type=torch.onnx.OperatorExportTypes.ONNX_ATEN_FALLBACK,
-            onnx_export=inspect.currentframe().f_code.co_name,
-            test_backward=False,
-        )
+        with torch.no_grad():
+            self.assertONNX(
+                MyModule(),
+                x,
+                onnx_export=inspect.currentframe().f_code.co_name,
+                test_backward=False,
+            )
 
     def test_clip(self):
         x = torch.randn(3, 4, requires_grad=True)
@@ -1311,7 +1308,6 @@ class TestOperators(ExtTestCase):
             emb_bag,
             (input, offset),
             keep_initializers_as_inputs=True,
-            operator_export_type=torch.onnx.OperatorExportTypes.ONNX_ATEN_FALLBACK,
             onnx_export=inspect.currentframe().f_code.co_name,
         )
 
@@ -1680,7 +1676,6 @@ class TestOperators(ExtTestCase):
         self.assertONNX(
             model,
             x,
-            operator_export_type=torch.onnx.OperatorExportTypes.ONNX_ATEN_FALLBACK,
             onnx_export=inspect.currentframe().f_code.co_name,
             atol=3e-4,
         )
@@ -2140,7 +2135,6 @@ class TestOperators(ExtTestCase):
             input_names=["input_1", "input_2"],
             dynamic_axes={"input_1": {0: "dim_0"}, "input_2": {0: "dim_1", 1: "dim_2"}},
             keep_initializers_as_inputs=False,
-            operator_export_type=torch.onnx.OperatorExportTypes.ONNX_ATEN_FALLBACK,
             onnx_export=inspect.currentframe().f_code.co_name,
             test_backward=False,
         )

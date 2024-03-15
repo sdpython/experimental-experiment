@@ -105,6 +105,9 @@ class TestOnnxExportLlama(ExtTestCase):
         model, input_tensors = get_llama_attention(input_dims=[(2, 1024)])
         input_tensors = input_tensors[0]
         expected = model(*input_tensors)
+        # torch._dynamo.reset()
+        # torch._dynamo.export(model, tracing_mode="symbolic")(*input_tensors)
+        # torch.export.export(model, input_tensors)
         onx, builder = export_utils(
             "test_llama_attention", model, *input_tensors, return_builder=True
         )

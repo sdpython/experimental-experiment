@@ -75,7 +75,6 @@ class TestOperatorsOnnxrt(ExtTestCase):
         rtol=1e-6,
         opset_version=None,
         test_backward=True,
-        operator_export_type=None,
         impl="ort",
         #
         input_names=None,
@@ -556,23 +555,20 @@ class TestOperatorsOnnxrt(ExtTestCase):
 
         class MyFun(Function):
             @staticmethod
-            def symbolic(g, x, onnx_export=inspect.currentframe().f_code.co_name):
-                return g.at(
-                    "add", x, x, onnx_export=inspect.currentframe().f_code.co_name
-                )
+            def symbolic(g, x):
+                return g.at("add", x, x)
 
             @staticmethod
-            def forward(ctx, x, onnx_export=inspect.currentframe().f_code.co_name):
+            def forward(ctx, x):
                 return x + x
 
         class MyModule(Module):
-            def forward(self, x, onnx_export=inspect.currentframe().f_code.co_name):
+            def forward(self, x):
                 return MyFun.apply(x)
 
         self.assertONNX(
             MyModule(),
             x,
-            operator_export_type=torch.onnx.OperatorExportTypes.ONNX_ATEN_FALLBACK,
             onnx_export=inspect.currentframe().f_code.co_name,
             test_backward=False,
         )
@@ -1410,7 +1406,6 @@ class TestOperatorsOnnxrt(ExtTestCase):
         self.assertONNX(
             model,
             x,
-            operator_export_type=torch.onnx.OperatorExportTypes.ONNX_ATEN_FALLBACK,
             onnx_export=inspect.currentframe().f_code.co_name,
             atol=3e-4,
             rtol=1e-4,

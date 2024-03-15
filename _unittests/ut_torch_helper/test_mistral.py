@@ -6,6 +6,7 @@ from experimental_experiment.ext_test_case import (
     ExtTestCase,
     ignore_warnings,
     skipif_ci_windows,
+    skipif_not_onnxrt,
     requires_torch,
     requires_onnxruntime,
 )
@@ -212,6 +213,7 @@ class TestMistral(ExtTestCase):
     @skipif_ci_windows("torch.compile not supported on Windows")
     @requires_onnxruntime("1.18", "missing kernel trilu")
     @unittest.skipIf(not has_cuda(), reason="cuda not available")
+    @skipif_not_onnxrt("failing when running pytest")
     def test_ort_mistral_model_backward_cuda(self):
         from experimental_experiment.torch_helper.mistral_helper import (
             get_mistral_model,

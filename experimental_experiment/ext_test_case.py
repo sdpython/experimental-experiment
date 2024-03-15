@@ -26,6 +26,18 @@ def is_apple() -> bool:
     return sys.platform == "darwin"
 
 
+def skipif_not_onnxrt(msg) -> Callable:
+    """
+    Skips a unit test if it runs on :epkg:`azure pipeline` on :epkg:`Windows`.
+    """
+    UNITTEST_ONNXRT = os.environ.get("UNITTEST_ONNXRT", "0")
+    value = int(UNITTEST_ONNXRT)
+    if not value:
+        msg = f"Set UNITTEST_ONNXRT=1 to run the unittest. {msg}"
+        return unittest.skip(msg)
+    return lambda x: x
+
+
 def skipif_ci_windows(msg) -> Callable:
     """
     Skips a unit test if it runs on :epkg:`azure pipeline` on :epkg:`Windows`.

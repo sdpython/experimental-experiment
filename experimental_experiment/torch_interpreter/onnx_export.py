@@ -1,6 +1,6 @@
 import time
 import warnings
-from typing import Any, Dict, Optional, Sequence, Set, Tuple, Union
+from typing import Any, Callable, Dict, Optional, Sequence, Set, Tuple, Union
 from onnx import ModelProto
 from onnx.defs import onnx_opset_version
 from ..xbuilder.graph_builder import GraphBuilder, OptimizationOptions
@@ -95,6 +95,11 @@ def _make_builder_interpreter(
     verbose: int = 0,
     raise_list: Optional[Set[str]] = None,
     dynamic_shapes: Optional[Union[Dict[str, Any], Tuple[Any]]] = None,
+    tracing_mode: str = "symbolic",
+    same_signature: bool = True,
+    decomposition_table: Optional[
+        Dict["torch._ops.OpOverload", Callable[..., Any]]  # noqa: F821
+    ] = None,
     dispatcher: Optional["Dispatcher"] = None,  # noqa: F821
 ) -> Tuple["torch.fx.GraphModule", GraphBuilder, "DynamoInterpreter"]:  # noqa: F821
     """
@@ -112,6 +117,9 @@ def _make_builder_interpreter(
     :param raise_list: the builder stops any time a name falls into that list,
         this is a debbuging tool
     :param dynamic_shapes: see :epkg:`torch.export.export`
+    :param same_signature: same signature
+    :param tracing_mode: tracing model
+    :param decomposition_table: decomposition table
     :param dispatcher: see :class:`experimental_experiment.torch_interpreter.Dispatcher`
     :return: onnx model
     """
@@ -129,7 +137,15 @@ def _make_builder_interpreter(
         buffers = dict(graph_module.named_buffers())
         mapping = {}
     else:
-        exported_mod = torch.export.export(mod, args, dynamic_shapes=dynamic_shapes)
+        # exported_mod = torch.export.export(mod, args, dynamic_shapes=dynamic_shapes)
+        exported_mod = torch._dynamo.export(
+            mod,
+            tracing_mode=tracing_mode,
+            dynamic_shapes=dynamic_shapes,
+            same_signature=same_signature,
+            decomposition_table=decomposition_table,
+        )(*args)
+
         if verbose > 0:
             msg = ", ".join(f"{a.dtype}:{tuple(a.shape)})" for a in args)
             print(f"[_make_builder_interpreter] args={msg}")
@@ -145,12 +161,19 @@ def _make_builder_interpreter(
             buffers = dict(exported_mod.named_buffers())
         except AttributeError:
             buffers = dict(mod.named_buffers())
-        signature = exported_mod.graph_signature
-        mapping = {}
-        for k, v in signature.inputs_to_parameters.items():
-            mapping[k] = v, True
-        for k, v in signature.inputs_to_buffers.items():
-            mapping[k] = v, False
+        if hasattr(exported_mod, "graph_signature"):
+            signature = exported_mod.graph_signature
+            mapping = {}
+            for k, v in signature.inputs_to_parameters.items():
+                mapping[k] = v, True
+            for k, v in signature.inputs_to_buffers.items():
+                mapping[k] = v, False
+        else:
+            mapping = {}
+            for k in weights:
+                mapping[k] = k, True
+            for k in buffers:
+                mapping[k] = k, False
 
     builder = GraphBuilder(
         target_opset,
