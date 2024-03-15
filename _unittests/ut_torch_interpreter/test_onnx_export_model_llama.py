@@ -108,6 +108,7 @@ class TestOnnxExportLlama(ExtTestCase):
 
     @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
     @ignore_warnings(DeprecationWarning)
+    @requires_torch("2.3", "dynamic_shapes are not well carries")
     def test_llama_attention(self):
         model, input_tensors = get_llama_attention(input_dims=[(2, 1024)])
         input_tensors = input_tensors[0]
@@ -118,8 +119,8 @@ class TestOnnxExportLlama(ExtTestCase):
         onx, builder = export_utils(
             "test_llama_attention", model, *input_tensors, return_builder=True
         )
-        with open("test_llama_attention.custom.onnx", "wb") as f:
-            f.write(onx.SerializeToString())
+        # with open("test_llama_attention.custom.onnx", "wb") as f:
+        #     f.write(onx.SerializeToString())
         xp = [x.numpy() for x in input_tensors]
         feeds = {f"input{i}": x for i, x in enumerate(xp)}
         ref = ExtendedReferenceEvaluator(onx)
@@ -144,6 +145,7 @@ class TestOnnxExportLlama(ExtTestCase):
 
     @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
     @ignore_warnings(DeprecationWarning)
+    @requires_torch("2.3", "dynamic_shapes are not well carries")
     def test_llama_decoder(self):
         import torch
 
@@ -162,6 +164,7 @@ class TestOnnxExportLlama(ExtTestCase):
     @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
     @requires_torch("2.3", "bug")
     @ignore_warnings(DeprecationWarning)
+    @unittest.skipIf(True, reason="torch._dynamo.export does not work")
     def test_llama_model_true(self):
         import torch
 
@@ -218,7 +221,6 @@ class TestOnnxExportLlama(ExtTestCase):
     @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
     @requires_torch("2.3", "bug")
     @ignore_warnings(DeprecationWarning)
-    @unittest.skipIf(True, reason="torch._dynamo.export does not work")
     def test_nn_true(self):
         import torch
 
