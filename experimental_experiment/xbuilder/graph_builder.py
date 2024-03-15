@@ -1837,6 +1837,9 @@ class GraphBuilder:
             self.set_shape(name, builder._known_shapes[init])
             self.set_type(name, builder._known_types[init])
 
+        for k, v in builder.dynamic_objects.items():
+            self.make_dynamic_object(k, v)
+
         assert len(input_names) == len(builder.inputs), (
             f"Inconsistency between input_names={input_names} "
             f"and inputs={builder.inputs}"
