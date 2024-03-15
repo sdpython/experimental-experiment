@@ -41,8 +41,6 @@ def optimize_model_proto(
     from onnxrewriter.optimizer import optimize
     from onnxrewriter.rewriter import rewrite
 
-    begin = time.perf_counter()
-
     if verbose:
         print(
             f"[optimize_model_proto] starts inliner with "
@@ -50,31 +48,43 @@ def optimize_model_proto(
             f"{len(model_proto.functions)} local functions"
         )
 
-    model_proto = inline_model_proto(model_proto)
-
-    if verbose:
-        print(
-            f"[optimize_model_proto] inliner done in {time.perf_counter() - begin} seconds."
-        )
-        print(
-            f"[optimize_model_proto] starts optimize with "
-            f"{len(model_proto.graph.node)} nodes and "
-            f"{len(model_proto.functions)} local functions"
-        )
+    # begin = time.perf_counter()
+    # model_proto = inline_model_proto(model_proto)
+    # if verbose:
+    #     print(
+    #         f"[optimize_model_proto] inliner done in {time.perf_counter() - begin} seconds."
+    #     )
+    #     print(
+    #         f"[optimize_model_proto] starts optimize with "
+    #         f"{len(model_proto.graph.node)} nodes and "
+    #         f"{len(model_proto.functions)} local functions"
+    #     )
 
     begin = time.perf_counter()
 
-    model_proto = optimize(
-        model_proto,
-        num_iterations=2,
-        onnx_shape_inference=onnx_shape_inference,
-        # function_aware_folding=True,
-    )
+    try:
+        model_proto = optimize(
+            model_proto,
+            num_iterations=2,
+            onnx_shape_inference=onnx_shape_inference,
+            # function_aware_folding=True,
+        )
+        exc = None
+    except Exception as e:
+        exc = e
+        pass
 
     if verbose:
-        print(
-            f"[optimize_model_proto] optimize done in {time.perf_counter() - begin} seconds."
-        )
+        if exc:
+            print(
+                f"[optimize_model_proto] optimize failed in "
+                f"{time.perf_counter() - begin} seconds due to {exc}"
+            )
+        else:
+            print(
+                f"[optimize_model_proto] optimize done in "
+                f"{time.perf_counter() - begin} seconds."
+            )
         print(
             f"[optimize_model_proto] starts rewrite with "
             f"{len(model_proto.graph.node)} nodes and "

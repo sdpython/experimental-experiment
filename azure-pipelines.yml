@@ -40,7 +40,7 @@ jobs:
       python -m pip install . -v -v -v
     displayName: 'install wheel'
   - script: |
-      python -m pytest -v
+      UNITTEST_ONNXRT=1 python -m pytest -v
     displayName: 'Runs Unit Tests'
   - task: PublishPipelineArtifact@0
     inputs:
@@ -122,7 +122,7 @@ jobs:
   - script: pip install onnxmltools --no-deps
     displayName: 'Install onnxmltools'
   - script: |
-      python -m pytest -v
+      UNITTEST_ONNXRT=1 python -m pytest -v
     displayName: 'Runs Unit Tests'
   - script: |
       python -u setup.py bdist_wheel
@@ -165,7 +165,7 @@ jobs:
   - script: pip install onnxmltools --no-deps
     displayName: 'Install onnxmltools'
   - script: |
-      python -m pytest -v
+      UNITTEST_ONNXRT=1 python -m pytest -v
     displayName: 'Runs Unit Tests'
   - script: |
       python -u setup.py bdist_wheel

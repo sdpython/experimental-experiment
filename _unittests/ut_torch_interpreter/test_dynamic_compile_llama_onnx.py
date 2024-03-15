@@ -7,6 +7,7 @@ from experimental_experiment.ext_test_case import (
     ignore_warnings,
     skipif_ci_windows,
     requires_torch,
+    skipif_transformers,
 )
 from experimental_experiment.torch_helper.dump_helper import assert_all_close
 from experimental_experiment.torch_dynamo import (
@@ -414,6 +415,11 @@ class TestDynamoLlamaDynamic(ExtTestCase):
     @skipif_ci_windows("torch.compile not supported on Windows")
     @requires_torch("2.2", "missing kernel")
     @unittest.skipIf(not has_cuda(), "cuda is needed for autocast")
+    @skipif_transformers(
+        "4.38.2",
+        "INVALID_ARGUMENT : Failed to load model with error:, "
+        "Graph output (aten_mean_dim_267_dim_2) does not exist in the graph.",
+    )
     def test_llama_model_backward_mixed_dynamic_onnxrt_1024(self):
         from experimental_experiment.torch_helper.llama_helper import get_llama_model
 

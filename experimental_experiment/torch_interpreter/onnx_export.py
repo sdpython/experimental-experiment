@@ -85,6 +85,33 @@ def _retrieve(
         return value
 
 
+def _export(
+    mod,
+    args,
+    tracing_mode,
+    dynamic_shapes,
+    same_signature,
+    decomposition_table,
+    use_dynamo,
+):
+    import torch
+
+    if not use_dynamo:
+        exported_mod = torch.export.export(mod, args, dynamic_shapes=dynamic_shapes)
+        return exported_mod
+
+    res = torch._dynamo.export(
+        mod,
+        aten_graph=True,
+        tracing_mode=tracing_mode,
+        dynamic_shapes=dynamic_shapes,
+        same_signature=same_signature,
+        decomposition_table=decomposition_table,
+        assume_static_by_default=dynamic_shapes is None,
+    )(*args)
+    return res
+
+
 def _make_builder_interpreter(
     mod: Union["torch.nn.Module", "torch.fx.GraphModule"],  # noqa: F821
     args: Optional[Sequence["torch.Tensor"]] = None,  # noqa: F821
@@ -101,6 +128,7 @@ def _make_builder_interpreter(
         Dict["torch._ops.OpOverload", Callable[..., Any]]  # noqa: F821
     ] = None,
     dispatcher: Optional["Dispatcher"] = None,  # noqa: F821
+    use_dynamo: bool = True,
 ) -> Tuple["torch.fx.GraphModule", GraphBuilder, "DynamoInterpreter"]:  # noqa: F821
     """
     Exports a torch model into ONNX using
@@ -116,11 +144,12 @@ def _make_builder_interpreter(
     :param verbose: verbosity level
     :param raise_list: the builder stops any time a name falls into that list,
         this is a debbuging tool
-    :param dynamic_shapes: see :epkg:`torch.export.export`
+    :param dynamic_shapes: see :epkg:`torch.export.export` or ``torch._dynamo.export``
     :param same_signature: same signature
     :param tracing_mode: tracing model
     :param decomposition_table: decomposition table
     :param dispatcher: see :class:`experimental_experiment.torch_interpreter.Dispatcher`
+    :param use_dynamo: use ``torch.export.export`` or ``torch._dynamo.export``
     :return: onnx model
     """
 
@@ -137,14 +166,15 @@ def _make_builder_interpreter(
         buffers = dict(graph_module.named_buffers())
         mapping = {}
     else:
-        # exported_mod = torch.export.export(mod, args, dynamic_shapes=dynamic_shapes)
-        exported_mod = torch._dynamo.export(
+        exported_mod = _export(
             mod,
+            args,
             tracing_mode=tracing_mode,
             dynamic_shapes=dynamic_shapes,
             same_signature=same_signature,
             decomposition_table=decomposition_table,
-        )(*args)
+            use_dynamo=use_dynamo,
+        )
 
         if verbose > 0:
             msg = ", ".join(f"{a.dtype}:{tuple(a.shape)})" for a in args)

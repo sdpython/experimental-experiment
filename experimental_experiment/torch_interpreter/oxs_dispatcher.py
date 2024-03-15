@@ -87,7 +87,8 @@ class OxsDispatcher(Dispatcher):
         if key not in default_registry:
             if self.verbose > 2:
                 print(
-                    "[OxsDispatcher.fallback] unable to find any fallback for {name!r} or {key!r}"
+                    f"[OxsDispatcher.fallback] unable to find any fallback "
+                    f"for {name!r} or {key!r}"
                 )
             return None
 

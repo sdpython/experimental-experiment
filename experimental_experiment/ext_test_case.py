@@ -7,7 +7,7 @@ import warnings
 from contextlib import redirect_stderr, redirect_stdout
 from io import StringIO
 from timeit import Timer
-from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, Union
+from typing import Any, Callable, Dict, List, Optional, Sequence, Set, Tuple, Union
 
 import numpy
 from numpy.testing import assert_allclose
@@ -24,6 +24,20 @@ def is_windows() -> bool:
 
 def is_apple() -> bool:
     return sys.platform == "darwin"
+
+
+def skipif_transformers(version_to_skip: Union[str, Set[str]], msg: str) -> Callable:
+    """
+    Skips a unit test if transformers has a specific version.
+    """
+    if isinstance(version_to_skip, str):
+        version_to_skip = {version_to_skip}
+    import transformers
+
+    if transformers.__version__ in version_to_skip:
+        msg = f"Unstable test. {msg}"
+        return unittest.skip(msg)
+    return lambda x: x
 
 
 def skipif_not_onnxrt(msg) -> Callable:
