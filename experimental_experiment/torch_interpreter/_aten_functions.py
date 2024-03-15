@@ -594,12 +594,24 @@ def aten_copy(
     x: T,
     src: T,
     non_blocking: bool = False,
+    name: str = "copy",
 ) -> T:
     "identity"
     assert not non_blocking, "copy implemented when non_blocking is True"
     if g.get_type(x) == g.get_type(src):
-        return g.op.Identity(src, name="copy")
-    return g.op.CastLike(src, x, name="copy")
+        return g.op.Identity(src, name=name)
+    return g.op.CastLike(src, x, name=name)
+
+
+def aten_copy_(
+    g: GraphBuilder,
+    sts: bool,
+    outputs: List[str],
+    x: T,
+    src: T,
+    non_blocking: bool = False,
+) -> T:
+    return aten_copy(g, sts, outputs, x, src, non_blocking, name="copy_")
 
 
 def aten_cos(
