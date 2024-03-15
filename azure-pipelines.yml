@@ -1,5 +1,5 @@
 jobs:
-- job: 'TestLinuxWheelPip'
+- job: 'TestLinuxWheelPip_4372'
   pool:
     vmImage: 'ubuntu-latest'
   strategy:
@@ -21,8 +21,12 @@ jobs:
     displayName: 'Install tools'
   - script: pip install -r requirements.txt
     displayName: 'Install Requirements'
+  - script: pip install transformers==4.37.2
+    displayName: 'Install specific version of transformers'
   - script: pip install -r requirements-dev.txt
     displayName: 'Install Requirements dev'
+  - script: python -c "import transformers;print(transformers.__version__)"
+    displayName: 'Install check transformers version'
   - script: |
       ruff check .
     displayName: 'Ruff'
@@ -36,7 +40,7 @@ jobs:
       python -m pip install . -v -v -v
     displayName: 'install wheel'
   - script: |
-      python -m pytest -v
+      UNITTEST_ONNXRT=1 python -m pytest -v
     displayName: 'Runs Unit Tests'
   - task: PublishPipelineArtifact@0
     inputs:
@@ -71,6 +75,8 @@ jobs:
     displayName: 'Install Requirements'
   - script: pip install -r requirements-dev.txt
     displayName: 'Install Requirements dev'
+  - script: python -c "import transformers;print(transformers.__version__)"
+    displayName: 'Install check transformers version'
   - script: pip install onnxmltools --no-deps
     displayName: 'Install onnxmltools'
   - script: |
@@ -159,7 +165,7 @@ jobs:
   - script: pip install onnxmltools --no-deps
     displayName: 'Install onnxmltools'
   - script: |
-      python -m pytest -v
+      UNITTEST_ONNXRT=1 python -m pytest -v
     displayName: 'Runs Unit Tests'
   - script: |
       python -u setup.py bdist_wheel

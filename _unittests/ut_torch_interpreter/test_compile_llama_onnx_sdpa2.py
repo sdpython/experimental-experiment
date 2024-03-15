@@ -22,21 +22,15 @@ def has_cuda():
     return torch.cuda.is_available()
 
 
-class TestDynamoLlama(ExtTestCase):
-    @ignore_warnings((UserWarning, DeprecationWarning))
-    def test_aaaa(self):
-        from transformers import LlamaConfig
-        from transformers.models.llama.modeling_llama import LlamaAttention
+class TestDynamoLlamaSdpa2(ExtTestCase):
 
-        config = LlamaConfig(
-            num_hidden_layers=1,
-            vocab_size=1024,
-            hidden_size=16,
-            intermediate_size=16,
-            max_position_embeddings=256,
-            num_attention_heads=2,
-        )
-        LlamaAttention(config, layer_idx=0)
+    @classmethod
+    def get_input_dims(cls, dynamic: bool):
+        if dynamic:
+            input_dims = ((2, 8), (4, 7), (9, 15))
+        else:
+            input_dims = ((9, 15), (9, 15), (9, 15))
+        return input_dims
 
     def _assert_model_numerically(
         self,
@@ -172,177 +166,72 @@ class TestDynamoLlama(ExtTestCase):
 
     @ignore_warnings((UserWarning, DeprecationWarning))
     @skipif_ci_windows("torch.compile not supported on Windows")
-    def test_mlp_forward(self):
-        import torch
+    @unittest.skipIf(
+        True, reason="_scaled_dot_product_flash_attention_for_cpu_default missing"
+    )
+    def test_llama_decoder_backward_dynamic(self):
+        from experimental_experiment.torch_helper.llama_helper import get_llama_decoder
 
-        class MLP(torch.nn.Module):
-            def __init__(self):
-                super().__init__()
-                self.fc1 = torch.nn.Linear(2, 4, bias=True)
-                self.fc2 = torch.nn.Linear(4, 2, bias=True)
-
-            def forward(self, tensor_x: torch.Tensor):
-                tensor_x = self.fc1(tensor_x)
-                tensor_x = torch.sigmoid(tensor_x)
-                tensor_x = self.fc2(tensor_x)
-                tensor_x = torch.sigmoid(tensor_x)
-                return tensor_x
-
-        # with static shape (dynamic=False), the conversion to onnx is done
-        # every time the batch size changes
-        batch_sizes = [3, 3, 3, 3, 3]
-
-        example_args_collection = tuple(
-            (torch.randn(batch, 2, dtype=torch.float32),) for batch in batch_sizes
+        input_dims = self.get_input_dims(True)
+        model, example_args_collection = get_llama_decoder(
+            input_dims=input_dims, _attn_implementation="sdpa"
         )
-
         self.common_test_model(
-            MLP(),
+            model,
             example_args_collection,
-            test_backward=False,
-            dynamic=False,
-            onnx_export="test_ort_mlp",
+            test_backward=True,
+            dynamic=True,
+            onnx_export="test_llama_decoder_backward_sdpa",
         )
-
-    @classmethod
-    def get_input_dims(cls, dynamic: bool):
-        if dynamic:
-            input_dims = ((2, 8), (4, 7), (9, 15))
-        else:
-            input_dims = ((9, 15), (9, 15), (9, 15))
-        return input_dims
 
     @ignore_warnings((UserWarning, DeprecationWarning))
     @skipif_ci_windows("torch.compile not supported on Windows")
     @requires_torch("2.2", "missing kernel")
-    def test_llama_model_backward_decomposition(self):
+    @unittest.skipIf(
+        True, reason="_scaled_dot_product_flash_attention_for_cpu_default missing"
+    )
+    def test_llama_model_backward_undec(self):
         from experimental_experiment.torch_helper.llama_helper import get_llama_model
 
-        import torch
-
-        sorted_list = list(torch._decomp.decomposition_table.items())
-        disable = {
-            "aten::slice_backward",
-            "aten::select_backward.out",
-            "aten::slice.Tensor",
-        }
-        new_list = [(k, v) for k, v in sorted_list if k.name() not in disable]
-        begin = 700
-        end = min(703, len(new_list))
-        for i in range(0, end, 1):
-            k, v = new_list[i]
-            if i < begin:
-                continue
-            msg = f"i={i+1}/{len(new_list)}-{k.name()}-{new_list[i]}"
-            with self.subTest(msg=msg):
-                decomp = dict(new_list[: i + 1])
-
-                input_dims = self.get_input_dims(False)
-                model, example_args_collection = get_llama_model(input_dims=input_dims)
-                self.common_test_model(
-                    model,
-                    example_args_collection,
-                    test_backward=True,
-                    dynamic=False,
-                    fullgraph=True,
-                    onnx_export="test_llama_model_backward_decomposition",
-                    decompositions=decomp,
-                    impl="ref",
-                    atol=1e-3,
-                    verbose=0,
-                )
-
         input_dims = self.get_input_dims(False)
-        model, example_args_collection = get_llama_model(input_dims=input_dims)
+        model, example_args_collection = get_llama_model(
+            input_dims=input_dims, _attn_implementation="sdpa"
+        )
         self.common_test_model(
             model,
             example_args_collection,
             test_backward=True,
             dynamic=False,
             fullgraph=True,
-            onnx_export="test_llama_model_backward_decomposition",
-            decompositions=True,
+            onnx_export="test_llama_model_backward_sdpa",
+        )
+
+    @ignore_warnings((UserWarning, DeprecationWarning))
+    @skipif_ci_windows("torch.compile not supported on Windows")
+    @requires_torch("2.2", "missing kernel")
+    def test_llama_model_backward_ref(self):
+        from experimental_experiment.torch_helper.llama_helper import get_llama_model
+
+        model, example_args_collection = get_llama_model(
+            input_dims=[(2, 1024)] * 2,
+            hidden_size=16,
+            num_hidden_layers=1,
+            vocab_size=1024,
+            intermediate_size=16,
+            max_position_embeddings=1024,
+            num_attention_heads=2,
+            _attn_implementation="eager",
+        )
+        self.common_test_model(
+            model,
+            example_args_collection,
+            test_backward=True,
+            dynamic=False,
+            fullgraph=True,
+            onnx_export="test_llama_model_backward_sdpa",
             impl="ref",
-            # verbose=10,
-        )
-
-    @ignore_warnings((UserWarning, DeprecationWarning))
-    @skipif_ci_windows("torch.compile not supported on Windows")
-    @requires_torch("2.3", "cache limit")
-    def test_llama_model_backward_forward_decomposition_yes(self):
-        from experimental_experiment.torch_helper.llama_helper import get_llama_model
-
-        import torch
-
-        sorted_list = list(torch._decomp.decomposition_table.items())
-        disable = {
-            "aten::slice_backward",
-            "aten::select_backward.out",
-            "aten::slice.Tensor",
-        }
-        new_list = [(k, v) for k, v in sorted_list if k.name() not in disable]
-        begin = 69
-        end = min(72, len(new_list))
-        for i in range(0, end, 1):
-            k, v = new_list[i]
-            if i < begin:
-                continue
-            msg = f"i={i+1}/{len(new_list)}-{k.name()}-{new_list[i]}"
-            with self.subTest(msg=msg):
-                decomp = dict(new_list[: i + 1])
-
-                input_dims = self.get_input_dims(False)
-                model, example_args_collection = get_llama_model(input_dims=input_dims)
-                self.common_test_model(
-                    model,
-                    example_args_collection,
-                    test_backward=1,
-                    dynamic=False,
-                    fullgraph=True,
-                    onnx_export="test_llama_model_backward_decomposition_yes",
-                    decompositions=decomp,
-                    atol=1e-4,
-                    # impl="ref",
-                    # verbose=10,
-                    # raise_list={"mul_2"},
-                )
-
-        input_dims = self.get_input_dims(False)
-        model, example_args_collection = get_llama_model(input_dims=input_dims)
-        self.common_test_model(
-            model,
-            example_args_collection,
-            test_backward=1,
-            dynamic=False,
-            fullgraph=True,
-            onnx_export="test_llama_model_backward_decomposition_yes",
-            decompositions=filter_decomposition_table(),
-            atol=1e-4,
-            # impl="ref",
-            # verbose=10,
-            # raise_list={"mul_2"},
-        )
-
-    @ignore_warnings((UserWarning, DeprecationWarning))
-    @skipif_ci_windows("torch.compile not supported on Windows")
-    @requires_torch("2.3", "cache limit")
-    def test_llama_model_backward_forward_decomposition_no(self):
-        from experimental_experiment.torch_helper.llama_helper import get_llama_model
-
-        input_dims = self.get_input_dims(False)
-        model, example_args_collection = get_llama_model(input_dims=input_dims)
-        self.common_test_model(
-            model,
-            example_args_collection,
-            test_backward=1,
-            dynamic=False,
-            fullgraph=True,
-            onnx_export="test_llama_model_backward_decomposition_no",
-            decompositions=False,
-            atol=1e-4,
-            # impl="ref",
-            # verbose=10,
-            # raise_list={"mul_2"},
+            verbose=0,
+            atol=3e-2,
         )
 
 

@@ -16,3 +16,4 @@ This projects was started with LLaMa.
     :maxdepth: 1
 
     llama
+    mistral

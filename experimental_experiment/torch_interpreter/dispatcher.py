@@ -46,7 +46,7 @@ class Dispatcher:
         """
         key = self._get_function_name(name)
         if key not in self.registered_functions:
-            if self.verbose > 2:
+            if self.verbose > 3:
                 print(
                     f"[Dispatcher.find_function] could not find a function for key={key!r} with name={name!r}"
                 )
@@ -66,7 +66,7 @@ class Dispatcher:
         <experimental_experiment.torch_interpreter._aten_functions.aten_elu>`.
         """
         if name not in self.registered_functions:
-            if self.verbose > 2:
+            if self.verbose > 3:
                 print(
                     f"[Dispatcher.find_method] could not find a method for name={name!r}"
                 )

@@ -138,7 +138,7 @@ def trained_model(max_iter=5, dynamic=False, storage=None):
         DiabetesDataset(*load_diabetes(return_X_y=True)),
         batch_size=5,
         shuffle=True,
-        num_workers=1,
+        num_workers=0,
     )
 
     loss_function = torch.nn.L1Loss()

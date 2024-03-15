@@ -1,25 +1,16 @@
 import os
 import unittest
-import packaging.version as pv
 from experimental_experiment.ext_test_case import (
     ExtTestCase,
     skipif_ci_windows,
     ignore_warnings,
+    requires_torch,
 )
-
-
-def torch_version():
-    import torch
-
-    return ".".join(torch.__version__.split(".")[:2])
 
 
 class TestDynamoCompileDiff(ExtTestCase):
     @skipif_ci_windows("dynamo does not work on windows")
-    @unittest.skipIf(
-        pv.Version(torch_version()) < pv.Version("2.2.1"),
-        reason="onnxrt not fully implemented",
-    )
+    @requires_torch("2.2.1", "onnxrt not fully implemented")
     @ignore_warnings((UserWarning, RuntimeWarning, DeprecationWarning))
     def test_standalone(self):
         import onnxruntime  # noqa: F401

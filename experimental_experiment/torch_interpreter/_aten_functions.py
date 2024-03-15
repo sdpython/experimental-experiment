@@ -594,12 +594,24 @@ def aten_copy(
     x: T,
     src: T,
     non_blocking: bool = False,
+    name: str = "copy",
 ) -> T:
     "identity"
     assert not non_blocking, "copy implemented when non_blocking is True"
     if g.get_type(x) == g.get_type(src):
-        return g.op.Identity(src, name="copy")
-    return g.op.CastLike(src, x, name="copy")
+        return g.op.Identity(src, name=name)
+    return g.op.CastLike(src, x, name=name)
+
+
+def aten_copy_(
+    g: GraphBuilder,
+    sts: bool,
+    outputs: List[str],
+    x: T,
+    src: T,
+    non_blocking: bool = False,
+) -> T:
+    return aten_copy(g, sts, outputs, x, src, non_blocking, name="copy_")
 
 
 def aten_cos(
@@ -882,24 +894,11 @@ def aten_empty_like(
     memory_format=None,
 ) -> T:
     "constantofshape"
-    import torch
-
-    assert (
-        layout is None
-    ), f"empty_like not implemented for layout={layout!r} is not None"
-    assert not pin_memory, "empty_like not implemented for pin_memory=True"
-    assert memory_format in (
-        None,
-        torch.preserve_format,
-        torch.contiguous_format,
-    ), f"empty_like not implemented for memory_format={memory_format}"
-
-    # simple case
     return aten_full(
         g,
         sts,
         outputs,
-        g.get_shape(x),
+        x,
         0,
         dtype=dtype or g.get_type(x),
         name="empty_like",
@@ -968,6 +967,20 @@ def aten_empty_strided(
     )
 
 
+def aten__enter_autocast(
+    g: GraphBuilder, sts: bool, outputs: List[str], *args: List[Any]
+) -> T:
+    """
+    Returns the function returns a dummy which will be removed
+    after the graph is created.
+    """
+    assert all(map(lambda x: not isinstance(x, str) or x in {"cpu", "cuda"}, args)), (
+        f"The function should not take any tensors as input but types are "
+        f"{[type(_) for _ in args]}: {args}{g.get_debug_msg()}"
+    )
+    return g.make_node("Constant", [], value_floats=[0], name="_enter_autocast")
+
+
 def aten_eq(g: GraphBuilder, sts: bool, outputs: List[str], x: T, y: T, name="eq") -> T:
     "equal"
     x, y = prepare_inputs_homogeneous_operator(g, x, y)
@@ -997,6 +1010,16 @@ def aten_exp(
     if sts:
         set_type_shape_unary_op(g, outputs[0], x)
     return res
+
+
+def aten__exit_autocast(
+    g: GraphBuilder, sts: bool, outputs: List[str], output_of_enter_auto_cast: T
+) -> T:
+    """
+    Returns the function returns a dummy which will be removed
+    after the graph is created.
+    """
+    return g.make_node("Identity", [output_of_enter_auto_cast], name="_exit_autocast")
 
 
 def aten_expand(
@@ -1204,6 +1227,7 @@ def aten_full_like(
     device: Optional["torch.device"] = None,  # noqa: F821
     pin_memory=None,
     memory_format=None,
+    name: str = "full_like",
 ) -> T:
     "constantofshape"
     import torch
@@ -1225,11 +1249,16 @@ def aten_full_like(
             g.get_shape(x),
             fill_value,
             dtype=dtype or g.get_type(x),
-            name="empty_like",
+            name=name,
         )
-    raise RuntimeError(
-        f"empty_like is not implemented when shape is not fully known "
-        f"for {x!r}{g.get_debug_msg()}"
+    return aten_full(
+        g,
+        sts,
+        outputs,
+        g.op.Shape(x, name="full_like"),
+        fill_value,
+        dtype=dtype or g.get_type(x),
+        name=name,
     )
 
 
@@ -1908,10 +1937,11 @@ def aten_ones(
     sts: bool,
     outputs: List[str],
     size: T,
-    dtype: int = TensorProto.FLOAT,
+    dtype: int = None,
     layout=None,
     device: Optional["torch.device"] = None,  # noqa: F821
     pin_memory=None,
+    name: str = "ones",
 ) -> T:
     "constantofshape"
     import torch
@@ -1937,13 +1967,36 @@ def aten_ones(
         isize,
         value=from_array(np.array([1], dtype=tensor_dtype_to_np_dtype(dtype))),
         outputs=outputs,
-        name="ones",
+        name=name,
     )
     if sts:
         g.set_type(res, dtype)
         if new_shape:
             g.set_shape(res, new_shape)
     return res
+
+
+def aten_ones_like(
+    g: GraphBuilder,
+    sts: bool,
+    outputs: List[str],
+    x: T,
+    dtype: Optional["torch.dtype"] = None,  # noqa: F821
+    layout=None,
+    device: Optional["torch.device"] = None,  # noqa: F821
+    pin_memory=None,
+    memory_format=None,
+) -> T:
+    "constantofshape"
+    return aten_full_like(
+        g,
+        sts,
+        outputs,
+        x,
+        1,
+        dtype=dtype or g.get_type(x),
+        name="ones_like",
+    )
 
 
 def aten_permute(
@@ -2163,6 +2216,19 @@ def aten_rsub_Scalar(
     "rsub"
     assert alpha == 1, f"Not implemented with alpha={alpha}"
     return aten_sub(g, sts, outputs, y, x, name="rsub_Scalar")
+
+
+def aten__set_grad_enabled(
+    g: GraphBuilder, sts: bool, outputs: List[str], enable: bool
+) -> T:
+    """
+    Returns the function returns a dummy which will be removed
+    after the graph is created.
+    """
+    assert isinstance(
+        enable, bool
+    ), f"Unexpected type for enable={enable!r}{g.get_debug_msg()}"
+    return g.make_node("Constant", [], value_floats=[0], name="_set_grad_enabled")
 
 
 def aten_setitem(
@@ -2973,6 +3039,16 @@ def aten_truediv(g: GraphBuilder, sts: bool, outputs: List[str], x: T, y: T) -> 
     res = g.op.Div(x, y, outputs=outputs, name="truediv")
     if sts:
         set_type_shape_binary_op(g, outputs[0], x, y)
+    return res
+
+
+def aten_triu(
+    g: GraphBuilder, sts: bool, outputs: List[str], x: T, diagonal: int = 0
+) -> T:
+    """trilu"""
+    res = g.op.Trilu(x, diagonal, upper=1, name="triu")
+    if sts:
+        set_type_shape_unary_op(g, res, x)
     return res
 
 

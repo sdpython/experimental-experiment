@@ -120,7 +120,7 @@ def onnx_debug_backend(
         verbose if isinstance(verbose, tuple) else (verbose, verbose)
     )
 
-    patterns = get_pattern_list(enable_pattern, disable_pattern)
+    patterns = get_pattern_list(enable_pattern, disable_pattern, verbose=verbose_onnx)
 
     options = OptimizationOptions(
         remove_unused=True,

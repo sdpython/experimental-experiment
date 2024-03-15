@@ -1,6 +1,6 @@
 import time
 import warnings
-from typing import Any, Dict, Optional, Sequence, Set, Tuple, Union
+from typing import Any, Callable, Dict, Optional, Sequence, Set, Tuple, Union
 from onnx import ModelProto
 from onnx.defs import onnx_opset_version
 from ..xbuilder.graph_builder import GraphBuilder, OptimizationOptions
@@ -85,6 +85,37 @@ def _retrieve(
         return value
 
 
+def _export(
+    mod,
+    args,
+    tracing_mode,
+    dynamic_shapes,
+    same_signature,
+    decomposition_table,
+    use_dynamo,
+):
+    import torch
+
+    if not use_dynamo:
+        exported_mod = torch.export.export(mod, args, dynamic_shapes=dynamic_shapes)
+        return exported_mod
+
+    # import torch.utils._pytree as pytree
+    # flat_args, orig_in_spec = pytree.tree_flatten((args, ))
+    # print("+++++", orig_in_spec, type(flat_args), len(flat_args))
+    res = torch._dynamo.export(
+        mod,
+        aten_graph=True,
+        tracing_mode=tracing_mode,
+        dynamic_shapes=dynamic_shapes,
+        same_signature=same_signature,
+        decomposition_table=decomposition_table,
+        assume_static_by_default=dynamic_shapes is None,
+    )(*args)
+
+    return res
+
+
 def _make_builder_interpreter(
     mod: Union["torch.nn.Module", "torch.fx.GraphModule"],  # noqa: F821
     args: Optional[Sequence["torch.Tensor"]] = None,  # noqa: F821
@@ -95,7 +126,13 @@ def _make_builder_interpreter(
     verbose: int = 0,
     raise_list: Optional[Set[str]] = None,
     dynamic_shapes: Optional[Union[Dict[str, Any], Tuple[Any]]] = None,
+    tracing_mode: str = "symbolic",
+    same_signature: bool = True,
+    decomposition_table: Optional[
+        Dict["torch._ops.OpOverload", Callable[..., Any]]  # noqa: F821
+    ] = None,
     dispatcher: Optional["Dispatcher"] = None,  # noqa: F821
+    use_dynamo: bool = True,
 ) -> Tuple["torch.fx.GraphModule", GraphBuilder, "DynamoInterpreter"]:  # noqa: F821
     """
     Exports a torch model into ONNX using
@@ -111,8 +148,12 @@ def _make_builder_interpreter(
     :param verbose: verbosity level
     :param raise_list: the builder stops any time a name falls into that list,
         this is a debbuging tool
-    :param dynamic_shapes: see :epkg:`torch.export.export`
+    :param dynamic_shapes: see :epkg:`torch.export.export` or ``torch._dynamo.export``
+    :param same_signature: same signature
+    :param tracing_mode: tracing model
+    :param decomposition_table: decomposition table
     :param dispatcher: see :class:`experimental_experiment.torch_interpreter.Dispatcher`
+    :param use_dynamo: use ``torch.export.export`` or ``torch._dynamo.export``
     :return: onnx model
     """
 
@@ -129,7 +170,16 @@ def _make_builder_interpreter(
         buffers = dict(graph_module.named_buffers())
         mapping = {}
     else:
-        exported_mod = torch.export.export(mod, args, dynamic_shapes=dynamic_shapes)
+        exported_mod = _export(
+            mod,
+            args,
+            tracing_mode=tracing_mode,
+            dynamic_shapes=dynamic_shapes,
+            same_signature=same_signature,
+            decomposition_table=decomposition_table,
+            use_dynamo=use_dynamo,
+        )
+
         if verbose > 0:
             msg = ", ".join(f"{a.dtype}:{tuple(a.shape)})" for a in args)
             print(f"[_make_builder_interpreter] args={msg}")
@@ -145,12 +195,19 @@ def _make_builder_interpreter(
             buffers = dict(exported_mod.named_buffers())
         except AttributeError:
             buffers = dict(mod.named_buffers())
-        signature = exported_mod.graph_signature
-        mapping = {}
-        for k, v in signature.inputs_to_parameters.items():
-            mapping[k] = v, True
-        for k, v in signature.inputs_to_buffers.items():
-            mapping[k] = v, False
+        if hasattr(exported_mod, "graph_signature"):
+            signature = exported_mod.graph_signature
+            mapping = {}
+            for k, v in signature.inputs_to_parameters.items():
+                mapping[k] = v, True
+            for k, v in signature.inputs_to_buffers.items():
+                mapping[k] = v, False
+        else:
+            mapping = {}
+            for k in weights:
+                mapping[k] = k, True
+            for k in buffers:
+                mapping[k] = k, False
 
     builder = GraphBuilder(
         target_opset,
@@ -187,6 +244,7 @@ def to_onnx(
     dynamic_shapes: Optional[Union[Dict[str, Any], Tuple[Any]]] = None,
     optimize: bool = True,
     dispatcher: Optional["Dispatcher"] = None,  # noqa: F821
+    api_two: bool = False,
 ) -> Union[ModelProto, Tuple[ModelProto, GraphBuilder]]:
     """
     Exports a torch model into ONNX using
@@ -206,6 +264,7 @@ def to_onnx(
     :param dynamic_shapes: see :epkg:`torch.export.export`
     :param optimize: optimize the model before exporting into onnx
     :param dispatcher: see :class:`experimental_experiment.torch_interpreter.Dispatcher`
+    :param api_two: use ``torch._dynamo.export`` instead of ``torch.export.export``
     :return: onnx model
     """
     if target_opset is None:
@@ -228,6 +287,7 @@ def to_onnx(
         raise_list=raise_list,
         dynamic_shapes=dynamic_shapes,
         dispatcher=dispatcher,
+        use_dynamo=api_two,
     )
 
     if verbose:

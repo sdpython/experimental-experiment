@@ -356,7 +356,7 @@ class TestOnnxExport(ExtTestCase):
         x = torch.rand(5, 3)
         model = Neuron(3, 1)
 
-        dispatcher = Dispatcher({"aten::celu": aten_celu}, verbose=3)
+        dispatcher = Dispatcher({"aten::celu": aten_celu}, verbose=4)
 
         s = StringIO()
         with contextlib.redirect_stdout(s):
@@ -390,7 +390,7 @@ class TestOnnxExport(ExtTestCase):
         x = torch.rand(5, 3)
         model = Neuron(3, 1)
 
-        dispatcher = Dispatcher({"aten::celu": aten_celu}, verbose=3)
+        dispatcher = Dispatcher({"aten::celu": aten_celu}, verbose=4)
 
         s = StringIO()
         with contextlib.redirect_stdout(s):

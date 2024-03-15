@@ -69,6 +69,8 @@ class GraphBuilder:
     - `_known_value_shape: Dict[str, Any]`: if a result is a shape or not
       (for example the output of operator Shape)
     - `_known_ranks: Dict[str, int]`: declared ranks
+    - `constants_node_: Dict[bytes, NodeProto]`: constant node
+    - `constants_alias_: Dict[str, str]`: alias for constant
     - `constants_: Dict[str, Any]`: constant values
     - `constants_computed_: Dict[str, Any]`: computed constant values
     - `dynamic_objects: Dict[str, torch.SymInt]`: list of dynamic dimension
@@ -124,6 +126,8 @@ class GraphBuilder:
         self._cache_shape = {}
         self._values = {}
         self._dynamic_alias = {}
+        self.constants_node_ = {}
+        self.constants_alias_ = {}
 
         self.nodes = []
         self.initializers_dict = {}
@@ -608,7 +612,6 @@ class GraphBuilder:
         shape: DYNAMIC_SHAPE,
         set_rank: bool = True,
         set_if_more_precise: bool = False,
-        for_onnx: bool = False,
         exc: bool = False,
     ):
         """
@@ -619,7 +622,6 @@ class GraphBuilder:
         :param shape: shape
         :param set_rank: set the rank as well
         :param set_if_more_precise: change the shape if it is more precise
-        :param for_onnx: if True, shape can't allow `torch.SymInt`
         :param exc: raise an exception if inconsistency
         """
         assert isinstance(name, str), f"Unexpected type {type(name)} for name."
@@ -628,7 +630,11 @@ class GraphBuilder:
             f"shape={shape}{self.get_debug_msg()}"
         )
         assert isinstance(shape, tuple), f"Unexpected shape type {type(shape)}"
-        shape = self.verify_shape(shape, 0, name=name, for_onnx=for_onnx)
+        shape = self.verify_shape(shape, 0, name=name)
+        assert all(map(lambda t: not isinstance(t, self.torch.SymInt), shape)), (
+            f"Unexpected type for a shape, shape={shape}, types={[type(_) for _ in shape]}"
+            f"{self.get_debug_msg()}"
+        )
         assert isinstance(shape, tuple), f"Unexpected shape type {type(shape)}"
         shape_int = [d for d in shape if isinstance(d, int)]
         assert (
@@ -1318,7 +1324,6 @@ class GraphBuilder:
     def verify_dynamic_shape(
         self,
         shape: Any,
-        for_onnx: bool = True,
         name: Optional[str] = None,
         add: bool = True,
     ) -> DYNAMIC_SHAPE:
@@ -1339,15 +1344,14 @@ class GraphBuilder:
                     continue
 
                 value = self._torch_sym_int(d, add=add)
-                new_shape.append(value if for_onnx else d)
+                assert (
+                    value is not None
+                ), f"Unexpected type {type(d)} in shape={shape}{self.get_debug_msg()}"
+                new_shape.append(value)
                 continue
-            if for_onnx and d is None:
-                new_shape.append(None)
-                continue
-            raise RuntimeError(
-                f"Unexpected type {type(d)} in shape={shape} (for_onnx={for_onnx}"
-                f"{self.get_debug_msg()}"
-            )
+            assert (
+                d is not None
+            ), f"Unexpected type {type(d)} in shape={shape}{self.get_debug_msg()}"
         return tuple(new_shape)
 
     def make_tensor_input(
@@ -1460,16 +1464,14 @@ class GraphBuilder:
         elem_type = self._get_type(elem_type, False)
         if not self.as_function and elem_type == 0:
             raise RuntimeError(f"Undefined element type for {name!r}.")
-        dyn_shape = self.verify_shape(
-            shape, name=name, elem_type=elem_type, for_onnx=True
-        )
+        dyn_shape = self.verify_shape(shape, name=name, elem_type=elem_type)
         self.outputs.append(oh.make_tensor_value_info(name, elem_type, dyn_shape))
         if self.verbose:
             print(
                 f"[GraphBuilder-{self._hash()}.make_tensor_output] {name}[{elem_type}:{dyn_shape}]"
             )
         if dyn_shape:
-            self.set_shape(name, dyn_shape, for_onnx=True)
+            self.set_shape(name, dyn_shape)
         if elem_type:
             self.set_type(name, elem_type)
         return name
@@ -1479,7 +1481,6 @@ class GraphBuilder:
         shape: Optional[DYNAMIC_SHAPE],
         elem_type: int,
         name: Optional[str] = None,
-        for_onnx: bool = False,
     ) -> Optional[DYNAMIC_SHAPE]:
         assert isinstance(
             elem_type, int
@@ -1495,7 +1496,7 @@ class GraphBuilder:
             f"Shape={shape} is not a shape (type={[type(i) for i in shape]}), "
             f"name={name!r}, elem_type={elem_type}{self.get_debug_msg()}"
         )
-        new_shape = self.verify_dynamic_shape(shape, for_onnx=for_onnx, name=name)
+        new_shape = self.verify_dynamic_shape(shape, name=name)
         return new_shape
 
     def _get_symbol(self, i: str) -> str:
@@ -1668,6 +1669,21 @@ class GraphBuilder:
         if attributes:
             node.attribute.extend(attributes)
 
+        if node.domain == "" and node.op_type in {"Constant", "ConstantOfShape"}:
+            # A exact constant may be already existing,
+            # In that case, we just return an identity node.
+            origin = self.is_exact_same_constant(node)
+            if origin is not None:
+                if self.verbose > 2:
+                    print(
+                        f"[GraphBuilder-{self._hash()}.make_node] duplicated constant detected for "
+                        f"{node.op_type}:{node.input}->{node.output}"
+                    )
+                node = oh.make_node("Identity", [origin.output[0]], [node.output[0]])
+                self.constants_alias_[node.output[0]] = origin.output[0]
+            else:
+                self.add_constant_node(node)
+
         # constant handling, shape, type
         self._make_node_set_type_shape_constant(node, set_type_shape=set_type_shape)
 
@@ -1820,6 +1836,9 @@ class GraphBuilder:
             self.set_name(name)
             self.set_shape(name, builder._known_shapes[init])
             self.set_type(name, builder._known_types[init])
+
+        for k, v in builder.dynamic_objects.items():
+            self.make_dynamic_object(k, v)
 
         assert len(input_names) == len(builder.inputs), (
             f"Inconsistency between input_names={input_names} "
@@ -2403,11 +2422,10 @@ class GraphBuilder:
                 perm = tuple(att.ints)
                 break
         assert perm, f"perm not here in node {node}"
-        assert len(perm) == 2, f"perm={perm} is not supported with torch"
         x = feeds[node.input[0]]
         if isinstance(x, np.ndarray):
             x = self.torch.Tensor(x)
-        return [self.torch.transpose(x, *perm)]
+        return [self.torch.permute(x, perm)]
 
     def compute_constant(
         self, name: str, exc: bool = True
@@ -2789,31 +2807,66 @@ class GraphBuilder:
             ):
                 self.set_value_shape(i, (i.name,))
 
+        need_identity_removal = False
+        new_nodes = []
         for node in self.nodes:
             self._unique_names |= set(node.output)
             self.update_value_shape_with_node(node)
             if node.name:
                 self._unique_node_names.add(node.name)
             if node.op_type == "Constant":
-                self.constants_[node.output[0]] = node
-                if not self.has_name(node.output[0]):
-                    self.set_name(node.output[0])
-                self.set_shape(node.output[0], self._get_tensor_shape(node))
-                self.set_type(node.output[0], self._get_tensor_type(node))
-            elif node.op_type == "ConstantOfShape" and self.is_constant(node.input[0]):
-                self.constants_[node.output[0]] = node
-                if not self.has_name(node.output[0]):
-                    self.set_name(node.output[0])
-                self.set_shape(node.output[0], self.get_shape(node.input[0]))
-                if len(node.attribute) == 0:
-                    self.set_type(node.output[0], TensorProto.FLOAT)
+                exist = self.is_exact_same_constant(node)
+                if exist is not None:
+                    node = oh.make_node("Identity", [exist.output[0]], [node.output[0]])
+                    replaced = True
+                    need_identity_removal = True
                 else:
-                    value = node.attribute[0].t
-                    self.set_type(node.output[0], value.data_type)
+                    self.add_constant_node(node)
+                    replaced = False
+
+                self.constants_[node.output[0]] = node
+                if not self.has_name(node.output[0]):
+                    self.set_name(node.output[0])
+
+                if replaced:
+                    self.set_type(node.output[0], self.get_type(node.input[0]))
+                    self.set_shape(node.output[0], self.get_shape(node.input[0]))
+                else:
+                    self.set_shape(node.output[0], self._get_tensor_shape(node))
+                    self.set_type(node.output[0], self._get_tensor_type(node))
+
+            elif node.op_type == "ConstantOfShape" and self.is_constant(node.input[0]):
+                exist = self.is_exact_same_constant(node)
+                if exist is not None:
+                    node = oh.make_node("Identity", [exist.output[0]], [node.output[0]])
+                    replaced = True
+                    need_identity_removal = True
+                else:
+                    self.add_constant_node(node)
+                    replaced = False
+
+                self.constants_[node.output[0]] = node
+                if not self.has_name(node.output[0]):
+                    self.set_name(node.output[0])
+                if replaced:
+                    self.set_type(node.output[0], self.get_type(node.input[0]))
+                    self.set_shape(node.output[0], self.get_shape(node.input[0]))
+                else:
+                    self.set_shape(node.output[0], self.get_shape(node.input[0]))
+                    if len(node.attribute) == 0:
+                        self.set_type(node.output[0], TensorProto.FLOAT)
+                    else:
+                        value = node.attribute[0].t
+                        self.set_type(node.output[0], value.data_type)
             else:
                 for o in node.output:
                     if not self.has_name(o):
                         self.set_name(o)
+            new_nodes.append(node)
+        self.nodes = new_nodes
+
+        if need_identity_removal:
+            self.remove_identity_nodes()
 
     def parse_dimension_expression(self, expr: str, exc: bool = True) -> Expression:
         """
@@ -2824,3 +2877,61 @@ class GraphBuilder:
         :return: an expression or None if exc is False and the parsing failed
         """
         return parse_expression(expr, exc=exc, context=self.dynamic_objects)
+
+    def _constant_key(self, node: NodeProto) -> Optional[bytes]:
+        """
+        Builds a unique key for a constant.
+        Returns None if the constant if too big.
+        """
+        if node.op_type == "ConstantOfShape":
+            # We assume initializer are fused.
+            name = node.input[0]
+            while name in self.constants_alias_:
+                name = self.constants_alias_[name]
+            key = [node.op_type.encode(), name.encode()]
+            for att in node.attribute:
+                key.append(att.SerializeToString())
+            return b"|".join(key)
+        if node.op_type == "Constant":
+            shape = self._get_tensor_shape(node)
+            size = np.prod(shape) if shape else 1
+            if size > self.optimization_options.constant_size:
+                # It would be too long.
+                return None
+            key = [node.op_type.encode()]
+            for att in node.attribute:
+                key.append(att.SerializeToString())
+            return b"|".join(key)
+
+        raise RuntimeError(
+            f"Unexpected node type {node.op_type!r}{self.get_debug_msg()}"
+        )
+
+    def add_constant_node(self, node: NodeProto) -> Optional[bytes]:
+        """
+        Adds a constant node. Any constant equivalent to this one
+        will be fused.
+        `self.optimization_options.constant_fusing` must be True.
+        """
+        if not self.optimization_options.constant_fusing:
+            return None
+        key = self._constant_key(node)
+        assert key not in self.constants_node_, (
+            f"A constant with the same key {key!r} was already added"
+            f"{self.get_debug_msg()}"
+        )
+        self.constants_node_[key] = node
+        return key
+
+    def is_exact_same_constant(self, node: NodeProto) -> Optional[NodeProto]:
+        """
+        Adds a constant node. Any constant equivalent to this one
+        will be fused.
+        `self.optimization_options.constant_fusing` must be True.
+        """
+        if not self.optimization_options.constant_fusing:
+            return None
+        key = self._constant_key(node)
+        if key in self.constants_node_:
+            return self.constants_node_[key]
+        return None

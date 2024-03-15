@@ -23,6 +23,14 @@ get_llama_model
 
 .. autofunction:: experimental_experiment.torch_helper.llama_helper.get_llama_model
 
+mistral_helper
+==============
+
+get_mistral_model
++++++++++++++++++
+
+.. autofunction:: experimental_experiment.torch_helper.mistral_helper.get_mistral_model
+
 dump_helper
 ===========
 

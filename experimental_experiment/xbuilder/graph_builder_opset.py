@@ -62,6 +62,7 @@ class Opset:
         "Sub": 1,
         "Tile": 1,
         "Transpose": 1,
+        "Trilu": 1,
         "Unsqueeze": 1,
         "Where": 1,
     }

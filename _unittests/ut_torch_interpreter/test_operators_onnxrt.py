@@ -4,7 +4,6 @@ import itertools
 import operator
 import unittest
 import sys
-import packaging.version as pv
 import numpy as np
 import onnxruntime  # noqa: F401
 import torch
@@ -13,7 +12,11 @@ import torch.nn.functional as F
 import torch.onnx
 from torch.autograd import Function
 from torch.nn import functional, Module, Parameter
-from experimental_experiment.ext_test_case import ExtTestCase, ignore_warnings
+from experimental_experiment.ext_test_case import (
+    ExtTestCase,
+    ignore_warnings,
+    requires_torch,
+)
 from experimental_experiment.torch_interpreter import FunctionNotFoundError
 from experimental_experiment.torch_helper.training_helper import make_aot_ort
 
@@ -72,7 +75,6 @@ class TestOperatorsOnnxrt(ExtTestCase):
         rtol=1e-6,
         opset_version=None,
         test_backward=True,
-        operator_export_type=None,
         impl="ort",
         #
         input_names=None,
@@ -553,23 +555,20 @@ class TestOperatorsOnnxrt(ExtTestCase):
 
         class MyFun(Function):
             @staticmethod
-            def symbolic(g, x, onnx_export=inspect.currentframe().f_code.co_name):
-                return g.at(
-                    "add", x, x, onnx_export=inspect.currentframe().f_code.co_name
-                )
+            def symbolic(g, x):
+                return g.at("add", x, x)
 
             @staticmethod
-            def forward(ctx, x, onnx_export=inspect.currentframe().f_code.co_name):
+            def forward(ctx, x):
                 return x + x
 
         class MyModule(Module):
-            def forward(self, x, onnx_export=inspect.currentframe().f_code.co_name):
+            def forward(self, x):
                 return MyFun.apply(x)
 
         self.assertONNX(
             MyModule(),
             x,
-            operator_export_type=torch.onnx.OperatorExportTypes.ONNX_ATEN_FALLBACK,
             onnx_export=inspect.currentframe().f_code.co_name,
             test_backward=False,
         )
@@ -1134,9 +1133,9 @@ class TestOperatorsOnnxrt(ExtTestCase):
             lambda x: x.sum(-1), x, onnx_export=inspect.currentframe().f_code.co_name
         )
 
-    @unittest.skipIf(
-        pv.Version(torch.__version__) < pv.Version("2.3.0"),
-        reason="rrelu_with_noise() missing 2 required positional arguments: 'lower' and 'upper'",
+    @requires_torch(
+        "2.3.0",
+        "rrelu_with_noise() missing 2 required positional arguments: 'lower' and 'upper'",
     )
     def test_rrelu(self):
         x = torch.randn(1, 2, 3, 4)
@@ -1407,7 +1406,6 @@ class TestOperatorsOnnxrt(ExtTestCase):
         self.assertONNX(
             model,
             x,
-            operator_export_type=torch.onnx.OperatorExportTypes.ONNX_ATEN_FALLBACK,
             onnx_export=inspect.currentframe().f_code.co_name,
             atol=3e-4,
             rtol=1e-4,

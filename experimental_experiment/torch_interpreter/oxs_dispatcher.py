@@ -15,7 +15,6 @@ class OxsDispatcher(Dispatcher):
     onnxscript may have multiple overloaded functions.
     Right now, it takes the first one.
 
-    :param registered_functions: registered functions
     :param verbose: verbose
     """
 
@@ -86,9 +85,10 @@ class OxsDispatcher(Dispatcher):
             key = "aten::" + key[6:]
 
         if key not in default_registry:
-            if self.verbose > 1:
+            if self.verbose > 2:
                 print(
-                    "[OxsDispatcher.fallback] unable to find any fallback for {name!r} or {key!r}"
+                    f"[OxsDispatcher.fallback] unable to find any fallback "
+                    f"for {name!r} or {key!r}"
                 )
             return None
 
@@ -105,10 +105,10 @@ class OxsDispatcher(Dispatcher):
             f"key={key!r}, name={name!r}{builder.get_debug_msg()}"
         )
 
-        if self.verbose > 1:
+        if self.verbose > 3:
             print(
-                f"[OxsDispatcher.fallback] found {len(regfct.overloads)} for "
-                f"{key!r} ({name!r}), taking the first one."
+                f"[OxsDispatcher.fallback] found {len(regfct.overloads)} "
+                f"overloads for {key!r} ({name!r}), taking the first one."
             )
 
         def wrapper(g, sts, outputs, *args, _fct=fct, _dispatcher=self, **kwargs):
@@ -162,3 +162,98 @@ class OxsDispatcher(Dispatcher):
     def _restore_oxs(self, old):
         for k, v in self.submodules.items():
             v.op, v.IsScalar, v.Rank = old[k]
+
+
+class OxsDebugDispatcher(OxsDispatcher):
+    """
+    Tries the fallback even if is not necessary to check
+    it is working.
+
+    :param verbose: verbosity
+    :param raise_exc: fail or raise an exception
+
+    The class can be used the following way.
+
+    .. runpython::
+        :showcode:
+        :process:
+
+        import torch
+        from experimental_experiment.torch_helper.llama_helper import get_llama_model
+        from experimental_experiment.xbuilder import OptimizationOptions
+        from experimental_experiment.torch_interpreter import to_onnx
+        from experimental_experiment.torch_interpreter.oxs_dispatcher import (
+            OxsDebugDispatcher,
+        )
+
+        with torch.no_grad():
+            model, input_tensors = get_llama_model()
+            input_tensors = input_tensors[0]
+
+            to_onnx(
+                model,
+                input_tensors,
+                input_names=[f"input{i}" for i in range(len(input_tensors))],
+                options=OptimizationOptions(patterns=None),
+                verbose=0,
+                dispatcher=OxsDebugDispatcher(verbose=2, raise_exc=False),
+            )"""
+
+    def __init__(self, verbose: int = 0, raise_exc: bool = True):
+        super(OxsDispatcher, self).__init__({}, verbose=verbose)
+        self._submodule = None
+        self.raise_exc = raise_exc
+
+    def fallback(
+        self,
+        name: Any,
+        fct: Optional[Callable],
+        args: List[Any],
+        kwargs: Dict[str, Any],
+        builder: "GraphBuilder",  # noqa: F821
+    ) -> Optional[Callable]:
+        if self.raise_exc:
+            res = OxsDispatcher.fallback(self, name, None, args, kwargs, builder)
+            res(builder, False, None, *args, **kwargs)
+            if self.verbose > 1:
+                print(
+                    f"[OxsDebugDispatcher.fallback] fallback "
+                    f"verified for {name!r}: {res}"
+                )
+        else:
+            try:
+                res = OxsDispatcher.fallback(self, name, None, args, kwargs, builder)
+            except (
+                AssertionError,
+                AttributeError,
+                RuntimeError,
+                TypeError,
+                ValueError,
+            ) as e:
+                if self.verbose > 1:
+                    print(
+                        f"[OxsDebugDispatcher.fallback] fallback "
+                        f"failed for {name!r} with e={e}"
+                    )
+                return fct
+            try:
+                res(builder, False, None, *args, **kwargs)
+            except (
+                AssertionError,
+                AttributeError,
+                RuntimeError,
+                TypeError,
+                ValueError,
+            ) as e:
+                if self.verbose > 1:
+                    print(
+                        f"[OxsDebugDispatcher.fallback] fallback "
+                        f"unverified for {name!r} with e={e}"
+                    )
+                return fct
+        if self.verbose > 1:
+            print(
+                f"[OxsDebugDispatcher.fallback] fallback verified "
+                f"for {name!r} with {res}"
+            )
+        return fct or res

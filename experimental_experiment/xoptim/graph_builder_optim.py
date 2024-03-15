@@ -30,8 +30,8 @@ class GraphBuilderPatternOptimization:
         verbose: int = 0,
     ):
         self.builder = builder
-        self.patterns = patterns or get_default_patterns()
         self.verbose = max(verbose, int(os.environ.get("LOG_PATTERN_OPTIMIZE", "0")))
+        self.patterns = patterns or get_default_patterns(self.verbose)
         self.recursive = recursive
         self._build()
         # This assume a name is given once and
@@ -104,6 +104,14 @@ class GraphBuilderPatternOptimization:
             return True
         suc = self.successors_[name]
         return len(suc) > 1
+
+    def is_used_only_by(self, name, *nodes: List[NodeProto]) -> bool:
+        """
+        Tells if a result is only used by a specific set of nodes.
+        """
+        next_nodes = self.next_nodes(name)
+        allowed = set(id(n) for n in nodes)
+        return all(map(lambda n: id(n) in allowed, next_nodes))
 
     def is_constant(self, name: str) -> bool:
         """

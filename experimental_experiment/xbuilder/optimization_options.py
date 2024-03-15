@@ -16,6 +16,8 @@ class OptimizationOptions:
         it looks a a specific subsequence of nodes in a graph
         and do some replacements,
         `'default'` means a default list of optimization patterns are applied
+    :param constant_fusing: similar node Constant and ConstantOfShape are used,
+        this options avoids creating new nodes when they are the same
     :param max_iter: maximum number of iteration when doing pattern optimizations,
         -1 to let it undefined
     :param recursive: optimizes subgraphs and functions as well
@@ -27,6 +29,7 @@ class OptimizationOptions:
         remove_unused: bool = True,
         constant_folding: bool = False,
         constant_size: int = 1024,
+        constant_fusing: bool = True,
         remove_identity: bool = True,
         patterns: Union[str, List["PatternOptimization"]] = "default",  # noqa: F821
         max_iter: int = -1,
@@ -37,10 +40,11 @@ class OptimizationOptions:
         self.constant_folding = constant_folding
         self.remove_identity = remove_identity
         self.constant_size = constant_size
+        self.constant_fusing = constant_fusing
         if isinstance(patterns, str):
             from ..xoptim.patterns import get_pattern_list
 
-            self.patterns = get_pattern_list(patterns)
+            self.patterns = get_pattern_list(patterns, verbose=verbose)
         else:
             assert patterns is None or isinstance(
                 patterns, list
@@ -48,7 +52,9 @@ class OptimizationOptions:
             from ..xoptim.patterns import get_pattern
 
             self.patterns = (
-                None if patterns is None else [get_pattern(p) for p in patterns]
+                None
+                if patterns is None
+                else [get_pattern(p, verbose=verbose) for p in patterns]
             )
         self.max_iter = -1
         self.verbose = verbose

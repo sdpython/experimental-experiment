@@ -266,6 +266,16 @@ class DynamoInterpreter:
                             f"\nnode.__dict__={node.__dict__}"
                             f"{self.builder.get_debug_msg()}"
                         )
+
+                # let's avoid none
+                ns = []
+                for i, d in enumerate(shape):
+                    if d is None:
+                        d = f"d_{o}_{i}"
+                        self.builder.make_dynamic_object(d, self.torch.SymInt(d))
+                    ns.append(d)
+                shape = tuple(ns)
+
                 self.builder.make_tensor_output(
                     o,
                     elem_type=elem_type,

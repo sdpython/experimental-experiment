@@ -7,7 +7,7 @@ import warnings
 from contextlib import redirect_stderr, redirect_stdout
 from io import StringIO
 from timeit import Timer
-from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, Union
+from typing import Any, Callable, Dict, List, Optional, Sequence, Set, Tuple, Union
 
 import numpy
 from numpy.testing import assert_allclose
@@ -24,6 +24,32 @@ def is_windows() -> bool:
 
 def is_apple() -> bool:
     return sys.platform == "darwin"
+
+
+def skipif_transformers(version_to_skip: Union[str, Set[str]], msg: str) -> Callable:
+    """
+    Skips a unit test if transformers has a specific version.
+    """
+    if isinstance(version_to_skip, str):
+        version_to_skip = {version_to_skip}
+    import transformers
+
+    if transformers.__version__ in version_to_skip:
+        msg = f"Unstable test. {msg}"
+        return unittest.skip(msg)
+    return lambda x: x
+
+
+def skipif_not_onnxrt(msg) -> Callable:
+    """
+    Skips a unit test if it runs on :epkg:`azure pipeline` on :epkg:`Windows`.
+    """
+    UNITTEST_ONNXRT = os.environ.get("UNITTEST_ONNXRT", "0")
+    value = int(UNITTEST_ONNXRT)
+    if not value:
+        msg = f"Set UNITTEST_ONNXRT=1 to run the unittest. {msg}"
+        return unittest.skip(msg)
+    return lambda x: x
 
 
 def skipif_ci_windows(msg) -> Callable:
@@ -390,8 +416,36 @@ def requires_torch(version: str, msg: str) -> Callable:
     import packaging.version as pv
     import torch
 
-    if pv.Version(torch.__version__) < pv.Version(version):
-        msg = f"Test does not work on azure pipeline (Windows). {msg}"
+    if pv.Version(".".join(torch.__version__.split(".")[:2])) < pv.Version(version):
+        msg = f"torch version {torch.__version__} < {version}: {msg}"
+        return unittest.skip(msg)
+    return lambda x: x
+
+
+def requires_onnxruntime(version: str, msg: str) -> Callable:
+    """
+    Skips a unit test if onnxruntime is not recent enough.
+    """
+    import packaging.version as pv
+    import onnxruntime
+
+    if pv.Version(".".join(onnxruntime.__version__.split(".")[:2])) < pv.Version(
+        version
+    ):
+        msg = f"onnxruntime version {onnxruntime.__version__} < {version}: {msg}"
+        return unittest.skip(msg)
+    return lambda x: x
+
+
+def requires_onnx(version: str, msg: str) -> Callable:
+    """
+    Skips a unit test if onnx is not recent enough.
+    """
+    import packaging.version as pv
+    import onnx
+
+    if pv.Version(".".join(onnx.__version__.split(".")[:2])) < pv.Version(version):
+        msg = f"onnx version {onnx.__version__} < {version}: {msg}"
         return unittest.skip(msg)
     return lambda x: x
 

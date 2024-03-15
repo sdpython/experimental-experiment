@@ -6,7 +6,7 @@ from .patterns_api import MatchResult, PatternOptimization
 
 class RotaryConcatPartPattern(PatternOptimization):
     """
-    Optimizes the following sequence.
+    Optimizes the following pattern
 
     .. plot::
 
@@ -64,6 +64,23 @@ class RotaryConcatPartPattern(PatternOptimization):
     ) -> Optional[MatchResult]:
         if node.op_type != "Add" or node.domain != "":
             return self.none()
+        left, right = g.node_before(node.input[0]), g.node_before(node.input[1])
+        if None in (left, right):
+            return self.none()
+        if "Concat" in (left.op_type, right.op_type):
+            return self.match_concat(g, node, matched)
+        if "ScatterElements" in (left.op_type, right.op_type):
+            return self.match_scatter(g, node, matched)
+        return self.none(node, inspect.currentframe().f_lineno)
+
+    def match_concat(
+        self,
+        g: "GraphBuilderPatternOptimization",  # noqa: F821
+        node: NodeProto,
+        matched: List[MatchResult],
+    ) -> Optional[MatchResult]:
+        if node.op_type != "Add" or node.domain != "":
+            return self.none()
         if g.is_used_more_than_once(node.input[0]) or g.is_used_more_than_once(
             node.input[1]
         ):
@@ -93,9 +110,16 @@ class RotaryConcatPartPattern(PatternOptimization):
         cst_right = [n for n in concat_right_before if n.op_type == "ConstantOfShape"][
             0
         ]
-        if g.is_used_more_than_once(cst_left.output[0]) or g.is_used_more_than_once(
-            cst_right.output[0]
+        if cst_left.output[0] == cst_right.output[0] and not g.is_used_only_by(
+            cst_left.output[0], concat_left, concat_right
         ):
+            # Node ConstantOfShape could be fused into a single one.
+            return self.none(node, inspect.currentframe().f_lineno)
+        if cst_left.output[0] != cst_right.output[0] and (
+            g.is_used_more_than_once(cst_left.output[0])
+            or g.is_used_more_than_once(cst_right.output[0])
+        ):
+            # Node ConstantOfShape are distinct, we check they are only used once.
             return self.none(node, inspect.currentframe().f_lineno)
 
         tl = [n for n in concat_right_before if n.op_type == "Neg"]
@@ -149,10 +173,10 @@ class RotaryConcatPartPattern(PatternOptimization):
             node,
         ]
 
-        return MatchResult(self, nodes, self.apply)
+        return MatchResult(self, nodes, self.apply_concat)
 
     @classmethod
-    def apply(
+    def apply_concat(
         cls,
         g: "GraphBuilder",  # noqa: F821
         cst_left: NodeProto,
@@ -192,3 +216,73 @@ class RotaryConcatPartPattern(PatternOptimization):
             doc_string=node.doc_string,
         )
         return [slice_left, slice_right, neg, concat]
+
+    def match_scatter(
+        self,
+        g: "GraphBuilderPatternOptimization",  # noqa: F821
+        node: NodeProto,
+        matched: List[MatchResult],
+    ) -> Optional[MatchResult]:
+        if node.op_type != "Add" or node.domain != "":
+            return self.none()
+        if g.is_used_more_than_once(node.input[0]) or g.is_used_more_than_once(
+            node.input[1]
+        ):
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        scatter_left, scatter_right = g.node_before(node.input[0]), g.node_before(
+            node.input[1]
+        )
+        if scatter_left is None or scatter_right is None:
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        cst_left = g.node_before(scatter_left.input[0])
+        cst_right = g.node_before(scatter_right.input[0])
+        if (
+            cst_left.op_type != "ConstantOfShape"
+            or cst_right.op_type != "ConstantOfShape"
+        ):
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        slice_left = g.node_before(scatter_left.input[2])
+        slice_right = g.node_before(scatter_right.input[2])
+        if slice_left.op_type not in ("Slice", "Neg") or slice_right.op_type not in (
+            "Slice",
+            "Neg",
+        ):
+            return self.none(node, inspect.currentframe().f_lineno)
+        if (
+            slice_left.op_type == "Neg"
+            and g.node_before(slice_left.input[0]).op_type != "Slice"
+        ):
+            return self.none(node, inspect.currentframe().f_lineno)
+        if (
+            slice_right.op_type == "Neg"
+            and g.node_before(slice_right.input[0]).op_type != "Slice"
+        ):
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        if slice_left.op_type == "Neg":
+            neg_left = slice_left
+            neg_right = None
+            slice_left = g.node_before(neg_left.input[0])
+        else:
+            neg_left = None
+            neg_right = slice_right
+            slice_right = g.node_before(neg_right.input[0])
+
+        nodes = [
+            cst_left,
+            slice_left,
+            neg_left,
+            cst_right,
+            slice_right,
+            neg_right,
+            node,
+        ]
+
+        # still returning None for the time begin
+        if nodes:
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        return MatchResult(self, nodes, self.apply_scatter)

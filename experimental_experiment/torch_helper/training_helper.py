@@ -36,7 +36,7 @@ def make_aot_ort(
         import packaging.version as pv
         from torch import __version__ as torch_version
 
-        if pv.Version(torch_version) < pv.Version("2.3"):
+        if pv.Version(".".join(torch_version.split(".")[:2])) < pv.Version("2.3"):
             rewrite = "try"
 
     if rewrite == "try":
@@ -75,7 +75,7 @@ def make_aot_ort(
             ort_session_options=ort_session_options,
             pre_ort_model_transforms=[
                 lambda *args, v=verbose, **kwargs: optimize_model_proto(
-                    *args, verbose=v, **kwargs
+                    *args, verbose=v, onnx_shape_inference=False, **kwargs
                 )
             ],
         )
