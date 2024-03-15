@@ -139,13 +139,14 @@ def ids_tensor(shape, vocab_size, rng=None, name=None):
 
 def get_llama_model(
     input_dims: Sequence[Tuple[int, int]] = ((2, 8), (4, 7), (9, 15)),
-    hidden_size=16,
-    num_hidden_layers=1,
-    vocab_size=1024,
-    intermediate_size=16,
-    max_position_embeddings=1024,
-    num_attention_heads=2,
-    _attn_implementation="eager",  # needed value to remove graph breaks
+    hidden_size: int = 16,
+    num_hidden_layers: int = 1,
+    vocab_size: int = 1024,
+    intermediate_size: int = 16,
+    max_position_embeddings: int = 1024,
+    num_attention_heads: int = 2,
+    _attn_implementation: str = "eager",  # needed value to remove graph breaks
+    with_mask: bool = True,
 ):
     """
     Returns a model.
@@ -168,20 +169,41 @@ def get_llama_model(
     if _attn_implementation:
         config._attn_implementation = _attn_implementation
 
+    if with_mask:
+
+        class LlamaModelWrapper(torch.nn.Module):
+            def __init__(self, config):
+                super().__init__()
+                self.model = LlamaModel(config)
+
+            def forward(self, input_ids, attention_mask):
+                model_output = self.model(input_ids, attention_mask=attention_mask)
+                return model_output.to_tuple()
+
+        def generate_example_inputs(batch: int, seq: int, vocab_size: int):
+            input_ids = ids_tensor([batch, seq], vocab_size)
+            input_mask = torch.tril(torch.ones(batch, seq, dtype=torch.float32))
+            assert input_mask.dtype == torch.float32
+            return input_ids, input_mask
+
+        example_args_collection = []
+        for b, s in input_dims:
+            example_args_collection.append(generate_example_inputs(b, s, vocab_size))
+
+        return LlamaModelWrapper(config), example_args_collection
+
     class LlamaModelWrapper(torch.nn.Module):
         def __init__(self, config):
             super().__init__()
             self.model = LlamaModel(config)
 
-        def forward(self, input_ids, attention_mask):
-            model_output = self.model(input_ids, attention_mask=attention_mask)
+        def forward(self, input_ids):
+            model_output = self.model(input_ids)
             return model_output.to_tuple()
 
     def generate_example_inputs(batch: int, seq: int, vocab_size: int):
         input_ids = ids_tensor([batch, seq], vocab_size)
-        input_mask = torch.tril(torch.ones(batch, seq, dtype=torch.float32))
-        assert input_mask.dtype == torch.float32
-        return input_ids, input_mask
+        return (input_ids,)
 
     example_args_collection = []
     for b, s in input_dims:

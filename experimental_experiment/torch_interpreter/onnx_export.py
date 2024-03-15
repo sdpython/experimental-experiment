@@ -309,6 +309,8 @@ def to_onnx(
     if verbose:
         t = time.perf_counter()
         print(f"[to_onnx] to_onnx done in {t - begin} s")
+        if verbose >= 10:
+            print(builder.get_debug_msg())
 
     if return_builder:
         return onx, builder

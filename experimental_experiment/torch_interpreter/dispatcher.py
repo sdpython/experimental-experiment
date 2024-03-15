@@ -1,3 +1,4 @@
+import inspect
 from typing import Any, Callable, Dict, List, Optional
 
 
@@ -95,3 +96,131 @@ class Dispatcher:
         :return: callable
         """
         return fct
+
+
+class ForceDispatcher(Dispatcher):
+    """
+    Implements a dispatcher which as an onnx as it is
+    when no converting function is found.
+
+    :param signatures: function used only for their signature mapping
+        a name to a function in order to have parameter names
+    :param verbose: verbose
+    :param domain: domain of the added node
+    :param version: version of the domain
+    :param strict: when an input is not a tensor, it becomes a named parameter
+        if strict is False
+    """
+
+    def __init__(
+        self,
+        signatures: Optional[Dict[str, Callable]] = None,
+        verbose: int = 0,
+        domain: str = "aten.lib",
+        version: int = 1,
+        strict: bool = False,
+    ):
+        super(ForceDispatcher, self).__init__({}, verbose=verbose)
+        self.signatures = signatures or {}
+        self.domain = domain
+        self.version = version
+        self.strict = strict
+        self._process_signatures()
+
+    def _process_signature(self, f: Callable):
+        args = []
+        kwargs = []
+        sig = inspect.signature(f)
+        for name, p in sig.parameters.items():
+            ann = p.annotation
+            if p.default is inspect._empty:
+                args.append(name)
+            else:
+                kwargs.append((name, p.default, None if ann is inspect._empty else ann))
+        return args, kwargs
+
+    def _process_signatures(self):
+        self.sigs_ = {}
+        for k, v in self.signatures.items():
+            sig = self._process_signature(v)
+            self.sigs_[k] = sig
+
+    def fallback(
+        self,
+        name: Any,
+        fct: Optional[Callable],
+        args: List[Any],
+        kwargs: Dict[str, Any],
+        builder: "GraphBuilder",  # noqa: F821
+    ) -> Optional[Callable]:
+        """
+        The function is called after the function converting an aten function
+        into ONNX. *fct* is this function. It can be changed and just
+        set when mapping was found.
+
+        :param name: object or str
+        :param fct: function found so far
+        :param args: known arguments coming from the graph module
+        :param kwargs: known named arguments coming from the graph module
+        :param builder: GraphBuilder
+        :return: callable
+        """
+        if fct is not None:
+            # The conversion has been found.
+            return fct
+
+        fname = self._get_function_name(name)
+
+        def wrapper(
+            g,
+            sts,
+            outputs,
+            *args,
+            _name=fname,
+            _domain=self.domain,
+            _version=self.version,
+            **kwargs,
+        ):
+            sig = self.sigs_.get(_name, None)
+            kwargs = kwargs.copy()
+            new_args = []
+            for i, n in enumerate(args):
+                if isinstance(n, str):
+                    new_args.append(n)
+                    continue
+                if isinstance(n, g.torch.Tensor):
+                    init = g.make_initializer("", n)
+                    new_args.append(init)
+                    continue
+                if not sig:
+                    if self.strict:
+                        raise RuntimeError(
+                            f"Unsupported type {type(n)} for argument {i} for function {_name!r}{g.get_debug_msg()}"
+                        )
+                    kwargs[f"param_{i}"] = n
+                    continue
+                a, kw = sig
+                assert i >= len(
+                    a
+                ), f"Unsupported type {type(n)} for argument {i} for function {_name!r}{g.get_debug_msg()}"
+                ni = i - len(a)
+                assert ni < len(
+                    kw
+                ), f"Unexpected argument at position {i}, for function {_name!r}{g.get_debug_msg()}"
+                p = kw[ni]
+                kwargs[p[0]] = n if p[2] is None else p[2](n)
+
+            g.add_domain(_domain, _version)
+            g.make_node(
+                _name,
+                new_args,
+                outputs=outputs,
+                domain=_domain,
+                name=g.unique_node_name(_name),
+                **kwargs,
+            )
+            if len(outputs) == 1:
+                return outputs[0]
+            return tuple(outputs)
+
+        return wrapper

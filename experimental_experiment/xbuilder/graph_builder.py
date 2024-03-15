@@ -230,6 +230,19 @@ class GraphBuilder:
         ), f"Domain {domain!r} is not registered{self.get_debug_msg()}."
         return self.opset[domain]
 
+    def add_domain(self, domain: str, version: int = 1):
+        """
+        Adds a domain to the list of supported ones.
+        Checks the version is the same if it exists.
+        """
+        if domain in self.opsets:
+            assert version == self.opsets[domain], (
+                f"Version mismatch for domain={domain!r}, current is "
+                f"{self.opsets[domain]}, new is {version}{self.get_debug_msg()}"
+            )
+            return
+        self.opsets[domain] = version
+
     def _hash(self) -> str:
         return make_hash(self)
 
