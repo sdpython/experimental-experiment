@@ -66,6 +66,11 @@ class FuncModuleModule(torch.nn.Module):
 
 class TestDynamoCompileBackend(ExtTestCase):
 
+    def setUp(self):
+        import torch
+
+        torch._dynamo.reset()
+
     def _assertONNX(
         self,
         backend: str,

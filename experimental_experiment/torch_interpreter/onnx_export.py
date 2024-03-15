@@ -100,6 +100,9 @@ def _export(
         exported_mod = torch.export.export(mod, args, dynamic_shapes=dynamic_shapes)
         return exported_mod
 
+    # import torch.utils._pytree as pytree
+    # flat_args, orig_in_spec = pytree.tree_flatten((args, ))
+    # print("+++++", orig_in_spec, type(flat_args), len(flat_args))
     res = torch._dynamo.export(
         mod,
         aten_graph=True,
@@ -109,6 +112,7 @@ def _export(
         decomposition_table=decomposition_table,
         assume_static_by_default=dynamic_shapes is None,
     )(*args)
+
     return res
 
 
@@ -240,6 +244,7 @@ def to_onnx(
     dynamic_shapes: Optional[Union[Dict[str, Any], Tuple[Any]]] = None,
     optimize: bool = True,
     dispatcher: Optional["Dispatcher"] = None,  # noqa: F821
+    api_two: bool = False,
 ) -> Union[ModelProto, Tuple[ModelProto, GraphBuilder]]:
     """
     Exports a torch model into ONNX using
@@ -259,6 +264,7 @@ def to_onnx(
     :param dynamic_shapes: see :epkg:`torch.export.export`
     :param optimize: optimize the model before exporting into onnx
     :param dispatcher: see :class:`experimental_experiment.torch_interpreter.Dispatcher`
+    :param api_two: use ``torch._dynamo.export`` instead of ``torch.export.export``
     :return: onnx model
     """
     if target_opset is None:
@@ -281,6 +287,7 @@ def to_onnx(
         raise_list=raise_list,
         dynamic_shapes=dynamic_shapes,
         dispatcher=dispatcher,
+        use_dynamo=api_two,
     )
 
     if verbose:

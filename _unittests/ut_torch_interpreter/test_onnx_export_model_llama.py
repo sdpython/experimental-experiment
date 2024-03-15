@@ -49,6 +49,7 @@ def export_utils(
     verbose=0,
     return_builder=False,
     dynamo=True,
+    use_dynamo=True,
 ):
     export_script(f"{prefix}.onnx", model, *args)
     if dynamo:
@@ -65,6 +66,7 @@ def export_utils(
         ),
         verbose=verbose,
         return_builder=return_builder,
+        api_two=use_dynamo,
     )
     with open(f"{prefix}.custom.onnx", "wb") as f:
         f.write((onx[0] if return_builder else onx).SerializeToString())
@@ -72,6 +74,11 @@ def export_utils(
 
 
 class TestOnnxExportLlama(ExtTestCase):
+    def setUp(self):
+        import torch
+
+        torch._dynamo.reset()
+
     def check_model_ort(self, onx):
         from onnxruntime import InferenceSession
 
@@ -155,21 +162,130 @@ class TestOnnxExportLlama(ExtTestCase):
     @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
     @requires_torch("2.3", "bug")
     @ignore_warnings(DeprecationWarning)
-    def test_llama_model(self):
+    def test_llama_model_true(self):
         import torch
 
         with torch.no_grad():
             model, input_tensors = get_llama_model()
             input_tensors = input_tensors[0]
             expected = model(*input_tensors)
-            onx = export_utils("test_llama_model", model, *input_tensors, dynamo=False)
+            onx = export_utils(
+                "test_llama_model_true",
+                model,
+                *input_tensors,
+                dynamo=False,
+                use_dynamo=True,
+                remove_unused=True,
+                verbose=0,
+            )
             xp = [x.numpy() for x in input_tensors]
             feeds = {f"input{i}": x for i, x in enumerate(xp)}
             ref = ExtendedReferenceEvaluator(onx)
             results = ref.run(None, feeds)
             self.assertEqualArray(expected[0].detach().numpy(), results[0], atol=1e-5)
-            with open("test_llama_model.onnx", "wb") as f:
-                f.write(onx.SerializeToString())
+            # with open("test_llama_model.onnx", "wb") as f:
+            # s    f.write(onx.SerializeToString())
+            self.check_model_ort(onx)
+
+    @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
+    @requires_torch("2.3", "bug")
+    @ignore_warnings(DeprecationWarning)
+    def test_llama_model_false(self):
+        import torch
+
+        with torch.no_grad():
+            model, input_tensors = get_llama_model()
+            input_tensors = input_tensors[0]
+            expected = model(*input_tensors)
+            onx = export_utils(
+                "test_llama_model_false",
+                model,
+                *input_tensors,
+                dynamo=False,
+                use_dynamo=False,
+                remove_unused=True,
+                verbose=0,
+            )
+            xp = [x.numpy() for x in input_tensors]
+            feeds = {f"input{i}": x for i, x in enumerate(xp)}
+            ref = ExtendedReferenceEvaluator(onx)
+            results = ref.run(None, feeds)
+            self.assertEqualArray(expected[0].detach().numpy(), results[0], atol=1e-5)
+            # with open("test_llama_model.onnx", "wb") as f:
+            #     f.write(onx.SerializeToString())
+            self.check_model_ort(onx)
+
+    @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
+    @requires_torch("2.3", "bug")
+    @ignore_warnings(DeprecationWarning)
+    @unittest.skipIf(True, reason="torch._dynamo.export does not work")
+    def test_nn_true(self):
+        import torch
+
+        class Neuron(torch.nn.Module):
+            def __init__(self, n_dims: int, n_targets: int):
+                super(Neuron, self).__init__()
+                self.linear = torch.nn.Linear(n_dims, n_targets)
+
+            def forward(self, x, y):
+                return torch.sigmoid(self.linear(x + y))
+
+        with torch.no_grad():
+            model, input_tensors = Neuron(3, 1), [(torch.rand(2, 3), torch.rand(2, 3))]
+            input_tensors = input_tensors[0]
+            expected = model(*input_tensors)
+            onx = export_utils(
+                "test_nn_true",
+                model,
+                *input_tensors,
+                dynamo=False,
+                use_dynamo=True,
+                remove_unused=True,
+                verbose=0,
+            )
+            xp = [x.numpy() for x in input_tensors]
+            feeds = {f"input{i}": x for i, x in enumerate(xp)}
+            ref = ExtendedReferenceEvaluator(onx)
+            results = ref.run(None, feeds)
+            self.assertEqualArray(expected.detach().numpy(), results[0], atol=1e-5)
+            # with open("test_llama_model.onnx", "wb") as f:
+            # s    f.write(onx.SerializeToString())
+            self.check_model_ort(onx)
+
+    @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
+    @requires_torch("2.3", "bug")
+    @ignore_warnings(DeprecationWarning)
+    def test_nn_false(self):
+        import torch
+
+        class Neuron(torch.nn.Module):
+            def __init__(self, n_dims: int, n_targets: int):
+                super(Neuron, self).__init__()
+                self.linear = torch.nn.Linear(n_dims, n_targets)
+
+            def forward(self, x, y):
+                return torch.sigmoid(self.linear(x + y))
+
+        with torch.no_grad():
+            model, input_tensors = Neuron(3, 1), [(torch.rand(2, 3), torch.rand(2, 3))]
+            input_tensors = input_tensors[0]
+            expected = model(*input_tensors)
+            onx = export_utils(
+                "test_nn_true",
+                model,
+                *input_tensors,
+                dynamo=False,
+                use_dynamo=False,
+                remove_unused=True,
+                verbose=0,
+            )
+            xp = [x.numpy() for x in input_tensors]
+            feeds = {f"input{i}": x for i, x in enumerate(xp)}
+            ref = ExtendedReferenceEvaluator(onx)
+            results = ref.run(None, feeds)
+            self.assertEqualArray(expected.detach().numpy(), results[0], atol=1e-5)
+            # with open("test_llama_model.onnx", "wb") as f:
+            # s    f.write(onx.SerializeToString())
             self.check_model_ort(onx)
 
 

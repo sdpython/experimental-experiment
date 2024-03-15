@@ -122,7 +122,7 @@ jobs:
   - script: pip install onnxmltools --no-deps
     displayName: 'Install onnxmltools'
   - script: |
-      UNITTEST_ONNXRT=1 python -m pytest -v
+      python -m pytest -v
     displayName: 'Runs Unit Tests'
   - script: |
       python -u setup.py bdist_wheel

@@ -7,6 +7,9 @@ rm plot*
 rm test* -rf
 rm temp* -rf
 rm dump* -rf
+rm *.sarif
+rm *.svg
+rm neural_coder_workspace -rf
 
 rm _doc/examples/plot*.onnx
 rm _doc/examples/plot*.txt
