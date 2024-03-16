@@ -121,6 +121,7 @@ class GraphBuilder:
         self.dynamic_objects_rev = {}
         self.functions = []
         self.value_info = []
+        self.raise_list = raise_list
         self._raise_list = raise_list or set()
         self.constants_computed_ = {}
         self._cache_shape = {}
