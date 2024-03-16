@@ -1643,11 +1643,17 @@ class GraphBuilder:
 
         if check is not False:
             for i in inputs:
+                if i == "":
+                    # Optional input.
+                    continue
                 assert self.has_name(i), (
                     f"Input {i!r} does not exist for operator {op_type!r} "
                     f"({self._hash()}){self.get_debug_msg()}"
                 )
             for i in output_names:
+                if i == "":
+                    # Optional output.
+                    continue
                 assert not self.has_name(i), (
                     f"Output {i!r} already exists for operator {op_type!r} "
                     f"({self._hash()}){self.get_debug_msg()}"
@@ -2275,6 +2281,8 @@ class GraphBuilder:
             known |= set(self.initializers_dict)
             for node in self.nodes:
                 for i in node.input:
+                    if i == "":
+                        continue
                     assert (
                         i in known
                     ), f"Unknown input {i!r}, step {step!r}  in node {node}"

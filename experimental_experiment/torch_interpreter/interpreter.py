@@ -883,9 +883,11 @@ class DynamoInterpreter:
                     self.builder.set_shape(r, (1,))
                     self.builder.set_type(r, TensorProto.INT64)
                     self.builder.make_dynamic_object(r, v)
+                elif v is None:
+                    continue
                 else:
                     raise TypeError(
-                        f"Unexpected type in node {node!r}, "
+                        f"Unexpected type in node {node!r}, r={r!r}, "
                         f"type(val)={type(v)}{self.builder.get_debug_msg()}"
                     )
         if exa is not None and not isinstance(exa, tuple):
