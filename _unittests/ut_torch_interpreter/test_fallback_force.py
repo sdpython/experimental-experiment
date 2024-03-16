@@ -17,14 +17,14 @@ def _f_scaled_dot_product_flash_attention_for_cpu_default(
     query,
     key,
     value,
-    dropout_p=0.0,
-    is_causal=False,
-    return_debug_mask=False,
+    dropout_p: float = 0.0,
+    is_causal: bool = False,
+    return_debug_mask: bool = False,
 ):
     from torch.nn import functional as F
 
     return F.scaled_dot_product_attention(
-        query, key, value, dropout_p=dropout_p, is_causal=is_causal
+        query, key, value, dropout_p=dropout_p, is_causal=bool(is_causal)
     )
 
 
@@ -46,11 +46,90 @@ class _scaled_dot_product_flash_attention_for_cpu_default(OpRun):
         tkey = torch.Tensor(key)
         tvalue = torch.Tensor(value)
         res = _f_scaled_dot_product_flash_attention_for_cpu_default(
-            tquery, tkey, tvalue, dropout_p=0.0, is_causal=True
+            tquery, tkey, tvalue, dropout_p=dropout_p, is_causal=is_causal
         )
         if isinstance(res, torch.Tensor):
             return (res.numpy(),)
         return tuple(r.numpy() for r in res)
+
+
+def has_cuda():
+    import torch
+
+    return torch.cuda.is_available()
+
+
+if has_cuda():
+
+    def _f_scaled_dot_product_efficient_attention_cuda(
+        query,
+        key,
+        value,
+        attn_bias=None,
+        compute_log_sumexp: bool = False,
+        dropout_p: float = 0.0,
+        is_causal: bool = False,
+        scale: float = 1.0,
+    ):
+        """
+        output, log_sumexp, philox_seed, philox_offset = _scaled_dot_product_efficient_attention(
+            query,
+            key,
+            value,
+            attn_bias,
+            compute_log_sumexp,
+            dropout_p,
+            is_causal,
+            1.0,
+        )
+        """
+        # from torch.nn import functional as F
+        import torch
+
+        res = torch.ops.aten._scaled_dot_product_efficient_attention.default(
+            query.to("cuda"),
+            key.to("cuda"),
+            value.to("cuda"),
+            None if attn_bias is None else attn_bias.to("cuda"),
+            compute_log_sumexp,
+            dropout_p,
+            is_causal,
+            scale=scale,
+        )
+        cpu_res = tuple(r.to("cpu") for r in res)
+        return cpu_res
+
+    class _scaled_dot_product_efficient_attention_default(OpRun):
+        op_domain = "aten.lib"
+
+        def _run(
+            self,
+            query,
+            key,
+            value,
+            attn_bias=None,
+            compute_log_sumexp: bool = False,
+            dropout_p: float = 0.0,
+            is_causal: bool = False,
+            scale: float = 1.0,
+        ):
+            import torch
+
+            tquery = torch.Tensor(query)
+            tkey = torch.Tensor(key)
+            tvalue = torch.Tensor(value)
+            tattn_bias = None if attn_bias is None else torch.Tensor(attn_bias)
+            res = _f_scaled_dot_product_efficient_attention_cuda(
+                tquery,
+                tkey,
+                tvalue,
+                tattn_bias,
+                dropout_p=dropout_p,
+                is_causal=is_causal,
+            )
+            if isinstance(res, torch.Tensor):
+                return (res.numpy(),)
+            return tuple(r.numpy() for r in res)
 
 
 class TestFallbackForce(ExtTestCase):
@@ -82,7 +161,7 @@ class TestFallbackForce(ExtTestCase):
         self.assertEqual(got.shape, (5, 1))
 
     @skipif_ci_windows("dynamo not supported on Windows")
-    def test_fallback_force_llama_sdpa(self):
+    def test_fallback_force_llama_sdpa_export(self):
         from experimental_experiment.torch_helper.llama_helper import get_llama_model
         from experimental_experiment.torch_interpreter import to_onnx
         from experimental_experiment.torch_interpreter.dispatcher import (
@@ -122,6 +201,88 @@ class TestFallbackForce(ExtTestCase):
             None, dict(zip(names, [i.numpy() for i in example_args_collection[0]]))
         )
         self.assertEqualArray(expected[0], got[0], atol=1e-5)
+
+    @skipif_ci_windows("dynamo not supported on Windows")
+    @unittest.skipIf(not has_cuda(), reason="design for cuda")
+    def test_fallback_force_llama_sdpa_cort_cuda_static(self):
+        self.fallback_force_llama_sdpa_cort_cuda(False)
+
+    @skipif_ci_windows("dynamo not supported on Windows")
+    @unittest.skipIf(not has_cuda(), reason="design for cuda")
+    @unittest.skipIf(
+        True,
+        reason="is_causal=bool(self.is_causal and attention_mask is None and q_len > 1)",
+    )
+    def test_fallback_force_llama_sdpa_cort_cuda_dynamic(self):
+        self.fallback_force_llama_sdpa_cort_cuda(True)
+
+    def fallback_force_llama_sdpa_cort_cuda(self, dynamic):
+        import torch
+        from torch._dynamo.backends.common import aot_autograd
+        from experimental_experiment.torch_helper.llama_helper import get_llama_model
+        from experimental_experiment.torch_dynamo import (
+            onnx_debug_backend,
+            get_decomposition_table,
+        )
+        from experimental_experiment.torch_interpreter.dispatcher import (
+            ForceDispatcher,
+        )
+
+        model, example_args_collection = get_llama_model(
+            input_dims=[(9, 15)], _attn_implementation="sdpa", with_mask=False
+        )
+        model = model.to("cuda")
+        example_args_collection = [
+            [i.to("cuda") for i in inp] for inp in example_args_collection
+        ]
+
+        expected = model(*example_args_collection[0])
+
+        dispatcher = ForceDispatcher(
+            {
+                "_scaled_dot_product_efficient_attention_default": _f_scaled_dot_product_efficient_attention_cuda
+            }
+        )
+
+        models = []
+
+        def store_model(onx):
+            with open(
+                f"test_fallback_force_llama_sdpa_cort_cuda_"
+                f"{1 if dynamic else 0}_{len(models)}.onnx",
+                "wb",
+            ) as f:
+                f.write(onx.SerializeToString())
+            models.append(onx)
+            return onx
+
+        aot_compiler = aot_autograd(
+            fw_compiler=lambda *args, **kwargs: onnx_debug_backend(
+                *args,
+                target_opset=18,
+                pre_ort_model_transforms=store_model,
+                dispatcher=dispatcher,
+                backend=lambda onx, verbose=0: ExtendedReferenceEvaluator(
+                    onx,
+                    new_ops=[_scaled_dot_product_efficient_attention_default],
+                    verbose=verbose,
+                ),
+                **kwargs,
+            ),
+            decompositions=get_decomposition_table(),
+        )
+
+        compiled_model = torch.compile(
+            model, backend=aot_compiler, dynamic=dynamic, fullgraph=True
+        )
+
+        got = compiled_model(*example_args_collection[0])
+        self.assertEqual(type(got), type(expected))
+        self.assertEqualArray(expected[0], got[0], atol=1e-1)
+        self.assertEqual(len(expected), 2)
+        self.assertEqual(len(got), 4)
+        self.assertEmpty(got[2])
+        self.assertEmpty(got[3])
 
 
 if __name__ == "__main__":

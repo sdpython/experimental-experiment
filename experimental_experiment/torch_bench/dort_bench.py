@@ -43,6 +43,7 @@ args = get_parsed_args(
     target_opset=(18, "opset to convert into, use with backend=custom"),
     config=("default", "default, medium, or small to test"),
     verbose=(0, "verbosity"),
+    implementation=("eager", "eager or sdpa"),
     disable_pattern=("", "a list of optimization patterns to disable"),
     enable_pattern=("default", "list of optimization patterns to enable"),
     expose="backend,repeat,warmup,device,num_hidden_layers,"
@@ -75,7 +76,7 @@ if args.config == "small":
         intermediate_size=16,
         max_position_embeddings=1024,
         num_attention_heads=2,
-        _attn_implementation="eager",
+        _attn_implementation=args.implementation,
     )
 elif args.config == "medium":
     config_dict = dict(
@@ -86,7 +87,7 @@ elif args.config == "medium":
         intermediate_size=1024,
         max_position_embeddings=1024,
         num_attention_heads=2,
-        _attn_implementation="eager",
+        _attn_implementation=args.implementation,
     )
 else:
     assert args.config in ("large", "default"), f"unexpected config={args.config!r}"
@@ -98,7 +99,7 @@ else:
         intermediate_size=11008,
         max_position_embeddings=2048,
         num_attention_heads=32,
-        _attn_implementation="eager",
+        _attn_implementation=args.implementation,
     )
 
 verbose = int(args.verbose)
@@ -107,6 +108,7 @@ enable_pattern = [_ for _ in args.enable_pattern.split(",") if _]
 print(f"llama config={config_dict}")
 print(f"backend={args.backend}")
 print(f"verbose={args.verbose}")
+print(f"implementation={args.implementation}")
 print(f"mixed={args.mixed}")
 if args.backend == "custom":
     print(f"disabled_pattern={disabled_pattern!r}")

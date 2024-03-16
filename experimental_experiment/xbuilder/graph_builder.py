@@ -533,6 +533,11 @@ class GraphBuilder:
                         return False
                     if len(size) >= 2:
                         return False
+                    if el_type == self.torch.int64 and len(size) == 0:
+                        # A single integer with no shape, it looks like a dimension.
+                        # Let's assume it is. It is more efficient to consider it as
+                        # a dimension.
+                        return False
                 else:
                     if elem_type is not None and elem_type in (
                         self.torch.float32,

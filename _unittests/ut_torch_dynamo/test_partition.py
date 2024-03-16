@@ -139,7 +139,6 @@ class TestPartition(ExtTestCase):
         expected = mlp(x)
 
         def backend_debug(*args, **kwargs):
-            print("llllll")
             return onnx_debug_backend(
                 *args, backend="ref", target_opset=18, verbose=1, **kwargs
             )
