@@ -57,61 +57,35 @@ import onnxruntime  # noqa: F401
 import numpy as np
 import torch
 import torch._dynamo.backends.registry
-from torch._dynamo.backends.common import aot_autograd
 import transformers
 from experimental_experiment.convert.convert_helper import ort_optimize
 from experimental_experiment.torch_helper.llama_helper import get_llama_model
-from experimental_experiment.torch_helper.training_helper import make_aot_ort
 from experimental_experiment.torch_helper.dump_helper import dump_onnx
-from experimental_experiment.torch_dynamo import get_decomposition_table
-from experimental_experiment.torch_dynamo import onnx_custom_backend, onnx_debug_backend
+from experimental_experiment.torch_bench._dort_cmd_common import (
+    create_compiled_model,
+    create_configuration_for_benchmark,
+)
 
-
-if args.config == "small":
-    config_dict = dict(
-        input_dims=[(2, 1024)] * (args.repeat + args.warmup),
-        hidden_size=16,
-        num_hidden_layers=args.num_hidden_layers,
-        vocab_size=1024,
-        intermediate_size=16,
-        max_position_embeddings=1024,
-        num_attention_heads=2,
-        _attn_implementation=args.implementation,
-    )
-elif args.config == "medium":
-    config_dict = dict(
-        input_dims=[(2, 1024)] * (args.repeat + args.warmup),
-        hidden_size=1024,
-        num_hidden_layers=args.num_hidden_layers,
-        vocab_size=1024,
-        intermediate_size=1024,
-        max_position_embeddings=1024,
-        num_attention_heads=2,
-        _attn_implementation=args.implementation,
-    )
-else:
-    assert args.config in ("large", "default"), f"unexpected config={args.config!r}"
-    config_dict = dict(
-        input_dims=[(2, 1024)] * (args.repeat + args.warmup),
-        hidden_size=4096,
-        num_hidden_layers=args.num_hidden_layers,
-        vocab_size=32000,
-        intermediate_size=11008,
-        max_position_embeddings=2048,
-        num_attention_heads=32,
-        _attn_implementation=args.implementation,
-    )
+config_dict = create_configuration_for_benchmark(
+    model="llama",
+    config=args.config,
+    repeat=args.repeat,
+    warmup=args.warmup,
+    num_hidden_layers=args.num_hidden_layers,
+    implementation=args.implementation,
+)
 
 verbose = int(args.verbose)
-disabled_pattern = [_ for _ in args.disable_pattern.split(",") if _]
+disable_pattern = [_ for _ in args.disable_pattern.split(",") if _]
 enable_pattern = [_ for _ in args.enable_pattern.split(",") if _]
 print(f"llama config={config_dict}")
 print(f"backend={args.backend}")
 print(f"verbose={args.verbose}")
 print(f"implementation={args.implementation}")
 print(f"mixed={args.mixed}")
+
 if args.backend == "custom":
-    print(f"disabled_pattern={disabled_pattern!r}")
+    print(f"disable_pattern={disable_pattern!r}")
     print(f"enable_pattern={enable_pattern!r}")
 
 
@@ -136,66 +110,20 @@ if is_cuda:
 print(f"Build the compile model with backend={args.backend}")
 use_dynamic = args.dynamic in (1, "1", True, "True")
 print(f"dynamic={use_dynamic}")
-
-if args.backend == "ort":
-    local_aot_ort, local_ort = make_aot_ort(
-        dynamic=use_dynamic, rewrite=True, verbose=args.verbose
-    )
-    compiled_model = torch.compile(model, backend=local_ort)
-
-elif args.backend == "plug":
-    os.environ["ONNXRT_CHANGE_REWRITER"] = "1"
-
-    local_aot_ort, local_ort = make_aot_ort(
-        dynamic=use_dynamic, rewrite=False, verbose=args.verbose
-    )
-    compiled_model = torch.compile(model, backend=local_ort)
-
-elif args.backend == "inductor":
-    compiled_model = torch.compile(model, backend="inductor", dynamic=use_dynamic)
-
-elif args.backend == "eager":
-    compiled_model = model
-
-elif args.backend == "custom":
-    target_opset = args.target_opset
-    aot_compiler = aot_autograd(
-        fw_compiler=lambda *args, **kwargs: onnx_custom_backend(
-            *args,
-            target_opset=target_opset,
-            verbose=verbose,
-            enable_pattern=enable_pattern,
-            disable_pattern=disabled_pattern,
-            **kwargs,
-        ),
-        decompositions=get_decomposition_table(),
-    )
-    compiled_model = torch.compile(
-        model, backend=aot_compiler, fullgraph=True, dynamic=use_dynamic
-    )
-
-elif args.backend == "debug":
-    target_opset = args.target_opset
-    print(f"-- debug backend, opset={target_opset}")
+if verbose:
+    print(f"-- debug backend, opset={args.target_opset}")
     for a in example_args_collection[0]:
         print(f"  input: {a.dtype}:{a.shape}")
-    aot_compiler = aot_autograd(
-        fw_compiler=lambda *args, **kwargs: onnx_debug_backend(
-            *args,
-            target_opset=target_opset,
-            backend="ref",
-            enable_pattern=enable_pattern,
-            disable_pattern=disabled_pattern,
-            **kwargs,
-        ),
-        decompositions=get_decomposition_table(),
-    )
-    compiled_model = torch.compile(
-        model, backend=aot_compiler, fullgraph=True, dynamic=use_dynamic
-    )
 
-else:
-    raise ValueError(f"Unexpected backend={args.backend!r}.")
+compiled_model = create_compiled_model(
+    model,
+    backend=args.backend,
+    use_dynamic=use_dynamic,
+    target_opset=args.target_opset,
+    verbose=verbose,
+    enable_pattern=enable_pattern,
+    disable_pattern=disable_pattern,
+)
 
 
 def loop_iteration(is_cuda, inputs, compiled_model, loss):
@@ -224,6 +152,7 @@ if is_cuda:
         f"CUDA memory allocated={torch.cuda.memory_allocated(0)}, "
         f"reserved={torch.cuda.memory_reserved(0)}"
     )
+
 warmup_times = []
 loss = torch.nn.MSELoss()
 for i in range(args.warmup):
@@ -265,7 +194,6 @@ if is_cuda:
         f"memory allocated={torch.cuda.memory_allocated(0)}, "
         f"reserved={torch.cuda.memory_reserved(0)}"
     )
-
 
 print("measures")
 times = []

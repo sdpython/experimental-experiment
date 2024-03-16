@@ -2,7 +2,11 @@ import unittest
 from typing import List
 import numpy as np
 from onnx.reference.op_run import OpRun
-from experimental_experiment.ext_test_case import ExtTestCase, skipif_ci_windows
+from experimental_experiment.ext_test_case import (
+    ExtTestCase,
+    skipif_ci_windows,
+    requires_torch,
+)
 from experimental_experiment.reference import ExtendedReferenceEvaluator
 
 
@@ -257,6 +261,7 @@ class TestFallbackForce(ExtTestCase):
         self.assertEqual(got.shape, (5, 1))
 
     @skipif_ci_windows("dynamo not supported on Windows")
+    @requires_torch("2.3", "AssertionError: original output #4 is None, ")
     def test_fallback_force_llama_sdpa_export(self):
         from experimental_experiment.torch_helper.llama_helper import get_llama_model
         from experimental_experiment.torch_interpreter import to_onnx
