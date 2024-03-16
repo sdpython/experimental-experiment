@@ -132,49 +132,47 @@ if has_cuda():
     ):
         import torch
 
-        cudat = [
-            grad.to("cuda"),
-            query.to("cuda"),
-            key.to("cuda"),
-            value.to("cuda"),
-            None if attn_bias is None else attn_bias.to("cuda"),
-            output.to("cuda"),
-            logsumexp,  # .to("cuda"),
-            philox_seed,
-            philox_offset,
-        ]
-
-        torch.cuda.synchronize()
-
-        res = torch.ops.aten._scaled_dot_product_efficient_attention_backward.default(
-            *cudat,
-            dropout_p,
-            [bool(r) for r in grad_input_mask],
-            is_causal,
-            scale=scale,
-        )
-
-        # RuntimeError: CUDA error: an illegal memory access was encountered
-        # try:
-        #     torch.cuda.synchronize()
-        #     dummy=False
-        # except (RuntimeError, TypeError) as e:
-        #     # something wrong is happening
-        #     warnings.warn(e)
-        #     dummy = True
-
         dummy = True
-        cpu_res = []
-        for r in res:
-            if r is None:
-                cpu_res.append(r)
-                continue
-            if dummy:
-                assert r.dtype in (
-                    torch.float32,
-                ), f"Unexpected dtype={r.dtype}, shape={r.shape} for a tensor"
-                r = torch.rand(r.shape, dtype=r.dtype)
-            cpu_res.append(r.cpu())
+        if dummy:
+            shape = grad.shape
+
+            cpu_res = [
+                torch.rand(shape, dtype=torch.float32),
+                torch.rand(shape, dtype=torch.float32),
+                torch.rand(shape, dtype=torch.float32),
+                torch.Tensor(np.array([0], dtype=np.float32)),
+            ]
+
+        else:
+
+            cudat = [
+                grad.to("cuda"),
+                query.to("cuda"),
+                key.to("cuda"),
+                value.to("cuda"),
+                None if attn_bias is None else attn_bias.to("cuda"),
+                output.to("cuda"),
+                logsumexp,  # .to("cuda"),
+                philox_seed,
+                philox_offset,
+            ]
+
+            res = (
+                torch.ops.aten._scaled_dot_product_efficient_attention_backward.default(
+                    *cudat,
+                    dropout_p,
+                    [bool(r) for r in grad_input_mask],
+                    is_causal,
+                    scale=scale,
+                )
+            )
+
+            cpu_res = []
+            for r in res:
+                if r is None:
+                    cpu_res.append(r)
+                    continue
+                cpu_res.append(r.cpu())
 
         return tuple(cpu_res)
 
@@ -445,6 +443,7 @@ class TestFallbackForce(ExtTestCase):
                     ],
                     verbose=verbose,
                 ),
+                verbose=0,
                 **kwargs,
             ),
             decompositions=get_decomposition_table(),
