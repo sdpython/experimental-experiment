@@ -143,3 +143,30 @@ def create_compiled_model(
         )
 
     raise ValueError(f"Unexpected backend={backend!r}.")
+
+
+def dort_args(name: str, description: str):
+    from experimental_experiment.args import get_parsed_args
+
+    args = get_parsed_args(
+        name,
+        description=description,
+        backend=("ort", "'ort' or 'inductor' or 'eager', 'plug', or 'custom'"),
+        device=("cpu", "'cpu' or 'cuda'"),
+        num_hidden_layers=(1, "number of hidden layers"),
+        warmup=5,
+        repeat=5,
+        mixed=(0, "mixed precision (based on autocast)"),
+        export=("", "export the dynamo models"),
+        dynamic=("0", "use dynamic shapes"),
+        target_opset=(18, "opset to convert into, use with backend=custom"),
+        config=("default", "default, medium, or small to test"),
+        verbose=(0, "verbosity"),
+        implementation=("eager", "eager or sdpa"),
+        disable_pattern=("", "a list of optimization patterns to disable"),
+        enable_pattern=("default", "list of optimization patterns to enable"),
+        expose="backend,repeat,warmup,device,num_hidden_layers,"
+        "mixed,export,config,target_opset,dynamic,verbose,"
+        "enable_pattern,disable_pattern",
+    )
+    return args
