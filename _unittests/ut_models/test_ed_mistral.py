@@ -6,6 +6,7 @@ from experimental_experiment.ext_test_case import (
     ignore_warnings,
     requires_torch,
 )
+from experimental_experiment.torch_helper.llama_helper import get_llama_model
 from experimental_experiment.torch_helper.mistral_helper import get_mistral_model
 from experimental_experiment.torch_test_helper import export_to_onnx, check_model_ort
 from experimental_experiment.torch_bench._dort_cmd_common import create_compiled_model
@@ -25,12 +26,12 @@ class TestEdMistral(ExtTestCase):
 
     @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
     @ignore_warnings(DeprecationWarning)
-    @requires_torch("2.3", " AssertionError: original output #6 is None")
+    @requires_torch("2.3", "AssertionError: original output #6 is None")
     def test_mistral_export(self):
         model, input_tensors = get_mistral_model()
         input_tensors = input_tensors[0]
         expected = model(*input_tensors)
-        ret = export_to_onnx(model, *input_tensors)
+        ret = export_to_onnx(model, *input_tensors, rename_inputs=False)
         onx = ret["proto"]
         xp = [x.numpy() for x in input_tensors]
         feeds = {f"input{i}": x for i, x in enumerate(xp)}
@@ -43,8 +44,28 @@ class TestEdMistral(ExtTestCase):
             self.assertEqualArray(expected[0].detach().numpy(), results[0], atol=1e-5)
 
     @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
+    @ignore_warnings(DeprecationWarning)
+    @requires_torch("2.3", "AssertionError: original output #6 is None")
+    def test_mistral_export_norename(self):
+        model, input_tensors = get_mistral_model()
+        input_tensors = input_tensors[0]
+        expected = model(*input_tensors)
+        ret = export_to_onnx(model, *input_tensors, rename_inputs=False)
+        onx = ret["proto"]
+        names = [i.name for i in onx.graph.input]
+        xp = [x.numpy() for x in input_tensors]
+        feeds = dict(zip(names, xp))
+        ref = ExtendedReferenceEvaluator(onx)
+        results = ref.run(None, feeds)
+        self.assertEqualArray(expected[0].detach().numpy(), results[0], atol=1e-5)
+        if has_cuda():
+            sess = check_model_ort(onx, providers="cuda")
+            results = sess.run(None, feeds)
+            self.assertEqualArray(expected[0].detach().numpy(), results[0], atol=1e-5)
+
+    @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
     @ignore_warnings((DeprecationWarning, UserWarning))
-    @requires_torch("2.3", " AssertionError: original output #6 is None")
+    @requires_torch("2.3", "AssertionError: original output #6 is None")
     def test_mistral_cort_static(self):
         model, input_tensors = get_mistral_model()
         input_tensors = input_tensors[0]
@@ -57,6 +78,7 @@ class TestEdMistral(ExtTestCase):
             target_opset=18,
             verbose=0,
             return_storage=True,
+            rename_inputs=True,
         )
         results = compiled_model(*input_tensors)
         self.assertEqualArray(expected[0].detach().numpy(), results[0], atol=1e-5)
@@ -74,7 +96,40 @@ class TestEdMistral(ExtTestCase):
 
     @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
     @ignore_warnings((DeprecationWarning, UserWarning))
-    @requires_torch("2.3", " AssertionError: original output #6 is None")
+    @requires_torch("2.3", "AssertionError: original output #6 is None")
+    def test_mistral_cort_static_norename(self):
+        model, input_tensors = get_mistral_model()
+        input_tensors = input_tensors[0]
+        expected = model(*input_tensors)
+
+        compiled_model, storage = create_compiled_model(
+            model,
+            backend="debug",
+            use_dynamic=False,
+            target_opset=18,
+            verbose=0,
+            return_storage=True,
+            rename_inputs=False,
+        )
+        results = compiled_model(*input_tensors)
+        self.assertEqualArray(expected[0].detach().numpy(), results[0], atol=1e-5)
+        instances = storage["instance"]
+        self.assertEqual(len(instances), 1)  # forward
+
+        train_loop(model, *input_tensors)
+        train_loop(compiled_model, *input_tensors)
+        instances = storage["instance"]
+        self.assertEqual(len(instances), 2)  # forward + backward
+
+        if __name__ == "__main__":
+            for i, inst in enumerate(instances):
+                self.dump_onnx(
+                    f"test_mistral_cort_static_{i}_norename.onnx", inst["onnx"]
+                )
+
+    @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
+    @ignore_warnings((DeprecationWarning, UserWarning))
+    @requires_torch("2.3", "AssertionError: original output #6 is None")
     def test_mistral_cort_dynamic(self):
         model, input_tensors = get_mistral_model()
         input_tensors = input_tensors[0]
@@ -87,6 +142,7 @@ class TestEdMistral(ExtTestCase):
             target_opset=18,
             verbose=0,
             return_storage=True,
+            rename_inputs=True,
         )
         results = compiled_model(*input_tensors)
         self.assertEqualArray(expected[0].detach().numpy(), results[0], atol=1e-5)
@@ -101,6 +157,72 @@ class TestEdMistral(ExtTestCase):
         if __name__ == "__main__":
             for i, inst in enumerate(instances):
                 self.dump_onnx(f"test_mistral_cort_dynamic_{i}.onnx", inst["onnx"])
+
+    @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
+    @ignore_warnings((DeprecationWarning, UserWarning))
+    @requires_torch("2.3", "AssertionError: original output #6 is None")
+    def test_mistral_cort_dynamic_norename(self):
+        model, input_tensors = get_mistral_model()
+        input_tensors = input_tensors[0]
+        expected = model(*input_tensors)
+
+        compiled_model, storage = create_compiled_model(
+            model,
+            backend="debug",
+            use_dynamic=True,
+            target_opset=18,
+            verbose=0,
+            return_storage=True,
+            rename_inputs=False,
+        )
+        results = compiled_model(*input_tensors)
+        self.assertEqualArray(expected[0].detach().numpy(), results[0], atol=1e-5)
+        instances = storage["instance"]
+        # self.assertEqual(len(instances), 1)  # forward
+
+        train_loop(model, *input_tensors)
+        train_loop(compiled_model, *input_tensors)
+        instances = storage["instance"]
+        self.assertEqual(len(instances), 2)  # forward + backward
+
+        if __name__ == "__main__":
+            for i, inst in enumerate(instances):
+                self.dump_onnx(
+                    f"test_mistral_cort_dynamic_{i}_norename.onnx", inst["onnx"]
+                )
+
+    @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
+    @ignore_warnings((DeprecationWarning, UserWarning))
+    @requires_torch("2.3", "AssertionError: original output #6 is None")
+    def test_llama_cort_dynamic_norename_custom(self):
+        model, input_tensors = get_llama_model()
+        input_tensors = input_tensors[0]
+        expected = model(*input_tensors)
+
+        compiled_model, storage = create_compiled_model(
+            model,
+            backend="custom",
+            use_dynamic=True,
+            target_opset=18,
+            verbose=0,
+            return_storage=True,
+            rename_inputs=False,
+        )
+        results = compiled_model(*input_tensors)
+        self.assertEqualArray(expected[0].detach().numpy(), results[0], atol=1e-5)
+        instances = storage["instance"]
+        # self.assertEqual(len(instances), 1)  # forward
+
+        train_loop(model, *input_tensors)
+        train_loop(compiled_model, *input_tensors)
+        instances = storage["instance"]
+        self.assertEqual(len(instances), 2)  # forward + backward
+
+        if __name__ == "__main__":
+            for i, inst in enumerate(instances):
+                self.dump_onnx(
+                    f"test_llama_cort_dynamic_{i}_norename_custom.onnx", inst["onnx"]
+                )
 
 
 if __name__ == "__main__":
