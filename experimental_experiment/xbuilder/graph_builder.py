@@ -1391,9 +1391,15 @@ class GraphBuilder:
             input_name = self.input_names[self.current_input]
             self.make_node("Identity", [input_name], [name], check=False)
         else:
-            self.input_names.append(name)
-            input_name = name
-            self.set_name(name)
+            if is_dimension:
+                # The convention is to have _dim_ in the name to tell
+                # it is a dimension.
+                input_name = f"{name}_dim_"
+                self.make_node("Identity", [input_name], [name], check=False)
+            else:
+                self.input_names.append(name)
+                input_name = name
+                self.set_name(name)
         assert (is_dimension and "_dim_" in input_name) or (
             not is_dimension and "_dim_" not in input_name
         ), (

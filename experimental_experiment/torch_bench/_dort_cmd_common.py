@@ -160,6 +160,7 @@ def create_compiled_model(
     enable_pattern: Union[str, List[str]] = "default",
     disable_pattern: Union[str, List[str]] = None,
     return_storage: bool = False,
+    rename_inputs: bool = True,
 ) -> Any:
     """
     Creates the compilrf model.
@@ -172,6 +173,7 @@ def create_compiled_model(
     :param disable_pattern: to disable optimization pattern
     :param return_storage: return a container for the models,
         only works with backend *custom* and *debug*
+    :param rename_inputs: rename inputs into ``input_{i}``
     :return: compiled model
     """
     import torch
@@ -226,6 +228,7 @@ def create_compiled_model(
                 enable_pattern=enable_pattern,
                 disable_pattern=disable_pattern,
                 storage=storage,
+                rename_inputs=rename_inputs,
                 **kwargs,
             ),
             decompositions=get_decomposition_table(),
@@ -248,6 +251,7 @@ def create_compiled_model(
                 enable_pattern=enable_pattern,
                 disable_pattern=disable_pattern,
                 storage=storage,
+                rename_inputs=rename_inputs,
                 **kwargs,
             ),
             decompositions=get_decomposition_table(),

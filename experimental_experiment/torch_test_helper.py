@@ -53,6 +53,7 @@ def export_to_onnx(
     torch_script: bool = True,
     target_opset: int = 18,
     prefix: Optional[str] = None,
+    rename_inputs: bool = False,
 ) -> Dict[str, Union[str, ModelProto, "GraphBuilder"]]:  # noqa: F821
     """
     Exports a model to ONNX.
@@ -64,6 +65,7 @@ def export_to_onnx(
     :param torch_script: export with torch.script as well
     :param target_opset: opset to export into
     :param prefix: prefix to choose to export into
+    :param rename_inputs: rename the inputs into ``input_{i}``
     :return: dictionary with ModelProto, builder, filenames
     """
     from .xbuilder import OptimizationOptions
@@ -83,7 +85,7 @@ def export_to_onnx(
     onx = to_onnx(
         model,
         tuple(args),
-        input_names=[f"input{i}" for i in range(len(args))],
+        input_names=[f"input{i}" for i in range(len(args))] if rename_inputs else None,
         options=OptimizationOptions(verbose=verbose),
         verbose=verbose,
         return_builder=return_builder,

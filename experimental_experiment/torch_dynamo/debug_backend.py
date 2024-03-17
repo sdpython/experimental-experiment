@@ -80,6 +80,7 @@ def onnx_debug_backend(
     ] = None,
     ort_optimization_level: Optional[str] = None,
     dispatcher: Optional["Dispatcher"] = None,  # noqa: F821
+    rename_inputs: bool = True,
 ) -> Callable:
     """
     Custom backend to export torch models into onnx
@@ -110,6 +111,7 @@ def onnx_debug_backend(
     :param ort_optimization_level: graph optimization level for onnxruntime,
         the default value is the same as what :epkg:`onnxruntime` defines
     :param dispatcher: see :class:`experimental_experiment.torch_interpreter.Dispatcher`
+    :param rename_inputs: rename inputs into ``input_{i}``
     :return: Callable
 
     See :ref:`l-plot-onnxrt-diff` for an example.
@@ -117,7 +119,7 @@ def onnx_debug_backend(
     onnx models, graph module as well the inputs and outputs when
     the model is run.
     """
-    input_names = create_input_names(graph_module, args)
+    input_names = create_input_names(graph_module, args) if rename_inputs else None
 
     verbose_onnx, verbose_backend = (
         verbose if isinstance(verbose, tuple) else (verbose, verbose)
