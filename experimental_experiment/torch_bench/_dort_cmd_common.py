@@ -75,13 +75,14 @@ def _create_configuration_for_benchmark_mistral(
     if config == "small":
         return dict(
             input_dims=[(2, 1024)] * (repeat + warmup),
-            hidden_size=16,
-            num_hidden_layers=num_hidden_layers,
-            vocab_size=1024,
+            hidden_size=32,
+            num_hidden_layers=2,
+            vocab_size=99,
             intermediate_size=16,
-            max_position_embeddings=1024,
+            max_position_embeddings=512,
             num_attention_heads=2,
-            _attn_implementation=implementation,
+            num_key_value_heads=2,
+            _attn_implementation="eager",
         )
     if config == "medium":
         return dict(
@@ -90,8 +91,10 @@ def _create_configuration_for_benchmark_mistral(
             num_hidden_layers=num_hidden_layers,
             vocab_size=1024,
             intermediate_size=1024,
+            num_attention_heads=4,
+            num_key_value_heads=4,
             max_position_embeddings=1024,
-            num_attention_heads=2,
+            sliding_window=4096,
             _attn_implementation=implementation,
         )
     if config in ("large", "default"):
@@ -100,9 +103,11 @@ def _create_configuration_for_benchmark_mistral(
             hidden_size=4096,
             num_hidden_layers=num_hidden_layers,
             vocab_size=32000,
-            intermediate_size=11008,
-            max_position_embeddings=2048,
+            intermediate_size=14336,
             num_attention_heads=32,
+            num_key_value_heads=8,
+            max_position_embeddings=131072,
+            sliding_window=4096,
             _attn_implementation=implementation,
         )
     raise ValueError(f"Unexpected value for config={config!r}.")

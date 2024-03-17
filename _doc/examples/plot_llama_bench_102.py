@@ -32,6 +32,7 @@ parsed_args = get_parsed_args(
     description=__doc__,
     warmup=3,
     repeat=5,
+    model=("llama", "model to benchmark"),
     backend=("eager,inductor,ort,custom,plug", "backend to test"),
     device=("cuda" if check_cuda_availability() else "cpu", "device to test"),
     num_hidden_layers=("2", "hidden layers to test"),
@@ -44,7 +45,7 @@ parsed_args = get_parsed_args(
     patterns=("none,default,default+onnxruntime", "optimization patterns to use"),
     disable_pattern=("none", "pattern or patterns to disable"),
     expose="backend,device,num_hidden_layers,mixed,scipt_name,repeat,"
-    "warmup,dump,check,config,patterns,dynamic,disable_pattern",
+    "warmup,dump,check,config,patterns,dynamic,disable_pattern,model",
 )
 
 import onnxruntime  # noqa: F401
@@ -65,6 +66,7 @@ warmup = parsed_args.warmup
 
 
 def make_config(
+    model,
     backend,
     device,
     num_hidden_layers,
@@ -78,6 +80,7 @@ def make_config(
     existing=None,
 ):
     cf = dict(
+        model=model,
         backend=backend,
         device=device,
         num_hidden_layers=num_hidden_layers,
@@ -139,6 +142,7 @@ if parsed_args.check not in (1, "1"):
             continue
         configs.append(
             make_config(
+                model=parsed_args.model,
                 backend=backend,
                 device=device,
                 num_hidden_layers=num_hidden_layers,
@@ -157,6 +161,7 @@ else:
     device = "cuda" if torch.cuda.is_available() else "cpu"
     configs = [
         dict(
+            model=parsed_args.model,
             backend="ort",
             device=device,
             num_hidden_layers=1,
@@ -223,11 +228,11 @@ if data_collected:
     min_eager = df[df.legend.str.contains("eager")]["time"].dropna().min()
     df["increase"] = df["time"] / min_eager - 1
     # df["ERROR"] = df["ERROR"].apply(lambda s: s.replace("\n", " "))
-    filename = "plot_llama_bench_with_cmd.csv"
+    filename = f"plot_{parsed_args.model}_bench_with_cmd.csv"
     df.to_csv(filename, index=False)
 
     df = df.drop(["CMD"], axis=1)
-    filename = "plot_llama_bench.csv"
+    filename = f"plot_{parsed_args.model}_bench.csv"
     df.to_csv(filename, index=False)
     df = pandas.read_csv(filename)  # to cast type
     print(df)
@@ -255,19 +260,20 @@ print(df.sort_values("legend"))
 torch_version = list(set(df["torch"].dropna()))
 transformers_version = list(set(df["transformers"].dropna()))
 ver = f"{torch_version[0]} - {transformers_version[0]}"
-llama = list(set(df["llama"].dropna()))[0]
+model = parsed_args.model
+modeldf = list(set(df[model].dropna()))[0]
 
 if data_collected:
     fig, ax = plt.subplots(1, 1, figsize=(12, df.shape[0] // 3 + 1))
 
     df = df.sort_values("time").set_index("legend")
     df[["warmup_time"]].plot.barh(
-        ax=ax, title=f"lower better\n{llama}\nwarmup time\n{ver}"
+        ax=ax, title=f"lower better\n{parsed_args.model}\nwarmup time\n{ver}"
     )
     ax.grid(True)
 
     fig.tight_layout()
-    fig.savefig("plot_llama_bench_warmup_time.png")
+    fig.savefig(f"plot_{parsed_args.model}_bench_warmup_time.png")
 
 ###############################
 # Plot time.
@@ -275,14 +281,16 @@ if data_collected:
 if data_collected:
     fig, ax = plt.subplots(1, 1, figsize=(12, df.shape[0] // 3 + 1))
 
-    df[["time"]].plot.barh(ax=ax, title=f"lower better\n{llama}\niteration time\n{ver}")
+    df[["time"]].plot.barh(
+        ax=ax, title=f"lower better\n{parsed_args.model}\niteration time\n{ver}"
+    )
     mi, ma = df["time"].min(), df["time"].max()
     mi = mi - (ma - mi) / 10
     ax.set_xlim(left=mi)
     ax.grid(True)
 
     fig.tight_layout()
-    fig.savefig("plot_llama_bench_time.png")
+    fig.savefig(f"plot_{parsed_args.model}_bench_time.png")
 
 ###############################
 # Plot increase.
@@ -291,9 +299,9 @@ if data_collected:
     fig, ax = plt.subplots(1, 1, figsize=(12, df.shape[0] // 3 + 1))
 
     df[["increase"]].plot.barh(
-        ax=ax, title=f"lower better\n{llama}\ncomparison to eager %"
+        ax=ax, title=f"lower better\n{parsed_args.model}\ncomparison to eager %"
     )
     ax.grid(True)
 
     fig.tight_layout()
-    fig.savefig("plot_llama_bench_relative.png")
+    fig.savefig(f"plot_{parsed_args.model}_bench_relative.png")

@@ -39,7 +39,6 @@ import torch
 import torch._dynamo.backends.registry
 import transformers
 from experimental_experiment.convert.convert_helper import ort_optimize
-from experimental_experiment.torch_helper.llama_helper import get_llama_model
 from experimental_experiment.torch_helper.dump_helper import dump_onnx
 from experimental_experiment.torch_bench._dort_cmd_common import (
     create_compiled_model,
@@ -47,7 +46,7 @@ from experimental_experiment.torch_bench._dort_cmd_common import (
 )
 
 config_dict = create_configuration_for_benchmark(
-    model="llama",
+    model=args.model,
     config=args.config,
     repeat=args.repeat,
     warmup=args.warmup,
@@ -58,6 +57,7 @@ config_dict = create_configuration_for_benchmark(
 verbose = int(args.verbose)
 disable_pattern = [_ for _ in args.disable_pattern.split(",") if _]
 enable_pattern = [_ for _ in args.enable_pattern.split(",") if _]
+print(f"model={args.model}")
 print(f"llama config={config_dict}")
 print(f"backend={args.backend}")
 print(f"verbose={args.verbose}")
@@ -76,7 +76,16 @@ if is_cuda:
         f"reserved={torch.cuda.memory_reserved(0)}"
     )
 
-model, example_args_collection = get_llama_model(**config_dict)
+if args.model == "llama":
+    from experimental_experiment.torch_helper.llama_helper import get_llama_model
+
+    model, example_args_collection = get_llama_model(**config_dict)
+elif args.model == "mistral":
+    from experimental_experiment.torch_helper.mistral_helper import get_mistral_model
+
+    model, example_args_collection = get_mistral_model(**config_dict)
+else:
+    raise AssertionError(f"not implemented for model={model!r}")
 
 device = args.device
 model = model.eval().to(device)
@@ -199,7 +208,7 @@ print("-----------")
 idims = "x".join(map(str, config_dict["input_dims"][0]))
 del config_dict["input_dims"]
 vals = "-".join(map(str, config_dict.values()))
-print(f":llama,{idims}-{vals};")
+print(f":{args.model},{idims}-{vals};")
 print(f":config,{args.config};")
 print(f":mixed,{args.mixed};")
 print(f":dynamic,{use_dynamic};")

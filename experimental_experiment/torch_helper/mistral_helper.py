@@ -75,6 +75,7 @@ def get_mistral_model(
     max_position_embeddings=512,
     num_attention_heads=2,
     num_key_value_heads=2,
+    sliding_window=4096,
     _attn_implementation="eager",  # needed value to remove graph breaks
 ):
     """
@@ -95,6 +96,7 @@ def get_mistral_model(
         max_position_embeddings=max_position_embeddings,
         num_attention_heads=num_attention_heads,
         num_key_value_heads=num_key_value_heads,
+        sliding_window=sliding_window,
     )
     if _attn_implementation:
         config._attn_implementation = _attn_implementation

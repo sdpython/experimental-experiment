@@ -4,7 +4,7 @@ from experimental_experiment.reference import ExtendedReferenceEvaluator
 from experimental_experiment.ext_test_case import (
     ExtTestCase,
     ignore_warnings,
-    # requires_torch,
+    requires_torch,
 )
 from experimental_experiment.torch_helper.mistral_helper import get_mistral_model
 from experimental_experiment.torch_test_helper import export_to_onnx, check_model_ort
@@ -43,6 +43,7 @@ class TestEdMistral(ExtTestCase):
 
     @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
     @ignore_warnings((DeprecationWarning, UserWarning))
+    @requires_torch("2.3", " AssertionError: original output #6 is None")
     def test_mistral_cort_static(self):
         model, input_tensors = get_mistral_model()
         input_tensors = input_tensors[0]
@@ -72,6 +73,7 @@ class TestEdMistral(ExtTestCase):
 
     @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
     @ignore_warnings((DeprecationWarning, UserWarning))
+    @requires_torch("2.3", " AssertionError: original output #6 is None")
     def test_mistral_cort_dynamic(self):
         model, input_tensors = get_mistral_model()
         input_tensors = input_tensors[0]
