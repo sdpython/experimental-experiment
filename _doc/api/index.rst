@@ -20,6 +20,7 @@ API
     torch_dynamo
     misc
     dimension
+    torch_test
 
 **Versions**
 
