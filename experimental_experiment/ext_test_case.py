@@ -248,6 +248,17 @@ def measure_time(
 class ExtTestCase(unittest.TestCase):
     _warns: List[Tuple[str, int, Warning]] = []
 
+    def dump_onnx(
+        self, name: str, proto: "ModelProto", folder: Optional[str] = None  # noqa: F821
+    ):
+        if folder is None:
+            folder = "dump_test"
+        if not os.path.exists(folder):
+            os.mkdir(folder)
+        fullname = os.path.join(folder, name)
+        with open(fullname, "wb") as f:
+            f.write(proto.SerializeToString())
+
     def assertExists(self, name):
         if not os.path.exists(name):
             raise AssertionError(f"File or folder {name!r} does not exists.")

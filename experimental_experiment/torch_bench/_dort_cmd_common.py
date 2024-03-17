@@ -2,8 +2,7 @@ import os
 from typing import Any, Dict, List, Tuple, Union
 
 
-def create_configuration_for_benchmark(
-    model: str = "llama",
+def _create_configuration_for_benchmark_llama(
     config: str = "small",
     repeat: int = 5,
     warmup: int = 3,
@@ -13,7 +12,6 @@ def create_configuration_for_benchmark(
     """
     Creates a model based on the given configuration.
 
-    :param model: model name
     :param config: size of the model (small, medium, large)
     :param warmup: number of warmup steps
     :param repeat: number of repetition
@@ -21,8 +19,6 @@ def create_configuration_for_benchmark(
     :param implementation: implementation
     :return: dictionary
     """
-    assert model == "llama", "not implemented yet for any other model than llama"
-
     if config == "small":
         return dict(
             input_dims=[(2, 1024)] * (repeat + warmup),
@@ -59,14 +55,111 @@ def create_configuration_for_benchmark(
     raise ValueError(f"Unexpected value for config={config!r}.")
 
 
+def _create_configuration_for_benchmark_mistral(
+    config: str = "small",
+    repeat: int = 5,
+    warmup: int = 3,
+    num_hidden_layers: int = 1,
+    implementation: str = "eager",
+) -> Dict[str, Union[str, int, List[Tuple[int, int]]]]:
+    """
+    Creates a model based on the given configuration.
+
+    :param config: size of the model (small, medium, large)
+    :param warmup: number of warmup steps
+    :param repeat: number of repetition
+    :param num_hidden_layers: number of hidden layers
+    :param implementation: implementation
+    :return: dictionary
+    """
+    if config == "small":
+        return dict(
+            input_dims=[(2, 1024)] * (repeat + warmup),
+            hidden_size=32,
+            num_hidden_layers=2,
+            vocab_size=99,
+            intermediate_size=16,
+            max_position_embeddings=512,
+            num_attention_heads=2,
+            num_key_value_heads=2,
+            _attn_implementation="eager",
+        )
+    if config == "medium":
+        return dict(
+            input_dims=[(2, 1024)] * (repeat + warmup),
+            hidden_size=1024,
+            num_hidden_layers=num_hidden_layers,
+            vocab_size=1024,
+            intermediate_size=1024,
+            num_attention_heads=4,
+            num_key_value_heads=4,
+            max_position_embeddings=1024,
+            sliding_window=4096,
+            _attn_implementation=implementation,
+        )
+    if config in ("large", "default"):
+        return dict(
+            input_dims=[(2, 1024)] * (repeat + warmup),
+            hidden_size=4096,
+            num_hidden_layers=num_hidden_layers,
+            vocab_size=32000,
+            intermediate_size=14336,
+            num_attention_heads=32,
+            num_key_value_heads=8,
+            max_position_embeddings=131072,
+            sliding_window=4096,
+            _attn_implementation=implementation,
+        )
+    raise ValueError(f"Unexpected value for config={config!r}.")
+
+
+def create_configuration_for_benchmark(
+    model: str = "llama",
+    config: str = "small",
+    repeat: int = 5,
+    warmup: int = 3,
+    num_hidden_layers: int = 1,
+    implementation: str = "eager",
+) -> Dict[str, Union[str, int, List[Tuple[int, int]]]]:
+    """
+    Creates a model based on the given configuration.
+
+    :param model: model name
+    :param config: size of the model (small, medium, large)
+    :param warmup: number of warmup steps
+    :param repeat: number of repetition
+    :param num_hidden_layers: number of hidden layers
+    :param implementation: implementation
+    :return: dictionary
+    """
+    if model == "llama":
+        return _create_configuration_for_benchmark_llama(
+            config=config,
+            repeat=repeat,
+            warmup=warmup,
+            num_hidden_layers=num_hidden_layers,
+            implementation=implementation,
+        )
+    if model == "mistral":
+        return _create_configuration_for_benchmark_mistral(
+            config=config,
+            repeat=repeat,
+            warmup=warmup,
+            num_hidden_layers=num_hidden_layers,
+            implementation=implementation,
+        )
+    raise ValueError(f"Not implemented for model={model!r}.")
+
+
 def create_compiled_model(
     model: Any,
     backend: str,
-    use_dynamic: bool,
     target_opset: int,
-    verbose: int,
-    enable_pattern: str,
-    disable_pattern: str,
+    use_dynamic: bool = False,
+    verbose: int = 0,
+    enable_pattern: Union[str, List[str]] = "default",
+    disable_pattern: Union[str, List[str]] = None,
+    return_storage: bool = False,
 ) -> Any:
     """
     Creates the compilrf model.
@@ -77,6 +170,8 @@ def create_compiled_model(
     :param verbose: verbosity
     :param enable_pattern: to enable optimization pattern
     :param disable_pattern: to disable optimization pattern
+    :param return_storage: return a container for the models,
+        only works with backend *custom* and *debug*
     :return: compiled model
     """
     import torch
@@ -89,12 +184,18 @@ def create_compiled_model(
     )
 
     if backend == "ort":
+        assert (
+            not return_storage
+        ), f"return_storage=True not implemented with backend={backend!r}"
         local_aot_ort, local_ort = make_aot_ort(
             dynamic=use_dynamic, rewrite=True, verbose=verbose
         )
         return torch.compile(model, backend=local_ort)
 
     if backend == "plug":
+        assert (
+            not return_storage
+        ), f"return_storage=True not implemented with backend={backend!r}"
         os.environ["ONNXRT_CHANGE_REWRITER"] = "1"
 
         local_aot_ort, local_ort = make_aot_ort(
@@ -103,12 +204,19 @@ def create_compiled_model(
         return torch.compile(model, backend=local_ort)
 
     if backend == "inductor":
+        assert (
+            not return_storage
+        ), f"return_storage=True not implemented with backend={backend!r}"
         return torch.compile(model, backend="inductor", dynamic=use_dynamic)
 
     if backend == "eager":
+        assert (
+            not return_storage
+        ), f"return_storage=True not implemented with backend={backend!r}"
         return model
 
     if backend == "custom":
+        storage = {} if return_storage else None
         target_opset = target_opset
         aot_compiler = aot_autograd(
             fw_compiler=lambda *args, **kwargs: onnx_custom_backend(
@@ -117,15 +225,20 @@ def create_compiled_model(
                 verbose=verbose,
                 enable_pattern=enable_pattern,
                 disable_pattern=disable_pattern,
+                storage=storage,
                 **kwargs,
             ),
             decompositions=get_decomposition_table(),
         )
-        return torch.compile(
+        cc = torch.compile(
             model, backend=aot_compiler, fullgraph=True, dynamic=use_dynamic
         )
+        if return_storage:
+            return cc, storage
+        return cc
 
     if backend == "debug":
+        storage = {} if return_storage else None
         target_opset = target_opset
         aot_compiler = aot_autograd(
             fw_compiler=lambda *args, **kwargs: onnx_debug_backend(
@@ -134,13 +247,17 @@ def create_compiled_model(
                 backend="ref",
                 enable_pattern=enable_pattern,
                 disable_pattern=disable_pattern,
+                storage=storage,
                 **kwargs,
             ),
             decompositions=get_decomposition_table(),
         )
-        return torch.compile(
+        cc = torch.compile(
             model, backend=aot_compiler, fullgraph=True, dynamic=use_dynamic
         )
+        if return_storage:
+            return cc, storage
+        return cc
 
     raise ValueError(f"Unexpected backend={backend!r}.")
 
@@ -151,6 +268,7 @@ def dort_args(name: str, description: str):
     args = get_parsed_args(
         name,
         description=description,
+        model=("llama", "model to measure, llama, mistral"),
         backend=("ort", "'ort' or 'inductor' or 'eager', 'plug', or 'custom'"),
         device=("cpu", "'cpu' or 'cuda'"),
         num_hidden_layers=(1, "number of hidden layers"),
@@ -167,6 +285,6 @@ def dort_args(name: str, description: str):
         enable_pattern=("default", "list of optimization patterns to enable"),
         expose="backend,repeat,warmup,device,num_hidden_layers,"
         "mixed,export,config,target_opset,dynamic,verbose,"
-        "enable_pattern,disable_pattern",
+        "enable_pattern,disable_pattern,model",
     )
     return args
