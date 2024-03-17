@@ -1,4 +1,6 @@
-from typing import Dict, Optional
+from typing import Any, Dict, List, Optional, Union
+import numpy as np
+from onnx import ModelProto
 from .debug_backend import onnx_debug_backend
 from .fast_backend import onnx_custom_backend
 
@@ -91,3 +93,108 @@ def filter_decomposition_table(existing_table: Optional[Dict] = None) -> Dict:
             continue
         new_table[k] = v
     return new_table
+
+
+def _single_print(v):
+    if v is None:
+        return "None"
+    if isinstance(v, (int, bool, str, float)):
+        return str(v)
+    if isinstance(v, np.ndarray):
+        return f"array:{v.dtype}:{v.shape}:{v.mean()}"
+    if hasattr(v, "numpy"):
+        return _single_print(v.detach().cpu().numpy())
+    if isinstance(v, ModelProto):
+        s = str(v).replace("\n", "").replace(" ", "")
+        return "ModelProto:" + s[:20] + "..." + s[-20:]
+    if "GraphModule" in str(type(v)):
+        s = str(v).replace("\n", "")
+        return "GraphModule:" + s[:20] + "..." + s[-20:]
+    if "GraphBuilder" in str(type(v)):
+        s = str(v).replace("\n", "")
+        return "GraphBuilder:" + s[:20] + "..." + s[-20:]
+    if "ExtendedReferenceEvaluator" in str(type(v)):
+        s = str(v).replace("\n", "")
+        return "ExtendedReferenceEvaluator:" + s[:20] + "..." + s[-20:]
+    raise TypeError(f"Unexpected type {type(v)}.")
+
+
+def pprint_storage(
+    storage: Any, indent: int = 0, as_list: bool = False
+) -> Union[List[str], str]:
+    """
+    Pretty print for the storage.
+
+    :param storage: any object
+    :param indent: indentation
+    :param as_list: return list or string
+    :return: list or string
+    """
+    sind = "  " * indent
+    if isinstance(storage, (np.ndarray, int, float, str, bool, type(None))):
+        rows = [sind + _single_print(storage)]
+    elif isinstance(storage, dict):
+        if len(storage) <= 10 and all(
+            map(
+                lambda v: isinstance(v, (int, float, str, bool, type(None))),
+                storage.values(),
+            )
+        ):
+            rows = [sind + str(storage)]
+        else:
+            rows = [sind + "{"]
+            for k, v in storage.items():
+                r = pprint_storage(v, indent=indent + 1, as_list=True)
+                if len(r) > 1:
+                    r[0] = f"{r[0][:-1]}{k!r}: {r[0][-1]}"
+                    r[-1] += ","
+                    rows.extend(r)
+                else:
+                    rows.append(f"  {sind}{k!r}: {r[0].lstrip(' ')},")
+            rows.append(sind + "}")
+    elif isinstance(storage, list):
+        if len(storage) <= 10 and all(
+            map(lambda v: isinstance(v, (int, float, str, bool, type(None))), storage)
+        ):
+            rows = [sind + str(storage)]
+        else:
+            rows = [sind + "["]
+            for v in storage:
+                r = pprint_storage(v, indent=indent + 1, as_list=True)
+                if len(r) > 1:
+                    r[-1] += ","
+                    rows.extend(r)
+                else:
+                    rows.append(f"  {sind}{r[0].lstrip(' ')},")
+            rows.append(sind + "]")
+    elif isinstance(storage, tuple):
+        if len(storage) <= 10 and all(
+            map(lambda v: isinstance(v, (int, float, str, bool, type(None))), storage)
+        ):
+            rows = [sind + str(storage)]
+        else:
+            rows = [sind + "("]
+            for v in storage:
+                r = pprint_storage(v, indent=indent + 1, as_list=True)
+                if len(r) > 1:
+                    r[-1] += ","
+                    rows.extend(r)
+                else:
+                    rows.append(f"  {sind}{r[0].lstrip(' ')},")
+            rows.append(sind + ")")
+    elif hasattr(storage, "numpy"):
+        rows = [sind + _single_print(storage)]
+    elif storage is None:
+        rows = [sind + _single_print(storage)]
+    elif (
+        "GraphModuleImpl" in str(type(storage))
+        or "ModelProto" in str(type(storage))
+        or "GraphBuilder" in str(type(storage))
+        or "ExtendedReferenceEvaluator" in str(type(storage))
+    ):
+        rows = [sind + _single_print(storage)]
+    else:
+        raise RuntimeError(f"Unexpected type {type(storage)}")
+    if as_list:
+        return rows
+    return "\n".join(rows)
