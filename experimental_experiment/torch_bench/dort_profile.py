@@ -1,40 +1,32 @@
 """
-Run llama model with DORT
-=========================
+Profile python execution for DORT
+=================================
 
 The script runs a few iterations of a dummy llama model.
 
 ::
 
-    python -m experimental_experiment.llama.dort_bench --help
+    python -m experimental_experiment.llama.dort_profile --help
 
 Example, run llama model with onnxrt backend on cuda.
 
 ::
 
-    python -m experimental_experiment.torch_bench.dort_bench --backend ort --device cuda
+    python -m experimental_experiment.torch_bench.dort_profile --backend ort --device cuda
     
-Other example, same script but dumps the produces models.
-
-::
-
-    ONNXRT_DUMP_PATH="llama_dort_" python -m experimental_experiment.torch_bench.dort_bench --backend ort --device cuda
-
-Or simply this one:
-
-::
-
-    python -m experimental_experiment.torch_bench.dort_bench --backend custom --device cuda --export a -w 1
 """
 
 from experimental_experiment.torch_bench._dort_cmd_common import dort_args
 
-args = dort_args("experimental_experiment.torch_bench.dort_bench", description=__doc__)
+args = dort_args(
+    "experimental_experiment.torch_bench.dort_profile", description=__doc__
+)
 
 import os
 import time
 import onnxruntime  # noqa: F401
 import numpy as np
+from onnx_array_api.profiling import profile, profile2graph
 import torch
 import torch._dynamo.backends.registry
 import transformers
@@ -177,11 +169,17 @@ if is_cuda:
 
 print("measures")
 times = []
-for example_inputs in example_args_collection[args.warmup :]:
-    inputs = [t.to("cuda") for t in example_inputs] if is_cuda else example_inputs
-    start_time = time.perf_counter()
-    loop_iteration(is_cuda, inputs, compiled_model, loss)
-    times.append(time.perf_counter() - start_time)
+
+
+def main_loop():
+    for example_inputs in example_args_collection[args.warmup :]:
+        inputs = [t.to("cuda") for t in example_inputs] if is_cuda else example_inputs
+        start_time = time.perf_counter()
+        loop_iteration(is_cuda, inputs, compiled_model, loss)
+        times.append(time.perf_counter() - start_time)
+
+
+ps = profile(main_loop)[0]
 
 print("measures done.")
 print(f"dynamic={args.dynamic}")
@@ -212,3 +210,8 @@ if args.backend in {"custom"}:
     print(f":patterns,+{args.enable_pattern}-{args.disable_pattern};")
 print(f":warmup_time,{sum(warmup_times)};")
 print(f":time,{np.mean(times)};")
+
+print("--------------------------------------------------------------------------")
+root, nodes = profile2graph(ps, clean_text=lambda x: "/".join(x.split("/")[-2:]))
+text = root.to_text()
+print(text)

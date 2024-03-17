@@ -385,6 +385,8 @@ class GraphBuilderPatternOptimization:
         known |= set(self.builder.initializers_dict)
         for p, node in enumerate(self.builder.nodes):
             for i in node.input:
+                if i == "":
+                    continue
                 assert i in known, (
                     f"Unknown input {i!r}, step {step!r} at position {p} "
                     f"in node {node.op_type} "

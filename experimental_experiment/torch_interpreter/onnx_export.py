@@ -227,7 +227,9 @@ def _make_builder_interpreter(
 
     from .interpreter import DynamoInterpreter
 
-    interpreter = DynamoInterpreter(builder, retrieve, dispatcher=dispatcher)
+    interpreter = DynamoInterpreter(
+        builder, retrieve, dispatcher=dispatcher, use_dynamo=use_dynamo
+    )
     return graph_module, builder, interpreter
 
 
@@ -309,6 +311,8 @@ def to_onnx(
     if verbose:
         t = time.perf_counter()
         print(f"[to_onnx] to_onnx done in {t - begin} s")
+        if verbose >= 10:
+            print(builder.get_debug_msg())
 
     if return_builder:
         return onx, builder

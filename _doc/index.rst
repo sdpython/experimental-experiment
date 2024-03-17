@@ -40,6 +40,7 @@ Source are `sdpython/experimental-experiment
     api/index
     auto_examples/index
     models/index
+    bench/index
     times
 
 .. toctree::

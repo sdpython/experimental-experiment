@@ -23,6 +23,7 @@ class DynamoInterpreter:
         see function `_retrieve
         <experimental_experiment.torch_interpreter.onnx_export._retrieve>`.
     :param dispatcher: see :class:`experimental_experiment.torch_interpreter.Dispatcher`
+    :param use_dynamo: see :func:`to_onnx <experimental_experiment.torch_interpreter.to_onnx>`
     """
 
     def _hash(self) -> str:
@@ -33,6 +34,7 @@ class DynamoInterpreter:
         graph_builder: "GraphBuilder",  # noqa: F821
         retriever: Callable,
         dispatcher: Optional["Dispatcher"] = None,  # noqa: F821
+        use_dynamo: bool = False,
     ):
         import torch
 
@@ -40,6 +42,7 @@ class DynamoInterpreter:
         self.builder = graph_builder
         self.retriever = retriever
         self.dispatcher = dispatcher
+        self.use_dynamo = (use_dynamo,)
         self.example_values_ = {}
 
     def run_node(self, node: "torch.fx.Node"):  # noqa: F821
@@ -880,9 +883,11 @@ class DynamoInterpreter:
                     self.builder.set_shape(r, (1,))
                     self.builder.set_type(r, TensorProto.INT64)
                     self.builder.make_dynamic_object(r, v)
+                elif v is None:
+                    continue
                 else:
                     raise TypeError(
-                        f"Unexpected type in node {node!r}, "
+                        f"Unexpected type in node {node!r}, r={r!r}, "
                         f"type(val)={type(v)}{self.builder.get_debug_msg()}"
                     )
         if exa is not None and not isinstance(exa, tuple):
@@ -951,6 +956,10 @@ class DynamoInterpreter:
             target_opset=self.builder.opsets,
             optimization_options=self.builder.optimization_options,
             verbose=self.builder.verbose,
+            dispatcher=self.dispatcher,
+            raise_list=self.builder.raise_list,
+            dynamic_shapes=self.builder.dynamic_shapes,
+            use_dynamo=self.use_dynamo,
         )
         builder.process(graph_module, interpreter)
         assert builder.outputs, f"No output detected for node={node}, graph={gm}"

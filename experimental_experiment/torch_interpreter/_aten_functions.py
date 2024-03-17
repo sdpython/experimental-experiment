@@ -2178,7 +2178,7 @@ def aten_repeat(
 def aten_rsqrt(g: GraphBuilder, sts: bool, outputs: List[str], x: T) -> T:
     "rqsrt"
     ext = g.make_node("Sqrt", [x], name="rsqrt")
-    res = g.make_node("Reciprocal", ext, outputs, name="rsqrt")
+    res = g.op.Reciprocal(ext, outputs=outputs, name="rsqrt")
     if sts:
         set_type_shape_unary_op(g, outputs[0], x)
     return res

@@ -1,3 +1,4 @@
+import inspect
 from typing import Any, Callable, Dict, List, Optional
 
 
@@ -95,3 +96,211 @@ class Dispatcher:
         :return: callable
         """
         return fct
+
+
+class ForceDispatcher(Dispatcher):
+    """
+    Implements a dispatcher which as an onnx as it is
+    when no converting function is found.
+
+    :param signatures: function used only for their signature mapping
+        a name to a function in order to have parameter names
+    :param verbose: verbose
+    :param domain: domain of the added node
+    :param version: version of the domain
+    :param strict: when an input is not a tensor, it becomes a named parameter
+        if strict is False
+    :param only_registered: fails if a function is not found in signatures
+    """
+
+    def __init__(
+        self,
+        signatures: Optional[Dict[str, Callable]] = None,
+        verbose: int = 0,
+        domain: str = "aten.lib",
+        version: int = 1,
+        strict: bool = False,
+        only_registered: bool = False,
+    ):
+        super(ForceDispatcher, self).__init__({}, verbose=verbose)
+        self.signatures = signatures or {}
+        self.domain = domain
+        self.version = version
+        self.strict = strict
+        self.only_registered = only_registered
+        self._process_signatures()
+
+    @classmethod
+    def _convert_into_type(cls, annotation):
+        assert (
+            annotation is not None and annotation is not inspect._empty
+        ), f"Unexpected annotation={annotation}"
+        if annotation in (float, int, bool):
+            return annotation
+        if hasattr(annotation, "_name") and annotation._name == "List":
+            assert len(annotation.__args__) == 1, f"Unexpected annotation {annotation}"
+            assert annotation.__args__[0] in (float, int, bool), (
+                f"Unexpected annotation {annotation}, "
+                f"annotation.__args__[0]={annotation.__args__[0]!r}"
+            )
+            t = annotation.__args__[0]
+            return lambda v: list(t(_) for _ in v)
+
+        raise RuntimeError(f"Unexpected annotation {annotation!r}")
+
+    def _process_signature(self, f: Callable):
+        args = []
+        kwargs = []
+        sig = inspect.signature(f)
+        has_annotation = any(
+            map(
+                lambda p: p.annotation is not None
+                and p.annotation is not inspect._empty,
+                sig.parameters.values(),
+            )
+        )
+        # If there is annotation, we assume every result = None without annotation is an optional Tensor.
+        for name, p in sig.parameters.items():
+            ann = p.annotation
+            if p.default is inspect._empty:
+                args.append(name)
+            elif p.default is None:
+                noann = p.annotation is None or p.annotation is inspect._empty
+                if has_annotation and noann:
+                    args.append(name)
+                elif not noann:
+                    kwargs.append(
+                        (
+                            name,
+                            p.default,
+                            (
+                                None
+                                if ann is inspect._empty or ann is None
+                                else self._convert_into_type(ann)
+                            ),
+                        )
+                    )
+                else:
+                    raise RuntimeError(
+                        f"Unable to determine if parameter {name!r} "
+                        f"is an input or a parameter, annotation is {p.annotation}, "
+                        f"default is {p.default!r} for function {f}, "
+                        f"has_annotation={has_annotation}"
+                    )
+            else:
+                kwargs.append(
+                    (
+                        name,
+                        p.default,
+                        (
+                            None
+                            if ann is inspect._empty or ann is None
+                            else self._convert_into_type(ann)
+                        ),
+                    )
+                )
+        return args, kwargs
+
+    def _process_signatures(self):
+        self.sigs_ = {}
+        for k, v in self.signatures.items():
+            sig = self._process_signature(v)
+            self.sigs_[k] = sig
+
+    def fallback(
+        self,
+        name: Any,
+        fct: Optional[Callable],
+        args: List[Any],
+        kwargs: Dict[str, Any],
+        builder: "GraphBuilder",  # noqa: F821
+    ) -> Optional[Callable]:
+        """
+        The function is called after the function converting an aten function
+        into ONNX. *fct* is this function. It can be changed and just
+        set when mapping was found.
+
+        :param name: object or str
+        :param fct: function found so far
+        :param args: known arguments coming from the graph module
+        :param kwargs: known named arguments coming from the graph module
+        :param builder: GraphBuilder
+        :return: callable
+        """
+        if fct is not None:
+            # The conversion has been found.
+            return fct
+
+        fname = self._get_function_name(name)
+
+        def wrapper(
+            g,
+            sts,
+            outputs,
+            *args,
+            _name=fname,
+            _domain=self.domain,
+            _version=self.version,
+            _only_registered=self.only_registered,
+            **kwargs,
+        ):
+            sig = self.sigs_.get(_name, None)
+            assert (
+                not _only_registered or sig is not None
+            ), f"Unable to find a function with {_name!r}{g.get_debug_msg()}"
+            kwargs = kwargs.copy()
+            new_args = []
+            for i, n in enumerate(args):
+                if isinstance(n, str):
+                    new_args.append(n)
+                    continue
+                if isinstance(n, g.torch.Tensor):
+                    init = g.make_initializer("", n)
+                    new_args.append(init)
+                    continue
+                if not sig:
+                    if self.strict:
+                        raise RuntimeError(
+                            f"Unsupported type {type(n)} for argument {i} for function {_name!r}{g.get_debug_msg()}"
+                        )
+                    kwargs[f"param_{i}"] = n
+                    continue
+
+                a, kw = sig
+                if n is None and i < len(a):
+                    # An optional input.
+                    new_args.append("")
+                    continue
+
+                assert i >= len(a), (
+                    f"Unsupported type {type(n)} for argument {i} for function {_name!r}"
+                    f"sig={sig}, {g.get_debug_msg()}"
+                )
+                ni = i - len(a)
+                assert ni < len(kw), (
+                    f"Unexpected argument at position {i}, for function {_name!r}"
+                    f"sig={sig}{g.get_debug_msg()}"
+                )
+                p = kw[ni]
+                kwargs[p[0]] = n if p[2] is None else p[2](n)
+
+            # Let's get rid of the empty name at the end of the inputs.
+            i = len(new_args) - 1
+            while i >= 0 and new_args[i] == "":
+                i -= 1
+            new_args = new_args[: i + 1] if i >= 0 else []
+
+            g.add_domain(_domain, _version)
+            g.make_node(
+                _name,
+                new_args,
+                outputs=outputs,
+                domain=_domain,
+                name=g.unique_node_name(_name),
+                **kwargs,
+            )
+            if len(outputs) == 1:
+                return outputs[0]
+            return tuple(outputs)
+
+        return wrapper

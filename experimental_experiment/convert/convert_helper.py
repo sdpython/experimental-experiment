@@ -43,7 +43,7 @@ def optimize_model_proto(
 
     if verbose:
         print(
-            f"[optimize_model_proto] starts inliner with "
+            f"[optimize_model_proto] starts optimize with "
             f"{len(model_proto.graph.node)} nodes and "
             f"{len(model_proto.functions)} local functions"
         )

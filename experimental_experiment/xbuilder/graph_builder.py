@@ -121,6 +121,7 @@ class GraphBuilder:
         self.dynamic_objects_rev = {}
         self.functions = []
         self.value_info = []
+        self.raise_list = raise_list
         self._raise_list = raise_list or set()
         self.constants_computed_ = {}
         self._cache_shape = {}
@@ -229,6 +230,19 @@ class GraphBuilder:
             domain in self.opset
         ), f"Domain {domain!r} is not registered{self.get_debug_msg()}."
         return self.opset[domain]
+
+    def add_domain(self, domain: str, version: int = 1):
+        """
+        Adds a domain to the list of supported ones.
+        Checks the version is the same if it exists.
+        """
+        if domain in self.opsets:
+            assert version == self.opsets[domain], (
+                f"Version mismatch for domain={domain!r}, current is "
+                f"{self.opsets[domain]}, new is {version}{self.get_debug_msg()}"
+            )
+            return
+        self.opsets[domain] = version
 
     def _hash(self) -> str:
         return make_hash(self)
@@ -519,6 +533,11 @@ class GraphBuilder:
                     ):
                         return False
                     if len(size) >= 2:
+                        return False
+                    if el_type == self.torch.int64 and len(size) == 0:
+                        # A single integer with no shape, it looks like a dimension.
+                        # Let's assume it is. It is more efficient to consider it as
+                        # a dimension.
                         return False
                 else:
                     if elem_type is not None and elem_type in (
@@ -1624,11 +1643,17 @@ class GraphBuilder:
 
         if check is not False:
             for i in inputs:
+                if i == "":
+                    # Optional input.
+                    continue
                 assert self.has_name(i), (
                     f"Input {i!r} does not exist for operator {op_type!r} "
                     f"({self._hash()}){self.get_debug_msg()}"
                 )
             for i in output_names:
+                if i == "":
+                    # Optional output.
+                    continue
                 assert not self.has_name(i), (
                     f"Output {i!r} already exists for operator {op_type!r} "
                     f"({self._hash()}){self.get_debug_msg()}"
@@ -2256,6 +2281,8 @@ class GraphBuilder:
             known |= set(self.initializers_dict)
             for node in self.nodes:
                 for i in node.input:
+                    if i == "":
+                        continue
                     assert (
                         i in known
                     ), f"Unknown input {i!r}, step {step!r}  in node {node}"
