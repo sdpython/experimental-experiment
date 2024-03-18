@@ -643,6 +643,7 @@ def aten_copy_(
     src: T,
     non_blocking: bool = False,
 ) -> T:
+    "identity"
     return aten_copy(g, sts, outputs, x, src, non_blocking, name="copy_")
 
 
@@ -1335,6 +1336,7 @@ def aten_full_like(
 def aten_FunctionCtx(
     g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], *args, **kwargs
 ):
+    "not implemented"
     if len(args) == 0 and len(kwargs) == 0:
         return
     raise NotImplementedError(f"args={args}, kwargs={kwargs}")
@@ -1982,6 +1984,39 @@ def aten_mul_Tensor(
     return aten_mul(g, sts, outputs, x, y, name="mul_Tensor")
 
 
+def aten_native_dropout(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    p: float,
+    train: bool = False,
+    name: str = "native_dropout",
+):
+    "dropout"
+    if not train:
+        assert (
+            len(outputs) == 1
+        ), f"train is False and outputs is {outputs}{g.get_debug_msg()}"
+        return g.op.Identity(x, outputs=outputs, name=name)
+    assert (
+        len(outputs) == 2
+    ), f"train is True and outputs is {outputs}{g.get_debug_msg()}"
+    tp = g.make_initializer(
+        "", np.array(p, dtype=tensor_dtype_to_np_dtype(g.get_type(x)))
+    )
+    tt = g.make_initializer("", np.array(train, dtype=np.bool_))
+    g.make_node("Dropout", [x, tp, tt], outputs, name=name)
+    if not sts:
+        set_type_shape_unary_op(g, outputs[0], x)
+        g.set_type(outputs[1], TensorProto.BOOL)
+        if g.has_shape(x):
+            g.set_shape(outputs[1], g.get_shape(x))
+        else:
+            g.set_rank(outputs[1], g.get_rank(x))
+    return tuple(outputs)
+
+
 def aten_native_layer_norm(
     g: GraphBuilder,
     sts: Optional[Dict[str, Any]],
@@ -2428,6 +2463,38 @@ def aten_rsub_Scalar(
     "rsub"
     assert alpha == 1, f"Not implemented with alpha={alpha}"
     return aten_sub(g, sts, outputs, y, x, name="rsub_Scalar")
+
+
+def aten_select_int(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    dim: int,
+    index: int,
+) -> T:
+    "gather"
+    assert isinstance(
+        dim, int
+    ), f"Unexpected type {type(dim)} for dim{g.get_debug_msg()}"
+    assert isinstance(
+        index, int
+    ), f"Unexpected type {type(index)} for dim{g.get_debug_msg()}"
+    res = g.op.Gather(x, np.array([index], dtype=np.int64), axis=dim, outputs=outputs)
+    if not sts:
+        g.set_type(res, g.get_type(x))
+        if g.has_shape(x):
+            shape = g.get_shape(x)
+            if dim < 0:
+                dim += len(shape)
+            assert dim < len(
+                shape
+            ), f"shape is {shape}, dim is {dim}{g.get_debug_msg()}"
+            new_shape = [s for i, s in enumerate(shape) if i != dim]
+            g.set_shape(res, tuple(new_shape))
+        else:
+            g.get_rank(res, g.get_rank(x) - 1)
+    return res
 
 
 def aten__set_grad_enabled(
