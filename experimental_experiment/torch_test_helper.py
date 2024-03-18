@@ -1,5 +1,6 @@
 import contextlib
 import io
+import os
 import warnings
 from typing import Any, Dict, List, Optional, Union
 from onnx import ModelProto
@@ -54,6 +55,8 @@ def export_to_onnx(
     target_opset: int = 18,
     prefix: Optional[str] = None,
     rename_inputs: bool = False,
+    optimize: bool = True,
+    folder: Optional[str] = "dump_test",
 ) -> Dict[str, Union[str, ModelProto, "GraphBuilder"]]:  # noqa: F821
     """
     Exports a model to ONNX.
@@ -66,6 +69,8 @@ def export_to_onnx(
     :param target_opset: opset to export into
     :param prefix: prefix to choose to export into
     :param rename_inputs: rename the inputs into ``input_{i}``
+    :param optimize: enable, disable optimizations
+    :param folder: where to dump the model, creates it if it does not exist
     :return: dictionary with ModelProto, builder, filenames
     """
     from .xbuilder import OptimizationOptions
@@ -89,10 +94,15 @@ def export_to_onnx(
         options=OptimizationOptions(verbose=verbose),
         verbose=verbose,
         return_builder=return_builder,
+        optimize=optimize,
     )
     ret["proto"] = onx
     if prefix is not None:
         filename = f"{prefix}.custom.onnx"
+        if folder is not None:
+            if not os.path.exists(folder):
+                os.mkdir(folder)
+            filename = os.path.join(folder, filename)
         with open(filename, "wb") as f:
             f.write((onx[0] if return_builder else onx).SerializeToString())
         ret["custom"] = filename

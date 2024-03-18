@@ -938,7 +938,7 @@ class GraphBuilder:
                         self.get_rank(name) <= 1
                     ), f"Unexpected rank={self.get_rank(name)} for a shape{self.get_debug_msg()}"
                     if self.get_rank(name) == 0:
-                        r = self.op.Unsqueeze(
+                        r = self.op.UnsqueezeAnyOpset(
                             name, np.array([0], dtype=np.int64), name=f"_mkshape_{name}"
                         )
                         self.set_type(r, self.get_type(name))
@@ -1030,6 +1030,34 @@ class GraphBuilder:
             )
         )
 
+    def is_constant_or_attribute(
+        self, node: NodeProto, input_index: int, att_name: str
+    ) -> bool:
+        """
+        Tells if an input is a constant or returns true if in an older
+        opset, it was named as an attribute.
+        """
+        if input_index < len(node.input):
+            return self.is_constant(node.input[input_index])
+        return True
+
+    def get_constant_or_attribute(
+        self, node: NodeProto, input_index: int, att_name: str
+    ) -> Any:
+        """
+        Tells if an input is a constant or returns true if in an older
+        opset, it was named as an attribute.
+        """
+        if input_index < len(node.input):
+            return self.get_constant(node.input[input_index])
+        for att in node.attribute:
+            if att.name == att_name:
+                assert (
+                    att.type == AttributeProto.INTS
+                ), f"Not Implemented when att.type={att.type}{self.get_debug_msg()}"
+                return np.array(list(att.ints), dtype=np.int64)
+        return None
+
     def update_value_shape_with_node(self, node):
         if node.domain != "":
             return
@@ -1065,11 +1093,11 @@ class GraphBuilder:
             return
 
         if node.op_type == "Squeeze":
-            if self.is_constant(node.input[1]):
+            if self.is_constant_or_attribute(node, 1, "axes"):
                 y = self.value_as_shape(node.input[0])
                 if y is None:
                     return
-                i = self.get_constant(node.input[1])
+                i = self.get_constant_or_attribute(node, 1, "axes")
                 if isinstance(i, int):
                     ii = i
                 elif (
@@ -1567,6 +1595,7 @@ class GraphBuilder:
         outputs: List[str],
         domain: str,
         name: str,
+        attributes: Optional[List[AttributeProto]] = None,
         **kwargs: Dict[str, Any],
     ):
         assert (
@@ -1586,6 +1615,24 @@ class GraphBuilder:
             f"Operator Cast needs arguments to but kwargs={kwargs}"
             f"{self.get_debug_msg()}"
         )
+        assert op_type != "Concat" or domain != "" or len(inputs) > 1, (
+            f"Concatenation of zero or one input is not necessary, "
+            f"len(inputs)={len(inputs)}{self.get_debug_msg()} "
+        )
+        if self.main_opset <= 11:
+            assert op_type != "Squeeze" or domain != "" or len(inputs) == 1, (
+                f"Operator Squeeze is not correclty specified for opset "
+                f"{self.main_opset}, inputs={inputs}, kwargs={kwargs}, "
+                f"atts={attributes}{self.get_debug_msg()}"
+            )
+        else:
+            n_entries = len(inputs) + len(attributes or []) + len(kwargs)
+            assert op_type != "Squeeze" or domain != "" or n_entries in (1, 2), (
+                f"Operator Squeeze is not correclty specified for opset "
+                f"{self.main_opset}, n_entries={n_entries}, "
+                f"inputs={inputs}, kwargs={kwargs}, "
+                f"atts={attributes}{self.get_debug_msg()}"
+            )
 
     def make_node(
         self,
@@ -1596,7 +1643,7 @@ class GraphBuilder:
         attributes: Optional[List[AttributeProto]] = None,
         check: Optional[bool] = None,
         name: Optional[str] = None,
-        set_type_shape: bool = False,
+        sts: Optional[Dict[str, Any]] = None,
         **kwargs,
     ) -> Union[str, List[str]]:
         """
@@ -1610,7 +1657,7 @@ class GraphBuilder:
         :param attributes: list of attributes to add as AttributeProto
         :param check: do some verification
         :param name: node name
-        :param set_type_shape: tries to set the shape and the type of
+        :param sts: if not specified, tries to set the shape and the type of
             the new results aftr the node is added, it is not possible
             for every node, there is no tool which determines the output shape
             of just one node
@@ -1673,7 +1720,13 @@ class GraphBuilder:
             name = self.unique_node_name(name)
 
         self._check_op_type(
-            op_type, inputs, outputs, domain=domain, name=name, **kwargs
+            op_type,
+            inputs,
+            outputs,
+            domain=domain,
+            name=name,
+            attributes=attributes,
+            **kwargs,
         )
 
         # break?
@@ -1716,7 +1769,7 @@ class GraphBuilder:
                 self.add_constant_node(node)
 
         # constant handling, shape, type
-        self._make_node_set_type_shape_constant(node, set_type_shape=set_type_shape)
+        self._make_node_set_type_shape_constant(node, sts=sts)
 
         if self.verbose > 3:
             print(
@@ -1766,7 +1819,9 @@ class GraphBuilder:
                     del kwargs["axes"]
         return inputs, kwargs
 
-    def _make_node_set_type_shape_constant(self, node: NodeProto, set_type_shape: bool):
+    def _make_node_set_type_shape_constant(
+        self, node: NodeProto, sts: Optional[Dict[str, Any]]
+    ):
         if node.domain != "":
             return
         if node.op_type == "Constant":
@@ -1808,7 +1863,7 @@ class GraphBuilder:
                 if cst is not None:
                     self.set_type(node.output[0], dtype_to_tensor_dtype(cst[0].dtype))
                     self.set_shape(node.output[0], tuple(cst[0].shape))
-        elif set_type_shape:
+        elif not sts:
             if node.op_type == "GatherElements":
                 if self.has_rank(node.input[0]) and self.has_rank(node.input[0]):
                     r1 = self.get_rank(node.input[0])
@@ -2079,11 +2134,15 @@ class GraphBuilder:
         for node in self.nodes:
             if node is None:
                 continue
+            if node.op_type == "Cast":
+                ext = f">{node.attribute[0].i}"
+            else:
+                ext = ""
             rows.append(
                 f"[GraphBuilder-{hs}.make_node] "
                 f"{_align(node.name, 15)} "
                 f"[{self._debug_string_inputs(node.input, node.output, 6)}] "
-                f"{node.op_type}:{node.input}->{node.output}"
+                f"{node.op_type}{ext}:{node.input}->{node.output}"
             )
         for io in self.outputs:
             shh = _nice_shape(io.type.tensor_type.shape)
@@ -2390,6 +2449,7 @@ class GraphBuilder:
         return gro.optimize(
             max_iter=self.optimization_options.max_iter,
             remove_identity=self.optimization_options.remove_identity,
+            stop_after=self.optimization_options.stop_after,
         )
 
     def remove_unused(self) -> int:
@@ -2573,6 +2633,23 @@ class GraphBuilder:
                 f"node.input={node.input}, node.output={node.output}, "
                 f"input_names={input_names}, output_names={output_names}"
             )
+
+            if old_name in replacements_rev:
+                # A tricky case:
+                # x -> Identity -> a -> Identity -> b -> Flatten -> output1
+                # x -> Identity -> output0
+                # How x should be renamed?
+                assert new_name in output_names, (
+                    f"replacement {old_name}->{new_name} is not possible because of "
+                    f"[{replacements_rev[old_name]}->{old_name}] and {new_name!r} "
+                    f"is not an output"
+                )
+                updates = {}
+                for k, v in replacements.items():
+                    if v == old_name:
+                        updates[k] = new_name
+                replacements.update(updates)
+
             replacements[old_name] = new_name
             replacements_rev[new_name] = old_name
 
@@ -2580,7 +2657,7 @@ class GraphBuilder:
             for k, v in replacements.items():
                 assert v not in replacements, (
                     f"replacement {k}->{v} is not possible because of "
-                    f"{v}->{replacements[v]}, old_name={old_name!r}, new_name={new_name!r}"
+                    f"[{v}->{replacements[v]}], old_name={old_name!r}, new_name={new_name!r}"
                 )
 
         # second pass: replacements in initializer

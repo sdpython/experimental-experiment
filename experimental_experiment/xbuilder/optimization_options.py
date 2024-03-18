@@ -21,6 +21,8 @@ class OptimizationOptions:
     :param max_iter: maximum number of iteration when doing pattern optimizations,
         -1 to let it undefined
     :param recursive: optimizes subgraphs and functions as well
+    :param stop_after: for investigation, stop_after this number of applies patterns,
+        -1 to never stop
     :param verbose: verbosity level (for pattern optimization)
     """
 
@@ -34,6 +36,7 @@ class OptimizationOptions:
         patterns: Union[str, List["PatternOptimization"]] = "default",  # noqa: F821
         max_iter: int = -1,
         recursive: bool = False,
+        stop_after: int = -1,
         verbose: int = 0,
     ):
         self.remove_unused = remove_unused
@@ -41,6 +44,7 @@ class OptimizationOptions:
         self.remove_identity = remove_identity
         self.constant_size = constant_size
         self.constant_fusing = constant_fusing
+        self.stop_after = stop_after
         if isinstance(patterns, str):
             from ..xoptim.patterns import get_pattern_list
 

@@ -1,8 +1,4 @@
-"""
-`sts` is an alias for `set_type_shape`.
-"""
-
-from typing import List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 import numpy as np
 from onnx.helper import tensor_dtype_to_np_dtype
 from ..xbuilder.shape_helper import all_int
@@ -19,7 +15,12 @@ T = str
 
 
 def prims_add(
-    g: GraphBuilder, sts: bool, outputs: List[str], x: T, y: T, name="prims_add"
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    y: T,
+    name="prims_add",
 ) -> T:
     "add"
     from ._aten_functions import aten_add
@@ -29,7 +30,7 @@ def prims_add(
 
 def prims_amax(
     g: GraphBuilder,
-    sts: bool,
+    sts: Optional[Dict[str, Any]],
     outputs: List[str],
     x: T,
     dim: Optional[int] = None,
@@ -59,14 +60,14 @@ def prims_amax(
         )
     else:
         raise RuntimeError(f"Unexpected type {type(dim)} for dim")
-    if sts:
+    if not sts:
         set_type_shape_reduce_op(g, outputs[0], x, keepdim=keepdim)
     return res
 
 
 def prims_broadcast_in_dim(
     g: GraphBuilder,
-    sts: bool,
+    sts: Optional[Dict[str, Any]],
     outputs: List[str],
     a: T,
     shape: List[int],
@@ -111,7 +112,7 @@ def prims_broadcast_in_dim(
         outputs=outputs,
     )
 
-    if sts:
+    if not sts:
         g.set_type(res, g.get_type(a))
         g.set_shape(res, shape)
 
@@ -120,7 +121,7 @@ def prims_broadcast_in_dim(
 
 def prims_cat(
     g: GraphBuilder,
-    sts: bool,
+    sts: Optional[Dict[str, Any]],
     outputs: List[str],
     tensors: Tuple[T, ...],
     dim: int = 0,
@@ -134,7 +135,7 @@ def prims_cat(
 
 def prims_clone(
     g: GraphBuilder,
-    sts: bool,
+    sts: Optional[Dict[str, Any]],
     outputs: List[str],
     x: T,
     memory_format: Optional[str] = None,
@@ -149,7 +150,7 @@ def prims_clone(
 
 def prims_convert_element_type(
     g: GraphBuilder,
-    sts: bool,
+    sts: Optional[Dict[str, Any]],
     outputs: List[str],
     x: T,
     dtype: "torch.dtype",  # noqa: F821
@@ -168,7 +169,7 @@ def prims_convert_element_type(
 
 def prims_collapse_view(
     g: GraphBuilder,
-    sts: bool,
+    sts: Optional[Dict[str, Any]],
     outputs: List[str],
     x: T,
     start: int,
@@ -193,7 +194,7 @@ def prims_collapse_view(
             new_shape.append(shape[i])
     ashape = np.array(new_shape, dtype=np.int64)
     res = g.op.Reshape(x, ashape, outputs=outputs, name=name)
-    if sts:
+    if not sts:
         g.set_type(res, g.get_type(x))
         ashape[ashape == -1] = s
         g.set_shape(res, tuple(ashape))
@@ -201,7 +202,11 @@ def prims_collapse_view(
 
 
 def prims_cos(
-    g: GraphBuilder, sts: bool, outputs: List[str], x: T, name: str = "prims_cos"
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    name: str = "prims_cos",
 ) -> T:
     "cos"
     from ._aten_functions import aten_cos
@@ -210,7 +215,12 @@ def prims_cos(
 
 
 def prims_div(
-    g: GraphBuilder, sts: bool, outputs: List[str], x: T, y: T, name: str = "prims_div"
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    y: T,
+    name: str = "prims_div",
 ) -> T:
     "div"
     from ._aten_functions import aten_div
@@ -220,7 +230,7 @@ def prims_div(
 
 def prims_empty_strided(
     g: GraphBuilder,
-    sts: bool,
+    sts: Optional[Dict[str, Any]],
     outputs: List[str],
     size: T,
     stride: T,
@@ -249,7 +259,12 @@ def prims_empty_strided(
 
 
 def prims_eq(
-    g: GraphBuilder, sts: bool, outputs: List[str], x: T, y: T, name: str = "prims_eq"
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    y: T,
+    name: str = "prims_eq",
 ) -> T:
     "equal"
     from ._aten_functions import aten_eq
@@ -258,7 +273,11 @@ def prims_eq(
 
 
 def prims_exp(
-    g: GraphBuilder, sts: bool, outputs: List[str], x: T, name: str = "prims_exp"
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    name: str = "prims_exp",
 ) -> T:
     "exp"
     from ._aten_functions import aten_exp
@@ -267,7 +286,12 @@ def prims_exp(
 
 
 def prims_gt(
-    g: GraphBuilder, sts: bool, outputs: List[str], x: T, y: T, name: str = "prims_gt"
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    y: T,
+    name: str = "prims_gt",
 ) -> T:
     "greater"
     from ._aten_functions import aten_gt
@@ -277,7 +301,7 @@ def prims_gt(
 
 def prims_iota(
     g: GraphBuilder,
-    sts: bool,
+    sts: Optional[Dict[str, Any]],
     outputs: List[str],
     length: int,
     start: int = 0,
@@ -314,7 +338,12 @@ def prims_iota(
 
 
 def prims_lt(
-    g: GraphBuilder, sts: bool, outputs: List[str], x: T, y: T, name: str = "prims_lt"
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    y: T,
+    name: str = "prims_lt",
 ) -> T:
     "less"
     from ._aten_functions import aten_lt
@@ -323,7 +352,12 @@ def prims_lt(
 
 
 def prims_mul(
-    g: GraphBuilder, sts: bool, outputs: List[str], x: T, y: T, name: str = "prims_mul"
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    y: T,
+    name: str = "prims_mul",
 ) -> T:
     "mul"
     from ._aten_functions import aten_mul
@@ -332,7 +366,11 @@ def prims_mul(
 
 
 def prims_neg(
-    g: GraphBuilder, sts: bool, outputs: List[str], x: T, name="prims_neg"
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    name="prims_neg",
 ) -> T:
     "neg"
     from ._aten_functions import aten_neg
@@ -342,7 +380,7 @@ def prims_neg(
 
 def prims_pow(
     g: GraphBuilder,
-    sts: bool,
+    sts: Optional[Dict[str, Any]],
     outputs: List[str],
     x: T,
     exponent: T,
@@ -355,17 +393,25 @@ def prims_pow(
 
 
 def prims_rsqrt(
-    g: GraphBuilder, sts: bool, outputs: List[str], x: T, name: str = "prims_rsqrt"
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    name: str = "prims_rsqrt",
 ) -> T:
     "rqsrt"
     res = g.op.Reciprocal(g.op.Sqrt(x, name=name), name=name, outputs=outputs)
-    if sts:
+    if not sts:
         set_type_shape_unary_op(g, res, x)
     return res
 
 
 def prims_sin(
-    g: GraphBuilder, sts: bool, outputs: List[str], x: T, name: str = "prims_sin"
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    name: str = "prims_sin",
 ) -> T:
     "sim"
     from ._aten_functions import aten_sin
@@ -375,7 +421,7 @@ def prims_sin(
 
 def prims_split_dim(
     g: GraphBuilder,
-    sts: bool,
+    sts: Optional[Dict[str, Any]],
     outputs: List[str],
     x: T,
     dim: int,
@@ -401,14 +447,19 @@ def prims_split_dim(
     inner_length = shape_dim // outer_length
     new_shape = shape[0:dim] + (outer_length, inner_length) + shape[dim + 1 :]
     res = g.op.Reshape(x, np.array(new_shape), outputs=outputs, name=name)
-    if sts:
+    if not sts:
         g.set_type(res, g.get_type(x))
         g.get_shape(res, tuple(new_shape))
     return res
 
 
 def prims_sub(
-    g: GraphBuilder, sts: bool, outputs: List[str], x: T, y: T, name: str = "prims_sub"
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    y: T,
+    name: str = "prims_sub",
 ) -> T:
     "sub"
     from ._aten_functions import aten_sub
@@ -418,7 +469,7 @@ def prims_sub(
 
 def prims_sum(
     g: GraphBuilder,
-    sts: bool,
+    sts: Optional[Dict[str, Any]],
     outputs: List[str],
     x: T,
     dim: Optional[Union[int, List[int]]] = None,
@@ -434,11 +485,15 @@ def prims_sum(
 
 
 def prims_transpose(
-    g: GraphBuilder, sts: bool, outputs: List[str], input_name: T, perm: List[int]
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    input_name: T,
+    perm: List[int],
 ) -> T:
     "transpose"
     res = g.make_node("Transpose", [input_name], outputs, perm=list(perm))
-    if sts:
+    if not sts:
         g.set_type(outputs[0], g.get_type(input_name))
         if g.has_shape(input_name):
             shape = list(g.get_shape(input_name))
@@ -451,13 +506,20 @@ def prims_transpose(
     return res
 
 
-def prims_view_of(g: GraphBuilder, sts: bool, outputs: List[str], x: T) -> T:
+def prims_view_of(
+    g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T
+) -> T:
     "identity"
     return g.op.Identity(x, outputs=outputs, name="prims_view_of")
 
 
 def prims_where(
-    g: GraphBuilder, sts: bool, outputs: List[str], condition: T, x: T, other: T
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    condition: T,
+    x: T,
+    other: T,
 ) -> T:
     "where"
     assert not (isinstance(x, (int, float)) and isinstance(other, (int, float))), (
@@ -470,7 +532,7 @@ def prims_where(
     dtype = tensor_dtype_to_np_dtype(g.get_type(other))
     ax = np.array([x], dtype=dtype)
     res = g.op.Where(condition, ax, other, outputs=outputs, name="prims_where")
-    if sts:
+    if not sts:
         g.set_type(res, g.get_type(other))
         if g.has_shape(condition) and g.has_shape(other):
             shape = broadcast_shape(g.get_shape(condition), g.get_shape(other))

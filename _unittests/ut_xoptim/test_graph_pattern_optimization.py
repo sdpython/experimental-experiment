@@ -1912,6 +1912,22 @@ class TestGraphPatternOptimization(ExtTestCase):
         got = opt_ref.run(None, feeds)[0]
         self.assertEqualArray(expected, got)
 
+    def test_matmul_reshape_phi(self):
+        origin = self._get_model("phi_1_good.onnx")
+        check_model(origin)
+        self._check_with_ort(origin)
+        gr = GraphBuilder(
+            origin,
+            infer_shapes=True,
+            optimization_options=OptimizationOptions(
+                patterns=["MatMulReshape2Of3"],
+                verbose=0,  # stop_after=2
+            ),
+        )
+        onx = gr.to_onnx(optimize=True)
+        self._check_with_ort(onx)
+        check_model(onx)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

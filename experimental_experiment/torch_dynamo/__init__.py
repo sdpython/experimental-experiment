@@ -39,7 +39,11 @@ def get_decomposition_table():
 
     new_table = {}
     for k, v in torch._decomp.decomposition_table.items():
-        if k.name() in {"aten::embedding_dense_backward", "aten::rrelu_with_noise"}:
+        if k.name() in {
+            "aten::embedding_dense_backward",
+            "aten::rrelu_with_noise",
+            "aten::native_layer_norm_backward",
+        }:
             new_table[k] = v
     return new_table
 

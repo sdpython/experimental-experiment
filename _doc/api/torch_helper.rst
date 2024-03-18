@@ -31,6 +31,14 @@ get_mistral_model
 
 .. autofunction:: experimental_experiment.torch_helper.mistral_helper.get_mistral_model
 
+phi_helper
+==========
+
+get_phi_model
++++++++++++++
+
+.. autofunction:: experimental_experiment.torch_helper.phi_helper.get_phi_model
+
 dump_helper
 ===========
 

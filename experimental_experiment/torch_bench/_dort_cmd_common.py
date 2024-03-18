@@ -1,154 +1,10 @@
 import os
-from typing import Any, Dict, List, Tuple, Union
-
-
-def _create_configuration_for_benchmark_llama(
-    config: str = "small",
-    repeat: int = 5,
-    warmup: int = 3,
-    num_hidden_layers: int = 1,
-    implementation: str = "eager",
-) -> Dict[str, Union[str, int, List[Tuple[int, int]]]]:
-    """
-    Creates a model based on the given configuration.
-
-    :param config: size of the model (small, medium, large)
-    :param warmup: number of warmup steps
-    :param repeat: number of repetition
-    :param num_hidden_layers: number of hidden layers
-    :param implementation: implementation
-    :return: dictionary
-    """
-    if config == "small":
-        return dict(
-            input_dims=[(2, 1024)] * (repeat + warmup),
-            hidden_size=16,
-            num_hidden_layers=num_hidden_layers,
-            vocab_size=1024,
-            intermediate_size=16,
-            max_position_embeddings=1024,
-            num_attention_heads=2,
-            _attn_implementation=implementation,
-        )
-    if config == "medium":
-        return dict(
-            input_dims=[(2, 1024)] * (repeat + warmup),
-            hidden_size=1024,
-            num_hidden_layers=num_hidden_layers,
-            vocab_size=1024,
-            intermediate_size=1024,
-            max_position_embeddings=1024,
-            num_attention_heads=2,
-            _attn_implementation=implementation,
-        )
-    if config in ("large", "default"):
-        return dict(
-            input_dims=[(2, 1024)] * (repeat + warmup),
-            hidden_size=4096,
-            num_hidden_layers=num_hidden_layers,
-            vocab_size=32000,
-            intermediate_size=11008,
-            max_position_embeddings=2048,
-            num_attention_heads=32,
-            _attn_implementation=implementation,
-        )
-    raise ValueError(f"Unexpected value for config={config!r}.")
-
-
-def _create_configuration_for_benchmark_mistral(
-    config: str = "small",
-    repeat: int = 5,
-    warmup: int = 3,
-    num_hidden_layers: int = 1,
-    implementation: str = "eager",
-) -> Dict[str, Union[str, int, List[Tuple[int, int]]]]:
-    """
-    Creates a model based on the given configuration.
-
-    :param config: size of the model (small, medium, large)
-    :param warmup: number of warmup steps
-    :param repeat: number of repetition
-    :param num_hidden_layers: number of hidden layers
-    :param implementation: implementation
-    :return: dictionary
-    """
-    if config == "small":
-        return dict(
-            input_dims=[(2, 1024)] * (repeat + warmup),
-            hidden_size=32,
-            num_hidden_layers=2,
-            vocab_size=99,
-            intermediate_size=16,
-            max_position_embeddings=512,
-            num_attention_heads=2,
-            num_key_value_heads=2,
-            _attn_implementation="eager",
-        )
-    if config == "medium":
-        return dict(
-            input_dims=[(2, 1024)] * (repeat + warmup),
-            hidden_size=1024,
-            num_hidden_layers=num_hidden_layers,
-            vocab_size=1024,
-            intermediate_size=1024,
-            num_attention_heads=4,
-            num_key_value_heads=4,
-            max_position_embeddings=1024,
-            sliding_window=4096,
-            _attn_implementation=implementation,
-        )
-    if config in ("large", "default"):
-        return dict(
-            input_dims=[(2, 1024)] * (repeat + warmup),
-            hidden_size=4096,
-            num_hidden_layers=num_hidden_layers,
-            vocab_size=32000,
-            intermediate_size=14336,
-            num_attention_heads=32,
-            num_key_value_heads=8,
-            max_position_embeddings=131072,
-            sliding_window=4096,
-            _attn_implementation=implementation,
-        )
-    raise ValueError(f"Unexpected value for config={config!r}.")
-
-
-def create_configuration_for_benchmark(
-    model: str = "llama",
-    config: str = "small",
-    repeat: int = 5,
-    warmup: int = 3,
-    num_hidden_layers: int = 1,
-    implementation: str = "eager",
-) -> Dict[str, Union[str, int, List[Tuple[int, int]]]]:
-    """
-    Creates a model based on the given configuration.
-
-    :param model: model name
-    :param config: size of the model (small, medium, large)
-    :param warmup: number of warmup steps
-    :param repeat: number of repetition
-    :param num_hidden_layers: number of hidden layers
-    :param implementation: implementation
-    :return: dictionary
-    """
-    if model == "llama":
-        return _create_configuration_for_benchmark_llama(
-            config=config,
-            repeat=repeat,
-            warmup=warmup,
-            num_hidden_layers=num_hidden_layers,
-            implementation=implementation,
-        )
-    if model == "mistral":
-        return _create_configuration_for_benchmark_mistral(
-            config=config,
-            repeat=repeat,
-            warmup=warmup,
-            num_hidden_layers=num_hidden_layers,
-            implementation=implementation,
-        )
-    raise ValueError(f"Not implemented for model={model!r}.")
+from typing import Any, Dict, List, Optional, Tuple, Union
+from ._dort_cmd_common_models import (
+    _create_configuration_for_benchmark_llama,
+    _create_configuration_for_benchmark_mistral,
+    _create_configuration_for_benchmark_phi,
+)
 
 
 def create_compiled_model(
@@ -161,6 +17,8 @@ def create_compiled_model(
     disable_pattern: Union[str, List[str]] = None,
     return_storage: bool = False,
     rename_inputs: bool = True,
+    dump_prefix: Optional[str] = None,
+    optimize: bool = True,
 ) -> Any:
     """
     Creates the compilrf model.
@@ -174,6 +32,8 @@ def create_compiled_model(
     :param return_storage: return a container for the models,
         only works with backend *custom* and *debug*
     :param rename_inputs: rename inputs into ``input_{i}``
+    :param dump_prefix: dumps the models (backend, custom and debug)
+    :param optimize: enable optimizations
     :return: compiled model
     """
     import torch
@@ -190,7 +50,7 @@ def create_compiled_model(
             not return_storage
         ), f"return_storage=True not implemented with backend={backend!r}"
         local_aot_ort, local_ort = make_aot_ort(
-            dynamic=use_dynamic, rewrite=True, verbose=verbose
+            dynamic=use_dynamic, rewrite=optimize, verbose=verbose
         )
         return torch.compile(model, backend=local_ort)
 
@@ -229,6 +89,8 @@ def create_compiled_model(
                 disable_pattern=disable_pattern,
                 storage=storage,
                 rename_inputs=rename_inputs,
+                dump_prefix=dump_prefix,
+                optimize=optimize,
                 **kwargs,
             ),
             decompositions=get_decomposition_table(),
@@ -252,6 +114,9 @@ def create_compiled_model(
                 disable_pattern=disable_pattern,
                 storage=storage,
                 rename_inputs=rename_inputs,
+                verbose=verbose,
+                dump_prefix=dump_prefix,
+                optimize=optimize,
                 **kwargs,
             ),
             decompositions=get_decomposition_table(),
@@ -287,8 +152,68 @@ def dort_args(name: str, description: str):
         implementation=("eager", "eager or sdpa"),
         disable_pattern=("", "a list of optimization patterns to disable"),
         enable_pattern=("default", "list of optimization patterns to enable"),
+        optimize=(1, "optimize the model"),
         expose="backend,repeat,warmup,device,num_hidden_layers,"
         "mixed,export,config,target_opset,dynamic,verbose,"
-        "enable_pattern,disable_pattern,model",
+        "enable_pattern,disable_pattern,model,optimize",
     )
     return args
+
+
+def create_configuration_for_benchmark(
+    model: str = "llama",
+    config: str = "small",
+    repeat: int = 5,
+    warmup: int = 3,
+    num_hidden_layers: int = 1,
+    implementation: str = "eager",
+) -> Dict[str, Union[str, int, List[Tuple[int, int]]]]:
+    """
+    Creates a model based on the given configuration.
+
+    :param model: model name
+    :param config: size of the model (small, medium, large)
+    :param warmup: number of warmup steps
+    :param repeat: number of repetition
+    :param num_hidden_layers: number of hidden layers
+    :param implementation: implementation
+    :return: dictionary
+    """
+    fcts = {
+        "llama": _create_configuration_for_benchmark_llama,
+        "mistral": _create_configuration_for_benchmark_mistral,
+        "phi": _create_configuration_for_benchmark_phi,
+    }
+    assert model in fcts, f"Not implemented for model {model!r}, config={config}"
+    return fcts[model](
+        config=config,
+        repeat=repeat,
+        warmup=warmup,
+        num_hidden_layers=num_hidden_layers,
+        implementation=implementation,
+    )
+
+
+def create_model(
+    model: str, config_dict: Dict[str, Union[int, str]]
+) -> Tuple[Any, List[Tuple[Any, ...]]]:
+    """
+    Returns a model and a list of inputs.
+    """
+
+    if model == "llama":
+        from ..torch_helper.llama_helper import get_llama_model
+
+        return get_llama_model(**config_dict)
+
+    if model == "mistral":
+        from ..torch_helper.mistral_helper import get_mistral_model
+
+        return get_mistral_model(**config_dict)
+
+    if model == "phi":
+        from ..torch_helper.phi_helper import get_phi_model
+
+        return get_phi_model(**config_dict)
+
+    raise AssertionError(f"not implemented for model={model!r}")

@@ -408,6 +408,7 @@ def onnx_custom_backend(
     ort_optimization_level: Optional[str] = None,
     dispatcher: Optional["Dispatcher"] = None,  # noqa: F821
     rename_inputs: bool = True,
+    optimize: bool = True,
 ) -> Callable:
     """
     Custom backend to export torch models into onnx
@@ -432,6 +433,7 @@ def onnx_custom_backend(
         the default value is the same as what :epkg:`onnxruntime` defines
     :param dispatcher: see :class:`experimental_experiment.torch_interpreter.Dispatcher`
     :param rename_inputs: rename the inputs
+    :param optimize: enable or disable the optimization
     :return: Callable
 
     See :ref:`l-plot-onnxrt-diff` or :ref:`l-plot-custom-backend` for examples.
@@ -493,6 +495,7 @@ def onnx_custom_backend(
         target_opset=target_opset,
         return_builder=True,
         dispatcher=dispatcher,
+        optimize=optimize,
     )
 
     if verbose:

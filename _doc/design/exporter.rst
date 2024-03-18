@@ -397,7 +397,7 @@ Let's consider the easy converting following function.
 
     def aten_addmm(
         g: GraphBuilder,
-        sts: bool,
+        sts: Optional[Dict[str, Any]],
         outputs: List[str],
 
         a: T,
@@ -410,7 +410,7 @@ Let's consider the easy converting following function.
         res = g.op.Gemm(
             b, c, a, alpha=float(alpha), beta=float(beta), outputs=outputs, name="addmm"
         )
-        if sts:
+        if not sts:
             g.set_type(res, g.get_type(b))
             g.set_rank(res, 2)
         return res
@@ -437,16 +437,16 @@ as shown in this function.
 
 ::
 
-    def aten_asin(g: GraphBuilder, sts: bool, outputs: List[str], x: T) -> T:
+    def aten_asin(g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T) -> T:
         "asin"
         res = g.make_node("Asin", [x], outputs)
-        if sts:
+        if not sts:
             set_type_shape_unary_op(g, outputs[0], x)
         return res  
 
-The boolean ``sts`` is ``False`` when the graph given by torch contains
-information about shape and type. In that case, the interpreter will
-give them to the graph builder.
+The boolean ``sts`` is ``None`` when the graph given by torch contains
+no information about shape and type. Otherwise, the interpreter
+gives them to the graph builder through ``sts``.
 
 Different Implementations
 +++++++++++++++++++++++++
@@ -459,7 +459,7 @@ are different. And the graph builder will remove the ``Identity`` node.
 
     def aten_copy(
         g: GraphBuilder,
-        sts: bool,
+        sts: Optional[Dict[str, Any]],
         outputs: List[str],
         x: T,
         src: T,

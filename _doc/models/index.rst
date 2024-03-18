@@ -10,6 +10,7 @@ This projects was started with LLaMa.
 
     torchtry
     onnxrt
+    example_bug
 
 .. toctree::
     :caption: Models
@@ -17,3 +18,4 @@ This projects was started with LLaMa.
 
     llama
     mistral
+    phi

@@ -23,14 +23,18 @@ from ._aten_functions import (
 T = str
 
 
-def aten_meth_bool(g: GraphBuilder, sts: bool, outputs: List[str], x: T) -> T:
+def aten_meth_bool(
+    g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T
+) -> T:
     "cast"
     import torch
 
     return aten_meth_to(g, sts, outputs, x, dtype=torch.bool)
 
 
-def aten_meth_clone(g: GraphBuilder, sts: bool, outputs: List[str], x: T) -> T:
+def aten_meth_clone(
+    g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T
+) -> T:
     "identity"
     assert x != outputs[0], (
         f"Input and output are the same x={x!r}, "
@@ -39,34 +43,48 @@ def aten_meth_clone(g: GraphBuilder, sts: bool, outputs: List[str], x: T) -> T:
     return g.make_node("Identity", [x], outputs, name=".clone")
 
 
-def aten_meth_contiguous(g: GraphBuilder, sts: bool, outputs: List[str], x: T) -> T:
+def aten_meth_contiguous(
+    g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T
+) -> T:
     "identity"
     return g.make_node("Identity", [x], outputs, name=".contiguous")
 
 
-def aten_meth_cos(g: GraphBuilder, sts: bool, outputs: List[str], x: T) -> T:
+def aten_meth_cos(
+    g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T
+) -> T:
     "cos"
     return aten_cos(g, sts, outputs, x)
 
 
-def aten_meth_cpu(g: GraphBuilder, sts: bool, outputs: List[str], x: T) -> T:
+def aten_meth_cpu(
+    g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T
+) -> T:
     "identity"
     return g.make_node("Identity", [x], outputs, name="cpu")
 
 
-def aten_meth_eq(g: GraphBuilder, sts: bool, outputs: List[str], x: T, y: T) -> T:
+def aten_meth_eq(
+    g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T, y: T
+) -> T:
     "equal"
     return aten_eq(g, sts, outputs, x, y)
 
 
 def aten_meth_expand(
-    g: GraphBuilder, sts: bool, outputs: List[str], x: T, *dims: List[int]
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    *dims: List[int],
 ) -> T:
     "expand"
     return aten_expand(g, sts, outputs, x, dims, name=".expand")
 
 
-def aten_meth_float(g: GraphBuilder, sts: bool, outputs: List[str], x: T) -> T:
+def aten_meth_float(
+    g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T
+) -> T:
     "cast"
     import torch
 
@@ -74,19 +92,29 @@ def aten_meth_float(g: GraphBuilder, sts: bool, outputs: List[str], x: T) -> T:
 
 
 def aten_meth_masked_fill(
-    g: GraphBuilder, sts: bool, outputs: List[str], x: T, mask: T, value: Any
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    mask: T,
+    value: Any,
 ) -> T:
     "constantofshape"
     return aten_meth_masked_fill_(g, sts, outputs, x, mask, value)
 
 
 def aten_meth_masked_fill_(
-    g: GraphBuilder, sts: bool, outputs: List[str], x: T, mask: T, value: Any
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    mask: T,
+    value: Any,
 ) -> T:
     "masked"
     value_cast = g.op.CastLike(value, x, name=".masked_fill")
     res = g.op.Where(mask, value_cast, x, name=".masked_fill")
-    if sts:
+    if not sts:
         g.set_type(res, g.get_type(x))
         g.set_type(value_cast, g.get_type(x))
         if isinstance(value, str):
@@ -107,7 +135,7 @@ def aten_meth_masked_fill_(
 
 def aten_meth_mean(
     g: GraphBuilder,
-    sts: bool,
+    sts: Optional[Dict[str, Any]],
     outputs: List[str],
     x: T,
     dim: T,
@@ -123,7 +151,7 @@ def aten_meth_mean(
     res = g.op.ReduceMeanAnyOpset(
         x, cst, outputs=outputs, keepdims=1 if keepdim else 0, name=".mean"
     )
-    if sts:
+    if not sts:
         set_type_shape_reduce_op(
             g,
             outputs[0],
@@ -136,7 +164,7 @@ def aten_meth_mean(
 
 def aten_meth_pow(
     g: GraphBuilder,
-    sts: bool,
+    sts: Optional[Dict[str, Any]],
     outputs: List[str],
     x: T,
     exponent: T,
@@ -158,13 +186,17 @@ def aten_meth_pow(
     else:
         raise RuntimeError(f"Unexpected type {type(exponent)} for exponent.")
     res = g.make_node("Pow", [x, cst], outputs)
-    if sts:
+    if not sts:
         set_type_shape_unary_op(g, outputs[0], x)
     return res
 
 
 def aten_meth_repeat(
-    g: GraphBuilder, sts: bool, outputs: List[str], x: T, *repeats: List[int]
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    *repeats: List[int],
 ) -> T:
     "repeat"
     return aten_repeat(g, sts, outputs, x, repeats, name=".repeat")
@@ -172,7 +204,7 @@ def aten_meth_repeat(
 
 def aten_meth_reshape(
     g: GraphBuilder,
-    sts: bool,
+    sts: Optional[Dict[str, Any]],
     outputs: List[str],
     input_name: T,
     *shape: List[int],
@@ -183,25 +215,27 @@ def aten_meth_reshape(
         # static version
         cst = g.make_initializer("", np.array(shape, dtype=np.int64))
         res = g.make_node("Reshape", [input_name, cst], outputs, name=name)
-        if sts:
+        if not sts:
             set_type_shape_reshape(g, res, input_name, shape)
         return res
     # dynamic version
     dyn_shape = g.make_shape_from_results(shape, name=name)
     res = g.make_node("Reshape", [input_name, dyn_shape], outputs, name=name)
-    if sts:
+    if not sts:
         set_type_shape_reshape(g, res, input_name, shape)
     return res
 
 
-def aten_meth_sin(g: GraphBuilder, sts: bool, outputs: List[str], x: T) -> T:
+def aten_meth_sin(
+    g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T
+) -> T:
     "sin"
     return aten_sin(g, sts, outputs, x)
 
 
 def aten_meth_size(
     g: GraphBuilder,
-    sts: bool,
+    sts: Optional[Dict[str, Any]],
     outputs: List[str],
     x: T,
     dim: Optional[int] = None,
@@ -210,30 +244,32 @@ def aten_meth_size(
     "size"
     if dim is None:
         res = g.op.Shape(x, name=f"{name}A", outputs=outputs)
-        if sts:
+        if not sts:
             g.set_type(res, TensorProto.INT64)
             g.set_shape(res, (g.get_rank(x),))
         return res
 
     s = g.op.Shape(x, name=name)
     d = g.op.Gather(s, np.array([dim], dtype=np.int64), name=f"{name}B")
-    res = g.op.Squeeze(
+    res = g.op.SqueezeAnyOpset(
         d, np.array([0], dtype=np.int64), name=f"{name}B", outputs=outputs
     )
-    if sts:
+    if not sts:
         g.set_type(res, TensorProto.INT64)
         g.set_shape(res, tuple())
     return res
 
 
-def aten_meth_t(g: GraphBuilder, sts: bool, outputs: List[str], x: T) -> T:
+def aten_meth_t(
+    g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T
+) -> T:
     "transpose"
     return aten_t(g, sts, outputs, x, name=".t")
 
 
 def aten_meth_to(
     g: GraphBuilder,
-    sts: bool,
+    sts: Optional[Dict[str, Any]],
     outputs: List[str],
     input_name: T,
     *args: List[Any],
@@ -267,7 +303,7 @@ def aten_meth_to(
     onnx_to = torch_dtype_to_onnx_dtype(dtype)
 
     res = g.make_node("Cast", [input_name], outputs, to=onnx_to, name=".to")
-    if sts:
+    if not sts:
         g.set_type(outputs[0], onnx_to)
         if g.has_shape(input_name):
             g.set_shape(outputs[0], g.get_shape(input_name))
@@ -277,7 +313,12 @@ def aten_meth_to(
 
 
 def aten_meth_transpose(
-    g: GraphBuilder, sts: bool, outputs: List[str], input_name: T, dim0: int, dim1: int
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    input_name: T,
+    dim0: int,
+    dim1: int,
 ) -> T:
     "transpose"
     perm = list(range(g.rank(input_name)))
@@ -288,7 +329,7 @@ def aten_meth_transpose(
     )
     perm[dim0], perm[dim1] = perm[dim1], perm[dim0]
     res = g.make_node("Transpose", [input_name], outputs, perm=perm)
-    if sts:
+    if not sts:
         g.set_type(outputs[0], g.get_type(input_name))
         if g.has_shape(input_name):
             shape = list(g.get_shape(input_name))
@@ -300,13 +341,17 @@ def aten_meth_transpose(
 
 
 def aten_meth_unsqueeze(
-    g: GraphBuilder, sts: bool, outputs: List[str], input_name: T, dim: int
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    input_name: T,
+    dim: int,
 ) -> T:
     "unsqueeze"
     new_name = g.unique_name(f"{input_name}_axes")
     g.make_initializer(new_name, np.array([dim], dtype=np.int64))
     res = g.make_node("Unsqueeze", [input_name, new_name], outputs)
-    if sts:
+    if not sts:
         dtype = g.get_type(input_name)
         g.set_type(outputs[0], dtype)
         if g.has_shape(input_name):
@@ -319,7 +364,11 @@ def aten_meth_unsqueeze(
 
 
 def aten_meth_view(
-    g: GraphBuilder, sts: bool, outputs: List[str], input_name: T, *args: Sequence[int]
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    input_name: T,
+    *args: Sequence[int],
 ) -> T:
     "view"
     if all_int(args):
@@ -329,13 +378,13 @@ def aten_meth_view(
         res = g.make_node(
             "Reshape", [input_name, new_shape_name], outputs, name=".view"
         )
-        if sts:
+        if not sts:
             set_type_shape_reshape(g, res, input_name, args)
         return res
 
     new_shape_name = g.make_shape_from_results(args, name=".view")
     res = g.make_node("Reshape", [input_name, new_shape_name], outputs, name=".view")
-    if sts:
+    if not sts:
         g.set_type(new_shape_name, TensorProto.INT64)
         g.set_shape(new_shape_name, (len(args),))
         set_type_shape_reshape(g, res, input_name, new_shape_name)
