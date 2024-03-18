@@ -183,9 +183,9 @@ class TestOperators(ExtTestCase):
                 target_opset=opset_version,
                 storage=storage,
                 backend=impl,
-                verbose=verbose,
                 raise_list=raise_list,
                 optimize=optimize,
+                verbose=verbose,
                 **kwargs,
             )
 
@@ -356,7 +356,7 @@ class TestOperators(ExtTestCase):
             dynamic_axes={"x": {0: "batch"}},
         )
 
-    def test_index(self):
+    def test_index_i(self):
         x = torch.tensor([[0.0]], requires_grad=True)
         self.assertONNX(
             lambda x: x[0], x, onnx_export=inspect.currentframe().f_code.co_name

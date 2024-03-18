@@ -2480,7 +2480,7 @@ def aten_select_int(
     assert isinstance(
         index, int
     ), f"Unexpected type {type(index)} for dim{g.get_debug_msg()}"
-    res = g.op.Gather(x, np.array([index], dtype=np.int64), axis=dim, outputs=outputs)
+    res = g.op.Gather(x, np.array(index, dtype=np.int64), axis=dim, outputs=outputs)
     if not sts:
         g.set_type(res, g.get_type(x))
         if g.has_shape(x):
