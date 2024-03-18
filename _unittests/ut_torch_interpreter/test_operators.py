@@ -253,7 +253,40 @@ class TestOperators(ExtTestCase):
                     )
                     assert len(grads) > 0, "No gradient was checked"
                 else:
-                    raise AssertionError(f"Unexpected type {type(baseline_result)}.")
+                    # tuple
+                    assert_all_close(
+                        baseline_result,
+                        result,
+                        atol=atol,
+                        rtol=rtol,
+                        msg="FORWARD-BACKWARD",
+                    )
+
+                    if square_loss:
+                        (baseline_result[0].sum() ** 2).backward()
+                        try:
+                            (result[0].sum() ** 2).backward()
+                        except FunctionNotFoundError as e:
+                            if not os.environ.get("EXPDORAISE", False):
+                                raise unittest.SkipTest(f"MISSING FOR BACKWARD {e}")
+                            raise
+                    else:
+                        baseline_result[0].sum().backward()
+                        try:
+                            result[0].sum().backward()
+                        except FunctionNotFoundError as e:
+                            if not os.environ.get("EXPDORAISE", False):
+                                raise unittest.SkipTest(f"MISSING FOR BACKWARD {e}")
+                            raise
+
+                    base_grads = tuple(_.grad for _ in model.parameters())
+                    grads = tuple(_.grad for _ in compiled_model.parameters())
+                    self.assertEqual(len(base_grads), len(grads))
+                    assert_all_close(
+                        base_grads, grads, atol=atol, rtol=rtol, msg="BACKWARD"
+                    )
+                    assert len(grads) > 0, "No gradient was checked"
+
             else:
                 assert (
                     not use_decomposition
@@ -283,7 +316,7 @@ class TestOperators(ExtTestCase):
             lambda x: x.acos(),
             x,
             onnx_export=inspect.currentframe().f_code.co_name,
-            verbose=6,
+            verbose=0,
         )
 
     def test_basic_static(self):
@@ -656,7 +689,7 @@ class TestOperators(ExtTestCase):
             opset_version=10,
             onnx_export=inspect.currentframe().f_code.co_name,
             impl="ref",
-            verbose=10,
+            verbose=0,
             optimize=False,
         )
 
@@ -683,6 +716,7 @@ class TestOperators(ExtTestCase):
             nn.MaxPool1d(3, stride=2, return_indices=True),
             x,
             onnx_export=inspect.currentframe().f_code.co_name,
+            verbose=0,
         )
 
     @ignore_warnings((UserWarning, DeprecationWarning))

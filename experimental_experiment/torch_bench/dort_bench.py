@@ -43,6 +43,7 @@ from experimental_experiment.torch_helper.dump_helper import dump_onnx
 from experimental_experiment.torch_bench._dort_cmd_common import (
     create_compiled_model,
     create_configuration_for_benchmark,
+    create_model,
 )
 
 config_dict = create_configuration_for_benchmark(
@@ -55,12 +56,14 @@ config_dict = create_configuration_for_benchmark(
 )
 
 verbose = int(args.verbose)
+optimize = args.optimize in (True, 1, "1", "True")
 disable_pattern = [_ for _ in args.disable_pattern.split(",") if _]
 enable_pattern = [_ for _ in args.enable_pattern.split(",") if _]
 print(f"model={args.model}")
 print(f"llama config={config_dict}")
 print(f"backend={args.backend}")
-print(f"verbose={args.verbose}")
+print(f"verbose={verbose}")
+print(f"optimize={args.optimize}")
 print(f"implementation={args.implementation}")
 print(f"mixed={args.mixed}")
 
@@ -76,16 +79,7 @@ if is_cuda:
         f"reserved={torch.cuda.memory_reserved(0)}"
     )
 
-if args.model == "llama":
-    from experimental_experiment.torch_helper.llama_helper import get_llama_model
-
-    model, example_args_collection = get_llama_model(**config_dict)
-elif args.model == "mistral":
-    from experimental_experiment.torch_helper.mistral_helper import get_mistral_model
-
-    model, example_args_collection = get_mistral_model(**config_dict)
-else:
-    raise AssertionError(f"not implemented for model={model!r}")
+model, example_args_collection = create_model(args.model, config_dict)
 
 device = args.device
 model = model.eval().to(device)
@@ -112,6 +106,7 @@ compiled_model = create_compiled_model(
     verbose=verbose,
     enable_pattern=enable_pattern,
     disable_pattern=disable_pattern,
+    optimize=optimize,
 )
 
 
