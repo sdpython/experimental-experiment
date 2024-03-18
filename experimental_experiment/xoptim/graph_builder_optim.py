@@ -404,7 +404,7 @@ class GraphBuilderPatternOptimization:
         )
 
     def optimize(
-        self, max_iter=-1, remove_identity: bool = True
+        self, max_iter=-1, remove_identity: bool = True, stop_after: int = -1
     ) -> List[Dict[str, Any]]:
         """
         Optimizes the based on the given list of patterns.
@@ -412,6 +412,8 @@ class GraphBuilderPatternOptimization:
         :param max_iter: maximum number of iterations
         :param remove_identity: remove identity nodes, it is better to keep it True,
             not doing it might prevent other patterns to find a set of nodes to optimize
+        :param sopt_after: stop after this number of replacements (to debug),
+            -1 not to stop
         :return: the method returns informations about the applied processes.
 
         The algorithm runs multiple iteration until the graph is not evolving
@@ -440,10 +442,10 @@ class GraphBuilderPatternOptimization:
         but it guarantees the local structure when applying the rewriting was
         not altered by another one.
         """
-
         assert (
             not self.recursive
         ), "GraphBuilderPatternOptimization.optimize does not implement recursivity"
+        continue_optimization = True
         if max_iter == -1:
             max_iter = len(self.builder.nodes)
         if self.verbose > 0:
@@ -460,8 +462,11 @@ class GraphBuilderPatternOptimization:
         begin_all = time.perf_counter()
         statistics = []
 
+        n_applied = 0
         last_it = 0
         for it in range(max_iter):
+            if not continue_optimization:
+                break
             if self.verbose > 0:
                 print(
                     f"[GraphBuilderPatternOptimization.optimize] iteration {it}: "
@@ -475,6 +480,8 @@ class GraphBuilderPatternOptimization:
             matches = []
             durations = {}
             for pattern in self.patterns:
+                if not continue_optimization:
+                    break
                 begin = time.perf_counter()
                 before = len(matches)
                 for match in pattern.enumerate_matches(self):
@@ -494,6 +501,14 @@ class GraphBuilderPatternOptimization:
                             f"[GraphBuilderPatternOptimization.optimize] match={match}"
                         )
                     matches.append((pattern, match))
+                    if stop_after > 0 and len(matches) + n_applied >= stop_after:
+                        continue_optimization = False
+                        if self.verbose > 0:
+                            print(
+                                f"[GraphBuilderPatternOptimization.optimize] stop after with "
+                                f"{len(matches)} as stop_after={stop_after} and n_applied={n_applied}"
+                            )
+                        break
 
                 statistics.append(
                     dict(
@@ -580,6 +595,7 @@ class GraphBuilderPatternOptimization:
 
                 n_added += add
                 n_removed += rem
+                n_applied += 1
             if self.verbose > 2:
                 print(
                     f"[GraphBuilderPatternOptimization.optimize] done all: -{n_removed} +{n_added} nodes"

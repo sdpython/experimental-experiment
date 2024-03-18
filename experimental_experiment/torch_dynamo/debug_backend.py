@@ -81,6 +81,7 @@ def onnx_debug_backend(
     ort_optimization_level: Optional[str] = None,
     dispatcher: Optional["Dispatcher"] = None,  # noqa: F821
     rename_inputs: bool = True,
+    optimize: bool = True,
 ) -> Callable:
     """
     Custom backend to export torch models into onnx
@@ -112,6 +113,7 @@ def onnx_debug_backend(
         the default value is the same as what :epkg:`onnxruntime` defines
     :param dispatcher: see :class:`experimental_experiment.torch_interpreter.Dispatcher`
     :param rename_inputs: rename inputs into ``input_{i}``
+    :param optimize: enable or disable the optimization
     :return: Callable
 
     See :ref:`l-plot-onnxrt-diff` for an example.
@@ -144,6 +146,7 @@ def onnx_debug_backend(
         return_builder=True,
         raise_list=raise_list,
         dispatcher=dispatcher,
+        optimize=optimize,
     )
 
     if pre_ort_model_transforms is not None:
@@ -165,6 +168,16 @@ def onnx_debug_backend(
         with open(name, "w") as f:
             f.write(builder.get_debug_msg())
             f.write("\n")
+            f.write("\n----------- TYPES, RANKS, SHAPES\n")
+            f.write(
+                str(
+                    dict(
+                        _known_types=builder._known_types,
+                        _known_ranks=builder._known_ranks,
+                        _known_shapes=builder._known_shapes,
+                    )
+                )
+            )
 
     sess = _get_session(
         onx,

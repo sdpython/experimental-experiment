@@ -2,6 +2,7 @@ import unittest
 import numpy as np
 import onnx
 import onnx.helper as oh
+import onnx.checker as oc
 from onnx import TensorProto
 from experimental_experiment.ext_test_case import ExtTestCase
 from experimental_experiment.xbuilder.graph_builder import GraphBuilder
@@ -128,6 +129,86 @@ class TestGraphSimplification(ExtTestCase):
         x = np.random.rand(10, 3).astype(np.float32)
         y = ref.run(None, {"X": x})[0]
         self.assertEqual(y.dtype, np.float32)
+
+    def test_remove_identity_two_paths1(self):
+        opset_imports = [oh.make_opsetid("", 12)]
+        nodes = [
+            oh.make_node("Add", ["X", "Y"], ["add"]),
+            oh.make_node("Identity", ["add"], ["add1"]),
+            oh.make_node("Identity", ["add1"], ["add2"]),
+            oh.make_node("Sub", ["add2", "X"], ["output1"]),
+            oh.make_node("Identity", ["add"], ["output0"]),
+        ]
+
+        graph = oh.make_graph(
+            nodes,
+            "experiment",
+            [
+                oh.make_tensor_value_info("X", TensorProto.FLOAT, [4, 5]),
+                oh.make_tensor_value_info("Y", TensorProto.FLOAT, [4, 5]),
+            ],
+            [
+                oh.make_tensor_value_info("output0", TensorProto.FLOAT, [4, 5]),
+                oh.make_tensor_value_info("output1", TensorProto.FLOAT, [4, 5]),
+            ],
+        )
+        model = oh.make_model(graph, opset_imports=opset_imports)
+        onx = self.call_optimizer(model)
+        self.assertEqual(["Add", "Sub"], [n.op_type for n in onx.graph.node])
+        oc.check_model(onx)
+
+    def test_remove_identity_two_paths2(self):
+        opset_imports = [oh.make_opsetid("", 12)]
+        nodes = [
+            oh.make_node("Add", ["X", "Y"], ["add"]),
+            oh.make_node("Identity", ["add"], ["add1"]),
+            oh.make_node("Identity", ["add1"], ["add2"]),
+            oh.make_node("Identity", ["add"], ["output0"]),
+            oh.make_node("Sub", ["add2", "X"], ["output1"]),
+        ]
+
+        graph = oh.make_graph(
+            nodes,
+            "experiment",
+            [
+                oh.make_tensor_value_info("X", TensorProto.FLOAT, [4, 5]),
+                oh.make_tensor_value_info("Y", TensorProto.FLOAT, [4, 5]),
+            ],
+            [
+                oh.make_tensor_value_info("output0", TensorProto.FLOAT, [4, 5]),
+                oh.make_tensor_value_info("output1", TensorProto.FLOAT, [4, 5]),
+            ],
+        )
+        model = oh.make_model(graph, opset_imports=opset_imports)
+        onx = self.call_optimizer(model)
+        self.assertEqual(["Add", "Sub"], [n.op_type for n in onx.graph.node])
+        oc.check_model(onx)
+
+    def test_remove_identity_two_paths3(self):
+        opset_imports = [oh.make_opsetid("", 12)]
+        nodes = [
+            oh.make_node("Add", ["X", "Y"], ["add"]),
+            oh.make_node("Identity", ["add"], ["add1"]),
+            oh.make_node("Identity", ["add1"], ["output1"]),
+            oh.make_node("Identity", ["add"], ["output0"]),
+        ]
+
+        graph = oh.make_graph(
+            nodes,
+            "experiment",
+            [
+                oh.make_tensor_value_info("X", TensorProto.FLOAT, [4, 5]),
+                oh.make_tensor_value_info("Y", TensorProto.FLOAT, [4, 5]),
+            ],
+            [
+                oh.make_tensor_value_info("output0", TensorProto.FLOAT, [4, 5]),
+                oh.make_tensor_value_info("output1", TensorProto.FLOAT, [4, 5]),
+            ],
+        )
+        model = oh.make_model(graph, opset_imports=opset_imports)
+        onx = self.call_optimizer(model)
+        self.assertEqual(["Add", "Identity"], [n.op_type for n in onx.graph.node])
+        oc.check_model(onx)
 
 
 if __name__ == "__main__":

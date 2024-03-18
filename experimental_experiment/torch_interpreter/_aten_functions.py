@@ -454,6 +454,7 @@ def aten_cat(
 ) -> T:
     "concat"
     assert len(tensors) > 0, f"No tensor to concat{g.get_debug_msg()}"
+    assert len(tensors) > 1, f"Not enough tensors to concat{g.get_debug_msg()}"
     res = g.op.Concat(*tensors, axis=dim, outputs=outputs, name="cat")
     if sts:
         dt0 = g.get_type(tensors[0])
@@ -1857,6 +1858,54 @@ def aten_mul_Tensor(g: GraphBuilder, sts: bool, outputs: List[str], x: T, y: T) 
     return aten_mul(g, sts, outputs, x, y, name="mul_Tensor")
 
 
+def aten_native_layer_norm(
+    g: GraphBuilder,
+    sts: bool,
+    outputs: List[str],
+    x: T,
+    normalized_shape: T,  # int64
+    weight: Optional[T] = None,
+    bias: Optional[T] = None,
+    eps: float = 1e-05,
+    name: str = "aten_native_layer_norm",
+) -> Tuple[T, T, T]:
+    "native_layer_norm"
+    assert isinstance(normalized_shape, list) and all_int(normalized_shape), (
+        f"aten_native_layer_norm not implemented for normalized_shape={normalized_shape}"
+        f"{g.get_debug_msg()}"
+    )
+    start_axis = -len(normalized_shape)
+
+    if weight is None:
+        dtype = tensor_dtype_to_np_dtype(g.get_type(x))
+        weight = g.op.ConstantOfShape(
+            g.op.Shape(x, start=start_axis, name=name),
+            value=from_array([1], dtype=dtype),
+            name=name,
+        )
+
+    g.make_node(
+        "LayerNormalization",
+        [x, weight, bias or ""],
+        outputs,
+        axis=start_axis,
+        epsilon=eps,
+        name=name,
+    )
+    if sts:
+        g.set_type(outputs[0], g.get_type(x))
+        g.get_type(outputs[1], TensorProto.FLOAT)
+        g.get_type(outputs[2], TensorProto.FLOAT)
+        if g.has_shape(x):
+            g.set_shape(outputs[0], g.get_shape(x))
+        else:
+            g.set_rank(outputs[0], g.get_rank(x))
+        g.set_shape(outputs[1], (1,))
+        g.set_shape(outputs[2], (1,))
+
+    return tuple(outputs)
+
+
 def aten_ne(g: GraphBuilder, sts: bool, outputs: List[str], x: T, y: T, name="ne") -> T:
     "not equal"
     x, y = prepare_inputs_homogeneous_operator(g, x, y)
@@ -2454,7 +2503,10 @@ def aten_slice_backward(
             cst = g.op.ConstantOfShape(cst_shape, value=value, name=name_d)
             inputs.append(cst)
 
-    res = g.op.Concat(*inputs, axis=dim, name=name)
+    if len(inputs) > 1:
+        res = g.op.Concat(*inputs, axis=dim, name=name, outputs=outputs)
+    else:
+        res = g.op.Identity(*inputs, outputs=outputs, name=name)
 
     if sts:
         g.set_type(res, g.get_type(grad_output))
@@ -2739,6 +2791,29 @@ def aten_sqrt(g: GraphBuilder, sts: bool, outputs: List[str], x: T) -> T:
     if sts:
         set_type_shape_unary_op(g, outputs[0], x)
     return res
+
+
+def aten_squeeze(
+    g: GraphBuilder,
+    sts: bool,
+    outputs: List[str],
+    x: T,
+    name="squeeze",
+) -> T:
+    "squeeze"
+    return g.op.Squeeze(x, name=name)
+
+
+def aten_squeeze_dim(
+    g: GraphBuilder,
+    sts: bool,
+    outputs: List[str],
+    x: T,
+    dim: int,
+    name="squeeze",
+) -> T:
+    "squeeze_dim"
+    return g.op.Squeeze(x, np.array([dim], dtype=np.int64), name=name)
 
 
 def aten_sub(

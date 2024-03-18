@@ -1586,6 +1586,10 @@ class GraphBuilder:
             f"Operator Cast needs arguments to but kwargs={kwargs}"
             f"{self.get_debug_msg()}"
         )
+        assert op_type != "Concat" or domain != "" or len(inputs) > 1, (
+            f"Concatenation of zero or one input is not necessary, "
+            f"len(inputs)={len(inputs)}{self.get_debug_msg()} "
+        )
 
     def make_node(
         self,
@@ -2390,6 +2394,7 @@ class GraphBuilder:
         return gro.optimize(
             max_iter=self.optimization_options.max_iter,
             remove_identity=self.optimization_options.remove_identity,
+            stop_after=self.optimization_options.stop_after,
         )
 
     def remove_unused(self) -> int:
@@ -2573,6 +2578,23 @@ class GraphBuilder:
                 f"node.input={node.input}, node.output={node.output}, "
                 f"input_names={input_names}, output_names={output_names}"
             )
+
+            if old_name in replacements_rev:
+                # A tricky case:
+                # x -> Identity -> a -> Identity -> b -> Flatten -> output1
+                # x -> Identity -> output0
+                # How x should be renamed?
+                assert new_name in output_names, (
+                    f"replacement {old_name}->{new_name} is not possible because of "
+                    f"[{replacements_rev[old_name]}->{old_name}] and {new_name!r} "
+                    f"is not an output"
+                )
+                updates = {}
+                for k, v in replacements.items():
+                    if v == old_name:
+                        updates[k] = new_name
+                replacements.update(updates)
+
             replacements[old_name] = new_name
             replacements_rev[new_name] = old_name
 
@@ -2580,7 +2602,7 @@ class GraphBuilder:
             for k, v in replacements.items():
                 assert v not in replacements, (
                     f"replacement {k}->{v} is not possible because of "
-                    f"{v}->{replacements[v]}, old_name={old_name!r}, new_name={new_name!r}"
+                    f"[{v}->{replacements[v]}], old_name={old_name!r}, new_name={new_name!r}"
                 )
 
         # second pass: replacements in initializer
