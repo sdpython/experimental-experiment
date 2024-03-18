@@ -344,7 +344,7 @@ def prepare_inputs_homogeneous_operator(
         if sts and sts.get("dtype", None) is not None:
             itype = torch_dtype_to_onnx_dtype(sts["dtype"])
         else:
-            assert len(dtypes_list_not_none) == 1, (
+            assert len(set(dtypes_list_not_none)) == 1, (
                 f"Too many choices for the output type, sts={sts} "
                 f"dtypes_list={dtypes_list}, "
                 f"dtypes_list_not_none={dtypes_list_not_none}{g.get_debug_msg()}"

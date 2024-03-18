@@ -70,7 +70,7 @@ def aten_add(
 ) -> T:
     "add"
     res, x, y = prepare_inputs_homogeneous_operator(
-        g, x, y, f=g.op.Add, name=name, outputs=outputs
+        g, x, y, f=g.op.Add, name=name, outputs=outputs, sts=sts
     )
     if not sts:
         set_type_shape_binary_op(g, outputs[0], x, y)
@@ -121,7 +121,7 @@ def aten_and(
 ) -> T:
     "and"
     res, x, y = prepare_inputs_homogeneous_operator(
-        g, x, y, f=g.op.And, name=name, outputs=outputs
+        g, x, y, f=g.op.And, name=name, outputs=outputs, sts=sts
     )
     if not sts:
         set_type_shape_binary_op(g, outputs[0], x, y)
@@ -687,7 +687,7 @@ def aten_div(
 ) -> T:
     "div"
     res, x, y = prepare_inputs_homogeneous_operator(
-        g, x, y, f=g.op.Div, name=name, outputs=outputs
+        g, x, y, f=g.op.Div, name=name, outputs=outputs, sts=sts
     )
     if not sts:
         set_type_shape_binary_op(g, outputs[0], x, y)
