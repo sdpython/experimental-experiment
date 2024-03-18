@@ -334,7 +334,7 @@ def aten_argmax(
     "argmax"
     if dim is None:
         xf = g.op.Reshape(x, np.array([-1], dtype=np.int64))
-        res = g.op.Squeeze(
+        res = g.op.SqueezeAnyOpset(
             g.op.ArgMax(xf, keepdims=(1 if keepdim else 0)),
             outputs=outputs,
             name="argmax",
@@ -537,13 +537,13 @@ def aten_convolution(
             weight_dim_0 = g.op.Slice(
                 shape, axes=[0], starts=[0], ends=[1], name="conv"
             )
-        cst1 = g.make_node("Constant", [], value_ints=[1], name="conv")
+        cst1 = g.make_initializer("", np.array([1], dtype=np.int64))
         bias_shape = g.make_node("Expand", [weight_dim_0, cst1], name="conv")
         dtype = tensor_dtype_to_np_dtype(g.get_type(input))
         bias = g.op.Expand(np.array([0.0], dtype=dtype), bias_shape, name="conv")
 
     # if Rank(input) != Rank(weight):
-    #    input = op.Unsqueeze(input, op.Constant(value_ints=[0]))
+    #    input = op.UnsqueezeAnyOpset(input, op.Constant(value_ints=[0]))
 
     res = g.make_node(
         "Conv",
@@ -1641,7 +1641,7 @@ def _aten_max_pool_onnx(
     "maxpool"
     # self_rank_is_unbatched_rank = Rank(self) == unbatched_rank
     # if self_rank_is_unbatched_rank:  # C,H,W -> N,C,H,W and N=1
-    #     self = op.Unsqueeze(self, op.Constant(value_ints=[0]))
+    #     self = op.UnsqueezeAnyOpset(self, op.Constant(value_ints=[0]))
 
     pool_result, _ = g.op.MaxPool(
         x,
@@ -1654,7 +1654,7 @@ def _aten_max_pool_onnx(
     )
 
     # if self_rank_is_unbatched_rank:
-    #    pool_result = op.Squeeze(pool_result, op.Constant(value_ints=[0]))
+    #    pool_result = op.SqueezeAnyOpset(pool_result, op.Constant(value_ints=[0]))
 
     return pool_result
 
@@ -1728,18 +1728,20 @@ def _aten_max_pool_with_indices_onnx(
         x, dilations=dilation, kernel_shape=n_dims_one, strides=n_dims_one
     )
 
-    ends = g.op.Constant(value_ints=n_dims_one, name=name)
-    starts = g.op.Constant(value_ints=n_dims_zero, name=name)
-    axes = g.op.Constant(value_ints=n_dims_axes, name=name)
+    ends = g.make_initializer("", np.array(n_dims_one, dtype=np.int64))
+    starts = g.make_initializer("", np.array(n_dims_zero, dtype=np.int64))
+    axes = g.make_initializer("", np.array(n_dims_axes, dtype=np.int64))
 
     delta = g.op.Slice(flatten_indices, starts, ends, axes, name=name)
     indices = g.op.Sub(indices, delta, name=name)
 
     if is_unbatched_rank:
-        pool_result = g.op.Squeeze(
-            pool_result, g.op.Constant(value_ints=[0]), name=name
+        pool_result = g.op.SqueezeAnyOpset(
+            pool_result, np.array([0], dtype=np.int64), name=name
         )
-        indices = g.op.Squeeze(indices, g.op.Constant(value_ints=[0]), name=name)
+        indices = g.op.SqueezeAnyOpset(
+            indices, np.array([0], dtype=np.int64), name=name
+        )
 
     if outputs:
         if not isinstance(outputs, (tuple, list)):
@@ -2801,7 +2803,7 @@ def aten_squeeze(
     name="squeeze",
 ) -> T:
     "squeeze"
-    return g.op.Squeeze(x, name=name)
+    return g.op.SqueezeAnyOpset(x, name=name)
 
 
 def aten_squeeze_dim(
@@ -2813,7 +2815,7 @@ def aten_squeeze_dim(
     name="squeeze",
 ) -> T:
     "squeeze_dim"
-    return g.op.Squeeze(x, np.array([dim], dtype=np.int64), name=name)
+    return g.op.SqueezeAnyOpset(x, np.array([dim], dtype=np.int64), name=name)
 
 
 def aten_sub(

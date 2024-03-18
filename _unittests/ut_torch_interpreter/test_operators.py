@@ -136,6 +136,7 @@ class TestOperators(ExtTestCase):
         verbose=0,
         raise_list=None,
         save_onnx=False,
+        optimize=True,
     ):
         if sys.platform == "win32":
             raise unittest.SkipTest("Windows not supported yet.")
@@ -184,6 +185,7 @@ class TestOperators(ExtTestCase):
                 backend=impl,
                 verbose=verbose,
                 raise_list=raise_list,
+                optimize=optimize,
                 **kwargs,
             )
 
@@ -646,12 +648,24 @@ class TestOperators(ExtTestCase):
             onnx_export=inspect.currentframe().f_code.co_name,
         )
 
-    def test_maxpool_dilations(self):
+    def test_maxpool_dilations_10(self):
         x = torch.randn(20, 16, 50)
         self.assertONNX(
             nn.MaxPool1d(2, stride=1, dilation=2),
             x,
             opset_version=10,
+            onnx_export=inspect.currentframe().f_code.co_name,
+            impl="ref",
+            verbose=10,
+            optimize=False,
+        )
+
+    def test_maxpool_dilations_18(self):
+        x = torch.randn(20, 16, 50)
+        self.assertONNX(
+            nn.MaxPool1d(2, stride=1, dilation=2),
+            x,
+            opset_version=18,
             onnx_export=inspect.currentframe().f_code.co_name,
         )
 

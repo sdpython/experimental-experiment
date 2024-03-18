@@ -429,7 +429,7 @@ class DynamoInterpreter:
                 if isinstance(i, str):
                     if self.builder.get_rank(i) == 0:
                         iends.append(
-                            self.builder.op.Unsqueeze(
+                            self.builder.op.UnsqueezeAnyOpset(
                                 i, np.array([0], dtype=np.int64), name=f"{name}C"
                             )
                         )
@@ -481,7 +481,7 @@ class DynamoInterpreter:
 
         if expand_axes:
             sliced = self.builder.make_node("Slice", inputs, name=f"{name}F")
-            res = self.builder.op.Unsqueeze(
+            res = self.builder.op.UnsqueezeAnyOpset(
                 sliced,
                 np.array(expand_axes, dtype=np.int64),
                 outputs=[node.name],
@@ -584,7 +584,7 @@ class DynamoInterpreter:
                     "Identity", [name_index], [node.name], name="getitemB_tuple"
                 )
             # The user mean to access the first element of a tensor.
-            res = self.builder.op.Squeeze(
+            res = self.builder.op.SqueezeAnyOpset(
                 self.builder.op.Gather(
                     result_name,
                     np.array([index], dtype=np.int64),

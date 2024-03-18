@@ -938,7 +938,7 @@ class GraphBuilder:
                         self.get_rank(name) <= 1
                     ), f"Unexpected rank={self.get_rank(name)} for a shape{self.get_debug_msg()}"
                     if self.get_rank(name) == 0:
-                        r = self.op.Unsqueeze(
+                        r = self.op.UnsqueezeAnyOpset(
                             name, np.array([0], dtype=np.int64), name=f"_mkshape_{name}"
                         )
                         self.set_type(r, self.get_type(name))
@@ -1030,6 +1030,34 @@ class GraphBuilder:
             )
         )
 
+    def is_constant_or_attribute(
+        self, node: NodeProto, input_index: int, att_name: str
+    ) -> bool:
+        """
+        Tells if an input is a constant or returns true if in an older
+        opset, it was named as an attribute.
+        """
+        if input_index < len(node.input):
+            return self.is_constant(node.input[input_index])
+        return True
+
+    def get_constant_or_attribute(
+        self, node: NodeProto, input_index: int, att_name: str
+    ) -> Any:
+        """
+        Tells if an input is a constant or returns true if in an older
+        opset, it was named as an attribute.
+        """
+        if input_index < len(node.input):
+            return self.get_constant(node.input[input_index])
+        for att in node.attribute:
+            if att.name == att_name:
+                assert (
+                    att.type == AttributeProto.INTS
+                ), f"Not Implemented when att.type={att.type}{self.get_debug_msg()}"
+                return np.array(list(att.ints), dtype=np.int64)
+        return None
+
     def update_value_shape_with_node(self, node):
         if node.domain != "":
             return
@@ -1065,11 +1093,11 @@ class GraphBuilder:
             return
 
         if node.op_type == "Squeeze":
-            if self.is_constant(node.input[1]):
+            if self.is_constant_or_attribute(node, 1, "axes"):
                 y = self.value_as_shape(node.input[0])
                 if y is None:
                     return
-                i = self.get_constant(node.input[1])
+                i = self.get_constant_or_attribute(node, 1, "axes")
                 if isinstance(i, int):
                     ii = i
                 elif (
@@ -1567,6 +1595,7 @@ class GraphBuilder:
         outputs: List[str],
         domain: str,
         name: str,
+        attributes: Optional[List[AttributeProto]] = None,
         **kwargs: Dict[str, Any],
     ):
         assert (
@@ -1590,6 +1619,20 @@ class GraphBuilder:
             f"Concatenation of zero or one input is not necessary, "
             f"len(inputs)={len(inputs)}{self.get_debug_msg()} "
         )
+        if self.main_opset <= 11:
+            assert op_type != "Squeeze" or domain != "" or len(inputs) == 1, (
+                f"Operator Squeeze is not correclty specified for opset "
+                f"{self.main_opset}, inputs={inputs}, kwargs={kwargs}, "
+                f"atts={attributes}{self.get_debug_msg()}"
+            )
+        else:
+            n_entries = len(inputs) + len(attributes or []) + len(kwargs)
+            assert op_type != "Squeeze" or domain != "" or n_entries in (1, 2), (
+                f"Operator Squeeze is not correclty specified for opset "
+                f"{self.main_opset}, n_entries={n_entries}, "
+                f"inputs={inputs}, kwargs={kwargs}, "
+                f"atts={attributes}{self.get_debug_msg()}"
+            )
 
     def make_node(
         self,
@@ -1677,7 +1720,13 @@ class GraphBuilder:
             name = self.unique_node_name(name)
 
         self._check_op_type(
-            op_type, inputs, outputs, domain=domain, name=name, **kwargs
+            op_type,
+            inputs,
+            outputs,
+            domain=domain,
+            name=name,
+            attributes=attributes,
+            **kwargs,
         )
 
         # break?

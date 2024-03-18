@@ -217,7 +217,7 @@ def aten_meth_size(
 
     s = g.op.Shape(x, name=name)
     d = g.op.Gather(s, np.array([dim], dtype=np.int64), name=f"{name}B")
-    res = g.op.Squeeze(
+    res = g.op.SqueezeAnyOpset(
         d, np.array([0], dtype=np.int64), name=f"{name}B", outputs=outputs
     )
     if sts:
