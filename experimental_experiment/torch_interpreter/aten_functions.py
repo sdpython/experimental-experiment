@@ -2,28 +2,40 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 from . import _aten_functions, _prims_functions
 
 
+def _enumerate_aten_functions():
+    for k, v in _aten_functions.__dict__.items():
+        if not k.startswith("aten_") or not callable(v):
+            continue
+        yield k, v
+
+
+def _enumerate_prims_functions():
+    for k, v in _prims_functions.__dict__.items():
+        if not k.startswith("prims_") or not callable(v):
+            continue
+        yield k, v
+
+
 def _register() -> Dict[str, Callable]:
     res = {}
-    for k, v in _aten_functions.__dict__.items():
-        if k.startswith("aten_"):
-            other_key = "::".join(k.split("_", maxsplit=1))
-            options = {k: v, other_key: v}
-            for c in options:
-                if c in res:
-                    raise RuntimeError(
-                        f"Alias {c!r} for function {v} is already taken by {res[k]}."
-                    )
-            res.update(options)
-    for k, v in _prims_functions.__dict__.items():
-        if k.startswith("prims_"):
-            other_key = "::".join(k.split("_", maxsplit=1))
-            options = {k: v, other_key: v}
-            for c in options:
-                if c in res:
-                    raise RuntimeError(
-                        f"Alias {c!r} for function {v} is already taken by {res[k]}."
-                    )
-            res.update(options)
+    for k, v in _enumerate_aten_functions():
+        other_key = "::".join(k.split("_", maxsplit=1))
+        options = {k: v, other_key: v}
+        for c in options:
+            if c in res:
+                raise RuntimeError(
+                    f"Alias {c!r} for function {v} is already taken by {res[k]}."
+                )
+        res.update(options)
+    for k, v in _enumerate_prims_functions():
+        other_key = "::".join(k.split("_", maxsplit=1))
+        options = {k: v, other_key: v}
+        for c in options:
+            if c in res:
+                raise RuntimeError(
+                    f"Alias {c!r} for function {v} is already taken by {res[k]}."
+                )
+        res.update(options)
     return res
 
 

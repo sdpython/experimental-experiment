@@ -1643,7 +1643,7 @@ class GraphBuilder:
         attributes: Optional[List[AttributeProto]] = None,
         check: Optional[bool] = None,
         name: Optional[str] = None,
-        set_type_shape: bool = False,
+        sts: Optional[Dict[str, Any]] = None,
         **kwargs,
     ) -> Union[str, List[str]]:
         """
@@ -1657,7 +1657,7 @@ class GraphBuilder:
         :param attributes: list of attributes to add as AttributeProto
         :param check: do some verification
         :param name: node name
-        :param set_type_shape: tries to set the shape and the type of
+        :param sts: if not specified, tries to set the shape and the type of
             the new results aftr the node is added, it is not possible
             for every node, there is no tool which determines the output shape
             of just one node
@@ -1769,7 +1769,7 @@ class GraphBuilder:
                 self.add_constant_node(node)
 
         # constant handling, shape, type
-        self._make_node_set_type_shape_constant(node, set_type_shape=set_type_shape)
+        self._make_node_set_type_shape_constant(node, sts=sts)
 
         if self.verbose > 3:
             print(
@@ -1819,7 +1819,9 @@ class GraphBuilder:
                     del kwargs["axes"]
         return inputs, kwargs
 
-    def _make_node_set_type_shape_constant(self, node: NodeProto, set_type_shape: bool):
+    def _make_node_set_type_shape_constant(
+        self, node: NodeProto, sts: Optional[Dict[str, Any]]
+    ):
         if node.domain != "":
             return
         if node.op_type == "Constant":
@@ -1861,7 +1863,7 @@ class GraphBuilder:
                 if cst is not None:
                     self.set_type(node.output[0], dtype_to_tensor_dtype(cst[0].dtype))
                     self.set_shape(node.output[0], tuple(cst[0].shape))
-        elif set_type_shape:
+        elif not sts:
             if node.op_type == "GatherElements":
                 if self.has_rank(node.input[0]) and self.has_rank(node.input[0]):
                     r1 = self.get_rank(node.input[0])
@@ -2132,11 +2134,15 @@ class GraphBuilder:
         for node in self.nodes:
             if node is None:
                 continue
+            if node.op_type == "Cast":
+                ext = f">{node.attribute[0].i}"
+            else:
+                ext = ""
             rows.append(
                 f"[GraphBuilder-{hs}.make_node] "
                 f"{_align(node.name, 15)} "
                 f"[{self._debug_string_inputs(node.input, node.output, 6)}] "
-                f"{node.op_type}:{node.input}->{node.output}"
+                f"{node.op_type}{ext}:{node.input}->{node.output}"
             )
         for io in self.outputs:
             shh = _nice_shape(io.type.tensor_type.shape)

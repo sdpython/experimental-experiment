@@ -356,7 +356,7 @@ class DynamoInterpreter:
         node: "torch.fx.Node",  # noqa: F821
         input_name: str,
         index_slice: slice,
-        set_type_shape: bool,
+        sts: Optional[Dict[str, Any]],
         axes: List[int],
         expand_axes: List[int],
         name: str = "_getitem_slice",
@@ -409,7 +409,7 @@ class DynamoInterpreter:
                     [shape_name, axis_name],
                     [end_name],
                     name=f"{name}B",
-                    set_type_shape=True,
+                    sts=None,
                 )
                 ends.append(end_name)
                 concat = True
@@ -489,7 +489,7 @@ class DynamoInterpreter:
             )
         else:
             res = self.builder.make_node("Slice", inputs, [node.name], name=f"{name}G")
-        if set_type_shape:
+        if not sts:
             dtype = self.builder.get_type(inputs[0])
             self.builder.set_type(node.name, dtype)
             if not concat and self.builder.has_shape(inputs[0]):
@@ -517,7 +517,7 @@ class DynamoInterpreter:
         node: "torch.fx.Node",  # noqa: F821
         input_name: str,
         indices: List[int],
-        set_type_shape: bool,
+        sts: Optional[Dict[str, Any]],
         axes: List[int],
         expand_axes: List[int],
         name: str = "_getitem_int1",
@@ -526,7 +526,7 @@ class DynamoInterpreter:
 
         return _aten_tensor_int1(
             self.builder,
-            set_type_shape,
+            sts,
             [node.name],
             input_name,
             indices,
@@ -548,14 +548,14 @@ class DynamoInterpreter:
         node_output, index = args
         result_name = node_output.name
         val = node.meta.get("val", None)
-        set_type_shape = True
+        sts = None
         if val is not None:
             if isinstance(val, self.torch.Tensor):
                 shape = val.shape
                 dtype = self.builder._get_type(val.dtype)
                 self.builder.set_shape(node.name, tuple(shape))
                 self.builder.set_type(node.name, dtype)
-                set_type_shape = False
+                sts = {"dtype": val.dtype}
             else:
                 raise TypeError(
                     f"Unexpected type in node {node!r}, type(val)={type(val)}."
@@ -566,7 +566,7 @@ class DynamoInterpreter:
             res = self.builder.make_node(
                 "Gather", [result_name, index.name], [node.name], name="getitemA"
             )
-            if set_type_shape:
+            if not sts:
                 self.builder.set_type(node.name, self.builder.get_type(result_name))
                 self.builder.set_rank(
                     node.name,
@@ -594,7 +594,7 @@ class DynamoInterpreter:
                 name="getitemB_index",
                 outputs=[node.name],
             )
-            if set_type_shape:
+            if not sts:
                 self.builder.set_type(node.name, self.builder.get_type(result_name))
                 if self.builder.has_shape(result_name):
                     self.builder.set_shape(
@@ -611,7 +611,7 @@ class DynamoInterpreter:
                 node,
                 node_output.name,
                 [index],
-                set_type_shape=set_type_shape,
+                sts=sts,
                 axes=[0],
                 expand_axes=[],
                 name="_getitem_slice1",
@@ -626,7 +626,7 @@ class DynamoInterpreter:
                     node,
                     node_output.name,
                     index,
-                    set_type_shape=set_type_shape,
+                    sts=sts,
                     axes=axes,
                     expand_axes=[],
                     name="_getitem_int1a",
@@ -660,7 +660,7 @@ class DynamoInterpreter:
                     node,
                     node_output.name,
                     slices,
-                    set_type_shape=set_type_shape,
+                    sts=sts,
                     axes=axes,
                     expand_axes=expand_axes,
                     name="_getitem_slice2",
@@ -738,7 +738,7 @@ class DynamoInterpreter:
         can_set = self._can_set_shape_and_type(node)
         n_nodes = len(self.builder.nodes) + len(self.builder.initializers_dict)
 
-        res = fct(self.builder, not can_set, output_names, *args, **fx_kwargs)
+        res = fct(self.builder, can_set, output_names, *args, **fx_kwargs)
 
         n_nodes_after = len(self.builder.nodes) + len(self.builder.initializers_dict)
         if res is None:
@@ -795,7 +795,7 @@ class DynamoInterpreter:
         output_names = self._get_output_names(node)
         can_set = self._can_set_shape_and_type(node)
 
-        res = fct(self.builder, not can_set, output_names, *args, **kwargs)
+        res = fct(self.builder, can_set, output_names, *args, **kwargs)
 
         self._set_shape_and_type(node, res)
         res = self._check_output_name(node, res, output_names)
@@ -835,7 +835,29 @@ class DynamoInterpreter:
         return res
 
     def _can_set_shape_and_type(self, node: "torch.fx.Node") -> bool:  # noqa: F821
-        return node.meta.get("val", None) is not None
+        if node.meta.get("val", None) is not None:
+            dtype = self._get_node_output_type(node)
+            assert dtype is not None, (
+                f"dtype is null, but val={node.meta.get('val', None)}"
+                f"{self.builder.get_debug_msg()} "
+            )
+            return {"dtype": dtype}
+        return None
+
+    def _get_node_output_type(
+        self, node: "torch.fx.Node"  # noqa: F821
+    ) -> Optional[Union["torch.dtype", Tuple["torch.dtype", ...]]]:  # noqa: F821
+        val = node.meta.get("val", None)
+        if val is not None:
+            if isinstance(val, tuple):
+                return tuple((None if v is None else v.dtype) for v in val)
+            exa = node.meta.get("example_value", None)
+            assert exa is None or val.dtype == exa.dtype, (
+                f"dtype inconsistency (val, example_value) "
+                f"{val.dtype} != {exa.dtype}{self.builder.get_debug_msg()}"
+            )
+            return val.dtype
+        return None
 
     def _set_shape_and_type(
         self, node: "torch.fx.Node", res: Union[str, List[str]]  # noqa: F821
@@ -864,8 +886,9 @@ class DynamoInterpreter:
 
             for v, r in zip(val, res):
                 if isinstance(v, self.torch.Tensor):
-                    shape = tuple(v.shape)
                     dtype = self.builder._get_type(v.dtype)
+                    self.builder.set_type(r, dtype)
+                    shape = tuple(v.shape)
                     if self.builder.is_dynamic_shape(shape):
                         self.builder.set_shape(r, shape, set_if_more_precise=True)
                     elif self.builder.has_rank(r):
@@ -875,7 +898,6 @@ class DynamoInterpreter:
                         )
                     else:
                         self.builder.set_rank(r, len(shape))
-                    self.builder.set_type(r, dtype)
                     if r in output_sets:
                         description.append(f"{r}:{dtype}:{shape}".replace(" ", ""))
                 elif isinstance(v, self.torch.SymInt):

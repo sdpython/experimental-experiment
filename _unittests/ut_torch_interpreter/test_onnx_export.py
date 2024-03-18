@@ -341,7 +341,7 @@ class TestOnnxExport(ExtTestCase):
         class NotFoundUTError(Exception):
             pass
 
-        def aten_celu(g, sts: bool, outputs, x: T, alpha=1.0, inplace=False) -> T:
+        def aten_celu(g, sts, outputs, x: T, alpha=1.0, inplace=False) -> T:
             assert not inplace, f"not implemented if inplace=True{g.get_debug_msg()}"
             raise NotFoundUTError("not implemented")
 
@@ -375,7 +375,7 @@ class TestOnnxExport(ExtTestCase):
         class NotFoundUTError(Exception):
             pass
 
-        def aten_celu(g, sts: bool, outputs, x: T, alpha=1.0, inplace=False) -> T:
+        def aten_celu(g, sts, outputs, x: T, alpha=1.0, inplace=False) -> T:
             assert not inplace, f"not implemented if inplace=True{g.get_debug_msg()}"
             raise NotFoundUTError("not implemented")
 
