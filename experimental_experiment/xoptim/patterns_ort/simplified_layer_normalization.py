@@ -107,26 +107,28 @@ class SimplifiedLayerNormalizationPattern(PatternOptimization):
         ), f"axis={axis} and shape={shape} don't match for {node_reduce.input[0]!r}"
         stash_type = g.get_type(node_reduce.input[0])
         dtype = oh.tensor_dtype_to_np_dtype(stash_type)
-        if shape is not None or isinstance(shape[axis], int):
+        if shape is not None and isinstance(shape[axis], int):
             # a constant
             scale = g.make_initializer("", np.array([1] * shape[axis], dtype=dtype))
         else:
             sh = g.make_node(
-                "Shape", [node_reduce.input[0]], name=f"{cls.__name__}--{nname}"
+                "Shape", [node_pow.input[0]], name=f"{cls.__name__}--{nname}"
             )
-            ga = g.make_node("Gather", [sh.output[0]], name=f"{cls.__name__}--{nname}")
-            ini = g.make_initializer("", np.array([0], dtype=np.int64))
-            sc = g.make_node_check_opset(
-                "Unsqueeze", [ga.output[0], ini.name], name=f"{cls.__name__}--{nname}"
+            axis_name = g.make_initializer("", np.array([axis], dtype=np.int64))
+            ga = g.make_node(
+                "Gather", [sh.output[0], axis_name], name=f"{cls.__name__}--{nname}"
             )
+            # sc = g.make_node_check_opset(
+            #    "Unsqueeze", [ga.output[0]], axes=[0], name=f"{cls.__name__}--{nname}"
+            # )
             cc = g.make_node(
                 "ConstantOfShape",
-                [sc.output[0]],
+                [ga.output[0]],
                 value=onh.from_array(np.array([1], dtype=dtype)),
                 name=f"{cls.__name__}--{nname}",
             )
             scale = cc.output[0]
-            nodes.extend([sh, ga, sc, cc])
+            nodes.extend([sh, ga, cc])
 
         layer = g.make_node(
             "SimplifiedLayerNormalization",

@@ -1,3 +1,4 @@
+import itertools
 import unittest
 import numpy as np
 from onnx import TensorProto, helper as oh, numpy_helper as onh
@@ -196,7 +197,7 @@ class TestGraphPatternOptimizationOrt(ExtTestCase):
             elif att.name == "transB":
                 self.assertEqual(att.i, 1)
 
-    def get_simplified_layer_normalization_model(self):
+    def get_simplified_layer_normalization_model(self, div, dyn):
         model = oh.make_model(
             oh.make_graph(
                 [
@@ -204,18 +205,31 @@ class TestGraphPatternOptimizationOrt(ExtTestCase):
                     oh.make_node("ReduceMean", ["x2", "axis"], ["xr"]),
                     oh.make_node("Add", ["xr", "eps"], ["xa"]),
                     oh.make_node("Sqrt", ["xa"], ["xq"]),
-                    oh.make_node("Reciprocal", ["xq"], ["xi"]),
+                    (
+                        oh.make_node("Div", ["one", "xq"], ["xi"])
+                        if div
+                        else oh.make_node("Reciprocal", ["xq"], ["xi"])
+                    ),
                     oh.make_node("Mul", ["xi", "X"], ["Y"]),
                 ],
                 "dummy",
-                [oh.make_tensor_value_info("X", TensorProto.FLOAT, ["a", 4])],
-                [oh.make_tensor_value_info("Y", TensorProto.FLOAT, ["a", 4])],
+                [
+                    oh.make_tensor_value_info(
+                        "X", TensorProto.FLOAT, ["a", "D" if dyn else 4]
+                    )
+                ],
+                [
+                    oh.make_tensor_value_info(
+                        "Y", TensorProto.FLOAT, ["a", "D" if dyn else 4]
+                    )
+                ],
                 [
                     onh.from_array(np.array([2], dtype=np.float32), name="exp"),
                     onh.from_array(
                         np.array([9.999999974752427e-7], dtype=np.float32), name="eps"
                     ),
                     onh.from_array(np.array([-1], dtype=np.int64), name="axis"),
+                    onh.from_array(np.array([1], dtype=np.float32), name="one"),
                 ],
             ),
             opset_imports=[
@@ -227,40 +241,57 @@ class TestGraphPatternOptimizationOrt(ExtTestCase):
         return model
 
     def test_simplified_layer_normalization_model(self):
-        model = self.get_simplified_layer_normalization_model()
-        gr = GraphBuilder(
-            model,
-            infer_shapes=True,
-            optimization_options=OptimizationOptions(
-                patterns=["SimplifiedLayerNormalization"]
-            ),
-        )
-        opt_onx = gr.to_onnx(optimize=True)
-        self.assertEqual(
-            ["SimplifiedLayerNormalization"],
-            [n.op_type for n in opt_onx.graph.node],
-        )
+        for div, dyn in itertools.product([False, True], [False, True]):
+            with self.subTest(div=div, dyn=dyn):
+                model = self.get_simplified_layer_normalization_model(div=div, dyn=dyn)
+                gr = GraphBuilder(
+                    model,
+                    infer_shapes=True,
+                    optimization_options=OptimizationOptions(
+                        patterns=["SimplifiedLayerNormalization"]
+                    ),
+                )
+                opt_onx = gr.to_onnx(optimize=True)
+                self.assertEqual(
+                    (
+                        [
+                            "Shape",
+                            "Gather",
+                            "ConstantOfShape",
+                            "SimplifiedLayerNormalization",
+                        ]
+                        if dyn
+                        else ["SimplifiedLayerNormalization"]
+                    ),
+                    [n.op_type for n in opt_onx.graph.node],
+                )
 
-        feeds = {
-            "X": np.arange(20).reshape((5, 4)).astype(np.float32),
-        }
-        ref1 = ExtendedReferenceEvaluator(model)
-        expected = ref1.run(None, feeds)
+                feeds = {
+                    "X": np.arange(20).reshape((5, 4)).astype(np.float32),
+                }
+                ref1 = ExtendedReferenceEvaluator(model)
+                expected = ref1.run(None, feeds)
 
-        self.assertEqual(1, len(opt_onx.graph.initializer))
+                ninits = {
+                    (False, False): 1,
+                    (False, True): 1,
+                    (True, False): 1,
+                    (True, True): 1,
+                }
+                self.assertEqual(ninits[div, dyn], len(opt_onx.graph.initializer))
 
-        ref2 = ExtendedReferenceEvaluator(opt_onx)
-        got = ref2.run(None, feeds)
-        self.assertEqualArray(expected[0], got[0], atol=1e-5)
+                ref2 = ExtendedReferenceEvaluator(opt_onx)
+                got = ref2.run(None, feeds)
+                self.assertEqualArray(expected[0], got[0], atol=1e-5)
 
-        if got:
-            from onnxruntime import InferenceSession
+                if got:
+                    from onnxruntime import InferenceSession
 
-            sess = InferenceSession(
-                opt_onx.SerializeToString(), providers=["CPUExecutionProvider"]
-            )
-            got = sess.run(None, feeds)
-            self.assertEqualArray(expected[0], got[0], atol=1e-5)
+                    sess = InferenceSession(
+                        opt_onx.SerializeToString(), providers=["CPUExecutionProvider"]
+                    )
+                    got = sess.run(None, feeds)
+                    self.assertEqualArray(expected[0], got[0], atol=1e-5)
 
 
 if __name__ == "__main__":

@@ -358,6 +358,63 @@ class GraphBuilderPatternOptimization:
     def unique_name(self, prefix: str) -> str:
         return self.builder.unique_name(prefix)
 
+    def make_node_check_opset(
+        self,
+        op_type: str,
+        inputs: Union[str, List[str]],
+        outputs: Union[int, List[str], str] = 1,
+        domain: str = "",
+        attributes: Optional[List[AttributeProto]] = None,
+        name: Optional[str] = None,
+        **kwargs,
+    ):
+        """
+        Creates a node without adding it to the graph but
+        adapt for some known operators changing over
+        multiple opets.
+
+        :param op_type: operator type
+        :param inputs: input names
+        :param outputs: outputs names, if one integer, creates n unique names,
+            if str, creates one unique names, if a list, use the name
+        :param domain: node domain
+        :param attributes: list of attributes
+        :param name: node name
+        :param kwargs: other attributes
+        :return a node
+        """
+        assert domain == "", f"The method only supports the main domain not {domain!r}"
+        if op_type in {"Squeeze", "Unsqueeze"}:
+            if self.builder.main_opset < 13:
+                assert (
+                    len(inputs) == 1
+                ), f"axis must be given as an attribute for {op_type!r}"
+                return self.make_node(
+                    op_type,
+                    inputs,
+                    outputs,
+                    domain=domain,
+                    attributes=attributes,
+                    name=name,
+                    **kwargs,
+                )
+            if len(inputs) == 1 and "axes" in kwargs:
+                axes = kwargs["axes"]
+                axes_name = self.make_initializer("", np.array([axes], dtype=np.int64))
+                inputs.append(axes_name)
+                del kwargs["axes"]
+            return self.make_node(
+                op_type,
+                inputs,
+                outputs,
+                domain=domain,
+                attributes=attributes,
+                name=name,
+                **kwargs,
+            )
+
+        raise RuntimeError(f"Operator {op_type!r} not supported yet.")
+
     def make_node(
         self,
         op_type: str,
@@ -368,7 +425,30 @@ class GraphBuilderPatternOptimization:
         name: Optional[str] = None,
         **kwargs,
     ) -> NodeProto:
+        """
+        Creates a node without adding it to the graph.
+
+        :param op_type: operator type
+        :param inputs: input names
+        :param outputs: outputs names, if one integer, creates n unique names,
+            if str, creates one unique names, if a list, use the name
+        :param domain: node domain
+        :param attributes: list of attributes
+        :param name: node name
+        :param kwargs: other attributes
+        :return a node
+        """
         name = self.builder.unique_node_name(name)
+        if isinstance(outputs, int):
+            if outputs == 1:
+                outputs = [self.unique_name(f"{op_type.lower()}-{inputs[0]}")]
+            else:
+                outputs = [
+                    self.unique_name(f"{op_type.lower()}-{inputs[0]}-{i}")
+                    for i in range(outputs)
+                ]
+        elif isinstance(outputs, str):
+            outputs = [self.unique_name(outputs)]
         proto = oh.make_node(
             op_type,
             inputs,
