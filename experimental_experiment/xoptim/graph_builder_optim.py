@@ -1,7 +1,8 @@
 import os
 import pprint
 import time
-from typing import Any, Dict, Iterator, List, Optional, Union
+from typing import Any, Callable, Dict, Iterator, List, Optional, Union
+import numpy as np
 from onnx import AttributeProto, NodeProto
 import onnx.helper as oh
 from ..xbuilder._onnx_helper import enumerate_subgraphs
@@ -119,6 +120,29 @@ class GraphBuilderPatternOptimization:
         """
         return self.builder.is_constant(name)
 
+    def is_constant_scalar(self, name: str, value: Optional[Any] = None) -> bool:
+        """
+        Tells if a constant is a scalar
+
+        :param name: name
+        :param value: value to compare to if specified
+        :return: boolean
+        """
+        if not self.is_constant(name):
+            return False
+        cst = self.get_computed_constant(name)
+        if hasattr(cst, "numpy"):
+            cst = cst.detach().cpu().numpy()
+        assert isinstance(
+            cst, np.ndarray
+        ), f"Unexpected type for constant {name}!r, type is {type(cst)}"
+        shape = cst.shape
+        if shape not in (tuple(), (1,)):
+            return False
+        if value is None:
+            return True
+        return all(cst == value)
+
     def get_computed_constant(
         self, name: str, statistics: Optional[List[str]] = None
     ) -> Any:
@@ -157,7 +181,11 @@ class GraphBuilderPatternOptimization:
         return self.builder.get_attribute(node, att_name, exc=exc)
 
     def get_constant_or_attribute(
-        self, node: NodeProto, attribute: str, input_index: int
+        self,
+        node: NodeProto,
+        attribute: str,
+        input_index: int,
+        cvt: Optional[Callable] = None,
     ) -> Any:
         """
         Returns an input or the value of an attribute.
@@ -166,7 +194,9 @@ class GraphBuilderPatternOptimization:
 
         :param node: node
         :param attribute: attribute name
-        :input_index: input index
+        :param input_index: input index
+        :param cvt: if not None, called this conversion function before
+            returning the result
         :return: value
         """
         found = None
@@ -179,7 +209,13 @@ class GraphBuilderPatternOptimization:
         assert input_index < len(
             node.input
         ), f"Input {input_index} does not exist in node {node}."
-        return self.get_computed_constant(node.input[input_index])
+        val = self.get_computed_constant(node.input[input_index])
+        if cvt is None:
+            return val
+        try:
+            return cvt(val)
+        except (ValueError, TypeError) as e:
+            raise RuntimeError(f"Unable to convert val={val} with cvt={cvt}") from e
 
     def has_type(self, name: str) -> bool:
         """
@@ -289,6 +325,14 @@ class GraphBuilderPatternOptimization:
                 f"knowns shapes are {pprint.pformat(self.builder._known_shapes)}"
             )
         return None
+
+    def next_node(self, name: str) -> NodeProto:
+        """
+        Returns the next node if it is unique, otherwise fails.
+        """
+        res = self.next_nodes(name)
+        assert len(res) == 1, f"Unexpected number of successors {len(res)} for {name!r}"
+        return res[0]
 
     def next_nodes(self, name: str) -> List[NodeProto]:
         """
