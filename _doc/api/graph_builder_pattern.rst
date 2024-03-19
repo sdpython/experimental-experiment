@@ -145,10 +145,10 @@ UnsqueezeUnsqueezePattern
 Ort Patterns
 ============
 
-ConstantOfShapeScatterNDPattern
-+++++++++++++++++++++++++++++++
+SimplifiedLayerNormalizationPattern
++++++++++++++++++++++++++++++++++++
 
-.. autoclass:: experimental_experiment.xoptim.patterns_ort.constant_of_shape_scatter_nd.ConstantOfShapeScatterNDPattern
+.. autoclass:: experimental_experiment.xoptim.patterns_ort.simplified_layer_normalization.SimplifiedLayerNormalizationPattern
     :members:
 
 FusedMatMulPattern
@@ -156,3 +156,13 @@ FusedMatMulPattern
 
 .. autoclass:: experimental_experiment.xoptim.patterns_ort.fused_matmul.FusedMatMulPattern
     :members:
+
+Experimental Patterns
+=====================
+
+ConstantOfShapeScatterNDPattern
++++++++++++++++++++++++++++++++
+
+.. autoclass:: experimental_experiment.xoptim.patterns_exp.constant_of_shape_scatter_nd.ConstantOfShapeScatterNDPattern
+    :members:
+
