@@ -6,6 +6,7 @@ def _enumerate_aten_functions():
     for k, v in _aten_functions.__dict__.items():
         if not k.startswith("aten_") or not callable(v):
             continue
+        assert v.__doc__, f"doc missing for {k!r} ({v})"
         yield k, v
 
 
@@ -13,6 +14,7 @@ def _enumerate_prims_functions():
     for k, v in _prims_functions.__dict__.items():
         if not k.startswith("prims_") or not callable(v):
             continue
+        assert v.__doc__, f"doc missing for {k!r} ({v})"
         yield k, v
 
 

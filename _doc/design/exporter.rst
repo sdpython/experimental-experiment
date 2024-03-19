@@ -153,6 +153,7 @@ It is important to update the shape the information is available.
 * :meth:`has_shape <experimental_experiment.xbuilder.GraphBuilder.has_shape>`
 * :meth:`has_rank <experimental_experiment.xbuilder.GraphBuilder.has_rank>`
 * :meth:`has_dynamic_object <experimental_experiment.xbuilder.GraphBuilder.has_dynamic_object>`
+* :meth:`is_sequence <experimental_experiment.xbuilder.GraphBuilder.is_sequence>`
 * :meth:`is_constant <experimental_experiment.xbuilder.GraphBuilder.is_constant>`
 * :meth:`value_as_shape <experimental_experiment.xbuilder.GraphBuilder.value_as_shape>`
 
@@ -160,6 +161,7 @@ Get the information:
 
 * :meth:`get_type <experimental_experiment.xbuilder.GraphBuilder.get_type>`
 * :meth:`get_shape <experimental_experiment.xbuilder.GraphBuilder.get_shape>`
+* :meth:`get_sequence <experimental_experiment.xbuilder.GraphBuilder.get_sequence>`
 * :meth:`get_rank <experimental_experiment.xbuilder.GraphBuilder.get_rank>`
 * :meth:`get_constant <experimental_experiment.xbuilder.GraphBuilder.get_constant>`
 * :meth:`value_as_shape <experimental_experiment.xbuilder.GraphBuilder.value_as_shape>`
@@ -169,6 +171,7 @@ Set the information:
 * :meth:`set_type <experimental_experiment.xbuilder.GraphBuilder.set_type>`
 * :meth:`set_shape <experimental_experiment.xbuilder.GraphBuilder.set_shape>`
 * :meth:`set_rank <experimental_experiment.xbuilder.GraphBuilder.set_rank>`
+* :meth:`set_sequence <experimental_experiment.xbuilder.GraphBuilder.set_sequence>`
 * :meth:`set_value_shape <experimental_experiment.xbuilder.GraphBuilder.set_value_shape>`
 
 A function used to provide information to the user and calls in most of the error message:

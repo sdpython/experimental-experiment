@@ -6,6 +6,7 @@ def _register() -> Dict[str, Callable]:
     res = {}
     for k, v in _aten_methods.__dict__.items():
         if k.startswith("aten_meth_"):
+            assert v.__doc__, f"doc missing for {k!r} ({v})"
             options = {k: v}
             for c in options:
                 if c in res:
