@@ -176,10 +176,16 @@ class DynamoInterpreter:
                     node.name, elem_type=val.dtype, shape=val.shape, is_dimension=False
                 )
             if "nn_module_stack" not in node.meta:
-                return self.builder.make_tensor_input(
-                    node.name, elem_type=val.dtype, shape=val.shape, is_dimension=False
-                )
-            value = self.retriever(node.target, val)
+                value = self.retriever(node.target, val)
+                if value is None:
+                    return self.builder.make_tensor_input(
+                        node.name,
+                        elem_type=val.dtype,
+                        shape=val.shape,
+                        is_dimension=False,
+                    )
+            else:
+                value = self.retriever(node.target, val)
             if value is None:
                 if ".FakeTensor" in str(type(val)):
                     dtype = val.dtype
