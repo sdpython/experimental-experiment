@@ -6,7 +6,7 @@ The datas should be saved with script ``dort_bench.py`` and option ``--export <s
 
 ::
 
-    python -m experimental_experiment.llama.dort_bench_profile --help
+    python -m experimental_experiment.torch_bench.dort_bench_profile --help
 
 Example, run llama model with onnxrt backend on cuda.
 

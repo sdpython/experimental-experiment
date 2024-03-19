@@ -67,11 +67,15 @@ def get_pattern(
         return [obj] if as_list else obj
 
     from ..patterns_ort import get_onnxruntime_patterns
+    from ..patterns_exp import get_experimental_patterns
+
+    _pattern = dict(
+        default=get_default_patterns,
+        onnxruntime=get_onnxruntime_patterns,
+        experimental=get_experimental_patterns,
+    )
 
     if isinstance(obj, str):
-        _pattern = dict(
-            default=get_default_patterns, onnxruntime=get_onnxruntime_patterns
-        )
         sep = "," if "," in obj else ("+" if "+" in obj else None)
         if sep:
             assert as_list, f"Returns a list for obj={obj!r}, as_list must be True."
@@ -89,12 +93,13 @@ def get_pattern(
         v.__class__.__name__.replace("Pattern", ""): v
         for v in get_default_patterns(verbose=verbose)
     }
-    mapping.update(
-        {
-            v.__class__.__name__.replace("Pattern", ""): v
-            for v in get_onnxruntime_patterns(verbose=verbose)
-        }
-    )
+    for fct in _pattern.values():
+        mapping.update(
+            {
+                v.__class__.__name__.replace("Pattern", ""): v
+                for v in fct(verbose=verbose)
+            }
+        )
     if isinstance(obj, list):
         assert as_list, f"obj={obj!r} is already a list"
         res = []

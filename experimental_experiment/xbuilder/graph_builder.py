@@ -446,7 +446,7 @@ class GraphBuilder:
         if isinstance(value, np.ndarray):
             return value
         if isinstance(value, self.torch.Tensor):
-            v = value.detach().numpy()
+            v = value.detach().cpu().numpy()
             self.constants_computed_[name] = v
             return v
         if isinstance(value, TensorProto):

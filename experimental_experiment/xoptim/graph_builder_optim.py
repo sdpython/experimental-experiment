@@ -1,7 +1,8 @@
 import os
 import pprint
 import time
-from typing import Any, Dict, Iterator, List, Optional, Union
+from typing import Any, Callable, Dict, Iterator, List, Optional, Union
+import numpy as np
 from onnx import AttributeProto, NodeProto
 import onnx.helper as oh
 from ..xbuilder._onnx_helper import enumerate_subgraphs
@@ -119,6 +120,29 @@ class GraphBuilderPatternOptimization:
         """
         return self.builder.is_constant(name)
 
+    def is_constant_scalar(self, name: str, value: Optional[Any] = None) -> bool:
+        """
+        Tells if a constant is a scalar
+
+        :param name: name
+        :param value: value to compare to if specified
+        :return: boolean
+        """
+        if not self.is_constant(name):
+            return False
+        cst = self.get_computed_constant(name)
+        if hasattr(cst, "numpy"):
+            cst = cst.detach().cpu().numpy()
+        assert isinstance(
+            cst, np.ndarray
+        ), f"Unexpected type for constant {name}!r, type is {type(cst)}"
+        shape = cst.shape
+        if shape not in (tuple(), (1,)):
+            return False
+        if value is None:
+            return True
+        return all(cst == value)
+
     def get_computed_constant(
         self, name: str, statistics: Optional[List[str]] = None
     ) -> Any:
@@ -157,7 +181,11 @@ class GraphBuilderPatternOptimization:
         return self.builder.get_attribute(node, att_name, exc=exc)
 
     def get_constant_or_attribute(
-        self, node: NodeProto, attribute: str, input_index: int
+        self,
+        node: NodeProto,
+        attribute: str,
+        input_index: int,
+        cvt: Optional[Callable] = None,
     ) -> Any:
         """
         Returns an input or the value of an attribute.
@@ -166,7 +194,9 @@ class GraphBuilderPatternOptimization:
 
         :param node: node
         :param attribute: attribute name
-        :input_index: input index
+        :param input_index: input index
+        :param cvt: if not None, called this conversion function before
+            returning the result
         :return: value
         """
         found = None
@@ -179,7 +209,13 @@ class GraphBuilderPatternOptimization:
         assert input_index < len(
             node.input
         ), f"Input {input_index} does not exist in node {node}."
-        return self.get_computed_constant(node.input[input_index])
+        val = self.get_computed_constant(node.input[input_index])
+        if cvt is None:
+            return val
+        try:
+            return cvt(val)
+        except (ValueError, TypeError) as e:
+            raise RuntimeError(f"Unable to convert val={val} with cvt={cvt}") from e
 
     def has_type(self, name: str) -> bool:
         """
@@ -290,6 +326,14 @@ class GraphBuilderPatternOptimization:
             )
         return None
 
+    def next_node(self, name: str) -> NodeProto:
+        """
+        Returns the next node if it is unique, otherwise fails.
+        """
+        res = self.next_nodes(name)
+        assert len(res) == 1, f"Unexpected number of successors {len(res)} for {name!r}"
+        return res[0]
+
     def next_nodes(self, name: str) -> List[NodeProto]:
         """
         Returns the node consuming the given results.
@@ -314,6 +358,63 @@ class GraphBuilderPatternOptimization:
     def unique_name(self, prefix: str) -> str:
         return self.builder.unique_name(prefix)
 
+    def make_node_check_opset(
+        self,
+        op_type: str,
+        inputs: Union[str, List[str]],
+        outputs: Union[int, List[str], str] = 1,
+        domain: str = "",
+        attributes: Optional[List[AttributeProto]] = None,
+        name: Optional[str] = None,
+        **kwargs,
+    ):
+        """
+        Creates a node without adding it to the graph but
+        adapt for some known operators changing over
+        multiple opets.
+
+        :param op_type: operator type
+        :param inputs: input names
+        :param outputs: outputs names, if one integer, creates n unique names,
+            if str, creates one unique names, if a list, use the name
+        :param domain: node domain
+        :param attributes: list of attributes
+        :param name: node name
+        :param kwargs: other attributes
+        :return a node
+        """
+        assert domain == "", f"The method only supports the main domain not {domain!r}"
+        if op_type in {"Squeeze", "Unsqueeze"}:
+            if self.builder.main_opset < 13:
+                assert (
+                    len(inputs) == 1
+                ), f"axis must be given as an attribute for {op_type!r}"
+                return self.make_node(
+                    op_type,
+                    inputs,
+                    outputs,
+                    domain=domain,
+                    attributes=attributes,
+                    name=name,
+                    **kwargs,
+                )
+            if len(inputs) == 1 and "axes" in kwargs:
+                axes = kwargs["axes"]
+                axes_name = self.make_initializer("", np.array([axes], dtype=np.int64))
+                inputs.append(axes_name)
+                del kwargs["axes"]
+            return self.make_node(
+                op_type,
+                inputs,
+                outputs,
+                domain=domain,
+                attributes=attributes,
+                name=name,
+                **kwargs,
+            )
+
+        raise RuntimeError(f"Operator {op_type!r} not supported yet.")
+
     def make_node(
         self,
         op_type: str,
@@ -324,7 +425,30 @@ class GraphBuilderPatternOptimization:
         name: Optional[str] = None,
         **kwargs,
     ) -> NodeProto:
+        """
+        Creates a node without adding it to the graph.
+
+        :param op_type: operator type
+        :param inputs: input names
+        :param outputs: outputs names, if one integer, creates n unique names,
+            if str, creates one unique names, if a list, use the name
+        :param domain: node domain
+        :param attributes: list of attributes
+        :param name: node name
+        :param kwargs: other attributes
+        :return a node
+        """
         name = self.builder.unique_node_name(name)
+        if isinstance(outputs, int):
+            if outputs == 1:
+                outputs = [self.unique_name(f"{op_type.lower()}-{inputs[0]}")]
+            else:
+                outputs = [
+                    self.unique_name(f"{op_type.lower()}-{inputs[0]}-{i}")
+                    for i in range(outputs)
+                ]
+        elif isinstance(outputs, str):
+            outputs = [self.unique_name(outputs)]
         proto = oh.make_node(
             op_type,
             inputs,
