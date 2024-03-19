@@ -4,6 +4,7 @@ from experimental_experiment.reference import ExtendedReferenceEvaluator
 from experimental_experiment.ext_test_case import (
     ExtTestCase,
     ignore_warnings,
+    skipif_ci_windows,
 )
 from experimental_experiment.torch_test_helper import export_to_onnx, check_model_ort
 
@@ -19,6 +20,7 @@ def has_cuda():
 
 class TestEdTransformer(ExtTestCase):
 
+    @skipif_ci_windows("dynamo exporter not on windows")
     @ignore_warnings(UserWarning)
     def test_transformer_export_new(self):
         import torch
