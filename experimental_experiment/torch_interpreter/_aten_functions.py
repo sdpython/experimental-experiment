@@ -3039,7 +3039,7 @@ def aten_split_with_sizes(
     name: str = "split_with_sizes",
     use_sequence: bool = False,
 ) -> T:
-    "split_to_sequence"
+    "split_to_sequence or split"
     assert isinstance(split_sizes, list) and all_int(
         split_sizes
     ), f"Implemented when split_sizes ({split_sizes}) is a constant{g.get_debug_msg()}"
