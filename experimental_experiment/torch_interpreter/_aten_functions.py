@@ -3029,6 +3029,73 @@ def aten__softmax_backward_data(
     return res
 
 
+def aten_split_with_sizes(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    split_sizes: T,
+    dim: int = 0,
+    name: str = "split_with_sizes",
+    use_sequence: bool = False,
+) -> T:
+    "split_to_sequence"
+    assert isinstance(split_sizes, list) and all_int(
+        split_sizes
+    ), f"Implemented when split_sizes ({split_sizes}) is a constant{g.get_debug_msg()}"
+    assert isinstance(dim, int), f"dim={dim} is not an integer{g.get_debug_msg()}"
+    assert all(map(lambda d: d > 0, split_sizes)), (
+        f"split_with_sizes only implemented when all sizes are positive "
+        f"but split_sizes={split_sizes}{g.get_debug_msg()}"
+    )
+    assert len(outputs) in (1, len(split_sizes)), (
+        f"Number of outputs is unexpected, outputs={outputs}, "
+        f"split_sizes={split_sizes}{g.get_debug_msg()}"
+    )
+    init = g.make_initializer("", np.array(split_sizes, dtype=np.int64))
+    if use_sequence:
+        res = g.make_node("SplitToSequence", [x, init], outputs, axis=dim, name=name)
+        if not sts:
+            if g.has_shape(x):
+                new_shapes = []
+                shape = g.get_shape(x)
+                new_shape = list(shape)
+                for s in split_sizes:
+                    new_shape[dim] = s
+                    new_shapes.append(tuple(new_shape))
+                g.set_sequence(res, g.get_type(x), shapes=new_shapes)
+            else:
+                r = g.get_rank(x)
+                g.set_sequence(res, g.get_type(x), types=[r for o in split_sizes])
+        return res
+
+    # Split directly as tensors.
+    if len(outputs) == 1:
+        o = outputs[0]
+        outputs = [f"{o}#{i}" for i, _ in enumerate(split_sizes)]
+    res = g.make_node("Split", [x, init], outputs, axis=dim, name=name)
+    if not sts:
+        new_shapes = []
+        new_ranks = []
+        if g.has_shape(x):
+            shape = g.get_shape(x)
+            new_shape = list(shape)
+            for s in split_sizes:
+                new_shape[dim] = s
+                new_shapes.append(tuple(new_shape))
+        else:
+            r = g.get_rank(x)
+            new_ranks = [r for s in split_sizes]
+        t = g.get_type(x)
+        for i, o in enumerate(res):
+            g.set_type(o, t)
+            if new_shapes:
+                g.get_shape(o, new_shape[i])
+            else:
+                g.get_rank(o, new_ranks[i])
+    return res
+
+
 def aten_sqrt(
     g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T
 ) -> T:

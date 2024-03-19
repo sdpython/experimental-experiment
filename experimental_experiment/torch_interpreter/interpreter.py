@@ -583,28 +583,46 @@ class DynamoInterpreter:
                 return self.builder.make_node(
                     "Identity", [name_index], [node.name], name="getitemB_tuple"
                 )
-            # The user mean to access the first element of a tensor.
-            res = self.builder.op.SqueezeAnyOpset(
-                self.builder.op.Gather(
-                    result_name,
-                    np.array([index], dtype=np.int64),
+            # The user mean to access the first element of a tensor or a sequence
+            if self.builder.is_sequence(result_name):
+                # A sequence
+                tpos = self.builder.make_initializer(
+                    "", np.array(index, dtype=np.int64)
+                )
+                res = self.builder.make_node(
+                    "SequenceAt", [result_name, tpos], [node.name]
+                )
+                if not sts:
+                    info = self.builder.get_sequence_info(result_name)
+                    self.builder.set_type(res, info["dtype"])
+                    if info["shape"] is not None:
+                        self.builder.set_shape(res, info["shape"][index])
+                    else:
+                        self.builder.set_rank(res, info["rank"][index])
+                return res
+            else:
+                # A tensor.
+                res = self.builder.op.SqueezeAnyOpset(
+                    self.builder.op.Gather(
+                        result_name,
+                        np.array([index], dtype=np.int64),
+                        name="getitemB_index",
+                    ),
+                    np.array([0], dtype=np.int64),
                     name="getitemB_index",
-                ),
-                np.array([0], dtype=np.int64),
-                name="getitemB_index",
-                outputs=[node.name],
-            )
-            if not sts:
-                self.builder.set_type(node.name, self.builder.get_type(result_name))
-                if self.builder.has_shape(result_name):
-                    self.builder.set_shape(
-                        node.name, self.builder.get_shape(result_name)[1:]
-                    )
-                else:
-                    self.builder.set_rank(
-                        node.name, self.builder.get_rank(result_name) - 1
-                    )
-            return res
+                    outputs=[node.name],
+                )
+                if not sts:
+                    self.builder.set_type(node.name, self.builder.get_type(result_name))
+                    if self.builder.has_shape(result_name):
+                        self.builder.set_shape(
+                            node.name, self.builder.get_shape(result_name)[1:]
+                        )
+                    else:
+                        self.builder.set_rank(
+                            node.name, self.builder.get_rank(result_name) - 1
+                        )
+                return res
 
         if isinstance(index, slice):
             return self._getitem_slice(
@@ -825,7 +843,20 @@ class DynamoInterpreter:
                     raise NotImplementedError(
                         f"Unexpected output_names {output_names}, res={res!r}, node.name={node.name!r}"
                     )
+            elif isinstance(res, list) and len(res) != 1:
+                # SplitToSequence rewritten into a Split
+                name = output_names[0]
+                assert all(map(lambda s: s.startswith(name), res)), (
+                    f"Unexpected output_names={output_names}, res={res}, node.name={node.name}"
+                    f"{self.builder.get_debug_msg()}"
+                )
+                # nothing to do
+                res = tuple(res)
             elif res != node.name:
+                assert isinstance(res, str), (
+                    f"Unexpected res={res}, output_names={output_names}, node.name={node.name}"
+                    f"{self.builder.get_debug_msg()}"
+                )
                 self.builder.make_node("Identity", [res], [node.name])
                 res = node.name
         else:
@@ -849,13 +880,17 @@ class DynamoInterpreter:
     ) -> Optional[Union["torch.dtype", Tuple["torch.dtype", ...]]]:  # noqa: F821
         val = node.meta.get("val", None)
         if val is not None:
-            if isinstance(val, tuple):
+            if isinstance(val, (tuple, list)):
+                # Type list comes from SplitToSequence.
                 return tuple((None if v is None else v.dtype) for v in val)
             exa = node.meta.get("example_value", None)
             assert exa is None or val.dtype == exa.dtype, (
                 f"dtype inconsistency (val, example_value) "
                 f"{val.dtype} != {exa.dtype}{self.builder.get_debug_msg()}"
             )
+            assert hasattr(
+                val, "dtype"
+            ), f"Unexpected type {type(val)} for val={val}{self.builder.get_debug_msg()}"
             return val.dtype
         return None
 
@@ -893,7 +928,7 @@ class DynamoInterpreter:
                         self.builder.set_shape(r, shape, set_if_more_precise=True)
                     elif self.builder.has_rank(r):
                         assert len(shape) == self.builder.get_rank(r), (
-                            f"Rank already set for {r!r}, but rank={self.builder.get_rank()} "
+                            f"Rank already set for {r!r}, but rank={self.builder.get_rank(r)} "
                             f"differs for shape={shape!r}{self.builder.get_debug_msg()}"
                         )
                     else:
@@ -907,10 +942,39 @@ class DynamoInterpreter:
                     self.builder.make_dynamic_object(r, v)
                 elif v is None:
                     continue
+                elif isinstance(v, list) and len(v) > 0:
+                    if len(v) == len(r) and r[0].endswith("#0"):
+                        # Operator Split was used instead of SplitToSequence.
+                        for r_, v_ in zip(r, v):
+                            self.builder.set_type(
+                                r_, torch_dtype_to_onnx_dtype(v_.dtype)
+                            )
+                            shape = tuple(v_.shape)
+                            if self.builder.is_dynamic_shape(shape):
+                                self.builder.set_shape(
+                                    r_, shape, set_if_more_precise=True
+                                )
+                            elif self.builder.has_rank(r_):
+                                assert len(shape) == self.builder.get_rank(r_), (
+                                    f"Rank already set for {r_!r}, but rank={self.builder.get_rank(r_)} "
+                                    f"differs for shape={shape!r}{self.builder.get_debug_msg()}"
+                                )
+                            else:
+                                self.builder.set_rank(r, len(shape))
+                    else:
+                        # This is coming from the sequence.
+                        dtype = list(set(_.dtype for _ in v))
+                        assert len(dtype) == 1, (
+                            f"Only sequence of tensors of the same type are allowed "
+                            f"but dtype={dtype}{self.builder.get_debug_msg()}"
+                        )
+                        itype = torch_dtype_to_onnx_dtype(dtype[0])
+                        self.builder.set_sequence(r, itype, shapes=(_.shape for _ in v))
                 else:
                     raise TypeError(
                         f"Unexpected type in node {node!r}, r={r!r}, "
                         f"type(val)={type(v)}{self.builder.get_debug_msg()}"
+                        f"\n----\nval={val}"
                     )
         if exa is not None and not isinstance(exa, tuple):
             if hasattr(exa, "dtype"):
