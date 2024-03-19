@@ -6,7 +6,7 @@ The script runs a few iterations of a dummy llama model.
 
 ::
 
-    python -m experimental_experiment.llama.dort_profile --help
+    python -m experimental_experiment.torch_bench.dort_profile --help
 
 Example, run llama model with onnxrt backend on cuda.
 
@@ -50,7 +50,7 @@ config_dict = create_configuration_for_benchmark(
 verbose = int(args.verbose)
 disable_pattern = [_ for _ in args.disable_pattern.split(",") if _]
 enable_pattern = [_ for _ in args.enable_pattern.split(",") if _]
-print(f"llama config={config_dict}")
+print(f"model config={config_dict}")
 print(f"backend={args.backend}")
 print(f"verbose={args.verbose}")
 print(f"implementation={args.implementation}")

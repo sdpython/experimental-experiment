@@ -6,7 +6,7 @@ The script runs a few iterations of a dummy llama model.
 
 ::
 
-    python -m experimental_experiment.llama.dort_bench --help
+    python -m experimental_experiment.torch_bench.dort_bench --help
 
 Example, run llama model with onnxrt backend on cuda.
 
@@ -60,7 +60,7 @@ optimize = args.optimize in (True, 1, "1", "True")
 disable_pattern = [_ for _ in args.disable_pattern.split(",") if _]
 enable_pattern = [_ for _ in args.enable_pattern.split(",") if _]
 print(f"model={args.model}")
-print(f"llama config={config_dict}")
+print(f"model config={config_dict}")
 print(f"backend={args.backend}")
 print(f"verbose={verbose}")
 print(f"optimize={args.optimize}")
