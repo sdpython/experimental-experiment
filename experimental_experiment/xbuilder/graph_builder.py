@@ -69,6 +69,7 @@ class GraphBuilder:
     - `_known_value_shape: Dict[str, Any]`: if a result is a shape or not
       (for example the output of operator Shape)
     - `_known_ranks: Dict[str, int]`: declared ranks
+    - `_known_sequences: Dict[str, Dict[str, Any]]`: known sequences
     - `constants_node_: Dict[bytes, NodeProto]`: constant node
     - `constants_alias_: Dict[str, str]`: alias for constant
     - `constants_: Dict[str, Any]`: constant values
@@ -140,6 +141,7 @@ class GraphBuilder:
         self._known_ranks = {}
         self._known_torch_value = {}
         self._known_names = set()
+        self._known_sequences = {}
         self._unique_names = set()
         self._unique_node_names = set()
         self._known_value_shape = {}
@@ -444,7 +446,7 @@ class GraphBuilder:
         if isinstance(value, np.ndarray):
             return value
         if isinstance(value, self.torch.Tensor):
-            v = value.detach().numpy()
+            v = value.detach().cpu().numpy()
             self.constants_computed_[name] = v
             return v
         if isinstance(value, TensorProto):
@@ -452,6 +454,50 @@ class GraphBuilder:
             self.constants_computed_[name] = v
             return v
         raise TypeError(f"Unable to convert type {type(value)} into numpy array.")
+
+    def is_sequence(self, name: str) -> bool:
+        """Tells if a result is a sequence."""
+        if name in self._known_sequences:
+            return True
+        assert self.has_name(name), f"Unknown name={name!r}{self.get_debug_msg()}"
+        return False
+
+    def get_sequence(self, name: str) -> Dict[str, Any]:
+        """Returns sequence information"""
+        assert (
+            name in self._known_sequences
+        ), f"Sequence {name!r} is not known{self.get_debug_msg()}"
+        return self._known_sequences[name]
+
+    def set_sequence(
+        self,
+        name: str,
+        dtype: int,
+        shapes: Optional[DYNAMIC_SHAPE] = None,
+        ranks: Optional[Tuple[int, ...]] = None,
+    ):
+        """
+        Defines a result as a sequence.
+        """
+        assert (
+            shapes is not None or ranks is not None
+        ), f"shapes or ranks must be defines for name={name!r}{self.get_debug_msg()}"
+        assert self.has_name(name), f"No result name={name!r}{self.get_debug_msg()}"
+        assert isinstance(dtype, int), (
+            f"Only one type is allowed in sequences but dtype={dtype!r}"
+            f"{self.get_debug_msg()}"
+        )
+        d = dict(dtype=dtype, shapes=shapes, ranks=ranks)
+        if shapes is not None and ranks is None:
+            d["ranks"] = tuple(len(s) for s in shapes)
+        if name not in self._known_sequences:
+            self._known_sequences[name] = d
+        else:
+            assert self._known_sequences[name] == d, (
+                f"Sequence {name!r} was already declared with a different type "
+                f"or shape or rank, declared={self._known_sequences[name]}, "
+                f"new={d}{self.get_debug_msg()}"
+            )
 
     def set_name(self, name: str):
         """Adds a name to the list of known names."""
@@ -713,7 +759,9 @@ class GraphBuilder:
 
     def has_name(self, name: str) -> bool:
         """Tells if a result exists."""
-        assert isinstance(name, str), f"Unexpected type {type(name)} for name."
+        assert isinstance(
+            name, str
+        ), f"Unexpected type {type(name)} for name (name={name!r})."
         return name in self._known_names
 
     def has_rank(self, name: str) -> bool:
@@ -1696,6 +1744,9 @@ class GraphBuilder:
 
         if check is not False:
             for i in inputs:
+                assert isinstance(
+                    i, str
+                ), f"Unexpected type {type(i)} in {inputs}{self.get_debug_msg()}"
                 if i == "":
                     # Optional input.
                     continue
@@ -1704,6 +1755,9 @@ class GraphBuilder:
                     f"({self._hash()}){self.get_debug_msg()}"
                 )
             for i in output_names:
+                assert isinstance(
+                    i, str
+                ), f"Unexpected type {type(i)} in {output_names}{self.get_debug_msg()}"
                 if i == "":
                     # Optional output.
                     continue
@@ -2920,6 +2974,15 @@ class GraphBuilder:
         need_identity_removal = False
         new_nodes = []
         for node in self.nodes:
+            assert node.op_type not in {
+                "SplitToSequence",
+                "SequenceConstruct",
+                "SequenceErase",
+                "SequenceInsert",
+            }, (
+                f"Sequence operators are not supported yet and op_type={node.op_type!r}"
+                f"(name={node.name!r})."
+            )
             self._unique_names |= set(node.output)
             self.update_value_shape_with_node(node)
             if node.name:

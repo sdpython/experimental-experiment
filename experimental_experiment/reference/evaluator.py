@@ -12,6 +12,7 @@ from .ops.op_memcpy_host import MemcpyFromHost, MemcpyToHost
 from .ops.op_quick_gelu import QuickGelu
 from .ops.op_scatter_elements import ScatterElements
 from .ops.op_scatternd_of_shape import ScatterNDOfShape
+from .ops.op_simplified_layer_normalization import SimplifiedLayerNormalization
 from .ops.op_slice import Slice_1, Slice_10
 
 
@@ -53,6 +54,7 @@ class ExtendedReferenceEvaluator(ReferenceEvaluator):
         QuickGelu,
         ScatterElements,
         ScatterNDOfShape,
+        SimplifiedLayerNormalization,
         Slice_1,
         Slice_10,
     ]

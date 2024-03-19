@@ -137,7 +137,7 @@ def dort_args(name: str, description: str):
     args = get_parsed_args(
         name,
         description=description,
-        model=("llama", "model to measure, llama, mistral"),
+        model=("llama", "model to measure, llama, mistral, phi, ..."),
         backend=("ort", "'ort' or 'inductor' or 'eager', 'plug', or 'custom'"),
         device=("cpu", "'cpu' or 'cuda'"),
         num_hidden_layers=(1, "number of hidden layers"),
@@ -155,6 +155,33 @@ def dort_args(name: str, description: str):
         optimize=(1, "optimize the model"),
         expose="backend,repeat,warmup,device,num_hidden_layers,"
         "mixed,export,config,target_opset,dynamic,verbose,"
+        "enable_pattern,disable_pattern,model,optimize",
+    )
+    return args
+
+
+def export_args(name: str, description: str):
+    from experimental_experiment.args import get_parsed_args
+
+    args = get_parsed_args(
+        name,
+        description=description,
+        model=("llama", "model to measure, llama, mistral, phi, ..."),
+        exporter=("custom", "script, dynamo, custom"),
+        device=("cpu", "'cpu' or 'cuda'"),
+        num_hidden_layers=(1, "number of hidden layers"),
+        mixed=(0, "mixed precision (based on autocast)"),
+        dynamic=("0", "use dynamic shapes"),
+        target_opset=(18, "opset to convert into, use with backend=custom"),
+        config=("default", "default, medium, or small to test"),
+        verbose=(0, "verbosity"),
+        ort=(1, "produce the model optimized by onnxruntime"),
+        implementation=("eager", "eager or sdpa"),
+        disable_pattern=("", "a list of optimization patterns to disable"),
+        enable_pattern=("default", "list of optimization patterns to enable"),
+        optimize=(1, "optimize the model"),
+        expose="exporter,device,num_hidden_layers,ort,"
+        "mixed,config,target_opset,dynamic,verbose,"
         "enable_pattern,disable_pattern,model,optimize",
     )
     return args

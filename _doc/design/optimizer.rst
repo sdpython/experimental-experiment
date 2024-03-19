@@ -428,6 +428,8 @@ Constants
 
 * :meth:`is_constant <experimental_experiment.xoptim.GraphBuilderPatternOptimization.is_constant>`:
   tells if a node is a constant (it may be a constant, an initializer or any value built on other constants)
+* :meth:`is_constant_scalar <experimental_experiment.xoptim.GraphBuilderPatternOptimization.is_constant_scalar>`:
+  checks a constant is a scalar and compares its value to a number
 * :meth:`get_computed_constant <experimental_experiment.xoptim.GraphBuilderPatternOptimization.get_computed_constant>`:
   returns the constant, computes it is a constant built from other constants
 * :meth:`get_attribute <experimental_experiment.xoptim.GraphBuilderPatternOptimization.get_attribute>`:
@@ -436,6 +438,8 @@ Constants
 Graph
 +++++
 
+* :meth:`next_node <experimental_experiment.xoptim.GraphBuilderPatternOptimization.next_node>`:
+  returns the next node only if there is only one
 * :meth:`next_nodes <experimental_experiment.xoptim.GraphBuilderPatternOptimization.next_nodes>`:
   returns the node consuming this result
 * :meth:`node_before <experimental_experiment.xoptim.GraphBuilderPatternOptimization.node_before>`:
@@ -448,3 +452,12 @@ Graph
   tells if a result is used more than once
 * :meth:`is_used_only_by <experimental_experiment.xoptim.GraphBuilderPatternOptimization.is_used_only_by>`:
   tells if a result is only used by specific nodes
+
+Nodes
++++++
+
+* :meth:`make_node <experimental_experiment.xoptim.GraphBuilderPatternOptimization.make_node>`:
+  creates a node without adding it to the graph
+* :meth:`make_node_check_opset <experimental_experiment.xoptim.GraphBuilderPatternOptimization.make_node_check_opset>`:
+  creates a node without adding it to the graph, deals with some constraints
+  related to opset version

@@ -643,6 +643,7 @@ def aten_copy_(
     src: T,
     non_blocking: bool = False,
 ) -> T:
+    "identity"
     return aten_copy(g, sts, outputs, x, src, non_blocking, name="copy_")
 
 
@@ -1335,6 +1336,7 @@ def aten_full_like(
 def aten_FunctionCtx(
     g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], *args, **kwargs
 ):
+    "not implemented"
     if len(args) == 0 and len(kwargs) == 0:
         return
     raise NotImplementedError(f"args={args}, kwargs={kwargs}")
@@ -1982,6 +1984,39 @@ def aten_mul_Tensor(
     return aten_mul(g, sts, outputs, x, y, name="mul_Tensor")
 
 
+def aten_native_dropout(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    p: float,
+    train: bool = False,
+    name: str = "native_dropout",
+):
+    "dropout"
+    if not train:
+        assert (
+            len(outputs) == 1
+        ), f"train is False and outputs is {outputs}{g.get_debug_msg()}"
+        return g.op.Identity(x, outputs=outputs, name=name)
+    assert (
+        len(outputs) == 2
+    ), f"train is True and outputs is {outputs}{g.get_debug_msg()}"
+    tp = g.make_initializer(
+        "", np.array(p, dtype=tensor_dtype_to_np_dtype(g.get_type(x)))
+    )
+    tt = g.make_initializer("", np.array(train, dtype=np.bool_))
+    g.make_node("Dropout", [x, tp, tt], outputs, name=name)
+    if not sts:
+        set_type_shape_unary_op(g, outputs[0], x)
+        g.set_type(outputs[1], TensorProto.BOOL)
+        if g.has_shape(x):
+            g.set_shape(outputs[1], g.get_shape(x))
+        else:
+            g.set_rank(outputs[1], g.get_rank(x))
+    return tuple(outputs)
+
+
 def aten_native_layer_norm(
     g: GraphBuilder,
     sts: Optional[Dict[str, Any]],
@@ -2428,6 +2463,38 @@ def aten_rsub_Scalar(
     "rsub"
     assert alpha == 1, f"Not implemented with alpha={alpha}"
     return aten_sub(g, sts, outputs, y, x, name="rsub_Scalar")
+
+
+def aten_select_int(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    dim: int,
+    index: int,
+) -> T:
+    "gather"
+    assert isinstance(
+        dim, int
+    ), f"Unexpected type {type(dim)} for dim{g.get_debug_msg()}"
+    assert isinstance(
+        index, int
+    ), f"Unexpected type {type(index)} for dim{g.get_debug_msg()}"
+    res = g.op.Gather(x, np.array(index, dtype=np.int64), axis=dim, outputs=outputs)
+    if not sts:
+        g.set_type(res, g.get_type(x))
+        if g.has_shape(x):
+            shape = g.get_shape(x)
+            if dim < 0:
+                dim += len(shape)
+            assert dim < len(
+                shape
+            ), f"shape is {shape}, dim is {dim}{g.get_debug_msg()}"
+            new_shape = [s for i, s in enumerate(shape) if i != dim]
+            g.set_shape(res, tuple(new_shape))
+        else:
+            g.get_rank(res, g.get_rank(x) - 1)
+    return res
 
 
 def aten__set_grad_enabled(
@@ -2959,6 +3026,73 @@ def aten__softmax_backward_data(
     res = g.op.Sub(new_grad_output, temp, outputs=outputs, name="softmax_backward_data")
     if not sts:
         set_type_shape_unary_op(g, res, grad_outputc, itype=itype)
+    return res
+
+
+def aten_split_with_sizes(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    split_sizes: T,
+    dim: int = 0,
+    name: str = "split_with_sizes",
+    use_sequence: bool = False,
+) -> T:
+    "split_to_sequence or split"
+    assert isinstance(split_sizes, list) and all_int(
+        split_sizes
+    ), f"Implemented when split_sizes ({split_sizes}) is a constant{g.get_debug_msg()}"
+    assert isinstance(dim, int), f"dim={dim} is not an integer{g.get_debug_msg()}"
+    assert all(map(lambda d: d > 0, split_sizes)), (
+        f"split_with_sizes only implemented when all sizes are positive "
+        f"but split_sizes={split_sizes}{g.get_debug_msg()}"
+    )
+    assert len(outputs) in (1, len(split_sizes)), (
+        f"Number of outputs is unexpected, outputs={outputs}, "
+        f"split_sizes={split_sizes}{g.get_debug_msg()}"
+    )
+    init = g.make_initializer("", np.array(split_sizes, dtype=np.int64))
+    if use_sequence:
+        res = g.make_node("SplitToSequence", [x, init], outputs, axis=dim, name=name)
+        if not sts:
+            if g.has_shape(x):
+                new_shapes = []
+                shape = g.get_shape(x)
+                new_shape = list(shape)
+                for s in split_sizes:
+                    new_shape[dim] = s
+                    new_shapes.append(tuple(new_shape))
+                g.set_sequence(res, g.get_type(x), shapes=new_shapes)
+            else:
+                r = g.get_rank(x)
+                g.set_sequence(res, g.get_type(x), types=[r for o in split_sizes])
+        return res
+
+    # Split directly as tensors.
+    if len(outputs) == 1:
+        o = outputs[0]
+        outputs = [f"{o}#{i}" for i, _ in enumerate(split_sizes)]
+    res = g.make_node("Split", [x, init], outputs, axis=dim, name=name)
+    if not sts:
+        new_shapes = []
+        new_ranks = []
+        if g.has_shape(x):
+            shape = g.get_shape(x)
+            new_shape = list(shape)
+            for s in split_sizes:
+                new_shape[dim] = s
+                new_shapes.append(tuple(new_shape))
+        else:
+            r = g.get_rank(x)
+            new_ranks = [r for s in split_sizes]
+        t = g.get_type(x)
+        for i, o in enumerate(res):
+            g.set_type(o, t)
+            if new_shapes:
+                g.get_shape(o, new_shape[i])
+            else:
+                g.get_rank(o, new_ranks[i])
     return res
 
 
