@@ -15,6 +15,8 @@ from experimental_experiment.xbuilder._onnx_helper import (
 )
 from experimental_experiment.reference import ExtendedReferenceEvaluator
 
+TFLOAT = TensorProto.FLOAT
+
 
 class TestGraphPatternOptimizationOrt(ExtTestCase):
     def _range(self, *shape, bias: float = None):
@@ -69,19 +71,19 @@ class TestGraphPatternOptimizationOrt(ExtTestCase):
                 [
                     oh.make_tensor_value_info(
                         "X",
-                        TensorProto.FLOAT,
+                        TFLOAT,
                         [2, 2, 128, 32] if side == "left" else [2, 2, 32, 128],
                     ),
                     oh.make_tensor_value_info(
                         "Y",
-                        TensorProto.FLOAT,
+                        TFLOAT,
                         [2, 2, 128, 64] if side == "left" else [2, 2, 64, 128],
                     ),
                 ],
                 [
                     oh.make_tensor_value_info(
                         "Z",
-                        TensorProto.FLOAT,
+                        TFLOAT,
                         [2, 2, 32, 64] if side == "left" else [2, 2, 64, 32],
                     ),
                 ],
@@ -144,17 +146,13 @@ class TestGraphPatternOptimizationOrt(ExtTestCase):
                 ],
                 "dummy",
                 [
-                    oh.make_tensor_value_info("X", TensorProto.FLOAT, [2, 2, 128, 32]),
-                    oh.make_tensor_value_info("Y", TensorProto.FLOAT, [2, 2, 64, 128]),
+                    oh.make_tensor_value_info("X", TFLOAT, [2, 2, 128, 32]),
+                    oh.make_tensor_value_info("Y", TFLOAT, [2, 2, 64, 128]),
                 ],
                 [
-                    oh.make_tensor_value_info("Z", TensorProto.FLOAT, [2, 2, 32, 64]),
-                    oh.make_tensor_value_info(
-                        "xm1", TensorProto.FLOAT, [2, 2, 32, 128]
-                    ),
-                    oh.make_tensor_value_info(
-                        "ym1", TensorProto.FLOAT, [2, 2, 128, 64]
-                    ),
+                    oh.make_tensor_value_info("Z", TFLOAT, [2, 2, 32, 64]),
+                    oh.make_tensor_value_info("xm1", TFLOAT, [2, 2, 32, 128]),
+                    oh.make_tensor_value_info("ym1", TFLOAT, [2, 2, 128, 64]),
                 ],
             ),
             opset_imports=[
@@ -213,16 +211,8 @@ class TestGraphPatternOptimizationOrt(ExtTestCase):
                     oh.make_node("Mul", ["xi", "X"], ["Y"]),
                 ],
                 "dummy",
-                [
-                    oh.make_tensor_value_info(
-                        "X", TensorProto.FLOAT, ["a", "D" if dyn else 4]
-                    )
-                ],
-                [
-                    oh.make_tensor_value_info(
-                        "Y", TensorProto.FLOAT, ["a", "D" if dyn else 4]
-                    )
-                ],
+                [oh.make_tensor_value_info("X", TFLOAT, ["a", "D" if dyn else 4])],
+                [oh.make_tensor_value_info("Y", TFLOAT, ["a", "D" if dyn else 4])],
                 [
                     onh.from_array(np.array([2], dtype=np.float32), name="exp"),
                     onh.from_array(
@@ -292,6 +282,101 @@ class TestGraphPatternOptimizationOrt(ExtTestCase):
                     )
                     got = sess.run(None, feeds)
                     self.assertEqualArray(expected[0], got[0], atol=1e-5)
+
+    def get_simplified_layer_normalization_model_output(self, div, dyn):
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("Pow", ["X", "exp"], ["x2"]),
+                    oh.make_node("ReduceMean", ["x2", "axis"], ["xr"]),
+                    oh.make_node("Add", ["xr", "eps"], ["xa"]),
+                    oh.make_node("Sqrt", ["xa"], ["xq"]),
+                    (
+                        oh.make_node("Div", ["one", "xq"], ["Z"])
+                        if div
+                        else oh.make_node("Reciprocal", ["xq"], ["Z"])
+                    ),
+                    oh.make_node("Mul", ["Z", "X"], ["Y"]),
+                ],
+                "dummy",
+                [oh.make_tensor_value_info("X", TFLOAT, ["a", "D" if dyn else 4])],
+                [
+                    oh.make_tensor_value_info("Y", TFLOAT, ["a", "D" if dyn else 4]),
+                    oh.make_tensor_value_info("Z", TFLOAT, ["a", 1]),
+                ],
+                [
+                    onh.from_array(np.array([2], dtype=np.float32), name="exp"),
+                    onh.from_array(
+                        np.array([9.999999974752427e-7], dtype=np.float32), name="eps"
+                    ),
+                    onh.from_array(np.array([-1], dtype=np.int64), name="axis"),
+                    onh.from_array(np.array([1], dtype=np.float32), name="one"),
+                ],
+            ),
+            opset_imports=[
+                oh.make_opsetid("", 18),
+            ],
+            ir_version=9,
+        )
+        check_model(model)
+        return model
+
+    def test_simplified_layer_normalization_model_output(self):
+        for div, dyn in itertools.product([False, True], [False, True]):
+            with self.subTest(div=div, dyn=dyn):
+                model = self.get_simplified_layer_normalization_model_output(
+                    div=div, dyn=dyn
+                )
+                gr = GraphBuilder(
+                    model,
+                    infer_shapes=True,
+                    optimization_options=OptimizationOptions(
+                        patterns=["SimplifiedLayerNormalization"]
+                    ),
+                )
+                opt_onx = gr.to_onnx(optimize=True)
+                self.assertEqual(
+                    (
+                        [
+                            "Shape",
+                            "Gather",
+                            "ConstantOfShape",
+                            "SimplifiedLayerNormalization",
+                        ]
+                        if dyn
+                        else ["SimplifiedLayerNormalization"]
+                    ),
+                    [n.op_type for n in opt_onx.graph.node],
+                )
+
+                feeds = {
+                    "X": np.arange(20).reshape((5, 4)).astype(np.float32),
+                }
+                ref1 = ExtendedReferenceEvaluator(model)
+                expected = ref1.run(None, feeds)
+
+                ninits = {
+                    (False, False): 1,
+                    (False, True): 1,
+                    (True, False): 1,
+                    (True, True): 1,
+                }
+                self.assertEqual(ninits[div, dyn], len(opt_onx.graph.initializer))
+
+                ref2 = ExtendedReferenceEvaluator(opt_onx)
+                got = ref2.run(None, feeds)
+                self.assertEqualArray(expected[0], got[0], atol=1e-5)
+                self.assertEqualArray(expected[1], got[1], atol=1e-5)
+
+                if got:
+                    from onnxruntime import InferenceSession
+
+                    sess = InferenceSession(
+                        opt_onx.SerializeToString(), providers=["CPUExecutionProvider"]
+                    )
+                    got = sess.run(None, feeds)
+                    self.assertEqualArray(expected[0], got[0], atol=1e-5)
+                    self.assertEqualArray(expected[1], got[1], atol=1e-5)
 
 
 if __name__ == "__main__":

@@ -133,7 +133,7 @@ class SimplifiedLayerNormalizationPattern(PatternOptimization):
         layer = g.make_node(
             "SimplifiedLayerNormalization",
             [node_pow.input[0], scale],
-            [node_mul.output[0]],
+            [node_mul.output[0], node_reciprocal.output[0]],
             epsilon=float(epsilon[0] if epsilon.shape else epsilon),
             axis=int(axis),
             stash_type=stash_type,

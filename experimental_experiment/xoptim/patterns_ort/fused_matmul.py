@@ -64,7 +64,7 @@ class FusedMatMulPattern(PatternOptimization):
             # Both are available, we only transpose one.
             nodes[0] = None
 
-        return MatchResult(self, nodes, self.apply, insert_at=node)
+        return MatchResult(self, nodes, self.apply)
 
     @classmethod
     def apply(

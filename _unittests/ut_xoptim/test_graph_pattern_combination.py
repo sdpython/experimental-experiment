@@ -9,6 +9,8 @@ from experimental_experiment.xbuilder.graph_builder import (
     OptimizationOptions,
 )
 
+TFLOAT = TensorProto.FLOAT
+
 
 class TestGraphPatternCombination(ExtTestCase):
 
@@ -33,10 +35,10 @@ class TestGraphPatternCombination(ExtTestCase):
                 ],
                 "dummy",
                 [
-                    oh.make_tensor_value_info("X", TensorProto.FLOAT, [32, 128]),
-                    oh.make_tensor_value_info("Y", TensorProto.FLOAT, [3, 5, 128, 64]),
+                    oh.make_tensor_value_info("X", TFLOAT, [32, 128]),
+                    oh.make_tensor_value_info("Y", TFLOAT, [3, 5, 128, 64]),
                 ],
-                [oh.make_tensor_value_info("Z", TensorProto.FLOAT, [3, 5, 32, 64])],
+                [oh.make_tensor_value_info("Z", TFLOAT, [3, 5, 32, 64])],
                 [
                     onh.from_array(np.array([0], dtype=np.int64), name="zero"),
                     onh.from_array(np.array([1], dtype=np.int64), name="un"),
@@ -94,14 +96,14 @@ class TestGraphPatternCombination(ExtTestCase):
                 ],
                 "dummy",
                 [
-                    oh.make_tensor_value_info("X", TensorProto.FLOAT, ["D32", "D128"]),
+                    oh.make_tensor_value_info("X", TFLOAT, ["D32", "D128"]),
                     oh.make_tensor_value_info(
-                        "Y", TensorProto.FLOAT, ["batch", "channel", "D128", "D64"]
+                        "Y", TFLOAT, ["batch", "channel", "D128", "D64"]
                     ),
                 ],
                 [
                     oh.make_tensor_value_info(
-                        "Z", TensorProto.FLOAT, ["batch", "channel", "D32", "64"]
+                        "Z", TFLOAT, ["batch", "channel", "D32", "64"]
                     )
                 ],
                 [
@@ -161,14 +163,14 @@ class TestGraphPatternCombination(ExtTestCase):
                 ],
                 "dummy",
                 [
-                    oh.make_tensor_value_info("X", TensorProto.FLOAT, ["D32", "D128"]),
+                    oh.make_tensor_value_info("X", TFLOAT, ["D32", "D128"]),
                     oh.make_tensor_value_info(
-                        "Y", TensorProto.FLOAT, ["batch", "channel", "any", "D64"]
+                        "Y", TFLOAT, ["batch", "channel", "any", "D64"]
                     ),
                 ],
                 [
                     oh.make_tensor_value_info(
-                        "Z", TensorProto.FLOAT, ["batch", "channel", "D32", "64"]
+                        "Z", TFLOAT, ["batch", "channel", "D32", "64"]
                     )
                 ],
                 [
@@ -228,12 +230,12 @@ class TestGraphPatternCombination(ExtTestCase):
                 ],
                 "dummy",
                 [
-                    oh.make_tensor_value_info("X", TensorProto.FLOAT, [32, 128]),
-                    oh.make_tensor_value_info("Y", TensorProto.FLOAT, [3, 5, 128, 64]),
+                    oh.make_tensor_value_info("X", TFLOAT, [32, 128]),
+                    oh.make_tensor_value_info("Y", TFLOAT, [3, 5, 128, 64]),
                 ],
                 [
-                    oh.make_tensor_value_info("Z", TensorProto.FLOAT, [3, 5, 32, 64]),
-                    oh.make_tensor_value_info("xm1", TensorProto.FLOAT, [1, 32, 128]),
+                    oh.make_tensor_value_info("Z", TFLOAT, [3, 5, 32, 64]),
+                    oh.make_tensor_value_info("xm1", TFLOAT, [1, 32, 128]),
                 ],
                 [
                     onh.from_array(np.array([0], dtype=np.int64), name="zero"),
