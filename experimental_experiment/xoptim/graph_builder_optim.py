@@ -201,6 +201,18 @@ class GraphBuilderPatternOptimization:
         """
         return self.builder.get_attribute(node, att_name, exc=exc)
 
+    def get_axis(self, node: NodeProto, default_axis: Optional[int] = None) -> int:
+        """
+        Retrieves the axis for many operators.
+        """
+        att = self.get_attribute(node, "axis", exc=False)
+        if att is None:
+            assert (
+                default_axis is not None
+            ), f"Node {node.op_type} has no axis and no default value."
+            return default_axis
+        return att.i
+
     def get_constant_or_attribute(
         self,
         node: NodeProto,

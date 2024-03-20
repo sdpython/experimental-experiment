@@ -3021,11 +3021,14 @@ class GraphBuilder:
                 self.constants_[node.output[0]] = node
                 if not self.has_name(node.output[0]):
                     self.set_name(node.output[0])
+
                 if replaced:
                     self.set_type(node.output[0], self.get_type(node.input[0]))
                     self.set_shape(node.output[0], self.get_shape(node.input[0]))
                 else:
-                    self.set_shape(node.output[0], self.get_shape(node.input[0]))
+                    value = self.get_constant(node.input[0], computed_value=True)
+                    shape = tuple(int(i) for i in value)
+                    self.set_shape(node.output[0], shape)
                     if len(node.attribute) == 0:
                         self.set_type(node.output[0], TensorProto.FLOAT)
                     else:

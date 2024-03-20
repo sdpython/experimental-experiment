@@ -711,9 +711,7 @@ class TestGraphPatternOptimization(ExtTestCase):
                     oh.make_tensor_value_info("X", TFLOAT, [32, 128]),
                     oh.make_tensor_value_info("Y", TFLOAT, [64, 128]),
                 ],
-                [
-                    oh.make_tensor_value_info("Z", TFLOAT, [32, 64]),
-                ],
+                [oh.make_tensor_value_info("Z", TFLOAT, [32, 64])],
             )
         )
         check_model(model)
@@ -1006,9 +1004,7 @@ class TestGraphPatternOptimization(ExtTestCase):
                     oh.make_tensor_value_info("Y", TFLOAT, ["a", 6]),
                 ],
                 [oh.make_tensor_value_info("Z", TFLOAT, ["a", 6])],
-                [
-                    onh.from_array(np.array([1, 6], dtype=np.int64), name="shape"),
-                ],
+                [onh.from_array(np.array([1, 6], dtype=np.int64), name="shape")],
             )
         )
         check_model(model)
@@ -1139,9 +1135,7 @@ class TestGraphPatternOptimization(ExtTestCase):
                     oh.make_tensor_value_info("Y", TFLOAT, [2, 4, 6]),
                 ],
                 [oh.make_tensor_value_info("Z", TFLOAT, [2, 4, 6])],
-                [
-                    onh.from_array(np.array([2, 4, 6], dtype=np.int64), name="shape"),
-                ],
+                [onh.from_array(np.array([2, 4, 6], dtype=np.int64), name="shape")],
             )
         )
         check_model(model)
@@ -1597,9 +1591,7 @@ class TestGraphPatternOptimization(ExtTestCase):
                     oh.make_node("Reshape", ["xr", "shape"], ["Y"]),
                 ],
                 "dummy",
-                [
-                    oh.make_tensor_value_info("X", TFLOAT, [3, 2]),
-                ],
+                [oh.make_tensor_value_info("X", TFLOAT, [3, 2])],
                 [oh.make_tensor_value_info("Y", TFLOAT, [3])],
                 [
                     onh.from_array(np.array([1], dtype=np.int64), name="axes"),
@@ -1633,9 +1625,7 @@ class TestGraphPatternOptimization(ExtTestCase):
                     oh.make_node("Reshape", ["xr", "shape"], ["Y"]),
                 ],
                 "dummy",
-                [
-                    oh.make_tensor_value_info("X", TFLOAT, [4, 3, 2]),
-                ],
+                [oh.make_tensor_value_info("X", TFLOAT, [4, 3, 2])],
                 [oh.make_tensor_value_info("Y", TFLOAT, [3])],
                 [
                     onh.from_array(np.array([0, 2], dtype=np.int64), name="axes"),
@@ -1671,9 +1661,7 @@ class TestGraphPatternOptimization(ExtTestCase):
                     oh.make_node("Cos", ["yr"], ["Y"]),
                 ],
                 "dummy",
-                [
-                    oh.make_tensor_value_info("X", TFLOAT, [3, 2]),
-                ],
+                [oh.make_tensor_value_info("X", TFLOAT, [3, 2])],
                 [oh.make_tensor_value_info("Y", TFLOAT, [1])],
                 [
                     onh.from_array(np.array([], dtype=np.int64), name="shape"),
@@ -1706,9 +1694,7 @@ class TestGraphPatternOptimization(ExtTestCase):
                     oh.make_node("Reshape", ["xr", "shape"], ["Y"]),
                 ],
                 "dummy",
-                [
-                    oh.make_tensor_value_info("X", TFLOAT, [3, 2]),
-                ],
+                [oh.make_tensor_value_info("X", TFLOAT, [3, 2])],
                 [oh.make_tensor_value_info("Y", TFLOAT, [3])],
                 [
                     onh.from_array(np.array([1], dtype=np.int64), name="axes"),
@@ -1821,9 +1807,7 @@ class TestGraphPatternOptimization(ExtTestCase):
                     oh.make_node("Exp", ["xs"], ["Z"]),
                 ],
                 "dummy",
-                [
-                    oh.make_tensor_value_info("X", TFLOAT, [1, 5, 7]),
-                ],
+                [oh.make_tensor_value_info("X", TFLOAT, [1, 5, 7])],
                 [oh.make_tensor_value_info("Z", TFLOAT, [3, 5, 7])],
                 [onh.from_array(np.array([3, 1, 1], dtype=np.int64), name="shape")],
             )
@@ -1854,9 +1838,7 @@ class TestGraphPatternOptimization(ExtTestCase):
                     oh.make_node("Pow", ["xs", "p"], ["Z"]),
                 ],
                 "dummy",
-                [
-                    oh.make_tensor_value_info("X", TFLOAT, [1, 5, 7]),
-                ],
+                [oh.make_tensor_value_info("X", TFLOAT, [1, 5, 7])],
                 [oh.make_tensor_value_info("Z", TFLOAT, [3, 5, 7])],
                 [
                     onh.from_array(np.array([3, 1, 1], dtype=np.int64), name="shape"),
@@ -1890,9 +1872,7 @@ class TestGraphPatternOptimization(ExtTestCase):
                     oh.make_node("Cast", ["xs"], ["Z"], to=TFLOAT16),
                 ],
                 "dummy",
-                [
-                    oh.make_tensor_value_info("X", TFLOAT, [1, 5, 7]),
-                ],
+                [oh.make_tensor_value_info("X", TFLOAT, [1, 5, 7])],
                 [oh.make_tensor_value_info("Z", TFLOAT16, [3, 5, 7])],
                 [onh.from_array(np.array([3, 1, 1], dtype=np.int64), name="shape")],
             )
@@ -1940,9 +1920,7 @@ class TestGraphPatternOptimization(ExtTestCase):
                     oh.make_node("Add", ["x1", "x2"], ["Y"]),
                 ],
                 "dummy",
-                [
-                    oh.make_tensor_value_info("X", TFLOAT, ["a", 8]),
-                ],
+                [oh.make_tensor_value_info("X", TFLOAT, ["a", 8])],
                 [oh.make_tensor_value_info("Y", TFLOAT, ["a", 7])],
                 [
                     onh.from_array(np.array([0], dtype=np.int64), name="zero"),
@@ -1989,6 +1967,85 @@ class TestGraphPatternOptimization(ExtTestCase):
         split = [n for n in onx.graph.node if n.op_type == "Split"]
         self.assertEqual(len(split), 2)
         self._check_with_ort(onx)
+
+    def test_rotary_split_missed(self):
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("Split", ["X", "split"], ["x1", "x2"], axis=1),
+                    oh.make_node("Neg", ["x1"], ["nx1"]),
+                    oh.make_node("ConstantOfShape", ["shape"], ["zero"]),
+                    oh.make_node("Concat", ["nx1", "zero"], ["c1"], axis=1),
+                    oh.make_node("Concat", ["zero", "x2"], ["c2"], axis=1),
+                    oh.make_node("Add", ["c1", "c2"], ["Y"]),
+                ],
+                "dummy",
+                [oh.make_tensor_value_info("X", TFLOAT, ["a", 16])],
+                [oh.make_tensor_value_info("Y", TFLOAT, ["a", 16])],
+                [
+                    onh.from_array(np.array([8, 8], dtype=np.int64), name="split"),
+                    onh.from_array(np.array([3, 16], dtype=np.int64), name="shape"),
+                ],
+            )
+        )
+        feeds = {"X": self._range(3, 16)}
+        ref = ExtendedReferenceEvaluator(model)
+        expected = ref.run(None, feeds)[0]
+
+        gr = GraphBuilder(
+            model,
+            infer_shapes=True,
+            optimization_options=OptimizationOptions(patterns=["RotaryConcatPart"]),
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+        self.assertEqual(
+            ["Split", "Neg", "ConstantOfShape", "Concat", "Concat", "Add"],
+            [n.op_type for n in opt_onx.graph.node],
+        )
+        self.assertEqual(2, len(opt_onx.graph.initializer))
+
+        opt_ref = ExtendedReferenceEvaluator(opt_onx)
+        got = opt_ref.run(None, feeds)[0]
+        self.assertEqualArray(expected, got)
+
+    def test_rotary_split(self):
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("Split", ["X", "split"], ["x1", "x2"], axis=1),
+                    oh.make_node("Neg", ["x1"], ["nx1"]),
+                    oh.make_node("ConstantOfShape", ["shape"], ["zero"]),
+                    oh.make_node("Concat", ["nx1", "zero"], ["c1"], axis=1),
+                    oh.make_node("Concat", ["zero", "x2"], ["c2"], axis=1),
+                    oh.make_node("Add", ["c1", "c2"], ["Y"]),
+                ],
+                "dummy",
+                [oh.make_tensor_value_info("X", TFLOAT, ["a", 16])],
+                [oh.make_tensor_value_info("Y", TFLOAT, ["a", 16])],
+                [
+                    onh.from_array(np.array([8, 8], dtype=np.int64), name="split"),
+                    onh.from_array(np.array([3, 8], dtype=np.int64), name="shape"),
+                ],
+            )
+        )
+        feeds = {"X": self._range(3, 16)}
+        ref = ExtendedReferenceEvaluator(model)
+        expected = ref.run(None, feeds)[0]
+
+        gr = GraphBuilder(
+            model,
+            infer_shapes=True,
+            optimization_options=OptimizationOptions(patterns=["RotaryConcatPart"]),
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+        self.assertEqual(
+            ["Split", "Neg", "Concat"], [n.op_type for n in opt_onx.graph.node]
+        )
+        self.assertEqual(1, len(opt_onx.graph.initializer))
+
+        opt_ref = ExtendedReferenceEvaluator(opt_onx)
+        got = opt_ref.run(None, feeds)[0]
+        self.assertEqualArray(expected, got)
 
 
 if __name__ == "__main__":
