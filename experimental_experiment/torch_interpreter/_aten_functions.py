@@ -1465,16 +1465,11 @@ def aten_index_put(
     new_index = g.op.UnsqueezeAnyOpset(index, np.array([-1], dtype=np.int64), name=name)
 
     if accumulate:
-        # shape_self = g.get_shape(x)
-        # zeros = g.op.ConstantOfShape(
-        #    np.array(shape_self, dtype=np.int64),
-        #    value=from_array(
-        #         np.array([0], dtype=tensor_dtype_to_np_dtype(g.get_type(values)))
-        #     ),
-        #    name=name,
-        # )
-        # result = g.op.ScatterND(zeros, new_index, values, name=name, reduction="add")
-        # res = g.op.Add(result, self, name=name)
+        assert g.main_opset >= 13, (
+            f"index_put cannot be implemented for opset < 13 "
+            f"because ScatterND does not support reduction"
+            f"{g.get_debug_msg()}"
+        )
         res = g.op.ScatterND(
             x, new_index, values, name=name, reduction="add", outputs=outputs
         )

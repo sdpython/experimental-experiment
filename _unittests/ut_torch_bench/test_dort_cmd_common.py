@@ -20,7 +20,7 @@ class TestDortCmdCommond(ExtTestCase):
     def test_get_model(self):
         cf = create_configuration_for_benchmark("llama", "small")
         model, example_args_collection = get_llama_model(**cf)
-        for bck in {"ort", "custom", "plug", "debug", "inductor", "eager"}:
+        for bck in {"ort", "custom", "plug", "debug", "inductor", "eager", "dynger"}:
             cp = create_compiled_model(
                 model,
                 backend=bck,
