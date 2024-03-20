@@ -1970,6 +1970,26 @@ class TestGraphPatternOptimization(ExtTestCase):
         got = opt_ref.run(None, feeds)[0]
         self.assertEqualArray(expected, got)
 
+    def test_slices_split_llama(self):
+        origin = self._get_model("dort-split-custom__0.onnx")
+        split = [n for n in origin.graph.node if n.op_type == "Split"]
+        self.assertEqual(len(split), 0)
+        self._check_with_ort(origin)
+        gr = GraphBuilder(
+            origin,
+            infer_shapes=True,
+            optimization_options=OptimizationOptions(
+                patterns=["SlicesSplit"],
+                verbose=0,
+            ),
+        )
+        gr.set_shape("transpose", (2, 2, 1024, 512))
+        gr.set_shape("transpose_1", (2, 2, 1024, 512))
+        onx = gr.to_onnx(optimize=True)
+        split = [n for n in onx.graph.node if n.op_type == "Split"]
+        self.assertEqual(len(split), 2)
+        self._check_with_ort(onx)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

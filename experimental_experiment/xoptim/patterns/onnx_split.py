@@ -27,6 +27,9 @@ class SlicesSplitPattern(PatternOptimization):
             for op in g.next_nodes(node.input[0])
             if op.op_type == "Slice" and op.domain == ""
         ]
+        if len(users) <= 1:
+            return self.none(node, inspect.currentframe().f_lineno)
+
         if any(map(lambda op: len(op.input) > 4, users)):
             # no step
             return self.none(node, inspect.currentframe().f_lineno)
@@ -56,7 +59,11 @@ class SlicesSplitPattern(PatternOptimization):
 
         if not g.is_constant_scalar(starts[0], 0):
             return self.none(node, inspect.currentframe().f_lineno)
-        if not g.is_constant_scalar(ends[-1], dim):
+        if not g.is_constant_scalar(ends[-1]):
+            return self.none(node, inspect.currentframe().f_lineno)
+        last = g.get_constant_scalar(ends[-1])
+        if last not in (dim, 9223372036854775807):
+            # 9223372036854775807 is what torch uses to specify the end
             return self.none(node, inspect.currentframe().f_lineno)
 
         if any(map(lambda i: not g.is_constant(i), starts)) or any(
@@ -92,8 +99,12 @@ class SlicesSplitPattern(PatternOptimization):
         ends = [op.input[2] for op in nodes]
         cst_starts = [g.get_constant_scalar(a) for a in starts]
         cst_ends = [g.get_constant_scalar(a) for a in ends]
-        n_els = [cst_ends[i] - cst_starts[i] for i in range(len(starts))]
         axis = g.get_constant_scalar(nodes[0].input[3])
+        if cst_ends[-1] == 9223372036854775807:
+            # 9223372036854775807 is what torch uses to specify the end
+            shape = g.get_shape(nodes[0].input[0])
+            cst_ends[-1] = shape[axis]
+        n_els = [cst_ends[i] - cst_starts[i] for i in range(len(starts))]
 
         splits = g.make_initializer("", np.array(n_els, dtype=np.int64))
         outputs = [op.output[0] for op in nodes]
