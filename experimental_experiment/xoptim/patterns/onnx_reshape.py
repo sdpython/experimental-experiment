@@ -61,7 +61,6 @@ class ReduceReshapePattern(PatternOptimization):
             reduced_shape = [s for i, s in enumerate(shape) if i not in set_axes]
             reshaped_shape = g.get_shape(next_node.output[0])
             if reduced_shape != reshaped_shape:
-                print(reduced_shape, reshaped_shape, axes)
                 return self.none(node, inspect.currentframe().f_lineno)
 
         return MatchResult(self, [node, next_node], self.apply, insert_at=node)

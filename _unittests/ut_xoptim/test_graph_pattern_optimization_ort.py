@@ -100,7 +100,6 @@ class TestGraphPatternOptimizationOrt(ExtTestCase):
             if side == "left"
             else {"X": self._range(2, 2, 32, 128), "Y": self._range(2, 2, 64, 128)}
         )
-        print(feeds["X"].shape, feeds["Y"].shape)
         if side == "left":
             assert feeds["X"][0, 0].T @ feeds["Y"][0, 0] is not None
         else:
@@ -176,7 +175,7 @@ class TestGraphPatternOptimizationOrt(ExtTestCase):
         )
         opt_onx = gr.to_onnx(optimize=True)
         self.assertEqual(
-            ["Transpose", "FusedMatMul", "Transpose"],
+            ["Transpose", "Transpose", "FusedMatMul"],
             [n.op_type for n in opt_onx.graph.node],
         )
         self.assertEqual(0, len(opt_onx.graph.initializer))
@@ -186,7 +185,7 @@ class TestGraphPatternOptimizationOrt(ExtTestCase):
         )
         got = opt_ref.run(None, feeds)
         self.assertEqualArray(expected[0], got[0])
-        node = opt_onx.graph.node[1]
+        node = opt_onx.graph.node[2]
         self.assertEqual(node.op_type, "FusedMatMul")
         self.assertEqual(node.domain, "com.microsoft")
         for att in node.attribute:
