@@ -288,6 +288,7 @@ class RotaryConcatPartPattern(PatternOptimization):
                 ]
             )
             neg = neg_left
+
         concat = g.make_node(
             "Concat",
             concat_inputs,
@@ -296,12 +297,16 @@ class RotaryConcatPartPattern(PatternOptimization):
             doc_string=node.doc_string,
             name=f"{cls.__name__}--{node.name}",
         )
+
+        # We still keep the constant in case other node use it.
+        # The algorithm removing the unused nodes will decide
+        # whether or not to keep it.
+
         if is_split:
             assert slice_left is None and slice_right is None
-            return [split, neg, concat]
+            return [cst_left, split, neg, concat]
 
-        assert split is None
-        return [slice_left, slice_right, neg, concat]
+        return [cst_left, slice_left, slice_right, neg, concat]
 
     def match_scatter(
         self,

@@ -10,6 +10,17 @@ from ..xbuilder.type_inference import infer_types
 from .patterns import MatchResult, PatternOptimization, get_default_patterns
 
 
+def _count(matches):
+    stats = {}
+    for n in matches:
+        cl = n[0].__class__.__name__
+        if cl in stats:
+            stats[cl] += 1
+        else:
+            stats[cl] = 1
+    return ", ".join([f"{v}*{k}" for k, v in stats.items()])
+
+
 class GraphBuilderPatternOptimization:
     """
     Implements optimization after the conversion is done.
@@ -667,28 +678,45 @@ class GraphBuilderPatternOptimization:
                             )
                         break
 
+                d = time.perf_counter() - begin
                 statistics.append(
                     dict(
                         pattern=f"match_{pattern}",
                         iteration=it,
                         instances=len(matches) - before,
-                        time_in=time.perf_counter() - begin,
+                        time_in=d,
                         match_index=len(matches),
                     )
+                )
+                durations[pattern.__class__.__name__] = (
+                    durations.get(pattern.__class__.__name__, 0) + d
                 )
 
             if self.verbose > 0 and matches:
                 if durations:
                     rev = max([(v, k) for k, v in durations.items()])
                     revs = f"{rev[-1]}:{rev[0]:.3f}"
+                    if len(matches) == 1:
+                        print(
+                            f"[GraphBuilderPatternOptimization.optimize] applies "
+                            f"{len(matches)} matches, [0]={str(matches[0][-1])} - "
+                            f"time={sum(durations.values()):.3f} | max_time={revs}"
+                        )
+                    else:
+                        print(
+                            f"[GraphBuilderPatternOptimization.optimize] applies "
+                            f"{len(matches)} matches, {_count(matches)} - "
+                            f"time={sum(durations.values()):.3f} | max_time={revs}"
+                        )
+                elif len(matches) == 1:
                     print(
-                        f"[GraphBuilderPatternOptimization.optimize] applies {len(matches)} matches, "
-                        f"[0]={str(matches[0][-1])} - time={sum(durations.values()):.3f} | max_time={revs}"
+                        f"[GraphBuilderPatternOptimization.optimize] applies "
+                        f"{len(matches)} matches, [0]={str(matches[0][-1])}"
                     )
                 else:
                     print(
-                        f"[GraphBuilderPatternOptimization.optimize] applies {len(matches)} matches, "
-                        f"[0]={str(matches[0][-1])}"
+                        f"[GraphBuilderPatternOptimization.optimize] applies "
+                        f"{len(matches)} matches, {_count(matches)}"
                     )
 
             # applies patterns (they must be disjoined)
