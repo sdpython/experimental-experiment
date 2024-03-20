@@ -194,6 +194,69 @@ class TestGraphPatternOptimizationOrt(ExtTestCase):
             elif att.name == "transB":
                 self.assertEqual(att.i, 1)
 
+    def test_fused_matmul_both_div(self):
+        from onnxruntime import InferenceSession
+
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("Transpose", ["X"], ["xm1"], perm=[0, 1, 3, 2]),
+                    oh.make_node("Transpose", ["Y"], ["ym1"], perm=[0, 1, 3, 2]),
+                    oh.make_node("MatMul", ["xm1", "ym1"], ["zd"]),
+                    oh.make_node("Div", ["zd", "deux"], ["Z"]),
+                ],
+                "dummy",
+                [
+                    oh.make_tensor_value_info("X", TFLOAT, [2, 2, 128, 32]),
+                    oh.make_tensor_value_info("Y", TFLOAT, [2, 2, 64, 128]),
+                ],
+                [
+                    oh.make_tensor_value_info("Z", TFLOAT, [2, 2, 32, 64]),
+                ],
+                [onh.from_array(np.array([2], dtype=np.float32), name="deux")],
+            ),
+            opset_imports=[
+                oh.make_opsetid("", 18),
+                oh.make_opsetid("com.microsoft", 1),
+            ],
+            ir_version=9,
+        )
+        check_model(model)
+        feeds = {"X": self._range(2, 2, 128, 32), "Y": self._range(2, 2, 64, 128)}
+        assert feeds["X"][0, 0].T @ feeds["Y"][0, 0].T is not None
+        ref = InferenceSession(
+            model.SerializeToString(), providers=["CPUExecutionProvider"]
+        )
+        expected = ref.run(None, feeds)
+
+        gr = GraphBuilder(
+            model,
+            infer_shapes=True,
+            optimization_options=OptimizationOptions(patterns=["FusedMatMul"]),
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+        self.assertEqual(
+            ["Transpose", "FusedMatMul"],
+            [n.op_type for n in opt_onx.graph.node],
+        )
+        self.assertEqual(0, len(opt_onx.graph.initializer))
+
+        opt_ref = InferenceSession(
+            model.SerializeToString(), providers=["CPUExecutionProvider"]
+        )
+        got = opt_ref.run(None, feeds)
+        self.assertEqualArray(expected[0], got[0])
+        node = opt_onx.graph.node[1]
+        self.assertEqual(node.op_type, "FusedMatMul")
+        self.assertEqual(node.domain, "com.microsoft")
+        for att in node.attribute:
+            if att.name == "transA":
+                self.assertEqual(att.i, 0)
+            elif att.name == "transB":
+                self.assertEqual(att.i, 1)
+            elif att.name == "alpha":
+                self.assertEqual(att.f, 0.5)
+
     def get_simplified_layer_normalization_model(self, div, dyn):
         model = oh.make_model(
             oh.make_graph(
