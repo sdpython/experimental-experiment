@@ -1981,7 +1981,7 @@ class TestGraphPatternOptimization(ExtTestCase):
                 ],
                 "dummy",
                 [oh.make_tensor_value_info("X", TFLOAT, ["a", 16])],
-                [oh.make_tensor_value_info("Y", TFLOAT, ["a", 16])],
+                [oh.make_tensor_value_info("Y", TFLOAT, ["a", 24])],
                 [
                     onh.from_array(np.array([8, 8], dtype=np.int64), name="split"),
                     onh.from_array(np.array([3, 16], dtype=np.int64), name="shape"),

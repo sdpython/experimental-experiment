@@ -214,16 +214,15 @@ class RotaryConcatPartPattern(PatternOptimization):
         all_inputs = list(concat_left.input) + list(concat_right.input)
         shapes = [g.get_shape(x) for x in all_inputs]
         dims = [s[axis] for s in shapes]
-        if dims[0] + dims[1] != dims[2] + dims[3]:
+        # We know that dims[0] + dims[1] == dims[2] + dims[3], otherwise,
+        # the addition next to Concat would not be possible.
+        # We need now that dims[1] + dims[2] == dims[0] + dims[3],
+        # then dims[1] - dims[0] == dims[3] - dims[2],
+        # then (1) + (2) ==> dims[1] = dims[3]
+        idims = set(d for d in dims if isinstance(d, int))
+        sdims = set(d for d in dims if isinstance(d, str))
+        if len(idims) > 1 or len(sdims) > 2:
             return self.none(node, inspect.currentframe().f_lineno)
-        total = dims[0] + dims[1]
-        bef = g.node_before(all_inputs[0])
-        if bef.op_type == "ConstantOfShape":
-            if dims[1] + dims[2] != total:
-                return self.none(node, inspect.currentframe().f_lineno)
-        else:
-            if dims[0] + dims[3] != total:
-                return self.none(node, inspect.currentframe().f_lineno)
 
         nodes = [
             cst_left,
