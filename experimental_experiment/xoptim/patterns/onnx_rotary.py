@@ -121,6 +121,7 @@ class RotaryConcatPartPattern(PatternOptimization):
         ]
 
         tl = [n for n in concat_right_before if n.op_type == "Neg"]
+        tr = [n for n in concat_left_before if n.op_type == "Neg"]
         if tl:
             neg_left = None
             neg_right = tl[0]
@@ -137,7 +138,7 @@ class RotaryConcatPartPattern(PatternOptimization):
             right_ = g.node_before(neg_right.input[0])
             slice_right = None if right_.op_type == "Split" else right_
             split_right = right_ if right_.op_type == "Split" else None
-        else:
+        elif tr:
             neg_left = [n for n in concat_left_before if n.op_type == "Neg"][0]
             neg_right = None
 
@@ -153,6 +154,8 @@ class RotaryConcatPartPattern(PatternOptimization):
                 return self.none(node, inspect.currentframe().f_lineno)
             slice_right = slice_right[0] if slice_right else None
             split_right = split_right[0] if split_right else None
+        else:
+            return self.none(node, inspect.currentframe().f_lineno)
 
         if (
             (slice_left is None and slice_right is not None)
