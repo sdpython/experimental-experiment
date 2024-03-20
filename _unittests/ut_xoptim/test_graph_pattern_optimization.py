@@ -1931,6 +1931,45 @@ class TestGraphPatternOptimization(ExtTestCase):
         self._check_with_ort(onx)
         check_model(onx)
 
+    def test_slices_split(self):
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("Slice", ["X", "zero", "sept", "un"], ["x1"]),
+                    oh.make_node("Slice", ["X", "sept", "huit", "un"], ["x2"]),
+                    oh.make_node("Add", ["x1", "x2"], ["Y"]),
+                ],
+                "dummy",
+                [
+                    oh.make_tensor_value_info("X", TFLOAT, ["a", 8]),
+                ],
+                [oh.make_tensor_value_info("Y", TFLOAT16, ["a", 7])],
+                [
+                    onh.from_array(np.array([0], dtype=np.int64), name="zero"),
+                    onh.from_array(np.array([1], dtype=np.int64), name="un"),
+                    onh.from_array(np.array([7], dtype=np.int64), name="sept"),
+                    onh.from_array(np.array([8], dtype=np.int64), name="huit"),
+                ],
+            )
+        )
+        check_model(model)
+        feeds = {"X": self._range(11, 8)}
+        ref = ExtendedReferenceEvaluator(model)
+        expected = ref.run(None, feeds)[0]
+
+        gr = GraphBuilder(
+            model,
+            infer_shapes=True,
+            optimization_options=OptimizationOptions(patterns=["SlicesSplit"]),
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+        self.assertEqual(["Split", "Add"], [n.op_type for n in opt_onx.graph.node])
+        self.assertEqual(1, len(opt_onx.graph.initializer))
+
+        opt_ref = ExtendedReferenceEvaluator(opt_onx)
+        got = opt_ref.run(None, feeds)[0]
+        self.assertEqualArray(expected, got)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

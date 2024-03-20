@@ -110,6 +110,12 @@ RotaryConcatPartPattern
 .. autoclass:: experimental_experiment.xoptim.patterns.RotaryConcatPartPattern
     :members:
 
+SlicesplitPattern
++++++++++++++++++
+
+.. autoclass:: experimental_experiment.xoptim.patterns.SlicesplitPattern
+    :members:
+
 Sub1MulPattern
 ++++++++++++++
 

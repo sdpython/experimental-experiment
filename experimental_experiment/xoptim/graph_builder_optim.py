@@ -132,6 +132,7 @@ class GraphBuilderPatternOptimization:
             return False
         cst = self.get_computed_constant(name)
         if hasattr(cst, "numpy"):
+            # This could fail xith bfloat16, ...
             cst = cst.detach().cpu().numpy()
         assert isinstance(
             cst, np.ndarray
@@ -142,6 +143,26 @@ class GraphBuilderPatternOptimization:
         if value is None:
             return True
         return all(cst == value)
+
+    def get_constant_scalar(self, name: str) -> Union[int, float]:
+        """
+        Returns a scalar as a constant.
+
+        :param name: name
+        :return: int or float
+        """
+        cst = self.get_computed_constant(name)
+        if hasattr(cst, "numpy"):
+            # This could fail xith bfloat16, ...
+            cst = cst.detach().cpu().numpy()
+        assert isinstance(
+            cst, np.ndarray
+        ), f"Unexpected type for constant {name}!r, type is {type(cst)}"
+        shape = cst.shape
+        value = cst[0] if shape == (1,) else cst
+        if value.dtype in {np.float32, np.float16, np.float64}:
+            return float(value)
+        return int(value)
 
     def get_computed_constant(
         self, name: str, statistics: Optional[List[str]] = None

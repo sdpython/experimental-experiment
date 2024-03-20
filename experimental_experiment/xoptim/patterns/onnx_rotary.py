@@ -214,6 +214,7 @@ class RotaryConcatPartPattern(PatternOptimization):
             node.output,
             axis=int(axis),
             doc_string=node.doc_string,
+            name=f"{cls.__name__}--{node.name}",
         )
         return [slice_left, slice_right, neg, concat]
 
