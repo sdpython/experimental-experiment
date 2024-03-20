@@ -2815,31 +2815,23 @@ def _aten_slice_scatter_static(
 
     # step 2
 
-    v = (0 if dim < 0 else len(shape)) - dim
-    if v > 1:
-        r = tuple(np.arange(1, v, 1))
-        if isinstance(index_2, str):
-            # dynamic shapes
-            index_base = g.op.Expand(
-                g.op.UnsqueezeAnyOpset(index_2, np.array([1], dtype=np.int64)),
-                np.array(r, dtype=np.int64),
-            )
-        else:
-            index_base = np.expand_dims(index_2, r)
+    resh = g.op.Reshape(index_2, np.array([-1, 1], dtype=np.int64), name=name)
+    if dim == 0:
+        res = g.op.ScatterND(x, resh, src, outputs=outputs, name=name)
     else:
-        index_base = index_2
+        perm = list(range(g.get_rank(x)))
+        perm[0], perm[dim] = perm[dim], perm[0]
+        res = g.op.Transpose(
+            g.op.ScatterND(
+                g.op.Transpose(x, perm=perm, name=name),
+                resh,
+                g.op.Transpose(src, perm=perm, name=name),
+                name=name,
+            ),
+            perm=perm,
+            outputs=outputs,
+        )
 
-    # Step 3: Expand the indices.
-    shape_expand = g.op.ScatterElements(
-        np.array(shape, dtype=np.int64),
-        np.array([dim], dtype=np.int64),
-        np.array([1], dtype=np.int64),
-        name=name,
-    )
-    indices = g.op.Expand(index_base, shape_expand, name=name)
-
-    # Step 4: final ScatterElements.
-    res = g.op.ScatterElements(x, indices, src, axis=dim, name=name)
     if not sts:
         g.set_type(res, g.get_type(x))
         g.set_shape(res, shape)
@@ -2889,26 +2881,23 @@ def _aten_slice_scatter_dynamic(
 
     # step 2
 
-    v = (0 if dim < 0 else g.get_rank(x)) - dim
-    if v > 1:
-        r = tuple(np.arange(1, v, 1))
-        index_base = g.op.Expand(
-            g.op.UnsqueezeAnyOpset(index_2, np.array([1], dtype=np.int64)),
-            np.array(r, dtype=np.int64),
-        )
+    resh = g.op.Reshape(index_2, np.array([-1, 1], dtype=np.int64), name=name)
+    if dim == 0:
+        res = g.op.ScatterND(x, resh, src, outputs=outputs, name=name)
     else:
-        index_base = index_2
-    # Step 3: Expand the indices.
-    shape_expand = g.op.ScatterElements(
-        shape,
-        np.array([dim], dtype=np.int64),
-        np.array([1], dtype=np.int64),
-        name=name,
-    )
-    indices = g.op.Expand(index_base, shape_expand, name=name)
+        perm = list(range(g.get_rank(x)))
+        perm[0], perm[dim] = perm[dim], perm[0]
+        res = g.op.Transpose(
+            g.op.ScatterND(
+                g.op.Transpose(x, perm=perm, name=name),
+                resh,
+                g.op.Transpose(src, perm=perm, name=name),
+                name=name,
+            ),
+            perm=perm,
+            outputs=outputs,
+        )
 
-    # Step 4: final step
-    res = g.op.ScatterElements(x, indices, src, axis=dim, name=name)
     if not sts:
         g.set_type(res, g.get_type(x))
         g.set_rank(res, g.get_rank(x))
