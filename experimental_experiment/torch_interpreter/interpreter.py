@@ -889,6 +889,8 @@ class DynamoInterpreter:
             if isinstance(val, (tuple, list)):
                 # Type list comes from SplitToSequence.
                 return tuple((None if v is None else v.dtype) for v in val)
+            if isinstance(val, self.torch.SymInt):
+                return self.torch.SymInt
             exa = node.meta.get("example_value", None)
             assert exa is None or val.dtype == exa.dtype, (
                 f"dtype inconsistency (val, example_value) "
