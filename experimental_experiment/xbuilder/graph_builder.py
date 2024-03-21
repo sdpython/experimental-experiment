@@ -1035,7 +1035,8 @@ class GraphBuilder:
         else:
             raise RuntimeError(
                 f"Initializer name={name!r}, "
-                f"unexpected type {type(value)} for value={value!r} ({msg})."
+                f"unexpected type {type(value)} for value={value!r} ({msg})"
+                f"{self.get_debug_msg()}"
             )
 
         key = self.make_key(value)

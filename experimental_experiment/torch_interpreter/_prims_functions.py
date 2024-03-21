@@ -285,6 +285,20 @@ def prims_exp(
     return aten_exp(g, sts, outputs, x, name=name)
 
 
+def prims_ge(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    y: T,
+    name: str = "prims_ge",
+) -> T:
+    "less"
+    from ._aten_functions import aten_ge
+
+    return aten_ge(g, sts, outputs, x, y, name=name)
+
+
 def prims_gt(
     g: GraphBuilder,
     sts: Optional[Dict[str, Any]],

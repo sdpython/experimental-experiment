@@ -1,3 +1,4 @@
+import itertools
 import unittest
 from experimental_experiment.ext_test_case import ExtTestCase, skipif_ci_windows
 from experimental_experiment.torch_bench._dort_cmd_common import (
@@ -43,6 +44,16 @@ class TestDortCmdCommond(ExtTestCase):
             ),
             ValueError,
         )
+
+    def test_create_many_configurations(self):
+        for model, impl, mask in itertools.product(
+            ["llama", "mistral", "phi"], ["eager", "sdpa"], [False, True]
+        ):
+            with self.subTest(model=model, impl=impl, mask=mask):
+                d = create_configuration_for_benchmark(
+                    model="llama", config="medium", implementation=impl, with_mask=mask
+                )
+                self.assertNotEmpty(d)
 
 
 if __name__ == "__main__":

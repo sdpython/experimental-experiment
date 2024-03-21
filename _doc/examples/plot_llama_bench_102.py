@@ -43,9 +43,12 @@ parsed_args = get_parsed_args(
     check=(0, "just check the script is working, ignores all other parameters"),
     config=("medium", "configuration to use, default or medium"),
     patterns=("none,default,default+onnxruntime", "optimization patterns to use"),
+    implementation=("eager", "eager or sdpa"),
+    with_mask=(1, "with or without a second input (mask"),
     disable_pattern=("none", "pattern or patterns to disable"),
     expose="backend,device,num_hidden_layers,mixed,scipt_name,repeat,"
-    "warmup,dump,check,config,patterns,dynamic,disable_pattern,model",
+    "warmup,dump,check,config,patterns,dynamic,disable_pattern,model"
+    "implementation,with_mask",
 )
 
 import onnxruntime  # noqa: F401
@@ -77,6 +80,8 @@ def make_config(
     warmup,
     pattern,
     disable_pattern,
+    implementation,
+    with_mask,
     existing=None,
 ):
     cf = dict(
@@ -89,6 +94,8 @@ def make_config(
         dynamic=dynamic,
         config=config,
         warmup=warmup,
+        implementation=implementation,
+        with_mask=with_mask,
     )
 
     if existing and backend != "custom":
@@ -154,6 +161,8 @@ if parsed_args.check not in (1, "1"):
                 pattern=pattern,
                 disable_pattern=parsed_args.disable_pattern,
                 existing=configs,
+                implementation=parsed_args.implementation,
+                with_mask=parsed_args.with_mask,
             )
         )
 else:
@@ -200,6 +209,10 @@ except BenchmarkError as e:
 #########################
 # Let's process the data.
 
+prefix = (
+    f"plot_{parsed_args.model}-{parsed_args.implementation}" f"{parsed_args.with_mask}"
+)
+
 if data_collected:
 
     def clean_pattern(s):
@@ -228,11 +241,11 @@ if data_collected:
     min_eager = df[df.legend.str.contains("eager")]["time"].dropna().min()
     df["increase"] = df["time"] / min_eager - 1
     # df["ERROR"] = df["ERROR"].apply(lambda s: s.replace("\n", " "))
-    filename = f"plot_{parsed_args.model}_bench_with_cmd.csv"
+    filename = f"plot_{prefix}_bench_with_cmd.csv"
     df.to_csv(filename, index=False)
 
     df = df.drop(["CMD"], axis=1)
-    filename = f"plot_{parsed_args.model}_bench.csv"
+    filename = f"plot_{prefix}_bench.csv"
     df.to_csv(filename, index=False)
     df = pandas.read_csv(filename)  # to cast type
     print(df)
@@ -262,18 +275,22 @@ transformers_version = list(set(df["transformers"].dropna()))
 ver = f"{torch_version[0]} - {transformers_version[0]}"
 model = parsed_args.model
 modeldf = list(set(df[model].dropna()))[0]
+title_prefix = (
+    f"{parsed_args.model}-{parsed_args.implementation}-" f"mask{parsed_args.with_mask}"
+)
+
 
 if data_collected:
     fig, ax = plt.subplots(1, 1, figsize=(12, df.shape[0] // 3 + 1))
 
     df = df.sort_values("time").set_index("legend")
     df[["warmup_time"]].plot.barh(
-        ax=ax, title=f"lower better\n{parsed_args.model}\nwarmup time\n{ver}"
+        ax=ax, title=f"lower better\n{title_prefix}\nwarmup time\n{ver}"
     )
     ax.grid(True)
 
     fig.tight_layout()
-    fig.savefig(f"plot_{parsed_args.model}_bench_warmup_time.png")
+    fig.savefig(f"plot_{prefix}_bench_warmup_time.png")
 
 ###############################
 # Plot time.
@@ -282,7 +299,7 @@ if data_collected:
     fig, ax = plt.subplots(1, 1, figsize=(12, df.shape[0] // 3 + 1))
 
     df[["time"]].plot.barh(
-        ax=ax, title=f"lower better\n{parsed_args.model}\niteration time\n{ver}"
+        ax=ax, title=f"lower better\n{title_prefix}\niteration time\n{ver}"
     )
     mi, ma = df["time"].min(), df["time"].max()
     mi = mi - (ma - mi) / 10
@@ -290,7 +307,7 @@ if data_collected:
     ax.grid(True)
 
     fig.tight_layout()
-    fig.savefig(f"plot_{parsed_args.model}_bench_time.png")
+    fig.savefig(f"plot_{prefix}_bench_time.png")
 
 ###############################
 # Plot increase.
@@ -299,9 +316,9 @@ if data_collected:
     fig, ax = plt.subplots(1, 1, figsize=(12, df.shape[0] // 3 + 1))
 
     df[["increase"]].plot.barh(
-        ax=ax, title=f"lower better\n{parsed_args.model}\ncomparison to eager %"
+        ax=ax, title=f"lower better\n{title_prefix}\ncomparison to eager %"
     )
     ax.grid(True)
 
     fig.tight_layout()
-    fig.savefig(f"plot_{parsed_args.model}_bench_relative.png")
+    fig.savefig(f"plot_{prefix}_bench_relative.png")
