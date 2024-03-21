@@ -3,7 +3,7 @@ from experimental_experiment.ext_test_case import ExtTestCase
 
 
 class TestCustomOps(ExtTestCase):
-    def test_llama_sdpa_attention(self):
+    def test_llama_sdpa_model_efficient(self):
         # see https://pytorch.org/tutorials/beginner/onnx/onnx_registry_tutorial.html
         # python -m pip install torch_ort
         # python -m torch_ort configure
@@ -217,7 +217,7 @@ class TestCustomOps(ExtTestCase):
 
         local_aot_ort, _ = make_aot_ort(
             dynamic=False,  # True,
-            rewrite=False,  # True,
+            rewrite=True,  # True,
             aten_conversion_changes=aten_conversion_changes,
             verbose=1,
         )
