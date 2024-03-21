@@ -1446,7 +1446,7 @@ def aten_index_put(
     g: GraphBuilder,
     sts: Optional[Dict[str, Any]],
     outputs: List[str],
-    self: T,
+    x: T,
     indices: List[T],
     values: T,
     accumulate: bool = False,
@@ -1459,30 +1459,27 @@ def aten_index_put(
     assert (
         len(indices) == 1
     ), f"Not implementeded for indices={indices}{g.get_debug_msg()}"
-    assert g.has_shape(self), f"Missing shape for {self!r}{g.get_debug_msg()}"
+    assert g.has_shape(x), f"Missing shape for {x!r}{g.get_debug_msg()}"
 
     index = indices[0]  # tensor
     new_index = g.op.UnsqueezeAnyOpset(index, np.array([-1], dtype=np.int64), name=name)
 
-    shape_self = g.get_shape(self)
-
     if accumulate:
-        zeros = g.op.ConstantOfShape(
-            np.array(shape_self, dtype=np.int64),
-            value=from_array(
-                np.array([0], dtype=tensor_dtype_to_np_dtype(g.get_type(values)))
-            ),
-            name=name,
+        assert g.main_opset >= 13, (
+            f"index_put cannot be implemented for opset < 13 "
+            f"because ScatterND does not support reduction"
+            f"{g.get_debug_msg()}"
         )
-        result = g.op.ScatterND(zeros, new_index, values, name=name, reduction="add")
-        res = g.op.Add(result, self, name=name)
+        res = g.op.ScatterND(
+            x, new_index, values, name=name, reduction="add", outputs=outputs
+        )
     else:
-        res = g.op.ScatterND(self, new_index, values, name=name)
+        res = g.op.ScatterND(x, new_index, values, name=name, outputs=outputs)
 
     if not sts:
-        g.set_type(res, g.get_type(self))
-        g.set_shape(res, g.get_shape(self))
-    return result
+        g.set_type(res, g.get_type(x))
+        g.set_shape(res, g.get_shape(x))
+    return res
 
 
 def aten__unsafe_index_put(

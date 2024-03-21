@@ -41,6 +41,7 @@ def create_compiled_model(
     from experimental_experiment.torch_helper.training_helper import make_aot_ort
     from experimental_experiment.torch_dynamo import (
         get_decomposition_table,
+        dynger_backend,
         onnx_custom_backend,
         onnx_debug_backend,
     )
@@ -126,6 +127,20 @@ def create_compiled_model(
         )
         if return_storage:
             return cc, storage
+        return cc
+
+    if backend == "dynger":
+        aot_compiler = aot_autograd(
+            fw_compiler=lambda *args, **kwargs: dynger_backend(
+                *args, verbose=verbose, optimize=optimize, **kwargs
+            ),
+            decompositions=get_decomposition_table(),
+        )
+        cc = torch.compile(
+            model, backend=aot_compiler, fullgraph=True, dynamic=use_dynamic
+        )
+        if return_storage:
+            return cc, None
         return cc
 
     raise ValueError(f"Unexpected backend={backend!r}.")
