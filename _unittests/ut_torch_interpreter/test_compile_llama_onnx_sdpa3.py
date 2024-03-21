@@ -179,6 +179,7 @@ class TestDynamoLlamaSdpa3(ExtTestCase):
             max_position_embeddings=1024,
             num_attention_heads=2,
             _attn_implementation="eager",
+            with_mask=False,
         )
         self.common_test_model(
             model,

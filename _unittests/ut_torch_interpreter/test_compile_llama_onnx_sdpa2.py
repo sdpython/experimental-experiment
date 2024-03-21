@@ -174,7 +174,7 @@ class TestDynamoLlamaSdpa2(ExtTestCase):
 
         input_dims = self.get_input_dims(True)
         model, example_args_collection = get_llama_decoder(
-            input_dims=input_dims, _attn_implementation="sdpa"
+            input_dims=input_dims, _attn_implementation="sdpa", with_mask=False
         )
         self.common_test_model(
             model,
@@ -195,7 +195,7 @@ class TestDynamoLlamaSdpa2(ExtTestCase):
 
         input_dims = self.get_input_dims(False)
         model, example_args_collection = get_llama_model(
-            input_dims=input_dims, _attn_implementation="sdpa"
+            input_dims=input_dims, _attn_implementation="sdpa", with_mask=False
         )
         self.common_test_model(
             model,
@@ -221,6 +221,7 @@ class TestDynamoLlamaSdpa2(ExtTestCase):
             max_position_embeddings=1024,
             num_attention_heads=2,
             _attn_implementation="eager",
+            with_mask=False,
         )
         self.common_test_model(
             model,
