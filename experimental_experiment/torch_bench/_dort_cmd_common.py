@@ -41,6 +41,7 @@ def create_compiled_model(
     from experimental_experiment.torch_helper.training_helper import make_aot_ort
     from experimental_experiment.torch_dynamo import (
         get_decomposition_table,
+        dynger_backend,
         onnx_custom_backend,
         onnx_debug_backend,
     )
@@ -128,6 +129,20 @@ def create_compiled_model(
             return cc, storage
         return cc
 
+    if backend == "dynger":
+        aot_compiler = aot_autograd(
+            fw_compiler=lambda *args, **kwargs: dynger_backend(
+                *args, verbose=verbose, optimize=optimize, **kwargs
+            ),
+            decompositions=get_decomposition_table(),
+        )
+        cc = torch.compile(
+            model, backend=aot_compiler, fullgraph=True, dynamic=use_dynamic
+        )
+        if return_storage:
+            return cc, None
+        return cc
+
     raise ValueError(f"Unexpected backend={backend!r}.")
 
 
@@ -153,9 +168,10 @@ def dort_args(name: str, description: str):
         disable_pattern=("", "a list of optimization patterns to disable"),
         enable_pattern=("default", "list of optimization patterns to enable"),
         optimize=(1, "optimize the model"),
+        with_mask=(1, "with or without mask, dynamo may fail with a mask"),
         expose="backend,repeat,warmup,device,num_hidden_layers,"
         "mixed,export,config,target_opset,dynamic,verbose,"
-        "enable_pattern,disable_pattern,model,optimize",
+        "enable_pattern,disable_pattern,model,optimize,with_mask",
     )
     return args
 
@@ -180,9 +196,10 @@ def export_args(name: str, description: str):
         disable_pattern=("", "a list of optimization patterns to disable"),
         enable_pattern=("default", "list of optimization patterns to enable"),
         optimize=(1, "optimize the model"),
+        with_mask=(1, "with or without mask, dynamo may fail with a mask"),
         expose="exporter,device,num_hidden_layers,ort,"
         "mixed,config,target_opset,dynamic,verbose,"
-        "enable_pattern,disable_pattern,model,optimize",
+        "enable_pattern,disable_pattern,model,optimize,with_mask",
     )
     return args
 
@@ -194,6 +211,7 @@ def create_configuration_for_benchmark(
     warmup: int = 3,
     num_hidden_layers: int = 1,
     implementation: str = "eager",
+    with_mask: bool = True,
 ) -> Dict[str, Union[str, int, List[Tuple[int, int]]]]:
     """
     Creates a model based on the given configuration.
@@ -204,6 +222,7 @@ def create_configuration_for_benchmark(
     :param repeat: number of repetition
     :param num_hidden_layers: number of hidden layers
     :param implementation: implementation
+    :param with_mask: use a mask
     :return: dictionary
     """
     fcts = {
@@ -218,6 +237,7 @@ def create_configuration_for_benchmark(
         warmup=warmup,
         num_hidden_layers=num_hidden_layers,
         implementation=implementation,
+        with_mask=with_mask,
     )
 
 
@@ -226,6 +246,10 @@ def create_model(
 ) -> Tuple[Any, List[Tuple[Any, ...]]]:
     """
     Returns a model and a list of inputs.
+
+    :param model: model name
+    :param config_dict: configuration
+    :return: model, list of inputs
     """
 
     if model == "llama":

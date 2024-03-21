@@ -93,6 +93,15 @@ class RotaryConcatPartPattern(PatternOptimization):
             return self.none(node, inspect.currentframe().f_lineno)
         if len(concat_left.input) != 2 or len(concat_right.input) != 2:
             return self.none(node, inspect.currentframe().f_lineno)
+        axis1 = g.get_axis(concat_left, 0)
+        axis2 = g.get_axis(concat_right, 0)
+        if axis1 != axis2:
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        # checking every result has shapes
+        all_inputs = list(concat_left.input) + list(concat_right.input)
+        if any(map(lambda x: not g.has_shape(x), all_inputs)):
+            return self.none(node, inspect.currentframe().f_lineno)
 
         concat_left_before = [g.node_before(i) for i in concat_left.input]
         concat_right_before = [g.node_before(i) for i in concat_right.input]
@@ -110,59 +119,114 @@ class RotaryConcatPartPattern(PatternOptimization):
         cst_right = [n for n in concat_right_before if n.op_type == "ConstantOfShape"][
             0
         ]
-        if cst_left.output[0] == cst_right.output[0] and not g.is_used_only_by(
-            cst_left.output[0], concat_left, concat_right
-        ):
-            # Node ConstantOfShape could be fused into a single one.
-            return self.none(node, inspect.currentframe().f_lineno)
-        if cst_left.output[0] != cst_right.output[0] and (
-            g.is_used_more_than_once(cst_left.output[0])
-            or g.is_used_more_than_once(cst_right.output[0])
-        ):
-            # Node ConstantOfShape are distinct, we check they are only used once.
-            return self.none(node, inspect.currentframe().f_lineno)
 
         tl = [n for n in concat_right_before if n.op_type == "Neg"]
+        tr = [n for n in concat_left_before if n.op_type == "Neg"]
         if tl:
             neg_left = None
             neg_right = tl[0]
-            slice_left = [n for n in concat_left_before if n.op_type == "Slice"][0]
-            slice_right = g.node_before(neg_right.input[0])
-        else:
+
+            slice_left = [n for n in concat_left_before if n.op_type == "Slice"]
+            split_left = [n for n in concat_left_before if n.op_type == "Split"]
+            if (len(slice_left) == 0 and len(split_left) == 0) or (
+                len(slice_left) > 0 and len(split_left) > 0
+            ):
+                return self.none(node, inspect.currentframe().f_lineno)
+            slice_left = slice_left[0] if slice_left else None
+            split_left = split_left[0] if split_left else None
+
+            right_ = g.node_before(neg_right.input[0])
+            slice_right = None if right_.op_type == "Split" else right_
+            split_right = right_ if right_.op_type == "Split" else None
+        elif tr:
             neg_left = [n for n in concat_left_before if n.op_type == "Neg"][0]
             neg_right = None
-            slice_left = g.node_before(neg_left.input[0])
-            slice_right = [n for n in concat_right_before if n.op_type == "Slice"][0]
 
-        if slice_left.input[0] != slice_right.input[0]:
+            left_ = g.node_before(neg_left.input[0])
+            slice_left = None if left_.op_type == "Split" else left_
+            split_left = left_ if left_.op_type == "Split" else None
+
+            slice_right = [n for n in concat_right_before if n.op_type == "Slice"]
+            split_right = [n for n in concat_right_before if n.op_type == "Split"]
+            if (len(slice_right) == 0 and len(split_right) == 0) or (
+                len(slice_right) > 0 and len(split_right) > 0
+            ):
+                return self.none(node, inspect.currentframe().f_lineno)
+            slice_right = slice_right[0] if slice_right else None
+            split_right = split_right[0] if split_right else None
+        else:
             return self.none(node, inspect.currentframe().f_lineno)
 
-        slice_left_def = [g.get_computed_constant(i) for i in slice_left.input[1:]]
-        slice_right_def = [g.get_computed_constant(i) for i in slice_right.input[1:]]
-        if len(slice_left_def) != 3 or len(slice_right_def) != 3:
-            return self.none(node, inspect.currentframe().f_lineno)
-        if slice_left_def[2].tolist() != slice_right_def[2].tolist():
-            # axis are different
-            return self.none(node, inspect.currentframe().f_lineno)
-        lengths = {len(v) for v in slice_left_def} | {len(v) for v in slice_right_def}
-        if lengths != {1}:
-            # more than one axis
+        if (
+            (slice_left is None and slice_right is not None)
+            or (slice_left is not None and slice_right is None)
+            or (split_left is None and split_right is not None)
+            or (split_left is not None and split_right is None)
+        ):
             return self.none(node, inspect.currentframe().f_lineno)
 
-        axis = slice_left_def[2][0]
-        dim_left = slice_left_def[1][0] - slice_left_def[0][0]
-        dim_right = slice_right_def[1][0] - slice_right_def[0][0]
+        is_slice = slice_left is not None
+        if is_slice:
+            if slice_left.input[0] != slice_right.input[0]:
+                return self.none(node, inspect.currentframe().f_lineno)
 
-        shape_left = g.get_computed_constant(cst_left.input[0])
-        shape_right = g.get_computed_constant(cst_right.input[0])
-        cdim_left = shape_left[axis]
-        cdim_right = shape_right[axis]
+            slice_left_def = [g.get_computed_constant(i) for i in slice_left.input[1:]]
+            slice_right_def = [
+                g.get_computed_constant(i) for i in slice_right.input[1:]
+            ]
+            if len(slice_left_def) != 3 or len(slice_right_def) != 3:
+                return self.none(node, inspect.currentframe().f_lineno)
+            if slice_left_def[2].tolist() != slice_right_def[2].tolist():
+                # axis are different
+                return self.none(node, inspect.currentframe().f_lineno)
+            lengths = {len(v) for v in slice_left_def} | {
+                len(v) for v in slice_right_def
+            }
+            if lengths != {1}:
+                # more than one axis
+                return self.none(node, inspect.currentframe().f_lineno)
 
-        if dim_left != cdim_right or dim_right != cdim_left:
+            axis = slice_left_def[2][0]
+            dim_left = slice_left_def[1][0] - slice_left_def[0][0]
+            dim_right = slice_right_def[1][0] - slice_right_def[0][0]
+
+            shape_left = g.get_computed_constant(cst_left.input[0])
+            shape_right = g.get_computed_constant(cst_right.input[0])
+            cdim_left = shape_left[axis]
+            cdim_right = shape_right[axis]
+
+            if dim_left != cdim_right or dim_right != cdim_left:
+                return self.none(node, inspect.currentframe().f_lineno)
+        else:
+            if id(split_left) != id(split_right):
+                # not the same split
+                return self.none(node, inspect.currentframe().f_lineno)
+            if len(split_left.output) != 2:
+                return self.none(node, inspect.currentframe().f_lineno)
+            axis = g.get_axis(split_left, 0)
+            axis1 = g.get_axis(concat_left, 0)
+            axis2 = g.get_axis(concat_right, 0)
+            if len(set([axis, axis1, axis2])) != 1:
+                return self.none(node, inspect.currentframe().f_lineno)
+
+        # last check about size.
+        axis = g.get_axis(concat_left, 0)
+        all_inputs = list(concat_left.input) + list(concat_right.input)
+        shapes = [g.get_shape(x) for x in all_inputs]
+        dims = [s[axis] for s in shapes]
+        # We know that dims[0] + dims[1] == dims[2] + dims[3], otherwise,
+        # the addition next to Concat would not be possible.
+        # We need now that dims[1] + dims[2] == dims[0] + dims[3],
+        # then dims[1] - dims[0] == dims[3] - dims[2],
+        # then (1) + (2) ==> dims[1] = dims[3]
+        idims = set(d for d in dims if isinstance(d, int))
+        sdims = set(d for d in dims if isinstance(d, str))
+        if len(idims) > 1 or len(sdims) > 2:
             return self.none(node, inspect.currentframe().f_lineno)
 
         nodes = [
             cst_left,
+            split_left,
             slice_left,
             neg_left,
             concat_left,
@@ -180,6 +244,7 @@ class RotaryConcatPartPattern(PatternOptimization):
         cls,
         g: "GraphBuilder",  # noqa: F821
         cst_left: NodeProto,
+        split: NodeProto,
         slice_left: NodeProto,
         neg_left: Optional[NodeProto],
         concat_left: NodeProto,
@@ -189,33 +254,61 @@ class RotaryConcatPartPattern(PatternOptimization):
         concat_right: NodeProto,
         node: NodeProto,
     ) -> List[NodeProto]:
-        axis = g.get_computed_constant(slice_left.input[3])[0]
+        is_split = split is not None
+        if is_split:
+            axis = g.get_attribute(split, "axis").i
+        else:
+            axis = g.get_computed_constant(slice_left.input[3])[0]
+
         if neg_left is None:
             neg_out = neg_right.output[0]
             pos = list(concat_right.input).index(neg_out)
             concat_inputs = (
-                [neg_right.output[0], slice_left.output[0]]
+                [
+                    neg_right.output[0],
+                    split.output[0] if is_split else slice_left.output[0],
+                ]
                 if pos == 0
-                else [slice_left.output[0], neg_right.output[0]]
+                else [
+                    split.output[0] if is_split else slice_left.output[0],
+                    neg_right.output[0],
+                ]
             )
             neg = neg_right
         else:
             neg_out = neg_left.output[0]
             pos = list(concat_left.input).index(neg_out)
             concat_inputs = (
-                [neg_left.output[0], slice_right.output[0]]
+                [
+                    neg_left.output[0],
+                    split.output[1] if is_split else slice_right.output[0],
+                ]
                 if pos == 0
-                else [slice_right.output[0], neg_left.output[0]]
+                else [
+                    split.output[1] if is_split else slice_right.output[0],
+                    neg_left.output[0],
+                ]
             )
             neg = neg_left
+
         concat = g.make_node(
             "Concat",
             concat_inputs,
             node.output,
             axis=int(axis),
             doc_string=node.doc_string,
+            name=f"{cls.__name__}--{node.name}",
         )
-        return [slice_left, slice_right, neg, concat]
+
+        # We still keep the constant in case other node use it.
+        # The algorithm removing the unused nodes will decide
+        # whether or not to keep it.
+
+        if is_split:
+            assert slice_left is None and slice_right is None
+            return [cst_left, split, neg, concat]
+
+        return [cst_left, slice_left, slice_right, neg, concat]
 
     def match_scatter(
         self,
@@ -281,7 +374,7 @@ class RotaryConcatPartPattern(PatternOptimization):
             node,
         ]
 
-        # still returning None for the time begin
+        # still returning None for the time being
         if nodes:
             return self.none(node, inspect.currentframe().f_lineno)
 

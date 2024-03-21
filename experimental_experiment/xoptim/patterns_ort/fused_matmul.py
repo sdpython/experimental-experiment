@@ -63,8 +63,17 @@ class FusedMatMulPattern(PatternOptimization):
         if nodes[0] is not None and nodes[1] is not None:
             # Both are available, we only transpose one.
             nodes[0] = None
+        if not g.is_used_more_than_once(node.output[0]):
+            next_node = g.next_node(node.output[0])
+            if (
+                next_node.op_type in {"Div", "Mul"}
+                and next_node.domain == ""
+                and g.is_constant_scalar(next_node.input[1])
+            ):
+                # The node can be fused with matmul
+                nodes.append(next_node)
 
-        return MatchResult(self, nodes, self.apply, insert_at=node)
+        return MatchResult(self, nodes, self.apply)
 
     @classmethod
     def apply(
@@ -73,6 +82,7 @@ class FusedMatMulPattern(PatternOptimization):
         node_before_left: Optional[NodeProto],
         node_before_right: Optional[NodeProto],
         node: NodeProto,
+        scale: Optional[NodeProto] = None,
     ) -> List[NodeProto]:
 
         inputs = [
@@ -106,17 +116,35 @@ class FusedMatMulPattern(PatternOptimization):
                     f"Unexpected attribute {att.name!r}={att} for node={node}"
                 )
 
-        new_node = g.make_node(
-            "FusedMatMul",
-            inputs,
-            node.output,
-            name=f"{cls.__name__}--{node.name}",
+        kwargs = dict(
             transA=transA,
             transB=transB,
             transBatchA=transBatchA,
             transBatchB=transBatchB,
+        )
+
+        if scale is not None:
+            # Let's include the scale as well
+            cst = g.get_computed_constant(scale.input[1])
+            value = float(cst[0] if cst.shape == (1,) else cst)
+            assert scale.op_type in {
+                "Div",
+                "Mul",
+            }, f"Match did not check next_node type {scale.op_type!r}"
+            alpha = value if scale.op_type == "Mul" else (1.0 / value)
+            kwargs["alpha"] = alpha
+            output = scale.output[0]
+        else:
+            output = node.output[0]
+
+        new_node = g.make_node(
+            "FusedMatMul",
+            inputs,
+            [output],
+            name=f"{cls.__name__}--{node.name}",
             doc_string=node.doc_string,
             domain="com.microsoft",
+            **kwargs,
         )
         new_node.attribute.extend(keep)
         res = [new_node]

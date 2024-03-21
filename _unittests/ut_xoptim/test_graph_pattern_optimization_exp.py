@@ -14,6 +14,8 @@ from experimental_experiment.xbuilder._onnx_helper import (
 )
 from experimental_experiment.reference import ExtendedReferenceEvaluator
 
+TFLOAT = TensorProto.FLOAT
+
 
 class TestGraphPatternOptimizationExp(ExtTestCase):
     def _range(self, *shape, bias: float = None):
@@ -69,11 +71,9 @@ class TestGraphPatternOptimizationExp(ExtTestCase):
                     oh.make_tensor_value_info(
                         "indices", TensorProto.INT64, [None, None]
                     ),
-                    oh.make_tensor_value_info(
-                        "updates", TensorProto.FLOAT, [None, None, None]
-                    ),
+                    oh.make_tensor_value_info("updates", TFLOAT, [None, None, None]),
                 ],
-                [oh.make_tensor_value_info("Z", TensorProto.FLOAT, [None, None, None])],
+                [oh.make_tensor_value_info("Z", TFLOAT, [None, None, None])],
             ),
             opset_imports=[
                 oh.make_opsetid("", 18),

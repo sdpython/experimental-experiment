@@ -31,6 +31,9 @@ from experimental_experiment.xbuilder.shape_helper import (
 )
 from experimental_experiment.xoptim.patterns import get_pattern_list
 
+TFLOAT = TensorProto.FLOAT
+TFLOAT16 = TensorProto.FLOAT16
+
 
 class TestGraphPatternOptimization(ExtTestCase):
     def test_get_pattern_list(self):
@@ -121,7 +124,7 @@ class TestGraphPatternOptimization(ExtTestCase):
         gr = GraphBuilder(origin)
         gro = GraphBuilderPatternOptimization(gr)
         dtype = gro.try_infer_type("_onx_mul028", exc=True)
-        self.assertEqual(dtype, TensorProto.FLOAT)
+        self.assertEqual(dtype, TFLOAT)
 
     def test_shape_inference0(self):
         origin = self._get_model("dort-c-custom__0.onnx")
@@ -210,10 +213,10 @@ class TestGraphPatternOptimization(ExtTestCase):
                 ],
                 "dummy",
                 [
-                    oh.make_tensor_value_info("X", TensorProto.FLOAT, [32, 128]),
-                    oh.make_tensor_value_info("Y", TensorProto.FLOAT, [3, 5, 128, 64]),
+                    oh.make_tensor_value_info("X", TFLOAT, [32, 128]),
+                    oh.make_tensor_value_info("Y", TFLOAT, [3, 5, 128, 64]),
                 ],
-                [oh.make_tensor_value_info("Z", TensorProto.FLOAT, [3, 5, 32, 64])],
+                [oh.make_tensor_value_info("Z", TFLOAT, [3, 5, 32, 64])],
                 [
                     onh.from_array(np.array([0], dtype=np.int64), name="zero"),
                     onh.from_array(np.array([1], dtype=np.int64), name="un"),
@@ -274,14 +277,14 @@ class TestGraphPatternOptimization(ExtTestCase):
                 ],
                 "dummy",
                 [
-                    oh.make_tensor_value_info("X", TensorProto.FLOAT, ["D32", "D128"]),
+                    oh.make_tensor_value_info("X", TFLOAT, ["D32", "D128"]),
                     oh.make_tensor_value_info(
-                        "Y", TensorProto.FLOAT, ["batch", "channel", "D128", "D64"]
+                        "Y", TFLOAT, ["batch", "channel", "D128", "D64"]
                     ),
                 ],
                 [
                     oh.make_tensor_value_info(
-                        "Z", TensorProto.FLOAT, ["batch", "channel", "D32", "64"]
+                        "Z", TFLOAT, ["batch", "channel", "D32", "64"]
                     )
                 ],
                 [
@@ -335,14 +338,14 @@ class TestGraphPatternOptimization(ExtTestCase):
                 ],
                 "dummy",
                 [
-                    oh.make_tensor_value_info("X", TensorProto.FLOAT, ["D32", "D128"]),
+                    oh.make_tensor_value_info("X", TFLOAT, ["D32", "D128"]),
                     oh.make_tensor_value_info(
-                        "Y", TensorProto.FLOAT, ["batch", "channel", "any", "D64"]
+                        "Y", TFLOAT, ["batch", "channel", "any", "D64"]
                     ),
                 ],
                 [
                     oh.make_tensor_value_info(
-                        "Z", TensorProto.FLOAT, ["batch", "channel", "D32", "64"]
+                        "Z", TFLOAT, ["batch", "channel", "D32", "64"]
                     )
                 ],
                 [
@@ -396,12 +399,12 @@ class TestGraphPatternOptimization(ExtTestCase):
                 ],
                 "dummy",
                 [
-                    oh.make_tensor_value_info("X", TensorProto.FLOAT, [32, 128]),
-                    oh.make_tensor_value_info("Y", TensorProto.FLOAT, [3, 5, 128, 64]),
+                    oh.make_tensor_value_info("X", TFLOAT, [32, 128]),
+                    oh.make_tensor_value_info("Y", TFLOAT, [3, 5, 128, 64]),
                 ],
                 [
-                    oh.make_tensor_value_info("Z", TensorProto.FLOAT, [3, 5, 32, 64]),
-                    oh.make_tensor_value_info("xm1", TensorProto.FLOAT, [1, 32, 128]),
+                    oh.make_tensor_value_info("Z", TFLOAT, [3, 5, 32, 64]),
+                    oh.make_tensor_value_info("xm1", TFLOAT, [1, 32, 128]),
                 ],
                 [
                     onh.from_array(np.array([0], dtype=np.int64), name="zero"),
@@ -474,10 +477,10 @@ class TestGraphPatternOptimization(ExtTestCase):
                 ],
                 "dummy",
                 [
-                    oh.make_tensor_value_info("X", TensorProto.FLOAT, [32, 128]),
-                    oh.make_tensor_value_info("Y", TensorProto.FLOAT, [3, 5, 128, 64]),
+                    oh.make_tensor_value_info("X", TFLOAT, [32, 128]),
+                    oh.make_tensor_value_info("Y", TFLOAT, [3, 5, 128, 64]),
                 ],
-                [oh.make_tensor_value_info("Z", TensorProto.FLOAT, [3, 5, 32, 64])],
+                [oh.make_tensor_value_info("Z", TFLOAT, [3, 5, 32, 64])],
                 [
                     onh.from_array(np.array([-1], dtype=np.int64), name="r1"),
                     onh.from_array(np.array([-1, 128], dtype=np.int64), name="r2"),
@@ -541,10 +544,10 @@ class TestGraphPatternOptimization(ExtTestCase):
                 ],
                 "dummy",
                 [
-                    oh.make_tensor_value_info("X", TensorProto.FLOAT, [32, 128]),
-                    oh.make_tensor_value_info("Y", TensorProto.FLOAT, [3, 5, 128, 64]),
+                    oh.make_tensor_value_info("X", TFLOAT, [32, 128]),
+                    oh.make_tensor_value_info("Y", TFLOAT, [3, 5, 128, 64]),
                 ],
-                [oh.make_tensor_value_info("Z", TensorProto.FLOAT, [3, 5, 32, 64])],
+                [oh.make_tensor_value_info("Z", TFLOAT, [3, 5, 32, 64])],
                 [
                     onh.from_array(
                         np.array([1, 32, 128], dtype=np.int64), name="shape1"
@@ -604,12 +607,12 @@ class TestGraphPatternOptimization(ExtTestCase):
                 ],
                 "dummy",
                 [
-                    oh.make_tensor_value_info("X", TensorProto.FLOAT, [32, 128]),
-                    oh.make_tensor_value_info("Y", TensorProto.FLOAT, [3, 5, 128, 64]),
+                    oh.make_tensor_value_info("X", TFLOAT, [32, 128]),
+                    oh.make_tensor_value_info("Y", TFLOAT, [3, 5, 128, 64]),
                 ],
                 [
-                    oh.make_tensor_value_info("Z", TensorProto.FLOAT, [3, 5, 32, 64]),
-                    oh.make_tensor_value_info("r1", TensorProto.FLOAT, [1, 1, 128, 32]),
+                    oh.make_tensor_value_info("Z", TFLOAT, [3, 5, 32, 64]),
+                    oh.make_tensor_value_info("r1", TFLOAT, [1, 1, 128, 32]),
                 ],
                 [onh.from_array(np.array([1, 1, 32, 128], dtype=np.int64), name="s1")],
             )
@@ -659,11 +662,11 @@ class TestGraphPatternOptimization(ExtTestCase):
                 ],
                 "dummy",
                 [
-                    oh.make_tensor_value_info("X", TensorProto.FLOAT, [128, 32]),
-                    oh.make_tensor_value_info("Y", TensorProto.FLOAT, [128, 64]),
+                    oh.make_tensor_value_info("X", TFLOAT, [128, 32]),
+                    oh.make_tensor_value_info("Y", TFLOAT, [128, 64]),
                 ],
                 [
-                    oh.make_tensor_value_info("Z", TensorProto.FLOAT, [32, 64]),
+                    oh.make_tensor_value_info("Z", TFLOAT, [32, 64]),
                 ],
             )
         )
@@ -705,12 +708,10 @@ class TestGraphPatternOptimization(ExtTestCase):
                 ],
                 "dummy",
                 [
-                    oh.make_tensor_value_info("X", TensorProto.FLOAT, [32, 128]),
-                    oh.make_tensor_value_info("Y", TensorProto.FLOAT, [64, 128]),
+                    oh.make_tensor_value_info("X", TFLOAT, [32, 128]),
+                    oh.make_tensor_value_info("Y", TFLOAT, [64, 128]),
                 ],
-                [
-                    oh.make_tensor_value_info("Z", TensorProto.FLOAT, [32, 64]),
-                ],
+                [oh.make_tensor_value_info("Z", TFLOAT, [32, 64])],
             )
         )
         check_model(model)
@@ -778,7 +779,7 @@ class TestGraphPatternOptimization(ExtTestCase):
             .cst(mk([256]), "c256")
             .cst(mk([512]), "c512")
             .cst(mk([3]), "c3")
-            .vin("X", TensorProto.FLOAT, ("a", "b", "c", "d"))
+            .vin("X", TFLOAT, ("a", "b", "c", "d"))
             .bring("shape")
             .ConstantOfShape()
             .rename("C1")
@@ -802,7 +803,7 @@ class TestGraphPatternOptimization(ExtTestCase):
             .bring("P1", "P2")
             .Add()
             .rename("Y")
-            .vout(TensorProto.FLOAT, ("a", "b", "c", "d"))
+            .vout(TFLOAT, ("a", "b", "c", "d"))
             .to_onnx()
         )
         check_model(model)
@@ -840,7 +841,7 @@ class TestGraphPatternOptimization(ExtTestCase):
             .cst(mk([256]), "c256")
             .cst(mk([512]), "c512")
             .cst(mk([3]), "c3")
-            .vin("X", TensorProto.FLOAT, ("a", "b", "c", "d"))
+            .vin("X", TFLOAT, ("a", "b", "c", "d"))
             .bring("shape")
             .ConstantOfShape()
             .rename("C1")
@@ -863,7 +864,7 @@ class TestGraphPatternOptimization(ExtTestCase):
             .bring("P1", "P2")
             .Add()
             .rename("Y")
-            .vout(TensorProto.FLOAT, ("a", "b", "c", "d"))
+            .vout(TFLOAT, ("a", "b", "c", "d"))
             .to_onnx()
         )
         check_model(model)
@@ -898,8 +899,8 @@ class TestGraphPatternOptimization(ExtTestCase):
             start(opset=18, ir_version=9)
             .cst(mk([2]), "cst1")
             .cst(mk([3]), "cst2")
-            .vin("X", TensorProto.FLOAT, ("a", "b"))
-            .vin("Y", TensorProto.FLOAT, ("a", "b"))
+            .vin("X", TFLOAT, ("a", "b"))
+            .vin("Y", TFLOAT, ("a", "b"))
             .bring("X", "cst1")
             .Mul()
             .rename("xc")
@@ -909,7 +910,7 @@ class TestGraphPatternOptimization(ExtTestCase):
             .bring("xc", "yc")
             .Mul()
             .rename("Z")
-            .vout(TensorProto.FLOAT, ("a", "b"))
+            .vout(TFLOAT, ("a", "b"))
             .to_onnx()
         )
         check_model(model)
@@ -944,8 +945,8 @@ class TestGraphPatternOptimization(ExtTestCase):
             start(opset=18, ir_version=9)
             .cst(mk([2]), "cst1")
             .cst(mk([3]), "cst2")
-            .vin("X", TensorProto.FLOAT, ("a", "b"))
-            .vin("Y", TensorProto.FLOAT, ("a", "b"))
+            .vin("X", TFLOAT, ("a", "b"))
+            .vin("Y", TFLOAT, ("a", "b"))
             .bring("X", "cst1")
             .Div()
             .rename("xc")
@@ -955,7 +956,7 @@ class TestGraphPatternOptimization(ExtTestCase):
             .bring("xc", "yc")
             .Mul()
             .rename("Z")
-            .vout(TensorProto.FLOAT, ("a", "b"))
+            .vout(TFLOAT, ("a", "b"))
             .to_onnx()
         )
         check_model(model)
@@ -999,13 +1000,11 @@ class TestGraphPatternOptimization(ExtTestCase):
                 ],
                 "dummy",
                 [
-                    oh.make_tensor_value_info("X", TensorProto.FLOAT, ["a", 6]),
-                    oh.make_tensor_value_info("Y", TensorProto.FLOAT, ["a", 6]),
+                    oh.make_tensor_value_info("X", TFLOAT, ["a", 6]),
+                    oh.make_tensor_value_info("Y", TFLOAT, ["a", 6]),
                 ],
-                [oh.make_tensor_value_info("Z", TensorProto.FLOAT, ["a", 6])],
-                [
-                    onh.from_array(np.array([1, 6], dtype=np.int64), name="shape"),
-                ],
+                [oh.make_tensor_value_info("Z", TFLOAT, ["a", 6])],
+                [onh.from_array(np.array([1, 6], dtype=np.int64), name="shape")],
             )
         )
         check_model(model)
@@ -1059,8 +1058,8 @@ class TestGraphPatternOptimization(ExtTestCase):
             start(opset=18, ir_version=9)
             .cst(mk([2]), "cst1")
             .cst(mk([3]), "cst2")
-            .vin("X", TensorProto.FLOAT, ("a", "b"))
-            .vin("Y", TensorProto.FLOAT, ("a", "b"))
+            .vin("X", TFLOAT, ("a", "b"))
+            .vin("Y", TFLOAT, ("a", "b"))
             .bring("X", "cst1")
             .Div()
             .rename("xc")
@@ -1070,7 +1069,7 @@ class TestGraphPatternOptimization(ExtTestCase):
             .bring("xc", "yc")
             .Mul()
             .rename("Z")
-            .vout(TensorProto.FLOAT, ("a", "b"))
+            .vout(TFLOAT, ("a", "b"))
             .to_onnx()
         )
         check_model(model)
@@ -1132,13 +1131,11 @@ class TestGraphPatternOptimization(ExtTestCase):
                 ],
                 "dummy",
                 [
-                    oh.make_tensor_value_info("X", TensorProto.FLOAT, [1, 4, 1]),
-                    oh.make_tensor_value_info("Y", TensorProto.FLOAT, [2, 4, 6]),
+                    oh.make_tensor_value_info("X", TFLOAT, [1, 4, 1]),
+                    oh.make_tensor_value_info("Y", TFLOAT, [2, 4, 6]),
                 ],
-                [oh.make_tensor_value_info("Z", TensorProto.FLOAT, [2, 4, 6])],
-                [
-                    onh.from_array(np.array([2, 4, 6], dtype=np.int64), name="shape"),
-                ],
+                [oh.make_tensor_value_info("Z", TFLOAT, [2, 4, 6])],
+                [onh.from_array(np.array([2, 4, 6], dtype=np.int64), name="shape")],
             )
         )
         check_model(model)
@@ -1194,10 +1191,10 @@ class TestGraphPatternOptimization(ExtTestCase):
                 ],
                 "dummy",
                 [
-                    oh.make_tensor_value_info("X", TensorProto.FLOAT, [2, 3, 4]),
-                    oh.make_tensor_value_info("Y", TensorProto.FLOAT, [2, 3, 4]),
+                    oh.make_tensor_value_info("X", TFLOAT, [2, 3, 4]),
+                    oh.make_tensor_value_info("Y", TFLOAT, [2, 3, 4]),
                 ],
-                [oh.make_tensor_value_info("Z", TensorProto.FLOAT, [2, 3, 4])],
+                [oh.make_tensor_value_info("Z", TFLOAT, [2, 3, 4])],
                 [
                     onh.from_array(np.array([-1, 8], dtype=np.int64), name="shape1"),
                     onh.from_array(np.array([3, -1], dtype=np.int64), name="shape2"),
@@ -1234,12 +1231,12 @@ class TestGraphPatternOptimization(ExtTestCase):
                 ],
                 "dummy",
                 [
-                    oh.make_tensor_value_info("X", TensorProto.FLOAT, [2, 3, 4]),
-                    oh.make_tensor_value_info("Y", TensorProto.FLOAT, [2, 3, 4]),
+                    oh.make_tensor_value_info("X", TFLOAT, [2, 3, 4]),
+                    oh.make_tensor_value_info("Y", TFLOAT, [2, 3, 4]),
                 ],
                 [
-                    oh.make_tensor_value_info("Z", TensorProto.FLOAT, [2, 3, 4]),
-                    oh.make_tensor_value_info("xrr", TensorProto.FLOAT, [3, 8]),
+                    oh.make_tensor_value_info("Z", TFLOAT, [2, 3, 4]),
+                    oh.make_tensor_value_info("xrr", TFLOAT, [3, 8]),
                 ],
                 [
                     onh.from_array(np.array([-1, 8], dtype=np.int64), name="shape1"),
@@ -1276,10 +1273,10 @@ class TestGraphPatternOptimization(ExtTestCase):
                 ],
                 "dummy",
                 [
-                    oh.make_tensor_value_info("X", TensorProto.FLOAT, [2, 3, 4]),
-                    oh.make_tensor_value_info("Y", TensorProto.FLOAT, [3, 8]),
+                    oh.make_tensor_value_info("X", TFLOAT, [2, 3, 4]),
+                    oh.make_tensor_value_info("Y", TFLOAT, [3, 8]),
                 ],
-                [oh.make_tensor_value_info("Z", TensorProto.FLOAT, [2, 3, 4])],
+                [oh.make_tensor_value_info("Z", TFLOAT, [2, 3, 4])],
                 [
                     onh.from_array(np.array([-1, 8], dtype=np.int64), name="shape1"),
                     onh.from_array(np.array([2, 3, 4], dtype=np.int64), name="shape3"),
@@ -1314,10 +1311,10 @@ class TestGraphPatternOptimization(ExtTestCase):
                 ],
                 "dummy",
                 [
-                    oh.make_tensor_value_info("X", TensorProto.FLOAT, [2, 3, 4]),
-                    oh.make_tensor_value_info("Y", TensorProto.FLOAT, [3, 8]),
+                    oh.make_tensor_value_info("X", TFLOAT, [2, 3, 4]),
+                    oh.make_tensor_value_info("Y", TFLOAT, [3, 8]),
                 ],
-                [oh.make_tensor_value_info("Z", TensorProto.FLOAT, [2, 3, 4])],
+                [oh.make_tensor_value_info("Z", TFLOAT, [2, 3, 4])],
                 [
                     onh.from_array(np.array([-1, 8], dtype=np.int64), name="shape1"),
                     onh.from_array(np.array([2, 3, 4], dtype=np.int64), name="shape3"),
@@ -1352,10 +1349,10 @@ class TestGraphPatternOptimization(ExtTestCase):
                 ],
                 "dummy",
                 [
-                    oh.make_tensor_value_info("X", TensorProto.FLOAT, [2, 3, 4]),
-                    oh.make_tensor_value_info("Y", TensorProto.FLOAT, [2, 3, 4]),
+                    oh.make_tensor_value_info("X", TFLOAT, [2, 3, 4]),
+                    oh.make_tensor_value_info("Y", TFLOAT, [2, 3, 4]),
                 ],
-                [oh.make_tensor_value_info("Z", TensorProto.FLOAT, [3, 8])],
+                [oh.make_tensor_value_info("Z", TFLOAT, [3, 8])],
                 [
                     onh.from_array(np.array([-1, 8], dtype=np.int64), name="shape1"),
                     onh.from_array(np.array([3, -1], dtype=np.int64), name="shape2"),
@@ -1391,10 +1388,10 @@ class TestGraphPatternOptimization(ExtTestCase):
                 ],
                 "dummy",
                 [
-                    oh.make_tensor_value_info("X", TensorProto.FLOAT, [2, 2, 3, 4]),
-                    oh.make_tensor_value_info("Y", TensorProto.FLOAT, [2, 2, 4, 3]),
+                    oh.make_tensor_value_info("X", TFLOAT, [2, 2, 3, 4]),
+                    oh.make_tensor_value_info("Y", TFLOAT, [2, 2, 4, 3]),
                 ],
-                [oh.make_tensor_value_info("Z", TensorProto.FLOAT, [2, 2, 3, 3])],
+                [oh.make_tensor_value_info("Z", TFLOAT, [2, 2, 3, 3])],
                 [
                     onh.from_array(np.array([-1, 3, 4], dtype=np.int64), name="shape1"),
                     onh.from_array(np.array([-1, 4, 3], dtype=np.int64), name="shape2"),
@@ -1433,12 +1430,12 @@ class TestGraphPatternOptimization(ExtTestCase):
                 ],
                 "dummy",
                 [
-                    oh.make_tensor_value_info("X", TensorProto.FLOAT, [2, 2, 3, 4]),
-                    oh.make_tensor_value_info("Y", TensorProto.FLOAT, [2, 2, 4, 3]),
+                    oh.make_tensor_value_info("X", TFLOAT, [2, 2, 3, 4]),
+                    oh.make_tensor_value_info("Y", TFLOAT, [2, 2, 4, 3]),
                 ],
                 [
-                    oh.make_tensor_value_info("Z", TensorProto.FLOAT, [2, 2, 3, 3]),
-                    oh.make_tensor_value_info("xrr", TensorProto.FLOAT, [4, 3, 3]),
+                    oh.make_tensor_value_info("Z", TFLOAT, [2, 2, 3, 3]),
+                    oh.make_tensor_value_info("xrr", TFLOAT, [4, 3, 3]),
                 ],
                 [
                     onh.from_array(np.array([-1, 3, 4], dtype=np.int64), name="shape1"),
@@ -1478,10 +1475,10 @@ class TestGraphPatternOptimization(ExtTestCase):
                 ],
                 "dummy",
                 [
-                    oh.make_tensor_value_info("X", TensorProto.FLOAT, [2, 2, 3, 4]),
-                    oh.make_tensor_value_info("Y", TensorProto.FLOAT, [4, 4, 3]),
+                    oh.make_tensor_value_info("X", TFLOAT, [2, 2, 3, 4]),
+                    oh.make_tensor_value_info("Y", TFLOAT, [4, 4, 3]),
                 ],
-                [oh.make_tensor_value_info("Z", TensorProto.FLOAT, [2, 2, 3, 3])],
+                [oh.make_tensor_value_info("Z", TFLOAT, [2, 2, 3, 3])],
                 [
                     onh.from_array(np.array([4, 3, 4], dtype=np.int64), name="shape1"),
                     onh.from_array(
@@ -1518,10 +1515,10 @@ class TestGraphPatternOptimization(ExtTestCase):
                 ],
                 "dummy",
                 [
-                    oh.make_tensor_value_info("X", TensorProto.FLOAT, [2, 2, 4, 3]),
-                    oh.make_tensor_value_info("Y", TensorProto.FLOAT, [4, 3, 4]),
+                    oh.make_tensor_value_info("X", TFLOAT, [2, 2, 4, 3]),
+                    oh.make_tensor_value_info("Y", TFLOAT, [4, 3, 4]),
                 ],
-                [oh.make_tensor_value_info("Z", TensorProto.FLOAT, [2, 2, 3, 3])],
+                [oh.make_tensor_value_info("Z", TFLOAT, [2, 2, 3, 3])],
                 [
                     onh.from_array(np.array([-1, 4, 3], dtype=np.int64), name="shape1"),
                     onh.from_array(
@@ -1558,10 +1555,10 @@ class TestGraphPatternOptimization(ExtTestCase):
                 ],
                 "dummy",
                 [
-                    oh.make_tensor_value_info("X", TensorProto.FLOAT, [2, 2, 3, 4]),
-                    oh.make_tensor_value_info("Y", TensorProto.FLOAT, [2, 2, 4, 3]),
+                    oh.make_tensor_value_info("X", TFLOAT, [2, 2, 3, 4]),
+                    oh.make_tensor_value_info("Y", TFLOAT, [2, 2, 4, 3]),
                 ],
-                [oh.make_tensor_value_info("Z", TensorProto.FLOAT, [4, 3, 3])],
+                [oh.make_tensor_value_info("Z", TFLOAT, [4, 3, 3])],
                 [
                     onh.from_array(np.array([-1, 3, 4], dtype=np.int64), name="shape1"),
                     onh.from_array(np.array([-1, 4, 3], dtype=np.int64), name="shape2"),
@@ -1594,10 +1591,8 @@ class TestGraphPatternOptimization(ExtTestCase):
                     oh.make_node("Reshape", ["xr", "shape"], ["Y"]),
                 ],
                 "dummy",
-                [
-                    oh.make_tensor_value_info("X", TensorProto.FLOAT, [3, 2]),
-                ],
-                [oh.make_tensor_value_info("Y", TensorProto.FLOAT, [3])],
+                [oh.make_tensor_value_info("X", TFLOAT, [3, 2])],
+                [oh.make_tensor_value_info("Y", TFLOAT, [3])],
                 [
                     onh.from_array(np.array([1], dtype=np.int64), name="axes"),
                     onh.from_array(np.array([3], dtype=np.int64), name="shape"),
@@ -1630,10 +1625,8 @@ class TestGraphPatternOptimization(ExtTestCase):
                     oh.make_node("Reshape", ["xr", "shape"], ["Y"]),
                 ],
                 "dummy",
-                [
-                    oh.make_tensor_value_info("X", TensorProto.FLOAT, [4, 3, 2]),
-                ],
-                [oh.make_tensor_value_info("Y", TensorProto.FLOAT, [3])],
+                [oh.make_tensor_value_info("X", TFLOAT, [4, 3, 2])],
+                [oh.make_tensor_value_info("Y", TFLOAT, [3])],
                 [
                     onh.from_array(np.array([0, 2], dtype=np.int64), name="axes"),
                     onh.from_array(np.array([3], dtype=np.int64), name="shape"),
@@ -1668,10 +1661,8 @@ class TestGraphPatternOptimization(ExtTestCase):
                     oh.make_node("Cos", ["yr"], ["Y"]),
                 ],
                 "dummy",
-                [
-                    oh.make_tensor_value_info("X", TensorProto.FLOAT, [3, 2]),
-                ],
-                [oh.make_tensor_value_info("Y", TensorProto.FLOAT, [1])],
+                [oh.make_tensor_value_info("X", TFLOAT, [3, 2])],
+                [oh.make_tensor_value_info("Y", TFLOAT, [1])],
                 [
                     onh.from_array(np.array([], dtype=np.int64), name="shape"),
                 ],
@@ -1703,10 +1694,8 @@ class TestGraphPatternOptimization(ExtTestCase):
                     oh.make_node("Reshape", ["xr", "shape"], ["Y"]),
                 ],
                 "dummy",
-                [
-                    oh.make_tensor_value_info("X", TensorProto.FLOAT, [3, 2]),
-                ],
-                [oh.make_tensor_value_info("Y", TensorProto.FLOAT, [3])],
+                [oh.make_tensor_value_info("X", TFLOAT, [3, 2])],
+                [oh.make_tensor_value_info("Y", TFLOAT, [3])],
                 [
                     onh.from_array(np.array([1], dtype=np.int64), name="axes"),
                     onh.from_array(np.array([3], dtype=np.int64), name="shape"),
@@ -1742,10 +1731,10 @@ class TestGraphPatternOptimization(ExtTestCase):
                 ],
                 "dummy",
                 [
-                    oh.make_tensor_value_info("X", TensorProto.FLOAT, [4, 5, 7]),
-                    oh.make_tensor_value_info("Y", TensorProto.FLOAT, [2, 2, 5, 3]),
+                    oh.make_tensor_value_info("X", TFLOAT, [4, 5, 7]),
+                    oh.make_tensor_value_info("Y", TFLOAT, [2, 2, 5, 3]),
                 ],
-                [oh.make_tensor_value_info("Z", TensorProto.FLOAT, [2, 2, 7, 3])],
+                [oh.make_tensor_value_info("Z", TFLOAT, [2, 2, 7, 3])],
                 [onh.from_array(np.array([2, 2, 7, 5], dtype=np.int64), name="shape")],
             )
         )
@@ -1781,10 +1770,10 @@ class TestGraphPatternOptimization(ExtTestCase):
                 ],
                 "dummy",
                 [
-                    oh.make_tensor_value_info("X", TensorProto.FLOAT, [2, 2, 5, 7]),
-                    oh.make_tensor_value_info("Y", TensorProto.FLOAT, [4, 3, 7]),
+                    oh.make_tensor_value_info("X", TFLOAT, [2, 2, 5, 7]),
+                    oh.make_tensor_value_info("Y", TFLOAT, [4, 3, 7]),
                 ],
-                [oh.make_tensor_value_info("Z", TensorProto.FLOAT, [2, 2, 5, 3])],
+                [oh.make_tensor_value_info("Z", TFLOAT, [2, 2, 5, 3])],
                 [onh.from_array(np.array([2, 2, 7, 3], dtype=np.int64), name="shape")],
             )
         )
@@ -1818,10 +1807,8 @@ class TestGraphPatternOptimization(ExtTestCase):
                     oh.make_node("Exp", ["xs"], ["Z"]),
                 ],
                 "dummy",
-                [
-                    oh.make_tensor_value_info("X", TensorProto.FLOAT, [1, 5, 7]),
-                ],
-                [oh.make_tensor_value_info("Z", TensorProto.FLOAT, [3, 5, 7])],
+                [oh.make_tensor_value_info("X", TFLOAT, [1, 5, 7])],
+                [oh.make_tensor_value_info("Z", TFLOAT, [3, 5, 7])],
                 [onh.from_array(np.array([3, 1, 1], dtype=np.int64), name="shape")],
             )
         )
@@ -1851,10 +1838,8 @@ class TestGraphPatternOptimization(ExtTestCase):
                     oh.make_node("Pow", ["xs", "p"], ["Z"]),
                 ],
                 "dummy",
-                [
-                    oh.make_tensor_value_info("X", TensorProto.FLOAT, [1, 5, 7]),
-                ],
-                [oh.make_tensor_value_info("Z", TensorProto.FLOAT, [3, 5, 7])],
+                [oh.make_tensor_value_info("X", TFLOAT, [1, 5, 7])],
+                [oh.make_tensor_value_info("Z", TFLOAT, [3, 5, 7])],
                 [
                     onh.from_array(np.array([3, 1, 1], dtype=np.int64), name="shape"),
                     onh.from_array(np.array([2], dtype=np.int64), name="p"),
@@ -1884,13 +1869,11 @@ class TestGraphPatternOptimization(ExtTestCase):
             oh.make_graph(
                 [
                     oh.make_node("Expand", ["X", "shape"], ["xs"]),
-                    oh.make_node("Cast", ["xs"], ["Z"], to=TensorProto.FLOAT16),
+                    oh.make_node("Cast", ["xs"], ["Z"], to=TFLOAT16),
                 ],
                 "dummy",
-                [
-                    oh.make_tensor_value_info("X", TensorProto.FLOAT, [1, 5, 7]),
-                ],
-                [oh.make_tensor_value_info("Z", TensorProto.FLOAT16, [3, 5, 7])],
+                [oh.make_tensor_value_info("X", TFLOAT, [1, 5, 7])],
+                [oh.make_tensor_value_info("Z", TFLOAT16, [3, 5, 7])],
                 [onh.from_array(np.array([3, 1, 1], dtype=np.int64), name="shape")],
             )
         )
@@ -1927,6 +1910,142 @@ class TestGraphPatternOptimization(ExtTestCase):
         onx = gr.to_onnx(optimize=True)
         self._check_with_ort(onx)
         check_model(onx)
+
+    def test_slices_split(self):
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("Slice", ["X", "zero", "sept", "un"], ["x1"]),
+                    oh.make_node("Slice", ["X", "sept", "huit", "un"], ["x2"]),
+                    oh.make_node("Add", ["x1", "x2"], ["Y"]),
+                ],
+                "dummy",
+                [oh.make_tensor_value_info("X", TFLOAT, ["a", 8])],
+                [oh.make_tensor_value_info("Y", TFLOAT, ["a", 7])],
+                [
+                    onh.from_array(np.array([0], dtype=np.int64), name="zero"),
+                    onh.from_array(np.array([1], dtype=np.int64), name="un"),
+                    onh.from_array(np.array([7], dtype=np.int64), name="sept"),
+                    onh.from_array(np.array([8], dtype=np.int64), name="huit"),
+                ],
+            )
+        )
+        check_model(model)
+        feeds = {"X": self._range(11, 8)}
+        ref = ExtendedReferenceEvaluator(model)
+        expected = ref.run(None, feeds)[0]
+
+        gr = GraphBuilder(
+            model,
+            infer_shapes=True,
+            optimization_options=OptimizationOptions(patterns=["SlicesSplit"]),
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+        self.assertEqual(["Split", "Add"], [n.op_type for n in opt_onx.graph.node])
+        self.assertEqual(1, len(opt_onx.graph.initializer))
+
+        opt_ref = ExtendedReferenceEvaluator(opt_onx)
+        got = opt_ref.run(None, feeds)[0]
+        self.assertEqualArray(expected, got)
+
+    def test_slices_split_llama(self):
+        origin = self._get_model("dort-split-custom__0.onnx")
+        split = [n for n in origin.graph.node if n.op_type == "Split"]
+        self.assertEqual(len(split), 0)
+        self._check_with_ort(origin)
+        gr = GraphBuilder(
+            origin,
+            infer_shapes=True,
+            optimization_options=OptimizationOptions(
+                patterns=["SlicesSplit"],
+                verbose=0,
+            ),
+        )
+        gr.set_shape("transpose", (2, 2, 1024, 512))
+        gr.set_shape("transpose_1", (2, 2, 1024, 512))
+        onx = gr.to_onnx(optimize=True)
+        split = [n for n in onx.graph.node if n.op_type == "Split"]
+        self.assertEqual(len(split), 2)
+        self._check_with_ort(onx)
+
+    def test_rotary_split_missed(self):
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("Split", ["X", "split"], ["x1", "x2"], axis=1),
+                    oh.make_node("Neg", ["x1"], ["nx1"]),
+                    oh.make_node("ConstantOfShape", ["shape"], ["zero"]),
+                    oh.make_node("Concat", ["nx1", "zero"], ["c1"], axis=1),
+                    oh.make_node("Concat", ["zero", "x2"], ["c2"], axis=1),
+                    oh.make_node("Add", ["c1", "c2"], ["Y"]),
+                ],
+                "dummy",
+                [oh.make_tensor_value_info("X", TFLOAT, ["a", 16])],
+                [oh.make_tensor_value_info("Y", TFLOAT, ["a", 24])],
+                [
+                    onh.from_array(np.array([8, 8], dtype=np.int64), name="split"),
+                    onh.from_array(np.array([3, 16], dtype=np.int64), name="shape"),
+                ],
+            )
+        )
+        feeds = {"X": self._range(3, 16)}
+        ref = ExtendedReferenceEvaluator(model)
+        expected = ref.run(None, feeds)[0]
+
+        gr = GraphBuilder(
+            model,
+            infer_shapes=True,
+            optimization_options=OptimizationOptions(patterns=["RotaryConcatPart"]),
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+        self.assertEqual(
+            ["Split", "Neg", "ConstantOfShape", "Concat", "Concat", "Add"],
+            [n.op_type for n in opt_onx.graph.node],
+        )
+        self.assertEqual(2, len(opt_onx.graph.initializer))
+
+        opt_ref = ExtendedReferenceEvaluator(opt_onx)
+        got = opt_ref.run(None, feeds)[0]
+        self.assertEqualArray(expected, got)
+
+    def test_rotary_split(self):
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("Split", ["X", "split"], ["x1", "x2"], axis=1),
+                    oh.make_node("Neg", ["x1"], ["nx1"]),
+                    oh.make_node("ConstantOfShape", ["shape"], ["zero"]),
+                    oh.make_node("Concat", ["nx1", "zero"], ["c1"], axis=1),
+                    oh.make_node("Concat", ["zero", "x2"], ["c2"], axis=1),
+                    oh.make_node("Add", ["c1", "c2"], ["Y"]),
+                ],
+                "dummy",
+                [oh.make_tensor_value_info("X", TFLOAT, ["a", 16])],
+                [oh.make_tensor_value_info("Y", TFLOAT, ["a", 16])],
+                [
+                    onh.from_array(np.array([8, 8], dtype=np.int64), name="split"),
+                    onh.from_array(np.array([3, 8], dtype=np.int64), name="shape"),
+                ],
+            )
+        )
+        feeds = {"X": self._range(3, 16)}
+        ref = ExtendedReferenceEvaluator(model)
+        expected = ref.run(None, feeds)[0]
+
+        gr = GraphBuilder(
+            model,
+            infer_shapes=True,
+            optimization_options=OptimizationOptions(patterns=["RotaryConcatPart"]),
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+        self.assertEqual(
+            ["Split", "Neg", "Concat"], [n.op_type for n in opt_onx.graph.node]
+        )
+        self.assertEqual(1, len(opt_onx.graph.initializer))
+
+        opt_ref = ExtendedReferenceEvaluator(opt_onx)
+        got = opt_ref.run(None, feeds)[0]
+        self.assertEqualArray(expected, got)
 
 
 if __name__ == "__main__":

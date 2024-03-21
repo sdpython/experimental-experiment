@@ -7,6 +7,7 @@ def _create_configuration_for_benchmark_llama(
     warmup: int = 3,
     num_hidden_layers: int = 1,
     implementation: str = "eager",
+    with_mask: bool = True,
 ) -> Dict[str, Union[str, int, List[Tuple[int, int]]]]:
     """
     Creates a model based on the given configuration.
@@ -16,6 +17,7 @@ def _create_configuration_for_benchmark_llama(
     :param repeat: number of repetition
     :param num_hidden_layers: number of hidden layers
     :param implementation: implementation
+    :param with_mask: use a mask
     :return: dictionary
     """
     if config == "small":
@@ -28,6 +30,7 @@ def _create_configuration_for_benchmark_llama(
             max_position_embeddings=1024,
             num_attention_heads=2,
             _attn_implementation=implementation,
+            with_mask=with_mask,
         )
     if config == "medium":
         return dict(
@@ -39,6 +42,7 @@ def _create_configuration_for_benchmark_llama(
             max_position_embeddings=1024,
             num_attention_heads=2,
             _attn_implementation=implementation,
+            with_mask=with_mask,
         )
     if config in ("large", "default"):
         return dict(
@@ -50,6 +54,7 @@ def _create_configuration_for_benchmark_llama(
             max_position_embeddings=2048,
             num_attention_heads=32,
             _attn_implementation=implementation,
+            with_mask=with_mask,
         )
     raise ValueError(f"Unexpected value for config={config!r}.")
 
@@ -60,6 +65,7 @@ def _create_configuration_for_benchmark_mistral(
     warmup: int = 3,
     num_hidden_layers: int = 1,
     implementation: str = "eager",
+    with_mask: bool = True,
 ) -> Dict[str, Union[str, int, List[Tuple[int, int]]]]:
     """
     Creates a model based on the given configuration.
@@ -69,6 +75,7 @@ def _create_configuration_for_benchmark_mistral(
     :param repeat: number of repetition
     :param num_hidden_layers: number of hidden layers
     :param implementation: implementation
+    :param with_mask: use a mask
     :return: dictionary
     """
     if config == "small":
@@ -82,6 +89,7 @@ def _create_configuration_for_benchmark_mistral(
             num_attention_heads=2,
             num_key_value_heads=2,
             _attn_implementation=implementation,
+            with_mask=with_mask,
         )
     if config == "medium":
         return dict(
@@ -95,6 +103,7 @@ def _create_configuration_for_benchmark_mistral(
             max_position_embeddings=1024,
             sliding_window=4096,
             _attn_implementation=implementation,
+            with_mask=with_mask,
         )
     if config in ("large", "default"):
         return dict(
@@ -108,6 +117,7 @@ def _create_configuration_for_benchmark_mistral(
             max_position_embeddings=131072,
             sliding_window=4096,
             _attn_implementation=implementation,
+            with_mask=with_mask,
         )
     raise ValueError(f"Unexpected value for config={config!r}.")
 
@@ -118,6 +128,7 @@ def _create_configuration_for_benchmark_phi(
     warmup: int = 3,
     num_hidden_layers: int = 1,
     implementation: str = "eager",
+    with_mask: bool = True,
 ) -> Dict[str, Union[str, int, List[Tuple[int, int]]]]:
     """
     Creates a model based on the given configuration.
@@ -127,6 +138,7 @@ def _create_configuration_for_benchmark_phi(
     :param repeat: number of repetition
     :param num_hidden_layers: number of hidden layers
     :param implementation: implementation
+    :param with_mask: use a mask
     :return: dictionary
     """
     if config == "small":
@@ -140,6 +152,7 @@ def _create_configuration_for_benchmark_phi(
             num_attention_heads=4,
             num_key_value_heads=2,
             _attn_implementation=implementation,
+            with_mask=with_mask,
         )
     if config == "medium":
         return dict(
@@ -152,6 +165,7 @@ def _create_configuration_for_benchmark_phi(
             num_key_value_heads=4,
             max_position_embeddings=1024,
             _attn_implementation=implementation,
+            with_mask=with_mask,
         )
     if config in ("large", "default"):
         return dict(
@@ -164,5 +178,6 @@ def _create_configuration_for_benchmark_phi(
             num_key_value_heads=None,
             max_position_embeddings=2048,
             _attn_implementation=implementation,
+            with_mask=with_mask,
         )
     raise ValueError(f"Unexpected value for config={config!r}.")

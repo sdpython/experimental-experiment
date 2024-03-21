@@ -10,6 +10,17 @@ from ..xbuilder.type_inference import infer_types
 from .patterns import MatchResult, PatternOptimization, get_default_patterns
 
 
+def _count(matches):
+    stats = {}
+    for n in matches:
+        cl = n[0].__class__.__name__
+        if cl in stats:
+            stats[cl] += 1
+        else:
+            stats[cl] = 1
+    return ", ".join([f"{v}*{k}" for k, v in stats.items()])
+
+
 class GraphBuilderPatternOptimization:
     """
     Implements optimization after the conversion is done.
@@ -132,6 +143,7 @@ class GraphBuilderPatternOptimization:
             return False
         cst = self.get_computed_constant(name)
         if hasattr(cst, "numpy"):
+            # This could fail xith bfloat16, ...
             cst = cst.detach().cpu().numpy()
         assert isinstance(
             cst, np.ndarray
@@ -142,6 +154,26 @@ class GraphBuilderPatternOptimization:
         if value is None:
             return True
         return all(cst == value)
+
+    def get_constant_scalar(self, name: str) -> Union[int, float]:
+        """
+        Returns a scalar as a constant.
+
+        :param name: name
+        :return: int or float
+        """
+        cst = self.get_computed_constant(name)
+        if hasattr(cst, "numpy"):
+            # This could fail xith bfloat16, ...
+            cst = cst.detach().cpu().numpy()
+        assert isinstance(
+            cst, np.ndarray
+        ), f"Unexpected type for constant {name}!r, type is {type(cst)}"
+        shape = cst.shape
+        value = cst[0] if shape == (1,) else cst
+        if value.dtype in {np.float32, np.float16, np.float64}:
+            return float(value)
+        return int(value)
 
     def get_computed_constant(
         self, name: str, statistics: Optional[List[str]] = None
@@ -179,6 +211,18 @@ class GraphBuilderPatternOptimization:
         Returns an attribute for a node.
         """
         return self.builder.get_attribute(node, att_name, exc=exc)
+
+    def get_axis(self, node: NodeProto, default_axis: Optional[int] = None) -> int:
+        """
+        Retrieves the axis for many operators.
+        """
+        att = self.get_attribute(node, "axis", exc=False)
+        if att is None:
+            assert (
+                default_axis is not None
+            ), f"Node {node.op_type} has no axis and no default value."
+            return default_axis
+        return att.i
 
     def get_constant_or_attribute(
         self,
@@ -634,28 +678,45 @@ class GraphBuilderPatternOptimization:
                             )
                         break
 
+                d = time.perf_counter() - begin
                 statistics.append(
                     dict(
                         pattern=f"match_{pattern}",
                         iteration=it,
                         instances=len(matches) - before,
-                        time_in=time.perf_counter() - begin,
+                        time_in=d,
                         match_index=len(matches),
                     )
+                )
+                durations[pattern.__class__.__name__] = (
+                    durations.get(pattern.__class__.__name__, 0) + d
                 )
 
             if self.verbose > 0 and matches:
                 if durations:
                     rev = max([(v, k) for k, v in durations.items()])
                     revs = f"{rev[-1]}:{rev[0]:.3f}"
+                    if len(matches) == 1:
+                        print(
+                            f"[GraphBuilderPatternOptimization.optimize] applies "
+                            f"{len(matches)} matches, [0]={str(matches[0][-1])} - "
+                            f"time={sum(durations.values()):.3f} | max_time={revs}"
+                        )
+                    else:
+                        print(
+                            f"[GraphBuilderPatternOptimization.optimize] applies "
+                            f"{len(matches)} matches, {_count(matches)} - "
+                            f"time={sum(durations.values()):.3f} | max_time={revs}"
+                        )
+                elif len(matches) == 1:
                     print(
-                        f"[GraphBuilderPatternOptimization.optimize] applies {len(matches)} matches, "
-                        f"[0]={str(matches[0][-1])} - time={sum(durations.values()):.3f} | max_time={revs}"
+                        f"[GraphBuilderPatternOptimization.optimize] applies "
+                        f"{len(matches)} matches, [0]={str(matches[0][-1])}"
                     )
                 else:
                     print(
-                        f"[GraphBuilderPatternOptimization.optimize] applies {len(matches)} matches, "
-                        f"[0]={str(matches[0][-1])}"
+                        f"[GraphBuilderPatternOptimization.optimize] applies "
+                        f"{len(matches)} matches, {_count(matches)}"
                     )
 
             # applies patterns (they must be disjoined)

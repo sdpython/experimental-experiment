@@ -47,10 +47,12 @@ config_dict = create_configuration_for_benchmark(
     warmup=1,
     num_hidden_layers=args.num_hidden_layers,
     implementation=args.implementation,
+    with_mask=args.with_mask,
 )
 
 verbose = int(args.verbose)
 optimize = args.optimize in (True, 1, "1", "True")
+with_mask = args.with_mask in (True, 1, "1", "True")
 disable_pattern = [_ for _ in args.disable_pattern.split(",") if _]
 enable_pattern = [_ for _ in args.enable_pattern.split(",") if _]
 print(f"model={args.model}")
@@ -58,6 +60,8 @@ print(f"model config={config_dict}")
 print(f"exporter={args.exporter}")
 print(f"verbose={verbose}")
 print(f"optimize={args.optimize}")
+print(f"implementation={args.implementation}")
+print(f"with_mask={args.with_mask}")
 print(f"mixed={args.mixed}")
 
 if args.exporter == "custom":
@@ -99,7 +103,8 @@ filename = os.path.join(
     folder,
     (
         f"export_{args.model}_{args.exporter}_{'dyn' if use_dynamic else 'static'}"
-        f"{'_mixed' if use_mixed else ''}_{args.config}-v{args.target_opset}.onnx"
+        f"{'_mixed' if use_mixed else ''}_{args.config}-v{args.target_opset}"
+        f".{args.implementation}.onnx"
     ),
 )
 print(f"start exporting in {filename!r}")

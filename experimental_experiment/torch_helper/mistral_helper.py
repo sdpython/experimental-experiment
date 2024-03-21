@@ -77,6 +77,7 @@ def get_mistral_model(
     num_key_value_heads=2,
     sliding_window=4096,
     _attn_implementation="eager",  # needed value to remove graph breaks
+    with_mask: bool = True,
 ):
     """
     Returns a model.
@@ -101,16 +102,7 @@ def get_mistral_model(
     if _attn_implementation:
         config._attn_implementation = _attn_implementation
 
-    class MistralModelWrapper(torch.nn.Module):
-        def __init__(self, config):
-            super().__init__()
-            self.model = MistralModel(config)
-
-        def forward(self, input_ids, attention_mask):
-            model_output = self.model(input_ids, attention_mask=attention_mask)
-            return model_output.to_tuple()
-
-    def generate_example_inputs(batch: int, seq: int, vocab_size: int):
+    def generate_example_inputs(batch: int, seq: int, vocab_size: int, with_mask: bool):
         (
             input_ids,
             token_type_ids,
@@ -122,12 +114,38 @@ def get_mistral_model(
             batch_size=batch,
             seq_length=seq,
             vocab_size=vocab_size,
-            use_input_mask=True,
+            use_input_mask=with_mask,
         )
-        return input_ids, input_mask
+        if with_mask:
+            return input_ids, input_mask
+        return (input_ids,)
+
+    if with_mask:
+
+        class MistralModelWrapper(torch.nn.Module):
+            def __init__(self, config):
+                super().__init__()
+                self.model = MistralModel(config)
+
+            def forward(self, input_ids, attention_mask):
+                model_output = self.model(input_ids, attention_mask=attention_mask)
+                return model_output.to_tuple()
+
+    else:
+
+        class MistralModelWrapper(torch.nn.Module):
+            def __init__(self, config):
+                super().__init__()
+                self.model = MistralModel(config)
+
+            def forward(self, input_ids):
+                model_output = self.model(input_ids)
+                return model_output.to_tuple()
 
     example_args_collection = []
     for b, s in input_dims:
-        example_args_collection.append(generate_example_inputs(b, s, vocab_size))
+        example_args_collection.append(
+            generate_example_inputs(b, s, vocab_size, with_mask)
+        )
 
     return MistralModelWrapper(config), example_args_collection

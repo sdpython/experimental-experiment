@@ -1446,7 +1446,7 @@ def aten_index_put(
     g: GraphBuilder,
     sts: Optional[Dict[str, Any]],
     outputs: List[str],
-    self: T,
+    x: T,
     indices: List[T],
     values: T,
     accumulate: bool = False,
@@ -1459,30 +1459,27 @@ def aten_index_put(
     assert (
         len(indices) == 1
     ), f"Not implementeded for indices={indices}{g.get_debug_msg()}"
-    assert g.has_shape(self), f"Missing shape for {self!r}{g.get_debug_msg()}"
+    assert g.has_shape(x), f"Missing shape for {x!r}{g.get_debug_msg()}"
 
     index = indices[0]  # tensor
     new_index = g.op.UnsqueezeAnyOpset(index, np.array([-1], dtype=np.int64), name=name)
 
-    shape_self = g.get_shape(self)
-
     if accumulate:
-        zeros = g.op.ConstantOfShape(
-            np.array(shape_self, dtype=np.int64),
-            value=from_array(
-                np.array([0], dtype=tensor_dtype_to_np_dtype(g.get_type(values)))
-            ),
-            name=name,
+        assert g.main_opset >= 13, (
+            f"index_put cannot be implemented for opset < 13 "
+            f"because ScatterND does not support reduction"
+            f"{g.get_debug_msg()}"
         )
-        result = g.op.ScatterND(zeros, new_index, values, name=name, reduction="add")
-        res = g.op.Add(result, self, name=name)
+        res = g.op.ScatterND(
+            x, new_index, values, name=name, reduction="add", outputs=outputs
+        )
     else:
-        res = g.op.ScatterND(self, new_index, values, name=name)
+        res = g.op.ScatterND(x, new_index, values, name=name, outputs=outputs)
 
     if not sts:
-        g.set_type(res, g.get_type(self))
-        g.set_shape(res, g.get_shape(self))
-    return result
+        g.set_type(res, g.get_type(x))
+        g.set_shape(res, g.get_shape(x))
+    return res
 
 
 def aten__unsafe_index_put(
@@ -2815,31 +2812,23 @@ def _aten_slice_scatter_static(
 
     # step 2
 
-    v = (0 if dim < 0 else len(shape)) - dim
-    if v > 1:
-        r = tuple(np.arange(1, v, 1))
-        if isinstance(index_2, str):
-            # dynamic shapes
-            index_base = g.op.Expand(
-                g.op.UnsqueezeAnyOpset(index_2, np.array([1], dtype=np.int64)),
-                np.array(r, dtype=np.int64),
-            )
-        else:
-            index_base = np.expand_dims(index_2, r)
+    resh = g.op.Reshape(index_2, np.array([-1, 1], dtype=np.int64), name=name)
+    if dim == 0:
+        res = g.op.ScatterND(x, resh, src, outputs=outputs, name=name)
     else:
-        index_base = index_2
+        perm = list(range(g.get_rank(x)))
+        perm[0], perm[dim] = perm[dim], perm[0]
+        res = g.op.Transpose(
+            g.op.ScatterND(
+                g.op.Transpose(x, perm=perm, name=name),
+                resh,
+                g.op.Transpose(src, perm=perm, name=name),
+                name=name,
+            ),
+            perm=perm,
+            outputs=outputs,
+        )
 
-    # Step 3: Expand the indices.
-    shape_expand = g.op.ScatterElements(
-        np.array(shape, dtype=np.int64),
-        np.array([dim], dtype=np.int64),
-        np.array([1], dtype=np.int64),
-        name=name,
-    )
-    indices = g.op.Expand(index_base, shape_expand, name=name)
-
-    # Step 4: final ScatterElements.
-    res = g.op.ScatterElements(x, indices, src, axis=dim, name=name)
     if not sts:
         g.set_type(res, g.get_type(x))
         g.set_shape(res, shape)
@@ -2889,26 +2878,23 @@ def _aten_slice_scatter_dynamic(
 
     # step 2
 
-    v = (0 if dim < 0 else g.get_rank(x)) - dim
-    if v > 1:
-        r = tuple(np.arange(1, v, 1))
-        index_base = g.op.Expand(
-            g.op.UnsqueezeAnyOpset(index_2, np.array([1], dtype=np.int64)),
-            np.array(r, dtype=np.int64),
-        )
+    resh = g.op.Reshape(index_2, np.array([-1, 1], dtype=np.int64), name=name)
+    if dim == 0:
+        res = g.op.ScatterND(x, resh, src, outputs=outputs, name=name)
     else:
-        index_base = index_2
-    # Step 3: Expand the indices.
-    shape_expand = g.op.ScatterElements(
-        shape,
-        np.array([dim], dtype=np.int64),
-        np.array([1], dtype=np.int64),
-        name=name,
-    )
-    indices = g.op.Expand(index_base, shape_expand, name=name)
+        perm = list(range(g.get_rank(x)))
+        perm[0], perm[dim] = perm[dim], perm[0]
+        res = g.op.Transpose(
+            g.op.ScatterND(
+                g.op.Transpose(x, perm=perm, name=name),
+                resh,
+                g.op.Transpose(src, perm=perm, name=name),
+                name=name,
+            ),
+            perm=perm,
+            outputs=outputs,
+        )
 
-    # Step 4: final step
-    res = g.op.ScatterElements(x, indices, src, axis=dim, name=name)
     if not sts:
         g.set_type(res, g.get_type(x))
         g.set_rank(res, g.get_rank(x))

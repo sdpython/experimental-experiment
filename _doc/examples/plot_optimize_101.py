@@ -45,7 +45,10 @@ plot_dot(proto)
 gr = GraphBuilder(
     proto,
     infer_shapes=True,
-    optimization_options=OptimizationOptions(patterns="default"),
+    optimization_options=OptimizationOptions(
+        patterns="default",
+        verbose=0,  # a higher value increases the verbosity when optimizations for patters
+    ),
 )
 stats = gr.optimize()
 df = pandas.DataFrame(stats)

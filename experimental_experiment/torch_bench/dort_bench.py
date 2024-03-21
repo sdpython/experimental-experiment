@@ -53,10 +53,12 @@ config_dict = create_configuration_for_benchmark(
     warmup=args.warmup,
     num_hidden_layers=args.num_hidden_layers,
     implementation=args.implementation,
+    with_mask=args.with_mask,
 )
 
 verbose = int(args.verbose)
 optimize = args.optimize in (True, 1, "1", "True")
+with_mask = args.with_mask in (True, 1, "1", "True")
 disable_pattern = [_ for _ in args.disable_pattern.split(",") if _]
 enable_pattern = [_ for _ in args.enable_pattern.split(",") if _]
 print(f"model={args.model}")
@@ -64,6 +66,7 @@ print(f"model config={config_dict}")
 print(f"backend={args.backend}")
 print(f"verbose={verbose}")
 print(f"optimize={args.optimize}")
+print(f"with_mask={args.with_mask}")
 print(f"implementation={args.implementation}")
 print(f"mixed={args.mixed}")
 
@@ -207,9 +210,12 @@ print(f":{args.model},{idims}-{vals};")
 print(f":config,{args.config};")
 print(f":mixed,{args.mixed};")
 print(f":dynamic,{use_dynamic};")
+print(f":optimize,{optimize};")
 print(f":backend,{args.backend};")
 print(f":repeat,{args.repeat};")
 print(f":warmup,{args.warmup};")
+print(f":with_mask,{args.with_mask};")
+print(f":implementation,{args.implementation};")
 print(f":torch,{torch.__version__};")
 print(f":transformers,{transformers.__version__};")
 if args.backend in {"custom"}:

@@ -3,6 +3,7 @@ import numpy as np
 from onnx import ModelProto
 from .debug_backend import onnx_debug_backend
 from .fast_backend import onnx_custom_backend
+from .dynger_backend import dynger_backend
 
 
 def get_decomposition_table():

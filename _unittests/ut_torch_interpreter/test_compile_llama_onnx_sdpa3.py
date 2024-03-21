@@ -166,7 +166,7 @@ class TestDynamoLlamaSdpa3(ExtTestCase):
 
     @ignore_warnings((UserWarning, DeprecationWarning))
     @skipif_ci_windows("torch.compile not supported on Windows")
-    @requires_torch("2.2", "missing kernel")
+    @requires_torch("2.3", "missing kernel")
     def test_llama_model_backward_ref(self):
         from experimental_experiment.torch_helper.llama_helper import get_llama_model
 
@@ -179,6 +179,7 @@ class TestDynamoLlamaSdpa3(ExtTestCase):
             max_position_embeddings=1024,
             num_attention_heads=2,
             _attn_implementation="eager",
+            with_mask=False,
         )
         self.common_test_model(
             model,

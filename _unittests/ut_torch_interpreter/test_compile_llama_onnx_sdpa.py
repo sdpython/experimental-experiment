@@ -185,6 +185,7 @@ class TestDynamoLlamaSdpa(ExtTestCase):
     @unittest.skipIf(
         True, reason="_scaled_dot_product_flash_attention_for_cpu_default missing"
     )
+    @requires_torch("2.3", "unexpected behaviour")
     def test_llama_decoder_forward(self):
         from experimental_experiment.torch_helper.llama_helper import get_llama_decoder
 
@@ -202,6 +203,7 @@ class TestDynamoLlamaSdpa(ExtTestCase):
 
     @ignore_warnings((UserWarning, DeprecationWarning))
     @skipif_ci_windows("torch.compile not supported on Windows")
+    @requires_torch("2.3", "unexpected behaviour")
     def test_llama_attention_forward(self):
         from experimental_experiment.torch_helper.llama_helper import (
             get_llama_attention,

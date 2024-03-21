@@ -76,6 +76,7 @@ def get_phi_model(
     num_attention_heads=4,
     num_key_value_heads=2,
     _attn_implementation="eager",  # needed value to remove graph breaks
+    with_mask: bool = True,
 ):
     """
     Returns a model.
@@ -100,13 +101,48 @@ def get_phi_model(
     if _attn_implementation:
         config._attn_implementation = _attn_implementation
 
+    if with_mask:
+
+        class PhiModelWrapper(torch.nn.Module):
+            def __init__(self, config):
+                super().__init__()
+                self.model = PhiModel(config)
+
+            def forward(self, input_ids, attention_mask):
+                model_output = self.model(input_ids, attention_mask=attention_mask)
+                return model_output.to_tuple()
+
+        def generate_example_inputs(batch: int, seq: int, vocab_size: int):
+            (
+                input_ids,
+                token_type_ids,
+                input_mask,
+                sequence_labels,
+                token_labels,
+                choice_labels,
+            ) = _prepare_config_and_inputs(
+                batch_size=batch,
+                seq_length=seq,
+                vocab_size=vocab_size,
+                use_input_mask=True,
+            )
+            return input_ids, input_mask
+
+        example_args_collection = []
+        for b, s in input_dims:
+            example_args_collection.append(generate_example_inputs(b, s, vocab_size))
+
+        return PhiModelWrapper(config), example_args_collection
+
+    # no mask
+
     class PhiModelWrapper(torch.nn.Module):
         def __init__(self, config):
             super().__init__()
             self.model = PhiModel(config)
 
-        def forward(self, input_ids, attention_mask):
-            model_output = self.model(input_ids, attention_mask=attention_mask)
+        def forward(self, input_ids):
+            model_output = self.model(input_ids)
             return model_output.to_tuple()
 
     def generate_example_inputs(batch: int, seq: int, vocab_size: int):
@@ -123,7 +159,7 @@ def get_phi_model(
             vocab_size=vocab_size,
             use_input_mask=True,
         )
-        return input_ids, input_mask
+        return (input_ids,)
 
     example_args_collection = []
     for b, s in input_dims:
