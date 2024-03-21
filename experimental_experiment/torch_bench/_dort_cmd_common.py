@@ -168,9 +168,10 @@ def dort_args(name: str, description: str):
         disable_pattern=("", "a list of optimization patterns to disable"),
         enable_pattern=("default", "list of optimization patterns to enable"),
         optimize=(1, "optimize the model"),
+        with_mask=(1, "with or without mask, dynamo may fail with a mask"),
         expose="backend,repeat,warmup,device,num_hidden_layers,"
         "mixed,export,config,target_opset,dynamic,verbose,"
-        "enable_pattern,disable_pattern,model,optimize",
+        "enable_pattern,disable_pattern,model,optimize,with_mask",
     )
     return args
 
@@ -195,9 +196,10 @@ def export_args(name: str, description: str):
         disable_pattern=("", "a list of optimization patterns to disable"),
         enable_pattern=("default", "list of optimization patterns to enable"),
         optimize=(1, "optimize the model"),
+        with_mask=(1, "with or without mask, dynamo may fail with a mask"),
         expose="exporter,device,num_hidden_layers,ort,"
         "mixed,config,target_opset,dynamic,verbose,"
-        "enable_pattern,disable_pattern,model,optimize",
+        "enable_pattern,disable_pattern,model,optimize,with_mask",
     )
     return args
 
@@ -209,6 +211,7 @@ def create_configuration_for_benchmark(
     warmup: int = 3,
     num_hidden_layers: int = 1,
     implementation: str = "eager",
+    with_mask: bool = True,
 ) -> Dict[str, Union[str, int, List[Tuple[int, int]]]]:
     """
     Creates a model based on the given configuration.
@@ -219,6 +222,7 @@ def create_configuration_for_benchmark(
     :param repeat: number of repetition
     :param num_hidden_layers: number of hidden layers
     :param implementation: implementation
+    :param with_mask: use a mask
     :return: dictionary
     """
     fcts = {
@@ -233,6 +237,7 @@ def create_configuration_for_benchmark(
         warmup=warmup,
         num_hidden_layers=num_hidden_layers,
         implementation=implementation,
+        with_mask=with_mask,
     )
 
 
@@ -241,6 +246,10 @@ def create_model(
 ) -> Tuple[Any, List[Tuple[Any, ...]]]:
     """
     Returns a model and a list of inputs.
+
+    :param model: model name
+    :param config_dict: configuration
+    :return: model, list of inputs
     """
 
     if model == "llama":

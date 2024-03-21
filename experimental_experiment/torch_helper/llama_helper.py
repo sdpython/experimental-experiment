@@ -192,6 +192,8 @@ def get_llama_model(
 
         return LlamaModelWrapper(config), example_args_collection
 
+    # no mask
+
     class LlamaModelWrapper(torch.nn.Module):
         def __init__(self, config):
             super().__init__()
