@@ -333,6 +333,7 @@ class TestDynamoLlama(ExtTestCase):
 
     @ignore_warnings((UserWarning, DeprecationWarning))
     @skipif_ci_windows("torch.compile not supported on Windows")
+    @requires_torch("2.3", "unexpected behaviour")
     def test_llama_attention_forward(self):
         from experimental_experiment.torch_helper.llama_helper import (
             get_llama_attention,
