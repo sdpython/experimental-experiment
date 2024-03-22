@@ -441,7 +441,6 @@ def onnx_custom_backend(
     onnx models, graph module as well the inputs and outputs when
     the model is run.
     """
-
     DEVICES = {
         -1: ORTC.OrtDevice(ORTC.OrtDevice.cpu(), ORTC.OrtDevice.default_memory(), 0)
     }

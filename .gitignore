@@ -7,9 +7,11 @@
 *.onnx
 *.png
 *.csv
+*.nsys-rep
 *.pkl
 *.xlsx
 *.sarif
+*.sqlite
 *.svg
 coverage.html/*
 temp*.txt*

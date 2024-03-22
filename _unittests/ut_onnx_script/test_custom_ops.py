@@ -155,6 +155,21 @@ class TestCustomOps(ExtTestCase):
                     if verbose:
                         print(f"[make_aot_ort] register {names[-1]!r}")
 
+            # from onnxruntime.training.ortmodule.torch_cpp_extensions.cuda import load_aten_op_executor_cpp_extension
+            from onnxruntime.training.ortmodule.torch_cpp_extensions import (
+                aten_op_executor,
+            )
+            from onnxruntime.capi import _pybind_state as _C
+
+            print(dir(aten_op_executor))
+
+            # aten_op_executor.load_aten_op_executor_cpp_extension()
+
+            _C.register_aten_op_executor(
+                str(aten_op_executor.is_tensor_argument_address()),
+                str(aten_op_executor.execute_aten_operator_address()),
+            )
+
             ort_session_options = onnxruntime.SessionOptions()
             # ort_session_options.log_severity_level = 1
 

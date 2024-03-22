@@ -124,13 +124,25 @@ def loop_iteration(is_cuda, inputs, compiled_model, loss):
             True,
             "True",
         ), f"not implemented with is_cuda={is_cuda}, mixed={args.mixed}"
+        if is_cuda:
+            torch.cuda.nvtx.range_push("DORT-FORWARD")
         result = compiled_model(*inputs)
+        if is_cuda:
+            torch.cuda.synchronize()
+            torch.cuda.nvtx.range_pop()
 
     # dummy_target = torch.ones_like(result[0], memory_format=torch.contiguous_format)
+    if is_cuda:
+        torch.cuda.nvtx.range_push("DORT-ERROR")
     error = result[0].sum()  # loss(result[0], dummy_target)
+    if is_cuda:
+        torch.cuda.nvtx.range_pop()
+    if is_cuda:
+        torch.cuda.nvtx.range_push("DORT-BACKWARD")
     error.backward()
     if is_cuda:
         torch.cuda.synchronize()
+        torch.cuda.nvtx.range_pop()
 
 
 print(f"warmup on device={args.device}")
@@ -170,7 +182,11 @@ for i in range(args.warmup):
                 ),
             )
     else:
+        if is_cuda:
+            torch.cuda.nvtx.range_push("DORT-ITERATION")
         loop_iteration(is_cuda, inputs, compiled_model, loss)
+        if is_cuda:
+            torch.cuda.nvtx.range_pop()
 
     warmup_times.append(time.perf_counter() - start_time)
 
