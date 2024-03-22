@@ -1,6 +1,6 @@
 import unittest
 import numpy as np
-from onnx import TensorProto, helper as oh
+from onnx import TensorProto, helper as oh, numpy_helper as onh
 from onnx.checker import check_model
 from experimental_experiment.ext_test_case import ExtTestCase
 from experimental_experiment.xbuilder.graph_builder import (
@@ -30,21 +30,28 @@ class TestGraphPatternOptimizationFix(ExtTestCase):
     def test_add_reduction_scatter_nd(self):
         model = oh.make_model(
             oh.make_graph(
-                [oh.make_node("ScatterND", ["X", "indices", "updates"], ["Z"])],
+                [
+                    oh.make_node(
+                        "ConstantOfShape",
+                        ["shape"],
+                        ["zero"],
+                        value=onh.from_array(np.array([0], dtype=np.float32)),
+                    ),
+                    oh.make_node("ScatterND", ["zero", "indices", "updates"], ["Z"]),
+                ],
                 "dummy",
                 [
-                    oh.make_tensor_value_info("X", TFLOAT, [5, 8]),
                     oh.make_tensor_value_info("indices", TINT64, [2]),
                     oh.make_tensor_value_info("updates", TFLOAT, [2, 8]),
                 ],
                 [oh.make_tensor_value_info("Z", TFLOAT, [5, 8])],
+                [onh.from_array(np.array([5, 8], dtype=np.int64), name="shape")],
             ),
             opset_imports=[oh.make_opsetid("", 18)],
             ir_version=9,
         )
         check_model(model)
         feeds = dict(
-            X=self._range(5, 8),
             indices=np.array([[0], [2]], dtype=np.int64),
             updates=np.ones((2, 8), dtype=np.float32),
         )
@@ -60,20 +67,20 @@ class TestGraphPatternOptimizationFix(ExtTestCase):
         )
         opt_onx = gr.to_onnx(optimize=True)
         self.assertEqual(
-            ["ScatterND"],
+            ["ConstantOfShape", "ScatterND"],
             [n.op_type for n in opt_onx.graph.node],
         )
-        self.assertEqual(0, len(opt_onx.graph.initializer))
+        self.assertEqual(1, len(opt_onx.graph.initializer))
 
         opt_ref = ExtendedReferenceEvaluator(opt_onx)
         got = opt_ref.run(None, feeds)
         self.assertEqualArray(expected[0], got[0])
-        node = opt_onx.graph.node[0]
+        node = opt_onx.graph.node[1]
         self.assertEqual(node.op_type, "ScatterND")
         n_checked = 0
         for att in node.attribute:
             if att.name == "reduction":
-                self.assertEqual(att.s, "add")
+                self.assertEqual(att.s, b"add")
                 n_checked += 1
         self.assertEqual(n_checked, 1)
 
