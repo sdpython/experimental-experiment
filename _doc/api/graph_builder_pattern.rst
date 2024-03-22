@@ -12,6 +12,11 @@ get_onnxruntime_patterns
 
 .. autofunction:: experimental_experiment.xoptim.patterns_ort.get_onnxruntime_patterns
 
+get_pattern_fix
+===============
+
+.. autofunction:: experimental_experiment.xoptim.patterns.get_pattern_fix
+
 get_pattern_list
 ================
 
@@ -41,8 +46,8 @@ PatternOptimization
 
 .. _l-pattern-optimization-onnx:
 
-Onnx Patterns
-=============
+Onnx (default) Patterns
+=======================
 
 CastPattern
 +++++++++++
@@ -146,6 +151,24 @@ UnsqueezeUnsqueezePattern
 .. autoclass:: experimental_experiment.xoptim.patterns.UnsqueezeUnsqueezePattern
     :members:
 
+Fix Patterns
+============
+
+AddReductionScatterND
++++++++++++++++++++++
+
+.. autoclass:: experimental_experiment.xoptim.patterns_fix.add_reduction_scatter_nd.AddReductionScatterND
+    :members:
+
+Experimental Patterns
+=====================
+
+ConstantOfShapeScatterNDPattern
++++++++++++++++++++++++++++++++
+
+.. autoclass:: experimental_experiment.xoptim.patterns_exp.constant_of_shape_scatter_nd.ConstantOfShapeScatterNDPattern
+    :members:
+
 .. _l-pattern-optimization-ort:
 
 Ort Patterns
@@ -161,14 +184,5 @@ FusedMatMulPattern
 ++++++++++++++++++
 
 .. autoclass:: experimental_experiment.xoptim.patterns_ort.fused_matmul.FusedMatMulPattern
-    :members:
-
-Experimental Patterns
-=====================
-
-ConstantOfShapeScatterNDPattern
-+++++++++++++++++++++++++++++++
-
-.. autoclass:: experimental_experiment.xoptim.patterns_exp.constant_of_shape_scatter_nd.ConstantOfShapeScatterNDPattern
     :members:
 

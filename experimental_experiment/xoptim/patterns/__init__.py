@@ -70,11 +70,13 @@ def get_pattern(
 
     from ..patterns_ort import get_onnxruntime_patterns
     from ..patterns_exp import get_experimental_patterns
+    from ..patterns_fix import get_fix_patterns
 
     _pattern = dict(
         default=get_default_patterns,
         onnxruntime=get_onnxruntime_patterns,
         experimental=get_experimental_patterns,
+        fix=get_fix_patterns,
     )
 
     if isinstance(obj, str):
