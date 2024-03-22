@@ -23,6 +23,7 @@ temp_data/*
 debug_data/*
 dump_models/*
 dump_llama/*
+dump_sdpa_llama/*
 temp_dump_models/*
 dump_dort_bench/*
 temp_llama_model_*/*

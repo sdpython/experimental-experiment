@@ -9,13 +9,8 @@ from experimental_experiment.ext_test_case import (
     ignore_warnings,
     skipif_ci_windows,
     skipif_ci_apple,
+    has_cuda,
 )
-
-
-def has_cuda():
-    import torch
-
-    return torch.cuda.is_available()
 
 
 class TestBackend(ExtTestCase):

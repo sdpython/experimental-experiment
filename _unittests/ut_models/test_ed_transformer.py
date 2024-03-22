@@ -5,17 +5,9 @@ from experimental_experiment.ext_test_case import (
     ExtTestCase,
     ignore_warnings,
     skipif_ci_windows,
+    has_cuda,
 )
 from experimental_experiment.torch_test_helper import export_to_onnx, check_model_ort
-
-
-def has_cuda():
-    import onnxruntime
-
-    available_providers = [
-        provider for provider in onnxruntime.get_available_providers()
-    ]
-    return "CUDAExecutionProvider" in available_providers
 
 
 class TestEdTransformer(ExtTestCase):

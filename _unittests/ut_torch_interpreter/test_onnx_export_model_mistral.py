@@ -9,17 +9,11 @@ from experimental_experiment.ext_test_case import (
     ExtTestCase,
     ignore_warnings,
     requires_torch,
+    has_cuda,
 )
 from experimental_experiment.xbuilder import OptimizationOptions
 from experimental_experiment.torch_interpreter import to_onnx
 from experimental_experiment.torch_helper.mistral_helper import get_mistral_model
-
-
-def has_cuda():
-    available_providers = [
-        provider for provider in onnxruntime.get_available_providers()
-    ]
-    return "CUDAExecutionProvider" in available_providers
 
 
 def export_utils(

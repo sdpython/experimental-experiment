@@ -430,6 +430,24 @@ def dump_dort_onnx(fn):
     return wrapped
 
 
+def has_cuda() -> bool:
+    """
+    Returns  ``torch.cuda.is_available()``.
+    """
+    import torch
+
+    return torch.cuda.is_available()
+
+
+def requires_cuda(msg: str = ""):
+    import torch
+
+    if not torch.cuda.is_available():
+        msg = msg or "only runs on CUDA but torch does not have it"
+        return unittest.skip(msg)
+    return lambda x: x
+
+
 def requires_torch(version: str, msg: str) -> Callable:
     """
     Skips a unit test if torch is not recent enough.

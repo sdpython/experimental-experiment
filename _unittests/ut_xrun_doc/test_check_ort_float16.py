@@ -8,13 +8,11 @@ import onnxruntime  # noqa: F401
 import onnx.helper as oh
 from onnx import TensorProto, load
 from onnx.numpy_helper import from_array
-from experimental_experiment.ext_test_case import ExtTestCase, ignore_warnings
-
-
-def has_cuda():
-    import torch
-
-    return torch.cuda.is_available()
+from experimental_experiment.ext_test_case import (
+    ExtTestCase,
+    ignore_warnings,
+    requires_cuda,
+)
 
 
 class TestCheckOrtFloat16(ExtTestCase):
@@ -142,7 +140,7 @@ class TestCheckOrtFloat16(ExtTestCase):
             short_list, [("CUDAExecutionProvider", o) for o in expected_names]
         )
 
-    @unittest.skipIf(not has_cuda(), reason="cuda not available")
+    @requires_cuda()
     @ignore_warnings(DeprecationWarning)
     def test_scatterels_cuda(self):
         default_value = [
@@ -170,7 +168,7 @@ class TestCheckOrtFloat16(ExtTestCase):
                     expected[dtype, reduction],
                 )
 
-    @unittest.skipIf(not has_cuda(), reason="cuda not available")
+    @requires_cuda()
     @ignore_warnings(DeprecationWarning)
     def test_scatternd_cuda(self):
         default_value = [

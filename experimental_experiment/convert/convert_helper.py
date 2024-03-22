@@ -1,7 +1,7 @@
 import time
 import warnings
 from typing import List, Union
-from onnx import ModelProto
+from onnx import ModelProto, helper as oh
 from onnx.inliner import inline_local_functions
 
 
@@ -16,8 +16,47 @@ def inline_model_proto(model_proto: ModelProto) -> ModelProto:
     return inline_local_functions(model_proto)
 
 
+def _fix_details(model: ModelProto, verbose: int = 0):
+    # ScatterND + Aten ops
+    print("[modify_onnx] START")
+    for node in model.graph.node:
+        if node.op_type == "ScatterND":
+            if len(node.attribute) == 0:
+                if verbose:
+                    print("[_fix_details] ScatterND, add reduction to add")
+                node.attribute.append(oh.make_attribute("reduction", "add"))
+            else:
+                red = node.attribute[0].s
+                if red != b"add":
+                    if verbose:
+                        print("[_fix_details] ScatterND, change reduction to add")
+                    del node.attribute[:]
+                    node.attribute.append(oh.make_attribute("reduction", "add"))
+        elif node.op_type == "ATen":
+            fname = None
+            for att in node.attribute:
+                if att.name == "operator":
+                    fname = att.s
+            if fname == b"_scaled_dot_product_efficient_attention_backward":
+                if verbose:
+                    print(
+                        "[_fix_details] ATen, delete last output for "
+                        "_scaled_dot_product_efficient_attention_backward"
+                    )
+                outputs = list(node.output)
+                del node.output[:]
+                outputs[-1] = ""
+                node.output.extend(outputs)
+    if verbose:
+        print("[_fix_details] DONE")
+    return model
+
+
 def optimize_model_proto(
-    model_proto: ModelProto, verbose: int = 0, onnx_shape_inference: bool = False
+    model_proto: ModelProto,
+    verbose: int = 0,
+    onnx_shape_inference: bool = False,
+    inplace: bool = True,
 ) -> ModelProto:
     """
     Optimizes a model proto to optimize onnxruntime.
@@ -25,6 +64,7 @@ def optimize_model_proto(
     :param model_proto: ModelProto
     :param verbose: verbosity
     :param onnx_shape_inference: enable shape inference
+    :param inplace: the function modifies the proto inplace as well
     :return: optimized model
 
     You should run that before calling this function
@@ -48,17 +88,7 @@ def optimize_model_proto(
             f"{len(model_proto.functions)} local functions"
         )
 
-    # begin = time.perf_counter()
-    # model_proto = inline_model_proto(model_proto)
-    # if verbose:
-    #     print(
-    #         f"[optimize_model_proto] inliner done in {time.perf_counter() - begin} seconds."
-    #     )
-    #     print(
-    #         f"[optimize_model_proto] starts optimize with "
-    #         f"{len(model_proto.graph.node)} nodes and "
-    #         f"{len(model_proto.functions)} local functions"
-    #     )
+    first_model_proto = model_proto
 
     begin = time.perf_counter()
 
@@ -116,6 +146,12 @@ def optimize_model_proto(
                 f"seconds (see 'bug-onnxrewriter.onnx')."
             )
 
+    _fix_details(model_proto)
+    if inplace:
+        del first_model_proto.graph.node[:]
+        del first_model_proto.functions[:]
+        first_model_proto.graph.node.extend(model_proto.graph.node)
+        first_model_proto.functions.extend(model_proto.functions)
     return model_proto
 
 

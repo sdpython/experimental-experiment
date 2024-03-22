@@ -11,12 +11,6 @@ from experimental_experiment.torch_helper.dump_helper import assert_all_close
 from experimental_experiment.torch_helper.training_helper import make_aot_ort
 
 
-def has_cuda():
-    import torch
-
-    return torch.cuda.is_available()
-
-
 class TestLlama(ExtTestCase):
     def _assert_model_numerically(
         self,

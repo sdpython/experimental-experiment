@@ -5,21 +5,13 @@ from experimental_experiment.ext_test_case import (
     ExtTestCase,
     ignore_warnings,
     requires_torch,
+    has_cuda,
 )
 from experimental_experiment.torch_helper.llama_helper import get_llama_model
 from experimental_experiment.torch_helper.mistral_helper import get_mistral_model
 from experimental_experiment.torch_test_helper import export_to_onnx, check_model_ort
 from experimental_experiment.torch_bench._dort_cmd_common import create_compiled_model
 from experimental_experiment.torch_helper.training_helper import train_loop
-
-
-def has_cuda():
-    import onnxruntime
-
-    available_providers = [
-        provider for provider in onnxruntime.get_available_providers()
-    ]
-    return "CUDAExecutionProvider" in available_providers
 
 
 class TestEdMistral(ExtTestCase):

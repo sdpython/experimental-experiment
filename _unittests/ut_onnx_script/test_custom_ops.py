@@ -1,5 +1,5 @@
 import unittest
-from experimental_experiment.ext_test_case import ExtTestCase
+from experimental_experiment.ext_test_case import ExtTestCase, requires_cuda
 
 
 class TestCustomOps(ExtTestCase):
@@ -7,6 +7,7 @@ class TestCustomOps(ExtTestCase):
     def setUpClass(cls):
         import onnxruntime  # noqa: F401
 
+    @requires_cuda()
     def test_llama_sdpa_model_efficient(self):
         # see https://pytorch.org/tutorials/beginner/onnx/onnx_registry_tutorial.html
         # python -m pip install torch_ort
@@ -32,9 +33,9 @@ class TestCustomOps(ExtTestCase):
                         print("[modify_onnx] ScatterND, add reduction to add")
                         node.attribute.append(oh.make_attribute("reduction", "add"))
                     else:
-                        print("[modify_onnx] ScatterND, change reduction to add")
                         red = node.attribute[0].s
                         if red != b"add":
+                            print("[modify_onnx] ScatterND, change reduction to add")
                             del node.attribute[:]
                             node.attribute.append(oh.make_attribute("reduction", "add"))
                 elif node.op_type == "ATen":
@@ -219,17 +220,19 @@ class TestCustomOps(ExtTestCase):
                 from onnxrewriter.rewriter import rewrite
 
                 def optimize_model_proto(model_proto):
-                    if True:
-                        model_proto = optimize(
-                            model_proto,
-                            num_iterations=2,
-                            onnx_shape_inference=False,
-                        )
-                    if True:
-                        model_proto = rewrite(model_proto)
-                    if True:
-                        modify_onnx(model_proto)
-                    return model_proto
+                    first_model_proto = model_proto
+                    model_proto = optimize(
+                        model_proto,
+                        num_iterations=2,
+                        onnx_shape_inference=False,
+                    )
+                    model_proto = rewrite(model_proto)
+                    del first_model_proto.graph.node[:]
+                    del first_model_proto.functions[:]
+                    first_model_proto.graph.node.extend(model_proto.graph.node)
+                    first_model_proto.functions.extend(model_proto.functions)
+                    modify_onnx(first_model_proto)
+                    return first_model_proto
 
                 if verbose:
                     print("[make_aot_ort] enable rewriting")

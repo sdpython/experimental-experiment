@@ -8,16 +8,11 @@ from experimental_experiment.ext_test_case import (
     skipif_ci_windows,
     skipif_not_onnxrt,
     requires_torch,
+    requires_cuda,
     requires_onnxruntime,
 )
 from experimental_experiment.torch_helper.dump_helper import assert_all_close
 from experimental_experiment.torch_helper.training_helper import make_aot_ort
-
-
-def has_cuda():
-    import torch
-
-    return torch.cuda.is_available()
 
 
 class TestMistral(ExtTestCase):
@@ -163,7 +158,7 @@ class TestMistral(ExtTestCase):
     @ignore_warnings((UserWarning, DeprecationWarning))
     @skipif_ci_windows("torch.compile not supported on Windows")
     @requires_onnxruntime("1.18", "missing kernel trilu")
-    @unittest.skipIf(not has_cuda(), reason="cuda not available")
+    @requires_cuda()
     @unittest.skipIf(
         True, reason=" NOT_IMPLEMENTED : Could not find an implementation for Trilu(14"
     )
@@ -212,7 +207,7 @@ class TestMistral(ExtTestCase):
     @ignore_warnings((UserWarning, DeprecationWarning))
     @skipif_ci_windows("torch.compile not supported on Windows")
     @requires_onnxruntime("1.18", "missing kernel trilu")
-    @unittest.skipIf(not has_cuda(), reason="cuda not available")
+    @requires_cuda()
     @skipif_not_onnxrt("failing when running pytest")
     def test_ort_mistral_model_backward_cuda(self):
         from experimental_experiment.torch_helper.mistral_helper import (

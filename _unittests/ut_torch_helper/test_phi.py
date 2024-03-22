@@ -4,12 +4,6 @@ from experimental_experiment.ext_test_case import ExtTestCase
 from experimental_experiment.reference import ExtendedReferenceEvaluator
 
 
-def has_cuda():
-    import torch
-
-    return torch.cuda.is_available()
-
-
 class TestPhi(ExtTestCase):
 
     def test_get_phi_model_export(self):
