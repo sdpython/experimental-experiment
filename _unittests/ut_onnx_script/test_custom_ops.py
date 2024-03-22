@@ -3,6 +3,10 @@ from experimental_experiment.ext_test_case import ExtTestCase
 
 
 class TestCustomOps(ExtTestCase):
+    @classmethod
+    def setUpClass(cls):
+        import onnxruntime  # noqa: F401
+
     def test_llama_sdpa_model_efficient(self):
         # see https://pytorch.org/tutorials/beginner/onnx/onnx_registry_tutorial.html
         # python -m pip install torch_ort
@@ -13,9 +17,41 @@ class TestCustomOps(ExtTestCase):
         from typing import Callable, List, Optional, Tuple
         import numpy as np
         import onnx
+        import onnx.helper as oh
+        from onnx import ModelProto
         import onnxscript
         import torch
         import torch.onnx
+
+        def modify_onnx(model: ModelProto):
+            # ScatterND + Aten ops
+            print("[modify_onnx] START")
+            for node in model.graph.node:
+                if node.op_type == "ScatterND":
+                    if len(node.attribute) == 0:
+                        print("[modify_onnx] ScatterND, add reduction to add")
+                        node.attribute.append(oh.make_attribute("reduction", "add"))
+                    else:
+                        print("[modify_onnx] ScatterND, change reduction to add")
+                        red = node.attribute[0].s
+                        if red != b"add":
+                            del node.attribute[:]
+                            node.attribute.append(oh.make_attribute("reduction", "add"))
+                elif node.op_type == "ATen":
+                    fname = None
+                    for att in node.attribute:
+                        if att.name == "operator":
+                            fname = att.s
+                    if fname == b"_scaled_dot_product_efficient_attention_backward":
+                        print(
+                            "[modify_onnx] ATen, delete last output for _scaled_dot_product_efficient_attention_backward"
+                        )
+                        outputs = list(node.output)
+                        del node.output[:]
+                        outputs[-1] = ""
+                        node.output.extend(outputs)
+            print("[modify_onnx] DONE")
+            return model
 
         @contextlib.contextmanager
         def dump_onnx(prefix: str, folder: Optional[str] = None, clean: bool = False):
@@ -55,7 +91,7 @@ class TestCustomOps(ExtTestCase):
             return torch.tensor(data=values, dtype=torch.long).view(shape).contiguous()
 
         op = onnxscript.opset18
-        aten_opset = onnxscript.values.Opset("custom.aten", 1)
+        aten_opset = onnxscript.values.Opset("org.pytorch.aten", 1)
 
         @onnxscript.script(aten_opset, default_opset=op)
         def scaled_dot_product_efficient_attention(
@@ -93,7 +129,7 @@ class TestCustomOps(ExtTestCase):
             philox_offset,
             dropout_p,
             grad_input_mask,
-            is_causal: bool,
+            is_causal,
         ):
             grad_query, grad_key, grad_value, grad_attn_bias = aten_opset.ATen(
                 grad,
@@ -161,10 +197,6 @@ class TestCustomOps(ExtTestCase):
             )
             from onnxruntime.capi import _pybind_state as _C
 
-            print(dir(aten_op_executor))
-
-            # aten_op_executor.load_aten_op_executor_cpp_extension()
-
             _C.register_aten_op_executor(
                 str(aten_op_executor.is_tensor_argument_address()),
                 str(aten_op_executor.execute_aten_operator_address()),
@@ -187,12 +219,16 @@ class TestCustomOps(ExtTestCase):
                 from onnxrewriter.rewriter import rewrite
 
                 def optimize_model_proto(model_proto):
-                    model_proto = optimize(
-                        model_proto,
-                        num_iterations=2,
-                        onnx_shape_inference=False,
-                    )
-                    model_proto = rewrite(model_proto)
+                    if True:
+                        model_proto = optimize(
+                            model_proto,
+                            num_iterations=2,
+                            onnx_shape_inference=False,
+                        )
+                    if True:
+                        model_proto = rewrite(model_proto)
+                    if True:
+                        modify_onnx(model_proto)
                     return model_proto
 
                 if verbose:
@@ -201,9 +237,7 @@ class TestCustomOps(ExtTestCase):
                 options = OrtBackendOptions(
                     export_options=export_options,
                     ort_session_options=ort_session_options,
-                    pre_ort_model_transforms=[
-                        lambda *args, **kwargs: optimize_model_proto(*args, **kwargs)
-                    ],
+                    pre_ort_model_transforms=[optimize_model_proto],
                 )
             else:
                 options = OrtBackendOptions(
@@ -259,17 +293,17 @@ class TestCustomOps(ExtTestCase):
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             optimized_mod = torch.compile(model, backend=local_aot_ort, fullgraph=True)
-            with dump_onnx("dort-llama-ort", folder="dump_llama", clean=True):
+            with dump_onnx("dort-llama-ort", folder="dump_sdpa_llama", clean=True):
                 output = optimized_mod(input_ids)  # , input_mask)
                 output[0].sum().backward()
 
-        names = [_ for _ in os.listdir("dump_llama") if _.endswith(".onnx")]
+        names = [_ for _ in os.listdir("dump_sdpa_llama") if _.endswith(".onnx")]
         print("------------------------------------------")
         print(f"exported model: {names}")
         for name in names:
             print()
             print("NODES in {name!r}")
-            onx = onnx.load(os.path.join("dump_llama", name))
+            onx = onnx.load(os.path.join("dump_sdpa_llama", name))
             for i, node in enumerate(onx.graph.node):
                 print(
                     f"{i+1}/{len(onx.graph.node)}: "
