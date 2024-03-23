@@ -10,7 +10,10 @@ from onnx import (
 )
 from onnx.checker import check_model
 from experimental_experiment.reference import ExtendedReferenceEvaluator
-from experimental_experiment.ext_test_case import ExtTestCase, requires_onnxruntime_training
+from experimental_experiment.ext_test_case import (
+    ExtTestCase,
+    requires_onnxruntime_training,
+)
 from experimental_experiment.xbuilder.graph_builder import (
     GraphBuilder,
     OptimizationOptions,
