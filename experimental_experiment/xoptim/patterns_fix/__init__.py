@@ -12,7 +12,7 @@ def get_fix_patterns(
         :showcode:
 
         import pprint
-        from experimental_experiment.xoptim.patterns_exp import get_fix_patterns
+        from experimental_experiment.xoptim.patterns_fix import get_fix_patterns
         pprint.pprint(get_fix_patterns())
     """
     from .add_reduction_scatter_nd import AddReductionScatterND

@@ -12,10 +12,10 @@ get_onnxruntime_patterns
 
 .. autofunction:: experimental_experiment.xoptim.patterns_ort.get_onnxruntime_patterns
 
-get_pattern_fix
-===============
+get_fix_patterns
+================
 
-.. autofunction:: experimental_experiment.xoptim.patterns.get_pattern_fix
+.. autofunction:: experimental_experiment.xoptim.patterns_fix.get_fix_patterns
 
 get_pattern_list
 ================
@@ -115,10 +115,10 @@ RotaryConcatPartPattern
 .. autoclass:: experimental_experiment.xoptim.patterns.RotaryConcatPartPattern
     :members:
 
-SlicesplitPattern
-+++++++++++++++++
+SlicesSplitPattern
+++++++++++++++++++
 
-.. autoclass:: experimental_experiment.xoptim.patterns.SlicesplitPattern
+.. autoclass:: experimental_experiment.xoptim.patterns.SlicesSplitPattern
     :members:
 
 Sub1MulPattern

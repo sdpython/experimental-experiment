@@ -259,7 +259,7 @@ class ExtTestCase(unittest.TestCase):
         return os.path.join(folder, name)
 
     def dump_onnx(
-        self, name: str, proto: "ModelProto", folder: Optional[str] = None  # noqa: F821
+        self, name: str, proto: Any, folder: Optional[str] = None  # noqa: F821
     ) -> str:
         """
         Dumps an onnx file.

@@ -425,7 +425,7 @@ class GraphBuilderPatternOptimization:
         :param attributes: list of attributes
         :param name: node name
         :param kwargs: other attributes
-        :return a node
+        :return: a node
         """
         assert domain == "", f"The method only supports the main domain not {domain!r}"
         if op_type in {"Squeeze", "Unsqueeze"}:
@@ -480,7 +480,7 @@ class GraphBuilderPatternOptimization:
         :param attributes: list of attributes
         :param name: node name
         :param kwargs: other attributes
-        :return a node
+        :return: a node
         """
         name = self.builder.unique_node_name(name)
         if isinstance(outputs, int):

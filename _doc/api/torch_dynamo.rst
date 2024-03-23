@@ -6,7 +6,7 @@ torch_dynamo
 dynger_backend
 ==============
 
-.. autofunction:: experimental_experiment.torch_dynamo.dynge_backend
+.. autofunction:: experimental_experiment.torch_dynamo.dynger_backend
 
 onnx_debug_backend
 ==================
