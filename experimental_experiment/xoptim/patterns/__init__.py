@@ -5,7 +5,7 @@ from typing import List, Optional, Union
 from .patterns_api import MatchResult, PatternOptimization  # noqa: F401
 
 # onnx patterns
-from .onnx_cast import CastPattern
+from .onnx_cast import CastPattern, CastCastBinaryPattern
 from .onnx_expand import ExpandPattern, ExpandBroadcastPattern, ExpandSwapPattern
 from .onnx_mul import MulMulMulScalarPattern
 from .onnx_matmul import (
@@ -40,6 +40,7 @@ def get_default_patterns(verbose: int = 0) -> List[PatternOptimization]:
     """
     return [
         CastPattern(verbose=verbose),
+        CastCastBinaryPattern(verbose=verbose),
         ExpandPattern(verbose=verbose),
         ExpandBroadcastPattern(verbose=verbose),
         ExpandSwapPattern(verbose=verbose),

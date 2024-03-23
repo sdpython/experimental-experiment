@@ -3,7 +3,11 @@ import unittest
 import numpy as np
 from onnx import TensorProto, helper as oh, numpy_helper as onh
 from onnx.checker import check_model
-from experimental_experiment.ext_test_case import ExtTestCase, skipif_ci_windows
+from experimental_experiment.ext_test_case import (
+    ExtTestCase,
+    skipif_ci_windows,
+    requires_onnxruntime_training,
+)
 from experimental_experiment.xbuilder.graph_builder import (
     GraphBuilder,
     OptimizationOptions,
@@ -210,9 +214,7 @@ class TestGraphPatternOptimizationOrt(ExtTestCase):
                     oh.make_tensor_value_info("X", TFLOAT, [2, 2, 128, 32]),
                     oh.make_tensor_value_info("Y", TFLOAT, [2, 2, 64, 128]),
                 ],
-                [
-                    oh.make_tensor_value_info("Z", TFLOAT, [2, 2, 32, 64]),
-                ],
+                [oh.make_tensor_value_info("Z", TFLOAT, [2, 2, 32, 64])],
                 [onh.from_array(np.array([2], dtype=np.float32), name="deux")],
             ),
             opset_imports=[
@@ -284,9 +286,7 @@ class TestGraphPatternOptimizationOrt(ExtTestCase):
                     onh.from_array(np.array([1], dtype=np.float32), name="one"),
                 ],
             ),
-            opset_imports=[
-                oh.make_opsetid("", 18),
-            ],
+            opset_imports=[oh.make_opsetid("", 18)],
             ir_version=9,
         )
         check_model(model)
@@ -375,9 +375,7 @@ class TestGraphPatternOptimizationOrt(ExtTestCase):
                     onh.from_array(np.array([1], dtype=np.float32), name="one"),
                 ],
             ),
-            opset_imports=[
-                oh.make_opsetid("", 18),
-            ],
+            opset_imports=[oh.make_opsetid("", 18)],
             ir_version=9,
         )
         check_model(model)
@@ -439,6 +437,57 @@ class TestGraphPatternOptimizationOrt(ExtTestCase):
                     got = sess.run(None, feeds)
                     self.assertEqualArray(expected[0], got[0], atol=1e-5)
                     self.assertEqualArray(expected[1], got[1], atol=1e-5)
+
+    @requires_onnxruntime_training()
+    def test_softmax_grad(self):
+        from onnxruntime import InferenceSession
+
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("Mul", ["dY", "Y"], ["mul"]),
+                    oh.make_node("ReduceSum", ["mul", "axis"], ["red"]),
+                    oh.make_node("Mul", ["red", "Y"], ["scaled"]),
+                    oh.make_node("Sub", ["mul", "scaled"], ["Z"]),
+                ],
+                "dummy",
+                [
+                    oh.make_tensor_value_info("dY", TFLOAT, [2, 3]),
+                    oh.make_tensor_value_info("Y", TFLOAT, [2, 3]),
+                ],
+                [oh.make_tensor_value_info("Z", TFLOAT, [2, 3])],
+                [onh.from_array(np.array([-1], dtype=np.int64), name="axis")],
+            ),
+            opset_imports=[oh.make_opsetid("", 18)],
+            ir_version=9,
+        )
+        check_model(model)
+        feeds = {"dY": self._range(2, 3), "Y": self._range(2, 3)}
+        ref = InferenceSession(
+            model.SerializeToString(), providers=["CPUExecutionProvider"]
+        )
+        expected = ref.run(None, feeds)
+
+        gr = GraphBuilder(
+            model,
+            infer_shapes=True,
+            optimization_options=OptimizationOptions(patterns=["SoftmaxGrad"]),
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+        self.assertEqual(["SoftmaxGrad"], [n.op_type for n in opt_onx.graph.node])
+        self.assertEqual(0, len(opt_onx.graph.initializer))
+
+        opt_ref = InferenceSession(
+            opt_onx.SerializeToString(), providers=["CPUExecutionProvider"]
+        )
+        got = opt_ref.run(None, feeds)
+        self.assertEqualArray(expected[0], got[0], atol=1e-5)
+        node = opt_onx.graph.node[0]
+        self.assertEqual(node.op_type, "SoftmaxGrad")
+        self.assertEqual(node.domain, "com.microsoft")
+        for att in node.attribute:
+            if att.name == "axis":
+                self.assertEqual(att.i, -1)
 
 
 if __name__ == "__main__":

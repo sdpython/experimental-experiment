@@ -55,6 +55,12 @@ CastPattern
 .. autoclass:: experimental_experiment.xoptim.patterns.CastPattern
     :members:
 
+CastCastBinaryPattern
++++++++++++++++++++++
+
+.. autoclass:: experimental_experiment.xoptim.patterns.CastCastBinaryPattern
+    :members:
+
 ExpandPattern
 +++++++++++++
 
@@ -184,5 +190,11 @@ FusedMatMulPattern
 ++++++++++++++++++
 
 .. autoclass:: experimental_experiment.xoptim.patterns_ort.fused_matmul.FusedMatMulPattern
+    :members:
+
+SoftmaxGradPattern
+++++++++++++++++++
+
+.. autoclass:: experimental_experiment.xoptim.patterns_ort.activation_grad.SoftmaxGradPattern
     :members:
 

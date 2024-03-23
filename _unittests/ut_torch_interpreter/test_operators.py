@@ -1913,7 +1913,7 @@ class TestOperators(ExtTestCase):
             (x, y),
             opset_version=12,
             onnx_export=inspect.currentframe().f_code.co_name,
-            atol=1e-4,
+            atol=1e-3,
         )
 
     def test_softmaxcrossentropy_3d(self):

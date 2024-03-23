@@ -1847,6 +1847,8 @@ def _aten_max_pool_with_indices_onnx(
             indices, np.array([0], dtype=np.int64), name=name
         )
 
+    g.set_type(delta, g.get_type(flatten_indices))
+
     if outputs:
         if not isinstance(outputs, (tuple, list)):
             raise TypeError(
