@@ -17,6 +17,7 @@ from .onnx_matmul import (
 from .onnx_reshape import (
     ReduceReshapePattern,
     Reshape2Of3Pattern,
+    ReshapeReshapeBinaryPattern,
     ReshapeReshapePattern,
 )
 from .onnx_rotary import RotaryConcatPartPattern
@@ -48,6 +49,7 @@ def get_default_patterns(verbose: int = 0) -> List[PatternOptimization]:
         ReduceReshapePattern(verbose=verbose),
         ReshapeMatMulReshapePattern(verbose=verbose),
         Reshape2Of3Pattern(verbose=verbose),
+        ReshapeReshapeBinaryPattern(verbose=verbose),
         MatMulReshape2Of3Pattern(verbose=verbose),
         ReshapeReshapePattern(verbose=verbose),
         RotaryConcatPartPattern(verbose=verbose),

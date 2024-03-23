@@ -1,7 +1,7 @@
 import inspect
 from typing import List, Optional
 from onnx import NodeProto
-from ...xbuilder._onnx_helper import element_wise_op_types
+from ...xbuilder._onnx_helper import element_wise_binary_op_types
 from .patterns_api import MatchResult, PatternOptimization
 
 
@@ -141,7 +141,7 @@ class Reshape2Of3Pattern(PatternOptimization):
     It can be 3 or 2 out of 3.
     """
 
-    _op_types = element_wise_op_types()
+    _op_types = element_wise_binary_op_types()
 
     def match(
         self,
@@ -284,3 +284,76 @@ class Reshape2Of3Pattern(PatternOptimization):
                 )
 
         return res
+
+
+class ReshapeReshapeBinaryPattern(PatternOptimization):
+    """
+    Moves two reshape operators beyond a binary operator
+    if it is possible.
+    """
+
+    _op_types = element_wise_binary_op_types()
+
+    def match(
+        self,
+        g: "GraphBuilderPatternOptimization",  # noqa: F821
+        node: NodeProto,
+        matched: List[MatchResult],
+    ) -> Optional[MatchResult]:
+        if node.op_type not in self._op_types or node.domain != "":
+            return self.none()
+
+        if g.is_used_more_than_once(node.input[0]) or g.is_used_more_than_once(
+            node.input[1]
+        ):
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        left, right = g.node_before(node.input[0]), g.node_before(node.input[1])
+        if left is None or left.op_type != "Reshape" or left.domain != "":
+            return self.none(node, inspect.currentframe().f_lineno)
+        if right is None or right.op_type != "Reshape" or right.domain != "":
+            return self.none(node, inspect.currentframe().f_lineno)
+        if not g.is_constant(left.input[1]) or not g.is_constant(right.input[1]):
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        if not g.has_shape(node.output[0]):
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        cst_left = g.get_computed_constant(left.input[1]).tolist()
+        cst_right = g.get_computed_constant(right.input[1]).tolist()
+        if cst_left != cst_right:
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        shape1 = g.get_shape(left.input[0]) if g.has_shape(left.input[0]) else None
+        shape2 = g.get_shape(right.input[0]) if g.has_shape(right.input[0]) else None
+        if shape1 is None or shape2 is None or shape1 != shape2:
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        # If there is not broadcast involved then it is ok.
+        # At this stage, we know shapes are equal before the reshaped operators
+        # and the same reshape is applied. So checking the output shape
+        # is not necesssary.
+        return MatchResult(self, [left, right, node], self.apply, insert_at=node)
+
+    @classmethod
+    def apply(
+        cls,
+        g: "GraphBuilder",  # noqa: F821
+        left: NodeProto,
+        right: NodeProto,
+        node: NodeProto,
+    ) -> List[NodeProto]:
+
+        new_node = g.make_node(
+            node.op_type,
+            [left.input[0], right.input[0]],
+            name=f"{cls.__name__}--{node.name}",
+        )
+        reshape_node = g.make_node(
+            "Reshape",
+            [new_node.output[0], left.input[1]],
+            node.output,
+            name=f"{cls.__name__}--{node.name}",
+            doc_string=node.doc_string,
+        )
+        return [new_node, reshape_node]

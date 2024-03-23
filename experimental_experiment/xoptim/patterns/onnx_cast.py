@@ -46,9 +46,8 @@ class CastPattern(PatternOptimization):
 
 class CastCastBinaryPattern(PatternOptimization):
     """
-    Moves a cast operators beyond a binary operator
-    if inputs cast cast before. The cast must cast
-    from a float type to another float type.
+    Moves two cast operators beyond a binary operator
+    The cast must cast from a float type to another float type.
     """
 
     _dtypes_allowed = {

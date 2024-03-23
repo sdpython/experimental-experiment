@@ -29,7 +29,7 @@ from ._onnx_helper import (
     compatible_opsets,
     _default_OPSET_TO_IR_VERSION,
     _nice_shape,
-    element_wise_op_types,
+    element_wise_binary_op_types,
     element_wise_op_cmp_types,
     unary_like_op_types,
 )
@@ -87,7 +87,7 @@ class GraphBuilder:
       (debugging tool)
     """
 
-    _op_type_element_wise_types = element_wise_op_types()
+    _op_type_element_wise_types = element_wise_binary_op_types()
     _op_type_element_wise_cmp_types = element_wise_op_cmp_types()
     _op_type_unary_like = unary_like_op_types()
 
@@ -338,6 +338,39 @@ class GraphBuilder:
             if new_shape == (1, -1):
                 # common case
                 return (1, "*".join(map(str, input_shape)))
+
+        if len(input_shape) == len(new_shape):
+            # It is easier to handle.
+            res = []
+            i_1 = None
+            a_int = True
+            b_int = True
+            for a, b in zip(input_shape, new_shape):
+                if not isinstance(a, int):
+                    a_int = False
+                if isinstance(b, int):
+                    if b >= 0:
+                        res.append(b)
+                    else:
+                        i_1 = len(res)
+                        res.append(None)
+                else:
+                    res.append(b)
+                    b_int = False
+            if i_1 is not None:
+                if a_int:
+                    size = int(np.prod(input_shape))
+                    if b_int:
+                        nz = -int(np.prod(new_shape)) // size
+                        res[i_1] = nz
+                    else:
+                        name = "*".join([str(x) for x in res if x is not None])
+                        res[i_1] = f"{name}/{size}"
+                else:
+                    an = "*".join(map(str, input_shape))
+                    name = "*".join([str(x) for x in res if x is not None])
+                    res[i_1] = f"{an}/({name})"
+            return tuple(res)
 
         raise RuntimeError(
             f"Not implemented yet for input_shape={input_shape} and new_shape={new_shape}."

@@ -158,7 +158,7 @@ def choose_consistent_domain_opset(
     return _get_default_opset_for_domain(domain)
 
 
-def element_wise_op_types() -> Set[str]:
+def element_wise_binary_op_types() -> Set[str]:
     """
     Returns the list of element-wise operators.
 
@@ -166,8 +166,8 @@ def element_wise_op_types() -> Set[str]:
         :showcode:
 
         import pprint
-        from experimental_experiment.xbuilder._onnx_helper import element_wise_op_types
-        pprint.pprint(element_wise_op_types())
+        from experimental_experiment.xbuilder._onnx_helper import element_wise_binary_op_types
+        pprint.pprint(element_wise_binary_op_types())
     """
     return {
         "Add",
