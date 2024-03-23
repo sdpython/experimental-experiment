@@ -3,7 +3,11 @@ import unittest
 import numpy as np
 from onnx import TensorProto, helper as oh, numpy_helper as onh
 from onnx.checker import check_model
-from experimental_experiment.ext_test_case import ExtTestCase, skipif_ci_windows
+from experimental_experiment.ext_test_case import (
+    ExtTestCase,
+    skipif_ci_windows,
+    requires_onnxruntime_training,
+)
 from experimental_experiment.xbuilder.graph_builder import (
     GraphBuilder,
     OptimizationOptions,
@@ -434,6 +438,7 @@ class TestGraphPatternOptimizationOrt(ExtTestCase):
                     self.assertEqualArray(expected[0], got[0], atol=1e-5)
                     self.assertEqualArray(expected[1], got[1], atol=1e-5)
 
+    @requires_onnxruntime_training()
     def test_softmax_grad(self):
         from onnxruntime import InferenceSession
 

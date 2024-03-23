@@ -1,5 +1,9 @@
 import unittest
-from experimental_experiment.ext_test_case import ExtTestCase, ignore_warnings
+from experimental_experiment.ext_test_case import (
+    ExtTestCase,
+    ignore_warnings,
+    requires_onnxruntime_training,
+)
 import numpy
 import onnx.defs
 from sklearn.datasets import make_regression, make_classification
@@ -16,17 +20,11 @@ from experimental_experiment.gradient.loss_helper import (
     get_train_initializer,
 )
 
-try:
-    from onnxruntime import training
-except ImportError:
-    # onnxruntime not training
-    training = None
-
 opset = min(18, onnx.defs.onnx_opset_version() - 2)
 
 
 class TestOrtTraining(ExtTestCase):
-    @unittest.skipIf(training is None, reason="not training")
+    @requires_onnxruntime_training()
     @ignore_warnings((DeprecationWarning, FutureWarning))
     def test_add_loss_output_reg(self):
         X, y = make_regression(100, n_features=10, bias=2)  # pylint: disable=W0632
@@ -44,7 +42,7 @@ class TestOrtTraining(ExtTestCase):
         skl_loss = mean_squared_error(reg.predict(X_test), y_test)
         self.assertLess(numpy.abs(skl_loss - loss[0, 0]), 1e-5)
 
-    @unittest.skipIf(training is None, reason="not training")
+    @requires_onnxruntime_training()
     @ignore_warnings((DeprecationWarning, FutureWarning))
     def test_add_loss_output_reg_l1(self):
         X, y = make_regression(100, n_features=10, bias=2)  # pylint: disable=W0632
@@ -62,7 +60,7 @@ class TestOrtTraining(ExtTestCase):
         skl_loss = mean_squared_error(reg.predict(X_test), y_test)
         self.assertLess(numpy.abs(skl_loss - loss[0, 0]), 1e-2)
 
-    @unittest.skipIf(training is None, reason="not training")
+    @requires_onnxruntime_training()
     @ignore_warnings((DeprecationWarning, FutureWarning))
     def test_get_train_initializer(self):
         X, y = make_regression(100, n_features=10, bias=2)  # pylint: disable=W0632
@@ -76,7 +74,7 @@ class TestOrtTraining(ExtTestCase):
         inits = get_train_initializer(onx)
         self.assertEqual({"intercept", "coef"}, set(inits))
 
-    @unittest.skipIf(training is None, reason="not training")
+    @requires_onnxruntime_training()
     @ignore_warnings((DeprecationWarning, FutureWarning))
     def test_add_log_loss(self):
         ide = OnnxIdentity("X", op_version=opset, output_names=["Y"])
@@ -95,7 +93,7 @@ class TestOrtTraining(ExtTestCase):
         skl_loss = log_loss(y, X[:, 1], eps=1e-6)
         self.assertLess(numpy.abs(skl_loss - loss[0, 0]), 1e-5)
 
-    @unittest.skipIf(training is None, reason="not training")
+    @requires_onnxruntime_training()
     @ignore_warnings((DeprecationWarning, FutureWarning))
     def test_add_loss_output_cls(self):
         X, y = make_classification(100, n_features=10)  # pylint: disable=W0632
