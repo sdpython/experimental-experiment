@@ -7,15 +7,10 @@ from experimental_experiment.ext_test_case import (
     ignore_warnings,
     skipif_ci_windows,
     requires_torch,
+    requires_cuda,
 )
 from experimental_experiment.torch_helper.dump_helper import assert_all_close
 from experimental_experiment.torch_helper.training_helper import make_aot_ort
-
-
-def has_cuda():
-    import torch
-
-    return torch.cuda.is_available()
 
 
 class TestLlama(ExtTestCase):
@@ -184,7 +179,7 @@ class TestLlama(ExtTestCase):
     @ignore_warnings((UserWarning, DeprecationWarning))
     @skipif_ci_windows("torch.compile not supported on Windows")
     @requires_torch("2.2", "missing kernel")
-    @unittest.skipIf(not has_cuda(), reason="cuda not available")
+    @requires_cuda()
     @unittest.skipIf(True, reason="fails with onnx-rewriter")
     def test_ort_llama_model_cuda(self):
         from experimental_experiment.torch_helper.llama_helper import (
@@ -228,7 +223,7 @@ class TestLlama(ExtTestCase):
     @ignore_warnings((UserWarning, DeprecationWarning))
     @skipif_ci_windows("torch.compile not supported on Windows")
     @requires_torch("2.2", "missing kernel")
-    @unittest.skipIf(not has_cuda(), reason="cuda not available")
+    @requires_cuda()
     @unittest.skipIf(True, reason="fails with onnx-rewriter")
     def test_ort_llama_model_backward_cuda(self):
         from experimental_experiment.torch_helper.llama_helper import (

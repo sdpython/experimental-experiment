@@ -122,7 +122,7 @@ class TestGraphPatternOptimizationOrt(ExtTestCase):
         self.assertEqual(0, len(opt_onx.graph.initializer))
 
         opt_ref = InferenceSession(
-            model.SerializeToString(), providers=["CPUExecutionProvider"]
+            opt_onx.SerializeToString(), providers=["CPUExecutionProvider"]
         )
         got = opt_ref.run(None, feeds)
         self.assertEqualArray(expected[0], got[0])
@@ -181,7 +181,7 @@ class TestGraphPatternOptimizationOrt(ExtTestCase):
         self.assertEqual(0, len(opt_onx.graph.initializer))
 
         opt_ref = InferenceSession(
-            model.SerializeToString(), providers=["CPUExecutionProvider"]
+            opt_onx.SerializeToString(), providers=["CPUExecutionProvider"]
         )
         got = opt_ref.run(None, feeds)
         self.assertEqualArray(expected[0], got[0])
@@ -242,7 +242,7 @@ class TestGraphPatternOptimizationOrt(ExtTestCase):
         self.assertEqual(0, len(opt_onx.graph.initializer))
 
         opt_ref = InferenceSession(
-            model.SerializeToString(), providers=["CPUExecutionProvider"]
+            opt_onx.SerializeToString(), providers=["CPUExecutionProvider"]
         )
         got = opt_ref.run(None, feeds)
         self.assertEqualArray(expected[0], got[0])

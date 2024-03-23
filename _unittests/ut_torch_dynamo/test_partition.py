@@ -17,12 +17,6 @@ from experimental_experiment.torch_dynamo.partition import (
 )
 
 
-def has_cuda():
-    import torch
-
-    return torch.cuda.is_available()
-
-
 class TestPartition(ExtTestCase):
 
     @skipif_ci_apple("no onnxruntime-training")

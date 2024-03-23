@@ -9,15 +9,10 @@ from experimental_experiment.ext_test_case import (
     ExtTestCase,
     ignore_warnings,
     requires_torch,
+    requires_cuda,
 )
 from experimental_experiment.torch_helper.dump_helper import assert_all_close
 from experimental_experiment.torch_dynamo import onnx_debug_backend, onnx_custom_backend
-
-
-def has_cuda():
-    import torch
-
-    return torch.cuda.is_available()
 
 
 class FuncModule(torch.nn.Module):
@@ -254,7 +249,7 @@ class TestDynamoCompileBackend(ExtTestCase):
         )
 
     @requires_torch("2.2.1", "onnxrt not fully implemented")
-    @unittest.skipIf(not has_cuda(), reason="needs cuda")
+    @requires_cuda()
     @ignore_warnings((UserWarning, RuntimeWarning, DeprecationWarning))
     def test_aaaa_backward_cuda(self):
         x = torch.rand(3, 4, requires_grad=True).to(torch.device("cuda"))

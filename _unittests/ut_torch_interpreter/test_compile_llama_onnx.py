@@ -7,6 +7,7 @@ from experimental_experiment.ext_test_case import (
     ignore_warnings,
     skipif_ci_windows,
     requires_torch,
+    requires_cuda,
 )
 from experimental_experiment.torch_helper.dump_helper import assert_all_close
 from experimental_experiment.torch_dynamo import (
@@ -14,12 +15,6 @@ from experimental_experiment.torch_dynamo import (
     get_decomposition_table,
     filter_decomposition_table,
 )
-
-
-def has_cuda():
-    import torch
-
-    return torch.cuda.is_available()
 
 
 class TestDynamoLlama(ExtTestCase):
@@ -479,7 +474,7 @@ class TestDynamoLlama(ExtTestCase):
     @ignore_warnings((UserWarning, DeprecationWarning))
     @skipif_ci_windows("torch.compile not supported on Windows")
     @requires_torch("2.2", "missing kernel")
-    @unittest.skipIf(not has_cuda(), "cuda is needed for autocast")
+    @requires_cuda()
     def test_llama_model_backward_forward_mixed(self):
         import torch
         from experimental_experiment.torch_helper.llama_helper import get_llama_model
@@ -514,7 +509,7 @@ class TestDynamoLlama(ExtTestCase):
     @ignore_warnings((UserWarning, DeprecationWarning))
     @skipif_ci_windows("torch.compile not supported on Windows")
     @requires_torch("2.2", "missing kernel")
-    @unittest.skipIf(not has_cuda(), "cuda is needed for autocast")
+    @requires_cuda()
     def test_llama_model_backward_mixed(self):
         import torch
         from experimental_experiment.torch_helper.llama_helper import get_llama_model

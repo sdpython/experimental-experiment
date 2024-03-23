@@ -121,7 +121,7 @@ Example about custom ops in onnxrt
         max_position_embeddings=1024,
         num_attention_heads=2,
     )
-    config._attn_implementation = "eager"
+    config._attn_implementation = "sdpa"
 
     model = LlamaModel(config)
 

@@ -1,7 +1,11 @@
 import onnxruntime  # noqa: F401
 import unittest
 from onnx import ModelProto
-from experimental_experiment.ext_test_case import ExtTestCase, skipif_ci_windows
+from experimental_experiment.ext_test_case import (
+    ExtTestCase,
+    skipif_ci_windows,
+    requires_cuda,
+)
 from experimental_experiment.convert.convert_helper import (
     optimize_model_proto,
     inline_model_proto,
@@ -14,12 +18,6 @@ try:
     has_rewriter = True
 except ImportError:
     has_rewriter = False
-
-
-def has_cuda():
-    import torch
-
-    return torch.cuda.is_available()
 
 
 input_dims = ((2, 1024),)
@@ -67,7 +65,7 @@ class TestConvertHelper(ExtTestCase):
         model_proto = model.model_proto
         ort_optimize(model_proto, providers="cpu", output="test_ort_optimize.onnx")
 
-    @unittest.skipIf(not has_cuda(), reason="no cuda")
+    @requires_cuda()
     def test_ort_optimize_cuda(self):
         import torch
         from experimental_experiment.torch_helper.llama_helper import (

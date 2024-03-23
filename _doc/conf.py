@@ -111,6 +111,7 @@ sphinx_gallery_conf = {
 
 epkg_dictionary = {
     "aten functions": "https://pytorch.org/cppdocs/api/namespace_at.html#functions",
+    "azure pipeline": "https://azure.microsoft.com/products/devops",
     "DOT": "https://graphviz.org/doc/info/lang.html",
     "JIT": "https://en.wikipedia.org/wiki/Just-in-time_compilation",
     "GraphModule": "https://pytorch.org/docs/stable/fx.html#torch.fx.GraphModule",
@@ -141,4 +142,5 @@ epkg_dictionary = {
     "torch.export.export": "https://pytorch.org/docs/stable/export.html#torch.export.export",
     "torch.onnx": "https://pytorch.org/docs/stable/onnx.html",
     "transformers": "https://huggingface.co/docs/transformers/en/index",
+    "Windows": "https://www.microsoft.com/windows",
 }

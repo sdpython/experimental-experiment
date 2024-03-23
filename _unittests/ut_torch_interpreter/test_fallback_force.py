@@ -6,6 +6,7 @@ from experimental_experiment.ext_test_case import (
     ExtTestCase,
     skipif_ci_windows,
     requires_torch,
+    has_cuda,
 )
 from experimental_experiment.reference import ExtendedReferenceEvaluator
 
@@ -56,12 +57,6 @@ class _scaled_dot_product_flash_attention_for_cpu_default(OpRun):
         if isinstance(res, torch.Tensor):
             return (res.numpy(),)
         return tuple(r.numpy() for r in res)
-
-
-def has_cuda():
-    import torch
-
-    return torch.cuda.is_available()
 
 
 if has_cuda():

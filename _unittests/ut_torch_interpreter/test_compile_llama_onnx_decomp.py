@@ -16,12 +16,6 @@ from experimental_experiment.torch_dynamo import (
 )
 
 
-def has_cuda():
-    import torch
-
-    return torch.cuda.is_available()
-
-
 class TestDynamoLlama(ExtTestCase):
     @ignore_warnings((UserWarning, DeprecationWarning))
     def test_aaaa(self):
