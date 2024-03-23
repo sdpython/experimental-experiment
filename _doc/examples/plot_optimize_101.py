@@ -47,7 +47,7 @@ gr = GraphBuilder(
     infer_shapes=True,
     optimization_options=OptimizationOptions(
         patterns="default",
-        verbose=0,  # a higher value increases the verbosity when optimizations for patters
+        verbose=0,  # a higher value increases the verbosity when optimizations for patterns
     ),
 )
 stats = gr.optimize()
