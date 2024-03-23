@@ -28,7 +28,7 @@ from .onnx_unsqueeze import UnsqueezeUnsqueezePattern
 
 def get_default_patterns(verbose: int = 0) -> List[PatternOptimization]:
     """
-    Returns a default list of optimization patters.
+    Returns a default list of optimization patterns.
     It is equal to the following list.
 
     .. runpython::
@@ -72,12 +72,14 @@ def get_pattern(
     from ..patterns_ort import get_onnxruntime_patterns
     from ..patterns_exp import get_experimental_patterns
     from ..patterns_fix import get_fix_patterns
+    from ..patterns_investigation import get_investigation_patterns
 
     _pattern = dict(
         default=get_default_patterns,
         onnxruntime=get_onnxruntime_patterns,
         experimental=get_experimental_patterns,
         fix=get_fix_patterns,
+        investigation=get_investigation_patterns,
     )
 
     if isinstance(obj, str):
