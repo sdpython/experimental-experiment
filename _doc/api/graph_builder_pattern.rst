@@ -109,6 +109,12 @@ Reshape2Of3Pattern
 .. autoclass:: experimental_experiment.xoptim.patterns.Reshape2Of3Pattern
     :members:
 
+ReshapeReshapeBinaryPattern
++++++++++++++++++++++++++++
+
+.. autoclass:: experimental_experiment.xoptim.patterns.ReshapeReshapeBinaryPattern
+    :members:
+
 ReshapeReshapePattern
 +++++++++++++++++++++
 

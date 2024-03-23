@@ -2047,7 +2047,7 @@ class TestGraphPatternOptimization(ExtTestCase):
         got = opt_ref.run(None, feeds)[0]
         self.assertEqualArray(expected, got)
 
-    def test_cast_cast_binary_split(self):
+    def test_cast_cast_binary(self):
         model = oh.make_model(
             oh.make_graph(
                 [
@@ -2075,6 +2075,43 @@ class TestGraphPatternOptimization(ExtTestCase):
         opt_onx = gr.to_onnx(optimize=True)
         self.assertEqual(["Add", "Cast"], [n.op_type for n in opt_onx.graph.node])
         self.assertEqual(0, len(opt_onx.graph.initializer))
+
+        opt_ref = ExtendedReferenceEvaluator(opt_onx)
+        got = opt_ref.run(None, feeds)[0]
+        self.assertEqualArray(expected, got)
+
+    def test_reshape_reshape_binary(self):
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("Reshape", ["X", "sh1"], ["xc"]),
+                    oh.make_node("Reshape", ["Y", "sh2"], ["yc"]),
+                    oh.make_node("Add", ["xc", "yc"], ["Z"]),
+                ],
+                "dummy",
+                [
+                    oh.make_tensor_value_info("X", TFLOAT, ["a", 4]),
+                    oh.make_tensor_value_info("Y", TFLOAT, ["a", 4]),
+                ],
+                [oh.make_tensor_value_info("Z", TFLOAT, ["b", 8])],
+                [
+                    onh.from_array(np.array([-1, 8], dtype=np.int64), name="sh1"),
+                    onh.from_array(np.array([-1, 8], dtype=np.int64), name="sh2"),
+                ],
+            )
+        )
+        feeds = {"X": self._range(6, 4), "Y": self._range(6, 4)}
+        ref = ExtendedReferenceEvaluator(model)
+        expected = ref.run(None, feeds)[0]
+
+        gr = GraphBuilder(
+            model,
+            infer_shapes=True,
+            optimization_options=OptimizationOptions(patterns=["ReshapeReshapeBinary"]),
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+        self.assertEqual(["Add", "Reshape"], [n.op_type for n in opt_onx.graph.node])
+        self.assertEqual(1, len(opt_onx.graph.initializer))
 
         opt_ref = ExtendedReferenceEvaluator(opt_onx)
         got = opt_ref.run(None, feeds)[0]

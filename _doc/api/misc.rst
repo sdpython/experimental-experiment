@@ -29,10 +29,10 @@ compatible_opsets
 
 .. autofunction:: experimental_experiment.xbuilder._onnx_helper.compatible_opsets
 
-element_wise_op_types
-+++++++++++++++++++++
+element_wise_binary_op_types
+++++++++++++++++++++++++++++
 
-.. autofunction:: experimental_experiment.xbuilder._onnx_helper.element_wise_op_types
+.. autofunction:: experimental_experiment.xbuilder._onnx_helper.element_wise_binary_op_types
 
 element_wise_op_cmp_types
 +++++++++++++++++++++++++

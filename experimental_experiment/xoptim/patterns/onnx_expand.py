@@ -1,7 +1,7 @@
 import inspect
 from typing import List, Optional
 from onnx import NodeProto
-from ...xbuilder._onnx_helper import element_wise_op_types, unary_like_op_types
+from ...xbuilder._onnx_helper import element_wise_binary_op_types, unary_like_op_types
 from ...xbuilder.shape_helper import all_int
 from .patterns_api import MatchResult, PatternOptimization
 
@@ -51,7 +51,7 @@ class ExpandBroadcastPattern(PatternOptimization):
     do the expansion by broadcasting one input.
     """
 
-    _op_types = element_wise_op_types()
+    _op_types = element_wise_binary_op_types()
 
     def match(
         self,
