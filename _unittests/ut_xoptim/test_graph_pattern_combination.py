@@ -10,7 +10,7 @@ from onnx import (
 )
 from onnx.checker import check_model
 from experimental_experiment.reference import ExtendedReferenceEvaluator
-from experimental_experiment.ext_test_case import ExtTestCase
+from experimental_experiment.ext_test_case import ExtTestCase, requires_onnxruntime_training
 from experimental_experiment.xbuilder.graph_builder import (
     GraphBuilder,
     OptimizationOptions,
@@ -323,6 +323,7 @@ class TestGraphPatternCombination(ExtTestCase):
                 self.assertIn("SimplifiedLayerNormalization", types)
                 self._check_ort_cpu(onx)
 
+    @requires_onnxruntime_training()
     def test_simplified_with_all(self):
         for model in [
             "noopt-llama-custom__0.onnx",
