@@ -192,3 +192,9 @@ FusedMatMulPattern
 .. autoclass:: experimental_experiment.xoptim.patterns_ort.fused_matmul.FusedMatMulPattern
     :members:
 
+SoftmaxGradPattern
+++++++++++++++++++
+
+.. autoclass:: experimental_experiment.xoptim.patterns_ort.activation_grad.SoftmaxGradPattern
+    :members:
+
