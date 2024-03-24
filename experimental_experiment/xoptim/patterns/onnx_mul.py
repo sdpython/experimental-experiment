@@ -136,7 +136,7 @@ class SwitchOrderBinaryPattern(PatternOptimization):
         left_type = getattr(left, "op_type", None)
         right_type = getattr(right, "op_type", None)
         if op_type not in {left_type, right_type}:
-            return self.none(node, inspect.currentframe().f_lineno)
+            return self.none()
 
         if left_type is None:
             choose = 1
@@ -248,6 +248,7 @@ class SwitchOrderBinaryPattern(PatternOptimization):
             return cls.switch_order(
                 shape_right, shape_left, shape_before_left, shape_before_right, 0
             )
+
         # option
 
         r_left = len(shape_left)
@@ -266,6 +267,7 @@ class SwitchOrderBinaryPattern(PatternOptimization):
             max(r_right, r_b_left),
             max(r_right, r_b_right),
         ]
+
         if cases[0] < min(cases[1], cases[2]):
             return 0
         if cases[1] < min(cases[0], cases[2]):
