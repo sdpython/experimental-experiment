@@ -182,15 +182,17 @@ class SwitchOrderBinaryPattern(PatternOptimization):
             before_left = g.get_shape(other_node.input[0])
             before_right = g.get_shape(other_node.input[1])
             if (
-                not self.switch_order(
-                    shape_left, shape_right, before_left, before_right
+                self.switch_order(
+                    shape_left, shape_right, before_left, before_right, choose
                 )
                 == 0
             ):
                 return self.none(node, inspect.currentframe().f_lineno)
 
+        assert choose in (0, 1), f"Unexpected value for choose={choose}"
         if g.is_used_more_than_once(other_node.output[0]):
             return self.none(node, inspect.currentframe().f_lineno)
+
         nodes = [node, left if choose == 0 else None, right if choose == 1 else None]
 
         return MatchResult(self, nodes, self.apply, insert_at=node)
