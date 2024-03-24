@@ -139,6 +139,12 @@ Sub1MulPattern
 .. autoclass:: experimental_experiment.xoptim.patterns.Sub1MulPattern
     :members:
 
+SwitchOrderBinaryPattern
+++++++++++++++++++++++++
+
+.. autoclass:: experimental_experiment.xoptim.patterns.SwitchOrderBinaryPattern
+    :members:
+
 TransposeMatMulPattern
 ++++++++++++++++++++++
 

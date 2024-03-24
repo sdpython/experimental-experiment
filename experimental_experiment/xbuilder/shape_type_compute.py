@@ -37,14 +37,15 @@ def broadcast_shape(sh1: STATIC_SHAPE, sh2: STATIC_SHAPE) -> STATIC_SHAPE:
                 d = b
             else:
                 d = None
-        else:
-            if isinstance(b, int):
-                if b == 1:
-                    d = a
-                else:
-                    d = None
+        elif isinstance(b, int):
+            # a is str
+            if b == 1:
+                d = a
             else:
                 d = None
+        else:
+            # both str
+            d = a if a == b else None
         if d is None:
             raise RuntimeError(
                 f"Not implemented for sh1={sh1}, sh2={sh2}, a={a}, b={b}, "

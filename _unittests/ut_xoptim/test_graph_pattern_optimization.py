@@ -2117,6 +2117,86 @@ class TestGraphPatternOptimization(ExtTestCase):
         got = opt_ref.run(None, feeds)[0]
         self.assertEqualArray(expected, got)
 
+    def test_switch_order_binary_left(self):
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("Add", ["X", "Y"], ["xy"]),
+                    oh.make_node("Add", ["xy", "Z"], ["F"]),
+                ],
+                "dummy",
+                [
+                    oh.make_tensor_value_info("X", TFLOAT, ["a", 2, 3, 4]),
+                    oh.make_tensor_value_info("Y", TFLOAT, ["a", 1, 3, 4]),
+                    oh.make_tensor_value_info("Z", TFLOAT, ["a", 1, 3, 4]),
+                ],
+                [oh.make_tensor_value_info("F", TFLOAT, ["a", 2, 3, 4])],
+            )
+        )
+        feeds = {
+            "X": self._range(2, 2, 3, 4),
+            "Y": self._range(2, 2, 3, 4),
+            "Z": self._range(2, 1, 3, 4),
+        }
+        ref = ExtendedReferenceEvaluator(model)
+        expected = ref.run(None, feeds)[0]
+        inputs = [tuple(n.input) for n in model.graph.node]
+
+        gr = GraphBuilder(
+            model,
+            infer_shapes=True,
+            optimization_options=OptimizationOptions(patterns=["SwitchOrderBinary"]),
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+        self.assertEqual(["Add", "Add"], [n.op_type for n in opt_onx.graph.node])
+        self.assertEqual(0, len(opt_onx.graph.initializer))
+        new_inputs = [tuple(n.input) for n in opt_onx.graph.node]
+        self.assertNotEqual(inputs, new_inputs)
+
+        opt_ref = ExtendedReferenceEvaluator(opt_onx)
+        got = opt_ref.run(None, feeds)[0]
+        self.assertEqualArray(expected, got)
+
+    def test_switch_order_binary_right(self):
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("Add", ["X", "Y"], ["xy"]),
+                    oh.make_node("Add", ["Z", "xy"], ["F"]),
+                ],
+                "dummy",
+                [
+                    oh.make_tensor_value_info("X", TFLOAT, ["a", 2, 3, 4]),
+                    oh.make_tensor_value_info("Y", TFLOAT, ["a", 1, 3, 4]),
+                    oh.make_tensor_value_info("Z", TFLOAT, ["a", 1, 3, 4]),
+                ],
+                [oh.make_tensor_value_info("F", TFLOAT, ["a", 2, 3, 4])],
+            )
+        )
+        feeds = {
+            "X": self._range(2, 2, 3, 4),
+            "Y": self._range(2, 2, 3, 4),
+            "Z": self._range(2, 1, 3, 4),
+        }
+        ref = ExtendedReferenceEvaluator(model)
+        expected = ref.run(None, feeds)[0]
+        inputs = [tuple(n.input) for n in model.graph.node]
+
+        gr = GraphBuilder(
+            model,
+            infer_shapes=True,
+            optimization_options=OptimizationOptions(patterns=["SwitchOrderBinary"]),
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+        self.assertEqual(["Add", "Add"], [n.op_type for n in opt_onx.graph.node])
+        self.assertEqual(0, len(opt_onx.graph.initializer))
+        new_inputs = [tuple(n.input) for n in opt_onx.graph.node]
+        self.assertNotEqual(inputs, new_inputs)
+
+        opt_ref = ExtendedReferenceEvaluator(opt_onx)
+        got = opt_ref.run(None, feeds)[0]
+        self.assertEqualArray(expected, got)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
