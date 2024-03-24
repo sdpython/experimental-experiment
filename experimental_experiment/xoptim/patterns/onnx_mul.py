@@ -144,9 +144,17 @@ class SwitchOrderBinaryPattern(PatternOptimization):
             choose = 0
         else:
             # Both left and right do the same operator.
-            if not g.has_shape(left.input[0]) or not g.has_shape(left.input[1]):
+            if (
+                left.op_type != op_type
+                or not g.has_shape(left.input[0])
+                or not g.has_shape(left.input[1])
+            ):
                 choose = 1
-            elif not g.has_shape(right.input[0]) or not g.has_shape(right.input[1]):
+            elif (
+                right.op_type != op_type
+                or not g.has_shape(right.input[0])
+                or not g.has_shape(right.input[1])
+            ):
                 choose = 0
             else:
                 # all have shapes.
