@@ -19,11 +19,11 @@ class TestEdMistral(ExtTestCase):
     @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
     @ignore_warnings(DeprecationWarning)
     @requires_torch("2.3", "AssertionError: original output #6 is None")
-    def test_mistral_export(self):
+    def test_mistral_export_rename(self):
         model, input_tensors = get_mistral_model()
         input_tensors = input_tensors[0]
         expected = model(*input_tensors)
-        ret = export_to_onnx(model, *input_tensors, rename_inputs=False)
+        ret = export_to_onnx(model, *input_tensors, rename_inputs=True)
         onx = ret["proto"]
         xp = [x.numpy() for x in input_tensors]
         feeds = {f"input{i}": x for i, x in enumerate(xp)}

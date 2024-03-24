@@ -149,18 +149,31 @@ class SwitchOrderBinaryPattern(PatternOptimization):
                 or not g.has_shape(left.input[0])
                 or not g.has_shape(left.input[1])
             ):
+                if right.op_type != op_type:
+                    return self.none(node, inspect.currentframe().f_lineno)
                 choose = 1
             elif (
                 right.op_type != op_type
                 or not g.has_shape(right.input[0])
                 or not g.has_shape(right.input[1])
             ):
+                if left.op_type != op_type:
+                    return self.none(node, inspect.currentframe().f_lineno)
                 choose = 0
+            elif right.op_type != op_type:
+                if left.op_type != op_type:
+                    return self.none(node, inspect.currentframe().f_lineno)
+                choose = 0
+            elif left.op_type != op_type:
+                choose = 1
             else:
-                # all have shapes.
+                # all have shapes and the right type
                 choose = 3
 
         other_node = left if choose == 0 else right
+        assert (
+            other_node.op_type == node.op_type
+        ), f"Type mismatch {node.op_type} != {other_node.op_type}"
         if not g.has_shape(other_node.input[0]) or not g.has_shape(other_node.input[1]):
             return self.none(node, inspect.currentframe().f_lineno)
 
@@ -190,6 +203,9 @@ class SwitchOrderBinaryPattern(PatternOptimization):
                 return self.none(node, inspect.currentframe().f_lineno)
 
         assert choose in (0, 1), f"Unexpected value for choose={choose}"
+        assert (
+            other_node.op_type == node.op_type
+        ), f"Type mismatch {node.op_type} != {other_node.op_type}"
         if g.is_used_more_than_once(other_node.output[0]):
             return self.none(node, inspect.currentframe().f_lineno)
 
