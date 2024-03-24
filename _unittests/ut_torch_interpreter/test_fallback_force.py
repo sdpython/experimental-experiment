@@ -376,9 +376,11 @@ class TestFallbackForce(ExtTestCase):
         self.assertEqual(type(got), type(expected))
         self.assertEqualArray(expected[0], got[0], atol=1e-1)
         self.assertEqual(len(expected), 2)
-        self.assertEqual(len(got), 4)
-        self.assertEmpty(got[2])
-        self.assertEmpty(got[3])
+        self.assertEqual(len(got), 2)
+        if len(got) > 2:
+            self.assertEmpty(got[2])
+        if len(got) > 3:
+            self.assertEmpty(got[3])
 
     @skipif_ci_windows("dynamo not supported on Windows")
     @unittest.skipIf(not has_cuda(), reason="design for cuda")

@@ -5,6 +5,7 @@ from experimental_experiment.ext_test_case import (
     ExtTestCase,
     skipif_ci_windows,
     requires_cuda,
+    ignore_warnings,
 )
 from experimental_experiment.convert.convert_helper import (
     optimize_model_proto,
@@ -25,6 +26,7 @@ input_dims = ((2, 1024),)
 
 class TestConvertHelper(ExtTestCase):
     @unittest.skipIf(not has_rewriter, reason="onnx-rewriter is missing")
+    @ignore_warnings(UserWarning)
     def test_optimize_llama(self):
         import torch
         from experimental_experiment.torch_helper.llama_helper import (
@@ -39,6 +41,7 @@ class TestConvertHelper(ExtTestCase):
         self.assertIsInstance(model_proto, ModelProto)
 
     @skipif_ci_windows("dynamo not working on windows")
+    @ignore_warnings(UserWarning)
     def test_inline_llama(self):
         import torch
         from experimental_experiment.torch_helper.llama_helper import (
@@ -53,7 +56,8 @@ class TestConvertHelper(ExtTestCase):
         self.assertIsInstance(model_proto, ModelProto)
 
     @skipif_ci_windows("dynamo not working on windows")
-    def test_ort_optimize(self):
+    @ignore_warnings(UserWarning)
+    def test_ort_optimize_cpu(self):
         import torch
         from experimental_experiment.torch_helper.llama_helper import (
             get_llama_attention,
@@ -66,6 +70,7 @@ class TestConvertHelper(ExtTestCase):
         ort_optimize(model_proto, providers="cpu", output="test_ort_optimize.onnx")
 
     @requires_cuda()
+    @ignore_warnings(UserWarning)
     def test_ort_optimize_cuda(self):
         import torch
         from experimental_experiment.torch_helper.llama_helper import (
