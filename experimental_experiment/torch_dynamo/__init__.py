@@ -49,6 +49,29 @@ def get_decomposition_table():
     return new_table
 
 
+def get_decomposition_table_dynamo(
+    onnx_registry: Optional["OnnxRegistry"] = None,  # noqa: F821
+):
+    """
+    Returns the decomposition table needed for the dynamo exporter.
+    The value is:
+
+    .. runpython::
+        :showcode:
+
+        import pprint
+        from experimental_experiment.torch_dynamo import get_decomposition_table_dynamo
+
+        pprint.pprint(get_decomposition_table_dynamo())
+    """
+    from torch.onnx._internal.fx.decomposition_table import (
+        create_onnx_friendly_decomposition_table,
+    )
+    from torch.onnx._internal.exporter import OnnxRegistry
+
+    return create_onnx_friendly_decomposition_table(onnx_registry or OnnxRegistry())
+
+
 def filter_decomposition_table(existing_table: Optional[Dict] = None) -> Dict:
     """
     Returns the decomposition table when some conversions because

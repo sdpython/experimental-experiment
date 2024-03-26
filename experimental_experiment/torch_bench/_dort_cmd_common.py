@@ -41,6 +41,7 @@ def create_compiled_model(
     from experimental_experiment.torch_helper.training_helper import make_aot_ort
     from experimental_experiment.torch_dynamo import (
         get_decomposition_table,
+        get_decomposition_table_dynamo,
         dynger_backend,
         onnx_custom_backend,
         onnx_debug_backend,
@@ -103,6 +104,32 @@ def create_compiled_model(
             return cc, storage
         return cc
 
+    if backend == "backort":
+        storage = {} if return_storage else None
+        target_opset = target_opset
+        aot_compiler = aot_autograd(
+            fw_compiler=lambda *args, **kwargs: onnx_custom_backend(
+                *args,
+                target_opset=target_opset,
+                verbose=verbose,
+                enable_pattern=enable_pattern,
+                disable_pattern=disable_pattern,
+                storage=storage,
+                rename_inputs=rename_inputs,
+                dump_prefix=dump_prefix,
+                optimize=optimize,
+                exporter="dynamo",
+                **kwargs,
+            ),
+            decompositions=get_decomposition_table_dynamo(),
+        )
+        cc = torch.compile(
+            model, backend=aot_compiler, fullgraph=True, dynamic=use_dynamic
+        )
+        if return_storage:
+            return cc, storage
+        return cc
+
     if backend == "debug":
         storage = {} if return_storage else None
         target_opset = target_opset
@@ -153,7 +180,10 @@ def dort_args(name: str, description: str):
         name,
         description=description,
         model=("llama", "model to measure, llama, mistral, phi, ..."),
-        backend=("ort", "'ort' or 'inductor' or 'eager', 'plug', or 'custom'"),
+        backend=(
+            "ort",
+            "'ort' or 'inductor' or 'eager', " "'plug', or 'custom', or 'backort'",
+        ),
         device=("cpu", "'cpu' or 'cuda'"),
         num_hidden_layers=(1, "number of hidden layers"),
         warmup=5,

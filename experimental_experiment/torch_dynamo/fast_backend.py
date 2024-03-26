@@ -390,6 +390,59 @@ class OrtBackend:
         return bck, new_inputs
 
 
+def _default_export(
+    graph_module,
+    args,
+    verbose,
+    target_opset,
+    dispatcher,
+    optimize,
+    enable_pattern,
+    disable_pattern,
+    rename_inputs,
+):
+    input_names = input_names = (
+        create_input_names(graph_module, args) if rename_inputs else None
+    )
+
+    verbose_onnx, verbose_backend = (
+        verbose if isinstance(verbose, tuple) else (verbose, verbose)
+    )
+
+    patterns = get_pattern_list(enable_pattern, disable_pattern, verbose=verbose_onnx)
+
+    options = OptimizationOptions(
+        remove_unused=True,
+        constant_folding=False,
+        patterns=patterns,
+        verbose=verbose_onnx,
+    )
+
+    onx, builder = to_onnx(
+        graph_module,
+        tuple(args),
+        input_names=input_names,
+        options=options,
+        verbose=verbose_onnx,
+        target_opset=target_opset,
+        return_builder=True,
+        dispatcher=dispatcher,
+        optimize=optimize,
+    )
+
+    return onx, builder
+
+
+def _print_memory(max_device: int):
+    if max_device >= 0:
+        print(
+            f"[onnx_custom_backend] CUDA memory "
+            f"allocated={torch.cuda.memory_allocated(max_device)}, "
+            f"reserved={torch.cuda.memory_reserved(max_device)}, "
+            f"max_device={max_device}"
+        )
+
+
 def onnx_custom_backend(
     graph_module: "torch.fx.GraphModule",  # noqa: F821
     args: List["torch.Tensor"],  # noqa: F821
@@ -409,6 +462,7 @@ def onnx_custom_backend(
     dispatcher: Optional["Dispatcher"] = None,  # noqa: F821
     rename_inputs: bool = True,
     optimize: bool = True,
+    exporter: Optional[str] = None,
 ) -> Callable:
     """
     Custom backend to export torch models into onnx
@@ -434,6 +488,7 @@ def onnx_custom_backend(
     :param dispatcher: see :class:`experimental_experiment.torch_interpreter.Dispatcher`
     :param rename_inputs: rename the inputs
     :param optimize: enable or disable the optimization
+    :param exporter: use a different exporter
     :return: Callable
 
     See :ref:`l-plot-onnxrt-diff` or :ref:`l-plot-custom-backend` for examples.
@@ -441,6 +496,9 @@ def onnx_custom_backend(
     onnx models, graph module as well the inputs and outputs when
     the model is run.
     """
+
+    # determines the devices
+
     DEVICES = {
         -1: ORTC.OrtDevice(ORTC.OrtDevice.cpu(), ORTC.OrtDevice.default_memory(), 0)
     }
@@ -457,58 +515,50 @@ def onnx_custom_backend(
     else:
         max_device = -1
 
-    input_names = input_names = (
-        create_input_names(graph_module, args) if rename_inputs else None
-    )
-
-    verbose_onnx, verbose_backend = (
-        verbose if isinstance(verbose, tuple) else (verbose, verbose)
-    )
-
-    patterns = get_pattern_list(enable_pattern, disable_pattern, verbose=verbose_onnx)
-
-    options = OptimizationOptions(
-        remove_unused=True,
-        constant_folding=False,
-        patterns=patterns,
-        verbose=verbose_onnx,
-    )
+    # Conversion to onnx
 
     begin = time.perf_counter()
     if verbose:
-        if max_device >= 0:
-            print(
-                f"[onnx_custom_backend] CUDA memory "
-                f"allocated={torch.cuda.memory_allocated(max_device)}, "
-                f"reserved={torch.cuda.memory_reserved(max_device)}, "
-                f"max_device={max_device}"
-            )
+        _print_memory(max_device)
         print("[onnx_custom_backend] starts conversion to onnx.")
 
-    onx, builder = to_onnx(
-        graph_module,
-        tuple(args),
-        input_names=input_names,
-        options=options,
-        verbose=verbose_onnx,
-        target_opset=target_opset,
-        return_builder=True,
-        dispatcher=dispatcher,
-        optimize=optimize,
-    )
+    if exporter is None:
+        onx, builder = _default_export(
+            graph_module,
+            args,
+            verbose,
+            target_opset,
+            dispatcher,
+            optimize,
+            enable_pattern,
+            disable_pattern,
+            rename_inputs,
+        )
+    elif exporter == "dynamo":
+        from ._dynamo_exporter import _dynamo_export
+
+        onx, builder = _dynamo_export(
+            graph_module,
+            args,
+            verbose,
+            target_opset,
+            dispatcher,
+            optimize,
+            enable_pattern,
+            disable_pattern,
+            rename_inputs,
+        )
+    else:
+        raise NotImplementedError(f"Unknown exporter {exporter!r}")
 
     if verbose:
         print(
             f"[onnx_custom_backend] to_onnx done in {time.perf_counter() - begin} with "
-            f"{len(onx.graph.node)} nodes and {onx.functions} local functions."
+            f"{len(onx.graph.node)} nodes and {len(onx.functions)} local functions."
         )
-        if max_device >= 0:
-            print(
-                f"[onnx_custom_backend] CUDA memory "
-                f"allocated={torch.cuda.memory_allocated(max_device)}, "
-                f"reserved={torch.cuda.memory_reserved(max_device)}, "
-                f"max_device={max_device}"
-            )
+        _print_memory(max_device)
+
+    # Applies other transformation.
 
     if pre_ort_model_transforms is not None:
 
@@ -517,13 +567,7 @@ def onnx_custom_backend(
         for tr in pre_ort_model_transforms:
             begin = time.perf_counter()
             if verbose:
-                if max_device >= 0:
-                    print(
-                        f"[onnx_custom_backend] CUDA memory "
-                        f"allocated={torch.cuda.memory_allocated(max_device)}, "
-                        f"reserved={torch.cuda.memory_reserved(max_device)}, "
-                        f"max_device={max_device}"
-                    )
+                _print_memory(max_device)
                 print(f"[onnx_custom_backend] starts pre_ort_model_transforms {tr}")
 
             onx = tr(onx)
@@ -534,13 +578,9 @@ def onnx_custom_backend(
                     f"done in {time.perf_counter() - begin} with "
                     f"{len(onx.graph.node)} nodes and {len(onx.functions)} local functions."
                 )
-                if max_device >= 0:
-                    print(
-                        f"[onnx_custom_backend] CUDA memory "
-                        f"allocated={torch.cuda.memory_allocated(max_device)}, "
-                        f"reserved={torch.cuda.memory_reserved(max_device)}, "
-                        f"max_device={max_device}"
-                    )
+                _print_memory(max_device)
+
+    # Checks for variable ONNXRT_DUMP_PATH
 
     value = os.environ.get("ONNXRT_DUMP_PATH", None)
     if value:
@@ -562,15 +602,11 @@ def onnx_custom_backend(
             f.write("\n")
         dump_first_inputs = name
 
+    # InferenceSession
+
     begin = time.perf_counter()
     if verbose:
-        if max_device >= 0:
-            print(
-                f"[onnx_custom_backend] CUDA memory "
-                f"allocated={torch.cuda.memory_allocated(max_device)}, "
-                f"reserved={torch.cuda.memory_reserved(max_device)}, "
-                f"max_device={max_device}"
-            )
+        _print_memory(max_device)
         print("[onnx_custom_backend] starts creating InferenceSession")
 
     sess, run_options = _get_session(
@@ -585,17 +621,13 @@ def onnx_custom_backend(
         print(
             f"[onnx_custom_backend] InferenceSession done in {time.perf_counter() - begin}"
         )
-        if max_device >= 0:
-            print(
-                f"[onnx_custom_backend] CUDA memory "
-                f"allocated={torch.cuda.memory_allocated(max_device)}, "
-                f"reserved={torch.cuda.memory_reserved(max_device)}, "
-                f"max_device={max_device}"
-            )
+        _print_memory(max_device)
 
     input_names = [i.name for i in onx.graph.input]
     output_names = [i.name for i in onx.graph.output]
     is_dimension_in, is_dimension_out = get_dimensions(onx)
+
+    # Storage
 
     if storage is not None:
         stor = {}
@@ -614,6 +646,8 @@ def onnx_custom_backend(
         stor["providers"] = providers
     else:
         stor = None
+
+    # Creates the backend.
 
     run = OrtBackend(
         sess=sess,
