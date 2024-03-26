@@ -26,7 +26,7 @@ symbolic
     import experimental_experiment
     import experimental_experiment.torch_interpreter
     import experimental_experiment.torch_interpreter.aten_functions
-    from experimental_experiment.torch_helper.llama_helper import get_llama_decoder
+    from experimental_experiment.torch_models.llama_helper import get_llama_decoder
 
     begin = time.perf_counter()
     print("creating model")
@@ -67,7 +67,7 @@ fake
     import experimental_experiment
     import experimental_experiment.torch_interpreter
     import experimental_experiment.torch_interpreter.aten_functions
-    from experimental_experiment.torch_helper.llama_helper import get_llama_decoder
+    from experimental_experiment.torch_models.llama_helper import get_llama_decoder
 
     begin = time.perf_counter()
     print("creating model")
@@ -146,7 +146,7 @@ With a bigger model:
     import experimental_experiment
     import experimental_experiment.torch_interpreter
     import experimental_experiment.torch_interpreter.aten_functions
-    from experimental_experiment.torch_helper.llama_helper import get_llama_decoder
+    from experimental_experiment.torch_models.llama_helper import get_llama_decoder
 
     model, example_args_collection = get_llama_decoder(
         input_dims=[(2, 1024)],
@@ -229,7 +229,7 @@ With a bigger model:
     import experimental_experiment
     import experimental_experiment.torch_interpreter
     import experimental_experiment.torch_interpreter.aten_functions
-    from experimental_experiment.torch_helper.llama_helper import get_llama_decoder
+    from experimental_experiment.torch_models.llama_helper import get_llama_decoder
 
     model, example_args_collection = get_llama_decoder(
         input_dims=[(2, 1024)],

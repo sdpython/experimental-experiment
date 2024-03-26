@@ -58,7 +58,7 @@ from experimental_experiment.plotting.memory import memory_peak_plot
 from experimental_experiment.ext_test_case import measure_time, get_figure
 from experimental_experiment.args import get_parsed_args
 from experimental_experiment.memory_peak import start_spying_on
-from experimental_experiment.torch_helper.training_helper import make_aot_ort
+from experimental_experiment.torch_models.training_helper import make_aot_ort
 from tqdm import tqdm
 
 has_cuda = has_cuda and torch.cuda.is_available()

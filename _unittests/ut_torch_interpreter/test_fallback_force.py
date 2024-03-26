@@ -258,7 +258,7 @@ class TestFallbackForce(ExtTestCase):
     @skipif_ci_windows("dynamo not supported on Windows")
     @requires_torch("2.3", "AssertionError: original output #4 is None, ")
     def test_fallback_force_llama_sdpa_export(self):
-        from experimental_experiment.torch_helper.llama_helper import get_llama_model
+        from experimental_experiment.torch_models.llama_helper import get_llama_model
         from experimental_experiment.torch_interpreter import to_onnx
         from experimental_experiment.torch_interpreter.dispatcher import (
             ForceDispatcher,
@@ -315,7 +315,7 @@ class TestFallbackForce(ExtTestCase):
     def fallback_force_llama_sdpa_cort_cuda(self, dynamic):
         import torch
         from torch._dynamo.backends.common import aot_autograd
-        from experimental_experiment.torch_helper.llama_helper import get_llama_model
+        from experimental_experiment.torch_models.llama_helper import get_llama_model
         from experimental_experiment.torch_dynamo import (
             onnx_debug_backend,
             get_decomposition_table,
@@ -390,7 +390,7 @@ class TestFallbackForce(ExtTestCase):
     def fallback_force_llama_sdpa_cort_training_cuda(self, dynamic):
         import torch
         from torch._dynamo.backends.common import aot_autograd
-        from experimental_experiment.torch_helper.llama_helper import get_llama_model
+        from experimental_experiment.torch_models.llama_helper import get_llama_model
         from experimental_experiment.torch_dynamo import (
             onnx_debug_backend,
             get_decomposition_table,
@@ -398,7 +398,7 @@ class TestFallbackForce(ExtTestCase):
         from experimental_experiment.torch_interpreter.dispatcher import (
             ForceDispatcher,
         )
-        from experimental_experiment.torch_helper.dump_helper import assert_all_close
+        from experimental_experiment.torch_models.dump_helper import assert_all_close
 
         model, example_args_collection = get_llama_model(
             input_dims=[(9, 15)], _attn_implementation="sdpa", with_mask=False

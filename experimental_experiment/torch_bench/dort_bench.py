@@ -39,7 +39,7 @@ import torch
 import torch._dynamo.backends.registry
 import transformers
 from experimental_experiment.convert.convert_helper import ort_optimize
-from experimental_experiment.torch_helper.dump_helper import dump_onnx
+from experimental_experiment.torch_models.dump_helper import dump_onnx
 from experimental_experiment.torch_bench._dort_cmd_common import (
     create_compiled_model,
     create_configuration_for_benchmark,

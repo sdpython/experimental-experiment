@@ -12,7 +12,7 @@ from experimental_experiment.ext_test_case import (
 )
 from experimental_experiment.xbuilder import OptimizationOptions
 from experimental_experiment.torch_interpreter import to_onnx
-from experimental_experiment.torch_helper.llama_helper import (
+from experimental_experiment.torch_models.llama_helper import (
     get_llama_attention,
     get_llama_decoder,
     get_llama_model,

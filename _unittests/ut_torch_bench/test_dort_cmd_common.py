@@ -5,7 +5,7 @@ from experimental_experiment.torch_bench._dort_cmd_common import (
     create_configuration_for_benchmark,
     create_compiled_model,
 )
-from experimental_experiment.torch_helper.llama_helper import get_llama_model
+from experimental_experiment.torch_models.llama_helper import get_llama_model
 
 
 class TestDortCmdCommond(ExtTestCase):

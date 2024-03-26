@@ -8,7 +8,7 @@ from experimental_experiment.ext_test_case import (
     skipif_ci_windows,
     requires_torch,
 )
-from experimental_experiment.torch_helper.dump_helper import assert_all_close
+from experimental_experiment.torch_models.dump_helper import assert_all_close
 from experimental_experiment.torch_dynamo import (
     onnx_debug_backend,
     get_decomposition_table,
@@ -162,7 +162,7 @@ class TestDynamoLlamaSdpa3(ExtTestCase):
     @skipif_ci_windows("torch.compile not supported on Windows")
     @requires_torch("2.3", "missing kernel")
     def test_llama_model_backward_ref(self):
-        from experimental_experiment.torch_helper.llama_helper import get_llama_model
+        from experimental_experiment.torch_models.llama_helper import get_llama_model
 
         model, example_args_collection = get_llama_model(
             input_dims=[(2, 1024)] * 2,

@@ -13,7 +13,7 @@ from experimental_experiment.ext_test_case import (
 )
 from experimental_experiment.xbuilder import OptimizationOptions
 from experimental_experiment.torch_interpreter import to_onnx
-from experimental_experiment.torch_helper.mistral_helper import get_mistral_model
+from experimental_experiment.torch_models.mistral_helper import get_mistral_model
 
 
 def export_utils(

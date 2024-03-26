@@ -21,7 +21,7 @@ class TestBackend(ExtTestCase):
     def test_onnx_custom_backend_dump(self):
         import onnxruntime
         from experimental_experiment.torch_dynamo.fast_backend import OrtBackend
-        from experimental_experiment.torch_helper.dump_helper import assert_all_close
+        from experimental_experiment.torch_models.dump_helper import assert_all_close
 
         model = oh.make_model(
             oh.make_graph(

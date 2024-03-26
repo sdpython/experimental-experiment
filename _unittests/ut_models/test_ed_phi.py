@@ -7,10 +7,10 @@ from experimental_experiment.ext_test_case import (
     requires_torch,
     has_cuda,
 )
-from experimental_experiment.torch_helper.phi_helper import get_phi_model
+from experimental_experiment.torch_models.phi_helper import get_phi_model
 from experimental_experiment.torch_test_helper import export_to_onnx, check_model_ort
 from experimental_experiment.torch_bench._dort_cmd_common import create_compiled_model
-from experimental_experiment.torch_helper.training_helper import (
+from experimental_experiment.torch_models.training_helper import (
     train_loop,
     train_loop_mixed_precision,
 )

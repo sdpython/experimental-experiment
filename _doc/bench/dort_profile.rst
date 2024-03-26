@@ -151,7 +151,7 @@ experimental_experiment.torch_bench.dort_profile
                 <built-in method torch.....guards.check_type_id> --   40   40 -- 0.00002 0.00002 -- ~:0:<built-in method torch._C._dynamo.guards.check_type_id> (<built-in method torch._C._dynamo.guards.check_type_id>)
                 <built-in method torch....o.guards.check_obj_id> --   75   75 -- 0.00005 0.00005 -- ~:0:<built-in method torch._C._dynamo.guards.check_obj_id> (<built-in method torch._C._dynamo.guards.check_obj_id>)
             _fn                                                  --    5    5 -- 0.00007 0.01576 -- _dynamo/eval_frame.py:427:_fn (_fn) +++
-            forward                                              --    5    5 -- 0.00002 0.01496 -- torch_helper/llama_helper.py:179:forward (forward)
+            forward                                              --    5    5 -- 0.00002 0.01496 -- torch_models/llama_helper.py:179:forward (forward)
                 _fn                                              --    5    5 -- 0.00005 0.01494 -- _dynamo/eval_frame.py:427:_fn (_fn) +++
     is_scripting                                                 --   25   25 -- 0.00002 0.00002 -- torch/_jit_internal.py:1120:is_scripting (is_scripting)
     main_loop                                                    --    1    1 -- 0.00037 0.28833 -- torch_bench/dort_profile.py:174:main_loop (main_loop)

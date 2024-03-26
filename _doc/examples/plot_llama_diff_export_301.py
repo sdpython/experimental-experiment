@@ -66,12 +66,12 @@ from experimental_experiment.convert.convert_helper import (
     optimize_model_proto,
     ort_optimize,
 )
-from experimental_experiment.torch_helper.llama_helper import (
+from experimental_experiment.torch_models.llama_helper import (
     get_llama_model,
     get_llama_attention,
     get_llama_decoder,
 )
-from experimental_experiment.torch_helper.dump_helper import reorder_functions_in_proto
+from experimental_experiment.torch_models.dump_helper import reorder_functions_in_proto
 
 has_cuda = has_cuda and torch.cuda.is_available()
 logging.disable(logging.ERROR)

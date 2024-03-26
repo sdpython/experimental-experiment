@@ -9,7 +9,7 @@ from experimental_experiment.ext_test_case import (
     requires_torch,
     requires_cuda,
 )
-from experimental_experiment.torch_helper.dump_helper import assert_all_close
+from experimental_experiment.torch_models.dump_helper import assert_all_close
 from experimental_experiment.torch_dynamo import (
     onnx_debug_backend,
     get_decomposition_table,
@@ -182,7 +182,7 @@ class TestDynamoLlamaSdpa(ExtTestCase):
     )
     @requires_torch("2.3", "unexpected behaviour")
     def test_llama_decoder_forward(self):
-        from experimental_experiment.torch_helper.llama_helper import get_llama_decoder
+        from experimental_experiment.torch_models.llama_helper import get_llama_decoder
 
         input_dims = self.get_input_dims(False)
         model, example_args_collection = get_llama_decoder(
@@ -200,7 +200,7 @@ class TestDynamoLlamaSdpa(ExtTestCase):
     @skipif_ci_windows("torch.compile not supported on Windows")
     @requires_torch("2.3", "unexpected behaviour")
     def test_llama_attention_forward(self):
-        from experimental_experiment.torch_helper.llama_helper import (
+        from experimental_experiment.torch_models.llama_helper import (
             get_llama_attention,
         )
 
@@ -220,7 +220,7 @@ class TestDynamoLlamaSdpa(ExtTestCase):
     @ignore_warnings((UserWarning, DeprecationWarning))
     @skipif_ci_windows("torch.compile not supported on Windows")
     def test_llama_attention_backward(self):
-        from experimental_experiment.torch_helper.llama_helper import (
+        from experimental_experiment.torch_models.llama_helper import (
             get_llama_attention,
         )
 
@@ -245,7 +245,7 @@ class TestDynamoLlamaSdpa(ExtTestCase):
     )
     # @unittest.skip("aten_embedding receives the inputs in the other way")
     def test_llama_model_forward(self):
-        from experimental_experiment.torch_helper.llama_helper import get_llama_model
+        from experimental_experiment.torch_models.llama_helper import get_llama_model
 
         input_dims = self.get_input_dims(False)
         model, example_args_collection = get_llama_model(
@@ -270,7 +270,7 @@ class TestDynamoLlamaSdpa(ExtTestCase):
         True, reason="_scaled_dot_product_flash_attention_for_cpu_default missing"
     )
     def test_llama_model_backward_forward(self):
-        from experimental_experiment.torch_helper.llama_helper import get_llama_model
+        from experimental_experiment.torch_models.llama_helper import get_llama_model
 
         input_dims = self.get_input_dims(False)
         model, example_args_collection = get_llama_model(
@@ -295,7 +295,7 @@ class TestDynamoLlamaSdpa(ExtTestCase):
         True, reason="_scaled_dot_product_flash_attention_for_cpu_default missing"
     )
     def test_llama_model_backward_forward_mixed(self):
-        from experimental_experiment.torch_helper.llama_helper import get_llama_model
+        from experimental_experiment.torch_models.llama_helper import get_llama_model
 
         input_dims = self.get_input_dims(False)
         model, example_args_collection = get_llama_model(
@@ -321,7 +321,7 @@ class TestDynamoLlamaSdpa(ExtTestCase):
         True, reason="_scaled_dot_product_flash_attention_for_cpu_default missing"
     )
     def test_llama_model_backward_mixed(self):
-        from experimental_experiment.torch_helper.llama_helper import get_llama_model
+        from experimental_experiment.torch_models.llama_helper import get_llama_model
 
         input_dims = self.get_input_dims(False)
         model, example_args_collection = get_llama_model(
@@ -343,7 +343,7 @@ class TestDynamoLlamaSdpa(ExtTestCase):
     @skipif_ci_windows("torch.compile not supported on Windows")
     @requires_torch("2.3", "unstable")
     def test_llama_decoder_forward_dynamic(self):
-        from experimental_experiment.torch_helper.llama_helper import get_llama_decoder
+        from experimental_experiment.torch_models.llama_helper import get_llama_decoder
 
         input_dims = self.get_input_dims(True)
         model, example_args_collection = get_llama_decoder(input_dims=input_dims)
