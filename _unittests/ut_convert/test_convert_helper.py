@@ -29,7 +29,7 @@ class TestConvertHelper(ExtTestCase):
     @ignore_warnings(UserWarning)
     def test_optimize_llama(self):
         import torch
-        from experimental_experiment.torch_helper.llama_helper import (
+        from experimental_experiment.torch_models.llama_helper import (
             get_llama_attention,
         )
 
@@ -44,7 +44,7 @@ class TestConvertHelper(ExtTestCase):
     @ignore_warnings(UserWarning)
     def test_inline_llama(self):
         import torch
-        from experimental_experiment.torch_helper.llama_helper import (
+        from experimental_experiment.torch_models.llama_helper import (
             get_llama_attention,
         )
 
@@ -59,7 +59,7 @@ class TestConvertHelper(ExtTestCase):
     @ignore_warnings(UserWarning)
     def test_ort_optimize_cpu(self):
         import torch
-        from experimental_experiment.torch_helper.llama_helper import (
+        from experimental_experiment.torch_models.llama_helper import (
             get_llama_attention,
         )
 
@@ -73,7 +73,7 @@ class TestConvertHelper(ExtTestCase):
     @ignore_warnings(UserWarning)
     def test_ort_optimize_cuda(self):
         import torch
-        from experimental_experiment.torch_helper.llama_helper import (
+        from experimental_experiment.torch_models.llama_helper import (
             get_llama_attention,
         )
 

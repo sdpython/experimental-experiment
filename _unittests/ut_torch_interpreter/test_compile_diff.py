@@ -25,12 +25,12 @@ class TestDynamoCompileDiff(ExtTestCase):
             optimize_model_proto,
             ort_optimize,
         )
-        from experimental_experiment.torch_helper.llama_helper import (
+        from experimental_experiment.torch_models.llama_helper import (
             get_llama_model,  # noqa: F401
             get_llama_attention,
             get_llama_decoder,  # noqa: F401
         )
-        from experimental_experiment.torch_helper.dump_helper import (
+        from experimental_experiment.torch_models.dump_helper import (
             assert_all_close,
             dump_onnx,
             reorder_functions_in_proto,
@@ -38,7 +38,7 @@ class TestDynamoCompileDiff(ExtTestCase):
             build_matching_inputs,
         )
         from experimental_experiment.torch_dynamo import onnx_debug_backend
-        from experimental_experiment.torch_helper.training_helper import make_aot_ort
+        from experimental_experiment.torch_models.training_helper import make_aot_ort
 
         logging.disable(logging.ERROR)
 

@@ -11,7 +11,7 @@ from experimental_experiment.ext_test_case import (
     requires_torch,
     requires_cuda,
 )
-from experimental_experiment.torch_helper.dump_helper import assert_all_close
+from experimental_experiment.torch_models.dump_helper import assert_all_close
 from experimental_experiment.torch_dynamo import onnx_debug_backend, onnx_custom_backend
 
 

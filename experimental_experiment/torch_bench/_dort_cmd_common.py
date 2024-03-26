@@ -38,7 +38,7 @@ def create_compiled_model(
     """
     import torch
     from torch._dynamo.backends.common import aot_autograd
-    from experimental_experiment.torch_helper.training_helper import make_aot_ort
+    from experimental_experiment.torch_models.training_helper import make_aot_ort
     from experimental_experiment.torch_dynamo import (
         get_decomposition_table,
         get_decomposition_table_dynamo,
@@ -283,17 +283,17 @@ def create_model(
     """
 
     if model == "llama":
-        from ..torch_helper.llama_helper import get_llama_model
+        from ..torch_models.llama_helper import get_llama_model
 
         return get_llama_model(**config_dict)
 
     if model == "mistral":
-        from ..torch_helper.mistral_helper import get_mistral_model
+        from ..torch_models.mistral_helper import get_mistral_model
 
         return get_mistral_model(**config_dict)
 
     if model == "phi":
-        from ..torch_helper.phi_helper import get_phi_model
+        from ..torch_models.phi_helper import get_phi_model
 
         return get_phi_model(**config_dict)
 

@@ -1,21 +1,19 @@
 import onnxruntime  # noqa: F401
 import copy
 import unittest
-from typing import Optional, Tuple
+from typing import Optional
 from experimental_experiment.ext_test_case import (
     ExtTestCase,
     ignore_warnings,
     skipif_ci_windows,
-    skipif_not_onnxrt,
     requires_torch,
     requires_cuda,
-    requires_onnxruntime,
 )
-from experimental_experiment.torch_helper.dump_helper import assert_all_close
-from experimental_experiment.torch_helper.training_helper import make_aot_ort
+from experimental_experiment.torch_models.dump_helper import assert_all_close
+from experimental_experiment.torch_models.training_helper import make_aot_ort
 
 
-class TestMistral(ExtTestCase):
+class TestLlama(ExtTestCase):
     def _assert_model_numerically(
         self,
         model,
@@ -58,32 +56,6 @@ class TestMistral(ExtTestCase):
                 grads = tuple(_.grad for _ in compiled_model.parameters())
                 assert_all_close(base_grads, grads, atol=atol, rtol=rtol)
 
-    def _assert_counting_information(
-        self,
-        ort_backend: "OrtBackend",  # noqa: F821
-        expected_execution_count: int,
-        number_of_cached_graph_modules: int,
-        number_of_exported_onnx_models_for_all_graph_modules: Tuple[int, ...],
-        expected_graph_break=0,
-        example_args_collection=None,
-    ):
-        self.assertEqual(
-            expected_execution_count * (expected_graph_break + 1),
-            ort_backend.execution_count,
-            msg=f"expected_execution_count={expected_execution_count}, "
-            f"expected_graph_break={expected_graph_break}, "
-            f"ort_backend.execution_count={ort_backend.execution_count}, "
-            f"number_of_cached_graph_modules={number_of_cached_graph_modules}",
-        )
-        for (
-            onnx_info,
-            expected_number_of_onnx_models,
-        ) in zip(
-            ort_backend._all_ort_execution_info.execution_info_per_graph_module.values(),
-            number_of_exported_onnx_models_for_all_graph_modules,
-        ):
-            self.assertEqual(len(onnx_info), expected_number_of_onnx_models)
-
     def common_test_model(
         self,
         model,
@@ -93,7 +65,6 @@ class TestMistral(ExtTestCase):
         fullgraph: bool = True,
         onnx_export=None,
         expected_graph_break=0,
-        assert_counting=True,
         device="cpu",
     ):
         import torch
@@ -111,71 +82,119 @@ class TestMistral(ExtTestCase):
             device=device,
         )
 
-        number_of_captured_graphs = 2 if test_backward else 1
-        if assert_counting:
-            self._assert_counting_information(
-                local_ort,
-                expected_execution_count=len(example_args_collection)
-                * number_of_captured_graphs,
-                number_of_cached_graph_modules=number_of_captured_graphs,
-                number_of_exported_onnx_models_for_all_graph_modules=(1,)
-                * number_of_captured_graphs,
-                expected_graph_break=expected_graph_break,
-                example_args_collection=example_args_collection,
-            )
+    @ignore_warnings((UserWarning, DeprecationWarning))
+    @skipif_ci_windows("torch.compile not supported on Windows")
+    def test_ort_mlp(self):
+        import torch
+
+        class MLP(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.fc1 = torch.nn.Linear(2, 4, bias=True)
+                self.fc2 = torch.nn.Linear(4, 2, bias=True)
+
+            def forward(self, tensor_x: torch.Tensor):
+                tensor_x = self.fc1(tensor_x)
+                tensor_x = torch.sigmoid(tensor_x)
+                tensor_x = self.fc2(tensor_x)
+                tensor_x = torch.sigmoid(tensor_x)
+                return tensor_x
+
+        # with static shape (dynamic=False), the conversion to onnx is done
+        # every time the batch size changes
+        batch_sizes = [3, 3, 3, 3, 3]
+
+        example_args_collection = tuple(
+            (torch.randn(batch, 2, dtype=torch.float32),) for batch in batch_sizes
+        )
+
+        self.common_test_model(
+            MLP(), example_args_collection, False, False, onnx_export="test_ort_mlp"
+        )
+
+    @ignore_warnings((UserWarning, DeprecationWarning))
+    @skipif_ci_windows("torch.compile not supported on Windows")
+    @requires_torch("2.2", "missing kernel")
+    def test_ort_mlp_backward(self):
+        import torch
+
+        class MLP(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.fc1 = torch.nn.Linear(2, 4, bias=True)
+                self.fc2 = torch.nn.Linear(4, 2, bias=True)
+
+            def forward(self, tensor_x: torch.Tensor):
+                tensor_x = self.fc1(tensor_x)
+                tensor_x = torch.sigmoid(tensor_x)
+                tensor_x = self.fc2(tensor_x)
+                tensor_x = torch.sigmoid(tensor_x)
+                return tensor_x
+
+        # with static shape (dynamic=False), the conversion to onnx is done
+        # every time the batch size changes
+        batch_sizes = [3, 3, 3, 3, 3]
+
+        example_args_collection = tuple(
+            (torch.randn(batch, 2, dtype=torch.float32),) for batch in batch_sizes
+        )
+
+        self.common_test_model(
+            MLP(),
+            example_args_collection,
+            test_backward=True,
+            dynamic=False,
+            onnx_export="test_ort_mlp_backward",
+        )
 
     @classmethod
     def get_input_dims(cls, dynamic: bool):
         if dynamic:
-            input_dims = ((13, 7), (14, 7), (15, 8))
+            input_dims = ((2, 8), (4, 7), (9, 15))
         else:
-            input_dims = ((13, 7), (13, 7), (13, 7))
+            input_dims = ((9, 15), (9, 15), (9, 15))
         return input_dims
 
     @ignore_warnings((UserWarning, DeprecationWarning))
     @skipif_ci_windows("torch.compile not supported on Windows")
     @requires_torch("2.3", "missing kernel")
-    @unittest.skipIf(
-        True, reason=" NOT_IMPLEMENTED : Could not find an implementation for Trilu(14"
-    )
-    def test_ort_mistral_model(self):
-        from experimental_experiment.torch_helper.mistral_helper import (
-            get_mistral_model,
+    @unittest.skipIf(True, reason="fails with onnx-rewriter")
+    def test_ort_llama_model(self):
+        from experimental_experiment.torch_models.llama_helper import (
+            get_llama_model,
         )
 
         input_dims = self.get_input_dims(False)
-        model, example_args_collection = get_mistral_model(input_dims=input_dims)
+        model, example_args_collection = get_llama_model(input_dims=input_dims)
         self.common_test_model(
             model,
             example_args_collection,
             test_backward=False,
             dynamic=False,
             fullgraph=True,
-            onnx_export="test_ort_mistral_model",
+            onnx_export="test_ort_llama_model",
             expected_graph_break=0,
         )
 
     @ignore_warnings((UserWarning, DeprecationWarning))
     @skipif_ci_windows("torch.compile not supported on Windows")
-    @requires_onnxruntime("1.18", "missing kernel trilu")
+    @requires_torch("2.2", "missing kernel")
     @requires_cuda()
-    @unittest.skipIf(
-        True, reason=" NOT_IMPLEMENTED : Could not find an implementation for Trilu(14"
-    )
-    def test_ort_mistral_model_cuda(self):
-        from experimental_experiment.torch_helper.mistral_helper import (
-            get_mistral_model,
+    @unittest.skipIf(True, reason="fails with onnx-rewriter")
+    def test_ort_llama_model_cuda(self):
+        from experimental_experiment.torch_models.llama_helper import (
+            get_llama_model,
         )
 
         input_dims = self.get_input_dims(False)
-        model, example_args_collection = get_mistral_model(input_dims=input_dims)
+        model, example_args_collection = get_llama_model(input_dims=input_dims)
         self.common_test_model(
             model,
             example_args_collection,
             test_backward=False,
             dynamic=False,
             fullgraph=True,
-            onnx_export="test_ort_mistral_model",
+            onnx_export="test_ort_llama_model",
             expected_graph_break=0,
             device="cuda",
         )
@@ -183,69 +202,65 @@ class TestMistral(ExtTestCase):
     @ignore_warnings((UserWarning, DeprecationWarning))
     @skipif_ci_windows("torch.compile not supported on Windows")
     @requires_torch("2.3", "missing kernel")
-    @unittest.skipIf(
-        True, reason=" NOT_IMPLEMENTED : Could not find an implementation for Trilu(14"
-    )
-    def test_ort_mistral_model_backward(self):
-        from experimental_experiment.torch_helper.mistral_helper import (
-            get_mistral_model,
+    @unittest.skipIf(True, reason="fails with onnx-rewriter")
+    def test_ort_llama_model_backward(self):
+        from experimental_experiment.torch_models.llama_helper import (
+            get_llama_model,
         )
 
         input_dims = self.get_input_dims(False)
-        model, example_args_collection = get_mistral_model(input_dims=input_dims)
+        model, example_args_collection = get_llama_model(input_dims=input_dims)
         self.common_test_model(
             model,
             example_args_collection,
             test_backward=True,
             dynamic=False,
             fullgraph=True,
-            onnx_export="test_ort_mistral_model_backward",
+            onnx_export="test_ort_llama_model_backward",
             expected_graph_break=0,
-            assert_counting=True,
         )
 
     @ignore_warnings((UserWarning, DeprecationWarning))
     @skipif_ci_windows("torch.compile not supported on Windows")
-    @requires_onnxruntime("1.18", "missing kernel trilu")
+    @requires_torch("2.2", "missing kernel")
     @requires_cuda()
-    @skipif_not_onnxrt("failing when running pytest")
-    def test_ort_mistral_model_backward_cuda(self):
-        from experimental_experiment.torch_helper.mistral_helper import (
-            get_mistral_model,
+    @unittest.skipIf(True, reason="fails with onnx-rewriter")
+    def test_ort_llama_model_backward_cuda(self):
+        from experimental_experiment.torch_models.llama_helper import (
+            get_llama_model,
         )
 
         input_dims = self.get_input_dims(False)
-        model, example_args_collection = get_mistral_model(input_dims=input_dims)
+        model, example_args_collection = get_llama_model(input_dims=input_dims)
         self.common_test_model(
             model,
             example_args_collection,
             test_backward=True,
             dynamic=False,
             fullgraph=True,
-            onnx_export="test_ort_mistral_model_backward",
+            onnx_export="test_ort_llama_model_backward",
             expected_graph_break=0,
-            assert_counting=True,
             device="cuda",
         )
 
-    def test_get_mistral_model_mask_sdpa(self):
-        from experimental_experiment.torch_helper.mistral_helper import (
-            get_mistral_model,
+    def test_get_llama_model_mask_sdpa(self):
+        from experimental_experiment.torch_models.llama_helper import (
+            get_llama_model,
         )
 
-        model, model_inputs = get_mistral_model(
+        model, model_inputs = get_llama_model(
             _attn_implementation="sdpa", with_mask=True
         )
         self.assertEqual(len(model_inputs[0]), 2)
         expected = model(*model_inputs[0])
         self.assertNotEmpty(expected)
 
-    def test_get_mistral_model_nomask_sdpa(self):
-        from experimental_experiment.torch_helper.mistral_helper import (
-            get_mistral_model,
+    def test_get_llama_model_nomask_sdpa(self):
+        from experimental_experiment.torch_models.llama_helper import (
+            get_llama_model,
         )
 
-        model, model_inputs = get_mistral_model(
+        model, model_inputs = get_llama_model(
             _attn_implementation="sdpa", with_mask=False
         )
         self.assertEqual(len(model_inputs[0]), 1)

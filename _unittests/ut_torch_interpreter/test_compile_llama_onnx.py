@@ -9,7 +9,7 @@ from experimental_experiment.ext_test_case import (
     requires_torch,
     requires_cuda,
 )
-from experimental_experiment.torch_helper.dump_helper import assert_all_close
+from experimental_experiment.torch_models.dump_helper import assert_all_close
 from experimental_experiment.torch_dynamo import (
     onnx_debug_backend,
     get_decomposition_table,
@@ -282,7 +282,7 @@ class TestDynamoLlama(ExtTestCase):
     @skipif_ci_windows("torch.compile not supported on Windows")
     @requires_torch("2.3", "unexpected behaviour")
     def test_llama_decoder_forward(self):
-        from experimental_experiment.torch_helper.llama_helper import get_llama_decoder
+        from experimental_experiment.torch_models.llama_helper import get_llama_decoder
 
         input_dims = self.get_input_dims(False)
         model, example_args_collection = get_llama_decoder(input_dims=input_dims)
@@ -298,7 +298,7 @@ class TestDynamoLlama(ExtTestCase):
     @skipif_ci_windows("torch.compile not supported on Windows")
     @requires_torch("2.3", "issue")
     def test_llama_decoder_forward_dynamic(self):
-        from experimental_experiment.torch_helper.llama_helper import get_llama_decoder
+        from experimental_experiment.torch_models.llama_helper import get_llama_decoder
 
         input_dims = self.get_input_dims(True)
         model, example_args_collection = get_llama_decoder(input_dims=input_dims)
@@ -314,7 +314,7 @@ class TestDynamoLlama(ExtTestCase):
     @skipif_ci_windows("torch.compile not supported on Windows")
     @requires_torch("2.3", "unstable")
     def test_llama_decoder_backward_dynamic(self):
-        from experimental_experiment.torch_helper.llama_helper import get_llama_decoder
+        from experimental_experiment.torch_models.llama_helper import get_llama_decoder
 
         input_dims = self.get_input_dims(True)
         model, example_args_collection = get_llama_decoder(input_dims=input_dims)
@@ -330,7 +330,7 @@ class TestDynamoLlama(ExtTestCase):
     @skipif_ci_windows("torch.compile not supported on Windows")
     @requires_torch("2.3", "unexpected behaviour")
     def test_llama_attention_forward(self):
-        from experimental_experiment.torch_helper.llama_helper import (
+        from experimental_experiment.torch_models.llama_helper import (
             get_llama_attention,
         )
 
@@ -348,7 +348,7 @@ class TestDynamoLlama(ExtTestCase):
     @ignore_warnings((UserWarning, DeprecationWarning))
     @skipif_ci_windows("torch.compile not supported on Windows")
     def test_llama_attention_backward(self):
-        from experimental_experiment.torch_helper.llama_helper import (
+        from experimental_experiment.torch_models.llama_helper import (
             get_llama_attention,
         )
 
@@ -369,7 +369,7 @@ class TestDynamoLlama(ExtTestCase):
     @unittest.skip("aten_embedding receives the inputs in the other way")
     def test_llama_model_forward(self):
         import torch
-        from experimental_experiment.torch_helper.llama_helper import get_llama_model
+        from experimental_experiment.torch_models.llama_helper import get_llama_model
 
         input_dims = self.get_input_dims(False)
         model, example_args_collection = get_llama_model(input_dims=input_dims)
@@ -400,7 +400,7 @@ class TestDynamoLlama(ExtTestCase):
     @skipif_ci_windows("torch.compile not supported on Windows")
     def test_llama_model_backward_forward(self):
         import torch
-        from experimental_experiment.torch_helper.llama_helper import get_llama_model
+        from experimental_experiment.torch_models.llama_helper import get_llama_model
 
         input_dims = self.get_input_dims(False)
         model, example_args_collection = get_llama_model(input_dims=input_dims)
@@ -430,7 +430,7 @@ class TestDynamoLlama(ExtTestCase):
     @skipif_ci_windows("torch.compile not supported on Windows")
     @requires_torch("2.2", "missing kernel")
     def test_llama_model_backward_undec(self):
-        from experimental_experiment.torch_helper.llama_helper import get_llama_model
+        from experimental_experiment.torch_models.llama_helper import get_llama_model
 
         input_dims = self.get_input_dims(False)
         model, example_args_collection = get_llama_model(input_dims=input_dims)
@@ -447,7 +447,7 @@ class TestDynamoLlama(ExtTestCase):
     @skipif_ci_windows("torch.compile not supported on Windows")
     @requires_torch("2.2", "missing kernel")
     def test_llama_model_backward_ref(self):
-        from experimental_experiment.torch_helper.llama_helper import get_llama_model
+        from experimental_experiment.torch_models.llama_helper import get_llama_model
 
         model, example_args_collection = get_llama_model(
             input_dims=[(2, 1024)] * 2,
@@ -477,7 +477,7 @@ class TestDynamoLlama(ExtTestCase):
     @requires_cuda()
     def test_llama_model_backward_forward_mixed(self):
         import torch
-        from experimental_experiment.torch_helper.llama_helper import get_llama_model
+        from experimental_experiment.torch_models.llama_helper import get_llama_model
 
         input_dims = self.get_input_dims(False)
         model, example_args_collection = get_llama_model(input_dims=input_dims)
@@ -512,7 +512,7 @@ class TestDynamoLlama(ExtTestCase):
     @requires_cuda()
     def test_llama_model_backward_mixed(self):
         import torch
-        from experimental_experiment.torch_helper.llama_helper import get_llama_model
+        from experimental_experiment.torch_models.llama_helper import get_llama_model
 
         input_dims = self.get_input_dims(False)
         model, example_args_collection = get_llama_model(input_dims=input_dims)

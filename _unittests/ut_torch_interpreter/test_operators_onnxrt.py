@@ -18,7 +18,7 @@ from experimental_experiment.ext_test_case import (
     requires_torch,
 )
 from experimental_experiment.torch_interpreter import FunctionNotFoundError
-from experimental_experiment.torch_helper.training_helper import make_aot_ort
+from experimental_experiment.torch_models.training_helper import make_aot_ort
 
 BATCH_SIZE = 2
 RNN_BATCH_SIZE = 7

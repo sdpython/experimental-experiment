@@ -69,12 +69,12 @@ from experimental_experiment.convert.convert_helper import (
     optimize_model_proto,
     ort_optimize,
 )
-from experimental_experiment.torch_helper.llama_helper import (
+from experimental_experiment.torch_models.llama_helper import (
     get_llama_model,
     get_llama_attention,
     get_llama_decoder,
 )
-from experimental_experiment.torch_helper.dump_helper import (
+from experimental_experiment.torch_models.dump_helper import (
     assert_all_close,
     dump_onnx,
     reorder_functions_in_proto,
@@ -82,7 +82,7 @@ from experimental_experiment.torch_helper.dump_helper import (
     build_matching_inputs,
     results_to_string,
 )
-from experimental_experiment.torch_helper.training_helper import (
+from experimental_experiment.torch_models.training_helper import (
     train_loop,
     make_aot_ort,
 )

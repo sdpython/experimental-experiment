@@ -45,7 +45,7 @@ Look for substring ``TODO:``.
             use_other_rewriter = os.environ.get("ONNXRT_CHANGE_REWRITER", None) in (1, "1")
             if use_other_rewriter:
                 from experimental_experiment.torch_interpreter import to_onnx
-                from experimental_experiment.torch_interpreter._torch_helper import create_input_names
+                from experimental_experiment.torch_interpreter._torch_models import create_input_names
                 from experimental_experiment.xbuilder import OptimizationOptions
                 from experimental_experiment.torch_interpreter.oxs_dispatcher import OxsDispatcher
                 
@@ -279,11 +279,11 @@ Baseline
     import onnx
     import torch
     import torch.onnx
-    from experimental_experiment.torch_helper.training_helper import (
+    from experimental_experiment.torch_models.training_helper import (
         make_aot_ort,
         train_loop,
     )
-    from experimental_experiment.torch_helper.dump_helper import dump_onnx
+    from experimental_experiment.torch_models.dump_helper import dump_onnx
 
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
@@ -361,11 +361,11 @@ With the custom exporter
     # from onnx_array_api.plotting.text_plot import onnx_simple_text_plot
     import torch
     import torch.onnx
-    from experimental_experiment.torch_helper.training_helper import (
+    from experimental_experiment.torch_models.training_helper import (
         make_aot_ort,
         train_loop,
     )
-    from experimental_experiment.torch_helper.dump_helper import dump_onnx
+    from experimental_experiment.torch_models.dump_helper import dump_onnx
 
     # from experimental_experiment.torch_interpreter import to_onnx
 

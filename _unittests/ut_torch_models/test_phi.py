@@ -8,7 +8,7 @@ class TestPhi(ExtTestCase):
 
     def test_get_phi_model_export(self):
         import torch
-        from experimental_experiment.torch_helper.phi_helper import (
+        from experimental_experiment.torch_models.phi_helper import (
             get_phi_model,
         )
 
@@ -26,7 +26,7 @@ class TestPhi(ExtTestCase):
         self.assertEqualArray(expected[0], got[0], atol=1e-5)
 
     def test_get_phi_model_mask_eager(self):
-        from experimental_experiment.torch_helper.phi_helper import (
+        from experimental_experiment.torch_models.phi_helper import (
             get_phi_model,
         )
 
@@ -38,7 +38,7 @@ class TestPhi(ExtTestCase):
         self.assertNotEmpty(expected)
 
     def test_get_phi_model_nomask_eager(self):
-        from experimental_experiment.torch_helper.phi_helper import (
+        from experimental_experiment.torch_models.phi_helper import (
             get_phi_model,
         )
 

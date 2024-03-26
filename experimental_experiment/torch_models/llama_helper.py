@@ -21,7 +21,7 @@ def get_llama_decoder(
 ):
     """
     Returns the decoder part.
-    See :func:`experimental_experiment.torch_helper.llama_helper.get_llama_model`.
+    See :func:`experimental_experiment.torch_models.llama_helper.get_llama_model`.
     """
     import torch
     from transformers import LlamaConfig
@@ -76,7 +76,7 @@ def get_llama_attention(
 ):
     """
     Returns the attention part.
-    See :func:`experimental_experiment.torch_helper.llama_helper.get_llama_model`.
+    See :func:`experimental_experiment.torch_models.llama_helper.get_llama_model`.
     """
     import torch
     from transformers import LlamaConfig
