@@ -98,6 +98,7 @@ class TestCustomOpsDispatch(ExtTestCase):
                 outputs=outputs,
                 operator="_scaled_dot_product_efficient_attention",
                 domain="org.pytorch.aten",
+                name="scaled_dot_product_efficient_attention",
             )
             g.add_domain("org.pytorch.aten")
             return output, log_sumexp, philox_seed, philox_offset
@@ -136,11 +137,13 @@ class TestCustomOpsDispatch(ExtTestCase):
             )
             # onnxruntime fails with type inference failed
             # Let's add some Cast even if not needed.
-            grad_cast = g.op.Cast(grad, to=g.get_type(grad), do_not_remove=True)
+            dt = g.get_type(grad)
+            helper = ",".join(map(str, [dt, dt, dt, dt]))
+            node_name = f"scaled_dot_product_attention_backward[{helper}]"
             grad_query, grad_key, grad_value, grad_attn_bias = g.make_node(
                 "ATen",
                 [
-                    grad_cast,
+                    grad,
                     query,
                     key,
                     value,
@@ -157,6 +160,7 @@ class TestCustomOpsDispatch(ExtTestCase):
                 outputs=outputs,
                 operator="_scaled_dot_product_efficient_attention_backward",
                 domain="org.pytorch.aten",
+                name=node_name,
             )
             g.add_domain("org.pytorch.aten")
             return grad_query, grad_key, grad_value, grad_attn_bias
