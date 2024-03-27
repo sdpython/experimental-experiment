@@ -2676,7 +2676,7 @@ class GraphBuilder:
         self.constants_.update(updates)
         new_nodes = []
         for node in self.nodes:
-            if self.do_not_remove(v):
+            if self.do_not_remove(node):
                 new_nodes.append(node)
                 continue
             if tuple(node.output) in node_to_remove:
