@@ -296,7 +296,9 @@ class TestCustomOpsOnnxScript(ExtTestCase):
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             optimized_mod = torch.compile(model, backend=local_aot_ort, fullgraph=True)
-            with dump_onnx("dort-llama-ort", folder="dump_sdpa_oxs_llama", clean=True):
+            with dump_onnx(
+                "dort-llama-sdpa-ort", folder="dump_sdpa_oxs_llama", clean=True
+            ):
                 output = optimized_mod(input_ids)  # , input_mask)
                 output[0].sum().backward()
 

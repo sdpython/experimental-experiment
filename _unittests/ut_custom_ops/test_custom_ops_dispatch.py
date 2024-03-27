@@ -15,13 +15,13 @@ class TestCustomOpsDispatch(ExtTestCase):
         import contextlib
         import os
         import warnings
-        from typing import Optional
+        from typing import Any, Dict, List, Optional
         import numpy as np
         import onnx
         import torch
         import torch.onnx
         from torch._dynamo.backends.common import aot_autograd
-        from experimental_experiment.torch_interpreter import ForceDispatcher
+        from experimental_experiment.torch_interpreter import Dispatcher
         from experimental_experiment.torch_dynamo import onnx_custom_backend
 
         @contextlib.contextmanager
@@ -55,9 +55,9 @@ class TestCustomOpsDispatch(ExtTestCase):
         #
 
         def onnx_scaled_dot_product_efficient_attention(
-            g,
-            sts,
-            outputs,
+            g: "GraphBuilder",  # noqa: F821
+            sts: Dict[str, Any],
+            outputs: List[str],
             query,
             key,
             value,
@@ -65,33 +65,47 @@ class TestCustomOpsDispatch(ExtTestCase):
             compute_log_sumexp: bool,
             dropout_p: float,
             is_causal: bool,
+            scale: float = 1.0,
+            **kwargs,
         ):
             assert (
                 len(outputs) == 4
             ), f"Unexpected number of outputs {outputs}{g.get_debug_msg()}"
-            cst = g.make_initializer("", np.array([1.0], dtype=np.float32))
+            assert len(kwargs) == 0, (
+                f"Unexpected kwargs {kwargs} in "
+                f"onnx_scaled_dot_product_efficient_attention{g.get_debug_msg()}"
+            )
+            # itype = g.get_type(value)
+            # dtype = tensor_dtype_to_np_dtype(itype)
+            t_compute_log_sumexp = g.make_initializer(
+                "", np.array(compute_log_sumexp, dtype=np.bool_)
+            )
+            t_dropout_p = g.make_initializer("", np.array(dropout_p, dtype=np.float32))
+            t_is_causal = g.make_initializer("", np.array(is_causal, dtype=np.bool_))
+            t_scale = g.make_initializer("", np.array(scale or 1.0, dtype=np.float32))
             output, log_sumexp, philox_seed, philox_offset = g.make_node(
-                "Aten",
+                "ATen",
                 [
                     query,
                     key,
                     value,
-                    attn_bias,
-                    compute_log_sumexp,
-                    dropout_p,
-                    is_causal,
-                    cst,
+                    attn_bias or "",
+                    t_compute_log_sumexp,
+                    t_dropout_p,
+                    t_is_causal,
+                    t_scale,
                 ],
-                outputs=4,
+                outputs=outputs,
                 operator="_scaled_dot_product_efficient_attention",
                 domain="org.pytorch.aten",
             )
+            g.add_domain("org.pytorch.aten")
             return output, log_sumexp, philox_seed, philox_offset
 
         def onnx_scaled_dot_product_attention_backward(
-            g,
-            sts,
-            outputs,
+            g: "GraphBuilder",  # noqa: F821
+            sts: Dict[str, Any],
+            outputs: List[str],
             grad,
             query,
             key,
@@ -103,12 +117,23 @@ class TestCustomOpsDispatch(ExtTestCase):
             philox_offset,
             dropout_p,
             grad_input_mask,
-            is_causal,
+            is_causal: bool,
+            scale: float = 1.0,
+            **kwargs,
         ):
             assert (
                 len(outputs) == 4
             ), f"Unexpected number of outputs {outputs}{g.get_debug_msg()}"
-            cst = g.make_initializer("", np.array([1.0], dtype=np.float32))
+            assert len(kwargs) == 0, (
+                f"Unexpected kwargs {kwargs} in "
+                f"onnx_scaled_dot_product_attention_backward{g.get_debug_msg()}"
+            )
+            t_scale = g.make_initializer("", np.array(scale or 1.0, dtype=np.float32))
+            t_dropout_p = g.make_initializer("", np.array(dropout_p, dtype=np.float32))
+            t_is_causal = g.make_initializer("", np.array(is_causal, dtype=np.bool_))
+            t_grad_input_mask = g.make_initializer(
+                "", np.array(grad_input_mask, dtype=np.int64)
+            )
             grad_query, grad_key, grad_value, grad_attn_bias = g.make_node(
                 "ATen",
                 [
@@ -116,23 +141,24 @@ class TestCustomOpsDispatch(ExtTestCase):
                     query,
                     key,
                     value,
-                    attn_bias,
+                    attn_bias or "",
                     output,
                     logsumexp,
                     philox_seed,
                     philox_offset,
-                    dropout_p,
-                    grad_input_mask,
-                    is_causal,
-                    cst,
+                    t_dropout_p,
+                    t_grad_input_mask,
+                    t_is_causal,
+                    t_scale,
                 ],
                 outputs=outputs,
                 operator="_scaled_dot_product_efficient_attention_backward",
-                domaon="org.pytorch.aten",
+                domain="org.pytorch.aten",
             )
+            g.add_domain("org.pytorch.aten")
             return grad_query, grad_key, grad_value, grad_attn_bias
 
-        dispatcher = ForceDispatcher(
+        dispatcher = Dispatcher(
             {
                 "_scaled_dot_product_efficient_attention_default": onnx_scaled_dot_product_efficient_attention,
                 "_scaled_dot_product_efficient_attention_backward_default": onnx_scaled_dot_product_attention_backward,
@@ -192,6 +218,7 @@ class TestCustomOpsDispatch(ExtTestCase):
                 *args,
                 target_opset=18,
                 dispatcher=dispatcher,
+                verbose=0,
                 **kwargs,
             ),
             # decompositions=get_decomposition_table(),
@@ -204,7 +231,9 @@ class TestCustomOpsDispatch(ExtTestCase):
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             optimized_mod = torch.compile(model, backend=aot_compiler, fullgraph=True)
-            with dump_onnx("dort-llama-ort", folder="dump_sdpa_dis_llama", clean=True):
+            with dump_onnx(
+                "dort-llama-sdpa-custom", folder="dump_sdpa_dis_llama", clean=True
+            ):
                 output = optimized_mod(input_ids)  # , input_mask)
                 output[0].sum().backward()
 
