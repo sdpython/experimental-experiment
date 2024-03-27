@@ -16,9 +16,9 @@ def inline_model_proto(model_proto: ModelProto) -> ModelProto:
     return inline_local_functions(model_proto)
 
 
-def _fix_details(model: ModelProto, verbose: int = 0):
+def _fix_details(model: ModelProto, verbose: int = 0) -> ModelProto:
     # ScatterND + Aten ops
-    print("[modify_onnx] START")
+    print("[_fix_details] START")
     for node in model.graph.node:
         if node.op_type == "ScatterND":
             if len(node.attribute) == 0:
@@ -146,7 +146,7 @@ def optimize_model_proto(
                 f"seconds (see 'bug-onnxrewriter.onnx')."
             )
 
-    _fix_details(model_proto)
+    # _fix_details(model_proto)
     if inplace:
         del first_model_proto.graph.node[:]
         del first_model_proto.functions[:]
