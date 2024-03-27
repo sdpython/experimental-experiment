@@ -21,7 +21,7 @@ class TestCustomOpsDispatch(ExtTestCase):
         import torch
         import torch.onnx
         from torch._dynamo.backends.common import aot_autograd
-        from experimental_experiment.torch_interpreter import FunctionDispatcher
+        from experimental_experiment.torch_interpreter import ForceDispatcher
         from experimental_experiment.torch_dynamo import onnx_custom_backend
 
         @contextlib.contextmanager
@@ -132,7 +132,7 @@ class TestCustomOpsDispatch(ExtTestCase):
             )
             return grad_query, grad_key, grad_value, grad_attn_bias
 
-        dispatcher = FunctionDispatcher(
+        dispatcher = ForceDispatcher(
             {
                 "_scaled_dot_product_efficient_attention_default": onnx_scaled_dot_product_efficient_attention,
                 "_scaled_dot_product_efficient_attention_backward_default": onnx_scaled_dot_product_attention_backward,
