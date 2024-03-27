@@ -114,35 +114,43 @@ compiled_model = create_compiled_model(
 
 
 def loop_iteration(is_cuda, inputs, compiled_model, loss):
-    if args.mixed in (1, "1", True, "True") and is_cuda:
+    mixed = args.mixed in (1, "1", True, "True")
+    if mixed and is_cuda:
         with torch.autocast(device_type="cuda", dtype=torch.float16):
+            torch.cuda.nvtx.range_push("DORT-FORWARD-MIXED")
             result = compiled_model(*inputs)
-    else:
-        assert args.mixed not in (
-            1,
-            "1",
-            True,
-            "True",
-        ), f"not implemented with is_cuda={is_cuda}, mixed={args.mixed}"
-        if is_cuda:
-            torch.cuda.nvtx.range_push("DORT-FORWARD")
-        result = compiled_model(*inputs)
-        if is_cuda:
             torch.cuda.synchronize()
             torch.cuda.nvtx.range_pop()
-
-    # dummy_target = torch.ones_like(result[0], memory_format=torch.contiguous_format)
-    if is_cuda:
-        torch.cuda.nvtx.range_push("DORT-ERROR")
-    error = result[0].sum()  # loss(result[0], dummy_target)
-    if is_cuda:
-        torch.cuda.nvtx.range_pop()
-    if is_cuda:
-        torch.cuda.nvtx.range_push("DORT-BACKWARD")
-    error.backward()
-    if is_cuda:
+    elif is_cuda:
+        torch.cuda.nvtx.range_push("DORT-FORWARD")
+        result = compiled_model(*inputs)
         torch.cuda.synchronize()
         torch.cuda.nvtx.range_pop()
+    else:
+        result = compiled_model(*inputs)
+
+    # dummy_target = torch.ones_like(result[0], memory_format=torch.contiguous_format)
+    if mixed and is_cuda:
+        with torch.autocast(device_type="cuda", dtype=torch.float16):
+            torch.cuda.nvtx.range_push("DORT-ERROR-MIXED")
+            error = result[0].sum()  # loss(result[0], dummy_target)
+            torch.cuda.nvtx.range_pop()
+            torch.cuda.nvtx.range_push("DORT-BACKWARD-MIXED")
+            error.backward()
+            torch.cuda.synchronize()
+            torch.cuda.nvtx.range_pop()
+    elif is_cuda:
+        torch.cuda.nvtx.range_push("DORT-ERROR")
+        error = result[0].sum()  # loss(result[0], dummy_target)
+        torch.cuda.nvtx.range_pop()
+        torch.cuda.nvtx.range_push("DORT-BACKWARD")
+        error.backward()
+        torch.cuda.synchronize()
+        torch.cuda.nvtx.range_pop()
+    else:
+        error = result[0].sum()  # loss(result[0], dummy_target)
+        error.backward()
+        torch.cuda.synchronize()
 
 
 print(f"warmup on device={args.device}")
