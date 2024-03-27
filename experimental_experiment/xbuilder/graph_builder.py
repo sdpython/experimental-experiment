@@ -1716,6 +1716,10 @@ class GraphBuilder:
                 f"atts={attributes}{self.get_debug_msg()}"
             )
 
+    def do_not_remove(self, node: NodeProto) -> bool:
+        """Tells if a node should be removed or not."""
+        return node.name.startswith("_DONOTREMOVE_")
+
     def make_node(
         self,
         op_type: str,
@@ -1726,6 +1730,7 @@ class GraphBuilder:
         check: Optional[bool] = None,
         name: Optional[str] = None,
         sts: Optional[Dict[str, Any]] = None,
+        do_not_remove: bool = False,
         **kwargs,
     ) -> Union[str, List[str]]:
         """
@@ -1743,6 +1748,7 @@ class GraphBuilder:
             the new results aftr the node is added, it is not possible
             for every node, there is no tool which determines the output shape
             of just one node
+        :param do_not_remove: prevent this node from being removed
         :param kwargs: additional attributes to add the node
         :return: output names
         """
@@ -1804,7 +1810,9 @@ class GraphBuilder:
                 assert self.has_shape(i), f"Input {i!r} has no known shape."
                 assert self.has_type(i), f"Input {i!r} has no known type."
 
-        if name:
+        if do_not_remove:
+            name = self.unique_node_name(f"_DONOTREMOVE_{name or ''}")
+        elif name:
             name = self.unique_node_name(name)
 
         self._check_op_type(
@@ -2557,7 +2565,7 @@ class GraphBuilder:
                     for i in node.input:
                         marked[o].add(i)
                         used = True
-            if used:
+            if used or self.do_not_remove(node):
                 for i in node.input:
                     marked[i] = set()
 
@@ -2668,6 +2676,9 @@ class GraphBuilder:
         self.constants_.update(updates)
         new_nodes = []
         for node in self.nodes:
+            if self.do_not_remove(v):
+                new_nodes.append(node)
+                continue
             if tuple(node.output) in node_to_remove:
                 continue
             new_nodes.append(node)
@@ -2686,7 +2697,7 @@ class GraphBuilder:
         replacements = {}
         replacements_rev = {}
         for node in self.nodes:
-            if node.op_type != "Identity":
+            if node.op_type != "Identity" or self.do_not_remove(node):
                 new_nodes.append(node)
                 continue
 
@@ -2819,7 +2830,14 @@ class GraphBuilder:
             assert i < len(
                 self.nodes
             ), f"Unable to remove node position {i}, there are {len(self.nodes)}"
-            memo.append(self.nodes[i])
+            n = self.nodes[i]
+            if not n:
+                # already marked as removed
+                continue
+            assert n and not self.do_not_remove(n), (
+                f"Node {n.name!r} marked as 'DONOTREMOVE' " f"cannot be removed."
+            )
+            memo.append(n)
             self.nodes[i] = None
 
         n_existing = []

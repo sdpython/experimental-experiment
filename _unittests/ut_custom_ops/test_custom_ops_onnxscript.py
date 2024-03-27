@@ -133,20 +133,21 @@ class TestCustomOpsOnnxScript(ExtTestCase):
             is_causal,
         ):
             grad_query, grad_key, grad_value, grad_attn_bias = aten_opset.ATen(
-                grad,
-                query,
-                key,
-                value,
-                attn_bias,
-                output,
-                logsumexp,
-                philox_seed,
-                philox_offset,
-                dropout_p,
-                grad_input_mask,
-                is_causal,
+                grad,  # 0
+                query,  # 1
+                key,  # 2
+                value,  # 3
+                attn_bias,  # 4
+                output,  # 5
+                logsumexp,  # 6
+                philox_seed,  # 7
+                philox_offset,  # 8
+                dropout_p,  # 9
+                grad_input_mask,  # 10
+                is_causal,  # 11
                 1.0,
                 operator="_scaled_dot_product_efficient_attention_backward",
+                # cpu_input_args=[],
             )
             return grad_query, grad_key, grad_value, grad_attn_bias
 

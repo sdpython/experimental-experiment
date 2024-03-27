@@ -571,6 +571,10 @@ class GraphBuilderPatternOptimization:
             )
         )
 
+    def do_not_remove(self, node: NodeProto) -> bool:
+        """Tells if a node can be removed."""
+        return self.builder.do_not_remove(node)
+
     def optimize(
         self, max_iter=-1, remove_identity: bool = True, stop_after: int = -1
     ) -> List[Dict[str, Any]]:
@@ -653,6 +657,17 @@ class GraphBuilderPatternOptimization:
                 begin = time.perf_counter()
                 before = len(matches)
                 for match in pattern.enumerate_matches(self):
+
+                    # bypass this node if the name contains some specific name
+                    fail_match = False
+                    for n in match.nodes:
+                        if n and self.do_not_remove(n):
+                            fail_match = True
+                            break
+                    if fail_match:
+                        continue
+
+                    # checks that a node is not already part of another pattern
                     bypass = False
                     for n in match.nodes:
                         if id(n) in marked:

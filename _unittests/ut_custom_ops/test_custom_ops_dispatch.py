@@ -134,10 +134,13 @@ class TestCustomOpsDispatch(ExtTestCase):
             t_grad_input_mask = g.make_initializer(
                 "", np.array(grad_input_mask, dtype=np.int64)
             )
+            # onnxruntime fails with type inference failed
+            # Let's add some Cast even if not needed.
+            grad_cast = g.op.Cast(grad, to=g.get_type(grad), do_not_remove=True)
             grad_query, grad_key, grad_value, grad_attn_bias = g.make_node(
                 "ATen",
                 [
-                    grad,
+                    grad_cast,
                     query,
                     key,
                     value,
@@ -219,6 +222,7 @@ class TestCustomOpsDispatch(ExtTestCase):
                 target_opset=18,
                 dispatcher=dispatcher,
                 verbose=0,
+                optimize=True,
                 **kwargs,
             ),
             # decompositions=get_decomposition_table(),
@@ -232,7 +236,7 @@ class TestCustomOpsDispatch(ExtTestCase):
             warnings.simplefilter("ignore")
             optimized_mod = torch.compile(model, backend=aot_compiler, fullgraph=True)
             with dump_onnx(
-                "dort-llama-sdpa-custom", folder="dump_sdpa_dis_llama", clean=True
+                "dort-llama-sdpa-custom-no", folder="dump_sdpa_dis_llama", clean=True
             ):
                 output = optimized_mod(input_ids)  # , input_mask)
                 output[0].sum().backward()
