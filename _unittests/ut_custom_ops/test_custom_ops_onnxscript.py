@@ -2,7 +2,7 @@ import unittest
 from experimental_experiment.ext_test_case import ExtTestCase, requires_cuda
 
 
-class TestCustomOps(ExtTestCase):
+class TestCustomOpsOnnxScript(ExtTestCase):
     @classmethod
     def setUpClass(cls):
         import onnxruntime  # noqa: F401
@@ -133,20 +133,21 @@ class TestCustomOps(ExtTestCase):
             is_causal,
         ):
             grad_query, grad_key, grad_value, grad_attn_bias = aten_opset.ATen(
-                grad,
-                query,
-                key,
-                value,
-                attn_bias,
-                output,
-                logsumexp,
-                philox_seed,
-                philox_offset,
-                dropout_p,
-                grad_input_mask,
-                is_causal,
+                grad,  # 0
+                query,  # 1
+                key,  # 2
+                value,  # 3
+                attn_bias,  # 4
+                output,  # 5
+                logsumexp,  # 6
+                philox_seed,  # 7
+                philox_offset,  # 8
+                dropout_p,  # 9
+                grad_input_mask,  # 10
+                is_causal,  # 11
                 1.0,
                 operator="_scaled_dot_product_efficient_attention_backward",
+                # cpu_input_args=[],
             )
             return grad_query, grad_key, grad_value, grad_attn_bias
 
@@ -296,17 +297,19 @@ class TestCustomOps(ExtTestCase):
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             optimized_mod = torch.compile(model, backend=local_aot_ort, fullgraph=True)
-            with dump_onnx("dort-llama-ort", folder="dump_sdpa_llama", clean=True):
+            with dump_onnx(
+                "dort-llama-sdpa-ort", folder="dump_sdpa_oxs_llama", clean=True
+            ):
                 output = optimized_mod(input_ids)  # , input_mask)
                 output[0].sum().backward()
 
-        names = [_ for _ in os.listdir("dump_sdpa_llama") if _.endswith(".onnx")]
+        names = [_ for _ in os.listdir("dump_sdpa_oxs_llama") if _.endswith(".onnx")]
         print("------------------------------------------")
         print(f"exported model: {names}")
         for name in names:
             print()
             print("NODES in {name!r}")
-            onx = onnx.load(os.path.join("dump_sdpa_llama", name))
+            onx = onnx.load(os.path.join("dump_sdpa_oxs_llama", name))
             for i, node in enumerate(onx.graph.node):
                 print(
                     f"{i+1}/{len(onx.graph.node)}: "
