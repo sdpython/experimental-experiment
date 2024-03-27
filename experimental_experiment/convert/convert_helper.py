@@ -16,7 +16,7 @@ def inline_model_proto(model_proto: ModelProto) -> ModelProto:
     return inline_local_functions(model_proto)
 
 
-def _fix_details(model: ModelProto, verbose: int = 0)->ModelProto:
+def _fix_details(model: ModelProto, verbose: int = 0) -> ModelProto:
     # ScatterND + Aten ops
     print("[_fix_details] START")
     for node in model.graph.node:

@@ -13,6 +13,7 @@ from experimental_experiment.convert.convert_helper import (
     ort_optimize,
 )
 from experimental_experiment.torch_interpreter import to_onnx
+
 try:
     import onnxrewriter  # noqa: F401
 
@@ -68,7 +69,9 @@ class TestConvertHelper(ExtTestCase):
         model(*example_args_collection[0])
         model = torch.onnx.dynamo_export(model, *example_args_collection[0])
         model_proto = model.model_proto
-        ort_optimize(model_proto, providers="cpu", output="test_ort_optimize_dynamo_cpu.onnx")
+        ort_optimize(
+            model_proto, providers="cpu", output="test_ort_optimize_dynamo_cpu.onnx"
+        )
 
     @requires_cuda()
     @ignore_warnings(UserWarning)
@@ -91,7 +94,6 @@ class TestConvertHelper(ExtTestCase):
     @ignore_warnings(UserWarning)
     @unittest.skipIf(True, reason="unstable")
     def test_ort_optimize_cpu(self):
-        import torch
         from experimental_experiment.torch_models.llama_helper import (
             get_llama_attention,
         )
@@ -106,7 +108,6 @@ class TestConvertHelper(ExtTestCase):
     @ignore_warnings(UserWarning)
     @unittest.skipIf(True, reason="unstable")
     def test_ort_optimize_cuda(self):
-        import torch
         from experimental_experiment.torch_models.llama_helper import (
             get_llama_attention,
         )
