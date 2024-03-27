@@ -150,7 +150,6 @@ def loop_iteration(is_cuda, inputs, compiled_model, loss):
     else:
         error = result[0].sum()  # loss(result[0], dummy_target)
         error.backward()
-        torch.cuda.synchronize()
 
 
 print(f"warmup on device={args.device}")

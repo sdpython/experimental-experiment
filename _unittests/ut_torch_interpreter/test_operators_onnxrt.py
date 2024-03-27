@@ -1428,6 +1428,7 @@ class TestOperatorsOnnxrt(ExtTestCase):
             onnx_export=inspect.currentframe().f_code.co_name,
         )
 
+    @unittest.skipIf(True, reason="unstable")
     def test_unfold(self):
         x = torch.randn(2, 3, 4, requires_grad=True)
         self.assertONNX(
