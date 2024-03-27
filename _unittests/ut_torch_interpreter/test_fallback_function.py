@@ -234,7 +234,7 @@ class TestFallbackForce(ExtTestCase):
         import torch
         from experimental_experiment.torch_interpreter import to_onnx
         from experimental_experiment.torch_interpreter.dispatcher import (
-            ForceDispatcher,
+            FunctionDispatcher,
         )
 
         class Neuron(torch.nn.Module):
@@ -248,7 +248,7 @@ class TestFallbackForce(ExtTestCase):
         x = torch.rand(5, 3)
         model = Neuron(3, 1)
 
-        onx = to_onnx(model, (x,), input_names=["x"], dispatcher=ForceDispatcher())
+        onx = to_onnx(model, (x,), input_names=["x"], dispatcher=FunctionDispatcher())
         self.assertEqual([n.op_type for n in onx.graph.node], ["Gemm", "celu_default"])
         self.assertEqual([n.domain for n in onx.graph.node], ["", "aten.lib"])
         ext = ExtendedReferenceEvaluator(onx, new_ops=[celu_default])
@@ -261,7 +261,7 @@ class TestFallbackForce(ExtTestCase):
         from experimental_experiment.torch_models.llama_helper import get_llama_model
         from experimental_experiment.torch_interpreter import to_onnx
         from experimental_experiment.torch_interpreter.dispatcher import (
-            ForceDispatcher,
+            FunctionDispatcher,
         )
 
         model, example_args_collection = get_llama_model(
@@ -272,7 +272,7 @@ class TestFallbackForce(ExtTestCase):
             model,
             example_args_collection[0],
             input_names=["input0"],
-            dispatcher=ForceDispatcher(
+            dispatcher=FunctionDispatcher(
                 {
                     "_scaled_dot_product_flash_attention_for_cpu_default": _f_scaled_dot_product_flash_attention_for_cpu_default
                 }
@@ -321,7 +321,7 @@ class TestFallbackForce(ExtTestCase):
             get_decomposition_table,
         )
         from experimental_experiment.torch_interpreter.dispatcher import (
-            ForceDispatcher,
+            FunctionDispatcher,
         )
 
         model, example_args_collection = get_llama_model(
@@ -334,7 +334,7 @@ class TestFallbackForce(ExtTestCase):
 
         expected = model(*example_args_collection[0])
 
-        dispatcher = ForceDispatcher(
+        dispatcher = FunctionDispatcher(
             {
                 "_scaled_dot_product_efficient_attention_default": _f_scaled_dot_product_efficient_attention_cuda
             }
@@ -396,7 +396,7 @@ class TestFallbackForce(ExtTestCase):
             get_decomposition_table,
         )
         from experimental_experiment.torch_interpreter.dispatcher import (
-            ForceDispatcher,
+            FunctionDispatcher,
         )
         from experimental_experiment.torch_models.dump_helper import assert_all_close
 
@@ -411,7 +411,7 @@ class TestFallbackForce(ExtTestCase):
         expected = model(*example_args_collection[0])
         expected[0].sum().backward()
 
-        dispatcher = ForceDispatcher(
+        dispatcher = FunctionDispatcher(
             {
                 "_scaled_dot_product_efficient_attention_default": _f_scaled_dot_product_efficient_attention_cuda,
                 "_scaled_dot_product_efficient_attention_backward_default": _f_scaled_dot_product_efficient_attention_backward_cuda,

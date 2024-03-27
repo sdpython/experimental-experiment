@@ -98,13 +98,16 @@ class Dispatcher:
         return fct
 
 
-class ForceDispatcher(Dispatcher):
+class FunctionDispatcher(Dispatcher):
     """
     Implements a dispatcher which as an onnx as it is
     when no converting function is found.
 
-    :param signatures: function used only for their signature mapping
-        a name to a function in order to have parameter names
+    :param signatures_or_converters: dictionary of functions,
+        first case, only the signature is used
+        in order to have parameter names, second case,
+        a converter, but then it must starts with three
+        parameter ``g: "GraphBuilder", sts: Dict[str, Any], outputs: List[str]``
     :param verbose: verbose
     :param domain: domain of the added node
     :param version: version of the domain
@@ -115,20 +118,21 @@ class ForceDispatcher(Dispatcher):
 
     def __init__(
         self,
-        signatures: Optional[Dict[str, Callable]] = None,
+        signatures_or_converters: Optional[Dict[str, Callable]] = None,
         verbose: int = 0,
         domain: str = "aten.lib",
         version: int = 1,
         strict: bool = False,
         only_registered: bool = False,
     ):
-        super(ForceDispatcher, self).__init__({}, verbose=verbose)
-        self.signatures = signatures or {}
+        super(FunctionDispatcher, self).__init__({}, verbose=verbose)
+        self.signatures = {}
+        self.converters = {}
         self.domain = domain
         self.version = version
         self.strict = strict
         self.only_registered = only_registered
-        self._process_signatures()
+        self._process_signatures(signatures_or_converters)
 
     @classmethod
     def _convert_into_type(cls, annotation):
@@ -152,6 +156,10 @@ class ForceDispatcher(Dispatcher):
         args = []
         kwargs = []
         sig = inspect.signature(f)
+        if sig.parameters:
+            for p in sig.parameters.values():
+                if p.annotation:
+                    print(p.annotation)
         has_annotation = any(
             map(
                 lambda p: p.annotation is not None
@@ -201,11 +209,16 @@ class ForceDispatcher(Dispatcher):
                 )
         return args, kwargs
 
-    def _process_signatures(self):
+    def _process_signatures(self, signatures_or_converters):
         self.sigs_ = {}
-        for k, v in self.signatures.items():
+        for k, v in signatures_or_converters.items():
+            
             sig = self._process_signature(v)
-            self.sigs_[k] = sig
+            if isinstance(sig, tuple):
+                self.signatures[k]  = v
+                self.sigs_[k] = sig
+            else:
+                self.converters[k]=v
 
     def fallback(
         self,
@@ -232,6 +245,8 @@ class ForceDispatcher(Dispatcher):
             return fct
 
         fname = self._get_function_name(name)
+        print("***", name, fname)
+        stop
 
         def wrapper(
             g,

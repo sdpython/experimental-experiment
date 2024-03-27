@@ -2,7 +2,7 @@ import unittest
 from experimental_experiment.ext_test_case import ExtTestCase, requires_cuda
 
 
-class TestCustomOps(ExtTestCase):
+class TestCustomOpsOnnxScript(ExtTestCase):
     @classmethod
     def setUpClass(cls):
         import onnxruntime  # noqa: F401
@@ -296,17 +296,17 @@ class TestCustomOps(ExtTestCase):
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             optimized_mod = torch.compile(model, backend=local_aot_ort, fullgraph=True)
-            with dump_onnx("dort-llama-ort", folder="dump_sdpa_llama", clean=True):
+            with dump_onnx("dort-llama-ort", folder="dump_sdpa_oxs_llama", clean=True):
                 output = optimized_mod(input_ids)  # , input_mask)
                 output[0].sum().backward()
 
-        names = [_ for _ in os.listdir("dump_sdpa_llama") if _.endswith(".onnx")]
+        names = [_ for _ in os.listdir("dump_sdpa_oxs_llama") if _.endswith(".onnx")]
         print("------------------------------------------")
         print(f"exported model: {names}")
         for name in names:
             print()
             print("NODES in {name!r}")
-            onx = onnx.load(os.path.join("dump_sdpa_llama", name))
+            onx = onnx.load(os.path.join("dump_sdpa_oxs_llama", name))
             for i, node in enumerate(onx.graph.node):
                 print(
                     f"{i+1}/{len(onx.graph.node)}: "
