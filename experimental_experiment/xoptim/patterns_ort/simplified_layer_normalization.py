@@ -4,7 +4,7 @@ import numpy as np
 from onnx import NodeProto
 import onnx.helper as oh
 import onnx.numpy_helper as onh
-from ..patterns.patterns_api import MatchResult, PatternOptimization
+from ..patterns_api import MatchResult, PatternOptimization
 
 
 class SimplifiedLayerNormalizationPattern(PatternOptimization):

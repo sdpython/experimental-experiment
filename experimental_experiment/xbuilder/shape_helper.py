@@ -21,6 +21,8 @@ def all_int_or_str(seq: Sequence[Any]) -> bool:
 
 
 def is_static_shape(shape: DYNAMIC_SHAPE) -> bool:
+    if shape is None:
+        return False
     return all(map(is_static_dimension, shape))
 
 

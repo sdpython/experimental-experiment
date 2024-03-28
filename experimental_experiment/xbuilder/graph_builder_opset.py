@@ -4,6 +4,15 @@ import numpy as np
 
 
 class Opset:
+    """
+    Makes it easier to write onnx graph.
+    The method name is the node type.
+
+    :param graph_builder: the builder
+    :param allow_unknown: allows unknown operators, otherwise,
+        fails this class does not the expected number of outputs
+    """
+
     # defined for opset >= 18
     # name: number of expected outputs
     _implemented = {
@@ -67,8 +76,11 @@ class Opset:
         "Where": 1,
     }
 
-    def __init__(self, builder: "GraphBuilder"):  # noqa: F821
+    def __init__(
+        self, builder: "GraphBuilder", allow_unknown: bool = False  # noqa: F821
+    ):
         self.builder = builder
+        self.allow_unknown = allow_unknown
 
     def __getattr__(self, name):
         if name in self._implemented:
@@ -76,10 +88,25 @@ class Opset:
         try:
             return super().__getattr__(name)
         except AttributeError as e:
-            raise AttributeError(
-                f"Unable to access attribute {name!r}, "
-                f"you can still use this operator with method 'make_node'."
-            ) from e
+            if not self.allow_unknown:
+                raise AttributeError(
+                    f"Unable to access attribute {name!r}, "
+                    f"you can still use this operator with method 'make_node'."
+                ) from e
+
+        # unkown name
+        return lambda *args, _name=name, **kwargs: self._make_node(
+            _name, *args, **kwargs
+        )
+
+    def _make_node(self, op_type, *args, outputs=None, **kwargs):
+        if outputs is None:
+            if op_type in self._implemented:
+                outputs = self._implemented[op_type]
+            else:
+                # We assume there is only one outputs.
+                outputs = 1
+        return self.make_node(op_type, *args, outputs=outputs, **kwargs)
 
     def make_node(
         self,

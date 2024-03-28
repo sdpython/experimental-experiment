@@ -193,6 +193,23 @@ class GraphBuilder:
             )
 
         self.op = Opset(self)
+        self.anyop = Opset(self, allow_unknown=True)
+
+    @property
+    def output_names(self) -> List[str]:
+        return [o.name for o in self.outputs]
+
+    def empty_copy(self, as_function: bool = False) -> "GraphBuilder":
+        """
+        Creates an empty copy but with the same opsets.
+        """
+        g = GraphBuilder(
+            self.opsets.copy(),
+            verbose=self.verbose,
+            ir_version=self.ir_version,
+            as_function=as_function,
+        )
+        return g
 
     def make_key(self, value: Any) -> Optional[Tuple[Union[str, int], ...]]:
         """
@@ -1459,6 +1476,8 @@ class GraphBuilder:
         """
         The implementation of this method should be revisited.
         """
+        if shape is None:
+            return None
         if is_static_shape(shape):
             return tuple(int(i) for i in shape)
         new_shape = []

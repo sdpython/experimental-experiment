@@ -12,7 +12,7 @@ from experimental_experiment.xbuilder.graph_builder import (
     GraphBuilder,
     OptimizationOptions,
 )
-from experimental_experiment.xoptim.patterns import get_pattern_list
+from experimental_experiment.xoptim import get_pattern_list
 from experimental_experiment.xbuilder._onnx_helper import (
     choose_consistent_domain_opset,
     compatible_opsets,

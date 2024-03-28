@@ -46,14 +46,14 @@ class OptimizationOptions:
         self.constant_fusing = constant_fusing
         self.stop_after = stop_after
         if isinstance(patterns, str):
-            from ..xoptim.patterns import get_pattern_list
+            from ..xoptim import get_pattern_list
 
             self.patterns = get_pattern_list(patterns, verbose=verbose)
         else:
             assert patterns is None or isinstance(
                 patterns, list
             ), f"Unexpected type {type(patterns)} for patterns"
-            from ..xoptim.patterns import get_pattern
+            from ..xoptim import get_pattern
 
             self.patterns = (
                 None

@@ -6,7 +6,7 @@ import torch
 from ..xbuilder import OptimizationOptions
 from ..torch_interpreter._torch_helper import create_input_names
 from ..torch_interpreter import to_onnx
-from ..xoptim.patterns import get_pattern_list
+from ..xoptim import get_pattern_list
 from .backend_helper import get_dimensions
 
 

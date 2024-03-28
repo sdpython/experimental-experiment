@@ -7,7 +7,7 @@ from experimental_experiment.xbuilder.graph_builder import (
     GraphBuilder,
     OptimizationOptions,
 )
-from experimental_experiment.xoptim.patterns import get_pattern_list
+from experimental_experiment.xoptim import get_pattern_list
 from experimental_experiment.reference import ExtendedReferenceEvaluator
 
 TFLOAT = TensorProto.FLOAT

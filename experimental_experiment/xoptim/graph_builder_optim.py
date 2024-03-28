@@ -7,7 +7,8 @@ from onnx import AttributeProto, NodeProto
 import onnx.helper as oh
 from ..xbuilder._onnx_helper import enumerate_subgraphs
 from ..xbuilder.type_inference import infer_types
-from .patterns import MatchResult, PatternOptimization, get_default_patterns
+from .patterns_api import MatchResult, PatternOptimization
+from .patterns import get_default_patterns
 
 
 def _count(matches):
@@ -51,7 +52,38 @@ class GraphBuilderPatternOptimization:
         # _build method should not change it.
         self._cache_computed_constant = {}
 
+    @property
+    def nodes(self) -> List[NodeProto]:
+        "property"
+        return self.builder.nodes
+
+    @property
+    def input_names(self) -> List[str]:
+        "property"
+        return self.builder.input_names
+
+    @property
+    def inputs(self) -> List[Any]:
+        "property"
+        return self.builder.inputs
+
+    @property
+    def output_names(self) -> List[str]:
+        "property"
+        return self.builder.output_names
+
+    @property
+    def outputs(self) -> List[Any]:
+        "property"
+        return self.builder.outputs
+
+    @property
+    def opsets(self):
+        "property"
+        return self.builder.opsets
+
     def iter_nodes(self) -> Iterator:
+        "iterator"
         for node in self.builder.nodes:
             yield node
 
@@ -400,6 +432,7 @@ class GraphBuilderPatternOptimization:
         return new_name
 
     def unique_name(self, prefix: str) -> str:
+        "Returns a unique name."
         return self.builder.unique_name(prefix)
 
     def make_node_check_opset(

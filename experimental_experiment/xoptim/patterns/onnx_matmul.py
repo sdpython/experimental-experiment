@@ -7,7 +7,7 @@ from ...xbuilder.shape_helper import (
     compatible_dimensions,
     is_static_shape,
 )
-from .patterns_api import MatchResult, PatternOptimization
+from ..patterns_api import MatchResult, PatternOptimization
 
 
 class MatMulReshape2Of3Pattern(PatternOptimization):
