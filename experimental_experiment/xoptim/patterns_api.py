@@ -244,7 +244,7 @@ class EasyPatternOptimization(PatternOptimization):
 
         # Let's match the first node.
         # Then we need to match successors and predecessors.
-        p_node = pat.nodes[0]
+        p_node = pat.nodes[-1]  # the last one
         if not self._match_nodes_io(node, p_node):
             return self.none()
 
