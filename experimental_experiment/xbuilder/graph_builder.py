@@ -1237,8 +1237,6 @@ class GraphBuilder:
                 if end is None:
                     if self.has_rank(node.input[0]):
                         end = self.get_rank(node.input[0])
-                    else:
-                        end = ""
                 if self.has_shape(node.input[0]):
                     shape = self.get_shape(node.input[0])
                     assert start.i < len(shape), (
@@ -1248,16 +1246,19 @@ class GraphBuilder:
                     if end is None:
                         self.set_value_shape(node.output[0], shape[start.i :])
                     else:
-                        assert end.i < len(shape), (
-                            f"Shape mismatch, end={end.i}, shape of {node.input[0]!r} "
+                        assert getattr(end, "i", end) <= len(shape), (
+                            f"Shape mismatch, end={getattr(end, 'i', end)}, shape of {node.input[0]!r} "
                             f"is {shape}{self.get_debug_msg()}"
                         )
-                        self.set_value_shape(node.output[0], shape[start.i : end.i])
+                        self.set_value_shape(
+                            node.output[0], shape[start.i : getattr(end, "i", end)]
+                        )
                 elif end is None:
                     self.set_value_shape(node.output[0], f"{node.input[0]}[{start.i}:]")
                 else:
                     self.set_value_shape(
-                        node.output[0], f"{node.input[0]}[{start.i}:{end.i}]"
+                        node.output[0],
+                        f"{node.input[0]}[{start.i}:{getattr(end, 'i', end)}]",
                     )
             return
 
@@ -1990,7 +1991,7 @@ class GraphBuilder:
 
     def get_attribute(
         self, node: NodeProto, att_name: str, exc: bool = True
-    ) -> AttributeProto:
+    ) -> Optional[AttributeProto]:
         """
         Returns an attribute for a node.
         """

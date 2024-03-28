@@ -170,8 +170,8 @@ class PatternOptimization:
 class EasyPatternOptimization(PatternOptimization):
     """
     Implements a pattern optimization for quick experimentation.
-    The current implementation does match on domain name.
-    It does compares attributes either.
+    The current implementation does not match on domain name.
+    It does not compares attributes either.
     """
 
     def __init__(self, verbose: int = 0):

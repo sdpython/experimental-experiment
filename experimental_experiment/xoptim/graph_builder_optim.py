@@ -238,7 +238,7 @@ class GraphBuilderPatternOptimization:
 
     def get_attribute(
         self, node: NodeProto, att_name: str, exc: bool = True
-    ) -> AttributeProto:
+    ) -> Optional[AttributeProto]:
         """
         Returns an attribute for a node.
         """
@@ -339,6 +339,22 @@ class GraphBuilderPatternOptimization:
         predecessor = self.predecessors_[name]
         return self.nodes_[predecessor]
 
+    def next_node(self, name: str) -> NodeProto:
+        """
+        Returns the next node if it is unique, otherwise fails.
+        """
+        res = self.next_nodes(name)
+        assert len(res) == 1, f"Unexpected number of successors {len(res)} for {name!r}"
+        return res[0]
+
+    def next_nodes(self, name: str) -> List[NodeProto]:
+        """
+        Returns the node consuming the given results.
+        """
+        if name not in self.successors_:
+            return []
+        return [self.nodes_[i] for i in self.successors_[name]]
+
     def try_infer_type(self, name: str, exc: bool = False) -> int:
         """
         Tries to infer the type of a result.
@@ -401,22 +417,6 @@ class GraphBuilderPatternOptimization:
                 f"knowns shapes are {pprint.pformat(self.builder._known_shapes)}"
             )
         return None
-
-    def next_node(self, name: str) -> NodeProto:
-        """
-        Returns the next node if it is unique, otherwise fails.
-        """
-        res = self.next_nodes(name)
-        assert len(res) == 1, f"Unexpected number of successors {len(res)} for {name!r}"
-        return res[0]
-
-    def next_nodes(self, name: str) -> List[NodeProto]:
-        """
-        Returns the node consuming the given results.
-        """
-        if name not in self.successors_:
-            return []
-        return [self.nodes_[i] for i in self.successors_[name]]
 
     @property
     def main_opset(self):

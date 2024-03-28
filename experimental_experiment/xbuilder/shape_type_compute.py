@@ -96,6 +96,8 @@ def set_type_shape_unary_op(
     """
     Sets the shape and type for an unary operator (abs, exp, ...).
     """
+    if not itype and not g.has_type(input_name):
+        return
     g.set_type(name, itype or g.get_type(input_name))
     if g.has_shape(input_name):
         g.set_shape(name, g.get_shape(input_name))
@@ -165,6 +167,8 @@ def set_type_shape_binary_op(
 
 
 def set_type_shape_matmul(g: "GraphBuilder", name: str, x: str, y: str):  # noqa: F821
+    if not g.has_type(x):
+        return
     g.set_type(name, g.get_type(x))
     if g.has_shape(x) and g.has_shape(y):
         sh1 = g.get_shape(x)
