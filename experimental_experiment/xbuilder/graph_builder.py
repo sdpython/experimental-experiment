@@ -193,6 +193,11 @@ class GraphBuilder:
             )
 
         self.op = Opset(self)
+        self.anyop = Opset(self, allow_unknown=True)
+
+    @property
+    def output_names(self) -> List[str]:
+        return [o.name for o in self.outputs]
 
     def empty_copy(self, as_function: bool = False) -> "GraphBuilder":
         """
