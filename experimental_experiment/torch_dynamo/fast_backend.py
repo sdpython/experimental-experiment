@@ -11,7 +11,7 @@ from onnxruntime.capi import _pybind_state as ORTC
 from ..xbuilder import OptimizationOptions
 from ..torch_interpreter import to_onnx
 from ..torch_interpreter._torch_helper import create_input_names
-from ..xoptim.patterns import get_pattern_list
+from ..xoptim import get_pattern_list
 from .backend_helper import get_dimensions
 
 
