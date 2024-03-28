@@ -2,7 +2,7 @@ import inspect
 from typing import List, Optional
 from onnx import NodeProto
 from ...xbuilder._onnx_helper import element_wise_binary_op_types
-from .patterns_api import MatchResult, PatternOptimization
+from ..patterns_api import MatchResult, PatternOptimization
 
 
 class ReduceReshapePattern(PatternOptimization):

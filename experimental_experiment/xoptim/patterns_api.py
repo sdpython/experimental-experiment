@@ -1,5 +1,6 @@
+import inspect
 import os
-from typing import Callable, Iterator, List, Optional, Sequence
+from typing import Any, Callable, Dict, Iterator, List, Optional, Sequence, Tuple
 from onnx import NodeProto
 
 
@@ -163,3 +164,161 @@ class PatternOptimization:
         :return: nodes to add to graph.
         """
         raise NotImplementedError(f"This function must be overloaded in class {cls}.")
+
+
+class EasyPatternOptimization(PatternOptimization):
+    """
+    Implements a pattern optimization for quick experimentation.
+    """
+
+    def __init__(self, verbose: int = 0):
+        super().__init__(verbose=verbose)
+        self._cache = {}
+
+    def match_pattern(
+        self,
+        g: "GraphBuilder",  # noqa: F821
+        *args: List[str],
+        **kwargs: Dict[str, Any],
+    ):
+        """
+        Builds the pattern to match.
+        """
+        raise NotImplementedError(
+            f"Class {self.__class__.__name__!r} must overwrite method match_pattern."
+        )
+
+    def _get_pattern(self, g):
+        from .graph_builder_optim import GraphBuilderPatternOptimization
+
+        kwargs = {}
+        args = []
+
+        # There should be a better way.
+        sig = inspect.signature(self.match_pattern)
+        for i, p in enumerate(sig.parameters.values()):
+            if i == 0:
+                continue
+            if p.default is not inspect._empty:
+                # an attribute
+                kwargs[p.name] = p.default
+            else:
+                args.append(p.name)
+
+        g2 = g.builder.empty_copy(as_function=True)
+        for name in args:
+            g2.make_tensor_input(name, 0, None, False)
+        output = self.match_pattern(g2, *args, **kwargs)
+        if isinstance(output, str):
+            g2.make_tensor_output(output, 0, None, is_dimension=False)
+        else:
+            for name in output:
+                g2.make_tensor_output(name, 0, None)
+        pat = GraphBuilderPatternOptimization(g2, verbose=g.verbose)
+        pat._build()
+        return pat
+
+    @classmethod
+    def _match_nodes_io(cls, n1: NodeProto, n2: NodeProto) -> bool:
+        if n1.op_type != n2.op_type:
+            return False
+        if len(n1.input) != len(n2.input):
+            return False
+        if len(n1.output) != len(n2.output):
+            return False
+        return True
+
+    def match(
+        self,
+        g: "GraphBuilderPatternOptimization",  # noqa: F821
+        node: NodeProto,
+        matched: List[MatchResult],
+    ) -> Optional[MatchResult]:
+
+        # We cache the pattern.
+        if id(g) in self._cache:
+            pat = self._cache[id(g)]
+        else:
+            pat = self._get_pattern(g)
+            self._cache[id(g)] = pat
+
+        # Let's match the first node.
+        # Then we need to match successors and predecessors.
+        p_node = pat.nodes[0]
+        if not self._match_nodes_io(node, p_node):
+            return self.none()
+
+        marked = {id(p_node): (p_node, node)}
+        stacked = [id(p_node)]
+        while stacked:
+            idn = stacked.pop()
+            n, pn = marked[idn]
+
+            # predecessor
+            # loop over input
+            pred = g.node_before(n)
+            ppred = pat.node_before(pn)
+            if ppred is not None:
+                if pred is None:
+                    return self.none(node, inspect.currentframe().f_lineno)
+                if pred.op_type != ppred.op_type:
+                    return self.none(node, inspect.currentframe().f_lineno)
+                # matching backward
+                key = id(pred)
+                if key not in marked:
+                    marked[key] = ppred, pred
+                    stacked.append(id(ppred))
+
+            # successors
+            ns = g.next_nodes(n)
+            pns = pat.next_nodes(pn)
+            if len(ns) != len(pns):
+                return self.none(node, inspect.currentframe().f_lineno)
+
+            # matching forward is more difficult, we first check the node operators
+            if len(ns) != len(pns):
+                return self.none(node, inspect.currentframe().f_lineno)
+
+            s1 = set(_.op_type for _ in ns)
+            s2 = set(_.op_type for _ in pns)
+            if s1 != s2:
+                return self.none(node, inspect.currentframe().f_lineno)
+
+            if len(s2) == len(pns):
+                if len(s1) != len(s2):
+                    return self.none(node, inspect.currentframe().f_lineno)
+                # unique node type, this is easy
+                d1 = {_.op_type: _ for _ in ns}
+                d2 = {_.op_type: _ for _ in pns}
+                for k, v in d1.items():
+                    vv = d2[k]  # it exists
+                    key = id(vv)
+                    if key not in marked:
+                        marked[key] = (vv, v)
+                        stacked.append(key)
+            else:
+                # otherwise this is less easy but the number of possibilities
+                # is usually small
+                # we need to check the marked operator first
+                assert False, "not implemented yet"
+
+    @classmethod
+    def apply_pattern(cls, g: "GraphBuilder", *args, **kwargs):  # noqa: F821
+        """
+        Applies the replacements.
+        """
+        raise NotImplementedError(
+            f"Class {cls.__name__!r} must overwrite method apply_pattern."
+        )
+
+    @classmethod
+    def apply(
+        cls,
+        g: "GraphBuilder",  # noqa: F821
+        pat: "GraphBuilderPatternOptimization",  # noqa: F821
+        mapping: List[Tuple[NodeProto, NodeProto]],
+        *nodes: Sequence[NodeProto],
+    ) -> List[NodeProto]:
+        raise NotImplementedError(
+            f"Class {cls.__name__!r} must overwrite method apply_pattern."
+        )

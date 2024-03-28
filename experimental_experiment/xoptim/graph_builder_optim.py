@@ -7,7 +7,8 @@ from onnx import AttributeProto, NodeProto
 import onnx.helper as oh
 from ..xbuilder._onnx_helper import enumerate_subgraphs
 from ..xbuilder.type_inference import infer_types
-from .patterns import MatchResult, PatternOptimization, get_default_patterns
+from .patterns_api import MatchResult, PatternOptimization
+from .patterns import get_default_patterns
 
 
 def _count(matches):
@@ -50,6 +51,10 @@ class GraphBuilderPatternOptimization:
         # no constant can replace an existing one.
         # _build method should not change it.
         self._cache_computed_constant = {}
+
+    @property
+    def nodes(self):
+        return self.builder.nodes
 
     def iter_nodes(self) -> Iterator:
         for node in self.builder.nodes:
