@@ -223,7 +223,7 @@ class TestGraphPatternBuilder(ExtTestCase):
                     transpose,
                     transpose,
                     domain="com.microsoft",
-                    output=2,
+                    outputs=2,
                 )
 
                 sin = op.Sin(output)
@@ -348,9 +348,9 @@ class TestGraphPatternBuilder(ExtTestCase):
             onx,
             infer_shapes=True,
             optimization_options=OptimizationOptions(
-                patterns=[RotaryEmbeddingPattern(verbose=10)],
+                patterns=[RotaryEmbeddingPattern(verbose=0)],
                 remove_identity=False,
-                verbose=10,
+                verbose=0,
             ),
         )
         if __name__ == "__main__":
