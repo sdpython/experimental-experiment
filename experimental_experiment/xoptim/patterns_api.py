@@ -630,8 +630,14 @@ class EasyPatternOptimization(PatternOptimization):
                 f"marked={set(id(b[1]) for b in marked.values())}"
             )
 
+            if self.verbose > 5:
+                self._debug["iteration"] = iteration
+
         if self.verbose > 5:
-            print(f"[EasyPatternOptimization.match] done. {len(marked)} marked nodes")
+            print(
+                f"[EasyPatternOptimization.match] done. "
+                f"{len(marked)} marked nodes with {iteration} iterations"
+            )
 
         # At this point, the pattern is matched but let's make sure.
         assert len(marked) == len(pat.nodes), (

@@ -38,7 +38,7 @@ from experimental_experiment.torch_bench._dort_cmd_common import (
 )
 from experimental_experiment.xbuilder import OptimizationOptions
 from experimental_experiment.torch_interpreter import to_onnx
-from experimental_experiment.xoptim.patterns import get_pattern_list
+from experimental_experiment.xoptim import get_pattern_list
 
 config_dict = create_configuration_for_benchmark(
     model=args.model,

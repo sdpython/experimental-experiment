@@ -80,7 +80,7 @@ def get_pattern_list(
         :showcode:
 
         import pprint
-        from experimental_experiment.xoptim.patterns import get_pattern_list
+        from experimental_experiment.xoptim import get_pattern_list
         pprint.pprint(get_pattern_list("default", ["Cast"]))
     """
     if positive_list is None:
