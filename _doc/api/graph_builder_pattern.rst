@@ -17,10 +17,15 @@ get_fix_patterns
 
 .. autofunction:: experimental_experiment.xoptim.patterns_fix.get_fix_patterns
 
+get_pattern
+===========
+
+.. autofunction:: experimental_experiment.xoptim.get_pattern
+
 get_pattern_list
 ================
 
-.. autofunction:: experimental_experiment.xoptim.patterns.get_pattern_list
+.. autofunction:: experimental_experiment.xoptim.get_pattern_list
 
 Classes
 =======
@@ -35,13 +40,19 @@ GraphBuilderPatternOptimization
 MatchResult
 +++++++++++
 
-.. autoclass:: experimental_experiment.xoptim.patterns.MatchResult
+.. autoclass:: experimental_experiment.xoptim.MatchResult
     :members:
 
 PatternOptimization
 +++++++++++++++++++
 
-.. autoclass:: experimental_experiment.xoptim.patterns.PatternOptimization
+.. autoclass:: experimental_experiment.xoptim.PatternOptimization
+    :members:
+
+EasyPatternOptimization
++++++++++++++++++++++++
+
+.. autoclass:: experimental_experiment.xoptim.EasyPatternOptimization
     :members:
 
 .. _l-pattern-optimization-onnx:
@@ -209,4 +220,3 @@ SoftmaxGradPattern
 
 .. autoclass:: experimental_experiment.xoptim.patterns_ort.activation_grad.SoftmaxGradPattern
     :members:
-

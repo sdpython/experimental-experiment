@@ -89,19 +89,9 @@ class Opset:
     def __getattr__(self, name):
         if name in self._implemented:
             return partial(self.make_node, name)
-        try:
-            return super().__getattr__(name)
-        except AttributeError as e:
-            if not self.allow_unknown:
-                raise AttributeError(
-                    f"Unable to access attribute {name!r}, "
-                    f"you can still use this operator with method 'make_node'."
-                ) from e
-
-        # unkown name
-        return lambda *args, _name=name, **kwargs: self._make_node(
-            _name, *args, **kwargs
-        )
+        if name in self.__dict__:
+            return self.__dict__[name]
+        return partial(self._make_node, name)
 
     def _make_node(self, op_type, *args, outputs=None, **kwargs):
         if outputs is None:

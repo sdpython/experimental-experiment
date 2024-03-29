@@ -199,15 +199,24 @@ class GraphBuilder:
     def output_names(self) -> List[str]:
         return [o.name for o in self.outputs]
 
-    def empty_copy(self, as_function: bool = False) -> "GraphBuilder":
+    def empty_copy(
+        self, as_function: bool = False, constant_size: int = 2**24
+    ) -> "GraphBuilder":
         """
         Creates an empty copy but with the same opsets.
         """
+        opt = OptimizationOptions(
+            constant_size=constant_size,
+            constant_fusing=False,
+            remove_identity=False,
+            patterns=None,
+        )
         g = GraphBuilder(
             self.opsets.copy(),
             verbose=self.verbose,
             ir_version=self.ir_version,
             as_function=as_function,
+            optimization_options=opt,
         )
         return g
 
@@ -1080,6 +1089,8 @@ class GraphBuilder:
         elif hasattr(value, "data"):
             # torch.nn.parameter.Parameter -> np.array
             pass
+        elif isinstance(value, TensorProto):
+            pass
         elif isinstance(value, np.ndarray):
             pass
         else:
@@ -1095,23 +1106,28 @@ class GraphBuilder:
                 return self._values[key]
             return self.make_node("Identity", [self._values[key]], [name])
 
-        itype = self._get_type(value.dtype)
+        if isinstance(value, TensorProto):
+            itype = value.data_type
+            shape = tuple(value.dims)
+        else:
+            itype = self._get_type(value.dtype)
+            shape = tuple(value.shape)
         if name == "":
-            sh = "x".join(map(str, value.shape))
+            sh = "x".join(map(str, shape))
             sh2 = (
                 "_".join(map(str, value.ravel().tolist()))
                 if value.size <= 5 and value.dtype == np.int64
                 else ""
             )
             name = self.unique_name(f"init{itype}_s{sh}_{sh2}")
-        self.set_shape(name, tuple(value.shape))
+        self.set_shape(name, shape)
         self.set_type(name, itype)
         self.set_name(name)
         self.initializers_dict[name] = value
         self.constants_[name] = None
         if self.verbose and (self.verbose > 1 or np.prod(value.shape) > 100):
             print(
-                f"[GraphBuilder-{self._hash()}.make_initializer] {name}[{value.dtype}:{value.shape}]"
+                f"[GraphBuilder-{self._hash()}.make_initializer] {name}[{itype}:{shape}]"
             )
         if key:
             self._values[key] = name
@@ -1870,6 +1886,16 @@ class GraphBuilder:
             node.attribute.extend(attributes)
 
         if node.domain == "" and node.op_type in {"Constant", "ConstantOfShape"}:
+
+            if len(node.attribute) == 1 and node.attribute[0].name == "value":
+                t = node.attribute[0].t
+                size = np.prod(t.dims)
+                assert size < self.optimization_options.constant_size, (
+                    f"A node Constant is created with a size {size} greater than "
+                    f"the limit {self.optimization_options.constant_size}"
+                    f"{self.get_debug_msg()}"
+                )
+
             # A exact constant may be already existing,
             # In that case, we just return an identity node.
             origin = self.is_exact_same_constant(node)
@@ -1941,12 +1967,14 @@ class GraphBuilder:
         if node.domain != "":
             return
         if node.op_type == "Constant":
-            size = len(node.SerializeToString())
-            if size >= self.optimization_options.constant_size:
-                raise ValueError(
-                    f"A node Constant holds a tensor bigger than "
-                    f"the constant: {size} >= {self.constant_size}."
-                )
+            if len(node.attribute) == 1 and node.attribute[0].name == "value":
+                size = np.prod(node.attribute[0].t.dims)
+            else:
+                size = len(node.SerializeToString())
+            assert size < self.optimization_options.constant_size, (
+                f"A node Constant holds a tensor bigger than "
+                f"the constant: {size} >= {self.optimization_options.constant_size}."
+            )
             k = node.output[0]
             self.constants_[k] = node
             shape = self._get_tensor_shape(node)
@@ -2928,7 +2956,11 @@ class GraphBuilder:
         inserted_at = []
         new_nodes_p = []
         for init, node in enumerate(new_nodes):
-            min_position = max(first_at.get(i, -1) for i in node.input) + 1
+            if node.input:
+                min_position = max(first_at.get(i, -1) for i in node.input) + 1
+            else:
+                # a constant node
+                min_position = 0
             max_position = min(needed_at.get(o, N) for o in node.output)
 
             assert min_position <= max_position, (
@@ -2939,7 +2971,11 @@ class GraphBuilder:
                 f"inserted_at={inserted_at}"
             )
 
-            local_min_position = max(insert_first_at.get(i, -1) for i in node.input)
+            if node.input:
+                local_min_position = max(insert_first_at.get(i, -1) for i in node.input)
+            else:
+                # a constant node
+                local_min_position = 0
             local_max_position = min(insert_needed_at.get(o, N) for o in node.output)
 
             assert local_min_position <= local_max_position, (
@@ -2965,10 +3001,13 @@ class GraphBuilder:
         new_nodes_p.sort()
 
         # do the addition
+        init_nams = {}
         for p, _, n in reversed(new_nodes_p):
             assert isinstance(n, NodeProto), f"Unexpected type {type(n)} for a node"
             self.nodes.insert(p, n)
         for _, _, n in new_nodes_p:
+            if n.output[0] in init_nams:
+                continue
             self._make_node_set_type_shape_constant(n, True)
             self._make_node_set_type_shape(n)
         return memo
@@ -3038,6 +3077,7 @@ class GraphBuilder:
                 self.set_shape(i.name, shape)
             if (
                 self.get_type(i.name) == TensorProto.INT64
+                and self.has_shape(i.name)
                 and self.get_shape(i.name) in ((1,), tuple)
                 and "dim" in i.name
             ):

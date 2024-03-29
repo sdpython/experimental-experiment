@@ -5,6 +5,7 @@ import numpy as np
 from onnx import TensorProto, load
 from onnx.checker import check_model
 import onnx.helper as oh
+import onnx.numpy_helper as onh
 from onnx.reference.op_run import OpRun
 from experimental_experiment.ext_test_case import ExtTestCase
 from experimental_experiment.xoptim import EasyPatternOptimization
@@ -13,6 +14,7 @@ from experimental_experiment.xbuilder.graph_builder import (
     GraphBuilder,
     OptimizationOptions,
 )
+from experimental_experiment.xoptim import GraphBuilderPatternOptimization
 
 T = str
 TFLOAT = TensorProto.FLOAT
@@ -195,7 +197,88 @@ class TestGraphPatternBuilder(ExtTestCase):
         got = ref2.run(None, feeds)
         self.assertEqualArray(expected[0], got[0])
 
-    def test_rotary_emb(self):
+    def test_rotary_embedding(self):
+        # The test work on a model if it has the expected name.
+        # A dummy model is used if not present (not implemented yet).
+
+        class RotaryEmbeddingPattern(EasyPatternOptimization):
+            """
+            Fusion for Rotary.
+            """
+
+            @classmethod
+            def match_pattern(
+                cls, g, x: "INT64", pos_ids: "FLOAT", axis: "INT64"  # noqa: F821
+            ):
+                # original code: the code does verifies the constant yet
+                # unsqueeze = op.Unsqueeze(x, [1])
+                op = g.op
+
+                unsqueeze = op.Unsqueeze(x, axis)
+                cast = op.Cast(unsqueeze, to=TensorProto.FLOAT)
+
+                matmul = op.MatMul(pos_ids, cast)
+                transpose = op.Transpose(matmul)
+                concattraining = g.anyop.ConcatTraining(
+                    transpose, transpose, domain="com.microsoft"
+                )
+
+                sin = op.Sin(concattraining)
+                cast1 = op.Cast(sin, to=TensorProto.FLOAT)
+                cos = op.Cos(concattraining)
+                cast2 = op.Cast(cos, to=TensorProto.FLOAT)
+                return cast1, cast2
+
+            @classmethod
+            def validate_mapping(
+                cls,
+                g,
+                deleted_nodes,
+                added_nodes,
+            ) -> bool:
+                # If some pattern needs to be rejected.
+                return True
+
+            @classmethod
+            def apply_pattern(
+                cls, g, x: "INT64", pos_ids: "FLOAT", axis: "INT64"  # noqa: F821
+            ):
+                op = g.op
+                cos_cache = op.Constant(
+                    value=onh.from_array(np.random.rand(256, 256).astype(np.float16))
+                )
+                sin_cache = op.Constant(
+                    value=onh.from_array(np.random.rand(256, 256).astype(np.float16))
+                )
+                return g.anyop.RotaryEmbedding(
+                    x,
+                    pos_ids,
+                    cos_cache,
+                    sin_cache,
+                    domain="com.microsoft",
+                    outputs=2,
+                )
+
+        g = GraphBuilderPatternOptimization(GraphBuilder(18, verbose=0))
+        pat = EasyPatternOptimization._build_pattern(
+            g, RotaryEmbeddingPattern.match_pattern
+        )
+        onx = pat.builder.to_onnx(optimize=False)
+        gr = GraphBuilder(
+            onx,
+            infer_shapes=False,
+            optimization_options=OptimizationOptions(
+                patterns=[RotaryEmbeddingPattern(verbose=0)],
+                verbose=0,
+            ),
+        )
+        opt_onx = gr.optimize()
+        opt_onx = gr.to_onnx(optimize=False)
+
+        expected = ["RotaryEmbedding"]
+        self.assertEqual(expected, [n.op_type for n in opt_onx.graph.node])
+
+    def test_rotary_emb_file(self):
         # The test work on a model if it has the expected name.
         # A dummy model is used if not present (not implemented yet).
         import torch
@@ -256,6 +339,7 @@ class TestGraphPatternBuilder(ExtTestCase):
             infer_shapes=True,
             optimization_options=OptimizationOptions(
                 patterns=[RotaryEmbeddingPattern(verbose=10)],
+                remove_identity=False,
                 verbose=10,
             ),
         )
@@ -283,6 +367,8 @@ class TestGraphPatternBuilder(ExtTestCase):
             f.write(buffer)
         if __name__ == "__main__":
             print(f"Saving done in {time.perf_counter() - begin}s")
+        op_types = set(node.op_type for node in opt_onx.graph.node)
+        self.assertIn("RotaryEmbedding", op_types)
 
 
 if __name__ == "__main__":

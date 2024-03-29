@@ -2,7 +2,9 @@ import inspect
 import os
 from collections import Counter
 from typing import Any, Callable, Dict, Iterator, List, Optional, Sequence, Tuple
+import numpy as np
 from onnx import NodeProto
+from ..xbuilder._dtype_helper import string_to_elem_type
 
 
 class MatchResult:
@@ -122,6 +124,9 @@ class PatternOptimization:
             f"This function must be overloaded in class {self.__class__}."
         )
 
+    def _debug_print(self) -> str:
+        return ""
+
     def none(
         self,
         node: Optional[NodeProto] = None,
@@ -141,7 +146,16 @@ class PatternOptimization:
         which lines in the code returned None and which condition failed.
         """
         if node and self.verbose:
-            if self.verbose >= 10:
+            if self.verbose >= 10 and hasattr(self, "_debug"):
+                msg2 = self._debug_print()
+                if msg2:
+                    msg2 = f"\n{msg2}"
+                print(
+                    f"[{self.__class__.__name__}.match] NONE - line: {lineno}:"
+                    f"{os.path.split(self.__class__.__module__)[-1]}, "
+                    f"op_type={node.op_type}{msg}{msg2}"
+                )
+            elif self.verbose >= 9:
                 print(
                     f"[{self.__class__.__name__}.match] NONE - line: {lineno}:"
                     f"{os.path.split(self.__class__.__module__)[-1]}, op_type={node.op_type}{msg}"
@@ -193,7 +207,9 @@ class EasyPatternOptimization(PatternOptimization):
         )
 
     @classmethod
-    def _build_pattern(cls, g, fct):
+    def _build_pattern(
+        cls, g: "GraphBuilderPatternOptimization", fct: Callable  # noqa: F821
+    ) -> "GraphBuilderPatternOptimization":  # noqa: F821
         from .graph_builder_optim import GraphBuilderPatternOptimization
 
         kwargs = {}
@@ -201,6 +217,7 @@ class EasyPatternOptimization(PatternOptimization):
 
         # There should be a better way.
         sig = inspect.signature(fct)
+        anns = []
         for i, p in enumerate(sig.parameters.values()):
             if i == 0:
                 continue
@@ -209,12 +226,21 @@ class EasyPatternOptimization(PatternOptimization):
                 kwargs[p.name] = p.default
             else:
                 args.append(p.name)
+                anns.append(p.annotation)
 
         assert len(kwargs) == 0, f"Attributes are not supported yet but kwargs={kwargs}"
 
-        g2 = g.builder.empty_copy(as_function=True)
-        for name in args:
-            g2.make_tensor_input(name, 0, None, False)
+        g2 = g.builder.empty_copy(as_function=True, constant_size=2**30)
+        for name, ann in zip(args, anns):
+            if ann is None or ann is str or ann is inspect._empty:
+                g2.make_tensor_input(name, 0, None, False)
+                continue
+            assert isinstance(
+                ann, str
+            ), f"Annotation for {name!r} must be a string or None but ann={ann!r}"
+            itype = string_to_elem_type(ann)
+            g2.make_tensor_input(name, itype, None, False)
+
         output = fct(g2, *args, **kwargs)
         if isinstance(output, str):
             g2.make_tensor_output(output, 0, None, is_dimension=False)
@@ -225,7 +251,9 @@ class EasyPatternOptimization(PatternOptimization):
         pat._build()
         return pat
 
-    def _get_match_pattern(self, g):
+    def _get_match_pattern(
+        self, g: "GraphBuilderPatternOptimization"  # noqa: F821
+    ) -> "GraphBuilderPatternOptimization":  # noqa: F821
         cache_key = 0, tuple(sorted(g.opsets.items()))
         if cache_key in self._cache:
             return self._cache[cache_key]
@@ -234,7 +262,9 @@ class EasyPatternOptimization(PatternOptimization):
         self._cache[cache_key] = pat
         return pat
 
-    def _get_apply_pattern(self, g):
+    def _get_apply_pattern(
+        self, g: "GraphBuilderPatternOptimization"  # noqa: F821
+    ) -> "GraphBuilderPatternOptimization":  # noqa: F821
         cache_key = 1, tuple(sorted(g.opsets.items()))
         if cache_key in self._cache:
             return self._cache[cache_key]
@@ -437,6 +467,32 @@ class EasyPatternOptimization(PatternOptimization):
             print(f"[EasyPatternOptimization._match_foward] add {res} nodes")
         return res
 
+    def _debug_print(self) -> str:
+        if not hasattr(self, "_debug"):
+            return ""
+
+        def _s(s):
+            if len(s) < 10:
+                return s
+            return f"...{s[-10:]}"
+
+        def _p(n):
+            return f"{n.op_type}({','.join(map(_s, n.input))})"
+
+        rows = []
+        for k, v in sorted(self._debug.items()):
+            if k == "stacked":
+                rows.append(f"len({k})={len(v)}:{v}")
+                continue
+            if k == "iteration":
+                rows.append(f"{k}={v}")
+                continue
+            if k == "marked":
+                rows.append("--marked--")
+                for i, tu in v.items():
+                    rows.append(f"  {_p(tu[0])} ~ {_p(tu[1])} [{i}]")
+        return "\n".join(rows)
+
     def match(
         self,
         g: "GraphBuilderPatternOptimization",  # noqa: F821
@@ -466,6 +522,18 @@ class EasyPatternOptimization(PatternOptimization):
         marked = {id(p_node): (node, p_node)}
         stacked = [id(p_node)]
         iteration = 0
+
+        if self.verbose > 5:
+            self._debug = dict(
+                pattern=pat,
+                marked=marked,
+                stacked=stacked,
+                iteration=iteration,
+                node=node,
+                pattern_node=p_node,
+                pattern_nodes=pat.nodes,
+            )
+
         while stacked:
             assert all(map(lambda b: id(b[1]) in check_ids, marked.values())), (
                 f"At least one id is not part of the pattern ids={check_ids}, "
@@ -545,8 +613,8 @@ class EasyPatternOptimization(PatternOptimization):
             f"got {len(pat.inputs)} in the applied pattern."
         )
         assert len(new_pat.outputs) == len(pat.outputs), (
-            f"Not the same number of outputs, matched outputs={len(new_pat.outputs)}, "
-            f"got {len(pat.outputs)} in the applied pattern."
+            f"Not the same number of outputs, matched outputs={new_pat.output_names}, "
+            f"got {pat.output_names} in the applied pattern."
         )
 
         if g.verbose > 5:
@@ -621,6 +689,20 @@ class EasyPatternOptimization(PatternOptimization):
                     n = g.unique_name(o)
                     replacements[o] = n
                     new_outputs.append(n)
+
+            if (
+                node.op_type == "Constant"
+                and node.domain == ""
+                and len(node.attribute) == 1
+                and node.attribute[0].name == "value"
+            ):
+                value = node.attribute[0].t
+                size = np.prod(value.dims)
+                if size >= g.builder.optimization_options.constant_size:
+                    # We check the size to convert it into initializer if needed.
+                    g.make_initializer(new_outputs[0], value)
+                    continue
+
             new_node = g.make_node(
                 node.op_type, new_inputs, new_outputs, domain=node.domain
             )
