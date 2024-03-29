@@ -219,13 +219,16 @@ class TestGraphPatternBuilder(ExtTestCase):
 
                 matmul = op.MatMul(pos_ids, cast)
                 transpose = op.Transpose(matmul)
-                concattraining = g.anyop.ConcatTraining(
-                    transpose, transpose, domain="com.microsoft"
+                output, length = g.anyop.ConcatTraining(
+                    transpose,
+                    transpose,
+                    domain="com.microsoft",
+                    output=2,
                 )
 
-                sin = op.Sin(concattraining)
+                sin = op.Sin(output)
                 cast1 = op.Cast(sin, to=TensorProto.FLOAT)
-                cos = op.Cos(concattraining)
+                cos = op.Cos(output)
                 cast2 = op.Cast(cos, to=TensorProto.FLOAT)
                 return cast1, cast2
 
@@ -259,21 +262,28 @@ class TestGraphPatternBuilder(ExtTestCase):
                     outputs=2,
                 )
 
-        g = GraphBuilderPatternOptimization(GraphBuilder(18, verbose=0))
-        pat = EasyPatternOptimization._build_pattern(
-            g, RotaryEmbeddingPattern.match_pattern
-        )
-        onx = pat.builder.to_onnx(optimize=False)
-        gr = GraphBuilder(
-            onx,
-            infer_shapes=False,
-            optimization_options=OptimizationOptions(
-                patterns=[RotaryEmbeddingPattern(verbose=0)],
-                verbose=0,
-            ),
-        )
-        opt_onx = gr.optimize()
-        opt_onx = gr.to_onnx(optimize=False)
+        def do():
+            g = GraphBuilderPatternOptimization(
+                GraphBuilder(18, verbose=10), verbose=10
+            )
+            pat = EasyPatternOptimization._build_pattern(
+                g, RotaryEmbeddingPattern.match_pattern
+            )
+            onx = pat.builder.to_onnx(optimize=False)
+            gr = GraphBuilder(
+                onx,
+                infer_shapes=False,
+                optimization_options=OptimizationOptions(
+                    patterns=[RotaryEmbeddingPattern(verbose=10)],
+                    verbose=10,
+                ),
+            )
+            opt_onx = gr.optimize()
+            opt_onx = gr.to_onnx(optimize=False)
+            return opt_onx
+
+        opt_onx, out, _ = self.capture(do)
+        self.assertIn("[RotaryEmbedding", out)
 
         expected = ["RotaryEmbedding"]
         self.assertEqual(expected, [n.op_type for n in opt_onx.graph.node])
@@ -299,13 +309,13 @@ class TestGraphPatternBuilder(ExtTestCase):
 
                 matmul = op.MatMul(pos_ids, cast)
                 transpose = op.Transpose(matmul)
-                concattraining = g.anyop.ConcatTraining(
-                    transpose, transpose, domain="com.microsoft"
+                output, length = g.anyop.ConcatTraining(
+                    transpose, transpose, domain="com.microsoft", outputs=2
                 )
 
-                sin = op.Sin(concattraining)
+                sin = op.Sin(output)
                 cast1 = op.Cast(sin, to=TensorProto.FLOAT)
-                cos = op.Cos(concattraining)
+                cos = op.Cos(output)
                 cast2 = op.Cast(cos, to=TensorProto.FLOAT)
                 return cast1, cast2
 
@@ -325,7 +335,7 @@ class TestGraphPatternBuilder(ExtTestCase):
                 cos_cache = torch.randn(256, 256).to(torch.float16)
                 sin_cache = torch.randn(256, 256).to(torch.float16)
                 return op.RotaryEmbedding(
-                    x, pos_ids, cos_cache, sin_cache, domain="com.microsoft"
+                    x, pos_ids, cos_cache, sin_cache, domain="com.microsoft", outputs=2
                 )
 
         model = "gemma_optimized_pre_grad_training_2.onnx"

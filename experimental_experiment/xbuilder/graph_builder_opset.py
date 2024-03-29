@@ -122,8 +122,9 @@ class Opset:
             ), f"Wrong inputs for operator {op_type!r}: {inputs!r}"
             if isinstance(i, str):
                 new_inputs.append(i)
-            elif hasattr(i, "name"):
+            elif hasattr(i, "name") and not hasattr(i, "detach"):
                 # torch.fx.Node
+                assert i.name is not None, f"Unexpected name for type {type(i)}"
                 new_inputs.append(i.name)
             else:
                 cst_name = self.builder.make_initializer(
@@ -131,6 +132,7 @@ class Opset:
                 )
                 new_inputs.append(cst_name)
 
+        assert None not in new_inputs
         return self.builder.make_node(
             op_type, new_inputs, outputs=outputs, domain=domain, name=name, **kwargs
         )

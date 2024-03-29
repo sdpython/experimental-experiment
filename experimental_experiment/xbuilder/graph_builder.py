@@ -1114,9 +1114,10 @@ class GraphBuilder:
             shape = tuple(value.shape)
         if name == "":
             sh = "x".join(map(str, shape))
+            size = np.prod(value.size()) if hasattr(value, "detach") else value.size
             sh2 = (
                 "_".join(map(str, value.ravel().tolist()))
-                if value.size <= 5 and value.dtype == np.int64
+                if size <= 5 and value.dtype == np.int64
                 else ""
             )
             name = self.unique_name(f"init{itype}_s{sh}_{sh2}")
@@ -1820,9 +1821,10 @@ class GraphBuilder:
 
         if check is not False:
             for i in inputs:
-                assert isinstance(
-                    i, str
-                ), f"Unexpected type {type(i)} in {inputs}{self.get_debug_msg()}"
+                assert isinstance(i, str), (
+                    f"Unexpected type {type(i)} in {inputs}, op_type={op_type!r}, "
+                    f"name={name!r}, {self.get_debug_msg()}"
+                )
                 if i == "":
                     # Optional input.
                     continue
@@ -1882,6 +1884,12 @@ class GraphBuilder:
                 f"inputs={inputs} (types={iti}), outputs={outputs} (types={ito}), "
                 f"domain={domain!r}, kwargs={kwargs}."
             ) from e
+
+        assert len(node.output) == len(set(node.output)) or "" in node.output, (
+            f"Repeated outputs for node {node.op_type}({', '.join(node.input)}) -> "
+            f"{', '.join(node.output)}"
+        )
+
         if attributes:
             node.attribute.extend(attributes)
 

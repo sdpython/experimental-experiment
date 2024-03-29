@@ -1,5 +1,6 @@
 import inspect
 import os
+import textwrap
 from collections import Counter
 from typing import Any, Callable, Dict, Iterator, List, Optional, Sequence, Tuple
 import numpy as np
@@ -149,7 +150,7 @@ class PatternOptimization:
             if self.verbose >= 10 and hasattr(self, "_debug"):
                 msg2 = self._debug_print()
                 if msg2:
-                    msg2 = f"\n{msg2}"
+                    msg2 = f"\n{textwrap.indent(msg2, '    ')}"
                 print(
                     f"[{self.__class__.__name__}.match] NONE - line: {lineno}:"
                     f"{os.path.split(self.__class__.__module__)[-1]}, "
@@ -317,6 +318,13 @@ class EasyPatternOptimization(PatternOptimization):
         # predecessors
         if len(n.input) != len(pn.input):
             # not the same number of inputs
+            self._hint(
+                "BACKWARD: not the same number of inputs",
+                "-- pattern",
+                pn,
+                "-- model",
+                n,
+            )
             return self.none(node, inspect.currentframe().f_lineno)
         for i, pi in zip(n.input, pn.input):
             ppred = pat.node_before(pi)
@@ -367,6 +375,13 @@ class EasyPatternOptimization(PatternOptimization):
         # successors
         if len(n.output) != len(pn.output):
             # not the same number of outputs
+            self._hint(
+                "FORWARD: not the same number of outputs",
+                "-- pattern",
+                pn,
+                "-- model",
+                n,
+            )
             return self.none(node, inspect.currentframe().f_lineno)
 
         for o, op in zip(n.output, pn.output):
@@ -399,7 +414,17 @@ class EasyPatternOptimization(PatternOptimization):
 
             # Let's remove the nodes already marked.
             p_marked = [_ for _ in pns if id(_) not in marked]
-            id_marked = set(id(marked[id(_)][0]) for _ in pns if id(_) in marked)
+            id_marked = list(id(marked[id(_)][0]) for _ in pns if id(_) in marked)
+            assert len(id_marked) + len(p_marked) == len(pns), (
+                f"Unexpected, id_marked={id_marked}, "
+                f"id_p_marked={set(map(id, p_marked))}, "
+                f"pns_ids={set(map(id, pns))}, "
+                f"ns_ids={set(map(id, ns))}, o={o!r}, op={op!r}, "
+                f"n.op_type={n.op_type!r}, "
+                f"n.output={n.output}, np.output={pn.output}, "
+                f"ns_types={set(_.op_type for _ in ns)}, "
+                f"pns_types={set(_.op_type for _ in pns)}"
+            )
             free = [_ for _ in ns if id(_) not in id_marked]
             if len(p_marked) == 0:
                 # Everything is already marked.
@@ -427,11 +452,19 @@ class EasyPatternOptimization(PatternOptimization):
 
             ec = Counter(expected_op_type)
             gc = Counter(got_op_type)
-            if len(ec) != len(gc):
-                # Number of unique operator types is different.
-                return self.none(node, inspect.currentframe().f_lineno)
-            if set(ec) != set(gc):
-                # Unique operator types are different.
+            if len(ec) != len(gc) or set(ec) != set(gc):
+                # number of unique operator types is different.
+                self._hint(
+                    "FORWARD: number of unique operator types is different",
+                    "-- pattern",
+                    ec,
+                    pn,
+                    "-- model",
+                    gc,
+                    n,
+                    "-- model-marked",
+                    id_marked,
+                )
                 return self.none(node, inspect.currentframe().f_lineno)
             for k, v in ec.items():
                 if gc[k] < v:
@@ -472,12 +505,19 @@ class EasyPatternOptimization(PatternOptimization):
             return ""
 
         def _s(s):
-            if len(s) < 10:
+            if len(s) <= 30:
                 return s
-            return f"...{s[-10:]}"
+            return f"{s[:15]}...{s[-15:]}"
 
-        def _p(n):
-            return f"{n.op_type}({','.join(map(_s, n.input))})"
+        def _p(n, full=False):
+            if isinstance(n, NodeProto):
+                if full:
+                    return (
+                        f"{n.op_type}({', '.join(map(_s, n.input))}) "
+                        f"-> ({', '.join(map(_s, n.output))})"
+                    )
+                return f"{n.op_type}({','.join(map(_s, n.input))})"
+            return str(n)
 
         rows = []
         for k, v in sorted(self._debug.items()):
@@ -488,10 +528,26 @@ class EasyPatternOptimization(PatternOptimization):
                 rows.append(f"{k}={v}")
                 continue
             if k == "marked":
-                rows.append("--marked--")
+                rows.append(f"--marked-- #{len(v)}")
                 for i, tu in v.items():
-                    rows.append(f"  {_p(tu[0])} ~ {_p(tu[1])} [{i}]")
+                    rows.append(f"  {_p(tu[0])} ~ {_p(tu[1])} [{id(tu[0])}-{i}]")
+                continue
+            if k == "hint":
+                rows.append(f"--hint--: {v[0]}")
+                for i in v[1:]:
+                    rows.append("  " + _p(i, full=True))
+                continue
+            if k in {"node", "pattern", "pattern_node", "pattern_nodes"}:
+                continue
+            rows.append(f"-- not shown {k}")
+
         return "\n".join(rows)
+
+    def _hint(self, *args: Sequence[Any]):
+        """
+        Add debugging information to help users.
+        """
+        self._debug["hint"] = args
 
     def match(
         self,
@@ -517,7 +573,9 @@ class EasyPatternOptimization(PatternOptimization):
             )
             if self.verbose >= 10:
                 print("[EasyPatternOptimization.match] match pattern")
-                print(self.display_pattern(g, self.match_pattern))
+                print(
+                    textwrap.indent(self.display_pattern(g, self.match_pattern), "    ")
+                )
 
         marked = {id(p_node): (node, p_node)}
         stacked = [id(p_node)]
@@ -618,9 +676,10 @@ class EasyPatternOptimization(PatternOptimization):
         )
 
         if g.verbose > 5:
-            print(f"[EasyPatternOptimization.apply] replace {len(nodes)} nodes")
-            print("apply pattern is")
-            print(cls.display_pattern(g, cls.apply_pattern))
+            print(
+                f"[EasyPatternOptimization.apply] replace {len(nodes)} nodes: "
+                f"{cls.display_pattern(g, cls.apply_pattern)}"
+            )
 
         matched_pattern_to_applied_pattern = {}
         for i, j in zip(pat.input_names, new_pat.input_names):
@@ -672,6 +731,12 @@ class EasyPatternOptimization(PatternOptimization):
         for k, v in matched_pattern_to_graph_name.items():
             replacements[matched_pattern_to_applied_pattern[k]] = v
 
+        # Creation of the new initializers
+        for name, init in new_pat.builder.initializers_dict.items():
+            # We add them to the graph, they will be removed if unused.
+            new_name = g.make_initializer(name, init)
+            replacements[new_name] = name
+
         # Creation of the new node.
         new_nodes = []
         for node in new_pat.nodes:
@@ -700,7 +765,10 @@ class EasyPatternOptimization(PatternOptimization):
                 size = np.prod(value.dims)
                 if size >= g.builder.optimization_options.constant_size:
                     # We check the size to convert it into initializer if needed.
-                    g.make_initializer(new_outputs[0], value)
+                    name = g.make_initializer(new_outputs[0], value)
+                    assert (
+                        name == new_outputs[0]
+                    ), f"Name mismatch {name} != {new_outputs[0]}"
                     continue
 
             new_node = g.make_node(

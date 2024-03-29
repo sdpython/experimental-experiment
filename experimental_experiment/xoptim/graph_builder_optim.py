@@ -534,6 +534,12 @@ class GraphBuilderPatternOptimization:
             name=name,
             **kwargs,
         )
+
+        assert len(outputs) == len(set(outputs)) or "" in outputs, (
+            f"Repeated outputs for node {op_type}({', '.join(inputs)}) -> "
+            f"{', '.join(outputs)}"
+        )
+
         if attributes:
             proto.attribute.extend(attributes)
         return proto
@@ -834,19 +840,19 @@ class GraphBuilderPatternOptimization:
                     f"[GraphBuilderPatternOptimization.optimize] done all: -{n_removed} +{n_added} nodes"
                 )
 
-            # remove unnecessary identity nodes
-
-            begin = time.perf_counter()
-            id_removed = self.builder.remove_identity_nodes()
-            statistics.append(
-                dict(
-                    pattern="remove_identity_nodes",
-                    iteration=it,
-                    removed=id_removed,
-                    time_in=time.perf_counter() - begin,
+            if remove_identity:
+                # remove unnecessary identity nodes
+                begin = time.perf_counter()
+                id_removed = self.builder.remove_identity_nodes()
+                statistics.append(
+                    dict(
+                        pattern="remove_identity_nodes",
+                        iteration=it,
+                        removed=id_removed,
+                        time_in=time.perf_counter() - begin,
+                    )
                 )
-            )
-            self._check_graph(statistics, "remove_identity", it, "B")
+                self._check_graph(statistics, "remove_identity", it, "B")
 
             # rebuild the graph structure
 
@@ -856,7 +862,6 @@ class GraphBuilderPatternOptimization:
                 dict(
                     pattern="build_for_pattern",
                     iteration=it,
-                    removed=id_removed,
                     time_in=time.perf_counter() - begin,
                 )
             )
