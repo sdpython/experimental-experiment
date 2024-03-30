@@ -3,7 +3,7 @@ from typing import List, Optional
 from onnx import NodeProto
 from ...xbuilder._onnx_helper import element_wise_binary_op_types, unary_like_op_types
 from ...xbuilder.shape_helper import all_int
-from .patterns_api import MatchResult, PatternOptimization
+from ..patterns_api import MatchResult, PatternOptimization
 
 
 class ExpandPattern(PatternOptimization):

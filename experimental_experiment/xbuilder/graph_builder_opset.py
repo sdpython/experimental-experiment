@@ -4,6 +4,15 @@ import numpy as np
 
 
 class Opset:
+    """
+    Makes it easier to write onnx graph.
+    The method name is the node type.
+
+    :param graph_builder: the builder
+    :param allow_unknown: allows unknown operators, otherwise,
+        fails this class does not the expected number of outputs
+    """
+
     # defined for opset >= 18
     # name: number of expected outputs
     _implemented = {
@@ -18,6 +27,8 @@ class Opset:
         "Concat": 1,
         "Constant": 1,
         "ConstantOfShape": 1,
+        "Cos": 1,
+        "Cosh": 1,
         "Div": 1,
         "Dropout": 2,
         "Elu": 1,
@@ -55,6 +66,8 @@ class Opset:
         "ScatterND": 1,
         "Shape": 1,
         "Sigmoid": 1,
+        "Sin": 1,
+        "Sinh": 1,
         "Slice": 1,
         "Softmax": 1,
         "Sqrt": 1,
@@ -67,19 +80,27 @@ class Opset:
         "Where": 1,
     }
 
-    def __init__(self, builder: "GraphBuilder"):  # noqa: F821
+    def __init__(
+        self, builder: "GraphBuilder", allow_unknown: bool = False  # noqa: F821
+    ):
         self.builder = builder
+        self.allow_unknown = allow_unknown
 
     def __getattr__(self, name):
         if name in self._implemented:
             return partial(self.make_node, name)
-        try:
-            return super().__getattr__(name)
-        except AttributeError as e:
-            raise AttributeError(
-                f"Unable to access attribute {name!r}, "
-                f"you can still use this operator with method 'make_node'."
-            ) from e
+        if name in self.__dict__:
+            return self.__dict__[name]
+        return partial(self._make_node, name)
+
+    def _make_node(self, op_type, *args, outputs=None, **kwargs):
+        if outputs is None:
+            if op_type in self._implemented:
+                outputs = self._implemented[op_type]
+            else:
+                # We assume there is only one outputs.
+                outputs = 1
+        return self.make_node(op_type, *args, outputs=outputs, **kwargs)
 
     def make_node(
         self,
@@ -101,8 +122,9 @@ class Opset:
             ), f"Wrong inputs for operator {op_type!r}: {inputs!r}"
             if isinstance(i, str):
                 new_inputs.append(i)
-            elif hasattr(i, "name"):
+            elif hasattr(i, "name") and not hasattr(i, "detach"):
                 # torch.fx.Node
+                assert i.name is not None, f"Unexpected name for type {type(i)}"
                 new_inputs.append(i.name)
             else:
                 cst_name = self.builder.make_initializer(
@@ -110,6 +132,7 @@ class Opset:
                 )
                 new_inputs.append(cst_name)
 
+        assert None not in new_inputs
         return self.builder.make_node(
             op_type, new_inputs, outputs=outputs, domain=domain, name=name, **kwargs
         )

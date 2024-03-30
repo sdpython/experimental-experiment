@@ -2,7 +2,7 @@ import inspect
 from typing import List, Optional
 import numpy as np
 from onnx import NodeProto
-from .patterns_api import MatchResult, PatternOptimization
+from ..patterns_api import MatchResult, PatternOptimization
 
 
 class SlicesSplitPattern(PatternOptimization):

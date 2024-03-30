@@ -7,7 +7,8 @@ from onnx import AttributeProto, NodeProto
 import onnx.helper as oh
 from ..xbuilder._onnx_helper import enumerate_subgraphs
 from ..xbuilder.type_inference import infer_types
-from .patterns import MatchResult, PatternOptimization, get_default_patterns
+from .patterns_api import MatchResult, PatternOptimization
+from .patterns import get_default_patterns
 
 
 def _count(matches):
@@ -51,7 +52,38 @@ class GraphBuilderPatternOptimization:
         # _build method should not change it.
         self._cache_computed_constant = {}
 
+    @property
+    def nodes(self) -> List[NodeProto]:
+        "property"
+        return self.builder.nodes
+
+    @property
+    def input_names(self) -> List[str]:
+        "property"
+        return self.builder.input_names
+
+    @property
+    def inputs(self) -> List[Any]:
+        "property"
+        return self.builder.inputs
+
+    @property
+    def output_names(self) -> List[str]:
+        "property"
+        return self.builder.output_names
+
+    @property
+    def outputs(self) -> List[Any]:
+        "property"
+        return self.builder.outputs
+
+    @property
+    def opsets(self):
+        "property"
+        return self.builder.opsets
+
     def iter_nodes(self) -> Iterator:
+        "iterator"
         for node in self.builder.nodes:
             yield node
 
@@ -206,7 +238,7 @@ class GraphBuilderPatternOptimization:
 
     def get_attribute(
         self, node: NodeProto, att_name: str, exc: bool = True
-    ) -> AttributeProto:
+    ) -> Optional[AttributeProto]:
         """
         Returns an attribute for a node.
         """
@@ -307,6 +339,22 @@ class GraphBuilderPatternOptimization:
         predecessor = self.predecessors_[name]
         return self.nodes_[predecessor]
 
+    def next_node(self, name: str) -> NodeProto:
+        """
+        Returns the next node if it is unique, otherwise fails.
+        """
+        res = self.next_nodes(name)
+        assert len(res) == 1, f"Unexpected number of successors {len(res)} for {name!r}"
+        return res[0]
+
+    def next_nodes(self, name: str) -> List[NodeProto]:
+        """
+        Returns the node consuming the given results.
+        """
+        if name not in self.successors_:
+            return []
+        return [self.nodes_[i] for i in self.successors_[name]]
+
     def try_infer_type(self, name: str, exc: bool = False) -> int:
         """
         Tries to infer the type of a result.
@@ -370,22 +418,6 @@ class GraphBuilderPatternOptimization:
             )
         return None
 
-    def next_node(self, name: str) -> NodeProto:
-        """
-        Returns the next node if it is unique, otherwise fails.
-        """
-        res = self.next_nodes(name)
-        assert len(res) == 1, f"Unexpected number of successors {len(res)} for {name!r}"
-        return res[0]
-
-    def next_nodes(self, name: str) -> List[NodeProto]:
-        """
-        Returns the node consuming the given results.
-        """
-        if name not in self.successors_:
-            return []
-        return [self.nodes_[i] for i in self.successors_[name]]
-
     @property
     def main_opset(self):
         "Returns the opset for the main domain (assuming it is used)."
@@ -400,6 +432,7 @@ class GraphBuilderPatternOptimization:
         return new_name
 
     def unique_name(self, prefix: str) -> str:
+        "Returns a unique name."
         return self.builder.unique_name(prefix)
 
     def make_node_check_opset(
@@ -501,6 +534,12 @@ class GraphBuilderPatternOptimization:
             name=name,
             **kwargs,
         )
+
+        assert len(outputs) == len(set(outputs)) or "" in outputs, (
+            f"Repeated outputs for node {op_type}({', '.join(inputs)}) -> "
+            f"{', '.join(outputs)}"
+        )
+
         if attributes:
             proto.attribute.extend(attributes)
         return proto
@@ -801,19 +840,19 @@ class GraphBuilderPatternOptimization:
                     f"[GraphBuilderPatternOptimization.optimize] done all: -{n_removed} +{n_added} nodes"
                 )
 
-            # remove unnecessary identity nodes
-
-            begin = time.perf_counter()
-            id_removed = self.builder.remove_identity_nodes()
-            statistics.append(
-                dict(
-                    pattern="remove_identity_nodes",
-                    iteration=it,
-                    removed=id_removed,
-                    time_in=time.perf_counter() - begin,
+            if remove_identity:
+                # remove unnecessary identity nodes
+                begin = time.perf_counter()
+                id_removed = self.builder.remove_identity_nodes()
+                statistics.append(
+                    dict(
+                        pattern="remove_identity_nodes",
+                        iteration=it,
+                        removed=id_removed,
+                        time_in=time.perf_counter() - begin,
+                    )
                 )
-            )
-            self._check_graph(statistics, "remove_identity", it, "B")
+                self._check_graph(statistics, "remove_identity", it, "B")
 
             # rebuild the graph structure
 
@@ -823,7 +862,6 @@ class GraphBuilderPatternOptimization:
                 dict(
                     pattern="build_for_pattern",
                     iteration=it,
-                    removed=id_removed,
                     time_in=time.perf_counter() - begin,
                 )
             )
