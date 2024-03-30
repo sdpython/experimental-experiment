@@ -111,7 +111,7 @@ sphinx_gallery_conf = {
 
 epkg_dictionary = {
     "aten functions": "https://pytorch.org/cppdocs/api/namespace_at.html#functions",
-    "azure pipeline": "https://azure.microsoft.com/products/devops",
+    "azure pipeline": "https://azure.microsoft.com/en-us/products/devops/pipelines",
     "DOT": "https://graphviz.org/doc/info/lang.html",
     "JIT": "https://en.wikipedia.org/wiki/Just-in-time_compilation",
     "GraphModule": "https://pytorch.org/docs/stable/fx.html#torch.fx.GraphModule",
