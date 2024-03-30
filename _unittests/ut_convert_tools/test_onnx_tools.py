@@ -78,7 +78,7 @@ class TestOnnxTools(ExtTestCase):
         self.assertExists(name2 + ".stats")
 
         name3 = f"{name}.2.onnx"
-        cmd = ["", "-i", name2, "-o", name3, '-v', "1"]
+        cmd = ["", "-i", name2, "-o", name3, "-v", "1"]
         _, out, _ = self.capture(lambda: _cmd_unlighten(cmd))
         self.assertIn("done", out)
         self.assertExists(name3)
