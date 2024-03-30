@@ -594,7 +594,7 @@ class EasyPatternOptimization(PatternOptimization):
 
         # to avoid infinite loops.
         max_iter = len(pat.nodes) * 2
-        while stacked or iteration < max_iter:
+        while stacked and iteration < max_iter:
             assert all(map(lambda b: id(b[1]) in check_ids, marked.values())), (
                 f"At least one id is not part of the pattern ids={check_ids}, "
                 f"marked={set(id(b[1]) for b in marked.values())}"
