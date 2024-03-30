@@ -592,7 +592,9 @@ class EasyPatternOptimization(PatternOptimization):
                 pattern_nodes=pat.nodes,
             )
 
-        while stacked:
+        # to avoid infinite loops.
+        max_iter = len(pat.nodes) * 2
+        while stacked or iteration < max_iter:
             assert all(map(lambda b: id(b[1]) in check_ids, marked.values())), (
                 f"At least one id is not part of the pattern ids={check_ids}, "
                 f"marked={set(id(b[1]) for b in marked.values())}"
@@ -632,6 +634,10 @@ class EasyPatternOptimization(PatternOptimization):
 
             if self.verbose > 5:
                 self._debug["iteration"] = iteration
+
+        if iteration >= max_iter and stacked:
+            self.hint("reached {iteration}>={max_iter} iterations")
+            return self.none(node, inspect.currentframe().f_lineno)
 
         if self.verbose > 5:
             print(
