@@ -2,9 +2,9 @@ import inspect
 import os
 import textwrap
 from collections import Counter
-from typing import Any, Callable, Dict, Iterator, List, Optional, Sequence, Tuple
+from typing import Any, Callable, Dict, Iterator, List, Optional, Sequence, Tuple, Union
 import numpy as np
-from onnx import NodeProto
+from onnx import FunctionProto, ModelProto, NodeProto
 from ..xbuilder._dtype_helper import string_to_elem_type
 
 
@@ -793,3 +793,42 @@ class EasyPatternOptimization(PatternOptimization):
             print(f"[EasyPatternOptimization.apply] done with {len(new_nodes)} nodes")
 
         return new_nodes
+
+
+class OnnxEasyPatternOptimization(EasyPatternOptimization):
+    """
+    Implementations pattern matching with onnx models.
+
+    :param match_model: model expressing the pattern to match
+    :param apply_model: model expression the replacement pattern
+    """
+
+    def __init__(
+        self,
+        match_model: Union[ModelProto, FunctionProto],
+        apply_model: Union[ModelProto, FunctionProto],
+        verbose: int = 0,
+    ):
+        super().__init__(verbose=verbose)
+        self._match_model = match_model
+        self._apply_model = apply_model
+
+
+def make_pattern_from_onnx(
+    name: str,
+    match_model: Union[ModelProto, FunctionProto],
+    apply_model: Union[ModelProto, FunctionProto],
+    verbose: int = 0,
+):
+    """
+    Dynamically create a new class inheriting from
+    :class:`EasyPatternOptimization`.
+
+    :param name: class name
+    :param match_model: model expressing the pattern to match
+    :param apply_model: model expression the replacement pattern
+    :param verbose: verbosity
+    :return: instance of a new class
+    """
+    new_type = type(name, (OnnxEasyPatternOptimization,), {})
+    return new_type(match_model, apply_model, verbose=verbose)
