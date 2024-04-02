@@ -39,7 +39,6 @@ class TestGraphPatternBuilder(ExtTestCase):
             Replaces ConstantOfShape + ScatterND with ScatterNDOfShape (com.domain).
             """
 
-            @classmethod
             def match_pattern(self, g: "GraphBuilder", x: T, y: T, z: T):  # noqa: F821
                 """
                 Builds the pattern to match.
@@ -47,8 +46,7 @@ class TestGraphPatternBuilder(ExtTestCase):
                 tmp = g.op.Add(x, y)
                 return g.op.Add(tmp, z)
 
-            @classmethod
-            def apply_pattern(cls, g: "GraphBuilder", x: T, y: T, z: T):  # noqa: F821
+            def apply_pattern(self, g: "GraphBuilder", x: T, y: T, z: T):  # noqa: F821
                 """
                 Builds the pattern to match.
                 """
@@ -117,7 +115,6 @@ class TestGraphPatternBuilder(ExtTestCase):
             Replaces ConstantOfShape + ScatterND with ScatterNDOfShape (com.domain).
             """
 
-            @classmethod
             def match_pattern(
                 self, g: "GraphBuilder", x: T, y: T, w: T, z: T
             ):  # noqa: F821
@@ -129,9 +126,8 @@ class TestGraphPatternBuilder(ExtTestCase):
                 r1 = g.op.Add(tmp, z)
                 return tmp2, r1
 
-            @classmethod
             def apply_pattern(
-                cls, g: "GraphBuilder", x: T, y: T, w: T, z: T
+                self, g: "GraphBuilder", x: T, y: T, w: T, z: T
             ):  # noqa: F821
                 """
                 Builds the pattern to match.
@@ -209,9 +205,8 @@ class TestGraphPatternBuilder(ExtTestCase):
             Fusion for Rotary.
             """
 
-            @classmethod
             def match_pattern(
-                cls, g, x: "INT64", pos_ids: "FLOAT", axis: "INT64"  # noqa: F821
+                self, g, x: "INT64", pos_ids: "FLOAT", axis: "INT64"  # noqa: F821
             ):
                 # original code: the code does verifies the constant yet
                 # unsqueeze = op.Unsqueeze(x, [1])
@@ -235,9 +230,8 @@ class TestGraphPatternBuilder(ExtTestCase):
                 cast2 = op.Cast(cos, to=TensorProto.FLOAT)
                 return cast1, cast2
 
-            @classmethod
             def validate_mapping(
-                cls,
+                self,
                 g,
                 deleted_nodes,
                 added_nodes,
@@ -245,9 +239,8 @@ class TestGraphPatternBuilder(ExtTestCase):
                 # If some pattern needs to be rejected.
                 return True
 
-            @classmethod
             def apply_pattern(
-                cls, g, x: "INT64", pos_ids: "FLOAT", axis: "INT64"  # noqa: F821
+                self, g, x: "INT64", pos_ids: "FLOAT", axis: "INT64"  # noqa: F821
             ):
                 op = g.op
                 cos_cache = op.Constant(
@@ -266,12 +259,11 @@ class TestGraphPatternBuilder(ExtTestCase):
                 )
 
         def do():
+            rot = RotaryEmbeddingPattern()
             g = GraphBuilderPatternOptimization(
                 GraphBuilder(18, verbose=10), verbose=10
             )
-            pat = EasyPatternOptimization._build_pattern(
-                g, RotaryEmbeddingPattern.match_pattern
-            )
+            pat = rot._build_pattern(g, rot.match_pattern)
             onx = pat.builder.to_onnx(optimize=False)
             gr = GraphBuilder(
                 onx,
@@ -301,8 +293,7 @@ class TestGraphPatternBuilder(ExtTestCase):
             Fusion for Rotary.
             """
 
-            @classmethod
-            def match_pattern(cls, g, x, pos_ids, axis):
+            def match_pattern(self, g, x, pos_ids, axis):
                 # original code: the code does verifies the constant yet
                 # unsqueeze = op.Unsqueeze(x, [1])
                 op = g.op
@@ -322,9 +313,8 @@ class TestGraphPatternBuilder(ExtTestCase):
                 cast2 = op.Cast(cos, to=TensorProto.FLOAT)
                 return cast1, cast2
 
-            @classmethod
             def validate_mapping(
-                cls,
+                self,
                 g,
                 deleted_nodes,
                 added_nodes,
@@ -332,8 +322,7 @@ class TestGraphPatternBuilder(ExtTestCase):
                 # If some pattern needs to be rejected.
                 return True
 
-            @classmethod
-            def apply_pattern(cls, g, x, pos_ids, axis):
+            def apply_pattern(self, g, x, pos_ids, axis):
                 op = g.op
                 cos_cache = torch.randn(256, 256).to(torch.float16)
                 sin_cache = torch.randn(256, 256).to(torch.float16)

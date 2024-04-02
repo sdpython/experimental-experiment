@@ -239,9 +239,8 @@ class RotaryConcatPartPattern(PatternOptimization):
 
         return MatchResult(self, nodes, self.apply_concat)
 
-    @classmethod
     def apply_concat(
-        cls,
+        self,
         g: "GraphBuilder",  # noqa: F821
         cst_left: NodeProto,
         split: NodeProto,
@@ -297,7 +296,7 @@ class RotaryConcatPartPattern(PatternOptimization):
             node.output,
             axis=int(axis),
             doc_string=node.doc_string,
-            name=f"{cls.__name__}--{node.name}",
+            name=f"{self.__class__.__name__}--{node.name}",
         )
 
         # We still keep the constant in case other node use it.

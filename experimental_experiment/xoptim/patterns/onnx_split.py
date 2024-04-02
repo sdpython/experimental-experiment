@@ -87,9 +87,8 @@ class SlicesSplitPattern(PatternOptimization):
 
         return MatchResult(self, users, self.apply)
 
-    @classmethod
     def apply(
-        cls,
+        self,
         g: "GraphBuilder",  # noqa: F821
         *nodes: NodeProto,
     ) -> List[NodeProto]:
@@ -113,6 +112,6 @@ class SlicesSplitPattern(PatternOptimization):
             [nodes[0].input[0], splits],
             outputs,
             axis=axis,
-            name=f"{cls.__name__}--{nodes[0].name}",
+            name=f"{self.__class__.__name__}--{nodes[0].name}",
         )
         return [node]

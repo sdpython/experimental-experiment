@@ -162,9 +162,8 @@ class PatternOptimization:
                     f"{os.path.split(self.__class__.__module__)[-1]}, op_type={node.op_type}{msg}"
                 )
 
-    @classmethod
     def apply(
-        cls, g: "GraphBuilder", *nodes: Sequence[NodeProto]  # noqa: F821
+        self, g: "GraphBuilder", *nodes: Sequence[NodeProto]  # noqa: F821
     ) -> List[NodeProto]:
         """
         The method does the rewriting. It assumes it can happen.
@@ -179,7 +178,10 @@ class PatternOptimization:
         :param nodes: nodes returned by method *match*, there are then removed
         :return: nodes to add to graph.
         """
-        raise NotImplementedError(f"This function must be overloaded in class {cls}.")
+        raise NotImplementedError(
+            f"This function must be overloaded in class "
+            f"{self.__class__.__name__!r}."
+        )
 
 
 class EasyPatternOptimization(PatternOptimization):
@@ -193,9 +195,8 @@ class EasyPatternOptimization(PatternOptimization):
         super().__init__(verbose=verbose)
         self._cache = {}
 
-    @classmethod
     def match_pattern(
-        cls,
+        self,
         g: "GraphBuilder",  # noqa: F821
         *args: List[str],
         **kwargs: Dict[str, Any],
@@ -204,12 +205,11 @@ class EasyPatternOptimization(PatternOptimization):
         Builds the pattern to match.
         """
         raise NotImplementedError(
-            f"Class {cls.__name__!r} must overwrite method match_pattern."
+            f"Class {self.__class__.__name__!r} must overwrite method match_pattern."
         )
 
-    @classmethod
     def _build_pattern(
-        cls, g: "GraphBuilderPatternOptimization", fct: Callable  # noqa: F821
+        self, g: "GraphBuilderPatternOptimization", fct: Callable  # noqa: F821
     ) -> "GraphBuilderPatternOptimization":  # noqa: F821
         from .graph_builder_optim import GraphBuilderPatternOptimization
 
@@ -274,12 +274,11 @@ class EasyPatternOptimization(PatternOptimization):
         self._cache[cache_key] = pat
         return pat
 
-    @classmethod
-    def display_pattern(cls, g, fct) -> str:
+    def display_pattern(self, g, fct) -> str:
         """
         Shows the pattern to match or to apply.
         """
-        pat = cls._build_pattern(g, fct)
+        pat = self._build_pattern(g, fct)
         rows = []
         rows.append(
             f"{fct.__name__}({', '.join(pat.input_names)}) -> {', '.join(pat.output_names)}"
@@ -657,27 +656,25 @@ class EasyPatternOptimization(PatternOptimization):
         matched_nodes = [marked[id(n)][0] for i, n in enumerate(pat.nodes)]
         return MatchResult(self, matched_nodes, self.apply)
 
-    @classmethod
-    def apply_pattern(cls, g: "GraphBuilder", *args, **kwargs):  # noqa: F821
+    def apply_pattern(self, g: "GraphBuilder", *args, **kwargs):  # noqa: F821
         """
         Applies the replacement.
         """
         raise NotImplementedError(
-            f"Class {cls.__name__!r} must overwrite method 'apply_pattern'."
+            f"Class {self.__class__.__name__!r} must overwrite method 'apply_pattern'."
         )
 
-    @classmethod
     def apply(
-        cls,
+        self,
         g: "GraphBuilder",  # noqa: F821
         *nodes: Sequence[NodeProto],
     ) -> List[NodeProto]:
-        pat = cls._build_pattern(g, cls.match_pattern)
+        pat = self._build_pattern(g, self.match_pattern)
         assert len(nodes) == len(pat.nodes), (
             f"Mismatch matched nodes pattern has {len(pat.nodes)} != {len(nodes)} = "
             f"the number of matched nodes"
         )
-        new_pat = cls._build_pattern(g, cls.apply_pattern)
+        new_pat = self._build_pattern(g, self.apply_pattern)
         assert len(new_pat.inputs) == len(pat.inputs), (
             f"Not the same number of inputs, matched inputs={len(new_pat.inputs)}, "
             f"got {len(pat.inputs)} in the applied pattern."
@@ -690,7 +687,7 @@ class EasyPatternOptimization(PatternOptimization):
         if g.verbose > 5:
             print(
                 f"[EasyPatternOptimization.apply] replace {len(nodes)} nodes: "
-                f"{cls.display_pattern(g, cls.apply_pattern)}"
+                f"{self.display_pattern(g, self.apply_pattern)}"
             )
 
         matched_pattern_to_applied_pattern = {}
@@ -812,6 +809,24 @@ class OnnxEasyPatternOptimization(EasyPatternOptimization):
         super().__init__(verbose=verbose)
         self._match_model = match_model
         self._apply_model = apply_model
+
+    def _build_pattern(
+        self, g: "GraphBuilderPatternOptimization", fct: Callable  # noqa: F821
+    ) -> "GraphBuilderPatternOptimization":  # noqa: F821
+        if fct == self.match_pattern:
+            onx = self._match_model
+        elif fct == self.apply_pattern:
+            onx = self._apply_model
+        else:
+            raise AssertionError(f"Cannot return pattern for unknown method {fct!r}.")
+
+        from ..xbuilder import GraphBuilder
+        from .graph_builder_optim import GraphBuilderPatternOptimization
+
+        g = GraphBuilder(onx)
+        g2 = GraphBuilderPatternOptimization(g, verbose=max(0, g.verbose - 1))
+        g2._build()
+        return g2
 
 
 def make_pattern_from_onnx(
