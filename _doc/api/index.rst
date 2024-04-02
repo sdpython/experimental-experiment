@@ -16,9 +16,9 @@ API
     aten_method
     prims_function
     convert
-    torch_models
     torch_dynamo
     misc
+    torch_helper
     dimension
     torch_test
 
