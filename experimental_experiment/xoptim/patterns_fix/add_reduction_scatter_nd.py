@@ -38,14 +38,15 @@ class AddReductionScatterND(PatternOptimization):
 
         return MatchResult(self, [node], self.apply, insert_at=node)
 
-    @classmethod
-    def apply(cls, g: "GraphBuilder", node: NodeProto) -> List[NodeProto]:  # noqa: F821
+    def apply(
+        self, g: "GraphBuilder", node: NodeProto  # noqa: F821
+    ) -> List[NodeProto]:
         new_node = g.make_node(
             "ScatterND",
             node.input,
             node.output,
             reduction="add",
-            name=f"{cls.__name__}--{node.name}",
+            name=f"{self.__class__.__name__}--{node.name}",
             doc_string=node.doc_string,
         )
         return [new_node]

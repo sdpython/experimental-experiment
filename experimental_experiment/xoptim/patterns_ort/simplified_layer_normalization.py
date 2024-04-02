@@ -81,9 +81,8 @@ class SimplifiedLayerNormalizationPattern(PatternOptimization):
         nodes = [node_pow, node, node_add, node_sqrt, node_reciprocal, node_mul]
         return MatchResult(self, nodes, self.apply, insert_at=node)
 
-    @classmethod
     def apply(
-        cls,
+        self,
         g: "GraphBuilder",  # noqa: F821
         node_pow: NodeProto,
         node_reduce: NodeProto,
@@ -112,20 +111,22 @@ class SimplifiedLayerNormalizationPattern(PatternOptimization):
             scale = g.make_initializer("", np.array([1] * shape[axis], dtype=dtype))
         else:
             sh = g.make_node(
-                "Shape", [node_pow.input[0]], name=f"{cls.__name__}--{nname}"
+                "Shape", [node_pow.input[0]], name=f"{self.__class__.__name__}--{nname}"
             )
             axis_name = g.make_initializer("", np.array([axis], dtype=np.int64))
             ga = g.make_node(
-                "Gather", [sh.output[0], axis_name], name=f"{cls.__name__}--{nname}"
+                "Gather",
+                [sh.output[0], axis_name],
+                name=f"{self.__class__.__name__}--{nname}",
             )
             # sc = g.make_node_check_opset(
-            #    "Unsqueeze", [ga.output[0]], axes=[0], name=f"{cls.__name__}--{nname}"
+            #    "Unsqueeze", [ga.output[0]], axes=[0], name=f"{self.__class__.__name__}--{nname}"
             # )
             cc = g.make_node(
                 "ConstantOfShape",
                 [ga.output[0]],
                 value=onh.from_array(np.array([1], dtype=dtype)),
-                name=f"{cls.__name__}--{nname}",
+                name=f"{self.__class__.__name__}--{nname}",
             )
             scale = cc.output[0]
             nodes.extend([sh, ga, cc])
@@ -137,7 +138,7 @@ class SimplifiedLayerNormalizationPattern(PatternOptimization):
             epsilon=float(epsilon[0] if epsilon.shape else epsilon),
             axis=int(axis),
             stash_type=stash_type,
-            name=f"{cls.__name__}--{nname}",
+            name=f"{self.__class__.__name__}--{nname}",
         )
 
         nodes.append(layer)

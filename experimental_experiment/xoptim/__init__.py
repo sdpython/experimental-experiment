@@ -1,7 +1,12 @@
 import pprint
 from typing import List, Optional, Union
 from .graph_builder_optim import GraphBuilderPatternOptimization
-from .patterns_api import MatchResult, PatternOptimization, EasyPatternOptimization
+from .patterns_api import (
+    MatchResult,
+    PatternOptimization,
+    EasyPatternOptimization,
+    make_pattern_from_onnx,
+)
 
 
 def get_pattern(

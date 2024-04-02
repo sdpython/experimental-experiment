@@ -49,11 +49,13 @@ def get_decomposition_table():
     return new_table
 
 
-def get_decomposition_table_dynamo(
-    onnx_registry: Optional["OnnxRegistry"] = None,  # noqa: F821
-):
+def get_decomposition_table_dynamo(onnx_registry=None):
     """
     Returns the decomposition table needed for the dynamo exporter.
+
+    :param onnx_registry: instance of class
+        ``torch.onnx._internal.exporter.OnnxRegistry``
+
     The value is:
 
     .. runpython::

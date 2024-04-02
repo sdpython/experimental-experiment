@@ -56,9 +56,8 @@ class MulMulMulScalarPattern(PatternOptimization):
 
         return MatchResult(self, nodes, self.apply)
 
-    @classmethod
     def apply(
-        cls,
+        self,
         g: "GraphBuilder",  # noqa: F821
         node: NodeProto,
         node_left: NodeProto,
@@ -68,8 +67,8 @@ class MulMulMulScalarPattern(PatternOptimization):
         new_node = g.make_node(
             node.op_type,
             [node_left.input[0], node_right.input[0]],
-            [g.unique_name(f"{cls.__class__.__name__}--{node.output[0]}")],
-            name=f"{cls.__name__}--{node.name}",
+            [g.unique_name(f"{self.__class__.__name__}--{node.output[0]}")],
+            name=f"{self.__class__.__name__}--{node.name}",
         )
         cst_left = g.get_computed_constant(node_left.input[1])
         cst_right = g.get_computed_constant(node_right.input[1])
@@ -94,7 +93,7 @@ class MulMulMulScalarPattern(PatternOptimization):
             "Mul",
             [new_node.output[0], new_cst],
             node.output,
-            name=f"{cls.__name__}--{node.name}-Cst",
+            name=f"{self.__class__.__name__}--{node.name}-Cst",
         )
 
         return [new_node, new_node2]
@@ -213,7 +212,6 @@ class SwitchOrderBinaryPattern(PatternOptimization):
 
         return MatchResult(self, nodes, self.apply, insert_at=node)
 
-    @classmethod
     def _align_shape(cls, sh: DYNAMIC_SHAPE, rk: int) -> DYNAMIC_SHAPE:
         """
         Aligns shapes to the same size.
@@ -222,7 +220,6 @@ class SwitchOrderBinaryPattern(PatternOptimization):
             return sh
         return (1,) * (rk - len(sh)) + sh
 
-    @classmethod
     def switch_order(
         cls,
         shape_left: DYNAMIC_SHAPE,
@@ -302,7 +299,6 @@ class SwitchOrderBinaryPattern(PatternOptimization):
         # No change.
         return 0
 
-    @classmethod
     def apply(
         cls,
         g: "GraphBuilder",  # noqa: F821
