@@ -1,7 +1,11 @@
 """
 to fail on error, use::
 
-    EXPDORAISE=1 python _unittests/ut_torch_interpreter/test_operators.py -k relu -f
+    clear&&EXPDORAISE=1 python _unittests/ut_torch_interpreter/test_operators.py -k relu -f
+
+or::
+
+    clear&&EXPDORAISE=1 python _unittests/ut_torch_interpreter/test_operators.py -f
 """
 
 import copy
@@ -243,6 +247,37 @@ class TestOperators(ExtTestCase):
                         except FunctionNotFoundError as e:
                             if not os.environ.get("EXPDORAISE", False):
                                 raise unittest.SkipTest(f"MISSING FOR BACKWARD {e}")
+                            assert (
+                                len(storage["instance"]) == 1
+                            ), f"Unexpected number of instance {len(storage['instance'])}"
+                            instance = storage["instance"][0]
+                            forward_onnx = instance["onnx"]
+                            folder = "dump_test_operators_forward"
+                            if not os.path.exists(folder):
+                                os.mkdir(folder)
+                            with open(
+                                os.path.join(folder, f"{onnx_export}_forward.onnx"),
+                                "wb",
+                            ) as f:
+                                f.write(forward_onnx.SerializeToString())
+                            # gradient from onnxruntime
+                            from experimental_experiment.gradient.grad_helper import (
+                                DerivativeOptions,
+                                onnx_derivative,
+                            )
+
+                            grad = onnx_derivative(
+                                forward_onnx,
+                                options=DerivativeOptions.KeepYieldOp,
+                                verbose=1,
+                            )
+                            with open(
+                                os.path.join(
+                                    folder, f"{onnx_export}_ort_yield_grad.onnx"
+                                ),
+                                "wb",
+                            ) as f:
+                                f.write(grad.SerializeToString())
                             raise
 
                     base_grads = tuple(_.grad for _ in model.parameters())
@@ -707,7 +742,9 @@ class TestOperators(ExtTestCase):
         self.assertONNX(
             nn.AvgPool2d(3, stride=2),
             x,
+            impl="ort",
             onnx_export=inspect.currentframe().f_code.co_name,
+            # verbose=10,
         )
 
     def test_maxpool_indices(self):

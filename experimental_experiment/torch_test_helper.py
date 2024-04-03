@@ -1,3 +1,7 @@
+"""
+More complex helpers used in unit tests.
+"""
+
 import contextlib
 import io
 import os

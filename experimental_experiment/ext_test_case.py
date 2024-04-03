@@ -1,3 +1,8 @@
+"""
+The module contains the main class ``ExtTestCase`` which adds
+specific functionalities to this project.
+"""
+
 import glob
 import os
 import re
@@ -246,6 +251,11 @@ def measure_time(
 
 
 class ExtTestCase(unittest.TestCase):
+    """
+    Inherits from :class:`unittest.TestCase` and adds specific comprison
+    functions and other helpers.
+    """
+
     _warns: List[Tuple[str, int, Warning]] = []
 
     def get_dump_file(self, name: str, folder: Optional[str] = None) -> str:
@@ -261,19 +271,19 @@ class ExtTestCase(unittest.TestCase):
     def dump_onnx(
         self, name: str, proto: Any, folder: Optional[str] = None  # noqa: F821
     ) -> str:
-        """
-        Dumps an onnx file.
-        """
+        "Dumps an onnx file."
         fullname = self.get_dump_file(name, folder=folder)
         with open(fullname, "wb") as f:
             f.write(proto.SerializeToString())
         return fullname
 
     def assertExists(self, name):
+        "Checks the existing of a file."
         if not os.path.exists(name):
             raise AssertionError(f"File or folder {name!r} does not exists.")
 
     def assertGreaterOrEqual(self, a, b, msg=None):
+        "in the name"
         if a < b:
             return AssertionError(
                 f"{a} < {b}, a not greater or equal than b\n{msg or ''}"
@@ -287,6 +297,7 @@ class ExtTestCase(unittest.TestCase):
         rtol: float = 0,
         msg: Optional[str] = None,
     ):
+        "in the name"
         self.assertEqual(len(expected), len(value))
         for a, b in zip(expected, value):
             self.assertEqualArray(a, b, atol=atol, rtol=rtol)
@@ -299,6 +310,7 @@ class ExtTestCase(unittest.TestCase):
         rtol: float = 0,
         msg: Optional[str] = None,
     ):
+        "in the name"
         if hasattr(expected, "detach"):
             expected = expected.detach().cpu().numpy()
         if hasattr(value, "detach"):
@@ -320,6 +332,7 @@ class ExtTestCase(unittest.TestCase):
         atol: float = 0,
         rtol: float = 0,
     ):
+        "in the name"
         if not isinstance(expected, numpy.ndarray):
             expected = numpy.array(expected)
         if not isinstance(value, numpy.ndarray):
@@ -327,6 +340,7 @@ class ExtTestCase(unittest.TestCase):
         self.assertEqualArray(expected, value, atol=atol, rtol=rtol)
 
     def assertRaise(self, fct: Callable, exc_type: type[Exception]):
+        "in the name"
         try:
             fct()
         except exc_type as e:
@@ -336,6 +350,7 @@ class ExtTestCase(unittest.TestCase):
         raise AssertionError("No exception was raised.")
 
     def assertEmpty(self, value: Any):
+        "in the name"
         if value is None:
             return
         if not value:
@@ -343,6 +358,7 @@ class ExtTestCase(unittest.TestCase):
         raise AssertionError(f"value is not empty: {value!r}.")
 
     def assertNotEmpty(self, value: Any):
+        "in the name"
         if value is None:
             raise AssertionError(f"value is empty: {value!r}.")
         if isinstance(value, (list, dict, tuple, set)):
@@ -350,6 +366,7 @@ class ExtTestCase(unittest.TestCase):
                 raise AssertionError(f"value is empty: {value!r}.")
 
     def assertStartsWith(self, prefix: str, full: str):
+        "in the name"
         if not full.startswith(prefix):
             raise AssertionError(f"prefix={prefix!r} does not start string  {full!r}.")
 
@@ -415,6 +432,9 @@ def get_figure(ax):
 
 
 def dump_dort_onnx(fn):
+    """
+    Context manager to dump onnx model created by dort.
+    """
     prefix = fn.__name__
     folder = "tests_dump"
     if not os.path.exists(folder):

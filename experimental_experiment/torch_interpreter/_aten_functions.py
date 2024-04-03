@@ -461,6 +461,130 @@ def aten_atanh(
     return res
 
 
+def _adjust_attributes_of_avg_pool(
+    expand_size: int,
+    kernel_size: Union[Sequence[int], int],
+    stride: Union[Sequence[int], int],
+    padding: Union[Sequence[int], int],
+) -> Tuple[Sequence[int], Sequence[int], Sequence[int]]:
+    """Adjust attributes of avg_pool to match ONNX specification."""
+
+    kernel_shape = (
+        [kernel_size] * expand_size if isinstance(kernel_size, int) else kernel_size
+    )
+
+    if isinstance(padding, int):
+        pads = [padding] * expand_size * 2
+    elif len(padding) == 1:
+        pads = padding * expand_size * 2
+    elif len(padding) == 2:
+        pads = padding * expand_size
+    else:
+        pads = padding * 2
+
+    if isinstance(stride, int):
+        strides = [stride] * expand_size
+    elif not stride:
+        strides = kernel_shape
+    else:
+        strides = stride
+
+    return (kernel_shape, strides, pads)
+
+
+def aten_avg_pool2d(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    kernel_size: Sequence[int] = (),
+    stride: Sequence[int] = (),
+    padding: Sequence[int] = (0, 0),
+    ceil_mode: bool = False,
+    count_include_pad: bool = True,
+    divisor_override: Optional[int] = None,
+) -> T:
+    "AveragePool"
+    assert divisor_override is None, (
+        f"avg_pool2d not implemented for divisor_override="
+        f"{divisor_override}{g.get_debug_msg()}"
+    )
+
+    expand_size = 2
+
+    kernel_shape, strides, pads = _adjust_attributes_of_avg_pool(
+        expand_size, kernel_size, stride, padding
+    )
+
+    result = g.op.AveragePool(
+        x,
+        ceil_mode=1 if ceil_mode else 0,
+        count_include_pad=1 if count_include_pad else 0,
+        kernel_shape=kernel_shape,
+        pads=pads,
+        strides=strides,
+        outputs=outputs,
+        name="avg_pool2d",
+    )
+
+    if sts:
+        g.set_type(result, g.get_type(x))
+        g.set_rank(result, g.get_rank(x))
+
+    return result
+
+
+def aten_avg_pool2d_backward(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    grad_output: T,
+    x: T,
+    kernel_size: Sequence[int] = (),
+    stride: Sequence[int] = (),
+    padding: Sequence[int] = (0, 0),
+    ceil_mode: bool = False,
+    count_include_pad: bool = True,
+    divisor_override: Optional[int] = None,
+    **kwargs,
+) -> T:
+    "AveragePoolGrad (not a standard onnx operator)"
+    assert divisor_override is None, (
+        f"avg_pool2d_backward not implemented for divisor_override="
+        f"{divisor_override}{g.get_debug_msg()}"
+    )
+    assert not kwargs, (
+        f"avg_pool2d_backward not implemented for kwargs="
+        f"{kwargs}{g.get_debug_msg()}"
+    )
+
+    expand_size = 2
+
+    kernel_shape, strides, pads = _adjust_attributes_of_avg_pool(
+        expand_size, kernel_size, stride, padding
+    )
+
+    grad = g.make_node(
+        "AveragePoolGrad",
+        grad_output,
+        ceil_mode=1 if ceil_mode else 0,
+        count_include_pad=1 if count_include_pad else 0,
+        kernel_shape=kernel_shape,
+        pads=pads,
+        strides=strides,
+        # domain="com.microsoft",
+        name="avg_pool2d_backward",
+    )
+    g.set_type(grad, g.get_type(x))
+    g.set_rank(grad, g.get_rank(x))
+
+    result = g.op.Add(x, grad, name="avg_pool2d_backward", outputs=outputs)
+    if sts:
+        g.set_type(result, g.get_type(x))
+        g.set_rank(result, g.get_rank(x))
+    return result
+
+
 def aten_bmm(
     g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T, y: T
 ) -> T:
