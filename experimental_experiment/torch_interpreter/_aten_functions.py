@@ -567,6 +567,7 @@ def aten_avg_pool2d_backward(
     grad = g.make_node(
         "AveragePoolGrad",
         grad_output,
+        auto_pad="NOTSET",
         ceil_mode=1 if ceil_mode else 0,
         count_include_pad=1 if count_include_pad else 0,
         kernel_shape=kernel_shape,
