@@ -278,6 +278,17 @@ class TestOperators(ExtTestCase):
                                 "wb",
                             ) as f:
                                 f.write(grad.SerializeToString())
+
+                            grad = onnx_derivative(
+                                forward_onnx,
+                                options=DerivativeOptions.Zero,
+                                verbose=1,
+                            )
+                            with open(
+                                os.path.join(folder, f"{onnx_export}_ort_grad.onnx"),
+                                "wb",
+                            ) as f:
+                                f.write(grad.SerializeToString())
                             raise
 
                     base_grads = tuple(_.grad for _ in model.parameters())
@@ -742,7 +753,7 @@ class TestOperators(ExtTestCase):
         self.assertONNX(
             nn.AvgPool2d(3, stride=2),
             x,
-            impl="ort",
+            impl="ref",
             onnx_export=inspect.currentframe().f_code.co_name,
             # verbose=10,
         )

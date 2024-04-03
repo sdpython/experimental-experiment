@@ -4,6 +4,7 @@ from onnx import FunctionProto, ModelProto
 from onnx.defs import get_schema
 from onnx.reference import ReferenceEvaluator
 from onnx.reference.op_run import OpRun
+from .ops.op_average_pool_grad import AveragePoolGrad
 from .ops.op_cast_like import CastLike_15, CastLike_19
 from .ops.op_concat import Concat
 from .ops.op_constant_of_shape import ConstantOfShape
@@ -44,6 +45,7 @@ class ExtendedReferenceEvaluator(ReferenceEvaluator):
     """
 
     default_ops = [
+        AveragePoolGrad,
         Concat,
         CastLike_15,
         CastLike_19,

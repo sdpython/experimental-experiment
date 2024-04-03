@@ -104,7 +104,7 @@ def onnx_derivative(
 
     The function calls *OrtModuleGraphBuilderConfiguration*
     from :epkg:`onnxruntime-training`. This graph is meant to be used
-    with @see cl OrtGradientForwardBackward and includes
+    with :epkg:`OrtGradientForwardBackward` and includes
     operator `YieldOp`. That's the graph looks this way:
 
     .. gdot::
@@ -338,37 +338,40 @@ def _onnx_derivative_fw(
         outputs = [o for o in grad_yield.graph.output if o.name not in original]
 
     map_out = {o.name: o for o in onx.graph.output}
+    set_out = set(map_out)
     for index, yn in yields_op:
-        if len(yn.input) != 1 or len(yn.output) != 1:
-            raise NotImplementedError(
-                f"Unexpected configuration for YieldOp node {yn!r}."
-            )
-        assert (
-            yn.input[0] in map_out
-        ), f"Unable to find output {yn.input[0]!r} in {list(map_out)!r}."
+        assert len(yn.input) == len(yn.output), (
+            f"YieldOp should have the same number of inputs and outputs "
+            f"but index={index} and yield op is\n{yn}"
+        )
+        assert len(set(yn.input) & set_out) == len(
+            yn.input
+        ), f"Unable to find one output {yn.input!r} in {list(map_out)!r}."
         if not (options & DerivativeOptions.FillGrad):
-            out = map_out[yn.input[0]]
-            new_input = onnx.ValueInfoProto()
-            new_input.name = yn.output[0]
-            new_input.doc_string = "from yieldop"
-            new_input.type.CopyFrom(out.type)
-            inputs.append(new_input)
+            for i, inp in enumerate(yn.input):
+                out = map_out[inp]
+                new_input = onnx.ValueInfoProto()
+                new_input.name = yn.output[i]
+                new_input.doc_string = "from yieldop"
+                new_input.type.CopyFrom(out.type)
+                inputs.append(new_input)
         else:
             assert (
                 options & DerivativeOptions.KeepOutputs
             ), "FillGrad should be set with KeepOutputs."
-            name = f"{yn.input[0]}_shape"
-            node = make_node("Shape", [yn.input[0]], [name])
-            other_nodes.append((index + 0.1, node))
-            out = map_out[yn.input[0]]
-            elem_type = out.type.tensor_type.elem_type
-            node = make_node(
-                "ConstantOfShape",
-                [name],
-                [yn.output[0]],
-                value=make_tensor("value", elem_type, (1,), [1]),
-            )
-            other_nodes.append((index + 0.2, node))
+            for i, inp in enumerate(yn.input):
+                name = f"{inp}_shape"
+                node = make_node("Shape", [inp], [name])
+                other_nodes.append((index + 0.1, node))
+                out = map_out[inp]
+                elem_type = out.type.tensor_type.elem_type
+                node = make_node(
+                    "ConstantOfShape",
+                    [name],
+                    [yn.output[i]],
+                    value=make_tensor("value", elem_type, (1,), [1]),
+                )
+                other_nodes.append((index + 0.2, node))
         if options & DerivativeOptions.KeepOutputs:
             # Keeps output from the original graph.
             outputs.append(out)
