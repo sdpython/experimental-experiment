@@ -88,9 +88,10 @@ class TestOrtEval(ExtTestCase):
         )
 
         ort_eval = OrtEval(model, providers="CUDA", verbose=10)
-        ort_eval.run(
-            None, dict(zip(input_names, [t.detach().cpu().numpy() for t in values]))
-        )
+        # ort_eval.run_dlpack(
+        #    None, dict(zip(input_names, [t.detach().cpu().numpy() for t in values]))
+        # )
+        ort_eval.run_dlpack(None, dict(zip(input_names, values)))
 
 
 if __name__ == "__main__":
