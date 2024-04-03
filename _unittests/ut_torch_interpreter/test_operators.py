@@ -255,10 +255,10 @@ class TestOperators(ExtTestCase):
                             folder = "dump_test_operators_forward"
                             if not os.path.exists(folder):
                                 os.mkdir(folder)
-                            with open(
-                                os.path.join(folder, f"{onnx_export}_forward.onnx"),
-                                "wb",
-                            ) as f:
+                            grad_name = os.path.join(
+                                folder, f"{onnx_export}_forward.onnx"
+                            )
+                            with open(grad_name, "wb") as f:
                                 f.write(forward_onnx.SerializeToString())
                             # gradient from onnxruntime
                             from experimental_experiment.gradient.grad_helper import (
