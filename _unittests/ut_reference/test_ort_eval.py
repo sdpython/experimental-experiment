@@ -87,7 +87,7 @@ class TestOrtEval(ExtTestCase):
             str(aten_op_executor.execute_aten_operator_address()),
         )
 
-        ort_eval = OrtEval(model, providers="CUDA", verbose=10)
+        ort_eval = OrtEval(model, providers="CUDA", verbose=11)
         # ort_eval.run_dlpack(
         #    None, dict(zip(input_names, [t.detach().cpu().numpy() for t in values]))
         # )

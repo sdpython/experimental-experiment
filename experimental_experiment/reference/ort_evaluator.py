@@ -232,9 +232,14 @@ class OrtEval:
                 for k, v in self.rt_inits_.items()
             }
             if "CUDAExecutionProvider" in self.providers:
-                self.rt_inits_torch_ = {
-                    k: v.cuda() for k, v in self.rt_inits_torch_.items()
-                }
+                ts = self.rt_inits_torch_
+                self.rt_inits_torch_ = {}
+                for k, v in ts.items():
+                    if v.dtype in (torch.float32,) and len(v.shape) == 0:
+                        pass
+                    elif v.dtype not in (torch.int64, torch.bool):
+                        v = v.cuda()
+                    self.rt_inits_torch_[k] = v
         results = self.rt_inits_torch_.copy()
 
         for k, v in self.rt_inits_.items():
@@ -297,7 +302,7 @@ class OrtEval:
         assert isinstance(max_device, int), f"unexpected type for device={max_device!r}"
         assert tensors is not None, "tensors cannot be None"
         new_tensors = []
-        for tensor in tensors:
+        for pos, tensor in enumerate(tensors):
             if tensor is None:
                 tensor = torch.Tensor(np.array([0], dtype=np.float32)).to(
                     "cuda" if max_device >= 0 else "cpu"
@@ -307,6 +312,8 @@ class OrtEval:
             shapes.append(tensor.size())
             data_ptrs.append(tensor.data_ptr())
             d = tensor.get_device()
+            if self.verbose > 10:
+                print(f"     < p={pos} d={d} dtype={dtypes[-1]} shape={tensor.shape}")
             devices.append(DEVICES[d])
             new_tensors.append(tensor)
             max_device = max(max_device, tensor.get_device())
@@ -316,6 +323,10 @@ class OrtEval:
         for _ in range(n_outputs):
             dev = DEVICES[max_device]
             output_devices.append(dev)
+            if self.verbose > 10:
+                print(
+                    f"     > p={_} d={max_device} dtype={dtypes[_]} shape={shapes[_]}"
+                )
 
         return ortvalues, output_devices
 
