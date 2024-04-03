@@ -1,7 +1,7 @@
 import inspect
 from typing import List, Optional
 from onnx import NodeProto
-from ..patterns.patterns_api import MatchResult, PatternOptimization
+from ..patterns_api import MatchResult, PatternOptimization
 
 
 class FusedMatMulPattern(PatternOptimization):
@@ -75,9 +75,8 @@ class FusedMatMulPattern(PatternOptimization):
 
         return MatchResult(self, nodes, self.apply)
 
-    @classmethod
     def apply(
-        cls,
+        self,
         g: "GraphBuilder",  # noqa: F821
         node_before_left: Optional[NodeProto],
         node_before_right: Optional[NodeProto],
@@ -141,7 +140,7 @@ class FusedMatMulPattern(PatternOptimization):
             "FusedMatMul",
             inputs,
             [output],
-            name=f"{cls.__name__}--{node.name}",
+            name=f"{self.__class__.__name__}--{node.name}",
             doc_string=node.doc_string,
             domain="com.microsoft",
             **kwargs,

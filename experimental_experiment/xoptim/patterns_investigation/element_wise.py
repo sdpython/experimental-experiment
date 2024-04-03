@@ -1,6 +1,6 @@
 from typing import List, Optional
 from onnx import NodeProto
-from ..patterns.patterns_api import MatchResult, PatternOptimization
+from ..patterns_api import MatchResult, PatternOptimization
 
 
 class BinaryInvestigation(PatternOptimization):
@@ -28,7 +28,6 @@ class BinaryInvestigation(PatternOptimization):
             print(f"[{self.__class__.__name__}] {self.report(g, *nodes)}")
         return self.none()
 
-    @classmethod
     def _str(cls, g, node):
         if node.op_type in cls._ops:
             sh1 = g.get_shape(node.input[0]) if g.has_shape(node.input[0]) else ("?",)
@@ -43,7 +42,6 @@ class BinaryInvestigation(PatternOptimization):
 
         return f"{node.op_type}(...)"
 
-    @classmethod
     def report(
         cls,
         g: "GraphBuilder",  # noqa: F821

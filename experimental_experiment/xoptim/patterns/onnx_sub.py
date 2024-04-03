@@ -1,7 +1,7 @@
 import inspect
 from typing import List, Optional
 from onnx import NodeProto
-from .patterns_api import MatchResult, PatternOptimization
+from ..patterns_api import MatchResult, PatternOptimization
 
 
 class Sub1MulPattern(PatternOptimization):
@@ -55,9 +55,8 @@ class Sub1MulPattern(PatternOptimization):
 
         return MatchResult(self, nodes, self.apply)
 
-    @classmethod
     def apply(
-        cls,
+        self,
         g: "GraphBuilder",  # noqa: F821
         node: NodeProto,
         node_left: NodeProto,
@@ -79,14 +78,14 @@ class Sub1MulPattern(PatternOptimization):
             mul_node = g.make_node(
                 "Mul",
                 [node_left.input[1], node.input[1]],
-                [g.unique_name(f"{cls.__class__.__name__}--{node.output[0]}")],
-                name=f"{cls.__name__}--{node.name}",
+                [g.unique_name(f"{self.__class__.__name__}--{node.output[0]}")],
+                name=f"{self.__class__.__name__}--{node.name}",
             )
             sub_node = g.make_node(
                 "Sub",
                 [node.input[1], mul_node.output[0]],
                 node.output,
-                name=f"{cls.__name__}--{node.name}",
+                name=f"{self.__class__.__name__}--{node.name}",
                 doc_string=node.doc_string,
             )
             keep_node = node_right
@@ -95,14 +94,14 @@ class Sub1MulPattern(PatternOptimization):
             mul_node = g.make_node(
                 "Mul",
                 [node.input[0], node_right.input[1]],
-                [g.unique_name(f"{cls.__class__.__name__}--{node.output[0]}")],
-                name=f"{cls.__name__}--{node.name}",
+                [g.unique_name(f"{self.__class__.__name__}--{node.output[0]}")],
+                name=f"{self.__class__.__name__}--{node.name}",
             )
             sub_node = g.make_node(
                 "Sub",
                 [node.input[0], mul_node.output[0]],
                 node.output,
-                name=f"{cls.__name__}--{node.name}",
+                name=f"{self.__class__.__name__}--{node.name}",
                 doc_string=node.doc_string,
             )
             keep_node = node_left

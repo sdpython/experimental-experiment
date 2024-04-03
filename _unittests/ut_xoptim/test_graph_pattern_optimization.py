@@ -29,7 +29,7 @@ from experimental_experiment.xbuilder.shape_helper import (
     compatible_shapes,
     compatible_dimensions,
 )
-from experimental_experiment.xoptim.patterns import get_pattern_list
+from experimental_experiment.xoptim import get_pattern_list
 
 TFLOAT = TensorProto.FLOAT
 TFLOAT16 = TensorProto.FLOAT16

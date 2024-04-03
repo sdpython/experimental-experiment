@@ -1,7 +1,7 @@
 import inspect
 from typing import List, Optional, Tuple
 from onnx import NodeProto
-from .patterns_api import MatchResult, PatternOptimization
+from ..patterns_api import MatchResult, PatternOptimization
 
 
 class TransposeTransposePattern(PatternOptimization):
@@ -9,7 +9,6 @@ class TransposeTransposePattern(PatternOptimization):
     Removes two consecutive transpose if the second one put the tensor in origin shape.
     """
 
-    @classmethod
     def apply_transpose(cls, perm: Tuple[int, ...], on: List[int]) -> List[int]:
         assert len(perm) == len(on), "length mismatch"
         res = [None for i in on]
@@ -51,16 +50,15 @@ class TransposeTransposePattern(PatternOptimization):
 
         return MatchResult(self, [node, next_node], self.apply)
 
-    @classmethod
     def apply(
-        cls, g: "GraphBuilder", node: NodeProto, next_node: NodeProto  # noqa: F821
+        self, g: "GraphBuilder", node: NodeProto, next_node: NodeProto  # noqa: F821
     ) -> List[NodeProto]:
         new_nodes = [
             g.make_node(
                 "Identity",
                 [node.input[0]],
                 next_node.output,
-                name=f"{cls.__name__}--{node.name}",
+                name=f"{self.__class__.__name__}--{node.name}",
                 doc_string=next_node.doc_string,
             )
         ]

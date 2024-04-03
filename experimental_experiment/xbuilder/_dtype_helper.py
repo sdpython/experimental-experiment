@@ -40,3 +40,12 @@ def dtype_to_tensor_dtype(dt: "dtype") -> int:  # noqa: F821
     except KeyError:
         pass
     return torch_dtype_to_onnx_dtype(dt)
+
+
+def string_to_elem_type(name: str) -> int:
+    """
+    Converts a string into an element type.
+    INT64 -> TensorProto.INT64
+    """
+    assert hasattr(TensorProto, name), f"Unable to interpret type {name!r}"
+    return getattr(TensorProto, name)

@@ -2,7 +2,7 @@ import inspect
 from typing import List, Optional
 from onnx import NodeProto
 from ...xbuilder._onnx_helper import element_wise_binary_op_types
-from .patterns_api import MatchResult, PatternOptimization
+from ..patterns_api import MatchResult, PatternOptimization
 
 
 class ReduceReshapePattern(PatternOptimization):
@@ -65,9 +65,8 @@ class ReduceReshapePattern(PatternOptimization):
 
         return MatchResult(self, [node, next_node], self.apply, insert_at=node)
 
-    @classmethod
     def apply(
-        cls, g: "GraphBuilder", node: NodeProto, next_node: NodeProto  # noqa: F821
+        self, g: "GraphBuilder", node: NodeProto, next_node: NodeProto  # noqa: F821
     ) -> List[NodeProto]:
         axes = g.get_attribute(node, "axes", exc=False)
         if axes is None:
@@ -76,7 +75,7 @@ class ReduceReshapePattern(PatternOptimization):
                 node.input,
                 next_node.output,
                 keepdims=0,
-                name=f"{cls.__name__}--{node.name}",
+                name=f"{self.__class__.__name__}--{node.name}",
                 doc_string=node.doc_string,
             )
             return [new_node]
@@ -88,7 +87,7 @@ class ReduceReshapePattern(PatternOptimization):
             next_node.output,
             keepdims=0,
             axes=list(axes.ints),
-            name=f"{cls.__name__}--{node.name}",
+            name=f"{self.__class__.__name__}--{node.name}",
             doc_string=node.doc_string,
         )
         return [new_node]
@@ -121,15 +120,14 @@ class ReshapeReshapePattern(PatternOptimization):
 
         return MatchResult(self, [node, next_node], self.apply, insert_at=next_node)
 
-    @classmethod
     def apply(
-        cls, g: "GraphBuilder", node: NodeProto, next_node: NodeProto  # noqa: F821
+        self, g: "GraphBuilder", node: NodeProto, next_node: NodeProto  # noqa: F821
     ) -> List[NodeProto]:
         new_node = g.make_node(
             "Reshape",
             [node.input[0], next_node.input[1]],
             next_node.output,
-            name=f"{cls.__name__}--{node.name}",
+            name=f"{self.__class__.__name__}--{node.name}",
             doc_string=next_node.doc_string,
         )
         return [new_node]
@@ -205,9 +203,8 @@ class Reshape2Of3Pattern(PatternOptimization):
 
         return MatchResult(self, nodes, self.apply)
 
-    @classmethod
     def apply(
-        cls,
+        self,
         g: "GraphBuilder",  # noqa: F821
         node_left: NodeProto,
         node_right: NodeProto,
@@ -226,7 +223,7 @@ class Reshape2Of3Pattern(PatternOptimization):
 
         # node left
         if node_left is None:
-            left_name = g.unique_name(f"{cls.__class__.__name__}L_{node.input[0]}")
+            left_name = g.unique_name(f"{self.__class__.__name__}L_{node.input[0]}")
             res.append(
                 g.make_node("Reshape", [node.input[0], final_shape_name], [left_name])
             )
@@ -238,7 +235,7 @@ class Reshape2Of3Pattern(PatternOptimization):
 
         # node right
         if node_right is None:
-            right_name = g.unique_name(f"{cls.__class__.__name__}R_{node.input[1]}")
+            right_name = g.unique_name(f"{self.__class__.__name__}R_{node.input[1]}")
             res.append(
                 g.make_node("Reshape", [node.input[1], final_shape_name], [right_name])
             )
@@ -251,7 +248,7 @@ class Reshape2Of3Pattern(PatternOptimization):
         # node and next node
         if next_node is None:
             # Reshape is needed.
-            new_name = g.unique_name(f"{cls.__class__.__name__}L_{node.output[0]}")
+            new_name = g.unique_name(f"{self.__class__.__name__}L_{node.output[0]}")
             res.extend(
                 [
                     g.make_node(
@@ -335,9 +332,8 @@ class ReshapeReshapeBinaryPattern(PatternOptimization):
         # is not necesssary.
         return MatchResult(self, [left, right, node], self.apply, insert_at=node)
 
-    @classmethod
     def apply(
-        cls,
+        self,
         g: "GraphBuilder",  # noqa: F821
         left: NodeProto,
         right: NodeProto,
@@ -347,13 +343,13 @@ class ReshapeReshapeBinaryPattern(PatternOptimization):
         new_node = g.make_node(
             node.op_type,
             [left.input[0], right.input[0]],
-            name=f"{cls.__name__}--{node.name}",
+            name=f"{self.__class__.__name__}--{node.name}",
         )
         reshape_node = g.make_node(
             "Reshape",
             [new_node.output[0], left.input[1]],
             node.output,
-            name=f"{cls.__name__}--{node.name}",
+            name=f"{self.__class__.__name__}--{node.name}",
             doc_string=node.doc_string,
         )
         return [new_node, reshape_node]

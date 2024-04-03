@@ -2,7 +2,7 @@ import inspect
 from typing import List, Optional
 from onnx import NodeProto
 from onnx.numpy_helper import to_array
-from ..patterns.patterns_api import MatchResult, PatternOptimization
+from ..patterns_api import MatchResult, PatternOptimization
 
 
 class ConstantOfShapeScatterNDPattern(PatternOptimization):
@@ -38,15 +38,14 @@ class ConstantOfShapeScatterNDPattern(PatternOptimization):
 
         return MatchResult(self, [node_before, node], self.apply, insert_at=node)
 
-    @classmethod
     def apply(
-        cls, g: "GraphBuilder", node_before: NodeProto, node: NodeProto  # noqa: F821
+        self, g: "GraphBuilder", node_before: NodeProto, node: NodeProto  # noqa: F821
     ) -> List[NodeProto]:
         new_node = g.make_node(
             "ScatterNDOfShape",
             [node_before.input[0], *node.input[1:]],
             node.output,
-            name=f"{cls.__name__}--{node.name}",
-            domain="com.microsoft",
+            name=f"{self.__class__.__name__}--{node.name}",
+            domain="onnx_extended.ortops.optim.cuda",
         )
         return [new_node]

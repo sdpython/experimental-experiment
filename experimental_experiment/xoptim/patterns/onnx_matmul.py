@@ -7,7 +7,7 @@ from ...xbuilder.shape_helper import (
     compatible_dimensions,
     is_static_shape,
 )
-from .patterns_api import MatchResult, PatternOptimization
+from ..patterns_api import MatchResult, PatternOptimization
 
 
 class MatMulReshape2Of3Pattern(PatternOptimization):
@@ -18,9 +18,8 @@ class MatMulReshape2Of3Pattern(PatternOptimization):
     :class:`experimental_experiment.xoptim.patterns.onnx_reshape.Reshape2Of3Pattern`.
     """
 
-    @classmethod
     def same_size(
-        cls,
+        self,
         g: "GraphBuilderPatternOptimization",  # noqa: F821,
         sh1: Tuple[int, ...],
         sh2: Tuple[int, ...],
@@ -117,9 +116,8 @@ class MatMulReshape2Of3Pattern(PatternOptimization):
 
         return MatchResult(self, nodes, self.apply)
 
-    @classmethod
     def apply(
-        cls,
+        self,
         g: "GraphBuilder",  # noqa: F821
         node_left: NodeProto,
         node_right: NodeProto,
@@ -147,7 +145,7 @@ class MatMulReshape2Of3Pattern(PatternOptimization):
                 shape_name = g.make_initializer(
                     "", np.array(expected_shape, dtype=np.int64)
                 )
-                left_name = g.unique_name(f"{cls.__class__.__name__}L_{node.input[0]}")
+                left_name = g.unique_name(f"{self.__class__.__name__}L_{node.input[0]}")
                 res.append(
                     g.make_node("Reshape", [node.input[0], shape_name], [left_name])
                 )
@@ -166,7 +164,9 @@ class MatMulReshape2Of3Pattern(PatternOptimization):
                 shape_name = g.make_initializer(
                     "", np.array(expected_shape, dtype=np.int64)
                 )
-                right_name = g.unique_name(f"{cls.__class__.__name__}L_{node.input[0]}")
+                right_name = g.unique_name(
+                    f"{self.__class__.__name__}L_{node.input[0]}"
+                )
                 res.append(
                     g.make_node("Reshape", [node.input[1], shape_name], [right_name])
                 )
@@ -183,7 +183,7 @@ class MatMulReshape2Of3Pattern(PatternOptimization):
             previous_shape = shape_left[:-1] + (shape_right[-1],)
             new_shape = the_shape_left[:-1] + (the_shape_right[-1],)
             if previous_shape != new_shape:
-                new_name = g.unique_name(f"{cls.__class__.__name__}L_{node.output[0]}")
+                new_name = g.unique_name(f"{self.__class__.__name__}L_{node.output[0]}")
                 previous_shape_name = g.make_initializer(
                     "", np.array(previous_shape, dtype=np.int64)
                 )
@@ -316,9 +316,8 @@ class ReshapeMatMulReshapePattern(PatternOptimization):
             self.apply,
         )
 
-    @classmethod
     def apply(
-        cls,
+        self,
         g: "GraphBuilder",  # noqa: F821
         node_before_left: NodeProto,
         node_before_right: NodeProto,
@@ -334,7 +333,7 @@ class ReshapeMatMulReshapePattern(PatternOptimization):
             "MatMul",
             [node_before_left.input[0], node_before_right.input[0]],
             next_node.output,
-            name=f"{cls.__name__}--{node.name}",
+            name=f"{self.__class__.__name__}--{node.name}",
             doc_string=next_node.doc_string,
         )
         res.append(new_node)
@@ -385,9 +384,8 @@ class TransposeMatMulPattern(PatternOptimization):
 
         return MatchResult(self, nodes, self.apply, insert_at=node)
 
-    @classmethod
     def apply(
-        cls,
+        self,
         g: "GraphBuilder",  # noqa: F821
         node_before_left: Optional[NodeProto],
         node_before_right: Optional[NodeProto],
@@ -423,7 +421,7 @@ class TransposeMatMulPattern(PatternOptimization):
             "Gemm",
             inputs,
             node.output,
-            name=f"{cls.__name__}--{node.name}",
+            name=f"{self.__class__.__name__}--{node.name}",
             transA=transA,
             transB=transB,
             doc_string=node.doc_string,
@@ -518,9 +516,8 @@ class TransposeReshapeMatMulPattern(PatternOptimization):
             insert_at=node,
         )
 
-    @classmethod
     def apply(
-        cls,
+        self,
         g: "GraphBuilder",  # noqa: F821
         node: NodeProto,
         node_left: Optional[NodeProto],
@@ -539,7 +536,7 @@ class TransposeReshapeMatMulPattern(PatternOptimization):
             perm = list(range(g.get_rank(node.input[0])))
             perm[-2], perm[-1] = perm[-1], perm[-2]
             left_name = g.unique_name(
-                f"{cls.__class__.__name__}L_{node_left_tr.input[0]}"
+                f"{self.__class__.__name__}L_{node_left_tr.input[0]}"
             )
             res = [
                 g.make_node(
@@ -556,7 +553,7 @@ class TransposeReshapeMatMulPattern(PatternOptimization):
             perm = list(range(g.get_rank(node.input[1])))
             perm[-2], perm[-1] = perm[-1], perm[-2]
             right_name = g.unique_name(
-                f"{cls.__class__.__name__}L_{node_right_tr.input[0]}"
+                f"{self.__class__.__name__}L_{node_right_tr.input[0]}"
             )
             res = [
                 g.make_node(

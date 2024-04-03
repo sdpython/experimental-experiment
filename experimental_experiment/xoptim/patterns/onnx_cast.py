@@ -1,7 +1,7 @@
 import inspect
 from typing import List, Optional
 from onnx import NodeProto, TensorProto
-from .patterns_api import MatchResult, PatternOptimization
+from ..patterns_api import MatchResult, PatternOptimization
 
 
 class CastPattern(PatternOptimization):
@@ -32,13 +32,14 @@ class CastPattern(PatternOptimization):
 
         return MatchResult(self, [node], self.apply, insert_at=node)
 
-    @classmethod
-    def apply(cls, g: "GraphBuilder", node: NodeProto) -> List[NodeProto]:  # noqa: F821
+    def apply(
+        self, g: "GraphBuilder", node: NodeProto  # noqa: F821
+    ) -> List[NodeProto]:
         new_node = g.make_node(
             "Identity",
             node.input,
             node.output,
-            name=f"{cls.__name__}--{node.name}",
+            name=f"{self.__class__.__name__}--{node.name}",
             doc_string=node.doc_string,
         )
         return [new_node]
@@ -93,9 +94,8 @@ class CastCastBinaryPattern(PatternOptimization):
 
         return MatchResult(self, [left, right, node], self.apply, insert_at=node)
 
-    @classmethod
     def apply(
-        cls,
+        self,
         g: "GraphBuilder",  # noqa: F821
         left: NodeProto,
         right: NodeProto,
@@ -107,14 +107,14 @@ class CastCastBinaryPattern(PatternOptimization):
         new_node = g.make_node(
             node.op_type,
             [left.input[0], right.input[0]],
-            name=f"{cls.__name__}--{node.name}",
+            name=f"{self.__class__.__name__}--{node.name}",
         )
         cast_node = g.make_node(
             "Cast",
             new_node.output,
             node.output,
             to=to.i,
-            name=f"{cls.__name__}--{node.name}",
+            name=f"{self.__class__.__name__}--{node.name}",
             doc_string=node.doc_string,
         )
         return [new_node, cast_node]

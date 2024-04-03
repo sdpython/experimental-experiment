@@ -1,7 +1,7 @@
 import inspect
 from typing import List, Optional
 from onnx import NodeProto
-from ..patterns.patterns_api import MatchResult, PatternOptimization
+from ..patterns_api import MatchResult, PatternOptimization
 
 
 class SoftmaxGradPattern(PatternOptimization):
@@ -49,9 +49,8 @@ class SoftmaxGradPattern(PatternOptimization):
         nodes = [mul_node, node, next_mul_node, sub_node]
         return MatchResult(self, nodes, self.apply, insert_at=node)
 
-    @classmethod
     def apply(
-        cls,
+        self,
         g: "GraphBuilder",  # noqa: F821
         mul_node: NodeProto,
         reduce_node: NodeProto,
@@ -68,7 +67,7 @@ class SoftmaxGradPattern(PatternOptimization):
             mul_node.input,
             sub_node.output,
             axis=int(axis[0]),
-            name=f"{cls.__name__}",
+            name=f"{self.__class__.__name__}",
             doc_string=sub_node.doc_string,
             domain="com.microsoft",
         )

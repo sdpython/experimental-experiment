@@ -3,7 +3,7 @@ from typing import List, Optional
 from onnx import NodeProto
 from ...xbuilder._onnx_helper import element_wise_binary_op_types, unary_like_op_types
 from ...xbuilder.shape_helper import all_int
-from .patterns_api import MatchResult, PatternOptimization
+from ..patterns_api import MatchResult, PatternOptimization
 
 
 class ExpandPattern(PatternOptimization):
@@ -106,9 +106,8 @@ class ExpandBroadcastPattern(PatternOptimization):
 
         return MatchResult(self, [node, next_node], self.apply, insert_at=next_node)
 
-    @classmethod
     def apply(
-        cls, g: "GraphBuilder", node: NodeProto, next_node: NodeProto  # noqa: F821
+        self, g: "GraphBuilder", node: NodeProto, next_node: NodeProto  # noqa: F821
     ) -> List[NodeProto]:
         if next_node.input[0] == node.output[0]:
             inputs = [node.input[0], next_node.input[1]]
@@ -119,7 +118,7 @@ class ExpandBroadcastPattern(PatternOptimization):
                 next_node.op_type,
                 inputs,
                 next_node.output,
-                name=f"{cls.__name__}--{node.name}",
+                name=f"{self.__class__.__name__}--{node.name}",
                 doc_string=next_node.doc_string,
             )
         ]
@@ -161,19 +160,18 @@ class ExpandSwapPattern(PatternOptimization):
 
         return MatchResult(self, [node, next_node], self.apply, insert_at=node)
 
-    @classmethod
     def apply(
-        cls, g: "GraphBuilder", node: NodeProto, next_node: NodeProto  # noqa: F821
+        self, g: "GraphBuilder", node: NodeProto, next_node: NodeProto  # noqa: F821
     ) -> List[NodeProto]:
         # We need to create a new name for the intermediate results.
         # The optimizer cannot reuse an existing name if the new result
         # has a different shape.
-        new_name = g.unique_name(f"{cls.__class__.__name__}_{node.input[0]}")
+        new_name = g.unique_name(f"{self.__class__.__name__}_{node.input[0]}")
         unary = g.make_node(
             next_node.op_type,
             [node.input[0], *next_node.input[1:]],
             [new_name],
-            name=f"{cls.__name__}--{node.name}",
+            name=f"{self.__class__.__name__}--{node.name}",
             doc_string=next_node.doc_string,
         )
         unary.attribute.extend(next_node.attribute)
@@ -181,7 +179,7 @@ class ExpandSwapPattern(PatternOptimization):
             node.op_type,  # Expand
             [new_name, node.input[1]],
             [next_node.output[0]],
-            name=f"{cls.__name__}--{node.name}",
+            name=f"{self.__class__.__name__}--{node.name}",
             doc_string=node.doc_string,
         )
         return [unary, expand]
