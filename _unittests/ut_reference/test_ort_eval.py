@@ -72,7 +72,7 @@ class TestOrtEval(ExtTestCase):
         model = "dump_sdpa_dis_llama/dort-llama-sdpa-custom-no__1.onnx"
         inputs = "dump_sdpa_dis_llama/dort-llama-sdpa-custom-no__1.txt.pkl"
         if not os.path.exists(model) or not os.path.exists(inputs):
-            raise unittest.skipTest(f"Unable to find {model!r} and {inputs!r}.")
+            raise unittest.SkipTest(f"Unable to find {model!r} and {inputs!r}.")
         with open(inputs, "rb") as f:
             feeds = pickle.load(f)
         input_names, values, output_names = feeds
@@ -87,7 +87,13 @@ class TestOrtEval(ExtTestCase):
             str(aten_op_executor.execute_aten_operator_address()),
         )
 
-        ort_eval = OrtEval(model, providers="CUDA", verbose=11)
+        ort_eval = OrtEval(
+            model,
+            providers="CUDA",
+            verbose=11,
+            whole=True,
+            optimized_model_filepath=model + ".optimized.onnx",
+        )
         # ort_eval.run_dlpack(
         #    None, dict(zip(input_names, [t.detach().cpu().numpy() for t in values]))
         # )
