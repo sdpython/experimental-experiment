@@ -847,11 +847,12 @@ class GraphBuilderPatternOptimization:
             if remove_identity:
                 # remove unnecessary identity nodes
                 begin = time.perf_counter()
-                id_removed = self.builder.remove_identity_nodes()
+                id_removed, id_added = self.builder.remove_identity_nodes()
                 statistics.append(
                     dict(
                         pattern="remove_identity_nodes",
                         iteration=it,
+                        added=id_added,
                         removed=id_removed,
                         time_in=time.perf_counter() - begin,
                     )
@@ -882,5 +883,7 @@ class GraphBuilderPatternOptimization:
                 f"[GraphBuilderPatternOptimization.optimize] done after {last_it} iterations with "
                 f"{len(self.builder.nodes)} nodes in {duration:.3f}"
             )
+            msg = self.builder._compile_statistics(statistics)
+            print(msg)
 
         return statistics

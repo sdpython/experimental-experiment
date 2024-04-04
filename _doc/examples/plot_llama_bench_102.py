@@ -285,7 +285,7 @@ modeldf = list(set(df[model].dropna()))[0]
 title_prefix = (
     f"lower better\n"
     f"{parsed_args.model} - {ver} - mask{parsed_args.with_mask}"
-    f"\n<device>-<implementation>-<hidden-layers>-<backend>-(optimization)"
+    f"\n<device>-h<hidden-layers>-<implementation>-<backend>-(optimization)"
 )
 
 

@@ -31,17 +31,19 @@ class ExpandPattern(PatternOptimization):
         if shape != new_shape:
             return self.none(node, inspect.currentframe().f_lineno)
 
-        def apply(g: "GraphBuilder", node: NodeProto) -> List[NodeProto]:  # noqa: F821
-            new_node = g.make_node(
-                "Identity",
-                node.input,
-                node.output,
-                name=f"{self.__class__.__name__}--{node.name}",
-                doc_string=node.doc_string,
-            )
-            return [new_node]
+        return MatchResult(self, [node], self.apply, insert_at=node)
 
-        return MatchResult(self, [node], apply, insert_at=node)
+    def apply(
+        self, g: "GraphBuilder", node: NodeProto  # noqa: F821
+    ) -> List[NodeProto]:
+        new_node = g.make_node(
+            "Identity",
+            node.input,
+            node.output,
+            name=f"{self.__class__.__name__}--{node.name}",
+            doc_string=node.doc_string,
+        )
+        return [new_node]
 
 
 class ExpandBroadcastPattern(PatternOptimization):

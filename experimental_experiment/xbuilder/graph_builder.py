@@ -2593,15 +2593,17 @@ class GraphBuilder:
             )
 
         statistics = []
+        main_begin = time.perf_counter()
 
         _check(statistics, "A")
         if self.optimization_options.remove_identity:
             begin = time.perf_counter()
-            n = self.remove_identity_nodes()
+            nr, na = self.remove_identity_nodes()
             statistics.append(
                 dict(
                     pattern="remove_identity_nodes",
-                    removed=n,
+                    removed=nr,
+                    added=na,
                     time_in=time.perf_counter() - begin,
                 )
             )
@@ -2666,7 +2668,49 @@ class GraphBuilder:
             )
             _check(statistics, "G")
 
+        if self.verbose > 1:
+            duration = time.perf_counter() - main_begin
+            print(
+                f"[GraphBuilder] done with "
+                f"{len(self.nodes)} nodes in {duration:.3f}"
+            )
+            msg = self._compile_statistics(statistics)
+            print(msg)
+
         return statistics
+
+    def _compile_statistics(self, statistics: List[Dict[str, Any]]) -> str:
+        stats = {}
+        for obs in statistics:
+            pattern = obs["pattern"]
+            if pattern not in stats:
+                stats[pattern] = {
+                    "time_in": 0.0,
+                    "iteration": [],
+                    "match_index": [],
+                    "removed": 0,
+                    "added": 0,
+                    "instances": 0,
+                }
+            o = stats[pattern]
+            for k, v in obs.items():
+                if k == "pattern":
+                    continue
+                if k in {"time_in", "removed", "added", "instances"}:
+                    o[k] += v
+                    continue
+                o[k].append(v)
+
+        rows = []
+        for k, v in sorted(stats.items()):
+            line = (
+                f"    STAT {k} +{v['added']} -{v['removed']} "
+                f"#it={len(set(v['iteration']))} "
+                f"maxmatch={max(v['match_index']) if v['match_index'] else 0} "
+                f"i={v['instances']} - time={v['time_in']}"
+            )
+            rows.append(line)
+        return "\n".join(rows)
 
     def optimize_with_patterns(self) -> List[Dict[str, Any]]:
         """
@@ -2823,17 +2867,18 @@ class GraphBuilder:
         self.nodes = new_nodes
         return start - len(self.nodes)
 
-    def remove_identity_nodes(self) -> int:
+    def remove_identity_nodes(self) -> Tuple[int, int]:
         """
-        Removes identity nodes. Returns the number of removed nodes.
+        Removes identity nodes. Returns the number of removed nodes
+        and the number of added nodes.
         """
         # first pass: detect replacements
-        start = len(self.nodes)
         new_nodes = []
         input_names = set(i.name for i in self.inputs)
         output_names = set(i.name for i in self.outputs)
         replacements = {}
         replacements_rev = {}
+        removed = 0
         for node in self.nodes:
             if node.op_type != "Identity" or self.do_not_remove(node):
                 new_nodes.append(node)
@@ -2896,6 +2941,7 @@ class GraphBuilder:
                     f"replacement {k}->{v} is not possible because of "
                     f"[{v}->{replacements[v]}], old_name={old_name!r}, new_name={new_name!r}"
                 )
+            removed += 1
 
         # second pass: replacements in initializer
         for k, v in replacements.items():
@@ -2912,6 +2958,7 @@ class GraphBuilder:
 
         # third pass: replacements in node
         self.nodes = []
+        added = 0
         for node in new_nodes:
             repo = {o for o in node.output if o in replacements}
             repi = {o for o in node.input if o in replacements}
@@ -2935,12 +2982,14 @@ class GraphBuilder:
                     domain=node.domain,
                     name=node.name,
                 )
+                added += 1
+                removed += 1
                 new_node.attribute.extend(node.attribute)
                 self.nodes.append(new_node)
             else:
                 self.nodes.append(node)
 
-        return start - len(self.nodes)
+        return removed, added
 
     def insert_and_remove_nodes(
         self,
