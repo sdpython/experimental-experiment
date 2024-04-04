@@ -11,7 +11,7 @@ psutil
 pytest
 pytest-coverage
 ruff
-scikit-learn
+scikit-learn>=1.4.0
 skl2onnx
 sphinx
 sphinx-gallery

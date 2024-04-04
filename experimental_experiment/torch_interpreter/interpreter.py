@@ -829,7 +829,9 @@ class DynamoInterpreter:
         val = node.meta.get("val", None)
         if val is not None and isinstance(val, tuple):
             n_outputs = len(val)
-            output_names = [f"{node.name}#{i}" for i in range(n_outputs)]
+            output_names = [
+                ("" if val[i] is None else f"{node.name}#{i}") for i in range(n_outputs)
+            ]
         else:
             assert isinstance(
                 node.name, str

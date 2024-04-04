@@ -563,6 +563,9 @@ class GraphBuilder:
     def set_name(self, name: str):
         """Adds a name to the list of known names."""
         assert (
+            name != ""
+        ), f"Empty name {name!r} can be registered{self.get_debug_msg()}"
+        assert (
             name not in self._raise_list
         ), f"Name {name!r} is one of the name declared in the stop list{self.get_debug_msg()}"
 
@@ -1971,6 +1974,8 @@ class GraphBuilder:
 
         # add the node
         for o in node.output:
+            if o == "":
+                continue
             self.set_name(o)
         self.nodes.append(node)
 
@@ -2901,7 +2906,7 @@ class GraphBuilder:
             if repi or repo:
                 new_inputs = [replacements.get(i, i) for i in node.input]
                 new_outputs = [replacements.get(i, i) for i in node.output]
-                assert not (set(new_inputs) & set(new_outputs)), (
+                assert set(new_inputs) & set(new_outputs) in ({""}, set()), (
                     f"Node type {node.op_type}-{node.name} is incorrectly replaced "
                     f"{node.input}->{new_inputs} and {node.output}->{new_outputs}\n"
                     f"replacements are\n{pprint.pformat(replacements)}"

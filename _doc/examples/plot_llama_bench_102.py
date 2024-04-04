@@ -211,9 +211,7 @@ except BenchmarkError as e:
 #########################
 # Let's process the data.
 
-prefix = (
-    f"plot_{parsed_args.model}-{parsed_args.implementation}" f"{parsed_args.with_mask}"
-)
+prefix = f"plot_{parsed_args.model}-{parsed_args.with_mask}"
 
 if data_collected:
 
@@ -286,9 +284,8 @@ model = parsed_args.model
 modeldf = list(set(df[model].dropna()))[0]
 title_prefix = (
     f"lower better\n"
-    f"{parsed_args.model}-{parsed_args.implementation}-"
-    f"mask{parsed_args.with_mask}\n{ver}"
-    f"\n<device>-<implementation>-<hidden-layers>-<backend>"
+    f"{parsed_args.model} - {ver} - mask{parsed_args.with_mask}"
+    f"\n<device>-<implementation>-<hidden-layers>-<backend>-(optimization)"
 )
 
 
