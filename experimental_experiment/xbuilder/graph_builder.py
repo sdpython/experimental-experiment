@@ -5,7 +5,7 @@ from typing import Any, Dict, List, Optional, Sequence, Set, Tuple, Union
 import numpy as np
 import onnx.helper as oh
 import onnx.numpy_helper as onh
-from onnx.shape_inference import infer_shapes
+from onnx.shape_inference import infer_shapes as onnx_infer_shapes
 from onnx import (
     AttributeProto,
     FunctionProto,
@@ -186,8 +186,9 @@ class GraphBuilder:
             self.current_input = len(self.inputs)
             self._update_structures_with_proto(target_opset_or_existing_proto)
             self.constant_folding(convert_into_initializer=False)
-            if infer_shapes:
-                self._update_shape_types_with_proto(target_opset_or_existing_proto)
+            self._update_shape_types_with_proto(
+                target_opset_or_existing_proto, infer_shapes
+            )
         else:
             raise NotImplementedError(
                 f"{type(target_opset_or_existing_proto)} is not supported."
@@ -2496,9 +2497,35 @@ class GraphBuilder:
             )
 
         # restores the existing value_info
+        done = (
+            set(init.name for init in model.graph.initializer)
+            | set(i.name for i in model.graph.input)
+            | set(i.name for i in model.graph.output)
+        )
         for val in self.value_info:
             if self.has_name(val.name):
                 model.graph.value_info.append(val)
+                done.add(val.name)
+
+        # adding shape information
+        addition = []
+        for name in self._known_names:
+            if name in done or not self.has_type(name):
+                continue
+            if self.has_shape(name):
+                addition.append(
+                    oh.make_tensor_value_info(
+                        name, self.get_type(name), list(self.get_shape(name))
+                    )
+                )
+            elif self.has_rank(name):
+                addition.append(
+                    oh.make_tensor_value_info(
+                        name, self.get_type(name), [None] * self.get_rank(name)
+                    )
+                )
+        if addition:
+            model.graph.value_info.extend(addition)
         return model
 
     def io_names(self):
@@ -3058,13 +3085,20 @@ class GraphBuilder:
             self._make_node_set_type_shape(n)
         return memo
 
-    def _update_shape_types_with_proto(self, proto: ModelProto):
+    def _update_shape_types_with_proto(
+        self, proto: ModelProto, infer_shapes: bool = False
+    ):
         """
         Updates the shapes and types for an existing model.
+
+        :param proto: model proto
+        :param infer_shapes: infer shapes to fill information about type and shapes
         """
         assert isinstance(proto, ModelProto), f"Unexpected type {type(proto)} for proto"
-        new_proto = infer_shapes(proto)
+        new_proto = onnx_infer_shapes(proto) if infer_shapes else proto
 
+        if not hasattr(new_proto.graph, "value_info"):
+            return
         for val in new_proto.graph.value_info:
             itype = val.type.tensor_type.elem_type
             self.set_type(val.name, itype)
