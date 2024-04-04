@@ -1,3 +1,4 @@
+import os
 import copy
 import inspect
 import itertools
@@ -137,7 +138,9 @@ class TestOperatorsOnnxrt(ExtTestCase):
                 try:
                     result.sum().backward()
                 except FunctionNotFoundError as e:
-                    raise unittest.SkipTest(f"MISSING FOR BACKWARD {e}")
+                    if not os.environ.get("EXPDORAISE", False):
+                        raise unittest.SkipTest(f"MISSING FOR BACKWARD {e}")
+                    raise
 
                 l1 = list(model.parameters())
                 l2 = list(compiled_model.parameters())

@@ -13,6 +13,9 @@ class OrtEval:
     :param providers: providers
     :param options: session options
     :param verbose: verbosity
+    :param whole: run the whole model instead instead of node
+        by node
+    :param optimized_model_filepath: export the optimized graph
     """
 
     def __init__(
@@ -21,8 +24,29 @@ class OrtEval:
         providers: Optional[Union[str, List[str]]] = None,
         options: Optional["SessionOptions"] = None,  # noqa: F821
         verbose: int = 0,
+        whole: bool = False,
+        optimized_model_filepath: Optional[str] = None,
     ):
         self.session_options = options
+        if self.session_options is None:
+            import onnxruntime
+
+            self.session_options = onnxruntime.SessionOptions()
+        if optimized_model_filepath:
+            self.session_options.optimized_model_filepath = optimized_model_filepath
+        if verbose >= 30:
+            import onnxruntime
+
+            self.session_options.log_severity_level = 0
+            self.session_options.log_verbosity_level = 0
+            self.run_options = onnxruntime.RunOptions()
+            self.run_options.log_severity_level = 0
+            self.run_options.log_verbosity_level = 0
+        else:
+            import onnxruntime
+
+            self.run_options = onnxruntime.RunOptions()
+
         if providers is None or providers in ("cpu", "CPU"):
             providers = ["CPUExecutionProvider"]
         elif providers in ("cuda", "CUDA"):
@@ -37,6 +61,7 @@ class OrtEval:
         self.rt_inits_ = {init.name: to_array(init) for init in proto.graph.initializer}
         self.rt_nodes_ = list(self.proto.graph.node)
         self.verbose = verbose
+        self.whole = whole
 
         try:
             import torch
@@ -55,13 +80,6 @@ class OrtEval:
             torch.int64: np.int64,
             torch.bool: np.bool_,
         }
-
-        import onnxruntime
-
-        self.run_options = onnxruntime.RunOptions()
-        self.run_options.add_run_config_entry(
-            "disable_synchronize_execution_providers", "1"
-        )
 
     def _get_torch_dtype(self, dt: Any) -> "torch.dtype":  # noqa: F821
         if dt == np.bool_:
@@ -129,6 +147,20 @@ class OrtEval:
         :param feed_inputs: inputs
         :return: outputs
         """
+        if self.whole:
+            if "" in self._cache:
+                sess = self._cache[""]
+            else:
+                import onnxruntime
+
+                sess = onnxruntime.InferenceSession(
+                    self.proto.SerializeToString(),
+                    self.session_options,
+                    providers=self.providers,
+                )
+                self._cache[""] = sess
+            return sess.run(outputs, feed_inputs, run_options=self.run_options)
+
         if outputs is None:
             outputs = [o.name for o in self.proto.graph.output]
         results = self.rt_inits_.copy()
@@ -209,7 +241,7 @@ class OrtEval:
         if "" in feeds:
             feeds[""] = np.array([0], dtype=np.float32)
 
-        outputs = sess.run(None, feeds)
+        outputs = sess.run(None, feeds, run_options=self.run_options)
         return outputs
 
     def run_dlpack(
@@ -222,6 +254,40 @@ class OrtEval:
         :param feed_inputs: inputs
         :return: outputs
         """
+        if self.whole:
+            from onnxruntime.capi import _pybind_state as ORTC
+
+            if "" in self._cache:
+                sess = self._cache[""]
+            else:
+                import onnxruntime
+
+                sess = onnxruntime.InferenceSession(
+                    self.proto.SerializeToString(),
+                    self.session_options,
+                    providers=self.providers,
+                )
+                self._cache[""] = sess
+
+            input_names = [i.name for i in self.proto.graph.input]
+            output_names = [i.name for i in self.proto.graph.output]
+            inputs = [feed_inputs[i] for i in input_names]
+            ortvalues, output_devices = self._get_ortvalues_from_torch_tensors(
+                inputs, len(self.proto.graph.output)
+            )
+
+            ort_outputs = ORTC.OrtValueVector()
+            sess.run_with_ortvaluevector(
+                self.run_options,
+                input_names,
+                ortvalues,
+                output_names,
+                ort_outputs,
+                output_devices,
+            )
+            pth_outputs = self._ortvalues_to_torch_tensor(ort_outputs)
+            return pth_outputs
+
         if outputs is None:
             outputs = [o.name for o in self.proto.graph.output]
         if not hasattr(self, "rt_inits_torch_"):
@@ -280,6 +346,8 @@ class OrtEval:
     ) -> Tuple[Tuple["torch.Tensor", ...], Tuple["OrtDevice", ...], Any]:  # noqa: F821
         import torch
         from onnxruntime.capi import _pybind_state as ORTC
+        
+        tensors = tuple(t.cuda() for t in tensors)
 
         DEVICES = {
             -1: ORTC.OrtDevice(ORTC.OrtDevice.cpu(), ORTC.OrtDevice.default_memory(), 0)
