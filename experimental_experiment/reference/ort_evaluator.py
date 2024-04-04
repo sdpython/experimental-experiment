@@ -382,6 +382,7 @@ class OrtEval:
         self,
         tensors: Tuple["torch.Tensor", ...],  # noqa: F821
         n_outputs: int,
+        log_set: Optional[List[Any]] = None,
     ) -> Tuple[Tuple["torch.Tensor", ...], Tuple["OrtDevice", ...], Any]:  # noqa: F821
         import torch
         from onnxruntime.capi import _pybind_state as ORTC
@@ -418,20 +419,29 @@ class OrtEval:
             data_ptrs.append(tensor.data_ptr())
             d = tensor.get_device()
             if self.verbose > 10:
-                print(f"     < p={pos} d={d} dtype={dtypes[-1]} shape={tensor.shape}")
+                if log_set is None:
+                    print(
+                        f"     < p={pos} d={d} dtype={dtypes[-1]} shape={tensor.shape}"
+                    )
             devices.append(DEVICES[d])
             new_tensors.append(tensor)
             max_device = max(max_device, tensor.get_device())
 
+        if self.verbose > 10 and log_set:
+            for pos, tensor in enumerate(log_set):
+                if tensor is None:
+                    continue
+                d = tensor.get_device()
+                dt = self.TORCH_DTYPE_TO_NUMPY_DTYPE[tensor.dtype]
+                print(f"     < p={pos} d={d} dtype={dt} shape={tensor.shape}")
+
         ortvalues.push_back_batch(new_tensors, data_ptrs, dtypes, shapes, devices)
         output_devices = []
-        for _ in range(n_outputs):
+        for i in range(n_outputs):
             dev = DEVICES[max_device]
             output_devices.append(dev)
             if self.verbose > 10:
-                print(
-                    f"     > p={_} d={max_device} dtype={dtypes[_]} shape={shapes[_]}"
-                )
+                print(f"     > p={i} d={max_device}")
 
         return ortvalues, output_devices
 
@@ -443,7 +453,15 @@ class OrtEval:
 
         from torch._C import _from_dlpack
 
-        res = ortvalues.to_dlpacks(_from_dlpack)
+        if all(map(lambda i: ortvalues[i].has_value(), range(len(ortvalues)))):
+            res = ortvalues.to_dlpacks(_from_dlpack)
+        else:
+            res = []
+            for i in range(len(ortvalues)):
+                if ortvalues[i].has_value():
+                    res.append(_from_dlpack(ortvalues[i].to_dlpack()))
+                else:
+                    res.append(None)
         return tuple(res)
 
     def _run_dlpack(
@@ -463,6 +481,7 @@ class OrtEval:
 
         if self.incremental:
             # Inputs are the inputs of the model not the node.
+            former_inputs = inputs
             inputs = []
             input_names = []
             for i in self.proto.graph.input:
@@ -470,7 +489,7 @@ class OrtEval:
                 input_names.append(i.name)
 
             ortvalues, output_devices = self._get_ortvalues_from_torch_tensors(
-                inputs, len(node.output)
+                inputs, len(node.output), log_set=former_inputs
             )
 
             ort_outputs = ORTC.OrtValueVector()

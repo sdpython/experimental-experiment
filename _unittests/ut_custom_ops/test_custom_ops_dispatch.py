@@ -226,7 +226,7 @@ class TestCustomOpsDispatch(ExtTestCase):
                 target_opset=18,
                 dispatcher=dispatcher,
                 verbose=0,
-                optimize=True,
+                optimize=False,
                 **kwargs,
             ),
             # decompositions=get_decomposition_table(),
