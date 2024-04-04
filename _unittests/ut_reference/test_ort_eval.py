@@ -118,6 +118,56 @@ class TestOrtEval(ExtTestCase):
         self.assertIn("Reshape(xm, shape3) -> Z", out)
 
     @ignore_warnings(DeprecationWarning)
+    def test_ort_eval_dlpack_whole(self):
+        import torch
+
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("Unsqueeze", ["X", "zero"], ["xu1"]),
+                    oh.make_node("Unsqueeze", ["xu1", "un"], ["xu2"]),
+                    oh.make_node("Reshape", ["xu2", "shape1"], ["xm1"]),
+                    oh.make_node("Reshape", ["Y", "shape2"], ["xm2c"]),
+                    oh.make_node("Cast", ["xm2c"], ["xm2"], to=1),
+                    oh.make_node("MatMul", ["xm1", "xm2"], ["xm"]),
+                    oh.make_node("Reshape", ["xm", "shape3"], ["Z"]),
+                ],
+                "dummy",
+                [
+                    oh.make_tensor_value_info("X", TFLOAT, [32, 128]),
+                    oh.make_tensor_value_info("Y", TFLOAT, [3, 5, 128, 64]),
+                ],
+                [oh.make_tensor_value_info("Z", TFLOAT, [3, 5, 32, 64])],
+                [
+                    onh.from_array(np.array([0], dtype=np.int64), name="zero"),
+                    onh.from_array(np.array([1], dtype=np.int64), name="un"),
+                    onh.from_array(
+                        np.array([1, 32, 128], dtype=np.int64), name="shape1"
+                    ),
+                    onh.from_array(
+                        np.array([15, 128, 64], dtype=np.int64), name="shape2"
+                    ),
+                    onh.from_array(
+                        np.array([3, 5, 32, 64], dtype=np.int64), name="shape3"
+                    ),
+                ],
+            ),
+            ir_version=9,
+            opset_imports=[oh.make_opsetid("", 18)],
+        )
+        check_model(model)
+        feeds = {"X": self._range(32, 128), "Y": self._range(3, 5, 128, 64)}
+        ref = ExtendedReferenceEvaluator(model, verbose=10)
+        expected, out, _ = self.capture(lambda: ref.run(None, feeds)[0])
+        self.assertIn("Reshape(xm, shape3) -> Z", out)
+
+        feeds = {k: torch.Tensor(v) for k, v in feeds.items()}
+        ort_eval = OrtEval(model, verbose=10, whole=True)
+        got, out, _ = self.capture(lambda: ort_eval.run_dlpack(None, feeds)[0])
+        self.assertEqualArray(expected, got, atol=1e-4)
+        self.assertNotIn("Reshape(xm, shape3) -> Z", out)
+
+    @ignore_warnings(DeprecationWarning)
     def test_ort_eval_whole(self):
         model = oh.make_model(
             oh.make_graph(
@@ -161,8 +211,8 @@ class TestOrtEval(ExtTestCase):
 
         ort_eval = OrtEval(model, verbose=10, whole=True)
         got, out, _ = self.capture(lambda: ort_eval.run(None, feeds)[0])
-        self.assertEqualArray(expected, got)
-        self.assertIn("Reshape(xm, shape3) -> Z", out)
+        self.assertEqualArray(expected, got, atol=1e-4)
+        self.assertNotIn("Reshape(xm, shape3) -> Z", out)
 
     @ignore_warnings(DeprecationWarning)
     def test_debug_pkl(self):
