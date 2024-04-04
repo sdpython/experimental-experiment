@@ -61,12 +61,14 @@ class FuncModule(Module):
         rg = dtype == torch.float32
         val = torch.ones((1,), requires_grad=rg, dtype=dtype)
         self.ppp = Parameter(val, requires_grad=rg)
+        val2 = torch.ones((2,), requires_grad=rg, dtype=dtype)
+        self.ppp2 = Parameter(val2, requires_grad=rg)
         self.params = nn.ParameterList(list(params))
 
     def forward(self, *args):
         f_args = list(itertools.chain(args, self.params))
-        f_args[0] = f_args[0] + self.ppp
-        res = self.f(*f_args)
+        f_args[0] = f_args[0] * self.ppp
+        res = self.f(*f_args) * self.ppp2
         return res
 
 
@@ -75,15 +77,16 @@ class FuncModule0(Module):
         super().__init__()
         self.f = f
         self.ppp = Parameter(torch.Tensor([1]).to(torch.float32))
+        self.ppp2 = Parameter(torch.Tensor([2]).to(torch.float32))
 
     def forward(self, *args):
         if isinstance(args[0], tuple):
-            args = (tuple([args[0][0] + self.ppp, *args[0][1:]]),)
-            res = self.f(*args)
+            args = (tuple([args[0][0] * self.ppp, *args[0][1:]]),)
+            res = self.f(*args) * self.ppp2
             return res
         else:
-            args = tuple([args[0] + self.ppp, *args[1:]])
-            res = self.f(*args)
+            args = tuple([args[0] * self.ppp, *args[1:]])
+            res = self.f(*args) * self.ppp2
             return res
 
 
