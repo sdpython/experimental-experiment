@@ -15,6 +15,8 @@ class OrtEval:
     :param verbose: verbosity
     :param whole: run the whole model instead instead of node
         by node
+    :param incremental: run the model node by node, but for every node,
+        executes the graph up to that node
     :param optimized_model_filepath: export the optimized graph
     """
 
@@ -25,6 +27,7 @@ class OrtEval:
         options: Optional["SessionOptions"] = None,  # noqa: F821
         verbose: int = 0,
         whole: bool = False,
+        incremental: bool = False,
         optimized_model_filepath: Optional[str] = None,
     ):
         self.session_options = options
@@ -62,6 +65,11 @@ class OrtEval:
         self.rt_nodes_ = list(self.proto.graph.node)
         self.verbose = verbose
         self.whole = whole
+        self.incremental = incremental
+        assert not whole or not incremental, (
+            f"whole={whole} and incremental={incremental} "
+            f"cannot be both True at the same time."
+        )
 
         try:
             import torch
@@ -141,7 +149,8 @@ class OrtEval:
         self, outputs: Optional[List[str]], feed_inputs: Dict[str, Any]
     ) -> List[Any]:
         """
-        Runs the model. For
+        Runs the model.
+        It only works with :class:`numpy.array`.
 
         :param outputs: required outputs or None for all
         :param feed_inputs: inputs
@@ -181,7 +190,7 @@ class OrtEval:
                         f"feed_inputs has {sorted(feed_inputs)}."
                     )
             inputs = [(results[i] if i != "" else None) for i in node.input]
-            outputs = self._run(node, inputs)
+            outputs = self._run(node, inputs, results)
             for name, value in zip(node.output, outputs):
                 if name == "":
                     continue
@@ -196,7 +205,28 @@ class OrtEval:
                 )
         return [results[name] for name in output_names]
 
-    def _get_sess(self, node, inputs):
+    def _get_sess_incremental(
+        self, node: NodeProto
+    ) -> Tuple[ModelProto, "onnxruntime.InferenceSession"]:  # noqa: F821
+        import onnxruntime
+        from ..xbuilder import GraphBuilder, OptimizationOptions
+
+        builder = GraphBuilder(
+            self.proto, optimization_options=OptimizationOptions(patterns=None)
+        )
+        builder.select_outputs(node.output)
+        onx = builder.to_onnx()
+        sess = onnxruntime.InferenceSession(
+            onx.SerializeToString(), self.session_options, self.providers
+        )
+        return onx, sess
+
+    def _get_sess(
+        self, node: NodeProto, inputs: List[Any]
+    ) -> Tuple[ModelProto, "onnxruntime.InferenceSession"]:  # noqa: F821
+        if self.incremental:
+            return self._get_sess_incremental(node)
+
         import onnxruntime
 
         vinputs = [
@@ -226,7 +256,9 @@ class OrtEval:
         )
         return onx, sess
 
-    def _run(self, node: NodeProto, inputs: List[Any]) -> List[Any]:
+    def _run(
+        self, node: NodeProto, inputs: List[Any], results: Dict[str, Any]
+    ) -> List[Any]:
         """
         Runs a node.
         """
@@ -237,9 +269,15 @@ class OrtEval:
         else:
             self._cache[key] = onx, sess = self._get_sess(node, inputs)
 
-        feeds = dict(zip(node.input, inputs))
-        if "" in feeds:
-            feeds[""] = np.array([0], dtype=np.float32)
+        if self.incremental:
+            # Inputs are the inputs of the model not the node.
+            feeds = {}
+            for i in self.proto.graph.input:
+                feeds[i.name] = results[i.name]
+        else:
+            feeds = dict(zip(node.input, inputs))
+            if "" in feeds:
+                feeds[""] = np.array([0], dtype=np.float32)
 
         outputs = sess.run(None, feeds, run_options=self.run_options)
         return outputs
@@ -248,7 +286,8 @@ class OrtEval:
         self, outputs: Optional[List[str]], feed_inputs: Dict[str, Any]
     ) -> List[Any]:
         """
-        Runs the model. For
+        Runs the model using :epkg:`run_with_ortvaluevector`.
+        It only works with :class:`torch.Tensor`.
 
         :param outputs: required outputs or None for all
         :param feed_inputs: inputs
@@ -324,7 +363,7 @@ class OrtEval:
                         f"feed_inputs has {sorted(feed_inputs)}."
                     )
             inputs = [(results[i] if i != "" else None) for i in node.input]
-            outputs = self._run_dlpack(node, inputs)
+            outputs = self._run_dlpack(node, inputs, results)
             for name, value in zip(node.output, outputs):
                 if name == "":
                     continue
@@ -407,7 +446,9 @@ class OrtEval:
         res = ortvalues.to_dlpacks(_from_dlpack)
         return tuple(res)
 
-    def _run_dlpack(self, node: NodeProto, inputs: List[Any]) -> List[Any]:
+    def _run_dlpack(
+        self, node: NodeProto, inputs: List[Any], results: Dict[str, Any]
+    ) -> List[Any]:
         """
         Runs a node.
         """
@@ -419,6 +460,30 @@ class OrtEval:
             sess = self._cache[key][1]
         else:
             self._cache[key] = onx, sess = self._get_sess(node, inputs)
+
+        if self.incremental:
+            # Inputs are the inputs of the model not the node.
+            inputs = []
+            input_names = []
+            for i in self.proto.graph.input:
+                inputs.append(results[i.name])
+                input_names.append(i.name)
+
+            ortvalues, output_devices = self._get_ortvalues_from_torch_tensors(
+                inputs, len(node.output)
+            )
+
+            ort_outputs = ORTC.OrtValueVector()
+            sess.run_with_ortvaluevector(
+                self.run_options,
+                input_names,
+                ortvalues,
+                node.output,
+                ort_outputs,
+                output_devices,
+            )
+            pth_outputs = self._ortvalues_to_torch_tensor(ort_outputs)
+            return pth_outputs
 
         ortvalues, output_devices = self._get_ortvalues_from_torch_tensors(
             inputs, len(node.output)

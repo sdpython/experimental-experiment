@@ -131,6 +131,7 @@ epkg_dictionary = {
     "opsets": "ttps://onnx.ai/onnx/intro/concepts.html#what-is-an-opset-version",
     "python": "https://www.python.org/",
     "pytorch": "https://pytorch.org/",
+    "run_with_ortvaluevector": "https://github.com/microsoft/onnxruntime/blob/main/onnxruntime/python/onnxruntime_inference_collection.py#L339",
     "scikit-learn": "https://scikit-learn.org/stable/",
     "scipy": "https://scipy.org/",
     "sklearn-onnx": "https://onnx.ai/sklearn-onnx/",

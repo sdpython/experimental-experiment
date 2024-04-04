@@ -13,6 +13,7 @@ from onnx import (
     ModelProto,
     NodeProto,
     TensorProto,
+    TypeProto,
 )
 from experimental_experiment.reference import ExtendedReferenceEvaluator
 from .shape_helper import (
@@ -1647,6 +1648,43 @@ class GraphBuilder:
         if elem_type:
             self.set_type(name, elem_type)
         return name
+
+    def select_outputs(self, output_names: List[str]):
+        """
+        Selects new outputs. The type is assumed to be unknown.
+        The method only wipes out the outputs to replace them by
+        others. It assumes the unused nodes are removed afterwards.
+
+        :param output_names: new outputs
+        """
+        new_outputs = []
+        for name in output_names:
+            if self.has_type(name) and self.has_rank(name):
+                if self.has_shape(name):
+                    out = oh.make_tensor_value_info(
+                        name, self.get_type(name), self.get_shape(name)
+                    )
+                    if self.verbose:
+                        print(
+                            f"[GraphBuilder-{self._hash()}.make_tensor_output] "
+                            f"{name}[{self.get_type(name)}:R{self.get_shape(name)}]"
+                        )
+                else:
+                    out = oh.make_tensor_value_info(
+                        name, self.get_type(name), [None] * self.get_rank(name)
+                    )
+                    if self.verbose:
+                        print(
+                            f"[GraphBuilder-{self._hash()}.make_tensor_output] "
+                            f"{name}[{self.get_type(name)}:R{self.get_rank(name)}]"
+                        )
+            else:
+                out = oh.make_value_info(name, TypeProto())
+                if self.verbose:
+                    print(f"[GraphBuilder-{self._hash()}.make_tensor_output] {name}")
+            new_outputs.append(out)
+
+        self.outputs = new_outputs
 
     def verify_shape(
         self,
