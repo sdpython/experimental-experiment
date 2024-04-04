@@ -43,7 +43,7 @@ parsed_args = get_parsed_args(
     check=(0, "just check the script is working, ignores all other parameters"),
     config=("medium", "configuration to use, default or medium"),
     patterns=("none,default,default+onnxruntime", "optimization patterns to use"),
-    implementation=("eager", "eager or sdpa"),
+    implementation=("eager", "eager or sdpa or both values comma separated value"),
     with_mask=(1, "with or without a second input (mask"),
     disable_pattern=("none", "pattern or patterns to disable"),
     expose="backend,device,num_hidden_layers,mixed,scipt_name,repeat,"
@@ -111,8 +111,8 @@ def make_config(
                 return None
 
     if pattern == "none":
-        opt = dict(disable_pattern="default")
-    elif pattern in ("default", "default+onnxruntime"):
+        opt = dict(enable_pattern="default", disable_pattern="default")
+    elif pattern in "default" or "+" in pattern:
         opt = dict(enable_pattern=pattern)
     else:
         raise AssertionError(f"unexpected value for pattern={pattern!r}")
@@ -135,6 +135,7 @@ if parsed_args.check not in (1, "1"):
         mixed,
         dynamic,
         pattern,
+        impl,
     ) in itertools.product(
         parsed_args.backend.split(","),
         parsed_args.device.split(","),
@@ -142,6 +143,7 @@ if parsed_args.check not in (1, "1"):
         list(map(int, parsed_args.mixed.split(","))),
         list(map(int, parsed_args.dynamic.split(","))),
         parsed_args.patterns.split(","),
+        parsed_args.implementation.split(","),
     ):
         if mixed == 1 and device == "cpu":
             continue
@@ -161,7 +163,7 @@ if parsed_args.check not in (1, "1"):
                 pattern=pattern,
                 disable_pattern=parsed_args.disable_pattern,
                 existing=configs,
-                implementation=parsed_args.implementation,
+                implementation=impl,
                 with_mask=parsed_args.with_mask,
             )
         )
@@ -171,7 +173,7 @@ else:
     configs = [
         dict(
             model=parsed_args.model,
-            backend="ort",
+            backend="custom",
             device=device,
             num_hidden_layers=1,
             repeat=1,
@@ -216,16 +218,19 @@ prefix = (
 if data_collected:
 
     def clean_pattern(s):
-        if "+default" in s:
-            s = s.replace("ConstantOfShapeScatterND", "")
         s = s.replace("+default-default", "")
         return s
 
     def make_legend(row):
         row = row.to_dict()
-        val = [row["device"], row["backend"], f"h{row['num_hidden_layers']}"]
+        val = [
+            row["device"],
+            f"h{row['num_hidden_layers']}",
+            row["implementation"],
+            row["backend"],
+        ]
         if row["mixed"]:
-            val.append("mixed")
+            val.append("mix")
         if row["dynamic"]:
             val.append("dyn")
         if "patterns" in row and row["patterns"] and "nan" not in str(row["patterns"]):
@@ -238,9 +243,13 @@ if data_collected:
     df = df.drop(["OUTPUT", "ERROR"], axis=1)
     df["legend"] = df.apply(make_legend, axis=1)
     df["time"] = df["time"].astype(float)
-    min_eager = df[df.legend.str.contains("eager")]["time"].dropna().min()
-    df["increase"] = df["time"] / min_eager - 1
-    # df["ERROR"] = df["ERROR"].apply(lambda s: s.replace("\n", " "))
+    df_eager = df[(df["implementation"] == "eager") & (df["backend"] == "eager")][
+        "time"
+    ].dropna()
+    if df_eager.shape[0] > 0:
+        min_eager = df_eager.min()
+        df["increase"] = df["time"] / min_eager - 1
+        # df["ERROR"] = df["ERROR"].apply(lambda s: s.replace("\n", " "))
     filename = f"plot_{prefix}_bench_with_cmd.csv"
     df.to_csv(filename, index=False)
 
@@ -276,7 +285,10 @@ ver = f"{torch_version[0]} - {transformers_version[0]}"
 model = parsed_args.model
 modeldf = list(set(df[model].dropna()))[0]
 title_prefix = (
-    f"{parsed_args.model}-{parsed_args.implementation}-" f"mask{parsed_args.with_mask}"
+    f"lower better\n"
+    f"{parsed_args.model}-{parsed_args.implementation}-"
+    f"mask{parsed_args.with_mask}\n{ver}"
+    f"\n<device>-<implementation>-<hidden-layers>-<backend>"
 )
 
 
@@ -284,9 +296,7 @@ if data_collected:
     fig, ax = plt.subplots(1, 1, figsize=(12, df.shape[0] // 3 + 1))
 
     df = df.sort_values("time").set_index("legend")
-    df[["warmup_time"]].plot.barh(
-        ax=ax, title=f"lower better\n{title_prefix}\nwarmup time\n{ver}"
-    )
+    df[["warmup_time"]].plot.barh(ax=ax, title=f"warmup time\n{title_prefix}")
     ax.grid(True)
 
     fig.tight_layout()
@@ -298,9 +308,7 @@ if data_collected:
 if data_collected:
     fig, ax = plt.subplots(1, 1, figsize=(12, df.shape[0] // 3 + 1))
 
-    df[["time"]].plot.barh(
-        ax=ax, title=f"lower better\n{title_prefix}\niteration time\n{ver}"
-    )
+    df[["time"]].plot.barh(ax=ax, title=f"computation time\n{title_prefix}")
     mi, ma = df["time"].min(), df["time"].max()
     mi = mi - (ma - mi) / 10
     ax.set_xlim(left=mi)
@@ -315,9 +323,7 @@ if data_collected:
 if data_collected:
     fig, ax = plt.subplots(1, 1, figsize=(12, df.shape[0] // 3 + 1))
 
-    df[["increase"]].plot.barh(
-        ax=ax, title=f"lower better\n{title_prefix}\ncomparison to eager %"
-    )
+    df[["increase"]].plot.barh(ax=ax, title=f"comparison to eager %\n{title_prefix}")
     ax.grid(True)
 
     fig.tight_layout()

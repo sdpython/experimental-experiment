@@ -1,10 +1,138 @@
 import os
 from typing import Any, Dict, List, Optional, Tuple, Union
+import numpy as np
 from ._dort_cmd_common_models import (
     _create_configuration_for_benchmark_llama,
     _create_configuration_for_benchmark_mistral,
     _create_configuration_for_benchmark_phi,
 )
+
+
+def get_fused_aten_ops_dispatcher():
+    """
+    Returns a dispatcher with additional converting function to
+    convert fused operators into ATen ops onnxruntime can call.
+    """
+    from ..torch_interpreter import Dispatcher
+
+    def onnx_scaled_dot_product_efficient_attention(
+        g: "GraphBuilder",  # noqa: F821
+        sts: Dict[str, Any],
+        outputs: List[str],
+        query,
+        key,
+        value,
+        attn_bias,
+        compute_log_sumexp: bool,
+        dropout_p: float,
+        is_causal: bool,
+        scale: float = 1.0,
+        **kwargs,
+    ):
+        assert (
+            len(outputs) == 4
+        ), f"Unexpected number of outputs {outputs}{g.get_debug_msg()}"
+        assert len(kwargs) == 0, (
+            f"Unexpected kwargs {kwargs} in "
+            f"onnx_scaled_dot_product_efficient_attention{g.get_debug_msg()}"
+        )
+        # itype = g.get_type(value)
+        # dtype = tensor_dtype_to_np_dtype(itype)
+        t_compute_log_sumexp = g.make_initializer(
+            "", np.array(compute_log_sumexp, dtype=np.bool_)
+        )
+        t_dropout_p = g.make_initializer("", np.array(dropout_p, dtype=np.float32))
+        t_is_causal = g.make_initializer("", np.array(is_causal, dtype=np.bool_))
+        t_scale = g.make_initializer("", np.array(scale or 1.0, dtype=np.float32))
+        output, log_sumexp, philox_seed, philox_offset = g.make_node(
+            "ATen",
+            [
+                query,
+                key,
+                value,
+                attn_bias or "",
+                t_compute_log_sumexp,
+                t_dropout_p,
+                t_is_causal,
+                t_scale,
+            ],
+            outputs=outputs,
+            operator="_scaled_dot_product_efficient_attention",
+            domain="org.pytorch.aten",
+            name="scaled_dot_product_efficient_attention",
+        )
+        g.add_domain("org.pytorch.aten")
+        return output, log_sumexp, philox_seed, philox_offset
+
+    def onnx_scaled_dot_product_attention_backward(
+        g: "GraphBuilder",  # noqa: F821
+        sts: Dict[str, Any],
+        outputs: List[str],
+        grad,
+        query,
+        key,
+        value,
+        attn_bias,
+        output,
+        logsumexp,
+        philox_seed,
+        philox_offset,
+        dropout_p,
+        grad_input_mask,
+        is_causal: bool,
+        scale: float = 1.0,
+        **kwargs,
+    ):
+        assert (
+            len(outputs) == 4
+        ), f"Unexpected number of outputs {outputs}{g.get_debug_msg()}"
+        assert len(kwargs) == 0, (
+            f"Unexpected kwargs {kwargs} in "
+            f"onnx_scaled_dot_product_attention_backward{g.get_debug_msg()}"
+        )
+        t_scale = g.make_initializer("", np.array(scale or 1.0, dtype=np.float32))
+        t_dropout_p = g.make_initializer("", np.array(dropout_p, dtype=np.float32))
+        t_is_causal = g.make_initializer("", np.array(is_causal, dtype=np.bool_))
+        t_grad_input_mask = g.make_initializer(
+            "", np.array(grad_input_mask, dtype=np.int64)
+        )
+        # onnxruntime fails with type inference failed
+        # Let's add some Cast even if not needed.
+        dt = g.get_type(grad)
+        helper = ",".join(map(str, [dt, dt, dt, dt]))
+        node_name = f"scaled_dot_product_attention_backward[{helper}]"
+        grad_query, grad_key, grad_value, grad_attn_bias = g.make_node(
+            "ATen",
+            [
+                grad,
+                query,
+                key,
+                value,
+                attn_bias or "",
+                output,
+                logsumexp,
+                philox_seed,
+                philox_offset,
+                t_dropout_p,
+                t_grad_input_mask,
+                t_is_causal,
+                t_scale,
+            ],
+            outputs=outputs,
+            operator="_scaled_dot_product_efficient_attention_backward",
+            domain="org.pytorch.aten",
+            name=node_name,
+        )
+        g.add_domain("org.pytorch.aten")
+        return grad_query, grad_key, grad_value, grad_attn_bias
+
+    dispatcher = Dispatcher(
+        {
+            "_scaled_dot_product_efficient_attention_default": onnx_scaled_dot_product_efficient_attention,
+            "_scaled_dot_product_efficient_attention_backward_default": onnx_scaled_dot_product_attention_backward,
+        }
+    )
+    return dispatcher
 
 
 def create_compiled_model(
@@ -19,6 +147,7 @@ def create_compiled_model(
     rename_inputs: bool = True,
     dump_prefix: Optional[str] = None,
     optimize: bool = True,
+    use_fused_aten_ops: bool = False,
 ) -> Any:
     """
     Creates the compilrf model.
@@ -34,6 +163,8 @@ def create_compiled_model(
     :param rename_inputs: rename inputs into ``input_{i}``
     :param dump_prefix: dumps the models (backend, custom and debug)
     :param optimize: enable optimizations
+    :param use_fused_aten_ops: use fused opetor when converting the model,
+        it only works the backend custom
     :return: compiled model
     """
     import torch
@@ -46,6 +177,19 @@ def create_compiled_model(
         onnx_custom_backend,
         onnx_debug_backend,
     )
+
+    if use_fused_aten_ops and backend in {"ort", "custom", "backort", "plug"}:
+        from onnxruntime.training.ortmodule.torch_cpp_extensions import aten_op_executor
+        from onnxruntime.capi import _pybind_state as _C
+
+        _C.register_aten_op_executor(
+            str(aten_op_executor.is_tensor_argument_address()),
+            str(aten_op_executor.execute_aten_operator_address()),
+        )
+
+        dispatcher = get_fused_aten_ops_dispatcher()
+    else:
+        dispatcher = None
 
     if backend == "ort":
         assert (
@@ -93,6 +237,7 @@ def create_compiled_model(
                 rename_inputs=rename_inputs,
                 dump_prefix=dump_prefix,
                 optimize=optimize,
+                dispatcher=dispatcher,
                 **kwargs,
             ),
             decompositions=get_decomposition_table(),
@@ -119,6 +264,7 @@ def create_compiled_model(
                 dump_prefix=dump_prefix,
                 optimize=optimize,
                 exporter="dynamo",
+                dispatcher=dispatcher,
                 **kwargs,
             ),
             decompositions=get_decomposition_table_dynamo(),
@@ -145,6 +291,7 @@ def create_compiled_model(
                 verbose=verbose,
                 dump_prefix=dump_prefix,
                 optimize=optimize,
+                dispatcher=dispatcher,
                 **kwargs,
             ),
             decompositions=get_decomposition_table(),

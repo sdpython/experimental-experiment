@@ -110,6 +110,7 @@ compiled_model = create_compiled_model(
     enable_pattern=enable_pattern,
     disable_pattern=disable_pattern,
     optimize=optimize,
+    use_fused_aten_ops=args.implementation == "sdpa",
 )
 
 

@@ -23,6 +23,7 @@ class TestCustomOpsDispatch(ExtTestCase):
         from torch._dynamo.backends.common import aot_autograd
         from experimental_experiment.torch_interpreter import Dispatcher
         from experimental_experiment.torch_dynamo import onnx_custom_backend
+        from experimental_experiment.torch_dynamo import get_decomposition_table
 
         @contextlib.contextmanager
         def dump_onnx(prefix: str, folder: Optional[str] = None, clean: bool = False):
@@ -226,10 +227,10 @@ class TestCustomOpsDispatch(ExtTestCase):
                 target_opset=18,
                 dispatcher=dispatcher,
                 verbose=0,
-                optimize=False,
+                optimize=True,
                 **kwargs,
             ),
-            # decompositions=get_decomposition_table(),
+            decompositions=get_decomposition_table(),
         )
 
         #
