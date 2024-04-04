@@ -91,8 +91,8 @@ class TestOrtEval(ExtTestCase):
             model,
             providers="CUDA",
             verbose=11,
-            whole=True,
-            optimized_model_filepath=model + ".optimized.onnx",
+            # whole=True,
+            # optimized_model_filepath=model + ".optimized.onnx",
         )
         # ort_eval.run_dlpack(
         #    None, dict(zip(input_names, [t.detach().cpu().numpy() for t in values]))

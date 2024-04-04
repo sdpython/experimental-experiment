@@ -346,6 +346,8 @@ class OrtEval:
     ) -> Tuple[Tuple["torch.Tensor", ...], Tuple["OrtDevice", ...], Any]:  # noqa: F821
         import torch
         from onnxruntime.capi import _pybind_state as ORTC
+        
+        tensors = tuple(t.cuda() for t in tensors)
 
         DEVICES = {
             -1: ORTC.OrtDevice(ORTC.OrtDevice.cpu(), ORTC.OrtDevice.default_memory(), 0)
