@@ -221,7 +221,9 @@ class DynamoInterpreter:
         output = declared[0]
         if hasattr(output, "name"):
             output = output.name
-            self.builder.make_node("Identity", [output], [output_name], check=False)
+            self.builder.make_node(
+                "Identity", [output], [output_name], check=False, name=".output"
+            )
             outputs = [(output, output_name)]
         else:
             outputs = []
@@ -238,10 +240,14 @@ class DynamoInterpreter:
                 if a_name is None:
                     # the gradient may need unused output
                     o = f"{output_name}_NONE_{i}"
-                    self.builder.make_node("Constant", [], [o], value_float=0.0)
+                    self.builder.make_node(
+                        "Constant", [], [o], value_float=0.0, name=".output"
+                    )
                     outputs.append((None, o))
                 else:
-                    self.builder.make_node("Identity", [a_name], [o], check=False)
+                    self.builder.make_node(
+                        "Identity", [a_name], [o], check=False, name=".output"
+                    )
                     outputs.append((a_name, o))
 
         val = node.meta.get("val", None)
@@ -596,7 +602,10 @@ class DynamoInterpreter:
                     "", np.array(index, dtype=np.int64)
                 )
                 res = self.builder.make_node(
-                    "SequenceAt", [result_name, tpos], [node.name]
+                    "SequenceAt",
+                    [result_name, tpos],
+                    [node.name],
+                    name="getitemB_tuple",
                 )
                 if not sts:
                     info = self.builder.get_sequence_info(result_name)
@@ -865,7 +874,9 @@ class DynamoInterpreter:
                     f"Unexpected res={res}, output_names={output_names}, node.name={node.name}"
                     f"{self.builder.get_debug_msg()}"
                 )
-                self.builder.make_node("Identity", [res], [node.name])
+                self.builder.make_node(
+                    "Identity", [res], [node.name], name="_check_output_name"
+                )
                 res = node.name
         else:
             raise NotImplementedError(

@@ -212,7 +212,7 @@ class SwitchOrderBinaryPattern(PatternOptimization):
 
         return MatchResult(self, nodes, self.apply, insert_at=node)
 
-    def _align_shape(cls, sh: DYNAMIC_SHAPE, rk: int) -> DYNAMIC_SHAPE:
+    def _align_shape(self, sh: DYNAMIC_SHAPE, rk: int) -> DYNAMIC_SHAPE:
         """
         Aligns shapes to the same size.
         """
@@ -221,7 +221,7 @@ class SwitchOrderBinaryPattern(PatternOptimization):
         return (1,) * (rk - len(sh)) + sh
 
     def switch_order(
-        cls,
+        self,
         shape_left: DYNAMIC_SHAPE,
         shape_right: DYNAMIC_SHAPE,
         shape_before_left: DYNAMIC_SHAPE,
@@ -242,7 +242,7 @@ class SwitchOrderBinaryPattern(PatternOptimization):
         The function returns the case.
         """
         if side == 1:
-            return cls.switch_order(
+            return self.switch_order(
                 shape_right, shape_left, shape_before_left, shape_before_right, 0
             )
 
@@ -274,10 +274,10 @@ class SwitchOrderBinaryPattern(PatternOptimization):
 
         # Ranks cannot be used to determine if switch is recommended.
         rk = max(cases)
-        # shape_left = cls._align_shape(shape_left, rk)
-        shape_right = cls._align_shape(shape_right, rk)
-        shape_before_left = cls._align_shape(shape_before_left, rk)
-        shape_before_right = cls._align_shape(shape_before_right, rk)
+        # shape_left = self._align_shape(shape_left, rk)
+        shape_right = self._align_shape(shape_right, rk)
+        shape_before_left = self._align_shape(shape_before_left, rk)
+        shape_before_right = self._align_shape(shape_before_right, rk)
 
         for b, c, a in zip(shape_before_left, shape_before_right, shape_right):
             if b == c == a:
@@ -300,7 +300,7 @@ class SwitchOrderBinaryPattern(PatternOptimization):
         return 0
 
     def apply(
-        cls,
+        self,
         g: "GraphBuilder",  # noqa: F821
         node: NodeProto,
         node_left: NodeProto,
@@ -318,7 +318,7 @@ class SwitchOrderBinaryPattern(PatternOptimization):
         before_left = g.get_shape(other_node.input[0])
         before_right = g.get_shape(other_node.input[1])
 
-        case = cls.switch_order(
+        case = self.switch_order(
             shape_left, shape_right, before_left, before_right, side
         )
         assert case in (1, 2), (
@@ -338,31 +338,55 @@ class SwitchOrderBinaryPattern(PatternOptimization):
         if side == 0:
             B, C, A = other_node.input[0], other_node.input[1], node.input[1]
             if case == 1:
-                op1 = g.make_node(op_type, [B, A])
+                op1 = g.make_node(
+                    op_type, [B, A], name=f"{self.__class__.__name__}--{node.name}"
+                )
                 op2 = g.make_node(
-                    op_type, [op1.output[0], C], [final], doc_string=node.doc_string
+                    op_type,
+                    [op1.output[0], C],
+                    [final],
+                    doc_string=node.doc_string,
+                    name=f"{self.__class__.__name__}--{node.name}",
                 )
                 return [op1, op2]
 
             # case 2
-            op1 = g.make_node(op_type, [C, A])
+            op1 = g.make_node(
+                op_type, [C, A], name=f"{self.__class__.__name__}--{node.name}"
+            )
             op2 = g.make_node(
-                op_type, [op1.output[0], B], [final], doc_string=node.doc_string
+                op_type,
+                [op1.output[0], B],
+                [final],
+                doc_string=node.doc_string,
+                name=f"{self.__class__.__name__}--{node.name}",
             )
             return [op1, op2]
 
         # side 1
         B, C, A = other_node.input[0], other_node.input[1], node.input[0]
         if case == 1:
-            op1 = g.make_node(op_type, [B, A])
+            op1 = g.make_node(
+                op_type, [B, A], name=f"{self.__class__.__name__}--{node.name}"
+            )
             op2 = g.make_node(
-                op_type, [op1.output[0], C], [final], doc_string=node.doc_string
+                op_type,
+                [op1.output[0], C],
+                [final],
+                doc_string=node.doc_string,
+                name=f"{self.__class__.__name__}--{node.name}",
             )
             return [op1, op2]
 
         # case 2
-        op1 = g.make_node(op_type, [C, A])
+        op1 = g.make_node(
+            op_type, [C, A], name=f"{self.__class__.__name__}--{node.name}"
+        )
         op2 = g.make_node(
-            op_type, [op1.output[0], B], [final], doc_string=node.doc_string
+            op_type,
+            [op1.output[0], B],
+            [final],
+            doc_string=node.doc_string,
+            name=f"{self.__class__.__name__}--{node.name}",
         )
         return [op1, op2]

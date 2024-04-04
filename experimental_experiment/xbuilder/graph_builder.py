@@ -1541,13 +1541,21 @@ class GraphBuilder:
         if self.current_input < len(self.input_names):
             # The input needs to be renamed, an identity node is added.
             input_name = self.input_names[self.current_input]
-            self.make_node("Identity", [input_name], [name], check=False)
+            self.make_node(
+                "Identity", [input_name], [name], check=False, name="make_tensor_input"
+            )
         else:
             if is_dimension:
                 # The convention is to have _dim_ in the name to tell
                 # it is a dimension.
                 input_name = f"{name}_dim_"
-                self.make_node("Identity", [input_name], [name], check=False)
+                self.make_node(
+                    "Identity",
+                    [input_name],
+                    [name],
+                    check=False,
+                    name="make_tensor_input",
+                )
             else:
                 self.input_names.append(name)
                 input_name = name
@@ -1831,6 +1839,10 @@ class GraphBuilder:
         :param kwargs: additional attributes to add the node
         :return: output names
         """
+        assert name is not None and not name.startswith("None"), (
+            f"It is good practice to give every node a name so that is "
+            f"easier to see where this node is created but name={name!r}."
+        )
         assert (
             not kwargs or not attributes
         ), f"Only attributes or kwargs can be filled for node {op_type!r}."

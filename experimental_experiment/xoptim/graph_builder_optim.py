@@ -515,6 +515,10 @@ class GraphBuilderPatternOptimization:
         :param kwargs: other attributes
         :return: a node
         """
+        assert name is not None and not name.startswith("None"), (
+            f"It is good practice to give every node a name so that is "
+            f"easier to see where this node is created but name={name!r}."
+        )
         name = self.builder.unique_node_name(name)
         if isinstance(outputs, int):
             if outputs == 1:

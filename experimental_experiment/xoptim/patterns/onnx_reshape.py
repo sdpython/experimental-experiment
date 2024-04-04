@@ -225,7 +225,12 @@ class Reshape2Of3Pattern(PatternOptimization):
         if node_left is None:
             left_name = g.unique_name(f"{self.__class__.__name__}L_{node.input[0]}")
             res.append(
-                g.make_node("Reshape", [node.input[0], final_shape_name], [left_name])
+                g.make_node(
+                    "Reshape",
+                    [node.input[0], final_shape_name],
+                    [left_name],
+                    name=f"{self.__class__.__name__}--{node.name}",
+                )
             )
         elif g.is_used_more_than_once(node_left.output[0]):
             res.append(node_left)
@@ -237,7 +242,12 @@ class Reshape2Of3Pattern(PatternOptimization):
         if node_right is None:
             right_name = g.unique_name(f"{self.__class__.__name__}R_{node.input[1]}")
             res.append(
-                g.make_node("Reshape", [node.input[1], final_shape_name], [right_name])
+                g.make_node(
+                    "Reshape",
+                    [node.input[1], final_shape_name],
+                    [right_name],
+                    name=f"{self.__class__.__name__}--{node.name}",
+                )
             )
         elif g.is_used_more_than_once(node_right.output[0]):
             res.append(node_right)
@@ -255,11 +265,13 @@ class Reshape2Of3Pattern(PatternOptimization):
                         node.op_type,
                         [left_name, right_name],
                         [new_name],
+                        name=f"{self.__class__.__name__}--{node.name}",
                     ),
                     g.make_node(
                         "Reshape",
                         [new_name, final_shape_name],
                         [node.output[0]],
+                        name=f"{self.__class__.__name__}--{node.name}",
                     ),
                 ]
             )
@@ -268,6 +280,7 @@ class Reshape2Of3Pattern(PatternOptimization):
                 node.op_type,
                 [left_name, right_name],
                 [next_node.output[0]],
+                name=f"{self.__class__.__name__}--{node.name}",
             )
             res.append(main_node)
 
@@ -277,6 +290,7 @@ class Reshape2Of3Pattern(PatternOptimization):
                         "Reshape",
                         [main_node.output[0], compute_shape_name],
                         [node.output[0]],
+                        name=f"{self.__class__.__name__}--{node.name}",
                     )
                 )
 
