@@ -1971,7 +1971,10 @@ class GraphBuilder:
                         f"{node.op_type}:{node.input}->{node.output}"
                     )
                 node = oh.make_node(
-                    "Identity", [origin.output[0]], [node.output[0]], name=".make_node"
+                    "Identity",
+                    [origin.output[0]],
+                    [node.output[0]],
+                    name=self.unique_node_name(".make_node"),
                 )
                 self.constants_alias_[node.output[0]] = origin.output[0]
             else:
