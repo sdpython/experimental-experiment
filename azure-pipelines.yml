@@ -30,7 +30,6 @@ jobs:
       git config core.sparsecheckout true
       echo "onnxscript" >> .git/info/sparse-checkout
       echo "setup.py" >> .git/info/sparse-checkout
-      echo "setup.py" >> .git/info/sparse-checkout
       echo "pyproject*" >> .git/info/sparse-checkout
       echo "README*" >> .git/info/sparse-checkout
       echo "requirement*" >> .git/info/sparse-checkout
@@ -60,7 +59,7 @@ jobs:
       python -m pip install . -v -v -v
     displayName: 'install wheel'
   - script: |
-      UNITTEST_ONNXRT=1 python -m pytest -v
+      UNITTEST_ONNXRT=1 python -m pytest -v _unittests
     displayName: 'Runs Unit Tests'
   - task: PublishPipelineArtifact@0
     inputs:
@@ -102,7 +101,6 @@ jobs:
       git config core.sparsecheckout true
       echo "onnxscript" >> .git/info/sparse-checkout
       echo "setup.py" >> .git/info/sparse-checkout
-      echo "setup.py" >> .git/info/sparse-checkout
       echo "pyproject*" >> .git/info/sparse-checkout
       echo "README*" >> .git/info/sparse-checkout
       echo "requirement*" >> .git/info/sparse-checkout
@@ -126,7 +124,7 @@ jobs:
       black --diff .
     displayName: 'Black'
   - script: |
-      python -m pytest --cov
+      python -m pytest --cov _unittests
     displayName: 'Runs Unit Tests'
   - script: |
       python -u setup.py bdist_wheel
@@ -166,7 +164,6 @@ jobs:
       git config core.sparsecheckout true
       echo "onnxscript" >> .git/info/sparse-checkout
       echo "setup.py" >> .git/info/sparse-checkout
-      echo "setup.py" >> .git/info/sparse-checkout
       echo "pyproject*" >> .git/info/sparse-checkout
       echo "README*" >> .git/info/sparse-checkout
       echo "requirement*" >> .git/info/sparse-checkout
@@ -182,7 +179,7 @@ jobs:
   - script: pip install onnxmltools --no-deps
     displayName: 'Install onnxmltools'
   - script: |
-      python -m pytest -v
+      python -m pytest -v _unittests
     displayName: 'Runs Unit Tests'
   - script: |
       python -u setup.py bdist_wheel
@@ -229,7 +226,6 @@ jobs:
       git config core.sparsecheckout true
       echo "onnxscript" >> .git/info/sparse-checkout
       echo "setup.py" >> .git/info/sparse-checkout
-      echo "setup.py" >> .git/info/sparse-checkout
       echo "pyproject*" >> .git/info/sparse-checkout
       echo "README*" >> .git/info/sparse-checkout
       echo "requirement*" >> .git/info/sparse-checkout
@@ -245,7 +241,7 @@ jobs:
   - script: pip install onnxmltools --no-deps
     displayName: 'Install onnxmltools'
   - script: |
-      UNITTEST_ONNXRT=1 python -m pytest -v
+      UNITTEST_ONNXRT=1 python -m pytest -v _unittests
     displayName: 'Runs Unit Tests'
   - script: |
       python -u setup.py bdist_wheel

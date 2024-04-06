@@ -25,6 +25,13 @@ Or simply this one:
 ::
 
     python -m experimental_experiment.torch_bench.dort_bench --backend custom --device cuda --export a -w 1
+
+
+Another example
+
+::
+
+    python -m experimental_experiment.torch_bench.dort_bench --backend custom --device cuda -w 1 -r 5 --with_mask 0 --implementation sdpa --enable_pattern AlmostDoNothing --config medium
 """
 
 from experimental_experiment.torch_bench._dort_cmd_common import dort_args
