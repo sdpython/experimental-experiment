@@ -1843,7 +1843,8 @@ class GraphBuilder:
         """
         assert name is not None and not name.startswith("None"), (
             f"It is good practice to give every node a name so that is "
-            f"easier to see where this node is created but name={name!r}."
+            f"easier to see where this node is created but name={name!r} "
+            f"and op_type={op_type!r}."
         )
         assert (
             not kwargs or not attributes
@@ -1969,7 +1970,9 @@ class GraphBuilder:
                         f"[GraphBuilder-{self._hash()}.make_node] duplicated constant detected for "
                         f"{node.op_type}:{node.input}->{node.output}"
                     )
-                node = oh.make_node("Identity", [origin.output[0]], [node.output[0]])
+                node = oh.make_node(
+                    "Identity", [origin.output[0]], [node.output[0]], name=".make_node"
+                )
                 self.constants_alias_[node.output[0]] = origin.output[0]
             else:
                 self.add_constant_node(node)
@@ -2148,7 +2151,8 @@ class GraphBuilder:
         for node in builder.nodes:
             assert name is not None and not name.startswith("None"), (
                 f"It is good practice to give every node a name so that is "
-                f"easier to see where this node is created but name={name!r}."
+                f"easier to see where this node is created but name={name!r} "
+                f"and op_type={node.op_type!r}."
             )
             new_inputs = [renaming[i] for i in node.input]
             new_outputs = [self.unique_name(f"{prefix}{o}") for o in node.output]
@@ -3255,7 +3259,12 @@ class GraphBuilder:
             if node.op_type == "Constant":
                 exist = self.is_exact_same_constant(node)
                 if exist is not None:
-                    node = oh.make_node("Identity", [exist.output[0]], [node.output[0]])
+                    node = oh.make_node(
+                        "Identity",
+                        [exist.output[0]],
+                        [node.output[0]],
+                        name="._update_structures_with_proto",
+                    )
                     replaced = True
                     need_identity_removal = True
                 else:
@@ -3276,7 +3285,12 @@ class GraphBuilder:
             elif node.op_type == "ConstantOfShape" and self.is_constant(node.input[0]):
                 exist = self.is_exact_same_constant(node)
                 if exist is not None:
-                    node = oh.make_node("Identity", [exist.output[0]], [node.output[0]])
+                    node = oh.make_node(
+                        "Identity",
+                        [exist.output[0]],
+                        [node.output[0]],
+                        name="._update_structures_with_proto",
+                    )
                     replaced = True
                     need_identity_removal = True
                 else:
