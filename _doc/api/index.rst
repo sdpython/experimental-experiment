@@ -35,12 +35,8 @@ The documentation was generated with the following versions.
     import torch
     import transformers
     import onnxscript
-    try:
-        import onnxrewriter
-    except ImportError:
-        onnxrewriter = None
 
-    for pck in [onnx, onnx_array_api, onnxruntime, torch, transformers, onnxscript, onnxrewriter]:
+    for pck in [onnx, onnx_array_api, onnxruntime, torch, transformers, onnxscript]:
         if pck is None:
             continue
         try:

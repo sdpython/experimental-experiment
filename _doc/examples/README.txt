@@ -17,8 +17,6 @@ pytorch nightly build should be installed, see
     pip install -r requirements-dev.txt    
     export PYTHONPATH=$PYTHONPATH:<this folder>
 
-Then install *onnx-rewriter*.
-
 Compare torch exporters
 +++++++++++++++++++++++
 

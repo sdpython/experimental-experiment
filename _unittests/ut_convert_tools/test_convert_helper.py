@@ -14,19 +14,10 @@ from experimental_experiment.convert.convert_helper import (
 )
 from experimental_experiment.torch_interpreter import to_onnx
 
-try:
-    import onnxrewriter  # noqa: F401
-
-    has_rewriter = True
-except ImportError:
-    has_rewriter = False
-
-
 input_dims = ((2, 1024),)
 
 
 class TestConvertHelper(ExtTestCase):
-    @unittest.skipIf(not has_rewriter, reason="onnx-rewriter is missing")
     @ignore_warnings(UserWarning)
     def test_optimize_llama(self):
         import torch

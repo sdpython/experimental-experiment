@@ -124,8 +124,6 @@ epkg_dictionary = {
     "onnxruntime": "https://onnxruntime.ai/",
     "onnxruntime-training": "https://onnxruntime.ai/docs/get-started/training-on-device.html",
     "onnx-array-api": ("https://sdpython.github.io/doc/onnx-array-api/dev/"),
-    "onnx-rewriter": "https://github.com/microsoft/onnx-rewriter",
-    "onnxrewriter": "https://github.com/microsoft/onnx-rewriter",
     "onnx-script": "https://github.com/microsoft/onnxscript",
     "onnxscript": "https://github.com/microsoft/onnxscript",
     "opsets": "ttps://onnx.ai/onnx/intro/concepts.html#what-is-an-opset-version",

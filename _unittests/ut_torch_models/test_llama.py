@@ -158,7 +158,6 @@ class TestLlama(ExtTestCase):
     @ignore_warnings((UserWarning, DeprecationWarning))
     @skipif_ci_windows("torch.compile not supported on Windows")
     @requires_torch("2.3", "missing kernel")
-    @unittest.skipIf(True, reason="fails with onnx-rewriter")
     def test_ort_llama_model(self):
         from experimental_experiment.torch_models.llama_helper import (
             get_llama_model,
@@ -180,7 +179,6 @@ class TestLlama(ExtTestCase):
     @skipif_ci_windows("torch.compile not supported on Windows")
     @requires_torch("2.2", "missing kernel")
     @requires_cuda()
-    @unittest.skipIf(True, reason="fails with onnx-rewriter")
     def test_ort_llama_model_cuda(self):
         from experimental_experiment.torch_models.llama_helper import (
             get_llama_model,
@@ -202,7 +200,6 @@ class TestLlama(ExtTestCase):
     @ignore_warnings((UserWarning, DeprecationWarning))
     @skipif_ci_windows("torch.compile not supported on Windows")
     @requires_torch("2.3", "missing kernel")
-    @unittest.skipIf(True, reason="fails with onnx-rewriter")
     def test_ort_llama_model_backward(self):
         from experimental_experiment.torch_models.llama_helper import (
             get_llama_model,
@@ -224,7 +221,6 @@ class TestLlama(ExtTestCase):
     @skipif_ci_windows("torch.compile not supported on Windows")
     @requires_torch("2.2", "missing kernel")
     @requires_cuda()
-    @unittest.skipIf(True, reason="fails with onnx-rewriter")
     def test_ort_llama_model_backward_cuda(self):
         from experimental_experiment.torch_models.llama_helper import (
             get_llama_model,

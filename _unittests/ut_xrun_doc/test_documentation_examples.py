@@ -7,13 +7,6 @@ import time
 from experimental_experiment import __file__ as experimental_experiment_file
 from experimental_experiment.ext_test_case import ExtTestCase, is_windows, is_apple
 
-try:
-    import onnxrewriter  # noqa: F401
-
-    has_rewriter = True
-except ImportError:
-    has_rewriter = False
-
 VERBOSE = 0
 ROOT = os.path.realpath(
     os.path.abspath(os.path.join(experimental_experiment_file, "..", ".."))
@@ -100,18 +93,6 @@ class TestDocumentationExamples(ExtTestCase):
             if name in {"plot_llama_bench_102.py"}:
                 if sys.platform in {"darwin"}:
                     reason = "apple not supported"
-
-            if (
-                not reason
-                and not has_rewriter
-                and name
-                in {
-                    "plot_torch_export_201.py",
-                    "plot_llama_diff_export_301.py",
-                    "plot_llama_diff_dort_301.py",
-                }
-            ):
-                reason = "missing onnx-rewriter"
 
             if not reason and name in {
                 # "plot_convolutation_matmul.py",

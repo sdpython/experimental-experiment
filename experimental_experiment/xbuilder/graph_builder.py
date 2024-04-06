@@ -1109,7 +1109,9 @@ class GraphBuilder:
         if key and key in self._values:
             if name == "":
                 return self._values[key]
-            return self.make_node("Identity", [self._values[key]], [name])
+            return self.make_node(
+                "Identity", [self._values[key]], [name], name="make_initializer"
+            )
 
         if isinstance(value, TensorProto):
             itype = value.data_type
@@ -2141,9 +2143,13 @@ class GraphBuilder:
         for name, inp in zip(input_names, builder.inputs):
             new_name = self.unique_name(f"{prefix}{inp.name}")
             renaming[inp.name] = new_name
-            self.make_node("Identity", [name], [new_name])
+            self.make_node("Identity", [name], [new_name], name=".make_nodes")
 
         for node in builder.nodes:
+            assert name is not None and not name.startswith("None"), (
+                f"It is good practice to give every node a name so that is "
+                f"easier to see where this node is created but name={name!r}."
+            )
             new_inputs = [renaming[i] for i in node.input]
             new_outputs = [self.unique_name(f"{prefix}{o}") for o in node.output]
             for o, no in zip(node.output, new_outputs):
@@ -2155,6 +2161,7 @@ class GraphBuilder:
                 domain=node.domain,
                 attributes=node.attribute,
                 check=False,
+                name=node.name,
             )
             for o, no in zip(node.output, new_outputs):
                 if builder.has_shape(o):
@@ -2171,7 +2178,7 @@ class GraphBuilder:
             f"outputs={builder.outputs}, renaming={renaming}."
         )
         for name, out in zip(output_names, builder.outputs):
-            self.make_node("Identity", [renaming[out.name]], [name])
+            self.make_node("Identity", [renaming[out.name]], [name], name=".make_nodes")
 
         # opsets and domains
         for o, v in builder.opsets.items():
