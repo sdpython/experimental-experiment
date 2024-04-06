@@ -103,8 +103,8 @@ class TestGraphSimplification(ExtTestCase):
             "", np.array([[0.4, 0.5, 0.6]], dtype=np.float32).T
         )
         bias = gr.make_initializer("", np.array([[0.4, 0.5, 0.6]], dtype=np.float32))
-        mm = gr.make_node("MatMul", ["X", weight])
-        out = gr.make_node("Add", [mm, bias], ["Y"])
+        mm = gr.make_node("MatMul", ["X", weight], name="ut")
+        out = gr.make_node("Add", [mm, bias], ["Y"], name="ut")
         gr.make_tensor_output(
             out, TensorProto.FLOAT, ("a",), indexed=False, is_dimension=False
         )

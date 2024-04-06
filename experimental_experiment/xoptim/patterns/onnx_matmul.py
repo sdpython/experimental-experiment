@@ -147,7 +147,12 @@ class MatMulReshape2Of3Pattern(PatternOptimization):
                 )
                 left_name = g.unique_name(f"{self.__class__.__name__}L_{node.input[0]}")
                 res.append(
-                    g.make_node("Reshape", [node.input[0], shape_name], [left_name])
+                    g.make_node(
+                        "Reshape",
+                        [node.input[0], shape_name],
+                        [left_name],
+                        name=f"{self.__class__.__name__}--{node.name}",
+                    )
                 )
             else:
                 left_name = node.input[0]
@@ -168,7 +173,12 @@ class MatMulReshape2Of3Pattern(PatternOptimization):
                     f"{self.__class__.__name__}L_{node.input[0]}"
                 )
                 res.append(
-                    g.make_node("Reshape", [node.input[1], shape_name], [right_name])
+                    g.make_node(
+                        "Reshape",
+                        [node.input[1], shape_name],
+                        [right_name],
+                        name=f"{self.__class__.__name__}--{node.name}",
+                    )
                 )
             else:
                 right_name = node.input[1]
@@ -193,11 +203,13 @@ class MatMulReshape2Of3Pattern(PatternOptimization):
                             node.op_type,
                             [left_name, right_name],
                             [new_name],
+                            name=f"{self.__class__.__name__}--{node.name}",
                         ),
                         g.make_node(
                             "Reshape",
                             [new_name, previous_shape_name],
                             [node.output[0]],
+                            name=f"{self.__class__.__name__}--{node.name}",
                         ),
                     ]
                 )
@@ -207,6 +219,7 @@ class MatMulReshape2Of3Pattern(PatternOptimization):
                         node.op_type,
                         [left_name, right_name],
                         [node.output[0]],
+                        name=f"{self.__class__.__name__}--{node.name}",
                     )
                 )
         else:
@@ -214,6 +227,7 @@ class MatMulReshape2Of3Pattern(PatternOptimization):
                 node.op_type,
                 [left_name, right_name],
                 [next_node.output[0]],
+                name=f"{self.__class__.__name__}--{node.name}",
             )
             res.append(main_node)
 
@@ -227,6 +241,7 @@ class MatMulReshape2Of3Pattern(PatternOptimization):
                         "Reshape",
                         [main_node.output[0], previous_shape_name],
                         [node.output[0]],
+                        name=f"{self.__class__.__name__}--{node.name}",
                     )
                 )
 
@@ -540,10 +555,17 @@ class TransposeReshapeMatMulPattern(PatternOptimization):
             )
             res = [
                 g.make_node(
-                    "Reshape", [node_left_tr.input[0], shape_name], [left_name]
+                    "Reshape",
+                    [node_left_tr.input[0], shape_name],
+                    [left_name],
+                    name=f"{self.__class__.__name__}--{node.name}",
                 ),
                 g.make_node(
-                    "Transpose", [left_name], [node.input[0]], perm=tuple(perm)
+                    "Transpose",
+                    [left_name],
+                    [node.input[0]],
+                    perm=tuple(perm),
+                    name=f"{self.__class__.__name__}--{node.name}",
                 ),
                 node,
             ]
@@ -557,10 +579,17 @@ class TransposeReshapeMatMulPattern(PatternOptimization):
             )
             res = [
                 g.make_node(
-                    "Reshape", [node_right_tr.input[0], shape_name], [right_name]
+                    "Reshape",
+                    [node_right_tr.input[0], shape_name],
+                    [right_name],
+                    name=f"{self.__class__.__name__}--{node.name}",
                 ),
                 g.make_node(
-                    "Transpose", [right_name], [node.input[1]], perm=tuple(perm)
+                    "Transpose",
+                    [right_name],
+                    [node.input[1]],
+                    perm=tuple(perm),
+                    name=f"{self.__class__.__name__}--{node.name}",
                 ),
                 node,
             ]
