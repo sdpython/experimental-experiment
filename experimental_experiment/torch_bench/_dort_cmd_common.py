@@ -317,6 +317,23 @@ def create_compiled_model(
             return cc, None
         return cc
 
+    if backend == "ortmodule":
+        from onnxruntime.training.ortmodule import ORTModule, DebugOptions, LogLevel
+
+        if dump_prefix:
+            os.environ["ORTMODULE_CACHE_DIR"] = os.path.dirname(dump_prefix)
+            opts = DebugOptions(
+                save_onnx=True,
+                log_level=LogLevel.VERBOSE if verbose else LogLevel.ERROR,
+                onnx_prefix=dump_prefix,
+            )
+        else:
+            opts = DebugOptions(
+                log_level=LogLevel.VERBOSE if verbose else LogLevel.ERROR,
+            )
+
+        return ORTModule(model, opts)
+
     raise ValueError(f"Unexpected backend={backend!r}.")
 
 

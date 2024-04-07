@@ -17,6 +17,7 @@ sphinx
 sphinx-gallery
 sphinx-issues
 sphinx-runpython
+torch-ort
 transformers!=4.38.0,!=4.38.1
 tqdm
 wheel

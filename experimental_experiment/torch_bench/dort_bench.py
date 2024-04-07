@@ -12,7 +12,7 @@ Example, run llama model with onnxrt backend on cuda.
 
 ::
 
-    python -m experimental_experiment.torch_bench.dort_bench --backend ort --device cuda
+    python -m experimental_experiment.torch_bench.dort_bench --backend ort --device cuda --config medium
     
 Other example, same script but dumps the produces models.
 
@@ -108,6 +108,9 @@ if verbose:
     for a in example_args_collection[0]:
         print(f"  input: {a.dtype}:{a.shape}")
 
+if args.export and not os.path.exists("dump_dort_bench"):
+    os.mkdir("dump_dort_bench")
+
 compiled_model = create_compiled_model(
     model,
     backend=args.backend,
@@ -118,6 +121,11 @@ compiled_model = create_compiled_model(
     disable_pattern=disable_pattern,
     optimize=optimize,
     use_fused_aten_ops=args.implementation == "sdpa",
+    dump_prefix=(
+        f"dump_dort_bench/{args.export}-{args.model}-{args.backend}"
+        if args.export
+        else None
+    ),
 )
 
 
@@ -178,7 +186,9 @@ for i in range(args.warmup):
 
     if args.backend in ("ort", "custom", "debug", "plug") and i == 0 and args.export:
         with dump_onnx(
-            f"dort-{args.export}-{args.backend}", folder="dump_dort_bench", clean=True
+            f"dort-{args.export}-{args.model}-{args.backend}",
+            folder="dump_dort_bench",
+            clean=True,
         ):
             loop_iteration(is_cuda, inputs, compiled_model, loss)
 
