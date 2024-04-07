@@ -66,7 +66,12 @@ class TestPhi(ExtTestCase):
             _attn_implementation="eager", with_mask=True
         )
         self.assertEqual(len(model_inputs[0]), 2)
-        omodel = ORTModule(model)
+        try:
+            omodel = ORTModule(model)
+        except (
+            onnxruntime.training.ortmodule._fallback_exceptions.ORTModuleInitException
+        ):
+            raise unittest.SkipTest("ORTModule extensions are not installed.")
         expected = omodel(*model_inputs[0])
         self.assertNotEmpty(expected)
 
@@ -86,7 +91,12 @@ class TestPhi(ExtTestCase):
             _attn_implementation="eager", with_mask=True
         )
         self.assertEqual(len(model_inputs[0]), 2)
-        omodel = ORTModule(model, opts)
+        try:
+            omodel = ORTModule(model, opts)
+        except (
+            onnxruntime.training.ortmodule._fallback_exceptions.ORTModuleInitException
+        ):
+            raise unittest.SkipTest("ORTModule extensions are not installed.")
         expected = omodel(*model_inputs[0])
         self.assertNotEmpty(expected)
         back = expected[0].sum().backward()
@@ -110,20 +120,9 @@ class TestPhi(ExtTestCase):
         )
         model = model.to("cuda")
         model_inputs = [list(t.to("cuda") for t in ts) for ts in model_inputs]
-        print(
-            "***",
-            [
-                (t.requires_grad, t.dtype, t.shape, t.get_device())
-                for t in model_inputs[0]
-            ],
-        )
         self.assertEqual(len(model_inputs[0]), 2)
         omodel = ORTModule(model, opts)
         expected = omodel(*model_inputs[0])
-        print(
-            "***",
-            [(t.requires_grad, t.dtype, t.shape, t.get_device()) for t in expected[:1]],
-        )
         self.assertNotEmpty(expected)
         back = expected[0].sum().backward()
         self.assertEmpty(back)
