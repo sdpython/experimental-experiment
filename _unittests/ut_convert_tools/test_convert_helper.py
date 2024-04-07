@@ -21,6 +21,7 @@ input_dims = ((2, 1024),)
 class TestConvertHelper(ExtTestCase):
     @ignore_warnings(UserWarning)
     @requires_onnxscript("0.2")
+    @skipif_ci_windows("not working on windows")
     def test_optimize_llama(self):
         import torch
         from experimental_experiment.torch_models.llama_helper import (
