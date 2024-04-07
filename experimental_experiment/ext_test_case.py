@@ -448,7 +448,7 @@ def requires_cuda(msg: str = ""):
     return lambda x: x
 
 
-def requires_torch(version: str, msg: str) -> Callable:
+def requires_torch(version: str, msg: str = "") -> Callable:
     """
     Skips a unit test if torch is not recent enough.
     """
@@ -461,7 +461,20 @@ def requires_torch(version: str, msg: str) -> Callable:
     return lambda x: x
 
 
-def requires_onnxruntime(version: str, msg: str) -> Callable:
+def requires_onnxscript(version: str, msg: str = "") -> Callable:
+    """
+    Skips a unit test if onnxscript is not recent enough.
+    """
+    import packaging.version as pv
+    import torch
+
+    if pv.Version(".".join(torch.__version__.split(".")[:2])) < pv.Version(version):
+        msg = f"onnxscript version {torch.__version__} < {version}: {msg}"
+        return unittest.skip(msg)
+    return lambda x: x
+
+
+def requires_onnxruntime(version: str, msg: str = "") -> Callable:
     """
     Skips a unit test if onnxruntime is not recent enough.
     """
@@ -491,7 +504,7 @@ def requires_onnxruntime_training(msg: str = "") -> Callable:
     return lambda x: x
 
 
-def requires_onnx(version: str, msg: str) -> Callable:
+def requires_onnx(version: str, msg: str = "") -> Callable:
     """
     Skips a unit test if onnx is not recent enough.
     """

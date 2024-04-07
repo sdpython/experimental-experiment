@@ -5,6 +5,7 @@ from experimental_experiment.ext_test_case import (
     ExtTestCase,
     skipif_ci_windows,
     requires_cuda,
+    requires_onnxscript,
     ignore_warnings,
 )
 from experimental_experiment.convert.convert_helper import (
@@ -19,6 +20,7 @@ input_dims = ((2, 1024),)
 
 class TestConvertHelper(ExtTestCase):
     @ignore_warnings(UserWarning)
+    @requires_onnxscript("0.2")
     def test_optimize_llama(self):
         import torch
         from experimental_experiment.torch_models.llama_helper import (

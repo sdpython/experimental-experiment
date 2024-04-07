@@ -1,6 +1,7 @@
 import unittest
 import os
 import sys
+import packaging.version as pv
 import importlib.util
 import subprocess
 import time
@@ -89,6 +90,14 @@ class TestDocumentationExamples(ExtTestCase):
                 if sys.platform in {"win32", "darwin"}:
                     # dynamo not supported on windows
                     reason = "graphviz not installed"
+
+            if name in {"plot_llama_diff_dort_301.py", "plot_llama_diff_export_301.py"}:
+                import torch
+
+                if pv.Version(".".join(torch.__version__.split(".")[:2])) < pv.Version(
+                    "2.3"
+                ):
+                    reason = "requires torch 2.3"
 
             if name in {"plot_llama_bench_102.py"}:
                 if sys.platform in {"darwin"}:
