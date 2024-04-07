@@ -23,8 +23,8 @@ jobs:
     displayName: 'Install Requirements'
   - script: |
       python -m pip install parameterized
-      mkdir onnxscript
-      cd onnxscript
+      mkdir onnxscript_repo
+      cd onnxscript_repo
       git init
       git remote add -f origin https://github.com/microsoft/onnxscript.git
       git config core.sparsecheckout true
@@ -37,6 +37,7 @@ jobs:
       echo "LICENSE*" >> .git/info/sparse-checkout
       echo "VERSION*" >> .git/info/sparse-checkout
       git pull origin main --depth=1
+      rm $(find . -name "*_test.py")
       python -m pip install -e . -v
       cd ..
     displayName: 'Install onnxscript'
@@ -94,7 +95,7 @@ jobs:
     displayName: 'Install Requirements'
   - script: |
       python -m pip install parameterized
-      mkdir onnxscript
+      mkdir onnxscript_repo
       cd onnxscript
       git init
       git remote add -f origin https://github.com/microsoft/onnxscript.git
@@ -108,6 +109,7 @@ jobs:
       echo "LICENSE*" >> .git/info/sparse-checkout
       echo "VERSION*" >> .git/info/sparse-checkout
       git pull origin main --depth=1
+      rm $(find . -name "*_test.py")
       python -m pip install -e . -v
       cd ..
     displayName: 'Install onnxscript'
@@ -157,7 +159,7 @@ jobs:
     displayName: 'Install Requirements'
   - script: |
       python -m pip install parameterized
-      mkdir onnxscript
+      mkdir onnxscript_repo
       cd onnxscript
       git init
       git remote add -f origin https://github.com/microsoft/onnxscript.git
@@ -171,6 +173,7 @@ jobs:
       echo "LICENSE*" >> .git/info/sparse-checkout
       echo "VERSION*" >> .git/info/sparse-checkout
       git pull origin main --depth=1
+      rm $(find . -name "*_test.py")
       python -m pip install -e . -v
       cd ..
     displayName: 'Install onnxscript'
@@ -219,7 +222,7 @@ jobs:
     displayName: 'Install Requirements'
   - script: |
       python -m pip install parameterized
-      mkdir onnxscript
+      mkdir onnxscript_repo
       cd onnxscript
       git init
       git remote add -f origin https://github.com/microsoft/onnxscript.git
@@ -233,6 +236,7 @@ jobs:
       echo "LICENSE*" >> .git/info/sparse-checkout
       echo "VERSION*" >> .git/info/sparse-checkout
       git pull origin main --depth=1
+      rm $(find . -name "*_test.py")
       python -m pip install -e . -v
       cd ..
     displayName: 'Install onnxscript'
