@@ -89,10 +89,10 @@ if is_cuda:
         f"reserved={torch.cuda.memory_reserved(0)}"
     )
 
-model, example_args_collection = create_model(args.model, config_dict)
 
 device = args.device
-model = model.eval().to(device)
+model, example_args_collection = create_model(args.model, config_dict)
+model = model.to(device)
 
 if is_cuda:
     print(
@@ -128,8 +128,12 @@ compiled_model = create_compiled_model(
     ),
 )
 
+print(f"type of compiled_model={type(compiled_model)}")
+
 
 def loop_iteration(is_cuda, inputs, compiled_model, loss):
+    torch.set_grad_enabled(True)
+
     mixed = args.mixed in (1, "1", True, "True")
     if mixed and is_cuda:
         with torch.autocast(device_type="cuda", dtype=torch.float16):

@@ -3,6 +3,7 @@ import unittest
 from experimental_experiment.ext_test_case import (
     ExtTestCase,
     requires_onnxruntime_training,
+    requires_cuda,
 )
 from experimental_experiment.reference import ExtendedReferenceEvaluator
 
@@ -87,6 +88,42 @@ class TestPhi(ExtTestCase):
         self.assertEqual(len(model_inputs[0]), 2)
         omodel = ORTModule(model, opts)
         expected = omodel(*model_inputs[0])
+        self.assertNotEmpty(expected)
+        back = expected[0].sum().backward()
+        self.assertEmpty(back)
+
+    @requires_onnxruntime_training()
+    @requires_cuda()
+    def test_get_phi_model_mask_eager_ortmodule_backward_cuda(self):
+        from onnxruntime.training.ortmodule import ORTModule, DebugOptions
+        from experimental_experiment.torch_models.phi_helper import (
+            get_phi_model,
+        )
+
+        opts = DebugOptions(
+            save_onnx=True,
+            onnx_prefix="test_get_phi_model_mask_eager_ortmodule_backward",
+        )
+
+        model, model_inputs = get_phi_model(
+            _attn_implementation="eager", with_mask=True
+        )
+        model = model.to("cuda")
+        model_inputs = [list(t.to("cuda") for t in ts) for ts in model_inputs]
+        print(
+            "***",
+            [
+                (t.requires_grad, t.dtype, t.shape, t.get_device())
+                for t in model_inputs[0]
+            ],
+        )
+        self.assertEqual(len(model_inputs[0]), 2)
+        omodel = ORTModule(model, opts)
+        expected = omodel(*model_inputs[0])
+        print(
+            "***",
+            [(t.requires_grad, t.dtype, t.shape, t.get_device()) for t in expected[:1]],
+        )
         self.assertNotEmpty(expected)
         back = expected[0].sum().backward()
         self.assertEmpty(back)
