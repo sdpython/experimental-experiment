@@ -121,7 +121,7 @@ if args.exporter == "script":
 elif args.exporter == "dynamo":
     with torch.no_grad():
         prog = torch.onnx.dynamo_export(model, *inputs)
-    onx = prog.to_model_proto()
+    onx = prog.model_proto
     if optimize:
         onx = optimize_model_proto(onx)
     with open(filename, "wb") as f:
