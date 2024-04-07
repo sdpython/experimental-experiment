@@ -48,8 +48,8 @@ jobs:
         echo "LICENSE*" >> .git/info/sparse-checkout
         echo "VERSION*" >> .git/info/sparse-checkout
         git pull origin main --depth=1
-        rm $(find . -name "*_test.py")
         python -m pip install -e . -v
+        rm onnxscript -rf
         cd ..
   
       - name: Install requirements dev

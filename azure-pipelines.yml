@@ -37,8 +37,8 @@ jobs:
       echo "LICENSE*" >> .git/info/sparse-checkout
       echo "VERSION*" >> .git/info/sparse-checkout
       git pull origin main --depth=1
-      rm $(find . -name "*_test.py")
       python -m pip install -e . -v
+      rm onnxscript -rf
       cd ..
     displayName: 'Install onnxscript'
   - script: pip install transformers==4.37.2
@@ -109,8 +109,8 @@ jobs:
       echo "LICENSE*" >> .git/info/sparse-checkout
       echo "VERSION*" >> .git/info/sparse-checkout
       git pull origin main --depth=1
-      rm $(find . -name "*_test.py")
       python -m pip install -e . -v
+      rm onnxscript -rf
       cd ..
     displayName: 'Install onnxscript'
   - script: pip install -r requirements-dev.txt
@@ -173,8 +173,8 @@ jobs:
       echo "LICENSE*" >> .git/info/sparse-checkout
       echo "VERSION*" >> .git/info/sparse-checkout
       git pull origin main --depth=1
-      rm $(find . -name "*_test.py")
       python -m pip install -e . -v
+      rm onnxscript -rf
       cd ..
     displayName: 'Install onnxscript'
   - script: pip install -r requirements-dev.txt
@@ -236,8 +236,8 @@ jobs:
       echo "LICENSE*" >> .git/info/sparse-checkout
       echo "VERSION*" >> .git/info/sparse-checkout
       git pull origin main --depth=1
-      rm $(find . -name "*_test.py")
       python -m pip install -e . -v
+      rm onnxscript -rf
       cd ..
     displayName: 'Install onnxscript'
   - script: pip install -r requirements-dev.txt
