@@ -6,6 +6,7 @@ exclude = [
     ".git",
     "build",
     "dist",
+    "onnxscript",
 ]
 
 # Same as Black.

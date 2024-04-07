@@ -134,7 +134,12 @@ class Opset:
 
         assert None not in new_inputs
         return self.builder.make_node(
-            op_type, new_inputs, outputs=outputs, domain=domain, name=name, **kwargs
+            op_type,
+            new_inputs,
+            outputs=outputs,
+            domain=domain,
+            name=name or f"{self.__class__.__name__}",
+            **kwargs,
         )
 
     @staticmethod

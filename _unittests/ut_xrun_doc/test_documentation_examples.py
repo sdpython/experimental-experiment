@@ -1,18 +1,12 @@
 import unittest
 import os
 import sys
+import packaging.version as pv
 import importlib.util
 import subprocess
 import time
 from experimental_experiment import __file__ as experimental_experiment_file
 from experimental_experiment.ext_test_case import ExtTestCase, is_windows, is_apple
-
-try:
-    import onnxrewriter  # noqa: F401
-
-    has_rewriter = True
-except ImportError:
-    has_rewriter = False
 
 VERBOSE = 0
 ROOT = os.path.realpath(
@@ -97,21 +91,17 @@ class TestDocumentationExamples(ExtTestCase):
                     # dynamo not supported on windows
                     reason = "graphviz not installed"
 
+            if name in {"plot_llama_diff_dort_301.py", "plot_llama_diff_export_301.py"}:
+                import torch
+
+                if pv.Version(".".join(torch.__version__.split(".")[:2])) < pv.Version(
+                    "2.3"
+                ):
+                    reason = "requires torch 2.3"
+
             if name in {"plot_llama_bench_102.py"}:
                 if sys.platform in {"darwin"}:
                     reason = "apple not supported"
-
-            if (
-                not reason
-                and not has_rewriter
-                and name
-                in {
-                    "plot_torch_export_201.py",
-                    "plot_llama_diff_export_301.py",
-                    "plot_llama_diff_dort_301.py",
-                }
-            ):
-                reason = "missing onnx-rewriter"
 
             if not reason and name in {
                 # "plot_convolutation_matmul.py",

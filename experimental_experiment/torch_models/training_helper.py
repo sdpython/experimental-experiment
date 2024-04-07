@@ -48,12 +48,6 @@ def make_aot_ort(
                 f"option pre_ort_model_transforms not available in torch {torch_version}"
             )
             rewrite = False
-        else:
-            try:
-                import onnxrewriter  # noqa: F401
-            except ImportError:
-                warnings.warn("unable to rewrite a model with onnx-rewriter due to {e}")
-                rewrite = False
 
     if onnx_registry is None:
         export_options = ExportOptions(dynamic_shapes=dynamic)

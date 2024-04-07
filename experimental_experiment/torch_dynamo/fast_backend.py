@@ -648,7 +648,6 @@ def onnx_custom_backend(
         stor = None
 
     # Creates the backend.
-
     run = OrtBackend(
         sess=sess,
         run_options=run_options,

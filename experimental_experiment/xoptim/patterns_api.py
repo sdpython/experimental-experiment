@@ -781,7 +781,11 @@ class EasyPatternOptimization(PatternOptimization):
                     continue
 
             new_node = g.make_node(
-                node.op_type, new_inputs, new_outputs, domain=node.domain
+                node.op_type,
+                new_inputs,
+                new_outputs,
+                domain=node.domain,
+                name=node.name,
             )
             new_node.attribute.extend(node.attribute)
             new_nodes.append(new_node)

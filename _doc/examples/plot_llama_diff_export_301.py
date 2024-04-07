@@ -6,7 +6,7 @@
 
 The script compares the two exporters implemented in :epkg:`pytorch`
 for a part of llama model. The model are compared after all optimizations
-were made with :epkg:`onnx-rewriter` and :epkg:`onnxruntime`.
+were made with and :epkg:`onnxruntime`.
 
 * `TorchScript-based ONNX Exporter
   <https://pytorch.org/docs/stable/onnx.html#torchscript-based-onnx-exporter>`_,

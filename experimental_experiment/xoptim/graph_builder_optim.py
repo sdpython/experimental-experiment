@@ -515,6 +515,11 @@ class GraphBuilderPatternOptimization:
         :param kwargs: other attributes
         :return: a node
         """
+        assert name is not None and not name.startswith("None"), (
+            f"It is good practice to give every node a name so that is "
+            f"easier to see where this node is created but name={name!r} "
+            f"and op_type={op_type!r}."
+        )
         name = self.builder.unique_node_name(name)
         if isinstance(outputs, int):
             if outputs == 1:
@@ -843,11 +848,12 @@ class GraphBuilderPatternOptimization:
             if remove_identity:
                 # remove unnecessary identity nodes
                 begin = time.perf_counter()
-                id_removed = self.builder.remove_identity_nodes()
+                id_removed, id_added = self.builder.remove_identity_nodes()
                 statistics.append(
                     dict(
                         pattern="remove_identity_nodes",
                         iteration=it,
+                        added=id_added,
                         removed=id_removed,
                         time_in=time.perf_counter() - begin,
                     )
@@ -878,5 +884,7 @@ class GraphBuilderPatternOptimization:
                 f"[GraphBuilderPatternOptimization.optimize] done after {last_it} iterations with "
                 f"{len(self.builder.nodes)} nodes in {duration:.3f}"
             )
+            msg = self.builder._compile_statistics(statistics)
+            print(msg)
 
         return statistics

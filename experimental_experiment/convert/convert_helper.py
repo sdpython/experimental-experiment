@@ -1,5 +1,4 @@
 import time
-import warnings
 from typing import List, Union
 from onnx import ModelProto, helper as oh
 from onnx.inliner import inline_local_functions
@@ -78,8 +77,8 @@ def optimize_model_proto(
         from experimental_experiment.convert.convert_helper import optimize_model_proto
         onnx_model = optimize_model_proto(onnx_model)
     """
-    from onnxrewriter.optimizer import optimize
-    from onnxrewriter.rewriter import rewrite
+    from onnxscript.optimizer import optimize
+    from onnxscript.rewriter import rewrite
 
     if verbose:
         print(
@@ -92,29 +91,17 @@ def optimize_model_proto(
 
     begin = time.perf_counter()
 
-    try:
-        model_proto = optimize(
-            model_proto,
-            num_iterations=2,
-            onnx_shape_inference=onnx_shape_inference,
-            # function_aware_folding=True,
-        )
-        exc = None
-    except Exception as e:
-        exc = e
-        pass
+    model_proto = optimize(
+        model_proto,
+        num_iterations=2,
+        onnx_shape_inference=onnx_shape_inference,
+    )
 
     if verbose:
-        if exc:
-            print(
-                f"[optimize_model_proto] optimize failed in "
-                f"{time.perf_counter() - begin} seconds due to {exc}"
-            )
-        else:
-            print(
-                f"[optimize_model_proto] optimize done in "
-                f"{time.perf_counter() - begin} seconds."
-            )
+        print(
+            f"[optimize_model_proto] optimize done in "
+            f"{time.perf_counter() - begin} seconds."
+        )
         print(
             f"[optimize_model_proto] starts rewrite with "
             f"{len(model_proto.graph.node)} nodes and "
@@ -123,28 +110,30 @@ def optimize_model_proto(
 
     begin = time.perf_counter()
 
-    try:
-        model_proto = rewrite(model_proto)
+    model_proto = rewrite(model_proto)
 
-        if verbose:
-            print(
-                f"[optimize_model_proto] rewrite done in {time.perf_counter() - begin} "
-                f"seconds with {len(model_proto.graph.node)} nodes and "
-                f"{len(model_proto.functions)} local functions"
-            )
-
-    except ValueError as e:
-        warnings.warn(
-            f"onnxrewrite.rewrite failed due to {e}, "
-            f"saving the model into 'bug-onnxrewriter.onnx'"
+    if verbose:
+        print(
+            f"[optimize_model_proto] rewrite done in {time.perf_counter() - begin} "
+            f"seconds with {len(model_proto.graph.node)} nodes and "
+            f"{len(model_proto.functions)} local functions"
         )
-        with open("bug-onnxrewriter.onnx", "wb") as f:
-            f.write(model_proto.SerializeToString())
-        if verbose:
-            print(
-                f"[optimize_model_proto] failed in {time.perf_counter() - begin} "
-                f"seconds (see 'bug-onnxrewriter.onnx')."
-            )
+        print(
+            f"[optimize_model_proto] starts inlining with "
+            f"{len(model_proto.graph.node)} nodes and "
+            f"{len(model_proto.functions)} local functions"
+        )
+
+    begin = time.perf_counter()
+
+    model_proto = inline_local_functions(model_proto)
+
+    if verbose:
+        print(
+            f"[optimize_model_proto] inlining done in {time.perf_counter() - begin} "
+            f"seconds with {len(model_proto.graph.node)} nodes and "
+            f"{len(model_proto.functions)} local functions"
+        )
 
     # _fix_details(model_proto)
     if inplace:

@@ -1,6 +1,7 @@
-from typing import List
-
-from ..patterns_api import PatternOptimization
+import inspect
+from typing import List, Optional
+from onnx import NodeProto
+from ..patterns_api import PatternOptimization, MatchResult
 
 # onnx patterns
 from .onnx_cast import CastPattern, CastCastBinaryPattern
@@ -25,6 +26,58 @@ from .onnx_transpose import TransposeTransposePattern
 from .onnx_unsqueeze import UnsqueezeUnsqueezePattern
 
 
+class AlmostDoNothingPattern(PatternOptimization):
+    """
+    Checks that a Expand is really needed.
+    """
+
+    def match(
+        self,
+        g: "GraphBuilderPatternOptimization",  # noqa: F821
+        node: NodeProto,
+        matched: List[MatchResult],
+    ) -> Optional[MatchResult]:
+        if node.op_type != "Pow" or node.domain != "":
+            return self.none()
+        if node.name is not None and "AlmostDoNothing" in node.name:
+            return self.none(node, inspect.currentframe().f_lineno)
+        return MatchResult(self, [node], self.apply, insert_at=node)
+
+    def apply(
+        self, g: "GraphBuilder", node: NodeProto  # noqa: F821
+    ) -> List[NodeProto]:
+        return [
+            g.make_node(
+                node.op_type,
+                node.input,
+                node.output,
+                name=f"AlmostDoNothing--{node.name}",
+            )
+        ]
+
+
+class DoNothingPattern(PatternOptimization):
+    """
+    Checks that a Expand is really needed.
+    """
+
+    def match(
+        self,
+        g: "GraphBuilderPatternOptimization",  # noqa: F821
+        node: NodeProto,
+        matched: List[MatchResult],
+    ) -> Optional[MatchResult]:
+        # if node.op_type != "Pow" or node.domain != "":
+        #    return self.none()
+        return self.none()
+        # return MatchResult(self, [node], self.apply, insert_at=node)
+
+    def apply(
+        self, g: "GraphBuilder", node: NodeProto  # noqa: F821
+    ) -> List[NodeProto]:
+        return [node]
+
+
 def get_default_patterns(verbose: int = 0) -> List[PatternOptimization]:
     """
     Returns a default list of optimization patterns.
@@ -38,6 +91,8 @@ def get_default_patterns(verbose: int = 0) -> List[PatternOptimization]:
         pprint.pprint(get_default_patterns())
     """
     return [
+        AlmostDoNothingPattern(verbose=verbose),
+        DoNothingPattern(verbose=verbose),
         CastPattern(verbose=verbose),
         CastCastBinaryPattern(verbose=verbose),
         ExpandPattern(verbose=verbose),

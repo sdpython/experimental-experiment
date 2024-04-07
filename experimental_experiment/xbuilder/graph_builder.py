@@ -5,7 +5,7 @@ from typing import Any, Dict, List, Optional, Sequence, Set, Tuple, Union
 import numpy as np
 import onnx.helper as oh
 import onnx.numpy_helper as onh
-from onnx.shape_inference import infer_shapes
+from onnx.shape_inference import infer_shapes as onnx_infer_shapes
 from onnx import (
     AttributeProto,
     FunctionProto,
@@ -13,6 +13,7 @@ from onnx import (
     ModelProto,
     NodeProto,
     TensorProto,
+    TypeProto,
 )
 from experimental_experiment.reference import ExtendedReferenceEvaluator
 from .shape_helper import (
@@ -185,8 +186,9 @@ class GraphBuilder:
             self.current_input = len(self.inputs)
             self._update_structures_with_proto(target_opset_or_existing_proto)
             self.constant_folding(convert_into_initializer=False)
-            if infer_shapes:
-                self._update_shape_types_with_proto(target_opset_or_existing_proto)
+            self._update_shape_types_with_proto(
+                target_opset_or_existing_proto, infer_shapes
+            )
         else:
             raise NotImplementedError(
                 f"{type(target_opset_or_existing_proto)} is not supported."
@@ -560,6 +562,9 @@ class GraphBuilder:
 
     def set_name(self, name: str):
         """Adds a name to the list of known names."""
+        assert (
+            name != ""
+        ), f"Empty name {name!r} can be registered{self.get_debug_msg()}"
         assert (
             name not in self._raise_list
         ), f"Name {name!r} is one of the name declared in the stop list{self.get_debug_msg()}"
@@ -1104,7 +1109,9 @@ class GraphBuilder:
         if key and key in self._values:
             if name == "":
                 return self._values[key]
-            return self.make_node("Identity", [self._values[key]], [name])
+            return self.make_node(
+                "Identity", [self._values[key]], [name], name="make_initializer"
+            )
 
         if isinstance(value, TensorProto):
             itype = value.data_type
@@ -1536,13 +1543,21 @@ class GraphBuilder:
         if self.current_input < len(self.input_names):
             # The input needs to be renamed, an identity node is added.
             input_name = self.input_names[self.current_input]
-            self.make_node("Identity", [input_name], [name], check=False)
+            self.make_node(
+                "Identity", [input_name], [name], check=False, name="make_tensor_input"
+            )
         else:
             if is_dimension:
                 # The convention is to have _dim_ in the name to tell
                 # it is a dimension.
                 input_name = f"{name}_dim_"
-                self.make_node("Identity", [input_name], [name], check=False)
+                self.make_node(
+                    "Identity",
+                    [input_name],
+                    [name],
+                    check=False,
+                    name="make_tensor_input",
+                )
             else:
                 self.input_names.append(name)
                 input_name = name
@@ -1647,6 +1662,43 @@ class GraphBuilder:
         if elem_type:
             self.set_type(name, elem_type)
         return name
+
+    def select_outputs(self, output_names: List[str]):
+        """
+        Selects new outputs. The type is assumed to be unknown.
+        The method only wipes out the outputs to replace them by
+        others. It assumes the unused nodes are removed afterwards.
+
+        :param output_names: new outputs
+        """
+        new_outputs = []
+        for name in output_names:
+            if self.has_type(name) and self.has_rank(name):
+                if self.has_shape(name):
+                    out = oh.make_tensor_value_info(
+                        name, self.get_type(name), self.get_shape(name)
+                    )
+                    if self.verbose:
+                        print(
+                            f"[GraphBuilder-{self._hash()}.make_tensor_output] "
+                            f"{name}[{self.get_type(name)}:R{self.get_shape(name)}]"
+                        )
+                else:
+                    out = oh.make_tensor_value_info(
+                        name, self.get_type(name), [None] * self.get_rank(name)
+                    )
+                    if self.verbose:
+                        print(
+                            f"[GraphBuilder-{self._hash()}.make_tensor_output] "
+                            f"{name}[{self.get_type(name)}:R{self.get_rank(name)}]"
+                        )
+            else:
+                out = oh.make_value_info(name, TypeProto())
+                if self.verbose:
+                    print(f"[GraphBuilder-{self._hash()}.make_tensor_output] {name}")
+            new_outputs.append(out)
+
+        self.outputs = new_outputs
 
     def verify_shape(
         self,
@@ -1789,6 +1841,11 @@ class GraphBuilder:
         :param kwargs: additional attributes to add the node
         :return: output names
         """
+        assert name is not None and not name.startswith("None"), (
+            f"It is good practice to give every node a name so that is "
+            f"easier to see where this node is created but name={name!r} "
+            f"and op_type={op_type!r}."
+        )
         assert (
             not kwargs or not attributes
         ), f"Only attributes or kwargs can be filled for node {op_type!r}."
@@ -1913,7 +1970,12 @@ class GraphBuilder:
                         f"[GraphBuilder-{self._hash()}.make_node] duplicated constant detected for "
                         f"{node.op_type}:{node.input}->{node.output}"
                     )
-                node = oh.make_node("Identity", [origin.output[0]], [node.output[0]])
+                node = oh.make_node(
+                    "Identity",
+                    [origin.output[0]],
+                    [node.output[0]],
+                    name=self.unique_node_name(".make_node"),
+                )
                 self.constants_alias_[node.output[0]] = origin.output[0]
             else:
                 self.add_constant_node(node)
@@ -1932,6 +1994,8 @@ class GraphBuilder:
 
         # add the node
         for o in node.output:
+            if o == "":
+                continue
             self.set_name(o)
         self.nodes.append(node)
 
@@ -2085,9 +2149,14 @@ class GraphBuilder:
         for name, inp in zip(input_names, builder.inputs):
             new_name = self.unique_name(f"{prefix}{inp.name}")
             renaming[inp.name] = new_name
-            self.make_node("Identity", [name], [new_name])
+            self.make_node("Identity", [name], [new_name], name=".make_nodes")
 
         for node in builder.nodes:
+            assert name is not None and not name.startswith("None"), (
+                f"It is good practice to give every node a name so that is "
+                f"easier to see where this node is created but name={name!r} "
+                f"and op_type={node.op_type!r}."
+            )
             new_inputs = [renaming[i] for i in node.input]
             new_outputs = [self.unique_name(f"{prefix}{o}") for o in node.output]
             for o, no in zip(node.output, new_outputs):
@@ -2099,6 +2168,7 @@ class GraphBuilder:
                 domain=node.domain,
                 attributes=node.attribute,
                 check=False,
+                name=node.name,
             )
             for o, no in zip(node.output, new_outputs):
                 if builder.has_shape(o):
@@ -2115,7 +2185,7 @@ class GraphBuilder:
             f"outputs={builder.outputs}, renaming={renaming}."
         )
         for name, out in zip(output_names, builder.outputs):
-            self.make_node("Identity", [renaming[out.name]], [name])
+            self.make_node("Identity", [renaming[out.name]], [name], name=".make_nodes")
 
         # opsets and domains
         for o, v in builder.opsets.items():
@@ -2458,9 +2528,35 @@ class GraphBuilder:
             )
 
         # restores the existing value_info
+        done = (
+            set(init.name for init in model.graph.initializer)
+            | set(i.name for i in model.graph.input)
+            | set(i.name for i in model.graph.output)
+        )
         for val in self.value_info:
             if self.has_name(val.name):
                 model.graph.value_info.append(val)
+                done.add(val.name)
+
+        # adding shape information
+        addition = []
+        for name in self._known_names:
+            if name in done or not self.has_type(name):
+                continue
+            if self.has_shape(name):
+                addition.append(
+                    oh.make_tensor_value_info(
+                        name, self.get_type(name), list(self.get_shape(name))
+                    )
+                )
+            elif self.has_rank(name):
+                addition.append(
+                    oh.make_tensor_value_info(
+                        name, self.get_type(name), [None] * self.get_rank(name)
+                    )
+                )
+        if addition:
+            model.graph.value_info.extend(addition)
         return model
 
     def io_names(self):
@@ -2511,15 +2607,17 @@ class GraphBuilder:
             )
 
         statistics = []
+        main_begin = time.perf_counter()
 
         _check(statistics, "A")
         if self.optimization_options.remove_identity:
             begin = time.perf_counter()
-            n = self.remove_identity_nodes()
+            nr, na = self.remove_identity_nodes()
             statistics.append(
                 dict(
                     pattern="remove_identity_nodes",
-                    removed=n,
+                    removed=nr,
+                    added=na,
                     time_in=time.perf_counter() - begin,
                 )
             )
@@ -2584,7 +2682,49 @@ class GraphBuilder:
             )
             _check(statistics, "G")
 
+        if self.verbose > 1:
+            duration = time.perf_counter() - main_begin
+            print(
+                f"[GraphBuilder] done with "
+                f"{len(self.nodes)} nodes in {duration:.3f}"
+            )
+            msg = self._compile_statistics(statistics)
+            print(msg)
+
         return statistics
+
+    def _compile_statistics(self, statistics: List[Dict[str, Any]]) -> str:
+        stats = {}
+        for obs in statistics:
+            pattern = obs["pattern"]
+            if pattern not in stats:
+                stats[pattern] = {
+                    "time_in": 0.0,
+                    "iteration": [],
+                    "match_index": [],
+                    "removed": 0,
+                    "added": 0,
+                    "instances": 0,
+                }
+            o = stats[pattern]
+            for k, v in obs.items():
+                if k == "pattern":
+                    continue
+                if k in {"time_in", "removed", "added", "instances"}:
+                    o[k] += v
+                    continue
+                o[k].append(v)
+
+        rows = []
+        for k, v in sorted(stats.items()):
+            line = (
+                f"    STAT {k} +{v['added']} -{v['removed']} "
+                f"#it={len(set(v['iteration']))} "
+                f"maxmatch={max(v['match_index']) if v['match_index'] else 0} "
+                f"i={v['instances']} - time={v['time_in']}"
+            )
+            rows.append(line)
+        return "\n".join(rows)
 
     def optimize_with_patterns(self) -> List[Dict[str, Any]]:
         """
@@ -2741,17 +2881,18 @@ class GraphBuilder:
         self.nodes = new_nodes
         return start - len(self.nodes)
 
-    def remove_identity_nodes(self) -> int:
+    def remove_identity_nodes(self) -> Tuple[int, int]:
         """
-        Removes identity nodes. Returns the number of removed nodes.
+        Removes identity nodes. Returns the number of removed nodes
+        and the number of added nodes.
         """
         # first pass: detect replacements
-        start = len(self.nodes)
         new_nodes = []
         input_names = set(i.name for i in self.inputs)
         output_names = set(i.name for i in self.outputs)
         replacements = {}
         replacements_rev = {}
+        removed = 0
         for node in self.nodes:
             if node.op_type != "Identity" or self.do_not_remove(node):
                 new_nodes.append(node)
@@ -2814,6 +2955,7 @@ class GraphBuilder:
                     f"replacement {k}->{v} is not possible because of "
                     f"[{v}->{replacements[v]}], old_name={old_name!r}, new_name={new_name!r}"
                 )
+            removed += 1
 
         # second pass: replacements in initializer
         for k, v in replacements.items():
@@ -2830,13 +2972,14 @@ class GraphBuilder:
 
         # third pass: replacements in node
         self.nodes = []
+        added = 0
         for node in new_nodes:
             repo = {o for o in node.output if o in replacements}
             repi = {o for o in node.input if o in replacements}
             if repi or repo:
                 new_inputs = [replacements.get(i, i) for i in node.input]
                 new_outputs = [replacements.get(i, i) for i in node.output]
-                assert not (set(new_inputs) & set(new_outputs)), (
+                assert set(new_inputs) & set(new_outputs) in ({""}, set()), (
                     f"Node type {node.op_type}-{node.name} is incorrectly replaced "
                     f"{node.input}->{new_inputs} and {node.output}->{new_outputs}\n"
                     f"replacements are\n{pprint.pformat(replacements)}"
@@ -2853,12 +2996,14 @@ class GraphBuilder:
                     domain=node.domain,
                     name=node.name,
                 )
+                added += 1
+                removed += 1
                 new_node.attribute.extend(node.attribute)
                 self.nodes.append(new_node)
             else:
                 self.nodes.append(node)
 
-        return start - len(self.nodes)
+        return removed, added
 
     def insert_and_remove_nodes(
         self,
@@ -3020,13 +3165,20 @@ class GraphBuilder:
             self._make_node_set_type_shape(n)
         return memo
 
-    def _update_shape_types_with_proto(self, proto: ModelProto):
+    def _update_shape_types_with_proto(
+        self, proto: ModelProto, infer_shapes: bool = False
+    ):
         """
         Updates the shapes and types for an existing model.
+
+        :param proto: model proto
+        :param infer_shapes: infer shapes to fill information about type and shapes
         """
         assert isinstance(proto, ModelProto), f"Unexpected type {type(proto)} for proto"
-        new_proto = infer_shapes(proto)
+        new_proto = onnx_infer_shapes(proto) if infer_shapes else proto
 
+        if not hasattr(new_proto.graph, "value_info"):
+            return
         for val in new_proto.graph.value_info:
             itype = val.type.tensor_type.elem_type
             self.set_type(val.name, itype)
@@ -3110,7 +3262,12 @@ class GraphBuilder:
             if node.op_type == "Constant":
                 exist = self.is_exact_same_constant(node)
                 if exist is not None:
-                    node = oh.make_node("Identity", [exist.output[0]], [node.output[0]])
+                    node = oh.make_node(
+                        "Identity",
+                        [exist.output[0]],
+                        [node.output[0]],
+                        name="._update_structures_with_proto",
+                    )
                     replaced = True
                     need_identity_removal = True
                 else:
@@ -3131,7 +3288,12 @@ class GraphBuilder:
             elif node.op_type == "ConstantOfShape" and self.is_constant(node.input[0]):
                 exist = self.is_exact_same_constant(node)
                 if exist is not None:
-                    node = oh.make_node("Identity", [exist.output[0]], [node.output[0]])
+                    node = oh.make_node(
+                        "Identity",
+                        [exist.output[0]],
+                        [node.output[0]],
+                        name="._update_structures_with_proto",
+                    )
                     replaced = True
                     need_identity_removal = True
                 else:

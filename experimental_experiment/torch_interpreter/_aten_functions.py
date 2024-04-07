@@ -34,7 +34,7 @@ def aten_abs(
     g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T
 ) -> T:
     "abs"
-    res = g.make_node("Abs", [x], outputs)
+    res = g.make_node("Abs", [x], outputs, name="abs")
     if not sts:
         set_type_shape_unary_op(g, outputs[0], x)
     return res
@@ -44,7 +44,7 @@ def aten_acos(
     g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T
 ) -> T:
     "acos"
-    res = g.make_node("Acos", [x], outputs)
+    res = g.make_node("Acos", [x], outputs, name="acos")
     if not sts:
         set_type_shape_unary_op(g, outputs[0], x)
     return res
@@ -54,7 +54,7 @@ def aten_acosh(
     g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T
 ) -> T:
     "acosh"
-    res = g.make_node("Acosh", [x], outputs)
+    res = g.make_node("Acosh", [x], outputs, name="acosh")
     if not sts:
         set_type_shape_unary_op(g, outputs[0], x)
     return res
@@ -425,7 +425,7 @@ def aten_asin(
     g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T
 ) -> T:
     "asin"
-    res = g.make_node("Asin", [x], outputs)
+    res = g.make_node("Asin", [x], outputs, name="asin")
     if not sts:
         set_type_shape_unary_op(g, outputs[0], x)
     return res
@@ -435,7 +435,7 @@ def aten_asinh(
     g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T
 ) -> T:
     "asinh"
-    res = g.make_node("Asinh", [x], outputs)
+    res = g.make_node("Asinh", [x], outputs, name="asinh")
     if not sts:
         set_type_shape_unary_op(g, outputs[0], x)
     return res
@@ -445,7 +445,7 @@ def aten_atan(
     g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T
 ) -> T:
     "atan"
-    res = g.make_node("Atan", [x], outputs)
+    res = g.make_node("Atan", [x], outputs, name="atan")
     if not sts:
         set_type_shape_unary_op(g, outputs[0], x)
     return res
@@ -455,7 +455,7 @@ def aten_atanh(
     g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T
 ) -> T:
     "atanh"
-    res = g.make_node("Atanh", [x], outputs)
+    res = g.make_node("Atanh", [x], outputs, name="atanh")
     if not sts:
         set_type_shape_unary_op(g, outputs[0], x)
     return res
@@ -665,7 +665,7 @@ def aten_cosh(
     g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T
 ) -> T:
     "cosh"
-    res = g.make_node("Cosh", [x], outputs)
+    res = g.make_node("Cosh", [x], outputs, name="cosh")
     if not sts:
         set_type_shape_unary_op(g, outputs[0], x)
     return res
@@ -806,127 +806,6 @@ def aten_embedding(
     if not sts:
         g.set_type(res, g.get_type(weight))
         g.set_rank(res, g.get_rank(weight) + g.get_rank(indices) - 1)
-    return res
-
-
-def aten_embedding_dense_backward(
-    g: GraphBuilder,
-    sts: Optional[Dict[str, Any]],
-    outputs: List[str],
-    grad_output: T,
-    indices: T,
-    num_weights: int,
-    padding_idx: int,
-    scale_grad_by_freq: bool,
-) -> T:
-    """
-    embedding
-
-    ::
-
-        def _unsqueeze_to_dim(x: Tensor, dim: int) -> Tensor:
-            for _ in range(dim - x.dim()):
-                x = x.unsqueeze(-1)
-            return x
-
-        def embedding_dense_backward(
-            grad_output: Tensor,
-            indices: Tensor,
-            num_weights: int,
-            padding_idx: int,
-            scale_grad_by_freq: bool,
-        ):
-            computation_dtype, result_dtype = utils.elementwise_dtypes(
-                grad_output, type_promotion_kind=utils.ELEMENTWISE_TYPE_PROMOTION_KIND.DEFAULT
-            )
-            grad_output = grad_output.to(computation_dtype)
-            indices = _maybe_convert_to_dtype(indices, torch.long)  # type: ignore[assignment]
-            if scale_grad_by_freq:
-                counts = indices.new_zeros((num_weights,))
-                ones = torch.ones_like(indices)
-                counts = aten._unsafe_index_put(counts, [indices], ones, accumulate=True)
-                grad_weights_scale = counts[indices]
-                grad_output = grad_output / grad_weights_scale.unsqueeze(-1)
-
-            mask = _unsqueeze_to_dim(indices == padding_idx, grad_output.ndim)
-            grad = grad_output.masked_fill(mask, 0)
-            grad_weight = grad_output.new_zeros(
-                (num_weights,) + grad_output.shape[indices.ndim :]
-            )
-            return aten._unsafe_index_put(grad_weight, [indices], grad, accumulate=True).to(
-                result_dtype
-            )
-    """
-    assert (
-        not scale_grad_by_freq
-    ), f"scale_grad_by_freq=True not implemented{g.get_debug_msg()}"
-    assert g.has_shape(grad_output), f"missing shape for grad_output{g.get_debug_msg()}"
-    assert g.has_shape(indices), f"missing shape for indices{g.get_debug_msg()}"
-    assert is_static_shape(
-        g.get_shape(grad_output)
-    ), f"unknown shape for grad_output{g.get_debug_msg()}"
-
-    # if scale_grad_by_freq:
-    #     counts = indices.new_zeros((num_weights,))
-    #     ones = torch.ones_like(indices)
-    #     counts = aten._unsafe_index_put(counts, [indices], ones, accumulate=True)
-    #     grad_weights_scale = counts[indices]
-    #     grad_output = grad_output / grad_weights_scale.unsqueeze(-1)
-
-    # mask = _unsqueeze_to_dim(indices == padding_idx, grad_output.ndim)
-    shape_indices = list(g.get_shape(indices))
-    ndim = g.get_rank(grad_output)
-    rank_indices = g.get_rank(indices)
-    shape_indices.extend([1] * (ndim - rank_indices))
-    assert ndim == len(shape_indices), (
-        f"New shape for indices is wrong shape_indices="
-        f"{shape_indices}, expected rank={ndim}"
-    )
-    mask = g.op.Reshape(
-        g.op.Equal(
-            indices,
-            np.array([padding_idx], dtype=np.int64),
-            name="embedding_dense_backward",
-        ),
-        np.array(shape_indices, dtype=np.int64),
-        name="embedding_dense_backward",
-    )
-    g.set_type(mask, TensorProto.BOOL)
-    g.set_rank(mask, len(shape_indices))
-
-    # grad = grad_output.masked_fill(mask, 0)
-    grad = aten_masked_fill_Scalar(
-        g,
-        sts,
-        None,
-        grad_output,
-        mask,
-        0,
-        name="embedding_dense_backward_masked_fill",
-    )
-
-    shape_output = g.get_shape(grad_output)
-    new_shape = (num_weights,) + shape_output[rank_indices:]
-    grad_weight = g.op.ConstantOfShape(
-        np.array(new_shape, dtype=np.int64), name="embedding_dense_backward"
-    )
-    indices_reshaped = g.op.UnsqueezeAnyOpset(
-        indices, np.array([0], dtype=np.int64), name="embedding_dense_backward"
-    )
-    res = g.op.ScatterElements(
-        grad_weight,
-        indices_reshaped,
-        grad,
-        outputs=outputs,
-        name="embedding_dense_backward",
-    )
-    assert res is not None, (
-        "aten_embedding_dense_backward is not correctly implemented, "
-        "use get_decomposition_table."
-    )
-    if not sts:
-        g.set_type(res, g.get_type(grad_output))
-        g.set_shape(res, new_shape)
     return res
 
 
@@ -1201,7 +1080,7 @@ def aten_flatten(
             f"start_dim={start_dim}, end_dim={end_dim} not supported."
         )
     if end_dim == -1:
-        return g.make_node("Flatten", [x], outputs)
+        return g.make_node("Flatten", [x], outputs, name="flatten")
     res = g.make_node("Flatten", [x], outputs, to=end_dim)
     if not sts:
         g.set_type(res, g.get_type(x))
@@ -2432,7 +2311,7 @@ def aten_round(
     g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T
 ) -> T:
     "round"
-    res = g.make_node("Round", [x], outputs)
+    res = g.make_node("Round", [x], outputs, name="round")
     if not sts:
         set_type_shape_unary_op(g, outputs[0], x)
     return res
@@ -2620,7 +2499,7 @@ def aten_sinh(
     g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T
 ) -> T:
     "sinh"
-    res = g.make_node("Sinh", [x], outputs)
+    res = g.make_node("Sinh", [x], outputs, name="sinh")
     if not sts:
         set_type_shape_unary_op(g, outputs[0], x)
     return res
@@ -3280,7 +3159,7 @@ def aten_tan(
     g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T
 ) -> T:
     "tan"
-    res = g.make_node("Tan", [x], outputs)
+    res = g.make_node("Tan", [x], outputs, name="tan")
     if not sts:
         set_type_shape_unary_op(g, outputs[0], x)
     return res
@@ -3290,7 +3169,7 @@ def aten_tanh(
     g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T
 ) -> T:
     "tanh"
-    res = g.make_node("Tanh", [x], outputs)
+    res = g.make_node("Tanh", [x], outputs, name="tanh")
     if not sts:
         set_type_shape_unary_op(g, outputs[0], x)
     return res
@@ -3414,7 +3293,7 @@ def aten_transpose(
     "transpose"
     perm = list(range(g.rank(input_name)))
     perm[dim0], perm[dim1] = perm[dim1], perm[dim0]
-    res = g.make_node("Transpose", [input_name], outputs, perm=perm)
+    res = g.make_node("Transpose", [input_name], outputs, perm=perm, name="transpose")
     if not sts:
         g.set_type(outputs[0], g.get_type(input_name))
         if g.has_shape(input_name):
