@@ -39,6 +39,23 @@ def _get_session(
         )
     opts.add_session_config_entry("session.disable_aot_function_inlining", "1")
 
+    opsets = set(d.domain for d in onx.opset_import)
+    print("----", opsets)
+    if "onnx_extended.ortops.optim.cuda" in opsets:
+        from onnx_extended.ortops.optim.cuda import get_ort_ext_libs
+
+        assert os.path.exists(
+            get_ort_ext_libs()[0]
+        ), f"Unable to find library {get_ort_ext_libs()[0]!r}."
+        opts.register_custom_ops_library(get_ort_ext_libs()[0])
+    elif "onnx_extended.ortops.optim.cpu" in opsets:
+        from onnx_extended.ortops.optim.cpu import get_ort_ext_libs
+
+        assert os.path.exists(
+            get_ort_ext_libs()[0]
+        ), f"Unable to find library {get_ort_ext_libs()[0]!r}."
+        opts.register_custom_ops_library(get_ort_ext_libs()[0])
+
     return (
         onnxruntime.InferenceSession(
             onx.SerializeToString(), opts, providers=providers

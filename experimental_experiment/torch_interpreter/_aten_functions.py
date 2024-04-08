@@ -1342,6 +1342,11 @@ def aten_index_put(
 
     index = indices[0]  # tensor
     new_index = g.op.UnsqueezeAnyOpset(index, np.array([-1], dtype=np.int64), name=name)
+    g.set_type(new_index, g.get_type(index))
+    if g.has_shape(index):
+        g.set_shape(new_index, g.get_shape(index) + (1,))
+    else:
+        g.set_rank(new_index, g.get_rank(index) + 1)
 
     if accumulate:
         assert g.main_opset >= 13, (

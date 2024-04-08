@@ -31,7 +31,7 @@ Another example
 
 ::
 
-    python -m experimental_experiment.torch_bench.dort_bench --backend custom --device cuda -w 1 -r 5 --with_mask 0 --implementation sdpa --enable_pattern AlmostDoNothing --config medium
+    python -m experimental_experiment.torch_bench.dort_bench --backend custom --device cuda -w 1 -r 5 --mixed 1 --with_mask 0 --implementation sdpa --enable_pattern AlmostDoNothing --config medium
 """
 
 from experimental_experiment.torch_bench._dort_cmd_common import dort_args
@@ -92,6 +92,9 @@ if is_cuda:
 
 device = args.device
 model, example_args_collection = create_model(args.model, config_dict)
+
+if args.backend != "ortmodule":
+    model = model.eval()
 model = model.to(device)
 
 if is_cuda:
@@ -108,8 +111,10 @@ if verbose:
     for a in example_args_collection[0]:
         print(f"  input: {a.dtype}:{a.shape}")
 
-if args.export and not os.path.exists("dump_dort_bench"):
-    os.mkdir("dump_dort_bench")
+dump_folder = args.dump_folder
+
+if args.export and not os.path.exists(dump_folder):
+    os.mkdir(dump_folder)
 
 compiled_model = create_compiled_model(
     model,
@@ -122,7 +127,7 @@ compiled_model = create_compiled_model(
     optimize=optimize,
     use_fused_aten_ops=args.implementation == "sdpa",
     dump_prefix=(
-        f"dump_dort_bench/{args.export}-{args.model}-{args.backend}"
+        f"{dump_folder}/{args.export}-{args.model}-{args.backend}"
         if args.export
         else None
     ),
@@ -191,19 +196,19 @@ for i in range(args.warmup):
     if args.backend in ("ort", "custom", "debug", "plug") and i == 0 and args.export:
         with dump_onnx(
             f"dort-{args.export}-{args.model}-{args.backend}",
-            folder="dump_dort_bench",
+            folder=dump_folder,
             clean=True,
         ):
             loop_iteration(is_cuda, inputs, compiled_model, loss)
 
-        for onx in os.listdir("dump_dort_bench"):
+        for onx in os.listdir(dump_folder):
             if not onx.endswith(".onnx"):
                 continue
             new_onx = onx.replace(".onnx", ".opt.onnx")
             print(f"  ort_optimize {onx} -> {new_onx}")
             ort_optimize(
-                os.path.join("dump_dort_bench", onx),
-                output=os.path.join("dump_dort_bench", new_onx),
+                os.path.join(dump_folder, onx),
+                output=os.path.join(dump_folder, new_onx),
                 providers=(
                     [("CUDAExecutionProvider", {}), ("CPUExecutionProvider", {})]
                     if is_cuda
