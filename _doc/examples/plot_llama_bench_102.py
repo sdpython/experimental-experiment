@@ -33,9 +33,12 @@ parsed_args = get_parsed_args(
     warmup=3,
     repeat=5,
     model=("llama", "model to benchmark"),
-    backend=("eager,dynger,inductor,ort,custom,plug", "backend to test"),
+    backend=(
+        "eager,dynger,inductor,ort,custom,ortmodule",
+        "backend to test, among eager,dynger,inductor,ort,custom,plug,ortmodule,backort",
+    ),
     device=("cuda" if check_cuda_availability() else "cpu", "device to test"),
-    num_hidden_layers=("2", "hidden layers to test"),
+    num_hidden_layers=("1", "hidden layers to test"),
     mixed=("0", "boolean value to test (mixed precision or not)"),
     dynamic=("0", "boolean value to test dynamic shapes or not"),
     script_name=("experimental_experiment.torch_bench.dort_bench", "script to run"),
@@ -211,7 +214,11 @@ except BenchmarkError as e:
 #########################
 # Let's process the data.
 
-prefix = f"plot_{parsed_args.model}-{parsed_args.with_mask}"
+prefix = (
+    f"plot_{parsed_args.model}-{parsed_args.with_mask}-"
+    f"m{parsed_args.mixed}d{parsed_args.dynamic}-"
+    f"{parsed_args.implementation}"
+)
 
 if data_collected:
 

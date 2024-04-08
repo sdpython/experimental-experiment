@@ -302,7 +302,7 @@ def to_onnx(
 
     if verbose:
         t = time.perf_counter()
-        print(f"[to_onnx] onnx nodes done in {t - begin} s")
+        print(f"[to_onnx] {len(builder.nodes)} onnx nodes done in {t - begin} s")
         print("[to_onnx] start conversion to onnx (before optimization)")
         begin = t
 
@@ -310,7 +310,9 @@ def to_onnx(
 
     if verbose:
         t = time.perf_counter()
-        print(f"[to_onnx] to_onnx done in {t - begin} s")
+        print(
+            f"[to_onnx] to_onnx done in {t - begin} s and {len(onx.graph.node)} nodes"
+        )
         if verbose >= 10:
             print(builder.get_debug_msg())
 

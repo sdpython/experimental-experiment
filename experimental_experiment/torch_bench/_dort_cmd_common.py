@@ -1,6 +1,7 @@
 import os
 from typing import Any, Dict, List, Optional, Tuple, Union
 import numpy as np
+from onnx import TensorProto
 from ._dort_cmd_common_models import (
     _create_configuration_for_benchmark_llama,
     _create_configuration_for_benchmark_mistral,
@@ -56,13 +57,41 @@ def get_fused_aten_ops_dispatcher():
                 t_is_causal,
                 t_scale,
             ],
-            outputs=outputs,
+            outputs=[
+                g.unique_name(n)
+                for n in ["output", "log_sumexp", "philox_seed", "philox_offset"]
+            ],
             operator="_scaled_dot_product_efficient_attention",
             domain="org.pytorch.aten",
             name="scaled_dot_product_efficient_attention",
         )
+        g.set_type(output, g.get_type(query))
+        g.set_type(log_sumexp, TensorProto.FLOAT)
+        g.set_rank(output, g.get_rank(query))
+        g.set_rank(log_sumexp, g.get_rank(query))
+
+        g.set_type(philox_seed, TensorProto.INT64)
+        g.set_type(philox_offset, TensorProto.INT64)
+        g.set_shape(philox_seed, tuple())
+        g.set_shape(philox_offset, tuple())
+
         g.add_domain("org.pytorch.aten")
-        return output, log_sumexp, philox_seed, philox_offset
+        res = []
+        for i, (name, rename) in enumerate(
+            zip([output, log_sumexp, philox_seed, philox_offset], outputs)
+        ):
+            res.append(
+                g.op.Identity(
+                    name,
+                    outputs=[rename],
+                    name=(
+                        "onnx_scaled_dot_product_efficient_attention"
+                        if i < 0
+                        else "_DONOTREMOVE_onnx_scaled_dot_product_efficient_attention"
+                    ),
+                )
+            )
+        return tuple(res)
 
     def onnx_scaled_dot_product_attention_backward(
         g: "GraphBuilder",  # noqa: F821
@@ -317,6 +346,23 @@ def create_compiled_model(
             return cc, None
         return cc
 
+    if backend == "ortmodule":
+        from onnxruntime.training.ortmodule import ORTModule, DebugOptions, LogLevel
+
+        if dump_prefix:
+            os.environ["ORTMODULE_CACHE_DIR"] = os.path.dirname(dump_prefix)
+            opts = DebugOptions(
+                save_onnx=True,
+                log_level=LogLevel.VERBOSE if verbose else LogLevel.ERROR,
+                onnx_prefix=dump_prefix,
+            )
+        else:
+            opts = DebugOptions(
+                log_level=LogLevel.VERBOSE if verbose else LogLevel.ERROR,
+            )
+
+        return ORTModule(model, opts)
+
     raise ValueError(f"Unexpected backend={backend!r}.")
 
 
@@ -344,10 +390,11 @@ def dort_args(name: str, description: str):
         implementation=("eager", "eager or sdpa"),
         disable_pattern=("", "a list of optimization patterns to disable"),
         enable_pattern=("default", "list of optimization patterns to enable"),
+        dump_folder=("dump_dort_bench", "where to dump the exported model"),
         optimize=(1, "optimize the model"),
         with_mask=(1, "with or without mask, dynamo may fail with a mask"),
         expose="backend,repeat,warmup,device,num_hidden_layers,"
-        "mixed,export,config,target_opset,dynamic,verbose,"
+        "mixed,export,config,target_opset,dynamic,verbose,dump_folder,"
         "enable_pattern,disable_pattern,model,optimize,with_mask",
     )
     return args

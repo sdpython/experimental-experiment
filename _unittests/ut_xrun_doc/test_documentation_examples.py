@@ -121,6 +121,9 @@ class TestDocumentationExamples(ExtTestCase):
             ):
                 reason = "dot is missing"
 
+            if not reason and is_apple():
+                reason = "last for ever"
+
             if reason:
 
                 @unittest.skip(reason)

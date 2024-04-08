@@ -2885,6 +2885,15 @@ class GraphBuilder:
         """
         Removes identity nodes. Returns the number of removed nodes
         and the number of added nodes.
+
+        .. note::
+
+            onnxruntime does not handle well when it is executing from domain
+            *'org.pytorch.aten'* (ATen for example) which outputs results
+            on CPU where the expected output is on CUDA. An identity node must be
+            kept or inserted in that case. In that particular case, a node can be
+            marked so that it does not get deleted: its name must start with
+            ``'_DONOTREMOVE_'``.
         """
         # first pass: detect replacements
         new_nodes = []
@@ -3035,9 +3044,9 @@ class GraphBuilder:
             if not n:
                 # already marked as removed
                 continue
-            assert n and not self.do_not_remove(n), (
-                f"Node {n.name!r} marked as 'DONOTREMOVE' " f"cannot be removed."
-            )
+            assert n and not self.do_not_remove(
+                n
+            ), f"Node {n.name!r} marked as 'DONOTREMOVE' cannot be removed."
             memo.append(n)
             self.nodes[i] = None
 

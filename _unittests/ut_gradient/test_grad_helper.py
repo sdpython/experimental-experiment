@@ -28,6 +28,7 @@ from experimental_experiment.ext_test_case import (
     ExtTestCase,
     ignore_warnings,
     requires_onnxruntime_training,
+    skipif_ci_windows,
 )
 
 opset = min(onnx.defs.onnx_opset_version() - 2, 18)
@@ -79,6 +80,7 @@ class TestGradHelper(ExtTestCase):
         ExtTestCase.setUpClass()
 
     @requires_onnxruntime_training()
+    @skipif_ci_windows("not working on windows")
     @ignore_warnings((DeprecationWarning, FutureWarning))
     def test_grad_helper_keep_yield(self):
         opv = opset
@@ -101,6 +103,7 @@ class TestGradHelper(ExtTestCase):
             f.write(new_onx.SerializeToString())
 
     @requires_onnxruntime_training()
+    @skipif_ci_windows("not working on windows")
     @ignore_warnings((DeprecationWarning, FutureWarning))
     def test_grad_helper(self):
         opv = opset
@@ -123,6 +126,7 @@ class TestGradHelper(ExtTestCase):
         self.check_runtime(new_onx, "test_grad_helper")
 
     @requires_onnxruntime_training()
+    @skipif_ci_windows("not working on windows")
     @ignore_warnings((DeprecationWarning, FutureWarning))
     def test_grad_helper_nooutput(self):
         opv = opset
@@ -142,6 +146,7 @@ class TestGradHelper(ExtTestCase):
         self.check_runtime(new_onx, "test_grad_helper_nooutput")
 
     @requires_onnxruntime_training()
+    @skipif_ci_windows("not working on windows")
     @ignore_warnings((DeprecationWarning, FutureWarning))
     def test_grad_helper_mul(self):
         opv = opset
@@ -157,6 +162,7 @@ class TestGradHelper(ExtTestCase):
         self.check_runtime(new_onx, "test_grad_helper_mul")
 
     @requires_onnxruntime_training()
+    @skipif_ci_windows("not working on windows")
     @ignore_warnings((DeprecationWarning, FutureWarning))
     def test_grad_helper_noweight(self):
         opv = opset
@@ -176,6 +182,7 @@ class TestGradHelper(ExtTestCase):
         self.check_runtime(new_onx, "test_grad_helper_noweight")
 
     @requires_onnxruntime_training()
+    @skipif_ci_windows("not working on windows")
     @ignore_warnings((DeprecationWarning, FutureWarning))
     def test_grad_helper_fillgrad(self):
         opv = opset

@@ -31,16 +31,21 @@ class AlmostDoNothingPattern(PatternOptimization):
     Checks that a Expand is really needed.
     """
 
+    n_count = 0
+
     def match(
         self,
         g: "GraphBuilderPatternOptimization",  # noqa: F821
         node: NodeProto,
         matched: List[MatchResult],
     ) -> Optional[MatchResult]:
+        if self.n_count >= 0:
+            return self.none()
         if node.op_type != "Pow" or node.domain != "":
             return self.none()
         if node.name is not None and "AlmostDoNothing" in node.name:
             return self.none(node, inspect.currentframe().f_lineno)
+        self.n_count += 1
         return MatchResult(self, [node], self.apply, insert_at=node)
 
     def apply(
@@ -92,7 +97,7 @@ def get_default_patterns(verbose: int = 0) -> List[PatternOptimization]:
     """
     return [
         AlmostDoNothingPattern(verbose=verbose),
-        DoNothingPattern(verbose=verbose),
+        # DoNothingPattern(verbose=verbose),
         CastPattern(verbose=verbose),
         CastCastBinaryPattern(verbose=verbose),
         ExpandPattern(verbose=verbose),
