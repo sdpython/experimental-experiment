@@ -40,7 +40,6 @@ def _get_session(
     opts.add_session_config_entry("session.disable_aot_function_inlining", "1")
 
     opsets = set(d.domain for d in onx.opset_import)
-    print("----", opsets)
     if "onnx_extended.ortops.optim.cuda" in opsets:
         from onnx_extended.ortops.optim.cuda import get_ort_ext_libs
 

@@ -27,11 +27,11 @@ Or simply this one:
     python -m experimental_experiment.torch_bench.dort_bench --backend custom --device cuda --export a -w 1
 
 
-Another example
+Profiling:
 
 ::
 
-    python -m experimental_experiment.torch_bench.dort_bench --backend custom --device cuda -w 1 -r 5 --mixed 1 --with_mask 0 --implementation sdpa --enable_pattern AlmostDoNothing --config medium
+    nsys profile python -m experimental_experiment.torch_bench.dort_bench --device cuda -w 2 -r 5 --mixed 1 --config large --backend eager --enable_pattern=default+onnxruntime
 """
 
 from experimental_experiment.torch_bench._dort_cmd_common import dort_args
