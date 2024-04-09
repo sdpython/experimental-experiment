@@ -64,7 +64,12 @@ class TestGraphPatternOptimizationExp(ExtTestCase):
                         ["cst"],
                         value=onh.from_array(np.array([0], dtype=np.float32)),
                     ),
-                    oh.make_node("ScatterND", ["cst", "indices", "updates"], ["Z"]),
+                    oh.make_node(
+                        "ScatterND",
+                        ["cst", "indices", "updates"],
+                        ["Z"],
+                        reduction="add",
+                    ),
                 ],
                 "dummy",
                 [

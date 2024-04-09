@@ -19,6 +19,10 @@ class ConstantOfShapeScatterNDPattern(PatternOptimization):
         if node.op_type != "ScatterND" or node.domain != "":
             return self.none()
 
+        reduction = g.get_attribute(node, "reduction", exc=False)
+        if reduction is None or reduction.s == b"none":
+            return self.none(node, inspect.currentframe().f_lineno)
+
         if not g.has_type(node.input[2]):
             itype = g.try_infer_type(node.input[2])
             if itype == 0:
