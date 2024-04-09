@@ -397,7 +397,7 @@ class TransposeMatMulPattern(PatternOptimization):
         # MatMul or Gemm are operating on 2D tensors.
         nodes = [*ns, node]
 
-        return MatchResult(self, nodes, self.apply, insert_at=node)
+        return MatchResult(self, nodes, self.apply)
 
     def apply(
         self,

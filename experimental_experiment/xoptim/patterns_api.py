@@ -132,7 +132,7 @@ class PatternOptimization:
         self,
         node: Optional[NodeProto] = None,
         lineno: Optional[int] = None,
-        msg: str = "",
+        msg: Optional[Union[Callable, str]] = None,
     ):
         """
         It may be useful which reason made a pattern matching fail.
@@ -147,6 +147,12 @@ class PatternOptimization:
         which lines in the code returned None and which condition failed.
         """
         if node and self.verbose:
+            if msg is None:
+                msg = ""
+            elif callable(msg):
+                msg = msg()
+            if msg:
+                msg = f"\n{msg}"
             if self.verbose >= 10 and hasattr(self, "_debug"):
                 msg2 = self._debug_print()
                 if msg2:
