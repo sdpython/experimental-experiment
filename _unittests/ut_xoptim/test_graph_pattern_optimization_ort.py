@@ -489,6 +489,68 @@ class TestGraphPatternOptimizationOrt(ExtTestCase):
             if att.name == "axis":
                 self.assertEqual(att.i, -1)
 
+    def test_gather_grad(self):
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node(
+                        "ConstantOfShape",
+                        ["shape"],
+                        ["cst"],
+                        value=onh.from_array(np.array([0], dtype=np.float32)),
+                    ),
+                    oh.make_node(
+                        "ScatterND",
+                        ["cst", "indices", "updates"],
+                        ["Z"],
+                        reduction="add",
+                    ),
+                ],
+                "dummy",
+                [
+                    oh.make_tensor_value_info("shape", TensorProto.INT64, [None]),
+                    oh.make_tensor_value_info(
+                        "indices", TensorProto.INT64, [None, None]
+                    ),
+                    oh.make_tensor_value_info("updates", TFLOAT, [None, None, None]),
+                ],
+                [oh.make_tensor_value_info("Z", TFLOAT, [None, None, None])],
+            ),
+            opset_imports=[
+                oh.make_opsetid("", 18),
+            ],
+            ir_version=9,
+        )
+        check_model(model)
+        gr = GraphBuilder(
+            model,
+            infer_shapes=True,
+            optimization_options=OptimizationOptions(patterns=["GatherGrad"]),
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+        self.assertEqual(
+            ["GatherGrad"],
+            [n.op_type for n in opt_onx.graph.node],
+        )
+
+        feeds = {
+            "shape": np.array([5, 6], dtype=np.int64),
+            "indices": np.array([[0], [1], [0]], dtype=np.int64),
+            "updates": np.arange(18).reshape((3, 6)).astype(np.float32),
+        }
+        ref1 = ExtendedReferenceEvaluator(model)
+        expected = ref1.run(None, feeds)
+
+        self.assertEqual(0, len(opt_onx.graph.initializer))
+        check_model(opt_onx)
+        opsets = {v.domain: v.version for v in opt_onx.opset_import}
+        self.assertIn("com.microsoft", opsets)
+        self.assertEqual(opsets["com.microsoft"], 1)
+
+        ref2 = ExtendedReferenceEvaluator(opt_onx)
+        got = ref2.run(None, feeds)
+        self.assertEqualArray(expected[0], got[0])
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

@@ -8,13 +8,13 @@ The script is calling many times the script ``experimental_experiment.torch_benc
 
 ::
 
-    python _doc/examples/plot_llama_bench.py --help
+    python _doc/examples/plot_llama_bench_102.py --help
     
 For exemple, to check mixed precision on multiple backend:
 
 ::
 
-    python _doc/examples/plot_llama_bench.py --device=cuda --num_hidden_layers=1 --mixed=1
+    python _doc/examples/plot_llama_bench_102.py --device=cuda --num_hidden_layers=2 --mixed=1
 
 
 Run the following command to run one experiment and get the available options:
@@ -130,7 +130,7 @@ def make_config(
             cf["disable_pattern"] = disable_pattern
     if "+experimental" in cf["enable_pattern"]:
         try:
-            import onnx_extended
+            import onnx_extended  # noqa: F401
         except ImportError:
             return None
     return cf
