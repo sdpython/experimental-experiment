@@ -8,6 +8,7 @@ from onnx.numpy_helper import from_array, to_array
 import torch
 from torch._C import _from_dlpack
 from onnxruntime.capi import _pybind_state as ORTC
+from ..convert.ort_helper import append_custom_libraries
 from ..xbuilder import OptimizationOptions
 from ..torch_interpreter import to_onnx
 from ..torch_interpreter._torch_helper import create_input_names
@@ -38,6 +39,7 @@ def _get_session(
             onnxruntime.GraphOptimizationLevel, ort_optimization_level
         )
     opts.add_session_config_entry("session.disable_aot_function_inlining", "1")
+    append_custom_libraries(onx, opts)
 
     opsets = set(d.domain for d in onx.opset_import)
     if "onnx_extended.ortops.optim.cuda" in opsets:
