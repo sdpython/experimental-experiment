@@ -45,7 +45,10 @@ parsed_args = get_parsed_args(
     dump=(0, "dump the models with env ONNXRT_DUMP_PATH"),
     check=(0, "just check the script is working, ignores all other parameters"),
     config=("medium", "configuration to use, default or medium"),
-    patterns=("none,default,default+onnxruntime", "optimization patterns to use"),
+    patterns=(
+        "none,default,default+onnxruntime," "default+onnxruntime+experimental",
+        "optimization patterns to use",
+    ),
     implementation=("eager", "eager or sdpa or both values comma separated value"),
     with_mask=(1, "with or without a second input (mask"),
     disable_pattern=("none", "pattern or patterns to disable"),
@@ -125,6 +128,11 @@ def make_config(
             cf["disable_pattern"] += f",{disable_pattern}"
         else:
             cf["disable_pattern"] = disable_pattern
+    if "+experimental" in cf["enable_pattern"]:
+        try:
+            import onnx_extended
+        except ImportError:
+            return None
     return cf
 
 

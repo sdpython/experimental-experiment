@@ -32,6 +32,12 @@ Profiling:
 ::
 
     nsys profile python -m experimental_experiment.torch_bench.dort_bench --device cuda -w 2 -r 5 --mixed 1 --config large --backend eager --enable_pattern=default+onnxruntime
+
+With experimental optimizers:
+
+::
+
+    python -m experimental_experiment.torch_bench.dort_bench --backend custom --device cuda --mixed=1 --export a -w 1 --enable_pattern=default+experimental
 """
 
 from experimental_experiment.torch_bench._dort_cmd_common import dort_args

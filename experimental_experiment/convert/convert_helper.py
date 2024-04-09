@@ -1,6 +1,6 @@
 import time
 from typing import List, Union
-from onnx import ModelProto, helper as oh
+from onnx import ModelProto, helper as oh, load as onnx_load
 from onnx.inliner import inline_local_functions
 
 
@@ -159,6 +159,7 @@ def ort_optimize(
     :param disable_aot: disable AOT
     """
     import onnxruntime
+    from .ort_helper import append_custom_libraries
 
     opts = onnxruntime.SessionOptions()
     opts.optimized_model_filepath = output
@@ -170,12 +171,14 @@ def ort_optimize(
     elif providers == "cuda":
         providers = [("CUDAExecutionProvider", {}), ("CPUExecutionProvider", {})]
     assert isinstance(providers, list), f"Unexpected value for providers={providers!r}"
+
+    if isinstance(onnx_model, str):
+        onnx_model = onnx_load(onnx_model)
+
+    append_custom_libraries(onnx_model, opts)
+
     onnxruntime.InferenceSession(
-        (
-            onnx_model.SerializeToString()
-            if isinstance(onnx_model, ModelProto)
-            else onnx_model
-        ),
+        onnx_model.SerializeToString(),
         opts,
         providers=providers,
     )
