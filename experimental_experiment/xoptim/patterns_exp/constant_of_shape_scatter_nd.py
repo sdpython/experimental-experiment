@@ -41,6 +41,7 @@ class ConstantOfShapeScatterNDPattern(PatternOptimization):
     def apply(
         self, g: "GraphBuilder", node_before: NodeProto, node: NodeProto  # noqa: F821
     ) -> List[NodeProto]:
+        reduction = g.get_attribute(node, "reduction")
         new_node = g.make_node(
             "ScatterNDOfShape",
             [node_before.input[0], *node.input[1:]],
@@ -48,4 +49,5 @@ class ConstantOfShapeScatterNDPattern(PatternOptimization):
             name=f"{self.__class__.__name__}--{node.name}",
             domain="onnx_extended.ortops.optim.cuda",
         )
+        new_node.attribute.append(reduction)
         return [new_node]

@@ -8,6 +8,7 @@ from onnx.numpy_helper import from_array, to_array
 import torch
 from torch._C import _from_dlpack
 from onnxruntime.capi import _pybind_state as ORTC
+from ..convert.ort_helper import append_custom_libraries
 from ..xbuilder import OptimizationOptions
 from ..torch_interpreter import to_onnx
 from ..torch_interpreter._torch_helper import create_input_names
@@ -38,22 +39,7 @@ def _get_session(
             onnxruntime.GraphOptimizationLevel, ort_optimization_level
         )
     opts.add_session_config_entry("session.disable_aot_function_inlining", "1")
-
-    opsets = set(d.domain for d in onx.opset_import)
-    if "onnx_extended.ortops.optim.cuda" in opsets:
-        from onnx_extended.ortops.optim.cuda import get_ort_ext_libs
-
-        assert os.path.exists(
-            get_ort_ext_libs()[0]
-        ), f"Unable to find library {get_ort_ext_libs()[0]!r}."
-        opts.register_custom_ops_library(get_ort_ext_libs()[0])
-    elif "onnx_extended.ortops.optim.cpu" in opsets:
-        from onnx_extended.ortops.optim.cpu import get_ort_ext_libs
-
-        assert os.path.exists(
-            get_ort_ext_libs()[0]
-        ), f"Unable to find library {get_ort_ext_libs()[0]!r}."
-        opts.register_custom_ops_library(get_ort_ext_libs()[0])
+    append_custom_libraries(onx, opts)
 
     return (
         onnxruntime.InferenceSession(
