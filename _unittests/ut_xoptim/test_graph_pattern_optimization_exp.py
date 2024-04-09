@@ -1,6 +1,7 @@
+import itertools
 import unittest
 import numpy as np
-from onnx import TensorProto, helper as oh, numpy_helper as onh
+from onnx import ModelProto, TensorProto, helper as oh, numpy_helper as onh
 from onnx.checker import check_model
 from experimental_experiment.ext_test_case import ExtTestCase, skipif_ci_windows
 from experimental_experiment.xbuilder.graph_builder import (
@@ -63,7 +64,12 @@ class TestGraphPatternOptimizationExp(ExtTestCase):
                         ["cst"],
                         value=onh.from_array(np.array([0], dtype=np.float32)),
                     ),
-                    oh.make_node("ScatterND", ["cst", "indices", "updates"], ["Z"]),
+                    oh.make_node(
+                        "ScatterND",
+                        ["cst", "indices", "updates"],
+                        ["Z"],
+                        reduction="add",
+                    ),
                 ],
                 "dummy",
                 [
@@ -77,7 +83,6 @@ class TestGraphPatternOptimizationExp(ExtTestCase):
             ),
             opset_imports=[
                 oh.make_opsetid("", 18),
-                oh.make_opsetid("com.microsoft", 1),
             ],
             ir_version=9,
         )
@@ -106,12 +111,64 @@ class TestGraphPatternOptimizationExp(ExtTestCase):
         self.assertEqual(0, len(opt_onx.graph.initializer))
         check_model(opt_onx)
         opsets = {v.domain: v.version for v in opt_onx.opset_import}
-        self.assertIn("com.microsoft", opsets)
-        self.assertEqual(opsets["com.microsoft"], 1)
+        self.assertIn("onnx_extended.ortops.optim.cuda", opsets)
+        self.assertEqual(opsets["onnx_extended.ortops.optim.cuda"], 1)
 
         ref2 = ExtendedReferenceEvaluator(opt_onx)
         got = ref2.run(None, feeds)
         self.assertEqualArray(expected[0], got[0])
+
+    def _get_aamm_model(self, op_type: str, left: bool) -> ModelProto:
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node(op_type, ["X", "Y"], ["xy"]),
+                    oh.make_node(op_type, ["xy", "Z"] if left else ["Z", "xy"], ["F"]),
+                ],
+                "dummy",
+                [
+                    oh.make_tensor_value_info("X", TFLOAT, ["d"]),
+                    oh.make_tensor_value_info("Y", TFLOAT, ["d"]),
+                    oh.make_tensor_value_info("Z", TFLOAT, ["d"]),
+                ],
+                [oh.make_tensor_value_info("F", TFLOAT, ["d"])],
+            ),
+            opset_imports=[
+                oh.make_opsetid("", 18),
+                oh.make_opsetid("com.microsoft", 1),
+            ],
+            ir_version=9,
+        )
+        check_model(model)
+        return model
+
+    def test_add_add_mul_mul_pattern(self):
+        for op_type, left in itertools.product(["Add", "Mul"], [True, False]):
+            with self.subTest(op_type=op_type, left=left):
+                model = self._get_aamm_model(op_type=op_type, left=left)
+                self.assertEqual(len(model.graph.node), 2)
+                gr = GraphBuilder(
+                    model,
+                    infer_shapes=True,
+                    optimization_options=OptimizationOptions(patterns=["AddAddMulMul"]),
+                )
+                opt_onx = gr.to_onnx(optimize=True)
+                self.assertEqual([op_type * 2], [_.op_type for _ in opt_onx.graph.node])
+                opsets = {v.domain: v.version for v in opt_onx.opset_import}
+                self.assertIn("onnx_extended.ortops.optim.cuda", opsets)
+                self.assertEqual(opsets["onnx_extended.ortops.optim.cuda"], 1)
+
+                feeds = {
+                    "X": np.array([10], dtype=np.float32),
+                    "Y": np.array([10], dtype=np.float32),
+                    "Z": np.array([10], dtype=np.float32),
+                }
+                ref1 = ExtendedReferenceEvaluator(model)
+                expected = ref1.run(None, feeds)
+
+                ref2 = ExtendedReferenceEvaluator(opt_onx)
+                got = ref2.run(None, feeds)
+                self.assertEqualArray(expected[0], got[0])
 
 
 if __name__ == "__main__":

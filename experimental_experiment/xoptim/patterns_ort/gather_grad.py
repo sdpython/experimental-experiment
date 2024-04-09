@@ -5,9 +5,9 @@ from onnx.numpy_helper import to_array
 from ..patterns_api import MatchResult, PatternOptimization
 
 
-class ConstantOfShapeScatterNDPattern(PatternOptimization):
+class GatherGradPattern(PatternOptimization):
     """
-    Replaces ConstantOfShape + ScatterND with ScatterNDOfShape (com.domain).
+    Replaces ConstantOfShape + ScatterND with GatherGrad (com.domain).
     """
 
     def match(
@@ -19,8 +19,8 @@ class ConstantOfShapeScatterNDPattern(PatternOptimization):
         if node.op_type != "ScatterND" or node.domain != "":
             return self.none()
 
-        reduction = g.get_attribute(node, "reduction", exc=False)
-        if reduction is None or reduction.s == b"none":
+        reduction = g.get_attribute(node, "reduction")
+        if reduction is None or reduction.s != b"add":
             return self.none(node, inspect.currentframe().f_lineno)
 
         if not g.has_type(node.input[2]):
@@ -45,13 +45,14 @@ class ConstantOfShapeScatterNDPattern(PatternOptimization):
     def apply(
         self, g: "GraphBuilder", node_before: NodeProto, node: NodeProto  # noqa: F821
     ) -> List[NodeProto]:
-        reduction = g.get_attribute(node, "reduction")
         new_node = g.make_node(
-            "ScatterNDOfShape",
+            "GatherGrad",
             [node_before.input[0], *node.input[1:]],
             node.output,
             name=f"{self.__class__.__name__}--{node.name}",
-            domain="onnx_extended.ortops.optim.cuda",
+            domain="com.microsoft",
         )
-        new_node.attribute.append(reduction)
+        for att in node.attribute:
+            if att.name != "reduction":
+                new_node.append(att)
         return [new_node]
