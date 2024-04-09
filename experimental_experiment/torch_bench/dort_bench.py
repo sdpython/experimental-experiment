@@ -33,7 +33,7 @@ Profiling:
 
     nsys profile python -m experimental_experiment.torch_bench.dort_bench --device cuda -w 2 -r 5 --mixed 1 --config large --backend eager --enable_pattern=default+onnxruntime
 
-Still failing:
+With experimental optimizers:
 
 ::
 
