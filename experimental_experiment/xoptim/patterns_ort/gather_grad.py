@@ -52,4 +52,7 @@ class GatherGradPattern(PatternOptimization):
             name=f"{self.__class__.__name__}--{node.name}",
             domain="com.microsoft",
         )
+        for att in node.attribute:
+            if att.name != "reduction":
+                new_node.append(att)
         return [new_node]

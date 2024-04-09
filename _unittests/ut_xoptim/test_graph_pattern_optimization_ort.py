@@ -13,6 +13,7 @@ from experimental_experiment.xbuilder.graph_builder import (
     OptimizationOptions,
 )
 from experimental_experiment.xoptim import get_pattern_list
+from experimental_experiment.xoptim.patterns_ort.gather_grad import GatherGradPattern
 from experimental_experiment.xbuilder._onnx_helper import (
     choose_consistent_domain_opset,
     compatible_opsets,
@@ -525,7 +526,7 @@ class TestGraphPatternOptimizationOrt(ExtTestCase):
         gr = GraphBuilder(
             model,
             infer_shapes=True,
-            optimization_options=OptimizationOptions(patterns=["GatherGrad"]),
+            optimization_options=OptimizationOptions(patterns=[GatherGradPattern()]),
         )
         opt_onx = gr.to_onnx(optimize=True)
         self.assertEqual(
@@ -535,7 +536,8 @@ class TestGraphPatternOptimizationOrt(ExtTestCase):
 
         feeds = {
             "shape": np.array([5, 6], dtype=np.int64),
-            "indices": np.array([[0], [1], [0]], dtype=np.int64),
+            # np.array([[0], [1], [0]], dtype=np.int64) does not work
+            "indices": np.array([[0], [1], [2]], dtype=np.int64),
             "updates": np.arange(18).reshape((3, 6)).astype(np.float32),
         }
         ref1 = ExtendedReferenceEvaluator(model)
