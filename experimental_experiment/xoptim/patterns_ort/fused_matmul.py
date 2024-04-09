@@ -49,18 +49,22 @@ class FusedMatMulPattern(PatternOptimization):
 
         hints = []
         found = False
+        nns = []
         for n in ns:
             if n is None:
+                nns.append(None)
                 continue
             perm = list(g.get_attribute(n, "perm").ints)
             expecting = list(range(len(perm)))
             expecting[-2], expecting[-1] = expecting[-1], expecting[-2]
             if perm != expecting:
                 hints.append(dict(expecting=expecting, perm=perm))
+                nns.append(None)
                 continue
             found = True
-            break
+            nns.append(n)
 
+        ns = nns
         if not found:
             # unexpected transpose
             return self.none(

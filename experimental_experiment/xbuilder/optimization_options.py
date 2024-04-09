@@ -24,6 +24,9 @@ class OptimizationOptions:
     :param stop_after: for investigation, stop_after this number of applies patterns,
         -1 to never stop
     :param verbose: verbosity level (for pattern optimization)
+    :param verifiers: run verifications to ensure the model is
+        correct everytime it is modifies, it is mostly to find bugs,
+        it is very slow
     """
 
     def __init__(
@@ -38,6 +41,7 @@ class OptimizationOptions:
         recursive: bool = False,
         stop_after: int = -1,
         verbose: int = 0,
+        verifies: bool = False,
     ):
         self.remove_unused = remove_unused
         self.constant_folding = constant_folding
@@ -63,6 +67,7 @@ class OptimizationOptions:
         self.max_iter = -1
         self.verbose = verbose
         self.recursive = recursive
+        self.verifies = verifies
 
     def __repr__(self):
         pats = "None" if self.patterns is None else [str(p) for p in self.patterns]

@@ -195,7 +195,7 @@ class TestGraphPatternCombination(ExtTestCase):
                 [
                     oh.make_tensor_value_info("X", TFLOAT, ["D32", "D128"]),
                     oh.make_tensor_value_info(
-                        "Y", TFLOAT, ["batch", "channel", "any", "D64"]
+                        "Y", TFLOAT, ["batch", "channel", "D128", "D64"]
                     ),
                 ],
                 [
@@ -354,6 +354,7 @@ class TestGraphPatternCombination(ExtTestCase):
             options = OptimizationOptions(
                 patterns="default+onnxruntime",
                 verbose=0,
+                verifies=False,
             )
             options.patterns = [
                 p for p in options.patterns if p.__class__.__name__ not in disabled

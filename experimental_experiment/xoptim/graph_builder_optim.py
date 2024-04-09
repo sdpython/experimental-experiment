@@ -4,6 +4,7 @@ import time
 from typing import Any, Callable, Dict, Iterator, List, Optional, Union
 import numpy as np
 from onnx import AttributeProto, NodeProto
+from onnx.shape_inference import infer_shapes
 import onnx.helper as oh
 from ..xbuilder._onnx_helper import enumerate_subgraphs
 from ..xbuilder.type_inference import infer_types
@@ -33,6 +34,12 @@ class GraphBuilderPatternOptimization:
         python -m onnx_array_api compare -m1 <model.onnx> -m2 <optimized.onnx> -m nodes -c 80
 
     This class assumes a pattern cannot reuse an existing name.
+
+    :param builder: GraphBuilder
+    :param patterns: list of patterns to apply
+    :param recursive: goes through subgraphs
+    :param verifies: verifies the model but it takes time
+    :param verbose: verbosity
     """
 
     def __init__(
@@ -40,12 +47,14 @@ class GraphBuilderPatternOptimization:
         builder: "GraphBuilder",  # noqa: F821
         patterns: Optional[List[PatternOptimization]] = None,
         recursive: bool = False,
+        verifies: bool = False,
         verbose: int = 0,
     ):
         self.builder = builder
         self.verbose = max(verbose, int(os.environ.get("LOG_PATTERN_OPTIMIZE", "0")))
         self.patterns = patterns or get_default_patterns(self.verbose)
         self.recursive = recursive
+        self.verifies = verifies
         self._build()
         # This assume a name is given once and
         # no constant can replace an existing one.
@@ -590,7 +599,7 @@ class GraphBuilderPatternOptimization:
             print(f"[GraphBuilderPatternOptimization.apply_match] {match} applied.")
         return new_nodes
 
-    def _check_graph(self, statistics, step, iteration, code):
+    def _check_graph(self, statistics, step, iteration, code, verifies):
         begin = time.perf_counter()
         assert (
             len(self.builder.nodes) > 0
@@ -607,6 +616,29 @@ class GraphBuilderPatternOptimization:
                     f"[{node.name}]: {node.input} -> {node.output}"
                 )
             known |= set(node.output)
+
+            if (
+                node.op_type in {"MatMul", "Gemm", "FusedMatMul"}
+                and self.builder.has_shape(node.input[0])
+                and self.builder.has_shape(node.input[1])
+            ):
+                sh1 = self.builder.get_shape(node.input[0])[-2:]
+                sh2 = self.builder.get_shape(node.input[1])[-2:]
+                tA = self.builder.get_attribute(node, "transA", exc=False)
+                tB = self.builder.get_attribute(node, "transB", exc=False)
+                tA = 0 if tA is None or tA.i == 0 else 1
+                tB = 0 if tB is None or tB.i == 0 else 1
+                if tA:
+                    sh1 = (sh1[1], sh1[0])
+                if tB:
+                    sh2 = (sh2[1], sh2[0])
+                assert sh1[-1] == sh2[0], (
+                    f"Node {node.op_type!r}, inputs={node.input}, "
+                    f"shape1={self.builder.get_shape(node.input[0])}, "
+                    f"shape2={self.builder.get_shape(node.input[1])}, "
+                    f"tA={tA}, tB={tB}."
+                )
+
         for o in self.builder.outputs:
             assert o.name in known, f"Unknown output {o.name!r}, step {step!r}"
         statistics.append(
@@ -616,6 +648,36 @@ class GraphBuilderPatternOptimization:
                 iteration=iteration,
             )
         )
+        if verifies:
+            onx = self.builder.to_onnx(optimize=False)
+            new_shapes = infer_shapes(onx)
+            for val in new_shapes.graph.value_info:
+                itype = val.type.tensor_type.elem_type
+                shape = tuple(
+                    d.dim_param if d.dim_param else d.dim_value
+                    for d in val.type.tensor_type.shape.dim
+                )
+                assert self.builder.has_name(val.name), f"name {val.name!r} is missing"
+                assert (
+                    not self.builder.has_type(val.name)
+                    or self.builder.get_type(val.name) == itype
+                ), (
+                    f"Result {val.name!r} has type {itype} but the builder "
+                    f"assumes it is {self.builder.get_type(val.name)}"
+                )
+                assert (
+                    not self.builder.has_shape(val.name)
+                    or self.builder.get_shape(val.name) == shape
+                ), (
+                    f"Result {val.name!r} has shape {shape} but the builder "
+                    f"assumes it is {self.builder.get_shape(val.name)}"
+                )
+
+            # from onnxruntime import InferenceSession
+            # InferenceSession(
+            #     onx.SerializeToString(),
+            #     providers=["CPUExecutionProvider"],
+            # )
 
     def do_not_remove(self, node: NodeProto) -> bool:
         """Tells if a node can be removed."""
@@ -732,15 +794,18 @@ class GraphBuilderPatternOptimization:
                     found = True
                     if self.verbose > 2:
                         print(
-                            f"[GraphBuilderPatternOptimization.optimize] match={match}"
+                            f"[GraphBuilderPatternOptimization.optimize] "
+                            f"match={match}"
                         )
                     matches.append((pattern, match))
                     if stop_after > 0 and len(matches) + n_applied >= stop_after:
                         continue_optimization = False
                         if self.verbose > 0:
                             print(
-                                f"[GraphBuilderPatternOptimization.optimize] stop after with "
-                                f"{len(matches)} as stop_after={stop_after} and n_applied={n_applied}"
+                                f"[GraphBuilderPatternOptimization.optimize] "
+                                f"stop after with "
+                                f"{len(matches)} as stop_after={stop_after} "
+                                f"and n_applied={n_applied}"
                             )
                         break
 
@@ -790,6 +855,7 @@ class GraphBuilderPatternOptimization:
             n_added = 0
             n_removed = 0
             for im, (pattern, match) in enumerate(matches):
+
                 if self.verbose > 3:
                     print(
                         f"[GraphBuilderPatternOptimization.optimize] "
@@ -825,11 +891,13 @@ class GraphBuilderPatternOptimization:
 
                 if self.verbose > 3:
                     print(
-                        f"[GraphBuilderPatternOptimization.optimize] done {match}: -{rem} +{add} nodes"
+                        f"[GraphBuilderPatternOptimization.optimize] done "
+                        f"{match}: -{rem} +{add} nodes"
                     )
                     if full_removed and self.verbose > 4:
                         print(
-                            f"[GraphBuilderPatternOptimization.optimize] removed outputs {full_removed}"
+                            f"[GraphBuilderPatternOptimization.optimize] "
+                            f"removed outputs {full_removed}"
                         )
 
                 obs = dict(
@@ -842,11 +910,12 @@ class GraphBuilderPatternOptimization:
                     time_in=time.perf_counter() - begin,
                 )
                 statistics.append(obs)
-                self._check_graph(statistics, str(match), it, "A")
+                self._check_graph(statistics, str(match), it, "A", self.verifies)
 
                 n_added += add
                 n_removed += rem
                 n_applied += 1
+
             if self.verbose > 2:
                 print(
                     f"[GraphBuilderPatternOptimization.optimize] done all: -{n_removed} +{n_added} nodes"
@@ -865,7 +934,7 @@ class GraphBuilderPatternOptimization:
                         time_in=time.perf_counter() - begin,
                     )
                 )
-                self._check_graph(statistics, "remove_identity", it, "B")
+                self._check_graph(statistics, "remove_identity", it, "B", self.verifies)
 
             # rebuild the graph structure
 

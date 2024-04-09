@@ -2737,6 +2737,7 @@ class GraphBuilder:
             verbose=max(self.verbose, self.optimization_options.verbose),
             patterns=self.optimization_options.patterns,
             recursive=self.optimization_options.recursive,
+            verifies=self.optimization_options.verifies,
         )
         return gro.optimize(
             max_iter=self.optimization_options.max_iter,
