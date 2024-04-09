@@ -48,6 +48,7 @@ class FusedMatMulPattern(PatternOptimization):
             return self.none(node, inspect.currentframe().f_lineno)
 
         hints = []
+        found = False
         for n in ns:
             if n is None:
                 continue

@@ -49,6 +49,34 @@ class MatchResult:
     def __str__(self) -> str:
         return self.to_string(short=True)
 
+    def debug_string(self, g: Optional["GraphBuilder"] = None) -> str:  # noqa: F821
+        """
+        Returns a string showing the matched nodes.
+        """
+
+        def _p(i, g=g):
+            if g.has_shape(i):
+                return f"{i}:{g.get_type(i)}:{g.get_shape(i)}"
+            return f"{i}:{g.get_type(i)}:R{g.get_rank(i)}"
+
+        rows = []
+        for ind, node in enumerate(self.nodes):
+            if node is None:
+                rows.append(f"{ind} -")
+                continue
+            rows.append(f"{ind} - {node.op_type}({node.input}) -> {node.output}")
+        if g:
+            rows.append("--------")
+            for ind, node in enumerate(self.nodes):
+                if node is None:
+                    rows.append(f"{ind} -")
+                    continue
+                rows.append(
+                    f"{ind} - {node.op_type}({', '.join(map(_p, node.input))}) "
+                    f"-> {', '.join(map(_p, node.output))}"
+                )
+        return "\n".join(rows)
+
 
 class PatternOptimization:
     """

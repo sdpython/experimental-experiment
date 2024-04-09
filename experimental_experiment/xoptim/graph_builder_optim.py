@@ -185,7 +185,9 @@ class GraphBuilderPatternOptimization:
             return False
         if value is None:
             return True
-        return all(cst == value)
+        if cst.shape == (1,):
+            return all(cst == value)
+        return cst == value
 
     def get_constant_scalar(self, name: str) -> Union[int, float]:
         """
@@ -719,6 +721,11 @@ class GraphBuilderPatternOptimization:
                             bypass = True
                             break
                     if bypass:
+                        if self.verbose >= 9:
+                            print(
+                                f"[{self.__class__.__name__}.match] OVERLAP "
+                                f"match={match}"
+                            )
                         continue
                     for n in match.nodes:
                         marked.add(id(n))
