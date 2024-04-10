@@ -632,7 +632,9 @@ class GraphBuilderPatternOptimization:
                     sh1 = (sh1[1], sh1[0])
                 if tB:
                     sh2 = (sh2[1], sh2[0])
-                assert sh1[-1] == sh2[0], (
+                assert (
+                    type(sh1[-1]) != type(sh2[0]) or sh1[-1] == sh2[0]  # noqa: E721
+                ), (
                     f"Node {node.op_type!r}, inputs={node.input}, "
                     f"shape1={self.builder.get_shape(node.input[0])}, "
                     f"shape2={self.builder.get_shape(node.input[1])}, "
