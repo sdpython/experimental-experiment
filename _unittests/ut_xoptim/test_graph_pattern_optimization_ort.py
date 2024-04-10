@@ -81,6 +81,7 @@ class TestGraphPatternOptimizationOrt(ExtTestCase):
             providers.insert(0, "CUDAExecutionProvider")
         InferenceSession(proto.SerializeToString(), providers=providers)
 
+    @requires_onnxruntime_training()
     def test_fused_matmul_pattern(self):
         origin = self._get_model("bug_fused.onnx")
         check_model(origin)
