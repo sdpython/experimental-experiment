@@ -1,7 +1,14 @@
 import itertools
+import os
 import unittest
 import numpy as np
-from onnx import TensorProto, helper as oh, numpy_helper as onh
+from onnx import (
+    ModelProto,
+    TensorProto,
+    helper as oh,
+    numpy_helper as onh,
+    load as onnx_load,
+)
 from onnx.checker import check_model
 from experimental_experiment.ext_test_case import (
     ExtTestCase,
@@ -58,6 +65,38 @@ class TestGraphPatternOptimizationOrt(ExtTestCase):
         self.assertFalse(compatible_opsets("", "Slice", 11, 13))
         self.assertTrue(compatible_opsets("", "Slice", 11, 12))
         self.assertFalse(compatible_opsets("", "Slice", 18, 1))
+
+    def _get_model(self, name: str) -> ModelProto:
+        p = os.path.join(os.path.dirname(__file__), "..", "ut_xbuilder", "data", name)
+        if not os.path.exists(p):
+            p = os.path.join(os.path.dirname(__file__), "data", name)
+        self.assertExists(p)
+        return onnx_load(p)
+
+    def _check_with_ort(self, proto: ModelProto):
+        from onnxruntime import InferenceSession, get_available_providers
+
+        providers = ["CPUExecutionProvider"]
+        if "CUDAExecutionProvider" in get_available_providers():
+            providers.insert(0, "CUDAExecutionProvider")
+        InferenceSession(proto.SerializeToString(), providers=providers)
+
+    @requires_onnxruntime_training()
+    def test_fused_matmul_pattern(self):
+        origin = self._get_model("bug_fused.onnx")
+        check_model(origin)
+        self._check_with_ort(origin)
+        gr = GraphBuilder(
+            origin,
+            infer_shapes=True,
+            optimization_options=OptimizationOptions(
+                patterns=["FusedMatMul"],
+                verbose=0,  # stop_after=2
+            ),
+        )
+        onx = gr.to_onnx(optimize=True)
+        self._check_with_ort(onx)
+        check_model(onx)
 
     def common_fused_matmul(self, side):
         from onnxruntime import InferenceSession

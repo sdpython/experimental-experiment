@@ -26,10 +26,16 @@ class TestGraphPatternCombination(ExtTestCase):
 
     def _check_ort_cpu(self, onx):
         import onnxruntime
+        from onnxruntime.capi.onnxruntime_pybind11_state import Fail
 
-        onnxruntime.InferenceSession(
-            onx.SerializeToString(), providers=["CPUExecutionProvider"]
-        )
+        try:
+            onnxruntime.InferenceSession(
+                onx.SerializeToString(), providers=["CPUExecutionProvider"]
+            )
+        except Fail as e:
+            with open("dump_bug.onnx", "wb") as f:
+                f.write(onx.SerializeToString())
+            raise e
 
     def _get_model(self, name: str) -> ModelProto:
         p = os.path.join(os.path.dirname(__file__), "..", "ut_xbuilder", "data", name)
@@ -189,7 +195,7 @@ class TestGraphPatternCombination(ExtTestCase):
                 [
                     oh.make_tensor_value_info("X", TFLOAT, ["D32", "D128"]),
                     oh.make_tensor_value_info(
-                        "Y", TFLOAT, ["batch", "channel", "any", "D64"]
+                        "Y", TFLOAT, ["batch", "channel", "D128", "D64"]
                     ),
                 ],
                 [
@@ -317,7 +323,7 @@ class TestGraphPatternCombination(ExtTestCase):
                     onx,
                     optimization_options=OptimizationOptions(
                         patterns=["SimplifiedLayerNormalization"],
-                        verbose=20,
+                        verbose=0,
                     ),
                     infer_shapes=True,
                 )
@@ -327,21 +333,37 @@ class TestGraphPatternCombination(ExtTestCase):
                 self._check_ort_cpu(onx)
 
     @requires_onnxruntime_training()
+    def test_simplified_with_all_but_one(self):
+        self._simplified_with_all({"TransposeReshapeMatMulPattern"})
+
+    @requires_onnxruntime_training()
     def test_simplified_with_all(self):
+        self._simplified_with_all({})
+
+    def _simplified_with_all(self, disabled):
         for model in [
-            "noopt-llama-custom__0.onnx",
             "noopt-llama-custom__1.onnx",
+            "noopt-llama-custom__0.onnx",
             "noopt-phi-custom__0.onnx",
             "noopt-phi-custom__1.onnx",
+            "llama_forward.onnx",
+            "llama_forward.onnx",
+            "opt-llama-custom-forward.onnx",
+            # "opt-llama-custom-backward.onnx",
         ]:
+            options = OptimizationOptions(
+                patterns="default+onnxruntime",
+                verbose=0,
+                verifies=False,
+            )
+            options.patterns = [
+                p for p in options.patterns if p.__class__.__name__ not in disabled
+            ]
             onx = self._get_model(model)
             with self.subTest(model=model):
                 gr = GraphBuilder(
                     onx,
-                    optimization_options=OptimizationOptions(
-                        patterns="default+onnxruntime",
-                        verbose=0,
-                    ),
+                    optimization_options=options,
                     infer_shapes=True,
                 )
                 onx = gr.to_onnx(optimize=True)

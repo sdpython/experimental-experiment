@@ -49,6 +49,34 @@ class MatchResult:
     def __str__(self) -> str:
         return self.to_string(short=True)
 
+    def debug_string(self, g: Optional["GraphBuilder"] = None) -> str:  # noqa: F821
+        """
+        Returns a string showing the matched nodes.
+        """
+
+        def _p(i, g=g):
+            if g.has_shape(i):
+                return f"{i}:{g.get_type(i)}:{g.get_shape(i)}"
+            return f"{i}:{g.get_type(i)}:R{g.get_rank(i)}"
+
+        rows = []
+        for ind, node in enumerate(self.nodes):
+            if node is None:
+                rows.append(f"{ind} -")
+                continue
+            rows.append(f"{ind} - {node.op_type}({node.input}) -> {node.output}")
+        if g:
+            rows.append("--------")
+            for ind, node in enumerate(self.nodes):
+                if node is None:
+                    rows.append(f"{ind} -")
+                    continue
+                rows.append(
+                    f"{ind} - {node.op_type}({', '.join(map(_p, node.input))}) "
+                    f"-> {', '.join(map(_p, node.output))}"
+                )
+        return "\n".join(rows)
+
 
 class PatternOptimization:
     """
@@ -132,7 +160,7 @@ class PatternOptimization:
         self,
         node: Optional[NodeProto] = None,
         lineno: Optional[int] = None,
-        msg: str = "",
+        msg: Optional[Union[Callable, str]] = None,
     ):
         """
         It may be useful which reason made a pattern matching fail.
@@ -147,6 +175,12 @@ class PatternOptimization:
         which lines in the code returned None and which condition failed.
         """
         if node and self.verbose:
+            if msg is None:
+                msg = ""
+            elif callable(msg):
+                msg = msg()
+            if msg:
+                msg = f"\n{msg}"
             if self.verbose >= 10 and hasattr(self, "_debug"):
                 msg2 = self._debug_print()
                 if msg2:

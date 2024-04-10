@@ -340,7 +340,7 @@ class TestGraphPatternOptimization(ExtTestCase):
                 [
                     oh.make_tensor_value_info("X", TFLOAT, ["D32", "D128"]),
                     oh.make_tensor_value_info(
-                        "Y", TFLOAT, ["batch", "channel", "any", "D64"]
+                        "Y", TFLOAT, ["batch", "channel", "D128", "D64"]
                     ),
                 ],
                 [
