@@ -11,3 +11,5 @@ Examples
     :maxdepth: 1
 
     ../auto_examples/plot_profile_existing_onnx_101
+    ../auto_examples/plot_scatternd_101
+
