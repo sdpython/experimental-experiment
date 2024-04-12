@@ -3256,19 +3256,47 @@ class GraphBuilder:
         need_identity_removal = False
         new_nodes = []
         for node in self.nodes:
-            assert node.op_type not in {
-                "SplitToSequence",
-                "SequenceConstruct",
-                "SequenceErase",
-                "SequenceInsert",
-            }, (
-                f"Sequence operators are not supported yet and op_type={node.op_type!r}"
-                f"(name={node.name!r})."
-            )
+
             self._unique_names |= set(node.output)
             self.update_value_shape_with_node(node)
             if node.name:
                 self._unique_node_names.add(node.name)
+
+            if node.op_type == "SequenceConstruct":
+                dtypes = [self.get_type(n) for n in node.input]
+                ranks = [self.get_rank(n) for n in node.input]
+                assert len(set(dtypes)) == 1, (
+                    f"A sequence has distinct dtype: {dtypes}, node.name={node.name}, "
+                    f"node.input={node.input}"
+                )
+                if not self.has_name(node.output[0]):
+                    self.set_name(node.output[0])
+                self.set_sequence(node.output[0], dtypes[0], shapes=None, ranks=ranks)
+                new_nodes.append(node)
+                continue
+
+            if node.op_type == "SequenceAt":
+                position = self.get_constant(node.input[1], computed_value=True)
+                seq = self.get_sequence(node.input[0])
+                dtype = seq["dtype"]
+                rank = seq["ranks"][int(position)]
+                if not self.has_name(node.output[0]):
+                    self.set_name(node.output[0])
+                self.set_type(node.output[0], dtype)
+                self.set_rank(node.output[0], rank)
+                new_nodes.append(node)
+                continue
+
+            assert node.op_type not in {
+                "SplitToSequence",
+                "SequenceErase",
+                "SequenceInsert",
+                "SequenceAt",
+            }, (
+                f"Sequence operators are not supported yet and op_type={node.op_type!r}"
+                f"(name={node.name!r})."
+            )
+
             if node.op_type == "Constant":
                 exist = self.is_exact_same_constant(node)
                 if exist is not None:

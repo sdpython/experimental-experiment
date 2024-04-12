@@ -14,13 +14,7 @@ Example, run llama model with onnxrt backend on cuda.
 
     python -m experimental_experiment.torch_bench.dort_bench --backend ort --device cuda --config medium
     
-Other example, same script but dumps the produces models.
-
-::
-
-    ONNXRT_DUMP_PATH="llama_dort_" python -m experimental_experiment.torch_bench.dort_bench --backend ort --device cuda
-
-Or simply this one:
+To export the models:
 
 ::
 
@@ -199,7 +193,11 @@ for i in range(args.warmup):
         torch.cuda.synchronize()
     start_time = time.perf_counter()
 
-    if args.backend in ("ort", "custom", "debug", "plug") and i == 0 and args.export:
+    if (
+        args.backend in ("ort", "custom", "debug", "plug", "ort+")
+        and i == 0
+        and args.export
+    ):
         with dump_onnx(
             f"dort-{args.export}-{args.model}-{args.backend}",
             folder=dump_folder,

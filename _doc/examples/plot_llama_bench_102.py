@@ -34,8 +34,8 @@ parsed_args = get_parsed_args(
     repeat=5,
     model=("llama", "model to benchmark"),
     backend=(
-        "eager,dynger,inductor,ort,custom,ortmodule",
-        "backend to test, among eager,dynger,inductor,ort,custom,plug,ortmodule,backort",
+        "eager,dynger,inductor,ort,ort+,custom,ortmodule",
+        "backend to test, among eager,dynger,inductor,ort,ort+,custom,plug,ortmodule,backort",
     ),
     device=("cuda" if check_cuda_availability() else "cpu", "device to test"),
     num_hidden_layers=("1", "hidden layers to test"),
@@ -265,6 +265,8 @@ if data_collected:
         # df["ERROR"] = df["ERROR"].apply(lambda s: s.replace("\n", " "))
     filename = f"plot_{prefix}_bench_with_cmd.csv"
     df.to_csv(filename, index=False)
+    filename = f"plot_{prefix}_bench_with_cmd.xlsx"
+    df.to_excel(filename, index=False)
 
     df = df.drop(["CMD"], axis=1)
     filename = f"plot_{prefix}_bench.csv"
