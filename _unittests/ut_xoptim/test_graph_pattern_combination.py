@@ -349,7 +349,9 @@ class TestGraphPatternCombination(ExtTestCase):
             "llama_forward.onnx",
             "llama_forward.onnx",
             "opt-llama-custom-forward.onnx",
-            # "opt-llama-custom-backward.onnx",
+            "dort-llama-llama-ort_1.onnx",
+            "dort-llama-llama-ort+_1.onnx",
+            "opt-llama-custom-backward.onnx",
         ]:
             options = OptimizationOptions(
                 patterns="default+onnxruntime",
