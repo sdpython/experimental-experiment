@@ -2541,7 +2541,7 @@ class GraphBuilder:
         # adding shape information
         addition = []
         for name in self._known_names:
-            if name in done or not self.has_type(name):
+            if name in done or not self.has_type(name) or self.get_type(name) == 0:
                 continue
             if self.has_shape(name):
                 addition.append(
@@ -3175,6 +3175,20 @@ class GraphBuilder:
             self._make_node_set_type_shape(n)
         return memo
 
+    @classmethod
+    def _clean_shapes(cls, proto: Union[GraphProto, ModelProto]):
+        # cleaning unresolved shapes
+        if isinstance(proto, ModelProto):
+            cls._clean_shapes(proto.graph)
+            return
+        new_shapes = []
+        for sh in proto.value_info:
+            if sh.type.tensor_type.elem_type == 0:
+                continue
+            new_shapes.append(sh)
+        del proto.value_info[:]
+        proto.value_info.extend(new_shapes)
+
     def _update_shape_types_with_proto(
         self, proto: ModelProto, infer_shapes: bool = False
     ):
@@ -3185,7 +3199,11 @@ class GraphBuilder:
         :param infer_shapes: infer shapes to fill information about type and shapes
         """
         assert isinstance(proto, ModelProto), f"Unexpected type {type(proto)} for proto"
-        new_proto = onnx_infer_shapes(proto) if infer_shapes else proto
+        if infer_shapes:
+            new_proto = onnx_infer_shapes(proto)
+            self._clean_shapes(new_proto)
+        else:
+            new_proto = proto
 
         if not hasattr(new_proto.graph, "value_info"):
             return
