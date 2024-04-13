@@ -146,6 +146,12 @@ class GraphBuilderPatternOptimization:
         """
         return name in self.outputs_
 
+    def is_used(self, name: str) -> bool:
+        """
+        Tells if a result is used or not.
+        """
+        return name in self.successors_
+
     def is_used_more_than_once(self, name: str) -> bool:
         """
         Tells if a result is used more than once in the current graph or in a subgraph

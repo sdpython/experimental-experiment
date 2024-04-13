@@ -146,6 +146,10 @@ class ExpandSwapPattern(PatternOptimization):
         if not g.has_shape(node.input[0]):
             return self.none(node, inspect.currentframe().f_lineno)
 
+        assert g.is_used(node.output[0]), (
+            f"The match should not even begin, {node.output[0]!r} "
+            f"is not used among {node.output} and type={node.op_type!r}"
+        )
         if g.is_used_more_than_once(node.output[0]):
             # More than one output so it probably must be done.
             return self.none(node, inspect.currentframe().f_lineno)

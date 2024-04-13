@@ -449,6 +449,45 @@ class TestGraphPatternCombination(ExtTestCase):
                 onx = gr.to_onnx(optimize=True)
                 self._check_ort_cpu(onx)
 
+    def test_study(self):
+        model = "dort-llama-llama-ort_1.onnx"
+        enabled = {
+            "Sub1MulPattern",
+            # "Reshape2Of3Pattern",
+            # "ReshapeReshapePattern",
+            "ExpandSwapPattern",
+            # "ExpandBroadcastPattern",
+        }
+        enabled = {}
+        disabled = {}
+        options = OptimizationOptions(
+            patterns="default+onnxruntime",
+            verbose=0,
+            verifies=False,
+        )
+        options.patterns = [
+            p
+            for p in options.patterns
+            if (not enabled or p.__class__.__name__ in enabled)
+            and p.__class__.__name__ not in disabled
+        ]
+        assert options.patterns, "Pattern is empty."
+        if __name__ == "__main__":
+            options.verbose = 1 if len(options.patterns) > 2 else 10
+            print(f"patterns={[c.__class__.__name__ for c in options.patterns]}")
+            print(f"verbose={options.verbose}")
+        onx = self._get_model(model)
+        self._check_ort_cpu(onx, fix_shape=True)
+        gr = GraphBuilder(
+            onx,
+            optimization_options=options,
+            infer_shapes=True,
+        )
+        onx = gr.to_onnx(optimize=True)
+        self._check_ort_cpu(onx)
+        with open(f"test_study_{model}", "wb") as f:
+            f.write(onx.SerializeToString())
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
