@@ -105,6 +105,7 @@ class GraphBuilderPatternOptimization:
         for node in self.iter_nodes():
             self.nodes_[id(node)] = node
 
+        self.set_output_names_ = set(self.builder.output_names)
         self.predecessors_ = {}
         self.successors_ = {}
         self.used_ = {}
@@ -148,9 +149,14 @@ class GraphBuilderPatternOptimization:
 
     def is_used(self, name: str) -> bool:
         """
-        Tells if a result is used or not.
+        Tells if a result is used or not,
+        including as an output of the graph.
         """
-        return name in self.successors_
+        return (
+            name in self.successors_
+            or name in self.used_
+            or name in self.set_output_names_
+        )
 
     def is_used_more_than_once(self, name: str) -> bool:
         """
