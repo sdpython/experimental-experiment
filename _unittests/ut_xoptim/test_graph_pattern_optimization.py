@@ -2197,6 +2197,20 @@ class TestGraphPatternOptimization(ExtTestCase):
         got = opt_ref.run(None, feeds)[0]
         self.assertEqualArray(expected, got)
 
+    def test_rotary_concat_dort(self):
+        origin = self._get_model("dort-llama-llama-ort_1.onnx")
+        before = [node for node in origin.graph.node if node.op_type == "Transpose"]
+        gr = GraphBuilder(
+            origin,
+            optimization_options=OptimizationOptions(
+                patterns=["RotaryConcatPart"], verbose=0
+            ),
+            infer_shapes=True,
+        )
+        onx = gr.to_onnx(optimize=True)
+        after = [node for node in onx.graph.node if node.op_type == "Transpose"]
+        self.assertNotEqual(len(before), len(after))
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
