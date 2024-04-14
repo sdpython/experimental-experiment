@@ -207,7 +207,7 @@ def create_compiled_model(
         onnx_debug_backend,
     )
 
-    if use_fused_aten_ops and backend in {"ort", "custom", "backort", "plug"}:
+    if use_fused_aten_ops and backend in {"ort", "custom", "backort", "plug", "ort+"}:
         from onnxruntime.training.ortmodule.torch_cpp_extensions import aten_op_executor
         from onnxruntime.capi import _pybind_state as _C
 
@@ -226,6 +226,18 @@ def create_compiled_model(
         ), f"return_storage=True not implemented with backend={backend!r}"
         local_aot_ort, local_ort = make_aot_ort(
             dynamic=use_dynamic, rewrite=optimize, verbose=verbose
+        )
+        return torch.compile(model, backend=local_ort)
+
+    if backend == "ort+":
+        assert (
+            not return_storage
+        ), f"return_storage=True not implemented with backend={backend!r}"
+        local_aot_ort, local_ort = make_aot_ort(
+            dynamic=use_dynamic,
+            rewrite=optimize,
+            verbose=verbose,
+            rewrite_more=True,
         )
         return torch.compile(model, backend=local_ort)
 
@@ -375,7 +387,7 @@ def dort_args(name: str, description: str):
         model=("llama", "model to measure, llama, mistral, phi, ..."),
         backend=(
             "ort",
-            "'ort' or 'inductor' or 'eager', " "'plug', or 'custom', or 'backort'",
+            "ort, ort+, inductor, eager, plug, backort, dynger, custom",
         ),
         device=("cpu", "'cpu' or 'cuda'"),
         num_hidden_layers=(1, "number of hidden layers"),

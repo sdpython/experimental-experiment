@@ -9,6 +9,7 @@ from onnx import (
     load as load_onnx,
 )
 from onnx.checker import check_model
+from onnx.shape_inference import infer_shapes
 from experimental_experiment.reference import ExtendedReferenceEvaluator
 from experimental_experiment.ext_test_case import (
     ExtTestCase,
@@ -24,18 +25,90 @@ TFLOAT = TensorProto.FLOAT
 
 class TestGraphPatternCombination(ExtTestCase):
 
-    def _check_ort_cpu(self, onx):
+    @classmethod
+    def setUpClass(cls):
+        for name in [
+            "dump_bug_test_pattern_combination_false.onnx",
+            "dump_bug_test_pattern_combination.onnx",
+        ]:
+            if os.path.exists(name):
+                os.remove(name)
+
+    def _check_ort_cpu(self, onx, fix_shape=False):
+
+        def cl(text):
+            return (
+                text.replace("\n", " ")
+                .replace("  ", " ")
+                .replace("  ", " ")
+                .replace("  ", " ")
+            )
+
+        def s(cond):
+            if not cond:
+                with open("dump_bug_test_pattern_combination_false.onnx", "wb") as f:
+                    f.write(onx.SerializeToString())
+            return cond
+
+        for i in onx.graph.input:
+            assert s(i.type.tensor_type.elem_type != 0), f"Input {i.name!r} has no type"
+        for i in onx.graph.output:
+            assert s(
+                i.type.tensor_type.elem_type != 0
+            ), f"Output {i.name!r} has no type"
+
+        skip_names = set()
+        for node in onx.graph.node:
+            if node.op_type in {"SequenceConstruct", "SequenceAt"}:
+                skip_names |= set(node.output)
+
+        if fix_shape:
+            new_shapes = []
+            for sh in onx.graph.value_info:
+                if sh.name in skip_names:
+                    continue
+                if sh.type.tensor_type.elem_type != 0:
+                    new_shapes.append(sh)
+            del onx.graph.value_info[:]
+            onx.graph.value_info.extend(new_shapes)
+
+        for sh in onx.graph.value_info:
+            if sh.name in skip_names:
+                continue
+            assert s(
+                sh.type.tensor_type.elem_type != 0
+            ), f"Result {sh.name!r} has no type"
+
+        # check_model(onx)
+        infer_shapes(onx)
+
         import onnxruntime
-        from onnxruntime.capi.onnxruntime_pybind11_state import Fail
+        from onnxruntime.capi.onnxruntime_pybind11_state import Fail, InvalidArgument
 
         try:
             onnxruntime.InferenceSession(
                 onx.SerializeToString(), providers=["CPUExecutionProvider"]
             )
-        except Fail as e:
-            with open("dump_bug.onnx", "wb") as f:
+        except (Fail, InvalidArgument) as e:
+            err = []
+            rows = []
+            for i in onx.graph.input:
+                rows.append(f"input-: {i.name!r} {cl(str(i.type))}")
+                if i.type.tensor_type.elem_type == 0:
+                    err.append(f"ERR:input-: {i.name!r} {cl(str(i.type))}")
+            for i in onx.graph.output:
+                rows.append(f"output: {i.name!r} {cl(str(i.type))}")
+                if i.type.tensor_type.elem_type == 0:
+                    err.append(f"ERR:output: {i.name!r} {cl(str(i.type))}")
+            for i in onx.graph.value_info:
+                rows.append(f"shape-: {i.name!r} {cl(str(i.type))}")
+                if i.type.tensor_type.elem_type == 0:
+                    err.append(f"ERR:shape-: {i.name!r} {cl(str(i.type))}")
+            msg = "\n".join(err + rows)
+
+            with open("dump_bug_test_pattern_combination.onnx", "wb") as f:
                 f.write(onx.SerializeToString())
-            raise e
+            raise AssertionError(msg) from e
 
     def _get_model(self, name: str) -> ModelProto:
         p = os.path.join(os.path.dirname(__file__), "..", "ut_xbuilder", "data", name)
@@ -333,8 +406,12 @@ class TestGraphPatternCombination(ExtTestCase):
                 self._check_ort_cpu(onx)
 
     @requires_onnxruntime_training()
-    def test_simplified_with_all_but_one(self):
+    def test_simplified_all_but_transpose_reshape_matmul(self):
         self._simplified_with_all({"TransposeReshapeMatMulPattern"})
+
+    @requires_onnxruntime_training()
+    def test_simplified_all_but_sub1_mul(self):
+        self._simplified_with_all({"Sub1MulPattern"})
 
     @requires_onnxruntime_training()
     def test_simplified_with_all(self):
@@ -349,7 +426,9 @@ class TestGraphPatternCombination(ExtTestCase):
             "llama_forward.onnx",
             "llama_forward.onnx",
             "opt-llama-custom-forward.onnx",
-            # "opt-llama-custom-backward.onnx",
+            "dort-llama-llama-ort_1.onnx",
+            "dort-llama2-llama-ort+_1.onnx",
+            "opt-llama-custom-backward.onnx",
         ]:
             options = OptimizationOptions(
                 patterns="default+onnxruntime",
@@ -360,6 +439,7 @@ class TestGraphPatternCombination(ExtTestCase):
                 p for p in options.patterns if p.__class__.__name__ not in disabled
             ]
             onx = self._get_model(model)
+            self._check_ort_cpu(onx, fix_shape=True)
             with self.subTest(model=model):
                 gr = GraphBuilder(
                     onx,
@@ -368,6 +448,45 @@ class TestGraphPatternCombination(ExtTestCase):
                 )
                 onx = gr.to_onnx(optimize=True)
                 self._check_ort_cpu(onx)
+
+    def test_study(self):
+        model = "dort-llama-llama-ort_1.onnx"
+        enabled = {
+            "Sub1MulPattern",
+            # "Reshape2Of3Pattern",
+            # "ReshapeReshapePattern",
+            "ExpandSwapPattern",
+            # "ExpandBroadcastPattern",
+        }
+        enabled = {}
+        disabled = {}
+        options = OptimizationOptions(
+            patterns="default+onnxruntime",
+            verbose=0,
+            verifies=False,
+        )
+        options.patterns = [
+            p
+            for p in options.patterns
+            if (not enabled or p.__class__.__name__ in enabled)
+            and p.__class__.__name__ not in disabled
+        ]
+        assert options.patterns, "Pattern is empty."
+        if __name__ == "__main__":
+            options.verbose = 1 if len(options.patterns) > 2 else 10
+            print(f"patterns={[c.__class__.__name__ for c in options.patterns]}")
+            print(f"verbose={options.verbose}")
+        onx = self._get_model(model)
+        self._check_ort_cpu(onx, fix_shape=True)
+        gr = GraphBuilder(
+            onx,
+            optimization_options=options,
+            infer_shapes=True,
+        )
+        onx = gr.to_onnx(optimize=True)
+        self._check_ort_cpu(onx)
+        with open(f"test_study_{model}", "wb") as f:
+            f.write(onx.SerializeToString())
 
 
 if __name__ == "__main__":

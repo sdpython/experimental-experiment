@@ -2541,7 +2541,7 @@ class GraphBuilder:
         # adding shape information
         addition = []
         for name in self._known_names:
-            if name in done or not self.has_type(name):
+            if name in done or not self.has_type(name) or self.get_type(name) == 0:
                 continue
             if self.has_shape(name):
                 addition.append(
@@ -3175,6 +3175,20 @@ class GraphBuilder:
             self._make_node_set_type_shape(n)
         return memo
 
+    @classmethod
+    def _clean_shapes(cls, proto: Union[GraphProto, ModelProto]):
+        # cleaning unresolved shapes
+        if isinstance(proto, ModelProto):
+            cls._clean_shapes(proto.graph)
+            return
+        new_shapes = []
+        for sh in proto.value_info:
+            if sh.type.tensor_type.elem_type == 0:
+                continue
+            new_shapes.append(sh)
+        del proto.value_info[:]
+        proto.value_info.extend(new_shapes)
+
     def _update_shape_types_with_proto(
         self, proto: ModelProto, infer_shapes: bool = False
     ):
@@ -3185,7 +3199,11 @@ class GraphBuilder:
         :param infer_shapes: infer shapes to fill information about type and shapes
         """
         assert isinstance(proto, ModelProto), f"Unexpected type {type(proto)} for proto"
-        new_proto = onnx_infer_shapes(proto) if infer_shapes else proto
+        if infer_shapes:
+            new_proto = onnx_infer_shapes(proto)
+            self._clean_shapes(new_proto)
+        else:
+            new_proto = proto
 
         if not hasattr(new_proto.graph, "value_info"):
             return
@@ -3256,19 +3274,47 @@ class GraphBuilder:
         need_identity_removal = False
         new_nodes = []
         for node in self.nodes:
-            assert node.op_type not in {
-                "SplitToSequence",
-                "SequenceConstruct",
-                "SequenceErase",
-                "SequenceInsert",
-            }, (
-                f"Sequence operators are not supported yet and op_type={node.op_type!r}"
-                f"(name={node.name!r})."
-            )
+
             self._unique_names |= set(node.output)
             self.update_value_shape_with_node(node)
             if node.name:
                 self._unique_node_names.add(node.name)
+
+            if node.op_type == "SequenceConstruct":
+                dtypes = [self.get_type(n) for n in node.input]
+                ranks = [self.get_rank(n) for n in node.input]
+                assert len(set(dtypes)) == 1, (
+                    f"A sequence has distinct dtype: {dtypes}, node.name={node.name}, "
+                    f"node.input={node.input}"
+                )
+                if not self.has_name(node.output[0]):
+                    self.set_name(node.output[0])
+                self.set_sequence(node.output[0], dtypes[0], shapes=None, ranks=ranks)
+                new_nodes.append(node)
+                continue
+
+            if node.op_type == "SequenceAt":
+                position = self.get_constant(node.input[1], computed_value=True)
+                seq = self.get_sequence(node.input[0])
+                dtype = seq["dtype"]
+                rank = seq["ranks"][int(position)]
+                if not self.has_name(node.output[0]):
+                    self.set_name(node.output[0])
+                self.set_type(node.output[0], dtype)
+                self.set_rank(node.output[0], rank)
+                new_nodes.append(node)
+                continue
+
+            assert node.op_type not in {
+                "SplitToSequence",
+                "SequenceErase",
+                "SequenceInsert",
+                "SequenceAt",
+            }, (
+                f"Sequence operators are not supported yet and op_type={node.op_type!r}"
+                f"(name={node.name!r})."
+            )
+
             if node.op_type == "Constant":
                 exist = self.is_exact_same_constant(node)
                 if exist is not None:

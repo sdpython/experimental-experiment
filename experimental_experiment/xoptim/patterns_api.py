@@ -111,10 +111,12 @@ class PatternOptimization:
         """
         matched = []
         for node in g.iter_nodes():
-            res = self.match(g, node, matched)
-            if res:
-                matched.append(res)
-                yield res
+            if any(map(lambda o: g.is_used(o), node.output)):
+                # We avoid processing a node which is not used.
+                res = self.match(g, node, matched)
+                if res:
+                    matched.append(res)
+                    yield res
 
     def match(
         self,

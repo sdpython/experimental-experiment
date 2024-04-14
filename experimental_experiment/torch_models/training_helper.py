@@ -5,9 +5,20 @@ from typing import Callable, List, Optional, Tuple
 def make_aot_ort(
     dynamic: bool = False,
     rewrite: bool = "try",
+    rewrite_more: bool = False,
     aten_conversion_changes: Optional[List[Tuple[Callable, str]]] = None,
     verbose: int = 0,
-):
+) -> tuple:
+    """
+    Creates a backend to train model with DORT.
+
+    :param dynamic: enable dynamic shapes
+    :param rewrite: rewrite the model after its conversion to onnx
+    :param rewrite_more: runs more optimization
+    :param aten_conversion_changes: calls aten ops
+    :param verbose: verbosity
+    :return: twice the same backend
+    """
     import onnxruntime
     from torch.onnx import (
         OnnxRegistry,
@@ -64,16 +75,52 @@ def make_aot_ort(
         if verbose:
             print("[make_aot_ort] enable rewriting")
 
-        options = OrtBackendOptions(
-            export_options=export_options,
-            ort_session_options=ort_session_options,
-            pre_ort_model_transforms=[
+        if rewrite_more:
+
+            def opt_f(*args, **kwargs):
+                from ..xbuilder import GraphBuilder, OptimizationOptions
+
+                first_model_proto = args[0]
+
+                next_model = optimize_model_proto(
+                    *args, verbose=verbose, onnx_shape_inference=False, **kwargs
+                )
+
+                gr = GraphBuilder(
+                    next_model,
+                    infer_shapes=True,
+                    optimization_options=OptimizationOptions(
+                        patterns="default+onnxruntime"
+                    ),
+                    verbose=verbose,
+                )
+                model_proto = gr.to_onnx()
+
+                del first_model_proto.graph.node[:]
+                del first_model_proto.functions[:]
+                del first_model_proto.graph.initializer[:]
+                first_model_proto.graph.node.extend(model_proto.graph.node)
+                first_model_proto.functions.extend(model_proto.functions)
+                first_model_proto.graph.initializer.extend(
+                    model_proto.graph.initializer
+                )
+
+                return first_model_proto
+
+        else:
+            opt_f = (  # noqa: E731
                 lambda *args, v=verbose, **kwargs: optimize_model_proto(
                     *args, verbose=v, onnx_shape_inference=False, **kwargs
                 )
-            ],
+            )
+
+        options = OrtBackendOptions(
+            export_options=export_options,
+            ort_session_options=ort_session_options,
+            pre_ort_model_transforms=[opt_f],
         )
     else:
+        assert not rewrite_more, "rewrite must be True if rewrite_more is True"
         options = OrtBackendOptions(
             export_options=export_options,
             ort_session_options=ort_session_options,
