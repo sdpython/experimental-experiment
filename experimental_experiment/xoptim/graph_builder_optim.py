@@ -3,9 +3,10 @@ import pprint
 import time
 from typing import Any, Callable, Dict, Iterator, List, Optional, Union
 import numpy as np
-from onnx import AttributeProto, NodeProto
+from onnx import AttributeProto, NodeProto, TensorProto
 from onnx.shape_inference import infer_shapes
 import onnx.helper as oh
+import onnx.numpy_helper as onh
 from ..xbuilder._onnx_helper import enumerate_subgraphs
 from ..xbuilder.type_inference import infer_types
 from .patterns_api import MatchResult, PatternOptimization
@@ -40,6 +41,8 @@ class GraphBuilderPatternOptimization:
     :param recursive: goes through subgraphs
     :param verifies: verifies the model but it takes time
     :param verbose: verbosity
+    :param dump_applied_patterns: dump applied patterns in a folder,
+        the users can check every pattern dumped as a :epkg:`FunctionProto`
     """
 
     def __init__(
@@ -49,12 +52,14 @@ class GraphBuilderPatternOptimization:
         recursive: bool = False,
         verifies: bool = False,
         verbose: int = 0,
+        dump_applied_patterns: Optional[str] = None,
     ):
         self.builder = builder
         self.verbose = max(verbose, int(os.environ.get("LOG_PATTERN_OPTIMIZE", "0")))
         self.patterns = patterns or get_default_patterns(self.verbose)
         self.recursive = recursive
         self.verifies = verifies
+        self.dump_applied_patterns = dump_applied_patterns
         self._build()
         # This assume a name is given once and
         # no constant can replace an existing one.
@@ -609,7 +614,150 @@ class GraphBuilderPatternOptimization:
         self.builder.insert_and_remove_nodes(position_insert, new_nodes, removed)
         if self.verbose >= 10:
             print(f"[GraphBuilderPatternOptimization.apply_match] {match} applied.")
+        if self.dump_applied_patterns:
+            self._save_pattern_as_proto(self.dump_applied_patterns, match, new_nodes)
         return new_nodes
+
+    def _to_cstop(self, init: Any, name: Optional[str] = None) -> NodeProto:
+        if isinstance(init, NodeProto):
+            assert (
+                name is None or init.output[0] == name
+            ), f"Name mismatch {name!r} != {init.output[0]!r}"
+            return init
+        if isinstance(init, TensorProto):
+            assert (
+                name is None or init.name == name
+            ), f"Name mismatch {name!r} != {init.name!r}"
+            return oh.make_node("Constant", [], [init.name], value=init)
+        if isinstance(init, np.ndarray):
+            return self._to_cstop(onh.from_array(init, name=name))
+        import torch
+
+        if isinstance(init, torch.Tensor):
+            return self._to_cstop(init.detach().cpu().numpy(), name=name)
+        raise AssertionError(f"Unexpected type {type(init)}")
+
+    def _save_pattern_as_proto(
+        self, folder: str, match: MatchResult, new_nodes: List[NodeProto]
+    ):
+        if not os.path.exists(folder):
+            os.mkdir(folder)
+
+        name = f"{match.pattern.__class__.__name__}_0.onnx"
+        fullname = os.path.join(folder, name)
+        n = 0
+        while os.path.exists(fullname):
+            n += 1
+            name = f"{match.pattern.__class__.__name__}_{n}.onnx"
+            fullname = os.path.join(folder, name)
+
+        if self.verbose >= 10:
+            print(
+                f"[GraphBuilderPatternOptimization._save_pattern_as_proto] save {fullname!r}"
+            )
+
+        unique_names = set()
+        for node in match.nodes:
+            if node is None:
+                continue
+            unique_names |= set(node.input)
+            unique_names |= set(node.output)
+
+        new_initializers = {}
+        input_names = set()
+        output_names = set()
+        for node in new_nodes:
+            if node is None:
+                continue
+            for i in node.input:
+                if i in unique_names:
+                    input_names.add(i)
+                elif i in self.builder.initializers_dict:
+                    new_initializers[i] = self.builder.initializers_dict[i]
+            for o in node.output:
+                if o in unique_names:
+                    output_names.add(o)
+
+        old_initializers = {}
+        for node in match.nodes:
+            if node is None:
+                continue
+            for i in node.input:
+                if i in self.builder.initializers_dict:
+                    old_initializers[i] = self.builder.initializers_dict[i]
+
+        new_init_nodes = [
+            self._to_cstop(v, name=k) for k, v in new_initializers.items()
+        ]
+        old_init_nodes = [
+            self._to_cstop(v, name=k) for k, v in old_initializers.items()
+        ]
+
+        fproto = oh.make_function(
+            domain="pattern",
+            fname=match.pattern.__class__.__name__,
+            inputs=list(input_names),
+            outputs=list(output_names),
+            nodes=old_init_nodes + [n for n in match.nodes if n is not None],
+            opset_imports=[
+                oh.make_opsetid(k, v) for k, v in self.builder.opsets.items()
+            ],
+        )
+
+        fproto_apply = oh.make_function(
+            "pattern",
+            match.pattern.__class__.__name__,
+            list(input_names),
+            list(output_names),
+            new_init_nodes + [n for n in new_nodes if n is not None],
+            opset_imports=[
+                oh.make_opsetid(k, v) for k, v in self.builder.opsets.items()
+            ],
+        )
+
+        def _sh(n):
+            if self.builder.has_shape(n):
+                return self.builder.get_shape(n)
+            if self.builder.has_rank(n):
+                return [None] * self.builder.get_rank(n)
+            return None
+
+        inputs = [
+            oh.make_tensor_value_info(n, self.builder.get_type(n), _sh(n))
+            for n in fproto.input
+        ]
+        outputs = [
+            oh.make_tensor_value_info(n, self.builder.get_type(n), _sh(n))
+            for n in fproto.output
+        ]
+
+        model = oh.make_model(
+            oh.make_graph(fproto.node, "pattern", inputs, outputs),
+            opset_imports=fproto.opset_import,
+            ir_version=self.builder.ir_version,
+        )
+
+        model_apply = oh.make_model(
+            oh.make_graph(fproto_apply.node, "pattern", inputs, outputs),
+            opset_imports=fproto_apply.opset_import,
+            ir_version=self.builder.ir_version,
+        )
+
+        with open(fullname, "wb") as f:
+            f.write(model.SerializeToString())
+        if self.verbose >= 10:
+            print(
+                f"[GraphBuilderPatternOptimization._save_pattern_as_proto] saved {fullname!r}"
+            )
+
+        name = f"{match.pattern.__class__.__name__}_{n}_apply.onnx"
+        fullname = os.path.join(folder, name)
+        with open(fullname, "wb") as f:
+            f.write(model_apply.SerializeToString())
+        if self.verbose >= 10:
+            print(
+                f"[GraphBuilderPatternOptimization._save_pattern_as_proto] saved {fullname!r}"
+            )
 
     def _check_graph(self, statistics, step, iteration, code, verifies):
         begin = time.perf_counter()
