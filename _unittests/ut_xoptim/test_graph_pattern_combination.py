@@ -464,6 +464,7 @@ class TestGraphPatternCombination(ExtTestCase):
             patterns="default+onnxruntime",
             verbose=0,
             verifies=False,
+            dump_applied_patterns="dump_applied_pattern",
         )
         options.patterns = [
             p

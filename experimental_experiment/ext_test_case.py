@@ -466,10 +466,22 @@ def requires_onnxscript(version: str, msg: str = "") -> Callable:
     Skips a unit test if onnxscript is not recent enough.
     """
     import packaging.version as pv
-    import torch
+    import onnxscript
 
-    if pv.Version(".".join(torch.__version__.split(".")[:2])) < pv.Version(version):
-        msg = f"onnxscript version {torch.__version__} < {version}: {msg}"
+    if pv.Version(".".join(onnxscript.__version__.split(".")[:2])) < pv.Version(
+        "0.2.0"
+    ):
+        try:
+            import onnxscript.optimizer
+
+            return True
+        except ImportError:
+            return False
+
+    if pv.Version(".".join(onnxscript.__version__.split(".")[:2])) < pv.Version(
+        version
+    ):
+        msg = f"onnxscript version {onnxscript.__version__} < {version}: {msg}"
         return unittest.skip(msg)
     return lambda x: x
 

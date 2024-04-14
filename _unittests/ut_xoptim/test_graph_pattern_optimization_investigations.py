@@ -44,6 +44,28 @@ class TestGraphPatternOptimizationInvestigation(ExtTestCase):
         self.assertIn("[BinaryInvestigation] Mul(2x2x1024x512, 1x1x1024x512)", out)
         self.assertGreater(len(model.graph.node), len(opt_onx.graph.node))
 
+    def test_dump_applied_patterns(self):
+        model = self._get_model("noopt-llama-custom__1.onnx")
+
+        gr = GraphBuilder(
+            model,
+            infer_shapes=True,
+            optimization_options=OptimizationOptions(
+                patterns=["RotaryConcatPart"],
+                dump_applied_patterns="test_dump_applied_patterns",
+                verbose=10,
+            ),
+        )
+        opt_onx, out, err = self.capture(lambda: gr.to_onnx(optimize=True))
+        self.assertIn("save", out)
+        assert os.path.exists(
+            "test_dump_applied_patterns"
+        ), f"folder 'test_dump_applied_patterns' not found"
+        assert os.listdir("test_dump_applied_patterns"), (
+            f"No file found in 'test_dump_applied_patterns': "
+            f"{os.listdir('test_dump_applied_patterns')}"
+        )
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
