@@ -60,7 +60,7 @@ class TestGraphPatternOptimizationInvestigation(ExtTestCase):
         self.assertIn("save", out)
         assert os.path.exists(
             "test_dump_applied_patterns"
-        ), f"folder 'test_dump_applied_patterns' not found"
+        ), "folder 'test_dump_applied_patterns' not found"
         assert os.listdir("test_dump_applied_patterns"), (
             f"No file found in 'test_dump_applied_patterns': "
             f"{os.listdir('test_dump_applied_patterns')}"
