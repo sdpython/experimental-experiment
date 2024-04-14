@@ -468,15 +468,18 @@ def requires_onnxscript(version: str, msg: str = "") -> Callable:
     import packaging.version as pv
     import onnxscript
 
-    if pv.Version(".".join(onnxscript.__version__.split(".")[:2])) < pv.Version(
-        "0.2.0"
+    if version in {"0.2.0", "0.2"} or (
+        hasattr(onnxscript, "__version__")
+        and pv.Version(".".join(onnxscript.__version__.split(".")[:2]))
+        < pv.Version("0.2.0")
     ):
         try:
             import onnxscript.optimizer
 
-            return True
+            return lambda x: x
         except ImportError:
-            return False
+            msg = f"onnxscript.optimizer not found: {msg}"
+            return unittest.skip(msg)
 
     if pv.Version(".".join(onnxscript.__version__.split(".")[:2])) < pv.Version(
         version
