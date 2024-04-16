@@ -402,6 +402,7 @@ def _default_export(
     enable_pattern,
     disable_pattern,
     rename_inputs,
+    processor,
 ):
     input_names = input_names = (
         create_input_names(graph_module, args) if rename_inputs else None
@@ -418,6 +419,7 @@ def _default_export(
         constant_folding=False,
         patterns=patterns,
         verbose=verbose_onnx,
+        processor=processor,
     )
 
     onx, builder = to_onnx(
@@ -465,6 +467,7 @@ def onnx_custom_backend(
     rename_inputs: bool = True,
     optimize: bool = True,
     exporter: Optional[str] = None,
+    processor: str = "CPU",
 ) -> Callable:
     """
     Custom backend to export torch models into onnx
@@ -491,6 +494,7 @@ def onnx_custom_backend(
     :param rename_inputs: rename the inputs
     :param optimize: enable or disable the optimization
     :param exporter: use a different exporter
+    :param processor: optimization specific for this processor,
     :return: Callable
 
     See :ref:`l-plot-onnxrt-diff` or :ref:`l-plot-custom-backend` for examples.
@@ -535,6 +539,7 @@ def onnx_custom_backend(
             enable_pattern,
             disable_pattern,
             rename_inputs,
+            processor,
         )
     elif exporter == "dynamo":
         from ._dynamo_exporter import _dynamo_export
@@ -549,6 +554,7 @@ def onnx_custom_backend(
             enable_pattern,
             disable_pattern,
             rename_inputs,
+            processor,
         )
     else:
         raise NotImplementedError(f"Unknown exporter {exporter!r}")

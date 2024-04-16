@@ -10,6 +10,7 @@ def make_aot_ort(
     verbose: int = 0,
     enable_pattern: Optional[Union[str, List[Union[str, type]]]] = "default",
     disable_pattern: Optional[Union[str, List[Union[str, type]]]] = None,
+    processor: str = "CPU",
 ) -> tuple:
     """
     Creates a backend to train model with DORT.
@@ -21,6 +22,7 @@ def make_aot_ort(
     :param verbose: verbosity
     :param enable_pattern: optimization patterns to enable
     :param disable_pattern: optimization patterns to disable
+    :param processor: optimization for this processor
     :return: twice the same backend
     """
     import onnxruntime
@@ -63,6 +65,7 @@ def make_aot_ort(
                 f"option pre_ort_model_transforms not available in torch {torch_version}"
             )
             rewrite = False
+            rewrite_more = False
 
     if onnx_registry is None:
         export_options = ExportOptions(dynamic_shapes=dynamic)
@@ -98,7 +101,9 @@ def make_aot_ort(
                 gr = GraphBuilder(
                     next_model,
                     infer_shapes=True,
-                    optimization_options=OptimizationOptions(patterns=patterns),
+                    optimization_options=OptimizationOptions(
+                        patterns=patterns, processor=processor
+                    ),
                     verbose=verbose,
                 )
                 model_proto = gr.to_onnx()
@@ -127,7 +132,7 @@ def make_aot_ort(
             pre_ort_model_transforms=[opt_f],
         )
     else:
-        assert not rewrite_more, "rewrite must be True if rewrite_more is True"
+        assert not rewrite_more, "rewrite_more must be False if rewrite is False"
         options = OrtBackendOptions(
             export_options=export_options,
             ort_session_options=ort_session_options,

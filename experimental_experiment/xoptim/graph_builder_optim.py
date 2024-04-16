@@ -43,6 +43,7 @@ class GraphBuilderPatternOptimization:
     :param verbose: verbosity
     :param dump_applied_patterns: dump applied patterns in a folder,
         the users can check every pattern dumped as a :epkg:`FunctionProto`
+    :param processor: do the optimization for this processor
     """
 
     def __init__(
@@ -53,13 +54,16 @@ class GraphBuilderPatternOptimization:
         verifies: bool = False,
         verbose: int = 0,
         dump_applied_patterns: Optional[str] = None,
+        processor: str = "CPU",
     ):
+        assert processor in {"CUDA", "CPU"}, f"Unknown processor {processor!r}"
         self.builder = builder
         self.verbose = max(verbose, int(os.environ.get("LOG_PATTERN_OPTIMIZE", "0")))
         self.patterns = patterns or get_default_patterns(self.verbose)
         self.recursive = recursive
         self.verifies = verifies
         self.dump_applied_patterns = dump_applied_patterns
+        self.processor = processor
         self._build()
         # This assume a name is given once and
         # no constant can replace an existing one.

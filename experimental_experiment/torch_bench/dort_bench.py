@@ -31,7 +31,7 @@ With experimental optimizers:
 
 ::
 
-    python -m experimental_experiment.torch_bench.dort_bench --backend custom --device cuda --mixed=1 --export a -w 1 --enable_pattern=default+experimental
+    python -m experimental_experiment.torch_bench.dort_bench --backend custom --device cuda --mixed=1 --export model -w 1 --enable_pattern=default+onnxruntime+experimental
 """
 
 from experimental_experiment.torch_bench._dort_cmd_common import dort_args
@@ -131,6 +131,7 @@ compiled_model = create_compiled_model(
         if args.export
         else None
     ),
+    processor=device.upper(),
 )
 
 print(f"type of compiled_model={type(compiled_model)}")
