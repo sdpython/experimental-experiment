@@ -543,9 +543,35 @@ def _set_shape_type_op_any_concat(self: "GraphBuilder", node: NodeProto):  # noq
         self.set_rank(node.output[0], ranks[0])
 
 
+def _set_shape_type_op_any_split(self: "GraphBuilder", node: NodeProto):  # noqa: F821
+    if not self.has_type(node.input[0]):
+        # the main type is missing, cannot continue
+        return
+    dtype = self.get_type(node.input[0])
+    for o in node.output:
+        self.set_type(o, dtype)
+    if self.has_shape(node.input[0]) and self.is_constant(node.input[1]):
+        splits = list(self.get_constant(node.input[1]))
+        assert len(splits) == len(node.output), (
+            f"Unexpected number of outputs, output={node.output} " f"splits={splits}"
+        )
+        att = self.get_attribute(node, "axis", exc=False)
+        axis = 0 if att is None else att.i
+
+        sh = list(self.get_shape(node.input[0]))
+        for i, o in enumerate(node.output):
+            sh[axis] = int(splits[i])
+            self.set_shape(o, tuple(sh))
+    else:
+        rank = self.get_rank(node.input[0])
+        for o in node.output:
+            self.set_rank(o, rank)
+
+
 _set_shape_type_op_any_known = {
     "Cast": _set_shape_type_op_any_cast,
     "Concat": _set_shape_type_op_any_concat,
+    "Split": _set_shape_type_op_any_split,
     "GatherElements": _set_shape_type_op_any_gather_elements,
     "Gemm": _set_shape_type_op_any_gemm,
     "MatMul": _set_shape_type_op_any_matmul,

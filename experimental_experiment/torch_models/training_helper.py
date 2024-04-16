@@ -1,5 +1,5 @@
 import warnings
-from typing import Callable, List, Optional, Tuple
+from typing import Callable, List, Optional, Tuple, Union
 
 
 def make_aot_ort(
@@ -8,6 +8,8 @@ def make_aot_ort(
     rewrite_more: bool = False,
     aten_conversion_changes: Optional[List[Tuple[Callable, str]]] = None,
     verbose: int = 0,
+    enable_pattern: Optional[Union[str, List[Union[str, type]]]] = "default",
+    disable_pattern: Optional[Union[str, List[Union[str, type]]]] = None,
 ) -> tuple:
     """
     Creates a backend to train model with DORT.
@@ -17,6 +19,8 @@ def make_aot_ort(
     :param rewrite_more: runs more optimization
     :param aten_conversion_changes: calls aten ops
     :param verbose: verbosity
+    :param enable_pattern: optimization patterns to enable
+    :param disable_pattern: optimization patterns to disable
     :return: twice the same backend
     """
     import onnxruntime
@@ -79,6 +83,7 @@ def make_aot_ort(
 
             def opt_f(*args, **kwargs):
                 from ..xbuilder import GraphBuilder, OptimizationOptions
+                from ..xoptim import get_pattern_list
 
                 first_model_proto = args[0]
 
@@ -86,12 +91,14 @@ def make_aot_ort(
                     *args, verbose=verbose, onnx_shape_inference=False, **kwargs
                 )
 
+                patterns = get_pattern_list(
+                    enable_pattern, disable_pattern, verbose=verbose
+                )
+
                 gr = GraphBuilder(
                     next_model,
                     infer_shapes=True,
-                    optimization_options=OptimizationOptions(
-                        patterns="default+onnxruntime"
-                    ),
+                    optimization_options=OptimizationOptions(patterns=patterns),
                     verbose=verbose,
                 )
                 model_proto = gr.to_onnx()

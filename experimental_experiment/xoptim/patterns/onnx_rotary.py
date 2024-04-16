@@ -1,5 +1,6 @@
 import inspect
 from typing import List, Optional
+import numpy as np
 from onnx import NodeProto
 from ..patterns_api import MatchResult, PatternOptimization
 
@@ -69,8 +70,8 @@ class RotaryConcatPartPattern(PatternOptimization):
             return self.none()
         if "Concat" in (left.op_type, right.op_type):
             return self.match_concat(g, node, matched)
-        if "ScatterElements" in (left.op_type, right.op_type):
-            return self.match_scatter(g, node, matched)
+        if "Transpose" in (left.op_type, right.op_type):
+            return self.match_transpose(g, node, matched)
         return self.none(node, inspect.currentframe().f_lineno)
 
     def match_concat(
@@ -309,7 +310,7 @@ class RotaryConcatPartPattern(PatternOptimization):
 
         return [cst_left, slice_left, slice_right, neg, concat]
 
-    def match_scatter(
+    def match_transpose(
         self,
         g: "GraphBuilderPatternOptimization",  # noqa: F821
         node: NodeProto,
@@ -322,22 +323,71 @@ class RotaryConcatPartPattern(PatternOptimization):
         ):
             return self.none(node, inspect.currentframe().f_lineno)
 
-        scatter_left, scatter_right = g.node_before(node.input[0]), g.node_before(
+        transpose_left, transpose_right = g.node_before(node.input[0]), g.node_before(
             node.input[1]
         )
+        if (
+            transpose_left.op_type != "Transpose"
+            or transpose_right.op_type != "Transpose"
+        ):
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        perm_left = list(g.get_attribute(transpose_left, "perm").ints)
+        perm_right = list(g.get_attribute(transpose_right, "perm").ints)
+        if perm_left != perm_right:
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        scatter_left, scatter_right = g.node_before(
+            transpose_left.input[0]
+        ), g.node_before(transpose_right.input[0])
         if scatter_left is None or scatter_right is None:
             return self.none(node, inspect.currentframe().f_lineno)
 
-        cst_left = g.node_before(scatter_left.input[0])
-        cst_right = g.node_before(scatter_right.input[0])
+        if scatter_left.op_type != "ScatterND" or scatter_right.op_type != "ScatterND":
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        tr_data_left, tr_data_right = g.node_before(
+            scatter_left.input[0]
+        ), g.node_before(scatter_right.input[0])
+        if (
+            list(g.get_attribute(tr_data_left, "perm").ints) != perm_left
+            or list(g.get_attribute(tr_data_right, "perm").ints) != perm_right
+        ):
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        tr_update_left, tr_update_right = g.node_before(
+            scatter_left.input[2]
+        ), g.node_before(scatter_right.input[2])
+        if (
+            list(g.get_attribute(tr_update_left, "perm").ints) != perm_left
+            or list(g.get_attribute(tr_update_right, "perm").ints) != perm_right
+        ):
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        nodes = [
+            scatter_left,
+            scatter_right,
+            transpose_left,
+            transpose_right,
+            tr_data_left,
+            tr_data_right,
+            tr_update_left,
+            tr_update_right,
+        ]
+
+        if any(map(lambda node: g.is_used_more_than_once(node.output[0]), nodes)):
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        cst_left = g.node_before(tr_data_left.input[0])
+        cst_right = g.node_before(tr_data_right.input[0])
         if (
             cst_left.op_type != "ConstantOfShape"
             or cst_right.op_type != "ConstantOfShape"
         ):
             return self.none(node, inspect.currentframe().f_lineno)
 
-        slice_left = g.node_before(scatter_left.input[2])
-        slice_right = g.node_before(scatter_right.input[2])
+        slice_left = g.node_before(tr_update_left.input[0])
+        slice_right = g.node_before(tr_update_right.input[0])
         if slice_left.op_type not in ("Slice", "Neg") or slice_right.op_type not in (
             "Slice",
             "Neg",
@@ -363,7 +413,7 @@ class RotaryConcatPartPattern(PatternOptimization):
             neg_right = slice_right
             slice_right = g.node_before(neg_right.input[0])
 
-        nodes = [
+        nodes2 = [
             cst_left,
             slice_left,
             neg_left,
@@ -373,8 +423,157 @@ class RotaryConcatPartPattern(PatternOptimization):
             node,
         ]
 
-        # still returning None for the time being
-        if nodes:
+        if any(
+            map(
+                lambda node: node is not None
+                and g.is_used_more_than_once(node.output[0]),
+                nodes2,
+            )
+        ):
             return self.none(node, inspect.currentframe().f_lineno)
 
-        return MatchResult(self, nodes, self.apply_scatter)
+        # Checking shapes and indices
+        if not g.has_shape(scatter_left.input[0]) or not g.has_shape(
+            scatter_right.input[0]
+        ):
+            return self.none(node, inspect.currentframe().f_lineno)
+        shape_left = g.get_shape(scatter_left.input[0])
+        shape_right = g.get_shape(scatter_right.input[0])
+        if shape_left != shape_right:
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        indices_left = g.get_computed_constant(scatter_left.input[1])
+        indices_right = g.get_computed_constant(scatter_right.input[1])
+        if (
+            len(indices_left.shape) != 2
+            or indices_left.shape[1] != 1
+            or len(indices_right.shape) != 2
+            or indices_right.shape[1] != 1
+        ):
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        ind_left = indices_left.ravel().tolist()
+        ind_right = indices_right.ravel().tolist()
+        if ind_left[0] == 0:
+            ind = ind_left + ind_right
+        else:
+            ind = ind_right + ind_left
+
+        if ind != list(range(shape_left[0])):
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        # Slices
+        if slice_left.input[0] != slice_right.input[0]:
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        slice_left_def = [g.get_computed_constant(i) for i in slice_left.input[1:]]
+        slice_right_def = [g.get_computed_constant(i) for i in slice_right.input[1:]]
+        if len(slice_left_def) != 4 or len(slice_right_def) != 4:
+            return self.none(node, inspect.currentframe().f_lineno)
+        if slice_left_def[2].tolist() != slice_right_def[2].tolist():
+            return self.none(node, inspect.currentframe().f_lineno)
+        if slice_left_def[3].tolist() != [1] or slice_right_def[3].tolist() != [1]:
+            return self.none(node, inspect.currentframe().f_lineno)
+        lengths = {len(v) for v in slice_left_def} | {len(v) for v in slice_right_def}
+        if lengths != {1}:
+            # more than one axis
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        axis = slice_left_def[2][0]
+        dim_left = slice_left_def[1][0] - slice_left_def[0][0]
+        dim_right = slice_right_def[1][0] - slice_right_def[0][0]
+
+        shape_left = g.get_computed_constant(cst_left.input[0])
+        shape_right = g.get_computed_constant(cst_right.input[0])
+        cdim_left = shape_left[axis]
+        cdim_right = shape_right[axis]
+
+        if dim_right + dim_left != cdim_right or cdim_right != cdim_left:
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        nodes = [
+            cst_left,
+            slice_left,
+            neg_left,
+            cst_right,
+            slice_right,
+            neg_right,
+            scatter_left,
+            scatter_right,
+            transpose_left,
+            transpose_right,
+            tr_data_left,
+            tr_data_right,
+            tr_update_left,
+            tr_update_right,
+            node,
+        ]
+
+        return MatchResult(self, nodes, self.apply_transpose)
+
+    def apply_transpose(
+        self,
+        g: "GraphBuilder",  # noqa: F821
+        cst_left: NodeProto,
+        slice_left: NodeProto,
+        neg_left: NodeProto,
+        cst_right: NodeProto,
+        slice_right: NodeProto,
+        neg_right: NodeProto,
+        scatter_left: NodeProto,
+        scatter_right: NodeProto,
+        transpose_left: NodeProto,
+        transpose_right: NodeProto,
+        tr_data_left: NodeProto,
+        tr_data_right: NodeProto,
+        tr_update_left: NodeProto,
+        tr_update_right: NodeProto,
+        node: NodeProto,
+    ):
+
+        slice_left_def = [g.get_computed_constant(i) for i in slice_left.input[1:]]
+        slice_right_def = [g.get_computed_constant(i) for i in slice_right.input[1:]]
+        axis = slice_left_def[2][0]
+        dim_left = slice_left_def[1][0] - slice_left_def[0][0]
+        dim_right = slice_right_def[1][0] - slice_right_def[0][0]
+
+        splits = g.make_initializer("", np.array([dim_left, dim_right], dtype=np.int64))
+
+        split = g.make_node(
+            "Split",
+            [slice_left.input[0], splits],
+            [
+                g.unique_name(f"{self.__class__.__name__}--{node.output[0]}"),
+                g.unique_name(f"{self.__class__.__name__}--{node.output[0]}"),
+            ],
+            axis=int(axis),
+            name=f"{self.__class__.__name__}--{node.name}",
+        )
+
+        if neg_left is None:
+            neg = g.make_node(
+                "Neg",
+                [split.output[1]],
+                [g.unique_name(f"{self.__class__.__name__}--{node.output[0]}")],
+                name=f"{self.__class__.__name__}--{node.name}",
+            )
+            concat_inputs = [split.output[0], neg.output[0]]
+        else:
+            neg = g.make_node(
+                "Neg",
+                [split.output[0]],
+                [g.unique_name(f"{self.__class__.__name__}--{node.output[0]}")],
+                name=f"{self.__class__.__name__}--{node.name}",
+            )
+            concat_inputs = [neg.output[0], split.output[1]]
+
+        concat = g.make_node(
+            "Concat",
+            concat_inputs,
+            node.output,
+            axis=int(axis),
+            doc_string=node.doc_string,
+            name=f"{self.__class__.__name__}--{node.name}",
+        )
+
+        return [split, neg, concat]

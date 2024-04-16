@@ -16,6 +16,9 @@ For exemple, to check mixed precision on multiple backend:
 
     python _doc/examples/plot_llama_bench_102.py --device=cuda --num_hidden_layers=2 --mixed=1
 
+::
+
+    python _doc/examples/plot_llama_bench_102.py --device=cuda --num_hidden_layers=2 --mixed=1 --backend=eager,dynger,ortmodule,inductor,ort+,custom
 
 Run the following command to run one experiment and get the available options:
 
@@ -104,7 +107,7 @@ def make_config(
         with_mask=with_mask,
     )
 
-    if existing and backend != "custom":
+    if existing and backend not in ("custom", "ort+"):
         for ex in existing:
             if not ex:
                 continue
@@ -273,6 +276,19 @@ if data_collected:
     df.to_csv(filename, index=False)
     df = pandas.read_csv(filename)  # to cast type
     print(df)
+
+    # summary
+    cs = [
+        c
+        for c in ["backend", "patterns", "warmup_time", "time", "increase"]
+        if c in df.columns
+    ]
+    dfs = df[cs]
+    filename = f"plot_{prefix}_summary.xlsx"
+    dfs.to_excel(filename, index=False)
+    filename = f"plot_{prefix}_summary.csv"
+    dfs.to_csv(filename, index=False)
+    print(dfs)
 
 ########################
 # First lines.

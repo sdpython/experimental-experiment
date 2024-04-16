@@ -272,7 +272,7 @@ print(f":with_mask,{args.with_mask};")
 print(f":implementation,{args.implementation};")
 print(f":torch,{torch.__version__};")
 print(f":transformers,{transformers.__version__};")
-if args.backend in {"custom"}:
+if args.backend in {"custom", "ort+"}:
     print(f":patterns,+{args.enable_pattern}-{args.disable_pattern};")
 print(f":warmup_time,{sum(warmup_times)};")
 print(f":time,{np.mean(times)};")

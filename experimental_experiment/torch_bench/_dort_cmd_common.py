@@ -238,6 +238,8 @@ def create_compiled_model(
             rewrite=optimize,
             verbose=verbose,
             rewrite_more=True,
+            enable_pattern=enable_pattern,
+            disable_pattern=disable_pattern,
         )
         return torch.compile(model, backend=local_ort)
 
