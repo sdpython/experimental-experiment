@@ -239,7 +239,7 @@ def create_compiled_model(
             dynamic=use_dynamic,
             rewrite=optimize,
             verbose=verbose,
-            rewrite_more=True,
+            rewrite_more=optimize,
             enable_pattern=enable_pattern,
             disable_pattern=disable_pattern,
             processor=processor,
