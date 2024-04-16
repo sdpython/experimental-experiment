@@ -254,7 +254,7 @@ def create_compiled_model(
 
         local_aot_ort, local_ort = make_aot_ort(
             dynamic=use_dynamic,
-            rewrite=False,
+            rewrite=True,
             verbose=verbose,
             rewrite_more=True,
             enable_pattern=enable_pattern,

@@ -92,8 +92,8 @@ class OptimizationOptions:
             f"constant_fusing={self.constant_fusing}, "
             f"verbose={self.verbose}, "
             f"max_iter={self.max_iter}, recursive={self.recursive}, "
-            f"processor={self.processor}",
-            f"patterns={pats}{opts})",
+            f"processor={self.processor}, "
+            f"patterns={pats}{opts})"
         )
         return "\n".join(
             textwrap.wrap(code, width=80, tabsize=4, subsequent_indent="    ")

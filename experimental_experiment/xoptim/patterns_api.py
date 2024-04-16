@@ -865,9 +865,9 @@ class OnnxEasyPatternOptimization(EasyPatternOptimization):
         from ..xbuilder import GraphBuilder
         from .graph_builder_optim import GraphBuilderPatternOptimization
 
-        g = GraphBuilder(onx)
+        gb = GraphBuilder(onx)
         g2 = GraphBuilderPatternOptimization(
-            g, verbose=max(0, g.verbose - 1), processor=g.processor
+            gb, verbose=max(0, gb.verbose - 1), processor=g.processor
         )
         g2._build()
         return g2
