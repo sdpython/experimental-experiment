@@ -10,6 +10,7 @@ def make_aot_ort(
     verbose: int = 0,
     enable_pattern: Optional[Union[str, List[Union[str, type]]]] = "default",
     disable_pattern: Optional[Union[str, List[Union[str, type]]]] = None,
+    processor: str = "CPU",
 ) -> tuple:
     """
     Creates a backend to train model with DORT.
@@ -21,6 +22,7 @@ def make_aot_ort(
     :param verbose: verbosity
     :param enable_pattern: optimization patterns to enable
     :param disable_pattern: optimization patterns to disable
+    :param processor: optimization for this processor
     :return: twice the same backend
     """
     import onnxruntime
@@ -98,7 +100,9 @@ def make_aot_ort(
                 gr = GraphBuilder(
                     next_model,
                     infer_shapes=True,
-                    optimization_options=OptimizationOptions(patterns=patterns),
+                    optimization_options=OptimizationOptions(
+                        patterns=patterns, processor=processor
+                    ),
                     verbose=verbose,
                 )
                 model_proto = gr.to_onnx()

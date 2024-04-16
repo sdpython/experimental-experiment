@@ -29,6 +29,7 @@ class OptimizationOptions:
         it is very slow
     :param dump_applied_patterns: dump applied patterns in a folder,
         the users can check every pattern dumped as a :epkg:`FunctionProto`
+    :param processor: CPU, CUDA, ...
     """
 
     def __init__(
@@ -45,6 +46,7 @@ class OptimizationOptions:
         verbose: int = 0,
         verifies: bool = False,
         dump_applied_patterns: Optional[str] = None,
+        processor: str = "CPU",
     ):
         self.remove_unused = remove_unused
         self.constant_folding = constant_folding
@@ -52,6 +54,7 @@ class OptimizationOptions:
         self.constant_size = constant_size
         self.constant_fusing = constant_fusing
         self.stop_after = stop_after
+        self.processor = processor
         if isinstance(patterns, str):
             from ..xoptim import get_pattern_list
 
@@ -89,7 +92,8 @@ class OptimizationOptions:
             f"constant_fusing={self.constant_fusing}, "
             f"verbose={self.verbose}, "
             f"max_iter={self.max_iter}, recursive={self.recursive}, "
-            f"patterns={pats}{opts})"
+            f"processor={self.processor}",
+            f"patterns={pats}{opts})",
         )
         return "\n".join(
             textwrap.wrap(code, width=80, tabsize=4, subsequent_indent="    ")

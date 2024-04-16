@@ -2739,6 +2739,7 @@ class GraphBuilder:
             recursive=self.optimization_options.recursive,
             verifies=self.optimization_options.verifies,
             dump_applied_patterns=self.optimization_options.dump_applied_patterns,
+            processor=self.optimization_options.processor,
         )
         return gro.optimize(
             max_iter=self.optimization_options.max_iter,

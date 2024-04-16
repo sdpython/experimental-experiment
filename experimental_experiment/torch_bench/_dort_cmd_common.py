@@ -177,6 +177,7 @@ def create_compiled_model(
     dump_prefix: Optional[str] = None,
     optimize: bool = True,
     use_fused_aten_ops: bool = False,
+    processor: str = "CPU",
 ) -> Any:
     """
     Creates the compilrf model.
@@ -194,6 +195,7 @@ def create_compiled_model(
     :param optimize: enable optimizations
     :param use_fused_aten_ops: use fused opetor when converting the model,
         it only works the backend custom
+    :param processor: optimization should be made for this processor
     :return: compiled model
     """
     import torch
@@ -240,6 +242,7 @@ def create_compiled_model(
             rewrite_more=True,
             enable_pattern=enable_pattern,
             disable_pattern=disable_pattern,
+            processor=processor,
         )
         return torch.compile(model, backend=local_ort)
 
@@ -250,7 +253,13 @@ def create_compiled_model(
         os.environ["ONNXRT_CHANGE_REWRITER"] = "1"
 
         local_aot_ort, local_ort = make_aot_ort(
-            dynamic=use_dynamic, rewrite=False, verbose=verbose
+            dynamic=use_dynamic,
+            rewrite=False,
+            verbose=verbose,
+            rewrite_more=True,
+            enable_pattern=enable_pattern,
+            disable_pattern=disable_pattern,
+            processor=processor,
         )
         return torch.compile(model, backend=local_ort)
 
@@ -281,6 +290,7 @@ def create_compiled_model(
                 dump_prefix=dump_prefix,
                 optimize=optimize,
                 dispatcher=dispatcher,
+                processor=processor,
                 **kwargs,
             ),
             decompositions=get_decomposition_table(),
@@ -308,6 +318,7 @@ def create_compiled_model(
                 optimize=optimize,
                 exporter="dynamo",
                 dispatcher=dispatcher,
+                processor=processor,
                 **kwargs,
             ),
             decompositions=get_decomposition_table_dynamo(),
@@ -335,6 +346,7 @@ def create_compiled_model(
                 dump_prefix=dump_prefix,
                 optimize=optimize,
                 dispatcher=dispatcher,
+                processor=processor,
                 **kwargs,
             ),
             decompositions=get_decomposition_table(),
