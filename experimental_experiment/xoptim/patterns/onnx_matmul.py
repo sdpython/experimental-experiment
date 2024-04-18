@@ -444,10 +444,12 @@ class TransposeMatMulPattern(PatternOptimization):
         new_node.attribute.extend(keep)
         res = [new_node]
         if node_before_left is not None and g.is_used_more_than_once(
+            # This is not efficient on CUDA.
             node_before_left.output[0]
         ):
             res.append(node_before_left)
         if node_before_right is not None and g.is_used_more_than_once(
+            # This is not efficient on CUDA.
             node_before_right.output[0]
         ):
             res.append(node_before_right)
