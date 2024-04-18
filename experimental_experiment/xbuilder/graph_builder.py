@@ -34,7 +34,7 @@ from ._onnx_helper import (
     element_wise_op_cmp_types,
     unary_like_op_types,
 )
-from ._dtype_helper import dtype_to_tensor_dtype
+from ._dtype_helper import dtype_to_tensor_dtype, onnx_dtype_to_torch_dtype
 from ._helper import make_hash
 from .optimization_options import OptimizationOptions
 from .expression_dimension import Expression, parse_expression
@@ -2820,6 +2820,7 @@ class GraphBuilder:
     ) -> Tuple[np.ndarray, Optional[Dict[str, np.ndarray]]]:
         assert self.is_constant(name), f"Name {name!r} is not a constant."
         if name is self.initializers_dict:
+            print("-----", name)
             return self.initializers_dict[name], None
         v = self.constants_[name]
         assert isinstance(v, NodeProto), f"Unexpected type {type(v)} for name={name!r}"
@@ -2833,9 +2834,18 @@ class GraphBuilder:
         else:
             ref = ExtendedReferenceEvaluator(v)
             output = ref.run(None, feeds)
+        new_outputs = []
         for name, val in zip(v.output, output):
+            if self.has_type(name):
+                # numpy changes the expected type sometimes (like transpose(x: float36) --> float32)
+                itype = self.get_type(name)
+                if hasattr(val, "detach"):
+                    val = val.to(onnx_dtype_to_torch_dtype(itype))
+                else:
+                    val = val.astype(oh.tensor_dtype_to_np_dtype(itype))
             self.constants_computed_[name] = val
-        return output, feeds
+            new_outputs.append(val)
+        return new_outputs, feeds
 
     def constant_folding(self, convert_into_initializer: bool = True) -> int:
         """

@@ -130,6 +130,7 @@ class GraphBuilderPatternOptimization:
         self.set_output_names_ = set(self.builder.output_names)
         self.predecessors_ = {}
         self.successors_ = {}
+        successors_id = {}
         self.used_ = {}
         for k, v in self.nodes_.items():
             assert isinstance(v, NodeProto), f"Unexpected type {type(v)} for node {k}"
@@ -138,7 +139,12 @@ class GraphBuilderPatternOptimization:
             for i in v.input:
                 if i not in self.successors_:
                     self.successors_[i] = []
-                self.successors_[i].append(k)
+                    successors_id[i] = set()
+                if id(k) not in successors_id[i]:
+                    # This test avoids the same successor to appear twice if one node
+                    # consumes twice the same node.
+                    self.successors_[i].append(k)
+                    successors_id[i].add(id(k))
 
             for sub in enumerate_subgraphs(v):
                 g = sub[-1]
