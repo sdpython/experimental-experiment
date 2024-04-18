@@ -32,6 +32,7 @@ def _dynamo_export(
     enable_pattern,
     disable_pattern,
     rename_inputs,
+    device,
     **kwargs
 ):
     import torch

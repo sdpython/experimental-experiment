@@ -50,6 +50,7 @@ class ConstantOfShapeScatterNDPattern(PatternOptimization):
             "ScatterNDOfShape",
             [node_before.input[0], *node.input[1:]],
             node.output,
+            strategy="optimize",
             name=f"{self.__class__.__name__}--{node.name}",
             domain="onnx_extended.ortops.optim.cuda",
         )

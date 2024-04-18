@@ -284,7 +284,9 @@ class EasyPatternOptimization(PatternOptimization):
         else:
             for name in output:
                 g2.make_tensor_output(name, 0, None, is_dimension=False)
-        pat = GraphBuilderPatternOptimization(g2, verbose=max(0, g.verbose - 1))
+        pat = GraphBuilderPatternOptimization(
+            g2, verbose=max(0, g.verbose - 1), processor=g.processor
+        )
         pat._build()
         return pat
 
@@ -863,8 +865,10 @@ class OnnxEasyPatternOptimization(EasyPatternOptimization):
         from ..xbuilder import GraphBuilder
         from .graph_builder_optim import GraphBuilderPatternOptimization
 
-        g = GraphBuilder(onx)
-        g2 = GraphBuilderPatternOptimization(g, verbose=max(0, g.verbose - 1))
+        gb = GraphBuilder(onx)
+        g2 = GraphBuilderPatternOptimization(
+            gb, verbose=max(0, gb.verbose - 1), processor=g.processor
+        )
         g2._build()
         return g2
 

@@ -47,6 +47,20 @@ class FusedMatMulPattern(PatternOptimization):
         if len([_ for _ in ns if _ is not None]) == 0:
             return self.none(node, inspect.currentframe().f_lineno)
 
+        if g.processor == "CUDA":
+            nns = []
+            for n in ns:
+                if n is None:
+                    nns.append(n)
+                    continue
+                if g.is_used_more_than_once(n.output[0]):
+                    nns.append(None)
+                    continue
+                nns.append(n)
+            if len([_ for _ in ns if _ is not None]) == 0:
+                return self.none(node, inspect.currentframe().f_lineno)
+            ns = nns
+
         hints = []
         found = False
         nns = []
