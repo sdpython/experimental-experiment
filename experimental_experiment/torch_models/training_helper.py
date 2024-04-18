@@ -22,7 +22,8 @@ def make_aot_ort(
     :param verbose: verbosity
     :param enable_pattern: optimization patterns to enable
     :param disable_pattern: optimization patterns to disable
-    :param processor: optimization for this processor
+    :param processor: optimization should be made for this processor
+        or this list of processors (comma separated value)
     :return: twice the same backend
     """
     import onnxruntime

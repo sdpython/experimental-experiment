@@ -16,6 +16,8 @@ class ConstantOfShapeScatterNDPattern(PatternOptimization):
         node: NodeProto,
         matched: List[MatchResult],
     ) -> Optional[MatchResult]:
+        if not g.has_processor("CUDA"):
+            return self.none()
         if node.op_type != "ScatterND" or node.domain != "":
             return self.none()
 

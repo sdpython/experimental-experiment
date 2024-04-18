@@ -29,7 +29,8 @@ class OptimizationOptions:
         it is very slow
     :param dump_applied_patterns: dump applied patterns in a folder,
         the users can check every pattern dumped as a :epkg:`FunctionProto`
-    :param processor: CPU, CUDA, ...
+    :param processor: optimization should be made for this processor
+        or this list of processors (comma separated value)
     """
 
     def __init__(

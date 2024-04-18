@@ -180,7 +180,7 @@ def create_compiled_model(
     processor: str = "CPU",
 ) -> Any:
     """
-    Creates the compilrf model.
+    Creates the compiled model.
 
     :param model: module
     :param backend: kind of backend
@@ -196,6 +196,7 @@ def create_compiled_model(
     :param use_fused_aten_ops: use fused opetor when converting the model,
         it only works the backend custom
     :param processor: optimization should be made for this processor
+        or this list of processors (comma separated value)
     :return: compiled model
     """
     import torch

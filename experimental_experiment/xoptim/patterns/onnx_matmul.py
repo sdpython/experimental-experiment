@@ -463,9 +463,9 @@ class TransposeMatMulPattern(PatternOptimization):
             # This is not efficient on CUDA.
             res.append(node_before_left)
         if node_before_right is not None and g.is_used_more_than_once(
-            # This is not efficient on CUDA.
             node_before_right.output[0]
         ):
+            # This is not efficient on CUDA.
             res.append(node_before_right)
         return res
 

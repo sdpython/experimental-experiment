@@ -62,7 +62,9 @@ class TestGraphFullModelPatternOptimization(ExtTestCase):
         gr = GraphBuilder(
             origin,
             optimization_options=OptimizationOptions(
-                patterns=["ConstantOfShapeScatterND"], verbose=0
+                patterns=["ConstantOfShapeScatterND"],
+                verbose=0,
+                processor="CUDA",
             ),
             infer_shapes=True,
         )
