@@ -74,6 +74,20 @@ class SameChildrenPattern(PatternOptimization):
             if len(nodes) == 0:
                 return self.none(node, inspect.currentframe().f_lineno)
 
+        for i in range(0, len(nodes), 2):
+            n1, n2 = nodes[i : i + 2]
+            assert (
+                len(n1.output) > 0
+            ), "A node should not have no output in this pattern."
+            assert (
+                not g.has_type(n1.output[0])
+                or not g.has_type(n2.output[0])
+                or g.get_type(n1.output[0]) == g.get_type(n2.output[0])
+            ), (
+                f"Nodes n1 and n2 have different output type for outputs "
+                f"{n1.output[0]!r}, {n2.output[0]}, and types "
+                f"{g.get_type(n1.output[0])} != {g.get_type(n2.output[0])})"
+            )
         return MatchResult(self, nodes, self.apply)
 
     def apply(

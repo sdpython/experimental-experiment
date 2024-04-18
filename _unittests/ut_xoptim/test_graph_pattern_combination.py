@@ -452,10 +452,10 @@ class TestGraphPatternCombination(ExtTestCase):
     def test_study(self):
         model = "dort-llama-llama-ort_1.onnx"
         enabled = {
-            "Sub1MulPattern",
+            # "Sub1MulPattern",
             # "Reshape2Of3Pattern",
             # "ReshapeReshapePattern",
-            "ExpandSwapPattern",
+            "SameChildrenPattern",
             # "ExpandBroadcastPattern",
         }
         enabled = {}
