@@ -494,7 +494,8 @@ def onnx_custom_backend(
     :param rename_inputs: rename the inputs
     :param optimize: enable or disable the optimization
     :param exporter: use a different exporter
-    :param processor: optimization specific for this processor,
+    :param processor: optimization should be made for this processor
+        or this list of processors (comma separated value)
     :return: Callable
 
     See :ref:`l-plot-onnxrt-diff` or :ref:`l-plot-custom-backend` for examples.

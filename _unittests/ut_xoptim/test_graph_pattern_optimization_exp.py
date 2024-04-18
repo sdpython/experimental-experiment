@@ -91,7 +91,7 @@ class TestGraphPatternOptimizationExp(ExtTestCase):
             model,
             infer_shapes=True,
             optimization_options=OptimizationOptions(
-                patterns=["ConstantOfShapeScatterND"]
+                patterns=["ConstantOfShapeScatterND"], processor="CPU,CUDA"
             ),
         )
         opt_onx = gr.to_onnx(optimize=True)
