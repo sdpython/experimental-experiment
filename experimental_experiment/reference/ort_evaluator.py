@@ -24,7 +24,7 @@ class OrtEval:
         self,
         proto: Union[str, ModelProto],
         providers: Optional[Union[str, List[str]]] = None,
-        options: Optional["SessionOptions"] = None,  # noqa: F821
+        options: Optional["onnxruntime.SessionOptions"] = None,  # noqa: F821
         verbose: int = 0,
         whole: bool = False,
         incremental: bool = False,
@@ -150,7 +150,7 @@ class OrtEval:
     ) -> List[Any]:
         """
         Runs the model.
-        It only works with :class:`numpy.array`.
+        It only works with numpy arrays.
 
         :param outputs: required outputs or None for all
         :param feed_inputs: inputs

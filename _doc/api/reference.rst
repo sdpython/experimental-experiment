@@ -9,10 +9,10 @@ ExtendedReferenceEvaluator
 .. autoclass:: experimental_experiment.reference.ExtendedReferenceEvaluator
     :members:
 
-OrtEvaluator
-============
+OrtEval
+=======
 
-.. autoclass:: experimental_experiment.reference.OrtEvaluator
+.. autoclass:: experimental_experiment.reference.OrtEval
     :members:
 
 from_array_extended
