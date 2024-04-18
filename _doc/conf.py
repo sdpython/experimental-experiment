@@ -114,6 +114,7 @@ epkg_dictionary = {
     "azure pipeline": "https://azure.microsoft.com/en-us/products/devops/pipelines",
     "DOT": "https://graphviz.org/doc/info/lang.html",
     "JIT": "https://en.wikipedia.org/wiki/Just-in-time_compilation",
+    "FunctionProto": "https://onnx.ai/onnx/api/classes.html#functionproto",
     "GraphModule": "https://pytorch.org/docs/stable/fx.html#torch.fx.GraphModule",
     "numpy": "https://numpy.org/",
     "onnx": "https://onnx.ai/onnx/",
