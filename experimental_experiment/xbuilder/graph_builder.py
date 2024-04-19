@@ -536,12 +536,13 @@ class GraphBuilder:
         dtype: int,
         shapes: Optional[DYNAMIC_SHAPE] = None,
         ranks: Optional[Tuple[int, ...]] = None,
+        unknown: bool = False,
     ):
         """
         Defines a result as a sequence.
         """
         assert (
-            shapes is not None or ranks is not None
+            shapes is not None or ranks is not None or unknown
         ), f"shapes or ranks must be defines for name={name!r}{self.get_debug_msg()}"
         assert self.has_name(name), f"No result name={name!r}{self.get_debug_msg()}"
         assert isinstance(dtype, int), (
@@ -1291,7 +1292,7 @@ class GraphBuilder:
                 y = self.value_as_shape(node.input[0])
                 if y is None:
                     return
-                i = self.get_constant(node.input[1])
+                i = self.get_constant(node.input[1], computed_value=True)
                 if isinstance(y, str) and isinstance(i, int):
                     self.set_value_shape(node.output[0], f"{y}[{i}]")
                     return
@@ -2319,11 +2320,15 @@ class GraphBuilder:
             raise RuntimeError(f"Values unknown for type {type(t)}-{t}.")
 
         rows = ["", "--DEBUG--", "--SHAPE--"]
-        rows.append(f"dynamic_objects={pprint.pformat(self.dynamic_objects)}")
-        rows.append(f"dynamic_objects_rev={pprint.pformat(self.dynamic_objects_rev)}")
-        rows.append(f"dynamic_alias={pprint.pformat(self._dynamic_alias)}")
-        rows.append(f"dynamic_shapes={pprint.pformat(self.dynamic_shapes)}")
-        rows.append(f"_known_value_shape={pprint.pformat(self._known_value_shape)}")
+        rows.append(f"dynamic_objects={pprint.pformat(self.dynamic_objects)[:10000]}")
+        rows.append(
+            f"dynamic_objects_rev={pprint.pformat(self.dynamic_objects_rev)[:10000]}"
+        )
+        rows.append(f"dynamic_alias={pprint.pformat(self._dynamic_alias)[:10000]}")
+        rows.append(f"dynamic_shapes={pprint.pformat(self.dynamic_shapes)[:10000]}")
+        rows.append(
+            f"_known_value_shape={pprint.pformat(self._known_value_shape)[:10000]}"
+        )
         rows.append("--TORCH-SHAPES--")
         for kk, vv in self._known_torch_value.items():
             rows.append(
@@ -2332,13 +2337,24 @@ class GraphBuilder:
                 f"{self.get_rank(kk) if self.has_rank(kk) else ''}:"
                 f"{self.get_shape(kk) if self.has_shape(kk) else ''}:"
             )
+            if len(rows) > 1000:
+                rows.append("...")
+                rows.append(
+                    f"Stopped with {len(self.initializers_dict)} "
+                    f"initializers and {len(self.nodes)} nodes."
+                )
+                return "\n".join(rows)
         rows.append("--ONNX--")
         for k, v in self._debug_msg.items():
             rows.append(f"-- {k} --")
-            if isinstance(v, dict):
-                rows.append(pprint.pformat(v))
-            else:
-                rows.append(str(v))
+            rows.append(pprint.pformat(v) if isinstance(v, dict) else str(v))
+            if len(rows) > 1000:
+                rows.append("...")
+                rows.append(
+                    f"Stopped with {len(self.initializers_dict)} "
+                    f"initializers and {len(self.nodes)} nodes."
+                )
+                return "\n".join(rows)
         rows.append("--")
         hs = self._hash()
         for io in self.inputs:
@@ -2353,6 +2369,13 @@ class GraphBuilder:
                 f"[GraphBuilder-{hs}.make_initializer] "
                 f"{name}[{_dtype(init)}:{_shape(init)}{sval}]"
             )
+            if len(rows) > 1000:
+                rows.append("...")
+                rows.append(
+                    f"Stopped with {len(self.initializers_dict)} "
+                    f"initializers and {len(self.nodes)} nodes."
+                )
+                return "\n".join(rows)
         for node in self.nodes:
             if node is None:
                 continue
@@ -2366,12 +2389,24 @@ class GraphBuilder:
                 f"[{self._debug_string_inputs(node.input, node.output, 6)}] "
                 f"{node.op_type}{ext}:{node.input}->{node.output}"
             )
+            if len(rows) > 1000:
+                rows.append("...")
+                rows.append(
+                    f"Stopped with {len(self.initiliazer)} "
+                    f"initializers and {len(self.nodes)} nodes."
+                )
+                return "\n".join(rows)
         for io in self.outputs:
             shh = _nice_shape(io.type.tensor_type.shape)
             rows.append(
                 f"[GraphBuilder-{hs}.make_tensor_output] {io.name}"
                 f"[{io.type.tensor_type.elem_type}:{shh}]"
             )
+
+        rows.append(
+            f"Completed with {len(self.initializers_dict)} "
+            f"initializers and {len(self.nodes)} nodes."
+        )
         return "\n".join(rows)
 
     def process(
@@ -2856,6 +2891,13 @@ class GraphBuilder:
             otherwise, just evaluates it
         :return: number of removed nodes
         """
+        if self.verbose > 1:
+            begin_ = time.perf_counter()
+            print(
+                f"[GraphBuilder.constant_folding] starts with "
+                f"{len(self.constants_)} constants and "
+                f"{len(self.nodes)} nodes."
+            )
         start = len(self.nodes)
         updates = {}
         node_to_remove = set()
@@ -2875,7 +2917,7 @@ class GraphBuilder:
                         self.initializers_dict[name] = value
                     else:
                         updates[name] = value
-                    if self.verbose:
+                    if self.verbose > 3:
                         print(
                             f"[GraphBuilder.constant_folding] fold_constant:"
                             f"{v.op_type}:{name}[{value.dtype}:"
@@ -2892,6 +2934,13 @@ class GraphBuilder:
                 continue
             new_nodes.append(node)
         self.nodes = new_nodes
+        if self.verbose > 1:
+            print(
+                f"[GraphBuilder.constant_folding] ends with "
+                f"{len(self.constants_)} constants and "
+                f"{len(self.nodes)} nodes in "
+                f"{time.perf_counter() - begin_} seconds"
+            )
         return start - len(self.nodes)
 
     def remove_identity_nodes(self) -> Tuple[int, int]:
@@ -2908,6 +2957,12 @@ class GraphBuilder:
             marked so that it does not get deleted: its name must start with
             ``'_DONOTREMOVE_'``.
         """
+        if self.verbose > 1:
+            begin_ = time.perf_counter()
+            print(
+                f"[GraphBuilder.remove_identity_nodes] "
+                f"starts with {len(self.nodes)}"
+            )
         # first pass: detect replacements
         new_nodes = []
         input_names = set(i.name for i in self.inputs)
@@ -2936,7 +2991,8 @@ class GraphBuilder:
             if new_name in replacements:
                 new_name = replacements[new_name]
                 assert new_name not in replacements, (
-                    f"Name {old_name!r} still in {replacements}, node.op_type={node.op_type!r}, "
+                    f"Name {old_name!r} still in {replacements}, "
+                    f"node.op_type={node.op_type!r}, "
                     f"node.input={node.input}, node.output={node.output}, "
                     f"input_names={input_names}, output_names={output_names}"
                 )
@@ -2947,7 +3003,8 @@ class GraphBuilder:
             if old_name in replacements:
                 replacements[replacements[old_name]] = new_name
             assert new_name not in replacements, (
-                f"Name {old_name!r} still in {replacements}, node.op_type={node.op_type!r}, "
+                f"Name {old_name!r} still in {replacements}, "
+                f"node.op_type={node.op_type!r}, "
                 f"node.input={node.input}, node.output={node.output}, "
                 f"input_names={input_names}, output_names={output_names}"
             )
@@ -2958,9 +3015,10 @@ class GraphBuilder:
                 # x -> Identity -> output0
                 # How x should be renamed?
                 assert new_name in output_names, (
-                    f"replacement {old_name}->{new_name} is not possible because of "
-                    f"[{replacements_rev[old_name]}->{old_name}] and {new_name!r} "
-                    f"is not an output"
+                    f"replacement {old_name}->{new_name} "
+                    f"is not possible because of "
+                    f"[{replacements_rev[old_name]}->{old_name}] "
+                    f"and {new_name!r} is not an output"
                 )
                 updates = {}
                 for k, v in replacements.items():
@@ -2972,19 +3030,27 @@ class GraphBuilder:
             replacements_rev[new_name] = old_name
 
             # verification
-            for k, v in replacements.items():
-                assert v not in replacements, (
-                    f"replacement {k}->{v} is not possible because of "
-                    f"[{v}->{replacements[v]}], old_name={old_name!r}, new_name={new_name!r}"
-                )
+            if len(replacements) < 500:
+                for k, v in replacements.items():
+                    assert v not in replacements, (
+                        f"replacement {k}->{v} is not possible because of "
+                        f"[{v}->{replacements[v]}], old_name={old_name!r}, "
+                        f"new_name={new_name!r}"
+                    )
             removed += 1
 
         # second pass: replacements in initializer
+        if self.verbose > 1:
+            print(
+                f"[GraphBuilder.remove_identity_nodes] found "
+                f"{len(replacements)} replacements"
+            )
         for k, v in replacements.items():
             if k in self.initializers_dict:
                 if self.optimization_options.verbose > 2:
                     print(
-                        f"[GraphBuilder.remove_identity_nodes] rename initializer {k!r} by {v!r}"
+                        f"[GraphBuilder.remove_identity_nodes] "
+                        f"rename initializer {k!r} by {v!r}"
                     )
                 self.initializers_dict[v] = self.initializers_dict[k]
                 del self.initializers_dict[k]
@@ -2993,6 +3059,10 @@ class GraphBuilder:
                 del self.constants_[k]
 
         # third pass: replacements in node
+        if self.verbose > 1:
+            print(
+                f"[GraphBuilder.remove_identity_nodes] " f"kept {len(new_nodes)} nodes"
+            )
         self.nodes = []
         added = 0
         for node in new_nodes:
@@ -3008,7 +3078,8 @@ class GraphBuilder:
                 )
                 if self.optimization_options.verbose > 2:
                     print(
-                        f"[GraphBuilder.remove_identity_nodes] node {node.op_type}-{node.name}:"
+                        f"[GraphBuilder.remove_identity_nodes] "
+                        f"node {node.op_type}-{node.name}:"
                         f"{node.input}->{new_inputs}:{node.output}->{new_outputs}"
                     )
                 new_node = oh.make_node(
@@ -3024,6 +3095,13 @@ class GraphBuilder:
                 self.nodes.append(new_node)
             else:
                 self.nodes.append(node)
+
+        if self.verbose > 1:
+            print(
+                f"[GraphBuilder.remove_identity_nodes] ends with "
+                f"{len(self.nodes)} nodes in "
+                f"{time.perf_counter() - begin_} seconds"
+            )
 
         return removed, added
 
@@ -3210,15 +3288,46 @@ class GraphBuilder:
         :param proto: model proto
         :param infer_shapes: infer shapes to fill information about type and shapes
         """
+        if self.verbose > 1:
+            begin_ = time.perf_counter()
+            print(
+                f"[GraphBuilder._update_shape_types_with_proto] starts with "
+                f"{len(self.nodes)} nodes and {len(getattr(proto.graph, 'value_info', 0))} "
+                f"shapes."
+            )
         assert isinstance(proto, ModelProto), f"Unexpected type {type(proto)} for proto"
         if infer_shapes:
+            if self.verbose > 1:
+                print("[GraphBuilder._update_shape_types_with_proto] infer shapes")
             new_proto = onnx_infer_shapes(proto)
+            if self.verbose > 1:
+                print(
+                    "[GraphBuilder._update_shape_types_with_proto] "
+                    f"infer shapes done {time.perf_counter() - begin_} seconds"
+                )
             self._clean_shapes(new_proto)
+            if self.verbose > 1:
+                print(
+                    "[GraphBuilder._update_shape_types_with_proto] "
+                    f"_clean_shapes after {time.perf_counter() - begin_} seconds"
+                )
         else:
             new_proto = proto
 
         if not hasattr(new_proto.graph, "value_info"):
+            if self.verbose > 1:
+                print(
+                    f"[GraphBuilder._update_shape_types_with_proto] ends in "
+                    f"{time.perf_counter() - begin_} seconds."
+                )
             return
+
+        if self.verbose > 1:
+            begin_ = time.perf_counter()
+            print(
+                f"[GraphBuilder._update_shape_types_with_proto] "
+                f"walk through {len(proto.graph.value_info)} shapes."
+            )
         for val in new_proto.graph.value_info:
             itype = val.type.tensor_type.elem_type
             self.set_type(val.name, itype)
@@ -3233,10 +3342,22 @@ class GraphBuilder:
                     self.make_dynamic_object(sh, self.torch.SymInt(sh))
             self.set_shape(val.name, shape, exc=False)
 
+        if self.verbose > 1:
+            print(
+                f"[GraphBuilder._update_shape_types_with_proto] ends in "
+                f"{time.perf_counter() - begin_} seconds."
+            )
+
     def _update_structures_with_proto(self, proto: ModelProto):
         """
         Updates the shapes and types for an existing model.
         """
+        if self.verbose > 1:
+            begin_ = time.perf_counter()
+            print(
+                f"[GraphBuilder._update_structures_with_proto] starts with "
+                f"{len(proto.graph.node)} nodes"
+            )
         self.opsets = {d.domain: d.version for d in proto.opset_import}
         if self.ir_version is None:
             self.ir_version = proto.ir_version
@@ -3293,15 +3414,34 @@ class GraphBuilder:
                 self._unique_node_names.add(node.name)
 
             if node.op_type == "SequenceConstruct":
-                dtypes = [self.get_type(n) for n in node.input]
-                ranks = [self.get_rank(n) for n in node.input]
-                assert len(set(dtypes)) == 1, (
-                    f"A sequence has distinct dtype: {dtypes}, node.name={node.name}, "
+                dtypes = [
+                    (self.get_type(n) if self.has_type(n) else 0) for n in node.input
+                ]
+                ranks = [
+                    (self.get_rank(n) if self.has_rank(n) else -1) for n in node.input
+                ]
+                unique_dtypes = set(dtypes)
+                if 0 in unique_dtypes:
+                    unique_dtypes = set(u for u in unique_dtypes if u != 0)
+                    if len(unique_dtypes) == 0:
+                        if not self.has_name(node.output[0]):
+                            self.set_name(node.output[0])
+                        self.set_sequence(
+                            node.output[0], 0, shapes=None, ranks=None, unknown=True
+                        )
+                        new_nodes.append(node)
+                        continue
+
+                assert len(unique_dtypes) == 1, (
+                    f"A sequence has distinct dtype: {dtypes}, "
+                    f"(unique_dtypes={unique_dtypes}), node.name={node.name}, "
                     f"node.input={node.input}"
                 )
                 if not self.has_name(node.output[0]):
                     self.set_name(node.output[0])
-                self.set_sequence(node.output[0], dtypes[0], shapes=None, ranks=ranks)
+                self.set_sequence(
+                    node.output[0], list(unique_dtypes)[0], shapes=None, ranks=ranks
+                )
                 new_nodes.append(node)
                 continue
 
@@ -3309,10 +3449,13 @@ class GraphBuilder:
                 position = self.get_constant(node.input[1], computed_value=True)
                 seq = self.get_sequence(node.input[0])
                 dtype = seq["dtype"]
-                rank = seq["ranks"][int(position)]
                 if not self.has_name(node.output[0]):
                     self.set_name(node.output[0])
                 self.set_type(node.output[0], dtype)
+                if seq["ranks"] is None:
+                    new_nodes.append(node)
+                    continue
+                rank = seq["ranks"][int(position)]
                 self.set_rank(node.output[0], rank)
                 new_nodes.append(node)
                 continue
@@ -3393,6 +3536,13 @@ class GraphBuilder:
 
         if need_identity_removal:
             self.remove_identity_nodes()
+
+        if self.verbose > 1:
+            print(
+                f"[GraphBuilder._update_structures_with_proto] ends with "
+                f"{len(self.nodes)} nodes in "
+                f"{time.perf_counter() - begin_}"
+            )
 
     def parse_dimension_expression(self, expr: str, exc: bool = True) -> Expression:
         """

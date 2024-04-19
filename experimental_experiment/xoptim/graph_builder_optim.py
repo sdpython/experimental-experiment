@@ -131,7 +131,7 @@ class GraphBuilderPatternOptimization:
         self.predecessors_ = {}
         self.successors_ = {}
         successors_id = {}
-        self.used_ = {}
+        self.used_ = set()
         for k, v in self.nodes_.items():
             assert isinstance(v, NodeProto), f"Unexpected type {type(v)} for node {k}"
             for o in v.output:
@@ -434,13 +434,13 @@ class GraphBuilderPatternOptimization:
         input_types = [
             (self.get_type(i) if self.has_type(i) else 0) for i in node.input
         ]
-        output_type = infer_types(node, input_types, name)
+        output_type = infer_types(node, input_types, name, exc=exc)
         if output_type > 0:
             return output_type
 
         # second try with more depth
         input_types = [self.try_infer_type(i, exc=exc) for i in node.input]
-        output_type = infer_types(node, input_types, name)
+        output_type = infer_types(node, input_types, name, exc=exc)
         if output_type > 0:
             return output_type
 

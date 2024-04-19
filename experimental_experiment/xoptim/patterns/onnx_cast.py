@@ -19,7 +19,7 @@ class CastPattern(PatternOptimization):
             return self.none()
 
         if not g.has_type(node.input[0]):
-            itype = g.try_infer_type(node.input[0])
+            itype = g.try_infer_type(node.input[0], exc=False)
             if itype == 0:
                 return self.none(node, inspect.currentframe().f_lineno)
         else:
