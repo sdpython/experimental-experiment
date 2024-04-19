@@ -11,7 +11,9 @@ from .ops.op_constant_of_shape import ConstantOfShape
 from .ops.op_fused_matmul import FusedMatMul
 from .ops.op_gather_grad import GatherGrad
 from .ops.op_memcpy_host import MemcpyFromHost, MemcpyToHost
+from .ops.op_mul_sigmoid import MulSigmoid
 from .ops.op_quick_gelu import QuickGelu
+from .ops.op_rotary import Rotary
 from .ops.op_scatter_elements import ScatterElements
 from .ops.op_scatternd_of_shape import ScatterNDOfShape
 from .ops.op_simplified_layer_normalization import SimplifiedLayerNormalization
@@ -56,7 +58,9 @@ class ExtendedReferenceEvaluator(ReferenceEvaluator):
         MemcpyFromHost,
         MemcpyToHost,
         MulMul,
+        MulSigmoid,
         QuickGelu,
+        Rotary,
         ScatterElements,
         ScatterNDOfShape,
         SimplifiedLayerNormalization,
