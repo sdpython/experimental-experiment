@@ -34,7 +34,7 @@ class TestGraphPatternCombination(ExtTestCase):
             if os.path.exists(name):
                 os.remove(name)
 
-    def _check_ort_cpu(self, onx, fix_shape=False):
+    def _check_ort_cpu_or_cuda(self, onx, fix_shape=False):
 
         def cl(text):
             return (
@@ -85,9 +85,22 @@ class TestGraphPatternCombination(ExtTestCase):
         import onnxruntime
         from onnxruntime.capi.onnxruntime_pybind11_state import Fail, InvalidArgument
 
+        opsets = {d.domain: d.version for d in onx.opset_import}
+        options = onnxruntime.SessionOptions()
+        providers = ["CPUExecutionProvider"]
+        if "onnx_extended.ortops.optim.cuda" in opsets:
+            from onnx_extended.ortops.optim.cuda import get_ort_ext_libs
+
+            options.register_custom_ops_library(get_ort_ext_libs()[0])
+            providers = ["CUDAExecutionProvider", "CPUExecutionProvider"]
+        if "onnx_extended.ortops.optim.cpu" in opsets:
+            from onnx_extended.ortops.optim.cpu import get_ort_ext_libs
+
+            options.register_custom_ops_library(get_ort_ext_libs()[0])
+
         try:
             onnxruntime.InferenceSession(
-                onx.SerializeToString(), providers=["CPUExecutionProvider"]
+                onx.SerializeToString(), options, providers=providers
             )
         except (Fail, InvalidArgument) as e:
             err = []
@@ -403,7 +416,7 @@ class TestGraphPatternCombination(ExtTestCase):
                 onx = gr.to_onnx(optimize=True)
                 types = set([n.op_type for n in onx.graph.node])
                 self.assertIn("SimplifiedLayerNormalization", types)
-                self._check_ort_cpu(onx)
+                self._check_ort_cpu_or_cuda(onx)
 
     @requires_onnxruntime_training()
     def test_simplified_all_but_transpose_reshape_matmul(self):
@@ -439,7 +452,7 @@ class TestGraphPatternCombination(ExtTestCase):
                 p for p in options.patterns if p.__class__.__name__ not in disabled
             ]
             onx = self._get_model(model)
-            self._check_ort_cpu(onx, fix_shape=True)
+            self._check_ort_cpu_or_cuda(onx, fix_shape=True)
             with self.subTest(model=model):
                 gr = GraphBuilder(
                     onx,
@@ -447,24 +460,22 @@ class TestGraphPatternCombination(ExtTestCase):
                     infer_shapes=True,
                 )
                 onx = gr.to_onnx(optimize=True)
-                self._check_ort_cpu(onx)
+                self._check_ort_cpu_or_cuda(onx)
 
     def test_study(self):
-        model = "dort-llama-llama-ort_1.onnx"
+        # model = "dort-llama-llama-ort_1.onnx"
+        model = "dort-model-llama-custom__1.onnx"
         enabled = {
-            # "Sub1MulPattern",
-            # "Reshape2Of3Pattern",
-            # "ReshapeReshapePattern",
-            "SameChildrenPattern",
-            # "ExpandBroadcastPattern",
+            "AddMulPattern",
         }
         enabled = {}
         disabled = {}
         options = OptimizationOptions(
-            patterns="default+onnxruntime",
+            patterns="default+onnxruntime+experimental",
             verbose=0,
             verifies=False,
             dump_applied_patterns="dump_applied_pattern",
+            processor="CPU,CUDA",
         )
         options.patterns = [
             p
@@ -475,17 +486,19 @@ class TestGraphPatternCombination(ExtTestCase):
         assert options.patterns, "Pattern is empty."
         if __name__ == "__main__":
             options.verbose = 1 if len(options.patterns) > 2 else 10
-            print(f"patterns={[c.__class__.__name__ for c in options.patterns]}")
-            print(f"verbose={options.verbose}")
+            print(f"-- patterns={[c.__class__.__name__ for c in options.patterns]}")
+            print(f"-- verbose={options.verbose}")
+        for p in options.patterns:
+            p.verbose = options.verbose
         onx = self._get_model(model)
-        self._check_ort_cpu(onx, fix_shape=True)
+        self._check_ort_cpu_or_cuda(onx, fix_shape=True)
         gr = GraphBuilder(
             onx,
             optimization_options=options,
             infer_shapes=True,
         )
         onx = gr.to_onnx(optimize=True)
-        self._check_ort_cpu(onx)
+        self._check_ort_cpu_or_cuda(onx)
         with open(f"test_study_{model}", "wb") as f:
             f.write(onx.SerializeToString())
 

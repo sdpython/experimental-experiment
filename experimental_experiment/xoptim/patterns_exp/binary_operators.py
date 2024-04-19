@@ -105,6 +105,7 @@ class AddMulPattern(PatternOptimization, _common):
     ) -> Optional[MatchResult]:
         if not g.has_processor("CUDA"):
             return self.none()
+
         if node.op_type not in {"Add", "Mul"} or node.domain != "":
             return self.none()
 

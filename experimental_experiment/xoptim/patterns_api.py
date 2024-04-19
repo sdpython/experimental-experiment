@@ -190,12 +190,13 @@ class PatternOptimization:
                 print(
                     f"[{self.__class__.__name__}.match] NONE - line: {lineno}:"
                     f"{os.path.split(self.__class__.__module__)[-1]}, "
-                    f"op_type={node.op_type}{msg}{msg2}"
+                    f"op_type={node.op_type}, name={node.name}{msg}{msg2}"
                 )
             elif self.verbose >= 9:
                 print(
                     f"[{self.__class__.__name__}.match] NONE - line: {lineno}:"
-                    f"{os.path.split(self.__class__.__module__)[-1]}, op_type={node.op_type}{msg}"
+                    f"{os.path.split(self.__class__.__module__)[-1]}, "
+                    f"op_type={node.op_type}, name={node.name}{msg}"
                 )
 
     def apply(
