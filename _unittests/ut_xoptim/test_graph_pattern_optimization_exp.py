@@ -118,12 +118,18 @@ class TestGraphPatternOptimizationExp(ExtTestCase):
         got = ref2.run(None, feeds)
         self.assertEqualArray(expected[0], got[0])
 
-    def _get_aamm_model(self, op_type: str, left: bool) -> ModelProto:
+    def _get_aamm_model(
+        self, op_type: str, left: bool, other_type: str = None
+    ) -> ModelProto:
+        if other_type is None:
+            other_type = op_type
         model = oh.make_model(
             oh.make_graph(
                 [
                     oh.make_node(op_type, ["X", "Y"], ["xy"]),
-                    oh.make_node(op_type, ["xy", "Z"] if left else ["Z", "xy"], ["F"]),
+                    oh.make_node(
+                        other_type, ["xy", "Z"] if left else ["Z", "xy"], ["F"]
+                    ),
                 ],
                 "dummy",
                 [
@@ -277,6 +283,41 @@ class TestGraphPatternOptimizationExp(ExtTestCase):
     def test_simple_rotary(self):
         self._simple_rotary("right")
         self._simple_rotary("left")
+
+    def test_add_mul_pattern(self):
+        for op_type, left in itertools.product(["Add", "Mul"], [True, False]):
+            other_type = "Add" if op_type == "Mul" else "Mul"
+            with self.subTest(op_type=op_type, left=left):
+                model = self._get_aamm_model(
+                    op_type=op_type, left=left, other_type=other_type
+                )
+                self.assertEqual(len(model.graph.node), 2)
+                gr = GraphBuilder(
+                    model,
+                    infer_shapes=True,
+                    optimization_options=OptimizationOptions(
+                        patterns=["AddMul"], processor="CPU,CUDA"
+                    ),
+                )
+                opt_onx = gr.to_onnx(optimize=True)
+                self.assertEqual(
+                    [f"{op_type}{other_type}"], [_.op_type for _ in opt_onx.graph.node]
+                )
+                opsets = {v.domain: v.version for v in opt_onx.opset_import}
+                self.assertIn("onnx_extended.ortops.optim.cuda", opsets)
+                self.assertEqual(opsets["onnx_extended.ortops.optim.cuda"], 1)
+
+                feeds = {
+                    "X": np.array([10], dtype=np.float32),
+                    "Y": np.array([10], dtype=np.float32),
+                    "Z": np.array([10], dtype=np.float32),
+                }
+                ref1 = ExtendedReferenceEvaluator(model)
+                expected = ref1.run(None, feeds)
+
+                ref2 = ExtendedReferenceEvaluator(opt_onx)
+                got = ref2.run(None, feeds)
+                self.assertEqualArray(expected[0], got[0])
 
 
 if __name__ == "__main__":
