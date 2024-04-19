@@ -26,6 +26,8 @@ class AddAddMulMulPattern(PatternOptimization, _common):
         node: NodeProto,
         matched: List[MatchResult],
     ) -> Optional[MatchResult]:
+        if not g.has_processor("CUDA"):
+            return self.none()
         if node.op_type not in {"Add", "Mul"} or node.domain != "":
             return self.none()
 
@@ -101,6 +103,8 @@ class MulSigmoidPattern(PatternOptimization):
         node: NodeProto,
         matched: List[MatchResult],
     ) -> Optional[MatchResult]:
+        if not g.has_processor("CUDA"):
+            return self.none()
         if node.op_type not in {"Sigmoid"} or node.domain != "":
             return self.none()
 

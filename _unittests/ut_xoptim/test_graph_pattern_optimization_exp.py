@@ -216,6 +216,66 @@ class TestGraphPatternOptimizationExp(ExtTestCase):
         got = ref2.run(None, feeds)
         self.assertEqualArray(expected[0], got[0], atol=1e-5)
 
+    def _simple_rotary(self, side):
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("Split", ["X", "splits"], ["s1", "s2"], axis=-1),
+                    (
+                        oh.make_node("Neg", ["s1"], ["ns1"])
+                        if side == "left"
+                        else oh.make_node("Neg", ["s2"], ["ns2"])
+                    ),
+                    (
+                        oh.make_node("Concat", ["s2", "ns1"], ["Y"], axis=-1)
+                        if side == "left"
+                        else oh.make_node("Concat", ["ns2", "s1"], ["Y"], axis=-1)
+                    ),
+                ],
+                "dummy",
+                [oh.make_tensor_value_info("X", TFLOAT, [None, None])],
+                [oh.make_tensor_value_info("Y", TFLOAT, [None, None])],
+                [onh.from_array(np.array([4, 4], dtype=np.int64), name="splits")],
+            ),
+            opset_imports=[
+                oh.make_opsetid("", 18),
+            ],
+            ir_version=9,
+        )
+        check_model(model)
+        gr = GraphBuilder(
+            model,
+            infer_shapes=True,
+            optimization_options=OptimizationOptions(
+                patterns=["SimpleRotary"], processor="CPU,CUDA", verbose=10
+            ),
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+        self.assertEqual(
+            ["Rotary"],
+            [n.op_type for n in opt_onx.graph.node],
+        )
+
+        feeds = {
+            "X": np.arange(24).reshape((3, 8)).astype(np.float32),
+        }
+        ref1 = ExtendedReferenceEvaluator(model)
+        expected = ref1.run(None, feeds)
+
+        self.assertEqual(0, len(opt_onx.graph.initializer))
+        check_model(opt_onx)
+        opsets = {v.domain: v.version for v in opt_onx.opset_import}
+        self.assertIn("onnx_extended.ortops.optim.cuda", opsets)
+        self.assertEqual(opsets["onnx_extended.ortops.optim.cuda"], 1)
+
+        ref2 = ExtendedReferenceEvaluator(opt_onx)
+        got = ref2.run(None, feeds)
+        self.assertEqualArray(expected[0], got[0], atol=1e-5)
+
+    def test_simple_rotary(self):
+        self._simple_rotary("right")
+        self._simple_rotary("left")
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

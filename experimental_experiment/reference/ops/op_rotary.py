@@ -1,0 +1,16 @@
+from onnx.reference.op_run import OpRun
+
+
+class Rotary(OpRun):
+    op_domain = "onnx_extended.ortops.optim.cuda"
+
+    def _run(self, X, side=None):
+        last_dim = X.shape[-1] // 2
+        cp = X.copy()
+        if side == "left":
+            cp[..., :last_dim] = X[..., last_dim:]
+            cp[..., last_dim:] = -X[..., :last_dim]
+        else:
+            cp[..., :last_dim] = -X[..., last_dim:]
+            cp[..., last_dim:] = X[..., :last_dim]
+        return (cp,)
