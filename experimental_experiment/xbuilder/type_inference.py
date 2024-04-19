@@ -45,14 +45,19 @@ _in_o1_node_types = {
 
 
 def infer_types(
-    node: NodeProto, input_types: Sequence[int], output_name: Optional[str]
+    node: NodeProto,
+    input_types: Sequence[int],
+    output_name: Optional[str],
+    exc: bool = True,
 ) -> Union[int, Tuple[int]]:
     """
     Tries to infer the type of an output or all outputs.
 
     :param node: NodeProto
     :param input_types: type of the elements of the input tensors
-    :param output_name: type for the desired output or all types if all are needed
+    :param output_name: type for the desired output or
+        all types if all are needed
+    :param exc: raise an exception if type cannot be infered
     :return: tuple of types or output type
     """
     if node.op_type in _i1_o1_node_types:
@@ -65,9 +70,12 @@ def infer_types(
         all_types = None
 
     if not all_types:
-        raise RuntimeError(
-            f"Unable to infer type for node type {node.op_type!r}, node is {node}."
-        )
+        if exc:
+            raise RuntimeError(
+                f"Unable to infer type for node type {node.op_type!r}, "
+                f"node is {node}."
+            )
+        return 0
 
     if output_name:
         assert len(node.output) == 1, (

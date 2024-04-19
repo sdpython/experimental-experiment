@@ -2320,11 +2320,15 @@ class GraphBuilder:
             raise RuntimeError(f"Values unknown for type {type(t)}-{t}.")
 
         rows = ["", "--DEBUG--", "--SHAPE--"]
-        rows.append(f"dynamic_objects={pprint.pformat(self.dynamic_objects)}")
-        rows.append(f"dynamic_objects_rev={pprint.pformat(self.dynamic_objects_rev)}")
-        rows.append(f"dynamic_alias={pprint.pformat(self._dynamic_alias)}")
-        rows.append(f"dynamic_shapes={pprint.pformat(self.dynamic_shapes)}")
-        rows.append(f"_known_value_shape={pprint.pformat(self._known_value_shape)}")
+        rows.append(f"dynamic_objects={pprint.pformat(self.dynamic_objects)[:10000]}")
+        rows.append(
+            f"dynamic_objects_rev={pprint.pformat(self.dynamic_objects_rev)[:10000]}"
+        )
+        rows.append(f"dynamic_alias={pprint.pformat(self._dynamic_alias)[:10000]}")
+        rows.append(f"dynamic_shapes={pprint.pformat(self.dynamic_shapes)[:10000]}")
+        rows.append(
+            f"_known_value_shape={pprint.pformat(self._known_value_shape)[:10000]}"
+        )
         rows.append("--TORCH-SHAPES--")
         for kk, vv in self._known_torch_value.items():
             rows.append(
@@ -2333,13 +2337,24 @@ class GraphBuilder:
                 f"{self.get_rank(kk) if self.has_rank(kk) else ''}:"
                 f"{self.get_shape(kk) if self.has_shape(kk) else ''}:"
             )
+            if len(rows) > 1000:
+                rows.append("...")
+                rows.append(
+                    f"Stopped with {len(self.initializers_dict)} "
+                    f"initializers and {len(self.nodes)} nodes."
+                )
+                return "\n".join(rows)
         rows.append("--ONNX--")
         for k, v in self._debug_msg.items():
             rows.append(f"-- {k} --")
-            if isinstance(v, dict):
-                rows.append(pprint.pformat(v))
-            else:
-                rows.append(str(v))
+            rows.append(pprint.pformat(v) if isinstance(v, dict) else str(v))
+            if len(rows) > 1000:
+                rows.append("...")
+                rows.append(
+                    f"Stopped with {len(self.initializers_dict)} "
+                    f"initializers and {len(self.nodes)} nodes."
+                )
+                return "\n".join(rows)
         rows.append("--")
         hs = self._hash()
         for io in self.inputs:

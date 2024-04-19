@@ -434,13 +434,13 @@ class GraphBuilderPatternOptimization:
         input_types = [
             (self.get_type(i) if self.has_type(i) else 0) for i in node.input
         ]
-        output_type = infer_types(node, input_types, name)
+        output_type = infer_types(node, input_types, name, exc=exc)
         if output_type > 0:
             return output_type
 
         # second try with more depth
         input_types = [self.try_infer_type(i, exc=exc) for i in node.input]
-        output_type = infer_types(node, input_types, name)
+        output_type = infer_types(node, input_types, name, exc=exc)
         if output_type > 0:
             return output_type
 
