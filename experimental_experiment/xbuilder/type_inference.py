@@ -1,5 +1,5 @@
 from typing import Optional, Sequence, Tuple, Union
-from onnx import NodeProto
+from onnx import NodeProto, TensorProto
 
 
 _i1_o1_node_types = {
@@ -59,12 +59,8 @@ def infer_types(
         all_types = _infer_type_i1_o1(node, input_types)
     elif node.op_type in _in_o1_node_types:
         all_types = _infer_type_in_o1(node, input_types)
-    elif node.op_type == "Range":
-        all_types = _infer_type_range(node, input_types)
-    elif node.op_type == "Cast":
-        all_types = _infer_type_cast(node, input_types)
-    elif node.op_type == "Where":
-        all_types = _infer_type_where(node, input_types)
+    elif node.op_type in _dict_type_inference:
+        all_types = _dict_type_inference[node.op_type](node, input_types)
     else:
         all_types = None
 
@@ -137,6 +133,36 @@ def _infer_type_cast(node: NodeProto, input_types: Sequence[int]) -> Tuple[int]:
     _raise_exc(node, input_types)
 
 
+def _infer_type_cast_like(node: NodeProto, input_types: Sequence[int]) -> Tuple[int]:
+    """
+    Returns the output type for a node CastLike.
+    """
+    assert len(input_types) == 2, f"Missing input types {input_types}"
+    return (input_types[1],)
+
+
+def _infer_type_constant_of_shape(
+    node: NodeProto, input_types: Sequence[int]
+) -> Tuple[int]:
+    """
+    Returns the output type for a node Cast.
+    """
+    if len(node.attribute) == 0:
+        return (TensorProto.FLOAT,)
+    value = node.attribute[0]
+    return (value.data_type,)
+
+
+def _infer_type_eye_like(node: NodeProto, input_types: Sequence[int]) -> Tuple[int]:
+    """
+    Returns the output type for a node CastLike.
+    """
+    for att in node.attribute:
+        if att.name == "dtype":
+            return (att.i,)
+    return (input_types[0],)
+
+
 def _infer_type_range(node: NodeProto, input_types: Sequence[int]) -> Tuple[int]:
     """
     Returns the output type for a node Cast.
@@ -152,3 +178,13 @@ def _infer_type_where(node: NodeProto, input_types: Sequence[int]) -> Tuple[int]
     Returns the output type for a node Where.
     """
     return (max(input_types[1:]),)
+
+
+_dict_type_inference = {
+    "Cast": _infer_type_cast,
+    "CastLike": _infer_type_cast_like,
+    "ConstantOfShape": _infer_type_constant_of_shape,
+    "EyeLike": _infer_type_eye_like,
+    "Range": _infer_type_range,
+    "Where": _infer_type_where,
+}
