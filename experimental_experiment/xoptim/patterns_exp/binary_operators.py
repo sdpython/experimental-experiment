@@ -4,12 +4,7 @@ from onnx import NodeProto
 from ..patterns_api import MatchResult, PatternOptimization
 
 
-class AddAddMulMulPattern(PatternOptimization):
-    """
-    Replaces Add + Add by AddAdd or Mul + Mul by MulMul
-    if they operate on the same shape.
-    """
-
+class _common:
     @classmethod
     def _same_shape(
         cls, g: "GraphBuilderPatternOptimization", name1: str, name2: str  # noqa: F821
@@ -17,6 +12,13 @@ class AddAddMulMulPattern(PatternOptimization):
         if not g.has_shape(name1) or not g.has_shape(name2):
             return False
         return g.get_shape(name1) == g.get_shape(name2)
+
+
+class AddAddMulMulPattern(PatternOptimization, _common):
+    """
+    Replaces Add + Add by AddAdd or Mul + Mul by MulMul
+    if they operate on the same shape.
+    """
 
     def match(
         self,
@@ -84,4 +86,49 @@ class AddAddMulMulPattern(PatternOptimization):
                 domain="onnx_extended.ortops.optim.cuda",
                 name=f"{self.__class__.__name__}--{node.name}",
             )
+        return [new_node]
+
+
+class MulSigmoidPattern(PatternOptimization):
+    """
+    Replaces Mul + Sigmoid by MulSigmoid
+    if they operate on the same input.
+    """
+
+    def match(
+        self,
+        g: "GraphBuilderPatternOptimization",  # noqa: F821
+        node: NodeProto,
+        matched: List[MatchResult],
+    ) -> Optional[MatchResult]:
+        if node.op_type not in {"Sigmoid"} or node.domain != "":
+            return self.none()
+
+        if g.is_used_more_than_once(node.output[0]):
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        next_node = g.next_node(node.output[0])
+        if next_node.op_type != "Mul" or node.domain != "":
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        index = list(next_node.input).index(node.output[0])
+        other_index = 1 - index
+        if next_node.input[other_index] != node.input[0]:
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        return MatchResult(self, [node, next_node], self.apply, insert_at=node)
+
+    def apply(
+        self,
+        g: "GraphBuilder",  # noqa: F821
+        node_sigmoid: NodeProto,
+        node_mul: NodeProto,
+    ) -> List[NodeProto]:
+        new_node = g.make_node(
+            "MulSigmoid",
+            node_sigmoid.input,
+            node_mul.output,
+            domain="onnx_extended.ortops.optim.cuda",
+            name=f"{self.__class__.__name__}--{node_sigmoid.name}",
+        )
         return [new_node]

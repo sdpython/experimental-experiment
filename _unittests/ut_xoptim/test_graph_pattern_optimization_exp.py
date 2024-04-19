@@ -170,6 +170,52 @@ class TestGraphPatternOptimizationExp(ExtTestCase):
                 got = ref2.run(None, feeds)
                 self.assertEqualArray(expected[0], got[0])
 
+    def test_mul_sigmoid(self):
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("Sigmoid", ["X"], ["xs"]),
+                    oh.make_node("Mul", ["X", "xs"], ["Y"]),
+                ],
+                "dummy",
+                [oh.make_tensor_value_info("X", TFLOAT, [None, None])],
+                [oh.make_tensor_value_info("Y", TFLOAT, [None, None])],
+            ),
+            opset_imports=[
+                oh.make_opsetid("", 18),
+            ],
+            ir_version=9,
+        )
+        check_model(model)
+        gr = GraphBuilder(
+            model,
+            infer_shapes=True,
+            optimization_options=OptimizationOptions(
+                patterns=["MulSigmoid"], processor="CPU,CUDA"
+            ),
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+        self.assertEqual(
+            ["MulSigmoid"],
+            [n.op_type for n in opt_onx.graph.node],
+        )
+
+        feeds = {
+            "X": np.arange(18).reshape((3, 6)).astype(np.float32),
+        }
+        ref1 = ExtendedReferenceEvaluator(model)
+        expected = ref1.run(None, feeds)
+
+        self.assertEqual(0, len(opt_onx.graph.initializer))
+        check_model(opt_onx)
+        opsets = {v.domain: v.version for v in opt_onx.opset_import}
+        self.assertIn("onnx_extended.ortops.optim.cuda", opsets)
+        self.assertEqual(opsets["onnx_extended.ortops.optim.cuda"], 1)
+
+        ref2 = ExtendedReferenceEvaluator(opt_onx)
+        got = ref2.run(None, feeds)
+        self.assertEqualArray(expected[0], got[0], atol=1e-5)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
