@@ -85,7 +85,7 @@ class SimpleRotaryPattern(PatternOptimization):
         side = "right" if neg_node.input[0] == split_node.output[1] else "left"
         new_node = g.make_node(
             "Rotary",
-            split_node.input[:1],
+            split_node.input,
             concat_node.output,
             side=side,
             name=f"{self.__class__.__name__}--{neg_node.name}",

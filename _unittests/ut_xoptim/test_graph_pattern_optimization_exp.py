@@ -150,7 +150,9 @@ class TestGraphPatternOptimizationExp(ExtTestCase):
                 gr = GraphBuilder(
                     model,
                     infer_shapes=True,
-                    optimization_options=OptimizationOptions(patterns=["AddAddMulMul"]),
+                    optimization_options=OptimizationOptions(
+                        patterns=["AddAddMulMul"], processor="CPU,CUDA"
+                    ),
                 )
                 opt_onx = gr.to_onnx(optimize=True)
                 self.assertEqual([op_type * 2], [_.op_type for _ in opt_onx.graph.node])
@@ -247,7 +249,7 @@ class TestGraphPatternOptimizationExp(ExtTestCase):
             model,
             infer_shapes=True,
             optimization_options=OptimizationOptions(
-                patterns=["SimpleRotary"], processor="CPU,CUDA", verbose=10
+                patterns=["SimpleRotary"], processor="CPU,CUDA", verbose=0
             ),
         )
         opt_onx = gr.to_onnx(optimize=True)
@@ -262,7 +264,7 @@ class TestGraphPatternOptimizationExp(ExtTestCase):
         ref1 = ExtendedReferenceEvaluator(model)
         expected = ref1.run(None, feeds)
 
-        self.assertEqual(0, len(opt_onx.graph.initializer))
+        self.assertEqual(1, len(opt_onx.graph.initializer))
         check_model(opt_onx)
         opsets = {v.domain: v.version for v in opt_onx.opset_import}
         self.assertIn("onnx_extended.ortops.optim.cuda", opsets)
