@@ -1,3 +1,9 @@
+"""
+::
+
+    clear&&python _unittests/ut_xoptim/test_graph_pattern_combination.py -k study
+"""
+
 import os
 import unittest
 import numpy as np
@@ -476,7 +482,7 @@ class TestGraphPatternCombination(ExtTestCase):
 
     def test_study(self):
         # model = "dort-llama-llama-ort_1.onnx"
-        model = "dort-model-llama-custom__1.onnx"
+        model = "dort-model-llama-custom__0.onnx"
         enabled = {
             "AddMulPattern",
         }

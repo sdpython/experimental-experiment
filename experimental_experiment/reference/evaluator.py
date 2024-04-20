@@ -13,6 +13,7 @@ from .ops.op_gather_grad import GatherGrad
 from .ops.op_memcpy_host import MemcpyFromHost, MemcpyToHost
 from .ops.op_mul_sigmoid import MulSigmoid
 from .ops.op_quick_gelu import QuickGelu
+from .ops.op_replace_zero import ReplaceZero
 from .ops.op_rotary import Rotary
 from .ops.op_scatter_elements import ScatterElements
 from .ops.op_scatternd_of_shape import ScatterNDOfShape
@@ -62,6 +63,7 @@ class ExtendedReferenceEvaluator(ReferenceEvaluator):
         MulMul,
         MulSigmoid,
         QuickGelu,
+        ReplaceZero,
         Rotary,
         ScatterElements,
         ScatterNDOfShape,

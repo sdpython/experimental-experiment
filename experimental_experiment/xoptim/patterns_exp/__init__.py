@@ -18,11 +18,13 @@ def get_experimental_patterns(
     from .binary_operators import AddAddMulMulPattern, AddMulPattern, MulSigmoidPattern
     from .constant_of_shape_scatter_nd import ConstantOfShapeScatterNDPattern
     from .simple_rotary import SimpleRotaryPattern
+    from .where_replace import ReplaceZeroPattern
 
     return [
         AddAddMulMulPattern(verbose=verbose),
         AddMulPattern(verbose=verbose),
         ConstantOfShapeScatterNDPattern(verbose=verbose),
         MulSigmoidPattern(verbose=verbose),
+        ReplaceZeroPattern(verbose=verbose),
         SimpleRotaryPattern(verbose=verbose),
     ]
