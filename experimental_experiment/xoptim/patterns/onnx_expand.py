@@ -134,6 +134,7 @@ class ExpandSwapPattern(PatternOptimization):
     """
 
     _op_types = unary_like_op_types()
+    _other_types = {"NegXplus1", "ReplaceZero"}
 
     def match(
         self,
@@ -160,7 +161,9 @@ class ExpandSwapPattern(PatternOptimization):
         ), "The previous test should have cleared out this case."
         next_node = next_nodes[0]
 
-        if next_node.op_type not in self._op_types or next_node.domain != "":
+        if next_node.op_type not in self._other_types and (
+            next_node.op_type not in self._op_types or next_node.domain != ""
+        ):
             # Not an unary wise operator.
             return self.none(node, inspect.currentframe().f_lineno)
 
@@ -178,6 +181,7 @@ class ExpandSwapPattern(PatternOptimization):
             [node.input[0], *next_node.input[1:]],
             [new_name],
             name=f"{self.__class__.__name__}--{node.name}",
+            domain=next_node.domain,
             doc_string=next_node.doc_string,
         )
         unary.attribute.extend(next_node.attribute)

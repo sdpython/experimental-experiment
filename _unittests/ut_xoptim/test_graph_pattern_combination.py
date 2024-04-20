@@ -484,9 +484,11 @@ class TestGraphPatternCombination(ExtTestCase):
         # model = "dort-llama-llama-ort_1.onnx"
         model = "dort-model-llama-custom__0.onnx"
         enabled = {
-            "AddMulPattern",
+            "ExpandSwapPattern",
+            "NegXplus1Pattern",
+            "ReplaceZeroPattern",
         }
-        enabled = {}
+        # enabled = {}
         disabled = {}
         options = OptimizationOptions(
             patterns="default+onnxruntime+experimental",
@@ -503,7 +505,7 @@ class TestGraphPatternCombination(ExtTestCase):
         ]
         assert options.patterns, "Pattern is empty."
         if __name__ == "__main__":
-            options.verbose = 1 if len(options.patterns) > 2 else 10
+            options.verbose = 1 if len(options.patterns) > 3 else 10
             print(f"-- patterns={[c.__class__.__name__ for c in options.patterns]}")
             print(f"-- verbose={options.verbose}")
         for p in options.patterns:
@@ -517,7 +519,7 @@ class TestGraphPatternCombination(ExtTestCase):
         )
         new_onx = gr.to_onnx(optimize=True)
         with open(f"test_study_{model}", "wb") as f:
-            f.write(onx.SerializeToString())
+            f.write(new_onx.SerializeToString())
 
         from onnxruntime.capi.onnxruntime_pybind11_state import NotImplemented
 

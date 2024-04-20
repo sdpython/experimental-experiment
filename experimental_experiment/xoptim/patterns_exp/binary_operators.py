@@ -216,3 +216,43 @@ class MulSigmoidPattern(PatternOptimization):
             name=f"{self.__class__.__name__}--{node_sigmoid.name}",
         )
         return [new_node]
+
+
+class NegXplus1Pattern(PatternOptimization):
+    """
+    Replaces 1 - X by NegXplus1
+    if they operate on the same input.
+    """
+
+    def match(
+        self,
+        g: "GraphBuilderPatternOptimization",  # noqa: F821
+        node: NodeProto,
+        matched: List[MatchResult],
+    ) -> Optional[MatchResult]:
+        if not g.has_processor("CUDA"):
+            return self.none()
+        if node.op_type not in {"Sub"} or node.domain != "":
+            return self.none()
+
+        if not g.is_constant(node.input[0]):
+            return self.none(node, inspect.currentframe().f_lineno)
+        cst = g.get_constant_scalar(node.input[0])
+        if cst != 1:
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        return MatchResult(self, [node], self.apply, insert_at=node)
+
+    def apply(
+        self,
+        g: "GraphBuilder",  # noqa: F821
+        node: NodeProto,
+    ) -> List[NodeProto]:
+        new_node = g.make_node(
+            "NegXplus1",
+            node.input[1:],
+            node.output,
+            domain="onnx_extended.ortops.optim.cuda",
+            name=f"{self.__class__.__name__}--{node.name}",
+        )
+        return [new_node]

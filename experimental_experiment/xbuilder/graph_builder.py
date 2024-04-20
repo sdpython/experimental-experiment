@@ -24,7 +24,7 @@ from .shape_helper import (
     is_static_dimension,
     is_static_shape,
 )
-from .shape_type_compute import set_shape_type_op_any
+from .shape_type_compute import set_shape_type_op_any, set_shape_type_custom
 from ._onnx_helper import (
     choose_consistent_domain_opset,
     compatible_opsets,
@@ -1805,6 +1805,9 @@ class GraphBuilder:
                 f"inputs={inputs}, kwargs={kwargs}, "
                 f"atts={attributes}{self.get_debug_msg()}"
             )
+        assert (
+            op_type in {"NegXplus1", "ReplaceZero"} and domain != ""
+        ), f"Type={op_type!r} and domain {domain!r} mismatch{self.get_debug_msg()}"
 
     def do_not_remove(self, node: NodeProto) -> bool:
         """Tells if a node should be removed or not."""
@@ -2106,8 +2109,9 @@ class GraphBuilder:
 
     def _make_node_set_type_shape(self, node: NodeProto):
         if node.domain != "":
-            return
-        set_shape_type_op_any(self, node)
+            set_shape_type_custom(self, node)
+        else:
+            set_shape_type_op_any(self, node)
 
     def make_nodes(
         self,
