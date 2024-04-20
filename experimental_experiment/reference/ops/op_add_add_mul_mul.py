@@ -13,3 +13,17 @@ class MulMul(OpRun):
 
     def _run(self, x, y, z):
         return (x * y * z,)
+
+
+class AddMul(OpRun):
+    op_domain = "onnx_extended.ortops.optim.cuda"
+
+    def _run(self, x, y, z):
+        return ((x + y) * z,)
+
+
+class MulAdd(OpRun):
+    op_domain = "onnx_extended.ortops.optim.cuda"
+
+    def _run(self, x, y, z):
+        return ((x * y) + z,)

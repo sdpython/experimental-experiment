@@ -118,12 +118,18 @@ class TestGraphPatternOptimizationExp(ExtTestCase):
         got = ref2.run(None, feeds)
         self.assertEqualArray(expected[0], got[0])
 
-    def _get_aamm_model(self, op_type: str, left: bool) -> ModelProto:
+    def _get_aamm_model(
+        self, op_type: str, left: bool, other_type: str = None
+    ) -> ModelProto:
+        if other_type is None:
+            other_type = op_type
         model = oh.make_model(
             oh.make_graph(
                 [
                     oh.make_node(op_type, ["X", "Y"], ["xy"]),
-                    oh.make_node(op_type, ["xy", "Z"] if left else ["Z", "xy"], ["F"]),
+                    oh.make_node(
+                        other_type, ["xy", "Z"] if left else ["Z", "xy"], ["F"]
+                    ),
                 ],
                 "dummy",
                 [
@@ -277,6 +283,201 @@ class TestGraphPatternOptimizationExp(ExtTestCase):
     def test_simple_rotary(self):
         self._simple_rotary("right")
         self._simple_rotary("left")
+
+    def test_add_mul_pattern(self):
+        for op_type, left in itertools.product(["Add", "Mul"], [True, False]):
+            other_type = "Add" if op_type == "Mul" else "Mul"
+            with self.subTest(op_type=op_type, left=left):
+                model = self._get_aamm_model(
+                    op_type=op_type, left=left, other_type=other_type
+                )
+                self.assertEqual(len(model.graph.node), 2)
+                gr = GraphBuilder(
+                    model,
+                    infer_shapes=True,
+                    optimization_options=OptimizationOptions(
+                        patterns=["AddMul"], processor="CPU,CUDA"
+                    ),
+                )
+                opt_onx = gr.to_onnx(optimize=True)
+                self.assertEqual(
+                    [f"{op_type}{other_type}"], [_.op_type for _ in opt_onx.graph.node]
+                )
+                opsets = {v.domain: v.version for v in opt_onx.opset_import}
+                self.assertIn("onnx_extended.ortops.optim.cuda", opsets)
+                self.assertEqual(opsets["onnx_extended.ortops.optim.cuda"], 1)
+
+                feeds = {
+                    "X": np.array([10], dtype=np.float32),
+                    "Y": np.array([10], dtype=np.float32),
+                    "Z": np.array([10], dtype=np.float32),
+                }
+                ref1 = ExtendedReferenceEvaluator(model)
+                expected = ref1.run(None, feeds)
+
+                ref2 = ExtendedReferenceEvaluator(opt_onx)
+                got = ref2.run(None, feeds)
+                self.assertEqualArray(expected[0], got[0])
+
+    def test_replace_zero(self):
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("Cast", ["X"], ["xb"], to=TensorProto.BOOL),
+                    oh.make_node("Where", ["xb", "cst", "X"], ["Y"]),
+                ],
+                "dummy",
+                [oh.make_tensor_value_info("X", TFLOAT, [None, None])],
+                [oh.make_tensor_value_info("Y", TFLOAT, [None, None])],
+                [onh.from_array(np.array([5.67], dtype=np.float32), name="cst")],
+            ),
+            opset_imports=[
+                oh.make_opsetid("", 18),
+            ],
+            ir_version=9,
+        )
+        check_model(model)
+        gr = GraphBuilder(
+            model,
+            infer_shapes=True,
+            optimization_options=OptimizationOptions(
+                patterns=["ReplaceZero"], processor="CPU,CUDA", verbose=0
+            ),
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+        self.assertEqual(
+            ["ReplaceZero"],
+            [n.op_type for n in opt_onx.graph.node],
+        )
+
+        feeds = {
+            "X": (np.arange(18).reshape((3, 6)) - 3).astype(np.float32),
+        }
+        ref1 = ExtendedReferenceEvaluator(model)
+        expected = ref1.run(None, feeds)
+
+        self.assertEqual(0, len(opt_onx.graph.initializer))
+        check_model(opt_onx)
+        opsets = {v.domain: v.version for v in opt_onx.opset_import}
+        self.assertIn("onnx_extended.ortops.optim.cuda", opsets)
+        self.assertEqual(opsets["onnx_extended.ortops.optim.cuda"], 1)
+
+        ref2 = ExtendedReferenceEvaluator(opt_onx)
+        got = ref2.run(None, feeds)
+        self.assertEqualArray(expected[0], got[0], atol=1e-5)
+
+    def test_negx_plus1(self):
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("Sub", ["one", "X"], ["Y"]),
+                ],
+                "dummy",
+                [oh.make_tensor_value_info("X", TFLOAT, [None, None])],
+                [oh.make_tensor_value_info("Y", TFLOAT, [None, None])],
+                [onh.from_array(np.array([1], dtype=np.float32), name="one")],
+            ),
+            opset_imports=[
+                oh.make_opsetid("", 18),
+            ],
+            ir_version=9,
+        )
+        check_model(model)
+        gr = GraphBuilder(
+            model,
+            infer_shapes=True,
+            optimization_options=OptimizationOptions(
+                patterns=["NegXplus1"], processor="CPU,CUDA", verbose=0
+            ),
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+        self.assertEqual(
+            ["NegXplus1"],
+            [n.op_type for n in opt_onx.graph.node],
+        )
+
+        feeds = {
+            "X": (np.arange(18).reshape((3, 6)) - 3).astype(np.float32),
+        }
+        ref1 = ExtendedReferenceEvaluator(model)
+        expected = ref1.run(None, feeds)
+
+        self.assertEqual(0, len(opt_onx.graph.initializer))
+        check_model(opt_onx)
+        opsets = {v.domain: v.version for v in opt_onx.opset_import}
+        self.assertIn("onnx_extended.ortops.optim.cuda", opsets)
+        self.assertEqual(opsets["onnx_extended.ortops.optim.cuda"], 1)
+
+        ref2 = ExtendedReferenceEvaluator(opt_onx)
+        got = ref2.run(None, feeds)
+        self.assertEqualArray(expected[0], got[0], atol=1e-5)
+
+    def test_tri_matrix(self):
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("Range", ["zero", "dim", "one"], ["ar"]),
+                    oh.make_node("Add", ["ar", "one"], ["ad"]),
+                    oh.make_node("Reshape", ["ad", "shape1"], ["re"]),
+                    oh.make_node("Less", ["ar", "re"], ["le"]),
+                    oh.make_node(
+                        "ConstantOfShape",
+                        ["shape"],
+                        ["cst"],
+                        value=onh.from_array(
+                            np.array([-3.4028234663852886e38], dtype=np.float32)
+                        ),
+                    ),
+                    oh.make_node("Where", ["le", "zerof", "cst"], ["Y"]),
+                ],
+                "dummy",
+                [],
+                [oh.make_tensor_value_info("Y", TFLOAT, [None, None])],
+                [
+                    onh.from_array(np.array([1], dtype=np.int64), name="one"),
+                    onh.from_array(np.array([0], dtype=np.int64), name="zero"),
+                    onh.from_array(np.array([1024], dtype=np.int64), name="dim"),
+                    onh.from_array(np.array([0], dtype=np.float32), name="zerof"),
+                    onh.from_array(np.array([1024, 1], dtype=np.int64), name="shape1"),
+                    onh.from_array(
+                        np.array([1024, 1024], dtype=np.int64), name="shape"
+                    ),
+                ],
+            ),
+            opset_imports=[
+                oh.make_opsetid("", 18),
+            ],
+            ir_version=9,
+        )
+        check_model(model)
+        gr = GraphBuilder(
+            model,
+            infer_shapes=True,
+            optimization_options=OptimizationOptions(
+                patterns=["TriMatrix"], processor="CPU,CUDA", verbose=10
+            ),
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+        self.assertEqual(
+            ["TriMatrix"],
+            [n.op_type for n in opt_onx.graph.node],
+        )
+
+        feeds = {
+            "X": (np.arange(18).reshape((3, 6)) - 3).astype(np.float32),
+        }
+        ref1 = ExtendedReferenceEvaluator(model)
+        expected = ref1.run(None, feeds)
+
+        self.assertEqual(1, len(opt_onx.graph.initializer))
+        check_model(opt_onx)
+        opsets = {v.domain: v.version for v in opt_onx.opset_import}
+        self.assertIn("onnx_extended.ortops.optim.cuda", opsets)
+        self.assertEqual(opsets["onnx_extended.ortops.optim.cuda"], 1)
+
+        ref2 = ExtendedReferenceEvaluator(opt_onx)
+        got = ref2.run(None, feeds)
+        self.assertEqualArray(expected[0], got[0], atol=1e-5)
 
 
 if __name__ == "__main__":

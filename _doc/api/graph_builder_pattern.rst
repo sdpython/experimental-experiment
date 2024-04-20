@@ -138,6 +138,12 @@ RotaryConcatPartPattern
 .. autoclass:: experimental_experiment.xoptim.patterns.RotaryConcatPartPattern
     :members:
 
+SameChildrenPattern
++++++++++++++++++++
+
+.. autoclass:: experimental_experiment.xoptim.patterns.SameChildrenPattern
+    :members:
+
 SlicesSplitPattern
 ++++++++++++++++++
 
@@ -192,10 +198,34 @@ AddReductionScatterND
 Experimental Patterns
 =====================
 
+AddAddMulMulPattern
++++++++++++++++++++
+
+.. autoclass:: experimental_experiment.xoptim.patterns_exp.binary_operators.AddAddMulMulPattern
+    :members:
+
+AddMulPattern
++++++++++++++
+
+.. autoclass:: experimental_experiment.xoptim.patterns_exp.binary_operators.AddMulPattern
+    :members:
+
 ConstantOfShapeScatterNDPattern
 +++++++++++++++++++++++++++++++
 
 .. autoclass:: experimental_experiment.xoptim.patterns_exp.constant_of_shape_scatter_nd.ConstantOfShapeScatterNDPattern
+    :members:
+
+MulSigmoidPattern
++++++++++++++++++
+
+.. autoclass:: experimental_experiment.xoptim.patterns_exp.binary_operators.MulSigmoidPattern
+    :members:
+
+SimpleRotaryPattern
++++++++++++++++++++
+
+.. autoclass:: experimental_experiment.xoptim.patterns_exp.simple_rotary.SimpleRotaryPattern
     :members:
 
 .. _l-pattern-optimization-ort:
@@ -213,6 +243,12 @@ FusedMatMulPattern
 ++++++++++++++++++
 
 .. autoclass:: experimental_experiment.xoptim.patterns_ort.fused_matmul.FusedMatMulPattern
+    :members:
+
+GatherGrad
+++++++++++
+
+.. autoclass:: experimental_experiment.xoptim.patterns_ort.gather_grad.GatherGrad
     :members:
 
 SoftmaxGradPattern

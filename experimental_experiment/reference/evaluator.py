@@ -4,7 +4,7 @@ from onnx import FunctionProto, ModelProto
 from onnx.defs import get_schema
 from onnx.reference import ReferenceEvaluator
 from onnx.reference.op_run import OpRun
-from .ops.op_add_add_mul_mul import AddAdd, MulMul
+from .ops.op_add_add_mul_mul import AddAdd, AddMul, MulAdd, MulMul
 from .ops.op_cast_like import CastLike_15, CastLike_19
 from .ops.op_concat import Concat
 from .ops.op_constant_of_shape import ConstantOfShape
@@ -12,12 +12,15 @@ from .ops.op_fused_matmul import FusedMatMul
 from .ops.op_gather_grad import GatherGrad
 from .ops.op_memcpy_host import MemcpyFromHost, MemcpyToHost
 from .ops.op_mul_sigmoid import MulSigmoid
+from .ops.op_negxplus1 import NegXplus1
 from .ops.op_quick_gelu import QuickGelu
+from .ops.op_replace_zero import ReplaceZero
 from .ops.op_rotary import Rotary
 from .ops.op_scatter_elements import ScatterElements
 from .ops.op_scatternd_of_shape import ScatterNDOfShape
 from .ops.op_simplified_layer_normalization import SimplifiedLayerNormalization
 from .ops.op_slice import Slice_1, Slice_10
+from .ops.op_tri_matrix import TriMatrix
 
 
 logger = getLogger("experimental-experiment-eval")
@@ -49,6 +52,7 @@ class ExtendedReferenceEvaluator(ReferenceEvaluator):
 
     default_ops = [
         AddAdd,
+        AddMul,
         Concat,
         CastLike_15,
         CastLike_19,
@@ -57,15 +61,19 @@ class ExtendedReferenceEvaluator(ReferenceEvaluator):
         GatherGrad,
         MemcpyFromHost,
         MemcpyToHost,
+        MulAdd,
         MulMul,
         MulSigmoid,
+        NegXplus1,
         QuickGelu,
+        ReplaceZero,
         Rotary,
         ScatterElements,
         ScatterNDOfShape,
         SimplifiedLayerNormalization,
         Slice_1,
         Slice_10,
+        TriMatrix,
     ]
 
     @staticmethod

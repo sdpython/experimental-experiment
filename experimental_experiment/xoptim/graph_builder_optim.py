@@ -254,7 +254,14 @@ class GraphBuilderPatternOptimization:
         ), f"Unexpected type for constant {name}!r, type is {type(cst)}"
         shape = cst.shape
         value = cst[0] if shape == (1,) else cst
-        if value.dtype in {np.float32, np.float16, np.float64}:
+        if value.dtype in {
+            np.float32,
+            np.float16,
+            np.float64,
+            np.dtype("float32"),
+            np.dtype("float16"),
+            np.dtype("float64"),
+        }:
             return float(value)
         return int(value)
 

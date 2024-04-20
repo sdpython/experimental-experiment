@@ -1,3 +1,9 @@
+"""
+::
+
+    clear&&python _unittests/ut_xoptim/test_graph_pattern_combination.py -k study
+"""
+
 import os
 import unittest
 import numpy as np
@@ -34,7 +40,22 @@ class TestGraphPatternCombination(ExtTestCase):
             if os.path.exists(name):
                 os.remove(name)
 
-    def _check_ort_cpu(self, onx, fix_shape=False):
+    def _fix_shape(self, onx):
+        skip_names = set()
+        for node in onx.graph.node:
+            if node.op_type in {"SequenceConstruct", "SequenceAt"}:
+                skip_names |= set(node.output)
+
+        new_shapes = []
+        for sh in onx.graph.value_info:
+            if sh.name in skip_names:
+                continue
+            if sh.type.tensor_type.elem_type != 0:
+                new_shapes.append(sh)
+        del onx.graph.value_info[:]
+        onx.graph.value_info.extend(new_shapes)
+
+    def _check_ort_cpu_or_cuda(self, onx):
 
         def cl(text):
             return (
@@ -62,16 +83,6 @@ class TestGraphPatternCombination(ExtTestCase):
             if node.op_type in {"SequenceConstruct", "SequenceAt"}:
                 skip_names |= set(node.output)
 
-        if fix_shape:
-            new_shapes = []
-            for sh in onx.graph.value_info:
-                if sh.name in skip_names:
-                    continue
-                if sh.type.tensor_type.elem_type != 0:
-                    new_shapes.append(sh)
-            del onx.graph.value_info[:]
-            onx.graph.value_info.extend(new_shapes)
-
         for sh in onx.graph.value_info:
             if sh.name in skip_names:
                 continue
@@ -85,9 +96,28 @@ class TestGraphPatternCombination(ExtTestCase):
         import onnxruntime
         from onnxruntime.capi.onnxruntime_pybind11_state import Fail, InvalidArgument
 
+        opsets = {d.domain: d.version for d in onx.opset_import}
+        options = onnxruntime.SessionOptions()
+        providers = ["CPUExecutionProvider"]
+        if "onnx_extended.ortops.optim.cuda" in opsets:
+            try:
+                from onnx_extended.ortops.optim.cuda import get_ort_ext_libs
+            except ImportError:
+                raise unittest.SkipTest("onnx_extended not installed.")
+
+            options.register_custom_ops_library(get_ort_ext_libs()[0])
+            providers = ["CUDAExecutionProvider", "CPUExecutionProvider"]
+        if "onnx_extended.ortops.optim.cpu" in opsets:
+            try:
+                from onnx_extended.ortops.optim.cpu import get_ort_ext_libs
+            except ImportError:
+                raise unittest.SkipTest("onnx_extended not installed.")
+
+            options.register_custom_ops_library(get_ort_ext_libs()[0])
+
         try:
             onnxruntime.InferenceSession(
-                onx.SerializeToString(), providers=["CPUExecutionProvider"]
+                onx.SerializeToString(), options, providers=providers
             )
         except (Fail, InvalidArgument) as e:
             err = []
@@ -403,7 +433,7 @@ class TestGraphPatternCombination(ExtTestCase):
                 onx = gr.to_onnx(optimize=True)
                 types = set([n.op_type for n in onx.graph.node])
                 self.assertIn("SimplifiedLayerNormalization", types)
-                self._check_ort_cpu(onx)
+                self._check_ort_cpu_or_cuda(onx)
 
     @requires_onnxruntime_training()
     def test_simplified_all_but_transpose_reshape_matmul(self):
@@ -439,7 +469,8 @@ class TestGraphPatternCombination(ExtTestCase):
                 p for p in options.patterns if p.__class__.__name__ not in disabled
             ]
             onx = self._get_model(model)
-            self._check_ort_cpu(onx, fix_shape=True)
+            self._fix_shape(onx)
+            self._check_ort_cpu_or_cuda(onx)
             with self.subTest(model=model):
                 gr = GraphBuilder(
                     onx,
@@ -447,24 +478,24 @@ class TestGraphPatternCombination(ExtTestCase):
                     infer_shapes=True,
                 )
                 onx = gr.to_onnx(optimize=True)
-                self._check_ort_cpu(onx)
+                self._check_ort_cpu_or_cuda(onx)
 
     def test_study(self):
-        model = "dort-llama-llama-ort_1.onnx"
+        # model = "dort-llama-llama-ort_1.onnx"
+        model = "dort-model-llama-custom__1.onnx"
         enabled = {
-            # "Sub1MulPattern",
-            # "Reshape2Of3Pattern",
-            # "ReshapeReshapePattern",
-            "SameChildrenPattern",
-            # "ExpandBroadcastPattern",
+            "ExpandSwapPattern",
+            "NegXplus1Pattern",
+            "ReplaceZeroPattern",
         }
         enabled = {}
         disabled = {}
         options = OptimizationOptions(
-            patterns="default+onnxruntime",
+            patterns="default+onnxruntime+experimental",
             verbose=0,
             verifies=False,
             dump_applied_patterns="dump_applied_pattern",
+            processor="CPU,CUDA",
         )
         options.patterns = [
             p
@@ -474,20 +505,29 @@ class TestGraphPatternCombination(ExtTestCase):
         ]
         assert options.patterns, "Pattern is empty."
         if __name__ == "__main__":
-            options.verbose = 1 if len(options.patterns) > 2 else 10
-            print(f"patterns={[c.__class__.__name__ for c in options.patterns]}")
-            print(f"verbose={options.verbose}")
+            options.verbose = 1 if len(options.patterns) > 3 else 10
+            print(f"-- patterns={[c.__class__.__name__ for c in options.patterns]}")
+            print(f"-- verbose={options.verbose}")
+        for p in options.patterns:
+            p.verbose = options.verbose
         onx = self._get_model(model)
-        self._check_ort_cpu(onx, fix_shape=True)
+        self._fix_shape(onx)
         gr = GraphBuilder(
             onx,
             optimization_options=options,
             infer_shapes=True,
         )
-        onx = gr.to_onnx(optimize=True)
-        self._check_ort_cpu(onx)
+        new_onx = gr.to_onnx(optimize=True)
         with open(f"test_study_{model}", "wb") as f:
-            f.write(onx.SerializeToString())
+            f.write(new_onx.SerializeToString())
+
+        from onnxruntime.capi.onnxruntime_pybind11_state import NotImplemented
+
+        try:
+            self._check_ort_cpu_or_cuda(onx)
+        except NotImplemented as e:
+            raise unittest.SkipTest(f"missing extension: {e}")
+        self._check_ort_cpu_or_cuda(new_onx)
 
 
 if __name__ == "__main__":
