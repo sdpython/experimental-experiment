@@ -412,6 +412,73 @@ class TestGraphPatternOptimizationExp(ExtTestCase):
         got = ref2.run(None, feeds)
         self.assertEqualArray(expected[0], got[0], atol=1e-5)
 
+    def test_tri_matrix(self):
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("Range", ["zero", "dim", "one"], ["ar"]),
+                    oh.make_node("Add", ["ar", "one"], ["ad"]),
+                    oh.make_node("Reshape", ["ad", "shape1"], ["re"]),
+                    oh.make_node("Less", ["ar", "re"], ["le"]),
+                    oh.make_node(
+                        "ConstantOfShape",
+                        ["shape"],
+                        ["cst"],
+                        value=onh.from_array(
+                            np.array([-3.4028234663852886e38], dtype=np.float32)
+                        ),
+                    ),
+                    oh.make_node("Where", ["le", "zerof", "cst"], ["Y"]),
+                ],
+                "dummy",
+                [],
+                [oh.make_tensor_value_info("Y", TFLOAT, [None, None])],
+                [
+                    onh.from_array(np.array([1], dtype=np.int64), name="one"),
+                    onh.from_array(np.array([0], dtype=np.int64), name="zero"),
+                    onh.from_array(np.array([1024], dtype=np.int64), name="dim"),
+                    onh.from_array(np.array([0], dtype=np.float32), name="zerof"),
+                    onh.from_array(np.array([1024, 1], dtype=np.int64), name="shape1"),
+                    onh.from_array(
+                        np.array([1024, 1024], dtype=np.int64), name="shape"
+                    ),
+                ],
+            ),
+            opset_imports=[
+                oh.make_opsetid("", 18),
+            ],
+            ir_version=9,
+        )
+        check_model(model)
+        gr = GraphBuilder(
+            model,
+            infer_shapes=True,
+            optimization_options=OptimizationOptions(
+                patterns=["TriMatrix"], processor="CPU,CUDA", verbose=10
+            ),
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+        self.assertEqual(
+            ["TriMatrix"],
+            [n.op_type for n in opt_onx.graph.node],
+        )
+
+        feeds = {
+            "X": (np.arange(18).reshape((3, 6)) - 3).astype(np.float32),
+        }
+        ref1 = ExtendedReferenceEvaluator(model)
+        expected = ref1.run(None, feeds)
+
+        self.assertEqual(1, len(opt_onx.graph.initializer))
+        check_model(opt_onx)
+        opsets = {v.domain: v.version for v in opt_onx.opset_import}
+        self.assertIn("onnx_extended.ortops.optim.cuda", opsets)
+        self.assertEqual(opsets["onnx_extended.ortops.optim.cuda"], 1)
+
+        ref2 = ExtendedReferenceEvaluator(opt_onx)
+        got = ref2.run(None, feeds)
+        self.assertEqualArray(expected[0], got[0], atol=1e-5)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

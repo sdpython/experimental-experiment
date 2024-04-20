@@ -20,6 +20,7 @@ from .ops.op_scatter_elements import ScatterElements
 from .ops.op_scatternd_of_shape import ScatterNDOfShape
 from .ops.op_simplified_layer_normalization import SimplifiedLayerNormalization
 from .ops.op_slice import Slice_1, Slice_10
+from .ops.op_tri_matrix import TriMatrix
 
 
 logger = getLogger("experimental-experiment-eval")
@@ -72,6 +73,7 @@ class ExtendedReferenceEvaluator(ReferenceEvaluator):
         SimplifiedLayerNormalization,
         Slice_1,
         Slice_10,
+        TriMatrix,
     ]
 
     @staticmethod

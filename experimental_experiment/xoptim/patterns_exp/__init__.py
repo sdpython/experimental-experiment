@@ -22,6 +22,7 @@ def get_experimental_patterns(
         NegXplus1Pattern,
     )
     from .constant_of_shape_scatter_nd import ConstantOfShapeScatterNDPattern
+    from .constants import TriMatrixPattern
     from .simple_rotary import SimpleRotaryPattern
     from .where_replace import ReplaceZeroPattern
 
@@ -33,4 +34,5 @@ def get_experimental_patterns(
         NegXplus1Pattern(verbose=verbose),
         ReplaceZeroPattern(verbose=verbose),
         SimpleRotaryPattern(verbose=verbose),
+        TriMatrixPattern(verbose=verbose),
     ]
