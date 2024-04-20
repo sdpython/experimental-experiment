@@ -263,6 +263,12 @@ FusedMatMulPattern
 .. autoclass:: experimental_experiment.xoptim.patterns_ort.fused_matmul.FusedMatMulPattern
     :members:
 
+FusedMatMulPatternx2
+++++++++++++++++++++
+
+.. autoclass:: experimental_experiment.xoptim.patterns_ort.fused_matmul.FusedMatMulPatternx2
+    :members:
+
 GatherGrad
 ++++++++++
 
