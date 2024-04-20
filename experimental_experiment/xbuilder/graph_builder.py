@@ -1806,7 +1806,7 @@ class GraphBuilder:
                 f"atts={attributes}{self.get_debug_msg()}"
             )
         assert (
-            op_type in {"NegXplus1", "ReplaceZero"} and domain != ""
+            op_type not in {"NegXplus1", "ReplaceZero"} or domain != ""
         ), f"Type={op_type!r} and domain {domain!r} mismatch{self.get_debug_msg()}"
 
     def do_not_remove(self, node: NodeProto) -> bool:
