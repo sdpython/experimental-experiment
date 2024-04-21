@@ -469,7 +469,7 @@ class TestGraphPatternOptimizationExp(ExtTestCase):
         ref1 = ExtendedReferenceEvaluator(model)
         expected = ref1.run(None, feeds)
 
-        self.assertEqual(1, len(opt_onx.graph.initializer))
+        self.assertEqual(2, len(opt_onx.graph.initializer))
         check_model(opt_onx)
         opsets = {v.domain: v.version for v in opt_onx.opset_import}
         self.assertIn("onnx_extended.ortops.optim.cuda", opsets)

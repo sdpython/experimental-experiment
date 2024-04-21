@@ -252,6 +252,10 @@ class GraphBuilderPatternOptimization:
         assert isinstance(
             cst, np.ndarray
         ), f"Unexpected type for constant {name}!r, type is {type(cst)}"
+        assert cst.shape in (
+            tuple(),
+            (1,),
+        ), f"Unexpected shape {cst.shape} for constant {name!r}"
         shape = cst.shape
         value = cst[0] if shape == (1,) else cst
         if value.dtype in {

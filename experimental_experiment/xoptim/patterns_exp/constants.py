@@ -1,7 +1,6 @@
 import inspect
 from typing import List, Optional
 import numpy as np
-import onnx.helper as oh
 import onnx.numpy_helper as onh
 from onnx import NodeProto
 from ..patterns_api import MatchResult, PatternOptimization
@@ -101,21 +100,20 @@ class TriMatrixPattern(PatternOptimization):
         where_node: NodeProto,
         cst_node: NodeProto,
     ) -> List[NodeProto]:
-        cst_upper = g.get_attribute(cst_node, "value").t
-        dtype = oh.tensor_dtype_to_np_dtype(cst_upper.data_type)
-
-        cst_lower = onh.from_array(
-            np.array([g.get_constant_scalar(where_node.input[1])], dtype=dtype)
-        )
+        cst_upper = onh.to_array(g.get_attribute(cst_node, "value").t)
+        dtype = cst_upper.dtype
+        cst_lower = np.array([g.get_constant_scalar(where_node.input[1])], dtype=dtype)
         cst_diag = cst_lower
+        csts_array = np.hstack([cst_lower, cst_diag, cst_upper]).astype(dtype)
+        assert csts_array.shape == (3,), f"Wrong constant array: {csts_array}"
 
+        cst_name = g.make_initializer(
+            f"{self.__class__.__name__}--{where_node.name}", csts_array
+        )
         new_node = g.make_node(
             "TriMatrix",
-            [cst_node.input[0]],
+            [cst_node.input[0], cst_name],
             where_node.output,
-            lower=cst_lower,
-            diag=cst_diag,
-            upper=cst_upper,
             name=f"{self.__class__.__name__}--{where_node.name}",
             domain="onnx_extended.ortops.optim.cuda",
         )
