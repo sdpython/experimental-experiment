@@ -237,6 +237,8 @@ class NegXplus1Pattern(PatternOptimization):
 
         if not g.is_constant(node.input[0]):
             return self.none(node, inspect.currentframe().f_lineno)
+        if not g.is_constant_scalar(node.input[0]):
+            return self.none(node, inspect.currentframe().f_lineno)
         cst = g.get_constant_scalar(node.input[0])
         if cst != 1:
             return self.none(node, inspect.currentframe().f_lineno)

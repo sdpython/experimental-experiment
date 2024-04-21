@@ -72,6 +72,12 @@ CastCastBinaryPattern
 .. autoclass:: experimental_experiment.xoptim.patterns.CastCastBinaryPattern
     :members:
 
+CastOpCastBinaryPattern
++++++++++++++++++++++++
+
+.. autoclass:: experimental_experiment.xoptim.patterns.CastOpCastBinaryPattern
+    :members:
+
 ExpandPattern
 +++++++++++++
 

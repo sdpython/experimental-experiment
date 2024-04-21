@@ -484,11 +484,9 @@ class TestGraphPatternCombination(ExtTestCase):
         # model = "dort-llama-llama-ort_1.onnx"
         model = "dort-model-llama-custom__1.onnx"
         enabled = {
-            "ExpandSwapPattern",
-            "NegXplus1Pattern",
-            "ReplaceZeroPattern",
+            "CastOpCastPattern",
         }
-        enabled = {}
+        # enabled = {}
         disabled = {}
         options = OptimizationOptions(
             patterns="default+onnxruntime+experimental",

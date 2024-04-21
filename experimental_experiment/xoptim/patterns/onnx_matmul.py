@@ -385,7 +385,7 @@ class TransposeMatMulPattern(PatternOptimization):
         if len([_ for _ in ns if _ is not None]) == 0:
             return self.none(node, inspect.currentframe().f_lineno)
 
-        if g.processor == "CUDA":
+        if g.has_processor("CUDA"):
             nns = []
             for n in ns:
                 if n is None:

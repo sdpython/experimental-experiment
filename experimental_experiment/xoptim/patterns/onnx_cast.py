@@ -118,3 +118,123 @@ class CastCastBinaryPattern(PatternOptimization):
             doc_string=node.doc_string,
         )
         return [new_node, cast_node]
+
+
+class CastOpCastPattern(PatternOptimization):
+    """
+    Removes two cast surrounding another operator.
+    """
+
+    _dtypes_allowed = {
+        TensorProto.FLOAT16,
+        TensorProto.BFLOAT16,
+        TensorProto.FLOAT,
+        TensorProto.DOUBLE,
+    }
+
+    _binary_op = {"Add", "Sub", "Mul", "Div"}
+    _other_ops = {"SoftmaxGrad"}
+
+    def match(
+        self,
+        g: "GraphBuilderPatternOptimization",  # noqa: F821
+        node: NodeProto,
+        matched: List[MatchResult],
+    ) -> Optional[MatchResult]:
+        if (
+            node.op_type not in self._binary_op or node.domain != ""
+        ) and node.op_type not in self._other_ops:
+            return self.none()
+        if g.is_used_more_than_once(node.input[0]) or g.is_used_more_than_once(
+            node.input[1]
+        ):
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        next_nodes = g.next_nodes(node.output[0])
+        if len(next_nodes) != 1:
+            return self.none(node, inspect.currentframe().f_lineno)
+        cast_out_node = next_nodes[0]
+        if cast_out_node.op_type != "Cast" or cast_out_node.domain != "":
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        cast_in_left = g.node_before(node.input[0])
+        cast_in_right = g.node_before(node.input[1])
+        if "Cast" not in (
+            "" if cast_in_left is None else cast_in_left.op_type,
+            "" if cast_in_right is None else cast_in_right.op_type,
+        ):
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        return MatchResult(
+            self,
+            [
+                (
+                    cast_in_left
+                    if cast_in_left is not None and cast_in_left.op_type == "Cast"
+                    else None
+                ),
+                (
+                    cast_in_right
+                    if cast_in_right is not None and cast_in_right.op_type == "Cast"
+                    else None
+                ),
+                node,
+                cast_out_node,
+            ],
+            self.apply,
+            insert_at=node,
+        )
+
+    def apply(
+        self,
+        g: "GraphBuilder",  # noqa: F821
+        cast_in_left: NodeProto,
+        cast_in_right: NodeProto,
+        node: NodeProto,
+        cast_out_node: NodeProto,
+    ) -> List[NodeProto]:
+        # to = g.get_attribute(cast_in_left or cast_in_right, "to").i
+        to_out = g.get_attribute(cast_out_node, "to").i
+        left_input = None
+        right_input = None
+        new_nodes = []
+
+        if cast_in_left is None:
+            left_input = g.unique_name(f"{self.__class__.__name__}--{node.output[0]}")
+            new_nodes.append(
+                g.make_node(
+                    "Cast",
+                    [node.input[0]],
+                    [left_input],
+                    to=to_out,
+                    name=f"{self.__class__.__name__}--CastL",
+                )
+            )
+        else:
+            left_input = cast_in_left.input[0]
+
+        if cast_in_right is None:
+            right_input = g.unique_name(f"{self.__class__.__name__}--{node.output[0]}")
+            new_nodes.append(
+                g.make_node(
+                    "Cast",
+                    [node.input[1]],
+                    [right_input],
+                    to=to_out,
+                    name=f"{self.__class__.__name__}--CastR",
+                )
+            )
+        else:
+            right_input = cast_in_right.input[0]
+
+        new_node = g.make_node(
+            node.op_type,
+            [left_input, right_input],
+            cast_out_node.output,
+            domain=node.domain,
+            name=f"{self.__class__.__name__}--{node.name}",
+        )
+        if node.attribute:
+            new_node.attribute.extend(node.attribute)
+        new_nodes.append(new_node)
+        return new_nodes
