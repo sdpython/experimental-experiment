@@ -132,7 +132,8 @@ class CastOpCastPattern(PatternOptimization):
         TensorProto.DOUBLE,
     }
 
-    _binary_op = {"SoftmaxGrad", "Add", "Sub", "Mul", "Div"}
+    _binary_op = {"Add", "Sub", "Mul", "Div"}
+    _other_ops = {"SoftmaxGrad"}
 
     def match(
         self,
@@ -140,7 +141,9 @@ class CastOpCastPattern(PatternOptimization):
         node: NodeProto,
         matched: List[MatchResult],
     ) -> Optional[MatchResult]:
-        if node.op_type not in self._binary_op or node.domain != "":
+        if (
+            node.op_type not in self._binary_op or node.domain != ""
+        ) and node.op_type not in self._other_ops:
             return self.none()
         if g.is_used_more_than_once(node.input[0]) or g.is_used_more_than_once(
             node.input[1]
