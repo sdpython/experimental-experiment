@@ -186,3 +186,79 @@ class FusedMatMulPattern(PatternOptimization):
             # This is not efficient on CUDA.
             res.append(node_before_right)
         return res
+
+
+class FusedMatMulx2Pattern(PatternOptimization):
+    """
+    Replaces the sequence Div by a scalar consumed by two FusedMatMul.
+    """
+
+    def match(
+        self,
+        g: "GraphBuilderPatternOptimization",  # noqa: F821
+        node: NodeProto,
+        matched: List[MatchResult],
+    ) -> Optional[MatchResult]:
+        if (node.op_type not in "MatMul" or node.domain != "") and (
+            node.op_type != "FusedMatMul" or node.domain != "com.microsoft"
+        ):
+            return self.none()
+
+        div_node = None
+        for name in node.input:
+            n = g.node_before(name)
+            if n is None:
+                continue
+            if n.op_type not in {"Mul", "Div"} or n.domain != "":
+                continue
+            if not g.is_constant_scalar(n.input[1]):
+                continue
+            div_node = n
+            break
+
+        if div_node is None:
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        next_nodes = g.next_nodes(div_node.output[0])
+        op_types = [n.op_type for n in next_nodes]
+        if any(map(lambda t: t not in {"FusedMatMul", "MatMul"}, op_types)):
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        return MatchResult(self, [div_node, *next_nodes], self.apply)
+
+    def apply(
+        self,
+        g: "GraphBuilder",  # noqa: F821
+        div_node: Optional[NodeProto],
+        *mnodes: Optional[NodeProto],
+    ) -> List[NodeProto]:
+        cst = g.get_constant_scalar(div_node.input[1])
+        if div_node.op_type == "Div":
+            cst = 1.0 / cst
+
+        new_nodes = []
+        for node in mnodes:
+            alpha = 1.0
+            atts = []
+            for att in node.attribute:
+                if att.name == "alpha":
+                    alpha = float(att.f)
+                else:
+                    atts.append(att)
+            new_inputs = [
+                (div_node.input[0] if i == div_node.output[0] else i)
+                for i in node.input
+            ]
+            alpha *= cst
+            new_node = g.make_node(
+                "FusedMatMul",
+                new_inputs,
+                node.output,
+                domain="com.microsoft",
+                alpha=alpha,
+                name=f"{self.__class__.__name__}--{node.name}",
+            )
+            if atts:
+                new_node.attribute.extend(atts)
+            new_nodes.append(new_node)
+        return new_nodes

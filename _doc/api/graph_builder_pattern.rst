@@ -222,10 +222,28 @@ MulSigmoidPattern
 .. autoclass:: experimental_experiment.xoptim.patterns_exp.binary_operators.MulSigmoidPattern
     :members:
 
+NegXplus1Pattern
+++++++++++++++++
+
+.. autoclass:: experimental_experiment.xoptim.patterns_exp.binary_operators.NegXplus1Pattern
+    :members:
+
+ReplaceZeroPattern
+++++++++++++++++++
+
+.. autoclass:: experimental_experiment.xoptim.patterns_exp.where_replace.ReplaceZeroPattern
+    :members:
+
 SimpleRotaryPattern
 +++++++++++++++++++
 
 .. autoclass:: experimental_experiment.xoptim.patterns_exp.simple_rotary.SimpleRotaryPattern
+    :members:
+
+TriMatrixPattern
+++++++++++++++++
+
+.. autoclass:: experimental_experiment.xoptim.patterns_exp.constants.TriMatrixPattern
     :members:
 
 .. _l-pattern-optimization-ort:
@@ -243,6 +261,12 @@ FusedMatMulPattern
 ++++++++++++++++++
 
 .. autoclass:: experimental_experiment.xoptim.patterns_ort.fused_matmul.FusedMatMulPattern
+    :members:
+
+FusedMatMulPatternx2
+++++++++++++++++++++
+
+.. autoclass:: experimental_experiment.xoptim.patterns_ort.fused_matmul.FusedMatMulPatternx2
     :members:
 
 GatherGrad
