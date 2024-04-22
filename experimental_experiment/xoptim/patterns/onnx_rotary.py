@@ -597,6 +597,7 @@ class RotaryConcatPartPattern(PatternOptimization):
                 other_nodes.append(tr_data_right)
             if cst_right is not None and id(cst_right) != id(cst_left):
                 other_nodes.append(cst_right)
-        print("******", [(n.op_type, n.output) for n in other_nodes])
-
-        return other_nodes + [split, neg, concat]
+        if other_nodes:
+            other_nodes = list(reversed(other_nodes))
+            return other_nodes + [split, neg, concat]
+        return [split, neg, concat]
