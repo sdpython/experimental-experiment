@@ -633,14 +633,18 @@ def _set_shape_type_op_any_unsqueeze(
     dtype = self.get_type(node.input[0])
     self.set_type(node.output[0], dtype)
     if self.has_shape(node.input[0]):
-        assert self.is_constant(node.input[1]), (
-            f"axes from node {node.op_type}, "
-            f"name={node.name!r} is not a constant, "
-            f"the new shape cannot be infered{self.get_debug_msg()}"
-        )
-        cst = self.get_constant(node.input[1])
-        if isinstance(cst, NodeProto) and cst.op_type == "Constant":
-            cst = self.get_constant(node.input[1], computed_value=True)
+        if len(node.input) == 1:
+            c = self.get_attribute(node, "axes")
+            cst = np.array(c.ints, dtype=np.int64)
+        else:
+            assert self.is_constant(node.input[1]), (
+                f"axes from node {node.op_type}, "
+                f"name={node.name!r} is not a constant, "
+                f"the new shape cannot be infered{self.get_debug_msg()}"
+            )
+            cst = self.get_constant(node.input[1])
+            if isinstance(cst, NodeProto) and cst.op_type == "Constant":
+                cst = self.get_constant(node.input[1], computed_value=True)
         assert isinstance(cst, np.ndarray), (
             f"Unexpected type {type(cst)} for {node.input[1]!r}, "
             f"unable to set type and shape for node {node.op_type} "

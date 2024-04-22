@@ -689,7 +689,7 @@ class TestOperators(ExtTestCase):
             opset_version=10,
             onnx_export=inspect.currentframe().f_code.co_name,
             impl="ref",
-            verbose=0,
+            verbose=10,
             optimize=False,
         )
 
