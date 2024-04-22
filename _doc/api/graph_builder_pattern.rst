@@ -72,10 +72,10 @@ CastCastBinaryPattern
 .. autoclass:: experimental_experiment.xoptim.patterns.CastCastBinaryPattern
     :members:
 
-CastOpCastBinaryPattern
-+++++++++++++++++++++++
+CastOpCastPattern
++++++++++++++++++
 
-.. autoclass:: experimental_experiment.xoptim.patterns.CastOpCastBinaryPattern
+.. autoclass:: experimental_experiment.xoptim.patterns.CastOpCastPattern
     :members:
 
 ExpandPattern
@@ -269,16 +269,16 @@ FusedMatMulPattern
 .. autoclass:: experimental_experiment.xoptim.patterns_ort.fused_matmul.FusedMatMulPattern
     :members:
 
-FusedMatMulPatternx2
+FusedMatMulx2Pattern
 ++++++++++++++++++++
 
-.. autoclass:: experimental_experiment.xoptim.patterns_ort.fused_matmul.FusedMatMulPatternx2
+.. autoclass:: experimental_experiment.xoptim.patterns_ort.fused_matmul.FusedMatMulx2Pattern
     :members:
 
-GatherGrad
-++++++++++
+GatherGradPattern
++++++++++++++++++
 
-.. autoclass:: experimental_experiment.xoptim.patterns_ort.gather_grad.GatherGrad
+.. autoclass:: experimental_experiment.xoptim.patterns_ort.gather_grad.GatherGradPattern
     :members:
 
 SoftmaxGradPattern
