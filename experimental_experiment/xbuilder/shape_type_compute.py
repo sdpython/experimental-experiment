@@ -437,7 +437,8 @@ def _set_shape_type_op_any_reshape(self: "GraphBuilder", node: NodeProto):  # no
 
 def _set_shape_type_op_any_slice(self: "GraphBuilder", node: NodeProto):  # noqa: F821
     self.set_type(node.output[0], self.get_type(node.input[0]))
-    self.set_rank(node.output[0], self.get_rank(node.input[0]))
+    if self.has_rank(node.input[0]):
+        self.set_rank(node.output[0], self.get_rank(node.input[0]))
 
 
 def _set_shape_type_op_any_reduce(self: "GraphBuilder", node: NodeProto):  # noqa: F821
@@ -650,7 +651,7 @@ def _set_shape_type_op_any_unsqueeze(
         for i in iaxes:
             shape.insert((i + len(shape) + 1) if i < 0 else i, 1)
         self.set_shape(node.output[0], tuple(shape))
-    else:
+    elif self.has_rank(node.input[0]):
         self.set_rank(node.output[0], self.get_rank(node.input[0]) + 1)
 
 
