@@ -184,7 +184,9 @@ class GraphBuilder:
                     "input_names must be empty if the input is an existing model."
                 )
             self.current_input = len(self.inputs)
-            self._update_structures_with_proto(target_opset_or_existing_proto)
+            self._update_structures_with_proto(
+                target_opset_or_existing_proto, infer_shapes
+            )
             self.constant_folding(convert_into_initializer=False)
             self._update_shape_types_with_proto(
                 target_opset_or_existing_proto, infer_shapes
@@ -807,7 +809,8 @@ class GraphBuilder:
         else:
             int_type = self._get_type(dtype)
         if name in self._known_types:
-            if int_type != self._known_types[name]:
+            # 0 is undefined
+            if self._known_types[name] != 0 and int_type != self._known_types[name]:
                 raise RuntimeError(
                     f"Type for name {name!r} already exists and it is different, "
                     f"known is {self._known_types[name]} != {int_type} (new)"
@@ -1182,9 +1185,9 @@ class GraphBuilder:
                 return np.array(list(att.ints), dtype=np.int64)
         return None
 
-    def update_value_shape_with_node(self, node):
+    def simple_update_value_shape_with_node(self, node) -> bool:
         if node.domain != "":
-            return
+            return False
         if node.op_type not in {
             "Concat",
             "Gather",
@@ -1208,19 +1211,20 @@ class GraphBuilder:
             "Equal",
             "Not",
         }:
-            return
+            return False
 
         if node.op_type == "Identity":
             value = self.value_as_shape(node.input[0])
             if value is not None:
                 self.set_value_shape(node.output[0], value)
-            return
+                return True
+            return False
 
         if node.op_type == "Squeeze":
             if self.is_constant_or_attribute(node, 1, "axes"):
                 y = self.value_as_shape(node.input[0])
                 if y is None:
-                    return
+                    return False
                 i = self.get_constant_or_attribute(node, 1, "axes")
                 if isinstance(i, int):
                     ii = i
@@ -1240,15 +1244,16 @@ class GraphBuilder:
                 ), f"A shape should only have one axis i={i}, y={y}{self.get_debug_msg()}"
                 if isinstance(y, str):
                     self.set_value_shape(node.output[0], f"squeeze({y})")
-                    return
+                    return True
                 if isinstance(y, int):
                     self.set_value_shape(node.output[0], y)
-                    return
+                    return True
                 assert isinstance(
                     y, tuple
                 ), f"Unexpected type {type(y)} for y={y} and i={i}{self.get_debug_msg()}"
                 self.set_value_shape(node.output[0], y[0])
-            return
+                return True
+            return False
 
         if node.op_type == "Shape":
             if len(node.attribute) == 0:
@@ -1256,46 +1261,50 @@ class GraphBuilder:
                     self.set_value_shape(node.output[0], self.get_shape(node.input[0]))
                 else:
                     self.set_value_shape(node.output[0], node.output[0])
-            else:
-                start = self.get_attribute(node, "start", exc=False) or 0
-                end = self.get_attribute(node, "end", exc=False)
+                return True
+
+            start = self.get_attribute(node, "start", exc=False) or 0
+            end = self.get_attribute(node, "end", exc=False)
+            if end is None:
+                if self.has_rank(node.input[0]):
+                    end = self.get_rank(node.input[0])
+            if self.has_shape(node.input[0]):
+                shape = self.get_shape(node.input[0])
+                assert start.i < len(shape), (
+                    f"Shape mismatch, start={start.i}, shape of {node.input[0]!r} "
+                    f"is {shape}{self.get_debug_msg()}"
+                )
                 if end is None:
-                    if self.has_rank(node.input[0]):
-                        end = self.get_rank(node.input[0])
-                if self.has_shape(node.input[0]):
-                    shape = self.get_shape(node.input[0])
-                    assert start.i < len(shape), (
-                        f"Shape mismatch, start={start.i}, shape of {node.input[0]!r} "
-                        f"is {shape}{self.get_debug_msg()}"
-                    )
-                    if end is None:
-                        self.set_value_shape(node.output[0], shape[start.i :])
-                    else:
-                        assert getattr(end, "i", end) <= len(shape), (
-                            f"Shape mismatch, end={getattr(end, 'i', end)}, shape of {node.input[0]!r} "
-                            f"is {shape}{self.get_debug_msg()}"
-                        )
-                        self.set_value_shape(
-                            node.output[0], shape[start.i : getattr(end, "i", end)]
-                        )
-                elif end is None:
-                    self.set_value_shape(node.output[0], f"{node.input[0]}[{start.i}:]")
-                else:
-                    self.set_value_shape(
-                        node.output[0],
-                        f"{node.input[0]}[{start.i}:{getattr(end, 'i', end)}]",
-                    )
-            return
+                    self.set_value_shape(node.output[0], shape[start.i :])
+                    return True
+                assert getattr(end, "i", end) <= len(shape), (
+                    f"Shape mismatch, end={getattr(end, 'i', end)}, shape of {node.input[0]!r} "
+                    f"is {shape}{self.get_debug_msg()}"
+                )
+                self.set_value_shape(
+                    node.output[0], shape[start.i : getattr(end, "i", end)]
+                )
+                return True
+
+            if end is None:
+                self.set_value_shape(node.output[0], f"{node.input[0]}[{start.i}:]")
+                return False
+
+            self.set_value_shape(
+                node.output[0],
+                f"{node.input[0]}[{start.i}:{getattr(end, 'i', end)}]",
+            )
+            return True
 
         if node.op_type == "Gather":
             if self.is_constant(node.input[1]):
                 y = self.value_as_shape(node.input[0])
                 if y is None:
-                    return
+                    return False
                 i = self.get_constant(node.input[1], computed_value=True)
                 if isinstance(y, str) and isinstance(i, int):
                     self.set_value_shape(node.output[0], f"{y}[{i}]")
-                    return
+                    return True
                 if (
                     isinstance(y, str)
                     and isinstance(i, np.ndarray)
@@ -1304,10 +1313,10 @@ class GraphBuilder:
                 ):
                     ii = int(i[0]) if i.shape == (1,) else int(i)
                     self.set_value_shape(node.output[0], f"{y}[{ii}]")
-                    return
+                    return True
                 if isinstance(y, tuple) and isinstance(i, int):
                     self.set_value_shape(node.output[0], y[i])
-                    return
+                    return True
                 if (
                     isinstance(y, tuple)
                     and isinstance(i, np.ndarray)
@@ -1320,20 +1329,20 @@ class GraphBuilder:
                         f"with inputs={node.input}{self.get_debug_msg()}"
                     )
                     self.set_value_shape(node.output[0], y[ii])
-                    return
+                    return True
                 raise RuntimeError(
                     f"Not implemented when node Gather with inputs={node.input}, "
                     f"y={y!r}, i={i!r}{self.get_debug_msg()}"
                 )
-            return
+            return False
 
         values = [self.value_as_shape(x) for x in node.input[0]]
         if any(map(lambda x: x is None, values)):
             # it is not a shape
-            return
+            return False
         if node.op_type == "Concat":
             self.set_shape_value(node.output[0], tuple(values))
-            return
+            return True
         raise RuntimeError(
             f"Unable to compute a shape for node {node.op_type!r} "
             f"with inputs={node.input}{self.get_debug_msg()}"
@@ -1994,7 +2003,7 @@ class GraphBuilder:
                 f"{node.op_type}:{node.input}->{node.output}"
             )
 
-        self.update_value_shape_with_node(node)
+        shape_set = self.simple_update_value_shape_with_node(node)
 
         # add the node
         for o in node.output:
@@ -2003,7 +2012,9 @@ class GraphBuilder:
             self.set_name(o)
         self.nodes.append(node)
 
-        self._make_node_set_type_shape(node)
+        if not shape_set:
+            # second try
+            self._make_node_set_type_shape(node)
 
         if len(output_names) == 1:
             return output_names[0]
@@ -3283,6 +3294,20 @@ class GraphBuilder:
         del proto.value_info[:]
         proto.value_info.extend(new_shapes)
 
+    def _update_shape_types_with_proto_one_result(self, val):
+        itype = val.type.tensor_type.elem_type
+        self.set_type(val.name, itype)
+        shape = tuple(
+            d.dim_param if d.dim_param else d.dim_value
+            for d in val.type.tensor_type.shape.dim
+        )
+        for sh in shape:
+            if isinstance(sh, int):
+                continue
+            if not self.has_dynamic_object(sh):
+                self.make_dynamic_object(sh, self.torch.SymInt(sh))
+        self.set_shape(val.name, shape, exc=False)
+
     def _update_shape_types_with_proto(
         self, proto: ModelProto, infer_shapes: bool = False
     ):
@@ -3333,18 +3358,7 @@ class GraphBuilder:
                 f"walk through {len(proto.graph.value_info)} shapes."
             )
         for val in new_proto.graph.value_info:
-            itype = val.type.tensor_type.elem_type
-            self.set_type(val.name, itype)
-            shape = tuple(
-                d.dim_param if d.dim_param else d.dim_value
-                for d in val.type.tensor_type.shape.dim
-            )
-            for sh in shape:
-                if isinstance(sh, int):
-                    continue
-                if not self.has_dynamic_object(sh):
-                    self.make_dynamic_object(sh, self.torch.SymInt(sh))
-            self.set_shape(val.name, shape, exc=False)
+            self._update_shape_types_with_proto_one_result(val)
 
         if self.verbose > 1:
             print(
@@ -3352,7 +3366,7 @@ class GraphBuilder:
                 f"{time.perf_counter() - begin_} seconds."
             )
 
-    def _update_structures_with_proto(self, proto: ModelProto):
+    def _update_structures_with_proto(self, proto: ModelProto, bypass_shape: bool):
         """
         Updates the shapes and types for an existing model.
         """
@@ -3375,6 +3389,11 @@ class GraphBuilder:
         self.inputs = list(proto.graph.input)
         self.outputs = list(proto.graph.output)
         self.input_names = [i.name for i in proto.graph.input]
+
+        if hasattr(proto.graph, "value_info"):
+            available_shapes = {v.name: v for v in proto.graph.value_info}
+        else:
+            available_shapes = {}
 
         for k, v in self.initializers_dict.items():
             self.constants_[k] = None
@@ -3413,9 +3432,16 @@ class GraphBuilder:
         for node in self.nodes:
 
             self._unique_names |= set(node.output)
-            self.update_value_shape_with_node(node)
+            shape_set = self.simple_update_value_shape_with_node(node)
             if node.name:
                 self._unique_node_names.add(node.name)
+
+            if shape_set:
+                for o in node.output:
+                    if not self.has_name(o):
+                        self.set_name(o)
+                new_nodes.append(node)
+                continue
 
             if node.op_type == "SequenceConstruct":
                 dtypes = [
@@ -3499,7 +3525,6 @@ class GraphBuilder:
                 else:
                     self.set_shape(node.output[0], self._get_tensor_shape(node))
                     self.set_type(node.output[0], self._get_tensor_type(node))
-
             elif node.op_type == "ConstantOfShape" and self.is_constant(node.input[0]):
                 exist = self.is_exact_same_constant(node)
                 if exist is not None:
@@ -3536,6 +3561,30 @@ class GraphBuilder:
                     if not self.has_name(o):
                         self.set_name(o)
             new_nodes.append(node)
+            for o in node.output:
+                if o in available_shapes:
+                    self._update_shape_types_with_proto_one_result(available_shapes[o])
+
+            if not bypass_shape:
+                if any(
+                    map(
+                        lambda x: x not in available_shapes and not self.has_type(x),
+                        node.output,
+                    )
+                ):
+                    # second try
+                    self._make_node_set_type_shape(node)
+
+                # This test should be enabled when shape inference is complete.
+                # assert all(
+                #     map(
+                #         lambda x: x in available_shapes or self.has_type(x), node.output
+                #     )
+                # ), (
+                #     f"One output of node {node.op_type!r} (name={node.name!r}) has no type: "
+                #     f"{', '.join(o + ((':' + str(self.get_type(o))) if self.has_type(o) else ':0') for o in node.output)}"
+                # )
+
         self.nodes = new_nodes
 
         if need_identity_removal:

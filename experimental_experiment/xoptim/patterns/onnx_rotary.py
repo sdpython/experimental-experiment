@@ -375,7 +375,14 @@ class RotaryConcatPartPattern(PatternOptimization):
             tr_update_right,
         ]
 
-        if any(map(lambda node: g.is_used_more_than_once(node.output[0]), nodes)):
+        allowed = (scatter_left.input[0], scatter_right.input[0])
+        if any(
+            map(
+                lambda node: node.output[0] not in allowed
+                and g.is_used_more_than_once(node.output[0]),
+                nodes,
+            )
+        ):
             return self.none(node, inspect.currentframe().f_lineno)
 
         cst_left = g.node_before(tr_data_left.input[0])
@@ -576,4 +583,21 @@ class RotaryConcatPartPattern(PatternOptimization):
             name=f"{self.__class__.__name__}--{node.name}",
         )
 
+        # restoring nodes used more than once
+        other_nodes = []
+        if scatter_left is not None and g.is_used_more_than_once(scatter_left.input[0]):
+            if tr_data_left is not None:
+                other_nodes.append(tr_data_left)
+            if cst_left is not None:
+                other_nodes.append(cst_left)
+        if scatter_right is not None and g.is_used_more_than_once(
+            scatter_right.input[0]
+        ):
+            if tr_data_right is not None and id(tr_data_right) != id(tr_data_left):
+                other_nodes.append(tr_data_right)
+            if cst_right is not None and id(cst_right) != id(cst_left):
+                other_nodes.append(cst_right)
+        if other_nodes:
+            other_nodes = list(reversed(other_nodes))
+            return other_nodes + [split, neg, concat]
         return [split, neg, concat]
