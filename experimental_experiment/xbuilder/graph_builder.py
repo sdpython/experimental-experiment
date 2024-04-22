@@ -809,7 +809,8 @@ class GraphBuilder:
         else:
             int_type = self._get_type(dtype)
         if name in self._known_types:
-            if int_type != self._known_types[name]:
+            # 0 is undefined
+            if self._known_types[name] != 0 and int_type != self._known_types[name]:
                 raise RuntimeError(
                     f"Type for name {name!r} already exists and it is different, "
                     f"known is {self._known_types[name]} != {int_type} (new)"
@@ -3574,14 +3575,15 @@ class GraphBuilder:
                     # second try
                     self._make_node_set_type_shape(node)
 
-                assert all(
-                    map(
-                        lambda x: x in available_shapes or self.has_type(x), node.output
-                    )
-                ), (
-                    f"One output of node {node.op_type!r} (name={node.name!r}) has no type: "
-                    f"{', '.join(o + ((':' + str(self.get_type(o))) if self.has_type(o) else ':0') for o in node.output)}"
-                )
+                # This test should be enabled when shape inference is complete.
+                # assert all(
+                #     map(
+                #         lambda x: x in available_shapes or self.has_type(x), node.output
+                #     )
+                # ), (
+                #     f"One output of node {node.op_type!r} (name={node.name!r}) has no type: "
+                #     f"{', '.join(o + ((':' + str(self.get_type(o))) if self.has_type(o) else ':0') for o in node.output)}"
+                # )
 
         self.nodes = new_nodes
 

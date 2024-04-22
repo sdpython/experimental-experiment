@@ -546,7 +546,7 @@ def _set_shape_type_op_any_concat(self: "GraphBuilder", node: NodeProto):  # noq
         else:
             new_shape[axis] = "+".join(map(str, dims))
         self.set_shape(node.output[0], tuple(new_shape))
-    else:
+    elif all(map(self.has_rank, node.input)):
         ranks = list(self.get_rank(i) for i in node.input)
         assert (
             len(set(ranks)) == 1
@@ -589,7 +589,7 @@ def _set_shape_type_op_any_scatternd(
     self.set_type(node.output[0], dtype)
     if self.has_shape(node.input[0]):
         self.set_shape(node.output[0], self.get_shape(node.input[0]))
-    else:
+    elif self.has_rank(node.input[0]):
         self.set_rank(node.output[0], self.get_rank(node.input[0]))
 
 
@@ -613,13 +613,14 @@ def _set_shape_type_op_any_transpose(
         for i, p in enumerate(perm):
             new_shape[i] = shape[p]
         self.set_shape(node.output[0], tuple(new_shape))
-    else:
+    elif self.has_rank(node.input[0]):
         self.set_rank(node.output[0], self.get_rank(node.input[0]))
 
 
 def _set_shape_type_op_any_tile(self: "GraphBuilder", node: NodeProto):  # noqa: F821
     self.set_type(node.output[0], self.get_type(node.input[0]))
-    self.set_rank(node.output[0], self.get_rank(node.input[0]))
+    if self.has_rank(node.input[0]):
+        self.set_rank(node.output[0], self.get_rank(node.input[0]))
 
 
 def _set_shape_type_op_any_unsqueeze(
@@ -647,7 +648,7 @@ def _set_shape_type_op_any_unsqueeze(
         iaxes = (int(cst),) if len(cst.shape) == 0 else tuple(int(i) for i in cst)
         shape = list(self.get_shape(node.input[0]))
         for i in iaxes:
-            shape.insert(i + len(shape) if i < 0 else i, 1)
+            shape.insert((i + len(shape) + 1) if i < 0 else i, 1)
         self.set_shape(node.output[0], tuple(shape))
     else:
         self.set_rank(node.output[0], self.get_rank(node.input[0]) + 1)
@@ -665,7 +666,7 @@ def _set_shape_type_op_any_where(self: "GraphBuilder", node: NodeProto):  # noqa
         )
         sh = broadcast_shape(sh1, self.get_shape(node.input[2]))
         self.set_shape(node.output[0], sh)
-    else:
+    elif self.has_rank(node.input[2]):
         self.set_rank(node.output[0], max(map(self.get_rank, node.input)))
 
 
@@ -708,9 +709,9 @@ def set_shape_type_op_any(self: "GraphBuilder", node: NodeProto):  # noqa: F821
 def set_type_shape_fused_matmul(self: "GraphBuilder", node: NodeProto):  # noqa: F821
     name = node.output[0]
     x, y = node.input[:2]
-    transA = self.get_attribute("transA")
+    transA = self.get_attribute(node, "transA", exc=False)
     transA = transA.i if transA else 0
-    transB = self.get_attribute("transB")
+    transB = self.get_attribute(node, "transB", exc=False)
     transB = transB.i if transB else 0
     if transA == 0 and transB == 0:
         return set_type_shape_matmul(self, name, x, y)
