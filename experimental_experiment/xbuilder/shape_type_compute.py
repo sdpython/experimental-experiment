@@ -452,7 +452,7 @@ def _set_shape_type_op_any_reduce(self: "GraphBuilder", node: NodeProto):  # noq
                 f"the new shape cannot be infered{self.get_debug_msg()}"
             )
             cst = self.get_constant(node.input[1])
-            if isinstance(cst, NodeProto) and cst.op_type == "Constant":
+            if isinstance(cst, NodeProto) and self.is_constant(cst.output[0]):
                 cst = self.get_constant(node.input[1], computed_value=True)
             assert isinstance(cst, np.ndarray), (
                 f"Unexpected type {type(cst)} for {node.input[1]!r}, "

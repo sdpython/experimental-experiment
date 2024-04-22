@@ -261,7 +261,7 @@ class TestGraphPatternBuilder(ExtTestCase):
         def do():
             rot = RotaryEmbeddingPattern()
             g = GraphBuilderPatternOptimization(
-                GraphBuilder(18, verbose=10), verbose=10
+                GraphBuilder({"": 18, "com.microsoft": 1}, verbose=10), verbose=10
             )
             pat = rot._build_pattern(g, rot.match_pattern)
             onx = pat.builder.to_onnx(optimize=False)
@@ -350,7 +350,7 @@ class TestGraphPatternBuilder(ExtTestCase):
         def do():
             rot = RotaryEmbeddingPattern()
             g = GraphBuilderPatternOptimization(
-                GraphBuilder(18, verbose=10), verbose=10
+                GraphBuilder({"": 18, "com.microsoft": 1}, verbose=10), verbose=10
             )
             pat = rot._build_pattern(g, rot.match_pattern)
             onx = pat.builder.to_onnx(optimize=False)
