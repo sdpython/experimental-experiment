@@ -801,6 +801,9 @@ class GraphBuilderPatternOptimization:
         known = set(n.name for n in self.builder.inputs)
         known |= set(self.builder.initializers_dict)
         for p, node in enumerate(self.builder.nodes):
+            assert (
+                node.domain in self.opsets
+            ), f"domain {node.domain!r} is not registered in {self.opsets}"
             for i in node.input:
                 if i == "":
                     continue

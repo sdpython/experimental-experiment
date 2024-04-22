@@ -2643,6 +2643,9 @@ class GraphBuilder:
             known = set(n.name for n in self.inputs)
             known |= set(self.initializers_dict)
             for node in self.nodes:
+                assert (
+                    node.domain in self.opsets
+                ), f"Domain {node.domain!r} is not registered in {self.opsets}"
                 for i in node.input:
                     if i == "":
                         continue
