@@ -435,6 +435,11 @@ def _set_shape_type_op_any_reshape(self: "GraphBuilder", node: NodeProto):  # no
             self.set_rank(k, rk[0])
 
 
+def _set_shape_type_op_any_slice(self: "GraphBuilder", node: NodeProto):  # noqa: F821
+    self.set_type(node.output[0], self.get_type(node.input[0]))
+    self.set_rank(node.output[0], self.get_rank(node.input[0]))
+
+
 def _set_shape_type_op_any_reduce(self: "GraphBuilder", node: NodeProto):  # noqa: F821
     keepdim = self.get_attribute(node, "keepdims", exc=False)
     axes = self.get_attribute(node, "axes", exc=False)
@@ -612,6 +617,11 @@ def _set_shape_type_op_any_transpose(
         self.set_rank(node.output[0], self.get_rank(node.input[0]))
 
 
+def _set_shape_type_op_any_tile(self: "GraphBuilder", node: NodeProto):  # noqa: F821
+    self.set_type(node.output[0], self.get_type(node.input[0]))
+    self.set_rank(node.output[0], self.get_rank(node.input[0]))
+
+
 def _set_shape_type_op_any_unsqueeze(
     self: "GraphBuilder", node: NodeProto  # noqa: F821
 ):
@@ -643,10 +653,26 @@ def _set_shape_type_op_any_unsqueeze(
         self.set_rank(node.output[0], self.get_rank(node.input[0]) + 1)
 
 
+def _set_shape_type_op_any_where(self: "GraphBuilder", node: NodeProto):  # noqa: F821
+    self.set_type(node.output[0], self.get_type(node.input[2]))
+    if (
+        self.has_shape(node.input[0])
+        and self.has_shape(node.input[1])
+        and self.has_shape(node.input[2])
+    ):
+        sh1 = broadcast_shape(
+            self.get_shape(node.input[0]), self.get_shape(node.input[1])
+        )
+        sh = broadcast_shape(sh1, self.get_shape(node.input[2]))
+        self.set_shape(node.output[0], sh)
+    else:
+        self.set_rank(node.output[0], max(map(self.get_rank, node.input)))
+
+
 _set_shape_type_op_any_known = {
     "Cast": _set_shape_type_op_any_cast,
     "Concat": _set_shape_type_op_any_concat,
-    "Split": _set_shape_type_op_any_split,
+    "Expand": _set_shape_type_op_any_reshape,
     "GatherElements": _set_shape_type_op_any_gather_elements,
     "Gemm": _set_shape_type_op_any_gemm,
     "MatMul": _set_shape_type_op_any_matmul,
@@ -654,8 +680,12 @@ _set_shape_type_op_any_known = {
     "Reshape": _set_shape_type_op_any_reshape,
     "ScatterND": _set_shape_type_op_any_scatternd,
     "Sign": _set_shape_type_op_any_sign,
+    "Slice": _set_shape_type_op_any_slice,
+    "Split": _set_shape_type_op_any_split,
+    "Tile": _set_shape_type_op_any_tile,
     "Transpose": _set_shape_type_op_any_transpose,
     "Unsqueeze": _set_shape_type_op_any_unsqueeze,
+    "Where": _set_shape_type_op_any_where,
 }
 
 

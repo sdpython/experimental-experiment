@@ -489,9 +489,9 @@ class TestGraphPatternCombination(ExtTestCase):
         # model = "dort-llama-llama-ort_1.onnx"
         model = "dort-rotary-llama-ort+_1.onnx"
         enabled = {
-            "CastOpCastPattern",
+            "RotaryConcatPartPattern",
         }
-        enabled = {}
+        # enabled = {}
         disabled = {}
         options = OptimizationOptions(
             patterns="default+onnxruntime+experimental",

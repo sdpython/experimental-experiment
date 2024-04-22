@@ -184,7 +184,9 @@ class GraphBuilder:
                     "input_names must be empty if the input is an existing model."
                 )
             self.current_input = len(self.inputs)
-            self._update_structures_with_proto(target_opset_or_existing_proto)
+            self._update_structures_with_proto(
+                target_opset_or_existing_proto, infer_shapes
+            )
             self.constant_folding(convert_into_initializer=False)
             self._update_shape_types_with_proto(
                 target_opset_or_existing_proto, infer_shapes
@@ -3363,7 +3365,7 @@ class GraphBuilder:
                 f"{time.perf_counter() - begin_} seconds."
             )
 
-    def _update_structures_with_proto(self, proto: ModelProto):
+    def _update_structures_with_proto(self, proto: ModelProto, bypass_shape: bool):
         """
         Updates the shapes and types for an existing model.
         """
@@ -3434,6 +3436,9 @@ class GraphBuilder:
                 self._unique_node_names.add(node.name)
 
             if shape_set:
+                for o in node.output:
+                    if not self.has_name(o):
+                        self.set_name(o)
                 new_nodes.append(node)
                 continue
 
@@ -3559,21 +3564,24 @@ class GraphBuilder:
                 if o in available_shapes:
                     self._update_shape_types_with_proto_one_result(available_shapes[o])
 
-            if any(
-                map(
-                    lambda x: x not in available_shapes and not self.has_type(x),
-                    node.output,
-                )
-            ):
-                # second try
-                self._make_node_set_type_shape(node)
+            if not bypass_shape:
+                if any(
+                    map(
+                        lambda x: x not in available_shapes and not self.has_type(x),
+                        node.output,
+                    )
+                ):
+                    # second try
+                    self._make_node_set_type_shape(node)
 
-            assert all(
-                map(lambda x: x in available_shapes or self.has_type(x), node.output)
-            ), (
-                f"One output of node {node.op_type!r} (name={node.name!r}) has no type: "
-                f"{', '.join(o + ((':' + str(self.get_type(o))) if self.has_type(o) else ':0') for o in node.output)}"
-            )
+                assert all(
+                    map(
+                        lambda x: x in available_shapes or self.has_type(x), node.output
+                    )
+                ), (
+                    f"One output of node {node.op_type!r} (name={node.name!r}) has no type: "
+                    f"{', '.join(o + ((':' + str(self.get_type(o))) if self.has_type(o) else ':0') for o in node.output)}"
+                )
 
         self.nodes = new_nodes
 
