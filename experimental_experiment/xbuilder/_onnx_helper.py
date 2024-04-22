@@ -247,6 +247,7 @@ def unary_like_op_types() -> Set[str]:
         "Relu",
         "Round",
         "Selu",
+        "Sigmoid",
         "Sign",
         "Sin",
         "Sinh",

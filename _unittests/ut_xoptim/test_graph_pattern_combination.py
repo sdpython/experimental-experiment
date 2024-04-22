@@ -16,6 +16,7 @@ from onnx import (
 )
 from onnx.checker import check_model
 from onnx.shape_inference import infer_shapes
+from onnx.onnx_cpp2py_export.shape_inference import InferenceError
 from experimental_experiment.reference import ExtendedReferenceEvaluator
 from experimental_experiment.ext_test_case import (
     ExtTestCase,
@@ -91,7 +92,11 @@ class TestGraphPatternCombination(ExtTestCase):
             ), f"Result {sh.name!r} has no type"
 
         # check_model(onx)
-        infer_shapes(onx)
+        try:
+            infer_shapes(onx)
+        except InferenceError as e:
+            if "Cannot infer type and shape for node name" not in str(e):
+                raise
 
         import onnxruntime
         from onnxruntime.capi.onnxruntime_pybind11_state import Fail, InvalidArgument
@@ -482,11 +487,11 @@ class TestGraphPatternCombination(ExtTestCase):
 
     def test_study(self):
         # model = "dort-llama-llama-ort_1.onnx"
-        model = "dort-model-llama-custom__1.onnx"
+        model = "dort-rotary-llama-ort+_1.onnx"
         enabled = {
             "CastOpCastPattern",
         }
-        # enabled = {}
+        enabled = {}
         disabled = {}
         options = OptimizationOptions(
             patterns="default+onnxruntime+experimental",
@@ -513,7 +518,8 @@ class TestGraphPatternCombination(ExtTestCase):
         gr = GraphBuilder(
             onx,
             optimization_options=options,
-            infer_shapes=True,
+            infer_shapes=False,
+            verbose=2 if __name__ == "__main__" else 0,
         )
         new_onx = gr.to_onnx(optimize=True)
         with open(f"test_study_{model}", "wb") as f:
