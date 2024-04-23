@@ -16,6 +16,7 @@ from experimental_experiment.xbuilder._onnx_helper import (
 from experimental_experiment.reference import ExtendedReferenceEvaluator
 
 TFLOAT = TensorProto.FLOAT
+TFLOAT16 = TensorProto.FLOAT16
 
 
 class TestGraphPatternOptimizationExp(ExtTestCase):
@@ -454,7 +455,7 @@ class TestGraphPatternOptimizationExp(ExtTestCase):
             model,
             infer_shapes=True,
             optimization_options=OptimizationOptions(
-                patterns=["TriMatrix"], processor="CPU,CUDA", verbose=10
+                patterns=["TriMatrix"], processor="CPU,CUDA", verbose=0
             ),
         )
         opt_onx = gr.to_onnx(optimize=True)
@@ -478,6 +479,66 @@ class TestGraphPatternOptimizationExp(ExtTestCase):
         ref2 = ExtendedReferenceEvaluator(opt_onx)
         got = ref2.run(None, feeds)
         self.assertEqualArray(expected[0], got[0], atol=1e-5)
+
+    def _transpose_cast(self, in_type, cast_before):
+        out_type = TFLOAT16 if in_type == TFLOAT else TFLOAT
+
+        if cast_before:
+            nodes = [
+                oh.make_node("Cast", ["X"], ["xc"], to=out_type),
+                oh.make_node("Transpose", ["xc"], ["Y"], perm=[1, 0]),
+            ]
+        else:
+            nodes = [
+                oh.make_node("Transpose", ["X"], ["xt"], perm=[1, 0]),
+                oh.make_node("Cast", ["xt"], ["Y"], to=out_type),
+            ]
+
+        model = oh.make_model(
+            oh.make_graph(
+                nodes,
+                "dummy",
+                [oh.make_tensor_value_info("X", in_type, ["a", "b"])],
+                [oh.make_tensor_value_info("Y", out_type, ["b", "a"])],
+            ),
+            opset_imports=[oh.make_opsetid("", 18)],
+            ir_version=9,
+        )
+        gr = GraphBuilder(
+            model,
+            infer_shapes=True,
+            optimization_options=OptimizationOptions(
+                patterns=["TransposeCast"], processor="CPU,CUDA", verbose=0
+            ),
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+        suffix = "32" if out_type == TFLOAT else "16"
+        self.assertEqual(
+            [f"Transpose2DCastFP{suffix}"],
+            [n.op_type for n in opt_onx.graph.node],
+        )
+
+        feeds = {
+            "X": (np.arange(32).reshape((4, 8)) - 3).astype(np.float32),
+        }
+        ref1 = ExtendedReferenceEvaluator(model)
+        expected = ref1.run(None, feeds)
+
+        self.assertEqual(0, len(opt_onx.graph.initializer))
+        check_model(opt_onx)
+        opsets = {v.domain: v.version for v in opt_onx.opset_import}
+        self.assertIn("onnx_extended.ortops.optim.cuda", opsets)
+        self.assertEqual(opsets["onnx_extended.ortops.optim.cuda"], 1)
+
+        ref2 = ExtendedReferenceEvaluator(opt_onx)
+        got = ref2.run(None, feeds)
+        self.assertEqualArray(expected[0], got[0], atol=1e-5)
+
+    def test_transpose_cast(self):
+        self._transpose_cast(TFLOAT, False)
+        self._transpose_cast(TFLOAT, True)
+        self._transpose_cast(TFLOAT16, False)
+        self._transpose_cast(TFLOAT16, True)
 
 
 if __name__ == "__main__":
