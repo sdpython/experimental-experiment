@@ -262,3 +262,67 @@ class FusedMatMulx2Pattern(PatternOptimization):
                 new_node.attribute.extend(atts)
             new_nodes.append(new_node)
         return new_nodes
+
+
+class FusedMatMulTransposePattern(PatternOptimization):
+    """
+    Replaces the sequence (Fused)Matmul(A,B) + Transpose
+    into FusedMatMul(B.T, A.T).
+    """
+
+    def match(
+        self,
+        g: "GraphBuilderPatternOptimization",  # noqa: F821
+        node: NodeProto,
+        matched: List[MatchResult],
+    ) -> Optional[MatchResult]:
+        if (node.op_type not in "MatMul" or node.domain != "") and (
+            node.op_type != "FusedMatMul" or node.domain != "com.microsoft"
+        ):
+            return self.none()
+
+        next_nodes = g.next_nodes(node.output[0])
+        if (
+            len(next_nodes) != 1
+            or next_nodes[0].op_type != "Transpose"
+            or next_nodes[0].domain != ""
+        ):
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        transpose_node = next_nodes[0]
+        perm = list(g.get_attribute(transpose_node, "perm").ints)
+        if len(perm) > 2:
+            if perm[:-2] != list(range(len(perm) - 2)):
+                return self.none(node, inspect.currentframe().f_lineno)
+        if perm[-2:] != [len(perm) - 1, len(perm) - 2]:
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        return MatchResult(self, [node, transpose_node], self.apply, insert_at=node)
+
+    def apply(
+        self,
+        g: "GraphBuilder",  # noqa: F821
+        node: NodeProto,
+        transpose_node: NodeProto,
+    ) -> List[NodeProto]:
+
+        default_values = dict(
+            transA=0, transB=0, transBatchA=0, transBatchB=0, alpha=1.0
+        )
+        kwargs = g.get_attributes_with_default(node, **default_values)
+        kwargs["transA"], kwargs["transB"] = 1 - kwargs["transB"], 1 - kwargs["transA"]
+        remove = []
+        for k in kwargs:
+            if kwargs[k] == default_values[k]:
+                remove.append(k)
+        for r in remove:
+            del kwargs[r]
+        new_node = g.make_node(
+            "FusedMatMul",
+            [node.input[1], node.input[0]],
+            transpose_node.output,
+            domain="com.microsoft",
+            name=f"{self.__class__.__name__}--{node.name}",
+            **kwargs,
+        )
+        return [new_node]
