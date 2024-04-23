@@ -246,6 +246,12 @@ SimpleRotaryPattern
 .. autoclass:: experimental_experiment.xoptim.patterns_exp.simple_rotary.SimpleRotaryPattern
     :members:
 
+TransposeCastPattern
+++++++++++++++++++++
+
+.. autoclass:: experimental_experiment.xoptim.patterns_exp.unary_operators.TransposeCastPattern
+    :members:
+
 TriMatrixPattern
 ++++++++++++++++
 
