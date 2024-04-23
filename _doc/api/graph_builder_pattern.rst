@@ -96,6 +96,12 @@ ExpandSwapPattern
 .. autoclass:: experimental_experiment.xoptim.patterns.ExpandSwapPattern
     :members:
 
+IdentityPattern
++++++++++++++++
+
+.. autoclass:: experimental_experiment.xoptim.patterns.IdentityPattern
+    :members:
+
 MatMulReshape2Of3Pattern
 ++++++++++++++++++++++++
 
