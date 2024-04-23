@@ -2142,6 +2142,9 @@ class GraphBuilder:
                         f"Unexpected type {type(def_val)} for attribute name {att.name!r}, "
                         f"attribute={att}"
                     )
+        for k, v in default_values.items():
+            if k not in res:
+                res[k] = v
         return res
 
     def _make_node_set_type_shape(self, node: NodeProto):
