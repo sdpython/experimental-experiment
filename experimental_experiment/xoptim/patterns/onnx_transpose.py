@@ -13,7 +13,7 @@ class TransposeTransposePattern(PatternOptimization):
         assert len(perm) == len(on), "length mismatch"
         res = [None for i in on]
         for i, p in enumerate(perm):
-            res[i] = p
+            res[i] = on[p]
         return res
 
     def match(
