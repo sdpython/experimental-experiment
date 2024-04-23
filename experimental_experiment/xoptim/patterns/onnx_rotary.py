@@ -350,6 +350,14 @@ class RotaryConcatPartPattern(PatternOptimization):
             scatter_left.input[0]
         ), g.node_before(scatter_right.input[0])
         if (
+            tr_data_left is None
+            or tr_data_left.op_type != "Transpose"
+            or tr_data_right is None
+            or tr_data_right.op_type != "Transpose"
+        ):
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        if (
             list(g.get_attribute(tr_data_left, "perm").ints) != perm_left
             or list(g.get_attribute(tr_data_right, "perm").ints) != perm_right
         ):
