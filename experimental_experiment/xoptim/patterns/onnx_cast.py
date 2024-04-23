@@ -132,7 +132,8 @@ class CastOpCastPattern(PatternOptimization):
         TensorProto.DOUBLE,
     }
 
-    _binary_op = {"Add", "Sub", "Mul", "Div"}
+    _unary_ops = {"MulSigmoid", "Neg", "Sigmoid"}
+    _binary_ops = {"Add", "Sub", "Mul", "Div"}
     _other_ops = {"SoftmaxGrad"}
 
     def match(
@@ -142,11 +143,13 @@ class CastOpCastPattern(PatternOptimization):
         matched: List[MatchResult],
     ) -> Optional[MatchResult]:
         if (
-            node.op_type not in self._binary_op or node.domain != ""
-        ) and node.op_type not in self._other_ops:
+            (node.op_type not in self._binary_ops or node.domain != "")
+            and node.op_type not in self._other_ops
+            and node.op_type not in self._unary_ops
+        ):
             return self.none()
-        if g.is_used_more_than_once(node.input[0]) or g.is_used_more_than_once(
-            node.input[1]
+        if g.is_used_more_than_once(node.input[0]) or (
+            len(node.input) > 1 and g.is_used_more_than_once(node.input[1])
         ):
             return self.none(node, inspect.currentframe().f_lineno)
 
@@ -158,7 +161,7 @@ class CastOpCastPattern(PatternOptimization):
             return self.none(node, inspect.currentframe().f_lineno)
 
         cast_in_left = g.node_before(node.input[0])
-        cast_in_right = g.node_before(node.input[1])
+        cast_in_right = g.node_before(node.input[1]) if len(node.input) > 1 else None
         if "Cast" not in (
             "" if cast_in_left is None else cast_in_left.op_type,
             "" if cast_in_right is None else cast_in_right.op_type,
@@ -213,7 +216,7 @@ class CastOpCastPattern(PatternOptimization):
         else:
             left_input = cast_in_left.input[0]
 
-        if cast_in_right is None:
+        if cast_in_right is None and len(node.input) > 1:
             right_input = g.unique_name(f"{self.__class__.__name__}--{node.output[0]}")
             new_nodes.append(
                 g.make_node(
@@ -225,11 +228,11 @@ class CastOpCastPattern(PatternOptimization):
                 )
             )
         else:
-            right_input = cast_in_right.input[0]
+            right_input = None if cast_in_right is None else cast_in_right.input[0]
 
         new_node = g.make_node(
             node.op_type,
-            [left_input, right_input],
+            [left_input] if right_input is None else [left_input, right_input],
             cast_out_node.output,
             domain=node.domain,
             name=f"{self.__class__.__name__}--{node.name}",

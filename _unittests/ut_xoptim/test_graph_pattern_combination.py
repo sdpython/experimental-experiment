@@ -145,10 +145,12 @@ class TestGraphPatternCombination(ExtTestCase):
                 f.write(onx.SerializeToString())
             raise AssertionError(msg) from e
 
-    def _get_model(self, name: str) -> ModelProto:
+    def _get_model(self, name: str, skip=False) -> ModelProto:
         p = os.path.join(os.path.dirname(__file__), "..", "ut_xbuilder", "data", name)
         if not os.path.exists(p):
             p = os.path.join(os.path.dirname(__file__), "data", name)
+        if skip and not os.path.exists(p):
+            raise unittest.SkipTest(f"Unable to find {p!r}.")
         self.assertExists(p)
         return load_onnx(p)
 
@@ -513,7 +515,7 @@ class TestGraphPatternCombination(ExtTestCase):
             print(f"-- verbose={options.verbose}")
         for p in options.patterns:
             p.verbose = options.verbose
-        onx = self._get_model(model)
+        onx = self._get_model(model, skip=True)
         self._fix_shape(onx)
         gr = GraphBuilder(
             onx,
