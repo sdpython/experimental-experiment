@@ -44,7 +44,7 @@ class TransposeTransposePattern(PatternOptimization):
         on = list(range(lens[0]))
         first = on.copy()
         for p in perms:
-            self.apply_transpose(p, on)
+            on = self.apply_transpose(p, on)
         if on != first:
             return self.none(node, inspect.currentframe().f_lineno)
 
