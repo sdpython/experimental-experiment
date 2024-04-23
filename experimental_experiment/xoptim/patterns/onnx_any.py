@@ -115,3 +115,57 @@ class SameChildrenPattern(PatternOptimization):
                     )
                 )
         return new_nodes
+
+
+class IdentityPattern(PatternOptimization):
+    """
+    Replaces operator such as
+    Div(X, 1), Mul(X, 1), Add(X, 0), Sub(X, 0),
+    Transpose(X, [0, 1, 2, ...])
+    into identity nodes.
+    """
+
+    def match(
+        self,
+        g: "GraphBuilderPatternOptimization",  # noqa: F821
+        node: NodeProto,
+        matched: List[MatchResult],
+    ) -> Optional[MatchResult]:
+        if (
+            node.op_type not in {"Add", "Mul", "Div", "Sub", "Transpose"}
+            or node.domain != ""
+        ):
+            return self.none()
+
+        if node.op_type == "Transpose":
+            perm = list(g.get_attribute(node, "perm").ints)
+            expected = list(range(len(perm)))
+            if perm != expected:
+                return self.none(node, inspect.currentframe().f_lineno)
+            return MatchResult(node, [node], self.apply, insert_at=node)
+
+        if not g.is_constant(node.input[1]):
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        cst = g.get_computed_constant(node.input[1])
+        if cst.shape not in (tuple(), (1,)):
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        val = float(cst[0] if len(cst.shape) == 1 else cst)
+        if val == 0 and node.op_type in {"Add", "Sub"}:
+            return MatchResult(node, [node], self.apply, insert_at=node)
+        if val == 1 and node.op_type in {"Mul", "Div"}:
+            return MatchResult(node, [node], self.apply, insert_at=node)
+        return self.none(node, inspect.currentframe().f_lineno)
+
+    def apply(
+        self, g: "GraphBuilder", node: NodeProto  # noqa: F821
+    ) -> List[NodeProto]:
+        return [
+            g.make_node(
+                "Identity",
+                [node.input[0]],
+                [node.output[0]],
+                name=f"{self.__class__.__name__}--{node.name}",
+            )
+        ]

@@ -2118,6 +2118,35 @@ class GraphBuilder:
         ), f"Unable to find attribute {att_name!r} for node type {node.op_type!r} in node {node}"
         return None
 
+    def get_attributes_with_default(
+        self, node: NodeProto, **default_values
+    ) -> Dict[str, Any]:
+        """
+        Returns int or float attributes. If missing, the default value is returned.
+
+        :param node: node
+        :param default_values: default values
+        """
+        res = {}
+        for att in node.attribute:
+            if att.name in default_values:
+                def_val = default_values[att.name]
+                if isinstance(def_val, int):
+                    res[att.name] = att.i
+                elif isinstance(def_val, float):
+                    res[att.name] = att.f
+                elif isinstance(def_val, str):
+                    res[att.name] = att.s
+                else:
+                    raise TypeError(
+                        f"Unexpected type {type(def_val)} for attribute name {att.name!r}, "
+                        f"attribute={att}"
+                    )
+        for k, v in default_values.items():
+            if k not in res:
+                res[k] = v
+        return res
+
     def _make_node_set_type_shape(self, node: NodeProto):
         if node.domain != "":
             set_shape_type_custom(self, node)

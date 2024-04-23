@@ -96,6 +96,12 @@ ExpandSwapPattern
 .. autoclass:: experimental_experiment.xoptim.patterns.ExpandSwapPattern
     :members:
 
+IdentityPattern
++++++++++++++++
+
+.. autoclass:: experimental_experiment.xoptim.patterns.IdentityPattern
+    :members:
+
 MatMulReshape2Of3Pattern
 ++++++++++++++++++++++++
 
@@ -279,6 +285,12 @@ FusedMatMulx2Pattern
 ++++++++++++++++++++
 
 .. autoclass:: experimental_experiment.xoptim.patterns_ort.fused_matmul.FusedMatMulx2Pattern
+    :members:
+
+FusedMatMulTransposePattern
++++++++++++++++++++++++++++
+
+.. autoclass:: experimental_experiment.xoptim.patterns_ort.fused_matmul.FusedMatMulTransposePattern
     :members:
 
 GatherGradPattern

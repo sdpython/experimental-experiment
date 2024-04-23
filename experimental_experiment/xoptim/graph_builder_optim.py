@@ -306,6 +306,14 @@ class GraphBuilderPatternOptimization:
         """
         return self.builder.get_attribute(node, att_name, exc=exc)
 
+    def get_attributes_with_default(
+        self, node: NodeProto, **default_values
+    ) -> Dict[str, Any]:
+        """
+        Returns integer or float values for attributes.
+        """
+        return self.builder.get_attributes_with_default(node, **default_values)
+
     def get_axis(self, node: NodeProto, default_axis: Optional[int] = None) -> int:
         """
         Retrieves the axis for many operators.

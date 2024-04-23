@@ -4,7 +4,7 @@ from onnx import NodeProto
 from ..patterns_api import PatternOptimization, MatchResult
 
 # onnx patterns
-from .onnx_any import SameChildrenPattern
+from .onnx_any import IdentityPattern, SameChildrenPattern
 from .onnx_cast import CastPattern, CastCastBinaryPattern, CastOpCastPattern
 from .onnx_expand import ExpandPattern, ExpandBroadcastPattern, ExpandSwapPattern
 from .onnx_mul import MulMulMulScalarPattern, SwitchOrderBinaryPattern
@@ -82,6 +82,7 @@ def get_default_patterns(verbose: int = 0) -> List[PatternOptimization]:
         ExpandPattern(verbose=verbose),
         ExpandBroadcastPattern(verbose=verbose),
         ExpandSwapPattern(verbose=verbose),
+        IdentityPattern(verbose=verbose),
         MulMulMulScalarPattern(verbose=verbose),
         ReduceReshapePattern(verbose=verbose),
         ReshapeMatMulReshapePattern(verbose=verbose),
