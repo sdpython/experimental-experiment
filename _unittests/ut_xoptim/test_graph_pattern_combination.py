@@ -486,9 +486,10 @@ class TestGraphPatternCombination(ExtTestCase):
                 self._check_ort_cpu_or_cuda(onx)
 
     def test_study(self):
-        model = "dort-llama-llama-ort_1.onnx"
+        model = "dort-model-missing-custom__0.onnx"
         enabled = {
-            "RotaryConcatPartPattern",
+            "TransposeCastPattern",
+            "TransposeMatMulPattern",
         }
         # enabled = {}
         disabled = {}
