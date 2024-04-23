@@ -1,3 +1,4 @@
+import os
 import warnings
 from typing import Callable, List, Optional, Tuple, Union
 
@@ -48,6 +49,33 @@ def make_aot_ort(
 
     ort_session_options = onnxruntime.SessionOptions()
     # ort_session_options.log_severity_level = 1
+
+    if (
+        enable_pattern
+        and "experimental" in enable_pattern
+        or any(map(lambda s: "experimental" in s, enable_pattern))
+    ):
+        try:
+            from onnx_extended.ortops.optim.cuda import get_ort_ext_libs
+
+            register = True
+        except ImportError:
+            register = False
+
+        if register:
+            assert os.path.exists(
+                get_ort_ext_libs()[0]
+            ), f"Unable to find library {get_ort_ext_libs()[0]!r}."
+            ort_session_options.register_custom_ops_library(get_ort_ext_libs()[0])
+
+            from onnx_extended.ortops.optim.cpu import (
+                get_ort_ext_libs as get_ort_ext_libs_cpu,
+            )
+
+            assert os.path.exists(
+                get_ort_ext_libs()[0]
+            ), f"Unable to find library {get_ort_ext_libs_cpu()[0]!r}."
+            ort_session_options.register_custom_ops_library(get_ort_ext_libs_cpu()[0])
 
     if rewrite is True:
         # we switch to try if torch is not recent enough.
@@ -112,11 +140,13 @@ def make_aot_ort(
                 del first_model_proto.graph.node[:]
                 del first_model_proto.functions[:]
                 del first_model_proto.graph.initializer[:]
+                del first_model_proto.opset_import[:]
                 first_model_proto.graph.node.extend(model_proto.graph.node)
                 first_model_proto.functions.extend(model_proto.functions)
                 first_model_proto.graph.initializer.extend(
                     model_proto.graph.initializer
                 )
+                first_model_proto.opset_import.extend(model_proto.opset_import)
 
                 return first_model_proto
 

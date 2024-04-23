@@ -215,6 +215,8 @@ for i in range(args.warmup):
         for onx in os.listdir(dump_folder):
             if not onx.endswith(".onnx"):
                 continue
+            if ".opt." in onx:
+                continue
             new_onx = onx.replace(".onnx", ".opt.onnx")
             print(f"  ort_optimize {onx} -> {new_onx}")
             ort_optimize(

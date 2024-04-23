@@ -140,10 +140,12 @@ def optimize_model_proto(
         del first_model_proto.graph.node[:]
         del first_model_proto.functions[:]
         del first_model_proto.graph.initializer[:]
+        del first_model_proto.opset_import[:]
 
         first_model_proto.graph.node.extend(model_proto.graph.node)
         first_model_proto.functions.extend(model_proto.functions)
         first_model_proto.graph.initializer.extend(model_proto.graph.initializer)
+        first_model_proto.opset_import.extend(model_proto.opset_import)
 
     return model_proto
 
