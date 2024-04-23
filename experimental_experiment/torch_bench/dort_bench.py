@@ -37,7 +37,7 @@ Or:
 
 ::
 
-    python -m experimental_experiment.torch_bench.dort_bench --backend ort+ --device cuda --mixed=1 --export model -w 1 --enable_pattern=default+onnxruntime
+    python -m experimental_experiment.torch_bench.dort_bench --backend ort+ --device cuda --mixed=1 --export model -w 1 --enable_pattern=default+onnxruntime+experimental
 """
 
 from experimental_experiment.torch_bench._dort_cmd_common import dort_args
