@@ -33,8 +33,8 @@ from experimental_experiment.args import get_parsed_args, check_cuda_availabilit
 parsed_args = get_parsed_args(
     "plot_llama_bench",
     description=__doc__,
-    warmup=3,
-    repeat=5,
+    warmup=5,
+    repeat=10,
     model=("llama", "model to benchmark"),
     backend=(
         "eager,dynger,inductor,ort,ort+,custom,ortmodule",
