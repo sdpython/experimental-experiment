@@ -139,6 +139,7 @@ compiled_model = create_compiled_model(
     ),
     processor=device.upper() if device.upper() == "CPU" else "CPU,CUDA",
 )
+del model
 
 print(f"type of compiled_model={type(compiled_model)}")
 
