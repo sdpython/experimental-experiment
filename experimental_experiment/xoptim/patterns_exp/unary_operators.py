@@ -12,6 +12,9 @@ class TransposeCastPattern(PatternOptimization):
 
     _allowed_types = (TensorProto.FLOAT, TensorProto.FLOAT16)
 
+    def __init__(self, verbose: int = 0, priority: int = 3):
+        super(TransposeCastPattern, self).__init__(verbose, priority)
+
     def match(
         self,
         g: "GraphBuilderPatternOptimization",  # noqa: F821

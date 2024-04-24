@@ -9,6 +9,9 @@ class FusedMatMulPattern(PatternOptimization):
     Replaces the sequence Transpose, Matmul into FusedMatMul.
     """
 
+    def __init__(self, verbose: int = 0, priority: int = 2):
+        super(FusedMatMulPattern, self).__init__(verbose, priority)
+
     def match(
         self,
         g: "GraphBuilderPatternOptimization",  # noqa: F821
@@ -193,6 +196,9 @@ class FusedMatMulx2Pattern(PatternOptimization):
     Replaces the sequence Div by a scalar consumed by two FusedMatMul.
     """
 
+    def __init__(self, verbose: int = 0, priority: int = 3):
+        super(FusedMatMulx2Pattern, self).__init__(verbose, priority)
+
     def match(
         self,
         g: "GraphBuilderPatternOptimization",  # noqa: F821
@@ -269,6 +275,9 @@ class FusedMatMulTransposePattern(PatternOptimization):
     Replaces the sequence (Fused)Matmul(A,B) + Transpose
     into FusedMatMul(B.T, A.T).
     """
+
+    def __init__(self, verbose: int = 0, priority: int = 3):
+        super(FusedMatMulTransposePattern, self).__init__(verbose, priority)
 
     def match(
         self,

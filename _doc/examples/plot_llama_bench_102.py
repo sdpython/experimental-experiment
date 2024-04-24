@@ -33,8 +33,8 @@ from experimental_experiment.args import get_parsed_args, check_cuda_availabilit
 parsed_args = get_parsed_args(
     "plot_llama_bench",
     description=__doc__,
-    warmup=3,
-    repeat=5,
+    warmup=5,
+    repeat=10,
     model=("llama", "model to benchmark"),
     backend=(
         "eager,dynger,inductor,ort,ort+,custom,ortmodule",
@@ -55,9 +55,14 @@ parsed_args = get_parsed_args(
     implementation=("eager", "eager or sdpa or both values comma separated value"),
     with_mask=(1, "with or without a second input (mask"),
     disable_pattern=("none", "pattern or patterns to disable"),
+    ort_optimize=(
+        "0,1",
+        "enable or disable onnxruntime optimization, " "by default, tries both",
+    ),
+    verbose=(1, "verbosity"),
     expose="backend,device,num_hidden_layers,mixed,scipt_name,repeat,"
     "warmup,dump,check,config,patterns,dynamic,disable_pattern,model"
-    "implementation,with_mask",
+    "implementation,with_mask,ort_optimize,verbose",
 )
 
 import onnxruntime  # noqa: F401
@@ -91,8 +96,14 @@ def make_config(
     disable_pattern,
     implementation,
     with_mask,
+    ort_optimize,
+    verbose,
     existing=None,
 ):
+    if backend not in ("custom", "ort+"):
+        ort_optimize = None
+        pattern = None
+        disable_pattern = None
     cf = dict(
         model=model,
         backend=backend,
@@ -105,7 +116,10 @@ def make_config(
         warmup=warmup,
         implementation=implementation,
         with_mask=with_mask,
+        ort_optimize=ort_optimize,
+        verbose=verbose,
     )
+    cf = {k: v for k, v in cf.items() if v is not None}
 
     if existing and backend not in ("custom", "ort+"):
         for ex in existing:
@@ -119,28 +133,35 @@ def make_config(
             if equal:
                 return None
 
-    if pattern == "none":
+    if pattern is None:
+        opt = {}
+    elif pattern == "none":
         opt = dict(enable_pattern="default", disable_pattern="default")
     elif pattern in "default" or "+" in pattern:
         opt = dict(enable_pattern=pattern)
     else:
         raise AssertionError(f"unexpected value for pattern={pattern!r}")
     cf.update(opt)
-    if disable_pattern != "none":
+    if disable_pattern not in ("none", None):
         if "disable_pattern" in cf:
             cf["disable_pattern"] += f",{disable_pattern}"
         else:
             cf["disable_pattern"] = disable_pattern
-    if "+experimental" in cf["enable_pattern"]:
+    if "enable_pattern" in cf and "+experimental" in cf["enable_pattern"]:
         try:
             import onnx_extended  # noqa: F401
         except ImportError:
             return None
+    elif not ort_optimize and backend in ("custom", "ort+"):
+        return None
+    assert (
+        cf["backend"] != "eager" or cf.get("ort_optimize", None) is None
+    ), f"Wrong configuration {cf}"
     return cf
 
 
 if parsed_args.check not in (1, "1"):
-    verbose = 1
+    verbose = parsed_args.verbose
     configs = []
     for (
         backend,
@@ -150,6 +171,7 @@ if parsed_args.check not in (1, "1"):
         dynamic,
         pattern,
         impl,
+        ort_optimize,
     ) in itertools.product(
         parsed_args.backend.split(","),
         parsed_args.device.split(","),
@@ -158,6 +180,7 @@ if parsed_args.check not in (1, "1"):
         list(map(int, parsed_args.dynamic.split(","))),
         parsed_args.patterns.split(","),
         parsed_args.implementation.split(","),
+        list(map(int, parsed_args.ort_optimize.split(","))),
     ):
         if mixed == 1 and device == "cpu":
             continue
@@ -179,6 +202,8 @@ if parsed_args.check not in (1, "1"):
                 existing=configs,
                 implementation=impl,
                 with_mask=parsed_args.with_mask,
+                ort_optimize=ort_optimize,
+                verbose=verbose,
             )
         )
 else:
@@ -202,8 +227,9 @@ else:
 # All configurations to consider.
 
 configs = [cf for cf in configs if cf]
-for i, cf in enumerate(configs):
-    print(f"config {i+1}: {cf}")
+if verbose:
+    for i, cf in enumerate(configs):
+        print(f"config {i+1}: {cf}")
 
 ################################
 # Running configuration.
@@ -219,7 +245,8 @@ try:
     )
     data_collected = True
 except BenchmarkError as e:
-    print(e)
+    if verbose:
+        print(e)
     data_collected = False
 
 #########################

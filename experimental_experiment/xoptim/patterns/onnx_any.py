@@ -28,6 +28,9 @@ class SameChildrenPattern(PatternOptimization):
                 return False
         return True
 
+    def __init__(self, verbose: int = 0, priority: int = 0):
+        super(SameChildrenPattern, self).__init__(verbose, priority)
+
     def match(
         self,
         g: "GraphBuilderPatternOptimization",  # noqa: F821
@@ -124,6 +127,9 @@ class IdentityPattern(PatternOptimization):
     Transpose(X, [0, 1, 2, ...])
     into identity nodes.
     """
+
+    def __init__(self, verbose: int = 0, priority: int = 0):
+        super(IdentityPattern, self).__init__(verbose, priority)
 
     def match(
         self,

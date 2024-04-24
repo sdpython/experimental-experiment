@@ -176,6 +176,7 @@ def create_compiled_model(
     rename_inputs: bool = True,
     dump_prefix: Optional[str] = None,
     optimize: bool = True,
+    ort_optimize: bool = True,
     use_fused_aten_ops: bool = False,
     processor: str = "CPU",
 ) -> Any:
@@ -193,6 +194,7 @@ def create_compiled_model(
     :param rename_inputs: rename inputs into ``input_{i}``
     :param dump_prefix: dumps the models (backend, custom and debug)
     :param optimize: enable optimizations
+    :param ort_optimize: enables onnxruntime optimization
     :param use_fused_aten_ops: use fused opetor when converting the model,
         it only works the backend custom
     :param processor: optimization should be made for this processor
@@ -209,6 +211,8 @@ def create_compiled_model(
         onnx_custom_backend,
         onnx_debug_backend,
     )
+
+    ort_optimization_level = "ORT_ENABLE_ALL" if ort_optimize else "ORT_DISABLE_ALL"
 
     if use_fused_aten_ops and backend in {"ort", "custom", "backort", "plug", "ort+"}:
         from onnxruntime.training.ortmodule.torch_cpp_extensions import aten_op_executor
@@ -244,6 +248,7 @@ def create_compiled_model(
             enable_pattern=enable_pattern,
             disable_pattern=disable_pattern,
             processor=processor,
+            ort_optimization_level=ort_optimization_level,
         )
         return torch.compile(model, backend=local_ort)
 
@@ -292,6 +297,7 @@ def create_compiled_model(
                 optimize=optimize,
                 dispatcher=dispatcher,
                 processor=processor,
+                ort_optimization_level=ort_optimization_level,
                 **kwargs,
             ),
             decompositions=get_decomposition_table(),
@@ -320,6 +326,7 @@ def create_compiled_model(
                 exporter="dynamo",
                 dispatcher=dispatcher,
                 processor=processor,
+                ort_optimization_level=ort_optimization_level,
                 **kwargs,
             ),
             decompositions=get_decomposition_table_dynamo(),
@@ -348,6 +355,7 @@ def create_compiled_model(
                 optimize=optimize,
                 dispatcher=dispatcher,
                 processor=processor,
+                ort_optimization_level=ort_optimization_level,
                 **kwargs,
             ),
             decompositions=get_decomposition_table(),
@@ -420,6 +428,7 @@ def dort_args(name: str, description: str):
         dump_folder=("dump_dort_bench", "where to dump the exported model"),
         optimize=(1, "optimize the model"),
         with_mask=(1, "with or without mask, dynamo may fail with a mask"),
+        ort_optimize=(1, "enable or disable onnxruntime optimization"),
         expose="backend,repeat,warmup,device,num_hidden_layers,"
         "mixed,export,config,target_opset,dynamic,verbose,dump_folder,"
         "enable_pattern,disable_pattern,model,optimize,with_mask",
@@ -447,6 +456,7 @@ def export_args(name: str, description: str):
         disable_pattern=("", "a list of optimization patterns to disable"),
         enable_pattern=("default", "list of optimization patterns to enable"),
         optimize=(1, "optimize the model"),
+        ort_optimize=(1, "enable or disable onnxruntime optimization"),
         with_mask=(1, "with or without mask, dynamo may fail with a mask"),
         expose="exporter,device,num_hidden_layers,ort,"
         "mixed,config,target_opset,dynamic,verbose,"

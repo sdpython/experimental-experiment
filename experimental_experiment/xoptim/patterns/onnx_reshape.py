@@ -98,6 +98,9 @@ class ReshapeReshapePattern(PatternOptimization):
     Replaces the sequence Reshape, Reshape by Reshape.
     """
 
+    def __init__(self, verbose: int = 0, priority: int = 0):
+        super(ReshapeReshapePattern, self).__init__(verbose, priority)
+
     def match(
         self,
         g: "GraphBuilderPatternOptimization",  # noqa: F821

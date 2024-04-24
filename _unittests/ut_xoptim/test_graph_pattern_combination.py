@@ -488,12 +488,12 @@ class TestGraphPatternCombination(ExtTestCase):
                 self._check_ort_cpu_or_cuda(onx)
 
     def test_study(self):
-        model = "dort-model-missing-custom__0.onnx"
+        model = "dort-slow-llama-custom__1.onnx"
         enabled = {
             "TransposeCastPattern",
             "TransposeMatMulPattern",
         }
-        # enabled = {}
+        enabled = {}
         disabled = {}
         options = OptimizationOptions(
             patterns="default+onnxruntime+experimental",
@@ -517,13 +517,24 @@ class TestGraphPatternCombination(ExtTestCase):
             p.verbose = options.verbose
         onx = self._get_model(model, skip=True)
         self._fix_shape(onx)
-        gr = GraphBuilder(
-            onx,
-            optimization_options=options,
-            infer_shapes=False,
-            verbose=2 if __name__ == "__main__" else 0,
-        )
-        new_onx = gr.to_onnx(optimize=True)
+
+        def do():
+            gr = GraphBuilder(
+                onx,
+                optimization_options=options,
+                infer_shapes=False,
+                verbose=2 if __name__ == "__main__" else 0,
+            )
+            return gr.to_onnx(optimize=True)
+
+        # from onnx_array_api.profiling import profile, profile2graph
+        # ps = profile(do)[0]
+        # root, nodes = profile2graph(ps, clean_text=lambda x: x.split("/")[-1])
+        # text = root.to_text()
+        # print(text)
+
+        new_onx = do()
+
         with open(f"test_study_{model}", "wb") as f:
             f.write(new_onx.SerializeToString())
 

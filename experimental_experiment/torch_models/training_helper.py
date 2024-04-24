@@ -12,6 +12,7 @@ def make_aot_ort(
     enable_pattern: Optional[Union[str, List[Union[str, type]]]] = "default",
     disable_pattern: Optional[Union[str, List[Union[str, type]]]] = None,
     processor: str = "CPU",
+    ort_optimization_level: Optional[str] = None,
 ) -> tuple:
     """
     Creates a backend to train model with DORT.
@@ -25,6 +26,7 @@ def make_aot_ort(
     :param disable_pattern: optimization patterns to disable
     :param processor: optimization should be made for this processor
         or this list of processors (comma separated value)
+    :param ort_optimization_level: onnxruntime optimization level
     :return: twice the same backend
     """
     import onnxruntime
@@ -49,6 +51,14 @@ def make_aot_ort(
 
     ort_session_options = onnxruntime.SessionOptions()
     # ort_session_options.log_severity_level = 1
+    if ort_optimization_level is not None:
+        assert hasattr(onnxruntime.GraphOptimizationLevel, ort_optimization_level), (
+            f"Unexpected value {ort_optimization_level!r} for GraphOptimizationLevel, "
+            f"expecting one of the values in {dir(onnxruntime.GraphOptimizationLevel)}"
+        )
+        ort_session_options.graph_optimization_level = getattr(
+            onnxruntime.GraphOptimizationLevel, ort_optimization_level
+        )
 
     if (
         enable_pattern

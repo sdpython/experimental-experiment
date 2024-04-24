@@ -180,11 +180,13 @@ class GraphBuilderPatternOptimization:
         Tells if a result is used or not,
         including as an output of the graph.
         """
-        return (
-            name in self.successors_
-            or name in self.used_
-            or name in self.set_output_names_
-        )
+        if name in self.successors_:
+            return True
+        if name in name in self.set_output_names_:
+            return True
+        if name in self.used_:
+            return True
+        return False
 
     def is_used_more_than_once(self, name: str) -> bool:
         """
@@ -822,29 +824,30 @@ class GraphBuilderPatternOptimization:
                 )
             known |= set(node.output)
 
-            if (
-                node.op_type in {"MatMul", "Gemm", "FusedMatMul"}
-                and self.builder.has_shape(node.input[0])
-                and self.builder.has_shape(node.input[1])
-            ):
-                sh1 = self.builder.get_shape(node.input[0])[-2:]
-                sh2 = self.builder.get_shape(node.input[1])[-2:]
-                tA = self.builder.get_attribute(node, "transA", exc=False)
-                tB = self.builder.get_attribute(node, "transB", exc=False)
-                tA = 0 if tA is None or tA.i == 0 else 1
-                tB = 0 if tB is None or tB.i == 0 else 1
-                if tA:
-                    sh1 = (sh1[1], sh1[0])
-                if tB:
-                    sh2 = (sh2[1], sh2[0])
-                assert (
-                    type(sh1[-1]) != type(sh2[0]) or sh1[-1] == sh2[0]  # noqa: E721
-                ), (
-                    f"Node {node.op_type!r}, inputs={node.input}, "
-                    f"shape1={self.builder.get_shape(node.input[0])}, "
-                    f"shape2={self.builder.get_shape(node.input[1])}, "
-                    f"tA={tA}, tB={tB}."
-                )
+            if verifies:
+                if (
+                    node.op_type in {"MatMul", "Gemm", "FusedMatMul"}
+                    and self.builder.has_shape(node.input[0])
+                    and self.builder.has_shape(node.input[1])
+                ):
+                    sh1 = self.builder.get_shape(node.input[0])[-2:]
+                    sh2 = self.builder.get_shape(node.input[1])[-2:]
+                    tA = self.builder.get_attribute(node, "transA", exc=False)
+                    tB = self.builder.get_attribute(node, "transB", exc=False)
+                    tA = 0 if tA is None or tA.i == 0 else 1
+                    tB = 0 if tB is None or tB.i == 0 else 1
+                    if tA:
+                        sh1 = (sh1[1], sh1[0])
+                    if tB:
+                        sh2 = (sh2[1], sh2[0])
+                    assert (
+                        type(sh1[-1]) != type(sh2[0]) or sh1[-1] == sh2[0]  # noqa: E721
+                    ), (
+                        f"Node {node.op_type!r}, inputs={node.input}, "
+                        f"shape1={self.builder.get_shape(node.input[0])}, "
+                        f"shape2={self.builder.get_shape(node.input[1])}, "
+                        f"tA={tA}, tB={tB}."
+                    )
 
         for o in self.builder.outputs:
             assert o.name in known, f"Unknown output {o.name!r}, step {step!r}"
@@ -935,10 +938,13 @@ class GraphBuilderPatternOptimization:
         continue_optimization = True
         if max_iter == -1:
             max_iter = len(self.builder.nodes)
+        priorities = list(sorted(set(p.priority for p in self.patterns)))
+        assert priorities, "list of priority is null."
         if self.verbose > 0:
             print(
                 f"[GraphBuilderPatternOptimization.optimize] start with "
-                f"{len(self.builder.nodes)} nodes and {len(self.patterns)} patterns"
+                f"{len(self.builder.nodes)} nodes and {len(self.patterns)} patterns, "
+                f"priorities={priorities}"
             )
             for i, pattern in enumerate(self.patterns):
                 print(
@@ -951,13 +957,15 @@ class GraphBuilderPatternOptimization:
 
         n_applied = 0
         last_it = 0
+        current_priority_index = 0
         for it in range(max_iter):
             if not continue_optimization:
                 break
             if self.verbose > 0:
                 print(
                     f"[GraphBuilderPatternOptimization.optimize] iteration {it}: "
-                    f"{len(self.builder.nodes)} nodes"
+                    f"{len(self.builder.nodes)} nodes, "
+                    f"priority={priorities[current_priority_index]}"
                 )
 
             # detects patterns
@@ -969,8 +977,13 @@ class GraphBuilderPatternOptimization:
             for pattern in self.patterns:
                 if not continue_optimization:
                     break
+                if pattern.priority > priorities[current_priority_index]:
+                    # skipping that pattern
+                    continue
                 begin = time.perf_counter()
                 before = len(matches)
+
+                # loop over the nodes
                 for match in pattern.enumerate_matches(self):
 
                     # bypass this node if the name contains some specific name
@@ -985,6 +998,8 @@ class GraphBuilderPatternOptimization:
                     # checks that a node is not already part of another pattern
                     bypass = False
                     for n in match.nodes:
+                        if n is None:
+                            continue
                         if id(n) in marked:
                             # a node is already marked for replacements
                             bypass = True
@@ -993,10 +1008,12 @@ class GraphBuilderPatternOptimization:
                         if self.verbose >= 9:
                             print(
                                 f"[{self.__class__.__name__}.match] OVERLAP "
-                                f"match={match}"
+                                f"match={match} #marked: {len(marked)})"
                             )
                         continue
                     for n in match.nodes:
+                        if n is None:
+                            continue
                         marked.add(id(n))
                     found = True
                     if self.verbose > 2:
@@ -1059,6 +1076,7 @@ class GraphBuilderPatternOptimization:
 
             # applies patterns (they must be disjoined)
 
+            added_types = set()
             n_added = 0
             n_removed = 0
             for im, (pattern, match) in enumerate(matches):
@@ -1071,6 +1089,7 @@ class GraphBuilderPatternOptimization:
 
                 begin = time.perf_counter()
                 added_nodes = self.apply_match(match)
+                added_types |= set(n.op_type for n in added_nodes)
 
                 if self.verbose > 3:
                     print(
@@ -1128,7 +1147,7 @@ class GraphBuilderPatternOptimization:
                     f"[GraphBuilderPatternOptimization.optimize] done all: -{n_removed} +{n_added} nodes"
                 )
 
-            if remove_identity:
+            if remove_identity and (it < 3 or "Identity" in added_types):
                 # remove unnecessary identity nodes
                 begin = time.perf_counter()
                 id_removed, id_added = self.builder.remove_identity_nodes()
@@ -1159,7 +1178,16 @@ class GraphBuilderPatternOptimization:
 
             last_it = it + 1
             if not found:
-                break
+                # No match, increase the priority.
+                current_priority_index += 1
+                if current_priority_index >= len(priorities):
+                    # There is priority left to explore.
+                    break
+                if self.verbose > 0:
+                    print(
+                        f"[GraphBuilderPatternOptimization.optimize] increase priority "
+                        f"to {priorities[current_priority_index]}"
+                    )
 
         if self.verbose > 0:
             duration = time.perf_counter() - begin_all
