@@ -20,7 +20,7 @@ class AddAddMulMulPattern(PatternOptimization, _common):
     if they operate on the same shape.
     """
 
-    def __init__(self, verbose: int = 0, priority: int = 2):
+    def __init__(self, verbose: int = 0, priority: int = 3):
         super(AddAddMulMulPattern, self).__init__(verbose, priority)
 
     def match(
@@ -100,7 +100,7 @@ class AddMulPattern(PatternOptimization, _common):
     if they operate on the same shape.
     """
 
-    def __init__(self, verbose: int = 0, priority: int = 2):
+    def __init__(self, verbose: int = 0, priority: int = 3):
         super(AddMulPattern, self).__init__(verbose, priority)
 
     def match(
