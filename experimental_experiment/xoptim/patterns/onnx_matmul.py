@@ -407,6 +407,9 @@ class TransposeMatMulPattern(PatternOptimization):
                 # unexpected transpose
                 return self.none(node, inspect.currentframe().f_lineno)
 
+        if len([_ for _ in ns if _ is not None]) == 0:
+            return self.none(node, inspect.currentframe().f_lineno)
+
         # At this stage, one or two inputs are transposed before being used.
         # MatMul or Gemm are operating on 2D tensors.
         nodes = [*ns, node]
