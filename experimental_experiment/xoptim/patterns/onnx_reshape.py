@@ -193,9 +193,21 @@ class Reshape2Of3Pattern(PatternOptimization):
             next_node = None
 
         shapes = [
-            (None if node_left is None else g.get_shape(node_left.input[0])),
-            (None if node_right is None else g.get_shape(node_right.input[0])),
-            (None if next_node is None else g.get_shape(next_node.output[0])),
+            (
+                None
+                if (node_left is None or not g.has_shape(node_left.input[0]))
+                else g.get_shape(node_left.input[0])
+            ),
+            (
+                None
+                if (node_right is None or not g.has_shape(node_right.input[0]))
+                else g.get_shape(node_right.input[0])
+            ),
+            (
+                None
+                if (next_node is None or not g.has_shape(next_node.output[0]))
+                else g.get_shape(next_node.output[0])
+            ),
         ]
 
         if len(set(_ for _ in shapes if _ is not None)) != 1:

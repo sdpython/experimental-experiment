@@ -16,7 +16,7 @@ from experimental_experiment.torch_models.training_helper import (
 )
 
 
-class TestEdMistral(ExtTestCase):
+class TestEdPhi(ExtTestCase):
 
     @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
     @ignore_warnings(DeprecationWarning)
@@ -47,7 +47,7 @@ class TestEdMistral(ExtTestCase):
     @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.3", "AssertionError: original output #6 is None")
-    def test_phi_cort_static(self):
+    def test_phi_cort_static_not_mixed(self):
         model, input_tensors = get_phi_model()
         input_tensors = input_tensors[0]
         expected = model(*input_tensors)
@@ -60,7 +60,8 @@ class TestEdMistral(ExtTestCase):
             verbose=0,  # (0, 10),
             return_storage=True,
             rename_inputs=False,
-            # dump_prefix="test_phi",
+            # dump_prefix="test_phi_cort_static",
+            # disable_pattern="MatMulReshape2Of3",
             optimize=True,
         )
         results = compiled_model(*input_tensors)
