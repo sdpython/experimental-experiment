@@ -2,6 +2,9 @@
 LLaMa
 =====
 
+Dummy Example
+=============
+
 `LLaMa <https://huggingface.co/docs/transformers/en/model_doc/llama>`_
 
 .. runpython::
@@ -49,3 +52,25 @@ LLaMa
 
         onx = to_onnx(model, (input_ids, input_mask))
         print(onnx_simple_text_plot(onx))
+
+Full Example
+============
+
+::
+
+    import torch
+    from transformers import AutoConfig, AutoModelForCausalLM
+
+    location = "meta-llama/Llama-2-7b-hf"
+    cahce_dir = "_cache"
+    l_config = AutoConfig.from_pretrained(
+        location, use_auth_token=use_auth_token, cache_dir=cache_dir
+    )
+    l_config.use_cache = True
+    llama = AutoModelForCausalLM.from_pretrained(
+        location,
+        use_auth_token=use_auth_token,
+        config=l_config,
+        torch_dtype=torch.float32,
+        cache_dir=cache_dir=cache_dir,
+    )
