@@ -110,8 +110,14 @@ class PatternOptimization:
         Enumerates all the
         """
         matched = []
-        for node in g.iter_nodes():
-            if any(map(lambda o: g.is_used(o), node.output)):
+        # g.iter_nodes() iterates on g.builder.nodes: -> too slow to have a secondary iterator
+        for node in g.builder.nodes:
+            # This expression seems awkard but it saves 10% just by looking into
+            # the first item of the list and then, if necessary, walking through the
+            # rest of the outputs.
+            if g.is_used(node.output[0]) or any(
+                map(lambda o: g.is_used(o), node.output[1:])
+            ):
                 # We avoid processing a node which is not used.
                 res = self.match(g, node, matched)
                 if res:
