@@ -20,6 +20,9 @@ class AddAddMulMulPattern(PatternOptimization, _common):
     if they operate on the same shape.
     """
 
+    def __init__(self, verbose: int = 0, priority: int = 2):
+        super(AddAddMulMulPattern, self).__init__(verbose, priority)
+
     def match(
         self,
         g: "GraphBuilderPatternOptimization",  # noqa: F821
@@ -96,6 +99,9 @@ class AddMulPattern(PatternOptimization, _common):
     Replaces Add + Mul by AddMul or Mul + Add by MulAdd
     if they operate on the same shape.
     """
+
+    def __init__(self, verbose: int = 0, priority: int = 2):
+        super(AddMulPattern, self).__init__(verbose, priority)
 
     def match(
         self,

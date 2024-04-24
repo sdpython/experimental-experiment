@@ -9,6 +9,9 @@ class TransposeTransposePattern(PatternOptimization):
     Removes two consecutive transpose if the second one put the tensor in origin shape.
     """
 
+    def __init__(self, verbose: int = 0, priority: int = 0):
+        super(TransposeTransposePattern, self).__init__(verbose, priority)
+
     @classmethod
     def apply_transpose(
         cls, perm: Tuple[int, ...], on: List[Union[int, str]]

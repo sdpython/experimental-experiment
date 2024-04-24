@@ -938,10 +938,13 @@ class GraphBuilderPatternOptimization:
         continue_optimization = True
         if max_iter == -1:
             max_iter = len(self.builder.nodes)
+        priorities = list(sorted(set(p.priority for p in self.patterns)))
+        assert priorities, "list of priority is null."
         if self.verbose > 0:
             print(
                 f"[GraphBuilderPatternOptimization.optimize] start with "
-                f"{len(self.builder.nodes)} nodes and {len(self.patterns)} patterns"
+                f"{len(self.builder.nodes)} nodes and {len(self.patterns)} patterns, "
+                f"priorities={priorities}"
             )
             for i, pattern in enumerate(self.patterns):
                 print(
@@ -954,13 +957,15 @@ class GraphBuilderPatternOptimization:
 
         n_applied = 0
         last_it = 0
+        current_priority_index = 0
         for it in range(max_iter):
             if not continue_optimization:
                 break
             if self.verbose > 0:
                 print(
                     f"[GraphBuilderPatternOptimization.optimize] iteration {it}: "
-                    f"{len(self.builder.nodes)} nodes"
+                    f"{len(self.builder.nodes)} nodes, "
+                    f"priority={priorities[current_priority_index]}"
                 )
 
             # detects patterns
@@ -972,6 +977,9 @@ class GraphBuilderPatternOptimization:
             for pattern in self.patterns:
                 if not continue_optimization:
                     break
+                if pattern.priority > priorities[current_priority_index]:
+                    # skipping that pattern
+                    continue
                 begin = time.perf_counter()
                 before = len(matches)
 
@@ -1170,7 +1178,16 @@ class GraphBuilderPatternOptimization:
 
             last_it = it + 1
             if not found:
-                break
+                # No match, increase the priority.
+                current_priority_index += 1
+                if current_priority_index >= len(priorities):
+                    # There is priority left to explore.
+                    break
+                if self.verbose > 0:
+                    print(
+                        f"[GraphBuilderPatternOptimization.optimize] increase priority "
+                        f"to {priorities[current_priority_index]}"
+                    )
 
         if self.verbose > 0:
             duration = time.perf_counter() - begin_all

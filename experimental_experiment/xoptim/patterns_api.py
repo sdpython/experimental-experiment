@@ -88,11 +88,14 @@ class PatternOptimization:
 
     :param verbose: determine the verbosity, this can be also dermine by setting up
         environment variable ``LOG_PATTERN_OPTIMIZE=10``
+    :param priority: at each iteration, all patterns whose priority is below one threshold
+        are executed, if none of them matches, the priority is increase
     """
 
-    def __init__(self, verbose: int = 0):
+    def __init__(self, verbose: int = 0, priority: int = 1):
         value = os.environ.get("LOG_PATTERN_OPTIMIZE", "0")
         self.verbose = max(verbose, int(value))
+        self.priority = priority
 
     def __str__(self) -> str:
         return self.__class__.__name__

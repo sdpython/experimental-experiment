@@ -59,7 +59,7 @@ parsed_args = get_parsed_args(
         "0,1",
         "enable or disable onnxruntime optimization, " "by default, tries both",
     ),
-    verbose=(0, "verbosity"),
+    verbose=(1, "verbosity"),
     expose="backend,device,num_hidden_layers,mixed,scipt_name,repeat,"
     "warmup,dump,check,config,patterns,dynamic,disable_pattern,model"
     "implementation,with_mask,ort_optimize,verbose",
@@ -227,8 +227,9 @@ else:
 # All configurations to consider.
 
 configs = [cf for cf in configs if cf]
-for i, cf in enumerate(configs):
-    print(f"config {i+1}: {cf}")
+if verbose:
+    for i, cf in enumerate(configs):
+        print(f"config {i+1}: {cf}")
 
 ################################
 # Running configuration.
@@ -244,7 +245,8 @@ try:
     )
     data_collected = True
 except BenchmarkError as e:
-    print(e)
+    if verbose:
+        print(e)
     data_collected = False
 
 #########################

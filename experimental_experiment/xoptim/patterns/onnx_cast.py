@@ -9,6 +9,9 @@ class CastPattern(PatternOptimization):
     Checks that a Cast is really needed.
     """
 
+    def __init__(self, verbose: int = 0, priority: int = 0):
+        super(CastPattern, self).__init__(verbose, priority)
+
     def match(
         self,
         g: "GraphBuilderPatternOptimization",  # noqa: F821
