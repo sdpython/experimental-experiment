@@ -1015,6 +1015,7 @@ class TestOperatorsOnnxrt(ExtTestCase):
             impl="ref",
         )
 
+    @requires_torch("2.4")
     @hide_stdout()
     def test_slice_dynamic_forward(self):
         x = torch.rand(3, 4, requires_grad=True)
@@ -1230,6 +1231,7 @@ class TestOperatorsOnnxrt(ExtTestCase):
             onnx_export=inspect.currentframe().f_code.co_name,
         )
 
+    @requires_torch("2.4")
     @hide_stdout()
     def test_batchnorm_noaffine(self):
         x = torch.randn(128, 128, 1, 1, requires_grad=True)
