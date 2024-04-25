@@ -100,7 +100,12 @@ class TestOperatorsOnnxrt(ExtTestCase):
 
         if test_backward:
             # forward/backward
-            local_aot_ort, local_ort = make_aot_ort(dynamic=False)
+            try:
+                local_aot_ort, local_ort = make_aot_ort(dynamic=False)
+            except AssertionError as e:
+                if "This requires torch>=2.3" in str(e):
+                    raise unittest.SkipTest(str(e))
+                raise
 
             compiled_model = torch.compile(
                 copy.deepcopy(model),

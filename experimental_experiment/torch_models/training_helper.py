@@ -89,7 +89,7 @@ def make_aot_ort(
             ), f"Unable to find library {get_ort_ext_libs_cpu()[0]!r}."
             ort_session_options.register_custom_ops_library(get_ort_ext_libs_cpu()[0])
 
-    assert rewrite, "It is no longer possible do disable rewriting."
+    assert rewrite, "It is no longer possible to disable rewriting."
     import packaging.version as pv
     from torch import __version__ as torch_version
 
