@@ -264,7 +264,7 @@ class TestCustomOpsOnnxScript(ExtTestCase):
 
         local_aot_ort, _ = make_aot_ort(
             dynamic=False,  # True,
-            rewrite=True,  # True,
+            rewrite=True,
             aten_conversion_changes=aten_conversion_changes,
             verbose=1,
         )

@@ -20,6 +20,7 @@ max-complexity = 10
 "_doc/examples/plot_*.py" = ["E402"]
 "_doc/examples/plot_first_example.py" = ["F811"]
 "experimental_experiment/checks.py" = ["F401"]
+"experimental_experiment/torch_bench/check_model.py" = ["E402"]
 "experimental_experiment/torch_bench/dort_bench.py" = ["E402"]
 "experimental_experiment/torch_bench/dort_bench_profile.py" = ["E402"]
 "experimental_experiment/torch_bench/dort_profile.py" = ["E402"]

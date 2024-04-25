@@ -109,6 +109,12 @@ class MatMulReshape2Of3Pattern(PatternOptimization):
                 # All shapes are different. It is not worth it.
                 return self.none(node, inspect.currentframe().f_lineno)
 
+            if not (len(next_shape) == len(the_shape_left) == len(the_shape_right)):
+                return self.none(node, inspect.currentframe().f_lineno)
+        else:
+            if not (len(the_shape_left) == len(the_shape_right)):
+                return self.none(node, inspect.currentframe().f_lineno)
+
         # The pattern is not handling the reshape after the matmul,
         # ReshapeReshapePattern will do it.
 

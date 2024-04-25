@@ -1541,8 +1541,15 @@ class TestGraphPatternOptimization(ExtTestCase):
             optimization_options=OptimizationOptions(patterns=["MatMulReshape2Of3"]),
         )
         opt_onx = gr.to_onnx(optimize=True)
-        self.assertEqual(["Reshape", "MatMul"], [n.op_type for n in opt_onx.graph.node])
-        self.assertEqual(1, len(opt_onx.graph.initializer))
+
+        # self.assertEqual(["Reshape", "MatMul"], [n.op_type for n in opt_onx.graph.node])
+        # self.assertEqual(1, len(opt_onx.graph.initializer))
+
+        # It is not rewritten anymore.
+        self.assertEqual(
+            ["Reshape", "MatMul", "Reshape"], [n.op_type for n in opt_onx.graph.node]
+        )
+        self.assertEqual(2, len(opt_onx.graph.initializer))
 
         opt_ref = ExtendedReferenceEvaluator(opt_onx)
         got = opt_ref.run(None, feeds)[0]
@@ -1581,8 +1588,15 @@ class TestGraphPatternOptimization(ExtTestCase):
             optimization_options=OptimizationOptions(patterns=["MatMulReshape2Of3"]),
         )
         opt_onx = gr.to_onnx(optimize=True)
-        self.assertEqual(["Reshape", "MatMul"], [n.op_type for n in opt_onx.graph.node])
-        self.assertEqual(1, len(opt_onx.graph.initializer))
+
+        # self.assertEqual(["Reshape", "MatMul"], [n.op_type for n in opt_onx.graph.node])
+        # self.assertEqual(1, len(opt_onx.graph.initializer))
+
+        # It is not rewritten anymore.
+        self.assertEqual(
+            ["Reshape", "MatMul", "Reshape"], [n.op_type for n in opt_onx.graph.node]
+        )
+        self.assertEqual(2, len(opt_onx.graph.initializer))
 
         opt_ref = ExtendedReferenceEvaluator(opt_onx)
         got = opt_ref.run(None, feeds)[0]
@@ -2001,7 +2015,7 @@ class TestGraphPatternOptimization(ExtTestCase):
             infer_shapes=True,
             optimization_options=OptimizationOptions(
                 patterns=["SlicesSplit"],
-                verbose=0,
+                verbose=10,
             ),
         )
         gr.set_shape("transpose", (2, 2, 1024, 512))

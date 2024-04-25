@@ -122,6 +122,34 @@ def ignore_warnings(warns: List[Warning]) -> Callable:
     return wrapper
 
 
+def hide_stdout(f: Optional[Callable] = None) -> Callable:
+    """
+    Catches warnings.
+
+    :param f: the function is called with the stdout as an argument
+    """
+
+    def wrapper(fct):
+
+        def call_f(self):
+            st = StringIO()
+            with redirect_stdout(st):
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore", (UserWarning,))
+                    try:
+                        return fct(self)
+                    except AssertionError as e:
+                        if "torch is not recent enough, file" in str(e):
+                            raise unittest.SkipTest(str(e))
+                        raise
+            if f is not None:
+                f(st.getvalue())
+
+        return call_f
+
+    return wrapper
+
+
 def measure_time(
     stmt: Union[str, Callable],
     context: Optional[Dict[str, Any]] = None,
@@ -481,6 +509,9 @@ def requires_onnxscript(version: str, msg: str = "") -> Callable:
             msg = f"onnxscript.optimizer not found: {msg}"
             return unittest.skip(msg)
 
+    if not hasattr(onnxscript, "__version__"):
+        # development version
+        return lambda x: x
     if pv.Version(".".join(onnxscript.__version__.split(".")[:2])) < pv.Version(
         version
     ):

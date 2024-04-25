@@ -1411,6 +1411,43 @@ def aten_index_select(
     return res
 
 
+def aten_layer_norm(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    normalized_shape: Sequence[int],
+    weight: Optional[T] = None,
+    bias: Optional[T] = None,
+    eps: float = 1e-05,
+    cudnn_enable: bool = False,  # not used
+    name="layer_norm",
+) -> T:
+    "layer_norm"
+    axes = np.array([-i for i in range(len(normalized_shape), 0, -1)], dtype=np.int64)
+    itype = g.get_type(x)
+    dtype = tensor_dtype_to_np_dtype(itype)
+
+    two_cst = np.array([2.0], dtype=dtype)
+    eps_cst = np.array([eps], dtype=dtype)
+
+    mean = g.op.ReduceMeanAnyOpset(x, axes, name=name, keepdims=1)
+    numerator = g.op.Sub(x, mean, name=name)
+    variance = g.op.ReduceMeanAnyOpset(
+        g.op.Pow(numerator, two_cst, name=name), axes, keepdims=1, name=name
+    )
+    denominator = g.op.Sqrt(g.op.Add(variance, eps_cst, name=name), name=name)
+    normalized = g.op.Div(numerator, denominator, name=name)
+
+    if weight is not None:
+        normalized = g.op.Mul(normalized, weight, name=name)
+    if bias is not None:
+        normalized = g.op.Add(normalized, bias, name=name)
+
+    # rdenominator = g.op.Reciprocal(denominator)
+    return normalized  # , mean, rdenominator
+
+
 def aten_leaky_relu(
     g: GraphBuilder,
     sts: Optional[Dict[str, Any]],
@@ -2348,6 +2385,123 @@ def aten_rsub_Scalar(
     return aten_sub(g, sts, outputs, y, x, name="rsub_Scalar")
 
 
+def _attention_scale(g: GraphBuilder, query: T, name: str = "_attention_scale") -> T:
+    if g.has_shape(query):
+        shape = g.get_shape(query)
+        last = shape[-1]
+        if isinstance(last, int):
+            scale = 1.0 / (float(last) ** 0.5)
+            return np.array([scale], dtype=tensor_dtype_to_np_dtype(g.get_type(query)))
+
+    shape = g.op.Shape(query, name=name)
+    last = g.op.Gather(shape, np.array([-1], dtype=np.int64), name=name)
+    itype = g.get_type(query)
+    clast = g.op.Cast(itype, to=itype, name=name)
+    return g.op.Reciprocal(g.op.Sqrt(clast, name=name), name=name)
+
+
+def _causal_attention_mask(
+    g: GraphBuilder, query: T, key: T, name: str = "_causal_attention_mask"
+) -> T:
+    itype = g.get_type(query)
+    dtype = tensor_dtype_to_np_dtype(itype)
+    attn_mask = None
+    if g.has_shape(query) and g.has_shape(key):
+        shape_query, shape_key = g.get_shape(query), g.get_shape(key)
+        if isinstance(shape_query[-2]) and isinstance(shape_key[-2], int):
+            shape = (shape_query, shape_key)
+            attn_mask = g.op.ConstantOfShape(
+                np.array(shape, dtype=np.int64),
+                value=from_array(np.array([1], dtype=dtype)),
+                name=name,
+            )
+
+    if attn_mask is None:
+        # dynamic path
+        shape_query = g.op.Shape(query, name=name)
+        shape_key = g.op.Shape(key, name=name)
+        dquery = g.op.Gather(shape_query, np.array([-2], dtype=np.int64), name=name)
+        dkey = g.op.Gather(shape_key, np.array([-2], dtype=np.int64), name=name)
+        size = g.op.Concat(dquery, dkey, axis=0)
+        attn_mask = g.op.ConstantOfShape(
+            size, value=from_array([1], dtype=dtype), name=name
+        )
+
+    tri_attn_mask = g.op.Trilu(attn_mask, upper=0, name=name)
+
+    new_attn_mask = g.op.Where(
+        g.op.Equal(tri_attn_mask, np.array([0], dtype=dtype), name=name),
+        from_array(
+            np.array([-float("inf")], dtype=dtype),
+            np.array([0], dtype=dtype),
+            name=name,
+        ),
+    )
+    return new_attn_mask
+
+
+def aten_scaled_dot_product_attention(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    query: T,
+    key: T,
+    value: T,
+    attn_mask: Optional[T] = None,
+    dropout_p: float = 0.0,
+    is_causal: bool = False,
+    scale: Optional[T] = None,
+    name: str = "aten_scaled_dot_product_attention",
+):
+    "scaled_dot_product_attention"
+    assert (not is_causal) or (
+        (is_causal and attn_mask is None)
+    ), f"is_causal and attn_mask cannot be set at the same time{g.get_debug_msg()}"
+
+    if scale is None:
+        scale = _attention_scale(g, query)
+
+    if is_causal:
+        attn_mask = _causal_attention_mask(g, query, key)
+
+    key_transposed_axes = list(range(g.get_rank(key)))
+    key_transposed_axes[-1], key_transposed_axes[-2] = (
+        key_transposed_axes[-2],
+        key_transposed_axes[-1],
+    )
+    key_transposed = g.op.Transpose(key, perm=key_transposed_axes, name=name)
+
+    sc = g.op.Sqrt(scale, name=name)
+    query_scaled = g.op.Mul(query, sc, name=name)
+    key_transposed_scaled = g.op.Mul(key_transposed, sc)
+    mul_qk = g.op.MatMul(query_scaled, key_transposed_scaled, name=name)
+
+    itype = g.get_type(query)
+    dtype = tensor_dtype_to_np_dtype(itype)
+
+    if attn_mask is None:
+        mul_qk_add = mul_qk
+    elif g.get_type(attn_mask) == TensorProto.BOOL:
+        attn_mask = g.op.Where(
+            attn_mask,
+            np.array([0.0], dtype=dtype),
+            np.array([-float("inf")], dtype=dtype),
+            name=name,
+        )
+        mul_qk_add = g.op.Add(mul_qk, attn_mask, name=name)
+    else:
+        mul_qk_add = g.op.Add(mul_qk, attn_mask, name=name)
+
+    attn_weight = g.op.Softmax(mul_qk_add, axis=-1)
+
+    if dropout_p != 0:
+        attn_weight = g.op.Dropout(
+            attn_weight, np.array([dropout_p], dtype=dtype), name=name
+        )[0]
+
+    return g.op.MatMul(attn_weight, value, name=name, outputs=outputs)
+
+
 def aten_select_int(
     g: GraphBuilder,
     sts: Optional[Dict[str, Any]],
@@ -2834,18 +2988,31 @@ def aten_softmax(
     x: T,
     dim: int = -1,
     dtype: Optional["torch.dtype"] = None,  # noqa: F821
+    name: str = "softmax",
 ) -> T:
     "softmax"
     if dtype is not None:
         itype = torch_dtype_to_onnx_dtype(dtype)
-        xc = g.op.Cast(x, to=itype, name="softmax")
+        xc = g.op.Cast(x, to=itype, name=name)
     else:
         itype = None
         xc = x
-    res = g.op.Softmax(xc, axis=dim, outputs=outputs)
+    res = g.op.Softmax(xc, axis=dim, outputs=outputs, name=name)
     if not sts:
         set_type_shape_unary_op(g, res, xc, itype=itype)
     return res
+
+
+def aten_softmax_int(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    dim: int = -1,
+    dtype: Optional["torch.dtype"] = None,  # noqa: F821
+) -> T:
+    "softmax"
+    return aten_softmax(g, sts, outputs, x, dim, dtype, name="softmax_int")
 
 
 def aten__softmax(
@@ -3139,27 +3306,6 @@ def aten_t(
     return res
 
 
-def aten_threshold_backward(
-    g: GraphBuilder,
-    sts: Optional[Dict[str, Any]],
-    outputs: List[str],
-    grad_output: T,
-    x: T,
-    threshold: float,
-    name: str = "threshold_backward",
-) -> T:
-    "lessorequal"
-    dtype = tensor_dtype_to_np_dtype(g.get_type(grad_output))
-    le = g.op.LessOrEqual(x, np.array([threshold], dtype=dtype), name=name)
-    res = g.op.Where(
-        le, np.array([0], dtype=dtype), grad_output, outputs=outputs, name=name
-    )
-    set_type_shape_unary_op(g, le, x, TensorProto.BOOL)
-    if not sts:
-        set_type_shape_unary_op(g, res, x)
-    return res
-
-
 def aten_tan(
     g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T
 ) -> T:
@@ -3287,6 +3433,27 @@ def aten_tensor(
     )
 
 
+def aten_threshold_backward(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    grad_output: T,
+    x: T,
+    threshold: float,
+    name: str = "threshold_backward",
+) -> T:
+    "lessorequal"
+    dtype = tensor_dtype_to_np_dtype(g.get_type(grad_output))
+    le = g.op.LessOrEqual(x, np.array([threshold], dtype=dtype), name=name)
+    res = g.op.Where(
+        le, np.array([0], dtype=dtype), grad_output, outputs=outputs, name=name
+    )
+    set_type_shape_unary_op(g, le, x, TensorProto.BOOL)
+    if not sts:
+        set_type_shape_unary_op(g, res, x)
+    return res
+
+
 def aten_transpose(
     g: GraphBuilder,
     sts: Optional[Dict[str, Any]],
@@ -3320,6 +3487,26 @@ def aten_transpose_int(
 ) -> T:
     "transpose"
     return aten_transpose(g, sts, outputs, input_name, dim0, dim1)
+
+
+def aten_tril(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    diagonal: int = 0,
+) -> T:
+    """tril"""
+
+    if diagonal == 0:
+        res = g.op.Trilu(x, upper=0, outputs=outputs)
+    else:
+        res = g.op.Trilu(
+            x, np.array(diagonal, dtype=np.int64), upper=0, outputs=outputs
+        )
+    if not sts:
+        set_type_shape_unary_op(g, res, x)
+    return res
 
 
 def aten_truediv(

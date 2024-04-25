@@ -95,9 +95,9 @@ class TestDocumentationExamples(ExtTestCase):
                 import torch
 
                 if pv.Version(".".join(torch.__version__.split(".")[:2])) < pv.Version(
-                    "2.3"
+                    "2.4"
                 ):
-                    reason = "requires torch 2.3"
+                    reason = "requires torch 2.4"
 
             if name in {"plot_llama_bench_102.py"}:
                 if sys.platform in {"darwin"}:

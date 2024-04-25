@@ -198,12 +198,14 @@ class OrtEval:
                 results[name] = value
 
         output_names = [o.name for o in self.proto.graph.output]
-        for name in output_names:
+        for i, name in enumerate(output_names):
+            if name == "":
+                continue
             if name not in results:
                 raise RuntimeError(
                     f"Unable to find output name {name!r} in {sorted(results)}, proto is\n{self.proto_}"
                 )
-        return [results[name] for name in output_names]
+        return [results[name] for name in output_names if name != ""]
 
     def _get_sess_incremental(
         self, node: NodeProto
@@ -214,11 +216,17 @@ class OrtEval:
         builder = GraphBuilder(
             self.proto, optimization_options=OptimizationOptions(patterns=None)
         )
-        builder.select_outputs(node.output)
+        builder.select_outputs([n for n in node.output if n != ""])
         onx = builder.to_onnx()
-        sess = onnxruntime.InferenceSession(
-            onx.SerializeToString(), self.session_options, self.providers
-        )
+        try:
+            sess = onnxruntime.InferenceSession(
+                onx.SerializeToString(), self.session_options, self.providers
+            )
+        except onnxruntime.capi.onnxruntime_pybind11_state.Fail as e:
+            raise AssertionError(
+                f"Cannot create a session for node\n-----\n"
+                f"{node}\n----------\n{onx}"
+            ) from e
         return onx, sess
 
     def _get_sess(
@@ -332,8 +340,20 @@ class OrtEval:
         if not hasattr(self, "rt_inits_torch_"):
             import torch
 
+            def torch_Tensor(v):
+                if len(v.shape) == 0:
+                    vv = torch_Tensor(np.expand_dims(v, 0))
+                    return vv.squeeze()
+                try:
+                    return torch.Tensor(v)
+                except RuntimeError as e:
+                    raise RuntimeError(
+                        f"Unable to convert {[v]} (type={type(v)}, "
+                        f"dtype={v.dtype}, shape={v.shape}) into a torch Tensor."
+                    ) from e
+
             self.rt_inits_torch_ = {
-                k: torch.Tensor(v).to(self._get_torch_dtype(v.dtype))
+                k: torch_Tensor(v).to(self._get_torch_dtype(v.dtype))
                 for k, v in self.rt_inits_.items()
             }
             if "CUDAExecutionProvider" in self.providers:
@@ -479,17 +499,24 @@ class OrtEval:
         else:
             self._cache[key] = onx, sess = self._get_sess(node, inputs)
 
+        onames = [n for n in node.output if n != ""]
         if self.incremental:
             # Inputs are the inputs of the model not the node.
             former_inputs = inputs
             inputs = []
             input_names = []
             for i in self.proto.graph.input:
+                if i.name == "":
+                    continue
                 inputs.append(results[i.name])
                 input_names.append(i.name)
 
             ortvalues, output_devices = self._get_ortvalues_from_torch_tensors(
-                inputs, len(node.output), log_set=former_inputs
+                inputs, len(onames), log_set=former_inputs
+            )
+            assert len(onames) == len(output_devices), (
+                f"Length mismatch {onames} but {len(output_devices)} devices, "
+                f"node.output={node.output}."
             )
 
             ort_outputs = ORTC.OrtValueVector()
@@ -497,7 +524,7 @@ class OrtEval:
                 self.run_options,
                 input_names,
                 ortvalues,
-                node.output,
+                onames,
                 ort_outputs,
                 output_devices,
             )
@@ -505,7 +532,11 @@ class OrtEval:
             return pth_outputs
 
         ortvalues, output_devices = self._get_ortvalues_from_torch_tensors(
-            inputs, len(node.output)
+            inputs, len(onames)
+        )
+        assert len(onames) == len(output_devices), (
+            f"Length mismatch {onames} but {len(output_devices)} devices, "
+            f"node.output={node.output}."
         )
 
         ort_outputs = ORTC.OrtValueVector()
@@ -513,7 +544,7 @@ class OrtEval:
             self.run_options,
             node.input,
             ortvalues,
-            node.output,
+            onames,
             ort_outputs,
             output_devices,
         )

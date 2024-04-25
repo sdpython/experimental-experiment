@@ -82,6 +82,7 @@ def onnx_debug_backend(
     dispatcher: Optional["Dispatcher"] = None,  # noqa: F821
     rename_inputs: bool = True,
     optimize: bool = True,
+    processor: str = "CPU",
 ) -> Callable:
     """
     Custom backend to export torch models into onnx
@@ -114,6 +115,7 @@ def onnx_debug_backend(
     :param dispatcher: see :class:`experimental_experiment.torch_interpreter.Dispatcher`
     :param rename_inputs: rename inputs into ``input_{i}``
     :param optimize: enable or disable the optimization
+    :param processor: specifies the processor it is optimized for
     :return: Callable
 
     See :ref:`l-plot-onnxrt-diff` for an example.
@@ -134,6 +136,7 @@ def onnx_debug_backend(
         constant_folding=False,
         patterns=patterns,
         verbose=verbose_onnx,
+        processor=processor,
     )
 
     onx, builder = to_onnx(

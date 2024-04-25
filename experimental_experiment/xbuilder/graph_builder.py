@@ -567,7 +567,7 @@ class GraphBuilder:
         """Adds a name to the list of known names."""
         assert (
             name != ""
-        ), f"Empty name {name!r} can be registered{self.get_debug_msg()}"
+        ), f"Empty name {name!r} cannot be registered{self.get_debug_msg()}"
         assert (
             name not in self._raise_list
         ), f"Name {name!r} is one of the name declared in the stop list{self.get_debug_msg()}"
@@ -3590,6 +3590,8 @@ class GraphBuilder:
                         self.set_type(node.output[0], value.data_type)
             else:
                 for o in node.output:
+                    if o == "":
+                        continue
                     if not self.has_name(o):
                         self.set_name(o)
             new_nodes.append(node)
