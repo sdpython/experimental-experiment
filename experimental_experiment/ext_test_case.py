@@ -509,6 +509,9 @@ def requires_onnxscript(version: str, msg: str = "") -> Callable:
             msg = f"onnxscript.optimizer not found: {msg}"
             return unittest.skip(msg)
 
+    if not hasattr(onnxscript, "__version__"):
+        # development version
+        return lambda x: x
     if pv.Version(".".join(onnxscript.__version__.split(".")[:2])) < pv.Version(
         version
     ):
