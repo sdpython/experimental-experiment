@@ -80,7 +80,7 @@ class TestEdPhi(ExtTestCase):
 
     @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
     @ignore_warnings((DeprecationWarning, UserWarning))
-    @requires_torch("2.3", "AssertionError: original output #6 is None")
+    @requires_torch("2.4")
     def test_phi_cort_static_mixed(self):
         import torch
 
