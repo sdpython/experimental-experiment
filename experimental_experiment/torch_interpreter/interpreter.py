@@ -168,10 +168,13 @@ class DynamoInterpreter:
                 is_dimension=False,
             )
 
-        if isinstance(val, self.torch.Tensor):
+        if isinstance(
+            val, (self.torch.Tensor, self.torch._subclasses.fake_tensor.FakeTensor)
+        ):
             stack_trace = node.meta.get("stack_trace", None)
-            if stack_trace is None:
+            if stack_trace is None and "from_node" not in node.meta:
                 # torch 2.1.0 and 2.2.0 behave differently.
+                # torch 2.4.0, stack_trace is None but from_node is in node.meta
                 return self.builder.make_tensor_input(
                     node.name, elem_type=val.dtype, shape=val.shape, is_dimension=False
                 )

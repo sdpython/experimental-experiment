@@ -311,7 +311,9 @@ def to_onnx(
     if verbose:
         t = time.perf_counter()
         print(
-            f"[to_onnx] to_onnx done in {t - begin} s and {len(onx.graph.node)} nodes"
+            f"[to_onnx] to_onnx done in {t - begin} s and {len(onx.graph.node)} nodes, "
+            f"{len(onx.graph.initializer)} initializers, {len(onx.graph.input)} inputs, "
+            f"{len(onx.graph.output)} outputs"
         )
         if verbose >= 10:
             print(builder.get_debug_msg())
