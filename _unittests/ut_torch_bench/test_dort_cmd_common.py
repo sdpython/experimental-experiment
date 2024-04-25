@@ -4,6 +4,7 @@ from experimental_experiment.ext_test_case import (
     ExtTestCase,
     skipif_ci_windows,
     ignore_warnings,
+    requires_torch,
 )
 from experimental_experiment.torch_bench._dort_cmd_common import (
     create_configuration_for_benchmark,
@@ -23,6 +24,7 @@ class TestDortCmdCommond(ExtTestCase):
 
     @skipif_ci_windows("dynamo not supported")
     @ignore_warnings((DeprecationWarning, UserWarning))
+    @requires_torch("2.4")
     def test_get_model(self):
         cf = create_configuration_for_benchmark("llama", "small")
         model, example_args_collection = get_llama_model(**cf)

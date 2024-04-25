@@ -10,7 +10,7 @@ from experimental_experiment.ext_test_case import (
 
 class TestDynamoCompileDiff(ExtTestCase):
     @skipif_ci_windows("dynamo does not work on windows")
-    @requires_torch("2.2.1", "onnxrt not fully implemented")
+    @requires_torch("2.4", "onnxrt not fully implemented")
     @ignore_warnings((UserWarning, RuntimeWarning, DeprecationWarning))
     def test_standalone(self):
         import onnxruntime  # noqa: F401

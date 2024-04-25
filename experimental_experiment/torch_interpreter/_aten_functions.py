@@ -2988,18 +2988,31 @@ def aten_softmax(
     x: T,
     dim: int = -1,
     dtype: Optional["torch.dtype"] = None,  # noqa: F821
+    name: str = "softmax",
 ) -> T:
     "softmax"
     if dtype is not None:
         itype = torch_dtype_to_onnx_dtype(dtype)
-        xc = g.op.Cast(x, to=itype, name="softmax")
+        xc = g.op.Cast(x, to=itype, name=name)
     else:
         itype = None
         xc = x
-    res = g.op.Softmax(xc, axis=dim, outputs=outputs)
+    res = g.op.Softmax(xc, axis=dim, outputs=outputs, name=name)
     if not sts:
         set_type_shape_unary_op(g, res, xc, itype=itype)
     return res
+
+
+def aten_softmax_int(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    dim: int = -1,
+    dtype: Optional["torch.dtype"] = None,  # noqa: F821
+) -> T:
+    "softmax"
+    return aten_softmax(g, sts, outputs, x, dim, dtype, name="softmax_int")
 
 
 def aten__softmax(
@@ -3293,27 +3306,6 @@ def aten_t(
     return res
 
 
-def aten_threshold_backward(
-    g: GraphBuilder,
-    sts: Optional[Dict[str, Any]],
-    outputs: List[str],
-    grad_output: T,
-    x: T,
-    threshold: float,
-    name: str = "threshold_backward",
-) -> T:
-    "lessorequal"
-    dtype = tensor_dtype_to_np_dtype(g.get_type(grad_output))
-    le = g.op.LessOrEqual(x, np.array([threshold], dtype=dtype), name=name)
-    res = g.op.Where(
-        le, np.array([0], dtype=dtype), grad_output, outputs=outputs, name=name
-    )
-    set_type_shape_unary_op(g, le, x, TensorProto.BOOL)
-    if not sts:
-        set_type_shape_unary_op(g, res, x)
-    return res
-
-
 def aten_tan(
     g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T
 ) -> T:
@@ -3441,6 +3433,27 @@ def aten_tensor(
     )
 
 
+def aten_threshold_backward(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    grad_output: T,
+    x: T,
+    threshold: float,
+    name: str = "threshold_backward",
+) -> T:
+    "lessorequal"
+    dtype = tensor_dtype_to_np_dtype(g.get_type(grad_output))
+    le = g.op.LessOrEqual(x, np.array([threshold], dtype=dtype), name=name)
+    res = g.op.Where(
+        le, np.array([0], dtype=dtype), grad_output, outputs=outputs, name=name
+    )
+    set_type_shape_unary_op(g, le, x, TensorProto.BOOL)
+    if not sts:
+        set_type_shape_unary_op(g, res, x)
+    return res
+
+
 def aten_transpose(
     g: GraphBuilder,
     sts: Optional[Dict[str, Any]],
@@ -3474,6 +3487,26 @@ def aten_transpose_int(
 ) -> T:
     "transpose"
     return aten_transpose(g, sts, outputs, input_name, dim0, dim1)
+
+
+def aten_tril(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    diagonal: int = 0,
+) -> T:
+    """tril"""
+
+    if diagonal == 0:
+        res = g.op.Trilu(x, upper=0, outputs=outputs)
+    else:
+        res = g.op.Trilu(
+            x, np.array(diagonal, dtype=np.int64), upper=0, outputs=outputs
+        )
+    if not sts:
+        set_type_shape_unary_op(g, res, x)
+    return res
 
 
 def aten_truediv(
