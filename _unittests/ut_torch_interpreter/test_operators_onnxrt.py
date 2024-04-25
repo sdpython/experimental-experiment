@@ -465,6 +465,7 @@ class TestOperatorsOnnxrt(ExtTestCase):
             atol=1e-4,
         )
 
+    @requires_torch("2.4")
     @hide_stdout()
     def test_batchnorm(self):
         x = torch.ones(2, 2, 2, 2, requires_grad=True)
@@ -574,6 +575,7 @@ class TestOperatorsOnnxrt(ExtTestCase):
             onnx_export=inspect.currentframe().f_code.co_name,
         )
 
+    @requires_torch("2.4")
     @hide_stdout()
     def test_avg_pool2d(self):
         x = torch.randn(20, 16, 50, 32)
@@ -1027,6 +1029,7 @@ class TestOperatorsOnnxrt(ExtTestCase):
     @unittest.skipIf(
         True, reason="data_ptr was false. Pointer to data memory is not valid"
     )
+    @requires_torch("2.4")
     @hide_stdout()
     def test_slice_dynamic_backward(self):
         x = torch.rand(3, 4, requires_grad=True)
@@ -1317,6 +1320,7 @@ class TestOperatorsOnnxrt(ExtTestCase):
         )
 
     @hide_stdout()
+    @requires_torch("2.4")
     def test_zeros_like(self):
         x = torch.randn(5, 8, requires_grad=True)
         self.assertONNX(
@@ -1326,6 +1330,7 @@ class TestOperatorsOnnxrt(ExtTestCase):
             test_backward=False,
         )
 
+    @requires_torch("2.4")
     @hide_stdout()
     def test_ones_like(self):
         x = torch.randn(6, 10, requires_grad=True)
@@ -1920,6 +1925,7 @@ class TestOperatorsOnnxrt(ExtTestCase):
             impl="ref",
         )
 
+    @requires_torch("2.4")
     @hide_stdout()
     def test_shape_value_map(self):
         class RSoftMax(torch.nn.Module):

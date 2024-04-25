@@ -504,9 +504,10 @@ def prims_transpose(
     outputs: List[str],
     input_name: T,
     perm: List[int],
+    name: str = "prims_transpose",
 ) -> T:
     "transpose"
-    res = g.make_node("Transpose", [input_name], outputs, perm=list(perm))
+    res = g.make_node("Transpose", [input_name], outputs, perm=list(perm), name=name)
     if not sts:
         g.set_type(outputs[0], g.get_type(input_name))
         if g.has_shape(input_name):
