@@ -122,6 +122,34 @@ def ignore_warnings(warns: List[Warning]) -> Callable:
     return wrapper
 
 
+def hide_stdout(f: Optional[Callable] = None) -> Callable:
+    """
+    Catches warnings.
+
+    :param f: the function is called with the stdout as an argument
+    """
+
+    def wrapper(fct):
+
+        def call_f(self):
+            st = StringIO()
+            with redirect_stdout(st):
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore", (UserWarning,))
+                    try:
+                        return fct(self)
+                    except AssertionError as e:
+                        if "torch is not recent enough, file" in str(e):
+                            raise unittest.SkipTest(str(e))
+                        raise
+            if f is not None:
+                f(st.getvalue())
+
+        return call_f
+
+    return wrapper
+
+
 def measure_time(
     stmt: Union[str, Callable],
     context: Optional[Dict[str, Any]] = None,
