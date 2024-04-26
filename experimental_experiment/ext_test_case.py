@@ -478,7 +478,7 @@ def requires_cuda(msg: str = ""):
 
 def requires_torch(version: str, msg: str = "") -> Callable:
     """
-    Skips a unit test if torch is not recent enough.
+    Skips a unit test if :epkg:`pytorch` is not recent enough.
     """
     import packaging.version as pv
     import torch
@@ -489,9 +489,24 @@ def requires_torch(version: str, msg: str = "") -> Callable:
     return lambda x: x
 
 
+def requires_transformers(version: str, msg: str = "") -> Callable:
+    """
+    Skips a unit test if :epkg:`transformers` is not recent enough.
+    """
+    import packaging.version as pv
+    import transformers
+
+    if pv.Version(".".join(transformers.__version__.split(".")[:2])) < pv.Version(
+        version
+    ):
+        msg = f"torch version {transformers.__version__} < {version}: {msg}"
+        return unittest.skip(msg)
+    return lambda x: x
+
+
 def requires_onnxscript(version: str, msg: str = "") -> Callable:
     """
-    Skips a unit test if onnxscript is not recent enough.
+    Skips a unit test if :epkg:`onnxscript` is not recent enough.
     """
     import packaging.version as pv
     import onnxscript
@@ -522,7 +537,7 @@ def requires_onnxscript(version: str, msg: str = "") -> Callable:
 
 def requires_onnxruntime(version: str, msg: str = "") -> Callable:
     """
-    Skips a unit test if onnxruntime is not recent enough.
+    Skips a unit test if :epkg:`onnxruntime` is not recent enough.
     """
     import packaging.version as pv
     import onnxruntime
@@ -537,7 +552,7 @@ def requires_onnxruntime(version: str, msg: str = "") -> Callable:
 
 def requires_onnxruntime_training(msg: str = "") -> Callable:
     """
-    Skips a unit test if onnxruntime is not onnxruntime_training
+    Skips a unit test if :epkg:`onnxruntime` is not onnxruntime_training.
     """
     try:
         from onnxruntime import training
@@ -552,7 +567,7 @@ def requires_onnxruntime_training(msg: str = "") -> Callable:
 
 def requires_onnx(version: str, msg: str = "") -> Callable:
     """
-    Skips a unit test if onnx is not recent enough.
+    Skips a unit test if :epkg:`onnx` is not recent enough.
     """
     import packaging.version as pv
     import onnx
