@@ -284,6 +284,14 @@ class ForceDispatcher(Dispatcher):
                 p = kw[ni]
                 kwargs[p[0]] = n if p[2] is None else p[2](n)
 
+            # for some arguments given as named arguments
+            new_kwargs = {}
+            for k, v in kwargs.items():
+                if isinstance(v, g.torch.fx.node.Node):
+                    new_args.append(v.name)
+                    continue
+                new_kwargs[k] = v
+
             # Let's get rid of the empty name at the end of the inputs.
             i = len(new_args) - 1
             while i >= 0 and new_args[i] == "":
@@ -297,7 +305,7 @@ class ForceDispatcher(Dispatcher):
                 outputs=outputs,
                 domain=_domain,
                 name=g.unique_node_name(_name),
-                **kwargs,
+                **new_kwargs,
             )
             if len(outputs) == 1:
                 return outputs[0]

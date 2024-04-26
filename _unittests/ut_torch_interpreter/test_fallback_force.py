@@ -7,6 +7,7 @@ from experimental_experiment.ext_test_case import (
     skipif_ci_windows,
     requires_torch,
     has_cuda,
+    ignore_warnings,
 )
 from experimental_experiment.reference import ExtendedReferenceEvaluator
 
@@ -23,6 +24,7 @@ def _f_scaled_dot_product_flash_attention_for_cpu_default(
     query,
     key,
     value,
+    attn_mask=None,
     dropout_p: float = 0.0,
     is_causal: bool = False,
     return_debug_mask: bool = False,
@@ -30,7 +32,7 @@ def _f_scaled_dot_product_flash_attention_for_cpu_default(
     from torch.nn import functional as F
 
     return F.scaled_dot_product_attention(
-        query, key, value, dropout_p=dropout_p, is_causal=bool(is_causal)
+        query, key, value, attn_mask, dropout_p=dropout_p, is_causal=bool(is_causal)
     )
 
 
@@ -42,6 +44,7 @@ class _scaled_dot_product_flash_attention_for_cpu_default(OpRun):
         query,
         key,
         value,
+        attn_mask=None,
         dropout_p=0.0,
         is_causal=False,
         return_debug_mask=False,
@@ -257,7 +260,9 @@ class TestFallbackForce(ExtTestCase):
 
     @skipif_ci_windows("dynamo not supported on Windows")
     @requires_torch("2.3", "AssertionError: original output #4 is None, ")
+    @ignore_warnings(DeprecationWarning)
     def test_fallback_force_llama_sdpa_export(self):
+        import torch
         from experimental_experiment.torch_models.llama_helper import get_llama_model
         from experimental_experiment.torch_interpreter import to_onnx
         from experimental_experiment.torch_interpreter.dispatcher import (
@@ -268,16 +273,17 @@ class TestFallbackForce(ExtTestCase):
             input_dims=[(9, 15)], _attn_implementation="sdpa", with_mask=False
         )
         expected = model(*example_args_collection[0])
-        onx = to_onnx(
-            model,
-            example_args_collection[0],
-            input_names=["input0"],
-            dispatcher=ForceDispatcher(
-                {
-                    "_scaled_dot_product_flash_attention_for_cpu_default": _f_scaled_dot_product_flash_attention_for_cpu_default
-                }
-            ),
-        )
+        with torch.no_grad():
+            onx = to_onnx(
+                model,
+                example_args_collection[0],
+                input_names=["input0"],
+                dispatcher=ForceDispatcher(
+                    {
+                        "_scaled_dot_product_flash_attention_for_cpu_default": _f_scaled_dot_product_flash_attention_for_cpu_default
+                    }
+                ),
+            )
         dot = [n for n in onx.graph.node if "scaled" in n.op_type]
         self.assertEqual(len(dot), 1)
         dot = dot[0]
