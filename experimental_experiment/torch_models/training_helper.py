@@ -126,8 +126,6 @@ def make_aot_ort(
             # next_model = optimize_model_proto(
             #     *args, verbose=verbose, onnx_shape_inference=False, **kwargs
             # )
-            with open("kkkkk.onnx", "wb") as f:
-                f.write(next_model.SerializeToString())
 
             patterns = get_pattern_list(
                 enable_pattern, disable_pattern, verbose=verbose
