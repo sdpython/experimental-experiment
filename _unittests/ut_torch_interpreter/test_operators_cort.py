@@ -108,7 +108,7 @@ class FuncModuleModule(Module):
         return res
 
 
-class TestOperators(ExtTestCase):
+class TestOperatorsCort(ExtTestCase):
     def setUp(self):
         super().setUp()
         torch._dynamo.reset()

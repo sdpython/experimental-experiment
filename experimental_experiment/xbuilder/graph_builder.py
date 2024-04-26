@@ -1553,14 +1553,7 @@ class GraphBuilder:
         if self.current_input < len(self.input_names):
             # The input needs to be renamed, an identity node is added.
             input_name = self.input_names[self.current_input]
-            self.make_node(
-                "Identity", [input_name], [name], check=False, name="make_tensor_input"
-            )
-        else:
-            if is_dimension:
-                # The convention is to have _dim_ in the name to tell
-                # it is a dimension.
-                input_name = f"{name}_dim_"
+            if input_name != name:
                 self.make_node(
                     "Identity",
                     [input_name],
@@ -1568,6 +1561,19 @@ class GraphBuilder:
                     check=False,
                     name="make_tensor_input",
                 )
+        else:
+            if is_dimension:
+                # The convention is to have _dim_ in the name to tell
+                # it is a dimension.
+                input_name = f"{name}_dim_"
+                if input_name != name:
+                    self.make_node(
+                        "Identity",
+                        [input_name],
+                        [name],
+                        check=False,
+                        name="make_tensor_input",
+                    )
             else:
                 self.input_names.append(name)
                 input_name = name
@@ -2373,6 +2379,11 @@ class GraphBuilder:
         rows.append(
             f"_known_value_shape={pprint.pformat(self._known_value_shape)[:10000]}"
         )
+        rows.append(f"_known_shapes={pprint.pformat(self._known_shapes)[:10000]}")
+        reminaing_ranks = {
+            k: v for k, v in self._known_ranks.items() if k not in self._known_shapes
+        }
+        rows.append(f"_known_ranks={pprint.pformat(reminaing_ranks )[:10000]}")
         rows.append("--TORCH-SHAPES--")
         for kk, vv in self._known_torch_value.items():
             rows.append(
@@ -2448,8 +2459,10 @@ class GraphBuilder:
             )
 
         rows.append(
-            f"Completed with {len(self.initializers_dict)} "
-            f"initializers and {len(self.nodes)} nodes."
+            f"[GraphBuilder-{hs}] Message completed, there are "
+            f"{len(self.initializers_dict)} initializers, "
+            f"{len(self.nodes)} nodes, {len(self.inputs)} inputs, "
+            f"{len(self.inputs)} outputs."
         )
         return "\n".join(rows)
 

@@ -77,4 +77,4 @@ Example about custom ops in onnxrt
 
 Look into unit test file
 `test_custom_ops.py
-<https://github.com/sdpython/experimental-experiment/blob/main/_unittests/ut_custom_ops/test_custom_ops_dispatch.py>`_.
+<https://github.com/sdpython/experimental-experiment/blob/main/_unittests/ut_xrun_custom_ops/test_custom_ops_dispatch.py>`_.
