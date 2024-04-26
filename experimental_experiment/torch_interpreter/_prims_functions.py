@@ -541,12 +541,14 @@ def prims_where(
         f"The two last arguments ({x}, {other}) are constant and cannot be used "
         f"to infer types{g.get_debug_msg}"
     )
-    assert isinstance(x, float) and isinstance(
-        other, str
-    ), f"No other case is implemented for where{g.get_debug_msg()}"
-    dtype = tensor_dtype_to_np_dtype(g.get_type(other))
-    ax = np.array([x], dtype=dtype)
-    res = g.op.Where(condition, ax, other, outputs=outputs, name="prims_where")
+    assert not isinstance(x, float) or not isinstance(other, float), (
+        f"The output type cannot be guessed if the last two arguments are both floats, "
+        f"x={x}, other={other}{g.get_debug_msg()}"
+    )
+    dtype = tensor_dtype_to_np_dtype(g.get_type(other if isinstance(other, str) else x))
+    ax = x if isinstance(x, str) else np.array([x], dtype=dtype)
+    aother = other if isinstance(other, str) else np.array([other], dtype=dtype)
+    res = g.op.Where(condition, ax, aother, outputs=outputs, name="prims_where")
     if not sts:
         g.set_type(res, g.get_type(other))
         if g.has_shape(condition) and g.has_shape(other):
