@@ -2379,6 +2379,11 @@ class GraphBuilder:
         rows.append(
             f"_known_value_shape={pprint.pformat(self._known_value_shape)[:10000]}"
         )
+        rows.append(f"_known_shapes={pprint.pformat(self._known_shapes)[:10000]}")
+        reminaing_ranks = {
+            k: v for k, v in self._known_ranks.items() if k not in self._known_shapes
+        }
+        rows.append(f"_known_ranks={pprint.pformat(reminaing_ranks )[:10000]}")
         rows.append("--TORCH-SHAPES--")
         for kk, vv in self._known_torch_value.items():
             rows.append(

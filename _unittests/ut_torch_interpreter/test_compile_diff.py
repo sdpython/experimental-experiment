@@ -1,3 +1,5 @@
+import contextlib
+import io
 import os
 import unittest
 from experimental_experiment.ext_test_case import (
@@ -54,11 +56,12 @@ class TestDynamoCompileDiff(ExtTestCase):
         folder = "temp_dump_models"
         storage = {}
 
-        local_aot_ort, _ = make_aot_ort(dynamic=True, rewrite=True)
-        optimized_mod = torch.compile(model, backend=local_aot_ort, fullgraph=True)
-        with dump_onnx("llama_onnxrt", folder=folder, clean=True):
-            expected_onnxrt = optimized_mod(*inputs[0])
-        assert_all_close(expected, expected_onnxrt)
+        with contextlib.redirect_stdout(io.StringIO()):
+            local_aot_ort, _ = make_aot_ort(dynamic=True, rewrite=True)
+            optimized_mod = torch.compile(model, backend=local_aot_ort, fullgraph=True)
+            with dump_onnx("llama_onnxrt", folder=folder, clean=True):
+                expected_onnxrt = optimized_mod(*inputs[0])
+            assert_all_close(expected, expected_onnxrt)
 
         # debugging backend
         onnx_mod = torch.compile(

@@ -18,7 +18,6 @@ sphinx-gallery
 sphinx-issues
 sphinx-runpython
 torch-ort; sys_platform == 'linux'
-transformers==4.37.2
-# !=4.38.0,!=4.38.1
+transformers!=4.38.0,!=4.38.1
 tqdm
 wheel

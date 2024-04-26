@@ -459,7 +459,7 @@ class DynamoInterpreter:
                         f"Unexpected value for end={i!r}"
                         f"{self.builder.get_debug_msg()}"
                     )
-                    iends.append(np.array([i], dtype=np.int64) for i in ends)
+                    iends.append(np.array([i], dtype=np.int64))
             if len(iends) > 1:
                 conc_ends = self.builder.op.Concat(*iends, axis=0, name=f"{name}D")
             else:
@@ -523,8 +523,10 @@ class DynamoInterpreter:
                     f"{self.builder.get_debug_msg()}"
                 )
                 self.builder.set_shape(node.name, new_shape)
-            else:
-                self.builder.set_rank(node.name, self.builder.get_rank(inputs[0]))
+            elif expand_axes:
+                self.builder.set_rank(
+                    node.name, self.builder.get_rank(inputs[0]) + len(expand_axes)
+                )
         return res
 
     def _getitem_int1(
@@ -677,6 +679,7 @@ class DynamoInterpreter:
                 slices = []
                 expand_axes = []
                 ellipsis = False
+                true_slice = False
                 for i, ind in enumerate(index):
                     if ind is Ellipsis:
                         assert not ellipsis, f"Second (...) found in index={index}"
@@ -691,16 +694,32 @@ class DynamoInterpreter:
                     axes.append(
                         ((i - len(index)) if ellipsis else i) - len(expand_axes)
                     )
+                    if (
+                        not isinstance(ind, slice)
+                        or ind.start is not None
+                        or ind.stop is not None
+                        or ind.step is not None
+                    ):
+                        true_slice = True
                     slices.append(ind)
-                return self._getitem_slice(
-                    node,
-                    node_output.name,
-                    slices,
-                    sts=sts,
-                    axes=axes,
-                    expand_axes=expand_axes,
-                    name="_getitem_slice2",
+                if true_slice:
+                    return self._getitem_slice(
+                        node,
+                        node_output.name,
+                        slices,
+                        sts=sts,
+                        axes=axes,
+                        expand_axes=expand_axes,
+                        name="_getitem_slice2",
+                    )
+                # It is just a node unsqueeze.
+                res = self.builder.op.UnsqueezeAnyOpset(
+                    str(node.args[0]),
+                    np.array(expand_axes, dtype=np.int64),
+                    name="getitem_unsqueeze",
+                    outputs=[node.name],
                 )
+                return res
 
         raise RuntimeError(
             f"getitem: unexpected type {type(index)} for index={index}, "

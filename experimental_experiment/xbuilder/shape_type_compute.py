@@ -655,8 +655,9 @@ def _set_shape_type_op_any_unsqueeze(
         for i in iaxes:
             shape.insert((i + len(shape) + 1) if i < 0 else i, 1)
         self.set_shape(node.output[0], tuple(shape))
-    elif self.has_rank(node.input[0]):
-        self.set_rank(node.output[0], self.get_rank(node.input[0]) + 1)
+    elif self.has_rank(node.input[0]) and self.is_constant(node.input[1]):
+        cst = self.get_constant(node.input[1], computed_value=True)
+        self.set_rank(node.output[0], self.get_rank(node.input[0]) + cst.size)
 
 
 def _set_shape_type_op_any_where(self: "GraphBuilder", node: NodeProto):  # noqa: F821
