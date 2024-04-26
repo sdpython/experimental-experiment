@@ -135,7 +135,7 @@ def hide_stdout(f: Optional[Callable] = None) -> Callable:
             st = StringIO()
             with redirect_stdout(st):
                 with warnings.catch_warnings():
-                    warnings.simplefilter("ignore", (UserWarning,))
+                    warnings.simplefilter("ignore", (UserWarning, DeprecationWarning))
                     try:
                         return fct(self)
                     except AssertionError as e:
