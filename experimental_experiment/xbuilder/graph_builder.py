@@ -2910,12 +2910,42 @@ class GraphBuilder:
             x = self.torch.Tensor(x)
         return [self.torch.permute(x, perm)]
 
+    def _apply_trilu(
+        self, node: NodeProto, feeds: Dict[str, "torch.Tensor"]  # noqa: F821
+    ) -> "torch.Tensor":  # noqa: F821
+        upper = True
+        for att in node.attribute:
+            if att.name == "upper":
+                upper = att.i
+                break
+        x = feeds[node.input[0]]
+        k = feeds[node.input[1]]
+        assert len(x.shape) > 0, (
+            f"x cannot be empty but shape is {x.shape}, execution of Trilu "
+            f"failed{self.get_debug_msg()}"
+        )
+        if isinstance(x, self.torch.Tensor):
+            assert isinstance(k, self.torch.Tensor), (
+                f"Expecting a tensor for {node.input[1]!r} but got "
+                f"{type(k)}{self.get_debug_msg()}"
+            )
+            ak = k.detach().cpu()
+            iak = int(ak) if len(ak.shape) == 0 else int(ak[0])
+            assert iak <= 1, f"Unexpected value for k={k}{self.get_debug_msg()}"
+            return [self.torch.triu(x, k == 0) if upper else self.torch.tril(x, k == 0)]
+
+        assert isinstance(k, np.ndarray), (
+            f"Expecting a tensor for {node.input[1]!r} but got "
+            f"{type(k)}{self.get_debug_msg()}"
+        )
+        iak = int(k) if len(k.shape) == 0 else int(k[0])
+        return [np.triu(x, iak) if upper else np.tril(x, iak)]
+
     def compute_constant(
         self, name: str, exc: bool = True
     ) -> Tuple[np.ndarray, Optional[Dict[str, np.ndarray]]]:
         assert self.is_constant(name), f"Name {name!r} is not a constant."
         if name is self.initializers_dict:
-            print("-----", name)
             return self.initializers_dict[name], None
         v = self.constants_[name]
         assert isinstance(v, NodeProto), f"Unexpected type {type(v)} for name={name!r}"
@@ -2923,9 +2953,15 @@ class GraphBuilder:
         for val in feeds.values():
             if val is None:
                 return None, None
-        if v.op_type == "Transpose":
+        if v.op_type == "Identity":
+            # much faster this way
+            output = [feeds[v.input[0]]]
+        elif v.op_type == "Transpose":
             # bypassing onnx.numpy_helper.from_array, too slow
             output = self._apply_transpose(v, feeds)
+        elif v.op_type == "Trilu":
+            # bypassing onnx.numpy_helper.from_array, too slow
+            output = self._apply_trilu(v, feeds)
         else:
             ref = ExtendedReferenceEvaluator(v)
             output = ref.run(None, feeds)
