@@ -11,6 +11,12 @@ from experimental_experiment.ext_test_case import (
 
 
 class TestDynamoCompileDiff(ExtTestCase):
+
+    def _check_ort(self, name: str):
+        from onnxruntime import InferenceSession
+
+        InferenceSession(name, providers=["CPUExecutionProvider"])
+
     @skipif_ci_windows("dynamo does not work on windows")
     @requires_torch("2.4", "onnxrt not fully implemented")
     @ignore_warnings((UserWarning, RuntimeWarning, DeprecationWarning))
@@ -57,7 +63,7 @@ class TestDynamoCompileDiff(ExtTestCase):
         storage = {}
 
         with contextlib.redirect_stdout(io.StringIO()):
-            local_aot_ort, _ = make_aot_ort(dynamic=True, rewrite=True)
+            local_aot_ort, _ = make_aot_ort(dynamic=True)
             optimized_mod = torch.compile(model, backend=local_aot_ort, fullgraph=True)
             with dump_onnx("llama_onnxrt", folder=folder, clean=True):
                 expected_onnxrt = optimized_mod(*inputs[0])
@@ -86,7 +92,9 @@ class TestDynamoCompileDiff(ExtTestCase):
         onnx_models = list(sorted([m for m in models if m.endswith(".onnx")]))
         assert len(onnx_models) == 2, f"unexpected value {onnx_models}"
         model_onnxrt = os.path.join(folder, onnx_models[1])
+        self._check_ort(model_onnxrt)
         model_debug = os.path.join(folder, onnx_models[0])
+        self._check_ort(model_debug)
         assert inputs_from_onnx_model(model_debug)
 
         reorder_functions_in_proto(model_onnxrt)
@@ -95,7 +103,12 @@ class TestDynamoCompileDiff(ExtTestCase):
         debug = onnx.load(model_debug)
 
         optimized = model_onnxrt.replace(".onnx", ".opt.onnx")
-        ort_optimize(onnxrt, output=optimized)
+        try:
+            ort_optimize(onnxrt, output=optimized)
+        except Exception as e:
+            raise AssertionError(
+                f"Optimization fails on model {model_onnxrt!r}."
+            ) from e
         onnxrt = onnx.load(optimized)
 
         optimized = model_debug.replace(".onnx", ".opt.onnx")

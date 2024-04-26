@@ -643,7 +643,11 @@ def _set_shape_type_op_any_unsqueeze(
                 f"the new shape cannot be infered{self.get_debug_msg()}"
             )
             cst = self.get_constant(node.input[1])
-            if isinstance(cst, NodeProto) and cst.op_type == "Constant":
+            if isinstance(cst, NodeProto) and cst.op_type in (
+                "Constant",
+                "Identity",
+                "ConstantOfShape",
+            ):
                 cst = self.get_constant(node.input[1], computed_value=True)
         assert isinstance(cst, np.ndarray), (
             f"Unexpected type {type(cst)} for {node.input[1]!r}, "
