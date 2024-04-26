@@ -2813,6 +2813,18 @@ class GraphBuilder:
                 if k in {"time_in", "removed", "added", "instances"}:
                     o[k] += v
                     continue
+                if k in {"changed", "scale"}:
+                    if k not in o:
+                        o[k] = 0
+                    o[k] += v
+                    continue
+                if k in {"iter"}:
+                    if k not in o:
+                        o[k] = 0
+                    o[k] = max(o[k], v)
+                    continue
+                if k in {"algo"} and k not in o:
+                    o[k] = []
                 o[k].append(v)
 
         rows = []

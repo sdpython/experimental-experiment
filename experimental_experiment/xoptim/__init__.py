@@ -7,6 +7,7 @@ from .patterns_api import (
     EasyPatternOptimization,
     make_pattern_from_onnx,
 )
+from .order_optim import OrderAlgorithm
 
 
 def get_pattern(
