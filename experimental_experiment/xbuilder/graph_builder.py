@@ -2777,6 +2777,11 @@ class GraphBuilder:
             )
             _check(statistics, "G")
 
+        if self.optimization_options.order:
+            res = self.optimize_order()
+            statistics.extend(res)
+            _check(statistics, "order")
+
         if self.verbose > 1:
             duration = time.perf_counter() - main_begin
             print(
@@ -2841,6 +2846,16 @@ class GraphBuilder:
             remove_identity=self.optimization_options.remove_identity,
             stop_after=self.optimization_options.stop_after,
         )
+
+    def optimize_order(self):
+        from ..xoptim.order_optim import OrderOptimization
+
+        opt = OrderOptimization(
+            self,
+            algorithm=self.optimization_options.order,
+            verbose=max(self.verbose, self.optimization_options.verbose),
+        )
+        return opt.optimize()
 
     def remove_unused(self) -> int:
         """

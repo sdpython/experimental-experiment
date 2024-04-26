@@ -31,6 +31,7 @@ class OptimizationOptions:
         the users can check every pattern dumped as a :epkg:`FunctionProto`
     :param processor: optimization should be made for this processor
         or this list of processors (comma separated value)
+    :param order: order algorithm to apply
     """
 
     def __init__(
@@ -48,6 +49,7 @@ class OptimizationOptions:
         verifies: bool = False,
         dump_applied_patterns: Optional[str] = None,
         processor: str = "CPU",
+        order: Optional["OrderAlgorithm"] = None,  # noqa: F821
     ):
         self.remove_unused = remove_unused
         self.constant_folding = constant_folding
@@ -56,6 +58,7 @@ class OptimizationOptions:
         self.constant_fusing = constant_fusing
         self.stop_after = stop_after
         self.processor = processor
+        self.order = order
         if isinstance(patterns, str):
             from ..xoptim import get_pattern_list
 
@@ -88,12 +91,14 @@ class OptimizationOptions:
         opts = "".join(add)
         code = (
             f"{self.__class__.__name__}(remove_unused={self.remove_unused}, "
+            f"remove_identity={self.remove_identity}, "
             f"constant_folding={self.constant_folding}, "
             f"constant_size={self.constant_size}, "
             f"constant_fusing={self.constant_fusing}, "
             f"verbose={self.verbose}, "
             f"max_iter={self.max_iter}, recursive={self.recursive}, "
             f"processor={self.processor}, "
+            f"order={self.order}, "
             f"patterns={pats}{opts})"
         )
         return "\n".join(
