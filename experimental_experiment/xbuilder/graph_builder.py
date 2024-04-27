@@ -2784,7 +2784,7 @@ class GraphBuilder:
             statistics.extend(res)
             _check(statistics, "order")
 
-        if self.verbose or self.self.optimization_options.verbose:
+        if self.verbose or self.optimization_options.verbose:
             duration = time.perf_counter() - main_begin
             print(
                 f"[GraphBuilder] done with "
