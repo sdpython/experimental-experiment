@@ -179,6 +179,7 @@ def create_compiled_model(
     ort_optimize: bool = True,
     use_fused_aten_ops: bool = False,
     processor: str = "CPU",
+    order_algorithm: str = "NONE",
 ) -> Any:
     """
     Creates the compiled model.
@@ -199,6 +200,8 @@ def create_compiled_model(
         it only works the backend custom
     :param processor: optimization should be made for this processor
         or this list of processors (comma separated value)
+    :param order_algorithm: algorithm optimizing the order the onnx node,
+        none by default
     :return: compiled model
     """
     import torch
@@ -250,6 +253,7 @@ def create_compiled_model(
             disable_pattern=disable_pattern,
             processor=processor,
             ort_optimization_level=ort_optimization_level,
+            order_algorithm=order_algorithm,
         )
         return torch.compile(model, backend=local_ort)
 
@@ -267,6 +271,7 @@ def create_compiled_model(
             enable_pattern=enable_pattern,
             disable_pattern=disable_pattern,
             processor=processor,
+            order_algorithm=order_algorithm,
         )
         return torch.compile(model, backend=local_ort)
 
@@ -299,6 +304,7 @@ def create_compiled_model(
                 dispatcher=dispatcher,
                 processor=processor,
                 ort_optimization_level=ort_optimization_level,
+                order_algorithm=order_algorithm,
                 **kwargs,
             ),
             decompositions=get_decomposition_table(),
@@ -328,6 +334,7 @@ def create_compiled_model(
                 dispatcher=dispatcher,
                 processor=processor,
                 ort_optimization_level=ort_optimization_level,
+                order_algorithm=order_algorithm,
                 **kwargs,
             ),
             decompositions=get_decomposition_table_dynamo(),
@@ -357,6 +364,7 @@ def create_compiled_model(
                 dispatcher=dispatcher,
                 processor=processor,
                 ort_optimization_level=ort_optimization_level,
+                order_algorithm=order_algorithm,
                 **kwargs,
             ),
             decompositions=get_decomposition_table(),
@@ -402,7 +410,7 @@ def create_compiled_model(
     raise ValueError(f"Unexpected backend={backend!r}.")
 
 
-def dort_args(name: str, description: str):
+def dort_args(name: str, description: str, new_args: Optional[List[str]] = None):
     from experimental_experiment.args import get_parsed_args
 
     args = get_parsed_args(
@@ -430,9 +438,11 @@ def dort_args(name: str, description: str):
         optimize=(1, "optimize the model"),
         with_mask=(1, "with or without mask, dynamo may fail with a mask"),
         ort_optimize=(1, "enable or disable onnxruntime optimization"),
+        order=("none", "optimization order see class OrderAlgorithm, none by default"),
         expose="backend,repeat,warmup,device,num_hidden_layers,"
         "mixed,export,config,target_opset,dynamic,verbose,dump_folder,"
-        "enable_pattern,disable_pattern,model,optimize,with_mask",
+        "enable_pattern,disable_pattern,model,optimize,with_mask,order",
+        new_args=new_args,
     )
     return args
 
@@ -459,9 +469,10 @@ def export_args(name: str, description: str):
         optimize=(1, "optimize the model"),
         ort_optimize=(1, "enable or disable onnxruntime optimization"),
         with_mask=(1, "with or without mask, dynamo may fail with a mask"),
+        order=("none", "optimization order see class OrderAlgorithm, none by default"),
         expose="exporter,device,num_hidden_layers,ort,"
         "mixed,config,target_opset,dynamic,verbose,"
-        "enable_pattern,disable_pattern,model,optimize,with_mask",
+        "enable_pattern,disable_pattern,model,optimize,with_mask,order",
     )
     return args
 

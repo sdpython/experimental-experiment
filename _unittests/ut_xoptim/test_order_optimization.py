@@ -8,6 +8,7 @@ from experimental_experiment.ext_test_case import (
     ExtTestCase,
     hide_stdout,
     ignore_warnings,
+    requires_onnxruntime_training,
 )
 from experimental_experiment.xbuilder.graph_builder import (
     GraphBuilder,
@@ -185,6 +186,7 @@ class TestGraphOrderOptimization(ExtTestCase):
         got = opt_ref.run(None, feeds)[0]
         self.assertEqualArray(expected, got)
 
+    @requires_onnxruntime_training()
     def test_order_bigger_model(self):
         for model in [
             # "noopt-phi-custom__1.onnx",
