@@ -2751,6 +2751,7 @@ class GraphBuilder:
                     )
                 )
                 _check(statistics, "E")
+
         if self.optimization_options.patterns:
             assert (
                 self.optimization_options.remove_unused
@@ -2783,7 +2784,7 @@ class GraphBuilder:
             statistics.extend(res)
             _check(statistics, "order")
 
-        if self.verbose > 1:
+        if self.verbose or self.self.optimization_options.verbose:
             duration = time.perf_counter() - main_begin
             print(
                 f"[GraphBuilder] done with "

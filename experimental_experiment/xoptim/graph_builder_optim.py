@@ -1195,7 +1195,8 @@ class GraphBuilderPatternOptimization:
                 f"[GraphBuilderPatternOptimization.optimize] done after {last_it} iterations with "
                 f"{len(self.builder.nodes)} nodes in {duration:.3f}"
             )
-            msg = self.builder._compile_statistics(statistics)
-            print(msg)
+            if self.verbose > 1:
+                msg = self.builder._compile_statistics(statistics)
+                print(msg)
 
         return statistics

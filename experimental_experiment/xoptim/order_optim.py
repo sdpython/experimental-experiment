@@ -207,7 +207,7 @@ class OrderOptimization:
                 changed=n_changes,
                 scale=n_moved,
                 iter=n_iter,
-                time=time.perf_counter() - begin,
+                time_in=time.perf_counter() - begin,
             )
         )
         return stats
