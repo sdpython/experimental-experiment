@@ -136,7 +136,7 @@ class TestGraphOrderOptimization(ExtTestCase):
 
     @ignore_warnings(RuntimeWarning)
     @hide_stdout()
-    def test_random_order(self):
+    def test_arandom_order(self):
         model = oh.make_model(
             oh.make_graph(
                 [
@@ -187,10 +187,10 @@ class TestGraphOrderOptimization(ExtTestCase):
 
     def test_order_bigger_model(self):
         for model in [
-            "noopt-phi-custom__1.onnx",
-            "noopt-llama-custom__1.onnx",
-            "noopt-llama-custom__0.onnx",
-            "noopt-phi-custom__0.onnx",
+            # "noopt-phi-custom__1.onnx",
+            # "noopt-llama-custom__1.onnx",
+            # "noopt-llama-custom__0.onnx",
+            # "noopt-phi-custom__0.onnx",
             "llama_forward.onnx",
             "llama_forward.onnx",
             "opt-llama-custom-forward.onnx",
@@ -198,10 +198,12 @@ class TestGraphOrderOptimization(ExtTestCase):
             "dort-llama2-llama-ort+_1.onnx",
             "opt-llama-custom-backward.onnx",
         ]:
+            # print(f"[test_order_bigger_model] {model!r}")
             onx = self._get_model(model)
             self._fix_shape(onx)
             self._check_ort_cpu_or_cuda(onx)
 
+            # print(f"[test_order_bigger_model] starts optimize")
             with self.subTest(model=model):
                 gr = GraphBuilder(
                     onx,

@@ -2679,9 +2679,10 @@ class GraphBuilder:
 
         def _check(stats, step):
             begin = time.perf_counter()
-            assert (
-                len(self.nodes) > 0
-            ), f"The onnx model is empty (step {step}, no node).\n{self.get_debug_msg()}"
+            assert len(self.nodes) > 0, (
+                f"The onnx model is empty (step {step}, no node)."
+                f"\n{self.get_debug_msg()}"
+            )
             known = set(n.name for n in self.inputs)
             known |= set(self.initializers_dict)
             for node in self.nodes:
