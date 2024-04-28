@@ -2871,7 +2871,8 @@ class GraphBuilder:
                 if not name:
                     return ""
                 if isinstance(name, str):
-                    return f"{self.get_type(name)}t[{_shape(name)}]"
+                    tt = self.get_type(name) if self.has_type(name) else "?"
+                    return f"{tt}t[{_shape(name)}]"
                 if name.op_type == "Transpose":
                     perm = ";".join(map(str, self.get_attribute(name, "perm").ints))
                     return f"{_key(name.input[0])}-perm={perm}"
