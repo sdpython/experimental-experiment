@@ -564,11 +564,13 @@ def requires_onnxruntime_training(
     if training is None:
         msg = msg or "onnxruntime_training is not installed"
         return unittest.skip(msg)
-    from onnxruntime.capi.onnxruntime_pybind11_state import OrtVal
 
-    if push_back_batch and not hasattr(OrtVal, "push_back_batch"):
-        msg = msg or "OrtVal has no method push_back_batch"
-        return unittest.skip(msg)
+    if push_back_batch:
+        from onnxruntime.capi.onnxruntime_pybind11_state import OrtValue
+
+        if not hasattr(OrtValue, "push_back_batch"):
+            msg = msg or "OrtValue has no method push_back_batch"
+            return unittest.skip(msg)
     return lambda x: x
 
 

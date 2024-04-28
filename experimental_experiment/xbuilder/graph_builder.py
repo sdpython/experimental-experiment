@@ -1,6 +1,7 @@
 import pprint
 import time
 import sys
+from collections import Counter
 from typing import Any, Dict, List, Optional, Sequence, Set, Tuple, Union
 import numpy as np
 import onnx.helper as oh
@@ -2838,6 +2839,77 @@ class GraphBuilder:
                 f"i={v['instances']} - time={v['time_in']}"
             )
             rows.append(line)
+
+        # adding statistics on node type
+        rows.append(self._compile_model_statistics(False))
+        rows.append(self._compile_model_statistics(True))
+        return "\n".join(rows)
+
+    def _compile_model_statistics(self, detailed: bool):
+        rows = [
+            f"--MODEL: {len(self.nodes)} nodes, {len(self.inputs)} inputs, "
+            f"{len(self.outputs)} outputs, "
+            f"{len(self.initializers_dict)} initializers--"
+            f"{'DETAILED--' if detailed else ''}"
+        ]
+        if detailed:
+
+            def _shape(name):
+                if self.has_shape(name):
+                    s = self.get_shape(name)
+                    if len(s) == 0:
+                        return "1"
+                    return "x".join(map(str, s))
+                if self.has_rank(name):
+                    r = self.get_rank(name)
+                    if r == 0:
+                        return "1"
+                    return "x".join(["?"] * r)
+                return "?"
+
+            def _key(name):
+                if not name:
+                    return ""
+                if isinstance(name, str):
+                    return f"{self.get_type(name)}t[{_shape(name)}]"
+                if name.op_type == "Transpose":
+                    perm = ";".join(map(str, self.get_attribute(name, "perm").ints))
+                    return f"{_key(name.input[0])}-perm={perm}"
+                return ", ".join(map(_key, name.input))
+
+            cc = Counter([_key(i) for i in self.input_names])
+            for k, v in sorted(cc.items()):
+                rows.append(f"     INPUT: {v:3d} x {k}")
+            cc = Counter([_key(i) for i in self.output_names])
+            for k, v in sorted(cc.items()):
+                rows.append(f"    OUTPUT: {v:3d} x {k}")
+            cc = Counter([_key(i) for i in self.initializers_dict])
+            for k, v in sorted(cc.items()):
+                rows.append(f"      INIT: {v:3d} x {k}")
+            op_types = [(n.domain, n.op_type, _key(n)) for n in self.nodes]
+            cc = Counter(op_types)
+            for k, v in sorted(cc.items()):
+                if k[0] == "":
+                    rows.append(f"      NODE: {v:3d} x {k[1]} -SIG- {k[2]}")
+                else:
+                    rows.append(f"      NODE: {v:3d} x {k[0]}.{k[1]} -SIG- {k[2]}")
+        else:
+            cc = Counter([self.get_type(i) for i in self.input_names])
+            for k, v in sorted(cc.items()):
+                rows.append(f"     INPUT: {v:3d} x {k}t")
+            cc = Counter([self.get_type(i) for i in self.output_names])
+            for k, v in sorted(cc.items()):
+                rows.append(f"    OUTPUT: {v:3d} x {k}t")
+            cc = Counter([self.get_type(i) for i in self.initializers_dict])
+            for k, v in sorted(cc.items()):
+                rows.append(f"      INIT: {v:3d} x {k}t")
+            op_types = [(n.domain, n.op_type) for n in self.nodes]
+            cc = Counter(op_types)
+            for k, v in sorted(cc.items()):
+                if k[0] == "":
+                    rows.append(f"      NODE: {v:3d} x {k[1]}")
+                else:
+                    rows.append(f"      NODE: {v:3d} x {k[0]}.{k[1]}")
         return "\n".join(rows)
 
     def optimize_with_patterns(self) -> List[Dict[str, Any]]:
