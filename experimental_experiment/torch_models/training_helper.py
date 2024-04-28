@@ -64,6 +64,12 @@ def make_aot_ort(
         ort_session_options.graph_optimization_level = getattr(
             onnxruntime.GraphOptimizationLevel, ort_optimization_level
         )
+        if ort_optimization_level == "ORT_DISABLE_ALL":
+            ort_session_options.enable_mem_pattern = False
+            ort_session_options.enable_mem_reuse = False
+            ort_session_options.enable_cpu_mem_arena = False
+            # ort_session_options.add_session_config_entry("set_denormal_as_zero", "1")
+            ort_session_options.add_session_config_entry("disable_prepacking", "1")
 
     if (
         enable_pattern

@@ -58,7 +58,9 @@ def main(args=None):
     import torch
     import torch._dynamo.backends.registry
     import transformers
-    from experimental_experiment.convert.convert_helper import ort_optimize
+    from experimental_experiment.convert.convert_helper import (
+        ort_optimize as run_ort_optimize,
+    )
     from experimental_experiment.torch_models.dump_helper import dump_onnx
     from experimental_experiment.torch_bench._dort_cmd_common import (
         create_compiled_model,
@@ -78,6 +80,7 @@ def main(args=None):
 
     verbose = int(args.verbose)
     optimize = args.optimize in (True, 1, "1", "True")
+    ort_optimize = args.ort_optimize in (True, 1, "1", "True")
     with_mask = args.with_mask in (True, 1, "1", "True")
     disable_pattern = [_ for _ in args.disable_pattern.split(",") if _]
     enable_pattern = [_ for _ in args.enable_pattern.split(",") if _]
@@ -86,6 +89,7 @@ def main(args=None):
     print(f"backend={args.backend}")
     print(f"verbose={verbose}")
     print(f"optimize={args.optimize}")
+    print(f"ort_optimize={ort_optimize}")
     print(f"order_algorithm={args.order}")
     print(f"with_mask={with_mask}")
     print(f"implementation={args.implementation}")
@@ -137,6 +141,7 @@ def main(args=None):
         enable_pattern=enable_pattern,
         disable_pattern=disable_pattern,
         optimize=optimize,
+        ort_optimize=ort_optimize,
         use_fused_aten_ops=args.implementation == "sdpa",
         dump_prefix=(
             f"{dump_folder}/{args.export}-{args.model}-{args.backend}"
@@ -225,7 +230,7 @@ def main(args=None):
                     continue
                 new_onx = onx.replace(".onnx", ".opt.onnx")
                 print(f"  ort_optimize {onx} -> {new_onx}")
-                ort_optimize(
+                run_ort_optimize(
                     os.path.join(dump_folder, onx),
                     output=os.path.join(dump_folder, new_onx),
                     providers=(

@@ -38,6 +38,13 @@ def _get_session(
         opts.graph_optimization_level = getattr(
             onnxruntime.GraphOptimizationLevel, ort_optimization_level
         )
+        if ort_optimization_level == "ORT_DISABLE_ALL":
+            opts.enable_mem_pattern = False
+            opts.enable_mem_reuse = False
+            opts.enable_cpu_mem_arena = False
+            # opts.add_session_config_entry("set_denormal_as_zero", "1")
+            opts.add_session_config_entry("disable_prepacking", "1")
+
     opts.add_session_config_entry("session.disable_aot_function_inlining", "1")
     append_custom_libraries(onx, opts)
 

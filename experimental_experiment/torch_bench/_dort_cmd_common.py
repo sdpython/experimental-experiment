@@ -215,6 +215,9 @@ def create_compiled_model(
         onnx_debug_backend,
     )
 
+    assert isinstance(ort_optimize, bool), (
+        f"Unexpected type={type(ort_optimize)} " f"for ort_optimize={ort_optimize}"
+    )
     ort_optimization_level = "ORT_ENABLE_ALL" if ort_optimize else "ORT_DISABLE_ALL"
 
     if use_fused_aten_ops and backend in {"ort", "custom", "backort", "plug", "ort+"}:
