@@ -65,10 +65,11 @@ parsed_args = get_parsed_args(
         "0,1",
         "enable or disable onnxruntime optimization, " "by default, tries both",
     ),
+    order=("none", "optimization order see class OrderAlgorithm, none by default"),
     verbose=(1, "verbosity"),
     expose="backend,device,num_hidden_layers,mixed,scipt_name,repeat,"
     "warmup,dump,check,config,patterns,dynamic,disable_pattern,model"
-    "implementation,with_mask,ort_optimize,verbose",
+    "implementation,with_mask,ort_optimize,verbose,order",
 )
 
 import onnxruntime  # noqa: F401
@@ -103,6 +104,7 @@ def make_config(
     implementation,
     with_mask,
     ort_optimize,
+    order,
     verbose,
     existing=None,
 ):
@@ -123,6 +125,7 @@ def make_config(
         implementation=implementation,
         with_mask=with_mask,
         ort_optimize=ort_optimize,
+        order=order,
         verbose=verbose,
     )
     cf = {k: v for k, v in cf.items() if v is not None}
@@ -209,6 +212,7 @@ if parsed_args.check not in (1, "1"):
                 implementation=impl,
                 with_mask=parsed_args.with_mask,
                 ort_optimize=ort_optimize,
+                order=parsed_args.order,
                 verbose=verbose,
             )
         )

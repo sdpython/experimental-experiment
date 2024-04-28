@@ -563,6 +563,7 @@ def requires_onnxruntime_training(msg: str = "") -> Callable:
         msg = msg or "onnxruntime_training is not installed"
         return unittest.skip(msg)
     from onnxruntime.capi.onnxruntime_pybind11_state import OrtVal
+
     if not hasattr(OrtVal, "push_back_batch"):
         msg = msg or "OrtVal has no method push_back_batch"
         return unittest.skip(msg)
