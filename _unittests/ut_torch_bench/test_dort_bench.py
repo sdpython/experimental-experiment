@@ -4,6 +4,7 @@ import logging
 import unittest
 from experimental_experiment.ext_test_case import (
     ExtTestCase,
+    skipif_ci_apple,
     skipif_ci_windows,
     ignore_warnings,
     requires_torch,
@@ -43,6 +44,10 @@ class TestDortBench(ExtTestCase):
         self.assertIn(":order,", out)
 
     @skipif_ci_windows("exporter does not work on Windows")
+    @skipif_ci_apple(
+        "AttributeError: 'onnxruntime.capi.onnxruntime_pybind11_state.OrtVal'"
+        "object has no attribute 'push_back_batch'"
+    )
     @ignore_warnings((DeprecationWarning, UserWarning))
     def test_dort_bench_small_llama_cpu_custom(self):
         self._dort_bench_small_llama_cpu("custom")
