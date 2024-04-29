@@ -3320,9 +3320,9 @@ class GraphBuilder:
                     rename = True
                 else:
                     new_inputs.append(i)
-                if rename:
-                    del node.input[:]
-                    node.input.extend(new_inputs)
+            if rename:
+                del node.input[:]
+                node.input.extend(new_inputs)
 
         # results
         return removed, added
