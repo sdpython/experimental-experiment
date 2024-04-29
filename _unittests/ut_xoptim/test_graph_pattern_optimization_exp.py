@@ -120,16 +120,24 @@ class TestGraphPatternOptimizationExp(ExtTestCase):
         self.assertEqualArray(expected[0], got[0])
 
     def _get_aamm_model(
-        self, op_type: str, left: bool, other_type: str = None
+        self, op_type: str, left: bool, other_type: str = None, negative: bool = False
     ) -> ModelProto:
         if other_type is None:
             other_type = op_type
         model = oh.make_model(
             oh.make_graph(
                 [
-                    oh.make_node(op_type, ["X", "Y"], ["xy"]),
                     oh.make_node(
-                        other_type, ["xy", "Z"] if left else ["Z", "xy"], ["F"]
+                        op_type, ["Y", "X"] if negative else ["X", "Y"], ["xy"]
+                    ),
+                    oh.make_node(
+                        other_type,
+                        (
+                            (["Z", "xy"] if left else ["xy", "Z"])
+                            if negative
+                            else (["xy", "Z"] if left else ["Z", "xy"])
+                        ),
+                        ["F"],
                     ),
                 ],
                 "dummy",
@@ -168,9 +176,9 @@ class TestGraphPatternOptimizationExp(ExtTestCase):
                 self.assertEqual(opsets["onnx_extended.ortops.optim.cuda"], 1)
 
                 feeds = {
-                    "X": np.array([10], dtype=np.float32),
-                    "Y": np.array([10], dtype=np.float32),
-                    "Z": np.array([10], dtype=np.float32),
+                    "X": np.array([10, 11], dtype=np.float32),
+                    "Y": np.array([10, 12], dtype=np.float32),
+                    "Z": np.array([10, 13], dtype=np.float32),
                 }
                 ref1 = ExtendedReferenceEvaluator(model)
                 expected = ref1.run(None, feeds)
@@ -309,9 +317,9 @@ class TestGraphPatternOptimizationExp(ExtTestCase):
                 self.assertEqual(opsets["onnx_extended.ortops.optim.cuda"], 1)
 
                 feeds = {
-                    "X": np.array([10], dtype=np.float32),
-                    "Y": np.array([10], dtype=np.float32),
-                    "Z": np.array([10], dtype=np.float32),
+                    "X": np.array([10, 11], dtype=np.float32),
+                    "Y": np.array([10, 12], dtype=np.float32),
+                    "Z": np.array([10, 13], dtype=np.float32),
                 }
                 ref1 = ExtendedReferenceEvaluator(model)
                 expected = ref1.run(None, feeds)
@@ -539,6 +547,45 @@ class TestGraphPatternOptimizationExp(ExtTestCase):
         self._transpose_cast(TFLOAT, True)
         self._transpose_cast(TFLOAT16, False)
         self._transpose_cast(TFLOAT16, True)
+
+    def test_sub_mul_pattern(self):
+        for op_type, left, negative in itertools.product(
+            ["Sub", "Mul"], [True, False], [False, True]
+        ):
+            other_type = "Sub" if op_type == "Mul" else "Mul"
+            with self.subTest(op_type=op_type, left=left, negative=negative):
+                model = self._get_aamm_model(
+                    op_type=op_type,
+                    left=left,
+                    other_type=other_type,
+                    negative=negative,
+                )
+                self.assertEqual(len(model.graph.node), 2)
+                gr = GraphBuilder(
+                    model,
+                    infer_shapes=True,
+                    optimization_options=OptimizationOptions(
+                        patterns=["SubMul"], processor="CPU,CUDA"
+                    ),
+                )
+                opt_onx = gr.to_onnx(optimize=True)
+                self.assertEqual(
+                    [f"{op_type}{other_type}"], [_.op_type for _ in opt_onx.graph.node]
+                )
+                opsets = {v.domain: v.version for v in opt_onx.opset_import}
+                self.assertIn("onnx_extended.ortops.optim.cuda", opsets)
+                self.assertEqual(opsets["onnx_extended.ortops.optim.cuda"], 1)
+
+                feeds = {
+                    "X": np.array([10, 11], dtype=np.float32),
+                    "Y": np.array([10, 12], dtype=np.float32),
+                    "Z": np.array([10, 13], dtype=np.float32),
+                }
+                ref1 = ExtendedReferenceEvaluator(model)
+                expected = ref1.run(None, feeds)
+                ref2 = ExtendedReferenceEvaluator(opt_onx)
+                got = ref2.run(None, feeds)
+                self.assertEqualArray(expected[0], got[0])
 
 
 if __name__ == "__main__":
