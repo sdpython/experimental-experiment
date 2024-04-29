@@ -490,12 +490,11 @@ class TestGraphPatternCombination(ExtTestCase):
                 self._check_ort_cpu_or_cuda(onx)
 
     def test_study(self):
-        model = "dort-bug.onnx"
-        model = "dump_dort_bench/dort-model-llama-custom__1.onnx"
+        model = "dort-model-llama-custom__1.onnx"
         enabled = {
             "AddAddMulMulBroadcastPattern",
         }
-        # enabled = {}
+        enabled = {}
         disabled = {}
         options = OptimizationOptions(
             patterns="default+onnxruntime+experimental",

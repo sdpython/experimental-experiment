@@ -445,6 +445,35 @@ class AddMulSharedInputPattern(PatternOptimization, _common):
         PatternOptimization.__init__(self, verbose, priority)
         _common.__init__(self, broadcast)
 
+    def can_fuse(cls, g: "GraphBuilder", nodes: List[NodeProto]) -> bool:  # noqa: F821
+        """
+        Checks that one node if not using the output of another.
+        """
+        assert len(nodes) == 2, f"Not implemented for {len(nodes)} nodes."
+        p1 = g.get_position(nodes[0])
+        p2 = g.get_position(nodes[1])
+        if p1 < p2:
+            output = nodes[1].output[0]
+            dont = nodes[0].output[0]
+        else:
+            output = nodes[0].output[0]
+            dont = nodes[1].output
+        predecessors = {output}
+        stack = [output]
+        while stack:
+            get = stack.pop()
+            node = g.node_before(get)
+            if node is None:
+                continue
+            for i in node.input:
+                if i == dont:
+                    return False
+                if i in predecessors:
+                    continue
+                predecessors.add(i)
+                stack.append(i)
+        return True
+
     def match(
         self,
         g: "GraphBuilderPatternOptimization",  # noqa: F821
@@ -469,20 +498,20 @@ class AddMulSharedInputPattern(PatternOptimization, _common):
                 if not self._same_shape(g, *n.input, broadcast=self.broadcast):
                     ok = False
                     break
-            if ok:
+            if ok and self.can_fuse(g, cons_left):
                 return MatchResult(self, cons_left, self.apply)
 
         cons_right = [
             n for n in g.next_nodes(node.input[1]) if n.op_type == node.op_type
         ]
-        if len(cons_left) == 2:
+        if len(cons_right) == 2:
             ok = True
             for n in cons_right:
                 if not self._same_shape(g, *n.input, broadcast=self.broadcast):
                     ok = False
                     break
-            if ok:
-                return MatchResult(self, cons_left, self.apply)
+            if ok and self.can_fuse(g, cons_right):
+                return MatchResult(self, cons_right, self.apply)
 
         return self.none(node, inspect.currentframe().f_lineno)
 
@@ -515,7 +544,7 @@ class AddMulSharedInputPattern(PatternOptimization, _common):
         return [new_node]
 
 
-class AddMulSharedInputBoradcastPattern(AddMulSharedInputPattern):
+class AddMulSharedInputBroadcastPattern(AddMulSharedInputPattern):
     """
     Replaces Add(A, B) and Add(A, C) by AddSharedInput(A, B, C)
     if they operate on the same shape. Does the same for

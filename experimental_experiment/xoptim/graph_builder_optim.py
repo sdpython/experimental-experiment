@@ -122,10 +122,13 @@ class GraphBuilderPatternOptimization:
         """
         Builds successor and predecessor.
         """
+        self.positions_ = {}
         self.nodes_ = {}
         self.outputs_ = {o.name for o in self.builder.outputs}
-        for node in self.iter_nodes():
-            self.nodes_[id(node)] = node
+        for i, node in enumerate(self.builder.nodes):
+            key = id(node)
+            self.nodes_[key] = node
+            self.positions_[key] = i
 
         self.set_output_names_ = set(self.builder.output_names)
         self.predecessors_ = {}
@@ -162,6 +165,9 @@ class GraphBuilderPatternOptimization:
                             self.used_.add(i)
                     for i in n.output:
                         sub_knowns.add(i)
+
+    def get_position(self, node: NodeProto) -> int:
+        return self.positions_[id(node)]
 
     def is_used_by_subgraph(self, name: str) -> bool:
         """
@@ -632,7 +638,7 @@ class GraphBuilderPatternOptimization:
             map(lambda i: i in self.nodes_, idn)
         ), f"One node in {idn} is not referenced"
 
-        positions = {id(n): i for i, n in enumerate(self.iter_nodes())}
+        positions = {id(n): i for i, n in enumerate(self.builder.nodes)}
 
         assert all(
             map(lambda i: i in positions, idn)
