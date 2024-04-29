@@ -100,6 +100,9 @@ class PatternOptimization:
     def __str__(self) -> str:
         return self.__class__.__name__
 
+    def __repr__(self) -> str:
+        return f"{self.__class__.__name__}()"
+
     def __eq__(self, o: "PatternOptimization"):
         """
         Basic comparison based on the class name.

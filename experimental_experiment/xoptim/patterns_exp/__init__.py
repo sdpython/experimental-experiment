@@ -17,9 +17,15 @@ def get_experimental_patterns(
     """
     from .binary_operators import (
         AddAddMulMulPattern,
+        AddAddMulMulBroadcastPattern,
         AddMulPattern,
+        AddMulBroadcastPattern,
+        AddMulSharedInputPattern,
+        AddMulSharedInputBroadcastPattern,
         MulSigmoidPattern,
         NegXplus1Pattern,
+        SubMulPattern,
+        SubMulBroadcastPattern,
     )
     from .constant_of_shape_scatter_nd import ConstantOfShapeScatterNDPattern
     from .constants import TriMatrixPattern
@@ -29,12 +35,18 @@ def get_experimental_patterns(
 
     return [
         AddAddMulMulPattern(verbose=verbose),
+        AddAddMulMulBroadcastPattern(verbose=verbose),
         AddMulPattern(verbose=verbose),
+        AddMulBroadcastPattern(verbose=verbose),
+        AddMulSharedInputPattern(verbose=verbose),
+        AddMulSharedInputBroadcastPattern(verbose=verbose),
         ConstantOfShapeScatterNDPattern(verbose=verbose),
         MulSigmoidPattern(verbose=verbose),
         NegXplus1Pattern(verbose=verbose),
         ReplaceZeroPattern(verbose=verbose),
         SimpleRotaryPattern(verbose=verbose),
+        SubMulPattern(verbose=verbose),
+        SubMulBroadcastPattern(verbose=verbose),
         TransposeCastPattern(verbose=verbose),
         TriMatrixPattern(verbose=verbose),
     ]

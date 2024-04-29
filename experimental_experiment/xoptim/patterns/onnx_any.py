@@ -43,7 +43,7 @@ class SameChildrenPattern(PatternOptimization):
 
         if len(next_nodes) == 2:
             n1, n2 = next_nodes
-            if n1.op_type != n2.op_type:
+            if n1.op_type != n2.op_type or n1.op_type == "Identity":
                 return self.none()
             if not self._cmp(n1, n2):
                 return self.none(node, inspect.currentframe().f_lineno)
@@ -51,6 +51,8 @@ class SameChildrenPattern(PatternOptimization):
         else:
             cp = {}
             for n in next_nodes:
+                if n.op_type == "Identity":
+                    continue
                 if n.op_type in cp:
                     cp[n.op_type].append(n)
                 else:
@@ -91,6 +93,11 @@ class SameChildrenPattern(PatternOptimization):
                 f"{n1.output[0]!r}, {n2.output[0]}, and types "
                 f"{g.get_type(n1.output[0])} != {g.get_type(n2.output[0])})"
             )
+        assert "Identity" not in set(n.op_type for n in nodes), (
+            f"Identity nodes should be covered by this pattern "
+            f"{set(n.op_type for n in nodes)}, type={node.op_type!r}, "
+            f"name={node.name!r}."
+        )
         return MatchResult(self, nodes, self.apply)
 
     def apply(

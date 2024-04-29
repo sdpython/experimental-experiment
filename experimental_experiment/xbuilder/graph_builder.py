@@ -3327,6 +3327,82 @@ class GraphBuilder:
         # results
         return removed, added
 
+    def _position_msg(
+        self, nodes: List[NodeProto], around: Optional[Tuple[int, int]] = None
+    ) -> str:
+        "Buids an error message."
+        pos = {}
+        posi = {}
+        for i, n in enumerate(self.nodes):
+            if n is None:
+                continue
+            pos[id(n)] = i
+            for o in n.output:
+                pos[o] = i
+            for o in n.input:
+                if o not in posi:
+                    posi[o] = i
+
+        rows = []
+        for node in nodes:
+            if node is None:
+                continue
+            rows.append(
+                f"{node.op_type}({', '.join(node.input)}) -> "
+                f"[{', '.join(node.output)}]  -- {node.name}"
+            )
+            for i in node.input:
+                rows.append(
+                    f"  -> pos({i}) = {pos.get(i, ' -')} -> {posi.get(i, ' -')}"
+                )
+            for i in node.output:
+                rows.append(
+                    f"  <- pos({i}) = {pos.get(i, ' -')} -> {posi.get(i, ' -')}"
+                )
+        if around is None:
+            return "\n".join(rows)
+
+        rows.append("---")
+        for i in range(max(0, around[0] - 3), min(len(self.nodes), around[1] + 3)):
+            n = self.nodes[i]
+            if n is None:
+                continue
+            rows.append(
+                f"P{i}: {n.op_type}({', '.join(n.input)}) -> "
+                f"[{', '.join(n.output)}]                   -- {n.name}"
+            )
+        return "\n".join(rows)
+
+    def _needed_at_first_at(self):
+        "Needed by insert_and_remove_nodes."
+        needed_at = {}
+        first_at = {}
+        for i, node in enumerate(self.nodes):
+            for name in node.input:
+                if name not in needed_at:
+                    needed_at[name] = i
+            for name in node.output:
+                if name not in first_at:
+                    first_at[name] = i
+        return needed_at, first_at
+
+    def _move_node_position(self, pos: int) -> int:
+        """Tries to move a node at position pos closed to the beginning."""
+        the_node = self.nodes[pos]
+        first_at = {}
+        for i, node in enumerate(self.nodes):
+            if i > pos:
+                break
+            for name in node.output:
+                if name not in first_at:
+                    first_at[name] = i
+        can_be = max(first_at.get(i, 0) for i in the_node.input) + 1
+        if can_be >= pos:
+            return None
+        self.nodes[can_be + 1 : pos + 1] = self.nodes[can_be:pos]
+        self.nodes[can_be] = the_node
+        return can_be
+
     def insert_and_remove_nodes(
         self,
         insert_at: Optional[int],
@@ -3409,18 +3485,41 @@ class GraphBuilder:
             self.nodes = [n for n in self.nodes if n is not None]
             return memo
 
+        self.nodes = [n for n in self.nodes if n is not None]
+
         # Needs to insert the nodes at the right location.
         # Let's find out where the best position is.
-        self.nodes = [n for n in self.nodes if n is not None]
-        needed_at = {}
-        first_at = {}
-        for i, node in enumerate(self.nodes):
-            for name in node.input:
-                if name not in needed_at:
-                    needed_at[name] = i
-            for name in node.output:
-                if name not in first_at:
-                    first_at[name] = i
+        needed_at, first_at = self._needed_at_first_at()
+
+        # First loop to check positions are ok otherwise move a node or two.
+        N = len(self.nodes)
+        inode = 0
+        while inode < len(new_nodes):
+            node = new_nodes[inode]
+            if node.input:
+                min_position = max(first_at.get(i, -1) for i in node.input) + 1
+            else:
+                # a constant node
+                min_position = 0
+            max_position = min(needed_at.get(o, N) for o in node.output)
+
+            if min_position <= max_position:
+                inode += 1
+                continue
+
+            # trouble, let's assume one move is ok.
+            mini = max((first_at.get(i, -1), i) for i in node.input)
+            pos, name = mini
+            assert (
+                name in self.nodes[pos].output
+            ), f"Name {name!r} should be at node position {pos}"
+            new_position = self._move_node_position(pos)
+            assert new_position, (
+                f"Node at position {pos} cannot be moved.\n----\n"
+                f"{self._position_msg([node])}"
+                f"\n-------\n{self._position_msg(new_nodes)}"
+            )
+            needed_at, first_at = self._needed_at_first_at()
 
         # guess the position to insert the nodes at
         # the order of the new nodes is consistent but it may have to be changed
@@ -3443,7 +3542,8 @@ class GraphBuilder:
                 f"min_position={min_position}, max_position={max_position}, "
                 f"len(nodes)={len(self.nodes)}, previous insertions={inserted_at}, "
                 f"insert_needed_at={insert_needed_at}, insert_first_at={insert_first_at}, "
-                f"inserted_at={inserted_at}"
+                f"inserted_at={inserted_at}\n{self._position_msg([node])}"
+                f"\n-------\n{self._position_msg(new_nodes)}"
             )
 
             if node.input:
