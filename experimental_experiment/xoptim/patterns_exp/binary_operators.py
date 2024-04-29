@@ -1,3 +1,4 @@
+import collections
 import inspect
 from typing import List, Optional
 from onnx import NodeProto
@@ -56,7 +57,7 @@ class AddAddMulMulPattern(PatternOptimization, _common):
     Replaces Add + Add by AddAdd or Mul + Mul by MulMul
     if they operate on the same shape.
 
-    :param broadcast: allow broadcast on the first dimension.
+    :param broadcast: allow broadcast on the first dimensions.
     """
 
     def __init__(self, verbose: int = 0, priority: int = 3, broadcast: bool = False):
@@ -139,7 +140,7 @@ class AddAddMulMulBroadcastPattern(AddAddMulMulPattern):
     Replaces Add + Add by AddAdd or Mul + Mul by MulMul
     if they operate on the same shape.
 
-    :param broadcast: allow broadcast on the first dimension.
+    :param broadcast: allow broadcast on the first dimensions.
     """
 
     def __init__(self, verbose: int = 0, priority: int = 4, broadcast: bool = True):
@@ -151,7 +152,7 @@ class AddMulPattern(PatternOptimization, _common):
     Replaces Add + Mul by AddMul or Mul + Add by MulAdd
     if they operate on the same shape.
 
-    :param broadcast: allow broadcast on the first dimension.
+    :param broadcast: allow broadcast on the first dimensions.
     """
 
     def __init__(self, verbose: int = 0, priority: int = 3, broadcast: bool = False):
@@ -234,7 +235,7 @@ class AddMulBroadcastPattern(AddMulPattern):
     Replaces Add + Mul by AddMul or Mul + Add by MulAdd
     if they operate on the same shape.
 
-    :param broadcast: allow broadcast on the first dimension.
+    :param broadcast: allow broadcast on the first dimensions.
     """
 
     def __init__(self, verbose: int = 0, priority: int = 4, broadcast: bool = True):
@@ -335,7 +336,7 @@ class SubMulPattern(PatternOptimization, _common):
     Replaces Sub + Mul by AddMul or Mul + Add by MulAdd
     if they operate on the same shape.
 
-    :param broadcast: allow broadcast on the first dimension.
+    :param broadcast: allow broadcast on the first dimensions.
     """
 
     def __init__(self, verbose: int = 0, priority: int = 3, broadcast: bool = False):
@@ -424,8 +425,104 @@ class SubMulBroadcastPattern(SubMulPattern):
     Replaces Add + Mul by AddMul or Mul + Add by MulAdd
     if they operate on the same shape.
 
-    :param broadcast: allow broadcast on the first dimension.
+    :param broadcast: allow broadcast on the first dimensions.
     """
 
     def __init__(self, verbose: int = 0, priority: int = 4, broadcast: bool = True):
         SubMulPattern.__init__(self, verbose, priority, broadcast)
+
+
+class AddMulSharedInputPattern(PatternOptimization, _common):
+    """
+    Replaces Add(A, B) and Add(A, C) by AddSharedInput(A, B, C)
+    if they operate on the same shape. Does the same for
+    operator Mul.
+
+    :param broadcast: allow broadcast on the first dimensions.
+    """
+
+    def __init__(self, verbose: int = 0, priority: int = 3, broadcast: bool = False):
+        PatternOptimization.__init__(self, verbose, priority)
+        _common.__init__(self, broadcast)
+
+    def match(
+        self,
+        g: "GraphBuilderPatternOptimization",  # noqa: F821
+        node: NodeProto,
+        matched: List[MatchResult],
+    ) -> Optional[MatchResult]:
+        if not g.has_processor("CUDA"):
+            return self.none()
+
+        if node.op_type not in {"Add", "Mul"} or node.domain != "":
+            return self.none()
+
+        if not self._same_shape(g, *node.input, broadcast=self.broadcast):
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        cons_left = [
+            n for n in g.next_nodes(node.input[0]) if n.op_type == node.op_type
+        ]
+        if len(cons_left) == 2:
+            ok = True
+            for n in cons_left:
+                if not self._same_shape(g, *n.input, broadcast=self.broadcast):
+                    ok = False
+                    break
+            if ok:
+                return MatchResult(self, cons_left, self.apply)
+
+        cons_right = [
+            n for n in g.next_nodes(node.input[1]) if n.op_type == node.op_type
+        ]
+        if len(cons_left) == 2:
+            ok = True
+            for n in cons_right:
+                if not self._same_shape(g, *n.input, broadcast=self.broadcast):
+                    ok = False
+                    break
+            if ok:
+                return MatchResult(self, cons_left, self.apply)
+
+        return self.none(node, inspect.currentframe().f_lineno)
+
+    def apply(
+        self,
+        g: "GraphBuilder",  # noqa: F821
+        *nodes: NodeProto,
+    ) -> List[NodeProto]:
+        assert len(nodes) == 2, f"not implemented for {len(nodes)} nodes"
+        names = collections.Counter([*nodes[0].input, *nodes[1].input])
+        assert len(names) == 3, f"Expects three distinct inputs not {names}"
+        common_name = None
+        other_names = []
+        for k, v in names.items():
+            if v == 2:
+                assert not common_name, f"Expects three distinct inputs not {names}"
+                common_name = k
+                continue
+            other_names.append(k)
+        assert len(other_names) == 2, f"Expects three distinct inputs not {names}"
+
+        new_node = g.make_node(
+            f"{nodes[0].op_type}SharedInput",
+            [common_name, *other_names],
+            [nodes[0].output[0], nodes[1].output[0]],
+            domain="onnx_extended.ortops.optim.cuda",
+            name=f"{self.__class__.__name__}--{nodes[0].name}",
+        )
+
+        return [new_node]
+
+
+class AddMulSharedInputBoradcastPattern(AddMulSharedInputPattern):
+    """
+    Replaces Add(A, B) and Add(A, C) by AddSharedInput(A, B, C)
+    if they operate on the same shape. Does the same for
+    operator Mul.
+
+    :param broadcast: allow broadcast on the first dimensions.
+    """
+
+    def __init__(self, verbose: int = 0, priority: int = 4, broadcast: bool = True):
+        AddMulSharedInputPattern.__init__(self, verbose, priority, broadcast)

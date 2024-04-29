@@ -587,6 +587,67 @@ class TestGraphPatternOptimizationExp(ExtTestCase):
                 got = ref2.run(None, feeds)
                 self.assertEqualArray(expected[0], got[0])
 
+    def _get_shared_input_model(self, op_type: str, left: bool) -> ModelProto:
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node(op_type, ["X", "Y"], ["F1"]),
+                    oh.make_node(op_type, ["X", "Z"] if left else ["Y", "Z"], ["F2"]),
+                ],
+                "dummy",
+                [
+                    oh.make_tensor_value_info("X", TFLOAT, ["d"]),
+                    oh.make_tensor_value_info("Y", TFLOAT, ["d"]),
+                    oh.make_tensor_value_info("Z", TFLOAT, ["d"]),
+                ],
+                [
+                    oh.make_tensor_value_info("F1", TFLOAT, ["d"]),
+                    oh.make_tensor_value_info("F2", TFLOAT, ["d"]),
+                ],
+            ),
+            opset_imports=[
+                oh.make_opsetid("", 18),
+                oh.make_opsetid("com.microsoft", 1),
+            ],
+            ir_version=9,
+        )
+        check_model(model)
+        return model
+
+    def test_add_mul_shared_input_pattern(self):
+        for op_type, left in itertools.product(["Add", "Mul"], [True, False]):
+            with self.subTest(op_type=op_type, left=left):
+                model = self._get_shared_input_model(
+                    op_type=op_type,
+                    left=left,
+                )
+                self.assertEqual(len(model.graph.node), 2)
+                gr = GraphBuilder(
+                    model,
+                    infer_shapes=True,
+                    optimization_options=OptimizationOptions(
+                        patterns=["AddMulSharedInput"], processor="CPU,CUDA"
+                    ),
+                )
+                opt_onx = gr.to_onnx(optimize=True)
+                self.assertEqual(
+                    [f"{op_type}SharedInput"], [_.op_type for _ in opt_onx.graph.node]
+                )
+                opsets = {v.domain: v.version for v in opt_onx.opset_import}
+                self.assertIn("onnx_extended.ortops.optim.cuda", opsets)
+                self.assertEqual(opsets["onnx_extended.ortops.optim.cuda"], 1)
+
+                feeds = {
+                    "X": np.array([10, 11], dtype=np.float32),
+                    "Y": np.array([10, 12], dtype=np.float32),
+                    "Z": np.array([10, 13], dtype=np.float32),
+                }
+                ref1 = ExtendedReferenceEvaluator(model)
+                expected = ref1.run(None, feeds)
+                ref2 = ExtendedReferenceEvaluator(opt_onx)
+                got = ref2.run(None, feeds)
+                self.assertEqualArray(expected[0], got[0])
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

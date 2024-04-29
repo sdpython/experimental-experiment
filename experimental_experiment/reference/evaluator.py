@@ -4,7 +4,16 @@ from onnx import FunctionProto, ModelProto
 from onnx.defs import get_schema
 from onnx.reference import ReferenceEvaluator
 from onnx.reference.op_run import OpRun
-from .ops.op_add_add_mul_mul import AddAdd, AddMul, MulAdd, MulMul, MulSub, SubMul
+from .ops.op_add_add_mul_mul import (
+    AddAdd,
+    AddMul,
+    AddSharedInput,
+    MulAdd,
+    MulMul,
+    MulSharedInput,
+    MulSub,
+    SubMul,
+)
 from .ops.op_cast_like import CastLike_15, CastLike_19
 from .ops.op_concat import Concat
 from .ops.op_constant_of_shape import ConstantOfShape
@@ -54,6 +63,7 @@ class ExtendedReferenceEvaluator(ReferenceEvaluator):
     default_ops = [
         AddAdd,
         AddMul,
+        AddSharedInput,
         Concat,
         CastLike_15,
         CastLike_19,
@@ -64,6 +74,7 @@ class ExtendedReferenceEvaluator(ReferenceEvaluator):
         MemcpyToHost,
         MulAdd,
         MulMul,
+        MulSharedInput,
         MulSigmoid,
         MulSub,
         NegXplus1,

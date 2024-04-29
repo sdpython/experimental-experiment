@@ -222,6 +222,24 @@ AddMulPattern
 .. autoclass:: experimental_experiment.xoptim.patterns_exp.binary_operators.AddMulPattern
     :members:
 
+AddMulBoradcastPattern
+++++++++++++++++++++++
+
+.. autoclass:: experimental_experiment.xoptim.patterns_exp.binary_operators.AddMulBoradcastPattern
+    :members:
+
+AddMulSharedInputPattern
+++++++++++++++++++++++++
+
+.. autoclass:: experimental_experiment.xoptim.patterns_exp.binary_operators.AddMulSharedInputPattern
+    :members:
+
+AddMulSharedInputBoradcastPattern
++++++++++++++++++++++++++++++++++
+
+.. autoclass:: experimental_experiment.xoptim.patterns_exp.binary_operators.AddMulSharedInputBoradcastPattern
+    :members:
+
 ConstantOfShapeScatterNDPattern
 +++++++++++++++++++++++++++++++
 
@@ -250,6 +268,18 @@ SimpleRotaryPattern
 +++++++++++++++++++
 
 .. autoclass:: experimental_experiment.xoptim.patterns_exp.simple_rotary.SimpleRotaryPattern
+    :members:
+
+SubMulPattern
++++++++++++++
+
+.. autoclass:: experimental_experiment.xoptim.patterns_exp.binary_operators.SubMulPattern
+    :members:
+
+SubMulBoradcastPattern
+++++++++++++++++++++++
+
+.. autoclass:: experimental_experiment.xoptim.patterns_exp.binary_operators.SubMulBoradcastPattern
     :members:
 
 TransposeCastPattern
