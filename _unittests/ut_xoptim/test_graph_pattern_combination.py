@@ -494,7 +494,8 @@ class TestGraphPatternCombination(ExtTestCase):
     def test_study(self):
         model = "dort_forward.onnx"
         enabled = {
-            "AddAddMulMulBroadcastPattern",
+            "ComputationCastOpCastPattern",
+            "CastOpCastPattern",
         }
         enabled = {}
         disabled = {}

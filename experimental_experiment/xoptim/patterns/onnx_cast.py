@@ -135,7 +135,7 @@ class CastOpCastPattern(PatternOptimization):
         TensorProto.DOUBLE,
     }
 
-    _unary_ops = {"MulSigmoid", "Neg", "Sigmoid"}
+    _unary_ops = {"MulSigmoid", "Neg", "Sigmoid", "Softmax"}
     _binary_ops = {"Add", "Sub", "Mul", "Div"}
     _other_ops = {"SoftmaxGrad"}
 
@@ -170,6 +170,21 @@ class CastOpCastPattern(PatternOptimization):
             "" if cast_in_right is None else cast_in_right.op_type,
         ):
             return self.none(node, inspect.currentframe().f_lineno)
+
+        if (
+            cast_in_left is None
+            or cast_in_left.op_type != "Cast"
+            or cast_in_right is None
+            or cast_in_right.op_type != "Cast"
+        ):
+            # Then we only allow this if the computation type is lower precision.
+            compute_type = g.get_type(node.output[0])
+            before_type = g.get_type((cast_in_left or cast_in_right).input[0])
+            if not (
+                compute_type == TensorProto.FLOAT
+                and before_type in (TensorProto.FLOAT16, TensorProto.BFLOAT16)
+            ):
+                return self.none(node, inspect.currentframe().f_lineno)
 
         return MatchResult(
             self,
@@ -243,4 +258,121 @@ class CastOpCastPattern(PatternOptimization):
         if node.attribute:
             new_node.attribute.extend(node.attribute)
         new_nodes.append(new_node)
+
+        if g.is_used_more_than_once(node.output[0]):
+            final_cast = g.make_node(
+                "Cast",
+                [new_node.output[0]],
+                [node.output[0]],
+                to=g.get_type(node.output[0]),
+                name=f"{self.__class__.__name__}--{node.name}",
+            )
+            new_nodes.append(final_cast)
+
         return new_nodes
+
+
+class ComputationCastOpCastPattern(PatternOptimization):
+    """
+    Changes the computation type to make it faster if one of the inputs
+    was just casted before.
+    """
+
+    _dtypes_allowed = {
+        TensorProto.FLOAT16,
+        TensorProto.BFLOAT16,
+        TensorProto.FLOAT,
+        TensorProto.DOUBLE,
+    }
+
+    _binary_ops = {"Add", "Sub", "Mul", "Div"}
+
+    def match(
+        self,
+        g: "GraphBuilderPatternOptimization",  # noqa: F821
+        node: NodeProto,
+        matched: List[MatchResult],
+    ) -> Optional[MatchResult]:
+        if node.op_type not in self._binary_ops or node.domain != "":
+            return self.none()
+
+        node_left = g.node_before(node.input[0])
+        node_right = g.node_before(node.input[1])
+        type_left = "" if node_left is None else node_left.op_type
+        type_right = "" if node_right is None else node_right.op_type
+        if not ((type_left == "Cast") ^ (type_right == "Cast")):
+            # only one cast allowed
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        if type_left:
+            node_right = None
+        else:
+            node_left = None
+        node_before = node_left or node_right
+        output_type = g.get_type(node.output[0])
+        before_type = g.get_type(node_before.input[0])
+        if not (
+            output_type == TensorProto.FLOAT
+            and before_type in (TensorProto.FLOAT16, TensorProto.BFLOAT16)
+        ):
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        if g.is_used_more_than_once(node_before.output[0]):
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        # At this stage, we know the computation type is float and one input
+        # has a lower type precision. Let's change it.
+        return MatchResult(
+            self, [node_left, node_right, node], self.apply, insert_at=node
+        )
+
+    def apply(
+        self,
+        g: "GraphBuilder",  # noqa: F821
+        node_left: Optional[NodeProto],
+        node_right: Optional[NodeProto],
+        node: NodeProto,
+    ) -> List[NodeProto]:
+
+        to_type = g.get_type(node.output[0])
+
+        inputs = []
+        if node_left is None:
+            before_type = g.get_type(node_right.input[0])
+            name = g.unique_name(f"{self.__class__.__name__}--{node.input[0]}")
+            cast_node = g.make_node(
+                "Cast",
+                [node.input[0]],
+                [name],
+                to=before_type,
+                name=f"{self.__class__.__name__}--{node.name}",
+            )
+            inputs = [name, node_right.input[0]]
+        else:
+            before_type = g.get_type(node_left.input[0])
+            name = g.unique_name(f"{self.__class__.__name__}--{node.input[1]}")
+            cast_node = g.make_node(
+                "Cast",
+                [node.input[1]],
+                [name],
+                to=before_type,
+                name=f"{self.__class__.__name__}--{node.name}",
+            )
+            inputs = [node_left.input[0], name]
+
+        name = g.unique_name(f"{self.__class__.__name__}--{node.output[0]}")
+        new_node = g.make_node(
+            node.op_type,
+            inputs,
+            [name],
+            domain=node.domain,
+            name=f"{self.__class__.__name__}--{node.name}",
+        )
+        final_cast = g.make_node(
+            "Cast",
+            [name],
+            [node.output[0]],
+            to=to_type,
+            name=f"{self.__class__.__name__}--{node.name}",
+        )
+        return [cast_node, new_node, final_cast]
