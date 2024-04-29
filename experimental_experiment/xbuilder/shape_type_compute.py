@@ -481,6 +481,10 @@ def _set_shape_type_op_any_matmul(self: "GraphBuilder", node: NodeProto):  # noq
 def _set_shape_type_op_any_gemm(self: "GraphBuilder", node: NodeProto):  # noqa: F821
     transA = self.get_attribute(node, "transA", exc=False)
     transB = self.get_attribute(node, "transB", exc=False)
+    assert len(node.input) >= 2, (
+        f"Unexpected number of input {node.input} for node "
+        f"{node.op_type} name {node.name!r}"
+    )
     set_type_shape_gemm(
         self,
         node.output[0],
