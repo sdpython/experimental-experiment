@@ -146,6 +146,8 @@ class TestGraphPatternCombination(ExtTestCase):
             raise AssertionError(msg) from e
 
     def _get_model(self, name: str, skip=False) -> ModelProto:
+        if os.path.exists(name):
+            return load_onnx(name)
         p = os.path.join(os.path.dirname(__file__), "..", "ut_xbuilder", "data", name)
         if not os.path.exists(p):
             p = os.path.join(os.path.dirname(__file__), "data", name)
@@ -488,12 +490,12 @@ class TestGraphPatternCombination(ExtTestCase):
                 self._check_ort_cpu_or_cuda(onx)
 
     def test_study(self):
-        model = "dort-slow-llama-custom__1.onnx"
+        model = "dort-bug.onnx"
+        model = "dump_dort_bench/dort-model-llama-custom__1.onnx"
         enabled = {
-            "TransposeCastPattern",
-            "TransposeMatMulPattern",
+            "AddAddMulMulBroadcastPattern",
         }
-        enabled = {}
+        # enabled = {}
         disabled = {}
         options = OptimizationOptions(
             patterns="default+onnxruntime+experimental",
@@ -535,7 +537,7 @@ class TestGraphPatternCombination(ExtTestCase):
 
         new_onx = do()
 
-        with open(f"test_study_{model}", "wb") as f:
+        with open(f"test_study_{os.path.split(model)[-1]}", "wb") as f:
             f.write(new_onx.SerializeToString())
 
         from onnxruntime.capi.onnxruntime_pybind11_state import NotImplemented

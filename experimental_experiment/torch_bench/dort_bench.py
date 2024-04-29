@@ -18,26 +18,26 @@ To export the models:
 
 ::
 
-    python -m experimental_experiment.torch_bench.dort_bench --backend custom --device cuda --export a -w 1
+    python -m experimental_experiment.torch_bench.dort_bench --backend custom --device cuda --export a -w 3
 
 
 Profiling:
 
 ::
 
-    nsys profile python -m experimental_experiment.torch_bench.dort_bench --device cuda -w 2 -r 5 --mixed 1 --config large --backend eager --enable_pattern=default+onnxruntime
+    nsys profile python -m experimental_experiment.torch_bench.dort_bench --device cuda -w 3 -r 5 --mixed 1 --config large --backend eager --enable_pattern=default+onnxruntime
 
 With experimental optimizers:
 
 ::
 
-    python -m experimental_experiment.torch_bench.dort_bench --backend custom --device cuda --mixed=1 --export model -w 1 --enable_pattern=default+onnxruntime+experimental
+    python -m experimental_experiment.torch_bench.dort_bench --backend custom --device cuda --mixed=1 --export model -w 3 --enable_pattern=default+onnxruntime+experimental
 
 Or:
 
 ::
 
-    python -m experimental_experiment.torch_bench.dort_bench --backend ort+ --device cuda --mixed=1 --export model -w 1 --enable_pattern=default+onnxruntime+experimental
+    python -m experimental_experiment.torch_bench.dort_bench --backend ort+ --device cuda --mixed=1 --export model -w 3 --enable_pattern=default+onnxruntime+experimental
 """
 
 import os

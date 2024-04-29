@@ -26,6 +26,8 @@ With 32Gb GPU memory, the script runs with 6 layers.
 
     python _doc/examples/plot_llama_bench_102.py --device=cuda --num_hidden_layers=6 --mixed=1 --backend=eager,dynger,ortmodule,inductor,ort+,custom --config=large
 
+    python _doc/examples/plot_llama_bench_102.py --device=cuda --num_hidden_layers=2 --mixed=1 --backend=eager,ort+,custom --config=large
+
 Run the following command to run one experiment and get the available options:
 
 ::

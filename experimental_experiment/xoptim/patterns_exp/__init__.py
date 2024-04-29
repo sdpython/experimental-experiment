@@ -17,7 +17,9 @@ def get_experimental_patterns(
     """
     from .binary_operators import (
         AddAddMulMulPattern,
+        AddAddMulMulBroadcastPattern,
         AddMulPattern,
+        AddMulBroadcastPattern,
         MulSigmoidPattern,
         NegXplus1Pattern,
     )
@@ -29,7 +31,9 @@ def get_experimental_patterns(
 
     return [
         AddAddMulMulPattern(verbose=verbose),
+        AddAddMulMulBroadcastPattern(verbose=verbose),
         AddMulPattern(verbose=verbose),
+        AddMulBroadcastPattern(verbose=verbose),
         ConstantOfShapeScatterNDPattern(verbose=verbose),
         MulSigmoidPattern(verbose=verbose),
         NegXplus1Pattern(verbose=verbose),
