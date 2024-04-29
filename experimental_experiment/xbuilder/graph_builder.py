@@ -3301,6 +3301,30 @@ class GraphBuilder:
                 f"{time.perf_counter() - begin_} seconds"
             )
 
+        # fourth pass: simplify the graph.
+        identity_outputs = {}
+        for node in self.nodes:
+            if node.op_type != "Identity" or node.domain != "":
+                continue
+            anc = node.input[0]
+            while anc in identity_outputs:
+                anc = identity_outputs[anc]
+            identity_outputs[node.output[0]] = anc
+
+        for node in self.nodes:
+            new_inputs = []
+            rename = False
+            for i in node.input:
+                if i in identity_outputs:
+                    new_inputs.append(identity_outputs[i])
+                    rename = True
+                else:
+                    new_inputs.append(i)
+                if rename:
+                    del node.input[:]
+                    node.input.extend(new_inputs)
+
+        # results
         return removed, added
 
     def insert_and_remove_nodes(
