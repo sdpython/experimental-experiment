@@ -83,6 +83,7 @@ def onnx_debug_backend(
     rename_inputs: bool = True,
     optimize: bool = True,
     processor: str = "CPU",
+    order_algorithm: Optional[str] = None,
 ) -> Callable:
     """
     Custom backend to export torch models into onnx
@@ -116,6 +117,8 @@ def onnx_debug_backend(
     :param rename_inputs: rename inputs into ``input_{i}``
     :param optimize: enable or disable the optimization
     :param processor: specifies the processor it is optimized for
+    :param order_algorithm: algorithm optimizing the order the onnx node,
+        none by default
     :return: Callable
 
     See :ref:`l-plot-onnxrt-diff` for an example.
@@ -131,12 +134,18 @@ def onnx_debug_backend(
 
     patterns = get_pattern_list(enable_pattern, disable_pattern, verbose=verbose_onnx)
 
+    if order_algorithm is not None:
+        from ..xoptim import OrderAlgorithm
+
+        order_algorithm = getattr(OrderAlgorithm, order_algorithm.upper())
+
     options = OptimizationOptions(
         remove_unused=True,
         constant_folding=False,
         patterns=patterns,
         verbose=verbose_onnx,
         processor=processor,
+        order=order_algorithm,
     )
 
     onx, builder = to_onnx(

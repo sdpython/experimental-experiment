@@ -1,6 +1,6 @@
 import subprocess
 from argparse import ArgumentParser, Namespace
-from typing import Dict, Optional, Tuple, Union
+from typing import Dict, List, Optional, Tuple, Union
 
 
 def check_cuda_availability():
@@ -28,6 +28,7 @@ def get_parsed_args(
     sleep: float = 0.1,
     tries: int = 2,
     expose: Optional[str] = None,
+    new_args: Optional[List[str]] = None,
     **kwargs: Dict[str, Tuple[Union[int, str, float], str]],
 ) -> Namespace:
     """
@@ -44,6 +45,7 @@ def get_parsed_args(
     :param expose: if empty, keeps all the parameters,
         if not None, only publish kwargs contains, otherwise the list
         of parameters to publish separated by a comma
+    :param new_args: args to consider or None to take `sys.args`
     :param kwargs: additional parameters,
         example: `n_trees=(10, "number of trees to train")`
     :return: parser
@@ -108,4 +110,4 @@ def get_parsed_args(
             default=v[0],
         )
 
-    return parser.parse_args()
+    return parser.parse_args(args=new_args)

@@ -38,6 +38,13 @@ def _get_session(
         opts.graph_optimization_level = getattr(
             onnxruntime.GraphOptimizationLevel, ort_optimization_level
         )
+        if ort_optimization_level == "ORT_DISABLE_ALL":
+            opts.enable_mem_pattern = False
+            opts.enable_mem_reuse = False
+            opts.enable_cpu_mem_arena = False
+            # opts.add_session_config_entry("set_denormal_as_zero", "1")
+            opts.add_session_config_entry("disable_prepacking", "1")
+
     opts.add_session_config_entry("session.disable_aot_function_inlining", "1")
     append_custom_libraries(onx, opts)
 
@@ -403,6 +410,7 @@ def _default_export(
     disable_pattern,
     rename_inputs,
     processor,
+    order_algorithm=None,
 ):
     input_names = input_names = (
         create_input_names(graph_module, args) if rename_inputs else None
@@ -414,12 +422,18 @@ def _default_export(
 
     patterns = get_pattern_list(enable_pattern, disable_pattern, verbose=verbose_onnx)
 
+    if order_algorithm is not None:
+        from ..xoptim import OrderAlgorithm
+
+        order_algorithm = getattr(OrderAlgorithm, order_algorithm.upper())
+
     options = OptimizationOptions(
         remove_unused=True,
         constant_folding=False,
         patterns=patterns,
         verbose=verbose_onnx,
         processor=processor,
+        order=order_algorithm,
     )
 
     onx, builder = to_onnx(
@@ -468,6 +482,7 @@ def onnx_custom_backend(
     optimize: bool = True,
     exporter: Optional[str] = None,
     processor: str = "CPU",
+    order_algorithm: Optional[str] = None,
 ) -> Callable:
     """
     Custom backend to export torch models into onnx
@@ -496,6 +511,8 @@ def onnx_custom_backend(
     :param exporter: use a different exporter
     :param processor: optimization should be made for this processor
         or this list of processors (comma separated value)
+    :param order_algorithm: algorithm optimizing the order the onnx node,
+        none by default
     :return: Callable
 
     See :ref:`l-plot-onnxrt-diff` or :ref:`l-plot-custom-backend` for examples.
@@ -541,6 +558,7 @@ def onnx_custom_backend(
             disable_pattern,
             rename_inputs,
             processor,
+            order_algorithm=order_algorithm,
         )
     elif exporter == "dynamo":
         from ._dynamo_exporter import _dynamo_export
@@ -556,6 +574,7 @@ def onnx_custom_backend(
             disable_pattern,
             rename_inputs,
             processor,
+            order_algorithm=order_algorithm,
         )
     else:
         raise NotImplementedError(f"Unknown exporter {exporter!r}")

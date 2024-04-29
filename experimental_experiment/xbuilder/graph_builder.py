@@ -1,6 +1,7 @@
 import pprint
 import time
 import sys
+from collections import Counter
 from typing import Any, Dict, List, Optional, Sequence, Set, Tuple, Union
 import numpy as np
 import onnx.helper as oh
@@ -2679,9 +2680,10 @@ class GraphBuilder:
 
         def _check(stats, step):
             begin = time.perf_counter()
-            assert (
-                len(self.nodes) > 0
-            ), f"The onnx model is empty (step {step}, no node).\n{self.get_debug_msg()}"
+            assert len(self.nodes) > 0, (
+                f"The onnx model is empty (step {step}, no node)."
+                f"\n{self.get_debug_msg()}"
+            )
             known = set(n.name for n in self.inputs)
             known |= set(self.initializers_dict)
             for node in self.nodes:
@@ -2750,6 +2752,7 @@ class GraphBuilder:
                     )
                 )
                 _check(statistics, "E")
+
         if self.optimization_options.patterns:
             assert (
                 self.optimization_options.remove_unused
@@ -2777,7 +2780,12 @@ class GraphBuilder:
             )
             _check(statistics, "G")
 
-        if self.verbose > 1:
+        if self.optimization_options.order:
+            res = self.optimize_order()
+            statistics.extend(res)
+            _check(statistics, "order")
+
+        if self.verbose or self.optimization_options.verbose:
             duration = time.perf_counter() - main_begin
             print(
                 f"[GraphBuilder] done with "
@@ -2808,6 +2816,18 @@ class GraphBuilder:
                 if k in {"time_in", "removed", "added", "instances"}:
                     o[k] += v
                     continue
+                if k in {"changed", "scale"}:
+                    if k not in o:
+                        o[k] = 0
+                    o[k] += v
+                    continue
+                if k in {"iter"}:
+                    if k not in o:
+                        o[k] = 0
+                    o[k] = max(o[k], v)
+                    continue
+                if k in {"algo"} and k not in o:
+                    o[k] = []
                 o[k].append(v)
 
         rows = []
@@ -2819,6 +2839,78 @@ class GraphBuilder:
                 f"i={v['instances']} - time={v['time_in']}"
             )
             rows.append(line)
+
+        # adding statistics on node type
+        rows.append(self._compile_model_statistics(False))
+        rows.append(self._compile_model_statistics(True))
+        return "\n".join(rows)
+
+    def _compile_model_statistics(self, detailed: bool):
+        rows = [
+            f"--MODEL: {len(self.nodes)} nodes, {len(self.inputs)} inputs, "
+            f"{len(self.outputs)} outputs, "
+            f"{len(self.initializers_dict)} initializers--"
+            f"{'DETAILED--' if detailed else ''}"
+        ]
+        if detailed:
+
+            def _shape(name):
+                if self.has_shape(name):
+                    s = self.get_shape(name)
+                    if len(s) == 0:
+                        return "1"
+                    return "x".join(map(str, s))
+                if self.has_rank(name):
+                    r = self.get_rank(name)
+                    if r == 0:
+                        return "1"
+                    return "x".join(["?"] * r)
+                return "?"
+
+            def _key(name):
+                if not name:
+                    return ""
+                if isinstance(name, str):
+                    tt = self.get_type(name) if self.has_type(name) else "?"
+                    return f"{tt}t[{_shape(name)}]"
+                if name.op_type == "Transpose":
+                    perm = ";".join(map(str, self.get_attribute(name, "perm").ints))
+                    return f"{_key(name.input[0])}-perm={perm}"
+                return ", ".join(map(_key, name.input))
+
+            cc = Counter([_key(i) for i in self.input_names])
+            for k, v in sorted(cc.items()):
+                rows.append(f"     INPUT: {v:3d} x {k}")
+            cc = Counter([_key(i) for i in self.output_names])
+            for k, v in sorted(cc.items()):
+                rows.append(f"    OUTPUT: {v:3d} x {k}")
+            cc = Counter([_key(i) for i in self.initializers_dict])
+            for k, v in sorted(cc.items()):
+                rows.append(f"      INIT: {v:3d} x {k}")
+            op_types = [(n.domain, n.op_type, _key(n)) for n in self.nodes]
+            cc = Counter(op_types)
+            for k, v in sorted(cc.items()):
+                if k[0] == "":
+                    rows.append(f"      NODE: {v:3d} x {k[1]} -SIG- {k[2]}")
+                else:
+                    rows.append(f"      NODE: {v:3d} x {k[0]}.{k[1]} -SIG- {k[2]}")
+        else:
+            cc = Counter([self.get_type(i) for i in self.input_names])
+            for k, v in sorted(cc.items()):
+                rows.append(f"     INPUT: {v:3d} x {k}t")
+            cc = Counter([self.get_type(i) for i in self.output_names])
+            for k, v in sorted(cc.items()):
+                rows.append(f"    OUTPUT: {v:3d} x {k}t")
+            cc = Counter([self.get_type(i) for i in self.initializers_dict])
+            for k, v in sorted(cc.items()):
+                rows.append(f"      INIT: {v:3d} x {k}t")
+            op_types = [(n.domain, n.op_type) for n in self.nodes]
+            cc = Counter(op_types)
+            for k, v in sorted(cc.items()):
+                if k[0] == "":
+                    rows.append(f"      NODE: {v:3d} x {k[1]}")
+                else:
+                    rows.append(f"      NODE: {v:3d} x {k[0]}.{k[1]}")
         return "\n".join(rows)
 
     def optimize_with_patterns(self) -> List[Dict[str, Any]]:
@@ -2841,6 +2933,16 @@ class GraphBuilder:
             remove_identity=self.optimization_options.remove_identity,
             stop_after=self.optimization_options.stop_after,
         )
+
+    def optimize_order(self):
+        from ..xoptim.order_optim import OrderOptimization
+
+        opt = OrderOptimization(
+            self,
+            algorithm=self.optimization_options.order,
+            verbose=max(self.verbose, self.optimization_options.verbose),
+        )
+        return opt.optimize()
 
     def remove_unused(self) -> int:
         """

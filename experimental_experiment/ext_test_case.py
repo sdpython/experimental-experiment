@@ -550,7 +550,9 @@ def requires_onnxruntime(version: str, msg: str = "") -> Callable:
     return lambda x: x
 
 
-def requires_onnxruntime_training(msg: str = "") -> Callable:
+def requires_onnxruntime_training(
+    push_back_batch: bool = False, msg: str = ""
+) -> Callable:
     """
     Skips a unit test if :epkg:`onnxruntime` is not onnxruntime_training.
     """
@@ -562,6 +564,13 @@ def requires_onnxruntime_training(msg: str = "") -> Callable:
     if training is None:
         msg = msg or "onnxruntime_training is not installed"
         return unittest.skip(msg)
+
+    if push_back_batch:
+        from onnxruntime.capi.onnxruntime_pybind11_state import OrtValue
+
+        if not hasattr(OrtValue, "push_back_batch"):
+            msg = msg or "OrtValue has no method push_back_batch"
+            return unittest.skip(msg)
     return lambda x: x
 
 

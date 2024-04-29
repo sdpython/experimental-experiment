@@ -14,6 +14,7 @@ def make_aot_ort(
     disable_pattern: Optional[Union[str, List[Union[str, type]]]] = None,
     processor: str = "CPU",
     ort_optimization_level: Optional[str] = None,
+    order_algorithm: Optional[str] = None,
 ) -> tuple:
     """
     Creates a backend to train model with DORT.
@@ -29,6 +30,8 @@ def make_aot_ort(
     :param processor: optimization should be made for this processor
         or this list of processors (comma separated value)
     :param ort_optimization_level: onnxruntime optimization level
+    :param order_algorithm: algorithm optimizing the order the onnx node,
+        none by default
     :return: twice the same backend
     """
     import onnxruntime
@@ -61,6 +64,12 @@ def make_aot_ort(
         ort_session_options.graph_optimization_level = getattr(
             onnxruntime.GraphOptimizationLevel, ort_optimization_level
         )
+        if ort_optimization_level == "ORT_DISABLE_ALL":
+            ort_session_options.enable_mem_pattern = False
+            ort_session_options.enable_mem_reuse = False
+            ort_session_options.enable_cpu_mem_arena = False
+            # ort_session_options.add_session_config_entry("set_denormal_as_zero", "1")
+            ort_session_options.add_session_config_entry("disable_prepacking", "1")
 
     if (
         enable_pattern
@@ -116,7 +125,14 @@ def make_aot_ort(
 
     if rewrite_more:
 
-        def opt_f(*args, **kwargs):
+        def opt_f(
+            *args,
+            order_algorithm=order_algorithm,
+            enable_pattern=enable_pattern,
+            disable_pattern=disable_pattern,
+            verbose=verbose,
+            **kwargs,
+        ):
             from ..xbuilder import GraphBuilder, OptimizationOptions
             from ..xoptim import get_pattern_list
 
@@ -130,12 +146,16 @@ def make_aot_ort(
             patterns = get_pattern_list(
                 enable_pattern, disable_pattern, verbose=verbose
             )
+            if order_algorithm is not None:
+                from ..xoptim import OrderAlgorithm
+
+                order_algorithm = getattr(OrderAlgorithm, order_algorithm.upper())
 
             gr = GraphBuilder(
                 next_model,
                 infer_shapes=True,
                 optimization_options=OptimizationOptions(
-                    patterns=patterns, processor=processor
+                    patterns=patterns, processor=processor, order=order_algorithm
                 ),
                 verbose=verbose,
             )

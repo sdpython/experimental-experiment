@@ -10,6 +10,7 @@ API
     reference
     graph_builder
     graph_builder_pattern
+    order_optimization
     interpreter
     onnx_export
     aten_function
