@@ -49,5 +49,8 @@ Mistral
 
         model(input_ids, input_mask)
 
-        onx = to_onnx(model, (input_ids, input_mask))
-        print(onnx_simple_text_plot(onx))
+        try:
+            onx = to_onnx(model, (input_ids, input_mask))
+            print(onnx_simple_text_plot(onx))
+        except Exception as e:
+            print(f"conversion is broken due to {e}")

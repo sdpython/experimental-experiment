@@ -468,6 +468,8 @@ class TestGraphPatternCombination(ExtTestCase):
             "dort-llama-llama-ort_1.onnx",
             "dort-llama2-llama-ort+_1.onnx",
             "opt-llama-custom-backward.onnx",
+            "dort_forward.onnx",
+            "dort_backward.onnx",
         ]:
             options = OptimizationOptions(
                 patterns="default+onnxruntime",
@@ -490,17 +492,20 @@ class TestGraphPatternCombination(ExtTestCase):
                 self._check_ort_cpu_or_cuda(onx)
 
     def test_study(self):
-        model = "dort-model-llama-custom__1.onnx"
+        model = "dort-last-llama-custom__1.onnx"
         enabled = {
-            "AddAddMulMulBroadcastPattern",
+            "ReduceSumNormalizePattern",
+            "SubMulBroadcastPattern",
+            "DivByMulScalarPattern",
         }
-        enabled = {}
+        # enabled = {}
         disabled = {}
         options = OptimizationOptions(
             patterns="default+onnxruntime+experimental",
             verbose=0,
             verifies=False,
             dump_applied_patterns="dump_applied_pattern",
+            max_iter=len(enabled) if enabled else -1,
             processor="CPU,CUDA",
         )
         options.patterns = [

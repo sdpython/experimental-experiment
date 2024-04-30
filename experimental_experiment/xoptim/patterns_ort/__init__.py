@@ -17,6 +17,7 @@ def get_onnxruntime_patterns(
     """
     from .activation_grad import SoftmaxGradPattern
     from .fused_matmul import (
+        FusedMatMulDivPattern,
         FusedMatMulPattern,
         FusedMatMulx2Pattern,
         FusedMatMulTransposePattern,
@@ -28,6 +29,7 @@ def get_onnxruntime_patterns(
     return [
         FusedMatMulPattern(verbose=verbose),
         FusedMatMulx2Pattern(verbose=verbose),
+        FusedMatMulDivPattern(verbose=verbose),
         FusedMatMulTransposePattern(verbose=verbose),
         # GatherGradPattern(verbose=verbose),
         SimplifiedLayerNormalizationPattern(verbose=verbose),

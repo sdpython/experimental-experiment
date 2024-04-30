@@ -23,7 +23,7 @@ Patterns
 ========
 
 Patterns must inherit from :class:`PatternOptimization
-<experimental_experiment.xoptim.patterns.PatternOptimization>`.
+<experimental_experiment.xoptim.PatternOptimization>`.
 This class defines two methods.
 
 PatternOptimization.match
@@ -51,7 +51,7 @@ PatternOptimization.match
 
 The method must not modify the graph.
 The method returns None if no match is found or an instance of class :class:`MatchResult
-<experimental_experiment.xoptim.patterns.MatchResult>`. It must contain:
+<experimental_experiment.xoptim.MatchResult>`. It must contain:
 
 * a list of nodes involved in the rewriting. It does not mean all of them will be
   removed but all of them are needed to do the rewriting and must
