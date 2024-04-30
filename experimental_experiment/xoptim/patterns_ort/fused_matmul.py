@@ -4,6 +4,76 @@ from onnx import NodeProto
 from ..patterns_api import MatchResult, PatternOptimization
 
 
+class FusedMatMulDivPattern(PatternOptimization):
+    """
+    Replaces the Matmul, Div into FusedMatMul.
+    """
+
+    def __init__(self, verbose: int = 0, priority: int = 2):
+        super(FusedMatMulDivPattern, self).__init__(verbose, priority)
+
+    def match(
+        self,
+        g: "GraphBuilderPatternOptimization",  # noqa: F821
+        node: NodeProto,
+        matched: List[MatchResult],
+    ) -> Optional[MatchResult]:
+        if (node.op_type != "MatMul" or node.domain != "") and (
+            node.op_type != "FusedMatMul" or node.domain != "com.microsoft"
+        ):
+            return self.none()
+
+        next_nodes = g.next_nodes(node.output[0])
+        if len(next_nodes) != 1:
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        op_type = next_nodes[0].op_type
+        if op_type not in ("Mul", "Div"):
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        if not g.is_constant_scalar(next_nodes[0].input[1]):
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        return MatchResult(
+            self, [node, next_nodes[0]], self.apply, insert_at=next_nodes[0]
+        )
+
+    def apply(
+        self,
+        g: "GraphBuilder",  # noqa: F821
+        node: NodeProto,
+        node_div: NodeProto,
+    ) -> List[NodeProto]:
+
+        alpha = 1.0
+        atts = []
+        if node.op_type == "FusedMatMul":
+            for att in node.attribute:
+                if att.name == "alpha":
+                    alpha *= att.f
+                else:
+                    atts.append(att)
+
+        cst = g.get_computed_constant(node_div.input[1])
+        scale = float(cst if len(cst.shape) == 0 else cst[0])
+        if node_div.op_type == "Div":
+            alpha /= scale
+        else:
+            alpha *= scale
+
+        mm = g.make_node(
+            "FusedMatMul",
+            node.input,
+            node_div.output,
+            domain="com.microsoft",
+            alpha=alpha,
+            name=f"{self.__class__.__name__}--{node.name}",
+        )
+        if atts:
+            mm.attribute.extend(atts)
+        return [mm]
+
+
 class FusedMatMulPattern(PatternOptimization):
     """
     Replaces the sequence Transpose, Matmul into FusedMatMul.

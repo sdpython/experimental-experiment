@@ -494,10 +494,9 @@ class TestGraphPatternCombination(ExtTestCase):
     def test_study(self):
         model = "dort_forward.onnx"
         enabled = {
-            "ComputationCastOpCastPattern",
-            "CastOpCastPattern",
+            "FusedMatMulDivPattern",
         }
-        enabled = {}
+        # enabled = {}
         disabled = {}
         options = OptimizationOptions(
             patterns="default+onnxruntime+experimental",
