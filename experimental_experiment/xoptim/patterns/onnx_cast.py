@@ -151,6 +151,9 @@ class CastOpCastPattern(PatternOptimization):
             and node.op_type not in self._unary_ops
         ):
             return self.none()
+        if "ComputationCastOpCastPattern--" in node.name:
+            return self.none(node, inspect.currentframe().f_lineno)
+
         if g.is_used_more_than_once(node.input[0]) or (
             len(node.input) > 1 and g.is_used_more_than_once(node.input[1])
         ):
@@ -318,6 +321,11 @@ class ComputationCastOpCastPattern(PatternOptimization):
             return self.none(node, inspect.currentframe().f_lineno)
 
         if g.is_used_more_than_once(node_before.output[0]):
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        next_nodes = g.next_nodes(node.output[0])
+        op_types = [n.op_type for n in next_nodes]
+        if "Cast" in op_types:
             return self.none(node, inspect.currentframe().f_lineno)
 
         # At this stage, we know the computation type is float and one input

@@ -59,6 +59,7 @@ class OptimizationOptions:
         self.stop_after = stop_after
         self.processor = processor
         self.order = order
+        self.max_iter = max_iter
         if isinstance(patterns, str):
             from ..xoptim import get_pattern_list
 
@@ -74,7 +75,6 @@ class OptimizationOptions:
                 if patterns is None
                 else [get_pattern(p, verbose=verbose) for p in patterns]
             )
-        self.max_iter = -1
         self.verbose = verbose
         self.recursive = recursive
         self.verifies = verifies

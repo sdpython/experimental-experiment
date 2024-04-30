@@ -492,9 +492,10 @@ class TestGraphPatternCombination(ExtTestCase):
                 self._check_ort_cpu_or_cuda(onx)
 
     def test_study(self):
-        model = "dort_forward.onnx"
+        model = "dort-bug-forward.onnx"
         enabled = {
-            "FusedMatMulDivPattern",
+            "CastOpCastPattern",
+            "ComputationCastOpCastPattern",
         }
         # enabled = {}
         disabled = {}
@@ -503,6 +504,7 @@ class TestGraphPatternCombination(ExtTestCase):
             verbose=0,
             verifies=False,
             dump_applied_patterns="dump_applied_pattern",
+            max_iter=len(enabled) if enabled else -1,
             processor="CPU,CUDA",
         )
         options.patterns = [
