@@ -171,7 +171,7 @@ class CastOpCastPattern(PatternOptimization):
         ):
             return self.none(node, inspect.currentframe().f_lineno)
 
-        if (
+        if cast_out_node is None and (
             cast_in_left is None
             or cast_in_left.op_type != "Cast"
             or cast_in_right is None
