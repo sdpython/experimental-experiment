@@ -492,10 +492,11 @@ class TestGraphPatternCombination(ExtTestCase):
                 self._check_ort_cpu_or_cuda(onx)
 
     def test_study(self):
-        model = "dort-bug-forward.onnx"
+        model = "dort-last-llama-custom__1.onnx"
         enabled = {
-            "CastOpCastPattern",
-            "ComputationCastOpCastPattern",
+            "ReduceSumNormalizePattern",
+            "SubMulBroadcastPattern",
+            "DivByMulScalarPattern",
         }
         # enabled = {}
         disabled = {}

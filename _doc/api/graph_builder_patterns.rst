@@ -27,6 +27,11 @@ ComputationCastOpCastPattern
 
 .. autoclass:: experimental_experiment.xoptim.patterns.ComputationCastOpCastPattern
 
+DivByMulScalarPattern
++++++++++++++++++++++
+
+.. autoclass:: experimental_experiment.xoptim.patterns.DivByMulScalarPattern
+
 ExpandPattern
 +++++++++++++
 
@@ -61,6 +66,11 @@ ReduceReshapePattern
 ++++++++++++++++++++
 
 .. autoclass:: experimental_experiment.xoptim.patterns.ReduceReshapePattern
+
+ReduceSumNormalizePattern
++++++++++++++++++++++++++
+
+.. autoclass:: experimental_experiment.xoptim.patterns.ReduceSumNormalizePattern
 
 ReshapeMatMulReshapePattern
 +++++++++++++++++++++++++++

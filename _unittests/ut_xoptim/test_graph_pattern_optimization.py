@@ -2702,6 +2702,90 @@ class TestGraphPatternOptimization(ExtTestCase):
         got = opt_ref.run(None, feeds)[0]
         self.assertEqualArray(expected, got)
 
+    def test_div_by_mul_scalar(self):
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("Div", ["X", "cst"], ["Y"]),
+                ],
+                "dummy",
+                [oh.make_tensor_value_info("X", TFLOAT, ["a", "b"])],
+                [oh.make_tensor_value_info("Y", TFLOAT, ["a", "b"])],
+                [onh.from_array(np.array(0.5, dtype=np.float32), name="cst")],
+            )
+        )
+        feeds = {"X": self._range(2, 3).astype(np.float32)}
+        ref = ExtendedReferenceEvaluator(model)
+        expected = ref.run(None, feeds)[0]
+        inputs = [tuple(n.input) for n in model.graph.node]
+
+        gr = GraphBuilder(
+            model,
+            infer_shapes=True,
+            optimization_options=OptimizationOptions(
+                patterns=["DivByMulScalar"], verbose=0
+            ),
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+        self.assertEqual(
+            ["Mul"],
+            [n.op_type for n in opt_onx.graph.node],
+        )
+        self.assertEqual(1, len(opt_onx.graph.initializer))
+        new_inputs = [tuple(n.input) for n in opt_onx.graph.node]
+        self.assertNotEqual(inputs, new_inputs)
+
+        opt_ref = ExtendedReferenceEvaluator(opt_onx)
+        got = opt_ref.run(None, feeds)[0]
+        self.assertEqualArray(expected, got, atol=1e-3)
+
+    def test_reduce_sum_normalization(self):
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("Cast", ["X"], ["xc"], to=TFLOAT),
+                    oh.make_node("ReduceSum", ["xc", "axis"], ["red"], keepdims=1),
+                    oh.make_node("Mul", ["red", "Y"], ["mul"]),
+                    oh.make_node("Sub", ["xc", "mul"], ["subc"]),
+                    oh.make_node("Cast", ["subc"], ["Z"], to=TFLOAT16),
+                ],
+                "dummy",
+                [
+                    oh.make_tensor_value_info("X", TFLOAT16, ["a", "b"]),
+                    oh.make_tensor_value_info("Y", TFLOAT, ["a", "b"]),
+                ],
+                [oh.make_tensor_value_info("Z", TFLOAT16, ["a", "b"])],
+                [onh.from_array(np.array(0.0 - 1, dtype=np.int64), name="axis")],
+            )
+        )
+        feeds = {
+            "X": self._range(2, 3).astype(np.float16),
+            "Y": self._range(2, 3).astype(np.float32),
+        }
+        ref = ExtendedReferenceEvaluator(model)
+        expected = ref.run(None, feeds)[0]
+        inputs = [tuple(n.input) for n in model.graph.node]
+
+        gr = GraphBuilder(
+            model,
+            infer_shapes=True,
+            optimization_options=OptimizationOptions(
+                patterns=["ReduceSumNormalize"], verbose=0
+            ),
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+        self.assertEqual(
+            ["ReduceSum", "Cast", "Mul", "Sub"],
+            [n.op_type for n in opt_onx.graph.node],
+        )
+        self.assertEqual(1, len(opt_onx.graph.initializer))
+        new_inputs = [tuple(n.input) for n in opt_onx.graph.node]
+        self.assertNotEqual(inputs, new_inputs)
+
+        opt_ref = ExtendedReferenceEvaluator(opt_onx)
+        got = opt_ref.run(None, feeds)[0]
+        self.assertEqualArray(expected, got, atol=1e-3)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

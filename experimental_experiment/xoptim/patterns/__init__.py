@@ -12,13 +12,18 @@ from .onnx_cast import (
     ComputationCastOpCastPattern,
 )
 from .onnx_expand import ExpandPattern, ExpandBroadcastPattern, ExpandSwapPattern
-from .onnx_mul import MulMulMulScalarPattern, SwitchOrderBinaryPattern
+from .onnx_mul import (
+    DivByMulScalarPattern,
+    MulMulMulScalarPattern,
+    SwitchOrderBinaryPattern,
+)
 from .onnx_matmul import (
     MatMulReshape2Of3Pattern,
     ReshapeMatMulReshapePattern,
     TransposeMatMulPattern,
     TransposeReshapeMatMulPattern,
 )
+from .onnx_reduce import ReduceSumNormalizePattern
 from .onnx_reshape import (
     ReduceReshapePattern,
     Reshape2Of3Pattern,
@@ -85,12 +90,14 @@ def get_default_patterns(verbose: int = 0) -> List[PatternOptimization]:
         CastCastBinaryPattern(verbose=verbose),
         CastOpCastPattern(verbose=verbose),
         ComputationCastOpCastPattern(verbose=verbose),
+        DivByMulScalarPattern(verbose=verbose),
         ExpandPattern(verbose=verbose),
         ExpandBroadcastPattern(verbose=verbose),
         ExpandSwapPattern(verbose=verbose),
         IdentityPattern(verbose=verbose),
         MulMulMulScalarPattern(verbose=verbose),
         ReduceReshapePattern(verbose=verbose),
+        ReduceSumNormalizePattern(verbose=verbose),
         ReshapeMatMulReshapePattern(verbose=verbose),
         Reshape2Of3Pattern(verbose=verbose),
         ReshapeReshapeBinaryPattern(verbose=verbose),
