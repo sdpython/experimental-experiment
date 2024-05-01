@@ -3020,8 +3020,12 @@ class GraphBuilder:
             if att.name == "upper":
                 upper = att.i
                 break
+        assert len(node.input) in (1, 2), (
+            f"Unexpected number of inputs (inputs={node.input}) "
+            f"for Trilu{self.get_debug_msg()}"
+        )
         x = feeds[node.input[0]]
-        k = feeds[node.input[1]]
+        k = feeds[node.input[1]] if len(node.input) > 1 else np.array(0, dtype=np.int64)
         assert len(x.shape) > 0, (
             f"x cannot be empty but shape is {x.shape}, execution of Trilu "
             f"failed{self.get_debug_msg()}"
