@@ -78,8 +78,12 @@ Full Example
 Llama 3
 =======
 
+See `Llama3 <https://huggingface.co/docs/transformers/main/en/model_doc/llama3>`_.
+
 ::
 
+    import pprint
+    import time
     import onnx
     import torch
     from transformers import AutoModelForCausalLM, AutoTokenizer
@@ -92,9 +96,18 @@ Llama 3
         tokenizer = AutoTokenizer.from_pretrained(model_id)
         base_prompt = "How many hours are in a day?"
         base_inputs = tokenizer(base_prompt, return_tensors="pt")  # .to("cpu")
-        export_options = torch.onnx.ExportOptions()  # fake_context=fake_context)
         input_ids = base_inputs.input_ids
 
-        onx = to_onnx(model, (input_ids,), input_names=["x"], verbose=1)
+        print("start conversion...")
+        begin = time.perf_counter()
+        large_onx = to_onnx(model, (input_ids,), input_names=["x"], verbose=1, large_model=True)
+        duration = time.perf_counter() - begin
+        print(f"conversion done in {duration}s")
 
-        ... to be continued
+    print("start saving in {folder!r}")
+    begin = time.perf_counter()
+    large_onx.save(os.path.join(folder, "llama3.onnx"))
+    duration = time.perf_counter() - begin
+    print(f"saving done in {duration}s")
+    pprint.pprint(os.listdir(folder))
+

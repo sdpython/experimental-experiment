@@ -8,6 +8,7 @@ from onnx import TensorProto
 from ..xbuilder.shape_helper import all_int
 from ..xbuilder._helper import make_hash
 from ..xbuilder._dtype_helper import torch_dtype_to_onnx_dtype
+from ..xbuilder.model_container import _get_type
 from ._exceptions import FunctionNotFoundError
 from .aten_functions import find_function
 from .aten_methods import find_method
@@ -309,7 +310,7 @@ class DynamoInterpreter:
             n_outputs = len(self.builder.outputs)
             output_name = f"{node.name}_{n_outputs}"
             shape = val.shape
-            dtype = self.builder._get_type(val.dtype)
+            dtype = _get_type(val.dtype)
             self.builder.make_tensor_output(output_name, dtype, shape)
             return output_name
 
@@ -569,7 +570,7 @@ class DynamoInterpreter:
         if val is not None:
             if isinstance(val, self.torch.Tensor):
                 shape = val.shape
-                dtype = self.builder._get_type(val.dtype)
+                dtype = _get_type(val.dtype)
                 self.builder.set_shape(node.name, tuple(shape))
                 self.builder.set_type(node.name, dtype)
                 sts = {"dtype": val.dtype}
@@ -964,7 +965,7 @@ class DynamoInterpreter:
 
             for v, r in zip(val, res):
                 if isinstance(v, self.torch.Tensor):
-                    dtype = self.builder._get_type(v.dtype)
+                    dtype = _get_type(v.dtype)
                     self.builder.set_type(r, dtype)
                     shape = tuple(v.shape)
                     if self.builder.is_dynamic_shape(shape):

@@ -3,6 +3,7 @@ import warnings
 from typing import Any, Callable, Dict, Optional, Sequence, Set, Tuple, Union
 from onnx import ModelProto
 from onnx.defs import onnx_opset_version
+from onnx.model_container import ModelContainer
 from ..xbuilder.graph_builder import GraphBuilder, OptimizationOptions
 
 
@@ -246,8 +247,13 @@ def to_onnx(
     dynamic_shapes: Optional[Union[Dict[str, Any], Tuple[Any]]] = None,
     optimize: bool = True,
     dispatcher: Optional["Dispatcher"] = None,  # noqa: F821
+    large_model: bool = True,
+    external_threshold: int = 1024,
     api_two: bool = False,
-) -> Union[ModelProto, Tuple[ModelProto, GraphBuilder]]:
+) -> Union[
+    Union[ModelProto, ModelContainer],
+    Tuple[Union[ModelProto, ModelContainer], GraphBuilder],
+]:
     """
     Exports a torch model into ONNX using
     `dynamo export
@@ -266,6 +272,11 @@ def to_onnx(
     :param dynamic_shapes: see :epkg:`torch.export.export`
     :param optimize: optimize the model before exporting into onnx
     :param dispatcher: see :class:`experimental_experiment.torch_interpreter.Dispatcher`
+    :param large_model: if True returns a :class:`onnx.model_container.ModelContainer`,
+        it lets the user to decide later if the weights should be part of the model
+        or saved as external weights
+    :param external_threshold: if large_model is True, every tensor above this limit
+        is stored as external
     :param api_two: use ``torch._dynamo.export`` instead of ``torch.export.export``
     :return: onnx model
     """
@@ -306,7 +317,11 @@ def to_onnx(
         print("[to_onnx] start conversion to onnx (before optimization)")
         begin = t
 
-    onx = builder.to_onnx(optimize=optimize)
+    onx = builder.to_onnx(
+        optimize=optimize,
+        large_model=large_model,
+        external_threshold=external_threshold,
+    )
 
     if verbose:
         t = time.perf_counter()
