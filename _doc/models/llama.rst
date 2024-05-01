@@ -74,3 +74,27 @@ Full Example
         torch_dtype=torch.float32,
         cache_dir=cache_dir=cache_dir,
     )
+
+Llama 3
+=======
+
+::
+
+    import onnx
+    import torch
+    from transformers import AutoModelForCausalLM, AutoTokenizer
+    from experimental_experiment.torch_interpreter import to_onnx
+
+    model_id = "meta-llama/Meta-Llama-3-8B"
+
+    with torch.no_grad():
+        model = AutoModelForCausalLM.from_pretrained(model_id).eval()
+        tokenizer = AutoTokenizer.from_pretrained(model_id)
+        base_prompt = "How many hours are in a day?"
+        base_inputs = tokenizer(base_prompt, return_tensors="pt")  # .to("cpu")
+        export_options = torch.onnx.ExportOptions()  # fake_context=fake_context)
+        input_ids = base_inputs.input_ids
+
+        onx = to_onnx(model, (input_ids,), input_names=["x"], verbose=1)
+
+        ... to be continued
