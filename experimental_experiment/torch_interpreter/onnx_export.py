@@ -1,3 +1,4 @@
+import inspect
 import time
 import warnings
 from typing import Any, Callable, Dict, Optional, Sequence, Set, Tuple, Union
@@ -234,6 +235,16 @@ def _make_builder_interpreter(
     return graph_module, builder, interpreter
 
 
+def _model_signature(
+    model: Union["torch.nn.Module", Callable]  # noqa: F821
+) -> inspect.Signature:
+    import torch
+
+    return inspect.signature(
+        model.forward if isinstance(model, torch.nn.Module) else model
+    )
+
+
 def to_onnx(
     mod: Union["torch.nn.Module", "torch.fx.GraphModule"],  # noqa: F821
     args: Sequence["torch.Tensor"],  # noqa: F821
@@ -287,7 +298,25 @@ def to_onnx(
     begin = time.perf_counter()
 
     if verbose:
-        print("[to_onnx] build the graph module")
+        print(f"[to_onnx] build the graph module with input_names={input_names}")
+
+    if dynamic_shapes is not None and input_names:
+        # Let's rewrite the dynamic shapes with the true name.
+        new_dynamic_shapes = {}
+        sig = _model_signature(mod)
+        true_input_names = [
+            name
+            for name, p in sig.parameters.items()
+            if p.default in (None, inspect.Parameter.empty)
+        ]
+        replacements = dict(zip(input_names, true_input_names))
+
+        for k, v in dynamic_shapes.items():
+            new_dynamic_shapes[replacements.get(k, k)] = v
+        dynamic_shapes = new_dynamic_shapes
+
+    if verbose and dynamic_shapes:
+        print(f"[to_onnx] dynamic_shapes={dynamic_shapes}")
 
     graph_module, builder, interpreter = _make_builder_interpreter(
         mod=mod,
@@ -325,10 +354,13 @@ def to_onnx(
 
     if verbose:
         t = time.perf_counter()
+        proto = onx if isinstance(onx, ModelProto) else onx.model_proto
         print(
-            f"[to_onnx] to_onnx done in {t - begin}s and {len(onx.graph.node)} nodes, "
-            f"{len(onx.graph.initializer)} initializers, {len(onx.graph.input)} inputs, "
-            f"{len(onx.graph.output)} outputs"
+            f"[to_onnx] to_onnx done in {t - begin}s "
+            f"and {len(proto.graph.node)} nodes, "
+            f"{len(proto.graph.initializer)} initializers, "
+            f"{len(proto.graph.input)} inputs, "
+            f"{len(proto.graph.output)} outputs"
         )
         if verbose >= 10:
             print(builder.get_debug_msg())
