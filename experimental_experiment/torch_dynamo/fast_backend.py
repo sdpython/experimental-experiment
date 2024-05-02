@@ -411,6 +411,7 @@ def _default_export(
     rename_inputs,
     processor,
     order_algorithm=None,
+    dump_patterns=None,
 ):
     input_names = input_names = (
         create_input_names(graph_module, args) if rename_inputs else None
@@ -434,6 +435,7 @@ def _default_export(
         verbose=verbose_onnx,
         processor=processor,
         order=order_algorithm,
+        dump_applied_patterns=dump_patterns,
     )
 
     onx, builder = to_onnx(
@@ -468,6 +470,7 @@ def onnx_custom_backend(
     backend: str = "ort",
     verbose: Union[int, Tuple[int, int]] = 0,
     dump_prefix: Optional[None] = None,
+    dump_patterns: Optional[str] = None,
     providers: Optional[Tuple[str]] = None,
     raise_exc: bool = True,
     storage: Optional[Dict[str, Any]] = None,
@@ -497,6 +500,7 @@ def onnx_custom_backend(
     :param verbose: adjust verbosity, if tuple, if gives different verbosity level
         to the exporter and the runtime
     :param dump_prefix: to dump the models and the inputs
+    :param dump_patterns: dump the patterns as well
     :param providers: where to run the model, by default
     :param raise_exc: raise an exception whenever something goes wrong
     :param storage: to store any interesting objects during the process
@@ -520,6 +524,9 @@ def onnx_custom_backend(
     onnx models, graph module as well the inputs and outputs when
     the model is run.
     """
+    assert dump_patterns is None or isinstance(
+        dump_patterns, str
+    ), f"Unexpected type {type(dump_patterns)} for dump_patterns."
 
     # determines the devices
 
@@ -559,6 +566,7 @@ def onnx_custom_backend(
             rename_inputs,
             processor,
             order_algorithm=order_algorithm,
+            dump_patterns=dump_patterns,
         )
     elif exporter == "dynamo":
         from ._dynamo_exporter import _dynamo_export
@@ -575,6 +583,7 @@ def onnx_custom_backend(
             rename_inputs,
             processor,
             order_algorithm=order_algorithm,
+            dump_patterns=dump_patterns,
         )
     else:
         raise NotImplementedError(f"Unknown exporter {exporter!r}")
