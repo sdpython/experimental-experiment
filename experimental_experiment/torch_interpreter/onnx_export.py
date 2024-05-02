@@ -247,7 +247,7 @@ def to_onnx(
     dynamic_shapes: Optional[Union[Dict[str, Any], Tuple[Any]]] = None,
     optimize: bool = True,
     dispatcher: Optional["Dispatcher"] = None,  # noqa: F821
-    large_model: bool = True,
+    large_model: bool = False,
     external_threshold: int = 1024,
     api_two: bool = False,
 ) -> Union[
