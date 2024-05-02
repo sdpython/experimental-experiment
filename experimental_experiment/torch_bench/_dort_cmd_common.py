@@ -284,6 +284,29 @@ def create_compiled_model(
         ), f"return_storage=True not implemented with backend={backend!r}"
         return torch.compile(model, backend="inductor", dynamic=use_dynamic)
 
+    if backend == "trt":
+        assert (
+            not return_storage
+        ), f"return_storage=True not implemented with backend={backend!r}"
+
+        import torch_tensorrt
+
+        def backend_trt(graph_module, args):
+            trt_gm = torch_tensorrt.dynamo.compile(graph_module, args)
+
+            def execute(*inputs):
+                return trt_gm(*inputs)
+
+            return execute
+
+        aot_compiler = aot_autograd(
+            fw_compiler=backend_trt,
+            decompositions=get_decomposition_table(),
+        )
+        return torch.compile(
+            model, backend=aot_compiler, fullgraph=True, dynamic=use_dynamic
+        )
+
     if backend == "eager":
         assert (
             not return_storage

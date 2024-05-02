@@ -25,4 +25,5 @@ Max Size
     echo "############################################"
     python -m experimental_experiment.torch_bench.dort_bench --device cuda --mixed=1 -w 3 --enable_pattern=default+onnxruntime+experimental --config large --num_hidden_layer 7 --backend ort+
     echo "############################################"
-
+    python -m experimental_experiment.torch_bench.dort_bench --device cuda --mixed=1 -w 3 --enable_pattern=default+onnxruntime+experimental --config large --num_hidden_layer 10 --backend trt
+    echo "############################################"
