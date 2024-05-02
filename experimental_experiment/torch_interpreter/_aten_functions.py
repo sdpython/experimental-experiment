@@ -1,7 +1,7 @@
 from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 import numpy as np
 from onnx import TensorProto
-from onnx.helper import tensor_dtype_to_np_dtype
+from onnx.helper import tensor_dtype_to_np_dtype, make_tensor
 from onnx.numpy_helper import from_array
 from ..xbuilder.shape_helper import (
     all_float,
@@ -2408,8 +2408,8 @@ def _causal_attention_mask(
     attn_mask = None
     if g.has_shape(query) and g.has_shape(key):
         shape_query, shape_key = g.get_shape(query), g.get_shape(key)
-        if isinstance(shape_query[-2]) and isinstance(shape_key[-2], int):
-            shape = (shape_query, shape_key)
+        if isinstance(shape_query[-2], int) and isinstance(shape_key[-2], int):
+            shape = (shape_query[-2], shape_key[-2])
             attn_mask = g.op.ConstantOfShape(
                 np.array(shape, dtype=np.int64),
                 value=from_array(np.array([1], dtype=dtype)),
@@ -2431,11 +2431,9 @@ def _causal_attention_mask(
 
     new_attn_mask = g.op.Where(
         g.op.Equal(tri_attn_mask, np.array([0], dtype=dtype), name=name),
-        from_array(
-            np.array([-float("inf")], dtype=dtype),
-            np.array([0], dtype=dtype),
-            name=name,
-        ),
+        np.array([-float("inf")], dtype=dtype),
+        np.array([0], dtype=dtype),
+        name=name,
     )
     return new_attn_mask
 
@@ -2500,6 +2498,128 @@ def aten_scaled_dot_product_attention(
         )[0]
 
     return g.op.MatMul(attn_weight, value, name=name, outputs=outputs)
+
+
+def _aten__scaled_dot_product_flash_attention_fillin_empty_outputs(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    query: T,
+    name: str = "_scaled_dot_product_flash_attention_fillin_empty_outputs",
+) -> Tuple[T, T, T, T]:
+
+    query_first_three_dims = g.op.Slice(
+        g.op.Shape(query, name=name),
+        g.op.Constant(value_ints=[0], name=name),
+        g.op.Constant(value_ints=[3], name=name),
+        name=name,
+    )
+    logsumexp = g.op.Expand(
+        np.array([0], dtype=tensor_dtype_to_np_dtype(g.get_type(query))),
+        query_first_three_dims,
+        name=name,
+        outputs=[outputs[0]],
+    )
+
+    empty_tensor_int = g.op.Cast(
+        g.op.ConstantOfShape(
+            g.op.Constant(
+                value=make_tensor("Empty_INTS", TensorProto.INT64, [0], []), name=name
+            ),
+            name=name,
+        ),
+        to=TensorProto.INT64,
+        name=name,
+        outputs=[outputs[1]],
+    )
+    empty_tensor_float = g.op.ConstantOfShape(
+        g.op.Constant(
+            value=make_tensor("Empty_FLOATS", TensorProto.INT64, [0], []), name=name
+        ),
+        name=name,
+        outputs=[outputs[2]],
+    )
+    empty_int = g.op.Constant(value_int=0, name=name, outputs=[outputs[3]])
+
+    return logsumexp, empty_tensor_int, empty_int, empty_tensor_float
+
+
+def aten__scaled_dot_product_flash_attention_for_cpu(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    query: T,
+    key: T,
+    value: T,
+    dropout_p: float = 0.0,
+    is_causal: bool = False,
+    attn_mask: Optional[T] = None,
+    scale: Optional[float] = None,
+    return_debug_mask: bool = False,
+    name: str = "_scaled_dot_product_flash_attention_for_cpu_default",
+) -> Tuple[T, T, T, T, T, T, T, T, T]:
+    """_scaled_dot_product_flash_attention"""
+    assert not return_debug_mask, "Not implemented when return_debug_mask is false."
+    result = aten_scaled_dot_product_attention(
+        g,
+        sts,
+        [outputs[0]],
+        query,
+        key,
+        value,
+        attn_mask=attn_mask,
+        dropout_p=dropout_p,
+        is_causal=is_causal,
+        scale=scale,
+        name="_scaled_dot_product_flash_attention_for_cpu_default",
+    )
+    assert isinstance(result, str), f"Unexpected type {type(result)}{g.get_debug_msg()}"
+
+    # The followings are not comsumed by the graph on llama 3 at least.
+    if len(outputs) == 2:
+        # only need 2
+        query_first_three_dims = g.op.Slice(
+            g.op.Shape(query, name=name),
+            g.op.Constant(value_ints=[0], name=name),
+            g.op.Constant(value_ints=[3], name=name),
+            name=name,
+        )
+        logsumexp = g.op.Expand(
+            np.array([0], dtype=tensor_dtype_to_np_dtype(g.get_type(query))),
+            query_first_three_dims,
+            name=name,
+            outputs=[outputs[1]],
+        )
+        return result, logsumexp
+
+    assert len(outputs) == 8, (
+        f"Unexpected number of outputs {len(outputs)}, "
+        f"outputs={outputs}{g.get_debug_msg()}"
+    )
+    (
+        logsumexp,
+        empty_tensor_int,
+        empty_int,
+        empty_tensor_float,
+    ) = _aten__scaled_dot_product_flash_attention_fillin_empty_outputs(
+        g, sts, [outputs[1], outputs[3], outputs[4], outputs[8]], query, name=name
+    )
+
+    empty_tensor_int2 = g.op.Identity(empty_tensor_int, name=name)
+    empty_int2 = g.op.Identity(empty_int, name=name)
+    empty_tensor_int2 = g.op.Identity(empty_tensor_int, name=name)
+
+    return (
+        result,  # 0
+        logsumexp,  # 1
+        empty_tensor_int,  # 2
+        empty_tensor_int2,  # 3
+        empty_int,  # 4
+        empty_int2,  # 5
+        empty_tensor_int,  # 6
+        empty_tensor_int2,  # 7
+        empty_tensor_float,  # 8
+    )
 
 
 def aten_select_int(

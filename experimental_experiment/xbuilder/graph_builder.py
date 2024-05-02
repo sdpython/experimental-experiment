@@ -6,6 +6,7 @@ from typing import Any, Dict, List, Optional, Sequence, Set, Tuple, Union
 import numpy as np
 import onnx.helper as oh
 import onnx.numpy_helper as onh
+from onnx.model_container import make_large_tensor_proto
 from onnx.shape_inference import infer_shapes as onnx_infer_shapes
 from onnx import (
     AttributeProto,
@@ -35,6 +36,7 @@ from ._onnx_helper import (
     element_wise_op_cmp_types,
     unary_like_op_types,
 )
+from .model_container import TorchModelContainer, proto_from_array, _get_type
 from ._dtype_helper import dtype_to_tensor_dtype, onnx_dtype_to_torch_dtype
 from ._helper import make_hash
 from .optimization_options import OptimizationOptions
@@ -808,7 +810,7 @@ class GraphBuilder:
         if isinstance(dtype, int):
             int_type = dtype
         else:
-            int_type = self._get_type(dtype)
+            int_type = _get_type(dtype)
         if name in self._known_types:
             # 0 is undefined
             if self._known_types[name] != 0 and int_type != self._known_types[name]:
@@ -927,40 +929,22 @@ class GraphBuilder:
         self._unique_node_names.add(name)
         return name
 
-    def _get_type(self, elem_type: Any, exc: bool = True) -> int:
-        if not isinstance(elem_type, int):
-            st = str(elem_type)
-            if "float32" in st:
-                elem_type = TensorProto.FLOAT
-            elif "float64" in st:
-                elem_type = TensorProto.DOUBLE
-            elif "bfloat16" in st:
-                elem_type = TensorProto.BFLOAT16
-            elif "float16" in st:
-                elem_type = TensorProto.FLOAT16
-            elif "uint64" in st:
-                elem_type = TensorProto.UINT64
-            elif "int64" in st:
-                elem_type = TensorProto.INT64
-            elif "uint32" in st:
-                elem_type = TensorProto.UINT32
-            elif "int32" in st:
-                elem_type = TensorProto.INT32
-            elif "uint16" in st:
-                elem_type = TensorProto.UINT16
-            elif "int16" in st:
-                elem_type = TensorProto.INT16
-            elif "bool" in st:
-                elem_type = TensorProto.BOOL
-            elif "uint8" in st:
-                elem_type = TensorProto.UINT8
-            elif "int8" in st:
-                elem_type = TensorProto.INT8
-            elif elem_type is None:
-                elem_type = TensorProto.UNDEFINED
-            elif exc:
-                raise ValueError(f"Unable to interpret elem_type {elem_type!r}.")
-        return elem_type
+    def elem_size(self, elem_type: int) -> int:
+        "Returns the size in byte of the an element of this size."
+        if elem_type in {TensorProto.FLOAT, TensorProto.INT32, TensorProto.UINT32}:
+            return 4
+        if elem_type in {TensorProto.DOUBLE, TensorProto.INT64, TensorProto.UINT64}:
+            return 8
+        if elem_type in {
+            TensorProto.INT16,
+            TensorProto.UINT16,
+            TensorProto.FLOAT16,
+            TensorProto.BFLOAT16,
+        }:
+            return 2
+        if elem_type in {TensorProto.BOOL, TensorProto.UINT8, TensorProto.INT8}:
+            return 1
+        raise AssertionError(f"elem_size not implemented for elem_type={elem_type}.")
 
     def has_dynamic_object(self, name: str) -> bool:
         """Tells if a result is a dynamic object, `torch.SymInt` for torch."""
@@ -1122,8 +1106,9 @@ class GraphBuilder:
             itype = value.data_type
             shape = tuple(value.dims)
         else:
-            itype = self._get_type(value.dtype)
+            itype = _get_type(value.dtype)
             shape = tuple(value.shape)
+
         if name == "":
             sh = "x".join(map(str, shape))
             size = np.prod(value.size()) if hasattr(value, "detach") else value.size
@@ -1133,6 +1118,7 @@ class GraphBuilder:
                 else ""
             )
             name = self.unique_name(f"init{itype}_s{sh}_{sh2}")
+
         self.set_shape(name, shape)
         self.set_type(name, itype)
         self.set_name(name)
@@ -1587,7 +1573,7 @@ class GraphBuilder:
         )
 
         self.current_input += 1
-        elem_type = self._get_type(elem_type)
+        elem_type = _get_type(elem_type)
         dyn_shape = self.verify_dynamic_shape(shape, name=input_name, add=True)
 
         if shape is not None:
@@ -1665,7 +1651,7 @@ class GraphBuilder:
             f"is_dimension={is_dimension}"
         )
 
-        elem_type = self._get_type(elem_type, False)
+        elem_type = _get_type(elem_type, False)
         if not self.as_function and elem_type == 0:
             raise RuntimeError(f"Undefined element type for {name!r}.")
         dyn_shape = self.verify_shape(shape, name=name, elem_type=elem_type)
@@ -2253,66 +2239,124 @@ class GraphBuilder:
             return output_names[0]
         return output_names
 
-    def from_array(
-        self, arr: "torch.Tensor", name: str = None  # noqa: F821
-    ) -> TensorProto:
-        """
-        Converts a torch Tensor into a TensorProto.
-        """
-        import sys
+    def _build_large_initializers(self, external_threshold: int):
+        new_inits = {}
+        large_inits = {}
+        for k, v in self.initializers_dict.items():
+            itype = self.get_type(k)
+            shape = self.get_shape(k)
+            size = np.prod(shape) * self.elem_size(itype)
+            if size < external_threshold:
+                new_inits[k] = v
+            else:
+                location = f"#{k}"
 
-        if not isinstance(arr, self.torch.Tensor):
-            raise TypeError(f"Unexpected type {type(arr)}.")
-        if arr.is_sparse:
-            raise NotImplementedError(
-                f"Sparse tensor is not supported yet but initializer {name!r} is."
-            )
+                nt = make_large_tensor_proto(location, k, itype, shape)
+                new_inits[k] = nt
+                large_inits[location] = v
+        return new_inits, large_inits
 
-        arr_cont = arr.contiguous() if not arr.is_contiguous() else arr
-        arr_cpu = arr_cont.cpu()
-        if arr_cpu.data_ptr() == arr.data_ptr():
-            copy = arr_cpu.clone().detach().requires_grad_(False)
-            assert arr_cpu.data_ptr() != copy.data_ptr()
-            np_arr = np.from_dlpack(copy)
-        else:
-            np_arr = np.from_dlpack(arr_cpu.detach())
-
-        tensor = TensorProto()
-        tensor.dims.extend(arr_cpu.shape)
-        tensor.name = name
-        itype = self._get_type(arr_cpu.dtype)
-        assert not hasattr(TensorProto, "INT4") or itype not in {
-            TensorProto.INT4,
-            TensorProto.UINT4,
-        }, f"Type {arr.dtype} is not supported yet for name={name!r}"
-        tensor.data_type = itype
-
-        if self.verbose and np.prod(arr_cpu.shape) > 100:
+    def _build_initializers(
+        self, large_model: bool, switch_low_high: bool, external_threshold: int
+    ) -> Tuple[List[TensorProto], Dict[str, TensorProto]]:
+        if self.verbose:
+            begin = time.perf_counter()
             print(
-                f"[GraphBuilder-{self._hash()}.from_array] {tensor.data_type}[{arr_cpu.shape}]"
+                f"[GraphBuilder-{self._hash()}._build_initializers] "
+                f"start with {len(self.initializers_dict)} initializers, "
+                f"large_model={large_model}, external_threshold={external_threshold}"
             )
 
-        if sys.byteorder == "big":
-            tensor.raw_data = np_arr.tobytes()
-            np_dtype = oh.tensor_dtype_to_np_dtype(tensor.data_type)
-            np.byteswap(np.frombuffer(tensor.raw_data, dtype=np_dtype), inplace=True)
-        else:
-            tensor.raw_data = np_arr.tobytes()
+        init_dict, large_inits = (
+            self._build_large_initializers(external_threshold)
+            if large_model
+            else (self.initializers_dict, {})
+        )
 
-        return tensor
+        if switch_low_high:
+            # Let's try to minimize the time.
+            if self.verbose:
+                print(
+                    f"[GraphBuilder-{self._hash()}._build_initializers] switch low/high order"
+                )
+            initializer = []
+            for k, v in init_dict.items():
 
-    def _build_initializers(self) -> List[TensorProto]:
+                if isinstance(v, TensorProto):
+                    if self.verbose > 1:
+                        print(
+                            f"[GraphBuilder-{self._hash()}._build_initializers] "
+                            f"TensorProto-{k}:{v.data_type}[{tuple(v.dims)}]"
+                        )
+                    initializer.append(v)
+                    continue
+
+                if self.verbose > 1:
+                    print(
+                        f"[GraphBuilder-{self._hash()}._build_initializers] "
+                        f"{type(v)}-{k}:{v.dtype}[{v.shape}]"
+                    )
+                if isinstance(v, np.ndarray):
+                    itype = dtype_to_tensor_dtype(v.dtype)
+                    if itype in {
+                        TensorProto.BOOL,
+                        TensorProto.STRING,
+                        TensorProto.UNDEFINED,
+                        TensorProto.COMPLEX64,
+                        TensorProto.COMPLEX128,
+                        getattr(TensorProto, "UINT4", 0),
+                        getattr(TensorProto, "INT4", 0),
+                    }:
+                        t = onh.from_array(v, name=k)
+                        initializer.append(t)
+                        continue
+
+                    from_np = True
+                else:
+                    assert isinstance(
+                        v, self.torch.Tensor
+                    ), f"tensor {k!r} has un unexpected type {type(v)}"
+                    from_np = False
+                    itype = dtype_to_tensor_dtype(v.dtype)
+
+                # How to avoid a copy?
+                if from_np:
+                    tensor = TensorProto()
+                    tensor.name = k
+                    tensor.dims.extend(v.shape)
+                    tensor.data_type = itype
+                    tensor.raw_data = v.tobytes()
+                else:
+                    tensor = proto_from_array(v, name=k, verbose=self.verbose)
+
+                initializer.append(tensor)
+
+            if self.verbose:
+                begin = time.perf_counter()
+                print(
+                    f"[GraphBuilder-{self._hash()}._build_initializers] "
+                    f"done in {time.perf_counter() - begin}s "
+                    f"with {len(initializer)} initializers, "
+                    f"{len(large_inits)} large initializers"
+                )
+            return initializer, large_inits
+
+        assert (
+            not self.large_model
+        ), "_build_initializers not implemented when large_model is True"
+        large_inits = {}
         res = []
-        for k, v in sorted(self.initializers_dict.items()):
+        for k, v in sorted(init_dict.items()):
             if isinstance(v, self.torch.Tensor):
                 # no string tensor
                 t = self.from_array(v, name=k)
                 res.append(t)
                 continue
             if isinstance(v, np.ndarray):
-                if self.verbose and np.prod(v.shape) > 100:
+                if self.verbose > 1 and np.prod(v.shape) > 100:
                     print(
-                        f"[GraphBuilder-{self._hash()}._build_initializers] onh.from_array:{k}:{v.dtype}[{v.shape}]"
+                        f"[GraphBuilder-{self._hash()}._build_initializers]"
+                        f"onh.from_array:{k}:{v.dtype}[{v.shape}]"
                     )
                 t = onh.from_array(v, name=k)
                 res.append(t)
@@ -2324,7 +2368,15 @@ class GraphBuilder:
                 f"Unable to convert initializer {k!r} with type "
                 f"{type(v)} into a TensorProto."
             )
-        return res
+        if self.verbose:
+            begin = time.perf_counter()
+            print(
+                f"[GraphBuilder-{self._hash()}._build_initializers] "
+                f"done in {time.perf_counter() - begin}s "
+                f"with {len(res)} initializers, "
+                f"{len(large_inits)} large initializers"
+            )
+        return res, large_inits
 
     def get_debug_msg(self) -> str:
         """
@@ -2494,8 +2546,12 @@ class GraphBuilder:
             interpreter.run_node(node)
 
     def to_onnx(
-        self, as_function: bool = False, optimize: bool = True
-    ) -> Union[FunctionProto, ModelProto]:
+        self,
+        as_function: bool = False,
+        optimize: bool = True,
+        large_model: bool = False,
+        external_threshold: int = 1024,
+    ) -> Union[FunctionProto, ModelProto, TorchModelContainer]:
         """
         Conversion to onnx. Only then the initializer are converted into
         TensorProto.
@@ -2503,6 +2559,11 @@ class GraphBuilder:
         :param as_function: converts the graph as a FunctionProto or a ModelProto
         :param optimize: disable or enable the optimization,
             the optimization are set when the class constructor is called
+        :param large_model: if True returns a :class:`onnx.model_container.ModelContainer`,
+            it lets the user to decide later if the weights should be part of the model
+            or saved as external weights
+        :param external_threshold: if large_model is True, every tensor above this limit
+            is stored as external
         :return: the proto
         """
         if len(self.nodes) == 0:
@@ -2527,13 +2588,15 @@ class GraphBuilder:
                 domain=self.domain,
             )
 
+        if self.ir_version:
+            ir_version = self.ir_version
+        elif "" in self.opsets:
+            ir_version = _default_OPSET_TO_IR_VERSION()[self.opsets[""]]
+
         if self.verbose:
             print(f"[GraphBuilder-{self._hash()}.to_onnx] make_model")
 
-        # graph = oh.make_graph(
-        #    self.nodes, "experiment", self.inputs, self.outputs, dense
-        # )
-
+        # building the model
         model = ModelProto()
         model.graph.CopyFrom(GraphProto())
 
@@ -2544,75 +2607,29 @@ class GraphBuilder:
 
         # initializer
 
-        if sys.byteorder == "big":
-            dense = self._build_initializers()
-            model.graph.initializer.extend(dense)
-        else:
-            # Let's try to minimize the time.
-            for k, v in self.initializers_dict.items():
-
-                if isinstance(v, TensorProto):
-                    if self.verbose:
-                        print(
-                            f"[GraphBuilder-{self._hash()}._build_initializers] "
-                            f"TensorProto-{k}:{v.data_type}[{tuple(v.dims)}]"
-                        )
-                    model.graph.initializer.append(v)
-                    continue
-
-                if self.verbose:
-                    print(
-                        f"[GraphBuilder-{self._hash()}._build_initializers] "
-                        f"{type(v)}-{k}:{v.dtype}[{v.shape}]"
-                    )
-                if isinstance(v, np.ndarray):
-                    itype = dtype_to_tensor_dtype(v.dtype)
-                    if itype in {
-                        TensorProto.BOOL,
-                        TensorProto.STRING,
-                        TensorProto.UNDEFINED,
-                        TensorProto.COMPLEX64,
-                        TensorProto.COMPLEX128,
-                        getattr(TensorProto, "UINT4", 0),
-                        getattr(TensorProto, "INT4", 0),
-                    }:
-                        t = onh.from_array(v, name=k)
-                        model.graph.initializer.append(t)
-                        continue
-
-                    from_np = True
-                else:
-                    assert isinstance(
-                        v, self.torch.Tensor
-                    ), f"tensor {k!r} has un unexpected type {type(v)}"
-                    from_np = False
-                    itype = dtype_to_tensor_dtype(v.dtype)
-
-                # How to avoid a copy?
-                if from_np:
-                    tensor = TensorProto()
-                    tensor.name = k
-                    tensor.dims.extend(v.shape)
-                    tensor.data_type = itype
-                    tensor.raw_data = v.tobytes()
-                else:
-                    tensor = self.from_array(v, name=k)
-
-                model.graph.initializer.append(tensor)
-
-        # graph.sparse_initializer.extend(sparse_initializer)
-        # graph.value_info.extend(value_info)
-        # graph.doc_string = doc_string
+        initializers, large_initializers = self._build_initializers(
+            switch_low_high=sys.byteorder != "big",
+            large_model=large_model,
+            external_threshold=external_threshold,
+        )
+        model.graph.initializer.extend(initializers)
 
         model.opset_import.extend(opsets)
         model.functions.extend(self.functions)
+        model.ir_version = ir_version
+        self._add_shape_information(model)
 
-        # model = oh.make_model(graph, opset_imports=opsets, functions=self.functions)
+        if large_model:
+            lm = TorchModelContainer()
+            lm.model_proto = model
+            if large_initializers:
+                lm.set_large_initializers(large_initializers)
+                lm.check_large_initializers()
+            return lm
 
-        if self.ir_version:
-            model.ir_version = self.ir_version
-        elif "" in self.opsets:
-            model.ir_version = _default_OPSET_TO_IR_VERSION()[self.opsets[""]]
+        return model
+
+    def _add_shape_information(self, model: ModelProto):
 
         if len(model.graph.node) == 0:
             raise RuntimeError(
@@ -2650,7 +2667,6 @@ class GraphBuilder:
                 )
         if addition:
             model.graph.value_info.extend(addition)
-        return model
 
     def io_names(self):
         """
@@ -3020,8 +3036,12 @@ class GraphBuilder:
             if att.name == "upper":
                 upper = att.i
                 break
+        assert len(node.input) in (1, 2), (
+            f"Unexpected number of inputs (inputs={node.input}) "
+            f"for Trilu{self.get_debug_msg()}"
+        )
         x = feeds[node.input[0]]
-        k = feeds[node.input[1]]
+        k = feeds[node.input[1]] if len(node.input) > 1 else np.array(0, dtype=np.int64)
         assert len(x.shape) > 0, (
             f"x cannot be empty but shape is {x.shape}, execution of Trilu "
             f"failed{self.get_debug_msg()}"

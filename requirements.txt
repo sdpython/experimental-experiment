@@ -1,4 +1,4 @@
-onnx
+onnx>=1.16.0
 onnxruntime-training; sys_platform == 'linux'
 onnxruntime; sys_platform != 'linux'
 torch>=2.3; sys_platform != 'darwin'

@@ -476,6 +476,18 @@ def requires_cuda(msg: str = ""):
     return lambda x: x
 
 
+def requires_zoo(msg: str = "") -> Callable:
+    """
+    Skips a unit test if environment variable ZOO is not equal to 1.
+    """
+    var = os.environ.get("ZOO", "0") in (1, "1", "TRUE", "true", "True")
+
+    if not var:
+        msg = f"ZOO not set up or != 1. {msg}"
+        return unittest.skip(msg)
+    return lambda x: x
+
+
 def requires_torch(version: str, msg: str = "") -> Callable:
     """
     Skips a unit test if :epkg:`pytorch` is not recent enough.
@@ -499,7 +511,7 @@ def requires_transformers(version: str, msg: str = "") -> Callable:
     if pv.Version(".".join(transformers.__version__.split(".")[:2])) < pv.Version(
         version
     ):
-        msg = f"torch version {transformers.__version__} < {version}: {msg}"
+        msg = f"transformers version {transformers.__version__} < {version}: {msg}"
         return unittest.skip(msg)
     return lambda x: x
 
