@@ -292,6 +292,40 @@ def create_compiled_model(
         ), f"return_storage=True not implemented with backend={backend!r}"
         return torch.compile(model, backend="inductor", dynamic=use_dynamic)
 
+    if backend == "trt":
+        assert (
+            not return_storage
+        ), f"return_storage=True not implemented with backend={backend!r}"
+        assert not use_dynamic, (
+            "TensorRT is not implemented when use_dynamic is False. "
+            "In that case, inputs should be a list of torch_tensorrt.Input objects. "
+        )
+        # TODO: create a specific backend,
+        # https://github.com/pytorch/TensorRT/blob/main/py/torch_tensorrt/dynamo/_compiler.py#L44
+
+        import torch_tensorrt
+
+        class trt_backend:
+            def __init__(self, model):
+                self.model = model
+                self.trt = None
+
+            def __call__(self, *args):
+                if self.trt is None:
+                    if self.verbose:
+                        print("[create_compiled_model] run torch.export.export")
+                    exp_program = torch.export.export(self.model, args)
+                    if self.verbose:
+                        print(
+                            "[create_compiled_model] run torch_tensorrt.dynamo.compile"
+                        )
+                    self.trt = torch_tensorrt.dynamo.compile(exp_program, args)
+                    if self.verbose:
+                        print("[create_compiled_model] done")
+                return self.trt(*args)
+
+        return trt_backend(model)
+
     if backend == "eager":
         assert (
             not return_storage
