@@ -296,24 +296,26 @@ def create_compiled_model(
         assert (
             not return_storage
         ), f"return_storage=True not implemented with backend={backend!r}"
+        assert not use_dynamic, (
+            "TensorRT is not implemented when use_dynamic is False. "
+            "In that case, inputs should be a list of torch_tensorrt.Input objects. "
+        )
 
         import torch_tensorrt
 
-        def backend_trt(graph_module, args):
-            trt_gm = torch_tensorrt.dynamo.compile(graph_module, args)
+        class trt_backend:
+            def __init__(self, model):
+                self.model = model
+                self.trt = None
 
-            def execute(*inputs):
-                return trt_gm(*inputs)
+            def __call__(self, *args):
+                if self.trt is None:
+                    exp_program = torch.export.export(self.model, args)
+                    self.trt = torch_tensorrt.dynamo.compile(exp_program, args)
+                    print(self.trt)
+                return self.trt(*args)
 
-            return execute
-
-        aot_compiler = aot_autograd(
-            fw_compiler=backend_trt,
-            decompositions=get_decomposition_table(),
-        )
-        return torch.compile(
-            model, backend=aot_compiler, fullgraph=True, dynamic=use_dynamic
-        )
+        return trt_backend(model)
 
     if backend == "eager":
         assert (

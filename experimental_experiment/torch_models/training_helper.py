@@ -153,9 +153,6 @@ def make_aot_ort(
 
                 order_algorithm = getattr(OrderAlgorithm, order_algorithm.upper())
 
-            print("*********", dump_patterns)
-            assert dump_patterns
-
             gr = GraphBuilder(
                 next_model,
                 infer_shapes=True,
