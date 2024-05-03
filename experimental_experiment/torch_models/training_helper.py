@@ -15,6 +15,7 @@ def make_aot_ort(
     processor: str = "CPU",
     ort_optimization_level: Optional[str] = None,
     order_algorithm: Optional[str] = None,
+    dump_patterns: Optional[str] = None,
 ) -> tuple:
     """
     Creates a backend to train model with DORT.
@@ -32,6 +33,7 @@ def make_aot_ort(
     :param ort_optimization_level: onnxruntime optimization level
     :param order_algorithm: algorithm optimizing the order the onnx node,
         none by default
+    :param dump_patterns: dump the applied patterns
     :return: twice the same backend
     """
     import onnxruntime
@@ -151,11 +153,17 @@ def make_aot_ort(
 
                 order_algorithm = getattr(OrderAlgorithm, order_algorithm.upper())
 
+            print("*********", dump_patterns)
+            assert dump_patterns
+
             gr = GraphBuilder(
                 next_model,
                 infer_shapes=True,
                 optimization_options=OptimizationOptions(
-                    patterns=patterns, processor=processor, order=order_algorithm
+                    patterns=patterns,
+                    processor=processor,
+                    order=order_algorithm,
+                    dump_applied_patterns=dump_patterns,
                 ),
                 verbose=verbose,
             )

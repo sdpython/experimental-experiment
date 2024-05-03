@@ -690,6 +690,7 @@ class GraphBuilderPatternOptimization:
     def _save_pattern_as_proto(
         self, folder: str, match: MatchResult, new_nodes: List[NodeProto]
     ):
+        assert isinstance(folder, str), f"Unexpected type {type(folder)} for folder."
         if not os.path.exists(folder):
             os.mkdir(folder)
 
@@ -784,14 +785,15 @@ class GraphBuilderPatternOptimization:
         model = oh.make_model(
             oh.make_graph(fproto.node, "pattern", inputs, outputs),
             opset_imports=fproto.opset_import,
-            ir_version=self.builder.ir_version,
         )
 
         model_apply = oh.make_model(
             oh.make_graph(fproto_apply.node, "pattern", inputs, outputs),
             opset_imports=fproto_apply.opset_import,
-            ir_version=self.builder.ir_version,
         )
+        if self.builder.ir_version:
+            model.ir_version = self.builder.ir_version
+            model_apply.ir_version = self.builder.ir_version
 
         with open(fullname, "wb") as f:
             f.write(model.SerializeToString())
