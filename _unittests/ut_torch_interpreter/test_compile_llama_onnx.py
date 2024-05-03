@@ -201,6 +201,48 @@ class TestDynamoLlama(ExtTestCase):
 
     @ignore_warnings((UserWarning, DeprecationWarning))
     @skipif_ci_windows("torch.compile not supported on Windows")
+    def test_tensorrt(self):
+        import torch
+
+        try:
+            import tensorrt  # noqa: F401
+            import torch_tensorrt
+        except ImportError as e:
+            raise unittest.SkipTest(f"Cannot import tensorrt due to {e}.")
+
+        class MLP(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.fc1 = torch.nn.Linear(2, 1024, bias=True)
+                self.fc2 = torch.nn.Linear(1024, 2048, bias=True)
+                self.fc3 = torch.nn.Linear(2048, 2, bias=True)
+
+            def forward(self, tensor_x: torch.Tensor):
+                tensor_x = self.fc1(tensor_x)
+                tensor_x = torch.sigmoid(tensor_x)
+                tensor_x = self.fc2(tensor_x)
+                tensor_x = torch.sigmoid(tensor_x)
+                tensor_x = self.fc3(tensor_x)
+                tensor_x = torch.sigmoid(tensor_x)
+                return tensor_x
+
+        # with static shape (dynamic=False), the conversion to onnx is done
+        # every time the batch size changes
+        batch_sizes = [3, 3, 3, 3, 3]
+
+        example_args_collection = [
+            (torch.randn(batch, 2, dtype=torch.float32).cuda(),)
+            for batch in batch_sizes
+        ]
+
+        model = MLP().eval().cuda()
+        inputs = example_args_collection[0]
+        exp_program = torch.export.export(model, tuple(inputs))
+        trt_gm = torch_tensorrt.dynamo.compile(exp_program, inputs)
+        trt_gm(*inputs)
+
+    @ignore_warnings((UserWarning, DeprecationWarning))
+    @skipif_ci_windows("torch.compile not supported on Windows")
     @requires_torch("2.2", "missing kernel")
     def test_mlp_backward_ort(self):
         import torch
@@ -540,6 +582,27 @@ class TestDynamoLlama(ExtTestCase):
             impl="ort",
             mixed=True,
         )
+
+    @ignore_warnings((UserWarning, DeprecationWarning))
+    @skipif_ci_windows("torch.compile not supported on Windows")
+    def test_tensorrt_llama(self):
+        try:
+            import tensorrt  # noqa: F401
+            import torch_tensorrt
+        except ImportError as e:
+            raise unittest.SkipTest(f"Cannot import tensorrt due to {e}.")
+
+        import torch
+        from experimental_experiment.torch_models.llama_helper import get_llama_model
+
+        input_dims = self.get_input_dims(False)
+        model, example_args_collection = get_llama_model(input_dims=input_dims)
+        model = model.cuda()
+
+        inputs = tuple(_.cuda() for _ in example_args_collection[0])
+        exp_program = torch.export.export(model, inputs)
+        trt_gm = torch_tensorrt.dynamo.compile(exp_program, inputs)
+        trt_gm(*inputs)
 
 
 if __name__ == "__main__":
