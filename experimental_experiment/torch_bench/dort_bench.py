@@ -94,10 +94,15 @@ def main(args=None):
     print(f"with_mask={with_mask}")
     print(f"implementation={args.implementation}")
     print(f"mixed={args.mixed}")
+    dump_patterns = args.dump_patterns in ("1", 1, "True", "true", True)
 
     if args.backend == "custom":
         print(f"disable_pattern={disable_pattern!r}")
         print(f"enable_pattern={enable_pattern!r}")
+    assert not dump_patterns or args.export, (
+        f"optimization patterns cannot be dumped if export is not set "
+        f"dump_patterns={dump_patterns!r}, export={args.export}"
+    )
 
     is_cuda = args.device == "cuda"
     if is_cuda:
@@ -132,6 +137,23 @@ def main(args=None):
     if args.export and not os.path.exists(dump_folder):
         os.mkdir(dump_folder)
 
+    if dump_patterns:
+        dump_patterns_folder = os.path.join(dump_folder, "patterns")
+        if os.path.exists(dump_patterns_folder):
+            for _ in os.listdir(dump_patterns_folder):
+                if _.endswith(".onnx"):
+                    os.remove(os.path.join(dump_patterns_folder, _))
+    else:
+        dump_patterns_folder = None
+    if verbose:
+        if dump_patterns:
+            print(
+                f"dump models and patterns in {dump_folder!r} "
+                f"and {dump_patterns_folder!r}"
+            )
+        else:
+            print(f"dump models in {dump_folder!r}")
+
     compiled_model = create_compiled_model(
         model,
         backend=args.backend,
@@ -148,6 +170,7 @@ def main(args=None):
             if args.export
             else None
         ),
+        dump_patterns=dump_patterns_folder,
         processor=device.upper() if device.upper() == "CPU" else "CPU,CUDA",
         order_algorithm=args.order,
     )

@@ -175,6 +175,7 @@ def create_compiled_model(
     return_storage: bool = False,
     rename_inputs: bool = True,
     dump_prefix: Optional[str] = None,
+    dump_patterns: Optional[str] = None,
     optimize: bool = True,
     ort_optimize: bool = True,
     use_fused_aten_ops: bool = False,
@@ -194,6 +195,7 @@ def create_compiled_model(
         only works with backend *custom* and *debug*
     :param rename_inputs: rename inputs into ``input_{i}``
     :param dump_prefix: dumps the models (backend, custom and debug)
+    :param dump_patterns: dumps the optimization applied patterns if applicable
     :param optimize: enable optimizations
     :param ort_optimize: enables onnxruntime optimization
     :param use_fused_aten_ops: use fused opetor when converting the model,
@@ -215,6 +217,9 @@ def create_compiled_model(
         onnx_debug_backend,
     )
 
+    assert dump_patterns is None or isinstance(
+        dump_patterns, str
+    ), f"Unexpected type {type(dump_patterns)} for dump_patterns."
     assert isinstance(ort_optimize, bool), (
         f"Unexpected type={type(ort_optimize)} " f"for ort_optimize={ort_optimize}"
     )
@@ -257,6 +262,7 @@ def create_compiled_model(
             processor=processor,
             ort_optimization_level=ort_optimization_level,
             order_algorithm=order_algorithm,
+            dump_patterns=dump_patterns,
         )
         return torch.compile(model, backend=local_ort)
 
@@ -275,6 +281,8 @@ def create_compiled_model(
             disable_pattern=disable_pattern,
             processor=processor,
             order_algorithm=order_algorithm,
+            dump_prefix=dump_prefix,
+            dump_patterns=dump_patterns,
         )
         return torch.compile(model, backend=local_ort)
 
@@ -326,6 +334,7 @@ def create_compiled_model(
                 storage=storage,
                 rename_inputs=rename_inputs,
                 dump_prefix=dump_prefix,
+                dump_patterns=dump_patterns,
                 optimize=optimize,
                 dispatcher=dispatcher,
                 processor=processor,
@@ -355,6 +364,7 @@ def create_compiled_model(
                 storage=storage,
                 rename_inputs=rename_inputs,
                 dump_prefix=dump_prefix,
+                dump_patterns=dump_patterns,
                 optimize=optimize,
                 exporter="dynamo",
                 dispatcher=dispatcher,
@@ -386,6 +396,7 @@ def create_compiled_model(
                 rename_inputs=rename_inputs,
                 verbose=verbose,
                 dump_prefix=dump_prefix,
+                dump_patterns=dump_patterns,
                 optimize=optimize,
                 dispatcher=dispatcher,
                 processor=processor,
@@ -461,6 +472,7 @@ def dort_args(name: str, description: str, new_args: Optional[List[str]] = None)
         disable_pattern=("", "a list of optimization patterns to disable"),
         enable_pattern=("default", "list of optimization patterns to enable"),
         dump_folder=("dump_dort_bench", "where to dump the exported model"),
+        dump_patterns=(0, "dumps the patterns in sub folder of dump_folder"),
         optimize=(1, "optimize the model"),
         with_mask=(1, "with or without mask, dynamo may fail with a mask"),
         ort_optimize=(1, "enable or disable onnxruntime optimization"),
@@ -497,7 +509,7 @@ def export_args(name: str, description: str):
         with_mask=(1, "with or without mask, dynamo may fail with a mask"),
         order=("none", "optimization order see class OrderAlgorithm, none by default"),
         expose="exporter,device,num_hidden_layers,ort,"
-        "mixed,config,target_opset,dynamic,verbose,"
+        "mixed,config,target_opset,dynamic,verbose,dump_patterns,"
         "enable_pattern,disable_pattern,model,optimize,with_mask,order",
     )
     return args
