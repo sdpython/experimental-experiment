@@ -494,9 +494,9 @@ class TestGraphPatternCombination(ExtTestCase):
     def test_study(self):
         model = "dort-last-llama-custom__1.onnx"
         enabled = {
-            "ReduceSumNormalizePattern",
-            "SubMulBroadcastPattern",
-            "DivByMulScalarPattern",
+            "MatMulReshape2Of3Pattern",
+            # "SubMulBroadcastPattern",
+            # "DivByMulScalarPattern",
         }
         # enabled = {}
         disabled = {}
