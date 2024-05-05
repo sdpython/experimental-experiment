@@ -2797,6 +2797,51 @@ class TestGraphPatternOptimization(ExtTestCase):
         # self.assertEqual(len(split), 2)
         self._check_with_ort(onx)
 
+    def test_unsqueeze_equal(self):
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("Unsqueeze", ["X", "axis"], ["Y"]),
+                    oh.make_node("Equal", ["X", "mone"], ["xe"]),
+                    oh.make_node("Unsqueeze", ["xe", "axis"], ["Z"]),
+                ],
+                "dummy",
+                [oh.make_tensor_value_info("X", TFLOAT, ["a", "b"])],
+                [
+                    oh.make_tensor_value_info("Y", TFLOAT, ["a", 1, "b"]),
+                    oh.make_tensor_value_info("Z", TensorProto.BOOL, ["a", 1, "b"]),
+                ],
+                [
+                    onh.from_array(np.array([1], dtype=np.int64), name="axis"),
+                    onh.from_array(np.array([-1], dtype=np.float32), name="mone"),
+                ],
+            )
+        )
+        feeds = {"X": self._range(2, 3).astype(np.float32)}
+        ref = ExtendedReferenceEvaluator(model, verbose=0)
+        expected = ref.run(None, feeds)[0]
+        inputs = [tuple(n.input) for n in model.graph.node]
+
+        gr = GraphBuilder(
+            model,
+            infer_shapes=True,
+            optimization_options=OptimizationOptions(
+                patterns=["UnsqueezeEqual"], verbose=0
+            ),
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+        self.assertEqual(
+            ["Unsqueeze", "Equal"],
+            [n.op_type for n in opt_onx.graph.node],
+        )
+        self.assertEqual(2, len(opt_onx.graph.initializer))
+        new_inputs = [tuple(n.input) for n in opt_onx.graph.node]
+        self.assertNotEqual(inputs, new_inputs)
+
+        opt_ref = ExtendedReferenceEvaluator(opt_onx)
+        got = opt_ref.run(None, feeds)[0]
+        self.assertEqualArray(expected, got, atol=1e-3)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
