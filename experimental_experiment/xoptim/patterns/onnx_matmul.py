@@ -41,10 +41,10 @@ class MatMulReshape2Of3Pattern(PatternOptimization):
             return self.none()
 
         if node.op_type == "FusedMatMul":
-            tA = g.get_attribute(node, "transBatchA")
+            tA = g.get_attribute(node, "transBatchA", exc=False)
             if tA is not None and tA.i != 0:
                 return self.none(node, inspect.currentframe().f_lineno)
-            tB = g.get_attribute(node, "transBatchB")
+            tB = g.get_attribute(node, "transBatchB", exc=False)
             if tB is not None and tB.i != 0:
                 return self.none(node, inspect.currentframe().f_lineno)
 
