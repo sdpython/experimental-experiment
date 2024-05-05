@@ -63,11 +63,16 @@ class TestGraphPatternOptimization(ExtTestCase):
 
     def _check_with_ort(self, proto: ModelProto):
         from onnxruntime import InferenceSession, get_available_providers
+        from onnxruntime.capi.onnxruntime_pybind11_state import Fail
 
         providers = ["CPUExecutionProvider"]
         if "CUDAExecutionProvider" in get_available_providers():
             providers.insert(0, "CUDAExecutionProvider")
-        InferenceSession(proto.SerializeToString(), providers=providers)
+        try:
+            InferenceSession(proto.SerializeToString(), providers=providers)
+        except Fail as e:
+            saved = self.dump_onnx("test_graph_pattern_optimization.onnx", proto)
+            raise AssertionError(f"Fails due to {e}, model saved into {saved!r}")
 
     @ignore_warnings(DeprecationWarning)
     def test_try_with_custom_model(self):
