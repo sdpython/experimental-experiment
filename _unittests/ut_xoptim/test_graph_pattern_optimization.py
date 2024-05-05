@@ -2008,7 +2008,7 @@ class TestGraphPatternOptimization(ExtTestCase):
             infer_shapes=True,
             optimization_options=OptimizationOptions(
                 patterns=["SlicesSplit"],
-                verbose=10,
+                verbose=0,
             ),
         )
         gr.set_shape("transpose", (2, 2, 1024, 512))
@@ -2778,6 +2778,24 @@ class TestGraphPatternOptimization(ExtTestCase):
         opt_ref = ExtendedReferenceEvaluator(opt_onx)
         got = opt_ref.run(None, feeds)[0]
         self.assertEqualArray(expected, got, atol=1e-3)
+
+    def test_2of3_expand(self):
+        origin = self._get_model("bug_2of3_s.onnx")
+        split = [n for n in origin.graph.node if n.op_type == "Split"]
+        self.assertEqual(len(split), 0)
+        self._check_with_ort(origin)
+        gr = GraphBuilder(
+            origin,
+            infer_shapes=True,
+            optimization_options=OptimizationOptions(
+                patterns=["Expand", "ReshapeReshape", "MatMulReshape2Of3"],
+                verbose=0,
+            ),
+        )
+        onx = gr.to_onnx(optimize=True)
+        # split = [n for n in onx.graph.node if n.op_type == "Split"]
+        # self.assertEqual(len(split), 2)
+        self._check_with_ort(onx)
 
 
 if __name__ == "__main__":
