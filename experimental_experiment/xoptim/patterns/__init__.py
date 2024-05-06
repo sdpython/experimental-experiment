@@ -11,6 +11,7 @@ from .onnx_cast import (
     CastOpCastPattern,
     ComputationCastOpCastPattern,
 )
+from .onnx_equal import UnsqueezeEqualPattern
 from .onnx_expand import ExpandPattern, ExpandBroadcastPattern, ExpandSwapPattern
 from .onnx_mul import (
     DivByMulScalarPattern,
@@ -111,5 +112,6 @@ def get_default_patterns(verbose: int = 0) -> List[PatternOptimization]:
         TransposeMatMulPattern(verbose=verbose),
         TransposeReshapeMatMulPattern(verbose=verbose),
         TransposeTransposePattern(verbose=verbose),
+        UnsqueezeEqualPattern(verbose=verbose),
         UnsqueezeUnsqueezePattern(verbose=verbose),
     ]

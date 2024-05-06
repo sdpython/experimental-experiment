@@ -63,11 +63,16 @@ class TestGraphPatternOptimization(ExtTestCase):
 
     def _check_with_ort(self, proto: ModelProto):
         from onnxruntime import InferenceSession, get_available_providers
+        from onnxruntime.capi.onnxruntime_pybind11_state import Fail
 
         providers = ["CPUExecutionProvider"]
         if "CUDAExecutionProvider" in get_available_providers():
             providers.insert(0, "CUDAExecutionProvider")
-        InferenceSession(proto.SerializeToString(), providers=providers)
+        try:
+            InferenceSession(proto.SerializeToString(), providers=providers)
+        except Fail as e:
+            saved = self.dump_onnx("test_graph_pattern_optimization.onnx", proto)
+            raise AssertionError(f"Fails due to {e}, model saved into {saved!r}")
 
     @ignore_warnings(DeprecationWarning)
     def test_try_with_custom_model(self):
@@ -1542,14 +1547,8 @@ class TestGraphPatternOptimization(ExtTestCase):
         )
         opt_onx = gr.to_onnx(optimize=True)
 
-        # self.assertEqual(["Reshape", "MatMul"], [n.op_type for n in opt_onx.graph.node])
-        # self.assertEqual(1, len(opt_onx.graph.initializer))
-
-        # It is not rewritten anymore.
-        self.assertEqual(
-            ["Reshape", "MatMul", "Reshape"], [n.op_type for n in opt_onx.graph.node]
-        )
-        self.assertEqual(2, len(opt_onx.graph.initializer))
+        self.assertEqual(["Reshape", "MatMul"], [n.op_type for n in opt_onx.graph.node])
+        self.assertEqual(1, len(opt_onx.graph.initializer))
 
         opt_ref = ExtendedReferenceEvaluator(opt_onx)
         got = opt_ref.run(None, feeds)[0]
@@ -1589,14 +1588,8 @@ class TestGraphPatternOptimization(ExtTestCase):
         )
         opt_onx = gr.to_onnx(optimize=True)
 
-        # self.assertEqual(["Reshape", "MatMul"], [n.op_type for n in opt_onx.graph.node])
-        # self.assertEqual(1, len(opt_onx.graph.initializer))
-
-        # It is not rewritten anymore.
-        self.assertEqual(
-            ["Reshape", "MatMul", "Reshape"], [n.op_type for n in opt_onx.graph.node]
-        )
-        self.assertEqual(2, len(opt_onx.graph.initializer))
+        self.assertEqual(["Reshape", "MatMul"], [n.op_type for n in opt_onx.graph.node])
+        self.assertEqual(1, len(opt_onx.graph.initializer))
 
         opt_ref = ExtendedReferenceEvaluator(opt_onx)
         got = opt_ref.run(None, feeds)[0]
@@ -2015,7 +2008,7 @@ class TestGraphPatternOptimization(ExtTestCase):
             infer_shapes=True,
             optimization_options=OptimizationOptions(
                 patterns=["SlicesSplit"],
-                verbose=10,
+                verbose=0,
             ),
         )
         gr.set_shape("transpose", (2, 2, 1024, 512))
@@ -2779,6 +2772,69 @@ class TestGraphPatternOptimization(ExtTestCase):
             [n.op_type for n in opt_onx.graph.node],
         )
         self.assertEqual(1, len(opt_onx.graph.initializer))
+        new_inputs = [tuple(n.input) for n in opt_onx.graph.node]
+        self.assertNotEqual(inputs, new_inputs)
+
+        opt_ref = ExtendedReferenceEvaluator(opt_onx)
+        got = opt_ref.run(None, feeds)[0]
+        self.assertEqualArray(expected, got, atol=1e-3)
+
+    def test_2of3_expand(self):
+        origin = self._get_model("bug_2of3_s.onnx")
+        split = [n for n in origin.graph.node if n.op_type == "Split"]
+        self.assertEqual(len(split), 0)
+        self._check_with_ort(origin)
+        gr = GraphBuilder(
+            origin,
+            infer_shapes=True,
+            optimization_options=OptimizationOptions(
+                patterns=["Expand", "ReshapeReshape", "MatMulReshape2Of3"],
+                verbose=0,
+            ),
+        )
+        onx = gr.to_onnx(optimize=True)
+        # split = [n for n in onx.graph.node if n.op_type == "Split"]
+        # self.assertEqual(len(split), 2)
+        self._check_with_ort(onx)
+
+    def test_unsqueeze_equal(self):
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("Unsqueeze", ["X", "axis"], ["Y"]),
+                    oh.make_node("Equal", ["X", "mone"], ["xe"]),
+                    oh.make_node("Unsqueeze", ["xe", "axis"], ["Z"]),
+                ],
+                "dummy",
+                [oh.make_tensor_value_info("X", TFLOAT, ["a", "b"])],
+                [
+                    oh.make_tensor_value_info("Y", TFLOAT, ["a", 1, "b"]),
+                    oh.make_tensor_value_info("Z", TensorProto.BOOL, ["a", 1, "b"]),
+                ],
+                [
+                    onh.from_array(np.array([1], dtype=np.int64), name="axis"),
+                    onh.from_array(np.array([-1], dtype=np.float32), name="mone"),
+                ],
+            )
+        )
+        feeds = {"X": self._range(2, 3).astype(np.float32)}
+        ref = ExtendedReferenceEvaluator(model, verbose=0)
+        expected = ref.run(None, feeds)[0]
+        inputs = [tuple(n.input) for n in model.graph.node]
+
+        gr = GraphBuilder(
+            model,
+            infer_shapes=True,
+            optimization_options=OptimizationOptions(
+                patterns=["UnsqueezeEqual"], verbose=0
+            ),
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+        self.assertEqual(
+            ["Unsqueeze", "Equal"],
+            [n.op_type for n in opt_onx.graph.node],
+        )
+        self.assertEqual(2, len(opt_onx.graph.initializer))
         new_inputs = [tuple(n.input) for n in opt_onx.graph.node]
         self.assertNotEqual(inputs, new_inputs)
 

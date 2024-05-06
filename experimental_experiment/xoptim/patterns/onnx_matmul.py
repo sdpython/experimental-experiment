@@ -35,8 +35,18 @@ class MatMulReshape2Of3Pattern(PatternOptimization):
         node: NodeProto,
         matched: List[MatchResult],
     ) -> Optional[MatchResult]:
-        if node.op_type != "MatMul" or node.domain != "":
+        if (node.op_type != "MatMul" or node.domain != "") and (
+            node.op_type != "FusedMatMul" or node.domain != "com.microsoft"
+        ):
             return self.none()
+
+        if node.op_type == "FusedMatMul":
+            tA = g.get_attribute(node, "transBatchA", exc=False)
+            if tA is not None and tA.i != 0:
+                return self.none(node, inspect.currentframe().f_lineno)
+            tB = g.get_attribute(node, "transBatchB", exc=False)
+            if tB is not None and tB.i != 0:
+                return self.none(node, inspect.currentframe().f_lineno)
 
         if (
             not g.has_shape(node.output[0])
@@ -98,7 +108,7 @@ class MatMulReshape2Of3Pattern(PatternOptimization):
         if next_node is not None:
             next_shape = g.get_shape(next_node.output[0])
             matmul_shape = the_shape_left[:-1] + (shape_right[-1],)
-            if matmul_shape[-2:] != next_shape[-2:] or not self.same_size(
+            if matmul_shape[-2:] != next_shape[-2:] and not self.same_size(
                 g, matmul_shape[:-2], next_shape[:-2]
             ):
                 return self.none(node, inspect.currentframe().f_lineno)
@@ -109,7 +119,9 @@ class MatMulReshape2Of3Pattern(PatternOptimization):
                 # All shapes are different. It is not worth it.
                 return self.none(node, inspect.currentframe().f_lineno)
 
-            if not (len(next_shape) == len(the_shape_left) == len(the_shape_right)):
+            if len(next_shape) != len(the_shape_left) and len(next_shape) != len(
+                the_shape_right
+            ):
                 return self.none(node, inspect.currentframe().f_lineno)
         else:
             if not (len(the_shape_left) == len(the_shape_right)):
@@ -125,10 +137,10 @@ class MatMulReshape2Of3Pattern(PatternOptimization):
     def apply(
         self,
         g: "GraphBuilder",  # noqa: F821
-        node_left: NodeProto,
-        node_right: NodeProto,
+        node_left: Optional[NodeProto],
+        node_right: Optional[NodeProto],
         node: NodeProto,
-        next_node: NodeProto,
+        next_node: Optional[NodeProto],
     ) -> List[NodeProto]:
 
         res = []
@@ -143,6 +155,44 @@ class MatMulReshape2Of3Pattern(PatternOptimization):
 
         the_shape_left = shape_left_left or shape_left
         the_shape_right = shape_right_right or shape_right
+
+        # If the first dimensions are not the same, we may assume
+        # the size is the same but a reshape is still needed.
+        add_right, add_left = False, False
+        one_more_reshape = the_shape_left[:-2] != the_shape_right[:-2]
+        if one_more_reshape:
+            expected_shape = g.get_shape(
+                node.output[0] if next_node is None else next_node.output[0]
+            )
+
+            assert node_left is not None or node_right is not None, (
+                f"Shapes are not consistent, one node Reshape should be there, "
+                f"node.name={node.name!r}, "
+                f"shape_left={shape_left}, shape_right={shape_right}, "
+                f"the_shape_left={shape_left_left}, "
+                f"the_shape_right={the_shape_right}, "
+                f"node_left is None={node_left is None}, "
+                f"node_right is None={node_right is None}, "
+                f"next_node is None={next_node is None}, "
+                f"expected_shape={expected_shape}"
+            )
+            if node_left is not None and the_shape_left[:-2] != expected_shape[:-2]:
+                add_left = True
+            elif node_right is not None and the_shape_right[:-2] != expected_shape[:-2]:
+                add_right = True
+            elif node_left is not None and node_right is not None:
+                raise AssertionError(
+                    f"Case still not implemented, shapes are not consistent, "
+                    f"one node Reshape should be there, "
+                    f"node.name={node.name!r}, "
+                    f"shape_left={shape_left}, shape_right={shape_right}, "
+                    f"the_shape_left={shape_left_left}, "
+                    f"the_shape_right={the_shape_right}, "
+                    f"node_left is None={node_left is None}, "
+                    f"node_right is None={node_right is None}, "
+                    f"next_node is None={next_node is None}, "
+                    f"expected_shape={expected_shape}"
+                )
 
         # node left
         if node_left is None:
@@ -195,6 +245,10 @@ class MatMulReshape2Of3Pattern(PatternOptimization):
             right_name = node_right.input[0]
 
         if next_node is None:
+            assert not add_right and not add_left, (
+                f"add_right={add_right}, add_left={add_left} "
+                f"are not implemented yet in this case."
+            )
             # Reshape is needed.
             previous_shape = shape_left[:-1] + (shape_right[-1],)
             new_shape = the_shape_left[:-1] + (the_shape_right[-1],)
@@ -203,14 +257,18 @@ class MatMulReshape2Of3Pattern(PatternOptimization):
                 previous_shape_name = g.make_initializer(
                     "", np.array(previous_shape, dtype=np.int64)
                 )
+                mm = g.make_node(
+                    node.op_type,
+                    [left_name, right_name],
+                    [new_name],
+                    name=f"{self.__class__.__name__}--{node.name}",
+                    domain=node.domain,
+                )
+                if node.attribute:
+                    mm.attribute.extend(node.attribute)
                 res.extend(
                     [
-                        g.make_node(
-                            node.op_type,
-                            [left_name, right_name],
-                            [new_name],
-                            name=f"{self.__class__.__name__}--{node.name}",
-                        ),
+                        mm,
                         g.make_node(
                             "Reshape",
                             [new_name, previous_shape_name],
@@ -220,21 +278,61 @@ class MatMulReshape2Of3Pattern(PatternOptimization):
                     ]
                 )
             else:
-                res.appens(
-                    g.make_node(
-                        node.op_type,
-                        [left_name, right_name],
-                        [node.output[0]],
-                        name=f"{self.__class__.__name__}--{node.name}",
-                    )
+                mm = g.make_node(
+                    node.op_type,
+                    [left_name, right_name],
+                    [node.output[0]],
+                    name=f"{self.__class__.__name__}--{node.name}",
+                    domain=node.domain,
                 )
+                if node.attribute:
+                    mm.attribute.extend(node.attribute)
+                res.append(mm)
         else:
+            if add_left:
+                new_left_name = g.unique_name(
+                    f"{self.__class__.__name__}AL_{left_name}"
+                )
+                new_sh = (
+                    g.get_shape(next_node.output[0])[:-2]
+                    + g.get_shape(node.input[0])[-2:]
+                )
+                sh = g.make_initializer("", np.array(new_sh, dtype=np.int64))
+                add = g.make_node(
+                    "Reshape",
+                    [left_name, sh],
+                    [new_left_name],
+                    name=f"{self.__class__.__name__}--AL--{node.name}",
+                )
+                res.append(add)
+                left_name = new_left_name
+            if add_right:
+                new_right_name = g.unique_name(
+                    f"{self.__class__.__name__}AR_{right_name}"
+                )
+                new_sh = (
+                    g.get_shape(next_node.output[0])[:-2]
+                    + g.get_shape(node.input[1])[-2:]
+                )
+                sh = g.make_initializer("", np.array(new_sh, dtype=np.int64))
+                add = g.make_node(
+                    "Reshape",
+                    [right_name, sh],
+                    [new_right_name],
+                    name=f"{self.__class__.__name__}--AR--{node.name}",
+                )
+                res.append(add)
+                right_name = new_right_name
+
             main_node = g.make_node(
                 node.op_type,
                 [left_name, right_name],
                 [next_node.output[0]],
                 name=f"{self.__class__.__name__}--{node.name}",
+                domain=node.domain,
             )
+            if node.attribute:
+                main_node.attribute.extend(node.attribute)
             res.append(main_node)
 
             if g.is_used_more_than_once(node.output[0]):
