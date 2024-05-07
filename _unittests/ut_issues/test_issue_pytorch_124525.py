@@ -1,5 +1,9 @@
 import unittest
-from experimental_experiment.ext_test_case import ExtTestCase, ignore_warnings
+from experimental_experiment.ext_test_case import (
+    ExtTestCase,
+    ignore_warnings,
+    requires_onnxruntime_training,
+)
 
 
 class TestIssuePytorch_124525(ExtTestCase):
@@ -43,6 +47,7 @@ class TestIssuePytorch_124525(ExtTestCase):
         loss.backward()
 
     @ignore_warnings((UserWarning, DeprecationWarning))
+    @requires_onnxruntime_training()
     def test_cort(self):
         import torch
         from torch._dynamo.backends.common import aot_autograd
