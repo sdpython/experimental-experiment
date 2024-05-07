@@ -596,12 +596,24 @@ class AddMulTransposePattern(PatternOptimization):
         node: NodeProto,
         transpose_node: NodeProto,
     ) -> List[NodeProto]:
+        att = g.get_attribute(node, "transposeMiddle", exc=False)
+        if att is None or att.i == 0:
+            return [
+                g.make_node(
+                    node.op_type,
+                    node.input,
+                    transpose_node.output,
+                    transposeMiddle=1,
+                    domain=node.domain,
+                    name=f"{self.__class__.__name__}--{node.name}",
+                )
+            ]
+        # Otherwise, the next transpose nullifies the one already set in node.
         return [
             g.make_node(
                 node.op_type,
                 node.input,
                 transpose_node.output,
-                transposeMiddle=1,
                 domain=node.domain,
                 name=f"{self.__class__.__name__}--{node.name}",
             )
