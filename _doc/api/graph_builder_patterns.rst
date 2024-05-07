@@ -35,8 +35,6 @@ Onnx (default) Patterns
 
 .. autoclass:: experimental_experiment.xoptim.patterns.ReshapeMatMulReshapePattern
 
-.. autoclass:: experimental_experiment.xoptim.patterns.UnsqueezeEqualPattern
-
 .. autoclass:: experimental_experiment.xoptim.patterns.Reshape2Of3Pattern
 
 .. autoclass:: experimental_experiment.xoptim.patterns.ReshapeReshapeBinaryPattern
