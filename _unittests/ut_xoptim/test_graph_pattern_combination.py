@@ -494,7 +494,7 @@ class TestGraphPatternCombination(ExtTestCase):
     def test_study(self):
         model = "dort-last-llama-custom__1.onnx"
         enabled = {
-            "UnsqueezeEqualPattern",
+            "AddMulTransposePattern",
             # "SubMulBroadcastPattern",
             # "DivByMulScalarPattern",
         }

@@ -1,3 +1,4 @@
+import numpy as np
 from onnx.reference.op_run import OpRun
 
 
@@ -18,15 +19,21 @@ class MulMul(OpRun):
 class AddMul(OpRun):
     op_domain = "onnx_extended.ortops.optim.cuda"
 
-    def _run(self, x, y, z):
-        return ((x + y) * z,)
+    def _run(self, x, y, z, transposeMiddle=None):
+        res = (x + y) * z
+        if transposeMiddle:
+            res = np.transpose(res, axes=[0, 2, 1, 3])
+        return (res,)
 
 
 class MulAdd(OpRun):
     op_domain = "onnx_extended.ortops.optim.cuda"
 
-    def _run(self, x, y, z):
-        return ((x * y) + z,)
+    def _run(self, x, y, z, transposeMiddle=None):
+        res = (x * y) + z
+        if transposeMiddle:
+            res = np.transpose(res, axes=[0, 2, 1, 3])
+        return (res,)
 
 
 class SubMul(OpRun):

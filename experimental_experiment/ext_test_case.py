@@ -276,6 +276,11 @@ def measure_time(
 class ExtTestCase(unittest.TestCase):
     _warns: List[Tuple[str, int, Warning]] = []
 
+    def print_model(self, model: "ModelProto"):  # noqa: F821
+        from onnx_array_api.plotting.text_plot import onnx_simple_text_plot
+
+        print(onnx_simple_text_plot(model))
+
     def get_dump_file(self, name: str, folder: Optional[str] = None) -> str:
         """
         Returns a filename to dump a model.
