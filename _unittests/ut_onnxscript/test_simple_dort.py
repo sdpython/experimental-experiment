@@ -17,7 +17,7 @@ from experimental_experiment.ext_test_case import (
 )
 
 
-def make_aot_ort(
+def _make_aot_ort(
     dynamic: bool = False,
     verbose: int = 0,
     ort_optimization_level: Optional[str] = None,
@@ -143,7 +143,7 @@ class TestSimpleDort(ExtTestCase):
         model.eval()
 
         # forward/backward
-        local_aot_ort = make_aot_ort(dynamic=dynamic_axes is not None)
+        local_aot_ort = _make_aot_ort(dynamic=dynamic_axes is not None)
 
         compiled_model = torch.compile(
             copy.deepcopy(model),
