@@ -555,3 +555,54 @@ class AddMulSharedInputBroadcastPattern(AddMulSharedInputPattern):
 
     def __init__(self, verbose: int = 0, priority: int = 4, broadcast: bool = True):
         AddMulSharedInputPattern.__init__(self, verbose, priority, broadcast)
+
+
+class AddMulTransposePattern(PatternOptimization):
+    """
+    Replaces (AddMul|MulAdd) + Transpose by (AddMul|MulAdd)(., transposeMiddle=1)
+    if it is possible.
+    """
+
+    def match(
+        self,
+        g: "GraphBuilderPatternOptimization",  # noqa: F821
+        node: NodeProto,
+        matched: List[MatchResult],
+    ) -> Optional[MatchResult]:
+        if (
+            node.op_type not in {"AddMul", "MulAdd"}
+            or node.domain != "onnx_extended.ortops.optim.cuda"
+        ):
+            return self.none()
+        if g.is_used_more_than_once(node.output[0]):
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        next_node = g.next_nodes(node.output[0])[0]
+        if next_node.op_type != "Transpose" or next_node.domain != "":
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        perm = g.get_attribute(next_node, "perm").ints
+        if len(perm) != 4:
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        if list(perm) != [0, 2, 1, 3]:
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        return MatchResult(self, [node, next_node], self.apply, insert_at=node)
+
+    def apply(
+        self,
+        g: "GraphBuilder",  # noqa: F821
+        node: NodeProto,
+        transpose_node: NodeProto,
+    ) -> List[NodeProto]:
+        return [
+            g.make_node(
+                node.op_type,
+                node.input,
+                transpose_node.output,
+                transposeMiddle=1,
+                domain=node.domain,
+                name=f"{self.__class__.__name__}--{node.name}",
+            )
+        ]

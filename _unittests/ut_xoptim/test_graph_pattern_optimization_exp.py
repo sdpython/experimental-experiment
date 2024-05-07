@@ -648,6 +648,75 @@ class TestGraphPatternOptimizationExp(ExtTestCase):
                 got = ref2.run(None, feeds)
                 self.assertEqualArray(expected[0], got[0])
 
+    def _get_add_mul_transpose_model(
+        self, op_type1: str, op_type2: str, left: bool
+    ) -> ModelProto:
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node(
+                        f"{op_type1}{op_type2}",
+                        ["X", "Y", "Z"],
+                        ["F1"],
+                        domain="onnx_extended.ortops.optim.cuda",
+                    ),
+                    oh.make_node("Transpose", ["F1"], ["final"], perm=[0, 2, 1, 3]),
+                ],
+                "dummy",
+                [
+                    oh.make_tensor_value_info("X", TFLOAT, ["a", "b", "c", "d"]),
+                    oh.make_tensor_value_info("Y", TFLOAT, ["a", "b", "c", "d"]),
+                    oh.make_tensor_value_info("Z", TFLOAT, ["a", "b", "c", "d"]),
+                ],
+                [oh.make_tensor_value_info("final", TFLOAT, ["a", "b", "c", "d"])],
+            ),
+            opset_imports=[
+                oh.make_opsetid("", 18),
+                oh.make_opsetid("onnx_extended.ortops.optim.cuda", 1),
+            ],
+            ir_version=9,
+        )
+        check_model(model)
+        return model
+
+    def test_add_mul_transpose_pattern(self):
+        for op_type, left in itertools.product(["Add", "Mul"], [True, False]):
+            with self.subTest(op_type=op_type, left=left):
+                op_type1 = op_type
+                op_type2 = "Mul" if op_type == "Add" else "Add"
+                model = self._get_add_mul_transpose_model(
+                    op_type1=op_type1,
+                    op_type2=op_type2,
+                    left=left,
+                )
+                self.assertEqual(len(model.graph.node), 2)
+                gr = GraphBuilder(
+                    model,
+                    infer_shapes=True,
+                    optimization_options=OptimizationOptions(
+                        patterns=["AddMulTranspose"], processor="CPU,CUDA", verbose=0
+                    ),
+                )
+                self.capture(lambda: self.print_model(model))
+                opt_onx = gr.to_onnx(optimize=True)
+                self.assertEqual(
+                    [f"{op_type1}{op_type2}"], [_.op_type for _ in opt_onx.graph.node]
+                )
+                opsets = {v.domain: v.version for v in opt_onx.opset_import}
+                self.assertIn("onnx_extended.ortops.optim.cuda", opsets)
+                self.assertEqual(opsets["onnx_extended.ortops.optim.cuda"], 1)
+
+                feeds = {
+                    "X": self._range(2, 3, 4, 5),
+                    "Y": self._range(2, 3, 4, 5),
+                    "Z": self._range(2, 3, 4, 5),
+                }
+                ref1 = ExtendedReferenceEvaluator(model)
+                expected = ref1.run(None, feeds)
+                ref2 = ExtendedReferenceEvaluator(opt_onx)
+                got = ref2.run(None, feeds)
+                self.assertEqualArray(expected[0], got[0])
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
