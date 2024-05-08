@@ -12,67 +12,65 @@ ExtendedReferenceEvaluator
 Kernels
 =======
 
-.. autoclass:: experimental_experiment.reference.AddAdd
+.. autoclass:: experimental_experiment.reference.evaluator.AddAdd
 
-.. autoclass:: experimental_experiment.reference.
+.. autoclass:: experimental_experiment.reference.evaluator.AddMul
 
-.. autoclass:: experimental_experiment.reference.AddMul
+.. autoclass:: experimental_experiment.reference.evaluator.AddSharedInput
 
-.. autoclass:: experimental_experiment.reference.AddSharedInput
+.. autoclass:: experimental_experiment.reference.evaluator.Concat
 
-.. autoclass:: experimental_experiment.reference.Concat
+.. autoclass:: experimental_experiment.reference.evaluator.CastLike_15
 
-.. autoclass:: experimental_experiment.reference.CastLike_15
+.. autoclass:: experimental_experiment.reference.evaluator.CastLike_19
 
-.. autoclass:: experimental_experiment.reference.CastLike_19
+.. autoclass:: experimental_experiment.reference.evaluator.ConstantOfShape
 
-.. autoclass:: experimental_experiment.reference.ConstantOfShape
+.. autoclass:: experimental_experiment.reference.evaluator.FusedMatMul
 
-.. autoclass:: experimental_experiment.reference.FusedMatMul
+.. autoclass:: experimental_experiment.reference.evaluator.GatherGrad
 
-.. autoclass:: experimental_experiment.reference.GatherGrad
+.. autoclass:: experimental_experiment.reference.evaluator.MaskedScatterNDOfShape
 
-.. autoclass:: experimental_experiment.reference.MaskedScatterNDOfShape
+.. autoclass:: experimental_experiment.reference.evaluator.MemcpyFromHost
 
-.. autoclass:: experimental_experiment.reference.MemcpyFromHost
+.. autoclass:: experimental_experiment.reference.evaluator.MemcpyToHost
 
-.. autoclass:: experimental_experiment.reference.MemcpyToHost
+.. autoclass:: experimental_experiment.reference.evaluator.MulAdd
 
-.. autoclass:: experimental_experiment.reference.MulAdd
+.. autoclass:: experimental_experiment.reference.evaluator.MulMul
 
-.. autoclass:: experimental_experiment.reference.MulMul
+.. autoclass:: experimental_experiment.reference.evaluator.MulSharedInput
 
-.. autoclass:: experimental_experiment.reference.MulSharedInput
+.. autoclass:: experimental_experiment.reference.evaluator.MulSigmoid
 
-.. autoclass:: experimental_experiment.reference.MulSigmoid
+.. autoclass:: experimental_experiment.reference.evaluator.MulSub
 
-.. autoclass:: experimental_experiment.reference.MulSub
+.. autoclass:: experimental_experiment.reference.evaluator.NegXplus1
 
-.. autoclass:: experimental_experiment.reference.NegXplus1
+.. autoclass:: experimental_experiment.reference.evaluator.QuickGelu
 
-.. autoclass:: experimental_experiment.reference.QuickGelu
+.. autoclass:: experimental_experiment.reference.evaluator.ReplaceZero
 
-.. autoclass:: experimental_experiment.reference.ReplaceZero
+.. autoclass:: experimental_experiment.reference.evaluator.Rotary
 
-.. autoclass:: experimental_experiment.reference.Rotary
+.. autoclass:: experimental_experiment.reference.evaluator.ScatterElements
 
-.. autoclass:: experimental_experiment.reference.ScatterElements
+.. autoclass:: experimental_experiment.reference.evaluator.ScatterNDOfShape
 
-.. autoclass:: experimental_experiment.reference.ScatterNDOfShape
+.. autoclass:: experimental_experiment.reference.evaluator.SimplifiedLayerNormalization
 
-.. autoclass:: experimental_experiment.reference.SimplifiedLayerNormalization
+.. autoclass:: experimental_experiment.reference.evaluator.Slice_1
 
-.. autoclass:: experimental_experiment.reference.Slice_1
+.. autoclass:: experimental_experiment.reference.evaluator.Slice_10
 
-.. autoclass:: experimental_experiment.reference.Slice_10
+.. autoclass:: experimental_experiment.reference.evaluator.SubMul
 
-.. autoclass:: experimental_experiment.reference.SubMul
+.. autoclass:: experimental_experiment.reference.evaluator.Transpose2DCastFP16
 
-.. autoclass:: experimental_experiment.reference.Transpose2DCastFP16
+.. autoclass:: experimental_experiment.reference.evaluator.Transpose2DCastFP32
 
-.. autoclass:: experimental_experiment.reference.Transpose2DCastFP32
-
-.. autoclass:: experimental_experiment.reference.TriMatrix
+.. autoclass:: experimental_experiment.reference.evaluator.TriMatrix
 
 OrtEval
 =======

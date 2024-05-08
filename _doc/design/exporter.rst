@@ -140,8 +140,6 @@ Some needs are very common and deserve a dedicated method.
 
 * :meth:`make_nodes <experimental_experiment.xbuilder.GraphBuilder.make_nodes>`:
   adds many nodes in one row, it renames the intermediate result if needed.
-* :meth:`from_array <experimental_experiment.xbuilder.GraphBuilder.from_array>`:
-  converts a torch Tensor into a TensorProto,
 * :meth:`get_attribute <experimental_experiment.xbuilder.GraphBuilder.get_attribute>`:
   retrieve an attribute from a NodeProto
 * :meth:`make_shape_from_results <experimental_experiment.xbuilder.GraphBuilder.make_shape_from_results>`:
