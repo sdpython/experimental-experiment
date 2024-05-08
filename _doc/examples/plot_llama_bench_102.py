@@ -266,7 +266,7 @@ except BenchmarkError as e:
 
 prefix = (
     f"plot_{parsed_args.model}-{parsed_args.with_mask}-"
-    f"m{parsed_args.mixed}d{parsed_args.dynamic}-"
+    f"m{parsed_args.mixed}d{parsed_args.dynamic}h{parsed_args.num_hidden_layers}-"
     f"{parsed_args.implementation}"
 )
 
