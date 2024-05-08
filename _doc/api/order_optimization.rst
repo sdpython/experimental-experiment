@@ -5,7 +5,7 @@ order_optim
 OrderAlgorithm
 ==============
 
-..autoclass:: experimental_experiment.xoptim.OrderAlgorithm
+..autoclass:: experimental_experiment.xoptim.order_optim.OrderAlgorithm
     :members:
     
 OrderOptimization
