@@ -10,3 +10,13 @@ class ScatterNDOfShape(OpRun):
         data = np.zeros(shape, dtype=updates.dtype)
         y = _scatter_nd_impl(data, indices, updates, reduction=reduction)
         return (y,)
+
+
+class MaskedScatterNDOfShape(OpRun):
+    op_domain = "onnx_extended.ortops.optim.cuda"
+
+    def _run(self, shape, indices, updates, reduction=None, maskedValue=None):
+        data = np.zeros(shape, dtype=updates.dtype)
+        new_updates = np.where(indices == maskedValue, 0, updates)
+        y = _scatter_nd_impl(data, indices, new_updates, reduction=reduction)
+        return (y,)
