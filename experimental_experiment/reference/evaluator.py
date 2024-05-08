@@ -26,7 +26,7 @@ from .ops.op_quick_gelu import QuickGelu
 from .ops.op_replace_zero import ReplaceZero
 from .ops.op_rotary import Rotary
 from .ops.op_scatter_elements import ScatterElements
-from .ops.op_scatternd_of_shape import ScatterNDOfShape
+from .ops.op_scatternd_of_shape import MaskedScatterNDOfShape, ScatterNDOfShape
 from .ops.op_simplified_layer_normalization import SimplifiedLayerNormalization
 from .ops.op_slice import Slice_1, Slice_10
 from .ops.op_transpose_cast import Transpose2DCastFP16, Transpose2DCastFP32
@@ -70,6 +70,7 @@ class ExtendedReferenceEvaluator(ReferenceEvaluator):
         ConstantOfShape,
         FusedMatMul,
         GatherGrad,
+        MaskedScatterNDOfShape,
         MemcpyFromHost,
         MemcpyToHost,
         MulAdd,

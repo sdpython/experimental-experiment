@@ -717,6 +717,94 @@ class TestGraphPatternOptimizationExp(ExtTestCase):
                 got = ref2.run(None, feeds)
                 self.assertEqualArray(expected[0], got[0])
 
+    def _masked_scatternd_of_shape_cuda(self, reduction, line, itype):
+        dtype = np.float32 if itype == TensorProto.FLOAT else np.float16
+
+        model1 = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node(
+                        "ConstantOfShape",
+                        ["shape"],
+                        ["data"],
+                        value=onh.from_array(np.array([0], dtype=np.float32)),
+                    ),
+                    oh.make_node("Equal", ["indices", "mone"], ["masked_indices"]),
+                    oh.make_node(
+                        "Where",
+                        ["masked_indices", "zero", "updates"],
+                        ["masked_updates"],
+                    ),
+                    oh.make_node(
+                        "ScatterND",
+                        inputs=["data", "indices", "masked_updates"],
+                        outputs=["y"],
+                        reduction=reduction,
+                    ),
+                ],
+                "nd",
+                [
+                    oh.make_tensor_value_info("shape", TensorProto.INT64, [None]),
+                    oh.make_tensor_value_info(
+                        "indices", TensorProto.INT64, [None, None, 1]
+                    ),
+                    oh.make_tensor_value_info("updates", itype, [None, None, None]),
+                ],
+                [oh.make_tensor_value_info("y", itype, [None, None])],
+                [
+                    onh.from_array(np.array([-1], dtype=np.int64), name="mone"),
+                    onh.from_array(np.array([0], dtype=dtype), name="zero"),
+                ],
+            ),
+            opset_imports=[oh.make_opsetid("", 18)],
+            ir_version=9,
+        )
+
+        gr = GraphBuilder(
+            model1,
+            infer_shapes=True,
+            optimization_options=OptimizationOptions(
+                patterns=["ConstantOfShapeScatterND", "MaskedShapeScatterND"],
+                processor="CPU,CUDA",
+                verbose=0,
+            ),
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+        # self.print_model(opt_onx)
+        self.assertEqual(
+            ["MaskedScatterNDOfShape"], [n.op_type for n in opt_onx.graph.node]
+        )
+
+        data = np.zeros((32, 16), dtype=dtype)
+        indices = np.array(
+            [
+                [0, 1, 2],
+                [2, 3, 4],
+                [-1, 30, 31],
+                [-1, 7, 8],
+                [10, 11, -1],
+                [20, -1, 21],
+            ],
+            dtype=np.int64,
+        )
+        indices = indices[..., np.newaxis]
+        shape = (6, 3, data.shape[-1])
+        updates = (np.arange(np.prod(shape)).reshape(shape) + 1).astype(dtype)
+
+        feeds2 = dict(
+            shape=np.array(data.shape, dtype=np.int64), indices=indices, updates=updates
+        )
+        ref = ExtendedReferenceEvaluator(model1)
+        expected = ref.run(None, feeds2)[0]
+
+        sess = ExtendedReferenceEvaluator(opt_onx)
+        got = sess.run(None, feeds2)[0]
+        self.assertEqual(expected.tolist(), got.tolist())
+
+    def test_masked_scatternd_of_shape_standalone_cuda(self):
+        self._masked_scatternd_of_shape_cuda("add", 0, TensorProto.FLOAT)
+        self._masked_scatternd_of_shape_cuda("add", 1, TensorProto.FLOAT)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

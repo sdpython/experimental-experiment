@@ -61,8 +61,8 @@ Onnx (default) Patterns
 
 .. autoclass:: experimental_experiment.xoptim.patterns.UnsqueezeUnsqueezePattern
 
-Fix Patterns
-============
+Custom Op Patterns
+==================
 
 .. autoclass:: experimental_experiment.xoptim.patterns_fix.add_reduction_scatter_nd.AddReductionScatterND
 
@@ -76,7 +76,11 @@ Fix Patterns
 
 .. autoclass:: experimental_experiment.xoptim.patterns_exp.binary_operators.AddMulSharedInputBroadcastPattern
 
+.. autoclass:: experimental_experiment.xoptim.patterns_exp.binary_operators.AddMulTransposePattern
+
 .. autoclass:: experimental_experiment.xoptim.patterns_exp.constant_of_shape_scatter_nd.ConstantOfShapeScatterNDPattern
+
+.. autoclass:: experimental_experiment.xoptim.patterns_exp.constant_of_shape_scatter_nd.MaskedShapeScatterNDPattern
 
 .. autoclass:: experimental_experiment.xoptim.patterns_exp.binary_operators.MulSigmoidPattern
 
@@ -99,8 +103,6 @@ Fix Patterns
 Ort Patterns
 ============
 
-.. autoclass:: experimental_experiment.xoptim.patterns_ort.simplified_layer_normalization.SimplifiedLayerNormalizationPattern
-
 .. autoclass:: experimental_experiment.xoptim.patterns_ort.fused_matmul.FusedMatMulPattern
 
 .. autoclass:: experimental_experiment.xoptim.patterns_ort.fused_matmul.FusedMatMulx2Pattern
@@ -108,5 +110,7 @@ Ort Patterns
 .. autoclass:: experimental_experiment.xoptim.patterns_ort.fused_matmul.FusedMatMulTransposePattern
 
 .. autoclass:: experimental_experiment.xoptim.patterns_ort.gather_grad.GatherGradPattern
+
+.. autoclass:: experimental_experiment.xoptim.patterns_ort.simplified_layer_normalization.SimplifiedLayerNormalizationPattern
 
 .. autoclass:: experimental_experiment.xoptim.patterns_ort.activation_grad.SoftmaxGradPattern
