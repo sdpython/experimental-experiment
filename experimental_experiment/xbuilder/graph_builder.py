@@ -895,6 +895,9 @@ class GraphBuilder:
         :param name: name
         :param value: it cannot be empty
         """
+        assert isinstance(
+            name, str
+        ), f"Unexpected type {type(name)} for name={name!r}{self.get_debug_msg()}"
         assert (
             name not in self._known_value_shape
         ), f"Shape value for {name!r} (value={value!r}) is already registered."
