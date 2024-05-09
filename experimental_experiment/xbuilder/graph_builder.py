@@ -900,7 +900,14 @@ class GraphBuilder:
         ), f"Unexpected type {type(name)} for name={name!r}{self.get_debug_msg()}"
         assert (
             name not in self._known_value_shape
-        ), f"Shape value for {name!r} (value={value!r}) is already registered."
+            or self._known_value_shape[name] == value
+        ), (
+            f"Shape value for {name!r} (value={value!r}) is already "
+            f"registered and is different fomr the existing value "
+            f"value={value!r}, existing value is "
+            f"{self._known_value_shape.get(name, None)!r}."
+        )
+
         assert value not in {
             tuple()
         }, f"Unexpected value for shape {name!r}, value={value}{self.get_debug_msg()}"
@@ -3755,7 +3762,7 @@ class GraphBuilder:
                 and self.get_shape(i.name) in ((1,), tuple)
                 and "dim" in i.name
             ):
-                self.set_value_shape(i, (i.name,))
+                self.set_value_shape(i.name, (i.name,))
 
         need_identity_removal = False
         new_nodes = []
