@@ -519,6 +519,12 @@ def export_args(name: str, description: str):
         ort_optimize=(1, "enable or disable onnxruntime optimization"),
         with_mask=(1, "with or without mask, dynamo may fail with a mask"),
         order=("none", "optimization order see class OrderAlgorithm, none by default"),
+        shape_scenario=(
+            "",
+            "shapes to use, 2x1024 by default, 'batch' to get "
+            "shapes with different batch dimensions, 'length' to get "
+            "different length sizes",
+        ),
         expose="exporter,device,num_hidden_layers,ort,"
         "mixed,config,target_opset,dynamic,verbose,dump_patterns,"
         "enable_pattern,disable_pattern,model,optimize,with_mask,order",
@@ -534,6 +540,7 @@ def create_configuration_for_benchmark(
     num_hidden_layers: int = 1,
     implementation: str = "eager",
     with_mask: bool = True,
+    shape_scenario: Optional[str] = None,
 ) -> Dict[str, Union[str, int, List[Tuple[int, int]]]]:
     """
     Creates a model based on the given configuration.
@@ -545,6 +552,9 @@ def create_configuration_for_benchmark(
     :param num_hidden_layers: number of hidden layers
     :param implementation: implementation
     :param with_mask: use a mask
+    :param shape_scenario: None or empty for all shapes equal to (2, 1024),
+        'batch' for different batch sizes,
+        'length' for different length sizes
     :return: dictionary
     """
     fcts = {
@@ -560,6 +570,7 @@ def create_configuration_for_benchmark(
         num_hidden_layers=num_hidden_layers,
         implementation=implementation,
         with_mask=with_mask,
+        shape_scenario=shape_scenario,
     )
 
 

@@ -76,6 +76,7 @@ def main(args=None):
         num_hidden_layers=args.num_hidden_layers,
         implementation=args.implementation,
         with_mask=args.with_mask,
+        shape_scenario=args.shape_scenario,
     )
 
     verbose = int(args.verbose)
@@ -94,6 +95,7 @@ def main(args=None):
     print(f"with_mask={with_mask}")
     print(f"implementation={args.implementation}")
     print(f"mixed={args.mixed}")
+    print(f"shape_scenario={args.shape_scenario}")
     dump_patterns = args.dump_patterns in ("1", 1, "True", "true", True)
 
     if args.backend == "custom":
@@ -300,7 +302,11 @@ def main(args=None):
     print(f"warmup_times={warmup_times}")
     print("-----------")
 
-    idims = "x".join(map(str, config_dict["input_dims"][0]))
+    i_shapes = set(config_dict["input_dims"])
+    if len(i_shapes) == 1:
+        idims = "x".join(map(str, list(i_shapes)[0]))
+    else:
+        idims = "|".join("x".join(map(str, shs)) for shs in list(i_shapes)[:2])
     del config_dict["input_dims"]
     vals = "-".join(map(str, config_dict.values()))
     print(f":{args.model},{idims}-{vals};")
