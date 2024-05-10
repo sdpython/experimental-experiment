@@ -3,7 +3,7 @@ from typing import Dict, List, Optional, Tuple, Union
 
 def _get_input_dims(shape_scenario: str, warmup: int, repeat: int):
     if shape_scenario in (None, ""):
-        return _get_input_dims(shape_scenario, warmup, repeat)
+        return [(2, 1024)] * (warmup + repeat)
     if shape_scenario == "batch":
         w = [(2, 1024), (3, 1024)] * warmup
         w = w[:warmup]
