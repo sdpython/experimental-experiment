@@ -888,32 +888,61 @@ class GraphBuilder:
             return self._known_value_shape[name]
         return None
 
-    def set_value_shape(self, name: str, value: Any):
+    def set_value_shape(
+        self, name: str, value: Any, equal_to: Optional[Tuple[str, str]] = None
+    ):
         """
         Sets the value for a shape result.
 
         :param name: name
         :param value: it cannot be empty
+        :param equal_to: if specified, the value is also
+            equal to this value
         """
         assert isinstance(
             name, str
         ), f"Unexpected type {type(name)} for name={name!r}{self.get_debug_msg()}"
-        assert (
-            name not in self._known_value_shape
-            or self._known_value_shape[name] == value
-        ), (
-            f"Shape value for {name!r} (value={value!r}) is already "
-            f"registered and is different fomr the existing value "
-            f"value={value!r}, existing value is "
-            f"{self._known_value_shape.get(name, None)!r}."
+        assert value not in {tuple()}, (
+            f"Unexpected value for shape {name!r}, "
+            f"value={value}{self.get_debug_msg()}"
         )
+        if equal_to is None:
+            assert (
+                name not in self._known_value_shape
+                or self._known_value_shape[name] == value
+            ), (
+                f"Shape value for {name!r} (value={value!r}) is already "
+                f"registered and is different from the existing "
+                f"value={value!r} (equal_to={equal_to!r}), "
+                f"existing value is {self._known_value_shape.get(name, None)!r}"
+                f"{self.get_debug_msg()}"
+            )
+            if self.verbose > 2:
+                print(f"[GraphBuilder-{self._hash()}.set_value_shape] {name}[{value}]")
+            self._known_value_shape[name] = value
+            return
 
-        assert value not in {
-            tuple()
-        }, f"Unexpected value for shape {name!r}, value={value}{self.get_debug_msg()}"
-        if self.verbose > 2:
-            print(f"[GraphBuilder-{self._hash()}.set_value_shape] {name}[{value}]")
-        self._known_value_shape[name] = value
+        assert name in equal_to, (
+            f"Unexpected name={name!r}, " f"it should be in equal_to={equal_to!r}."
+        )
+        values = (
+            self._known_value_shape.get(equal_to[0], None),
+            self._known_value_shape.get(equal_to[1], None),
+        )
+        assert value in values, (
+            f"Unexpected value={value} for name={name!r}, equal_to={equal_to}, "
+            f"values={values}{self.get_debug_msg()}"
+        )
+        assert equal_to[0] in self._known_value_shape, (
+            f"{equal_to[0]!r} should already registered, name={name!r}, "
+            f"value={value!r}, equal_to={equal_to!r}{self.get_debug_msg()}"
+        )
+        # The logic is to get rid of one value instead of keeping
+        # a mapping between equivalent values.
+        new_value = self._known_value_shape[equal_to[0]]
+        for n in equal_to:
+            if n not in self._known_value_shape:
+                self._known_value_shape[n] = new_value
 
     def unique_name(self, prefix: str) -> str:
         if prefix in self._unique_names:
@@ -1213,7 +1242,9 @@ class GraphBuilder:
         if node.op_type == "Identity":
             value = self.value_as_shape(node.input[0])
             if value is not None:
-                self.set_value_shape(node.output[0], value)
+                self.set_value_shape(
+                    node.output[0], value, equal_to=(node.input[0], node.output[0])
+                )
                 return True
             return False
 

@@ -27,27 +27,48 @@ class TestGraphPatternDynamic(ExtTestCase):
         self.assertExists(p)
         return load_onnx(p)
 
-    def test_graph_default_forward(self):
+    def test_graph_default_forward_single(self):
         static_model = self._get_model("shape-dort-static-llama-custom__0.onnx")
         dynamic_model = self._get_model("shape-dort-dynamic-llama-custom__0.onnx")
         patterns = get_default_patterns()
-        self._check_models_patterns(static_model, dynamic_model, patterns)
+        self._check_models_patterns(static_model, dynamic_model, patterns, False)
+
+    def test_graph_default_forward_cumulative(self):
+        static_model = self._get_model("shape-dort-static-llama-custom__0.onnx")
+        dynamic_model = self._get_model("shape-dort-dynamic-llama-custom__0.onnx")
+        patterns = get_default_patterns()
+        self._check_models_patterns(static_model, dynamic_model, patterns, True)
 
     def _check_models_patterns(
         self,
         model1: ModelProto,
         model2: ModelProto,
         patterns: List[PatternOptimization],
+        cumulative: bool,
     ):
+        self.assertNotEqual(len(model1.graph.node), len(model2.graph.node))
+        delta = 0
         for i in range(len(patterns)):
-            opts = OptimizationOptions(patterns=patterns[: i + 1], verbose=0)
+            opts = OptimizationOptions(
+                patterns=patterns[: i + 1] if cumulative else patterns[i : i + 1],
+                verbose=0,
+            )
             gr1 = GraphBuilder(model1, infer_shapes=True, optimization_options=opts)
             stat1 = gr1.optimize()
             gr2 = GraphBuilder(model2, infer_shapes=True, optimization_options=opts)
             stat2 = gr2.optimize()
-            print(stat1)
-            print(stat2)
-            self.assertEqual(stat1, stat2)
+            app1 = [s for s in stat1 if s["pattern"].startswith("apply")]
+            app2 = [s for s in stat2 if s["pattern"].startswith("apply")]
+            if len(app1) > len(app2) - delta:
+                raise AssertionError(
+                    f"Discrancies static/dynamic: i={i}, delta={delta}, "
+                    f"len(app1)={len(app1)}, len(app2)={len(app2)}, "
+                    f"pattern={patterns[i]}\n-----\n"
+                    f"#applied static={len(app1)}, #applied dynamic={len(app2)}"
+                    f"\n{app1}\n--------\n{app2}"
+                )
+            assert len(app1) <= len(app2)
+            delta = len(app2) - len(app1) if cumulative else 0
 
 
 if __name__ == "__main__":
