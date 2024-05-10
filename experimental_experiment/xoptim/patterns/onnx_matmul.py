@@ -101,6 +101,8 @@ class MatMulReshape2Of3Pattern(PatternOptimization):
 
         the_shape_left = shape_left_left or shape_left
         the_shape_right = shape_right_right or shape_right
+        if not is_static_shape(the_shape_left) or not is_static_shape(the_shape_right):
+            return self.none(node, inspect.currentframe().f_lineno)
         if not self.same_size(g, the_shape_left[:-2], the_shape_right[:-2]):
             # first dimension are the same
             return self.none(node, inspect.currentframe().f_lineno)
