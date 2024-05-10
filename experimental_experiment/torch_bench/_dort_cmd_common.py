@@ -488,8 +488,14 @@ def dort_args(name: str, description: str, new_args: Optional[List[str]] = None)
         with_mask=(1, "with or without mask, dynamo may fail with a mask"),
         ort_optimize=(1, "enable or disable onnxruntime optimization"),
         order=("none", "optimization order see class OrderAlgorithm, none by default"),
+        shape_scenario=(
+            "",
+            "shapes to use, 2x1024 by default, 'batch' to get "
+            "shapes with different batch dimensions, 'length' to get "
+            "different length sizes",
+        ),
         expose="backend,repeat,warmup,device,num_hidden_layers,"
-        "mixed,export,config,target_opset,dynamic,verbose,dump_folder,"
+        "mixed,export,config,target_opset,dynamic,verbose,dump_folder,shape_scenario"
         "enable_pattern,disable_pattern,model,optimize,with_mask,order",
         new_args=new_args,
     )
@@ -519,12 +525,6 @@ def export_args(name: str, description: str):
         ort_optimize=(1, "enable or disable onnxruntime optimization"),
         with_mask=(1, "with or without mask, dynamo may fail with a mask"),
         order=("none", "optimization order see class OrderAlgorithm, none by default"),
-        shape_scenario=(
-            "",
-            "shapes to use, 2x1024 by default, 'batch' to get "
-            "shapes with different batch dimensions, 'length' to get "
-            "different length sizes",
-        ),
         expose="exporter,device,num_hidden_layers,ort,"
         "mixed,config,target_opset,dynamic,verbose,dump_patterns,"
         "enable_pattern,disable_pattern,model,optimize,with_mask,order",
