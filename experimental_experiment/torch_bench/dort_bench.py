@@ -52,6 +52,7 @@ def main(args=None):
         new_args=args,
     )
 
+    import logging
     import time
     import onnxruntime  # noqa: F401
     import numpy as np
@@ -155,6 +156,9 @@ def main(args=None):
             )
         else:
             print(f"dump models in {dump_folder!r}")
+
+    logger = logging.getLogger("onnxscript.optimizer.constant_folding")
+    logger.setLevel(logging.ERROR)
 
     compiled_model = create_compiled_model(
         model,
