@@ -128,5 +128,5 @@ def run_benchmark(
         if verbose >= 10:
             print("--------------- OUTPUT")
             print(sout)
-            
+
     return data
