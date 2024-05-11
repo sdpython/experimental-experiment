@@ -68,10 +68,16 @@ parsed_args = get_parsed_args(
         "enable or disable onnxruntime optimization, " "by default, tries both",
     ),
     order=("none", "optimization order see class OrderAlgorithm, none by default"),
+    shape_scenario=(
+        "",
+        "shapes to use, 2x1024 by default, 'batch' to get "
+        "shapes with different batch dimensions, 'length' to get "
+        "different length sizes",
+    ),
     verbose=(1, "verbosity"),
     expose="backend,device,num_hidden_layers,mixed,scipt_name,repeat,"
     "warmup,dump,check,config,patterns,dynamic,disable_pattern,model"
-    "implementation,with_mask,ort_optimize,verbose,order",
+    "implementation,with_mask,ort_optimize,verbose,order,shape_scenario",
 )
 
 import onnxruntime  # noqa: F401
@@ -107,6 +113,7 @@ def make_config(
     with_mask,
     ort_optimize,
     order,
+    shape_scenario,
     verbose,
     existing=None,
 ):
@@ -128,6 +135,7 @@ def make_config(
         with_mask=with_mask,
         ort_optimize=ort_optimize,
         order=order,
+        shape_scenario=shape_scenario,
         verbose=verbose,
     )
     cf = {k: v for k, v in cf.items() if v is not None}
@@ -215,6 +223,7 @@ if parsed_args.check not in (1, "1"):
                 with_mask=parsed_args.with_mask,
                 ort_optimize=ort_optimize,
                 order=parsed_args.order,
+                shape_scenario=parsed_args.shape_scenario,
                 verbose=verbose,
             )
         )

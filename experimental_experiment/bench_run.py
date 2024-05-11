@@ -122,4 +122,11 @@ def run_benchmark(
         metrics["OUTPUT"] = sout
         metrics["CMD"] = f"[{' '.join(cmd)}]"
         data.append(metrics)
+        if verbose > 5:
+            print("--------------- ERROR")
+            print(serr)
+        if verbose >= 10:
+            print("--------------- OUTPUT")
+            print(sout)
+
     return data

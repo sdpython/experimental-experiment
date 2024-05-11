@@ -1,7 +1,7 @@
 import collections
 import inspect
 from typing import List, Optional
-from onnx import NodeProto
+from onnx import NodeProto, TensorProto
 from ..patterns_api import MatchResult, PatternOptimization
 
 
@@ -74,7 +74,8 @@ class AddAddMulMulPattern(PatternOptimization, _common):
             return self.none()
         if node.op_type not in {"Add", "Mul"} or node.domain != "":
             return self.none()
-
+        if g.get_type(node.input[0]) in {TensorProto.INT64, TensorProto.INT32}:
+            return self.none()
         if not self._same_shape(g, *node.input, broadcast=self.broadcast):
             return self.none(node, inspect.currentframe().f_lineno)
 
@@ -170,7 +171,8 @@ class AddMulPattern(PatternOptimization, _common):
 
         if node.op_type not in {"Add", "Mul"} or node.domain != "":
             return self.none()
-
+        if g.get_type(node.input[0]) in {TensorProto.INT64, TensorProto.INT32}:
+            return self.none()
         if not self._same_shape(g, *node.input, broadcast=self.broadcast):
             return self.none(node, inspect.currentframe().f_lineno)
 
@@ -258,7 +260,8 @@ class MulSigmoidPattern(PatternOptimization):
             return self.none()
         if node.op_type not in {"Sigmoid"} or node.domain != "":
             return self.none()
-
+        if g.get_type(node.input[0]) in {TensorProto.INT64, TensorProto.INT32}:
+            return self.none()
         if g.is_used_more_than_once(node.output[0]):
             return self.none(node, inspect.currentframe().f_lineno)
 
@@ -304,6 +307,8 @@ class NegXplus1Pattern(PatternOptimization):
         if not g.has_processor("CUDA"):
             return self.none()
         if node.op_type not in {"Sub"} or node.domain != "":
+            return self.none()
+        if g.get_type(node.input[0]) in {TensorProto.INT64, TensorProto.INT32}:
             return self.none()
 
         if not g.is_constant(node.input[0]):
@@ -351,10 +356,10 @@ class SubMulPattern(PatternOptimization, _common):
     ) -> Optional[MatchResult]:
         if not g.has_processor("CUDA"):
             return self.none()
-
         if node.op_type not in {"Sub", "Mul"} or node.domain != "":
             return self.none()
-
+        if g.get_type(node.input[0]) in {TensorProto.INT64, TensorProto.INT32}:
+            return self.none()
         if not self._same_shape(g, *node.input, broadcast=self.broadcast):
             return self.none(node, inspect.currentframe().f_lineno)
 
@@ -482,10 +487,10 @@ class AddMulSharedInputPattern(PatternOptimization, _common):
     ) -> Optional[MatchResult]:
         if not g.has_processor("CUDA"):
             return self.none()
-
         if node.op_type not in {"Add", "Mul"} or node.domain != "":
             return self.none()
-
+        if g.get_type(node.input[0]) in {TensorProto.INT64, TensorProto.INT32}:
+            return self.none()
         if not self._same_shape(g, *node.input, broadcast=self.broadcast):
             return self.none(node, inspect.currentframe().f_lineno)
 
