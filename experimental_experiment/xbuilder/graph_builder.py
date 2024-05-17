@@ -1009,10 +1009,8 @@ class GraphBuilder:
             value, self.torch.SymInt
         ), f"Unexpected type {type(value)} for value{self.get_debug_msg()}"
         self.dynamic_objects[name] = value
-        assert (
-            name not in self._known_value_shape
-        ), f"Shape value for {name!r} was already registered."
-        self._known_value_shape[name] = name
+        if name not in self._known_value_shape:
+            self._known_value_shape[name] = name
         key = str(value)
         if key not in self.dynamic_objects_rev:
             self.dynamic_objects_rev[key] = []
@@ -1020,9 +1018,12 @@ class GraphBuilder:
         if shape_as_input:
             # torch.compile adds input for dynamic shapes
             return self.make_tensor_input(
-                name, TensorProto.INT64, (1,), is_dimension=True
+                self._known_value_shape[name],
+                TensorProto.INT64,
+                (1,),
+                is_dimension=True,
             )
-        return name
+        return self._known_value_shape[name]
 
     def make_shape_from_results(self, shape: DYNAMIC_SHAPE, name="") -> str:
         """
@@ -1511,10 +1512,12 @@ class GraphBuilder:
                 f"Unexpected type {type(new_value)} for value={value!r}, d={d}"
                 f"{self.get_debug_msg()}"
             )
-            assert len(new_value) == 1, (
+            assert len(new_value) >= 1, (
                 f"Unexpected number of items in {new_value}, value={value!r}, d={d}"
                 f"{self.get_debug_msg()}"
             )
+            # We assume if len(new_value) > 1 that all names are equivalent.
+            # The graph is doing the same computation multiple times.
             final = new_value[0]
             assert isinstance(final, tuple) or len(final) != 2, (
                 f"Unexpected type {type(final)}, final={final}, value={value}, d={d}"

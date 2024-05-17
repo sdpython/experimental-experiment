@@ -2708,82 +2708,6 @@ def aten_setitem(
     )
 
 
-def aten_sigmoid(
-    g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T
-) -> T:
-    "sigmoid"
-    res = g.op.Sigmoid(x, outputs=outputs)
-    if not sts:
-        set_type_shape_unary_op(g, outputs[0], x)
-    return res
-
-
-def aten_sigmoid_backward(
-    g: GraphBuilder,
-    sts: Optional[Dict[str, Any]],
-    outputs: List[str],
-    out_grad: T,
-    y: T,
-) -> T:
-    """
-    sigmoid backward
-
-    See https://github.com/pytorch/pytorch/blob/main/torch/_decomp/decompositions.py#L108.
-    conj_physical = identity for real number.
-
-    ::
-
-        return out_grad * (y * (1 - y)).conj_physical()
-    """
-    dtype = tensor_dtype_to_np_dtype(g.get_type(y))
-    _1y = g.op.Sub(np.array([1], dtype=dtype), y, name="sigmoid_backward")
-    y1y = g.op.Mul(y, _1y, name="sigmoid_backward")
-    res = g.op.Mul(out_grad, y1y, outputs=outputs, name="sigmoid_backward")
-
-    set_type_shape_unary_op(g, _1y, y)
-    set_type_shape_unary_op(g, y1y, y)
-    if not sts:
-        set_type_shape_unary_op(g, res, y)
-    return res
-
-
-def aten_silu(
-    g: GraphBuilder,
-    sts: Optional[Dict[str, Any]],
-    outputs: List[str],
-    x: T,
-    inplace: bool = False,
-) -> T:
-    "silu"
-    assert (
-        not inplace
-    ), f"inplace computation is not allowed with onnx{g.get_debug_msg()}"
-    res = g.op.Mul(x, g.op.Sigmoid(x, name="silu"), outputs=outputs, name="silu")
-    if not sts:
-        set_type_shape_unary_op(g, res, x)
-    return res
-
-
-def aten_sin(
-    g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T, name="sin"
-) -> T:
-    "sin"
-    res = g.make_node("Sin", [x], outputs, name=name)
-    if not sts:
-        set_type_shape_unary_op(g, outputs[0], x)
-    return res
-
-
-def aten_sinh(
-    g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T
-) -> T:
-    "sinh"
-    res = g.make_node("Sinh", [x], outputs, name="sinh")
-    if not sts:
-        set_type_shape_unary_op(g, outputs[0], x)
-    return res
-
-
 def aten_slice_Tensor(
     g: GraphBuilder,
     sts: Optional[Dict[str, Any]],
@@ -3101,6 +3025,82 @@ def aten_slice_scatter(
     )
 
 
+def aten_sigmoid(
+    g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T
+) -> T:
+    "sigmoid"
+    res = g.op.Sigmoid(x, outputs=outputs)
+    if not sts:
+        set_type_shape_unary_op(g, outputs[0], x)
+    return res
+
+
+def aten_sigmoid_backward(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    out_grad: T,
+    y: T,
+) -> T:
+    """
+    sigmoid backward
+
+    See https://github.com/pytorch/pytorch/blob/main/torch/_decomp/decompositions.py#L108.
+    conj_physical = identity for real number.
+
+    ::
+
+        return out_grad * (y * (1 - y)).conj_physical()
+    """
+    dtype = tensor_dtype_to_np_dtype(g.get_type(y))
+    _1y = g.op.Sub(np.array([1], dtype=dtype), y, name="sigmoid_backward")
+    y1y = g.op.Mul(y, _1y, name="sigmoid_backward")
+    res = g.op.Mul(out_grad, y1y, outputs=outputs, name="sigmoid_backward")
+
+    set_type_shape_unary_op(g, _1y, y)
+    set_type_shape_unary_op(g, y1y, y)
+    if not sts:
+        set_type_shape_unary_op(g, res, y)
+    return res
+
+
+def aten_silu(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    inplace: bool = False,
+) -> T:
+    "silu"
+    assert (
+        not inplace
+    ), f"inplace computation is not allowed with onnx{g.get_debug_msg()}"
+    res = g.op.Mul(x, g.op.Sigmoid(x, name="silu"), outputs=outputs, name="silu")
+    if not sts:
+        set_type_shape_unary_op(g, res, x)
+    return res
+
+
+def aten_sin(
+    g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T, name="sin"
+) -> T:
+    "sin"
+    res = g.make_node("Sin", [x], outputs, name=name)
+    if not sts:
+        set_type_shape_unary_op(g, outputs[0], x)
+    return res
+
+
+def aten_sinh(
+    g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T
+) -> T:
+    "sinh"
+    res = g.make_node("Sinh", [x], outputs, name="sinh")
+    if not sts:
+        set_type_shape_unary_op(g, outputs[0], x)
+    return res
+
+
 def aten_softmax(
     g: GraphBuilder,
     sts: Optional[Dict[str, Any]],
@@ -3369,6 +3369,23 @@ def aten_sum_dim_IntList(
     itype = torch_dtype_to_onnx_dtype(dtype)
     result = g.op.Cast(res, to=itype, outputs=outputs, name="sum_dim_IntList")
     return result
+
+
+def aten_sym_size_int(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    dim: int,
+    name: str = "sym_size_int",
+) -> T:
+    """
+    Shape + Gather
+    """
+    shape = g.op.Shape(x, name=name)
+    return g.op.Gather(
+        shape, np.array([dim], dtype=np.int64), name=name, outputs=outputs
+    )
 
 
 def aten__to_copy(

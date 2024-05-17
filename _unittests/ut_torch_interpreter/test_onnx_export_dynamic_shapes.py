@@ -1,9 +1,16 @@
 import sys
 import unittest
 from onnx.reference import ReferenceEvaluator
-from experimental_experiment.ext_test_case import ExtTestCase, ignore_warnings
+from experimental_experiment.ext_test_case import (
+    ExtTestCase,
+    ignore_warnings,
+    requires_cuda,
+    requires_torch,
+    requires_transformers,
+)
 from experimental_experiment.xbuilder import OptimizationOptions
 from experimental_experiment.torch_interpreter import to_onnx
+from experimental_experiment.torch_models.llama_helper import get_llama_model
 
 
 class TestOnnxExportDynamicShapes(ExtTestCase):
@@ -78,6 +85,122 @@ class TestOnnxExportDynamicShapes(ExtTestCase):
         ref = ReferenceEvaluator(onx)
         got = ref.run(None, {"x": x.detach().cpu().numpy()})
         self.assertEqualArray(expected, got[0], atol=1e-5)
+
+    @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
+    @requires_torch("2.3", "bug")
+    @requires_transformers("4.41.0", "dynamic shapes issue")
+    @ignore_warnings(DeprecationWarning)
+    # @unittest.skipIf(True, reason="torch._dynamo.export does not work")
+    def test_export_llama_model_dynamic_shapes_cpu(self):
+        import torch
+        import onnxruntime
+
+        with torch.no_grad():
+            input_dims = [(2, 1024), (3, 1024)]
+            model, input_tensors = get_llama_model(input_dims, with_mask=False)
+            onx = to_onnx(
+                model,
+                input_tensors[0],
+                dynamic_shapes={"input_ids": {0: torch.export.Dim("batch", min=2)}},
+            )
+
+            for i in range(0, len(input_tensors)):
+                expected = model(*input_tensors[i])
+                sess = onnxruntime.InferenceSession(
+                    onx.SerializeToString(), providers=["CPUExecutionProvider"]
+                )
+                feeds = {}
+                for n, t in zip(sess.get_inputs(), input_tensors[i]):
+                    feeds[n.name] = t.detach().cpu().numpy()
+                results = sess.run(None, feeds)
+                self.assertEqualArray(
+                    expected[0].detach().numpy(),
+                    results[0],
+                    atol=1e-5,
+                    msg=f"input {i} failed",
+                )
+
+    @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
+    @requires_cuda()
+    @requires_torch("2.3", "bug")
+    @requires_transformers("4.41.0", "dynamic shapes issue")
+    @ignore_warnings(DeprecationWarning)
+    # @unittest.skipIf(True, reason="torch._dynamo.export does not work")
+    def test_export_llama_model_dynamic_shapes_cuda(self):
+        import torch
+        import onnxruntime
+
+        with torch.no_grad():
+            input_dims = [(2, 1024), (3, 1024)]
+            model, input_tensors = get_llama_model(input_dims, with_mask=False)
+            model = model.to("cuda")
+            input_tensors = [tuple(t.to("cuda") for t in p) for p in input_tensors]
+            onx = to_onnx(
+                model,
+                input_tensors[0],
+                dynamic_shapes={"input_ids": {0: torch.export.Dim("batch", min=2)}},
+            )
+
+            for i in range(0, len(input_tensors)):
+                expected = model(*input_tensors[i])
+                sess = onnxruntime.InferenceSession(
+                    onx.SerializeToString(),
+                    providers=["CUDAExecutionProvider", "CPUExecutionProvider"],
+                )
+                feeds = {}
+                for n, t in zip(sess.get_inputs(), input_tensors[i]):
+                    feeds[n.name] = t.detach().cpu().numpy()
+                results = sess.run(None, feeds)
+                self.assertEqualArray(
+                    expected[0].detach().cpu().numpy(),
+                    results[0],
+                    atol=1e-5,
+                    msg=f"input {i} failed",
+                )
+
+    @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
+    @requires_cuda()
+    @requires_torch("2.3", "bug")
+    @requires_transformers("4.41.0", "dynamic shapes issue")
+    @ignore_warnings(DeprecationWarning)
+    # @unittest.skipIf(True, reason="torch._dynamo.export does not work")
+    def test_export_llama_model_dynamic_shapes_fused_cuda(self):
+        import torch
+        import onnxruntime
+
+        with torch.no_grad():
+            input_dims = [(2, 1024), (3, 1024)]
+            model, input_tensors = get_llama_model(input_dims, with_mask=False)
+            model = model.to("cuda")
+            input_tensors = [tuple(t.to("cuda") for t in p) for p in input_tensors]
+            onx = to_onnx(
+                model,
+                input_tensors[0],
+                dynamic_shapes={"input_ids": {0: torch.export.Dim("batch", min=2)}},
+                options=OptimizationOptions(
+                    patterns="default+onnxruntime+experimental", verbose=1
+                ),
+            )
+
+            # with open("llama_export_dynamic.onnx", "wb") as f:
+            #    f.write(onx.SerializeToString())
+
+            for i in range(0, len(input_tensors)):
+                expected = model(*input_tensors[i])
+                sess = onnxruntime.InferenceSession(
+                    onx.SerializeToString(),
+                    providers=["CUDAExecutionProvider", "CPUExecutionProvider"],
+                )
+                feeds = {}
+                for n, t in zip(sess.get_inputs(), input_tensors[i]):
+                    feeds[n.name] = t.detach().cpu().numpy()
+                results = sess.run(None, feeds)
+                self.assertEqualArray(
+                    expected[0].detach().cpu().numpy(),
+                    results[0],
+                    atol=1e-5,
+                    msg=f"input {i} failed",
+                )
 
 
 if __name__ == "__main__":
