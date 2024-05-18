@@ -327,7 +327,7 @@ print("debug:", inputs_from_onnx_model(model_debug, init=True))
 # +++++++++++++++++++++++++++++
 #
 # Let's try the model with a python backend (reference implementation).
-# First step, onnx-script uses many functions. The reference evaluation expects
+# First step, onnxscript uses many functions. The reference evaluation expects
 # every function to be defined so the order of functions in the model matters.
 # No recursivity is allowed by this runtime. We need to reorder as function Rank is usually placed
 # at the end of the model.
