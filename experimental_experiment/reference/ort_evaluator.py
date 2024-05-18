@@ -146,15 +146,20 @@ class OrtEval:
             print(pattern % tuple(new_args))
 
     def run(
-        self, outputs: Optional[List[str]], feed_inputs: Dict[str, Any]
-    ) -> List[Any]:
+        self,
+        outputs: Optional[List[str]],
+        feed_inputs: Dict[str, Any],
+        intermediate: bool = False,
+    ) -> Union[Dict[str, Any], List[Any]]:
         """
         Runs the model.
         It only works with numpy arrays.
 
         :param outputs: required outputs or None for all
         :param feed_inputs: inputs
-        :return: outputs
+        :param intermediate: returns all output instead of the last ones
+        :return: outputs, as a list if return_all is False,
+            as a dictionary if return_all is True
         """
         if self.whole:
             if "" in self._cache:
@@ -197,6 +202,8 @@ class OrtEval:
                 self._log(2, " + %s: %s", name, value)  # type: ignore[arg-type]
                 results[name] = value
 
+        if intermediate:
+            return results
         output_names = [o.name for o in self.proto.graph.output]
         for i, name in enumerate(output_names):
             if name == "":
@@ -237,18 +244,14 @@ class OrtEval:
 
         import onnxruntime
 
-        vinputs = [
-            (
-                oh.make_tensor_value_info(i, TensorProto.FLOAT, None)
-                if i == ""
-                else oh.make_tensor_value_info(
-                    i,
-                    self._get_itype(it.dtype),
-                    it.shape,
-                )
-            )
-            for i, it in zip(node.input, inputs)
-        ]
+        unique_names = set()
+        vinputs = []
+        for i, it in zip(node.input, inputs):
+            if i == "" or i in unique_names:
+                continue
+            unique_names.add(i)
+            value = oh.make_tensor_value_info(i, self._get_itype(it.dtype), it.shape)
+            vinputs.append(value)
 
         voutputs = [oh.make_value_info(o, TypeProto()) for o in node.output]
 
@@ -259,9 +262,17 @@ class OrtEval:
         del onx.opset_import[:]
         onx.opset_import.extend(self.proto.opset_import)
 
-        sess = onnxruntime.InferenceSession(
-            onx.SerializeToString(), self.session_options, self.providers
-        )
+        try:
+            sess = onnxruntime.InferenceSession(
+                onx.SerializeToString(), self.session_options, self.providers
+            )
+        except onnxruntime.capi.onnxruntime_pybind11_state.Fail as e:
+            from onnx_array_api.plotting.text_plot import onnx_simple_text_plot
+
+            raise RuntimeError(
+                f"Unable to infer a session due to {e}\n"
+                f"{onnx_simple_text_plot(onx)}"
+            ) from e
         return onx, sess
 
     def _run(

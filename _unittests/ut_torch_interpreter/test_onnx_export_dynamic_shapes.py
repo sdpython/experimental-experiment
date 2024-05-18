@@ -8,7 +8,7 @@ from experimental_experiment.ext_test_case import (
     requires_torch,
     requires_transformers,
 )
-from experimental_experiment.reference import ExtendedReferenceEvaluator
+from experimental_experiment.reference import ExtendedReferenceEvaluator, OrtEval
 from experimental_experiment.xbuilder import OptimizationOptions
 from experimental_experiment.torch_interpreter import to_onnx
 from experimental_experiment.torch_models.llama_helper import get_llama_model
@@ -188,7 +188,7 @@ class TestOnnxExportDynamicShapes(ExtTestCase):
                         if get_ort_ext_libs is not None
                         else "default+onnxruntime"
                     ),
-                    verbose=1,
+                    verbose=0,
                     processor="CUDA",
                 ),
             )
@@ -197,13 +197,12 @@ class TestOnnxExportDynamicShapes(ExtTestCase):
             f.write(onx.SerializeToString())
         opts = onnxruntime.SessionOptions()
         append_custom_libraries(onx, opts)
+        providers = ["CUDAExecutionProvider", "CPUExecutionProvider"]
 
         for i in range(0, len(input_tensors)):
             expected = model(*input_tensors[i])
             sess = onnxruntime.InferenceSession(
-                onx.SerializeToString(),
-                opts,
-                providers=["CUDAExecutionProvider", "CPUExecutionProvider"],
+                onx.SerializeToString(), opts, providers=providers
             )
             feeds = {}
             for n, t in zip(sess.get_inputs(), input_tensors[i]):
@@ -216,6 +215,21 @@ class TestOnnxExportDynamicShapes(ExtTestCase):
                 atol=1e-5,
                 msg=f"input {i} failed with ExtendedReferenceEvaluator",
             )
+            expected_ref = ref.run(None, feeds, intermediate=True)
+
+            ort_eval = OrtEval(onx, options=opts, providers=providers)
+            got_ort = ort_eval.run(None, feeds, intermediate=True)
+            for k, v in expected_ref.items():
+                if k == "":
+                    continue
+                g = got_ort[k]
+                self.assertEqualArray(
+                    v,
+                    g,
+                    atol=1e-5,
+                    msg=f"outut {k!r} is different between ExtendedReferenceEvaluator and OrtEval",
+                )
+
             results = sess.run(None, feeds)
             self.assertEqualArray(
                 expected[0].detach().cpu().numpy(),
