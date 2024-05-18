@@ -8,6 +8,7 @@ from experimental_experiment.ext_test_case import (
     requires_torch,
     requires_transformers,
 )
+from experimental_experiment.reference import ExtendedReferenceEvaluator
 from experimental_experiment.xbuilder import OptimizationOptions
 from experimental_experiment.torch_interpreter import to_onnx
 from experimental_experiment.torch_models.llama_helper import get_llama_model
@@ -90,7 +91,6 @@ class TestOnnxExportDynamicShapes(ExtTestCase):
     @requires_torch("2.3", "bug")
     @requires_transformers("4.41.0", "dynamic shapes issue")
     @ignore_warnings(DeprecationWarning)
-    # @unittest.skipIf(True, reason="torch._dynamo.export does not work")
     def test_export_llama_model_dynamic_shapes_cpu(self):
         import torch
         import onnxruntime
@@ -125,7 +125,6 @@ class TestOnnxExportDynamicShapes(ExtTestCase):
     @requires_torch("2.3", "bug")
     @requires_transformers("4.41.0", "dynamic shapes issue")
     @ignore_warnings(DeprecationWarning)
-    # @unittest.skipIf(True, reason="torch._dynamo.export does not work")
     def test_export_llama_model_dynamic_shapes_cuda(self):
         import torch
         import onnxruntime
@@ -146,6 +145,7 @@ class TestOnnxExportDynamicShapes(ExtTestCase):
                 sess = onnxruntime.InferenceSession(
                     onx.SerializeToString(),
                     providers=["CUDAExecutionProvider", "CPUExecutionProvider"],
+                    processor="CUDA",
                 )
                 feeds = {}
                 for n, t in zip(sess.get_inputs(), input_tensors[i]):
@@ -163,10 +163,15 @@ class TestOnnxExportDynamicShapes(ExtTestCase):
     @requires_torch("2.3", "bug")
     @requires_transformers("4.41.0", "dynamic shapes issue")
     @ignore_warnings(DeprecationWarning)
-    # @unittest.skipIf(True, reason="torch._dynamo.export does not work")
     def test_export_llama_model_dynamic_shapes_fused_cuda(self):
         import torch
         import onnxruntime
+        from experimental_experiment.convert.ort_helper import append_custom_libraries
+
+        try:
+            from onnx_extended.ortops.optim.cuda import get_ort_ext_libs
+        except ImportError:
+            get_ort_ext_libs = None
 
         with torch.no_grad():
             input_dims = [(2, 1024), (3, 1024)]
@@ -178,29 +183,46 @@ class TestOnnxExportDynamicShapes(ExtTestCase):
                 input_tensors[0],
                 dynamic_shapes={"input_ids": {0: torch.export.Dim("batch", min=2)}},
                 options=OptimizationOptions(
-                    patterns="default+onnxruntime+experimental", verbose=1
+                    patterns=(
+                        "default+onnxruntime+experimental"
+                        if get_ort_ext_libs is not None
+                        else "default+onnxruntime"
+                    ),
+                    verbose=1,
+                    processor="CUDA",
                 ),
             )
 
-            # with open("llama_export_dynamic.onnx", "wb") as f:
-            #    f.write(onx.SerializeToString())
+        with open("test_llama_export_dynamic_fused.onnx", "wb") as f:
+            f.write(onx.SerializeToString())
+        opts = onnxruntime.SessionOptions()
+        append_custom_libraries(onx, opts)
 
-            for i in range(0, len(input_tensors)):
-                expected = model(*input_tensors[i])
-                sess = onnxruntime.InferenceSession(
-                    onx.SerializeToString(),
-                    providers=["CUDAExecutionProvider", "CPUExecutionProvider"],
-                )
-                feeds = {}
-                for n, t in zip(sess.get_inputs(), input_tensors[i]):
-                    feeds[n.name] = t.detach().cpu().numpy()
-                results = sess.run(None, feeds)
-                self.assertEqualArray(
-                    expected[0].detach().cpu().numpy(),
-                    results[0],
-                    atol=1e-5,
-                    msg=f"input {i} failed",
-                )
+        for i in range(0, len(input_tensors)):
+            expected = model(*input_tensors[i])
+            sess = onnxruntime.InferenceSession(
+                onx.SerializeToString(),
+                opts,
+                providers=["CUDAExecutionProvider", "CPUExecutionProvider"],
+            )
+            feeds = {}
+            for n, t in zip(sess.get_inputs(), input_tensors[i]):
+                feeds[n.name] = t.detach().cpu().numpy()
+            ref = ExtendedReferenceEvaluator(onx)
+            results = ref.run(None, feeds)
+            self.assertEqualArray(
+                expected[0].detach().cpu().numpy(),
+                results[0],
+                atol=1e-5,
+                msg=f"input {i} failed with ExtendedReferenceEvaluator",
+            )
+            results = sess.run(None, feeds)
+            self.assertEqualArray(
+                expected[0].detach().cpu().numpy(),
+                results[0],
+                atol=1e-5,
+                msg=f"input {i} failed with InferenceSession",
+            )
 
 
 if __name__ == "__main__":

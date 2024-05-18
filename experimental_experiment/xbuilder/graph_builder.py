@@ -2766,6 +2766,10 @@ class GraphBuilder:
         statistics = []
         main_begin = time.perf_counter()
 
+        if self.verbose or self.optimization_options.verbose:
+            print(f"[GraphBuilder.optimize] start with {len(self.nodes)} nodes")
+            print(f"[GraphBuilder.optimize] options={self.optimization_options!r}")
+
         _check(statistics, "A")
         if self.optimization_options.remove_identity:
             begin = time.perf_counter()
@@ -2848,7 +2852,7 @@ class GraphBuilder:
         if self.verbose or self.optimization_options.verbose:
             duration = time.perf_counter() - main_begin
             print(
-                f"[GraphBuilder] done with "
+                f"[GraphBuilder.optimize] done with "
                 f"{len(self.nodes)} nodes in {duration:.3f}"
             )
             msg = self._compile_statistics(statistics)
