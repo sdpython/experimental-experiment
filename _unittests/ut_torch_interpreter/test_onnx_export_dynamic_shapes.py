@@ -5,6 +5,7 @@ from experimental_experiment.ext_test_case import (
     ExtTestCase,
     ignore_warnings,
     requires_cuda,
+    requires_onnxruntime,
     requires_torch,
     requires_transformers,
 )
@@ -123,6 +124,7 @@ class TestOnnxExportDynamicShapes(ExtTestCase):
     @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
     @requires_torch("2.3", "bug")
     @requires_transformers("4.41.0", "dynamic shapes issue")
+    @requires_onnxruntime("1.18")
     @ignore_warnings(DeprecationWarning)
     def test_export_llama_model_dynamic_shapes_x2_cpu(self):
         import torch

@@ -14,7 +14,7 @@ class TestDynamoExportDynamicShapes(ExtTestCase):
 
     @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
     @requires_onnxscript("0.2", "issue in rewriter")
-    @requires_torch("2.3", "bug")
+    @requires_torch("2.4", "bug")
     @requires_transformers("4.41.0", "dynamic shapes issue")
     @ignore_warnings(DeprecationWarning)
     # @unittest.skipIf(True, reason="torch._dynamo.export does not work")
