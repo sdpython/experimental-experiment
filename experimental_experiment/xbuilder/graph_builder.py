@@ -121,6 +121,7 @@ class GraphBuilder:
         self.verbose = verbose
         self.ir_version = ir_version
         self._debug_msg = {}
+        self.dynamic_dimensions_source = {}
         self.dynamic_shapes = dynamic_shapes
         self.dynamic_objects = {}
         self.dynamic_objects_rev = {}
@@ -152,18 +153,23 @@ class GraphBuilder:
         self.constants_ = {}
 
         if self.dynamic_shapes:
-            for _, v in self.dynamic_shapes.items():
-                for __, vv in v.items():
+            for input_name, v in self.dynamic_shapes.items():
+                for pos, vv in v.items():
                     if "_Dim" in str(type(vv)):
                         name = vv.__name__
                     else:
                         name = vv
                     assert isinstance(name, str), (
                         f"Unexpected type {type(v)}:{v} for dynamic "
-                        f"dimension in {_!r}, name is {name!r}"
+                        f"dimension is {pos!r}, name is {name!r}"
                     )
                     if not self.has_dynamic_object(name):
-                        self.make_dynamic_object(name, self.torch.SymInt(name))
+                        self.make_dynamic_object(
+                            name,
+                            self.torch.SymInt(name),
+                            axis=pos,
+                            input_name=input_name,
+                        )
 
         if isinstance(target_opset_or_existing_proto, (int, dict)):
             # starts a model from nothing
@@ -405,9 +411,8 @@ class GraphBuilder:
                     res[i_1] = f"{an}/({name})"
             return tuple(res)
 
-        raise RuntimeError(
-            f"Not implemented yet for input_shape={input_shape} and new_shape={new_shape}."
-        )
+        # The shape is dynamic and cannot be set.
+        return None
 
     def _get_tensor_shape(self, proto: Union[NodeProto, TensorProto]) -> STATIC_SHAPE:
         if isinstance(proto, TensorProto):
@@ -990,7 +995,12 @@ class GraphBuilder:
         return name in self.dynamic_objects
 
     def make_dynamic_object(
-        self, name: str, value: Any, shape_as_input: bool = False
+        self,
+        name: str,
+        value: Any,
+        shape_as_input: bool = False,
+        input_name: Optional[str] = None,
+        axis: Optional[int] = None,
     ) -> str:
         """
         Creates a dynamic shapes.
@@ -999,6 +1009,8 @@ class GraphBuilder:
         :param value: value
         :param shape_as_input: adds the name to the list of the inputs
             of the onnx model
+        :param input_name: the dimension comes from this input
+        :param axis: the dimension comes this axis
         :return: the name
         """
         assert name not in self.dynamic_objects, (
@@ -1008,11 +1020,23 @@ class GraphBuilder:
         assert isinstance(
             value, self.torch.SymInt
         ), f"Unexpected type {type(value)} for value{self.get_debug_msg()}"
+        if input_name is not None:
+            assert axis is not None, (
+                f"input_name={input_name!r} but axis is None for "
+                f"dynamic shape {name!r}, value is {value!r}{self.get_debug_msg}"
+            )
+            assert name != input_name, (
+                f"Name {name!r} cannot be defined from itself (axis={axis}), "
+                f"value={value}{self.get_debug_msg()}"
+            )
+            source = dict(input_name=input_name, axis=axis)
+            if name in self.dynamic_dimensions_source:
+                self.dynamic_dimensions_source[name].append(source)
+            else:
+                self.dynamic_dimensions_source[name] = [source]
         self.dynamic_objects[name] = value
-        assert (
-            name not in self._known_value_shape
-        ), f"Shape value for {name!r} was already registered."
-        self._known_value_shape[name] = name
+        if name not in self._known_value_shape:
+            self._known_value_shape[name] = name
         key = str(value)
         if key not in self.dynamic_objects_rev:
             self.dynamic_objects_rev[key] = []
@@ -1020,8 +1044,34 @@ class GraphBuilder:
         if shape_as_input:
             # torch.compile adds input for dynamic shapes
             return self.make_tensor_input(
-                name, TensorProto.INT64, (1,), is_dimension=True
+                self._known_value_shape[name],
+                TensorProto.INT64,
+                (1,),
+                is_dimension=True,
             )
+        return self._known_value_shape[name]
+
+    def get_dimension_as_result(self, name: str) -> str:
+        if self.has_name(name):
+            return name
+        assert (
+            name in self.dynamic_dimensions_source
+            and len(self.dynamic_dimensions_source[name]) > 0
+        ), (
+            f"Dimension {name!r} has no registered source "
+            f"it cannot be created as a result{self.get_debug_msg()}"
+        )
+        source = self.dynamic_dimensions_source[name][0]
+        axis = source["axis"]
+        input_name = source["input_name"]
+        shape_name = self.unique_name(f"_onx_shape_{name}")
+        self.make_node(
+            "Shape", [input_name], [shape_name], name="_get_dimension_as_result"
+        )
+        axis_name = self.make_initializer("", np.array([axis], dtype=np.int64))
+        self.make_node(
+            "Gather", [shape_name, axis_name], [name], name="_get_dimension_as_result"
+        )
         return name
 
     def make_shape_from_results(self, shape: DYNAMIC_SHAPE, name="") -> str:
@@ -1062,8 +1112,13 @@ class GraphBuilder:
             elif isinstance(d, (str, self.torch.SymInt)):
                 value = self._torch_sym_int(d)
                 if value in self.dynamic_objects_rev:
-                    name = self.dynamic_objects_rev[value][0]
-                    assert not isinstance(name, tuple)
+                    assert len(self.dynamic_objects_rev[value]) >= 1
+                    name = self.dynamic_objects_rev[value][0][0]
+                    assert not isinstance(name, tuple), (
+                        f"Unexpected type {type(name)}, name={name!r}, value={value!r}"
+                        f"{self.get_debug_msg()}"
+                    )
+                    name = self.get_dimension_as_result(name)
                 else:
                     name = value
                 if isinstance(name, self.torch.SymInt):
@@ -1511,10 +1566,12 @@ class GraphBuilder:
                 f"Unexpected type {type(new_value)} for value={value!r}, d={d}"
                 f"{self.get_debug_msg()}"
             )
-            assert len(new_value) == 1, (
+            assert len(new_value) >= 1, (
                 f"Unexpected number of items in {new_value}, value={value!r}, d={d}"
                 f"{self.get_debug_msg()}"
             )
+            # We assume if len(new_value) > 1 that all names are equivalent.
+            # The graph is doing the same computation multiple times.
             final = new_value[0]
             assert isinstance(final, tuple) or len(final) != 2, (
                 f"Unexpected type {type(final)}, final={final}, value={value}, d={d}"
@@ -1933,7 +1990,8 @@ class GraphBuilder:
                     # Optional input.
                     continue
                 assert self.has_name(i), (
-                    f"Input {i!r} does not exist for operator {op_type!r} "
+                    f"Input {i!r} does not exist for operator {op_type!r}, "
+                    f"inputs={inputs}, name={name!r} "
                     f"({self._hash()}){self.get_debug_msg()}"
                 )
             for i in output_names:
@@ -2455,7 +2513,7 @@ class GraphBuilder:
 
         def _values(t):
             if hasattr(t, "detach"):
-                return t.detach().numpy().ravel().tolist()
+                return t.detach().cpu().numpy().ravel().tolist()
             if hasattr(t, "size"):
                 return t.ravel().tolist()
             if hasattr(t, "dims"):
@@ -2466,7 +2524,12 @@ class GraphBuilder:
         rows = ["", "--DEBUG--", "--SHAPE--"]
         rows.append(f"dynamic_objects={pprint.pformat(self.dynamic_objects)[:10000]}")
         rows.append(
-            f"dynamic_objects_rev={pprint.pformat(self.dynamic_objects_rev)[:10000]}"
+            f"dynamic_objects_rev="
+            f"{pprint.pformat(self.dynamic_objects_rev)[:10000]}"
+        )
+        rows.append(
+            f"dynamic_dimensions_source="
+            f"{pprint.pformat(self.dynamic_dimensions_source)[:10000]}"
         )
         rows.append(f"dynamic_alias={pprint.pformat(self._dynamic_alias)[:10000]}")
         rows.append(f"dynamic_shapes={pprint.pformat(self.dynamic_shapes)[:10000]}")
@@ -2763,6 +2826,10 @@ class GraphBuilder:
         statistics = []
         main_begin = time.perf_counter()
 
+        if self.verbose or self.optimization_options.verbose:
+            print(f"[GraphBuilder.optimize] start with {len(self.nodes)} nodes")
+            print(f"[GraphBuilder.optimize] options={self.optimization_options!r}")
+
         _check(statistics, "A")
         if self.optimization_options.remove_identity:
             begin = time.perf_counter()
@@ -2845,7 +2912,7 @@ class GraphBuilder:
         if self.verbose or self.optimization_options.verbose:
             duration = time.perf_counter() - main_begin
             print(
-                f"[GraphBuilder] done with "
+                f"[GraphBuilder.optimize] done with "
                 f"{len(self.nodes)} nodes in {duration:.3f}"
             )
             msg = self._compile_statistics(statistics)
@@ -3669,11 +3736,13 @@ class GraphBuilder:
             d.dim_param if d.dim_param else d.dim_value
             for d in val.type.tensor_type.shape.dim
         )
-        for sh in shape:
+        for i, sh in enumerate(shape):
             if isinstance(sh, int):
                 continue
             if not self.has_dynamic_object(sh):
-                self.make_dynamic_object(sh, self.torch.SymInt(sh))
+                self.make_dynamic_object(
+                    sh, self.torch.SymInt(sh), input_name=val.name, axis=i
+                )
         self.set_shape(val.name, shape, exc=False)
 
     def _update_shape_types_with_proto(
@@ -3781,11 +3850,13 @@ class GraphBuilder:
                     d.dim_param if d.dim_param else d.dim_value
                     for d in i.type.tensor_type.shape.dim
                 )
-                for sh in shape:
+                for axis, sh in enumerate(shape):
                     if isinstance(sh, int):
                         continue
                     if not self.has_dynamic_object(sh):
-                        self.make_dynamic_object(sh, self.torch.SymInt(sh))
+                        self.make_dynamic_object(
+                            sh, self.torch.SymInt(sh), input_name=i.name, axis=axis
+                        )
                 self.set_shape(i.name, shape)
             if (
                 self.get_type(i.name) == TensorProto.INT64

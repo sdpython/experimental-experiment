@@ -671,7 +671,7 @@ Fallback
 The current library does not always have a converting function
 for evert aten functions implemented in torch. A mechanism exists
 to intercept the function returned by the interpreter and replace it
-by a function coming from another source such as :epkg:`onnx-script`.
+by a function coming from another source such as :epkg:`onnxscript`.
 
 .. runpython::
     :showcode:

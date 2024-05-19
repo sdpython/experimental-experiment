@@ -21,26 +21,26 @@ jobs:
     displayName: 'Install tools'
   - script: pip install -r requirements.txt
     displayName: 'Install Requirements'
-  - script: |
-      python -m pip install parameterized
-      mkdir onnxscript_repo
-      cd onnxscript_repo
-      git init
-      git remote add -f origin https://github.com/microsoft/onnxscript.git
-      git config core.sparsecheckout true
-      echo "onnxscript" >> .git/info/sparse-checkout
-      echo "setup.py" >> .git/info/sparse-checkout
-      echo "pyproject*" >> .git/info/sparse-checkout
-      echo "README*" >> .git/info/sparse-checkout
-      echo "requirement*" >> .git/info/sparse-checkout
-      echo "MANIFEST*" >> .git/info/sparse-checkout
-      echo "LICENSE*" >> .git/info/sparse-checkout
-      echo "VERSION*" >> .git/info/sparse-checkout
-      git pull origin main --depth=1
-      python -m pip install -e . -v
-      rm onnxscript -rf
-      cd ..
-    displayName: 'Install onnxscript'
+  #- script: |
+  #    python -m pip install parameterized
+  #    mkdir onnxscript_repo
+  #    cd onnxscript_repo
+  #    git init
+  #    git remote add -f origin https://github.com/microsoft/onnxscript.git
+  #    git config core.sparsecheckout true
+  #    echo "onnxscript" >> .git/info/sparse-checkout
+  #    echo "setup.py" >> .git/info/sparse-checkout
+  #    echo "pyproject*" >> .git/info/sparse-checkout
+  #    echo "README*" >> .git/info/sparse-checkout
+  #    echo "requirement*" >> .git/info/sparse-checkout
+  #    echo "MANIFEST*" >> .git/info/sparse-checkout
+  #    echo "LICENSE*" >> .git/info/sparse-checkout
+  #    echo "VERSION*" >> .git/info/sparse-checkout
+  #    git pull origin main --depth=1
+  #    python -m pip install -e . -v
+  #    rm onnxscript -rf
+  #    cd ..
+  #  displayName: 'Install onnxscript'
   - script: pip install transformers==4.37.2
     displayName: 'Install specific version of transformers'
   - script: pip install -r requirements-dev.txt
@@ -62,7 +62,7 @@ jobs:
       python -m pip install . -v -v -v
     displayName: 'install wheel'
   - script: |
-      UNITTEST_ONNXRT=1 python -m pytest -v _unittests
+      UNITTEST_ONNXRT=1 python -m pytest -v _unittests --durations=10
     displayName: 'Runs Unit Tests'
   - task: PublishPipelineArtifact@0
     inputs:
@@ -95,26 +95,26 @@ jobs:
     displayName: 'Install tools'
   - script: pip install -r requirements.txt
     displayName: 'Install Requirements'
-  - script: |
-      python -m pip install parameterized
-      mkdir onnxscript_repo
-      cd onnxscript
-      git init
-      git remote add -f origin https://github.com/microsoft/onnxscript.git
-      git config core.sparsecheckout true
-      echo "onnxscript" >> .git/info/sparse-checkout
-      echo "setup.py" >> .git/info/sparse-checkout
-      echo "pyproject*" >> .git/info/sparse-checkout
-      echo "README*" >> .git/info/sparse-checkout
-      echo "requirement*" >> .git/info/sparse-checkout
-      echo "MANIFEST*" >> .git/info/sparse-checkout
-      echo "LICENSE*" >> .git/info/sparse-checkout
-      echo "VERSION*" >> .git/info/sparse-checkout
-      git pull origin main --depth=1
-      python -m pip install -e . -v
-      rm onnxscript -rf
-      cd ..
-    displayName: 'Install onnxscript'
+  #- script: |
+  #    python -m pip install parameterized
+  #    mkdir onnxscript_repo
+  #    cd onnxscript
+  #    git init
+  #    git remote add -f origin https://github.com/microsoft/onnxscript.git
+  #    git config core.sparsecheckout true
+  #    echo "onnxscript" >> .git/info/sparse-checkout
+  #    echo "setup.py" >> .git/info/sparse-checkout
+  #    echo "pyproject*" >> .git/info/sparse-checkout
+  #    echo "README*" >> .git/info/sparse-checkout
+  #    echo "requirement*" >> .git/info/sparse-checkout
+  #    echo "MANIFEST*" >> .git/info/sparse-checkout
+  #    echo "LICENSE*" >> .git/info/sparse-checkout
+  #    echo "VERSION*" >> .git/info/sparse-checkout
+  #    git pull origin main --depth=1
+  #    python -m pip install -e . -v
+  #    rm onnxscript -rf
+  #    cd ..
+  #  displayName: 'Install onnxscript'
   - script: pip install -r requirements-dev.txt
     displayName: 'Install Requirements dev'
   - script: |
@@ -130,7 +130,7 @@ jobs:
       black --diff .
     displayName: 'Black'
   - script: |
-      python -m pytest --cov _unittests
+      python -m pytest --cov _unittests --durations=10
     displayName: 'Runs Unit Tests'
   - script: |
       python -u setup.py bdist_wheel
@@ -161,32 +161,32 @@ jobs:
     displayName: 'Install tools'
   - script: pip install -r requirements.txt
     displayName: 'Install Requirements'
-  - script: |
-      python -m pip install parameterized
-      mkdir onnxscript_repo
-      cd onnxscript
-      git init
-      git remote add -f origin https://github.com/microsoft/onnxscript.git
-      git config core.sparsecheckout true
-      echo "onnxscript" >> .git/info/sparse-checkout
-      echo "setup.py" >> .git/info/sparse-checkout
-      echo "pyproject*" >> .git/info/sparse-checkout
-      echo "README*" >> .git/info/sparse-checkout
-      echo "requirement*" >> .git/info/sparse-checkout
-      echo "MANIFEST*" >> .git/info/sparse-checkout
-      echo "LICENSE*" >> .git/info/sparse-checkout
-      echo "VERSION*" >> .git/info/sparse-checkout
-      git pull origin main --depth=1
-      python -m pip install -e . -v
-      rm onnxscript -rf
-      cd ..
-    displayName: 'Install onnxscript'
+  #- script: |
+  #    python -m pip install parameterized
+  #    mkdir onnxscript_repo
+  #    cd onnxscript
+  #    git init
+  #    git remote add -f origin https://github.com/microsoft/onnxscript.git
+  #    git config core.sparsecheckout true
+  #    echo "onnxscript" >> .git/info/sparse-checkout
+  #    echo "setup.py" >> .git/info/sparse-checkout
+  #    echo "pyproject*" >> .git/info/sparse-checkout
+  #    echo "README*" >> .git/info/sparse-checkout
+  #    echo "requirement*" >> .git/info/sparse-checkout
+  #    echo "MANIFEST*" >> .git/info/sparse-checkout
+  #    echo "LICENSE*" >> .git/info/sparse-checkout
+  #    echo "VERSION*" >> .git/info/sparse-checkout
+  #    git pull origin main --depth=1
+  #    python -m pip install -e . -v
+  #    rm onnxscript -rf
+  #    cd ..
+  #  displayName: 'Install onnxscript'
   - script: pip install -r requirements-dev.txt
     displayName: 'Install Requirements dev'
   - script: pip install onnxmltools --no-deps
     displayName: 'Install onnxmltools'
   - script: |
-      python -m pytest -v _unittests
+      python -m pytest -v _unittests --durations=10
     displayName: 'Runs Unit Tests'
   - script: |
       python -u setup.py bdist_wheel
@@ -224,32 +224,32 @@ jobs:
     displayName: 'Install tools'
   - script: pip install -r requirements.txt
     displayName: 'Install Requirements'
-  - script: |
-      python -m pip install parameterized
-      mkdir onnxscript_repo
-      cd onnxscript
-      git init
-      git remote add -f origin https://github.com/microsoft/onnxscript.git
-      git config core.sparsecheckout true
-      echo "onnxscript" >> .git/info/sparse-checkout
-      echo "setup.py" >> .git/info/sparse-checkout
-      echo "pyproject*" >> .git/info/sparse-checkout
-      echo "README*" >> .git/info/sparse-checkout
-      echo "requirement*" >> .git/info/sparse-checkout
-      echo "MANIFEST*" >> .git/info/sparse-checkout
-      echo "LICENSE*" >> .git/info/sparse-checkout
-      echo "VERSION*" >> .git/info/sparse-checkout
-      git pull origin main --depth=1
-      python -m pip install -e . -v
-      rm onnxscript -rf
-      cd ..
-    displayName: 'Install onnxscript'
+  #- script: |
+  #    python -m pip install parameterized
+  #    mkdir onnxscript_repo
+  #    cd onnxscript
+  #    git init
+  #    git remote add -f origin https://github.com/microsoft/onnxscript.git
+  #    git config core.sparsecheckout true
+  #    echo "onnxscript" >> .git/info/sparse-checkout
+  #    echo "setup.py" >> .git/info/sparse-checkout
+  #    echo "pyproject*" >> .git/info/sparse-checkout
+  #    echo "README*" >> .git/info/sparse-checkout
+  #    echo "requirement*" >> .git/info/sparse-checkout
+  #    echo "MANIFEST*" >> .git/info/sparse-checkout
+  #    echo "LICENSE*" >> .git/info/sparse-checkout
+  #    echo "VERSION*" >> .git/info/sparse-checkout
+  #    git pull origin main --depth=1
+  #    python -m pip install -e . -v
+  #    rm onnxscript -rf
+  #    cd ..
+  #  displayName: 'Install onnxscript'
   - script: pip install -r requirements-dev.txt
     displayName: 'Install Requirements dev'
   - script: pip install onnxmltools --no-deps
     displayName: 'Install onnxmltools'
   - script: |
-      UNITTEST_ONNXRT=1 python -m pytest -v _unittests
+      UNITTEST_ONNXRT=1 python -m pytest -v _unittests --durations=10
     displayName: 'Runs Unit Tests'
   - script: |
       python -u setup.py bdist_wheel
