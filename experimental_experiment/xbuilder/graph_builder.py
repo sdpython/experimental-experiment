@@ -3854,7 +3854,7 @@ class GraphBuilder:
                     if isinstance(sh, int):
                         continue
                     if not self.has_dynamic_object(sh):
-                        if i < len(self.inputs):
+                        if axis < len(self.inputs):
                             self.make_dynamic_object(
                                 sh, self.torch.SymInt(sh), input_name=i.name, axis=axis
                             )
