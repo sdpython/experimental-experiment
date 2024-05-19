@@ -88,7 +88,7 @@ class TestOnnxExportDynamicShapes(ExtTestCase):
         self.assertEqualArray(expected, got[0], atol=1e-5)
 
     @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
-    @requires_torch("2.3", "bug")
+    @requires_torch("2.4", "bug")
     @requires_transformers("4.41.0", "dynamic shapes issue")
     @ignore_warnings(DeprecationWarning)
     def test_export_llama_model_dynamic_shapes_x1_cpu(self):

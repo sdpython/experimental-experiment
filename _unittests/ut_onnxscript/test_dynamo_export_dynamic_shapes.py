@@ -3,6 +3,7 @@ import unittest
 from experimental_experiment.ext_test_case import (
     ExtTestCase,
     ignore_warnings,
+    requires_onnxscript,
     requires_torch,
     requires_transformers,
 )
@@ -12,6 +13,7 @@ from experimental_experiment.torch_models.llama_helper import get_llama_model
 class TestDynamoExportDynamicShapes(ExtTestCase):
 
     @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
+    @requires_onnxscript("0.2", "issue in rewriter")
     @requires_torch("2.3", "bug")
     @requires_transformers("4.41.0", "dynamic shapes issue")
     @ignore_warnings(DeprecationWarning)
