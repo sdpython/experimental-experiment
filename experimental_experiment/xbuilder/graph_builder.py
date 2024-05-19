@@ -405,9 +405,8 @@ class GraphBuilder:
                     res[i_1] = f"{an}/({name})"
             return tuple(res)
 
-        raise RuntimeError(
-            f"Not implemented yet for input_shape={input_shape} and new_shape={new_shape}."
-        )
+        # The shape is dynamic and cannot be set.
+        return None
 
     def _get_tensor_shape(self, proto: Union[NodeProto, TensorProto]) -> STATIC_SHAPE:
         if isinstance(proto, TensorProto):
@@ -1008,6 +1007,7 @@ class GraphBuilder:
         assert isinstance(
             value, self.torch.SymInt
         ), f"Unexpected type {type(value)} for value{self.get_debug_msg()}"
+        print("++++1", name, value)
         self.dynamic_objects[name] = value
         if name not in self._known_value_shape:
             self._known_value_shape[name] = name
@@ -1063,8 +1063,12 @@ class GraphBuilder:
             elif isinstance(d, (str, self.torch.SymInt)):
                 value = self._torch_sym_int(d)
                 if value in self.dynamic_objects_rev:
-                    name = self.dynamic_objects_rev[value][0]
-                    assert not isinstance(name, tuple)
+                    assert len(self.dynamic_objects_rev[value]) >= 1
+                    name = self.dynamic_objects_rev[value][0][0]
+                    assert not isinstance(name, tuple), (
+                        f"Unexpected type {type(name)}, name={name!r}, value={value!r}"
+                        f"{self.get_debug_msg()}"
+                    )
                 else:
                     name = value
                 if isinstance(name, self.torch.SymInt):
@@ -1493,6 +1497,7 @@ class GraphBuilder:
             and value not in self._known_value_shape
             and add
         ):
+            print("++++2", value)
             self.dynamic_objects[value] = value
             self.dynamic_objects_rev[value] = [value]
 
@@ -1936,7 +1941,8 @@ class GraphBuilder:
                     # Optional input.
                     continue
                 assert self.has_name(i), (
-                    f"Input {i!r} does not exist for operator {op_type!r} "
+                    f"Input {i!r} does not exist for operator {op_type!r}, "
+                    f"inputs={inputs}, name={name!r} "
                     f"({self._hash()}){self.get_debug_msg()}"
                 )
             for i in output_names:
@@ -2458,7 +2464,7 @@ class GraphBuilder:
 
         def _values(t):
             if hasattr(t, "detach"):
-                return t.detach().numpy().ravel().tolist()
+                return t.detach().cpu().numpy().ravel().tolist()
             if hasattr(t, "size"):
                 return t.ravel().tolist()
             if hasattr(t, "dims"):
