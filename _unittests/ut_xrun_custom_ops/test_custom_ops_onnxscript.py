@@ -165,15 +165,6 @@ class TestCustomOpsOnnxScript(ExtTestCase):
                 ExportOptions,
             )
 
-            if rewrite:
-                try:
-                    import onnxrewriter  # noqa: F401
-                except ImportError:
-                    warnings.warn(
-                        "unable to rewrite a model with onnx-rewriter due to {e}"
-                    )
-                    rewrite = False
-
             names = []
             onnx_registry = None
             if aten_conversion_changes is not None:
@@ -217,8 +208,10 @@ class TestCustomOpsOnnxScript(ExtTestCase):
                 )
 
             if rewrite:
-                from onnxrewriter.optimizer import optimize
-                from onnxrewriter.rewriter import rewrite
+
+                from onnxscript.optimizer import optimize
+                from onnxscript.rewriter import rewrite
+                from onnx.inliner import inline_local_functions
 
                 def optimize_model_proto(model_proto):
                     first_model_proto = model_proto
@@ -228,6 +221,7 @@ class TestCustomOpsOnnxScript(ExtTestCase):
                         onnx_shape_inference=False,
                     )
                     model_proto = rewrite(model_proto)
+                    model_proto = inline_local_functions(model_proto)
                     del first_model_proto.graph.node[:]
                     del first_model_proto.functions[:]
                     first_model_proto.graph.node.extend(model_proto.graph.node)
@@ -270,7 +264,7 @@ class TestCustomOpsOnnxScript(ExtTestCase):
 
         local_aot_ort, _ = make_aot_ort(
             dynamic=False,  # True,
-            rewrite=True,  # True,
+            rewrite=True,
             aten_conversion_changes=aten_conversion_changes,
             verbose=1,
         )

@@ -16,11 +16,22 @@ def get_onnxruntime_patterns(
         pprint.pprint(get_onnxruntime_patterns())
     """
     from .activation_grad import SoftmaxGradPattern
-    from .fused_matmul import FusedMatMulPattern
+    from .fused_matmul import (
+        FusedMatMulDivPattern,
+        FusedMatMulPattern,
+        FusedMatMulx2Pattern,
+        FusedMatMulTransposePattern,
+    )
+
+    # from .gather_grad import GatherGradPattern
     from .simplified_layer_normalization import SimplifiedLayerNormalizationPattern
 
     return [
         FusedMatMulPattern(verbose=verbose),
+        FusedMatMulx2Pattern(verbose=verbose),
+        FusedMatMulDivPattern(verbose=verbose),
+        FusedMatMulTransposePattern(verbose=verbose),
+        # GatherGradPattern(verbose=verbose),
         SimplifiedLayerNormalizationPattern(verbose=verbose),
         SoftmaxGradPattern(verbose=verbose),
     ]

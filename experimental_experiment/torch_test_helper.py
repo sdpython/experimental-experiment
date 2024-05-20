@@ -59,7 +59,7 @@ def export_to_onnx(
     target_opset: int = 18,
     prefix: Optional[str] = None,
     rename_inputs: bool = False,
-    optimize: bool = True,
+    optimize: Union[str, bool] = True,
     folder: Optional[str] = "dump_test",
 ) -> Dict[str, Union[str, ModelProto, "GraphBuilder"]]:  # noqa: F821
     """
@@ -73,7 +73,7 @@ def export_to_onnx(
     :param target_opset: opset to export into
     :param prefix: prefix to choose to export into
     :param rename_inputs: rename the inputs into ``input_{i}``
-    :param optimize: enable, disable optimizations
+    :param optimize: enable, disable optimizations of pattern to test
     :param folder: where to dump the model, creates it if it does not exist
     :return: dictionary with ModelProto, builder, filenames
     """
@@ -91,11 +91,15 @@ def export_to_onnx(
                 torch.onnx.export(model, args, filename, input_names=["input"])
                 ret["torch.script"] = filename
 
+    if isinstance(optimize, str):
+        options = OptimizationOptions(verbose=verbose, patterns=optimize)
+    else:
+        options = OptimizationOptions(verbose=verbose)
     onx = to_onnx(
         model,
         tuple(args),
         input_names=[f"input{i}" for i in range(len(args))] if rename_inputs else None,
-        options=OptimizationOptions(verbose=verbose),
+        options=options,
         verbose=verbose,
         return_builder=return_builder,
         optimize=optimize,

@@ -140,8 +140,6 @@ Some needs are very common and deserve a dedicated method.
 
 * :meth:`make_nodes <experimental_experiment.xbuilder.GraphBuilder.make_nodes>`:
   adds many nodes in one row, it renames the intermediate result if needed.
-* :meth:`from_array <experimental_experiment.xbuilder.GraphBuilder.from_array>`:
-  converts a torch Tensor into a TensorProto,
 * :meth:`get_attribute <experimental_experiment.xbuilder.GraphBuilder.get_attribute>`:
   retrieve an attribute from a NodeProto
 * :meth:`make_shape_from_results <experimental_experiment.xbuilder.GraphBuilder.make_shape_from_results>`:
@@ -202,8 +200,8 @@ Example
     gr.make_tensor_input("X", TensorProto.FLOAT, ("a", "b"), is_dimension=False)
     weight = gr.make_initializer("", np.array([[0.4, 0.5, 0.6]], dtype=np.float32).T)
     bias = gr.make_initializer("", np.array([[0.4, 0.5, 0.6]], dtype=np.float32))
-    mm = gr.make_node("MatMul", ["X", weight])
-    out = gr.make_node("Add", [mm, bias], ["Y"])
+    mm = gr.make_node("MatMul", ["X", weight], name="n")
+    out = gr.make_node("Add", [mm, bias], ["Y"], name="n")
     gr.make_tensor_output(out, TensorProto.FLOAT, ("a",), indexed=False, is_dimension=False)
     onx = gr.to_onnx()
 
@@ -673,7 +671,7 @@ Fallback
 The current library does not always have a converting function
 for evert aten functions implemented in torch. A mechanism exists
 to intercept the function returned by the interpreter and replace it
-by a function coming from another source such as :epkg:`onnx-script`.
+by a function coming from another source such as :epkg:`onnxscript`.
 
 .. runpython::
     :showcode:

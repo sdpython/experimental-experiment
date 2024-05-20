@@ -6,6 +6,8 @@ from experimental_experiment.ext_test_case import (
     ExtTestCase,
     ignore_warnings,
     skipif_ci_windows,
+    requires_torch,
+    hide_stdout,
 )
 from experimental_experiment.torch_models.dump_helper import assert_all_close
 from experimental_experiment.torch_models.training_helper import make_aot_ort
@@ -90,6 +92,8 @@ class TestLlama(ExtTestCase):
 
     @ignore_warnings((UserWarning, DeprecationWarning))
     @skipif_ci_windows("torch.compile not supported on Windows")
+    @requires_torch("2.4")
+    @hide_stdout()
     def test_ort_llama_decoder_forward(self):
         from experimental_experiment.torch_models.llama_helper import get_llama_decoder
 
@@ -105,6 +109,8 @@ class TestLlama(ExtTestCase):
 
     @ignore_warnings((UserWarning, DeprecationWarning))
     @skipif_ci_windows("torch.compile not supported on Windows")
+    @requires_torch("2.4")
+    @hide_stdout()
     def test_ort_llama_decoder_backward(self):
         from experimental_experiment.torch_models.llama_helper import get_llama_decoder
 
@@ -120,6 +126,8 @@ class TestLlama(ExtTestCase):
 
     @ignore_warnings((UserWarning, DeprecationWarning))
     @skipif_ci_windows("torch.compile not supported on Windows")
+    @requires_torch("2.4")
+    @hide_stdout()
     def test_ort_llama_attention(self):
         from experimental_experiment.torch_models.llama_helper import (
             get_llama_attention,
@@ -137,6 +145,8 @@ class TestLlama(ExtTestCase):
 
     @ignore_warnings((UserWarning, DeprecationWarning))
     @skipif_ci_windows("torch.compile not supported on Windows")
+    @requires_torch("2.4")
+    @hide_stdout()
     def test_ort_llama_attention_backward(self):
         from experimental_experiment.torch_models.llama_helper import (
             get_llama_attention,

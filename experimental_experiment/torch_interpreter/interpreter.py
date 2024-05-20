@@ -8,6 +8,7 @@ from onnx import TensorProto
 from ..xbuilder.shape_helper import all_int
 from ..xbuilder._helper import make_hash
 from ..xbuilder._dtype_helper import torch_dtype_to_onnx_dtype
+from ..xbuilder.model_container import _get_type
 from ._exceptions import FunctionNotFoundError
 from .aten_functions import find_function
 from .aten_methods import find_method
@@ -168,10 +169,13 @@ class DynamoInterpreter:
                 is_dimension=False,
             )
 
-        if isinstance(val, self.torch.Tensor):
+        if isinstance(
+            val, (self.torch.Tensor, self.torch._subclasses.fake_tensor.FakeTensor)
+        ):
             stack_trace = node.meta.get("stack_trace", None)
-            if stack_trace is None:
+            if stack_trace is None and "from_node" not in node.meta:
                 # torch 2.1.0 and 2.2.0 behave differently.
+                # torch 2.4.0, stack_trace is None but from_node is in node.meta
                 return self.builder.make_tensor_input(
                     node.name, elem_type=val.dtype, shape=val.shape, is_dimension=False
                 )
@@ -221,7 +225,9 @@ class DynamoInterpreter:
         output = declared[0]
         if hasattr(output, "name"):
             output = output.name
-            self.builder.make_node("Identity", [output], [output_name], check=False)
+            self.builder.make_node(
+                "Identity", [output], [output_name], check=False, name=".output"
+            )
             outputs = [(output, output_name)]
         else:
             outputs = []
@@ -238,10 +244,14 @@ class DynamoInterpreter:
                 if a_name is None:
                     # the gradient may need unused output
                     o = f"{output_name}_NONE_{i}"
-                    self.builder.make_node("Constant", [], [o], value_float=0.0)
+                    self.builder.make_node(
+                        "Constant", [], [o], value_float=0.0, name=".output"
+                    )
                     outputs.append((None, o))
                 else:
-                    self.builder.make_node("Identity", [a_name], [o], check=False)
+                    self.builder.make_node(
+                        "Identity", [a_name], [o], check=False, name=".output"
+                    )
                     outputs.append((a_name, o))
 
         val = node.meta.get("val", None)
@@ -300,7 +310,7 @@ class DynamoInterpreter:
             n_outputs = len(self.builder.outputs)
             output_name = f"{node.name}_{n_outputs}"
             shape = val.shape
-            dtype = self.builder._get_type(val.dtype)
+            dtype = _get_type(val.dtype)
             self.builder.make_tensor_output(output_name, dtype, shape)
             return output_name
 
@@ -450,7 +460,7 @@ class DynamoInterpreter:
                         f"Unexpected value for end={i!r}"
                         f"{self.builder.get_debug_msg()}"
                     )
-                    iends.append(np.array([i], dtype=np.int64) for i in ends)
+                    iends.append(np.array([i], dtype=np.int64))
             if len(iends) > 1:
                 conc_ends = self.builder.op.Concat(*iends, axis=0, name=f"{name}D")
             else:
@@ -514,8 +524,10 @@ class DynamoInterpreter:
                     f"{self.builder.get_debug_msg()}"
                 )
                 self.builder.set_shape(node.name, new_shape)
-            else:
-                self.builder.set_rank(node.name, self.builder.get_rank(inputs[0]))
+            elif expand_axes:
+                self.builder.set_rank(
+                    node.name, self.builder.get_rank(inputs[0]) + len(expand_axes)
+                )
         return res
 
     def _getitem_int1(
@@ -558,7 +570,7 @@ class DynamoInterpreter:
         if val is not None:
             if isinstance(val, self.torch.Tensor):
                 shape = val.shape
-                dtype = self.builder._get_type(val.dtype)
+                dtype = _get_type(val.dtype)
                 self.builder.set_shape(node.name, tuple(shape))
                 self.builder.set_type(node.name, dtype)
                 sts = {"dtype": val.dtype}
@@ -596,7 +608,10 @@ class DynamoInterpreter:
                     "", np.array(index, dtype=np.int64)
                 )
                 res = self.builder.make_node(
-                    "SequenceAt", [result_name, tpos], [node.name]
+                    "SequenceAt",
+                    [result_name, tpos],
+                    [node.name],
+                    name="getitemB_tuple",
                 )
                 if not sts:
                     info = self.builder.get_sequence_info(result_name)
@@ -665,6 +680,7 @@ class DynamoInterpreter:
                 slices = []
                 expand_axes = []
                 ellipsis = False
+                true_slice = False
                 for i, ind in enumerate(index):
                     if ind is Ellipsis:
                         assert not ellipsis, f"Second (...) found in index={index}"
@@ -679,16 +695,32 @@ class DynamoInterpreter:
                     axes.append(
                         ((i - len(index)) if ellipsis else i) - len(expand_axes)
                     )
+                    if (
+                        not isinstance(ind, slice)
+                        or ind.start is not None
+                        or ind.stop is not None
+                        or ind.step is not None
+                    ):
+                        true_slice = True
                     slices.append(ind)
-                return self._getitem_slice(
-                    node,
-                    node_output.name,
-                    slices,
-                    sts=sts,
-                    axes=axes,
-                    expand_axes=expand_axes,
-                    name="_getitem_slice2",
+                if true_slice:
+                    return self._getitem_slice(
+                        node,
+                        node_output.name,
+                        slices,
+                        sts=sts,
+                        axes=axes,
+                        expand_axes=expand_axes,
+                        name="_getitem_slice2",
+                    )
+                # It is just a node unsqueeze.
+                res = self.builder.op.UnsqueezeAnyOpset(
+                    str(node.args[0]),
+                    np.array(expand_axes, dtype=np.int64),
+                    name="getitem_unsqueeze",
+                    outputs=[node.name],
                 )
+                return res
 
         raise RuntimeError(
             f"getitem: unexpected type {type(index)} for index={index}, "
@@ -829,7 +861,9 @@ class DynamoInterpreter:
         val = node.meta.get("val", None)
         if val is not None and isinstance(val, tuple):
             n_outputs = len(val)
-            output_names = [f"{node.name}#{i}" for i in range(n_outputs)]
+            output_names = [
+                ("" if val[i] is None else f"{node.name}#{i}") for i in range(n_outputs)
+            ]
         else:
             assert isinstance(
                 node.name, str
@@ -863,7 +897,9 @@ class DynamoInterpreter:
                     f"Unexpected res={res}, output_names={output_names}, node.name={node.name}"
                     f"{self.builder.get_debug_msg()}"
                 )
-                self.builder.make_node("Identity", [res], [node.name])
+                self.builder.make_node(
+                    "Identity", [res], [node.name], name="_check_output_name"
+                )
                 res = node.name
         else:
             raise NotImplementedError(
@@ -929,7 +965,7 @@ class DynamoInterpreter:
 
             for v, r in zip(val, res):
                 if isinstance(v, self.torch.Tensor):
-                    dtype = self.builder._get_type(v.dtype)
+                    dtype = _get_type(v.dtype)
                     self.builder.set_type(r, dtype)
                     shape = tuple(v.shape)
                     if self.builder.is_dynamic_shape(shape):

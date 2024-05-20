@@ -49,6 +49,34 @@ class MatchResult:
     def __str__(self) -> str:
         return self.to_string(short=True)
 
+    def debug_string(self, g: Optional["GraphBuilder"] = None) -> str:  # noqa: F821
+        """
+        Returns a string showing the matched nodes.
+        """
+
+        def _p(i, g=g):
+            if g.has_shape(i):
+                return f"{i}:{g.get_type(i)}:{g.get_shape(i)}"
+            return f"{i}:{g.get_type(i)}:R{g.get_rank(i)}"
+
+        rows = []
+        for ind, node in enumerate(self.nodes):
+            if node is None:
+                rows.append(f"{ind} -")
+                continue
+            rows.append(f"{ind} - {node.op_type}({node.input}) -> {node.output}")
+        if g:
+            rows.append("--------")
+            for ind, node in enumerate(self.nodes):
+                if node is None:
+                    rows.append(f"{ind} -")
+                    continue
+                rows.append(
+                    f"{ind} - {node.op_type}({', '.join(map(_p, node.input))}) "
+                    f"-> {', '.join(map(_p, node.output))}"
+                )
+        return "\n".join(rows)
+
 
 class PatternOptimization:
     """
@@ -60,14 +88,20 @@ class PatternOptimization:
 
     :param verbose: determine the verbosity, this can be also dermine by setting up
         environment variable ``LOG_PATTERN_OPTIMIZE=10``
+    :param priority: at each iteration, all patterns whose priority is below one threshold
+        are executed, if none of them matches, the priority is increase
     """
 
-    def __init__(self, verbose: int = 0):
+    def __init__(self, verbose: int = 0, priority: int = 1):
         value = os.environ.get("LOG_PATTERN_OPTIMIZE", "0")
         self.verbose = max(verbose, int(value))
+        self.priority = priority
 
     def __str__(self) -> str:
         return self.__class__.__name__
+
+    def __repr__(self) -> str:
+        return f"{self.__class__.__name__}()"
 
     def __eq__(self, o: "PatternOptimization"):
         """
@@ -82,11 +116,19 @@ class PatternOptimization:
         Enumerates all the
         """
         matched = []
-        for node in g.iter_nodes():
-            res = self.match(g, node, matched)
-            if res:
-                matched.append(res)
-                yield res
+        # g.iter_nodes() iterates on g.builder.nodes: -> too slow to have a secondary iterator
+        for node in g.builder.nodes:
+            # This expression seems awkard but it saves 10% just by looking into
+            # the first item of the list and then, if necessary, walking through the
+            # rest of the outputs.
+            if g.is_used(node.output[0]) or any(
+                map(lambda o: g.is_used(o), node.output[1:])
+            ):
+                # We avoid processing a node which is not used.
+                res = self.match(g, node, matched)
+                if res:
+                    matched.append(res)
+                    yield res
 
     def match(
         self,
@@ -111,7 +153,7 @@ class PatternOptimization:
         The method must not modify the graph.
         The method returns None if no match is found or an instance
         of class :class:`MatchResult
-        <experimental_experiment.xoptim.patterns.MatchResult>`. It must contain:
+        <experimental_experiment.xoptim.MatchResult>`. It must contain:
 
         * a list of nodes involved in the rewriting. It does not mean all
           of them will be removed but all of them are needed to do the rewriting
@@ -132,7 +174,7 @@ class PatternOptimization:
         self,
         node: Optional[NodeProto] = None,
         lineno: Optional[int] = None,
-        msg: str = "",
+        msg: Optional[Union[Callable, str]] = None,
     ):
         """
         It may be useful which reason made a pattern matching fail.
@@ -147,6 +189,12 @@ class PatternOptimization:
         which lines in the code returned None and which condition failed.
         """
         if node and self.verbose:
+            if msg is None:
+                msg = ""
+            elif callable(msg):
+                msg = msg()
+            if msg:
+                msg = f"\n{msg}"
             if self.verbose >= 10 and hasattr(self, "_debug"):
                 msg2 = self._debug_print()
                 if msg2:
@@ -154,12 +202,13 @@ class PatternOptimization:
                 print(
                     f"[{self.__class__.__name__}.match] NONE - line: {lineno}:"
                     f"{os.path.split(self.__class__.__module__)[-1]}, "
-                    f"op_type={node.op_type}{msg}{msg2}"
+                    f"op_type={node.op_type}, name={node.name}{msg}{msg2}"
                 )
             elif self.verbose >= 9:
                 print(
                     f"[{self.__class__.__name__}.match] NONE - line: {lineno}:"
-                    f"{os.path.split(self.__class__.__module__)[-1]}, op_type={node.op_type}{msg}"
+                    f"{os.path.split(self.__class__.__module__)[-1]}, "
+                    f"op_type={node.op_type}, name={node.name}{msg}"
                 )
 
     def apply(
@@ -248,7 +297,9 @@ class EasyPatternOptimization(PatternOptimization):
         else:
             for name in output:
                 g2.make_tensor_output(name, 0, None, is_dimension=False)
-        pat = GraphBuilderPatternOptimization(g2, verbose=max(0, g.verbose - 1))
+        pat = GraphBuilderPatternOptimization(
+            g2, verbose=max(0, g.verbose - 1), processor=g.processor
+        )
         pat._build()
         return pat
 
@@ -781,7 +832,11 @@ class EasyPatternOptimization(PatternOptimization):
                     continue
 
             new_node = g.make_node(
-                node.op_type, new_inputs, new_outputs, domain=node.domain
+                node.op_type,
+                new_inputs,
+                new_outputs,
+                domain=node.domain,
+                name=node.name,
             )
             new_node.attribute.extend(node.attribute)
             new_nodes.append(new_node)
@@ -823,8 +878,10 @@ class OnnxEasyPatternOptimization(EasyPatternOptimization):
         from ..xbuilder import GraphBuilder
         from .graph_builder_optim import GraphBuilderPatternOptimization
 
-        g = GraphBuilder(onx)
-        g2 = GraphBuilderPatternOptimization(g, verbose=max(0, g.verbose - 1))
+        gb = GraphBuilder(onx)
+        g2 = GraphBuilderPatternOptimization(
+            gb, verbose=max(0, gb.verbose - 1), processor=g.processor
+        )
         g2._build()
         return g2
 

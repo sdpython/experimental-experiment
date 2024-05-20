@@ -98,6 +98,9 @@ class ReshapeReshapePattern(PatternOptimization):
     Replaces the sequence Reshape, Reshape by Reshape.
     """
 
+    def __init__(self, verbose: int = 0, priority: int = 0):
+        super(ReshapeReshapePattern, self).__init__(verbose, priority)
+
     def match(
         self,
         g: "GraphBuilderPatternOptimization",  # noqa: F821
@@ -190,9 +193,21 @@ class Reshape2Of3Pattern(PatternOptimization):
             next_node = None
 
         shapes = [
-            (None if node_left is None else g.get_shape(node_left.input[0])),
-            (None if node_right is None else g.get_shape(node_right.input[0])),
-            (None if next_node is None else g.get_shape(next_node.output[0])),
+            (
+                None
+                if (node_left is None or not g.has_shape(node_left.input[0]))
+                else g.get_shape(node_left.input[0])
+            ),
+            (
+                None
+                if (node_right is None or not g.has_shape(node_right.input[0]))
+                else g.get_shape(node_right.input[0])
+            ),
+            (
+                None
+                if (next_node is None or not g.has_shape(next_node.output[0]))
+                else g.get_shape(next_node.output[0])
+            ),
         ]
 
         if len(set(_ for _ in shapes if _ is not None)) != 1:
@@ -225,7 +240,12 @@ class Reshape2Of3Pattern(PatternOptimization):
         if node_left is None:
             left_name = g.unique_name(f"{self.__class__.__name__}L_{node.input[0]}")
             res.append(
-                g.make_node("Reshape", [node.input[0], final_shape_name], [left_name])
+                g.make_node(
+                    "Reshape",
+                    [node.input[0], final_shape_name],
+                    [left_name],
+                    name=f"{self.__class__.__name__}--{node.name}",
+                )
             )
         elif g.is_used_more_than_once(node_left.output[0]):
             res.append(node_left)
@@ -237,7 +257,12 @@ class Reshape2Of3Pattern(PatternOptimization):
         if node_right is None:
             right_name = g.unique_name(f"{self.__class__.__name__}R_{node.input[1]}")
             res.append(
-                g.make_node("Reshape", [node.input[1], final_shape_name], [right_name])
+                g.make_node(
+                    "Reshape",
+                    [node.input[1], final_shape_name],
+                    [right_name],
+                    name=f"{self.__class__.__name__}--{node.name}",
+                )
             )
         elif g.is_used_more_than_once(node_right.output[0]):
             res.append(node_right)
@@ -255,11 +280,13 @@ class Reshape2Of3Pattern(PatternOptimization):
                         node.op_type,
                         [left_name, right_name],
                         [new_name],
+                        name=f"{self.__class__.__name__}--{node.name}",
                     ),
                     g.make_node(
                         "Reshape",
                         [new_name, final_shape_name],
                         [node.output[0]],
+                        name=f"{self.__class__.__name__}--{node.name}",
                     ),
                 ]
             )
@@ -268,6 +295,7 @@ class Reshape2Of3Pattern(PatternOptimization):
                 node.op_type,
                 [left_name, right_name],
                 [next_node.output[0]],
+                name=f"{self.__class__.__name__}--{node.name}",
             )
             res.append(main_node)
 
@@ -277,6 +305,7 @@ class Reshape2Of3Pattern(PatternOptimization):
                         "Reshape",
                         [main_node.output[0], compute_shape_name],
                         [node.output[0]],
+                        name=f"{self.__class__.__name__}--{node.name}",
                     )
                 )
 

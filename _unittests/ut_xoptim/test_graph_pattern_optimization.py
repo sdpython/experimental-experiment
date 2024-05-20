@@ -63,11 +63,16 @@ class TestGraphPatternOptimization(ExtTestCase):
 
     def _check_with_ort(self, proto: ModelProto):
         from onnxruntime import InferenceSession, get_available_providers
+        from onnxruntime.capi.onnxruntime_pybind11_state import Fail
 
         providers = ["CPUExecutionProvider"]
         if "CUDAExecutionProvider" in get_available_providers():
             providers.insert(0, "CUDAExecutionProvider")
-        InferenceSession(proto.SerializeToString(), providers=providers)
+        try:
+            InferenceSession(proto.SerializeToString(), providers=providers)
+        except Fail as e:
+            saved = self.dump_onnx("test_graph_pattern_optimization.onnx", proto)
+            raise AssertionError(f"Fails due to {e}, model saved into {saved!r}")
 
     @ignore_warnings(DeprecationWarning)
     def test_try_with_custom_model(self):
@@ -340,7 +345,7 @@ class TestGraphPatternOptimization(ExtTestCase):
                 [
                     oh.make_tensor_value_info("X", TFLOAT, ["D32", "D128"]),
                     oh.make_tensor_value_info(
-                        "Y", TFLOAT, ["batch", "channel", "any", "D64"]
+                        "Y", TFLOAT, ["batch", "channel", "D128", "D64"]
                     ),
                 ],
                 [
@@ -596,7 +601,7 @@ class TestGraphPatternOptimization(ExtTestCase):
         after = [node for node in onx.graph.node if node.op_type == "Transpose"]
         self.assertEqual(len(before) - 14, len(after))
 
-    def test_transpose_transpose_execution(self):
+    def test_transpose_transpose_execution_id(self):
         model = oh.make_model(
             oh.make_graph(
                 [
@@ -613,6 +618,49 @@ class TestGraphPatternOptimization(ExtTestCase):
                 [
                     oh.make_tensor_value_info("Z", TFLOAT, [3, 5, 32, 64]),
                     oh.make_tensor_value_info("r1", TFLOAT, [1, 1, 128, 32]),
+                ],
+                [onh.from_array(np.array([1, 1, 32, 128], dtype=np.int64), name="s1")],
+            )
+        )
+        check_model(model)
+        feeds = {"X": self._range(32, 128), "Y": self._range(3, 5, 128, 64)}
+        ref = ExtendedReferenceEvaluator(model)
+        expected = ref.run(None, feeds)
+
+        gr = GraphBuilder(
+            model,
+            infer_shapes=True,
+            optimization_options=OptimizationOptions(patterns=["TransposeTranspose"]),
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+        self.assertEqual(
+            ["Reshape", "Transpose", "MatMul"],
+            [n.op_type for n in opt_onx.graph.node],
+        )
+        self.assertEqual(1, len(opt_onx.graph.initializer))
+
+        opt_ref = ExtendedReferenceEvaluator(opt_onx)
+        got = opt_ref.run(None, feeds)
+        self.assertEqual(len(expected), len(got))
+        for a, b in zip(expected, got):
+            self.assertEqualArray(a, b)
+
+    def test_transpose_transpose_execution_one_left(self):
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("Reshape", ["X", "s1"], ["xs"]),
+                    oh.make_node("Transpose", ["xs"], ["r1"], perm=[1, 0, 3, 2]),
+                    oh.make_node("Transpose", ["r1"], ["xm1"], perm=[0, 1, 3, 2]),
+                    oh.make_node("MatMul", ["xm1", "Y"], ["Z"]),
+                ],
+                "dummy",
+                [
+                    oh.make_tensor_value_info("X", TFLOAT, [32, 128]),
+                    oh.make_tensor_value_info("Y", TFLOAT, [3, 5, 128, 64]),
+                ],
+                [
+                    oh.make_tensor_value_info("Z", TFLOAT, [3, 5, 32, 64]),
                 ],
                 [onh.from_array(np.array([1, 1, 32, 128], dtype=np.int64), name="s1")],
             )
@@ -1498,6 +1546,7 @@ class TestGraphPatternOptimization(ExtTestCase):
             optimization_options=OptimizationOptions(patterns=["MatMulReshape2Of3"]),
         )
         opt_onx = gr.to_onnx(optimize=True)
+
         self.assertEqual(["Reshape", "MatMul"], [n.op_type for n in opt_onx.graph.node])
         self.assertEqual(1, len(opt_onx.graph.initializer))
 
@@ -1538,6 +1587,7 @@ class TestGraphPatternOptimization(ExtTestCase):
             optimization_options=OptimizationOptions(patterns=["MatMulReshape2Of3"]),
         )
         opt_onx = gr.to_onnx(optimize=True)
+
         self.assertEqual(["Reshape", "MatMul"], [n.op_type for n in opt_onx.graph.node])
         self.assertEqual(1, len(opt_onx.graph.initializer))
 
@@ -2196,6 +2246,601 @@ class TestGraphPatternOptimization(ExtTestCase):
         opt_ref = ExtendedReferenceEvaluator(opt_onx)
         got = opt_ref.run(None, feeds)[0]
         self.assertEqualArray(expected, got)
+
+    def test_rotary_concat_dort(self):
+        origin = self._get_model("dort-llama-llama-ort_1.onnx")
+        before = [node for node in origin.graph.node if node.op_type == "Transpose"]
+        gr = GraphBuilder(
+            origin,
+            optimization_options=OptimizationOptions(
+                patterns=["RotaryConcatPart"], verbose=0
+            ),
+            infer_shapes=True,
+        )
+        onx = gr.to_onnx(optimize=True)
+        after = [node for node in onx.graph.node if node.op_type == "Transpose"]
+        self.assertNotEqual(len(before), len(after))
+
+    def test_same_children_pattern_2(self):
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("Add", ["X", "Y"], ["xy"]),
+                    oh.make_node("Cast", ["xy"], ["xy1"], to=TensorProto.FLOAT16),
+                    oh.make_node("Cast", ["xy"], ["xy2"], to=TensorProto.FLOAT16),
+                    oh.make_node("Add", ["xy1", "xy2"], ["Z"]),
+                ],
+                "dummy",
+                [
+                    oh.make_tensor_value_info("X", TFLOAT, ["a", 2, 3, 4]),
+                    oh.make_tensor_value_info("Y", TFLOAT, ["a", 1, 3, 4]),
+                ],
+                [oh.make_tensor_value_info("Z", TFLOAT16, ["a", 2, 3, 4])],
+            )
+        )
+        feeds = {
+            "X": self._range(2, 3, 4),
+            "Y": self._range(1, 3, 4),
+        }
+        ref = ExtendedReferenceEvaluator(model)
+        expected = ref.run(None, feeds)[0]
+        inputs = [tuple(n.input) for n in model.graph.node]
+
+        gr = GraphBuilder(
+            model,
+            infer_shapes=True,
+            optimization_options=OptimizationOptions(
+                patterns=["SameChildren"], verbose=0
+            ),
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+        self.assertEqual(
+            ["Add", "Cast", "Add"], [n.op_type for n in opt_onx.graph.node]
+        )
+        self.assertEqual(0, len(opt_onx.graph.initializer))
+        new_inputs = [tuple(n.input) for n in opt_onx.graph.node]
+        self.assertNotEqual(inputs, new_inputs)
+
+        opt_ref = ExtendedReferenceEvaluator(opt_onx)
+        got = opt_ref.run(None, feeds)[0]
+        self.assertEqualArray(expected, got)
+
+    def test_same_children_pattern_3(self):
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("Add", ["X", "Y"], ["xy"]),
+                    oh.make_node("Cast", ["xy"], ["xy1"], to=TensorProto.FLOAT16),
+                    oh.make_node("Cast", ["xy"], ["xy2"], to=TensorProto.FLOAT16),
+                    oh.make_node("Cast", ["xy"], ["xy3"], to=TensorProto.FLOAT16),
+                    oh.make_node("Add", ["xy1", "xy2"], ["xy12"]),
+                    oh.make_node("Add", ["xy12", "xy3"], ["Z"]),
+                ],
+                "dummy",
+                [
+                    oh.make_tensor_value_info("X", TFLOAT, ["a", 2, 3, 4]),
+                    oh.make_tensor_value_info("Y", TFLOAT, ["a", 1, 3, 4]),
+                ],
+                [oh.make_tensor_value_info("Z", TFLOAT16, ["a", 2, 3, 4])],
+            )
+        )
+        feeds = {
+            "X": self._range(2, 3, 4),
+            "Y": self._range(1, 3, 4),
+        }
+        ref = ExtendedReferenceEvaluator(model)
+        expected = ref.run(None, feeds)[0]
+        inputs = [tuple(n.input) for n in model.graph.node]
+
+        gr = GraphBuilder(
+            model,
+            infer_shapes=True,
+            optimization_options=OptimizationOptions(
+                patterns=["SameChildren"], verbose=0
+            ),
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+        self.assertEqual(
+            ["Add", "Cast", "Add", "Add"], [n.op_type for n in opt_onx.graph.node]
+        )
+        self.assertEqual(0, len(opt_onx.graph.initializer))
+        new_inputs = [tuple(n.input) for n in opt_onx.graph.node]
+        self.assertNotEqual(inputs, new_inputs)
+
+        opt_ref = ExtendedReferenceEvaluator(opt_onx)
+        got = opt_ref.run(None, feeds)[0]
+        self.assertEqualArray(expected, got)
+
+    def test_same_children_pattern_2_next(self):
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("Add", ["X", "Y"], ["xy"]),
+                    oh.make_node("Cast", ["xy"], ["xy1"], to=TensorProto.FLOAT16),
+                    oh.make_node("Cast", ["xy"], ["xy2"], to=TensorProto.FLOAT16),
+                    oh.make_node("Exp", ["xy1"], ["e1"]),
+                    oh.make_node("Exp", ["xy2"], ["e2"]),
+                    oh.make_node("Add", ["e1", "e2"], ["Z"]),
+                ],
+                "dummy",
+                [
+                    oh.make_tensor_value_info("X", TFLOAT, ["a", 2, 3, 4]),
+                    oh.make_tensor_value_info("Y", TFLOAT, ["a", 1, 3, 4]),
+                ],
+                [oh.make_tensor_value_info("Z", TFLOAT16, ["a", 2, 3, 4])],
+            )
+        )
+        feeds = {
+            "X": self._range(2, 3, 4),
+            "Y": self._range(1, 3, 4),
+        }
+        ref = ExtendedReferenceEvaluator(model)
+        expected = ref.run(None, feeds)[0]
+        inputs = [tuple(n.input) for n in model.graph.node]
+
+        gr = GraphBuilder(
+            model,
+            infer_shapes=True,
+            optimization_options=OptimizationOptions(
+                patterns=["SameChildren"], verbose=0
+            ),
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+        self.assertEqual(
+            ["Add", "Cast", "Exp", "Add"], [n.op_type for n in opt_onx.graph.node]
+        )
+        self.assertEqual(0, len(opt_onx.graph.initializer))
+        new_inputs = [tuple(n.input) for n in opt_onx.graph.node]
+        self.assertNotEqual(inputs, new_inputs)
+
+        opt_ref = ExtendedReferenceEvaluator(opt_onx)
+        got = opt_ref.run(None, feeds)[0]
+        self.assertEqualArray(expected, got)
+
+    def test_same_children_pattern_4_next(self):
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("Add", ["X", "Y"], ["xy"]),
+                    oh.make_node("Cast", ["xy"], ["xy1"], to=TensorProto.FLOAT16),
+                    oh.make_node("Cast", ["xy"], ["xy2"], to=TensorProto.FLOAT16),
+                    oh.make_node("Cast", ["xy"], ["xy3"], to=TensorProto.FLOAT16),
+                    oh.make_node("Cast", ["xy"], ["xy4"], to=TensorProto.FLOAT16),
+                    oh.make_node("Exp", ["xy1"], ["e1"]),
+                    oh.make_node("Exp", ["xy2"], ["e2"]),
+                    oh.make_node("Exp", ["xy3"], ["e3"]),
+                    oh.make_node("Exp", ["xy4"], ["e4"]),
+                    oh.make_node("Add", ["e1", "e2"], ["e12"]),
+                    oh.make_node("Add", ["e3", "e4"], ["e34"]),
+                    oh.make_node("Add", ["e12", "e34"], ["Z"]),
+                ],
+                "dummy",
+                [
+                    oh.make_tensor_value_info("X", TFLOAT, ["a", 2, 3, 4]),
+                    oh.make_tensor_value_info("Y", TFLOAT, ["a", 1, 3, 4]),
+                ],
+                [oh.make_tensor_value_info("Z", TFLOAT16, ["a", 2, 3, 4])],
+            )
+        )
+        feeds = {
+            "X": self._range(2, 3, 4),
+            "Y": self._range(1, 3, 4),
+        }
+        ref = ExtendedReferenceEvaluator(model)
+        expected = ref.run(None, feeds)[0]
+        inputs = [tuple(n.input) for n in model.graph.node]
+
+        gr = GraphBuilder(
+            model,
+            infer_shapes=True,
+            optimization_options=OptimizationOptions(
+                patterns=["SameChildren"], verbose=0
+            ),
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+        self.assertEqual(
+            ["Add", "Cast", "Exp", "Add", "Add"],
+            [n.op_type for n in opt_onx.graph.node],
+        )
+        self.assertEqual(0, len(opt_onx.graph.initializer))
+        new_inputs = [tuple(n.input) for n in opt_onx.graph.node]
+        self.assertNotEqual(inputs, new_inputs)
+
+        opt_ref = ExtendedReferenceEvaluator(opt_onx)
+        got = opt_ref.run(None, feeds)[0]
+        self.assertEqualArray(expected, got)
+
+    def test_cast_op_cast_binary(self):
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("Cast", ["Y"], ["yc"], to=TensorProto.FLOAT),
+                    oh.make_node("Add", ["X", "yc"], ["zc"]),
+                    oh.make_node("Cast", ["zc"], ["Z"], to=TensorProto.FLOAT16),
+                ],
+                "dummy",
+                [
+                    oh.make_tensor_value_info("X", TFLOAT, ["a", "b"]),
+                    oh.make_tensor_value_info("Y", TFLOAT16, ["a", "b"]),
+                ],
+                [oh.make_tensor_value_info("Z", TFLOAT16, ["a", "b"])],
+            )
+        )
+        feeds = {
+            "X": self._range(2, 3).astype(np.float32),
+            "Y": self._range(2, 3).astype(np.float16),
+        }
+        ref = ExtendedReferenceEvaluator(model)
+        expected = ref.run(None, feeds)[0]
+        inputs = [tuple(n.input) for n in model.graph.node]
+
+        gr = GraphBuilder(
+            model,
+            infer_shapes=True,
+            optimization_options=OptimizationOptions(
+                patterns=["CastOpCast"], verbose=0
+            ),
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+        self.assertEqual(
+            ["Cast", "Add"],
+            [n.op_type for n in opt_onx.graph.node],
+        )
+        self.assertEqual(0, len(opt_onx.graph.initializer))
+        new_inputs = [tuple(n.input) for n in opt_onx.graph.node]
+        self.assertNotEqual(inputs, new_inputs)
+
+        opt_ref = ExtendedReferenceEvaluator(opt_onx)
+        got = opt_ref.run(None, feeds)[0]
+        self.assertEqualArray(expected, got)
+
+    def test_computation_cast_op_cast_binary(self):
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("Cast", ["Y"], ["yc"], to=TensorProto.FLOAT),
+                    oh.make_node("Add", ["X", "yc"], ["Z"]),
+                ],
+                "dummy",
+                [
+                    oh.make_tensor_value_info("X", TFLOAT, ["a", "b"]),
+                    oh.make_tensor_value_info("Y", TFLOAT16, ["a", "b"]),
+                ],
+                [oh.make_tensor_value_info("Z", TFLOAT, ["a", "b"])],
+            )
+        )
+        feeds = {
+            "X": self._range(2, 3).astype(np.float32),
+            "Y": self._range(2, 3).astype(np.float16),
+        }
+        ref = ExtendedReferenceEvaluator(model)
+        expected = ref.run(None, feeds)[0]
+        inputs = [tuple(n.input) for n in model.graph.node]
+
+        gr = GraphBuilder(
+            model,
+            infer_shapes=True,
+            optimization_options=OptimizationOptions(
+                patterns=["ComputationCastOpCast"], verbose=0
+            ),
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+        self.assertEqual(
+            ["Cast", "Add", "Cast"],
+            [n.op_type for n in opt_onx.graph.node],
+        )
+        self.assertEqual(0, len(opt_onx.graph.initializer))
+        new_inputs = [tuple(n.input) for n in opt_onx.graph.node]
+        self.assertNotEqual(inputs, new_inputs)
+
+        opt_ref = ExtendedReferenceEvaluator(opt_onx)
+        got = opt_ref.run(None, feeds)[0]
+        self.assertEqualArray(expected, got, atol=1e-3)
+
+    def test_cast_op_cast_unary(self):
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("Cast", ["X"], ["xc"], to=TensorProto.FLOAT16),
+                    oh.make_node("Neg", ["xc"], ["xnc"]),
+                    oh.make_node("Cast", ["xnc"], ["Y"], to=TensorProto.FLOAT),
+                ],
+                "dummy",
+                [oh.make_tensor_value_info("X", TFLOAT, ["a", "b"])],
+                [oh.make_tensor_value_info("Y", TFLOAT, ["a", "b"])],
+            )
+        )
+        feeds = {
+            "X": self._range(2, 3).astype(np.float32),
+            "Y": self._range(2, 3).astype(np.float16),
+        }
+        ref = ExtendedReferenceEvaluator(model)
+        expected = ref.run(None, feeds)[0]
+        inputs = [tuple(n.input) for n in model.graph.node]
+
+        gr = GraphBuilder(
+            model,
+            infer_shapes=True,
+            optimization_options=OptimizationOptions(
+                patterns=["CastOpCast"], verbose=0
+            ),
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+        self.assertEqual(
+            ["Neg"],
+            [n.op_type for n in opt_onx.graph.node],
+        )
+        self.assertEqual(0, len(opt_onx.graph.initializer))
+        new_inputs = [tuple(n.input) for n in opt_onx.graph.node]
+        self.assertNotEqual(inputs, new_inputs)
+
+        opt_ref = ExtendedReferenceEvaluator(opt_onx)
+        got = opt_ref.run(None, feeds)[0]
+        self.assertEqualArray(expected, got, atol=1e-3)
+
+    def test_identity_pattern_transpose(self):
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("Add", ["X", "two"], ["x2"]),
+                    oh.make_node("Mul", ["x2", "two"], ["x3"]),
+                    oh.make_node("Transpose", ["x3"], ["Y"], perm=[0, 1, 2]),
+                ],
+                "dummy",
+                [oh.make_tensor_value_info("X", TFLOAT, ["a", "b", "c"])],
+                [oh.make_tensor_value_info("Y", TFLOAT, ["a", "b", "c"])],
+                [onh.from_array(np.array([2], dtype=np.float32), name="two")],
+            )
+        )
+        feeds = {
+            "X": self._range(2, 3, 4).astype(np.float32),
+        }
+        ref = ExtendedReferenceEvaluator(model)
+        expected = ref.run(None, feeds)[0]
+        inputs = [tuple(n.input) for n in model.graph.node]
+
+        gr = GraphBuilder(
+            model,
+            infer_shapes=True,
+            optimization_options=OptimizationOptions(patterns=["Identity"], verbose=0),
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+        self.assertEqual(
+            ["Add", "Mul"],
+            [n.op_type for n in opt_onx.graph.node],
+        )
+        self.assertEqual(1, len(opt_onx.graph.initializer))
+        new_inputs = [tuple(n.input) for n in opt_onx.graph.node]
+        self.assertNotEqual(inputs, new_inputs)
+
+        opt_ref = ExtendedReferenceEvaluator(opt_onx)
+        got = opt_ref.run(None, feeds)[0]
+        self.assertEqualArray(expected, got)
+
+    def test_identity_pattern_mul(self):
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("Constant", [], ["one"], value_float=1.0),
+                    oh.make_node("Add", ["X", "two"], ["x2"]),
+                    oh.make_node("Mul", ["x2", "one"], ["Y"]),
+                ],
+                "dummy",
+                [oh.make_tensor_value_info("X", TFLOAT, ["a", "b", "c"])],
+                [oh.make_tensor_value_info("Y", TFLOAT, ["a", "b", "c"])],
+                [onh.from_array(np.array([2], dtype=np.float32), name="two")],
+            )
+        )
+        feeds = {
+            "X": self._range(2, 3, 4).astype(np.float32),
+        }
+        ref = ExtendedReferenceEvaluator(model)
+        expected = ref.run(None, feeds)[0]
+        inputs = [tuple(n.input) for n in model.graph.node]
+
+        gr = GraphBuilder(
+            model,
+            infer_shapes=True,
+            optimization_options=OptimizationOptions(patterns=["Identity"], verbose=0),
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+        self.assertEqual(
+            ["Add"],
+            [n.op_type for n in opt_onx.graph.node],
+        )
+        self.assertEqual(1, len(opt_onx.graph.initializer))
+        new_inputs = [tuple(n.input) for n in opt_onx.graph.node]
+        self.assertNotEqual(inputs, new_inputs)
+
+        opt_ref = ExtendedReferenceEvaluator(opt_onx)
+        got = opt_ref.run(None, feeds)[0]
+        self.assertEqualArray(expected, got)
+
+    def test_identity_pattern_add(self):
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("Constant", [], ["zero"], value_float=0.0),
+                    oh.make_node("Add", ["X", "zero"], ["x2"]),
+                    oh.make_node("Mul", ["x2", "two"], ["Y"]),
+                ],
+                "dummy",
+                [oh.make_tensor_value_info("X", TFLOAT, ["a", "b", "c"])],
+                [oh.make_tensor_value_info("Y", TFLOAT, ["a", "b", "c"])],
+                [onh.from_array(np.array([2], dtype=np.float32), name="two")],
+            )
+        )
+        feeds = {
+            "X": self._range(2, 3, 4).astype(np.float32),
+        }
+        ref = ExtendedReferenceEvaluator(model)
+        expected = ref.run(None, feeds)[0]
+        inputs = [tuple(n.input) for n in model.graph.node]
+
+        gr = GraphBuilder(
+            model,
+            infer_shapes=True,
+            optimization_options=OptimizationOptions(patterns=["Identity"], verbose=0),
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+        self.assertEqual(
+            ["Mul"],
+            [n.op_type for n in opt_onx.graph.node],
+        )
+        self.assertEqual(1, len(opt_onx.graph.initializer))
+        new_inputs = [tuple(n.input) for n in opt_onx.graph.node]
+        self.assertNotEqual(inputs, new_inputs)
+
+        opt_ref = ExtendedReferenceEvaluator(opt_onx)
+        got = opt_ref.run(None, feeds)[0]
+        self.assertEqualArray(expected, got)
+
+    def test_div_by_mul_scalar(self):
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("Div", ["X", "cst"], ["Y"]),
+                ],
+                "dummy",
+                [oh.make_tensor_value_info("X", TFLOAT, ["a", "b"])],
+                [oh.make_tensor_value_info("Y", TFLOAT, ["a", "b"])],
+                [onh.from_array(np.array(0.5, dtype=np.float32), name="cst")],
+            )
+        )
+        feeds = {"X": self._range(2, 3).astype(np.float32)}
+        ref = ExtendedReferenceEvaluator(model)
+        expected = ref.run(None, feeds)[0]
+        inputs = [tuple(n.input) for n in model.graph.node]
+
+        gr = GraphBuilder(
+            model,
+            infer_shapes=True,
+            optimization_options=OptimizationOptions(
+                patterns=["DivByMulScalar"], verbose=0
+            ),
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+        self.assertEqual(
+            ["Mul"],
+            [n.op_type for n in opt_onx.graph.node],
+        )
+        self.assertEqual(1, len(opt_onx.graph.initializer))
+        new_inputs = [tuple(n.input) for n in opt_onx.graph.node]
+        self.assertNotEqual(inputs, new_inputs)
+
+        opt_ref = ExtendedReferenceEvaluator(opt_onx)
+        got = opt_ref.run(None, feeds)[0]
+        self.assertEqualArray(expected, got, atol=1e-3)
+
+    def test_reduce_sum_normalization(self):
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("Cast", ["X"], ["xc"], to=TFLOAT),
+                    oh.make_node("ReduceSum", ["xc", "axis"], ["red"], keepdims=1),
+                    oh.make_node("Mul", ["red", "Y"], ["mul"]),
+                    oh.make_node("Sub", ["xc", "mul"], ["subc"]),
+                    oh.make_node("Cast", ["subc"], ["Z"], to=TFLOAT16),
+                ],
+                "dummy",
+                [
+                    oh.make_tensor_value_info("X", TFLOAT16, ["a", "b"]),
+                    oh.make_tensor_value_info("Y", TFLOAT, ["a", "b"]),
+                ],
+                [oh.make_tensor_value_info("Z", TFLOAT16, ["a", "b"])],
+                [onh.from_array(np.array(0.0 - 1, dtype=np.int64), name="axis")],
+            )
+        )
+        feeds = {
+            "X": self._range(2, 3).astype(np.float16),
+            "Y": self._range(2, 3).astype(np.float32),
+        }
+        ref = ExtendedReferenceEvaluator(model)
+        expected = ref.run(None, feeds)[0]
+        inputs = [tuple(n.input) for n in model.graph.node]
+
+        gr = GraphBuilder(
+            model,
+            infer_shapes=True,
+            optimization_options=OptimizationOptions(
+                patterns=["ReduceSumNormalize"], verbose=0
+            ),
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+        self.assertEqual(
+            ["ReduceSum", "Cast", "Mul", "Sub"],
+            [n.op_type for n in opt_onx.graph.node],
+        )
+        self.assertEqual(1, len(opt_onx.graph.initializer))
+        new_inputs = [tuple(n.input) for n in opt_onx.graph.node]
+        self.assertNotEqual(inputs, new_inputs)
+
+        opt_ref = ExtendedReferenceEvaluator(opt_onx)
+        got = opt_ref.run(None, feeds)[0]
+        self.assertEqualArray(expected, got, atol=1e-3)
+
+    def test_2of3_expand(self):
+        origin = self._get_model("bug_2of3_s.onnx")
+        split = [n for n in origin.graph.node if n.op_type == "Split"]
+        self.assertEqual(len(split), 0)
+        self._check_with_ort(origin)
+        gr = GraphBuilder(
+            origin,
+            infer_shapes=True,
+            optimization_options=OptimizationOptions(
+                patterns=["Expand", "ReshapeReshape", "MatMulReshape2Of3"],
+                verbose=0,
+            ),
+        )
+        onx = gr.to_onnx(optimize=True)
+        # split = [n for n in onx.graph.node if n.op_type == "Split"]
+        # self.assertEqual(len(split), 2)
+        self._check_with_ort(onx)
+
+    def test_unsqueeze_equal(self):
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("Unsqueeze", ["X", "axis"], ["Y"]),
+                    oh.make_node("Equal", ["X", "mone"], ["xe"]),
+                    oh.make_node("Unsqueeze", ["xe", "axis"], ["Z"]),
+                ],
+                "dummy",
+                [oh.make_tensor_value_info("X", TFLOAT, ["a", "b"])],
+                [
+                    oh.make_tensor_value_info("Y", TFLOAT, ["a", 1, "b"]),
+                    oh.make_tensor_value_info("Z", TensorProto.BOOL, ["a", 1, "b"]),
+                ],
+                [
+                    onh.from_array(np.array([1], dtype=np.int64), name="axis"),
+                    onh.from_array(np.array([-1], dtype=np.float32), name="mone"),
+                ],
+            )
+        )
+        feeds = {"X": self._range(2, 3).astype(np.float32)}
+        ref = ExtendedReferenceEvaluator(model, verbose=0)
+        expected = ref.run(None, feeds)[0]
+        inputs = [tuple(n.input) for n in model.graph.node]
+
+        gr = GraphBuilder(
+            model,
+            infer_shapes=True,
+            optimization_options=OptimizationOptions(
+                patterns=["UnsqueezeEqual"], verbose=0
+            ),
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+        self.assertEqual(
+            ["Unsqueeze", "Equal"],
+            [n.op_type for n in opt_onx.graph.node],
+        )
+        self.assertEqual(2, len(opt_onx.graph.initializer))
+        new_inputs = [tuple(n.input) for n in opt_onx.graph.node]
+        self.assertNotEqual(inputs, new_inputs)
+
+        opt_ref = ExtendedReferenceEvaluator(opt_onx)
+        got = opt_ref.run(None, feeds)[0]
+        self.assertEqualArray(expected, got, atol=1e-3)
 
 
 if __name__ == "__main__":

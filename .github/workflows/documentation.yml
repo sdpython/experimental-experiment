@@ -31,6 +31,27 @@ jobs:
       - name: Install requirements
         run: python -m pip install -r requirements.txt
 
+      #- name: Install onnxscript
+      #  run: |
+      #  python -m pip install parameterized
+      #  mkdir onnxscript_repo
+      #  cd onnxscript
+      #  git init
+      #  git remote add -f origin https://github.com/microsoft/onnxscript.git
+      #  git config core.sparsecheckout true
+      #  echo "onnxscript" >> .git/info/sparse-checkout
+      #  echo "setup.py" >> .git/info/sparse-checkout
+      #  echo "pyproject*" >> .git/info/sparse-checkout
+      #  echo "README*" >> .git/info/sparse-checkout
+      #  echo "requirement*" >> .git/info/sparse-checkout
+      #  echo "MANIFEST*" >> .git/info/sparse-checkout
+      #  echo "LICENSE*" >> .git/info/sparse-checkout
+      #  echo "VERSION*" >> .git/info/sparse-checkout
+      #  git pull origin main --depth=1
+      #  python -m pip install -e . -v
+      #  rm onnxscript -rf
+      #  cd ..
+  
       - name: Install requirements dev
         run: python -m pip install -r requirements-dev.txt
 
@@ -48,7 +69,7 @@ jobs:
           pip install pytest
           pip install pytest-cov
           export PYTHONPATH=.
-          pytest --cov=./experimental_experiment/ --cov-report=xml --durations=10 --ignore-glob=**LONG*.py --ignore-glob=**notebook*.py
+          pytest --cov=./experimental_experiment/ --cov-report=xml --durations=10 --ignore-glob=**LONG*.py --ignore-glob=**notebook*.py _unittests
           export PYTHONPATH=
 
       - name: Upload coverage reports to Codecov

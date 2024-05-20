@@ -7,6 +7,7 @@ from onnx.checker import check_model
 from experimental_experiment.ext_test_case import ExtTestCase
 from experimental_experiment.onnx_tools import onnx_lighten, onnx_unlighten
 from experimental_experiment._command_lines_parser import _cmd_lighten, _cmd_unlighten
+from experimental_experiment.torch_test_helper import check_model_ort
 
 TFLOAT = TensorProto.FLOAT
 
@@ -44,7 +45,9 @@ class TestOnnxTools(ExtTestCase):
                         np.array([3, 5, 320, 640], dtype=np.int64), name="shape3"
                     ),
                 ],
-            )
+            ),
+            opset_imports=[oh.make_opsetid("", 18)],
+            ir_version=9,
         )
         return model
 
@@ -62,6 +65,7 @@ class TestOnnxTools(ExtTestCase):
         check_model(new_model)
         size2 = len(new_model.SerializeToString())
         self.assertEqual(size1, size2)
+        check_model_ort(model)
 
     def test_cmd_un_lighten_model(self):
         model = self._get_model()

@@ -11,6 +11,9 @@ class ExpandPattern(PatternOptimization):
     Checks that a Expand is really needed.
     """
 
+    def __init__(self, verbose: int = 0, priority: int = 0):
+        super(ExpandPattern, self).__init__(verbose, priority)
+
     def match(
         self,
         g: "GraphBuilderPatternOptimization",  # noqa: F821
@@ -31,17 +34,19 @@ class ExpandPattern(PatternOptimization):
         if shape != new_shape:
             return self.none(node, inspect.currentframe().f_lineno)
 
-        def apply(g: "GraphBuilder", node: NodeProto) -> List[NodeProto]:  # noqa: F821
-            new_node = g.make_node(
-                "Identity",
-                node.input,
-                node.output,
-                name=f"{self.__class__.__name__}--{node.name}",
-                doc_string=node.doc_string,
-            )
-            return [new_node]
+        return MatchResult(self, [node], self.apply, insert_at=node)
 
-        return MatchResult(self, [node], apply, insert_at=node)
+    def apply(
+        self, g: "GraphBuilder", node: NodeProto  # noqa: F821
+    ) -> List[NodeProto]:
+        new_node = g.make_node(
+            "Identity",
+            node.input,
+            node.output,
+            name=f"{self.__class__.__name__}--{node.name}",
+            doc_string=node.doc_string,
+        )
+        return [new_node]
 
 
 class ExpandBroadcastPattern(PatternOptimization):
@@ -132,6 +137,7 @@ class ExpandSwapPattern(PatternOptimization):
     """
 
     _op_types = unary_like_op_types()
+    _other_types = {"NegXplus1", "ReplaceZero"}
 
     def match(
         self,
@@ -144,6 +150,10 @@ class ExpandSwapPattern(PatternOptimization):
         if not g.has_shape(node.input[0]):
             return self.none(node, inspect.currentframe().f_lineno)
 
+        assert g.is_used(node.output[0]), (
+            f"The match should not even begin, {node.output[0]!r} "
+            f"is not used among {node.output} and type={node.op_type!r}"
+        )
         if g.is_used_more_than_once(node.output[0]):
             # More than one output so it probably must be done.
             return self.none(node, inspect.currentframe().f_lineno)
@@ -154,7 +164,9 @@ class ExpandSwapPattern(PatternOptimization):
         ), "The previous test should have cleared out this case."
         next_node = next_nodes[0]
 
-        if next_node.op_type not in self._op_types or next_node.domain != "":
+        if next_node.op_type not in self._other_types and (
+            next_node.op_type not in self._op_types or next_node.domain != ""
+        ):
             # Not an unary wise operator.
             return self.none(node, inspect.currentframe().f_lineno)
 
@@ -172,6 +184,7 @@ class ExpandSwapPattern(PatternOptimization):
             [node.input[0], *next_node.input[1:]],
             [new_name],
             name=f"{self.__class__.__name__}--{node.name}",
+            domain=next_node.domain,
             doc_string=next_node.doc_string,
         )
         unary.attribute.extend(next_node.attribute)

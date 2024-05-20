@@ -261,7 +261,96 @@ class TestGraphPatternBuilder(ExtTestCase):
         def do():
             rot = RotaryEmbeddingPattern()
             g = GraphBuilderPatternOptimization(
-                GraphBuilder(18, verbose=10), verbose=10
+                GraphBuilder({"": 18, "com.microsoft": 1}, verbose=10), verbose=10
+            )
+            pat = rot._build_pattern(g, rot.match_pattern)
+            onx = pat.builder.to_onnx(optimize=False)
+            gr = GraphBuilder(
+                onx,
+                infer_shapes=False,
+                optimization_options=OptimizationOptions(
+                    patterns=[RotaryEmbeddingPattern(verbose=10)],
+                    verbose=10,
+                ),
+            )
+            opt_onx = gr.optimize()
+            opt_onx = gr.to_onnx(optimize=False)
+            return opt_onx
+
+        opt_onx, out, _ = self.capture(do)
+        self.assertIn("[RotaryEmbedding", out)
+
+        expected = ["RotaryEmbedding"]
+        self.assertEqual(expected, [n.op_type for n in opt_onx.graph.node])
+
+    def test_rotary_embedding_same_axis(self):
+        # The test work on a model if it has the expected name.
+        # A dummy model is used if not present (not implemented yet).
+
+        class RotaryEmbeddingPattern(EasyPatternOptimization):
+            """
+            Fusion for Rotary.
+            """
+
+            def match_pattern(
+                self, g, x: "INT64", pos_ids: "FLOAT", axis: "INT64"  # noqa: F821
+            ):
+                # original code: the code does verifies the constant yet
+                # unsqueeze = op.Unsqueeze(x, [1])
+                op = g.op
+
+                unsqueeze = op.Unsqueeze(x, axis)
+                cast = op.Cast(unsqueeze, to=TensorProto.FLOAT)
+
+                matmul = op.MatMul(pos_ids, cast)
+                transpose = op.Transpose(matmul)
+                output, length = g.anyop.ConcatTraining(
+                    transpose,
+                    transpose,
+                    domain="com.microsoft",
+                    outputs=2,
+                )
+
+                sin = op.Sin(output)
+                cast1 = op.Cast(sin, to=TensorProto.FLOAT)
+                cos = op.Cos(output)
+                cast2 = op.Cast(cos, to=TensorProto.FLOAT)
+                unsq1 = op.Unsqueeze(cast1, axis)
+                unsq2 = op.Unsqueeze(cast2, axis)
+                return unsq1, unsq2
+
+            def validate_mapping(
+                self,
+                g,
+                deleted_nodes,
+                added_nodes,
+            ) -> bool:
+                # If some pattern needs to be rejected.
+                return True
+
+            def apply_pattern(
+                self, g, x: "INT64", pos_ids: "FLOAT", axis: "INT64"  # noqa: F821
+            ):
+                op = g.op
+                cos_cache = op.Constant(
+                    value=onh.from_array(np.random.rand(256, 256).astype(np.float16))
+                )
+                sin_cache = op.Constant(
+                    value=onh.from_array(np.random.rand(256, 256).astype(np.float16))
+                )
+                return g.anyop.RotaryEmbedding(
+                    x,
+                    pos_ids,
+                    cos_cache,
+                    sin_cache,
+                    domain="com.microsoft",
+                    outputs=2,
+                )
+
+        def do():
+            rot = RotaryEmbeddingPattern()
+            g = GraphBuilderPatternOptimization(
+                GraphBuilder({"": 18, "com.microsoft": 1}, verbose=10), verbose=10
             )
             pat = rot._build_pattern(g, rot.match_pattern)
             onx = pat.builder.to_onnx(optimize=False)
@@ -311,7 +400,9 @@ class TestGraphPatternBuilder(ExtTestCase):
                 cast1 = op.Cast(sin, to=TensorProto.FLOAT)
                 cos = op.Cos(output)
                 cast2 = op.Cast(cos, to=TensorProto.FLOAT)
-                return cast1, cast2
+                unsq1 = op.Unsqueeze(cast1, axis)
+                unsq2 = op.Unsqueeze(cast2, axis)
+                return unsq1, unsq2
 
             def validate_mapping(
                 self,

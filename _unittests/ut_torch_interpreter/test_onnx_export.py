@@ -84,6 +84,8 @@ def export_utils(
     remove_unused=False,
     constant_folding=True,
     verbose=0,
+    rename_input=True,
+    expected_weights=None,
 ):
     import torch
 
@@ -101,7 +103,7 @@ def export_utils(
     onx = to_onnx(
         model,
         tuple(args),
-        input_names=["input"],
+        input_names=["input"] if rename_input else None,
         options=OptimizationOptions(
             remove_unused=remove_unused,
             constant_folding=constant_folding,
@@ -110,6 +112,12 @@ def export_utils(
         ),
         verbose=verbose,
     )
+    if expected_weights is not None:
+        assert len(onx.graph.initializer) == expected_weights, (
+            f"The model has {len(onx.graph.initializer)} initiliazers, "
+            f"expecting {expected_weights}, inputs are "
+            f"{[_.name for _ in onx.graph.input]}."
+        )
     with open(name, "wb") as f:
         f.write(onx.SerializeToString())
     names.append(name)
@@ -146,16 +154,43 @@ class TestOnnxExport(ExtTestCase):
 
     @skipif_ci_windows("torch dynamo not supported on windows")
     @ignore_warnings((UserWarning, DeprecationWarning))
-    def test_simple_export_conv(self):
+    def test_simple_export_conv_rename(self):
         model, input_tensor = return_module_cls_conv()
-        names = export_utils("test_simple_export_conv", model, input_tensor)
+        names = export_utils(
+            "test_simple_export_conv_rename", model, input_tensor, expected_weights=2
+        )
         x = input_tensor.numpy()
         results = []
         for name in names:
-            ref = ReferenceEvaluator(name)
-            results.append(ref.run(None, {"input": x})[0])
-            self.check_model_ort(name)
-        self.assertEqualArray(results[0], results[1])
+            with self.subTest(name=name):
+                ref = ReferenceEvaluator(name)
+                results.append(ref.run(None, {"input": x})[0])
+                self.check_model_ort(name)
+        if len(names) == len(results):
+            self.assertEqualArray(results[0], results[1])
+
+    @skipif_ci_windows("torch dynamo not supported on windows")
+    @ignore_warnings((UserWarning, DeprecationWarning))
+    def test_simple_export_conv_norename(self):
+        model, input_tensor = return_module_cls_conv()
+        names = export_utils(
+            "test_simple_export_conv_norename",
+            model,
+            input_tensor,
+            rename_input=False,
+            expected_weights=2,
+            verbose=0,
+        )
+        x = input_tensor.numpy()
+        results = []
+        for name in names:
+            with self.subTest(name=name):
+                ref = ReferenceEvaluator(name)
+                input_name = ref.input_names[0]
+                results.append(ref.run(None, {input_name: x})[0])
+                self.check_model_ort(name)
+        if len(names) == len(results):
+            self.assertEqualArray(results[0], results[1])
 
     @skipif_ci_windows("torch dynamo not supported on windows")
     @ignore_warnings((UserWarning, DeprecationWarning))

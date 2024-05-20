@@ -11,6 +11,7 @@ from onnx.reference.ops.op_cast import (
 )
 from onnx.reference.op_run import to_array_extended  # noqa: F401
 from .evaluator import ExtendedReferenceEvaluator  # noqa: F401
+from .ort_evaluator import OrtEval  # noqa: F401
 
 
 def from_array_extended(tensor: np.ndarray, name: Optional[str] = None) -> TensorProto:

@@ -205,7 +205,12 @@ class OxsOpset:
                 new_inputs.append(cst_name)
 
         outputs = self.builder.make_node(
-            op_type, new_inputs, outputs=outputs, domain=domain, name=name, **kwargs
+            op_type,
+            new_inputs,
+            outputs=outputs,
+            domain=domain,
+            name=name or f"{self.__class__.__name__}",
+            **kwargs,
         )
         if isinstance(outputs, tuple):
             return tuple(Var(o, self.builder) for o in outputs)

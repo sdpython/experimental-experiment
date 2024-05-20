@@ -127,6 +127,34 @@ def ignore_warnings(warns: List[Warning]) -> Callable:
     return wrapper
 
 
+def hide_stdout(f: Optional[Callable] = None) -> Callable:
+    """
+    Catches warnings.
+
+    :param f: the function is called with the stdout as an argument
+    """
+
+    def wrapper(fct):
+
+        def call_f(self):
+            st = StringIO()
+            with redirect_stdout(st):
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore", (UserWarning, DeprecationWarning))
+                    try:
+                        return fct(self)
+                    except AssertionError as e:
+                        if "torch is not recent enough, file" in str(e):
+                            raise unittest.SkipTest(str(e))
+                        raise
+            if f is not None:
+                f(st.getvalue())
+
+        return call_f
+
+    return wrapper
+
+
 def measure_time(
     stmt: Union[str, Callable],
     context: Optional[Dict[str, Any]] = None,
@@ -258,6 +286,11 @@ class ExtTestCase(unittest.TestCase):
 
     _warns: List[Tuple[str, int, Warning]] = []
 
+    def print_model(self, model: "ModelProto"):  # noqa: F821
+        from onnx_array_api.plotting.text_plot import onnx_simple_text_plot
+
+        print(onnx_simple_text_plot(model))
+
     def get_dump_file(self, name: str, folder: Optional[str] = None) -> str:
         """
         Returns a filename to dump a model.
@@ -269,7 +302,10 @@ class ExtTestCase(unittest.TestCase):
         return os.path.join(folder, name)
 
     def dump_onnx(
-        self, name: str, proto: Any, folder: Optional[str] = None  # noqa: F821
+        self,
+        name: str,
+        proto: Any,
+        folder: Optional[str] = None,
     ) -> str:
         "Dumps an onnx file."
         fullname = self.get_dump_file(name, folder=folder)
@@ -315,8 +351,18 @@ class ExtTestCase(unittest.TestCase):
             expected = expected.detach().cpu().numpy()
         if hasattr(value, "detach"):
             value = value.detach().cpu().numpy()
-        self.assertEqual(expected.dtype, value.dtype)
-        self.assertEqual(expected.shape, value.shape)
+        if msg:
+            try:
+                self.assertEqual(expected.dtype, value.dtype)
+            except AssertionError as e:
+                raise AssertionError(msg) from e
+            try:
+                self.assertEqual(expected.shape, value.shape)
+            except AssertionError as e:
+                raise AssertionError(msg) from e
+        else:
+            self.assertEqual(expected.dtype, value.dtype)
+            self.assertEqual(expected.shape, value.shape)
 
         try:
             assert_allclose(expected, value, atol=atol, rtol=rtol)
@@ -468,9 +514,21 @@ def requires_cuda(msg: str = ""):
     return lambda x: x
 
 
-def requires_torch(version: str, msg: str) -> Callable:
+def requires_zoo(msg: str = "") -> Callable:
     """
-    Skips a unit test if torch is not recent enough.
+    Skips a unit test if environment variable ZOO is not equal to 1.
+    """
+    var = os.environ.get("ZOO", "0") in (1, "1", "TRUE", "true", "True")
+
+    if not var:
+        msg = f"ZOO not set up or != 1. {msg}"
+        return unittest.skip(msg)
+    return lambda x: x
+
+
+def requires_torch(version: str, msg: str = "") -> Callable:
+    """
+    Skips a unit test if :epkg:`pytorch` is not recent enough.
     """
     import packaging.version as pv
     import torch
@@ -481,9 +539,55 @@ def requires_torch(version: str, msg: str) -> Callable:
     return lambda x: x
 
 
-def requires_onnxruntime(version: str, msg: str) -> Callable:
+def requires_transformers(version: str, msg: str = "") -> Callable:
     """
-    Skips a unit test if onnxruntime is not recent enough.
+    Skips a unit test if :epkg:`transformers` is not recent enough.
+    """
+    import packaging.version as pv
+    import transformers
+
+    if pv.Version(".".join(transformers.__version__.split(".")[:2])) < pv.Version(
+        version
+    ):
+        msg = f"transformers version {transformers.__version__} < {version}: {msg}"
+        return unittest.skip(msg)
+    return lambda x: x
+
+
+def requires_onnxscript(version: str, msg: str = "") -> Callable:
+    """
+    Skips a unit test if :epkg:`onnxscript` is not recent enough.
+    """
+    import packaging.version as pv
+    import onnxscript
+
+    if version in {"0.2.0", "0.2"} or (
+        hasattr(onnxscript, "__version__")
+        and pv.Version(".".join(onnxscript.__version__.split(".")[:2]))
+        < pv.Version("0.2.0")
+    ):
+        try:
+            import onnxscript.optimizer
+
+            return lambda x: x
+        except ImportError:
+            msg = f"onnxscript.optimizer not found: {msg}"
+            return unittest.skip(msg)
+
+    if not hasattr(onnxscript, "__version__"):
+        # development version
+        return lambda x: x
+    if pv.Version(".".join(onnxscript.__version__.split(".")[:2])) < pv.Version(
+        version
+    ):
+        msg = f"onnxscript version {onnxscript.__version__} < {version}: {msg}"
+        return unittest.skip(msg)
+    return lambda x: x
+
+
+def requires_onnxruntime(version: str, msg: str = "") -> Callable:
+    """
+    Skips a unit test if :epkg:`onnxruntime` is not recent enough.
     """
     import packaging.version as pv
     import onnxruntime
@@ -496,9 +600,11 @@ def requires_onnxruntime(version: str, msg: str) -> Callable:
     return lambda x: x
 
 
-def requires_onnxruntime_training(msg: str = "") -> Callable:
+def requires_onnxruntime_training(
+    push_back_batch: bool = False, msg: str = ""
+) -> Callable:
     """
-    Skips a unit test if onnxruntime is not onnxruntime_training
+    Skips a unit test if :epkg:`onnxruntime` is not onnxruntime_training.
     """
     try:
         from onnxruntime import training
@@ -508,12 +614,19 @@ def requires_onnxruntime_training(msg: str = "") -> Callable:
     if training is None:
         msg = msg or "onnxruntime_training is not installed"
         return unittest.skip(msg)
+
+    if push_back_batch:
+        from onnxruntime.capi.onnxruntime_pybind11_state import OrtValue
+
+        if not hasattr(OrtValue, "push_back_batch"):
+            msg = msg or "OrtValue has no method push_back_batch"
+            return unittest.skip(msg)
     return lambda x: x
 
 
-def requires_onnx(version: str, msg: str) -> Callable:
+def requires_onnx(version: str, msg: str = "") -> Callable:
     """
-    Skips a unit test if onnx is not recent enough.
+    Skips a unit test if :epkg:`onnx` is not recent enough.
     """
     import packaging.version as pv
     import onnx

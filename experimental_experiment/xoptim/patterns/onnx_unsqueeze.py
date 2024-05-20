@@ -10,6 +10,9 @@ class UnsqueezeUnsqueezePattern(PatternOptimization):
     Replaces the sequence Unsqueeze, Unsqueeze by Unsqueeze.
     """
 
+    def __init__(self, verbose: int = 0, priority: int = 0):
+        super(UnsqueezeUnsqueezePattern, self).__init__(verbose, priority)
+
     def match(
         self,
         g: "GraphBuilderPatternOptimization",  # noqa: F821

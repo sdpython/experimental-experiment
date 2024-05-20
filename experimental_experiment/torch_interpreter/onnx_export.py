@@ -1,8 +1,10 @@
+import inspect
 import time
 import warnings
 from typing import Any, Callable, Dict, Optional, Sequence, Set, Tuple, Union
 from onnx import ModelProto
 from onnx.defs import onnx_opset_version
+from onnx.model_container import ModelContainer
 from ..xbuilder.graph_builder import GraphBuilder, OptimizationOptions
 
 
@@ -233,6 +235,16 @@ def _make_builder_interpreter(
     return graph_module, builder, interpreter
 
 
+def _model_signature(
+    model: Union["torch.nn.Module", Callable]  # noqa: F821
+) -> inspect.Signature:
+    import torch
+
+    return inspect.signature(
+        model.forward if isinstance(model, torch.nn.Module) else model
+    )
+
+
 def to_onnx(
     mod: Union["torch.nn.Module", "torch.fx.GraphModule"],  # noqa: F821
     args: Sequence["torch.Tensor"],  # noqa: F821
@@ -246,8 +258,13 @@ def to_onnx(
     dynamic_shapes: Optional[Union[Dict[str, Any], Tuple[Any]]] = None,
     optimize: bool = True,
     dispatcher: Optional["Dispatcher"] = None,  # noqa: F821
+    large_model: bool = False,
+    external_threshold: int = 1024,
     api_two: bool = False,
-) -> Union[ModelProto, Tuple[ModelProto, GraphBuilder]]:
+) -> Union[
+    Union[ModelProto, ModelContainer],
+    Tuple[Union[ModelProto, ModelContainer], GraphBuilder],
+]:
     """
     Exports a torch model into ONNX using
     `dynamo export
@@ -266,6 +283,11 @@ def to_onnx(
     :param dynamic_shapes: see :epkg:`torch.export.export`
     :param optimize: optimize the model before exporting into onnx
     :param dispatcher: see :class:`experimental_experiment.torch_interpreter.Dispatcher`
+    :param large_model: if True returns a :class:`onnx.model_container.ModelContainer`,
+        it lets the user to decide later if the weights should be part of the model
+        or saved as external weights
+    :param external_threshold: if large_model is True, every tensor above this limit
+        is stored as external
     :param api_two: use ``torch._dynamo.export`` instead of ``torch.export.export``
     :return: onnx model
     """
@@ -276,7 +298,25 @@ def to_onnx(
     begin = time.perf_counter()
 
     if verbose:
-        print("[to_onnx] build the graph module")
+        print(f"[to_onnx] build the graph module with input_names={input_names}")
+
+    if dynamic_shapes is not None and input_names:
+        # Let's rewrite the dynamic shapes with the true name.
+        new_dynamic_shapes = {}
+        sig = _model_signature(mod)
+        true_input_names = [
+            name
+            for name, p in sig.parameters.items()
+            if p.default in (None, inspect.Parameter.empty)
+        ]
+        replacements = dict(zip(input_names, true_input_names))
+
+        for k, v in dynamic_shapes.items():
+            new_dynamic_shapes[replacements.get(k, k)] = v
+        dynamic_shapes = new_dynamic_shapes
+
+    if verbose and dynamic_shapes:
+        print(f"[to_onnx] dynamic_shapes={dynamic_shapes}")
 
     graph_module, builder, interpreter = _make_builder_interpreter(
         mod=mod,
@@ -302,15 +342,26 @@ def to_onnx(
 
     if verbose:
         t = time.perf_counter()
-        print(f"[to_onnx] onnx nodes done in {t - begin} s")
+        print(f"[to_onnx] {len(builder.nodes)} onnx nodes done in {t - begin} s")
         print("[to_onnx] start conversion to onnx (before optimization)")
         begin = t
 
-    onx = builder.to_onnx(optimize=optimize)
+    onx = builder.to_onnx(
+        optimize=optimize,
+        large_model=large_model,
+        external_threshold=external_threshold,
+    )
 
     if verbose:
         t = time.perf_counter()
-        print(f"[to_onnx] to_onnx done in {t - begin} s")
+        proto = onx if isinstance(onx, ModelProto) else onx.model_proto
+        print(
+            f"[to_onnx] to_onnx done in {t - begin}s "
+            f"and {len(proto.graph.node)} nodes, "
+            f"{len(proto.graph.initializer)} initializers, "
+            f"{len(proto.graph.input)} inputs, "
+            f"{len(proto.graph.output)} outputs"
+        )
         if verbose >= 10:
             print(builder.get_debug_msg())
 

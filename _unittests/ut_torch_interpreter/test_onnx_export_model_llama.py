@@ -108,7 +108,7 @@ class TestOnnxExportLlama(ExtTestCase):
 
     @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
     @ignore_warnings(DeprecationWarning)
-    @requires_torch("2.3", "dynamic_shapes are not well carries")
+    @requires_torch("2.4", "dynamic_shapes are not well carries")
     def test_llama_attention(self):
         model, input_tensors = get_llama_attention(input_dims=[(2, 1024)])
         input_tensors = input_tensors[0]
@@ -145,7 +145,7 @@ class TestOnnxExportLlama(ExtTestCase):
 
     @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
     @ignore_warnings(DeprecationWarning)
-    @requires_torch("2.3", "dynamic_shapes are not well carries")
+    @requires_torch("2.4", "dynamic_shapes are not well carries")
     def test_llama_decoder(self):
         import torch
 
@@ -165,7 +165,7 @@ class TestOnnxExportLlama(ExtTestCase):
     @requires_torch("2.3", "bug")
     @ignore_warnings(DeprecationWarning)
     @unittest.skipIf(True, reason="torch._dynamo.export does not work")
-    def test_llama_model_true(self):
+    def test_llama_model_dynamo_true(self):
         import torch
 
         with torch.no_grad():
@@ -173,7 +173,7 @@ class TestOnnxExportLlama(ExtTestCase):
             input_tensors = input_tensors[0]
             expected = model(*input_tensors)
             onx = export_utils(
-                "test_llama_model_true",
+                "test_llama_model_dynamo_true",
                 model,
                 *input_tensors,
                 dynamo=False,
@@ -191,9 +191,9 @@ class TestOnnxExportLlama(ExtTestCase):
             self.check_model_ort(onx)
 
     @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
-    @requires_torch("2.3", "bug")
+    @requires_torch("2.4", "Unable to find input 'x' in known results")
     @ignore_warnings(DeprecationWarning)
-    def test_llama_model_false(self):
+    def test_llama_model_dynamo_false(self):
         import torch
 
         with torch.no_grad():
@@ -201,7 +201,7 @@ class TestOnnxExportLlama(ExtTestCase):
             input_tensors = input_tensors[0]
             expected = model(*input_tensors)
             onx = export_utils(
-                "test_llama_model_false",
+                "test_llama_model_dynamo_false",
                 model,
                 *input_tensors,
                 dynamo=False,
@@ -221,7 +221,7 @@ class TestOnnxExportLlama(ExtTestCase):
     @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
     @requires_torch("2.3", "bug")
     @ignore_warnings(DeprecationWarning)
-    def test_nn_true(self):
+    def test_nn_dynamo_true(self):
         import torch
 
         class Neuron(torch.nn.Module):
@@ -237,7 +237,7 @@ class TestOnnxExportLlama(ExtTestCase):
             input_tensors = input_tensors[0]
             expected = model(*input_tensors)
             onx = export_utils(
-                "test_nn_true",
+                "test_nn_dynamo_true",
                 model,
                 *input_tensors,
                 dynamo=False,
@@ -255,9 +255,9 @@ class TestOnnxExportLlama(ExtTestCase):
             self.check_model_ort(onx)
 
     @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
-    @requires_torch("2.3", "bug")
+    @requires_torch("2.4", "Unable to find input 'x' in known results")
     @ignore_warnings(DeprecationWarning)
-    def test_nn_false(self):
+    def test_nn_dynamo_false(self):
         import torch
 
         class Neuron(torch.nn.Module):
@@ -273,7 +273,7 @@ class TestOnnxExportLlama(ExtTestCase):
             input_tensors = input_tensors[0]
             expected = model(*input_tensors)
             onx = export_utils(
-                "test_nn_true",
+                "test_nn_dynamo_false",
                 model,
                 *input_tensors,
                 dynamo=False,

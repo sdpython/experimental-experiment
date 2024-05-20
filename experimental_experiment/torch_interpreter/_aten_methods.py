@@ -185,7 +185,7 @@ def aten_meth_pow(
         cst = exponent
     else:
         raise RuntimeError(f"Unexpected type {type(exponent)} for exponent.")
-    res = g.make_node("Pow", [x, cst], outputs)
+    res = g.make_node("Pow", [x, cst], outputs, name="meth_pow")
     if not sts:
         set_type_shape_unary_op(g, outputs[0], x)
     return res
@@ -328,7 +328,9 @@ def aten_meth_transpose(
         f"{g.get_debug_msg()}"
     )
     perm[dim0], perm[dim1] = perm[dim1], perm[dim0]
-    res = g.make_node("Transpose", [input_name], outputs, perm=perm)
+    res = g.make_node(
+        "Transpose", [input_name], outputs, perm=perm, name="meth_transpose"
+    )
     if not sts:
         g.set_type(outputs[0], g.get_type(input_name))
         if g.has_shape(input_name):
@@ -350,7 +352,9 @@ def aten_meth_unsqueeze(
     "unsqueeze"
     new_name = g.unique_name(f"{input_name}_axes")
     g.make_initializer(new_name, np.array([dim], dtype=np.int64))
-    res = g.make_node("Unsqueeze", [input_name, new_name], outputs)
+    res = g.make_node(
+        "Unsqueeze", [input_name, new_name], outputs, name="meth_unsqueeze"
+    )
     if not sts:
         dtype = g.get_type(input_name)
         g.set_type(outputs[0], dtype)

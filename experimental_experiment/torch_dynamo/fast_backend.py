@@ -8,6 +8,7 @@ from onnx.numpy_helper import from_array, to_array
 import torch
 from torch._C import _from_dlpack
 from onnxruntime.capi import _pybind_state as ORTC
+from ..convert.ort_helper import append_custom_libraries
 from ..xbuilder import OptimizationOptions
 from ..torch_interpreter import to_onnx
 from ..torch_interpreter._torch_helper import create_input_names
@@ -37,7 +38,15 @@ def _get_session(
         opts.graph_optimization_level = getattr(
             onnxruntime.GraphOptimizationLevel, ort_optimization_level
         )
+        if ort_optimization_level == "ORT_DISABLE_ALL":
+            opts.enable_mem_pattern = False
+            opts.enable_mem_reuse = False
+            opts.enable_cpu_mem_arena = False
+            # opts.add_session_config_entry("set_denormal_as_zero", "1")
+            opts.add_session_config_entry("disable_prepacking", "1")
+
     opts.add_session_config_entry("session.disable_aot_function_inlining", "1")
+    append_custom_libraries(onx, opts)
 
     return (
         onnxruntime.InferenceSession(
@@ -400,6 +409,9 @@ def _default_export(
     enable_pattern,
     disable_pattern,
     rename_inputs,
+    processor,
+    order_algorithm=None,
+    dump_patterns=None,
 ):
     input_names = input_names = (
         create_input_names(graph_module, args) if rename_inputs else None
@@ -411,11 +423,19 @@ def _default_export(
 
     patterns = get_pattern_list(enable_pattern, disable_pattern, verbose=verbose_onnx)
 
+    if order_algorithm is not None:
+        from ..xoptim import OrderAlgorithm
+
+        order_algorithm = getattr(OrderAlgorithm, order_algorithm.upper())
+
     options = OptimizationOptions(
         remove_unused=True,
         constant_folding=False,
         patterns=patterns,
         verbose=verbose_onnx,
+        processor=processor,
+        order=order_algorithm,
+        dump_applied_patterns=dump_patterns,
     )
 
     onx, builder = to_onnx(
@@ -450,6 +470,7 @@ def onnx_custom_backend(
     backend: str = "ort",
     verbose: Union[int, Tuple[int, int]] = 0,
     dump_prefix: Optional[None] = None,
+    dump_patterns: Optional[str] = None,
     providers: Optional[Tuple[str]] = None,
     raise_exc: bool = True,
     storage: Optional[Dict[str, Any]] = None,
@@ -463,6 +484,8 @@ def onnx_custom_backend(
     rename_inputs: bool = True,
     optimize: bool = True,
     exporter: Optional[str] = None,
+    processor: str = "CPU",
+    order_algorithm: Optional[str] = None,
 ) -> Callable:
     """
     Custom backend to export torch models into onnx
@@ -477,6 +500,7 @@ def onnx_custom_backend(
     :param verbose: adjust verbosity, if tuple, if gives different verbosity level
         to the exporter and the runtime
     :param dump_prefix: to dump the models and the inputs
+    :param dump_patterns: dump the patterns as well
     :param providers: where to run the model, by default
     :param raise_exc: raise an exception whenever something goes wrong
     :param storage: to store any interesting objects during the process
@@ -489,6 +513,10 @@ def onnx_custom_backend(
     :param rename_inputs: rename the inputs
     :param optimize: enable or disable the optimization
     :param exporter: use a different exporter
+    :param processor: optimization should be made for this processor
+        or this list of processors (comma separated value)
+    :param order_algorithm: algorithm optimizing the order the onnx node,
+        none by default
     :return: Callable
 
     See :ref:`l-plot-onnxrt-diff` or :ref:`l-plot-custom-backend` for examples.
@@ -496,6 +524,9 @@ def onnx_custom_backend(
     onnx models, graph module as well the inputs and outputs when
     the model is run.
     """
+    assert dump_patterns is None or isinstance(
+        dump_patterns, str
+    ), f"Unexpected type {type(dump_patterns)} for dump_patterns."
 
     # determines the devices
 
@@ -533,6 +564,9 @@ def onnx_custom_backend(
             enable_pattern,
             disable_pattern,
             rename_inputs,
+            processor,
+            order_algorithm=order_algorithm,
+            dump_patterns=dump_patterns,
         )
     elif exporter == "dynamo":
         from ._dynamo_exporter import _dynamo_export
@@ -547,6 +581,9 @@ def onnx_custom_backend(
             enable_pattern,
             disable_pattern,
             rename_inputs,
+            processor,
+            order_algorithm=order_algorithm,
+            dump_patterns=dump_patterns,
         )
     else:
         raise NotImplementedError(f"Unknown exporter {exporter!r}")
@@ -648,7 +685,6 @@ def onnx_custom_backend(
         stor = None
 
     # Creates the backend.
-
     run = OrtBackend(
         sess=sess,
         run_options=run_options,

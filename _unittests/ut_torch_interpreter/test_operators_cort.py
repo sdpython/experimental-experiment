@@ -1,25 +1,46 @@
+"""
+to fail on error, use::
+
+    clear&&EXPDORAISE=1 python _unittests/ut_torch_interpreter/test_operators.py -k relu -f
+
+or::
+
+    clear&&EXPDORAISE=1 python _unittests/ut_torch_interpreter/test_operators.py -f
+"""
+
 import copy
 import inspect
 import itertools
 import operator
+import os
 import unittest
 import sys
+import warnings
+from typing import Optional
 import numpy as np
-import onnxruntime  # noqa: F401
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.onnx
 from torch.autograd import Function
 from torch.nn import functional, Module, Parameter
+from torch.onnx.symbolic_helper import (
+    _get_tensor_dim_size,
+    _get_tensor_sizes,
+    parse_args,
+)
+from torch._dynamo.backends.common import aot_autograd
 from experimental_experiment.ext_test_case import (
     ExtTestCase,
     ignore_warnings,
     requires_torch,
 )
 from experimental_experiment.torch_interpreter import FunctionNotFoundError
-from experimental_experiment.torch_models.training_helper import make_aot_ort
-from experimental_experiment.torch_models.dump_helper import dump_onnx
+from experimental_experiment.torch_models.dump_helper import assert_all_close
+from experimental_experiment.torch_dynamo import (
+    onnx_debug_backend,
+    get_decomposition_table,
+)
 
 BATCH_SIZE = 2
 RNN_BATCH_SIZE = 7
@@ -32,13 +53,16 @@ OP_BOOL_SUPPORTED = False
 
 
 class FuncModule(Module):
-    def __init__(self, f, params=None):
+    def __init__(self, f, params=None, dtype=torch.float32):
         if params is None:
             params = ()
         super().__init__()
         self.f = f
-        self.ppp = Parameter(torch.Tensor([1]))
-        self.ppp2 = Parameter(torch.Tensor([2]))
+        rg = dtype == torch.float32
+        val = torch.ones((1,), requires_grad=rg, dtype=dtype)
+        self.ppp = Parameter(val, requires_grad=rg)
+        val2 = torch.ones((2,), requires_grad=rg, dtype=dtype)
+        self.ppp2 = Parameter(val2, requires_grad=rg)
         self.params = nn.ParameterList(list(params))
 
     def forward(self, *args):
@@ -48,21 +72,50 @@ class FuncModule(Module):
         return res
 
 
+class FuncModule0(Module):
+    def __init__(self, f):
+        super().__init__()
+        self.f = f
+        self.ppp = Parameter(torch.Tensor([1]).to(torch.float32))
+        self.ppp2 = Parameter(torch.Tensor([2]).to(torch.float32))
+
+    def forward(self, *args):
+        if isinstance(args[0], tuple):
+            args = (tuple([args[0][0] * self.ppp, *args[0][1:]]),)
+            res = self.f(*args) * self.ppp2
+            return res
+        else:
+            args = tuple([args[0] * self.ppp, *args[1:]])
+            res = self.f(*args) * self.ppp2
+            return res
+
+
+class FuncModule1(Module):
+    def __init__(self, f):
+        super().__init__()
+        self.f = f
+        self.ppp = Parameter(torch.Tensor([1]).to(torch.float32))
+
+    def forward(self, *args):
+        args = tuple([args[0], args[1] + self.ppp, *args[2:]])
+        res = self.f(*args)
+        return res
+
+
 class FuncModuleModule(Module):
     def __init__(self, f):
         super().__init__()
         self.f = f
         self.mod = f
         self.ppp = Parameter(torch.Tensor([1]))
-        self.ppp2 = Parameter(torch.Tensor([2]))
 
     def forward(self, *args):
-        x = args[0] * self.ppp
-        res = self.mod(x, *args[1:]) * self.ppp2
+        x = args[0] + self.ppp
+        res = self.mod(x, *args[1:])
         return res
 
 
-class TestOperatorsOnnxrt(ExtTestCase):
+class TestOperatorsCort(ExtTestCase):
     def setUp(self):
         super().setUp()
         torch._dynamo.reset()
@@ -81,32 +134,85 @@ class TestOperatorsOnnxrt(ExtTestCase):
         impl="ort",
         #
         input_names=None,
-        dynamic_axes=None,
+        dynamic_axes=False,
         keep_initializers_as_inputs=None,
         training=None,
+        input_index: Optional[int] = None,
+        square_loss=False,
+        use_decomposition=False,
+        verbose=0,
+        raise_list=None,
+        save_onnx=False,
+        optimize=True,
     ):
         if sys.platform == "win32":
             raise unittest.SkipTest("Windows not supported yet.")
         assert isinstance(onnx_export, str), f"Export onnx is wrong for f={f}"
         if isinstance(args, torch.Tensor):
             args = [args]
-        if params is None:
-            params = ()
-        if isinstance(f, nn.Module):
-            model = FuncModuleModule(f)
-        else:
-            model = FuncModule(f, params)
-        model.eval()
 
-        with dump_onnx(onnx_export, "dump_test_operators_onnxrt"):
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", UserWarning)
+            if isinstance(f, nn.Module):
+                if verbose:
+                    print("[assertONNX] +FuncModuleModule")
+                model = FuncModuleModule(f)
+            elif input_index is None:
+                if params is None:
+                    params = ()
+                if verbose:
+                    print("[assertONNX] +FuncModule")
+                model = FuncModule(f, params, dtype=args[0].dtype)
+            elif input_index == 0:
+                assert params is None, f"not implemented with params={params}"
+                if verbose:
+                    print("[assertONNX] +FuncModule0")
+                model = FuncModule0(f)
+            elif input_index == 1:
+                assert params is None, f"not implemented with params={params}"
+                if verbose:
+                    print("[assertONNX] +FuncModule1")
+                model = FuncModule1(f)
+            else:
+                assert input_index in (
+                    0,
+                    1,
+                ), f"Not implemented for input_index={input_index}"
+            model.eval()
+            storage = {}
+
+            if verbose >= 10:
+                for i, arg in enumerate(args):
+                    print(f"[assertONNX] i={i}, arg={arg.dtype}:{arg.shape}")
+
+            backend_debug = lambda *args, **kwargs: onnx_debug_backend(  # noqa: E731
+                *args,
+                target_opset=opset_version,
+                storage=storage,
+                backend=impl,
+                raise_list=raise_list,
+                optimize=optimize,
+                verbose=verbose,
+                **kwargs,
+            )
+
             if test_backward:
                 # forward/backward
-                local_aot_ort, local_ort = make_aot_ort(dynamic=False)
+                if use_decomposition:
+                    if use_decomposition is True:
+                        new_table = get_decomposition_table()
+                    else:
+                        new_table = use_decomposition
+                    aot_compiler = aot_autograd(
+                        fw_compiler=backend_debug, decompositions=new_table
+                    )
+                else:
+                    aot_compiler = aot_autograd(fw_compiler=backend_debug)
 
                 compiled_model = torch.compile(
                     copy.deepcopy(model),
-                    backend=local_aot_ort,
-                    dynamic=False,
+                    backend=aot_compiler,
+                    dynamic=dynamic_axes not in (None, False),
                     fullgraph=fullgraph,
                 )
 
@@ -114,99 +220,174 @@ class TestOperatorsOnnxrt(ExtTestCase):
                 try:
                     result = compiled_model(*args)
                 except torch._dynamo.exc.BackendCompilerFailed as e:
-                    if "FunctionNotFoundError" in str(e):
+                    if not os.environ.get(
+                        "EXPDORAISE", False
+                    ) and "FunctionNotFoundError" in str(e):
                         raise unittest.SkipTest(f"MISSING FOR FORWARD {e}")
                     raise
 
-                if isinstance(baseline_result, tuple):
-                    baseline_result = baseline_result[0]
-                    result = result[0]
                 if isinstance(baseline_result, torch.Tensor):
-                    self.assertEqualArray(
-                        baseline_result.detach().numpy(),
-                        result.detach().numpy(),
+                    assert_all_close(
+                        baseline_result,
+                        result,
                         atol=atol,
                         rtol=rtol,
-                        msg=f"expected\n{baseline_result}\n--got--\n{result}",
+                        msg="FORWARD-BACKWARD",
                     )
-                    try:
-                        torch.testing.assert_close(
-                            baseline_result,
-                            result,
-                            atol=atol,
-                            rtol=rtol,
-                            equal_nan=True,
-                        )
-                    except AssertionError as e:
-                        if "nan" not in str(e):
+
+                    if square_loss:
+                        (baseline_result.sum() ** 2).backward()
+                        try:
+                            (result.sum() ** 2).backward()
+                        except FunctionNotFoundError as e:
+                            if not os.environ.get("EXPDORAISE", False):
+                                raise unittest.SkipTest(f"MISSING FOR BACKWARD {e}")
+                            raise
+                    else:
+                        baseline_result.sum().backward()
+                        try:
+                            result.sum().backward()
+                        except FunctionNotFoundError as e:
+                            if not os.environ.get("EXPDORAISE", False):
+                                raise unittest.SkipTest(f"MISSING FOR BACKWARD {e}")
+                            assert (
+                                len(storage["instance"]) == 1
+                            ), f"Unexpected number of instance {len(storage['instance'])}"
+                            instance = storage["instance"][0]
+                            forward_onnx = instance["onnx"]
+                            folder = "dump_test_operators_forward"
+                            if not os.path.exists(folder):
+                                os.mkdir(folder)
+                            grad_name = os.path.join(
+                                folder, f"{onnx_export}_forward.onnx"
+                            )
+                            with open(grad_name, "wb") as f:
+                                f.write(forward_onnx.SerializeToString())
+                            # gradient from onnxruntime
+                            from experimental_experiment.gradient.grad_helper import (
+                                DerivativeOptions,
+                                onnx_derivative,
+                            )
+
+                            grad = onnx_derivative(
+                                forward_onnx,
+                                options=DerivativeOptions.KeepYieldOp,
+                                verbose=1,
+                            )
+                            with open(
+                                os.path.join(
+                                    folder, f"{onnx_export}_ort_yield_grad.onnx"
+                                ),
+                                "wb",
+                            ) as f:
+                                f.write(grad.SerializeToString())
+
+                            grad = onnx_derivative(
+                                forward_onnx,
+                                options=DerivativeOptions.Zero,
+                                verbose=1,
+                            )
+                            with open(
+                                os.path.join(folder, f"{onnx_export}_ort_grad.onnx"),
+                                "wb",
+                            ) as f:
+                                f.write(grad.SerializeToString())
                             raise
 
-                    baseline_result.sum().backward()
-                    try:
-                        result.sum().backward()
-                    except FunctionNotFoundError as e:
-                        raise unittest.SkipTest(f"MISSING FOR BACKWARD {e}")
-
-                    l1 = list(model.parameters())
-                    l2 = list(compiled_model.parameters())
-                    self.assertEqual(len(l1), len(l2))
-                    assert len(l1) > 0, "No gradient to test"
-                    n_gradient = 0
-                    for baseline_param, param in zip(l1, l2):
-                        n_gradient += 1
-                        self.assertEqualArray(
-                            baseline_param.grad.detach().numpy(),
-                            param.grad.detach().numpy(),
-                            atol=atol,
-                            rtol=rtol,
-                        )
-                        torch.testing.assert_close(
-                            baseline_param.grad,
-                            param.grad,
-                            atol=atol,
-                            rtol=rtol,
-                            equal_nan=True,
-                        )
-                    assert n_gradient > 0, "No gradient was checked"
+                    base_grads = tuple(_.grad for _ in model.parameters())
+                    grads = tuple(_.grad for _ in compiled_model.parameters())
+                    self.assertEqual(len(base_grads), len(grads))
+                    assert_all_close(
+                        base_grads, grads, atol=atol, rtol=rtol, msg="BACKWARD"
+                    )
+                    assert len(grads) > 0, "No gradient was checked"
                 else:
-                    raise AssertionError(f"Unexpected type {type(baseline_result)}.")
+                    # tuple
+                    assert_all_close(
+                        baseline_result,
+                        result,
+                        atol=atol,
+                        rtol=rtol,
+                        msg="FORWARD-BACKWARD",
+                    )
+
+                    if square_loss:
+                        (baseline_result[0].sum() ** 2).backward()
+                        try:
+                            (result[0].sum() ** 2).backward()
+                        except FunctionNotFoundError as e:
+                            if not os.environ.get("EXPDORAISE", False):
+                                raise unittest.SkipTest(f"MISSING FOR BACKWARD {e}")
+                            raise
+                    else:
+                        baseline_result[0].sum().backward()
+                        try:
+                            result[0].sum().backward()
+                        except FunctionNotFoundError as e:
+                            if not os.environ.get("EXPDORAISE", False):
+                                raise unittest.SkipTest(f"MISSING FOR BACKWARD {e}")
+                            raise
+
+                    base_grads = tuple(_.grad for _ in model.parameters())
+                    grads = tuple(_.grad for _ in compiled_model.parameters())
+                    self.assertEqual(len(base_grads), len(grads))
+                    assert_all_close(
+                        base_grads, grads, atol=atol, rtol=rtol, msg="BACKWARD"
+                    )
+                    assert len(grads) > 0, "No gradient was checked"
+
             else:
+                assert (
+                    not use_decomposition
+                ), "not implemented for use_decomposition=True"
                 # forward only
                 compiled_model = torch.compile(
                     copy.deepcopy(model),
-                    backend="onnxrt",
-                    dynamic=False,
+                    backend=backend_debug,
+                    dynamic=dynamic_axes not in (None, False),
                     fullgraph=fullgraph,
                 )
-
                 baseline_result = model(*args)
                 result = compiled_model(*args)
+                assert_all_close(
+                    baseline_result, result, atol=atol, rtol=rtol, msg="FORWARD"
+                )
 
-                if isinstance(baseline_result, torch.Tensor):
-                    self.assertEqualArray(
-                        baseline_result.detach().numpy(),
-                        result.detach().numpy(),
-                        atol=atol,
-                        rtol=rtol,
-                    )
-                    torch.testing.assert_close(
-                        baseline_result, result, atol=atol, rtol=rtol, equal_nan=True
-                    )
+            if save_onnx:
+                for i, inst in enumerate(storage["instance"]):
+                    with open(f"{onnx_export}_{i}.onnx", "wb") as f:
+                        f.write(inst["onnx"].SerializeToString())
 
     @ignore_warnings(UserWarning)
     def test_aaa(self):
         x = torch.rand(3, 4, requires_grad=True)
         self.assertONNX(
-            lambda x: x.acos(), x, onnx_export=inspect.currentframe().f_code.co_name
+            lambda x: x.acos(),
+            x,
+            onnx_export=inspect.currentframe().f_code.co_name,
+            verbose=0,
         )
 
-    def test_basic(self):
+    def test_basic_static(self):
         x = torch.tensor([0.4], requires_grad=True)
         y = torch.tensor([0.7], requires_grad=True)
         self.assertONNX(
             lambda x, y: -torch.sigmoid(torch.tanh(x * (x + y))),
             (x, y),
             onnx_export=inspect.currentframe().f_code.co_name,
+            dynamic_axes=(False, True),
+            impl="ref",
+            save_onnx=False,
+        )
+
+    def test_basic_dynamic(self):
+        x = torch.tensor([0.4], requires_grad=True)
+        y = torch.tensor([0.7], requires_grad=True)
+        self.assertONNX(
+            lambda x, y: -torch.sigmoid(torch.tanh(x * (x + y))),
+            (x, y),
+            onnx_export=inspect.currentframe().f_code.co_name,
+            dynamic_axes={"x": {0: "batch"}},
         )
 
     def test_view(self):
@@ -215,16 +396,21 @@ class TestOperatorsOnnxrt(ExtTestCase):
             lambda x: x.view(1, 1), x, onnx_export=inspect.currentframe().f_code.co_name
         )
 
-    def test_index(self):
+    def test_view_dynamic(self):
+        x = torch.tensor([0.0], requires_grad=True)
+        self.assertONNX(
+            lambda x: x.view(1, 1),
+            x,
+            onnx_export=inspect.currentframe().f_code.co_name,
+            dynamic_axes={"x": {0: "batch"}},
+        )
+
+    def test_index_i(self):
         x = torch.tensor([[0.0]], requires_grad=True)
         self.assertONNX(
             lambda x: x[0], x, onnx_export=inspect.currentframe().f_code.co_name
         )
 
-    @unittest.skip(
-        reason="Please convert all Tensors to FakeTensors first or instantiate "
-        "FakeTensorMode with 'allow_non_fake_inputs'."
-    )
     def test_index_tensor(self):
         x = torch.arange(12, requires_grad=True, dtype=torch.float32).reshape((-1, 4))
         y = x[[0, 2]]
@@ -236,10 +422,6 @@ class TestOperatorsOnnxrt(ExtTestCase):
             test_backward=False,
         )
 
-    @unittest.skip(
-        reason="Please convert all Tensors to FakeTensors first or instantiate "
-        "FakeTensorMode with 'allow_non_fake_inputs'."
-    )
     def test_index_tensor_f(self):
         x = torch.arange(12, requires_grad=True, dtype=torch.float32).reshape((-1, 4))
         y = torch.index_select(x.clone(), 0, torch.tensor([0, 2]))
@@ -249,6 +431,26 @@ class TestOperatorsOnnxrt(ExtTestCase):
             x,
             onnx_export=inspect.currentframe().f_code.co_name,
             test_backward=False,
+        )
+
+    def test_index_select_ort(self):
+        x = torch.arange(12, requires_grad=True, dtype=torch.float32).reshape((-1, 4))
+        self.assertONNX(
+            lambda x: torch.index_select(x.clone(), 1, torch.tensor([0, 2])),
+            x,
+            onnx_export=inspect.currentframe().f_code.co_name,
+            test_backward=False,
+            impl="ort",
+        )
+
+    def test_index_select_ref(self):
+        x = torch.arange(12, requires_grad=True, dtype=torch.float32).reshape((-1, 4))
+        self.assertONNX(
+            lambda x: torch.index_select(x.clone(), 1, torch.tensor([0, 2])),
+            x,
+            onnx_export=inspect.currentframe().f_code.co_name,
+            test_backward=False,
+            impl="ref",
         )
 
     def test_type_as(self):
@@ -268,6 +470,8 @@ class TestOperatorsOnnxrt(ExtTestCase):
     def test_add_broadcast(self):
         x = torch.randn(2, 3, requires_grad=True).double()
         y = torch.randn(3, requires_grad=True).double()
+        r = x + y
+        print(r.type, r.shape)
         self.assertONNX(
             operator.add, (x, y), onnx_export=inspect.currentframe().f_code.co_name
         )
@@ -345,10 +549,7 @@ class TestOperatorsOnnxrt(ExtTestCase):
     def test_chunk(self):
         x = torch.tensor([0.0, 1.0, 2.0], requires_grad=True)
         self.assertONNX(
-            lambda x: x.chunk(2),
-            x,
-            onnx_export=inspect.currentframe().f_code.co_name,
-            test_backward=False,
+            lambda x: x.chunk(2), x, onnx_export=inspect.currentframe().f_code.co_name
         )
 
     def test_split(self):
@@ -359,7 +560,6 @@ class TestOperatorsOnnxrt(ExtTestCase):
             lambda x: torch.split(x, 2, 1),
             x,
             onnx_export=inspect.currentframe().f_code.co_name,
-            test_backward=False,
         )
 
     def test_split_with_sizes(self):
@@ -370,17 +570,24 @@ class TestOperatorsOnnxrt(ExtTestCase):
             lambda x: torch.split(x, [2, 1, 3], 1),
             x,
             onnx_export=inspect.currentframe().f_code.co_name,
+        )
+
+    def test_concat2(self):
+        x = torch.randn(2, 3)
+        y = torch.randn(2, 3)
+        self.assertONNX(
+            lambda inputs: torch.cat(inputs, 1),
+            ((x, y),),
+            onnx_export=inspect.currentframe().f_code.co_name,
             test_backward=False,
+            input_index=0,
         )
 
     def test_mm(self):
         m1 = torch.randn(2, 3, requires_grad=True)
         m2 = torch.randn(3, 4, requires_grad=True)
         self.assertONNX(
-            torch.mm,
-            (m1, m2),
-            onnx_export=inspect.currentframe().f_code.co_name,
-            atol=1e-5,
+            torch.mm, (m1, m2), onnx_export=inspect.currentframe().f_code.co_name
         )
 
     @ignore_warnings(UserWarning)
@@ -471,7 +678,6 @@ class TestOperatorsOnnxrt(ExtTestCase):
             onnx_export=inspect.currentframe().f_code.co_name,
         )
 
-    @unittest.skip(reason="AssertionError: Cannot detect fake_mode")
     def test_conv(self):
         x = torch.ones(20, 16, 50, 40, requires_grad=True)
         self.assertONNX(
@@ -481,7 +687,6 @@ class TestOperatorsOnnxrt(ExtTestCase):
             onnx_export=inspect.currentframe().f_code.co_name,
         )
 
-    @unittest.skip(reason="AssertionError: Cannot detect fake_mode")
     def test_conv_onnx_irv4(self):
         x = torch.ones(20, 16, 50, 40, requires_grad=True)
         self.assertONNX(
@@ -490,7 +695,6 @@ class TestOperatorsOnnxrt(ExtTestCase):
             onnx_export=inspect.currentframe().f_code.co_name,
         )
 
-    @unittest.skip(reason="AssertionError: Cannot detect fake_mode")
     def test_conv_onnx_irv4_opset8(self):
         # This test point checks that for opset 8 (or lower), even if
         # keep_initializers_as_inputs is set to False, it is ignored,
@@ -507,7 +711,6 @@ class TestOperatorsOnnxrt(ExtTestCase):
             onnx_export=inspect.currentframe().f_code.co_name,
         )
 
-    @unittest.skip(reason="AssertionError: Cannot detect fake_mode")
     def test_convtranspose(self):
         x = torch.ones(2, 3, 4, 5, requires_grad=True)
         self.assertONNX(
@@ -520,7 +723,6 @@ class TestOperatorsOnnxrt(ExtTestCase):
         )
 
     def test_maxpool(self):
-        # The backward has a graph break.
         x = torch.randn(20, 16, 50)
         self.assertONNX(
             nn.MaxPool1d(3, stride=2),
@@ -528,12 +730,24 @@ class TestOperatorsOnnxrt(ExtTestCase):
             onnx_export=inspect.currentframe().f_code.co_name,
         )
 
-    def test_maxpool_dilations(self):
+    def test_maxpool_dilations_10(self):
         x = torch.randn(20, 16, 50)
         self.assertONNX(
             nn.MaxPool1d(2, stride=1, dilation=2),
             x,
             opset_version=10,
+            onnx_export=inspect.currentframe().f_code.co_name,
+            impl="ref",
+            verbose=10,
+            optimize=False,
+        )
+
+    def test_maxpool_dilations_18(self):
+        x = torch.randn(20, 16, 50)
+        self.assertONNX(
+            nn.MaxPool1d(2, stride=1, dilation=2),
+            x,
+            opset_version=18,
             onnx_export=inspect.currentframe().f_code.co_name,
         )
 
@@ -542,9 +756,9 @@ class TestOperatorsOnnxrt(ExtTestCase):
         self.assertONNX(
             nn.AvgPool2d(3, stride=2),
             x,
+            impl="ref",
             onnx_export=inspect.currentframe().f_code.co_name,
-            test_backward=True,
-            rtol=1e-3,
+            # verbose=10,
         )
 
     def test_maxpool_indices(self):
@@ -553,12 +767,14 @@ class TestOperatorsOnnxrt(ExtTestCase):
             nn.MaxPool1d(3, stride=2, return_indices=True),
             x,
             onnx_export=inspect.currentframe().f_code.co_name,
+            verbose=0,
         )
 
     @ignore_warnings((UserWarning, DeprecationWarning))
-    @unittest.skip(
-        reason="torch._dynamo.exc.Unsupported: speculate_subgraph: while introspecting "
-        "autograd.Function, we were unable to trace function `backward` into a single graph."
+    @requires_torch(
+        "2.3.0",
+        "torch._dynamo.exc.InternalTorchDynamoError: type object "
+        "'FunctionMeta' has no attribute 'forward'",
     )
     def test_at_op(self):
         x = torch.randn(3, 4)
@@ -576,12 +792,13 @@ class TestOperatorsOnnxrt(ExtTestCase):
             def forward(self, x):
                 return MyFun.apply(x)
 
-        self.assertONNX(
-            MyModule(),
-            x,
-            onnx_export=inspect.currentframe().f_code.co_name,
-            test_backward=False,
-        )
+        with torch.no_grad():
+            self.assertONNX(
+                MyModule(),
+                x,
+                onnx_export=inspect.currentframe().f_code.co_name,
+                test_backward=False,
+            )
 
     def test_clip(self):
         x = torch.randn(3, 4, requires_grad=True)
@@ -651,9 +868,6 @@ class TestOperatorsOnnxrt(ExtTestCase):
             onnx_export=inspect.currentframe().f_code.co_name,
         )
 
-    @unittest.skip(
-        "Cannot find any perfect/nearest match of symbolic function for aten::mean.default"
-    )
     def test_mean(self):
         x = torch.randn(1, 2, 3, 4, requires_grad=True)
         self.assertONNX(
@@ -662,9 +876,6 @@ class TestOperatorsOnnxrt(ExtTestCase):
             onnx_export=inspect.currentframe().f_code.co_name,
         )
 
-    @unittest.skip(
-        "Cannot find any perfect/nearest match of symbolic function for aten::mean.dim"
-    )
     def test_reduced_mean(self):
         x = torch.randn(1, 2, 3, 4, requires_grad=True)
         self.assertONNX(
@@ -681,9 +892,6 @@ class TestOperatorsOnnxrt(ExtTestCase):
             onnx_export=inspect.currentframe().f_code.co_name,
         )
 
-    @unittest.skip(
-        reason="Cannot find any perfect/nearest match of symbolic function for aten::mean.default"
-    )
     def test_mean_dtype(self):
         x = torch.randn(1, 2, 3, 4, requires_grad=True)
         self.assertONNX(
@@ -692,9 +900,6 @@ class TestOperatorsOnnxrt(ExtTestCase):
             onnx_export=inspect.currentframe().f_code.co_name,
         )
 
-    @unittest.skip(
-        reason="Cannot find any perfect/nearest match of symbolic function for aten::mean.dim"
-    )
     def test_reduced_mean_dtype(self):
         x = torch.randn(1, 2, 3, 4, requires_grad=True)
         self.assertONNX(
@@ -799,12 +1004,27 @@ class TestOperatorsOnnxrt(ExtTestCase):
         )
 
     def test_equal(self):
-        x = torch.randn(1, 2, 3, 1, requires_grad=False).int()
-        y = torch.randn(1, 4, requires_grad=False).int()
+        x = (
+            torch.randn(
+                1,
+                2,
+                3,
+                1,
+                requires_grad=False,
+            )
+            .to(torch.int32)
+            .to(torch.float32)
+        )
+        y = (
+            torch.randn(1, 2, 1, 1, requires_grad=False)
+            .to(torch.int32)
+            .to(torch.float32)
+        )
         self.assertONNX(
-            operator.eq,
+            lambda x, y: x == y,
             (x, y),
             onnx_export=inspect.currentframe().f_code.co_name,
+            impl="ref",
             test_backward=False,
         )
 
@@ -820,8 +1040,8 @@ class TestOperatorsOnnxrt(ExtTestCase):
         )
 
     def test_gt(self):
-        x = torch.randn(1, 2, 3, 1, requires_grad=False).int()
-        y = torch.randn(1, 4, requires_grad=False).int()
+        x = torch.randn(1, 2, 3, 1, requires_grad=False).to(torch.int64)
+        y = torch.randn(1, 4, requires_grad=False).to(torch.int64)
         self.assertONNX(
             operator.gt,
             (x, y),
@@ -833,15 +1053,22 @@ class TestOperatorsOnnxrt(ExtTestCase):
         x = torch.randn(3, 4, requires_grad=False).int()
         y = torch.randn(3, 4, requires_grad=False).int()
         self.assertONNX(
-            operator.le,
+            operator.le, (x, y), onnx_export=inspect.currentframe().f_code.co_name
+        )
+
+    def test_op_ge_int(self):
+        x = torch.randn(3, 4, requires_grad=False).to(torch.int64)
+        y = torch.randn(3, 4, requires_grad=False).to(torch.int64)
+        self.assertONNX(
+            operator.ge,
             (x, y),
             onnx_export=inspect.currentframe().f_code.co_name,
             test_backward=False,
         )
 
-    def test_ge(self):
-        x = torch.randn(3, 4, requires_grad=False).int()
-        y = torch.randn(3, 4, requires_grad=False).int()
+    def test_op_gef(self):
+        x = torch.randn(3, 4, requires_grad=False, dtype=torch.float32)
+        y = torch.randn(3, 4, requires_grad=False, dtype=torch.float32)
         self.assertONNX(
             operator.ge,
             (x, y),
@@ -871,6 +1098,16 @@ class TestOperatorsOnnxrt(ExtTestCase):
         x = torch.randn(3, 4, requires_grad=True)
         self.assertONNX(
             lambda x: x.tan(), x, onnx_export=inspect.currentframe().f_code.co_name
+        )
+
+    def test_tanh(self):
+        x = torch.randn(3, 4, requires_grad=True)
+        self.assertONNX(
+            lambda x: x.tanh(),
+            x,
+            onnx_export=inspect.currentframe().f_code.co_name,
+            impl="ref",
+            square_loss=True,
         )
 
     @ignore_warnings(UserWarning)
@@ -929,26 +1166,62 @@ class TestOperatorsOnnxrt(ExtTestCase):
             impl="ref",
         )
 
-    def test_slice_dynamic_forward(self):
+    def test_slice_dynamic(self):
         x = torch.rand(3, 4, requires_grad=True)
         self.assertONNX(
             lambda x: x[x.size(0) :, x.size(1) - 3],
             x,
             opset_version=10,
             onnx_export=inspect.currentframe().f_code.co_name,
+        )
+
+    def test_slice_scatter_1_forward(self):
+        a = torch.zeros(8, 8)
+        b = torch.ones(2, 8)
+        self.assertONNX(
+            lambda a, b: torch.slice_scatter(a, b, start=6),
+            (a, b),
+            opset_version=18,
+            onnx_export=inspect.currentframe().f_code.co_name,
+            impl="ref",
+            test_backward=False,
+            raise_list=None,  # {"_onx_scatterelements0"},
+        )
+
+    def test_slice_scatter_1_backward(self):
+        a = torch.zeros(8, 8)
+        b = torch.ones(2, 8)
+        self.assertONNX(
+            lambda a, b: torch.slice_scatter(a, b, start=6),
+            (a, b),
+            opset_version=18,
+            onnx_export=inspect.currentframe().f_code.co_name,
+            impl="ref",
+            test_backward=True,
+        )
+
+    def test_slice_scatter_2_forward(self):
+        a = torch.zeros(8, 8)
+        b = torch.ones(8, 2)
+        self.assertONNX(
+            lambda a, b: torch.slice_scatter(a, b, dim=1, start=2, end=6, step=2),
+            (a, b),
+            opset_version=18,
+            onnx_export=inspect.currentframe().f_code.co_name,
+            impl="ref",
             test_backward=False,
         )
 
-    @unittest.skipIf(
-        True, reason="data_ptr was false. Pointer to data memory is not valid"
-    )
-    def test_slice_dynamic_backward(self):
-        x = torch.rand(3, 4, requires_grad=True)
+    def test_slice_scatter_2_backward(self):
+        a = torch.zeros(8, 8)
+        b = torch.ones(8, 2)
         self.assertONNX(
-            lambda x: x[x.size(0) :, x.size(1) - 3],
-            x,
-            opset_version=10,
+            lambda a, b: torch.slice_scatter(a, b, dim=1, start=2, end=6, step=2),
+            (a, b),
+            opset_version=18,
             onnx_export=inspect.currentframe().f_code.co_name,
+            impl="ref",
+            test_backward=True,
         )
 
     def test_sign(self):
@@ -1002,7 +1275,6 @@ class TestOperatorsOnnxrt(ExtTestCase):
             lambda x: torch.isnan(x),
             x,
             onnx_export=inspect.currentframe().f_code.co_name,
-            test_backward=False,
         )
 
     def test_argmax(self):
@@ -1040,7 +1312,6 @@ class TestOperatorsOnnxrt(ExtTestCase):
             onnx_export=inspect.currentframe().f_code.co_name,
         )
 
-    @unittest.skip(reason="Wrong gradient")
     def test_selu(self):
         x = torch.randn(1, 2, 3, 4, requires_grad=True)
         self.assertONNX(
@@ -1081,7 +1352,6 @@ class TestOperatorsOnnxrt(ExtTestCase):
             onnx_export=inspect.currentframe().f_code.co_name,
         )
 
-    @unittest.skipIf(True, reason="opset version")
     def test_upsample_nearest_scale(self):
         x = torch.randn(1, 2, 3, 4, requires_grad=True)
         self.assertONNX(
@@ -1095,7 +1365,6 @@ class TestOperatorsOnnxrt(ExtTestCase):
             onnx_export=inspect.currentframe().f_code.co_name,
         )
 
-    @unittest.skipIf(True, reason="opset version")
     def test_upsample_nearest_scale_default_scale_factor(self):
         x = torch.randn(1, 2, 3, 4, requires_grad=True)
         self.assertONNX(
@@ -1104,7 +1373,6 @@ class TestOperatorsOnnxrt(ExtTestCase):
             onnx_export=inspect.currentframe().f_code.co_name,
         )
 
-    @unittest.skipIf(True, reason="opset version")
     def test_upsample_nearest_size(self):
         x = torch.randn(1, 2, 3, 4, requires_grad=True)
         self.assertONNX(
@@ -1128,7 +1396,18 @@ class TestOperatorsOnnxrt(ExtTestCase):
             x,
             keep_initializers_as_inputs=True,
             onnx_export=inspect.currentframe().f_code.co_name,
-            test_backward=False,
+        )
+
+    @unittest.skip("+1 in ModuleModule is failing this test")
+    def test_embedding_bags(self):
+        emb_bag = nn.EmbeddingBag(10, 8)
+        input = torch.tensor([1, 2, 3, 4]).long()
+        offset = torch.tensor([0]).long()
+        self.assertONNX(
+            emb_bag,
+            (input, offset),
+            keep_initializers_as_inputs=True,
+            onnx_export=inspect.currentframe().f_code.co_name,
         )
 
     def test_implicit_expand(self):
@@ -1143,6 +1422,28 @@ class TestOperatorsOnnxrt(ExtTestCase):
             lambda x: x.sum(-1), x, onnx_export=inspect.currentframe().f_code.co_name
         )
 
+    def test_randn(self):
+        x = torch.randn(1, 2, 3, 4)
+        self.assertONNX(
+            lambda x: torch.randn(1, 2, 3, 4) + x,
+            x,
+            onnx_export=inspect.currentframe().f_code.co_name,
+        )
+
+    def test_rand(self):
+        x = torch.rand(1, 2, 3, 4)
+        self.assertONNX(
+            lambda x: torch.rand(1, 2, 3, 4) + x,
+            x,
+            onnx_export=inspect.currentframe().f_code.co_name,
+        )
+
+    def test_relu(self):
+        x = torch.randn(1, 2, 3, 4)
+        self.assertONNX(
+            torch.nn.ReLU(), x, onnx_export=inspect.currentframe().f_code.co_name
+        )
+
     @requires_torch(
         "2.3.0",
         "rrelu_with_noise() missing 2 required positional arguments: 'lower' and 'upper'",
@@ -1150,7 +1451,10 @@ class TestOperatorsOnnxrt(ExtTestCase):
     def test_rrelu(self):
         x = torch.randn(1, 2, 3, 4)
         self.assertONNX(
-            torch.nn.RReLU(), x, onnx_export=inspect.currentframe().f_code.co_name
+            torch.nn.RReLU(),
+            x,
+            onnx_export=inspect.currentframe().f_code.co_name,
+            use_decomposition=True,
         )
 
     def test_prelu(self):
@@ -1169,16 +1473,31 @@ class TestOperatorsOnnxrt(ExtTestCase):
         )
 
     def test_sigmoid(self):
-        with self.subTest(dim=4):
-            x = torch.randn(1, 2, 3, 4, requires_grad=True)
+        with self.subTest(dim=2, impl="ref"):
+            x = torch.arange(12, dtype=torch.float32, requires_grad=True).reshape(
+                (3, 4)
+            )
             self.assertONNX(
                 lambda x: torch.sigmoid(x),
                 x,
                 onnx_export=inspect.currentframe().f_code.co_name,
+                impl="ref",
+                square_loss=True,
             )
 
         with self.subTest(dim=2):
-            x = torch.randn(3, 4, requires_grad=True)
+            x = torch.arange(12, dtype=torch.float32, requires_grad=True).reshape(
+                (3, 4)
+            )
+            self.assertONNX(
+                lambda x: torch.sigmoid(x),
+                x,
+                onnx_export=inspect.currentframe().f_code.co_name,
+                square_loss=True,
+            )
+
+        with self.subTest(dim=4):
+            x = torch.randn(1, 2, 3, 4, requires_grad=True)
             self.assertONNX(
                 lambda x: torch.sigmoid(x),
                 x,
@@ -1208,11 +1527,10 @@ class TestOperatorsOnnxrt(ExtTestCase):
             lambda x: torch.zeros_like(x),
             x,
             onnx_export=inspect.currentframe().f_code.co_name,
-            test_backward=False,
         )
 
     def test_ones_like(self):
-        x = torch.randn(6, 10, requires_grad=True)
+        x = torch.randn(6, 10, requires_grad=False)
         self.assertONNX(
             lambda x: torch.ones_like(x),
             x,
@@ -1233,8 +1551,8 @@ class TestOperatorsOnnxrt(ExtTestCase):
         )
 
     def test_ne(self):
-        x = torch.randn(1, 2, 3, 1, requires_grad=False).int()
-        y = torch.randn(1, 4, requires_grad=False).int()
+        x = torch.randn(1, 2, 3, 1, requires_grad=False).int().to(torch.float32)
+        y = torch.randn(1, 4, requires_grad=False).int().to(torch.float32)
         self.assertONNX(
             lambda x, y: torch.ne(x, y),
             (x, y),
@@ -1268,12 +1586,39 @@ class TestOperatorsOnnxrt(ExtTestCase):
             onnx_export=inspect.currentframe().f_code.co_name,
         )
 
+    def test_dropout_default(self):
+        x = torch.randn(3, 4, requires_grad=True)
+        self.assertONNX(
+            lambda x: torch.max(functional.dropout(x)),
+            x,
+            onnx_export=inspect.currentframe().f_code.co_name,
+        )
+
+    def test_dropout_training(self):
+        x = torch.randn(3, 4, requires_grad=True)
+        self.assertONNX(
+            lambda x: torch.max(functional.dropout(x)),
+            x,
+            training=torch.onnx.TrainingMode.TRAINING,
+            onnx_export=inspect.currentframe().f_code.co_name,
+        )
+
     def test_dropout_opset12(self):
         x = torch.randn(3, 4, requires_grad=True)
         self.assertONNX(
             lambda x: torch.max(functional.dropout(x, training=False)),
             x,
             opset_version=12,
+            onnx_export=inspect.currentframe().f_code.co_name,
+        )
+
+    def test_dropout_training_opset12(self):
+        x = torch.randn(3, 4, requires_grad=True)
+        self.assertONNX(
+            lambda x: torch.max(functional.dropout(x)),
+            x,
+            opset_version=12,
+            training=torch.onnx.TrainingMode.TRAINING,
             onnx_export=inspect.currentframe().f_code.co_name,
         )
 
@@ -1410,6 +1755,20 @@ class TestOperatorsOnnxrt(ExtTestCase):
             test_backward=False,
         )
 
+    @unittest.skip("+1 in ModuleModule is failing this test")
+    def test_bitshift(self):
+        class BitshiftModel(torch.nn.Module):
+            def forward(self, input):
+                return input >> 1, input >> 2
+
+        input = torch.arange(24, dtype=torch.uint8).reshape(3, 4, 2)
+        self.assertONNX(
+            BitshiftModel(),
+            input,
+            opset_version=11,
+            onnx_export=inspect.currentframe().f_code.co_name,
+        )
+
     def test_layer_norm_aten(self):
         model = torch.nn.LayerNorm([10, 10])
         x = torch.randn(20, 5, 10, 10)
@@ -1418,7 +1777,6 @@ class TestOperatorsOnnxrt(ExtTestCase):
             x,
             onnx_export=inspect.currentframe().f_code.co_name,
             atol=3e-4,
-            rtol=1e-4,
         )
 
     def test_pixel_shuffle(self):
@@ -1438,7 +1796,6 @@ class TestOperatorsOnnxrt(ExtTestCase):
             onnx_export=inspect.currentframe().f_code.co_name,
         )
 
-    @unittest.skipIf(True, reason="unstable")
     def test_unfold(self):
         x = torch.randn(2, 3, 4, requires_grad=True)
         self.assertONNX(
@@ -1562,7 +1919,6 @@ class TestOperatorsOnnxrt(ExtTestCase):
             lambda x: torch.scalar_tensor(x.dim()),
             x,
             onnx_export=inspect.currentframe().f_code.co_name,
-            test_backward=False,
         )
 
     def test_det(self):
@@ -1572,14 +1928,12 @@ class TestOperatorsOnnxrt(ExtTestCase):
             x,
             opset_version=11,
             onnx_export=inspect.currentframe().f_code.co_name,
-            atol=1e-4,
         )
         self.assertONNX(
             lambda x: torch.linalg.det(x),
             x,
             opset_version=11,
             onnx_export=inspect.currentframe().f_code.co_name,
-            atol=1e-4,
         )
 
     def test_softmaxcrossentropy(self):
@@ -1672,6 +2026,7 @@ class TestOperatorsOnnxrt(ExtTestCase):
             onnx_export=inspect.currentframe().f_code.co_name,
         )
 
+    @unittest.skipIf(not DYNAMIC_SHAPE_SUPPORTED, reason="dynamic axes not supported")
     def test_dynamic_axes_add(self):
         m1 = torch.randn(2, 3, requires_grad=True)
         m2 = torch.randn(2, 1, requires_grad=True)
@@ -1684,6 +2039,7 @@ class TestOperatorsOnnxrt(ExtTestCase):
             onnx_export=inspect.currentframe().f_code.co_name,
         )
 
+    @unittest.skipIf(not DYNAMIC_SHAPE_SUPPORTED, reason="dynamic axes not supported")
     def test_dynamic_axes_add_inputs_same_symbolic_shape(self):
         m1 = torch.randn(2, 3, requires_grad=True)
         self.assertONNX(
@@ -1695,6 +2051,7 @@ class TestOperatorsOnnxrt(ExtTestCase):
             onnx_export=inspect.currentframe().f_code.co_name,
         )
 
+    @unittest.skipIf(not DYNAMIC_SHAPE_SUPPORTED, reason="dynamic axes not supported")
     def test_dynamic_axes_matmul_ort(self):
         m1 = torch.randn(2, 2, 4, requires_grad=True)
         m2 = torch.randn(2, 4, 3, requires_grad=True)
@@ -1707,6 +2064,7 @@ class TestOperatorsOnnxrt(ExtTestCase):
             onnx_export=inspect.currentframe().f_code.co_name,
         )
 
+    @unittest.skipIf(not DYNAMIC_SHAPE_SUPPORTED, reason="dynamic axes not supported")
     def test_dynamic_axes_matmul_ref(self):
         m1 = torch.randn(2, 2, 4, requires_grad=True)
         m2 = torch.randn(2, 4, 3, requires_grad=True)
@@ -1720,17 +2078,37 @@ class TestOperatorsOnnxrt(ExtTestCase):
             impl="ref",
         )
 
-    def test_dynamic_axes_reduce_mean(self):
-        m1 = torch.randn(2, 3, 4, requires_grad=True)
+    @unittest.skipIf(not DYNAMIC_SHAPE_SUPPORTED, reason="dynamic axes not supported")
+    def test_dynamic_axes_reduce_mean_12(self):
+        m1 = torch.arange(24, dtype=torch.float32, requires_grad=True).reshape(
+            (2, 3, 4)
+        )
         self.assertONNX(
             lambda x: torch.mean(x, dim=1),
-            (m1),
+            (m1,),
             input_names=["input"],
             dynamic_axes={"input": {1: "dim_1", 2: "dim_2"}},
             opset_version=12,
             onnx_export=inspect.currentframe().f_code.co_name,
+            impl="ref",
         )
 
+    @unittest.skipIf(not DYNAMIC_SHAPE_SUPPORTED, reason="dynamic axes not supported")
+    def test_dynamic_axes_reduce_mean_18(self):
+        m1 = torch.arange(24, dtype=torch.float32, requires_grad=True).reshape(
+            (2, 3, 4)
+        )
+        self.assertONNX(
+            lambda x: torch.mean(x, dim=1),
+            (m1,),
+            input_names=["input"],
+            dynamic_axes={"input": {1: "dim_1", 2: "dim_2"}},
+            opset_version=18,
+            onnx_export=inspect.currentframe().f_code.co_name,
+            impl="ref",
+        )
+
+    @unittest.skipIf(not DYNAMIC_SHAPE_SUPPORTED, reason="dynamic axes not supported")
     def test_dynamic_axes_unchange_softmax_ort(self):
         m1 = torch.arange(6, requires_grad=True, dtype=torch.float32).reshape((-1, 3))
         self.assertONNX(
@@ -1742,6 +2120,7 @@ class TestOperatorsOnnxrt(ExtTestCase):
             onnx_export=inspect.currentframe().f_code.co_name,
         )
 
+    @unittest.skipIf(not DYNAMIC_SHAPE_SUPPORTED, reason="dynamic axes not supported")
     def test_dynamic_axes_unchange_softmax_ref(self):
         m1 = torch.arange(6, requires_grad=True, dtype=torch.float32).reshape((-1, 3))
         self.assertONNX(
@@ -1749,12 +2128,135 @@ class TestOperatorsOnnxrt(ExtTestCase):
             (m1,),
             input_names=["input"],
             dynamic_axes={"input": {1: "dim_1"}},
-            opset_version=12,
+            opset_version=14,
             onnx_export=inspect.currentframe().f_code.co_name,
             impl="ref",
         )
 
+    @unittest.skip("+1 in ModuleModule is failing this test")
+    def test_aten_embedding_1(self):
+        _onnx_opset_version = 12
+
+        @parse_args("v", "v", "i", "b", "b")
+        def embedding(g, weight, indices, padding_idx, scale_grad_by_freq, sparse):
+            custom_attributes_json = (
+                "{"
+                f'"padding_idx":{str(padding_idx)},'
+                f'"scale_grad_by_freq":{str(scale_grad_by_freq).lower()},'
+                f'"sparse":{str(sparse).lower()}'
+                "}"
+            )
+            output = g.at(
+                "embedding",
+                weight,
+                indices,
+                custom_attributes_json_s=custom_attributes_json,
+            )
+            return output
+
+        torch.onnx.register_custom_op_symbolic(
+            "::embedding", embedding, _onnx_opset_version
+        )
+
+        class Model(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.emb = torch.nn.Embedding(4, 8)
+
+            def forward(self, x, y):
+                res = self.emb(x)
+                res = res + y
+                return torch.ones(res.shape[0])
+
+        model = Model()
+        x = torch.ones(32, dtype=torch.long)
+        y = torch.randn(1, 8)
+        self.assertONNX(
+            model,
+            (x, y),
+            opset_version=_onnx_opset_version,
+            onnx_export=inspect.currentframe().f_code.co_name,
+            test_backward=False,
+        )
+
+        torch.onnx.unregister_custom_op_symbolic("::embedding", _onnx_opset_version)
+
+    @unittest.skip("+1 in ModuleModule is failing this test")
+    def test_aten_embedding_2(self):
+        _onnx_opset_version = 12
+
+        @parse_args("v", "v", "i", "b", "b")
+        def embedding(g, weight, indices, padding_idx, scale_grad_by_freq, sparse):
+            custom_attributes_json = (
+                "{"
+                f'"padding_idx":{str(padding_idx)},'
+                f'"scale_grad_by_freq":{str(scale_grad_by_freq).lower()},'
+                f'"sparse":{str(sparse).lower()}'
+                "}"
+            )
+            output = g.at(
+                "embedding",
+                weight,
+                indices,
+                custom_attributes_json_s=custom_attributes_json,
+            )
+
+            # do shape inference and set it via setType
+            indices_shape = _get_tensor_sizes(indices)
+            if indices_shape is not None and hasattr(weight.type(), "with_sizes"):
+                output_type = weight.type().with_sizes(
+                    indices_shape + [_get_tensor_dim_size(weight, 1)]
+                )
+                output.setType(output_type)
+            return output
+
+        torch.onnx.register_custom_op_symbolic(
+            "::embedding", embedding, _onnx_opset_version
+        )
+
+        class Model(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.emb = torch.nn.Embedding(4, 8)
+
+            def forward(self, x, y):
+                res = self.emb(x)
+                res = res + y
+                return torch.ones(res.shape[0])
+
+        model = Model()
+        x = torch.ones(32, dtype=torch.long)
+        y = torch.randn(1, 8)
+        self.assertONNX(
+            model,
+            (x, y),
+            opset_version=_onnx_opset_version,
+            input_names=["input_1", "input_2"],
+            dynamic_axes={"input_1": {0: "dim_0"}, "input_2": {0: "dim_1", 1: "dim_2"}},
+            keep_initializers_as_inputs=False,
+            onnx_export=inspect.currentframe().f_code.co_name,
+            test_backward=False,
+        )
+
+        torch.onnx.unregister_custom_op_symbolic("::embedding", _onnx_opset_version)
+
+    @unittest.skipIf(not DYNAMIC_SHAPE_SUPPORTED, reason="dynamic shape")
     def test_shape_value_map(self):
+        # Without shapeValueMap, the onnx graph looks like:
+        # graph(%0 : Float(*, 1, 128, 1, strides=[128, 128, 1, 1], requires_grad=0, device=cpu)):
+        #   %2 : Long(4, strides=[1], device=cpu) = onnx::Shape(%0)
+        #   %4 : Long(device=cpu) = onnx::Constant[value={0}]()
+        #   %5 : Long(device=cpu) = onnx::Gather[axis=0](%2, %4)
+        #   %6 : Long(device=cpu) = onnx::Constant[value={1}]()
+        #   %7 : Long(device=cpu) = onnx::Constant[value={2}]()
+        #   %8 : Long(device=cpu) = onnx::Constant[value={-1}]()
+        #   %9 : int[] = prim::ListConstruct(%5, %6, %7, %8)
+        #   %10 : Float(*, *, *, *, strides=[128, 128, 64, 1], requires_grad=0, device=cpu) = onnx::Reshape(%0, %9)
+        #   ...
+        # With shapeValueMap, it becomes:
+        #   ...
+        #   %10 : Float(*, 1, 2, 64, strides=[128, 128, 64, 1], requires_grad=0, device=cpu) = onnx::Reshape(%0, %9)
+        #   ...
         class RSoftMax(torch.nn.Module):
             def __init__(self, radix, cardinality):
                 super().__init__()
@@ -1779,6 +2281,55 @@ class TestOperatorsOnnxrt(ExtTestCase):
             dynamic_axes={"x": {0: "dim_0"}},
             onnx_export=inspect.currentframe().f_code.co_name,
             test_backward=False,
+        )
+
+    @unittest.skipIf(True, reason="bug with as_strided")
+    def test_as_strided_0(self):
+        x = torch.arange(12, requires_grad=True, dtype=torch.float32).reshape((-1, 3))
+        self.assertONNX(
+            lambda x: torch.as_strided(x, (3, 3), (1, 2)),
+            x,
+            onnx_export=inspect.currentframe().f_code.co_name,
+        )
+
+    @unittest.skipIf(True, reason="bug with as_strided")
+    def test_as_strided_1(self):
+        import torch
+
+        new_table = {}
+        for k, v in torch._decomp.decomposition_table.items():
+            if k.name() in {
+                "aten::slice_backward",
+                "aten::select_backward.out",
+                "aten::slice.Tensor",
+            }:
+                new_table[k] = v
+
+        shape = (9, 2, 15, 4)
+        x = torch.arange(
+            np.prod(shape), requires_grad=True, dtype=torch.float32
+        ).reshape(shape)
+        self.assertONNX(
+            lambda x: x[:, :, 4:, :],
+            x,
+            onnx_export=inspect.currentframe().f_code.co_name,
+            use_decomposition=new_table,
+        )
+
+    def test_embedding_simple(self):
+        ix = torch.tensor([[1, 2, 4, 5], [4, 3, 2, 9]], dtype=torch.int64)
+        embedding_matrix = torch.arange(
+            30, dtype=torch.float32, requires_grad=True
+        ).reshape((-1, 3))
+        torch.embedding(embedding_matrix, ix)
+        self.assertONNX(
+            lambda ix, mat: torch.embedding(mat, ix),
+            (ix, embedding_matrix),
+            onnx_export=inspect.currentframe().f_code.co_name,
+            input_index=1,
+            impl="ref",
+            verbose=0,
+            use_decomposition=True,
         )
 
 

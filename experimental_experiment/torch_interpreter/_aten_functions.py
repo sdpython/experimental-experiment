@@ -1,7 +1,7 @@
 from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 import numpy as np
 from onnx import TensorProto
-from onnx.helper import tensor_dtype_to_np_dtype
+from onnx.helper import tensor_dtype_to_np_dtype, make_tensor
 from onnx.numpy_helper import from_array
 from ..xbuilder.shape_helper import (
     all_float,
@@ -34,7 +34,7 @@ def aten_abs(
     g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T
 ) -> T:
     "abs"
-    res = g.make_node("Abs", [x], outputs)
+    res = g.make_node("Abs", [x], outputs, name="abs")
     if not sts:
         set_type_shape_unary_op(g, outputs[0], x)
     return res
@@ -44,7 +44,7 @@ def aten_acos(
     g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T
 ) -> T:
     "acos"
-    res = g.make_node("Acos", [x], outputs)
+    res = g.make_node("Acos", [x], outputs, name="acos")
     if not sts:
         set_type_shape_unary_op(g, outputs[0], x)
     return res
@@ -54,7 +54,7 @@ def aten_acosh(
     g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T
 ) -> T:
     "acosh"
-    res = g.make_node("Acosh", [x], outputs)
+    res = g.make_node("Acosh", [x], outputs, name="acosh")
     if not sts:
         set_type_shape_unary_op(g, outputs[0], x)
     return res
@@ -425,7 +425,7 @@ def aten_asin(
     g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T
 ) -> T:
     "asin"
-    res = g.make_node("Asin", [x], outputs)
+    res = g.make_node("Asin", [x], outputs, name="asin")
     if not sts:
         set_type_shape_unary_op(g, outputs[0], x)
     return res
@@ -435,7 +435,7 @@ def aten_asinh(
     g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T
 ) -> T:
     "asinh"
-    res = g.make_node("Asinh", [x], outputs)
+    res = g.make_node("Asinh", [x], outputs, name="asinh")
     if not sts:
         set_type_shape_unary_op(g, outputs[0], x)
     return res
@@ -445,7 +445,7 @@ def aten_atan(
     g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T
 ) -> T:
     "atan"
-    res = g.make_node("Atan", [x], outputs)
+    res = g.make_node("Atan", [x], outputs, name="atan")
     if not sts:
         set_type_shape_unary_op(g, outputs[0], x)
     return res
@@ -455,7 +455,7 @@ def aten_atanh(
     g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T
 ) -> T:
     "atanh"
-    res = g.make_node("Atanh", [x], outputs)
+    res = g.make_node("Atanh", [x], outputs, name="atanh")
     if not sts:
         set_type_shape_unary_op(g, outputs[0], x)
     return res
@@ -790,7 +790,7 @@ def aten_cosh(
     g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T
 ) -> T:
     "cosh"
-    res = g.make_node("Cosh", [x], outputs)
+    res = g.make_node("Cosh", [x], outputs, name="cosh")
     if not sts:
         set_type_shape_unary_op(g, outputs[0], x)
     return res
@@ -931,127 +931,6 @@ def aten_embedding(
     if not sts:
         g.set_type(res, g.get_type(weight))
         g.set_rank(res, g.get_rank(weight) + g.get_rank(indices) - 1)
-    return res
-
-
-def aten_embedding_dense_backward(
-    g: GraphBuilder,
-    sts: Optional[Dict[str, Any]],
-    outputs: List[str],
-    grad_output: T,
-    indices: T,
-    num_weights: int,
-    padding_idx: int,
-    scale_grad_by_freq: bool,
-) -> T:
-    """
-    embedding
-
-    ::
-
-        def _unsqueeze_to_dim(x: Tensor, dim: int) -> Tensor:
-            for _ in range(dim - x.dim()):
-                x = x.unsqueeze(-1)
-            return x
-
-        def embedding_dense_backward(
-            grad_output: Tensor,
-            indices: Tensor,
-            num_weights: int,
-            padding_idx: int,
-            scale_grad_by_freq: bool,
-        ):
-            computation_dtype, result_dtype = utils.elementwise_dtypes(
-                grad_output, type_promotion_kind=utils.ELEMENTWISE_TYPE_PROMOTION_KIND.DEFAULT
-            )
-            grad_output = grad_output.to(computation_dtype)
-            indices = _maybe_convert_to_dtype(indices, torch.long)  # type: ignore[assignment]
-            if scale_grad_by_freq:
-                counts = indices.new_zeros((num_weights,))
-                ones = torch.ones_like(indices)
-                counts = aten._unsafe_index_put(counts, [indices], ones, accumulate=True)
-                grad_weights_scale = counts[indices]
-                grad_output = grad_output / grad_weights_scale.unsqueeze(-1)
-
-            mask = _unsqueeze_to_dim(indices == padding_idx, grad_output.ndim)
-            grad = grad_output.masked_fill(mask, 0)
-            grad_weight = grad_output.new_zeros(
-                (num_weights,) + grad_output.shape[indices.ndim :]
-            )
-            return aten._unsafe_index_put(grad_weight, [indices], grad, accumulate=True).to(
-                result_dtype
-            )
-    """
-    assert (
-        not scale_grad_by_freq
-    ), f"scale_grad_by_freq=True not implemented{g.get_debug_msg()}"
-    assert g.has_shape(grad_output), f"missing shape for grad_output{g.get_debug_msg()}"
-    assert g.has_shape(indices), f"missing shape for indices{g.get_debug_msg()}"
-    assert is_static_shape(
-        g.get_shape(grad_output)
-    ), f"unknown shape for grad_output{g.get_debug_msg()}"
-
-    # if scale_grad_by_freq:
-    #     counts = indices.new_zeros((num_weights,))
-    #     ones = torch.ones_like(indices)
-    #     counts = aten._unsafe_index_put(counts, [indices], ones, accumulate=True)
-    #     grad_weights_scale = counts[indices]
-    #     grad_output = grad_output / grad_weights_scale.unsqueeze(-1)
-
-    # mask = _unsqueeze_to_dim(indices == padding_idx, grad_output.ndim)
-    shape_indices = list(g.get_shape(indices))
-    ndim = g.get_rank(grad_output)
-    rank_indices = g.get_rank(indices)
-    shape_indices.extend([1] * (ndim - rank_indices))
-    assert ndim == len(shape_indices), (
-        f"New shape for indices is wrong shape_indices="
-        f"{shape_indices}, expected rank={ndim}"
-    )
-    mask = g.op.Reshape(
-        g.op.Equal(
-            indices,
-            np.array([padding_idx], dtype=np.int64),
-            name="embedding_dense_backward",
-        ),
-        np.array(shape_indices, dtype=np.int64),
-        name="embedding_dense_backward",
-    )
-    g.set_type(mask, TensorProto.BOOL)
-    g.set_rank(mask, len(shape_indices))
-
-    # grad = grad_output.masked_fill(mask, 0)
-    grad = aten_masked_fill_Scalar(
-        g,
-        sts,
-        None,
-        grad_output,
-        mask,
-        0,
-        name="embedding_dense_backward_masked_fill",
-    )
-
-    shape_output = g.get_shape(grad_output)
-    new_shape = (num_weights,) + shape_output[rank_indices:]
-    grad_weight = g.op.ConstantOfShape(
-        np.array(new_shape, dtype=np.int64), name="embedding_dense_backward"
-    )
-    indices_reshaped = g.op.UnsqueezeAnyOpset(
-        indices, np.array([0], dtype=np.int64), name="embedding_dense_backward"
-    )
-    res = g.op.ScatterElements(
-        grad_weight,
-        indices_reshaped,
-        grad,
-        outputs=outputs,
-        name="embedding_dense_backward",
-    )
-    assert res is not None, (
-        "aten_embedding_dense_backward is not correctly implemented, "
-        "use get_decomposition_table."
-    )
-    if not sts:
-        g.set_type(res, g.get_type(grad_output))
-        g.set_shape(res, new_shape)
     return res
 
 
@@ -1326,7 +1205,7 @@ def aten_flatten(
             f"start_dim={start_dim}, end_dim={end_dim} not supported."
         )
     if end_dim == -1:
-        return g.make_node("Flatten", [x], outputs)
+        return g.make_node("Flatten", [x], outputs, name="flatten")
     res = g.make_node("Flatten", [x], outputs, to=end_dim)
     if not sts:
         g.set_type(res, g.get_type(x))
@@ -1588,6 +1467,11 @@ def aten_index_put(
 
     index = indices[0]  # tensor
     new_index = g.op.UnsqueezeAnyOpset(index, np.array([-1], dtype=np.int64), name=name)
+    g.set_type(new_index, g.get_type(index))
+    if g.has_shape(index):
+        g.set_shape(new_index, g.get_shape(index) + (1,))
+    else:
+        g.set_rank(new_index, g.get_rank(index) + 1)
 
     if accumulate:
         assert g.main_opset >= 13, (
@@ -1650,6 +1534,43 @@ def aten_index_select(
         else:
             g.set_rank(res, g.get_rank(x))
     return res
+
+
+def aten_layer_norm(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    normalized_shape: Sequence[int],
+    weight: Optional[T] = None,
+    bias: Optional[T] = None,
+    eps: float = 1e-05,
+    cudnn_enable: bool = False,  # not used
+    name="layer_norm",
+) -> T:
+    "layer_norm"
+    axes = np.array([-i for i in range(len(normalized_shape), 0, -1)], dtype=np.int64)
+    itype = g.get_type(x)
+    dtype = tensor_dtype_to_np_dtype(itype)
+
+    two_cst = np.array([2.0], dtype=dtype)
+    eps_cst = np.array([eps], dtype=dtype)
+
+    mean = g.op.ReduceMeanAnyOpset(x, axes, name=name, keepdims=1)
+    numerator = g.op.Sub(x, mean, name=name)
+    variance = g.op.ReduceMeanAnyOpset(
+        g.op.Pow(numerator, two_cst, name=name), axes, keepdims=1, name=name
+    )
+    denominator = g.op.Sqrt(g.op.Add(variance, eps_cst, name=name), name=name)
+    normalized = g.op.Div(numerator, denominator, name=name)
+
+    if weight is not None:
+        normalized = g.op.Mul(normalized, weight, name=name)
+    if bias is not None:
+        normalized = g.op.Add(normalized, bias, name=name)
+
+    # rdenominator = g.op.Reciprocal(denominator)
+    return normalized  # , mean, rdenominator
 
 
 def aten_leaky_relu(
@@ -2557,7 +2478,7 @@ def aten_round(
     g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T
 ) -> T:
     "round"
-    res = g.make_node("Round", [x], outputs)
+    res = g.make_node("Round", [x], outputs, name="round")
     if not sts:
         set_type_shape_unary_op(g, outputs[0], x)
     return res
@@ -2587,6 +2508,243 @@ def aten_rsub_Scalar(
     "rsub"
     assert alpha == 1, f"Not implemented with alpha={alpha}"
     return aten_sub(g, sts, outputs, y, x, name="rsub_Scalar")
+
+
+def _attention_scale(g: GraphBuilder, query: T, name: str = "_attention_scale") -> T:
+    if g.has_shape(query):
+        shape = g.get_shape(query)
+        last = shape[-1]
+        if isinstance(last, int):
+            scale = 1.0 / (float(last) ** 0.5)
+            return np.array([scale], dtype=tensor_dtype_to_np_dtype(g.get_type(query)))
+
+    shape = g.op.Shape(query, name=name)
+    last = g.op.Gather(shape, np.array([-1], dtype=np.int64), name=name)
+    itype = g.get_type(query)
+    clast = g.op.Cast(itype, to=itype, name=name)
+    return g.op.Reciprocal(g.op.Sqrt(clast, name=name), name=name)
+
+
+def _causal_attention_mask(
+    g: GraphBuilder, query: T, key: T, name: str = "_causal_attention_mask"
+) -> T:
+    itype = g.get_type(query)
+    dtype = tensor_dtype_to_np_dtype(itype)
+    attn_mask = None
+    if g.has_shape(query) and g.has_shape(key):
+        shape_query, shape_key = g.get_shape(query), g.get_shape(key)
+        if isinstance(shape_query[-2], int) and isinstance(shape_key[-2], int):
+            shape = (shape_query[-2], shape_key[-2])
+            attn_mask = g.op.ConstantOfShape(
+                np.array(shape, dtype=np.int64),
+                value=from_array(np.array([1], dtype=dtype)),
+                name=name,
+            )
+
+    if attn_mask is None:
+        # dynamic path
+        shape_query = g.op.Shape(query, name=name)
+        shape_key = g.op.Shape(key, name=name)
+        dquery = g.op.Gather(shape_query, np.array([-2], dtype=np.int64), name=name)
+        dkey = g.op.Gather(shape_key, np.array([-2], dtype=np.int64), name=name)
+        size = g.op.Concat(dquery, dkey, axis=0)
+        attn_mask = g.op.ConstantOfShape(
+            size, value=from_array([1], dtype=dtype), name=name
+        )
+
+    tri_attn_mask = g.op.Trilu(attn_mask, upper=0, name=name)
+
+    new_attn_mask = g.op.Where(
+        g.op.Equal(tri_attn_mask, np.array([0], dtype=dtype), name=name),
+        np.array([-float("inf")], dtype=dtype),
+        np.array([0], dtype=dtype),
+        name=name,
+    )
+    return new_attn_mask
+
+
+def aten_scaled_dot_product_attention(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    query: T,
+    key: T,
+    value: T,
+    attn_mask: Optional[T] = None,
+    dropout_p: float = 0.0,
+    is_causal: bool = False,
+    scale: Optional[T] = None,
+    name: str = "aten_scaled_dot_product_attention",
+):
+    "scaled_dot_product_attention"
+    assert (not is_causal) or (
+        (is_causal and attn_mask is None)
+    ), f"is_causal and attn_mask cannot be set at the same time{g.get_debug_msg()}"
+
+    if scale is None:
+        scale = _attention_scale(g, query)
+
+    if is_causal:
+        attn_mask = _causal_attention_mask(g, query, key)
+
+    key_transposed_axes = list(range(g.get_rank(key)))
+    key_transposed_axes[-1], key_transposed_axes[-2] = (
+        key_transposed_axes[-2],
+        key_transposed_axes[-1],
+    )
+    key_transposed = g.op.Transpose(key, perm=key_transposed_axes, name=name)
+
+    sc = g.op.Sqrt(scale, name=name)
+    query_scaled = g.op.Mul(query, sc, name=name)
+    key_transposed_scaled = g.op.Mul(key_transposed, sc)
+    mul_qk = g.op.MatMul(query_scaled, key_transposed_scaled, name=name)
+
+    itype = g.get_type(query)
+    dtype = tensor_dtype_to_np_dtype(itype)
+
+    if attn_mask is None:
+        mul_qk_add = mul_qk
+    elif g.get_type(attn_mask) == TensorProto.BOOL:
+        attn_mask = g.op.Where(
+            attn_mask,
+            np.array([0.0], dtype=dtype),
+            np.array([-float("inf")], dtype=dtype),
+            name=name,
+        )
+        mul_qk_add = g.op.Add(mul_qk, attn_mask, name=name)
+    else:
+        mul_qk_add = g.op.Add(mul_qk, attn_mask, name=name)
+
+    attn_weight = g.op.Softmax(mul_qk_add, axis=-1)
+
+    if dropout_p != 0:
+        attn_weight = g.op.Dropout(
+            attn_weight, np.array([dropout_p], dtype=dtype), name=name
+        )[0]
+
+    return g.op.MatMul(attn_weight, value, name=name, outputs=outputs)
+
+
+def _aten__scaled_dot_product_flash_attention_fillin_empty_outputs(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    query: T,
+    name: str = "_scaled_dot_product_flash_attention_fillin_empty_outputs",
+) -> Tuple[T, T, T, T]:
+
+    query_first_three_dims = g.op.Slice(
+        g.op.Shape(query, name=name),
+        g.op.Constant(value_ints=[0], name=name),
+        g.op.Constant(value_ints=[3], name=name),
+        name=name,
+    )
+    logsumexp = g.op.Expand(
+        np.array([0], dtype=tensor_dtype_to_np_dtype(g.get_type(query))),
+        query_first_three_dims,
+        name=name,
+        outputs=[outputs[0]],
+    )
+
+    empty_tensor_int = g.op.Cast(
+        g.op.ConstantOfShape(
+            g.op.Constant(
+                value=make_tensor("Empty_INTS", TensorProto.INT64, [0], []), name=name
+            ),
+            name=name,
+        ),
+        to=TensorProto.INT64,
+        name=name,
+        outputs=[outputs[1]],
+    )
+    empty_tensor_float = g.op.ConstantOfShape(
+        g.op.Constant(
+            value=make_tensor("Empty_FLOATS", TensorProto.INT64, [0], []), name=name
+        ),
+        name=name,
+        outputs=[outputs[2]],
+    )
+    empty_int = g.op.Constant(value_int=0, name=name, outputs=[outputs[3]])
+
+    return logsumexp, empty_tensor_int, empty_int, empty_tensor_float
+
+
+def aten__scaled_dot_product_flash_attention_for_cpu(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    query: T,
+    key: T,
+    value: T,
+    dropout_p: float = 0.0,
+    is_causal: bool = False,
+    attn_mask: Optional[T] = None,
+    scale: Optional[float] = None,
+    return_debug_mask: bool = False,
+    name: str = "_scaled_dot_product_flash_attention_for_cpu_default",
+) -> Tuple[T, T, T, T, T, T, T, T, T]:
+    """_scaled_dot_product_flash_attention"""
+    assert not return_debug_mask, "Not implemented when return_debug_mask is false."
+    result = aten_scaled_dot_product_attention(
+        g,
+        sts,
+        [outputs[0]],
+        query,
+        key,
+        value,
+        attn_mask=attn_mask,
+        dropout_p=dropout_p,
+        is_causal=is_causal,
+        scale=scale,
+        name="_scaled_dot_product_flash_attention_for_cpu_default",
+    )
+    assert isinstance(result, str), f"Unexpected type {type(result)}{g.get_debug_msg()}"
+
+    # The followings are not comsumed by the graph on llama 3 at least.
+    if len(outputs) == 2:
+        # only need 2
+        query_first_three_dims = g.op.Slice(
+            g.op.Shape(query, name=name),
+            g.op.Constant(value_ints=[0], name=name),
+            g.op.Constant(value_ints=[3], name=name),
+            name=name,
+        )
+        logsumexp = g.op.Expand(
+            np.array([0], dtype=tensor_dtype_to_np_dtype(g.get_type(query))),
+            query_first_three_dims,
+            name=name,
+            outputs=[outputs[1]],
+        )
+        return result, logsumexp
+
+    assert len(outputs) == 8, (
+        f"Unexpected number of outputs {len(outputs)}, "
+        f"outputs={outputs}{g.get_debug_msg()}"
+    )
+    (
+        logsumexp,
+        empty_tensor_int,
+        empty_int,
+        empty_tensor_float,
+    ) = _aten__scaled_dot_product_flash_attention_fillin_empty_outputs(
+        g, sts, [outputs[1], outputs[3], outputs[4], outputs[8]], query, name=name
+    )
+
+    empty_tensor_int2 = g.op.Identity(empty_tensor_int, name=name)
+    empty_int2 = g.op.Identity(empty_int, name=name)
+    empty_tensor_int2 = g.op.Identity(empty_tensor_int, name=name)
+
+    return (
+        result,  # 0
+        logsumexp,  # 1
+        empty_tensor_int,  # 2
+        empty_tensor_int2,  # 3
+        empty_int,  # 4
+        empty_int2,  # 5
+        empty_tensor_int,  # 6
+        empty_tensor_int2,  # 7
+        empty_tensor_float,  # 8
+    )
 
 
 def aten_select_int(
@@ -2673,82 +2831,6 @@ def aten_setitem(
     raise RuntimeError(
         f"setitem not implemented for indices={indices}{g.get_debug_msg()}"
     )
-
-
-def aten_sigmoid(
-    g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T
-) -> T:
-    "sigmoid"
-    res = g.op.Sigmoid(x, outputs=outputs)
-    if not sts:
-        set_type_shape_unary_op(g, outputs[0], x)
-    return res
-
-
-def aten_sigmoid_backward(
-    g: GraphBuilder,
-    sts: Optional[Dict[str, Any]],
-    outputs: List[str],
-    out_grad: T,
-    y: T,
-) -> T:
-    """
-    sigmoid backward
-
-    See https://github.com/pytorch/pytorch/blob/main/torch/_decomp/decompositions.py#L108.
-    conj_physical = identity for real number.
-
-    ::
-
-        return out_grad * (y * (1 - y)).conj_physical()
-    """
-    dtype = tensor_dtype_to_np_dtype(g.get_type(y))
-    _1y = g.op.Sub(np.array([1], dtype=dtype), y, name="sigmoid_backward")
-    y1y = g.op.Mul(y, _1y, name="sigmoid_backward")
-    res = g.op.Mul(out_grad, y1y, outputs=outputs, name="sigmoid_backward")
-
-    set_type_shape_unary_op(g, _1y, y)
-    set_type_shape_unary_op(g, y1y, y)
-    if not sts:
-        set_type_shape_unary_op(g, res, y)
-    return res
-
-
-def aten_silu(
-    g: GraphBuilder,
-    sts: Optional[Dict[str, Any]],
-    outputs: List[str],
-    x: T,
-    inplace: bool = False,
-) -> T:
-    "silu"
-    assert (
-        not inplace
-    ), f"inplace computation is not allowed with onnx{g.get_debug_msg()}"
-    res = g.op.Mul(x, g.op.Sigmoid(x, name="silu"), outputs=outputs, name="silu")
-    if not sts:
-        set_type_shape_unary_op(g, res, x)
-    return res
-
-
-def aten_sin(
-    g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T, name="sin"
-) -> T:
-    "sin"
-    res = g.make_node("Sin", [x], outputs, name=name)
-    if not sts:
-        set_type_shape_unary_op(g, outputs[0], x)
-    return res
-
-
-def aten_sinh(
-    g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T
-) -> T:
-    "sinh"
-    res = g.make_node("Sinh", [x], outputs)
-    if not sts:
-        set_type_shape_unary_op(g, outputs[0], x)
-    return res
 
 
 def aten_slice_Tensor(
@@ -3068,7 +3150,105 @@ def aten_slice_scatter(
     )
 
 
+def aten_sigmoid(
+    g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T
+) -> T:
+    "sigmoid"
+    res = g.op.Sigmoid(x, outputs=outputs)
+    if not sts:
+        set_type_shape_unary_op(g, outputs[0], x)
+    return res
+
+
+def aten_sigmoid_backward(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    out_grad: T,
+    y: T,
+) -> T:
+    """
+    sigmoid backward
+
+    See https://github.com/pytorch/pytorch/blob/main/torch/_decomp/decompositions.py#L108.
+    conj_physical = identity for real number.
+
+    ::
+
+        return out_grad * (y * (1 - y)).conj_physical()
+    """
+    dtype = tensor_dtype_to_np_dtype(g.get_type(y))
+    _1y = g.op.Sub(np.array([1], dtype=dtype), y, name="sigmoid_backward")
+    y1y = g.op.Mul(y, _1y, name="sigmoid_backward")
+    res = g.op.Mul(out_grad, y1y, outputs=outputs, name="sigmoid_backward")
+
+    set_type_shape_unary_op(g, _1y, y)
+    set_type_shape_unary_op(g, y1y, y)
+    if not sts:
+        set_type_shape_unary_op(g, res, y)
+    return res
+
+
+def aten_silu(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    inplace: bool = False,
+) -> T:
+    "silu"
+    assert (
+        not inplace
+    ), f"inplace computation is not allowed with onnx{g.get_debug_msg()}"
+    res = g.op.Mul(x, g.op.Sigmoid(x, name="silu"), outputs=outputs, name="silu")
+    if not sts:
+        set_type_shape_unary_op(g, res, x)
+    return res
+
+
+def aten_sin(
+    g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T, name="sin"
+) -> T:
+    "sin"
+    res = g.make_node("Sin", [x], outputs, name=name)
+    if not sts:
+        set_type_shape_unary_op(g, outputs[0], x)
+    return res
+
+
+def aten_sinh(
+    g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T
+) -> T:
+    "sinh"
+    res = g.make_node("Sinh", [x], outputs, name="sinh")
+    if not sts:
+        set_type_shape_unary_op(g, outputs[0], x)
+    return res
+
+
 def aten_softmax(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    dim: int = -1,
+    dtype: Optional["torch.dtype"] = None,  # noqa: F821
+    name: str = "softmax",
+) -> T:
+    "softmax"
+    if dtype is not None:
+        itype = torch_dtype_to_onnx_dtype(dtype)
+        xc = g.op.Cast(x, to=itype, name=name)
+    else:
+        itype = None
+        xc = x
+    res = g.op.Softmax(xc, axis=dim, outputs=outputs, name=name)
+    if not sts:
+        set_type_shape_unary_op(g, res, xc, itype=itype)
+    return res
+
+
+def aten_softmax_int(
     g: GraphBuilder,
     sts: Optional[Dict[str, Any]],
     outputs: List[str],
@@ -3077,16 +3257,7 @@ def aten_softmax(
     dtype: Optional["torch.dtype"] = None,  # noqa: F821
 ) -> T:
     "softmax"
-    if dtype is not None:
-        itype = torch_dtype_to_onnx_dtype(dtype)
-        xc = g.op.Cast(x, to=itype, name="softmax")
-    else:
-        itype = None
-        xc = x
-    res = g.op.Softmax(xc, axis=dim, outputs=outputs)
-    if not sts:
-        set_type_shape_unary_op(g, res, xc, itype=itype)
-    return res
+    return aten_softmax(g, sts, outputs, x, dim, dtype, name="softmax_int")
 
 
 def aten__softmax(
@@ -3325,6 +3496,23 @@ def aten_sum_dim_IntList(
     return result
 
 
+def aten_sym_size_int(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    dim: int,
+    name: str = "sym_size_int",
+) -> T:
+    """
+    Shape + Gather
+    """
+    shape = g.op.Shape(x, name=name)
+    return g.op.Gather(
+        shape, np.array([dim], dtype=np.int64), name=name, outputs=outputs
+    )
+
+
 def aten__to_copy(
     g: GraphBuilder,
     sts: Optional[Dict[str, Any]],
@@ -3380,32 +3568,11 @@ def aten_t(
     return res
 
 
-def aten_threshold_backward(
-    g: GraphBuilder,
-    sts: Optional[Dict[str, Any]],
-    outputs: List[str],
-    grad_output: T,
-    x: T,
-    threshold: float,
-    name: str = "threshold_backward",
-) -> T:
-    "lessorequal"
-    dtype = tensor_dtype_to_np_dtype(g.get_type(grad_output))
-    le = g.op.LessOrEqual(x, np.array([threshold], dtype=dtype), name=name)
-    res = g.op.Where(
-        le, np.array([0], dtype=dtype), grad_output, outputs=outputs, name=name
-    )
-    set_type_shape_unary_op(g, le, x, TensorProto.BOOL)
-    if not sts:
-        set_type_shape_unary_op(g, res, x)
-    return res
-
-
 def aten_tan(
     g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T
 ) -> T:
     "tan"
-    res = g.make_node("Tan", [x], outputs)
+    res = g.make_node("Tan", [x], outputs, name="tan")
     if not sts:
         set_type_shape_unary_op(g, outputs[0], x)
     return res
@@ -3415,7 +3582,7 @@ def aten_tanh(
     g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T
 ) -> T:
     "tanh"
-    res = g.make_node("Tanh", [x], outputs)
+    res = g.make_node("Tanh", [x], outputs, name="tanh")
     if not sts:
         set_type_shape_unary_op(g, outputs[0], x)
     return res
@@ -3528,6 +3695,27 @@ def aten_tensor(
     )
 
 
+def aten_threshold_backward(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    grad_output: T,
+    x: T,
+    threshold: float,
+    name: str = "threshold_backward",
+) -> T:
+    "lessorequal"
+    dtype = tensor_dtype_to_np_dtype(g.get_type(grad_output))
+    le = g.op.LessOrEqual(x, np.array([threshold], dtype=dtype), name=name)
+    res = g.op.Where(
+        le, np.array([0], dtype=dtype), grad_output, outputs=outputs, name=name
+    )
+    set_type_shape_unary_op(g, le, x, TensorProto.BOOL)
+    if not sts:
+        set_type_shape_unary_op(g, res, x)
+    return res
+
+
 def aten_transpose(
     g: GraphBuilder,
     sts: Optional[Dict[str, Any]],
@@ -3539,7 +3727,7 @@ def aten_transpose(
     "transpose"
     perm = list(range(g.rank(input_name)))
     perm[dim0], perm[dim1] = perm[dim1], perm[dim0]
-    res = g.make_node("Transpose", [input_name], outputs, perm=perm)
+    res = g.make_node("Transpose", [input_name], outputs, perm=perm, name="transpose")
     if not sts:
         g.set_type(outputs[0], g.get_type(input_name))
         if g.has_shape(input_name):
@@ -3561,6 +3749,26 @@ def aten_transpose_int(
 ) -> T:
     "transpose"
     return aten_transpose(g, sts, outputs, input_name, dim0, dim1)
+
+
+def aten_tril(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    diagonal: int = 0,
+) -> T:
+    """tril"""
+
+    if diagonal == 0:
+        res = g.op.Trilu(x, upper=0, outputs=outputs)
+    else:
+        res = g.op.Trilu(
+            x, np.array(diagonal, dtype=np.int64), upper=0, outputs=outputs
+        )
+    if not sts:
+        set_type_shape_unary_op(g, res, x)
+    return res
 
 
 def aten_truediv(

@@ -410,7 +410,6 @@ With the custom exporter
 
     local_aot_ort, _ = make_aot_ort(
         dynamic=True,
-        rewrite=False,
         verbose=1,
     )
 

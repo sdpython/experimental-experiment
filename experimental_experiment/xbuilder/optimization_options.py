@@ -1,5 +1,5 @@
 import textwrap
-from typing import List, Union
+from typing import List, Optional, Union
 
 
 class OptimizationOptions:
@@ -24,6 +24,14 @@ class OptimizationOptions:
     :param stop_after: for investigation, stop_after this number of applies patterns,
         -1 to never stop
     :param verbose: verbosity level (for pattern optimization)
+    :param verifiers: run verifications to ensure the model is
+        correct everytime it is modifies, it is mostly to find bugs,
+        it is very slow
+    :param dump_applied_patterns: dump applied patterns in a folder,
+        the users can check every pattern dumped as a :epkg:`FunctionProto`
+    :param processor: optimization should be made for this processor
+        or this list of processors (comma separated value)
+    :param order: order algorithm to apply
     """
 
     def __init__(
@@ -38,6 +46,10 @@ class OptimizationOptions:
         recursive: bool = False,
         stop_after: int = -1,
         verbose: int = 0,
+        verifies: bool = False,
+        dump_applied_patterns: Optional[str] = None,
+        processor: str = "CPU",
+        order: Optional["OrderAlgorithm"] = None,  # noqa: F821
     ):
         self.remove_unused = remove_unused
         self.constant_folding = constant_folding
@@ -45,6 +57,9 @@ class OptimizationOptions:
         self.constant_size = constant_size
         self.constant_fusing = constant_fusing
         self.stop_after = stop_after
+        self.processor = processor
+        self.order = order
+        self.max_iter = max_iter
         if isinstance(patterns, str):
             from ..xoptim import get_pattern_list
 
@@ -60,17 +75,31 @@ class OptimizationOptions:
                 if patterns is None
                 else [get_pattern(p, verbose=verbose) for p in patterns]
             )
-        self.max_iter = -1
         self.verbose = verbose
         self.recursive = recursive
+        self.verifies = verifies
+        self.dump_applied_patterns = dump_applied_patterns
 
     def __repr__(self):
         pats = "None" if self.patterns is None else [str(p) for p in self.patterns]
+        add = []
+        for att in ["verifies", "stop_after", "dump_applied_patterns"]:
+            val = getattr(self, att)
+            if val in (-1, None, False):
+                continue
+            add.append(f", {att}={val!r}")
+        opts = "".join(add)
         code = (
             f"{self.__class__.__name__}(remove_unused={self.remove_unused}, "
+            f"remove_identity={self.remove_identity}, "
             f"constant_folding={self.constant_folding}, "
-            f"constant_size={self.constant_size}, verbose={self.verbose}, "
-            f"max_iter={self.max_iter}, recursive={self.recursive}, patterns={pats})"
+            f"constant_size={self.constant_size}, "
+            f"constant_fusing={self.constant_fusing}, "
+            f"verbose={self.verbose}, "
+            f"max_iter={self.max_iter}, recursive={self.recursive}, "
+            f"processor={self.processor}, "
+            f"order={self.order}, "
+            f"patterns={pats}{opts})"
         )
         return "\n".join(
             textwrap.wrap(code, width=80, tabsize=4, subsequent_indent="    ")

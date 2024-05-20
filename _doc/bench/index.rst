@@ -7,3 +7,4 @@ Benchmark from the command line
 
     dort_bench
     dort_profile
+    scripts

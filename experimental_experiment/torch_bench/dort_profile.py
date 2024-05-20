@@ -95,6 +95,7 @@ compiled_model = create_compiled_model(
     verbose=verbose,
     enable_pattern=enable_pattern,
     disable_pattern=disable_pattern,
+    ort_optimize=args.ort_optimize,
 )
 
 

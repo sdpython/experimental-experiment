@@ -89,6 +89,7 @@ class TestOnnxExportMistral(ExtTestCase):
         model, input_tensors = get_mistral_model()
         input_tensors = input_tensors[0]
         expected = model(*input_tensors)
+        # fails with transformers==4.37.2 and torch-nightly==2.4.0.dev20240425+cu118
         onx = export_utils("test_mistral_model", model, *input_tensors)
         xp = [x.numpy() for x in input_tensors]
         feeds = {f"input{i}": x for i, x in enumerate(xp)}

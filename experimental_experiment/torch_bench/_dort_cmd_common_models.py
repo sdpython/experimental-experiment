@@ -1,4 +1,22 @@
-from typing import Dict, List, Tuple, Union
+from typing import Dict, List, Optional, Tuple, Union
+
+
+def _get_input_dims(shape_scenario: str, warmup: int, repeat: int):
+    if shape_scenario in (None, ""):
+        return [(2, 1024)] * (warmup + repeat)
+    if shape_scenario == "batch":
+        w = [(2, 1024), (3, 1024)] * warmup
+        w = w[:warmup]
+        r = [(2, 1024), (3, 1024), (4, 1024)] * repeat
+        r = r[:repeat]
+        return w + r
+    if shape_scenario == "length":
+        w = [(2, 1024), (2, 1096)] * warmup
+        w = w[:warmup]
+        r = [(2, 1024), (2, 1096), (2, 1112)] * repeat
+        r = r[:repeat]
+        return w + r
+    raise AssertionError(f"Unexpected value {shape_scenario!r} for shape_scenario.")
 
 
 def _create_configuration_for_benchmark_llama(
@@ -8,6 +26,7 @@ def _create_configuration_for_benchmark_llama(
     num_hidden_layers: int = 1,
     implementation: str = "eager",
     with_mask: bool = True,
+    shape_scenario: Optional[str] = None,
 ) -> Dict[str, Union[str, int, List[Tuple[int, int]]]]:
     """
     Creates a model based on the given configuration.
@@ -18,11 +37,14 @@ def _create_configuration_for_benchmark_llama(
     :param num_hidden_layers: number of hidden layers
     :param implementation: implementation
     :param with_mask: use a mask
+    :param shape_scenario: None or empty for all shapes equal to (2, 1024),
+        'batch' for different batch sizes,
+        'length' for different length sizes
     :return: dictionary
     """
     if config == "small":
         return dict(
-            input_dims=[(2, 1024)] * (repeat + warmup),
+            input_dims=_get_input_dims(shape_scenario, warmup, repeat),
             hidden_size=16,
             num_hidden_layers=num_hidden_layers,
             vocab_size=1024,
@@ -34,7 +56,7 @@ def _create_configuration_for_benchmark_llama(
         )
     if config == "medium":
         return dict(
-            input_dims=[(2, 1024)] * (repeat + warmup),
+            input_dims=_get_input_dims(shape_scenario, warmup, repeat),
             hidden_size=1024,
             num_hidden_layers=num_hidden_layers,
             vocab_size=1024,
@@ -46,7 +68,7 @@ def _create_configuration_for_benchmark_llama(
         )
     if config in ("large", "default"):
         return dict(
-            input_dims=[(2, 1024)] * (repeat + warmup),
+            input_dims=_get_input_dims(shape_scenario, warmup, repeat),
             hidden_size=4096,
             num_hidden_layers=num_hidden_layers,
             vocab_size=32000,
@@ -66,6 +88,7 @@ def _create_configuration_for_benchmark_mistral(
     num_hidden_layers: int = 1,
     implementation: str = "eager",
     with_mask: bool = True,
+    shape_scenario: Optional[str] = None,
 ) -> Dict[str, Union[str, int, List[Tuple[int, int]]]]:
     """
     Creates a model based on the given configuration.
@@ -76,11 +99,15 @@ def _create_configuration_for_benchmark_mistral(
     :param num_hidden_layers: number of hidden layers
     :param implementation: implementation
     :param with_mask: use a mask
+    :param shape_scenario: None or empty for all shapes equal to (2, 1024),
+        'batch' for different batch sizes,
+        'length' for different length sizes
     :return: dictionary
     """
+
     if config == "small":
         return dict(
-            input_dims=[(2, 1024)] * (repeat + warmup),
+            input_dims=_get_input_dims(shape_scenario, warmup, repeat),
             hidden_size=32,
             num_hidden_layers=num_hidden_layers,
             vocab_size=99,
@@ -93,7 +120,7 @@ def _create_configuration_for_benchmark_mistral(
         )
     if config == "medium":
         return dict(
-            input_dims=[(2, 1024)] * (repeat + warmup),
+            input_dims=_get_input_dims(shape_scenario, warmup, repeat),
             hidden_size=1024,
             num_hidden_layers=num_hidden_layers,
             vocab_size=1024,
@@ -107,7 +134,7 @@ def _create_configuration_for_benchmark_mistral(
         )
     if config in ("large", "default"):
         return dict(
-            input_dims=[(2, 1024)] * (repeat + warmup),
+            input_dims=_get_input_dims(shape_scenario, warmup, repeat),
             hidden_size=4096,
             num_hidden_layers=num_hidden_layers,
             vocab_size=32000,
@@ -129,6 +156,7 @@ def _create_configuration_for_benchmark_phi(
     num_hidden_layers: int = 1,
     implementation: str = "eager",
     with_mask: bool = True,
+    shape_scenario: Optional[str] = None,
 ) -> Dict[str, Union[str, int, List[Tuple[int, int]]]]:
     """
     Creates a model based on the given configuration.
@@ -139,11 +167,14 @@ def _create_configuration_for_benchmark_phi(
     :param num_hidden_layers: number of hidden layers
     :param implementation: implementation
     :param with_mask: use a mask
+    :param shape_scenario: None or empty for all shapes equal to (2, 1024),
+        'batch' for different batch sizes,
+        'length' for different length sizes
     :return: dictionary
     """
     if config == "small":
         return dict(
-            input_dims=[(2, 1024)] * (repeat + warmup),
+            input_dims=_get_input_dims(shape_scenario, warmup, repeat),
             hidden_size=32,
             num_hidden_layers=num_hidden_layers,
             vocab_size=99,
@@ -156,7 +187,7 @@ def _create_configuration_for_benchmark_phi(
         )
     if config == "medium":
         return dict(
-            input_dims=[(2, 1024)] * (repeat + warmup),
+            input_dims=_get_input_dims(shape_scenario, warmup, repeat),
             hidden_size=1024,
             num_hidden_layers=num_hidden_layers,
             vocab_size=1024,
@@ -169,7 +200,7 @@ def _create_configuration_for_benchmark_phi(
         )
     if config in ("large", "default"):
         return dict(
-            input_dims=[(2, 1024)] * (repeat + warmup),
+            input_dims=_get_input_dims(shape_scenario, warmup, repeat),
             hidden_size=2048,
             num_hidden_layers=num_hidden_layers,
             vocab_size=51200,

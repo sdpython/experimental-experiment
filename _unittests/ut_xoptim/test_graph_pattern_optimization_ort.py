@@ -1,7 +1,14 @@
 import itertools
+import os
 import unittest
 import numpy as np
-from onnx import TensorProto, helper as oh, numpy_helper as onh
+from onnx import (
+    ModelProto,
+    TensorProto,
+    helper as oh,
+    numpy_helper as onh,
+    load as onnx_load,
+)
 from onnx.checker import check_model
 from experimental_experiment.ext_test_case import (
     ExtTestCase,
@@ -13,6 +20,7 @@ from experimental_experiment.xbuilder.graph_builder import (
     OptimizationOptions,
 )
 from experimental_experiment.xoptim import get_pattern_list
+from experimental_experiment.xoptim.patterns_ort.gather_grad import GatherGradPattern
 from experimental_experiment.xbuilder._onnx_helper import (
     choose_consistent_domain_opset,
     compatible_opsets,
@@ -57,6 +65,38 @@ class TestGraphPatternOptimizationOrt(ExtTestCase):
         self.assertFalse(compatible_opsets("", "Slice", 11, 13))
         self.assertTrue(compatible_opsets("", "Slice", 11, 12))
         self.assertFalse(compatible_opsets("", "Slice", 18, 1))
+
+    def _get_model(self, name: str) -> ModelProto:
+        p = os.path.join(os.path.dirname(__file__), "..", "ut_xbuilder", "data", name)
+        if not os.path.exists(p):
+            p = os.path.join(os.path.dirname(__file__), "data", name)
+        self.assertExists(p)
+        return onnx_load(p)
+
+    def _check_with_ort(self, proto: ModelProto):
+        from onnxruntime import InferenceSession, get_available_providers
+
+        providers = ["CPUExecutionProvider"]
+        if "CUDAExecutionProvider" in get_available_providers():
+            providers.insert(0, "CUDAExecutionProvider")
+        InferenceSession(proto.SerializeToString(), providers=providers)
+
+    @requires_onnxruntime_training()
+    def test_fused_matmul_pattern(self):
+        origin = self._get_model("bug_fused.onnx")
+        check_model(origin)
+        self._check_with_ort(origin)
+        gr = GraphBuilder(
+            origin,
+            infer_shapes=True,
+            optimization_options=OptimizationOptions(
+                patterns=["FusedMatMul"],
+                verbose=0,  # stop_after=2
+            ),
+        )
+        onx = gr.to_onnx(optimize=True)
+        self._check_with_ort(onx)
+        check_model(onx)
 
     def common_fused_matmul(self, side):
         from onnxruntime import InferenceSession
@@ -258,6 +298,73 @@ class TestGraphPatternOptimizationOrt(ExtTestCase):
                 self.assertEqual(att.i, 1)
             elif att.name == "alpha":
                 self.assertEqual(att.f, 0.5)
+
+    def test_fused_matmul_div(self):
+        from onnxruntime import InferenceSession
+
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node(
+                        "FusedMatMul",
+                        ["X", "Y"],
+                        ["zd"],
+                        domain="com.microsoft",
+                        alpha=1.3,
+                    ),
+                    oh.make_node("Div", ["zd", "deux"], ["Z"]),
+                ],
+                "dummy",
+                [
+                    oh.make_tensor_value_info("X", TFLOAT, [2, 2, 32, 128]),
+                    oh.make_tensor_value_info("Y", TFLOAT, [2, 2, 128, 64]),
+                ],
+                [oh.make_tensor_value_info("Z", TFLOAT, [2, 2, 32, 64])],
+                [onh.from_array(np.array([2], dtype=np.float32), name="deux")],
+            ),
+            opset_imports=[
+                oh.make_opsetid("", 18),
+                oh.make_opsetid("com.microsoft", 1),
+            ],
+            ir_version=9,
+        )
+        check_model(model)
+        feeds = {"X": self._range(2, 2, 32, 128), "Y": self._range(2, 2, 128, 64)}
+        assert feeds["X"][0, 0] @ feeds["Y"][0, 0] is not None
+        ref = InferenceSession(
+            model.SerializeToString(), providers=["CPUExecutionProvider"]
+        )
+        expected = ref.run(None, feeds)
+
+        gr = GraphBuilder(
+            model,
+            infer_shapes=True,
+            optimization_options=OptimizationOptions(
+                patterns=["FusedMatMulDiv"], verbose=0
+            ),
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+        self.assertEqual(
+            ["FusedMatMul"],
+            [n.op_type for n in opt_onx.graph.node],
+        )
+        self.assertEqual(0, len(opt_onx.graph.initializer))
+
+        opt_ref = InferenceSession(
+            opt_onx.SerializeToString(), providers=["CPUExecutionProvider"]
+        )
+        got = opt_ref.run(None, feeds)
+        self.assertEqualArray(expected[0], got[0])
+        node = opt_onx.graph.node[0]
+        self.assertEqual(node.op_type, "FusedMatMul")
+        self.assertEqual(node.domain, "com.microsoft")
+        for att in node.attribute:
+            if att.name == "transA":
+                self.assertEqual(att.i, 0)
+            elif att.name == "transB":
+                self.assertEqual(att.i, 0)
+            elif att.name == "alpha":
+                self.assertAlmostEqual(att.f, 1.3 / 2, atol=1e-5)
 
     def get_simplified_layer_normalization_model(self, div, dyn):
         model = oh.make_model(
@@ -488,6 +595,189 @@ class TestGraphPatternOptimizationOrt(ExtTestCase):
         for att in node.attribute:
             if att.name == "axis":
                 self.assertEqual(att.i, -1)
+
+    def test_gather_grad(self):
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node(
+                        "ConstantOfShape",
+                        ["shape"],
+                        ["cst"],
+                        value=onh.from_array(np.array([0], dtype=np.float32)),
+                    ),
+                    oh.make_node(
+                        "ScatterND",
+                        ["cst", "indices", "updates"],
+                        ["Z"],
+                        reduction="add",
+                    ),
+                ],
+                "dummy",
+                [
+                    oh.make_tensor_value_info("shape", TensorProto.INT64, [None]),
+                    oh.make_tensor_value_info(
+                        "indices", TensorProto.INT64, [None, None]
+                    ),
+                    oh.make_tensor_value_info("updates", TFLOAT, [None, None, None]),
+                ],
+                [oh.make_tensor_value_info("Z", TFLOAT, [None, None, None])],
+            ),
+            opset_imports=[
+                oh.make_opsetid("", 18),
+            ],
+            ir_version=9,
+        )
+        check_model(model)
+        gr = GraphBuilder(
+            model,
+            infer_shapes=True,
+            optimization_options=OptimizationOptions(patterns=[GatherGradPattern()]),
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+        self.assertEqual(
+            ["GatherGrad"],
+            [n.op_type for n in opt_onx.graph.node],
+        )
+
+        feeds = {
+            "shape": np.array([5, 6], dtype=np.int64),
+            # np.array([[0], [1], [0]], dtype=np.int64) does not work
+            "indices": np.array([[0], [1], [2]], dtype=np.int64),
+            "updates": np.arange(18).reshape((3, 6)).astype(np.float32),
+        }
+        ref1 = ExtendedReferenceEvaluator(model)
+        expected = ref1.run(None, feeds)
+
+        self.assertEqual(0, len(opt_onx.graph.initializer))
+        check_model(opt_onx)
+        opsets = {v.domain: v.version for v in opt_onx.opset_import}
+        self.assertIn("com.microsoft", opsets)
+        self.assertEqual(opsets["com.microsoft"], 1)
+
+        ref2 = ExtendedReferenceEvaluator(opt_onx)
+        got = ref2.run(None, feeds)
+        self.assertEqualArray(expected[0], got[0])
+
+    def test_fused_matmul_both_div_2x(self):
+        from onnxruntime import InferenceSession
+
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("Div", ["X", "deux"], ["half"]),
+                    oh.make_node(
+                        "FusedMatMul",
+                        ["half", "X"],
+                        ["x1"],
+                        transA=1,
+                        alpha=50.1,
+                        domain="com.microsoft",
+                    ),
+                    oh.make_node(
+                        "FusedMatMul",
+                        ["X", "half"],
+                        ["x2"],
+                        transA=1,
+                        alpha=0.07,
+                        domain="com.microsoft",
+                    ),
+                    oh.make_node("Add", ["x1", "x2"], ["Z"]),
+                ],
+                "dummy",
+                [
+                    oh.make_tensor_value_info("X", TFLOAT, [2, 2, 4, 4]),
+                    oh.make_tensor_value_info("Y", TFLOAT, [2, 2, 4, 4]),
+                ],
+                [oh.make_tensor_value_info("Z", TFLOAT, [2, 2, 32, 64])],
+                [onh.from_array(np.array([2], dtype=np.float32), name="deux")],
+            ),
+            opset_imports=[
+                oh.make_opsetid("", 18),
+                oh.make_opsetid("com.microsoft", 1),
+            ],
+            ir_version=9,
+        )
+        feeds = {"X": self._range(2, 2, 4, 4), "Y": self._range(2, 2, 4, 4)}
+        ref = InferenceSession(
+            model.SerializeToString(), providers=["CPUExecutionProvider"]
+        )
+        expected = ref.run(None, feeds)
+
+        gr = GraphBuilder(
+            model,
+            infer_shapes=True,
+            optimization_options=OptimizationOptions(patterns=["FusedMatMulx2"]),
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+        self.assertEqual(
+            ["FusedMatMul", "FusedMatMul", "Add"],
+            [n.op_type for n in opt_onx.graph.node],
+        )
+        self.assertEqual(0, len(opt_onx.graph.initializer))
+
+        opt_ref = InferenceSession(
+            opt_onx.SerializeToString(), providers=["CPUExecutionProvider"]
+        )
+        got = opt_ref.run(None, feeds)
+        self.assertEqualArray(expected[0], got[0])
+
+    def test_fused_matmul_transpose(self):
+        from onnxruntime import InferenceSession
+
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node(
+                        "FusedMatMul",
+                        ["X", "Y"],
+                        ["xy"],
+                        transA=1,
+                        transB=1,
+                        alpha=50.1,
+                        domain="com.microsoft",
+                    ),
+                    oh.make_node("Transpose", ["xy"], ["Z"], perm=[0, 1, 3, 2]),
+                ],
+                "dummy",
+                [
+                    oh.make_tensor_value_info("X", TFLOAT, [2, 2, 6, 3]),
+                    oh.make_tensor_value_info("Y", TFLOAT, [2, 2, 5, 6]),
+                ],
+                [oh.make_tensor_value_info("Z", TFLOAT, [2, 2, None, None])],
+                [onh.from_array(np.array([2], dtype=np.float32), name="deux")],
+            ),
+            opset_imports=[
+                oh.make_opsetid("", 18),
+                oh.make_opsetid("com.microsoft", 1),
+            ],
+            ir_version=9,
+        )
+        feeds = {"X": self._range(2, 2, 6, 3), "Y": self._range(2, 2, 5, 6)}
+        ref = InferenceSession(
+            model.SerializeToString(), providers=["CPUExecutionProvider"]
+        )
+        expected = ref.run(None, feeds)
+
+        gr = GraphBuilder(
+            model,
+            infer_shapes=True,
+            optimization_options=OptimizationOptions(
+                patterns=["FusedMatMulTranspose"], verbose=10
+            ),
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+        self.assertEqual(
+            ["FusedMatMul"],
+            [n.op_type for n in opt_onx.graph.node],
+        )
+        self.assertEqual(0, len(opt_onx.graph.initializer))
+
+        opt_ref = InferenceSession(
+            opt_onx.SerializeToString(), providers=["CPUExecutionProvider"]
+        )
+        got = opt_ref.run(None, feeds)
+        self.assertEqualArray(expected[0], got[0])
 
 
 if __name__ == "__main__":

@@ -91,7 +91,9 @@ def run_benchmark(
         else:
             os.environ["ONNXRT_DUMP_PATH"] = ""
         if verbose > 3:
-            print(f"[run_benchmark] cmd={cmd}")
+            print(
+                f"[run_benchmark] cmd={cmd if isinstance(cmd, str) else ' '.join(cmd)}"
+            )
         p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         res = p.communicate()
         out, err = res
@@ -120,4 +122,11 @@ def run_benchmark(
         metrics["OUTPUT"] = sout
         metrics["CMD"] = f"[{' '.join(cmd)}]"
         data.append(metrics)
+        if verbose > 5:
+            print("--------------- ERROR")
+            print(serr)
+        if verbose >= 10:
+            print("--------------- OUTPUT")
+            print(sout)
+
     return data
