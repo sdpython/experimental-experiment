@@ -58,5 +58,9 @@ class AveragePoolGrad(OpRun):
                             grad[batch, channel, t:b, le:ri] += (
                                 out[batch, channel, i, j] * scale
                             )
+        else:
+            raise NotImplementedError(
+                f"AveragePoolGrad is not implemented for shape={out.shape}."
+            )
 
         return (grad.astype(out.dtype),)
