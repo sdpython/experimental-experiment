@@ -51,6 +51,24 @@ class FuncModule(Module):
         return res
 
 
+class FuncModuleSimple(Module):
+    def __init__(self, f, params=None, dtype=torch.float32):
+        if params is None:
+            params = ()
+        super().__init__()
+        self.f = f
+        rg = dtype == torch.float32
+        val = torch.ones((1,), requires_grad=rg, dtype=dtype)
+        self.ppp = Parameter(val, requires_grad=rg)
+        self.params = nn.ParameterList(list(params))
+
+    def forward(self, *args):
+        f_args = list(itertools.chain(args, self.params))
+        f_args[0] = f_args[0] * self.ppp
+        res = self.f(*f_args)
+        return res
+
+
 class FuncModuleModule(Module):
     def __init__(self, f):
         super().__init__()
@@ -87,6 +105,7 @@ class TestOperatorsOnnxrt(ExtTestCase):
         dynamic_axes=None,
         keep_initializers_as_inputs=None,
         training=None,
+        input_index=None,
     ):
         if sys.platform == "win32":
             raise unittest.SkipTest("Windows not supported yet.")
@@ -97,6 +116,8 @@ class TestOperatorsOnnxrt(ExtTestCase):
             params = ()
         if isinstance(f, nn.Module):
             model = FuncModuleModule(f)
+        elif input_index == "simple":
+            model = FuncModuleSimple(f, params)
         else:
             model = FuncModule(f, params)
         model.eval()
@@ -451,6 +472,7 @@ class TestOperatorsOnnxrt(ExtTestCase):
             x,
             onnx_export=inspect.currentframe().f_code.co_name,
             test_backward=False,
+            input_index="simple",
         )
 
     @hide_stdout()
@@ -463,6 +485,7 @@ class TestOperatorsOnnxrt(ExtTestCase):
             x,
             onnx_export=inspect.currentframe().f_code.co_name,
             test_backward=False,
+            input_index="simple",
         )
 
     @hide_stdout()
@@ -475,6 +498,7 @@ class TestOperatorsOnnxrt(ExtTestCase):
             x,
             onnx_export=inspect.currentframe().f_code.co_name,
             test_backward=False,
+            input_index="simple",
         )
 
     @hide_stdout()

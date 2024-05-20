@@ -585,7 +585,10 @@ class TestOperatorsCort(ExtTestCase):
     def test_chunk(self):
         x = torch.tensor([0.0, 1.0, 2.0], requires_grad=True)
         self.assertONNX(
-            lambda x: x.chunk(2), x, onnx_export=inspect.currentframe().f_code.co_name
+            lambda x: x.chunk(2),
+            x,
+            onnx_export=inspect.currentframe().f_code.co_name,
+            input_index="simple",
         )
 
     def test_split(self):
@@ -596,6 +599,7 @@ class TestOperatorsCort(ExtTestCase):
             lambda x: torch.split(x, 2, 1),
             x,
             onnx_export=inspect.currentframe().f_code.co_name,
+            input_index="simple",
         )
 
     def test_split_with_sizes(self):
@@ -606,6 +610,7 @@ class TestOperatorsCort(ExtTestCase):
             lambda x: torch.split(x, [2, 1, 3], 1),
             x,
             onnx_export=inspect.currentframe().f_code.co_name,
+            input_index="simple",
         )
 
     def test_concat2(self):
@@ -1063,6 +1068,7 @@ class TestOperatorsCort(ExtTestCase):
             onnx_export=inspect.currentframe().f_code.co_name,
             impl="ref",
             test_backward=False,
+            input_index="simple",
         )
 
     def test_lt(self):
@@ -1074,6 +1080,7 @@ class TestOperatorsCort(ExtTestCase):
             onnx_export=inspect.currentframe().f_code.co_name,
             impl="ref",
             test_backward=False,
+            input_index="simple",
         )
 
     def test_gt(self):
@@ -1084,6 +1091,7 @@ class TestOperatorsCort(ExtTestCase):
             (x, y),
             onnx_export=inspect.currentframe().f_code.co_name,
             test_backward=False,
+            input_index="simple",
         )
 
     def test_le(self):
@@ -1101,6 +1109,7 @@ class TestOperatorsCort(ExtTestCase):
             (x, y),
             onnx_export=inspect.currentframe().f_code.co_name,
             test_backward=False,
+            input_index="simple",
         )
 
     def test_op_gef(self):
@@ -1111,6 +1120,7 @@ class TestOperatorsCort(ExtTestCase):
             (x, y),
             onnx_export=inspect.currentframe().f_code.co_name,
             test_backward=False,
+            input_index="simple",
         )
 
     def test_exp(self):
@@ -1532,6 +1542,7 @@ class TestOperatorsCort(ExtTestCase):
                 x,
                 onnx_export=inspect.currentframe().f_code.co_name,
                 square_loss=True,
+                atol=1e-4,
             )
 
         with self.subTest(dim=4):
@@ -1596,6 +1607,7 @@ class TestOperatorsCort(ExtTestCase):
             (x, y),
             onnx_export=inspect.currentframe().f_code.co_name,
             test_backward=False,
+            input_index="simple",
         )
 
     def test_reducemax(self):
