@@ -356,7 +356,7 @@ def prepare_inputs_homogeneous_operator(
         else:
             assert len(set(dtypes_list_not_none)) == 1, (
                 f"Too many choices for the output type, sts={sts} "
-                f"dtypes_list={dtypes_list}, "
+                f"dtypes_list={dtypes_list}, name={name!r}, "
                 f"dtypes_list_not_none={dtypes_list_not_none}{g.get_debug_msg()}"
             )
             itype = dtypes_list_not_none[0]

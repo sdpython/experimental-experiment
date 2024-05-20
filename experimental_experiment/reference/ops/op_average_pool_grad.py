@@ -1,6 +1,4 @@
 import numpy as np
-from onnx import TensorProto
-import onnx.helper as oh
 from onnx.reference.op_run import OpRun
 
 
@@ -8,7 +6,7 @@ class AveragePoolGrad(OpRun):
 
     def _run(
         self,
-        X,
+        out,
         auto_pad=None,
         ceil_mode=None,
         count_include_pad=None,
@@ -23,57 +21,42 @@ class AveragePoolGrad(OpRun):
         assert pads is not None, "pads is None"
         assert strides is not None, "strides is None"
 
-        if not hasattr(self, "_cache"):
-            self._cache = {}
+        assert auto_pad == "NOTSET", f"Not implemented for autopad={auto_pad!r}"
+        assert ceil_mode == 0, f"Not implemented for ceil_mode={ceil_mode!r}"
+        assert (
+            count_include_pad == 1
+        ), f"Not implemented for count_include_pad={count_include_pad!r}"
 
-        key = (
-            auto_pad,
-            ceil_mode,
-            count_include_pad,
-            tuple(kernel_shape),
-            tuple(pads),
-            tuple(strides),
-            len(X.shape),
-        )
-        if key not in self._cache:
-            from onnxruntime import InferenceSession
+        grad_shape = list(out.shape[:2])
+        for i in range(len(kernel_shape)):
+            d = (
+                out.shape[i + 2] * strides[i]
+                + kernel_shape[i]
+                - 1
+                + sum(pads[i * 2 : i * 2 + 2])
+            )
+            grad_shape.append(d)
 
-            TFLOAT = TensorProto.FLOAT
-
-            model = oh.make_model(
-                oh.make_graph(
-                    [
-                        oh.make_node(
-                            "AveragePoolGrad",
-                            ["X"],
-                            ["Y"],
-                            auto_pad=auto_pad,
-                            ceil_mode=ceil_mode,
-                            count_include_pad=count_include_pad,
-                            kernel_shape=kernel_shape,
-                            pads=pads,
-                            strides=strides,
+        grad = np.zeros(tuple(grad_shape), dtype=out.dtype)
+        scale = (1.0 / np.prod(kernel_shape)).astype(out.dtype)
+        if len(grad_shape) == 4:
+            # 2D
+            for batch in range(grad.shape[0]):
+                for channel in range(grad.shape[1]):
+                    for i in range(out.shape[2]):
+                        t = max(i * strides[0] - pads[0], 0)
+                        b = min(
+                            i * strides[0] - pads[0] + kernel_shape[0], grad.shape[2]
                         )
-                    ],
-                    "single",
-                    [oh.make_tensor_value_info("X", TFLOAT, [None] * len(X.shape))],
-                    [oh.make_tensor_value_info("Y", TFLOAT, [None] * len(X.shape))],
-                ),
-                opset_imports=[oh.make_opsetid("", 18)],
-                ir_version=9,
-            )
+                        for j in range(out.shape[3]):
+                            le = max(j * strides[1] - pads[2], 0)
+                            ri = min(
+                                j * strides[1] - pads[2] + kernel_shape[1],
+                                grad.shape[3],
+                            )
 
-            sess = InferenceSession(
-                model.SerializeToString(), providers=["CPUExecutionProvider"]
-            )
-            self._cache[key] = lambda x, _sess=sess: _sess.run(
-                None, {"X": x.astype(np.float32)}
-            )[0]
+                            grad[batch, channel, t:b, le:ri] += (
+                                out[batch, channel, i, j] * scale
+                            )
 
-        fct = self._cache[key]
-        y = fct(X)
-        assert set(y.shape) != {0}, (
-            f"Issue with X={X.dtype}|{X.shape}, and key={key}",
-            f"output is y={y.dtype}|{y.shape}",
-        )
-        return (y.astype(X.dtype),)
+        return (grad.astype(out.dtype),)

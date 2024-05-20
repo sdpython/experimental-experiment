@@ -61,7 +61,7 @@ class FuncModule(Module):
         rg = dtype == torch.float32
         val = torch.ones((1,), requires_grad=rg, dtype=dtype)
         self.ppp = Parameter(val, requires_grad=rg)
-        val2 = torch.ones((2,), requires_grad=rg, dtype=dtype)
+        val2 = torch.ones((1,), requires_grad=rg, dtype=dtype)
         self.ppp2 = Parameter(val2, requires_grad=rg)
         self.params = nn.ParameterList(list(params))
 
@@ -69,6 +69,24 @@ class FuncModule(Module):
         f_args = list(itertools.chain(args, self.params))
         f_args[0] = f_args[0] * self.ppp
         res = self.f(*f_args) * self.ppp2
+        return res
+
+
+class FuncModuleSimple(Module):
+    def __init__(self, f, params=None, dtype=torch.float32):
+        if params is None:
+            params = ()
+        super().__init__()
+        self.f = f
+        rg = dtype == torch.float32
+        val = torch.ones((1,), requires_grad=rg, dtype=dtype)
+        self.ppp = Parameter(val, requires_grad=rg)
+        self.params = nn.ParameterList(list(params))
+
+    def forward(self, *args):
+        f_args = list(itertools.chain(args, self.params))
+        f_args[0] = f_args[0] * self.ppp
+        res = self.f(*f_args)
         return res
 
 
@@ -97,7 +115,7 @@ class FuncModule1(Module):
         self.ppp = Parameter(torch.Tensor([1]).to(torch.float32))
 
     def forward(self, *args):
-        args = tuple([args[0], args[1] + self.ppp, *args[2:]])
+        args = tuple([args[0], args[1] * self.ppp, *args[2:]])
         res = self.f(*args)
         return res
 
@@ -110,7 +128,7 @@ class FuncModuleModule(Module):
         self.ppp = Parameter(torch.Tensor([1]))
 
     def forward(self, *args):
-        x = args[0] + self.ppp
+        x = args[0] * self.ppp
         res = self.mod(x, *args[1:])
         return res
 
@@ -157,6 +175,12 @@ class TestOperatorsCort(ExtTestCase):
                 if verbose:
                     print("[assertONNX] +FuncModuleModule")
                 model = FuncModuleModule(f)
+            elif input_index == "simple":
+                if params is None:
+                    params = ()
+                if verbose:
+                    print("[assertONNX] +FuncModuleSimple")
+                model = FuncModuleSimple(f, params, dtype=args[0].dtype)
             elif input_index is None:
                 if params is None:
                     params = ()
@@ -294,6 +318,12 @@ class TestOperatorsCort(ExtTestCase):
                                 f.write(grad.SerializeToString())
                             raise
 
+                    if save_onnx:
+                        assert storage["instance"]
+                        for i, inst in enumerate(storage["instance"]):
+                            with open(f"{onnx_export}_{i}.onnx", "wb") as f:
+                                f.write(inst["onnx"].SerializeToString())
+
                     base_grads = tuple(_.grad for _ in model.parameters())
                     grads = tuple(_.grad for _ in compiled_model.parameters())
                     self.assertEqual(len(base_grads), len(grads))
@@ -302,6 +332,12 @@ class TestOperatorsCort(ExtTestCase):
                     )
                     assert len(grads) > 0, "No gradient was checked"
                 else:
+                    if save_onnx:
+                        assert storage["instance"]
+                        for i, inst in enumerate(storage["instance"]):
+                            with open(f"{onnx_export}_{i}.onnx", "wb") as f:
+                                f.write(inst["onnx"].SerializeToString())
+
                     # tuple
                     assert_all_close(
                         baseline_result,
@@ -349,14 +385,14 @@ class TestOperatorsCort(ExtTestCase):
                 )
                 baseline_result = model(*args)
                 result = compiled_model(*args)
+                if save_onnx:
+                    assert storage["instance"]
+                    for i, inst in enumerate(storage["instance"]):
+                        with open(f"{onnx_export}_{i}.onnx", "wb") as f:
+                            f.write(inst["onnx"].SerializeToString())
                 assert_all_close(
                     baseline_result, result, atol=atol, rtol=rtol, msg="FORWARD"
                 )
-
-            if save_onnx:
-                for i, inst in enumerate(storage["instance"]):
-                    with open(f"{onnx_export}_{i}.onnx", "wb") as f:
-                        f.write(inst["onnx"].SerializeToString())
 
     @ignore_warnings(UserWarning)
     def test_aaa(self):
@@ -754,11 +790,12 @@ class TestOperatorsCort(ExtTestCase):
     def test_avg_pool2d(self):
         x = torch.randn(20, 16, 50, 32)
         self.assertONNX(
-            nn.AvgPool2d(3, stride=2),
+            nn.AvgPool2d(5, stride=2),
             x,
             impl="ref",
             onnx_export=inspect.currentframe().f_code.co_name,
-            # verbose=10,
+            verbose=0,
+            save_onnx=True,
         )
 
     def test_maxpool_indices(self):
@@ -1284,6 +1321,7 @@ class TestOperatorsCort(ExtTestCase):
             x,
             onnx_export=inspect.currentframe().f_code.co_name,
             test_backward=False,
+            input_index="simple",
         )
 
     def test_logsoftmax(self):
