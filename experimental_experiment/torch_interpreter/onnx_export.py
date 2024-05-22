@@ -13,6 +13,7 @@ def _retrieve(
     value: Any,
     weights: Dict[str, "torch.Tensor"],  # noqa: F821
     buffers: Dict[str, "torch.Tensor"],  # noqa: F821
+    constants: Dict[str, "torch.Tensor"],  # noqa: F821
     mapping: Dict[str, Tuple[str, bool]],
     graph_builder: "GraphBuilder",  # noqa: F821
 ) -> "torch.Tensor":  # noqa: F821
@@ -27,13 +28,14 @@ def _retrieve(
         # This is not a weight but a constant.
         if isinstance(value, torch.Tensor) and "FakeTensor" not in str(type(value)):
             return value
-        if len(weights) == 0 and len(buffers) == 0:
+        if len(weights) == 0 and len(buffers) == 0 and len(constants) == 0:
             # It has to be an input.
             return None
         raise RuntimeError(
             f"Unable to find {name!r}."
             f"\nAvailable weights: {list(sorted(weights))}. "
             f"\nAvailable buffers: {list(sorted(buffers))}. "
+            f"\nAvailable constants: {list(sorted(constants))}. "
             f"\nmapping={mapping}"
             f"{graph_builder.get_debug_msg() if graph_builder else ''}"
             f"\nvalue={value.dtype}:{value.shape}\n{value}"
@@ -42,49 +44,75 @@ def _retrieve(
     new_name, is_weight = mapping[name]
 
     if is_weight:
+        # weights
         if new_name not in weights:
             if (
                 new_name.startswith("L__self___")
                 and new_name[len("L__self___") :] in weights
             ):
                 new_name = new_name[len("L__self___") :]
-        if new_name not in weights:
-            raise ValueError(
-                f"Unexpected name {name!r} for input "
-                f"{name!r} mapped to weight {new_name!r}, "
-                f"cannot be found in {', '.join(sorted(weights))}."
-            )
+        assert new_name in weights, (
+            f"Unexpected name {name!r} for input "
+            f"{name!r} mapped to weight {new_name!r}, "
+            f"cannot be found in {', '.join(sorted(weights))}."
+        )
         import torch
 
         value = weights[new_name]
-        if not isinstance(value, torch.Tensor):
-            raise ValueError(
-                f"Unexpected type {type(value)} for input "
-                f"{name!r} mapped to weight {new_name!r}."
-            )
+        assert isinstance(value, torch.Tensor), (
+            f"Unexpected type {type(value)} for input "
+            f"{name!r} mapped to weight {new_name!r}."
+        )
         return value
-    else:
-        if new_name not in buffers:
-            if (
-                new_name.startswith("L__self___")
-                and new_name[len("L__self___") :] in buffers
-            ):
-                new_name = new_name[len("L__self___") :]
-        if new_name not in buffers:
-            raise ValueError(
-                f"Unexpected name {name!r} for input "
-                f"{name!r} mapped to buffer {new_name!r}, "
-                f"cannot be found in {', '.join(sorted(buffers))}."
-            )
+
+    # buffers and constants or lieft tensors
+    if new_name in buffers:
+        value = buffers[new_name]
         import torch
 
-        value = buffers[new_name]
-        if not isinstance(value, torch.Tensor):
-            raise ValueError(
-                f"Unexpected type {type(value)} for constant "
-                f"{name!r} mapped to buffer {new_name!r}."
-            )
+        assert isinstance(value, torch.Tensor), (
+            f"Unexpected type {type(value)} for buffer "
+            f"{name!r} mapped to buffer {new_name!r}."
+        )
         return value
+    if new_name in constants:
+        value = constants[new_name]
+        import torch
+
+        assert isinstance(value, torch.Tensor), (
+            f"Unexpected type {type(value)} for constant "
+            f"{name!r} mapped to constant {new_name!r}."
+        )
+        return value
+
+    if new_name.startswith("L__self___") and new_name[len("L__self___") :] in buffers:
+        new_name = new_name[len("L__self___") :]
+        value = buffers[new_name]
+        import torch
+
+        assert isinstance(value, torch.Tensor), (
+            f"Unexpected type {type(value)} for buffer "
+            f"{name!r} mapped to buffer {new_name!r}."
+        )
+        return value
+
+    if new_name.startswith("c_") and new_name[len("c_") :] in constants:
+        new_name = new_name[len("c_") :]
+        value = constants[new_name]
+        import torch
+
+        assert isinstance(value, torch.Tensor), (
+            f"Unexpected type {type(value)} for constant "
+            f"{name!r} mapped to constant {new_name!r}."
+        )
+        return value
+
+    raise ValueError(
+        f"Unexpected name {name!r} for input "
+        f"{name!r} mapped to buffer or constant {new_name!r}, "
+        f"cannot be found in {', '.join(sorted(buffers))} or "
+        f"{', '.join(sorted(constants))}"
+    )
 
 
 def _export(
@@ -170,6 +198,7 @@ def _make_builder_interpreter(
         graph_module = mod
         weights = dict(graph_module.named_parameters())
         buffers = dict(graph_module.named_buffers())
+        constants = mod._constants
         mapping = {}
     else:
         exported_mod = _export(
@@ -197,6 +226,7 @@ def _make_builder_interpreter(
             buffers = dict(exported_mod.named_buffers())
         except AttributeError:
             buffers = dict(mod.named_buffers())
+        constants = exported_mod._constants or {}
         if hasattr(exported_mod, "graph_signature"):
             signature = exported_mod.graph_signature
             mapping = {}
@@ -204,11 +234,15 @@ def _make_builder_interpreter(
                 mapping[k] = v, True
             for k, v in signature.inputs_to_buffers.items():
                 mapping[k] = v, False
+            for k, v in signature.inputs_to_lifted_tensor_constants.items():
+                mapping[k] = v, False
         else:
             mapping = {}
             for k in weights:
                 mapping[k] = k, True
             for k in buffers:
+                mapping[k] = k, False
+            for k in constants:
                 mapping[k] = k, False
 
     builder = GraphBuilder(
@@ -223,9 +257,15 @@ def _make_builder_interpreter(
     )
 
     def retrieve(
-        name, value, weights=weights, buffers=buffers, mapping=mapping, builder=builder
+        name,
+        value,
+        weights=weights,
+        buffers=buffers,
+        mapping=mapping,
+        constants=constants,
+        builder=builder,
     ):
-        return _retrieve(name, value, weights, buffers, mapping, builder)
+        return _retrieve(name, value, weights, buffers, constants, mapping, builder)
 
     from .interpreter import DynamoInterpreter
 

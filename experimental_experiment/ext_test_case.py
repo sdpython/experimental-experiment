@@ -1,4 +1,5 @@
 import glob
+import logging
 import os
 import re
 import sys
@@ -275,6 +276,12 @@ def measure_time(
 
 class ExtTestCase(unittest.TestCase):
     _warns: List[Tuple[str, int, Warning]] = []
+
+    @classmethod
+    def setUpClass(cls):
+        logger = logging.getLogger("onnxscript.optimizer.constant_folding")
+        logger.setLevel(logging.ERROR)
+        unittest.TestCase.setUpClass()
 
     def print_model(self, model: "ModelProto"):  # noqa: F821
         from onnx_array_api.plotting.text_plot import onnx_simple_text_plot
