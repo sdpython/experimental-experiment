@@ -2,12 +2,14 @@ import unittest
 from experimental_experiment.ext_test_case import (
     ExtTestCase,
     ignore_warnings,
+    requires_onnxscript,
 )
 
 
 class TestIssuePytorch_126856(ExtTestCase):
 
     @ignore_warnings((DeprecationWarning, UserWarning))
+    @requires_onnxscript("0.2")
     def test_export_dynamo(self):
         import torch
         import onnxruntime as rt
