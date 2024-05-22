@@ -179,7 +179,7 @@ def make_config(
     return cf
 
 
-if parsed_args.check not in (1, "1"):
+if parsed_args.check not in (1, "1") and not unit_test_going():
     verbose = parsed_args.verbose
     configs = []
     for (

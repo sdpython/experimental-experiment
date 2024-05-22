@@ -799,8 +799,9 @@ class TestOperatorsCort(ExtTestCase):
             x,
             impl="ref",
             onnx_export=inspect.currentframe().f_code.co_name,
-            verbose=0,
+            verbose=10,
             save_onnx=True,
+            optimize=False,
         )
 
     def test_maxpool_indices(self):
