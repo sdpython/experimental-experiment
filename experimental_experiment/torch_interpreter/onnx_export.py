@@ -198,7 +198,7 @@ def _make_builder_interpreter(
         graph_module = mod
         weights = dict(graph_module.named_parameters())
         buffers = dict(graph_module.named_buffers())
-        constants = mod._constants
+        constants = mod.state_dict()
         mapping = {}
     else:
         exported_mod = _export(
