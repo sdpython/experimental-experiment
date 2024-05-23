@@ -1341,8 +1341,20 @@ def aten_index_put(
     assert g.has_shape(x), f"Missing shape for {x!r}{g.get_debug_msg()}"
 
     index = indices[0]  # tensor
+    index_dtype = g.get_type(index)
+    if index_dtype == TensorProto.BOOL:
+        assert not accumulate, (
+            f"accumulate is True but it does not make sense in that case"
+            f"{g.get_debug_msg()}"
+        )
+        res = g.op.Where(index, values, x, outputs=outputs)
+        if sts:
+            g.set_type(res, g.get_type(x))
+            g.set_shape(res, g.get_shape(x))
+        return res
+
     new_index = g.op.UnsqueezeAnyOpset(index, np.array([-1], dtype=np.int64), name=name)
-    g.set_type(new_index, g.get_type(index))
+    g.set_type(new_index, index_dtype)
     if g.has_shape(index):
         g.set_shape(new_index, g.get_shape(index) + (1,))
     else:
@@ -1497,6 +1509,13 @@ def aten_leaky_relu_backward(
     if not sts:
         set_type_shape_unary_op(g, res, x)
     return res
+
+
+def aten_lift_fresh_copy(
+    g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T
+) -> T:
+    "identity"
+    return g.op.Identity(x, outputs=outputs, name="lift_fresh_copy")
 
 
 def aten_linear(
@@ -2115,7 +2134,11 @@ def aten_ones(
         dtype = TensorProto.FLOAT
     res = g.op.ConstantOfShape(
         isize,
-        value=from_array(np.array([1], dtype=tensor_dtype_to_np_dtype(dtype))),
+        value=from_array(
+            np.array(
+                [1], dtype=tensor_dtype_to_np_dtype(torch_dtype_to_onnx_dtype(dtype))
+            )
+        ),
         outputs=outputs,
         name=name,
     )

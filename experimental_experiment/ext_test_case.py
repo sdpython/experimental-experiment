@@ -1,4 +1,5 @@
 import glob
+import logging
 import os
 import re
 import sys
@@ -276,6 +277,12 @@ def measure_time(
 class ExtTestCase(unittest.TestCase):
     _warns: List[Tuple[str, int, Warning]] = []
 
+    @classmethod
+    def setUpClass(cls):
+        logger = logging.getLogger("onnxscript.optimizer.constant_folding")
+        logger.setLevel(logging.ERROR)
+        unittest.TestCase.setUpClass()
+
     def print_model(self, model: "ModelProto"):  # noqa: F821
         from onnx_array_api.plotting.text_plot import onnx_simple_text_plot
 
@@ -502,6 +509,16 @@ def requires_zoo(msg: str = "") -> Callable:
 
     if not var:
         msg = f"ZOO not set up or != 1. {msg}"
+        return unittest.skip(msg)
+    return lambda x: x
+
+
+def requires_sklearn(version: str, msg: str = "") -> Callable:
+    import packaging.version as pv
+    import sklearn
+
+    if pv.Version(".".join(sklearn.__version__.split(".")[:2])) < pv.Version(version):
+        msg = f"torch version {sklearn.__version__} < {version}: {msg}"
         return unittest.skip(msg)
     return lambda x: x
 
