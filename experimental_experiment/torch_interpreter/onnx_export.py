@@ -226,7 +226,11 @@ def _make_builder_interpreter(
             buffers = dict(exported_mod.named_buffers())
         except AttributeError:
             buffers = dict(mod.named_buffers())
-        constants = exported_mod._constants or {}
+        if hasattr(exported_mod, "tensor_constants"):
+            constants = exported_mod.tensor_constants or {}
+        else:
+            # A bug may appear later.
+            constants = {}
         if hasattr(exported_mod, "graph_signature"):
             signature = exported_mod.graph_signature
             mapping = {}
@@ -236,6 +240,15 @@ def _make_builder_interpreter(
                 mapping[k] = v, False
             for k, v in signature.inputs_to_lifted_tensor_constants.items():
                 mapping[k] = v, False
+                assert k in constants or k[2:] in constants, (
+                    f"A constant {k!r}, v={v!r} was detected "
+                    f"in the signature was not retrieved from the model. "
+                    f"\nlist(constants)={list(sorted(constants))}"
+                    f"\nexported_mod.tensor_constants={getattr(exported_mod, 'tensor_constants', '?')}"
+                    f"\nexported_mod._constants={getattr(exported_mod, '_constants', '?')}"
+                    f"\ndir(export_mod)={dir(exported_mod)}"
+                    f"\ndir(mod)={dir(mod)}"
+                )
         else:
             mapping = {}
             for k in weights:

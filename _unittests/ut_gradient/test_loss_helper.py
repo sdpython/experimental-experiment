@@ -90,7 +90,9 @@ class TestOrtTraining(ExtTestCase):
         oinf = ReferenceEvaluator(onx_loss)
         output = oinf.run(None, {"X": X, "label": y.reshape((-1, 1))})
         loss = output[0]
-        skl_loss = log_loss(y, X[:, 1], eps=1e-6)
+        eps = 1e-6
+        xp = numpy.maximum(eps, numpy.minimum(1 - eps, X[:, 1]))
+        skl_loss = log_loss(y, xp)
         self.assertLess(numpy.abs(skl_loss - loss[0, 0]), 1e-5)
 
     @requires_onnxruntime_training()
@@ -121,7 +123,9 @@ class TestOrtTraining(ExtTestCase):
         oinf = ReferenceEvaluator(onx_loss)
         output = oinf.run(None, {"X": X_test, "label": y_test.reshape((-1, 1))})
         loss = output[0]
-        skl_loss = log_loss(y_test, reg.predict_proba(X_test), eps=1e-6)
+        eps = 1e-6
+        xp = numpy.maximum(eps, numpy.minimum(1 - eps, reg.predict_proba(X_test)))
+        skl_loss = log_loss(y_test, xp)
         self.assertLess(numpy.abs(skl_loss - loss[0, 0]), 1e-5)
 
 
