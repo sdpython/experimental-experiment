@@ -513,6 +513,16 @@ def requires_zoo(msg: str = "") -> Callable:
     return lambda x: x
 
 
+def requires_sklearn(version: str, msg: str = "") -> Callable:
+    import packaging.version as pv
+    import sklearn
+
+    if pv.Version(".".join(sklearn.__version__.split(".")[:2])) < pv.Version(version):
+        msg = f"torch version {sklearn.__version__} < {version}: {msg}"
+        return unittest.skip(msg)
+    return lambda x: x
+
+
 def requires_torch(version: str, msg: str = "") -> Callable:
     """
     Skips a unit test if :epkg:`pytorch` is not recent enough.

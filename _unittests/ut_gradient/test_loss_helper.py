@@ -3,6 +3,7 @@ from experimental_experiment.ext_test_case import (
     ExtTestCase,
     ignore_warnings,
     requires_onnxruntime_training,
+    requires_sklearn,
 )
 import numpy
 import onnx.defs
@@ -97,6 +98,7 @@ class TestOrtTraining(ExtTestCase):
 
     @requires_onnxruntime_training()
     @ignore_warnings((DeprecationWarning, FutureWarning))
+    @requires_sklearn("1.5.0")
     def test_add_loss_output_cls(self):
         X, y = make_classification(100, n_features=10)  # pylint: disable=W0632
         X = X.astype(numpy.float32)
@@ -112,7 +114,8 @@ class TestOrtTraining(ExtTestCase):
             black_op={"LinearClassifier"},
             options={"zipmap": False},
         )
-        onx_loss = add_loss_output(onx, "log", output_index="probabilities", eps=1e-6)
+        eps = 1e-6
+        onx_loss = add_loss_output(onx, "log", output_index="probabilities", eps=eps)
         try:
             text = onnx_simple_text_plot(onx_loss)
         except RuntimeError:
@@ -123,7 +126,6 @@ class TestOrtTraining(ExtTestCase):
         oinf = ReferenceEvaluator(onx_loss)
         output = oinf.run(None, {"X": X_test, "label": y_test.reshape((-1, 1))})
         loss = output[0]
-        eps = 1e-6
         xp = numpy.maximum(eps, numpy.minimum(1 - eps, reg.predict_proba(X_test)))
         skl_loss = log_loss(y_test, xp)
         self.assertLess(numpy.abs(skl_loss - loss[0, 0]), 1e-5)
