@@ -492,11 +492,9 @@ class TestGraphPatternCombination(ExtTestCase):
                 self._check_ort_cpu_or_cuda(onx)
 
     def test_study(self):
-        model = "dort-last-llama-custom__1.onnx"
+        model = "dort-model-llama-ort+_0.onnx"
         enabled = {
-            "MaskedShapeScatterNDPattern",
-            # "SubMulBroadcastPattern",
-            # "DivByMulScalarPattern",
+            "FusedMatMulPattern",
         }
         # enabled = {}
         disabled = {}
