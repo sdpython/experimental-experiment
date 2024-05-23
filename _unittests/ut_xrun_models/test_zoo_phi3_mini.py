@@ -14,7 +14,7 @@ class TestZooPhi3(ExtTestCase):
     @ignore_warnings(DeprecationWarning)
     @requires_torch("2.3")
     @requires_zoo()  # ZOO=1 python _unittests/ut_xrun_models/test_zoo_phi3_mini.py
-    def test_phi3_export(self):
+    def test_phi3_mini_export(self):
 
         import os
         import time

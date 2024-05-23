@@ -21,7 +21,7 @@ The chosen docker is the following one:
 
 .. code-block:: bash
 
-    pip install --upgrade numpy scipy jupyter matplotlib black ruff cython pybind11 flatbuffers sympy sphinx furo coloredlogs onnx cerberus pandas scikit-learn parameterized pytest isort pytest-cov openpyxl
+    pip install --upgrade numpy scipy jupyter matplotlib black ruff cython pybind11 flatbuffers sympy sphinx furo coloredlogs onnx cerberus pandas scikit-learn parameterized pytest isort pytest-cov openpyxl accelerate
     pip install --upgrade --pre torch==2.4.0.dev20240510 torchvision torchaudio --index-url https://download.pytorch.org/whl/nightly/cu124
 
     # flash attention
