@@ -441,6 +441,7 @@ class RotaryConcatPartPattern(PatternOptimization):
         if any(
             map(
                 lambda node: node is not None
+                and node.op_type not in {"Constant", "ConstantOfShape"}
                 and g.is_used_more_than_once(node.output[0]),
                 nodes2,
             )
@@ -546,6 +547,16 @@ class RotaryConcatPartPattern(PatternOptimization):
         node: NodeProto,
     ):
 
+        keep = []
+        if cst_left is not None and g.is_used_more_than_once(cst_left.output[0]):
+            keep.append(cst_left)
+        if (
+            cst_right is not None
+            and g.is_used_more_than_once(cst_right.output[0])
+            and (cst_left is None or id(cst_left) != id(cst_right))
+        ):
+            keep.append(cst_right)
+
         slice_left_def = [g.get_computed_constant(i) for i in slice_left.input[1:]]
         slice_right_def = [g.get_computed_constant(i) for i in slice_right.input[1:]]
         axis = slice_left_def[2][0]
@@ -608,4 +619,4 @@ class RotaryConcatPartPattern(PatternOptimization):
         if other_nodes:
             other_nodes = list(reversed(other_nodes))
             return other_nodes + [split, neg, concat]
-        return [split, neg, concat]
+        return keep + [split, neg, concat]

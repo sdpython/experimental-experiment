@@ -471,6 +471,7 @@ class TestGraphPatternCombination(ExtTestCase):
             "dort_forward.onnx",
             "dort_backward.onnx",
             "dort-model-llama-ort+_0.onnx",
+            "dort-model-llama-ort+_1.onnx",
         ]:
             options = OptimizationOptions(
                 patterns="default+onnxruntime",
@@ -493,9 +494,9 @@ class TestGraphPatternCombination(ExtTestCase):
                 self._check_ort_cpu_or_cuda(onx)
 
     def test_study(self):
-        model = "dort-model-llama-ort+_0.onnx"
+        model = "dort-model-llama-ort+_1.onnx"
         enabled = {
-            "SlicesSplitPattern",
+            "RotaryConcatPartPattern",
         }
         # enabled = {}
         disabled = {}
