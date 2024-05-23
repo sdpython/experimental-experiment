@@ -495,7 +495,7 @@ class TestGraphPatternCombination(ExtTestCase):
     def test_study(self):
         model = "dort-model-llama-ort+_0.onnx"
         enabled = {
-            "FusedMatMulPattern",
+            "SlicesSplitPattern",
         }
         # enabled = {}
         disabled = {}
