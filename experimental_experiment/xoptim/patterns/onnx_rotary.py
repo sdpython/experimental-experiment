@@ -403,20 +403,25 @@ class RotaryConcatPartPattern(PatternOptimization):
 
         slice_left = g.node_before(tr_update_left.input[0])
         slice_right = g.node_before(tr_update_right.input[0])
-        if slice_left.op_type not in ("Slice", "Neg") or slice_right.op_type not in (
+        if slice_left.op_type not in (
             "Slice",
             "Neg",
+            "Split",
+        ) or slice_right.op_type not in (
+            "Slice",
+            "Neg",
+            "Split",
         ):
             return self.none(node, inspect.currentframe().f_lineno)
-        if (
-            slice_left.op_type == "Neg"
-            and g.node_before(slice_left.input[0]).op_type != "Slice"
-        ):
+
+        if slice_left.op_type == "Neg" and g.node_before(
+            slice_left.input[0]
+        ).op_type not in ("Slice", "Split"):
             return self.none(node, inspect.currentframe().f_lineno)
-        if (
-            slice_right.op_type == "Neg"
-            and g.node_before(slice_right.input[0]).op_type != "Slice"
-        ):
+
+        if slice_right.op_type == "Neg" and g.node_before(
+            slice_right.input[0]
+        ).op_type not in ("Slice", "Split"):
             return self.none(node, inspect.currentframe().f_lineno)
 
         if slice_left.op_type == "Neg":
@@ -447,6 +452,12 @@ class RotaryConcatPartPattern(PatternOptimization):
             )
         ):
             return self.none(node, inspect.currentframe().f_lineno)
+
+        use_split = False
+        if slice_left.op_type == "Split" == slice_right.op_type:
+            if id(slice_left) != id(slice_right):
+                return self.none(node, inspect.currentframe().f_lineno)
+            use_split = True
 
         # Checking shapes and indices
         if not g.has_shape(scatter_left.input[0]) or not g.has_shape(
@@ -479,33 +490,44 @@ class RotaryConcatPartPattern(PatternOptimization):
             return self.none(node, inspect.currentframe().f_lineno)
 
         # Slices
-        if slice_left.input[0] != slice_right.input[0]:
-            return self.none(node, inspect.currentframe().f_lineno)
+        if not use_split:
+            if slice_left.input[0] != slice_right.input[0]:
+                return self.none(node, inspect.currentframe().f_lineno)
 
-        slice_left_def = [g.get_computed_constant(i) for i in slice_left.input[1:]]
-        slice_right_def = [g.get_computed_constant(i) for i in slice_right.input[1:]]
-        if len(slice_left_def) != 4 or len(slice_right_def) != 4:
-            return self.none(node, inspect.currentframe().f_lineno)
-        if slice_left_def[2].tolist() != slice_right_def[2].tolist():
-            return self.none(node, inspect.currentframe().f_lineno)
-        if slice_left_def[3].tolist() != [1] or slice_right_def[3].tolist() != [1]:
-            return self.none(node, inspect.currentframe().f_lineno)
-        lengths = {len(v) for v in slice_left_def} | {len(v) for v in slice_right_def}
-        if lengths != {1}:
-            # more than one axis
-            return self.none(node, inspect.currentframe().f_lineno)
+            slice_left_def = [g.get_computed_constant(i) for i in slice_left.input[1:]]
+            slice_right_def = [
+                g.get_computed_constant(i) for i in slice_right.input[1:]
+            ]
+            if len(slice_left_def) != 4 or len(slice_right_def) != 4:
+                return self.none(node, inspect.currentframe().f_lineno)
+            if slice_left_def[2].tolist() != slice_right_def[2].tolist():
+                return self.none(node, inspect.currentframe().f_lineno)
+            if slice_left_def[3].tolist() != [1] or slice_right_def[3].tolist() != [1]:
+                return self.none(node, inspect.currentframe().f_lineno)
+            lengths = {len(v) for v in slice_left_def} | {
+                len(v) for v in slice_right_def
+            }
+            if lengths != {1}:
+                # more than one axis
+                return self.none(node, inspect.currentframe().f_lineno)
+            axis = slice_left_def[2][0]
+            dim_left = slice_left_def[1][0] - slice_left_def[0][0]
+            dim_right = slice_right_def[1][0] - slice_right_def[0][0]
 
-        axis = slice_left_def[2][0]
-        dim_left = slice_left_def[1][0] - slice_left_def[0][0]
-        dim_right = slice_right_def[1][0] - slice_right_def[0][0]
+            shape_left = g.get_computed_constant(cst_left.input[0])
+            shape_right = g.get_computed_constant(cst_right.input[0])
+            cdim_left = shape_left[axis]
+            cdim_right = shape_right[axis]
 
-        shape_left = g.get_computed_constant(cst_left.input[0])
-        shape_right = g.get_computed_constant(cst_right.input[0])
-        cdim_left = shape_left[axis]
-        cdim_right = shape_right[axis]
-
-        if dim_right + dim_left != cdim_right or cdim_right != cdim_left:
-            return self.none(node, inspect.currentframe().f_lineno)
+            if dim_right + dim_left != cdim_right or cdim_right != cdim_left:
+                return self.none(node, inspect.currentframe().f_lineno)
+        else:
+            split_node = slice_left
+            if not g.is_constant(split_node.input[1]):
+                return self.none(node, inspect.currentframe().f_lineno)
+            cst = g.get_computed_constant(split_node.input[1])
+            if cst.min() != cst.max():
+                return self.none(node, inspect.currentframe().f_lineno)
 
         nodes = [
             cst_left,
@@ -557,24 +579,32 @@ class RotaryConcatPartPattern(PatternOptimization):
         ):
             keep.append(cst_right)
 
-        slice_left_def = [g.get_computed_constant(i) for i in slice_left.input[1:]]
-        slice_right_def = [g.get_computed_constant(i) for i in slice_right.input[1:]]
-        axis = slice_left_def[2][0]
-        dim_left = slice_left_def[1][0] - slice_left_def[0][0]
-        dim_right = slice_right_def[1][0] - slice_right_def[0][0]
+        if slice_left.op_type == "Split" == slice_right.op_type:
+            split = slice_left
+            axis = g.get_attribute(split, "axis").i
+        else:
+            slice_left_def = [g.get_computed_constant(i) for i in slice_left.input[1:]]
+            slice_right_def = [
+                g.get_computed_constant(i) for i in slice_right.input[1:]
+            ]
+            axis = slice_left_def[2][0]
+            dim_left = slice_left_def[1][0] - slice_left_def[0][0]
+            dim_right = slice_right_def[1][0] - slice_right_def[0][0]
 
-        splits = g.make_initializer("", np.array([dim_left, dim_right], dtype=np.int64))
+            splits = g.make_initializer(
+                "", np.array([dim_left, dim_right], dtype=np.int64)
+            )
 
-        split = g.make_node(
-            "Split",
-            [slice_left.input[0], splits],
-            [
-                g.unique_name(f"{self.__class__.__name__}--{node.output[0]}"),
-                g.unique_name(f"{self.__class__.__name__}--{node.output[0]}"),
-            ],
-            axis=int(axis),
-            name=f"{self.__class__.__name__}--{node.name}",
-        )
+            split = g.make_node(
+                "Split",
+                [slice_left.input[0], splits],
+                [
+                    g.unique_name(f"{self.__class__.__name__}--{node.output[0]}"),
+                    g.unique_name(f"{self.__class__.__name__}--{node.output[0]}"),
+                ],
+                axis=int(axis),
+                name=f"{self.__class__.__name__}--{node.name}",
+            )
 
         if neg_left is None:
             neg = g.make_node(
