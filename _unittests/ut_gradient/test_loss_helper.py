@@ -112,7 +112,7 @@ class TestOrtTraining(ExtTestCase):
             black_op={"LinearClassifier"},
             options={"zipmap": False},
         )
-        onx_loss = add_loss_output(onx, "log", output_index="probabilities", eps=1 - 6)
+        onx_loss = add_loss_output(onx, "log", output_index="probabilities", eps=1e-6)
         try:
             text = onnx_simple_text_plot(onx_loss)
         except RuntimeError:

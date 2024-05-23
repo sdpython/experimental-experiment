@@ -50,7 +50,7 @@ jobs:
       python -c "import transformers;print('transformers', transformers.__version__)"
       python -c "import onnxruntime;print('onnxruntime', onnxruntime.__version__)"
       python -c "import onnx;print('onnx', onnx.__version__)"
-      python -c "import onnx_extended;print('onnx_extended', onnx_extended.__version__)"
+      # python -c "import onnx_extended;print('onnx_extended', onnx_extended.__version__)"
       python -c "import onnxscript;print('onnxscript', getattr(onnxscript, '__version__', 'dev'))"
     displayName: 'Install check transformers version'
   - script: |

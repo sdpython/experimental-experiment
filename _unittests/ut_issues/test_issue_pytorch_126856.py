@@ -3,6 +3,7 @@ from experimental_experiment.ext_test_case import (
     ExtTestCase,
     ignore_warnings,
     requires_onnxscript,
+    requires_torch,
 )
 
 
@@ -10,6 +11,7 @@ class TestIssuePytorch_126856(ExtTestCase):
 
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_onnxscript("0.2")
+    @requires_torch("2.4")
     def test_export_dynamo(self):
         import torch
         import onnxruntime as rt
@@ -36,6 +38,7 @@ class TestIssuePytorch_126856(ExtTestCase):
         self.assertEqualArray(expected, results[0])
 
     @ignore_warnings((DeprecationWarning, UserWarning))
+    @requires_torch("2.4")
     def test_export_custom(self):
         import torch
         import onnxruntime as rt
