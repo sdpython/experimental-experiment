@@ -67,7 +67,7 @@ jobs:
       python -m pip install . -v -v -v
     displayName: 'install wheel'
   - script: |
-      UNITTEST_ONNXRT=1 python -m pytest -v _unittests --durations=10
+      UNITTEST_ONNXRT=1 python -m pytest _unittests --durations=10
     displayName: 'Runs Unit Tests'
   - task: PublishPipelineArtifact@0
     inputs:

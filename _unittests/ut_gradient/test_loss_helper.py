@@ -98,7 +98,7 @@ class TestOrtTraining(ExtTestCase):
 
     @requires_onnxruntime_training()
     @ignore_warnings((DeprecationWarning, FutureWarning))
-    @requires_sklearn("1.5.0")
+    @requires_sklearn("1.6.0")
     def test_add_loss_output_cls(self):
         X, y = make_classification(100, n_features=10)  # pylint: disable=W0632
         X = X.astype(numpy.float32)
