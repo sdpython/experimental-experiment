@@ -470,6 +470,9 @@ class TestGraphPatternCombination(ExtTestCase):
             "opt-llama-custom-backward.onnx",
             "dort_forward.onnx",
             "dort_backward.onnx",
+            "dort-model-llama-ort+_0.onnx",
+            "dort-model-llama-ort+_1.onnx",
+            "dort-model-llama-ort+_1_split.onnx",
         ]:
             options = OptimizationOptions(
                 patterns="default+onnxruntime",
@@ -492,11 +495,9 @@ class TestGraphPatternCombination(ExtTestCase):
                 self._check_ort_cpu_or_cuda(onx)
 
     def test_study(self):
-        model = "dort-last-llama-custom__1.onnx"
+        model = "dort-model-llama-ort+_1_split.onnx"
         enabled = {
-            "MaskedShapeScatterNDPattern",
-            # "SubMulBroadcastPattern",
-            # "DivByMulScalarPattern",
+            "RotaryConcatPartPattern",
         }
         # enabled = {}
         disabled = {}
@@ -505,7 +506,7 @@ class TestGraphPatternCombination(ExtTestCase):
             verbose=0,
             verifies=False,
             dump_applied_patterns="dump_applied_pattern",
-            max_iter=len(enabled) if enabled else -1,
+            max_iter=len(enabled) + 1 if enabled else -1,
             processor="CPU,CUDA",
         )
         options.patterns = [

@@ -30,8 +30,16 @@ class SlicesSplitPattern(PatternOptimization):
         if len(users) <= 1:
             return self.none(node, inspect.currentframe().f_lineno)
 
-        if any(map(lambda op: len(op.input) > 4, users)):
-            # no step
+        for user in users:
+            if len(user.input) == 4:
+                continue
+            if len(user.input) == 5:
+                if not g.is_constant_scalar(user.input[-1]):
+                    return self.none(node, inspect.currentframe().f_lineno)
+                scalar = g.get_constant_scalar(user.input[-1])
+                if scalar != 1:
+                    return self.none(node, inspect.currentframe().f_lineno)
+                continue
             return self.none(node, inspect.currentframe().f_lineno)
 
         # axis

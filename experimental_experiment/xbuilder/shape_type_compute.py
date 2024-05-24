@@ -733,11 +733,14 @@ def set_type_shape_fused_matmul(self: "GraphBuilder", node: NodeProto):  # noqa:
     if self.has_shape(x) and self.has_shape(y):
         sh1 = self.get_shape(x)
         sh2 = self.get_shape(y)
-        assert len(sh1) == len(
-            sh2
-        ), f"not implemented when shapes are {sh1} and {sh2}{self.get_debug_msg()}"
+        if len(sh1) != len(sh2):
+            if len(sh1) < len(sh2):
+                sh1 = ((1,) * (len(sh2) - len(sh1))) + sh1
+            else:
+                sh2 = ((1,) * (len(sh1) - len(sh2))) + sh2
         prefix = broadcast_shape(sh1[:-2], sh2[:-2]) if len(sh1) > 2 else tuple()
         new_shape = (sh1[-1] if transA else sh1[-2], sh2[-2] if transB else sh2[-1])
+        self.set_shape(name, prefix + new_shape)
         self.set_shape(name, prefix + new_shape)
     else:
         self.set_rank(name, max(self.get_rank(x), self.get_rank(y)))
