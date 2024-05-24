@@ -492,12 +492,18 @@ def has_cuda() -> bool:
     return torch.cuda.is_available()
 
 
-def requires_cuda(msg: str = ""):
+def requires_cuda(msg: str = "", version: str = ""):
     import torch
 
     if not torch.cuda.is_available():
         msg = msg or "only runs on CUDA but torch does not have it"
         return unittest.skip(msg)
+    if version:
+        import packaging.versions as pv
+
+        if pv.Version(torch.version.cuda) < pv.Version(version):
+            msg = msg or f"CUDA older than {version}"
+            return unittest.skip(msg)
     return lambda x: x
 
 
