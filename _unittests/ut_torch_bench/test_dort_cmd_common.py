@@ -63,7 +63,7 @@ class TestDortCmdCommond(ExtTestCase):
 
     def test_create_many_configurations(self):
         for model, impl, mask in itertools.product(
-            ["llama", "mistral", "phi"], ["eager", "sdpa"], [False, True]
+            ["llama", "mistral", "phi", "phi3"], ["eager", "sdpa"], [False, True]
         ):
             with self.subTest(model=model, impl=impl, mask=mask):
                 d = create_configuration_for_benchmark(

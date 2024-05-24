@@ -794,7 +794,10 @@ def aten_embedding(
             f"Not implemented when padding_idx={padding_idx}, or "
             f"scale_grad_by_freq={scale_grad_by_freq} or sparse={sparse} "
             f"or max_norm={max_norm} or norm_type={norm_type} "
-            f"are different from the default values."
+            f"are different from the default values, "
+            f"weight: {g.get_shape(weight) if g.has_shape(weight) else '?'}, "
+            f"indices: {g.get_shape(indices) if g.has_shape(indices) else '?'}"
+            f"{g.get_debug_msg()}"
         )
     assert g.get_type(indices) == 7, (
         f"indices be integer not {g.get_type(indices)}, "

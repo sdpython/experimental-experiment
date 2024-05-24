@@ -19,3 +19,4 @@ This projects was started with LLaMa.
     llama
     mistral
     phi
+    phi3
