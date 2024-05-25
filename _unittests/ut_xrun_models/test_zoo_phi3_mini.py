@@ -6,10 +6,12 @@ from experimental_experiment.ext_test_case import (
     requires_torch,
     requires_zoo,
 )
+from experimental_experiment.torch_models.phi3_helper import has_phi3
 
 
 class TestZooPhi3(ExtTestCase):
 
+    @unittest.skipIf(not has_phi3(), reason="transformers not recent enough")
     @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
     @ignore_warnings(DeprecationWarning)
     @requires_torch("2.3")

@@ -6,10 +6,12 @@ from experimental_experiment.ext_test_case import (
     requires_cuda,
 )
 from experimental_experiment.reference import ExtendedReferenceEvaluator
+from experimental_experiment.torch_models.phi3_helper import has_phi3
 
 
 class TestPhi3(ExtTestCase):
 
+    @unittest.skipIf(not has_phi3(), reason="transformers not recent enough")
     def test_get_phi3_model_export(self):
         import torch
         from experimental_experiment.torch_models.phi3_helper import (
@@ -29,6 +31,7 @@ class TestPhi3(ExtTestCase):
         got = ref.run(None, feeds)
         self.assertEqualArray(expected[0], got[0], atol=1e-5)
 
+    @unittest.skipIf(not has_phi3(), reason="transformers not recent enough")
     def test_get_phi3_model_mask_eager(self):
         from experimental_experiment.torch_models.phi3_helper import (
             get_phi3_model,
@@ -41,6 +44,7 @@ class TestPhi3(ExtTestCase):
         expected = model(*model_inputs[0])
         self.assertNotEmpty(expected)
 
+    @unittest.skipIf(not has_phi3(), reason="transformers not recent enough")
     def test_get_phi3_model_mask_eager_backward(self):
         from experimental_experiment.torch_models.phi3_helper import (
             get_phi3_model,
@@ -55,6 +59,7 @@ class TestPhi3(ExtTestCase):
         back = expected[0].sum().backward()
         self.assertEmpty(back)
 
+    @unittest.skipIf(not has_phi3(), reason="transformers not recent enough")
     @requires_onnxruntime_training()
     def test_get_phi3_model_mask_eager_ortmodule(self):
         from onnxruntime.training.ortmodule import ORTModule
@@ -102,6 +107,7 @@ class TestPhi3(ExtTestCase):
         back = expected[0].sum().backward()
         self.assertEmpty(back)
 
+    @unittest.skipIf(not has_phi3(), reason="transformers not recent enough")
     @requires_onnxruntime_training()
     @requires_cuda()
     def test_get_phi3_model_mask_eager_ortmodule_backward_cuda(self):
@@ -127,6 +133,7 @@ class TestPhi3(ExtTestCase):
         back = expected[0].sum().backward()
         self.assertEmpty(back)
 
+    @unittest.skipIf(not has_phi3(), reason="transformers not recent enough")
     def test_get_phi3_model_nomask_eager(self):
         from experimental_experiment.torch_models.phi3_helper import (
             get_phi3_model,

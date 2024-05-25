@@ -2,6 +2,19 @@ import random
 from typing import Any, Sequence, Tuple
 
 
+def has_phi3() -> bool:
+    """
+    Tells if package :epkg:`transformers` is recent enough.
+    """
+    try:
+        from transformers import Phi3Config
+
+        assert Phi3Config
+        return True
+    except ImportError:
+        return False
+
+
 def ids_tensor(shape, vocab_size, rng=None, name=None):
     #  Creates a random int32 tensor of the shape within the vocab size
     import torch

@@ -14,10 +14,12 @@ from experimental_experiment.torch_models.training_helper import (
     train_loop,
     train_loop_mixed_precision,
 )
+from experimental_experiment.torch_models.phi3_helper import has_phi3
 
 
 class TestEdPhi3(ExtTestCase):
 
+    @unittest.skipIf(not has_phi3(), reason="transformers not recent enough")
     @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
     @ignore_warnings(DeprecationWarning)
     @requires_torch("2.3", "AssertionError: original output #6 is None")
@@ -47,6 +49,7 @@ class TestEdPhi3(ExtTestCase):
             results = sess.run(None, feeds)
             self.assertEqualArray(expected[0].detach().numpy(), results[0], atol=1e-5)
 
+    @unittest.skipIf(not has_phi3(), reason="transformers not recent enough")
     @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.3", "AssertionError: original output #6 is None")
@@ -81,6 +84,7 @@ class TestEdPhi3(ExtTestCase):
             for i, inst in enumerate(instances):
                 self.dump_onnx(f"test_phi3_cort_static_{i}.onnx", inst["onnx"])
 
+    @unittest.skipIf(not has_phi3(), reason="transformers not recent enough")
     @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.4")
@@ -124,6 +128,7 @@ class TestEdPhi3(ExtTestCase):
             for i, inst in enumerate(instances):
                 self.dump_onnx(f"test_phi3_cort_static_mixed_{i}.onnx", inst["onnx"])
 
+    @unittest.skipIf(not has_phi3(), reason="transformers not recent enough")
     @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.3", "AssertionError: original output #6 is None")
@@ -157,6 +162,7 @@ class TestEdPhi3(ExtTestCase):
             for i, inst in enumerate(instances):
                 self.dump_onnx(f"test_phi3_cort_dynamic_{i}.onnx", inst["onnx"])
 
+    @unittest.skipIf(not has_phi3(), reason="transformers not recent enough")
     @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.3", "AssertionError: original output #6 is None")
