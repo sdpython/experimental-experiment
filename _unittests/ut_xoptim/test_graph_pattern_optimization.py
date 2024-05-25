@@ -2014,12 +2014,11 @@ class TestGraphPatternOptimization(ExtTestCase):
         gr.set_shape("transpose", (2, 2, 1024, 512))
         gr.set_shape("transpose_1", (2, 2, 1024, 512))
         onx = gr.to_onnx(optimize=True)
-        self.dump_onnx("test_slices_split_llama.onnx", onx)
+        # self.dump_onnx("test_slices_split_llama.onnx", onx)
         split = [n for n in onx.graph.node if n.op_type == "Split"]
         self.assertEqual(len(split), 2)
         self._check_with_ort(onx)
 
-    @requires_onnx("1.18")
     def test_slices_split_llama_not_onnx_node_shape_inference(self):
         origin = self._get_model("dort-split-custom__0.onnx")
         split = [n for n in origin.graph.node if n.op_type == "Split"]
@@ -2030,6 +2029,7 @@ class TestGraphPatternOptimization(ExtTestCase):
         # The inference seems to give a wrong value in that (empty)
         # which may be considered as a empty shape.
         # Then a node after this one may be wrong in case of an empty shape.
+        # The optimization may do something wrong.
         gr = GraphBuilder(
             origin,
             infer_shapes="new",
@@ -2041,7 +2041,8 @@ class TestGraphPatternOptimization(ExtTestCase):
         gr.set_shape("transpose", (2, 2, 1024, 512))
         gr.set_shape("transpose_1", (2, 2, 1024, 512))
         onx = gr.to_onnx(optimize=True)
-        self.dump_onnx("test_slices_split_llama.onnx", onx)
+        # We delete all the shape values because some of them are wrong.
+        del onx.graph.value_info[:]
         split = [n for n in onx.graph.node if n.op_type == "Split"]
         self.assertEqual(len(split), 2)
         self._check_with_ort(onx)
