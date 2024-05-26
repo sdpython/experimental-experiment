@@ -566,7 +566,11 @@ def _set_shape_type_op_any_split(self: "GraphBuilder", node: NodeProto):  # noqa
     dtype = self.get_type(node.input[0])
     for o in node.output:
         self.set_type(o, dtype)
-    if self.has_shape(node.input[0]) and self.is_constant(node.input[1]):
+    if (
+        self.has_shape(node.input[0])
+        and len(node.input) > 1
+        and self.is_constant(node.input[1])
+    ):
         splits = list(self.get_constant(node.input[1]))
         assert len(splits) == len(node.output), (
             f"Unexpected number of outputs, output={node.output} " f"splits={splits}"

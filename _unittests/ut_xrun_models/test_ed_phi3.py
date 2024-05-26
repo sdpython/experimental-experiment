@@ -145,7 +145,7 @@ class TestEdPhi3(ExtTestCase):
             verbose=0,  # (0, 10),
             return_storage=True,
             rename_inputs=False,
-            # dump_prefix="test_phi",
+            dump_prefix="test_phi3",
             optimize=True,
         )
         results = compiled_model(*input_tensors)
