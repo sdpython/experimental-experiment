@@ -34,12 +34,13 @@ Phi3
         max_position_embeddings=512,
         num_attention_heads=2,
         num_key_value_heads=2,
+        pad_token_id=1023,
     )
     config._attn_implementation = "eager"
 
     with torch.no_grad():
 
-        model = PhiModel(config)
+        model = Phi3Model(config)
 
         batch, seq, vocab_size = 2, 1024, 1024
 

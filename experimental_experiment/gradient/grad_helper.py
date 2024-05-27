@@ -104,7 +104,7 @@ def onnx_derivative(
 
     The function calls *OrtModuleGraphBuilderConfiguration*
     from :epkg:`onnxruntime-training`. This graph is meant to be used
-    with :epkg:`OrtGradientForwardBackward` and includes
+    with `OrtGradientForwardBackward` and includes
     operator `YieldOp`. That's the graph looks this way:
 
     .. gdot::
