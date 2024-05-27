@@ -501,6 +501,7 @@ class TestGraphPatternCombination(ExtTestCase):
             if model in {
                 "noopt-llama-custom__1.onnx",
                 "noopt-phi-custom__1.onnx",
+                "opt-llama-custom-backward.onnx",
             } and sys.platform in {
                 "win32",
                 "darwin",
