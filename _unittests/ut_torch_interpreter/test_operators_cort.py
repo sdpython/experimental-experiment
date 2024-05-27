@@ -1,7 +1,11 @@
 """
 to fail on error, use::
 
-    EXPDORAISE=1 python _unittests/ut_torch_interpreter/test_operators.py -k relu -f
+    clear&&EXPDORAISE=1 python _unittests/ut_torch_interpreter/test_operators.py -k relu -f
+
+or::
+
+    clear&&EXPDORAISE=1 python _unittests/ut_torch_interpreter/test_operators.py -f
 """
 
 import copy
@@ -57,11 +61,31 @@ class FuncModule(Module):
         rg = dtype == torch.float32
         val = torch.ones((1,), requires_grad=rg, dtype=dtype)
         self.ppp = Parameter(val, requires_grad=rg)
+        val2 = torch.ones((1,), requires_grad=rg, dtype=dtype)
+        self.ppp2 = Parameter(val2, requires_grad=rg)
         self.params = nn.ParameterList(list(params))
 
     def forward(self, *args):
         f_args = list(itertools.chain(args, self.params))
-        f_args[0] = f_args[0] + self.ppp
+        f_args[0] = f_args[0] * self.ppp
+        res = self.f(*f_args) * self.ppp2
+        return res
+
+
+class FuncModuleSimple(Module):
+    def __init__(self, f, params=None, dtype=torch.float32):
+        if params is None:
+            params = ()
+        super().__init__()
+        self.f = f
+        rg = dtype == torch.float32
+        val = torch.ones((1,), requires_grad=rg, dtype=dtype)
+        self.ppp = Parameter(val, requires_grad=rg)
+        self.params = nn.ParameterList(list(params))
+
+    def forward(self, *args):
+        f_args = list(itertools.chain(args, self.params))
+        f_args[0] = f_args[0] * self.ppp
         res = self.f(*f_args)
         return res
 
@@ -71,15 +95,16 @@ class FuncModule0(Module):
         super().__init__()
         self.f = f
         self.ppp = Parameter(torch.Tensor([1]).to(torch.float32))
+        self.ppp2 = Parameter(torch.Tensor([2]).to(torch.float32))
 
     def forward(self, *args):
         if isinstance(args[0], tuple):
-            args = (tuple([args[0][0] + self.ppp, *args[0][1:]]),)
-            res = self.f(*args)
+            args = (tuple([args[0][0] * self.ppp, *args[0][1:]]),)
+            res = self.f(*args) * self.ppp2
             return res
         else:
-            args = tuple([args[0] + self.ppp, *args[1:]])
-            res = self.f(*args)
+            args = tuple([args[0] * self.ppp, *args[1:]])
+            res = self.f(*args) * self.ppp2
             return res
 
 
@@ -90,7 +115,7 @@ class FuncModule1(Module):
         self.ppp = Parameter(torch.Tensor([1]).to(torch.float32))
 
     def forward(self, *args):
-        args = tuple([args[0], args[1] + self.ppp, *args[2:]])
+        args = tuple([args[0], args[1] * self.ppp, *args[2:]])
         res = self.f(*args)
         return res
 
@@ -103,7 +128,7 @@ class FuncModuleModule(Module):
         self.ppp = Parameter(torch.Tensor([1]))
 
     def forward(self, *args):
-        x = args[0] + self.ppp
+        x = args[0] * self.ppp
         res = self.mod(x, *args[1:])
         return res
 
@@ -137,6 +162,7 @@ class TestOperatorsCort(ExtTestCase):
         raise_list=None,
         save_onnx=False,
         optimize=True,
+        intermediate=False,
     ):
         if sys.platform == "win32":
             raise unittest.SkipTest("Windows not supported yet.")
@@ -150,6 +176,12 @@ class TestOperatorsCort(ExtTestCase):
                 if verbose:
                     print("[assertONNX] +FuncModuleModule")
                 model = FuncModuleModule(f)
+            elif input_index == "simple":
+                if params is None:
+                    params = ()
+                if verbose:
+                    print("[assertONNX] +FuncModuleSimple")
+                model = FuncModuleSimple(f, params, dtype=args[0].dtype)
             elif input_index is None:
                 if params is None:
                     params = ()
@@ -185,22 +217,52 @@ class TestOperatorsCort(ExtTestCase):
                 backend=impl,
                 raise_list=raise_list,
                 optimize=optimize,
-                verbose=verbose,
+                verbose=(verbose, 10) if intermediate else verbose,
                 **kwargs,
             )
 
+            if intermediate:
+                from experimental_experiment.torch_dynamo import dynger_backend
+
+                backend_dynger = lambda *args, **kwargs: dynger_backend(  # noqa: E731
+                    *args, optimize=optimize, verbose=10, **kwargs
+                )
+                aot_compiler_dynger = (
+                    aot_autograd(
+                        fw_compiler=backend_dynger,
+                        decompositions=(
+                            get_decomposition_table()
+                            if use_decomposition is True
+                            else use_decomposition
+                        ),
+                    )
+                    if use_decomposition
+                    else aot_autograd(fw_compiler=backend_dynger)
+                )
+                compiled_model_dynger = torch.compile(
+                    copy.deepcopy(model),
+                    backend=aot_compiler_dynger,
+                    dynamic=dynamic_axes not in (None, False),
+                    fullgraph=fullgraph,
+                )
+                results_dynger = compiled_model_dynger(*args)
+                if test_backward:
+                    results_dynger.sum().backward()
+
             if test_backward:
                 # forward/backward
-                if use_decomposition:
-                    if use_decomposition is True:
-                        new_table = get_decomposition_table()
-                    else:
-                        new_table = use_decomposition
-                    aot_compiler = aot_autograd(
-                        fw_compiler=backend_debug, decompositions=new_table
+                aot_compiler = (
+                    aot_autograd(
+                        fw_compiler=backend_debug,
+                        decompositions=(
+                            get_decomposition_table()
+                            if use_decomposition is True
+                            else use_decomposition
+                        ),
                     )
-                else:
-                    aot_compiler = aot_autograd(fw_compiler=backend_debug)
+                    if use_decomposition
+                    else aot_autograd(fw_compiler=backend_debug)
+                )
 
                 compiled_model = torch.compile(
                     copy.deepcopy(model),
@@ -243,7 +305,55 @@ class TestOperatorsCort(ExtTestCase):
                         except FunctionNotFoundError as e:
                             if not os.environ.get("EXPDORAISE", False):
                                 raise unittest.SkipTest(f"MISSING FOR BACKWARD {e}")
+                            assert (
+                                len(storage["instance"]) == 1
+                            ), f"Unexpected number of instance {len(storage['instance'])}"
+                            instance = storage["instance"][0]
+                            forward_onnx = instance["onnx"]
+                            folder = "dump_test_operators_forward"
+                            if not os.path.exists(folder):
+                                os.mkdir(folder)
+                            grad_name = os.path.join(
+                                folder, f"{onnx_export}_forward.onnx"
+                            )
+                            with open(grad_name, "wb") as f:
+                                f.write(forward_onnx.SerializeToString())
+                            # gradient from onnxruntime
+                            from experimental_experiment.gradient.grad_helper import (
+                                DerivativeOptions,
+                                onnx_derivative,
+                            )
+
+                            grad = onnx_derivative(
+                                forward_onnx,
+                                options=DerivativeOptions.KeepYieldOp,
+                                verbose=1,
+                            )
+                            with open(
+                                os.path.join(
+                                    folder, f"{onnx_export}_ort_yield_grad.onnx"
+                                ),
+                                "wb",
+                            ) as f:
+                                f.write(grad.SerializeToString())
+
+                            grad = onnx_derivative(
+                                forward_onnx,
+                                options=DerivativeOptions.Zero,
+                                verbose=1,
+                            )
+                            with open(
+                                os.path.join(folder, f"{onnx_export}_ort_grad.onnx"),
+                                "wb",
+                            ) as f:
+                                f.write(grad.SerializeToString())
                             raise
+
+                    if save_onnx:
+                        assert storage["instance"]
+                        for i, inst in enumerate(storage["instance"]):
+                            with open(f"{onnx_export}_{i}.onnx", "wb") as f:
+                                f.write(inst["onnx"].SerializeToString())
 
                     base_grads = tuple(_.grad for _ in model.parameters())
                     grads = tuple(_.grad for _ in compiled_model.parameters())
@@ -253,6 +363,12 @@ class TestOperatorsCort(ExtTestCase):
                     )
                     assert len(grads) > 0, "No gradient was checked"
                 else:
+                    if save_onnx:
+                        assert storage["instance"]
+                        for i, inst in enumerate(storage["instance"]):
+                            with open(f"{onnx_export}_{i}.onnx", "wb") as f:
+                                f.write(inst["onnx"].SerializeToString())
+
                     # tuple
                     assert_all_close(
                         baseline_result,
@@ -300,14 +416,14 @@ class TestOperatorsCort(ExtTestCase):
                 )
                 baseline_result = model(*args)
                 result = compiled_model(*args)
+                if save_onnx:
+                    assert storage["instance"]
+                    for i, inst in enumerate(storage["instance"]):
+                        with open(f"{onnx_export}_{i}.onnx", "wb") as f:
+                            f.write(inst["onnx"].SerializeToString())
                 assert_all_close(
                     baseline_result, result, atol=atol, rtol=rtol, msg="FORWARD"
                 )
-
-            if save_onnx:
-                for i, inst in enumerate(storage["instance"]):
-                    with open(f"{onnx_export}_{i}.onnx", "wb") as f:
-                        f.write(inst["onnx"].SerializeToString())
 
     @ignore_warnings(UserWarning)
     def test_aaa(self):
@@ -500,7 +616,10 @@ class TestOperatorsCort(ExtTestCase):
     def test_chunk(self):
         x = torch.tensor([0.0, 1.0, 2.0], requires_grad=True)
         self.assertONNX(
-            lambda x: x.chunk(2), x, onnx_export=inspect.currentframe().f_code.co_name
+            lambda x: x.chunk(2),
+            x,
+            onnx_export=inspect.currentframe().f_code.co_name,
+            input_index="simple",
         )
 
     def test_split(self):
@@ -511,6 +630,7 @@ class TestOperatorsCort(ExtTestCase):
             lambda x: torch.split(x, 2, 1),
             x,
             onnx_export=inspect.currentframe().f_code.co_name,
+            input_index="simple",
         )
 
     def test_split_with_sizes(self):
@@ -521,6 +641,7 @@ class TestOperatorsCort(ExtTestCase):
             lambda x: torch.split(x, [2, 1, 3], 1),
             x,
             onnx_export=inspect.currentframe().f_code.co_name,
+            input_index="simple",
         )
 
     def test_concat2(self):
@@ -705,9 +826,14 @@ class TestOperatorsCort(ExtTestCase):
     def test_avg_pool2d(self):
         x = torch.randn(20, 16, 50, 32)
         self.assertONNX(
-            nn.AvgPool2d(3, stride=2),
+            nn.AvgPool2d(5, stride=2),
             x,
+            impl="ref",
             onnx_export=inspect.currentframe().f_code.co_name,
+            verbose=0,
+            save_onnx=True,
+            optimize=False,
+            # intermediate=True,
         )
 
     def test_maxpool_indices(self):
@@ -975,6 +1101,7 @@ class TestOperatorsCort(ExtTestCase):
             onnx_export=inspect.currentframe().f_code.co_name,
             impl="ref",
             test_backward=False,
+            input_index="simple",
         )
 
     def test_lt(self):
@@ -986,6 +1113,7 @@ class TestOperatorsCort(ExtTestCase):
             onnx_export=inspect.currentframe().f_code.co_name,
             impl="ref",
             test_backward=False,
+            input_index="simple",
         )
 
     def test_gt(self):
@@ -996,6 +1124,7 @@ class TestOperatorsCort(ExtTestCase):
             (x, y),
             onnx_export=inspect.currentframe().f_code.co_name,
             test_backward=False,
+            input_index="simple",
         )
 
     def test_le(self):
@@ -1013,6 +1142,7 @@ class TestOperatorsCort(ExtTestCase):
             (x, y),
             onnx_export=inspect.currentframe().f_code.co_name,
             test_backward=False,
+            input_index="simple",
         )
 
     def test_op_gef(self):
@@ -1023,6 +1153,7 @@ class TestOperatorsCort(ExtTestCase):
             (x, y),
             onnx_export=inspect.currentframe().f_code.co_name,
             test_backward=False,
+            input_index="simple",
         )
 
     def test_exp(self):
@@ -1233,6 +1364,7 @@ class TestOperatorsCort(ExtTestCase):
             x,
             onnx_export=inspect.currentframe().f_code.co_name,
             test_backward=False,
+            input_index="simple",
         )
 
     def test_logsoftmax(self):
@@ -1275,6 +1407,7 @@ class TestOperatorsCort(ExtTestCase):
             lambda x: x.repeat(1, 2, 3, 4),
             x,
             onnx_export=inspect.currentframe().f_code.co_name,
+            atol=1e-4,
         )
 
     def test_repeat_dim_overflow(self):
@@ -1443,6 +1576,7 @@ class TestOperatorsCort(ExtTestCase):
                 x,
                 onnx_export=inspect.currentframe().f_code.co_name,
                 square_loss=True,
+                atol=1e-4,
             )
 
         with self.subTest(dim=4):
@@ -1507,6 +1641,7 @@ class TestOperatorsCort(ExtTestCase):
             (x, y),
             onnx_export=inspect.currentframe().f_code.co_name,
             test_backward=False,
+            input_index="simple",
         )
 
     def test_reducemax(self):

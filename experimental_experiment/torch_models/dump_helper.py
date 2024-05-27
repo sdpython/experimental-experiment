@@ -85,6 +85,10 @@ def assert_all_close(
             np.testing.assert_allclose(v1, v2, atol=atol, rtol=rtol)
         except AssertionError as e:
             if quantile is None:
+                if v1.size <= 10:
+                    raise AssertionError(
+                        f"Discrepancies between\nv1={v1}\nv2={v2}\nratio={v2/v1}"
+                    ) from e
                 raise
             maxdiff = np.abs(v1 - v2)
             th = np.quantile(maxdiff, quantile)

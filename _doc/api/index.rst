@@ -20,10 +20,10 @@ API
     prims_function
     convert
     torch_dynamo
-    misc
     torch_helper
     dimension
     torch_test
+    misc
 
 **Versions**
 

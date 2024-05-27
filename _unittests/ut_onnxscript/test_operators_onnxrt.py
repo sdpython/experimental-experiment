@@ -23,6 +23,7 @@ from experimental_experiment.ext_test_case import (
 from experimental_experiment.torch_interpreter import FunctionNotFoundError
 from experimental_experiment.torch_models.training_helper import make_aot_ort
 
+
 BATCH_SIZE = 2
 RNN_BATCH_SIZE = 7
 RNN_SEQUENCE_LENGTH = 11
@@ -40,11 +41,30 @@ class FuncModule(Module):
         super().__init__()
         self.f = f
         self.ppp = Parameter(torch.Tensor([1]))
+        self.ppp2 = Parameter(torch.Tensor([2]))
         self.params = nn.ParameterList(list(params))
 
     def forward(self, *args):
         f_args = list(itertools.chain(args, self.params))
-        f_args[0] = f_args[0] + self.ppp
+        f_args[0] = f_args[0] * self.ppp
+        res = self.f(*f_args) * self.ppp2
+        return res
+
+
+class FuncModuleSimple(Module):
+    def __init__(self, f, params=None, dtype=torch.float32):
+        if params is None:
+            params = ()
+        super().__init__()
+        self.f = f
+        rg = dtype == torch.float32
+        val = torch.ones((1,), requires_grad=rg, dtype=dtype)
+        self.ppp = Parameter(val, requires_grad=rg)
+        self.params = nn.ParameterList(list(params))
+
+    def forward(self, *args):
+        f_args = list(itertools.chain(args, self.params))
+        f_args[0] = f_args[0] * self.ppp
         res = self.f(*f_args)
         return res
 
@@ -55,10 +75,11 @@ class FuncModuleModule(Module):
         self.f = f
         self.mod = f
         self.ppp = Parameter(torch.Tensor([1]))
+        self.ppp2 = Parameter(torch.Tensor([2]))
 
     def forward(self, *args):
-        x = args[0] + self.ppp
-        res = self.mod(x, *args[1:])
+        x = args[0] * self.ppp
+        res = self.mod(x, *args[1:]) * self.ppp2
         return res
 
 
@@ -84,6 +105,7 @@ class TestOperatorsOnnxrt(ExtTestCase):
         dynamic_axes=None,
         keep_initializers_as_inputs=None,
         training=None,
+        input_index=None,
     ):
         if sys.platform == "win32":
             raise unittest.SkipTest("Windows not supported yet.")
@@ -94,6 +116,8 @@ class TestOperatorsOnnxrt(ExtTestCase):
             params = ()
         if isinstance(f, nn.Module):
             model = FuncModuleModule(f)
+        elif input_index == "simple":
+            model = FuncModuleSimple(f, params)
         else:
             model = FuncModule(f, params)
         model.eval()
@@ -135,13 +159,89 @@ class TestOperatorsOnnxrt(ExtTestCase):
                     rtol=rtol,
                     msg=f"expected\n{baseline_result}\n--got--\n{result}",
                 )
+
+                baseline_result = model(*args)
                 try:
+                    result = compiled_model(*args)
+                except torch._dynamo.exc.BackendCompilerFailed as e:
+                    if "FunctionNotFoundError" in str(e):
+                        raise unittest.SkipTest(f"MISSING FOR FORWARD {e}")
+                    raise
+
+                if isinstance(baseline_result, tuple):
+                    baseline_result = baseline_result[0]
+                    result = result[0]
+                if isinstance(baseline_result, torch.Tensor):
+                    self.assertEqualArray(
+                        baseline_result.detach().numpy(),
+                        result.detach().numpy(),
+                        atol=atol,
+                        rtol=rtol,
+                        msg=f"expected\n{baseline_result}\n--got--\n{result}",
+                    )
+                    try:
+                        torch.testing.assert_close(
+                            baseline_result,
+                            result,
+                            atol=atol,
+                            rtol=rtol,
+                            equal_nan=True,
+                        )
+                    except AssertionError as e:
+                        if "nan" not in str(e):
+                            raise
+
+                    baseline_result.sum().backward()
+                    try:
+                        result.sum().backward()
+                    except FunctionNotFoundError as e:
+                        raise unittest.SkipTest(f"MISSING FOR BACKWARD {e}")
+
+                    l1 = list(model.parameters())
+                    l2 = list(compiled_model.parameters())
+                    self.assertEqual(len(l1), len(l2))
+                    assert len(l1) > 0, "No gradient to test"
+                    n_gradient = 0
+                    for baseline_param, param in zip(l1, l2):
+                        n_gradient += 1
+                        self.assertEqualArray(
+                            baseline_param.grad.detach().numpy(),
+                            param.grad.detach().numpy(),
+                            atol=atol,
+                            rtol=rtol,
+                        )
+                        torch.testing.assert_close(
+                            baseline_param.grad,
+                            param.grad,
+                            atol=atol,
+                            rtol=rtol,
+                            equal_nan=True,
+                        )
+                    assert n_gradient > 0, "No gradient was checked"
+                else:
+                    raise AssertionError(f"Unexpected type {type(baseline_result)}.")
+            else:
+                # forward only
+                compiled_model = torch.compile(
+                    copy.deepcopy(model),
+                    backend="onnxrt",
+                    dynamic=False,
+                    fullgraph=fullgraph,
+                )
+
+                baseline_result = model(*args)
+                result = compiled_model(*args)
+
+                if isinstance(baseline_result, torch.Tensor):
+                    self.assertEqualArray(
+                        baseline_result.detach().numpy(),
+                        result.detach().numpy(),
+                        atol=atol,
+                        rtol=rtol,
+                    )
                     torch.testing.assert_close(
                         baseline_result, result, atol=atol, rtol=rtol, equal_nan=True
                     )
-                except AssertionError as e:
-                    if "nan" not in str(e):
-                        raise
 
                 baseline_result.sum().backward()
                 try:
@@ -172,8 +272,6 @@ class TestOperatorsOnnxrt(ExtTestCase):
                         equal_nan=True,
                     )
                 assert n_gradient > 0, "No gradient was checked"
-            else:
-                raise AssertionError(f"Unexpected type {type(baseline_result)}.")
         else:
             # forward only
             compiled_model = torch.compile(
@@ -374,6 +472,7 @@ class TestOperatorsOnnxrt(ExtTestCase):
             x,
             onnx_export=inspect.currentframe().f_code.co_name,
             test_backward=False,
+            input_index="simple",
         )
 
     @hide_stdout()
@@ -386,6 +485,7 @@ class TestOperatorsOnnxrt(ExtTestCase):
             x,
             onnx_export=inspect.currentframe().f_code.co_name,
             test_backward=False,
+            input_index="simple",
         )
 
     @hide_stdout()
@@ -398,6 +498,7 @@ class TestOperatorsOnnxrt(ExtTestCase):
             x,
             onnx_export=inspect.currentframe().f_code.co_name,
             test_backward=False,
+            input_index="simple",
         )
 
     @hide_stdout()
@@ -588,7 +689,8 @@ class TestOperatorsOnnxrt(ExtTestCase):
             nn.AvgPool2d(3, stride=2),
             x,
             onnx_export=inspect.currentframe().f_code.co_name,
-            test_backward=False,
+            test_backward=True,
+            rtol=1e-3,
         )
 
     @hide_stdout()

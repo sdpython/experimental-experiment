@@ -1,4 +1,6 @@
+import contextlib
 import copy
+import io
 import os
 import unittest
 import onnx.helper as oh
@@ -216,12 +218,6 @@ class TestBackend(ExtTestCase):
     def test_backend_dynger(self):
         from experimental_experiment.torch_dynamo import dynger_backend
 
-        stored = []
-
-        def store_model(m):
-            stored.append(m)
-            return m
-
         class MLP(torch.nn.Module):
             def __init__(self):
                 super().__init__()
@@ -248,6 +244,42 @@ class TestBackend(ExtTestCase):
 
         got = compiled_model(x)
         self.assertEqualArray(expected, got, atol=1e-5)
+
+    @skipif_ci_windows("no torch dynamo")
+    def test_backend_dynger_verbose(self):
+        from experimental_experiment.torch_dynamo import dynger_backend
+
+        class MLP(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.layers = torch.nn.Sequential(
+                    torch.nn.Linear(10, 32),
+                    torch.nn.Sigmoid(),
+                    torch.nn.Linear(32, 1),
+                )
+
+            def forward(self, x):
+                return self.layers(x)
+
+        x = torch.randn(3, 10, dtype=torch.float32)
+
+        mlp = MLP()
+        expected = mlp(x)
+
+        compiled_model = torch.compile(
+            copy.deepcopy(mlp),
+            backend=lambda *args, **kwargs: dynger_backend(*args, verbose=10, **kwargs),
+            dynamic=False,
+            fullgraph=True,
+        )
+
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            got = compiled_model(x)
+        self.assertEqualArray(expected, got, atol=1e-5)
+        out = buf.getvalue()
+        self.assertIn("[dynger_backend] done", out)
+        self.assertIn("Linear((l_x_,))", out)
 
     @skipif_ci_apple("no onnxruntime-training")
     @skipif_ci_windows("no torch dynamo")
