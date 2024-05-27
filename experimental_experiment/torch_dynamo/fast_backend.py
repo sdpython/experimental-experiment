@@ -523,6 +523,45 @@ def onnx_custom_backend(
     If not empty, `storage` keeps the memory of the data generated,
     onnx models, graph module as well the inputs and outputs when
     the model is run.
+
+    The following example shows how to use the custom backend
+    (based on :epkg:`onnxruntime`).
+
+    .. runpython::
+        :showcode:
+
+        import torch
+        from experimental_experiment.torch_dynamo import onnx_custom_backend
+
+
+        class MLP(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.layers = torch.nn.Sequential(
+                    torch.nn.Linear(10, 32),
+                    torch.nn.Sigmoid(),
+                    torch.nn.Linear(32, 1),
+                )
+
+            def forward(self, x):
+                return self.layers(x)
+
+
+        x = torch.randn(3, 10, dtype=torch.float32)
+
+        mlp = MLP()
+        expected = mlp(x)
+
+        compiled_model = torch.compile(
+            mlp,
+            backend=lambda *args, **kwargs: onnx_custom_backend(*args, verbose=1, **kwargs),
+            dynamic=False,
+            fullgraph=True,
+        )
+
+        got = compiled_model(x)
+        diff = (expected - got).max()
+        print(f"discrepancies: {diff}")
     """
     assert dump_patterns is None or isinstance(
         dump_patterns, str

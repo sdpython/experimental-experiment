@@ -20,6 +20,45 @@ def dynger_backend(
     :param verbose: adjust verbosity, if tuple, if gives different verbosity level
         to the exporter and the runtime
     :return: Callable
+
+    Next examples shows how to display intermediate results
+    while executing the graph produced by torch dynamo.
+
+    .. runpython::
+        :showcode:
+
+        import torch
+        from experimental_experiment.torch_dynamo import dynger_backend
+
+
+        class MLP(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.layers = torch.nn.Sequential(
+                    torch.nn.Linear(10, 32),
+                    torch.nn.Sigmoid(),
+                    torch.nn.Linear(32, 1),
+                )
+
+            def forward(self, x):
+                return self.layers(x)
+
+
+        x = torch.randn(3, 10, dtype=torch.float32)
+
+        mlp = MLP()
+        expected = mlp(x)
+
+        compiled_model = torch.compile(
+            mlp,
+            backend=lambda *args, **kwargs: dynger_backend(*args, verbose=10, **kwargs),
+            dynamic=False,
+            fullgraph=True,
+        )
+
+        got = compiled_model(x)
+        diff = (expected - got).max()
+        print(f"discrepancies: {diff}")
     """
     if isinstance(graph_module, torch.fx.GraphModule):
         if verbose > 0:
