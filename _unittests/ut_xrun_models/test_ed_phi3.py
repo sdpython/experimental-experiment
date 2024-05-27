@@ -22,7 +22,7 @@ class TestEdPhi3(ExtTestCase):
     @unittest.skipIf(not has_phi3(), reason="transformers not recent enough")
     @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
     @ignore_warnings(DeprecationWarning)
-    @requires_torch("2.3", "AssertionError: original output #6 is None")
+    @requires_torch("2.4", "for transformers 4.41.1")
     def test_phi3_export_no_rename(self):
         import torch
 
@@ -52,7 +52,7 @@ class TestEdPhi3(ExtTestCase):
     @unittest.skipIf(not has_phi3(), reason="transformers not recent enough")
     @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
     @ignore_warnings((DeprecationWarning, UserWarning))
-    @requires_torch("2.3", "AssertionError: original output #6 is None")
+    @requires_torch("2.4", "for transformers 4.41.1")
     def test_phi3_cort_static_not_mixed(self):
         model, input_tensors = get_phi3_model()
         input_tensors = input_tensors[0]
@@ -87,7 +87,7 @@ class TestEdPhi3(ExtTestCase):
     @unittest.skipIf(not has_phi3(), reason="transformers not recent enough")
     @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
     @ignore_warnings((DeprecationWarning, UserWarning))
-    @requires_torch("2.4")
+    @requires_torch("2.4", "for transformers 4.41.1")
     def test_phi3_cort_static_mixed(self):
         import torch
 
@@ -131,7 +131,7 @@ class TestEdPhi3(ExtTestCase):
     @unittest.skipIf(not has_phi3(), reason="transformers not recent enough")
     @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
     @ignore_warnings((DeprecationWarning, UserWarning))
-    @requires_torch("2.3", "AssertionError: original output #6 is None")
+    @requires_torch("2.4", "for transformers 4.41.1")
     def test_phi3_cort_dynamic(self):
         model, input_tensors = get_phi3_model()
         input_tensors = input_tensors[0]
@@ -165,7 +165,7 @@ class TestEdPhi3(ExtTestCase):
     @unittest.skipIf(not has_phi3(), reason="transformers not recent enough")
     @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
     @ignore_warnings((DeprecationWarning, UserWarning))
-    @requires_torch("2.3", "AssertionError: original output #6 is None")
+    @requires_torch("2.4", "for transformers 4.41.1")
     def test_phi3_cort_static(self):
         model, input_tensors = get_phi3_model()
         input_tensors = input_tensors[0]
