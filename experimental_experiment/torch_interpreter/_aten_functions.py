@@ -573,17 +573,17 @@ def aten_avg_pool2d_backward(
         kernel_shape=kernel_shape,
         pads=pads,
         strides=strides,
+        outputs=outputs,
         # domain="com.microsoft",
         name="avg_pool2d_backward",
     )
-    g.set_type(grad, g.get_type(x))
-    g.set_rank(grad, g.get_rank(x))
 
-    result = g.op.Add(x, grad, name="avg_pool2d_backward", outputs=outputs)
+    # It is an average, so x is not used to compute the gradient.
+    # result = g.op.Add(x, grad, name="avg_pool2d_backward", outputs=outputs)
     if sts:
-        g.set_type(result, g.get_type(x))
-        g.set_rank(result, g.get_rank(x))
-    return result
+        g.set_type(grad, g.get_type(x))
+        g.set_rank(grad, g.get_rank(x))
+    return grad
 
 
 def aten_bmm(

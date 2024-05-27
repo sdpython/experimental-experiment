@@ -162,6 +162,7 @@ class TestOperatorsCort(ExtTestCase):
         raise_list=None,
         save_onnx=False,
         optimize=True,
+        intermediate=False,
     ):
         if sys.platform == "win32":
             raise unittest.SkipTest("Windows not supported yet.")
@@ -216,22 +217,52 @@ class TestOperatorsCort(ExtTestCase):
                 backend=impl,
                 raise_list=raise_list,
                 optimize=optimize,
-                verbose=verbose,
+                verbose=(verbose, 10) if intermediate else verbose,
                 **kwargs,
             )
 
+            if intermediate:
+                from experimental_experiment.torch_dynamo import dynger_backend
+
+                backend_dynger = lambda *args, **kwargs: dynger_backend(  # noqa: E731
+                    *args, optimize=optimize, verbose=10, **kwargs
+                )
+                aot_compiler_dynger = (
+                    aot_autograd(
+                        fw_compiler=backend_dynger,
+                        decompositions=(
+                            get_decomposition_table()
+                            if use_decomposition is True
+                            else use_decomposition
+                        ),
+                    )
+                    if use_decomposition
+                    else aot_autograd(fw_compiler=backend_dynger)
+                )
+                compiled_model_dynger = torch.compile(
+                    copy.deepcopy(model),
+                    backend=aot_compiler_dynger,
+                    dynamic=dynamic_axes not in (None, False),
+                    fullgraph=fullgraph,
+                )
+                results_dynger = compiled_model_dynger(*args)
+                if test_backward:
+                    results_dynger.sum().backward()
+
             if test_backward:
                 # forward/backward
-                if use_decomposition:
-                    if use_decomposition is True:
-                        new_table = get_decomposition_table()
-                    else:
-                        new_table = use_decomposition
-                    aot_compiler = aot_autograd(
-                        fw_compiler=backend_debug, decompositions=new_table
+                aot_compiler = (
+                    aot_autograd(
+                        fw_compiler=backend_debug,
+                        decompositions=(
+                            get_decomposition_table()
+                            if use_decomposition is True
+                            else use_decomposition
+                        ),
                     )
-                else:
-                    aot_compiler = aot_autograd(fw_compiler=backend_debug)
+                    if use_decomposition
+                    else aot_autograd(fw_compiler=backend_debug)
+                )
 
                 compiled_model = torch.compile(
                     copy.deepcopy(model),
@@ -799,9 +830,10 @@ class TestOperatorsCort(ExtTestCase):
             x,
             impl="ref",
             onnx_export=inspect.currentframe().f_code.co_name,
-            verbose=10,
+            verbose=0,
             save_onnx=True,
             optimize=False,
+            # intermediate=True,
         )
 
     def test_maxpool_indices(self):
