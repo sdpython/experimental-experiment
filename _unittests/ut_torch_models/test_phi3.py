@@ -80,6 +80,7 @@ class TestPhi3(ExtTestCase):
         expected = omodel(*model_inputs[0])
         self.assertNotEmpty(expected)
 
+    @unittest.skipIf(not has_phi3(), reason="transformers not recent enough")
     @requires_onnxruntime_training()
     def test_get_phi3_model_mask_eager_ortmodule_backward(self):
         from onnxruntime.training.ortmodule import ORTModule, DebugOptions
