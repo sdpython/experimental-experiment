@@ -6,6 +6,7 @@ from ._dort_cmd_common_models import (
     _create_configuration_for_benchmark_llama,
     _create_configuration_for_benchmark_mistral,
     _create_configuration_for_benchmark_phi,
+    _create_configuration_for_benchmark_phi3,
 )
 
 
@@ -561,6 +562,7 @@ def create_configuration_for_benchmark(
         "llama": _create_configuration_for_benchmark_llama,
         "mistral": _create_configuration_for_benchmark_mistral,
         "phi": _create_configuration_for_benchmark_phi,
+        "phi3": _create_configuration_for_benchmark_phi3,
     }
     assert model in fcts, f"Not implemented for model {model!r}, config={config}"
     return fcts[model](
@@ -599,5 +601,10 @@ def create_model(
         from ..torch_models.phi_helper import get_phi_model
 
         return get_phi_model(**config_dict)
+
+    if model == "phi3":
+        from ..torch_models.phi3_helper import get_phi3_model
+
+        return get_phi3_model(**config_dict)
 
     raise AssertionError(f"not implemented for model={model!r}")

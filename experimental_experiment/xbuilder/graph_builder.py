@@ -47,6 +47,21 @@ from .graph_builder_opset import Opset
 class GraphBuilder:
     """
     Simplifies the creation of a model.
+
+    :param target_opset_or_existing_proto: a ModelProto, an integer,
+        a dictionary of domain, version
+    :param input_names: input names
+    :param as_function: export as a function or a model
+    :param optimization_options: optimizations options,
+        see :class:`OptimizationOptions`
+    :param args: example of inputs
+    :param ir_version: ir version when exporting
+    :param verbose: verbosity
+    :param infer_shapes: run shape inference, if the value is `'new'`,
+        existing shapes are ignored
+    :param raise_list: raise an exception if a new operator belongs to that list
+    :param dynamic_shapes: dynamic shapes
+
     Important attributes:
 
     - `input_names: List[str]`: list of input names
@@ -106,7 +121,7 @@ class GraphBuilder:
         args: Optional[List[Any]] = None,
         ir_version: Optional[int] = None,
         verbose: int = 0,
-        infer_shapes: bool = False,
+        infer_shapes: Union[bool, str] = False,
         raise_list: Optional[Set[str]] = None,
         dynamic_shapes: Optional[Union[Dict[str, Any], Tuple[Any]]] = None,
     ):
@@ -3746,13 +3761,15 @@ class GraphBuilder:
         self.set_shape(val.name, shape, exc=False)
 
     def _update_shape_types_with_proto(
-        self, proto: ModelProto, infer_shapes: bool = False
+        self, proto: ModelProto, infer_shapes: Union[bool, str] = False
     ):
         """
         Updates the shapes and types for an existing model.
 
         :param proto: model proto
         :param infer_shapes: infer shapes to fill information about type and shapes
+            run shape inference, if the value is `'new'`,
+            existing shapes are ignored
         """
         if self.verbose > 1:
             begin_ = time.perf_counter()
@@ -3765,6 +3782,8 @@ class GraphBuilder:
         if infer_shapes:
             if self.verbose > 1:
                 print("[GraphBuilder._update_shape_types_with_proto] infer shapes")
+            if infer_shapes == "new":
+                del proto.graph.value_info[:]
             new_proto = onnx_infer_shapes(proto)
             if self.verbose > 1:
                 print(

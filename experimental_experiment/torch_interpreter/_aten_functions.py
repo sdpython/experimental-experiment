@@ -910,17 +910,32 @@ def aten_embedding(
 ) -> T:
     "embedding"
     if (
-        (padding_idx is not None and padding_idx >= 0)
+        (padding_idx is not None and padding_idx != -1)
         or scale_grad_by_freq
         or sparse
         or max_norm is not None
     ):
-        raise NotImplementedError(
-            f"Not implemented when padding_idx={padding_idx}, or "
-            f"scale_grad_by_freq={scale_grad_by_freq} or sparse={sparse} "
-            f"or max_norm={max_norm} or norm_type={norm_type} "
-            f"are different from the default values."
-        )
+        exc = True
+        if g.has_shape(weight):
+            shape = g.get_shape(weight)
+            if (
+                len(shape) > 0
+                and isinstance(shape[0], int)
+                and shape[0] == padding_idx + 1
+            ):
+                # padding_idx should probabily be -1, shape are probably dynamic
+                padding_idx = -1
+                exc = False
+        if exc:
+            raise NotImplementedError(
+                f"Not implemented when padding_idx={padding_idx}, or "
+                f"scale_grad_by_freq={scale_grad_by_freq} or sparse={sparse} "
+                f"or max_norm={max_norm} or norm_type={norm_type} "
+                f"are different from the default values, "
+                f"weight: {g.get_shape(weight) if g.has_shape(weight) else '?'}, "
+                f"indices: {g.get_shape(indices) if g.has_shape(indices) else '?'}"
+                f"{g.get_debug_msg()}"
+            )
     assert g.get_type(indices) == 7, (
         f"indices be integer not {g.get_type(indices)}, "
         f"weight is {g.get_type(weight)}"
@@ -1466,8 +1481,20 @@ def aten_index_put(
     assert g.has_shape(x), f"Missing shape for {x!r}{g.get_debug_msg()}"
 
     index = indices[0]  # tensor
+    index_dtype = g.get_type(index)
+    if index_dtype == TensorProto.BOOL:
+        assert not accumulate, (
+            f"accumulate is True but it does not make sense in that case"
+            f"{g.get_debug_msg()}"
+        )
+        res = g.op.Where(index, values, x, outputs=outputs)
+        if sts:
+            g.set_type(res, g.get_type(x))
+            g.set_shape(res, g.get_shape(x))
+        return res
+
     new_index = g.op.UnsqueezeAnyOpset(index, np.array([-1], dtype=np.int64), name=name)
-    g.set_type(new_index, g.get_type(index))
+    g.set_type(new_index, index_dtype)
     if g.has_shape(index):
         g.set_shape(new_index, g.get_shape(index) + (1,))
     else:
@@ -1622,6 +1649,13 @@ def aten_leaky_relu_backward(
     if not sts:
         set_type_shape_unary_op(g, res, x)
     return res
+
+
+def aten_lift_fresh_copy(
+    g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T
+) -> T:
+    "identity"
+    return g.op.Identity(x, outputs=outputs, name="lift_fresh_copy")
 
 
 def aten_linear(
@@ -2240,7 +2274,11 @@ def aten_ones(
         dtype = TensorProto.FLOAT
     res = g.op.ConstantOfShape(
         isize,
-        value=from_array(np.array([1], dtype=tensor_dtype_to_np_dtype(dtype))),
+        value=from_array(
+            np.array(
+                [1], dtype=tensor_dtype_to_np_dtype(torch_dtype_to_onnx_dtype(dtype))
+            )
+        ),
         outputs=outputs,
         name=name,
     )
@@ -3313,6 +3351,19 @@ def aten__softmax_backward_data(
     return res
 
 
+def aten_split_Tensor(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    split_sizes: T,
+    dim: int = 0,
+    name: str = "split_Tensor",
+) -> T:
+    "split_to_sequence or split"
+    return aten_split_with_sizes(g, sts, outputs, x, split_sizes, dim, name=name)
+
+
 def aten_split_with_sizes(
     g: GraphBuilder,
     sts: Optional[Dict[str, Any]],
@@ -3324,9 +3375,54 @@ def aten_split_with_sizes(
     use_sequence: bool = False,
 ) -> T:
     "split_to_sequence or split"
-    assert isinstance(split_sizes, list) and all_int(
-        split_sizes
-    ), f"Implemented when split_sizes ({split_sizes}) is a constant{g.get_debug_msg()}"
+    if not use_sequence and isinstance(split_sizes, int):
+        # Then torch means to split into equal chunk of this size
+        assert g.has_shape(x), (
+            f"Not implemented when split_sizes={split_sizes} "
+            f"and x has not known shape "
+            f"{g.get_debug_msg()}"
+        )
+        shape = g.get_shape(x)
+        size = shape[dim]
+        assert isinstance(size, int), (
+            f"Not implemented when split_sizes={split_sizes} "
+            f"and x has dynamic shape {shape} "
+            f"{g.get_debug_msg()}"
+        )
+        n_splits = (
+            (size // split_sizes)
+            if size % split_sizes == 0
+            else (size // split_sizes + 1)
+        )
+        if len(outputs) == 1:
+            o = outputs[0]
+            outputs = [f"{o}#{i}" for i in range(n_splits)]
+        res = g.make_node(
+            "Split", [x], outputs, axis=dim, num_outputs=n_splits, name=name
+        )
+        if not sts:
+            new_shapes = []
+            new_ranks = []
+            shape = g.get_shape(x)
+            new_shape = list(shape)
+            for i in range(n_splits):
+                s = min(size - split_sizes, split_sizes)
+                new_shape[dim] = s
+                size -= split_sizes
+                new_shapes.append(tuple(new_shape))
+            t = g.get_type(x)
+            for i, o in enumerate(res):
+                g.set_type(o, t)
+                if new_shapes:
+                    g.get_shape(o, new_shape[i])
+                else:
+                    g.get_rank(o, new_ranks[i])
+        return res
+
+    assert isinstance(split_sizes, list) and all_int(split_sizes), (
+        f"Not implemented when split_sizes ({split_sizes}) "
+        f"is a constant{g.get_debug_msg()}"
+    )
     assert isinstance(dim, int), f"dim={dim} is not an integer{g.get_debug_msg()}"
     assert all(map(lambda d: d > 0, split_sizes)), (
         f"split_with_sizes only implemented when all sizes are positive "

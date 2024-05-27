@@ -4,6 +4,7 @@ specific functionalities to this project.
 """
 
 import glob
+import logging
 import os
 import re
 import sys
@@ -286,6 +287,12 @@ class ExtTestCase(unittest.TestCase):
 
     _warns: List[Tuple[str, int, Warning]] = []
 
+    @classmethod
+    def setUpClass(cls):
+        logger = logging.getLogger("onnxscript.optimizer.constant_folding")
+        logger.setLevel(logging.ERROR)
+        unittest.TestCase.setUpClass()
+
     def print_model(self, model: "ModelProto"):  # noqa: F821
         from onnx_array_api.plotting.text_plot import onnx_simple_text_plot
 
@@ -505,12 +512,18 @@ def has_cuda() -> bool:
     return torch.cuda.is_available()
 
 
-def requires_cuda(msg: str = ""):
+def requires_cuda(msg: str = "", version: str = ""):
     import torch
 
     if not torch.cuda.is_available():
         msg = msg or "only runs on CUDA but torch does not have it"
         return unittest.skip(msg)
+    if version:
+        import packaging.versions as pv
+
+        if pv.Version(torch.version.cuda) < pv.Version(version):
+            msg = msg or f"CUDA older than {version}"
+            return unittest.skip(msg)
     return lambda x: x
 
 
@@ -522,6 +535,16 @@ def requires_zoo(msg: str = "") -> Callable:
 
     if not var:
         msg = f"ZOO not set up or != 1. {msg}"
+        return unittest.skip(msg)
+    return lambda x: x
+
+
+def requires_sklearn(version: str, msg: str = "") -> Callable:
+    import packaging.version as pv
+    import sklearn
+
+    if pv.Version(".".join(sklearn.__version__.split(".")[:2])) < pv.Version(version):
+        msg = f"torch version {sklearn.__version__} < {version}: {msg}"
         return unittest.skip(msg)
     return lambda x: x
 
