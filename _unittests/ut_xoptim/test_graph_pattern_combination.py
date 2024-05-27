@@ -498,7 +498,10 @@ class TestGraphPatternCombination(ExtTestCase):
             "dort-model-llama-ort+_1.onnx",
             "dort-model-llama-ort+_1_split.onnx",
         ]:
-            if model in {"noopt-llama-custom__1.onnx"} and sys.platform in {
+            if model in {
+                "noopt-llama-custom__1.onnx",
+                "noopt-phi-custom__1.onnx",
+            } and sys.platform in {
                 "win32",
                 "darwin",
             }:
