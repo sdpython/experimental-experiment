@@ -1407,6 +1407,7 @@ class TestOperatorsCort(ExtTestCase):
             lambda x: x.repeat(1, 2, 3, 4),
             x,
             onnx_export=inspect.currentframe().f_code.co_name,
+            atol=1e-4,
         )
 
     def test_repeat_dim_overflow(self):

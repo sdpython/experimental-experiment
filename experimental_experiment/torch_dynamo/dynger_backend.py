@@ -32,7 +32,9 @@ def dynger_backend(
 
     if verbose >= 10:
 
-        def _identity(target, inputs, name, *args, **kwargs):
+        def _identity(
+            target: str, inputs: List[str], name: str, *args: Any, **kwargs: Any
+        ) -> Any:
             print(f"{target}({inputs}) -> {name}")
             res = target(*args, **kwargs)
             if isinstance(res, torch.Tensor):
@@ -53,20 +55,72 @@ def dynger_backend(
                 raise AssertionError(f"Not implemented when type(res)={type(res)}")
             return res
 
+        class _identity_graph:
+
+            def __init__(
+                self,
+                graph: "torch.fx.graph.Graph",
+                inputs: List[str],
+                name: str,
+                f: Callable,
+            ):
+                self._graph = graph
+                self._inputs = inputs
+                self._name = name
+                self._f = f
+                assert isinstance(
+                    name, str
+                ), f"One name is expexted for one result but name={name!r}"
+
+            def __call__(self, *args, **kwargs):
+                print(
+                    f"{self._graph.__class__.__name__}({self._inputs}) -> {self._name}"
+                )
+                res = self._f(*args, **kwargs)
+                if isinstance(res, torch.Tensor):
+                    if np.prod(res.shape) <= 8:
+                        v = ",".join(
+                            map(str, res.ravel().detach().cpu().numpy().tolist())
+                        )
+                    else:
+                        v = (
+                            ",".join(
+                                map(
+                                    str, res.ravel().detach().cpu().numpy().tolist()[:5]
+                                )
+                            )
+                            + "..."
+                        )
+                    print(f"  + {self._name}: {res.dtype}:{res.shape}:{v}")
+                else:
+                    raise AssertionError(f"Not implemented when type(res)={type(res)}")
+                return res
+
         for i, node in enumerate(exported_mod.graph.nodes):
-            if node.op != "call_function":
+            if node.op in ("call_function", "call_method"):
+                node.target = lambda *args, __=node.target, _args=node.args, _name=node.name, **kwargs: _identity(
+                    __, _args, _name, *args, **kwargs
+                )
                 continue
-            if isinstance(node.target, str):
+            if node.op == "call_module":
+                sub_module = node.graph.owning_module.get_submodule(node.target)
+                sub_module.forward = _identity_graph(
+                    sub_module, node.args, node.target, f=sub_module.forward
+                )
                 continue
-            node.target = lambda *args, __=node.target, _args=node.args, _name=node.name, **kwargs: _identity(
-                __, _args, _name, *args, **kwargs
-            )
+            if node.op in {"get_attr"}:
+                raise AssertionError(
+                    f"Not implemented for node.op={node.op!r}, node.__dict__={node.__dict__}"
+                )
         exported_mod.graph.lint()
         exported_mod.recompile()
 
     def run(*inputs, gm=exported_mod):
         if verbose:
-            print("[dynger_backend] begin execution")
+            print(
+                f"[dynger_backend] begin execution with "
+                f"{len(exported_mod.graph.nodes)} nodes"
+            )
             res = gm(*inputs)
             print("[dynger_backend] done")
             return res

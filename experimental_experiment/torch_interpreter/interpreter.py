@@ -1053,10 +1053,9 @@ class DynamoInterpreter:
 
         sub_module = node.graph.owning_module.get_submodule(node.target)
 
-        if not isinstance(sub_module, self.torch.nn.Module):
-            raise NotImplementedError(
-                f"Not implemented for type {type(sub_module)}.\n{raise_msg()}"
-            )
+        assert isinstance(
+            sub_module, self.torch.nn.Module
+        ), f"Not implemented for type {type(sub_module)}.\n{raise_msg()}"
 
         named_args = node.args
         args = []
