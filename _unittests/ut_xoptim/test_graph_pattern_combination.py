@@ -6,6 +6,7 @@
 
 import os
 import unittest
+import sys
 import numpy as np
 from onnx import (
     ModelProto,
@@ -497,6 +498,12 @@ class TestGraphPatternCombination(ExtTestCase):
             "dort-model-llama-ort+_1.onnx",
             "dort-model-llama-ort+_1_split.onnx",
         ]:
+            if model in {"noopt-llama-custom__1.onnx"} and sys.platform in {
+                "win32",
+                "darwin",
+            }:
+                # Fatal error: com.microsoft:SoftmaxGrad(-1) is not a registered function/op
+                continue
             options = OptimizationOptions(
                 patterns=(
                     "default+onnxruntime+experimental"
