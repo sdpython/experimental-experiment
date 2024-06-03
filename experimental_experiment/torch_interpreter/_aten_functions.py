@@ -3035,6 +3035,12 @@ def _aten_slice_scatter_static(
         dim_shape
     ), f"slice_scatter not implemented when shape={shape}{g.get_debug_msg()}"
 
+    if g.has_shape(src):
+        shape_src = g.get_shape(src)
+        if shape_src == shape and start == 0 and end == 9223372036854775807:
+            # It is identity.
+            return g.op.Identity(x, outputs=outputs, name=name)
+
     index_1 = np.arange(0, dim_shape)
     if (start is None or isinstance(start, int)) and (
         end is None or isinstance(end, int)
