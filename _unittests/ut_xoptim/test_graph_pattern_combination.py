@@ -552,10 +552,42 @@ class TestGraphPatternCombination(ExtTestCase):
             if check_ort:
                 self._check_ort_cpu_or_cuda(new_onx, model=model)
 
-    def test_study(self):
-        model = "dort-llama2-llama-ort+_1.onnx"
+    def test_insert_position(self):
+        model = "this_fail.onnx"
         enabled = {
-            "RotaryConcatPartPattern",
+            "AddMulSharedInputBroadcastPattern",
+        }
+        disabled = {}
+        options = OptimizationOptions(
+            patterns="default+onnxruntime+experimental",
+            verbose=0,
+            verifies=False,
+            dump_applied_patterns="dump_applied_pattern",
+            max_iter=len(enabled) + 1 if enabled else -1,
+            processor="CPU,CUDA",
+        )
+        options.patterns = [
+            p
+            for p in options.patterns
+            if (not enabled or p.__class__.__name__ in enabled)
+            and p.__class__.__name__ not in disabled
+        ]
+        assert options.patterns, "Pattern is empty."
+        onx = self._get_model(model, skip=True)
+        self._fix_shape(onx)
+
+        gr = GraphBuilder(
+            onx,
+            optimization_options=options,
+            infer_shapes=False,
+            verbose=2 if __name__ == "__main__" else 0,
+        )
+        gr.to_onnx(optimize=True)
+
+    def test_study(self):
+        model = "before_debug.onnx"
+        enabled = {
+            "AddMulSharedInputBroadcastPattern",
         }
         # enabled = {}
         disabled = {}
@@ -575,7 +607,7 @@ class TestGraphPatternCombination(ExtTestCase):
         ]
         assert options.patterns, "Pattern is empty."
         if __name__ == "__main__":
-            options.verbose = 1 if len(options.patterns) > 3 else 10
+            options.verbose = 10 if len(options.patterns) > 3 else 10
             print(f"-- patterns={[c.__class__.__name__ for c in options.patterns]}")
             print(f"-- verbose={options.verbose}")
         for p in options.patterns:
