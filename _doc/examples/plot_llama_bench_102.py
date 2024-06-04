@@ -156,7 +156,7 @@ def make_config(
         opt = {}
     elif pattern == "none":
         opt = dict(enable_pattern="default", disable_pattern="default")
-    elif pattern in "default" or "+" in pattern:
+    elif pattern in "default" or "+" in pattern or "-" in pattern:
         opt = dict(enable_pattern=pattern)
     else:
         raise AssertionError(f"unexpected value for pattern={pattern!r}")
