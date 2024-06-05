@@ -384,8 +384,23 @@ class EasyPatternOptimization(PatternOptimization):
             pred = g.node_before(i)
             if pred is None:
                 # No node in the graph.
+                self._hint(
+                    "BACKWARD: no node in the graph",
+                    "-- pred",
+                    pred,
+                    "-- ppred",
+                    ppred,
+                )
                 return self.none(node, inspect.currentframe().f_lineno)
             if pred.op_type != ppred.op_type:
+                # Distinct type
+                self._hint(
+                    "BACKWARD: distinct types",
+                    "-- pred",
+                    pred,
+                    "-- ppred",
+                    ppred,
+                )
                 return self.none(node, inspect.currentframe().f_lineno)
             # matching backward
             key = id(ppred)
@@ -597,7 +612,24 @@ class EasyPatternOptimization(PatternOptimization):
         """
         Add debugging information to help users.
         """
-        self._debug["hint"] = args
+        if self.verbose >= 5:
+            self._debug["hint"] = args
+
+    def validate_mapping(
+        self,
+        g: "GraphBuilder",  # noqa: F821
+        deleted_nodes: List[NodeProto],
+        pattern_nodes: Optional[List[NodeProto]] = None,
+    ) -> bool:
+        """
+        Validates the mapping.
+
+        :param g: GraphBuilder
+        :param deleted_nodes: matched nodes from the model (to be deleted)
+        :param pattern_nodes: matched nodes coming from the pattern
+        :return: validate the mapping or not, default is True
+        """
+        return True
 
     def match(
         self,
@@ -689,12 +721,6 @@ class EasyPatternOptimization(PatternOptimization):
             self.hint("reached {iteration}>={max_iter} iterations")
             return self.none(node, inspect.currentframe().f_lineno)
 
-        if self.verbose > 5:
-            print(
-                f"[EasyPatternOptimization.match] done. "
-                f"{len(marked)} marked nodes with {iteration} iterations"
-            )
-
         # At this point, the pattern is matched but let's make sure.
         assert len(marked) == len(pat.nodes), (
             f"Number of marked nodes is different, {len(marked)} marked nodes, "
@@ -705,6 +731,21 @@ class EasyPatternOptimization(PatternOptimization):
         # We order the matched nodes in the same order than the pattern
         # to let next functions to be able to build the matching again.
         matched_nodes = [marked[id(n)][0] for i, n in enumerate(pat.nodes)]
+
+        if not self.validate_mapping(g, matched_nodes, pat.nodes):
+            if self.verbose >= 2:
+                print(
+                    f"[EasyPatternOptimization.match] validation failed "
+                    f"{len(marked)} marked nodes with {iteration} iterations"
+                )
+            return None
+
+        if self.verbose > 5:
+            print(
+                f"[EasyPatternOptimization.match] done. "
+                f"{len(marked)} marked nodes with {iteration} iterations"
+            )
+
         return MatchResult(self, matched_nodes, self.apply)
 
     def apply_pattern(self, g: "GraphBuilder", *args, **kwargs):  # noqa: F821
