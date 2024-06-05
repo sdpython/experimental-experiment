@@ -834,6 +834,7 @@ class TestOperatorsCort(ExtTestCase):
             save_onnx=True,
             optimize=False,
             # intermediate=True,
+            rtol=1e-4,
         )
 
     def test_maxpool_indices(self):

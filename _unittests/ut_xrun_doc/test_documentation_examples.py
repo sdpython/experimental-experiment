@@ -86,6 +86,7 @@ class TestDocumentationExamples(ExtTestCase):
                 "plot_convolutation_matmul_102.py",
                 "plot_optimize_101.py",
                 "plot_torch_linreg_101.py",
+                "plot_rewrite_101.py",
             }:
                 if sys.platform in {"win32", "darwin"}:
                     # dynamo not supported on windows
