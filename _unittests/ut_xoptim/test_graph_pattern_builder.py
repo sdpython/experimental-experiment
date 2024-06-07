@@ -1,8 +1,9 @@
 import os
 import time
 import unittest
+from typing import List, Optional
 import numpy as np
-from onnx import TensorProto, load
+from onnx import NodeProto, TensorProto, load
 from onnx.checker import check_model
 import onnx.helper as oh
 import onnx.numpy_helper as onh
@@ -234,7 +235,7 @@ class TestGraphPatternBuilder(ExtTestCase):
                 self,
                 g,
                 deleted_nodes,
-                added_nodes,
+                pattern_nodes,
             ) -> bool:
                 # If some pattern needs to be rejected.
                 return True
@@ -323,7 +324,7 @@ class TestGraphPatternBuilder(ExtTestCase):
                 self,
                 g,
                 deleted_nodes,
-                added_nodes,
+                pattern_nodes,
             ) -> bool:
                 # If some pattern needs to be rejected.
                 return True
@@ -408,7 +409,7 @@ class TestGraphPatternBuilder(ExtTestCase):
                 self,
                 g,
                 deleted_nodes,
-                added_nodes,
+                pattern_nodes,
             ) -> bool:
                 # If some pattern needs to be rejected.
                 return True
@@ -555,6 +556,70 @@ class TestGraphPatternBuilder(ExtTestCase):
         ref2 = ExtendedReferenceEvaluator(opt_onx, new_ops=[AddAdd])
         got = ref2.run(None, feeds)
         self.assertEqualArray(expected[0], got[0])
+
+    def test_validate_mapping(self):
+
+        proto = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("Sigmoid", ["Y"], ["sy"]),
+                    oh.make_node("Mul", ["Y", "sy"], ["ysy"]),
+                    oh.make_node("Mul", ["X", "ysy"], ["final"]),
+                ],
+                "nd",
+                [
+                    oh.make_tensor_value_info("X", TensorProto.FLOAT, [1, "b", "c"]),
+                    oh.make_tensor_value_info("Y", TensorProto.FLOAT, ["a", "b", "c"]),
+                ],
+                [
+                    oh.make_tensor_value_info(
+                        "final", TensorProto.FLOAT, ["a", "b", "c"]
+                    )
+                ],
+            ),
+            opset_imports=[oh.make_opsetid("", 18)],
+            ir_version=9,
+        )
+
+        class MulMulSigmoidPattern(EasyPatternOptimization):
+
+            def match_pattern(self, g: GraphBuilder, X, Y):
+                return g.op.Mul(X, g.op.Mul(Y, g.op.Sigmoid(Y)))
+
+            def apply_pattern(self, g: GraphBuilder, X, Y):
+                return g.anyop.MulMulSigmoid(
+                    X, Y, domain="onnx_extended.ortops.optim.cuda"
+                )
+
+            def validate_mapping(
+                self,
+                g: GraphBuilder,
+                deleted_nodes: List[NodeProto],
+                pattern_nodes: Optional[List[NodeProto]] = None,
+            ) -> bool:
+                for node in deleted_nodes:
+                    if (
+                        node.op_type == "Mul"
+                        and g.has_shape(node.input[0])
+                        and g.has_shape(node.input[1])
+                    ):
+                        sh1 = g.get_shape(node.input[0])
+                        sh2 = g.get_shape(node.input[1])
+                        if sh1 != sh2:
+                            return False
+                return True
+
+        gr = GraphBuilder(
+            proto,
+            infer_shapes=True,
+            optimization_options=OptimizationOptions(
+                patterns=[MulMulSigmoidPattern(verbose=1)],
+                verbose=0,
+            ),
+        )
+
+        new_proto = gr.to_onnx()
+        self.assertEqual(len(new_proto.graph.node), len(proto.graph.node))
 
 
 if __name__ == "__main__":
