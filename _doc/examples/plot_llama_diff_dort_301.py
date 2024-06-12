@@ -207,7 +207,7 @@ if backward:
             storage=storage,
             **kwargs,
         ),
-        decompositions=get_decomposition_table(),
+        decompositions=get_decomposition_table("default"),
     )
     onnx_mod = torch.compile(copy.deepcopy(model), backend=aot_compiler, fullgraph=True)
 

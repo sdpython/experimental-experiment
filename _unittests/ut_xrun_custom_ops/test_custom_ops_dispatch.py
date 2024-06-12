@@ -230,7 +230,7 @@ class TestCustomOpsDispatch(ExtTestCase):
                 optimize=True,
                 **kwargs,
             ),
-            decompositions=get_decomposition_table(),
+            decompositions=get_decomposition_table("default"),
         )
 
         #

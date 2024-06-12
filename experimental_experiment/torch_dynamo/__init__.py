@@ -23,7 +23,7 @@ def get_decomposition_table(
         from torch._dynamo.backends.common import aot_autograd
         from experimental_experiment.torch_dynamo import get_decomposition_table
 
-        aot_compiler = aot_autograd(fw_compiler=backend_debug, decompositions=get_decomposition_table())
+        aot_compiler = aot_autograd(fw_compiler=backend_debug, decompositions=get_decomposition_table("default"))
 
         compiled_model = torch.compile(
             model,
@@ -40,7 +40,7 @@ def get_decomposition_table(
         import pprint
         from experimental_experiment.torch_dynamo import get_decomposition_table
 
-        pprint.pprint(get_decomposition_table())
+        pprint.pprint(get_decomposition_table("default"))
     """
     if decomposition_table == "default":
         import torch

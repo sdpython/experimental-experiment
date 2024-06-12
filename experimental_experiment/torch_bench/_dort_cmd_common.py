@@ -354,7 +354,7 @@ def create_compiled_model(
                 order_algorithm=order_algorithm,
                 **kwargs,
             ),
-            decompositions=get_decomposition_table(),
+            decompositions=get_decomposition_table("default"),
         )
         cc = torch.compile(
             model, backend=aot_compiler, fullgraph=True, dynamic=use_dynamic
@@ -416,7 +416,7 @@ def create_compiled_model(
                 order_algorithm=order_algorithm,
                 **kwargs,
             ),
-            decompositions=get_decomposition_table(),
+            decompositions=get_decomposition_table("default"),
         )
         cc = torch.compile(
             model, backend=aot_compiler, fullgraph=True, dynamic=use_dynamic
@@ -430,7 +430,7 @@ def create_compiled_model(
             fw_compiler=lambda *args, **kwargs: dynger_backend(
                 *args, verbose=verbose, optimize=optimize, **kwargs
             ),
-            decompositions=get_decomposition_table(),
+            decompositions=get_decomposition_table("default"),
         )
         cc = torch.compile(
             model, backend=aot_compiler, fullgraph=True, dynamic=use_dynamic
