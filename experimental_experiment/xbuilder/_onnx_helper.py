@@ -224,7 +224,6 @@ def unary_like_op_types() -> Set[str]:
         "Atanh",
         "BitShift",
         "Cast",
-        "CastLike",
         "Ceil",
         "Celu",
         "Clip",

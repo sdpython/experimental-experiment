@@ -1,4 +1,4 @@
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Callable, Dict, List, Optional, Union
 import numpy as np
 from onnx import ModelProto
 from .debug_backend import onnx_debug_backend
@@ -6,10 +6,16 @@ from .fast_backend import onnx_custom_backend
 from .dynger_backend import dynger_backend
 
 
-def get_decomposition_table():
+def get_decomposition_table(
+    decomposition_table: Optional[
+        Dict["torch._ops.OpOverload", Callable[..., Any] | str]  # noqa: F821
+    ] = None
+) -> Dict["torch._ops.OpOverload", Callable[..., Any]]:  # noqa: F821
     """
     Returns the decomposition table needed to translate backward
     graph into onnx. It should used as follows:
+
+    :param decomposition_table: a string or a table
 
     ::
 
@@ -36,20 +42,30 @@ def get_decomposition_table():
 
         pprint.pprint(get_decomposition_table())
     """
-    import torch
+    if decomposition_table == "default":
+        import torch
 
-    new_table = {}
-    for k, v in torch._decomp.decomposition_table.items():
-        if k.name() in {
-            "aten::embedding_dense_backward",
-            "aten::rrelu_with_noise",
-            "aten::native_layer_norm_backward",
-        }:
-            new_table[k] = v
-    return new_table
+        new_table = {}
+        for k, v in torch._decomp.decomposition_table.items():
+            if k.name() in {
+                "aten::embedding_dense_backward",
+                "aten::rrelu_with_noise",
+                "aten::native_layer_norm_backward",
+            }:
+                new_table[k] = v
+        return new_table
+
+    if isinstance(decomposition_table, dict):
+        return decomposition_table
+
+    raise AssertionError(
+        f"Unexpected value for decomposition_table: {decomposition_table!r}"
+    )
 
 
-def get_decomposition_table_dynamo(onnx_registry=None):
+def get_decomposition_table_dynamo(
+    onnx_registry=None,
+) -> Dict["torch._ops.OpOverload", Callable[..., Any]]:  # noqa: F821
     """
     Returns the decomposition table needed for the dynamo exporter.
 
@@ -74,7 +90,9 @@ def get_decomposition_table_dynamo(onnx_registry=None):
     return create_onnx_friendly_decomposition_table(onnx_registry or OnnxRegistry())
 
 
-def filter_decomposition_table(existing_table: Optional[Dict] = None) -> Dict:
+def filter_decomposition_table(
+    existing_table: Optional[Dict] = None,
+) -> Dict["torch._ops.OpOverload", Callable[..., Any]]:  # noqa: F821
     """
     Returns the decomposition table when some conversions because
     their translation in ONNX is less efficient.
@@ -119,6 +137,7 @@ def filter_decomposition_table(existing_table: Optional[Dict] = None) -> Dict:
             "aten::slice_backward",
             "aten::select_backward.out",
             "aten::slice.Tensor",
+            "aten::fft_rfft",
         }:
             continue
         new_table[k] = v

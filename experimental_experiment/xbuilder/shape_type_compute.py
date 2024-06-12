@@ -722,6 +722,12 @@ def set_shape_type_op_any(self: "GraphBuilder", node: NodeProto):  # noqa: F821
         set_type_shape_binary_op(self, node.output[0], *node.input)
     elif node.op_type in self._op_type_unary_like:
         set_type_shape_unary_op(self, node.output[0], node.input[0])
+    elif node.op_type == "CastLike":
+        self.set_type(node.output[0], self.get_type(node.input[1]))
+        if self.has_shape(node.input[0]):
+            self.set_shape(node.output[0], self.get_shape(node.input[0]))
+        elif self.has_rank(node.input[0]):
+            self.set_rank(node.output[0], self.get_rank(node.input[0]))
 
 
 def set_type_shape_fused_matmul(self: "GraphBuilder", node: NodeProto):  # noqa: F821
