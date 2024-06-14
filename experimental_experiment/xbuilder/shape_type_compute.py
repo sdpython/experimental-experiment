@@ -560,6 +560,10 @@ def _set_shape_type_op_any_concat(self: "GraphBuilder", node: NodeProto):  # noq
 
 
 def _set_shape_type_op_any_split(self: "GraphBuilder", node: NodeProto):  # noqa: F821
+    num_outputs = self.get_attribute(node, "num_outputs", exc=False)
+    assert num_outputs is None or num_outputs.i == len(
+        node.output
+    ), f"Unexpected number of outputs (should be {num_outputs.i}) for node {node}"
     if not self.has_type(node.input[0]):
         # the main type is missing, cannot continue
         return

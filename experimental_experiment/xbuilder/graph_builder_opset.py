@@ -97,6 +97,11 @@ class Opset:
         if outputs is None:
             if op_type in self._implemented:
                 outputs = self._implemented[op_type]
+            elif op_type == "Split" and kwargs.get("domain", "") == "":
+                assert (
+                    "num_outputs" in kwargs
+                ), f"Number of outputs is not implemented yet for operator {op_type!r} and kwargs={kwargs}"
+                outputs = kwargs["num_outputs"]
             else:
                 # We assume there is only one outputs.
                 outputs = 1
@@ -111,6 +116,9 @@ class Opset:
         name: Optional[str] = None,
         **kwargs,
     ):
+        assert (
+            op_type != "Split" or outputs != 1
+        ), f"Operator Split is useless with one output, inputs={inputs}, outputs={outputs}"
         if outputs is None:
             outputs = self._implemented[op_type]
         if inputs is None:

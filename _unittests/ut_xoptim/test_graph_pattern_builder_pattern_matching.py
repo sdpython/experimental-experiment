@@ -646,8 +646,8 @@ class TestGraphPatternBuilder(ExtTestCase):
                 "name",
                 [oh.make_tensor_value_info("X", TensorProto.FLOAT, [3, 4, 6])],
                 [
-                    oh.make_tensor_value_info("spl1", TensorProto.FLOAT, [3, 4, 3]),
-                    oh.make_tensor_value_info("spl2", TensorProto.FLOAT, [3, 4, 3]),
+                    oh.make_tensor_value_info("spl1", TensorProto.FLOAT, [3, 2, 3]),
+                    oh.make_tensor_value_info("spl2", TensorProto.FLOAT, [3, 2, 3]),
                 ],
                 [
                     onh.from_array(np.array([0], dtype=np.int64), name="zero"),
@@ -671,14 +671,16 @@ class TestGraphPatternBuilder(ExtTestCase):
         opt_onx = gr.to_onnx(optimize=True)
         self.assertEqual(["Split"], [n.op_type for n in opt_onx.graph.node])
 
-        feeds = {"x": self._range(3, 4, 6)}
+        feeds = {"X": self._range(3, 2, 6) * (3 * 2 * 6)}
         ref1 = ExtendedReferenceEvaluator(model)
         expected = ref1.run(None, feeds)
 
         self.assertEqual(0, len(opt_onx.graph.initializer))
         check_model(opt_onx)
+        self.assertEqual([], [i.name for i in opt_onx.graph.initializer])
         ref2 = ExtendedReferenceEvaluator(opt_onx)
         got = ref2.run(None, feeds)
+        self.assertEqual(len(expected), len(got))
         self.assertEqualArray(expected[0], got[0])
 
 

@@ -126,7 +126,7 @@ class ReshapeReshapePattern(PatternOptimization):
                 # Then we only allow it the shape is static.
                 if not g.is_constant(next_node.input[1]):
                     return self.none(node, inspect.currentframe().f_lineno)
-                cst = g.get_computed_shape(next_node.input[1])
+                cst = g.get_computed_constant(next_node.input[1])
                 if cst.min() <= 0:
                     return self.none(node, inspect.currentframe().f_lineno)
 
