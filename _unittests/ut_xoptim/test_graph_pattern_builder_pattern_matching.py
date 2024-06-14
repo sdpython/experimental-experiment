@@ -637,6 +637,14 @@ class TestGraphPatternBuilder(ExtTestCase):
             def apply_pattern(self, g: GraphBuilder, x: T, b0, e0, a0, b1, e1, a1):
                 return g.op.Split(x, axis=-1, num_outputs=2)
 
+            def validate_mapping(
+                self,
+                g: GraphBuilder,
+                deleted_nodes: List[NodeProto],
+                pattern_nodes: Optional[List[NodeProto]] = None,
+            ) -> bool:
+                return deleted_nodes[0].input[1] == "zero"
+
         model = oh.make_model(
             oh.make_graph(
                 [

@@ -571,7 +571,7 @@ class EasyPatternOptimization(PatternOptimization):
                 f"ec={ec}, gc={gc}"
             )
         if self.verbose > 5 and res > 0:
-            print(f"[EasyPatternOptimization._match_foward] add {res} nodes")
+            print(f"[EasyPatternOptimization._match_forward] add {res} nodes")
         return res
 
     def _debug_print(self) -> str:
@@ -735,6 +735,9 @@ class EasyPatternOptimization(PatternOptimization):
                 return res
 
             if res == 0 and fall_back_candidates:
+                # No backward possible, no forward either.
+                # We make sure that one of pattern inputs is not linked to another
+                # node in the pattern itself.
                 for candidate in fall_back_candidates:
                     res = self._match_forward(g, node, pat, marked, stacked, *candidate)
                     if res is None or res == 0:
@@ -793,7 +796,8 @@ class EasyPatternOptimization(PatternOptimization):
         g: "GraphBuilder",  # noqa: F821
         *nodes: Sequence[NodeProto],
     ) -> List[NodeProto]:
-        pat = self._build_pattern(g, self.match_pattern)
+        # Why build the pattern gain
+        pat = self._get_match_pattern(g)
         assert len(nodes) == len(pat.nodes), (
             f"Mismatch matched nodes pattern has {len(pat.nodes)} != {len(nodes)} = "
             f"the number of matched nodes"
