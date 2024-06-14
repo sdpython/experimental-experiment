@@ -354,7 +354,7 @@ class EasyPatternOptimization(PatternOptimization):
         Matches backward.
 
         :param g: graph
-        :param node: root node (the node the matched begain with,
+        :param node: root node (the node the matched began with,
             used only for debugging)
         :param pat: pattern
         :param marked: nodes of the pattern marked as already matched
@@ -376,6 +376,7 @@ class EasyPatternOptimization(PatternOptimization):
                 n,
             )
             return self.none(node, inspect.currentframe().f_lineno)
+
         for i, pi in zip(n.input, pn.input):
             ppred = pat.node_before(pi)
             if ppred is None:
@@ -419,37 +420,45 @@ class EasyPatternOptimization(PatternOptimization):
         pat: "GraphBuilderPatternOptimization",  # noqa: F821
         marked: Dict[int, Tuple[NodeProto, NodeProto]],
         stacked: List[int],
-        n: NodeProto,
-        pn: NodeProto,
+        n: Union[NodeProto, str],
+        pn: Union[NodeProto, str],
     ) -> Optional[int]:
         """
         Matches forward.
 
         :param g: graph
-        :param node: root node (the node the matched begain with,
-            used only for debugging)
+        :param node: root node (the node the matched began with,
+            used only for debugging),
         :param pat: pattern
         :param marked: nodes of the pattern marked as already matched
         :param stacked: next node to look into
-        :param n: node coming from the graph
-        :param ns: node coming from the pattern
+        :param n: node coming from the graph, it can be a string to start from a result
+        :param ns: node coming from the pattern, it can be a string to start from a result
         :return: number of matched nodes to continue, None or False to indicate a failed match
         """
         res = 0
 
         # successors
-        if len(n.output) != len(pn.output):
-            # not the same number of outputs
-            self._hint(
-                "FORWARD: not the same number of outputs",
-                "-- pattern",
-                pn,
-                "-- model",
-                n,
+        if isinstance(n, NodeProto) and isinstance(pn, NodeProto):
+            if len(n.output) != len(pn.output):
+                # not the same number of outputs
+                self._hint(
+                    "FORWARD: not the same number of outputs",
+                    "-- pattern",
+                    pn,
+                    "-- model",
+                    n,
+                )
+                return self.none(node, inspect.currentframe().f_lineno)
+            matched_results = list(zip(n.output, pn.output))
+        elif isinstance(n, str) and isinstance(pn, str):
+            matched_results = [(n, pn)]
+        else:
+            raise AssertionError(
+                f"Unexpected types for n: {type(n)} and pn: {type(pn)}."
             )
-            return self.none(node, inspect.currentframe().f_lineno)
 
-        for o, op in zip(n.output, pn.output):
+        for o, op in matched_results:
             ns = g.next_nodes(o)
             pns = pat.next_nodes(op)
             if len(pns) == 0:
@@ -692,11 +701,27 @@ class EasyPatternOptimization(PatternOptimization):
             idn = stacked.pop()
             n, pn = marked[idn]
 
-            res = self._match_backward(g, node, pat, marked, stacked, n, pn)
-            if res is None:
-                if self.verbose > 5:
-                    print("[EasyPatternOptimization.match] done. backward failed.")
-                return res
+            fall_back_candidates = None
+            if any(map(lambda i: pat.node_before(i) is not None, pn.input)):
+                # There are backward nodes in the pattern.
+                res = self._match_backward(g, node, pat, marked, stacked, n, pn)
+                if res is None:
+                    if self.verbose > 5:
+                        print("[EasyPatternOptimization.match] done. backward failed.")
+                    return res
+            else:
+                # We check then if an input or pn has an unmatched node.
+                for x in pn.input:
+                    psuccessors = pat.next_nodes(x)
+                    if len(psuccessors) == 1:
+                        # It is itself.
+                        continue
+                    for pnn in psuccessors:
+                        if id(pnn) not in marked:
+                            # One unmarked node is consuming the input.
+                            # The potential list of candidates.
+                            fall_back_candidates = list(zip(n.input, pn.input))
+                            break
 
             assert all(map(lambda b: id(b[1]) in check_ids, marked.values())), (
                 f"At least one id is not part of the pattern ids={check_ids}, "
@@ -708,6 +733,13 @@ class EasyPatternOptimization(PatternOptimization):
                 if self.verbose > 5:
                     print("[EasyPatternOptimization.match] done. forward failed.")
                 return res
+
+            if res == 0 and fall_back_candidates:
+                for candidate in fall_back_candidates:
+                    res = self._match_forward(g, node, pat, marked, stacked, *candidate)
+                    if res is None or res == 0:
+                        continue
+                    break
 
             assert all(map(lambda b: id(b[1]) in check_ids, marked.values())), (
                 f"At least one id is not part of the pattern ids={check_ids}, "
