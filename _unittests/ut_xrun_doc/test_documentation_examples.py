@@ -93,12 +93,16 @@ class TestDocumentationExamples(ExtTestCase):
                     reason = "graphviz not installed"
 
             if name in {"plot_llama_diff_dort_301.py", "plot_llama_diff_export_301.py"}:
-                import torch
+                from torch import __version__ as tv
 
-                if pv.Version(".".join(torch.__version__.split(".")[:2])) < pv.Version(
-                    "2.4"
-                ):
+                if pv.Version(".".join(tv.split(".")[:2])) < pv.Version("2.4"):
                     reason = "requires torch 2.4"
+
+            if name in {"plot_torch_export_201.py"}:
+                from torch import __version__ as tv
+
+                if pv.Version(".".join(tv.split(".")[:2])) < pv.Version("2.5"):
+                    reason = "requires torch 2.5"
 
             if name in {"plot_llama_bench_102.py"}:
                 if sys.platform in {"darwin"}:
