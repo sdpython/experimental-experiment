@@ -98,8 +98,8 @@ jobs:
     displayName: 'Install Graphviz'
   - script: python -m pip install --upgrade pip setuptools wheel
     displayName: 'Install tools'
-  - script: pip install -r requirements.txt
-    displayName: 'Install Requirements'
+  - script: pip install -r requirements.txt --find-links https://download.pytorch.org/whl/nightly/
+    displayName: 'Install Requirements + torch-nightly'
   #- script: |
   #    python -m pip install parameterized
   #    mkdir onnxscript_repo
