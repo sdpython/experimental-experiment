@@ -40,14 +40,14 @@ class TestGraphPatternBuilder(ExtTestCase):
             Replaces ConstantOfShape + ScatterND with ScatterNDOfShape (com.domain).
             """
 
-            def match_pattern(self, g: "GraphBuilder", x: T, y: T, z: T):  # noqa: F821
+            def match_pattern(self, g: GraphBuilder, x: T, y: T, z: T):
                 """
                 Builds the pattern to match.
                 """
                 tmp = g.op.Add(x, y)
                 return g.op.Add(tmp, z)
 
-            def apply_pattern(self, g: "GraphBuilder", x: T, y: T, z: T):  # noqa: F821
+            def apply_pattern(self, g: GraphBuilder, x: T, y: T, z: T):
                 """
                 Builds the pattern to match.
                 """
@@ -116,9 +116,7 @@ class TestGraphPatternBuilder(ExtTestCase):
             Replaces ConstantOfShape + ScatterND with ScatterNDOfShape (com.domain).
             """
 
-            def match_pattern(
-                self, g: "GraphBuilder", x: T, y: T, w: T, z: T
-            ):  # noqa: F821
+            def match_pattern(self, g: GraphBuilder, x: T, y: T, w: T, z: T):
                 """
                 Builds the pattern to match.
                 """
@@ -127,9 +125,7 @@ class TestGraphPatternBuilder(ExtTestCase):
                 r1 = g.op.Add(tmp, z)
                 return tmp2, r1
 
-            def apply_pattern(
-                self, g: "GraphBuilder", x: T, y: T, w: T, z: T
-            ):  # noqa: F821
+            def apply_pattern(self, g: GraphBuilder, x: T, y: T, w: T, z: T):
                 """
                 Builds the pattern to match.
                 """
@@ -620,6 +616,80 @@ class TestGraphPatternBuilder(ExtTestCase):
 
         new_proto = gr.to_onnx()
         self.assertEqual(len(new_proto.graph.node), len(proto.graph.node))
+
+    def test_graph_pattern_builder_multi_outputs_slice(self):
+
+        class SliceSplitPattern(EasyPatternOptimization):
+
+            def match_pattern(
+                self,
+                g: GraphBuilder,
+                x: "FLOAT",  # noqa: F821
+                b0: "INT64",  # noqa: F821
+                e0: "INT64",  # noqa: F821
+                a0: "INT64",  # noqa: F821
+                b1: "INT64",  # noqa: F821
+                e1: "INT64",  # noqa: F821
+                a1: "INT64",  # noqa: F821
+            ):
+                return g.op.Slice(x, b0, e0, a0), g.op.Slice(x, b1, e1, a1)
+
+            def apply_pattern(self, g: GraphBuilder, x: T, b0, e0, a0, b1, e1, a1):
+                return g.op.Split(x, axis=-1, num_outputs=2)
+
+            def validate_mapping(
+                self,
+                g: GraphBuilder,
+                deleted_nodes: List[NodeProto],
+                pattern_nodes: Optional[List[NodeProto]] = None,
+            ) -> bool:
+                return deleted_nodes[0].input[1] == "zero"
+
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("Slice", ["X", "zero", "half", "axis"], ["spl1"]),
+                    oh.make_node("Slice", ["X", "half", "last", "axis"], ["spl2"]),
+                ],
+                "name",
+                [oh.make_tensor_value_info("X", TensorProto.FLOAT, [3, 4, 6])],
+                [
+                    oh.make_tensor_value_info("spl1", TensorProto.FLOAT, [3, 2, 3]),
+                    oh.make_tensor_value_info("spl2", TensorProto.FLOAT, [3, 2, 3]),
+                ],
+                [
+                    onh.from_array(np.array([0], dtype=np.int64), name="zero"),
+                    onh.from_array(np.array([3], dtype=np.int64), name="half"),
+                    onh.from_array(np.array([6], dtype=np.int64), name="last"),
+                    onh.from_array(np.array([2], dtype=np.int64), name="axis"),
+                ],
+            ),
+            opset_imports=[oh.make_opsetid("", 18)],
+        )
+
+        check_model(model)
+        gr = GraphBuilder(
+            model,
+            infer_shapes=True,
+            optimization_options=OptimizationOptions(
+                patterns=[SliceSplitPattern(verbose=0)],
+                verbose=0,
+            ),
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+        self.assertEqual(["Split"], [n.op_type for n in opt_onx.graph.node])
+
+        feeds = {"X": self._range(3, 2, 6) * (3 * 2 * 6)}
+        ref1 = ExtendedReferenceEvaluator(model)
+        expected = ref1.run(None, feeds)
+
+        self.assertEqual(0, len(opt_onx.graph.initializer))
+        check_model(opt_onx)
+        self.assertEqual([], [i.name for i in opt_onx.graph.initializer])
+        ref2 = ExtendedReferenceEvaluator(opt_onx)
+        got = ref2.run(None, feeds)
+        self.assertEqual(len(expected), len(got))
+        self.assertEqualArray(expected[0], got[0])
 
 
 if __name__ == "__main__":
