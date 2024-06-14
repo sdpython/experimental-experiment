@@ -17,6 +17,7 @@ from torch.nn import functional, Module, Parameter
 from experimental_experiment.ext_test_case import (
     ExtTestCase,
     ignore_warnings,
+    requires_onnxscript,
     requires_torch,
     hide_stdout,
 )
@@ -465,6 +466,7 @@ class TestOperatorsOnnxrt(ExtTestCase):
         )
 
     @hide_stdout()
+    @requires_onnxscript("0.3")  # getitem
     def test_xt_chunk(self):
         x = torch.tensor([0.0, 1.0, 2.0], requires_grad=True)
         self.assertONNX(
@@ -476,6 +478,7 @@ class TestOperatorsOnnxrt(ExtTestCase):
         )
 
     @hide_stdout()
+    @requires_onnxscript("0.3")  # getitem
     def test_xt_split(self):
         x = torch.tensor(
             [[0.0, 1.0, 1.0, 0.0, 2.0, 2.0], [2.0, 3.0, 3.0, 2.0, 1.0, 1.0]]
@@ -489,6 +492,7 @@ class TestOperatorsOnnxrt(ExtTestCase):
         )
 
     @hide_stdout()
+    @requires_onnxscript("0.3")  # getitem
     def test_xt_split_with_sizes(self):
         x = torch.tensor(
             [[0.0, 1.0, 1.0, 0.0, 2.0, 2.0], [2.0, 3.0, 3.0, 2.0, 1.0, 1.0]]
