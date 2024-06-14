@@ -68,6 +68,7 @@ def main(args=None):
         create_configuration_for_benchmark,
         create_model,
     )
+    from experimental_experiment.memory_peak import start_spying_on, flatten
 
     config_dict = create_configuration_for_benchmark(
         model=args.model,
@@ -231,6 +232,8 @@ def main(args=None):
             f"reserved={torch.cuda.memory_reserved(0)}"
         )
 
+    memory = start_spying_on(cuda=is_cuda)
+
     warmup_times = []
     loss = torch.nn.MSELoss()
     for i in range(args.warmup):
@@ -305,6 +308,8 @@ def main(args=None):
     print(f"times={times}")
     print(f"warmup_times={warmup_times}")
     print("-----------")
+    stat_memory = flatten(memory.stop(), prefix="memory_")
+    print(stat_memory)
 
     i_shapes = set(config_dict["input_dims"])
     if len(i_shapes) == 1:
@@ -327,6 +332,8 @@ def main(args=None):
     print(f":implementation,{args.implementation};")
     print(f":torch,{torch.__version__};")
     print(f":transformers,{transformers.__version__};")
+    for k, v in stat_memory.items():
+        print(f":{k},{v};")
     if args.backend in {"custom", "ort+", "debug"}:
         suffix = "+oo" if args.ort_optimize else ""
         print(f":patterns,+{args.enable_pattern}-{args.disable_pattern}{suffix};")
