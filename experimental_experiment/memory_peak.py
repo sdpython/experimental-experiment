@@ -1,6 +1,6 @@
 import multiprocessing
 import os
-from typing import Optional
+from typing import Dict, Optional
 
 
 def get_memory_rss(pid: int) -> int:
@@ -215,7 +215,7 @@ def start_spying_on(
 
     .. code-block:: python
 
-        from experimental_experiment.memory_peak import start_spying_on
+        from experimental_experiment.memory_peak import start_spying_on, flatten
 
         p = start_spying_on()
         # ...
@@ -223,7 +223,19 @@ def start_spying_on(
         # ...
         stat = p.stop()
         print(stat)
+        print(flatten(stat))
     """
     if pid is None:
         pid = os.getpid()
     return MemorySpy(pid, delay, cuda)
+
+
+def flatten(ps, prefix: str = "") -> Dict[str, float]:
+    obs = ps["cpu"].to_dict(unit=2**20)
+    if "gpus" in ps:
+        for i, g in enumerate(ps["gpus"]):
+            for k, v in g.to_dict(unit=2**20).items():
+                obs[f"gpu{i}_{k}"] = v
+    if prefix:
+        obs = {f"{prefix}{k}": v for k, v in obs.items()}
+    return obs
