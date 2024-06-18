@@ -586,7 +586,7 @@ def _set_shape_type_op_any_split(self: "GraphBuilder", node: NodeProto):  # noqa
         for i, o in enumerate(node.output):
             sh[axis] = int(splits[i])
             self.set_shape(o, tuple(sh))
-    else:
+    elif self.has_rank(node.input[0]):
         rank = self.get_rank(node.input[0])
         for o in node.output:
             self.set_rank(o, rank)
