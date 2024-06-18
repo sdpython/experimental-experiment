@@ -586,7 +586,7 @@ def _set_shape_type_op_any_split(self: "GraphBuilder", node: NodeProto):  # noqa
         for i, o in enumerate(node.output):
             sh[axis] = int(splits[i])
             self.set_shape(o, tuple(sh))
-    else:
+    elif self.has_rank(node.input[0]):
         rank = self.get_rank(node.input[0])
         for o in node.output:
             self.set_rank(o, rank)
@@ -750,7 +750,7 @@ def set_type_shape_fused_matmul(self: "GraphBuilder", node: NodeProto):  # noqa:
         new_shape = (sh1[-1] if transA else sh1[-2], sh2[-2] if transB else sh2[-1])
         self.set_shape(name, prefix + new_shape)
         self.set_shape(name, prefix + new_shape)
-    else:
+    elif self.has_rank(x) and self.has_rank(y):
         self.set_rank(name, max(self.get_rank(x), self.get_rank(y)))
 
 

@@ -284,6 +284,8 @@ class EasyPatternOptimization(PatternOptimization):
         for name, ann in zip(args, anns):
             if ann is None or ann is str or ann is inspect._empty:
                 g2.make_tensor_input(name, 0, None, False)
+                # Type is unknown
+                g2.set_type(name, -1)
                 continue
             assert isinstance(
                 ann, str
@@ -376,6 +378,17 @@ class EasyPatternOptimization(PatternOptimization):
                 n,
             )
             return self.none(node, inspect.currentframe().f_lineno)
+
+        for nr, pnr in zip(n.input, pn.input):
+            if len(g.next_nodes(nr)) != len(pat.next_nodes(pnr)):
+                self._hint(
+                    "BACKWARD: one input is used outside the pattern",
+                    "-- pattern",
+                    pn,
+                    "-- model",
+                    n,
+                )
+                return self.none(node, inspect.currentframe().f_lineno)
 
         for i, pi in zip(n.input, pn.input):
             ppred = pat.node_before(pi)

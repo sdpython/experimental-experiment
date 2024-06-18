@@ -691,6 +691,63 @@ class TestGraphPatternBuilder(ExtTestCase):
         self.assertEqual(len(expected), len(got))
         self.assertEqualArray(expected[0], got[0])
 
+    def test_should_not_match(self):
+        proto = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("Transpose", ["X"], ["Xt"], perm=[1, 0]),
+                    oh.make_node("MatMul", ["Xt", "Y"], ["Z"]),
+                    oh.make_node("Transpose", ["Xt"], ["W"], perm=[1, 0]),
+                ],
+                "name",
+                [
+                    oh.make_tensor_value_info("X", TFLOAT, [4, 4]),
+                    oh.make_tensor_value_info("Y", TFLOAT, [4, 4]),
+                ],
+                [
+                    oh.make_tensor_value_info("Z", TFLOAT, [None, None]),
+                    oh.make_tensor_value_info("W", TFLOAT, [None, None]),
+                ],
+            ),
+            opset_imports=[
+                oh.make_opsetid("", 18),
+                oh.make_opsetid("com.microsoft", 1),
+            ],
+        )
+
+        class TransposeMatMulPattern(EasyPatternOptimization):
+            def match_pattern(self, g: GraphBuilder, X, Y):
+                return g.op.MatMul(g.op.Transpose(X), Y)
+
+            def apply_pattern(self, g: GraphBuilder, X, Y):
+                return g.anyop.FusedMatMul(X, Y, domain="com.microsoft", transA=1)
+
+            def validate_mapping(
+                self,
+                g: GraphBuilder,
+                deleted_nodes: List[NodeProto],
+                pattern_nodes: Optional[List[NodeProto]] = None,
+            ) -> bool:
+                perm = list(g.get_attribute(deleted_nodes[0], "perm").ints)
+                expected_perm = list(range(len(perm)))
+                expected_perm[-2], expected_perm[-1] = (
+                    expected_perm[-1],
+                    expected_perm[-2],
+                )
+                return expected_perm == perm
+
+        gr = GraphBuilder(
+            proto,
+            infer_shapes=True,
+            optimization_options=OptimizationOptions(
+                patterns=[TransposeMatMulPattern(verbose=0)],
+                verbose=0,
+            ),
+        )
+
+        new_proto = gr.to_onnx()
+        self.assertEqual(len(new_proto.graph.node), len(proto.graph.node))
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
