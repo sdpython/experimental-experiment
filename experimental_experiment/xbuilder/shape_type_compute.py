@@ -750,7 +750,7 @@ def set_type_shape_fused_matmul(self: "GraphBuilder", node: NodeProto):  # noqa:
         new_shape = (sh1[-1] if transA else sh1[-2], sh2[-2] if transB else sh2[-1])
         self.set_shape(name, prefix + new_shape)
         self.set_shape(name, prefix + new_shape)
-    else:
+    elif self.has_rank(x) and self.has_rank(y):
         self.set_rank(name, max(self.get_rank(x), self.get_rank(y)))
 
 

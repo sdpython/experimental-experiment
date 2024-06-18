@@ -2551,6 +2551,7 @@ class GraphBuilder:
         rows.append(
             f"_known_value_shape={pprint.pformat(self._known_value_shape)[:10000]}"
         )
+        rows.append(f"_known_types={pprint.pformat(self._known_types)[:10000]}")
         rows.append(f"_known_shapes={pprint.pformat(self._known_shapes)[:10000]}")
         reminaing_ranks = {
             k: v for k, v in self._known_ranks.items() if k not in self._known_shapes
