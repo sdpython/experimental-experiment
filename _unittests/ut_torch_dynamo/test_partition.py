@@ -49,7 +49,7 @@ class TestPartition(ExtTestCase):
 
         aot_compiler = aot_autograd(
             fw_compiler=backend_debug,
-            decompositions=get_decomposition_table(),
+            decompositions=get_decomposition_table("default"),
         )
 
         compiled_model = torch.compile(
@@ -95,11 +95,11 @@ class TestPartition(ExtTestCase):
                 backend_function=backend_debug,
                 verbose=1,
                 use_aot_autograd=True,
-                decompositions=get_decomposition_table(),
+                decompositions=get_decomposition_table("default"),
                 partition_fn=get_partition_fn(),
                 **kwargs,
             ),
-            decompositions=get_decomposition_table(),
+            decompositions=get_decomposition_table("default"),
             partition_fn=get_partition_fn(),
         )
 
@@ -148,11 +148,11 @@ class TestPartition(ExtTestCase):
                 backend_function=backend_debug,
                 verbose=1,
                 use_aot_autograd=True,
-                decompositions=get_decomposition_table(),
+                decompositions=get_decomposition_table("default"),
                 partition_fn=get_partition_fn(),
                 **kwargs,
             ),
-            decompositions=get_decomposition_table(),
+            decompositions=get_decomposition_table("default"),
             partition_fn=get_partition_fn(),
         )
 

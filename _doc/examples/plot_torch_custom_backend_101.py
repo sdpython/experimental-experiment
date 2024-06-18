@@ -89,7 +89,7 @@ aot_compiler = aot_autograd(
     fw_compiler=lambda *args, **kwargs: onnx_custom_backend(
         *args, target_opset=18, **kwargs
     ),
-    decompositions=get_decomposition_table(),
+    decompositions=get_decomposition_table("default"),
 )
 
 compiled_model = torch.compile(
@@ -124,7 +124,7 @@ def trained_model(max_iter=5, dynamic=False, storage=None):
         fw_compiler=lambda *args, **kwargs: onnx_custom_backend(
             *args, target_opset=18, storage=storage, **kwargs
         ),
-        decompositions=get_decomposition_table(),
+        decompositions=get_decomposition_table("default"),
     )
 
     compiled_model = torch.compile(

@@ -127,7 +127,13 @@ def _export(
     import torch
 
     if not use_dynamo:
+
         exported_mod = torch.export.export(mod, args, dynamic_shapes=dynamic_shapes)
+        if decomposition_table:
+            from ..torch_dynamo import get_decomposition_table
+
+            decomposition_table = get_decomposition_table(decomposition_table)
+            exported_mod = exported_mod.run_decompositions(decomposition_table)
         return exported_mod
 
     # import torch.utils._pytree as pytree
@@ -159,7 +165,7 @@ def _make_builder_interpreter(
     tracing_mode: str = "symbolic",
     same_signature: bool = True,
     decomposition_table: Optional[
-        Dict["torch._ops.OpOverload", Callable[..., Any]]  # noqa: F821
+        Dict["torch._ops.OpOverload", Callable[..., Any] | str]  # noqa: F821
     ] = None,
     dispatcher: Optional["Dispatcher"] = None,  # noqa: F821
     use_dynamo: bool = True,
@@ -201,6 +207,9 @@ def _make_builder_interpreter(
         constants = mod.state_dict()
         mapping = {}
     else:
+        if verbose > 0:
+            print(f"[_make_builder_interpreter] export with use_dynamo={use_dynamo}")
+
         exported_mod = _export(
             mod,
             args,
@@ -313,6 +322,9 @@ def to_onnx(
     dispatcher: Optional["Dispatcher"] = None,  # noqa: F821
     large_model: bool = False,
     external_threshold: int = 1024,
+    decomposition_table: Optional[
+        Dict["torch._ops.OpOverload", Callable[..., Any] | str]  # noqa: F821
+    ] = None,
     api_two: bool = False,
 ) -> Union[
     Union[ModelProto, ModelContainer],
@@ -341,6 +353,7 @@ def to_onnx(
         or saved as external weights
     :param external_threshold: if large_model is True, every tensor above this limit
         is stored as external
+    :param decomposition_table: decomposition table
     :param api_two: use ``torch._dynamo.export`` instead of ``torch.export.export``
     :return: onnx model
     """
@@ -383,6 +396,7 @@ def to_onnx(
         dynamic_shapes=dynamic_shapes,
         dispatcher=dispatcher,
         use_dynamo=api_two,
+        decomposition_table=decomposition_table,
     )
 
     if verbose:

@@ -966,7 +966,9 @@ class DynamoInterpreter:
             for v, r in zip(val, res):
                 if isinstance(v, self.torch.Tensor):
                     dtype = _get_type(v.dtype)
-                    self.builder.set_type(r, dtype)
+                    if dtype not in (TensorProto.COMPLEX64, TensorProto.COMPLEX128):
+                        # Complex may be handled differently.
+                        self.builder.set_type(r, dtype)
                     shape = tuple(v.shape)
                     if self.builder.is_dynamic_shape(shape):
                         self.builder.set_shape(r, shape, set_if_more_precise=True)

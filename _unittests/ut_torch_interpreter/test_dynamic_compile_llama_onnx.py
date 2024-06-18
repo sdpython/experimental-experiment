@@ -115,7 +115,7 @@ class TestDynamoLlamaDynamic(ExtTestCase):
                 else:
                     aot_compiler = aot_autograd(
                         fw_compiler=backend_debug,
-                        decompositions=get_decomposition_table(),
+                        decompositions=get_decomposition_table("default"),
                     )
 
                 compiled_model = torch.compile(

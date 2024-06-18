@@ -1178,6 +1178,186 @@ def aten_expand(
     return res
 
 
+def _fftn_onnx_normalization(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    transformed: T,
+    normalization: int,
+    forward: bool,
+    dims: Sequence[int],
+    name="_fftn_onnx_normalization",
+) -> T:
+    # Obtain the total_sample_count (n) for normalization
+    x_shape = g.op.Shape(x, name=name)
+    x_shape_0 = g.op.Gather(x_shape, np.array(dims, dtype=np.int64), name=name)
+    g.set_type(x_shape_0, TensorProto.INT64)
+    total_sample_count_i = g.op.ReduceProd(x_shape_0, keepdims=0, name=name)
+    g.set_type(total_sample_count_i, TensorProto.INT64)
+    total_sample_count = g.op.CastLike(total_sample_count_i, transformed, name=name)
+    g.set_type(total_sample_count, g.get_type(transformed))
+
+    # Normalize the result
+    # Reference https://pytorch.org/docs/stable/generated/torch.fft.fftn.html#torch.fft.fftn
+    # Reference https://github.com/pytorch/pytorch/blob/d090c18fcaaba6e1b5cb474a89058cf6081c8275/torch/_refs/fft.py#L42
+    if normalization == 1:
+        # "forward" - normalize by 1/n
+        sq = g.op.Sqrt(total_sample_count, name=name)
+        result = (
+            g.op.Div(transformed, sq, name=name)
+            if forward
+            else g.op.Mul(transformed, sq, name=name)
+        )
+    elif normalization == 2:
+        # "ortho" - normalize by 1/sqrt(n)
+        result = (
+            g.op.Div(transformed, total_sample_count, name=name)
+            if forward
+            else transformed
+        )
+    else:
+        # "backward" - no normalization
+        result = (
+            transformed
+            if forward
+            else g.op.Mul(transformed, total_sample_count, name=name)
+        )
+
+    return g.op.Identity(result, outputs=outputs, name=name)
+
+
+def _fftn_onnx(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    dims: Sequence[int],
+    normalization: int,
+    inverse: bool,
+    onesided: bool,
+    name="_fftn_onnx",
+) -> T:
+    """Standard complex to complex or real to complex FFT (forward or backward).
+
+    This is a private shared function for implementing the various FFT functions.
+
+    Args:
+        self: The input tensor.
+        dims: The dimensions to apply FFT.
+        normalization: The normalization mode.
+        inverse: Whether to compute the inverse FFT.
+        onesided: Whether to compute the one-sided FFT, which retains only the
+            positive frequencies.
+
+    Returns:
+        The transformed tensor.
+    """
+    transformed = g.op.Unsqueeze(x, axes=np.array([0], dtype=np.int64), name=name)
+    g.set_type(transformed, g.get_type(x))
+    g.set_rank(transformed, g.get_rank(x) + 1)
+
+    new_dims = [dim_ + 1 if dim_ >= 0 else dim_ for dim_ in dims]
+
+    for dim in new_dims[:-1]:
+        transformed = g.op.DFT(
+            transformed, axis=dim, inverse=inverse, onesided=False, name=name
+        )
+        g.set_type(transformed, g.get_type(x))
+
+    # Torch computers one-sided FFT on the last dimension only.
+    transformed = (
+        g.op.DFT(
+            transformed, axis=new_dims[-1], inverse=inverse, onesided=True, name=name
+        )
+        if onesided
+        else g.op.DFT(
+            transformed, axis=new_dims[-1], inverse=inverse, onesided=False, name=name
+        )
+    )
+    g.set_type(transformed, g.get_type(x))
+
+    # Remove the batch dimension
+    transformed = g.op.Squeeze(
+        transformed, axes=np.array([0], dtype=np.int64), name=name
+    )
+    g.set_type(transformed, g.get_type(x))
+
+    return _fftn_onnx_normalization(
+        g, sts, outputs, x, transformed, normalization, not inverse, dims, name=name
+    )
+
+
+def aten__fft_c2r(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    dim: Sequence[int],
+    normalization: int,
+    last_dim_size: int,
+    name="_fft_c2r",
+) -> T:
+    """_fft_c2r"""
+    assert last_dim_size == 2048, f"Unexpected value for last_dim_size={last_dim_size}"
+    x_rank = g.get_rank(x)
+    # ONNX DFT input assumes the last dimension is the complex dimension.
+    # Thus dim=-1 in PyTorch is dim=-2 in ONNX.
+    dim = [(d - 1) + x_rank if d < 0 else d for d in dim]
+    transformed = _fftn_onnx(
+        g, sts, None, x, dim, normalization, inverse=True, onesided=False, name=name
+    )
+    # Take only the real part
+    real_part = g.op.Slice(
+        transformed,
+        axes=np.array([-1], dtype=np.int64),
+        starts=np.array([0], dtype=np.int64),
+        ends=np.array([1], dtype=np.int64),
+        name=name,
+    )
+
+    return g.op.Squeeze(
+        real_part, axes=np.array([-1], dtype=np.int64), outputs=outputs, name=name
+    )
+
+
+def aten__fft_r2c(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    dim: Sequence[int],
+    normalization: int,
+    onesided: bool,
+    name="_fft_r2c",
+) -> T:
+    """_fft_r2c"""
+
+    # Add a new dimension at the end
+    signal = g.op.Unsqueeze(x, axes=np.array([-1], dtype=np.int64), name=name)
+
+    # No need to fill the imaginary part because ONNX DFT accepts real inputs
+    # https://onnx.ai/onnx/operators/onnx__DFT.html#inputs
+
+    x_rank = g.get_rank(x)
+
+    # ONNX DFT input assumes the last dimension is the complex dimension.
+    # Thus dim=-1 in PyTorch is dim=-2 in ONNX.
+    dim = [(d - 1) + x_rank if d < 0 else d for d in dim]
+
+    return _fftn_onnx(
+        g,
+        sts,
+        outputs,
+        signal,
+        dim,
+        normalization,
+        inverse=False,
+        onesided=onesided,
+        name=name,
+    )
+
+
 def aten_fill_Scalar(
     g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T, v: T
 ) -> T:
