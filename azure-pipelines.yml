@@ -1,4 +1,61 @@
 jobs:
+- job: 'TestLinuxWheelPip_nightly'
+  pool:
+    vmImage: 'ubuntu-latest'
+  strategy:
+    matrix:
+      Python312-Linux:
+        python.version: '3.12'
+    maxParallel: 3
+
+  steps:
+  - task: UsePythonVersion@0
+    inputs:
+      versionSpec: '$(python.version)'
+      architecture: 'x64'
+  - script: sudo apt-get update
+    displayName: 'AptGet Update'
+  - script: sudo apt-get install -y graphviz
+    displayName: 'Install Graphviz'
+  - script: python -m pip install --upgrade pip setuptools wheel
+    displayName: 'Install tools'
+  - script: pip install --index-url=https://download.pytorch.org/whl/nightly/cpu --pre torch torchvision
+    displayName: 'Install torch nightly'
+  - script: pip install transformers
+    displayName: 'Install specific version of transformers'
+  - script: pip install -r requirements.txt
+    displayName: 'Install Requirements'
+  - script: pip install -r requirements-dev.txt
+    displayName: 'Install Requirements dev'
+  - script: |
+      python -c "import torch;print('torch', torch.__version__)"
+      python -c "import transformers;print('transformers', transformers.__version__)"
+      python -c "import onnxruntime;print('onnxruntime', onnxruntime.__version__)"
+      python -c "import onnx;print('onnx', onnx.__version__)"
+      python -c "import sklearn;print('scikit-learn', sklearn.__version__)"
+      # python -c "import onnx_extended;print('onnx_extended', onnx_extended.__version__)"
+      python -c "import onnxscript;print('onnxscript', getattr(onnxscript, '__version__', 'dev'))"
+    displayName: 'Install check transformers version'
+  - script: |
+      ruff check .
+    displayName: 'Ruff'
+  - script: |
+      black --diff .
+    displayName: 'Black'
+  - script: |
+      python -m pip wheel . --wheel-dir dist -v -v -v
+    displayName: 'build wheel'
+  - script: |
+      python -m pip install . -v -v -v
+    displayName: 'install wheel'
+  - script: |
+      UNITTEST_ONNXRT=1 python -m pytest _unittests --durations=10
+    displayName: 'Runs Unit Tests'
+  - task: PublishPipelineArtifact@0
+    inputs:
+      artifactName: 'wheel-linux-wheel-$(python.version)'
+      targetPath: 'dist'
+
 - job: 'TestLinuxWheelPip_4372'
   pool:
     vmImage: 'ubuntu-latest'

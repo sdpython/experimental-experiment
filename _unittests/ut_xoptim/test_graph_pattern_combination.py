@@ -164,7 +164,7 @@ class TestGraphPatternCombination(ExtTestCase):
         if skip and not os.path.exists(p):
             raise unittest.SkipTest(f"Unable to find {p!r}.")
         self.assertExists(p)
-        return load_onnx(p)
+        return load_onnx(p, load_external_data=False)
 
     def _range(self, *shape, bias: float = None):
         n = np.prod(shape)
@@ -497,6 +497,8 @@ class TestGraphPatternCombination(ExtTestCase):
             "dort-model-llama-ort+_0.onnx",
             "dort-model-llama-ort+_1.onnx",
             "dort-model-llama-ort+_1_split.onnx",
+            "em_llama_custom_static_fp32_cuda_large_h6_58fa9.onnx.2.onnx",
+            "em_phi_custom_static_fp32_cuda_large_h6_58fa9.onnx.2.onnx",
         ]:
             if model in {
                 "noopt-llama-custom__1.onnx",
@@ -553,11 +555,11 @@ class TestGraphPatternCombination(ExtTestCase):
                 self._check_ort_cpu_or_cuda(new_onx, model=model)
 
     def test_study(self):
-        model = "dort-llama2-llama-ort+_1.onnx"
+        model = "em_llama_custom_static_fp32_cuda_large_h6_58fa9.onnx.2.onnx"
         enabled = {
             "RotaryConcatPartPattern",
         }
-        # enabled = {}
+        enabled = {}
         disabled = {}
         options = OptimizationOptions(
             patterns="default+onnxruntime+experimental",
@@ -603,12 +605,19 @@ class TestGraphPatternCombination(ExtTestCase):
         with open(f"test_study_{os.path.split(model)[-1]}", "wb") as f:
             f.write(new_onx.SerializeToString())
 
-        from onnxruntime.capi.onnxruntime_pybind11_state import NotImplemented
+        from onnxruntime.capi.onnxruntime_pybind11_state import (
+            NotImplemented,
+            RuntimeException,
+        )
 
         try:
             self._check_ort_cpu_or_cuda(onx)
         except NotImplemented as e:
             raise unittest.SkipTest(f"missing extension: {e}")
+        except RuntimeException as e:
+            if "Invalid fd was supplied" in str(e):
+                raise unittest.SkipTest(f"missing extension: {e}")
+            raise
         self._check_ort_cpu_or_cuda(new_onx)
 
 
