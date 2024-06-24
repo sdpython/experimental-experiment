@@ -19,7 +19,7 @@ from onnx.checker import check_model
 from onnx.shape_inference import infer_shapes
 from onnx.onnx_cpp2py_export.shape_inference import InferenceError
 from experimental_experiment.reference import ExtendedReferenceEvaluator
-from experimental_experiment.ext_test_case import ExtTestCase
+from experimental_experiment.ext_test_case import ExtTestCase, skipif_ci_windows
 from experimental_experiment.xbuilder.graph_builder import (
     GraphBuilder,
     OptimizationOptions,
@@ -554,6 +554,7 @@ class TestGraphPatternCombination(ExtTestCase):
             if check_ort:
                 self._check_ort_cpu_or_cuda(new_onx, model=model)
 
+    @skipif_ci_windows("crash")
     def test_study(self):
         model = "em_llama_custom_static_fp32_cuda_large_h6_58fa9.onnx.2.onnx"
         enabled = {
