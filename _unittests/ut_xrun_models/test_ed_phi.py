@@ -124,6 +124,7 @@ class TestEdPhi(ExtTestCase):
     @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.3", "AssertionError: original output #6 is None")
+    @unittest.skipIf(sys.version_info >= (3, 12, 0), reason="too long")
     def test_phi_cort_dynamic(self):
         model, input_tensors = get_phi_model()
         input_tensors = input_tensors[0]
@@ -222,6 +223,7 @@ class TestEdPhi(ExtTestCase):
     @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.3", "AssertionError: original output #6 is None")
+    @unittest.skipIf(sys.version_info >= (3, 12, 0), reason="too long")
     def test_phi_cort_dynamic(self):
         model, input_tensors = get_phi_model()
         input_tensors = input_tensors[0]

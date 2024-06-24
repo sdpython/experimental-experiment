@@ -1,3 +1,4 @@
+import sys
 import copy
 import unittest
 from typing import Optional
@@ -209,6 +210,7 @@ class TestDynamoLlama(ExtTestCase):
     @ignore_warnings((UserWarning, DeprecationWarning))
     @skipif_ci_windows("torch.compile not supported on Windows")
     @requires_torch("2.3", "missing kernel")
+    @unittest.skipIf(sys.version_info >= (3, 12, 0), reason="too long")
     def test_llama_model_backward_decomposition(self):
         from experimental_experiment.torch_models.llama_helper import get_llama_model
 

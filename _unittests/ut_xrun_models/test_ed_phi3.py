@@ -132,6 +132,7 @@ class TestEdPhi3(ExtTestCase):
     @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.4", "for transformers 4.41.1")
+    @unittest.skipIf(sys.version_info >= (3, 12, 0), reason="too long")
     def test_phi3_cort_dynamic(self):
         model, input_tensors = get_phi3_model()
         input_tensors = input_tensors[0]

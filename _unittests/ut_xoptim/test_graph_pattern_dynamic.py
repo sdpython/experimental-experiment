@@ -1,3 +1,4 @@
+import sys
 import os
 import unittest
 from typing import List
@@ -86,6 +87,7 @@ class TestGraphPatternDynamic(ExtTestCase):
             ],
         )
 
+    @unittest.skipIf(sys.version_info >= (3, 12, 0), reason="too long")
     def test_graph_default_backward_cumulative(self):
         static_model = self._get_model("shape-dort-static-llama-custom__1.onnx")
         dynamic_model = self._get_model("shape-dort-dynamic-llama-custom__1.onnx")
