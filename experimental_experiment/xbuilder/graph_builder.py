@@ -268,7 +268,7 @@ class GraphBuilder:
                 return None
             return self.make_key(onh.to_array(value))
         if isinstance(value, self.torch.Tensor):
-            if value.dtype == self.torch.int64 and value.size < 8:
+            if value.dtype == self.torch.int64 and value.numel() < 8:
                 return self.make_key(value.detach().cpu().numpy())
             return None
         if isinstance(value, int):
