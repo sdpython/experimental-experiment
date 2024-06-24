@@ -17,7 +17,7 @@ jobs:
     displayName: 'AptGet Update'
   - script: sudo apt-get install -y graphviz
     displayName: 'Install Graphviz'
-  - script: python -m pip install --upgrade pip setuptools wheel
+  - script: python -m pip install --upgrade pip wheel
     displayName: 'Install tools'
   - script: pip install --index-url=https://download.pytorch.org/whl/nightly/cpu --pre torch torchvision
     displayName: 'Install torch nightly'
@@ -74,7 +74,7 @@ jobs:
     displayName: 'AptGet Update'
   - script: sudo apt-get install -y graphviz
     displayName: 'Install Graphviz'
-  - script: python -m pip install --upgrade pip setuptools wheel
+  - script: python -m pip install --upgrade pip wheel
     displayName: 'Install tools'
   - script: pip install -r requirements.txt
     displayName: 'Install Requirements'
