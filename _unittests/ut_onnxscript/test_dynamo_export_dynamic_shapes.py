@@ -29,7 +29,9 @@ class TestDynamoExportDynamicShapes(ExtTestCase):
             exported_program = torch.export.export(
                 model,
                 input_tensors[0],
-                dynamic_shapes={"input_ids": {0: torch.export.Dim("batch", min=2)}},
+                dynamic_shapes={
+                    "input_ids": {0: torch.export.Dim("batch", min=2, max=8192)}
+                },
             )
             export_options = torch.onnx.ExportOptions(dynamic_shapes=True)
             export_options = exporter.ResolvedExportOptions(

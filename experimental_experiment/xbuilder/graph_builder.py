@@ -548,6 +548,10 @@ class GraphBuilder:
             self.constants_computed_[name] = v
             return v
         if isinstance(value, TensorProto):
+            if uses_external_data(value):
+                raise TypeError(
+                    f"Tensor is using external data, data_type={value.data_type}, dims={value.dims}"
+                )
             v = onh.to_array(value)
             self.constants_computed_[name] = v
             return v

@@ -157,7 +157,7 @@ class IdentityPattern(PatternOptimization):
                 return self.none(node, inspect.currentframe().f_lineno)
             return MatchResult(node, [node], self.apply, insert_at=node)
 
-        if not g.is_constant(node.input[1]):
+        if not g.is_constant_scalar(node.input[1]):
             return self.none(node, inspect.currentframe().f_lineno)
 
         cst = g.get_computed_constant(node.input[1])
