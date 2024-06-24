@@ -263,29 +263,36 @@ class GraphBuilderPatternOptimization:
             return self._cache_computed_constant[name].shape
         if name in self.builder.initializers_dict:
             proto = self.builder.initializers_dict[name]
-            if isinstance(proto, TensorProto):
-                return tuple(proto.dims)
-            if isinstance(proto, NodeProto):
-                assert (
-                    len(proto.attribute) == 1
-                ), f"Unexpected number of attribute for node={proto}"
-                for att in proto.attribute:
-                    if att.name == "value":
-                        return tuple(proto.value.dims)
-                if exc:
-                    raise AssertionError(
-                        f"Unable to retrieve shape for name={name!r} (type is NodeProto)"
-                    )
-                return None
-            if hasattr(proto, "shape"):
-                return proto.shape
+        elif name in self.builder.constants_:
+            proto = self.builder.constants_[name]
+        else:
             if exc:
                 raise AssertionError(
-                    f"Unable to retrieve shape for name={name!r} and type {type(proto)}"
+                    f"Unable to retrieve initializer or constant for {name!r}"
                 )
             return None
+
+        if isinstance(proto, TensorProto):
+            return tuple(proto.dims)
+        if isinstance(proto, NodeProto):
+            assert (
+                len(proto.attribute) == 1
+            ), f"Unexpected number of attribute for node={proto}"
+            for att in proto.attribute:
+                if att.name == "value":
+                    return tuple(proto.value.dims)
+                if att.name in {"value_float", "value_int"}:
+                    return tuple()
+            raise AssertionError(
+                f"Unable to retrieve shape for name={name!r} (type is NodeProto)"
+            )
+            return None
+        if hasattr(proto, "shape"):
+            return proto.shape
         if exc:
-            raise AssertionError(f"Unable to retrieve shape for name={name!r}")
+            raise AssertionError(
+                f"Unable to retrieve shape for name={name!r} and type {type(proto)}"
+            )
         return None
 
     def get_constant_scalar(self, name: str) -> Union[int, float]:
