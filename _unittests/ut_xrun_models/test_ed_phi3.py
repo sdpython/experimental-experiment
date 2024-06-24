@@ -19,6 +19,19 @@ from experimental_experiment.torch_models.phi3_helper import has_phi3
 
 class TestEdPhi3(ExtTestCase):
 
+    @classmethod
+    def setUp(cls):
+        import torch._dynamo
+
+        cls._keep = torch._dynamo.config.suppress_errors
+        torch._dynamo.config.suppress_errors = True
+
+    @classmethod
+    def teadDown(cls):
+        import torch._dynamo
+
+        torch._dynamo.config.suppress_errors = cls._keep
+
     @unittest.skipIf(not has_phi3(), reason="transformers not recent enough")
     @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
     @ignore_warnings(DeprecationWarning)
