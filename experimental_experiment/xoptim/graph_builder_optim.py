@@ -274,7 +274,15 @@ class GraphBuilderPatternOptimization:
 
         if isinstance(proto, TensorProto):
             return tuple(proto.dims)
-        if isinstance(proto, NodeProto):
+        if isinstance(proto, NodeProto) and proto.domain == "":
+            if proto.op_type == "Cast":
+                return self.get_constant_shape(proto.input[0], exc=exc)
+            if proto.op_type != "Constant":
+                if exc:
+                    raise AssertionError(
+                        f"Unable to retrieve shape for name={name!r} and node {proto.op_type!r}."
+                    )
+                return None
             assert (
                 len(proto.attribute) == 1
             ), f"Unexpected number of attribute for node={proto}"
@@ -284,7 +292,9 @@ class GraphBuilderPatternOptimization:
                 if att.name in {"value_float", "value_int"}:
                     return tuple()
             raise AssertionError(
-                f"Unable to retrieve shape for name={name!r} (type is NodeProto)"
+                f"Unable to retrieve shape for name={name!r} (type is NodeProto), "
+                f"node.op_type={proto.op_type!r}, "
+                f"attributes={[att.name for att in proto.attribute]}."
             )
             return None
         if hasattr(proto, "shape"):
