@@ -1256,9 +1256,22 @@ def aten_floor_divide(
     name="floor_divide",
 ) -> T:
     """floor + div"""
-    div = g.op.Div(x, y, name=name)
-    g.set_type(div, g.get_type(x))
-    g.set_rank(div, max(g.get_rank(x), g.get_rank(y)))
+    if isinstance(y, str) and isinstance(x, str):
+        div = g.op.Div(x, y, name=name)
+        g.set_type(div, g.get_type(x))
+        g.set_rank(div, max(g.get_rank(x), g.get_rank(y)))
+    elif isinstance(x, str) and isinstance(y, int):
+        div = g.op.Div(x, y, name=name)
+        g.set_type(div, g.get_type(x))
+        if g.has_shape(x):
+            g.set_shape(div, g.get_shape(x))
+        else:
+            g.set_rank(div, g.get_rank(x))
+    else:
+        raise AssertionError(
+            f"Unable to implement floordiv for types {[type(x), type(y)]}{g.get_debug_msg()}"
+        )
+
     res = g.op.Floor(div, outputs=outputs, name=name)
     if sts:
         g.set_type(res, g.get_type(x))
