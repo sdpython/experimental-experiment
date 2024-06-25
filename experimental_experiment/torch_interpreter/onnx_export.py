@@ -136,6 +136,9 @@ def _export(
             )
         return exported_mod
 
+    # other issues
+    # https://github.com/pytorch/pytorch/issues/127571
+
     # import torch.utils._pytree as pytree
     # flat_args, orig_in_spec = pytree.tree_flatten((args, ))
     # print("+++++", orig_in_spec, type(flat_args), len(flat_args))

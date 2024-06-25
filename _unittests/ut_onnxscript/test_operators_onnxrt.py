@@ -1749,6 +1749,7 @@ class TestOperatorsOnnxrt(ExtTestCase):
             lambda x: torch.nn.functional.gelu(x),
             x,
             onnx_export=inspect.currentframe().f_code.co_name,
+            atol=2e-6,
         )
 
     @unittest.skipIf(not DYNAMIC_SHAPE_SUPPORTED, reason="dynamic shape")

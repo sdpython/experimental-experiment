@@ -8,6 +8,7 @@ from experimental_experiment.ext_test_case import (
     skipif_ci_windows,
     ignore_warnings,
     requires_torch,
+    requires_onnxruntime_training,
 )
 
 
@@ -49,6 +50,7 @@ class TestDortBench(ExtTestCase):
         "object has no attribute 'push_back_batch'"
     )
     @ignore_warnings((DeprecationWarning, UserWarning))
+    @requires_onnxruntime_training()
     def test_dort_bench_small_llama_cpu_custom(self):
         self._dort_bench_small_llama_cpu("custom")
 

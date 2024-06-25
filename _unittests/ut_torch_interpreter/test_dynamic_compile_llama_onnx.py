@@ -9,6 +9,7 @@ from experimental_experiment.ext_test_case import (
     requires_torch,
     requires_cuda,
     requires_onnxscript,
+    requires_onnxruntime_training,
     skipif_transformers,
 )
 from experimental_experiment.torch_models.dump_helper import assert_all_close
@@ -285,6 +286,7 @@ class TestDynamoLlamaDynamic(ExtTestCase):
     @ignore_warnings((UserWarning, DeprecationWarning))
     @skipif_ci_windows("torch.compile not supported on Windows")
     @requires_torch("2.3", "missing kernel")
+    @requires_onnxruntime_training()
     def test_llama_attention_b_forward_dynamic(self):
         from experimental_experiment.torch_models.llama_helper import (
             get_llama_attention,

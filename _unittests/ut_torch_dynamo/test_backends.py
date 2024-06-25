@@ -12,6 +12,7 @@ from experimental_experiment.ext_test_case import (
     skipif_ci_windows,
     skipif_ci_apple,
     has_cuda,
+    requires_onnxruntime_training,
 )
 
 
@@ -20,6 +21,7 @@ class TestBackend(ExtTestCase):
     @ignore_warnings(DeprecationWarning)
     @skipif_ci_windows("onnxruntime-training not available")
     @skipif_ci_apple("onnxruntime-training not available")
+    @requires_onnxruntime_training()
     def test_onnx_custom_backend_dump(self):
         import onnxruntime
         from experimental_experiment.torch_dynamo.fast_backend import OrtBackend
@@ -283,6 +285,7 @@ class TestBackend(ExtTestCase):
 
     @skipif_ci_apple("no onnxruntime-training")
     @skipif_ci_windows("no torch dynamo")
+    @requires_onnxruntime_training()
     def test_ort_graph_no_optimization(self):
         from experimental_experiment.torch_dynamo import onnx_custom_backend
 
