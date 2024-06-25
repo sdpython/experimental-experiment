@@ -1284,7 +1284,10 @@ def aten_floor_divide(
     res = g.op.Floor(div, outputs=outputs, name=name)
     if sts:
         g.set_type(res, g.get_type(x))
-        g.set_rank(res, g.get_rank(div))
+        if g.has_shape(div):
+            g.set_shape(res, g.get_shape(div))
+        else:
+            g.set_rank(res, g.get_rank(div))
     return res
 
 
