@@ -1256,10 +1256,13 @@ def aten_floor_divide(
     name="floor_divide",
 ) -> T:
     """floor + div"""
-
-    res = g.op.Floor(g.op.Div(x, y, name=name), outputs=outputs, name=name)
+    div = g.op.Div(x, y, name=name)
+    g.set_type(div, g.get_type(x))
+    g.set_rank(div, max(g.get_rank(x), g.get_rank(y)))
+    res = g.op.Floor(div, outputs=outputs, name=name)
     if sts:
         g.set_type(res, g.get_type(x))
+        g.set_rank(res, g.get_rank(div))
     return res
 
 

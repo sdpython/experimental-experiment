@@ -19,7 +19,11 @@ from onnx.checker import check_model
 from onnx.shape_inference import infer_shapes
 from onnx.onnx_cpp2py_export.shape_inference import InferenceError
 from experimental_experiment.reference import ExtendedReferenceEvaluator
-from experimental_experiment.ext_test_case import ExtTestCase, skipif_ci_windows
+from experimental_experiment.ext_test_case import (
+    ExtTestCase,
+    skipif_ci_windows,
+    requires_onnxruntime_training,
+)
 from experimental_experiment.xbuilder.graph_builder import (
     GraphBuilder,
     OptimizationOptions,
@@ -454,6 +458,7 @@ class TestGraphPatternCombination(ExtTestCase):
                 self.assertIn("SimplifiedLayerNormalization", types)
                 self._check_ort_cpu_or_cuda(onx)
 
+    @requires_onnxruntime_training()
     def test_simplified_with_all_default(self):
         self._simplified_with_all(
             {}, experimental=False, check_ort=cuda_recent_enough()
