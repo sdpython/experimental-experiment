@@ -74,12 +74,25 @@ class FuncModuleModule(Module):
         super().__init__()
         self.f = f
         self.mod = f
-        self.ppp = Parameter(torch.Tensor([1]))
-        self.ppp2 = Parameter(torch.Tensor([2]))
+        self.ppp = Parameter(torch.Tensor([1]).to(torch.float32))
+        self.ppp2 = Parameter(torch.Tensor([2]).to(torch.float32))
 
     def forward(self, *args):
         x = args[0] * self.ppp
-        res = self.mod(x, *args[1:]) * self.ppp2
+        res = self.mod(x, *args[1:])
+        return res * self.ppp2
+
+
+class FuncModuleModuleSimple(Module):
+    def __init__(self, f):
+        super().__init__()
+        self.f = f
+        self.mod = f
+        self.ppp = Parameter(torch.Tensor([1]).to(torch.float32))
+
+    def forward(self, *args):
+        x = args[0] * self.ppp
+        res = self.mod(x, *args[1:])
         return res
 
 
@@ -115,7 +128,11 @@ class TestOperatorsOnnxrt(ExtTestCase):
         if params is None:
             params = ()
         if isinstance(f, nn.Module):
-            model = FuncModuleModule(f)
+            model = (
+                FuncModuleModuleSimple(f)
+                if input_index == "simple"
+                else FuncModuleModule(f)
+            )
         elif input_index == "simple":
             model = FuncModuleSimple(f, params)
         else:
@@ -703,6 +720,7 @@ class TestOperatorsOnnxrt(ExtTestCase):
             nn.MaxPool1d(3, stride=2, return_indices=True),
             x,
             onnx_export=inspect.currentframe().f_code.co_name,
+            input_index="simple",
         )
 
     @ignore_warnings((UserWarning, DeprecationWarning))

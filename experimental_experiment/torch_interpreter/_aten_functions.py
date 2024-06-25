@@ -388,7 +388,16 @@ def aten_as_strided(
     storage_offset: Optional[int] = None,
 ) -> T:
     "as_strided"
-    assert False, f"The implementation is still incorrect{g.get_debug_msg()}"
+    if storage_offset is None and min(stride) == max(stride) == 1 and g.has_shape(x):
+        shape = g.get_shape(x)
+        if np.prod(shape) == np.prod(size):
+            return g.op.Reshape(x, np.array(size, dtype=np.int64), outputs=outputs)
+
+    assert False, (
+        f"The implementation is still incorrect, x={x!r}, "
+        f"shape={g.get_shape(x)}, size={size}, "
+        f"stride={stride}, storage_offset={storage_offset}{g.get_debug_msg()}"
+    )
 
     import torch
     from torch.fx.experimental.proxy_tensor import maybe_disable_fake_tensor_mode

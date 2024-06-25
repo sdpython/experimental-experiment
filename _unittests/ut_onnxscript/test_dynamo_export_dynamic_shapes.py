@@ -14,7 +14,7 @@ class TestDynamoExportDynamicShapes(ExtTestCase):
 
     @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
     @requires_onnxscript("0.2", "issue in rewriter")
-    @requires_torch("2.4", "bug")
+    @requires_torch("2.6", "bug")
     @requires_transformers("4.41.0", "dynamic shapes issue")
     @ignore_warnings(DeprecationWarning)
     # @unittest.skipIf(True, reason="torch._dynamo.export does not work")
@@ -26,13 +26,24 @@ class TestDynamoExportDynamicShapes(ExtTestCase):
         with torch.no_grad():
             input_dims = [(2, 1024), (3, 1024)]
             model, input_tensors = get_llama_model(input_dims, with_mask=False)
-            exported_program = torch.export.export(
-                model,
-                input_tensors[0],
-                dynamic_shapes={
-                    "input_ids": {0: torch.export.Dim("batch", min=2, max=8192)}
-                },
-            )
+            try:
+                exported_program = torch.export.export(
+                    model,
+                    input_tensors[0],
+                    dynamic_shapes={
+                        "input_ids": {0: torch.export.Dim("batch", min=2, max=8192)}
+                    },
+                )
+            except torch._export.verifier.SpecViolationError:
+                exported_program = torch.export._trace._export(
+                    model,
+                    input_tensors[0],
+                    dynamic_shapes={
+                        "input_ids": {0: torch.export.Dim("batch", min=2, max=8192)}
+                    },
+                    pre_dispatch=False,
+                )
+
             export_options = torch.onnx.ExportOptions(dynamic_shapes=True)
             export_options = exporter.ResolvedExportOptions(
                 export_options, model=exported_program

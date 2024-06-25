@@ -1,11 +1,11 @@
 jobs:
-- job: 'TestLinuxWheelPip311_nightly'
+- job: 'TestLinuxWheelPip312_nightly'
   pool:
     vmImage: 'ubuntu-latest'
   strategy:
     matrix:
-      Python311-Linux:
-        python.version: '3.11'
+      Python312-Linux:
+        python.version: '3.12'
     maxParallel: 3
 
   steps:
@@ -59,13 +59,13 @@ jobs:
       artifactName: 'wheel-linux-wheel-$(python.version)'
       targetPath: 'dist'
 
-- job: 'TestLinuxWheelPip312_4372'
+- job: 'TestLinuxWheelPip311_4372'
   pool:
     vmImage: 'ubuntu-latest'
   strategy:
     matrix:
-      Python312-Linux:
-        python.version: '3.12'
+      Python311-Linux:
+        python.version: '3.11'
     maxParallel: 3
 
   steps:
