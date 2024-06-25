@@ -1244,7 +1244,7 @@ def aten_floordiv(
     g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T, y: T
 ) -> T:
     """floor + div"""
-    return aten_floor_divide(g, sts, outputs, x, y, name="fllordiv")
+    return aten_floor_divide(g, sts, outputs, x, y, name="floordiv")
 
 
 def aten_floor_divide(
@@ -1261,12 +1261,21 @@ def aten_floor_divide(
         g.set_type(div, g.get_type(x))
         g.set_rank(div, max(g.get_rank(x), g.get_rank(y)))
     elif isinstance(x, str) and isinstance(y, int):
-        div = g.op.Div(x, y, name=name)
+        dtype = tensor_dtype_to_np_dtype(g.get_type(x))
+        div = g.op.Div(x, np.array([y], dtype=dtype), name=name)
         g.set_type(div, g.get_type(x))
         if g.has_shape(x):
             g.set_shape(div, g.get_shape(x))
         else:
             g.set_rank(div, g.get_rank(x))
+    elif isinstance(x, int) and isinstance(y, str):
+        dtype = tensor_dtype_to_np_dtype(g.get_type(y))
+        div = g.op.Div(np.array([x], dtype=dtype), y, name=name)
+        g.set_type(div, g.get_type(y))
+        if g.has_shape(y):
+            g.set_shape(div, g.get_shape(y))
+        else:
+            g.set_rank(div, g.get_rank(y))
     else:
         raise AssertionError(
             f"Unable to implement floordiv for types {[type(x), type(y)]}{g.get_debug_msg()}"
