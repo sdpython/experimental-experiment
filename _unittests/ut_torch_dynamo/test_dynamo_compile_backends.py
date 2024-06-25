@@ -225,6 +225,7 @@ class TestDynamoCompileBackend(ExtTestCase):
 
     @requires_torch("2.2.1", "onnxrt not fully implemented")
     @ignore_warnings((UserWarning, RuntimeWarning, DeprecationWarning))
+    @requires_onnxruntime_training()
     def test_aaaa_forward_cpu(self):
         x = torch.rand(3, 4, requires_grad=True)
 

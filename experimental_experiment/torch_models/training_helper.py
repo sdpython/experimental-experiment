@@ -16,6 +16,7 @@ def make_aot_ort(
     ort_optimization_level: Optional[str] = None,
     order_algorithm: Optional[str] = None,
     dump_patterns: Optional[str] = None,
+    dump_prefix: Optional[str] = None,
 ) -> tuple:
     """
     Creates a backend to train model with DORT.
@@ -34,8 +35,10 @@ def make_aot_ort(
     :param order_algorithm: algorithm optimizing the order the onnx node,
         none by default
     :param dump_patterns: dump the applied patterns
+    :param dump_prefix: prefix before saving the models
     :return: twice the same backend
     """
+    assert not dump_prefix, f"dump_prefix={dump_prefix!r} not implemented"
     import onnxruntime
     from torch.onnx import (
         OnnxRegistry,

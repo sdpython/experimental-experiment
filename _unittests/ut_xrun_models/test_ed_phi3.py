@@ -67,6 +67,8 @@ class TestEdPhi3(ExtTestCase):
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.4", "for transformers 4.41.1")
     def test_phi3_cort_static_not_mixed(self):
+        import torch
+
         model, input_tensors = get_phi3_model()
         input_tensors = input_tensors[0]
         expected = model(*input_tensors)
@@ -83,7 +85,14 @@ class TestEdPhi3(ExtTestCase):
             # disable_pattern="MatMulReshape2Of3",
             optimize=True,
         )
-        results = compiled_model(*input_tensors)
+        try:
+            results = compiled_model(*input_tensors)
+        except torch._dynamo.exc.Unsupported as e:
+            if "Logger not supported for non-export cases" in str(e):
+                raise unittest.SkipTest(
+                    "transformers which make the torch export fail."
+                )
+            raise
         self.assertEqualArray(expected[0].detach().numpy(), results[0], atol=1e-5)
         instances = storage["instance"]
         self.assertEqual(len(instances), 1)  # forward
@@ -127,7 +136,14 @@ class TestEdPhi3(ExtTestCase):
                 optimize=True,
             )
             torch.cuda.synchronize()
-            results = compiled_model(*input_tensors)
+            try:
+                results = compiled_model(*input_tensors)
+            except torch._dynamo.exc.Unsupported as e:
+                if "Logger not supported for non-export cases" in str(e):
+                    raise unittest.SkipTest(
+                        "transformers which make the torch export fail."
+                    )
+                raise
             torch.cuda.synchronize()
         self.assertEqualArray(expected[0].detach().cpu().numpy(), results[0], atol=1e-2)
         instances = storage["instance"]
@@ -148,6 +164,8 @@ class TestEdPhi3(ExtTestCase):
     @requires_torch("2.4", "for transformers 4.41.1")
     @unittest.skipIf(sys.version_info >= (3, 12, 0), reason="too long")
     def test_phi3_cort_dynamic(self):
+        import torch
+
         model, input_tensors = get_phi3_model()
         input_tensors = input_tensors[0]
         expected = model(*input_tensors)
@@ -163,7 +181,14 @@ class TestEdPhi3(ExtTestCase):
             dump_prefix="test_phi3",
             optimize=True,
         )
-        results = compiled_model(*input_tensors)
+        try:
+            results = compiled_model(*input_tensors)
+        except torch._dynamo.exc.Unsupported as e:
+            if "Logger not supported for non-export cases" in str(e):
+                raise unittest.SkipTest(
+                    "transformers which make the torch export fail."
+                )
+            raise
         self.assertEqualArray(expected[0].detach().numpy(), results[0], atol=1e-5)
         instances = storage["instance"]
         # self.assertEqual(len(instances), 1)  # forward
@@ -182,6 +207,8 @@ class TestEdPhi3(ExtTestCase):
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.4", "for transformers 4.41.1")
     def test_phi3_cort_static(self):
+        import torch
+
         model, input_tensors = get_phi3_model()
         input_tensors = input_tensors[0]
         expected = model(*input_tensors)
@@ -195,7 +222,14 @@ class TestEdPhi3(ExtTestCase):
             return_storage=True,
             rename_inputs=True,
         )
-        results = compiled_model(*input_tensors)
+        try:
+            results = compiled_model(*input_tensors)
+        except torch._dynamo.exc.Unsupported as e:
+            if "Logger not supported for non-export cases" in str(e):
+                raise unittest.SkipTest(
+                    "transformers which make the torch export fail."
+                )
+            raise
         self.assertEqualArray(expected[0].detach().numpy(), results[0], atol=1e-5)
         instances = storage["instance"]
         self.assertEqual(len(instances), 1)  # forward
