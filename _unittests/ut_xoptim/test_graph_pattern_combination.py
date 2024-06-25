@@ -607,6 +607,7 @@ class TestGraphPatternCombination(ExtTestCase):
             f.write(new_onx.SerializeToString())
 
         from onnxruntime.capi.onnxruntime_pybind11_state import (
+            Fail,
             NotImplemented,
             RuntimeException,
         )
@@ -615,6 +616,10 @@ class TestGraphPatternCombination(ExtTestCase):
             self._check_ort_cpu_or_cuda(onx)
         except NotImplemented as e:
             raise unittest.SkipTest(f"missing extension: {e}")
+        except Fail as e:
+            if "com.microsoft:SoftmaxGrad(-1) is not a registered function" in str(e):
+                unittest.SkipTest(f"onnxruntime-training is needed for {e}")
+            raise
         except RuntimeException as e:
             if "Invalid fd was supplied" in str(e):
                 raise unittest.SkipTest(f"missing extension: {e}")
