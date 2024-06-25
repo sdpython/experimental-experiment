@@ -101,6 +101,7 @@ class TestEdPhi3(ExtTestCase):
     @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.4", "for transformers 4.41.1")
+    @unittest.skipIf(not has_cuda(), reason="CUDA is needed.")
     def test_phi3_cort_static_mixed(self):
         import torch
 
