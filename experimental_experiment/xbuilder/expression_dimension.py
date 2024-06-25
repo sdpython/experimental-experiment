@@ -28,7 +28,13 @@ def parse_expression(
     :param context: known variables (or dimensions)
     :return: an expression
     """
-    assert isinstance(expr, str), f"Unexpected type {type(expr)} for expr={expr!r}"
+    if hasattr(expr, "__sym_float__"):
+        # torch.SymInt
+        return parse_expression(expr.node, context=context)
+
+    assert isinstance(
+        expr, str
+    ), f"Unexpected type {type(expr)} for expr={expr!r} and context={context}"
     assert exc, "parse_expression not implemented when exc is False"
     if context is None:
         context = {}

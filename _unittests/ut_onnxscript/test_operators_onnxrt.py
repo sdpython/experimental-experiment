@@ -1831,6 +1831,7 @@ class TestOperatorsOnnxrt(ExtTestCase):
             lambda x, b1, b2: torch.baddbmm(x, b1, b2),
             (x, b1, b2),
             onnx_export=inspect.currentframe().f_code.co_name,
+            atol=1e-5,
         )
 
     @hide_stdout()

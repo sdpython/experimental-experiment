@@ -14,6 +14,14 @@ class TestDimension(ExtTestCase):
         self.assertIsInstance(e, Expression)
         self.assertEqual(repr(e), "Expression('a*b*c')")
 
+    def test_parse_expression_div(self):
+        import torch
+
+        expr = torch.SymInt("32//s3")
+        e = parse_expression(expr, dict(s3=8))
+        self.assertIsInstance(e, Expression)
+        self.assertEqual(repr(e), "Expression('32//s3')")
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
