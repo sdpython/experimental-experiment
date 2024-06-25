@@ -1240,12 +1240,24 @@ def aten_flatten(
     return res
 
 
-def aten_floor_divide(
+def aten_floordiv(
     g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T, y: T
 ) -> T:
     """floor + div"""
+    return aten_floor_divide(g, sts, outputs, x, y, name="fllordiv")
 
-    res = g.op.Floor(g.op.Div(x, y), outputs=outputs)
+
+def aten_floor_divide(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    y: T,
+    name="floor_divide",
+) -> T:
+    """floor + div"""
+
+    res = g.op.Floor(g.op.Div(x, y, name=name), outputs=outputs, name=name)
     if sts:
         g.set_type(res, g.get_type(x))
     return res

@@ -31,6 +31,9 @@ def parse_expression(
     if hasattr(expr, "__sym_float__"):
         # torch.SymInt
         return parse_expression(expr.node, context=context)
+    if hasattr(expr, "_expr"):
+        # torch.fx.experimental.sym_node.SymNode
+        return parse_expression(str(expr._expr), context=context)
 
     assert isinstance(
         expr, str
