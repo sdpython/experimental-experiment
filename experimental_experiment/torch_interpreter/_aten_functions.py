@@ -3552,6 +3552,16 @@ def aten_sqrt(
     return res
 
 
+def aten__sym_sqrt(
+    g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T
+) -> T:
+    "sqrt"
+    res = g.make_node("Sqrt", [x], name="_sym_sqrt")
+    if not sts:
+        set_type_shape_unary_op(g, outputs[0], x)
+    return res
+
+
 def aten_squeeze(
     g: GraphBuilder,
     sts: Optional[Dict[str, Any]],
