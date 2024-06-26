@@ -11,7 +11,7 @@ class TestIssuePytorch_126856(ExtTestCase):
 
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_onnxscript("0.2")
-    @requires_torch("2.4")
+    @requires_torch("2.6")
     def test_export_dynamo(self):
         import torch
         import onnxruntime as rt
