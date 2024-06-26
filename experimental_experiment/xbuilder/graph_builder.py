@@ -4082,7 +4082,12 @@ class GraphBuilder:
         :param exc: raises an exception if it fails
         :return: an expression or None if exc is False and the parsing failed
         """
-        return parse_expression(expr, exc=exc, context=self.dynamic_objects)
+        try:
+            return parse_expression(expr, exc=exc, context=self.dynamic_objects)
+        except AssertionError as e:
+            raise AssertionError(
+                f"Unable to parse an expression due to {e}{self.get_debug_msg()}"
+            ) from e
 
     def _constant_key(self, node: NodeProto) -> Optional[bytes]:
         """
