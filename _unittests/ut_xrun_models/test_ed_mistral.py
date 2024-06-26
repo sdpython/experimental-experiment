@@ -164,6 +164,10 @@ class TestEdMistral(ExtTestCase):
     @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.3", "AssertionError: original output #6 is None")
+    @unittest.skipif(
+        sys.version_info[:2] == (3, 12),
+        reason="use of SymFloat, not supported right now",
+    )
     def test_mistral_cort_dynamic_norename(self):
         model, input_tensors = get_mistral_model()
         input_tensors = input_tensors[0]
@@ -197,7 +201,11 @@ class TestEdMistral(ExtTestCase):
     @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.3", "AssertionError: original output #6 is None")
-    def test_llama_cort_dynamic_norename_custom(self):
+    @unittest.skipif(
+        sys.version_info[:2] == (3, 12),
+        reason="use of SymFloat, not supported right now",
+    )
+    def test_mistral_cort_dynamic_norename_custom(self):
         model, input_tensors = get_llama_model()
         input_tensors = input_tensors[0]
         expected = model(*input_tensors)
@@ -224,7 +232,7 @@ class TestEdMistral(ExtTestCase):
         if __name__ == "__main__":
             for i, inst in enumerate(instances):
                 self.dump_onnx(
-                    f"test_llama_cort_dynamic_{i}_norename_custom.onnx", inst["onnx"]
+                    f"test_mistral_cort_dynamic_{i}_norename_custom.onnx", inst["onnx"]
                 )
 
 
