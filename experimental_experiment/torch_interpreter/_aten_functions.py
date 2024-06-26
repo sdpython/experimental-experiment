@@ -536,7 +536,7 @@ def aten_avg_pool2d(
         name="avg_pool2d",
     )
 
-    if sts:
+    if not sts:
         g.set_type(result, g.get_type(x))
         g.set_rank(result, g.get_rank(x))
 
@@ -589,7 +589,7 @@ def aten_avg_pool2d_backward(
 
     # It is an average, so x is not used to compute the gradient.
     # result = g.op.Add(x, grad, name="avg_pool2d_backward", outputs=outputs)
-    if sts:
+    if not sts:
         g.set_type(grad, g.get_type(x))
         g.set_rank(grad, g.get_rank(x))
     return grad
@@ -1282,7 +1282,7 @@ def aten_floor_divide(
         )
 
     res = g.op.Floor(div, outputs=outputs, name=name)
-    if sts:
+    if not sts:
         g.set_type(res, g.get_type(x))
         if g.has_shape(div):
             g.set_shape(res, g.get_shape(div))
@@ -1548,7 +1548,7 @@ def aten_index_put(
             f"{g.get_debug_msg()}"
         )
         res = g.op.Where(index, values, x, outputs=outputs)
-        if sts:
+        if not sts:
             g.set_type(res, g.get_type(x))
             g.set_shape(res, g.get_shape(x))
         return res
