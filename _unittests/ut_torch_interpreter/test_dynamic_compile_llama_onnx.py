@@ -256,7 +256,9 @@ class TestDynamoLlamaDynamic(ExtTestCase):
     @ignore_warnings((UserWarning, DeprecationWarning))
     @skipif_ci_windows("torch.compile not supported on Windows")
     @requires_torch("2.4", "missing kernel")
-    @unittest.skipIf(sys.version_info[:2] != (3, 12), reason="not working yet python python 3.12")
+    @unittest.skipIf(
+        sys.version_info[:2] != (3, 12), reason="not working yet python python 3.12"
+    )
     def test_llama_attention_forward_dynamic(self):
         from experimental_experiment.torch_models.llama_helper import (
             get_llama_attention,
