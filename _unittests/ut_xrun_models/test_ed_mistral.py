@@ -164,7 +164,7 @@ class TestEdMistral(ExtTestCase):
     @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.3", "AssertionError: original output #6 is None")
-    @unittest.skipif(
+    @unittest.skipIf(
         sys.version_info[:2] == (3, 12),
         reason="use of SymFloat, not supported right now",
     )
@@ -201,7 +201,7 @@ class TestEdMistral(ExtTestCase):
     @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.3", "AssertionError: original output #6 is None")
-    @unittest.skipif(
+    @unittest.skipIf(
         sys.version_info[:2] == (3, 12),
         reason="use of SymFloat, not supported right now",
     )
