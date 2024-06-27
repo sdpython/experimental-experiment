@@ -21,6 +21,8 @@ jobs:
     displayName: 'Install tools'
   - script: pip install --index-url=https://download.pytorch.org/whl/nightly/cpu --pre torch torchvision
     displayName: 'Install torch nightly'
+  - script: python -m pip install -i https://aiinfra.pkgs.visualstudio.com/PublicPackages/_packaging/ORT-Nightly/pypi/simple/ onnxruntime-training
+    displayName: 'Install onnxruntime-training nightly'
   - script: pip install transformers
     displayName: 'Install specific version of transformers'
   - script: pip install -r requirements.txt
@@ -160,6 +162,7 @@ jobs:
     displayName: 'Install tools'
   - script: pip install -r requirements.txt --pre --find-links https://download.pytorch.org/whl/nightly/
     displayName: 'Install Requirements + torch-nightly'
+    
   #- script: |
   #    python -m pip install parameterized
   #    mkdir onnxscript_repo
