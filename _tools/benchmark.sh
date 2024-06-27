@@ -115,7 +115,7 @@ then
     pip install --upgrade pip
     echo "[$0] Install numpy"
     pip install setuptools wheel --upgrade
-    pip install numpy==1.26.4 pandas matplotlib openpyxl sympy flatbuffers h5py packaging onnx cerberus
+    pip install numpy==1.26.4 pandas matplotlib openpyxl sympy flatbuffers h5py packaging onnx cerberus pybind11 cython onnx-array-api
     echo "[$0] done numpy"
 
     echo "[$0] Install pytorch"
@@ -164,19 +164,38 @@ then
     python -m pip install git+https://github.com/microsoft/onnxscript.git
     echo "[$0] done"
 
-    source "${BENCHNAME}/bin/deactivate"
+    echo "[$0] onnx-extended"
+    if [[ -d "onnx-extended" ]]
+    then
+        git clone https://github.com/sdpython/onnx-extended.git
+    fi
+    cd onnx-extended
+    python setup.py build_ext --inplace --cuda-version=${CUDA_VERSION} --cuda-link=SHARED
+    python setup.py install --inplace --cuda-version=${CUDA_VERSION} --cuda-link=SHARED
+    cd ..
+    echo "[$0] done"
+
+    echo "[$0] experimental-experiment"
+    python -m pip install git+https://github.com/sdpython/experimental-experiment.git
+    echo "[$0] done"
+
+    deactivate
     echo "[$0] done requirements"
 fi
 
+# VERIFICATIONS
 echo "[$0] VERIFICATIONS"
 source "${BENCHNAME}/bin/activate"
 
-python -c "import torch;print('CUDA AVAILABLE', torch.cuda.is_available())"
+echo "[$0] CUDA AVAILABLE?"
+python -c "import torch;print(torch.cuda.is_available())"
+echo "[$0] NVIDIA-SMI"
 nvidia-smi
 
+echo "[$0] pip freeze"
 pip freeze
 
-source "${BENCHNAME}/bin/deactivate"
+deactivate
 echo "[$0] DONE"
 
 
