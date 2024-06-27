@@ -110,14 +110,13 @@ then
     python3 -m venv ${BENCHNAME} || exit 0
     echo "[$0] done venv"
 
-
     echo "[$0] Install requirements"
     source "${BENCHNAME}/bin/activate"
     pip install --upgrade pip
     echo "[$0] Install numpy"
     pip install setuptools wheel --upgrade
-    pip install numpy==1.26.4 pandas matplotlib openpyxl
-    echo "[$0] done"
+    pip install numpy==1.26.4 pandas matplotlib openpyxl sympy flatbuffers h5py packaging onnx cerberus
+    echo "[$0] done numpy"
 
     echo "[$0] Install pytorch"
     if [[ $PYTORCH_VERSION == "nightly" ]];
@@ -136,7 +135,7 @@ then
             pip install --pre torch==${PYTORCH_VERSION} torchvision torchaudio --index-url https://download.pytorch.org/whl/nightly/cpu
         fi
     fi
-    echo "[$0] done"
+    echo "[$0] done pytorch"
 
     echo "[$0] Install onnxruntime"
     if [[ $PYTORCH_VERSION == "nightly" ]];
@@ -155,7 +154,7 @@ then
             pip install onnxruntime-training==${ORT_VERSION}
         fi
     fi
-    echo "[$0] done"
+    echo "[$0] done onnxruntime"
 
     echo "[$0] Install transformers, deepspeed"
     python -m pip install transformers==${TRANSFORMERS_VERSION} deepspeed
