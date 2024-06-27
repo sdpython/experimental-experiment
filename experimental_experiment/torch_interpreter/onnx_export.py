@@ -127,8 +127,17 @@ def _export(
     import torch
 
     if not use_dynamo:
-        exported_mod = torch.export.export(mod, args, dynamic_shapes=dynamic_shapes)
+        try:
+            exported_mod = torch.export.export(mod, args, dynamic_shapes=dynamic_shapes)
+        except torch._export.verifier.SpecViolationError:
+            # see https://github.com/pytorch/pytorch/issues/128394
+            exported_mod = torch.export._trace._export(
+                mod, args, dynamic_shapes=dynamic_shapes, pre_dispatch=False
+            )
         return exported_mod
+
+    # other issues
+    # https://github.com/pytorch/pytorch/issues/127571
 
     # import torch.utils._pytree as pytree
     # flat_args, orig_in_spec = pytree.tree_flatten((args, ))

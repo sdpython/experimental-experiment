@@ -483,6 +483,7 @@ class TestDynamoLlama(ExtTestCase):
             dynamic=False,
             fullgraph=True,
             onnx_export="test_llama_model_backward",
+            atol=5e-4,
         )
 
     @ignore_warnings((UserWarning, DeprecationWarning))

@@ -72,12 +72,18 @@ class TestDocumentationExamples(ExtTestCase):
                 continue
             reason = None
 
+            if sys.version_info >= (3, 12, 0):
+                reason = "too long"
+
             if name in {"plot_torch_export_201.py"}:
                 if sys.platform in {"win32"}:
                     # dynamo not supported on windows
                     reason = "windows not supported"
 
-            if name in {"plot_llama_bench_102.py", "plot_torch_custom_backend_101.py"}:
+            if not reason and name in {
+                "plot_llama_bench_102.py",
+                "plot_torch_custom_backend_101.py",
+            }:
                 if sys.platform in {"win32", "darwin"}:
                     # dynamo not supported on windows
                     reason = "onnxruntime-training not available"

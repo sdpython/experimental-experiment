@@ -239,7 +239,7 @@ def get_torch_dort(model, *args):
     with contextlib.redirect_stdout(io.StringIO()):
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            local_aot_ort, _ = make_aot_ort(dynamic=True, rewrite=False)
+            local_aot_ort, _ = make_aot_ort(dynamic=True, rewrite=True)
             optimized_mod = torch.compile(model, backend=local_aot_ort, fullgraph=True)
             optimized_mod(*args)
             return optimized_mod

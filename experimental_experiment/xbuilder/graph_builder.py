@@ -4,10 +4,6 @@ import sys
 from collections import Counter
 from typing import Any, Dict, List, Optional, Sequence, Set, Tuple, Union
 import numpy as np
-import onnx.helper as oh
-import onnx.numpy_helper as onh
-from onnx.model_container import make_large_tensor_proto
-from onnx.shape_inference import infer_shapes as onnx_infer_shapes
 from onnx import (
     AttributeProto,
     FunctionProto,
@@ -17,6 +13,11 @@ from onnx import (
     TensorProto,
     TypeProto,
 )
+import onnx.helper as oh
+import onnx.numpy_helper as onh
+from onnx.external_data_helper import uses_external_data
+from onnx.model_container import make_large_tensor_proto
+from onnx.shape_inference import infer_shapes as onnx_infer_shapes
 from experimental_experiment.reference import ExtendedReferenceEvaluator
 from .shape_helper import (
     DYNAMIC_SHAPE,
@@ -251,12 +252,23 @@ class GraphBuilder:
     def make_key(self, value: Any) -> Optional[Tuple[Union[str, int], ...]]:
         """
         Builds a key identifying a value.
-        Returns None if it is none possible.
+        Returns None if it is not possible.
         """
         if isinstance(value, TensorProto):
+            if uses_external_data(value):
+                key = None
+                for info in value.external_data:
+                    if info.key == "location":
+                        key = info.value
+                        break
+                assert key is not None, (
+                    f"External tensor {value.name!r} has no location, "
+                    f"external_data is {value.external_data}"
+                )
+                return None
             return self.make_key(onh.to_array(value))
         if isinstance(value, self.torch.Tensor):
-            if value.dtype == self.torch.int64:
+            if value.dtype == self.torch.int64 and value.numel() < 8:
                 return self.make_key(value.detach().cpu().numpy())
             return None
         if isinstance(value, int):
@@ -536,6 +548,10 @@ class GraphBuilder:
             self.constants_computed_[name] = v
             return v
         if isinstance(value, TensorProto):
+            if uses_external_data(value):
+                raise TypeError(
+                    f"Tensor is using external data, data_type={value.data_type}, dims={value.dims}"
+                )
             v = onh.to_array(value)
             self.constants_computed_[name] = v
             return v
@@ -4066,7 +4082,12 @@ class GraphBuilder:
         :param exc: raises an exception if it fails
         :return: an expression or None if exc is False and the parsing failed
         """
-        return parse_expression(expr, exc=exc, context=self.dynamic_objects)
+        try:
+            return parse_expression(expr, exc=exc, context=self.dynamic_objects)
+        except AssertionError as e:
+            raise AssertionError(
+                f"Unable to parse an expression due to {e}{self.get_debug_msg()}"
+            ) from e
 
     def _constant_key(self, node: NodeProto) -> Optional[bytes]:
         """

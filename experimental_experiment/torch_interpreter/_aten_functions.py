@@ -388,7 +388,16 @@ def aten_as_strided(
     storage_offset: Optional[int] = None,
 ) -> T:
     "as_strided"
-    assert False, f"The implementation is still incorrect{g.get_debug_msg()}"
+    if storage_offset is None and min(stride) == max(stride) == 1 and g.has_shape(x):
+        shape = g.get_shape(x)
+        if np.prod(shape) == np.prod(size):
+            return g.op.Reshape(x, np.array(size, dtype=np.int64), outputs=outputs)
+
+    assert False, (
+        f"The implementation is still incorrect, x={x!r}, "
+        f"shape={g.get_shape(x)}, size={size}, "
+        f"stride={stride}, storage_offset={storage_offset}{g.get_debug_msg()}"
+    )
 
     import torch
     from torch.fx.experimental.proxy_tensor import maybe_disable_fake_tensor_mode
@@ -527,7 +536,7 @@ def aten_avg_pool2d(
         name="avg_pool2d",
     )
 
-    if sts:
+    if not sts:
         g.set_type(result, g.get_type(x))
         g.set_rank(result, g.get_rank(x))
 
@@ -580,7 +589,7 @@ def aten_avg_pool2d_backward(
 
     # It is an average, so x is not used to compute the gradient.
     # result = g.op.Add(x, grad, name="avg_pool2d_backward", outputs=outputs)
-    if sts:
+    if not sts:
         g.set_type(grad, g.get_type(x))
         g.set_rank(grad, g.get_rank(x))
     return grad
@@ -1231,6 +1240,57 @@ def aten_flatten(
     return res
 
 
+def aten_floordiv(
+    g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T, y: T
+) -> T:
+    """floor + div"""
+    return aten_floor_divide(g, sts, outputs, x, y, name="floordiv")
+
+
+def aten_floor_divide(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    y: T,
+    name="floor_divide",
+) -> T:
+    """floor + div"""
+    if isinstance(y, str) and isinstance(x, str):
+        div = g.op.Div(x, y, name=name)
+        g.set_type(div, g.get_type(x))
+        g.set_rank(div, max(g.get_rank(x), g.get_rank(y)))
+    elif isinstance(x, str) and isinstance(y, int):
+        dtype = tensor_dtype_to_np_dtype(g.get_type(x))
+        div = g.op.Div(x, np.array([y], dtype=dtype), name=name)
+        g.set_type(div, g.get_type(x))
+        if g.has_shape(x):
+            g.set_shape(div, g.get_shape(x))
+        else:
+            g.set_rank(div, g.get_rank(x))
+    elif isinstance(x, int) and isinstance(y, str):
+        dtype = tensor_dtype_to_np_dtype(g.get_type(y))
+        div = g.op.Div(np.array([x], dtype=dtype), y, name=name)
+        g.set_type(div, g.get_type(y))
+        if g.has_shape(y):
+            g.set_shape(div, g.get_shape(y))
+        else:
+            g.set_rank(div, g.get_rank(y))
+    else:
+        raise AssertionError(
+            f"Unable to implement floordiv for types {[type(x), type(y)]}{g.get_debug_msg()}"
+        )
+
+    res = g.op.Floor(div, outputs=outputs, name=name)
+    if not sts:
+        g.set_type(res, g.get_type(x))
+        if g.has_shape(div):
+            g.set_shape(res, g.get_shape(div))
+        else:
+            g.set_rank(res, g.get_rank(div))
+    return res
+
+
 def aten_full(
     g: GraphBuilder,
     sts: Optional[Dict[str, Any]],
@@ -1488,7 +1548,7 @@ def aten_index_put(
             f"{g.get_debug_msg()}"
         )
         res = g.op.Where(index, values, x, outputs=outputs)
-        if sts:
+        if not sts:
             g.set_type(res, g.get_type(x))
             g.set_shape(res, g.get_shape(x))
         return res
@@ -3487,6 +3547,16 @@ def aten_sqrt(
 ) -> T:
     "sqrt"
     res = g.make_node("Sqrt", [x], name="sqrt")
+    if not sts:
+        set_type_shape_unary_op(g, outputs[0], x)
+    return res
+
+
+def aten__sym_sqrt(
+    g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T
+) -> T:
+    "sqrt"
+    res = g.make_node("Sqrt", [x], name="_sym_sqrt")
     if not sts:
         set_type_shape_unary_op(g, outputs[0], x)
     return res

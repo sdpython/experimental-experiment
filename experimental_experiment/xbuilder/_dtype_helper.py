@@ -37,7 +37,7 @@ def torch_dtype_to_onnx_dtype(to: "torch.dtype") -> int:  # noqa: F821
 def dtype_to_tensor_dtype(dt: "dtype") -> int:  # noqa: F821
     try:
         return np_dtype_to_tensor_dtype(dt)
-    except KeyError:
+    except (KeyError, TypeError):
         pass
     return torch_dtype_to_onnx_dtype(dt)
 

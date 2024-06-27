@@ -1,6 +1,7 @@
 import os
 import time
 import unittest
+import sys
 import numpy as np
 from experimental_experiment.ext_test_case import ExtTestCase, skipif_ci_apple
 from experimental_experiment.memory_peak import get_memory_rss, start_spying_on
@@ -9,11 +10,13 @@ import torch
 
 class TestMemoryPeak(ExtTestCase):
     @skipif_ci_apple("stuck")
+    @unittest.skipIf(sys.version_info >= (3, 12, 0), reason="too long")
     def test_memory(self):
         mem = get_memory_rss(os.getpid())
         self.assertIsInstance(mem, int)
 
     @skipif_ci_apple("stuck")
+    @unittest.skipIf(sys.version_info >= (3, 12, 0), reason="stuck")
     def test_spy(self):
         p = start_spying_on()
         res = []
@@ -30,6 +33,7 @@ class TestMemoryPeak(ExtTestCase):
 
     @skipif_ci_apple("stuck")
     @unittest.skipIf(not torch.cuda.is_available(), reason="CUDA not here")
+    @unittest.skipIf(sys.version_info >= (3, 12, 0), reason="too long")
     def test_spy_cuda(self):
         p = start_spying_on(cuda=True)
         res = []

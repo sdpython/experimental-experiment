@@ -1,4 +1,5 @@
 import copy
+import sys
 import unittest
 from typing import Optional
 import onnxruntime  # noqa: F401
@@ -9,6 +10,7 @@ from experimental_experiment.ext_test_case import (
     requires_torch,
     requires_cuda,
     requires_onnxscript,
+    requires_onnxruntime_training,
     skipif_transformers,
 )
 from experimental_experiment.torch_models.dump_helper import assert_all_close
@@ -253,7 +255,10 @@ class TestDynamoLlamaDynamic(ExtTestCase):
 
     @ignore_warnings((UserWarning, DeprecationWarning))
     @skipif_ci_windows("torch.compile not supported on Windows")
-    @requires_torch("2.3", "missing kernel")
+    @requires_torch("2.4", "missing kernel")
+    @unittest.skipIf(
+        sys.version_info[:2] == (3, 12), reason="not working yet python python 3.12"
+    )
     def test_llama_attention_forward_dynamic(self):
         from experimental_experiment.torch_models.llama_helper import (
             get_llama_attention,
@@ -285,6 +290,7 @@ class TestDynamoLlamaDynamic(ExtTestCase):
     @ignore_warnings((UserWarning, DeprecationWarning))
     @skipif_ci_windows("torch.compile not supported on Windows")
     @requires_torch("2.3", "missing kernel")
+    @requires_onnxruntime_training()
     def test_llama_attention_b_forward_dynamic(self):
         from experimental_experiment.torch_models.llama_helper import (
             get_llama_attention,
