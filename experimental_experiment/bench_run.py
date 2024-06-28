@@ -1,10 +1,12 @@
+import itertools
 import multiprocessing
 import os
 import platform
 import re
 import subprocess
 import sys
-from typing import Dict, List, Tuple, Union
+from argparse import Namespace
+from typing import Any, Dict, List, Tuple, Union
 
 
 class BenchmarkError(RuntimeError):
@@ -15,7 +17,7 @@ def get_machine() -> Dict[str, Union[str, int, float, Tuple[int, int]]]:
     """
     Returns the machine specification.
     """
-    cpu: Dict[str, Union[str, int, float, Tuple[int, int]]] = dict(
+    config: Dict[str, Union[str, int, float, Tuple[int, int]]] = dict(
         machine=str(platform.machine()),
         processor=str(platform.processor()),
         version=str(sys.version),
@@ -25,13 +27,13 @@ def get_machine() -> Dict[str, Union[str, int, float, Tuple[int, int]]]:
     try:
         import torch.cuda
     except ImportError:
-        return cpu
+        return config
 
-    cpu["has_cuda"] = bool(torch.cuda.is_available())
-    if cpu["has_cuda"]:
-        cpu["capability"] = torch.cuda.get_device_capability(0)
-        cpu["device_name"] = str(torch.cuda.get_device_name(0))
-    return cpu
+    config["has_cuda"] = bool(torch.cuda.is_available())
+    if config["has_cuda"]:
+        config["capability"] = torch.cuda.get_device_capability(0)
+        config["device_name"] = str(torch.cuda.get_device_name(0))
+    return config
 
 
 def _cmd_line(
@@ -49,7 +51,28 @@ def _extract_metrics(text: str) -> Dict[str, str]:
     res = reg.findall(text)
     if len(res) == 0:
         return {}
-    return dict(res)
+    kw = dict(res)
+    new_kw = {}
+    for k, w in kw.items():
+        assert isinstance(k, str) and isinstance(
+            w, str
+        ), f"Unexpected type for k={k!r}, types={type(k)}, {type(w)})."
+        assert "\n" not in w, f"Unexpected multi-line value for k={k!r}, value is\n{w}"
+        assert len(w) < 100, f"Unexpected long value for k={k!r}, value is\n{w}"
+        try:
+            wi = int(w)
+            new_kw[k] = wi
+            continue
+        except ValueError:
+            pass
+        try:
+            wf = float(w)
+            new_kw[k] = wf
+            continue
+        except ValueError:
+            pass
+        new_kw[k] = w
+    return new_kw
 
 
 def _make_prefix(script_name: str, index: int) -> str:
@@ -75,6 +98,7 @@ def run_benchmark(
     :param dump: dump onnx file
     :return: values
     """
+    assert configs, f"No configuration was given (script_name={script_name!r})"
     if verbose:
         from tqdm import tqdm
 
@@ -130,3 +154,51 @@ def run_benchmark(
             print(sout)
 
     return data
+
+
+def multi_run(kwargs: Namespace) -> bool:
+    """
+    Checks if multiple values were sent for one argument.
+    """
+    return any(isinstance(v, str) and "," in v for v in kwargs.__dict__.values())
+
+
+def make_configs(kwargs: Namespace) -> List[Dict[str, Any]]:
+    """
+    Creates all the configurations based on the command line arguments.
+    """
+    args = []
+    for k, v in kwargs.__dict__.items():
+        if isinstance(v, str):
+            args.append([(k, s) for s in v.split(",")])
+        else:
+            args.append([(k, v)])
+    configs = list(itertools.product(*args))
+    return [dict(c) for c in configs]
+
+
+def make_dataframe_from_benchmark_data(data: List[Dict], detailed: bool = True) -> Any:
+    """
+    Creates a dataframe from the received data.
+
+    :param data: list of dictionaries for every run
+    :param detailed: remove multi line and long values
+    :return: dataframe
+    """
+    import pandas
+
+    if detailed:
+        return pandas.DataFrame(data)
+
+    new_data = []
+    for d in data:
+        g = {}
+        for k, v in d.items():
+            if not isinstance(v, str):
+                g[k] = v
+                continue
+            if "\n" in v or len(v) > 100:
+                continue
+            g[k] = v
+        new_data.append(g)
+    return pandas.DataFrame(new_data)

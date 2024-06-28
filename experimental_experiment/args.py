@@ -110,4 +110,21 @@ def get_parsed_args(
             default=v[0],
         )
 
-    return parser.parse_args(args=new_args)
+    res = parser.parse_args(args=new_args)
+    update = {}
+    for k, v in res.__dict__.items():
+        try:
+            vi = int(v)
+            update[k] = vi
+            continue
+        except ValueError:
+            pass
+        try:
+            vf = float(v)
+            update[k] = vf
+            continue
+        except ValueError:
+            pass
+    if update:
+        res.__dict__.update(update)
+    return res

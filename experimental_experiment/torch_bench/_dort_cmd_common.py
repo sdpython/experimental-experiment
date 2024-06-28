@@ -471,23 +471,23 @@ def dort_args(name: str, description: str, new_args: Optional[List[str]] = None)
             "ort, ort+, inductor, eager, plug, backort, dynger, custom",
         ),
         device=("cpu", "'cpu' or 'cuda'"),
-        num_hidden_layers=(1, "number of hidden layers"),
+        num_hidden_layers=("1", "number of hidden layers"),
         warmup=5,
         repeat=5,
-        mixed=(0, "mixed precision (based on autocast)"),
+        mixed=("0", "mixed precision (based on autocast)"),
         export=("", "export the dynamo models"),
         dynamic=("0", "use dynamic shapes"),
-        target_opset=(18, "opset to convert into, use with backend=custom"),
+        target_opset=("18", "opset to convert into, use with backend=custom"),
         config=("default", "default, medium, or small to test"),
-        verbose=(0, "verbosity"),
+        verbose=("0", "verbosity"),
         implementation=("eager", "eager or sdpa"),
         disable_pattern=("", "a list of optimization patterns to disable"),
         enable_pattern=("default", "list of optimization patterns to enable"),
         dump_folder=("dump_dort_bench", "where to dump the exported model"),
-        dump_patterns=(0, "dumps the patterns in sub folder of dump_folder"),
-        optimize=(1, "optimize the model"),
-        with_mask=(1, "with or without mask, dynamo may fail with a mask"),
-        ort_optimize=(1, "enable or disable onnxruntime optimization"),
+        dump_patterns=("0", "dumps the patterns in sub folder of dump_folder"),
+        optimize=("1", "optimize the model"),
+        with_mask=("1", "with or without mask, dynamo may fail with a mask"),
+        ort_optimize=("1", "enable or disable onnxruntime optimization"),
         order=("none", "optimization order see class OrderAlgorithm, none by default"),
         shape_scenario=(
             "",
@@ -495,9 +495,13 @@ def dort_args(name: str, description: str, new_args: Optional[List[str]] = None)
             "shapes with different batch dimensions, 'length' to get "
             "different length sizes",
         ),
+        output_data=(
+            "output_data_multi.csv",
+            "when running multiple configuration, " "save the results in that file",
+        ),
         expose="backend,repeat,warmup,device,num_hidden_layers,"
         "mixed,export,config,target_opset,dynamic,verbose,dump_folder,shape_scenario"
-        "enable_pattern,disable_pattern,model,optimize,with_mask,order",
+        "enable_pattern,disable_pattern,model,optimize,with_mask,order,output_data",
         new_args=new_args,
     )
     return args
