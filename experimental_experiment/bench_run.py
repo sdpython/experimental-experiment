@@ -202,3 +202,46 @@ def make_dataframe_from_benchmark_data(data: List[Dict], detailed: bool = True) 
             g[k] = v
         new_data.append(g)
     return pandas.DataFrame(new_data)
+
+
+def measure_discrepancies(
+    expected: List[Tuple["torch.Tensor", ...]],  # noqa: F821
+    outputs: List[Tuple["torch.Tensor", ...]],  # noqa: F821
+) -> Tuple[float, float]:
+    """
+    Computes the discrepancies.
+
+    :param expected: list of outputs coming from a torch model
+    :param outputs: list of outputs coming from an onnx model
+    :return: max absole errors, max relative errors
+    """
+
+    def _flatten(outputs):
+        flat = []
+        for tensor in outputs:
+            if isinstance(tensor, tuple):
+                flat.extend(_flatten(tensor))
+            else:
+                flat.append(tensor)
+        return tuple(flat)
+
+    abs_errs = []
+    rel_errs = []
+    for torch_outputs_mixed_types, onnx_outputs in zip(expected, outputs):
+        torch_outputs = _flatten(torch_outputs_mixed_types)
+        assert len(torch_outputs) == len(
+            onnx_outputs
+        ), f"Length mismatch {len(torch_outputs)} != {len(onnx_outputs)}"
+        for torch_tensor, onnx_tensor in zip(torch_outputs, onnx_outputs):
+            assert (
+                torch_tensor.dtype == onnx_tensor.dtype
+            ), f"Type mismatch {torch_tensor.dtype} != {onnx_tensor.dtype}"
+            assert (
+                torch_tensor.shape == onnx_tensor.shape
+            ), f"Type mismatch {torch_tensor.shape} != {onnx_tensor.shape}"
+            diff = torch_tensor - onnx_tensor
+            abs_err = float(diff.abs().max())
+            rel_err = float((diff.abs() / torch_tensor).max())
+            abs_errs.append(abs_err)
+            rel_errs.append(rel_err)
+    return max(abs_errs), max(rel_errs)

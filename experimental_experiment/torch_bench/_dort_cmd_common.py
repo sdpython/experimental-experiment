@@ -507,7 +507,7 @@ def dort_args(name: str, description: str, new_args: Optional[List[str]] = None)
     return args
 
 
-def export_args(name: str, description: str):
+def export_args(name: str, description: str, new_args: Optional[List[str]] = None):
     from experimental_experiment.args import get_parsed_args
 
     args = get_parsed_args(
@@ -530,9 +530,14 @@ def export_args(name: str, description: str):
         ort_optimize=(1, "enable or disable onnxruntime optimization"),
         with_mask=(1, "with or without mask, dynamo may fail with a mask"),
         order=("none", "optimization order see class OrderAlgorithm, none by default"),
+        output_data=(
+            "output_data_multi.csv",
+            "when running multiple configuration, " "save the results in that file",
+        ),
         expose="exporter,device,num_hidden_layers,ort,"
         "mixed,config,target_opset,dynamic,verbose,dump_patterns,"
         "enable_pattern,disable_pattern,model,optimize,with_mask,order",
+        new_args=new_args,
     )
     return args
 
