@@ -1,10 +1,10 @@
 import time
 import os
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional, Union
 import numpy as np
 import onnx
 from onnx import ModelProto
-from ..convert.convert_helper import optimize_model_proto
+from ..convert.convert_helper import optimize_model_proto_oxs
 from ..bench_run import measure_discrepancies
 
 
@@ -15,9 +15,14 @@ def common_export(
     target_opset: int = 18,
     folder: str = "",
     filename: str = "model.onnx",
-    dynamic_shapes: Any | None = None,
+    dynamic_shapes: Optional[Any] = None,
     verbose: int = 0,
-    optimization: str | None = None,
+    optimize_oxs: str = "",
+    ort_optimize: bool = False,
+    large_model: bool = False,
+    order: bool = False,
+    enable_pattern: Optional[Union[str, List[str]]] = None,
+    disable_pattern: Optional[Union[str, List[str]]] = None,
     stats: Dict[str, Any] | None = None,
 ):
     """
@@ -30,10 +35,16 @@ def common_export(
     :param inputs: inputs
     :param dynamic_shapes: dynamic shapes
     :param target_opset: target opset
-    :param optimization: optimization scenario, '/' separated values
+    :param optimize_oxs: run optimization with onnxscript
+    :param enable_pattern: patterns to apply
+    :param disable_pattern: patterns not to apply
     :param verbose: verbosity
     :param stats: if not None, populates this
         dictionary with statistics about time
+    :param optimize_oxs: optimize
+    :param ort_optimize: produces a file showing onnxruntime optimizations
+    :param large_model: save weights as external
+    :param order: optimize order
     :returns: onnx proto
     """
     import torch.onnx
@@ -44,9 +55,14 @@ def common_export(
         filename = os.path.join(folder, filename)
 
     if verbose:
-        print(f"[common_export] start exporting with {exporter!r} in {filename!r}")
+        print(
+            f"[common_export] start exporting with {exporter!r}, "
+            f"{len(inputs)} inputs in {filename!r}"
+        )
     begin = time.perf_counter()
     if exporter == "script":
+        assert isinstance(inputs, tuple), f"{type(inputs)}"
+        assert len(inputs) == 2
         torch.onnx.export(
             model,
             inputs,
@@ -74,6 +90,25 @@ def common_export(
         with torch.no_grad():
             prog = torch.onnx.dynamo_export(model, *inputs)
         onnx.save(prog.model_proto, filename)
+    elif exporter == "custom":
+        from ..xoptim import get_pattern_list
+        from ..xbuilder import OptimizationOptions
+        from ..torch_interpreter import to_onnx
+
+        patterns = get_pattern_list(enable_pattern, disable_pattern, verbose=verbose)
+        onx = to_onnx(
+            model,
+            inputs,
+            input_names=[f"input{i}" for i in range(len(inputs))],
+            options=OptimizationOptions(patterns=patterns, order=order),
+            verbose=verbose,
+            target_opset=target_opset,
+            optimize=bool(enable_pattern),
+            large_model=large_model,
+        )
+        print([i.name for i in onx.graph.input])
+        with open(filename, "wb") as f:
+            f.write(onx.SerializeToString())
     else:
         raise ValueError(f"Unknown exporter {exporter!r}")
 
@@ -90,13 +125,11 @@ def common_export(
     with open(filename, "rb") as f:
         onx = onnx.load(f)
 
-    if optimization:
+    if optimize_oxs:
         if verbose:
-            print(f"[common_export] start optimization with {optimization!r}")
+            print("[common_export] start optimization with onnxscript")
         begin = time.perf_counter()
-        optimized_model = optimize_model_proto(
-            onx, optimization, verbose=verbose, stats=stats
-        )
+        optimized_model = optimize_model_proto_oxs(onx, verbose=verbose, stats=stats)
         end = time.perf_counter() - begin
         if stats is not None:
             stats["optimization_time"] = end
@@ -108,6 +141,23 @@ def common_export(
         onnx.save(optimized_model, filename)
         if verbose:
             print(f"[common_export] done saving in {time.perf_counter() - begin}")
+
+    if ort_optimize and filename:
+        output = f"{filename}.opt.onnx"
+        if verbose:
+            print(f"[common_export] onnxruntime optimize in {output!r}")
+        from ..convert.convert_helper import ort_optimize as fopt
+
+        is_cuda = next(model.parameters()).is_cuda
+        providers = ["CUDAExecutionProvider", "CPUExecutionProvider"]
+        fopt(
+            onx,
+            output,
+            providers=providers if is_cuda else providers[-1:],
+            disable_aot=False,
+        )
+        if verbose:
+            print("[common_export] done")
 
     return onx
 

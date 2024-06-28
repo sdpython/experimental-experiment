@@ -213,7 +213,7 @@ class TestCustomOpsOnnxScript(ExtTestCase):
                 from onnxscript.rewriter import rewrite
                 from onnx.inliner import inline_local_functions
 
-                def optimize_model_proto(model_proto):
+                def optimize_model_proto_oxs(model_proto):
                     first_model_proto = model_proto
                     model_proto = optimize(
                         model_proto,
@@ -235,7 +235,7 @@ class TestCustomOpsOnnxScript(ExtTestCase):
                 options = OrtBackendOptions(
                     export_options=export_options,
                     ort_session_options=ort_session_options,
-                    pre_ort_model_transforms=[optimize_model_proto],
+                    pre_ort_model_transforms=[optimize_model_proto_oxs],
                 )
             else:
                 options = OrtBackendOptions(

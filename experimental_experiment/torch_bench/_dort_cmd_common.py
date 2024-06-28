@@ -513,11 +513,13 @@ def export_args(name: str, description: str, new_args: Optional[List[str]] = Non
     args = get_parsed_args(
         name,
         description=description,
+        warmup=5,
+        repeat=10,
         model=("llama", "model to measure, llama, mistral, phi, ..."),
         exporter=("custom", "script, dynamo, custom"),
         device=("cpu", "'cpu' or 'cuda'"),
         num_hidden_layers=(1, "number of hidden layers"),
-        mixed=(0, "mixed precision (based on autocast)"),
+        dtype=("float32", "model float type"),
         dynamic=("0", "use dynamic shapes"),
         target_opset=(18, "opset to convert into, use with backend=custom"),
         config=("default", "default, medium, or small to test"),
@@ -530,13 +532,17 @@ def export_args(name: str, description: str, new_args: Optional[List[str]] = Non
         ort_optimize=(1, "enable or disable onnxruntime optimization"),
         with_mask=(1, "with or without mask, dynamo may fail with a mask"),
         order=("none", "optimization order see class OrderAlgorithm, none by default"),
+        memory_peak=("0", "measure memory peak"),
+        dump_folder=("dump_export", "folder where to dump the model"),
+        large_model=("0", "saves weights in a separate file"),
         output_data=(
             "output_data_multi.csv",
             "when running multiple configuration, " "save the results in that file",
         ),
         expose="exporter,device,num_hidden_layers,ort,"
         "mixed,config,target_opset,dynamic,verbose,dump_patterns,"
-        "enable_pattern,disable_pattern,model,optimize,with_mask,order",
+        "enable_pattern,disable_pattern,model,optimize,with_mask,order"
+        "memory_peak,dump_folder,large_model,dtype,repeat,warmup",
         new_args=new_args,
     )
     return args
@@ -551,6 +557,8 @@ def create_configuration_for_benchmark(
     implementation: str = "eager",
     with_mask: bool = True,
     shape_scenario: Optional[str] = None,
+    dynamic_shapes: bool = False,
+    dtype: str = "float32",
 ) -> Dict[str, Union[str, int, List[Tuple[int, int]]]]:
     """
     Creates a model based on the given configuration.
@@ -565,6 +573,7 @@ def create_configuration_for_benchmark(
     :param shape_scenario: None or empty for all shapes equal to (2, 1024),
         'batch' for different batch sizes,
         'length' for different length sizes
+    :param dynamic_shapes: use dynamic shapes
     :return: dictionary
     """
     fcts = {
@@ -582,19 +591,41 @@ def create_configuration_for_benchmark(
         implementation=implementation,
         with_mask=with_mask,
         shape_scenario=shape_scenario,
+        dynamic_shapes=dynamic_shapes,
     )
 
 
 def create_model(
-    model: str, config_dict: Dict[str, Union[int, str]]
+    model: str,
+    config_dict: Dict[str, Union[int, str]],
+    dtype: Optional[str] = "float32",
 ) -> Tuple[Any, List[Tuple[Any, ...]]]:
     """
     Returns a model and a list of inputs.
 
     :param model: model name
     :param config_dict: configuration
+    :param dtype: dtype to use
     :return: model, list of inputs
     """
+    if dtype is not None:
+        import torch
+
+        res = create_model(model, config_dict, dtype=None)
+        torch_dtype = getattr(torch, dtype)
+        return tuple(
+            [
+                res[0].to(torch_dtype),
+                [
+                    tuple(
+                        (i.to(torch_dtype) if i.dtype == torch.float32 else i)
+                        for i in obs
+                    )
+                    for obs in res[1]
+                ],
+                *res[2:],
+            ]
+        )
 
     if model == "llama":
         from ..torch_models.llama_helper import get_llama_model

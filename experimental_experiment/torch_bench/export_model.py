@@ -12,7 +12,7 @@ Example, run llama model with onnxrt backend on cuda.
 
 ::
 
-    python -m experimental_experiment.torch_bench.export_model --exporter script --device cuda
+    python -m experimental_experiment.torch_bench.export_model --exporter script --device cuda --config medium
     
 """
 
@@ -70,6 +70,14 @@ def main(args=None):
             common_export,
         )
 
+        verbose = int(args.verbose)
+        use_dynamic = args.dynamic in (1, "1", True, "True")
+        with_mask = args.with_mask in (True, 1, "1", "True")
+        order = args.order in (True, 1, "1", "True")
+        large_model = args.large_model in (True, 1, "1", "True")
+        disable_pattern = [_ for _ in args.disable_pattern.split("+") if _]
+        enable_pattern = [_ for _ in args.enable_pattern.split("+") if _]
+
         config_dict = create_configuration_for_benchmark(
             model=args.model,
             config=args.config,
@@ -77,21 +85,20 @@ def main(args=None):
             warmup=1,
             num_hidden_layers=args.num_hidden_layers,
             implementation=args.implementation,
-            with_mask=args.with_mask,
+            with_mask=with_mask,
+            dynamic_shapes=use_dynamic,
         )
 
-        verbose = int(args.verbose)
-        with_mask = args.with_mask in (True, 1, "1", "True")
-        disable_pattern = [_ for _ in args.disable_pattern.split("+") if _]
-        enable_pattern = [_ for _ in args.enable_pattern.split("+") if _]
         print(f"model={args.model}")
         print(f"model config={config_dict}")
         print(f"exporter={args.exporter}")
         print(f"verbose={verbose}")
         print(f"optimize={args.optimize}")
+        print(f"dtype={args.dtype}")
         print(f"implementation={args.implementation}")
         print(f"with_mask={args.with_mask}")
-        print(f"mixed={args.mixed}")
+        print(f"order={args.order}")
+        print(f"dump_folder={args.dump_folder}")
 
         if args.exporter == "custom":
             print(f"disable_pattern={disable_pattern!r}")
@@ -104,19 +111,18 @@ def main(args=None):
                 f"reserved={torch.cuda.memory_reserved(0)}"
             )
 
-        use_dynamic = args.dynamic in (1, "1", True, "True")
         begin = time.perf_counter()
-        model, example_args_collection, dynamic_shapes = create_model(
-            args.model, config_dict, dynamic_shapes=use_dynamic, with_mask=with_mask
-        )
+        res = create_model(args.model, config_dict, dtype=args.dtype)
+        model, example_args_collection = res[:2]
+        dynamic_shapes = None if len(res) == 2 else res[2]
         print(f"[export_model] model created in {time.perf_counter() - begin}")
 
         device = args.device
         model = model.eval().to(device)
-        example_inputs = example_args_collection[0]
-        inputs = (
-            tuple([t.to("cuda") for t in example_inputs]) if is_cuda else example_inputs
-        )
+        example_inputs = [
+            tuple(t.to(device) for t in example_inputs)
+            for example_inputs in example_args_collection
+        ]
 
         if is_cuda:
             print(
@@ -125,20 +131,15 @@ def main(args=None):
             )
 
         print(f"dynamic={use_dynamic}")
-        use_mixed = args.mixed in (1, "1", True, "True")
-        print(f"mixed={use_mixed}")
 
-        folder = "dump_model"
+        folder = args.dump_folder
         if not os.path.exists(folder):
             os.mkdir(folder)
 
-        filename = os.path.join(
-            folder,
-            (
-                f"export_{args.model}_{args.exporter}_{'dyn' if use_dynamic else 'static'}"
-                f"{'_mixed' if use_mixed else ''}_{args.config}-v{args.target_opset}"
-                f".{args.implementation}.onnx"
-            ),
+        filename = (
+            f"export_{args.model}_{args.exporter}_{'dyn' if use_dynamic else 'static'}"
+            f"{args.dtype}_{args.config}-v{args.target_opset}"
+            f".{args.implementation}.onnx"
         )
 
         if args.dynamic:
@@ -148,23 +149,22 @@ def main(args=None):
         conversion = {}
         memory_stats = {}
 
-        print(f"Exporter model with exporter={args.exporter}, n_inputs={len(inputs)}")
+        print(
+            f"Exporter model with exporter={args.exporter}, n_inputs={len(example_inputs[0])}"
+        )
         if args.exporter == "eager":
             print("[export_model] start benchmark")
             begin = time.perf_counter()
             result = run_inference(
                 model,
-                example_inputs,
+                example_inputs[0],
                 warmup=args.warmup,
                 repeat=args.repeat,
                 verbose=args.verbose,
             )
             print(f"[export_model] benchmark done in {time.perf_counter() - begin}")
         else:
-            print(
-                f"[export_model] export to onnx with exporter={args.exporter!r} "
-                f"and optimization={args.optimization!r}"
-            )
+            print(f"[export_model] export to onnx with exporter={args.exporter!r}")
             begin = time.perf_counter()
 
             memory_session = (
@@ -181,10 +181,14 @@ def main(args=None):
                 folder=args.dump_folder,
                 filename=filename,
                 dynamic_shapes=dynamic_shapes if args.dynamic else None,
-                ort_optimize=args.ort_optimize,
-                optimization=args.optimization,
+                ort_optimize=args.ort in ("1", 1, "True", True),
+                optimize_oxs=args.optimize in ("1", 1, "True", True),
+                enable_pattern=args.enable_pattern,
+                disable_pattern=args.disable_pattern,
                 verbose=args.verbose,
                 stats=conversion,
+                large_model=large_model,
+                order=order,
             )
             print(
                 f"[export_model] export to onnx done in {time.perf_counter() - begin}"
