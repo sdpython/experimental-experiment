@@ -117,13 +117,13 @@ def get_parsed_args(
             vi = int(v)
             update[k] = vi
             continue
-        except ValueError:
+        except (ValueError, TypeError):
             pass
         try:
             vf = float(v)
             update[k] = vf
             continue
-        except ValueError:
+        except (ValueError, TypeError):
             pass
     if update:
         res.__dict__.update(update)
