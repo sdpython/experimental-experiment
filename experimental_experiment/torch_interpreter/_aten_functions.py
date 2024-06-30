@@ -889,7 +889,7 @@ def aten_dropout(
         outputs = outputs.copy()
         outputs.append("")
     if isinstance(p, float):
-        p = np.array(p, dtype=np.float64)
+        p = np.array(p, dtype=tensor_dtype_to_np_dtype(g.get_type(x)))
     if isinstance(training, bool):
         training = np.array(training, dtype=np.bool_)
     result, _ = g.op.Dropout(x, p, training, outputs=outputs)
@@ -2763,7 +2763,7 @@ def aten_scaled_dot_product_attention(
 
     if dropout_p != 0:
         attn_weight = g.op.Dropout(
-            attn_weight, np.array([dropout_p], dtype=dtype), name=name
+            attn_weight, np.array(dropout_p, dtype=dtype), name=name
         )[0]
 
     return g.op.MatMul(attn_weight, value, name=name, outputs=outputs)
