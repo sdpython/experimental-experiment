@@ -604,6 +604,13 @@ def aten_bitwise_or(
     name: str = "bitwise_or",
 ) -> T:
     "bitwise or"
+    if g.get_type(x) == TensorProto.BOOL and g.get_type(x) == TensorProto.BOOL:
+        x, y = prepare_inputs_homogeneous_operator(g, x, y, name=name)
+        res = g.op.Or(x, y, outputs=outputs, name=name)
+        if not sts:
+            set_type_shape_binary_op(g, outputs[0], x, y)
+        return res
+
     x, y = prepare_inputs_homogeneous_operator(g, x, y, name=name)
     res = g.op.BitwiseOr(x, y, outputs=outputs, name=name)
     if not sts:

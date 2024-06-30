@@ -20,15 +20,18 @@ class TestEdMistral(ExtTestCase):
     @ignore_warnings(DeprecationWarning)
     @requires_torch("2.3", "AssertionError: original output #6 is None")
     def test_mistral_export_rename(self):
+        import torch
+
         model, input_tensors = get_mistral_model()
         input_tensors = input_tensors[0]
         expected = model(*input_tensors)
-        try:
-            ret = export_to_onnx(model, *input_tensors, rename_inputs=True)
-        except RuntimeError as e:
-            if "cannot mutate tensors with frozen storage" in str(e):
-                raise unittest.SkipTest("cannot mutate tensors with frozen storag")
-            raise
+        with torch.no_grad():
+            try:
+                ret = export_to_onnx(model, *input_tensors, rename_inputs=True)
+            except RuntimeError as e:
+                if "cannot mutate tensors with frozen storage" in str(e):
+                    raise unittest.SkipTest("cannot mutate tensors with frozen storag")
+                raise
         onx = ret["proto"]
         xp = [x.numpy() for x in input_tensors]
         feeds = {f"input{i}": x for i, x in enumerate(xp)}
@@ -44,15 +47,18 @@ class TestEdMistral(ExtTestCase):
     @ignore_warnings(DeprecationWarning)
     @requires_torch("2.3", "AssertionError: original output #6 is None")
     def test_mistral_export_norename(self):
+        import torch
+
         model, input_tensors = get_mistral_model()
         input_tensors = input_tensors[0]
         expected = model(*input_tensors)
-        try:
-            ret = export_to_onnx(model, *input_tensors, rename_inputs=False)
-        except RuntimeError as e:
-            if "cannot mutate tensors with frozen storage" in str(e):
-                raise unittest.SkipTest("cannot mutate tensors with frozen storag")
-            raise
+        with torch.no_grad():
+            try:
+                ret = export_to_onnx(model, *input_tensors, rename_inputs=False)
+            except RuntimeError as e:
+                if "cannot mutate tensors with frozen storage" in str(e):
+                    raise unittest.SkipTest("cannot mutate tensors with frozen storag")
+                raise
         onx = ret["proto"]
         names = [i.name for i in onx.graph.input]
         xp = [x.numpy() for x in input_tensors]
@@ -61,7 +67,9 @@ class TestEdMistral(ExtTestCase):
         results = ref.run(None, feeds)
         self.assertEqualArray(expected[0].detach().numpy(), results[0], atol=1e-5)
         if has_cuda():
-            sess = check_model_ort(onx, providers="cuda")
+            sess = check_model_ort(
+                onx, providers="cuda", dump_file="test_mistral_export_norename.onnx"
+            )
             results = sess.run(None, feeds)
             self.assertEqualArray(expected[0].detach().numpy(), results[0], atol=1e-5)
 
