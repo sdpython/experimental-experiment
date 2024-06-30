@@ -1,10 +1,6 @@
 import importlib
-import logging
 import os
 import re
-import subprocess
-import sys
-import warnings
 import torch
 from torch._dynamo.testing import collect_results
 from torch._dynamo.utils import clone_inputs
@@ -41,8 +37,6 @@ imports = [
     "ViTForMaskedImageModeling",
     "ViTModel",
 ]
-
-BATCH_SIZE_KNOWN_MODELS = dict()
 
 MODELS_FILENAME = """
 AlbertForMaskedLM,8
@@ -98,21 +92,20 @@ XLNetLMHeadModel,16
 YituTechConvBert,32
 """
 
-
+BATCH_SIZE_KNOWN_MODELS = dict()
 
 SKIP = {
     # Difficult to setup accuracy test because .eval() not supported
-    "Reformer",
+    # "Reformer",
     # Fails deepcopy
-    "BlenderbotForConditionalGeneration",
-    "GPTNeoForCausalLM",
-    "GPTNeoForSequenceClassification",
+    # "BlenderbotForConditionalGeneration",
+    # "GPTNeoForCausalLM",
+    # "GPTNeoForSequenceClassification",
     # Fails with even batch size = 1
-    "GPTJForCausalLM",
-    "GPTJForQuestionAnswering",
+    # "GPTJForCausalLM",
+    # "GPTJForQuestionAnswering",
 }
 
-# TODO - Fails even after fake tensors
 BATCH_SIZE_DIVISORS = {
     "AlbertForMaskedLM": 2,
     "AlbertForQuestionAnswering": 2,
@@ -167,51 +160,20 @@ BATCH_SIZE_DIVISORS = {
     "YituTechConvBert": 2,
 }
 
-SKIP_ACCURACY_CHECK_MODELS = {
-    # Models too large to have eager, dynamo and fp64_numbers simultaneosuly
-    # even for 40 GB machine.
-    "DebertaV2ForMaskedLM",
-    "BlenderbotForCausalLM",
-}
-
-SKIP_DUE_TO_CONTROL_FLOW = {"AllenaiLongformerBase"}
-
-
-REQUIRE_HIGHER_TOLERANCE_TRAINING = {
-    "MT5ForConditionalGeneration",
-    # AlbertForQuestionAnswering fails in CI GCP A100 but error does not seem
-    # harmful.
-    "AlbertForQuestionAnswering",
-}
-REQUIRE_HIGHER_TOLERANCE_INFERENCE = {
-    "GPT2ForSequenceClassification",
-    "RobertaForQuestionAnswering",
-}
-
-
-SKIP_FOR_CPU = {
-    "OPTForCausalLM",  # OOMs
-}
-
-ONLY_EVAL_MODE = {
-    "M2M100ForConditionalGeneration",
-}
-
-FP32_ONLY_MODELS = {
-    "GoogleFnet",
-}
+EXTRA_MODELS = {}
 
 
 def initialize():
     """
     Steps to run before running the benchmark.
     """
+    import transformers
+
     if "TORCHINDUCTOR_FX_GRAPH_CACHE" not in os.environ:
         torch._inductor.config.fx_graph_cache = True
 
-    mod = importlib.import_module("transformers")
     for cls in imports:
-        if not hasattr(mod, cls):
+        if not hasattr(transformers, cls):
             raise ModuleNotFoundError(f"{cls!r} is here, update transformers")
 
     lines = MODELS_FILENAME.split("\n")
@@ -221,9 +183,45 @@ def initialize():
         batch_size = int(batch_size)
         BATCH_SIZE_KNOWN_MODELS[model_name] = batch_size
 
+    EXTRA_MODELS.update(
+        {
+            "AllenaiLongformerBase": (
+                transformers.AutoConfig.from_pretrained("allenai/longformer-base-4096"),
+                transformers.AutoModelForMaskedLM,
+            ),
+            "Reformer": (
+                transformers.ReformerConfig(),
+                transformers.AutoModelForMaskedLM,
+            ),
+            "T5Small": (
+                transformers.AutoConfig.from_pretrained("t5-small"),
+                transformers.AutoModelForSeq2SeqLM,
+            ),
+            # "BigBird": (
+            #     BigBirdConfig(attention_type="block_sparse"),
+            #     AutoModelForMaskedLM,
+            # ),
+            "DistillGPT2": (
+                transformers.AutoConfig.from_pretrained("distilgpt2"),
+                transformers.AutoModelForCausalLM,
+            ),
+            "GoogleFnet": (
+                transformers.AutoConfig.from_pretrained("google/fnet-base"),
+                transformers.AutoModelForMaskedLM,
+            ),
+            "YituTechConvBert": (
+                transformers.AutoConfig.from_pretrained("YituTech/conv-bert-base"),
+                transformers.AutoModelForMaskedLM,
+            ),
+            "CamemBert": (
+                transformers.AutoConfig.from_pretrained("camembert-base"),
+                transformers.AutoModelForMaskedLM,
+            ),
+        }
+    )
 
 
-def get_module_cls_by_model_name(model_cls_name):
+def _get_module_cls_by_model_name(model_cls_name):
     _module_by_model_name = {
         "Speech2Text2Decoder": "transformers.models.speech_to_text_2.modeling_speech_to_text_2",
         "TrOCRDecoder": "transformers.models.trocr.modeling_trocr",
@@ -233,7 +231,7 @@ def get_module_cls_by_model_name(model_cls_name):
     return getattr(module, model_cls_name)
 
 
-def get_sequence_length(model_cls, model_name):
+def _get_sequence_length(model_cls, model_name):
     if model_name.startswith(("Blenderbot",)):
         seq_length = 128
     elif model_name.startswith(("GPT2", "Bart", "T5", "PLBart", "MBart")):
@@ -255,32 +253,27 @@ def get_sequence_length(model_cls, model_name):
             "Bert",
             "Roberta",
         )
-    ) or model_name in ("DistillGPT2", "GoogleFnet", "YituTechConvBert", "CamemBert"):
+    ) or model_name in {"DistillGPT2", "GoogleFnet", "YituTechConvBert", "CamemBert"}:
         seq_length = 512
-    elif model_name in ("TrOCRForCausalLM"):
+    elif model_name in ["TrOCRForCausalLM"]:
         seq_length = 256
     elif model_name.startswith("MobileBert"):
         seq_length = 128
     elif model_name.startswith("Wav2Vec2"):
-        # If too short, will fail with something like
-        # ValueError: `mask_length` has to be smaller than `sequence_length`,
-        # but got `mask_length`: 10 and `sequence_length`: 9`
-        seq_length = 10000  # NB: a more realistic size is 155136
+        seq_length = 2**16
     else:
-        log.info(
-            f"Sequence Length not defined for {model_name}. Choosing 128 arbitrarily"
-        )
         seq_length = 128
     return seq_length
 
 
-def generate_inputs_for_model(
+def _generate_inputs_for_model(
     model_cls, model, model_name, bs, device, include_loss_args=False
 ):
-    # TODO - Check if following values are representative
+    import transformers
+
     num_choices = 3
     num_visual_features = 42
-    seq_length = get_sequence_length(model_cls, model_name)
+    seq_length = _get_sequence_length(model_cls, model_name)
     vocab_size = model.config.vocab_size
 
     if model_name.startswith("Wav2Vec2"):
@@ -290,39 +283,39 @@ def generate_inputs_for_model(
         return {
             "input_values": torch.randn((bs, seq_length), device=device),
             # Added because that's what the example training script has
-            "attention_mask": rand_int_tensor(device, 0, 2, (bs, seq_length)),
-            "labels": rand_int_tensor(device, 0, vocab_size, (bs, target_length)),
+            "attention_mask": _rand_int_tensor(device, 0, 2, (bs, seq_length)),
+            "labels": _rand_int_tensor(device, 0, vocab_size, (bs, target_length)),
         }
 
     if model_name.endswith("MultipleChoice"):
-        input = rand_int_tensor(device, 0, vocab_size, (bs, num_choices, seq_length))
+        inputt = _rand_int_tensor(device, 0, vocab_size, (bs, num_choices, seq_length))
     elif model_name.startswith("Roberta"):
-        input = rand_int_tensor(device, 0, 1, (bs, seq_length))
+        inputt = _rand_int_tensor(device, 0, 1, (bs, seq_length))
     else:
-        input = rand_int_tensor(device, 0, vocab_size, (bs, seq_length))
+        inputt = _rand_int_tensor(device, 0, vocab_size, (bs, seq_length))
 
     if "Bart" in model_name:
-        input[:, -1] = model.config.eos_token_id
+        inputt[:, -1] = model.config.eos_token_id
 
-    input_dict = {"input_ids": input}
+    input_dict = {"input_ids": inputt}
 
     if (
         model_name.startswith("T5")
         or model_name.startswith("M2M100")
         or model_name.startswith("MT5")
         or model_cls
-        in [
-            BlenderbotModel,
-            BlenderbotSmallModel,
-            BlenderbotForConditionalGeneration,
-            BlenderbotSmallForConditionalGeneration,
-            PegasusModel,
-            PegasusForConditionalGeneration,
-            MarianModel,
-            MarianMTModel,
-        ]
+        in {
+            transformers.BlenderbotModel,
+            transformers.BlenderbotSmallModel,
+            transformers.BlenderbotForConditionalGeneration,
+            transformers.BlenderbotSmallForConditionalGeneration,
+            transformers.PegasusModel,
+            transformers.PegasusForConditionalGeneration,
+            transformers.MarianModel,
+            transformers.MarianMTModel,
+        }
     ):
-        input_dict["decoder_input_ids"] = input
+        input_dict["decoder_input_ids"] = inputt
 
     if model_name.startswith("Lxmert"):
         visual_feat_dim, visual_pos_dim = (
@@ -336,61 +329,64 @@ def generate_inputs_for_model(
 
     if include_loss_args:
         if model_name.endswith("PreTraining"):
-            if model_cls in [ElectraForPreTraining, LxmertForPreTraining]:
-                input_dict["labels"] = rand_int_tensor(device, 0, 1, (bs, seq_length))
+            if model_cls in [
+                transformers.ElectraForPreTraining,
+                transformers.LxmertForPreTraining,
+            ]:
+                input_dict["labels"] = _rand_int_tensor(device, 0, 1, (bs, seq_length))
             else:
                 label_name = (
                     "sentence_order_label"
-                    if model_cls in [AlbertForPreTraining]
+                    if model_cls in [transformers.AlbertForPreTraining]
                     else "next_sentence_label"
                 )
                 input_dict["labels"] = (
-                    rand_int_tensor(device, 0, vocab_size, (bs, seq_length)),
+                    _rand_int_tensor(device, 0, vocab_size, (bs, seq_length)),
                 )
-                input_dict[label_name] = rand_int_tensor(device, 0, 1, (bs,))
+                input_dict[label_name] = _rand_int_tensor(device, 0, 1, (bs,))
         elif model_name.endswith("QuestionAnswering"):
-            input_dict["start_positions"] = rand_int_tensor(
+            input_dict["start_positions"] = _rand_int_tensor(
                 device, 0, seq_length, (bs,)
             )
-            input_dict["end_positions"] = rand_int_tensor(device, 0, seq_length, (bs,))
+            input_dict["end_positions"] = _rand_int_tensor(device, 0, seq_length, (bs,))
         elif (
             model_name.endswith("MaskedLM")
             or model_name.endswith("HeadModel")
             or model_name.endswith("CausalLM")
             or model_name.endswith("DoubleHeadsModel")
         ):
-            input_dict["labels"] = rand_int_tensor(
+            input_dict["labels"] = _rand_int_tensor(
                 device, 0, vocab_size, (bs, seq_length)
             )
         elif model_name.endswith("TokenClassification"):
-            input_dict["labels"] = rand_int_tensor(
+            input_dict["labels"] = _rand_int_tensor(
                 device, 0, model.config.num_labels - 1, (bs, seq_length)
             )
         elif model_name.endswith("MultipleChoice"):
-            input_dict["labels"] = rand_int_tensor(device, 0, num_choices, (bs,))
+            input_dict["labels"] = _rand_int_tensor(device, 0, num_choices, (bs,))
         elif model_name.endswith("SequenceClassification"):
-            input_dict["labels"] = rand_int_tensor(
+            input_dict["labels"] = _rand_int_tensor(
                 device, 0, model.config.num_labels - 1, (bs,)
             )
         elif model_name.endswith("NextSentencePrediction"):
-            input_dict["labels"] = rand_int_tensor(device, 0, 1, (bs,))
+            input_dict["labels"] = _rand_int_tensor(device, 0, 1, (bs,))
         elif model_name.endswith("ForConditionalGeneration"):
-            input_dict["labels"] = rand_int_tensor(
+            input_dict["labels"] = _rand_int_tensor(
                 device, 0, vocab_size - 1, (bs, seq_length)
             )
         elif model_name in EXTRA_MODELS:
-            input_dict["labels"] = rand_int_tensor(
+            input_dict["labels"] = _rand_int_tensor(
                 device, 0, vocab_size, (bs, seq_length)
             )
         else:
             raise NotImplementedError(
-                f"Class {model_name} unsupported for training test "
+                f"Class {model_name!r} unsupported for training test "
             )
 
     return input_dict
 
 
-def rand_int_tensor(device, low, high, shape):
+def _rand_int_tensor(device, low, high, shape):
     return torch.randint(
         low,
         high,
@@ -401,73 +397,27 @@ def rand_int_tensor(device, low, high, shape):
     )
 
 
-EXTRA_MODELS = {
-    "AllenaiLongformerBase": (
-        AutoConfig.from_pretrained("allenai/longformer-base-4096"),
-        AutoModelForMaskedLM,
-    ),
-    "Reformer": (
-        ReformerConfig(),
-        AutoModelForMaskedLM,
-    ),
-    "T5Small": (
-        AutoConfig.from_pretrained("t5-small"),
-        AutoModelForSeq2SeqLM,
-    ),
-    # "BigBird": (
-    #     BigBirdConfig(attention_type="block_sparse"),
-    #     AutoModelForMaskedLM,
-    # ),
-    "DistillGPT2": (
-        AutoConfig.from_pretrained("distilgpt2"),
-        AutoModelForCausalLM,
-    ),
-    "GoogleFnet": (
-        AutoConfig.from_pretrained("google/fnet-base"),
-        AutoModelForMaskedLM,
-    ),
-    "YituTechConvBert": (
-        AutoConfig.from_pretrained("YituTech/conv-bert-base"),
-        AutoModelForMaskedLM,
-    ),
-    "CamemBert": (
-        AutoConfig.from_pretrained("camembert-base"),
-        AutoModelForMaskedLM,
-    ),
-}
-
-
 class HuggingfaceRunner(BenchmarkRunner):
     def __init__(self):
         super().__init__()
         self.suite_name = "huggingface"
 
-    @property
-    def skip_models_for_cpu(self):
-        return SKIP_FOR_CPU
-
-    @property
-    def fp32_only_models(self):
-        return FP32_ONLY_MODELS
-
-    @property
-    def skip_models_due_to_control_flow(self):
-        return SKIP_DUE_TO_CONTROL_FLOW
-
     def _get_model_cls_and_config(self, model_name):
         if model_name not in EXTRA_MODELS:
-            model_cls = get_module_cls_by_model_name(model_name)
+            import transformers
+
+            model_cls = _get_module_cls_by_model_name(model_name)
             config_cls = model_cls.config_class
             config = config_cls()
 
             # NB: some models need a pad token defined to handle BS > 1
             if (
                 model_cls
-                in [
-                    GPT2ForSequenceClassification,
-                    GPTNeoForSequenceClassification,
-                    GPTJForSequenceClassification,
-                ]
+                in {
+                    transformers.GPT2ForSequenceClassification,
+                    transformers.GPTNeoForSequenceClassification,
+                    transformers.GPTJForSequenceClassification,
+                }
                 or model_cls.__name__.startswith("Roberta")
                 or model_cls.__name__.startswith("Marian")
             ):
@@ -508,32 +458,21 @@ class HuggingfaceRunner(BenchmarkRunner):
             batch_size_default = BATCH_SIZE_KNOWN_MODELS[model_name]
         elif batch_size is None:
             batch_size_default = 16
-            log.info(
-                f"Batch size not specified for {model_name}. Setting batch_size=16"
-            )
 
         if batch_size is None:
             batch_size = batch_size_default
             if model_name in BATCH_SIZE_DIVISORS:
                 batch_size = max(int(batch_size / BATCH_SIZE_DIVISORS[model_name]), 1)
-                log.info(
-                    f"Running smaller batch size={batch_size} for {model_name}, orig batch_size={batch_size_default}"
-                )
 
-        example_inputs = generate_inputs_for_model(
+        example_inputs = _generate_inputs_for_model(
             model_cls, model, model_name, batch_size, device, include_loss_args=True
         )
 
-        # So we can check for correct gradients without eliminating the dropout computation
         for attr in dir(config):
             if "drop" in attr and isinstance(getattr(config, attr), float):
                 setattr(config, attr, 1e-30)
 
-        if (
-            is_training
-            and not use_eval_mode
-            and not (self.args.accuracy and model_name in ONLY_EVAL_MODE)
-        ):
+        if is_training and not use_eval_mode:
             model.train()
         else:
             model.eval()
@@ -560,12 +499,6 @@ class HuggingfaceRunner(BenchmarkRunner):
             yield model_name
 
     @property
-    def skip_accuracy_checks_large_models_dashboard(self):
-        if self.args.dashboard or self.args.accuracy:
-            return SKIP_ACCURACY_CHECK_MODELS
-        return set()
-
-    @property
     def get_output_amp_train_process_func(self):
         return {}
 
@@ -577,14 +510,6 @@ class HuggingfaceRunner(BenchmarkRunner):
 
     def get_tolerance_and_cosine_flag(self, is_training, current_device, name):
         cosine = self.args.cosine
-        if is_training:
-            if name in REQUIRE_HIGHER_TOLERANCE_TRAINING:
-                return 2e-2, cosine
-            else:
-                return 1e-2, cosine
-        else:
-            if name in REQUIRE_HIGHER_TOLERANCE_INFERENCE:
-                return 4e-3, cosine
         return 1e-3, cosine
 
     def compute_loss(self, pred):
@@ -607,96 +532,8 @@ class HuggingfaceRunner(BenchmarkRunner):
         return None
 
 
-def refresh_model_names_and_batch_sizes():
-    """
-    This function reads the HF Fx tracer supported models and finds the largest
-    batch size that could fit on the GPU with PyTorch eager.
-
-    The resulting data is written in huggingface_models_list.txt.
-
-    Note - We only need to run this function if we believe that HF Fx tracer now
-    supports more models.
-    """
-    import transformers.utils.fx as hf_fx
-
-    family = dict()
-    lm_seen = set()
-    family_seen = set()
-    for cls_name in hf_fx._SUPPORTED_MODELS:
-        if "For" not in cls_name:
-            continue
-
-        model_cls = get_module_cls_by_model_name(cls_name)
-
-        # TODO: AttributeError: '*Config' object has no attribute 'vocab_size'
-        if model_cls in [
-            CLIPModel,
-            CLIPVisionModel,
-            # SwinForImageClassification,
-            # SwinForImageClassification,
-            # SwinForMaskedImageModeling,
-            # SwinModel,
-            ViTForImageClassification,
-            ViTForMaskedImageModeling,
-            ViTModel,
-        ]:
-            continue
-
-        # TODO: AssertionError: Padding_idx must be within num_embeddings
-        if model_cls in [MarianForCausalLM, MarianMTModel, MarianModel]:
-            continue
-
-        # TODO: "model is not supported yet" from HFTracer
-        if model_cls in [HubertForSequenceClassification]:
-            continue
-
-        # TODO: shape mismatch in loss calculation
-        if model_cls in [LxmertForQuestionAnswering]:
-            continue
-
-        family_name = cls_name.split("For")[0]
-        if family_name not in family:
-            family[family_name] = []
-        if cls_name.endswith(("MaskedLM", "CausalLM")) and family_name not in lm_seen:
-            family[family_name].append(cls_name)
-            lm_seen.add(family_name)
-        elif (
-            cls_name.endswith(
-                ("SequenceClassification", "ConditionalGeneration", "QuestionAnswering")
-            )
-            and family_name not in family_seen
-        ):
-            family[family_name].append(cls_name)
-            family_seen.add(family_name)
-        elif cls_name.endswith("ImageClassification"):
-            family[family_name].append(cls_name)
-
-    chosen_models = set()
-    for members in family.values():
-        chosen_models.update(set(members))
-
-    # Add the EXTRA_MODELS
-    chosen_models.update(set(EXTRA_MODELS.keys()))
-
-    for model_name in sorted(chosen_models):
-        try:
-            subprocess.check_call(
-                [sys.executable]
-                + sys.argv
-                + ["--find-batch-sizes"]
-                + [f"--only={model_name}"]
-                + [f"--output={MODELS_FILENAME}"]
-            )
-        except subprocess.SubprocessError:
-            log.warning(f"Failed to find suitable batch size for {model_name}")
-
-
 def huggingface_main():
-    # Code to refresh model names and batch sizes
-    # if "--find-batch-sizes" not in sys.argv:
-    #     refresh_model_names_and_batch_sizes()
-    logging.basicConfig(level=logging.WARNING)
-    warnings.filterwarnings("ignore")
+    initialize()
     main(HuggingfaceRunner())
 
 
