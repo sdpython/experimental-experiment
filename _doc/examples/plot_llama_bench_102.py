@@ -180,12 +180,12 @@ def make_config(
 
 
 if parsed_args.check not in (1, "1") and not unit_test_going():
-    
+
     def _split(s):
         if isinstance(s, int):
             return [s]
         return [int(i) for i in s.split(",")]
-    
+
     verbose = parsed_args.verbose
     configs = []
     for (

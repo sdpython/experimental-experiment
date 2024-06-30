@@ -595,6 +595,29 @@ def aten_avg_pool2d_backward(
     return grad
 
 
+def aten_bitwise_or(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    y: T,
+    name: str = "bitwise_or",
+) -> T:
+    "bitwise or"
+    x, y = prepare_inputs_homogeneous_operator(g, x, y, name=name)
+    res = g.op.BitwiseOr(x, y, outputs=outputs, name=name)
+    if not sts:
+        set_type_shape_binary_op(g, outputs[0], x, y, cmp_op=True)
+    return res
+
+
+def aten_bitwise_or_Tensor(
+    g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T, y: T
+) -> T:
+    "bitwise or"
+    return aten_bitwise_or(g, sts, outputs, x, y, name="bitwise_or_Tensor")
+
+
 def aten_bmm(
     g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T, y: T
 ) -> T:
@@ -1658,6 +1681,29 @@ def aten_layer_norm(
 
     # rdenominator = g.op.Reciprocal(denominator)
     return normalized  # , mean, rdenominator
+
+
+def aten_le(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    y: T,
+    name: str = "le",
+) -> T:
+    "less or equal"
+    x, y = prepare_inputs_homogeneous_operator(g, x, y, name=name)
+    res = g.op.LessOrEqual(x, y, outputs=outputs, name=name)
+    if not sts:
+        set_type_shape_binary_op(g, outputs[0], x, y, cmp_op=True)
+    return res
+
+
+def aten_le_Tensor(
+    g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T, y: T
+) -> T:
+    "less or equal"
+    return aten_le(g, sts, outputs, x, y, name="le_Tensor")
 
 
 def aten_leaky_relu(
@@ -3373,10 +3419,13 @@ def aten__softmax(
     half_to_float: bool = False,
 ) -> T:
     "softmax"
-    assert not half_to_float, f"Unexpected value for half_to_float={half_to_float!r}"
-    res = g.op.Softmax(x, axis=dim, outputs=outputs, name="_softmax")
+    cx = g.op.Cast(x, to=TensorProto.FLOAT) if half_to_float else x
+    res = g.op.Softmax(cx, axis=dim, outputs=outputs, name="_softmax")
     if not sts:
-        set_type_shape_unary_op(g, res, x)
+        if half_to_float:
+            set_type_shape_unary_op(g, res, x, itype=TensorProto.FLOAT)
+        else:
+            set_type_shape_unary_op(g, res, x)
     return res
 
 
