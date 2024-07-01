@@ -9,7 +9,7 @@ from experimental_experiment.ext_test_case import (
     ignore_warnings,
 )
 from experimental_experiment.convert.convert_helper import (
-    optimize_model_proto,
+    optimize_model_proto_oxs,
     inline_model_proto,
     ort_optimize,
 )
@@ -32,7 +32,7 @@ class TestConvertHelper(ExtTestCase):
         model(*example_args_collection[0])
         model = torch.onnx.dynamo_export(model, *example_args_collection[0])
         model_proto = model.model_proto
-        model_proto = optimize_model_proto(model_proto)
+        model_proto = optimize_model_proto_oxs(model_proto)
         self.assertIsInstance(model_proto, ModelProto)
 
     @skipif_ci_windows("dynamo not working on windows")

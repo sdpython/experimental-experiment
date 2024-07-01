@@ -184,7 +184,7 @@ class TestEdPhi3(ExtTestCase):
         try:
             results = compiled_model(*input_tensors)
         except torch._dynamo.exc.Unsupported as e:
-            if "Logger not supported for non-export cases" in str(e):
+            if "You are not running the flash-attention implementation" in str(e):
                 raise unittest.SkipTest(
                     "transformers which make the torch export fail."
                 )

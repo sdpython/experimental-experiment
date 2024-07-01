@@ -30,7 +30,7 @@ class TestDynamoCompileDiff(ExtTestCase):
         )
         import torch
         from experimental_experiment.convert.convert_helper import (
-            optimize_model_proto,
+            optimize_model_proto_oxs,
             ort_optimize,
         )
         from experimental_experiment.torch_models.llama_helper import (
@@ -99,7 +99,7 @@ class TestDynamoCompileDiff(ExtTestCase):
 
         reorder_functions_in_proto(model_onnxrt)
         feedsrt = build_matching_inputs(model_debug, feeds, model_onnxrt)
-        onnxrt = optimize_model_proto(onnx.load(model_onnxrt))
+        onnxrt = optimize_model_proto_oxs(onnx.load(model_onnxrt))
         debug = onnx.load(model_debug)
 
         optimized = model_onnxrt.replace(".onnx", ".opt.onnx")

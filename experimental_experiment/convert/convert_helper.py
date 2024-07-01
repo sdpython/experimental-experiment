@@ -1,5 +1,5 @@
 import time
-from typing import List, Union
+from typing import Any, Dict, List, Optional, Union
 from onnx import ModelProto, helper as oh, load as onnx_load
 from onnx.inliner import inline_local_functions
 
@@ -51,11 +51,12 @@ def _fix_details(model: ModelProto, verbose: int = 0) -> ModelProto:
     return model
 
 
-def optimize_model_proto(
+def optimize_model_proto_oxs(
     model_proto: ModelProto,
     verbose: int = 0,
     onnx_shape_inference: bool = False,
     inplace: bool = True,
+    stats: Optional[Dict[str, Any]] = None,
 ) -> ModelProto:
     """
     Optimizes a model proto to optimize onnxruntime.
@@ -64,6 +65,7 @@ def optimize_model_proto(
     :param verbose: verbosity
     :param onnx_shape_inference: enable shape inference
     :param inplace: the function modifies the proto inplace as well
+    :param stats: if not empty, stores information
     :return: optimized model
 
     You should run that before calling this function
@@ -74,15 +76,15 @@ def optimize_model_proto(
             opset_version=self._resolved_onnx_exporter_options.onnx_registry.opset_version
         )
 
-        from experimental_experiment.convert.convert_helper import optimize_model_proto
-        onnx_model = optimize_model_proto(onnx_model)
+        from experimental_experiment.convert.convert_helper import optimize_model_proto_oxs
+        onnx_model = optimize_model_proto_oxs(onnx_model)
     """
     from onnxscript.optimizer import optimize
     from onnxscript.rewriter import rewrite
 
     if verbose:
         print(
-            f"[optimize_model_proto] starts optimize with "
+            f"[optimize_model_proto_oxs] starts optimize with "
             f"{len(model_proto.graph.node)} nodes and "
             f"{len(model_proto.functions)} local functions"
         )
@@ -97,13 +99,15 @@ def optimize_model_proto(
         onnx_shape_inference=onnx_shape_inference,
     )
 
+    if stats:
+        stats["oxs_optimize_time"] = time.perf_counter() - begin
     if verbose:
         print(
-            f"[optimize_model_proto] optimize done in "
+            f"[optimize_model_proto_oxs] optimize done in "
             f"{time.perf_counter() - begin} seconds."
         )
         print(
-            f"[optimize_model_proto] starts rewrite with "
+            f"[optimize_model_proto_oxs] starts rewrite with "
             f"{len(model_proto.graph.node)} nodes and "
             f"{len(model_proto.functions)} local functions"
         )
@@ -112,14 +116,16 @@ def optimize_model_proto(
 
     model_proto = rewrite(model_proto)
 
+    if stats:
+        stats["oxs_rewrite_time"] = time.perf_counter() - begin
     if verbose:
         print(
-            f"[optimize_model_proto] rewrite done in {time.perf_counter() - begin} "
+            f"[optimize_model_proto_oxs] rewrite done in {time.perf_counter() - begin} "
             f"seconds with {len(model_proto.graph.node)} nodes and "
             f"{len(model_proto.functions)} local functions"
         )
         print(
-            f"[optimize_model_proto] starts inlining with "
+            f"[optimize_model_proto_oxs] starts inlining with "
             f"{len(model_proto.graph.node)} nodes and "
             f"{len(model_proto.functions)} local functions"
         )
@@ -128,9 +134,11 @@ def optimize_model_proto(
 
     model_proto = inline_local_functions(model_proto)
 
+    if stats:
+        stats["oxs_inline_time"] = time.perf_counter() - begin
     if verbose:
         print(
-            f"[optimize_model_proto] inlining done in {time.perf_counter() - begin} "
+            f"[optimize_model_proto_oxs] inlining done in {time.perf_counter() - begin} "
             f"seconds with {len(model_proto.graph.node)} nodes and "
             f"{len(model_proto.functions)} local functions"
         )

@@ -80,8 +80,8 @@ def _dynamo_export(
     # They are in-place modifications for avoiding unnecessary
     # copy of ONNX initializers.
     if optimize:
-        from ..convert.convert_helper import optimize_model_proto
+        from ..convert.convert_helper import optimize_model_proto_oxs
 
-        onnx_model = optimize_model_proto(onnx_model)
+        onnx_model = optimize_model_proto_oxs(onnx_model)
 
     return onnx_model, None

@@ -144,7 +144,7 @@ def make_aot_ort(
             first_model_proto = args[0]
 
             next_model = inline_local_functions(first_model_proto)
-            # next_model = optimize_model_proto(
+            # next_model = optimize_model_proto_oxs(
             #     *args, verbose=verbose, onnx_shape_inference=False, **kwargs
             # )
 
@@ -186,7 +186,7 @@ def make_aot_ort(
             first_model_proto = args[0]
 
             next_model = inline_local_functions(first_model_proto)
-            # next_model = optimize_model_proto(
+            # next_model = optimize_model_proto_oxs(
             #     *args, verbose=verbose, onnx_shape_inference=False, **kwargs
             # )
 

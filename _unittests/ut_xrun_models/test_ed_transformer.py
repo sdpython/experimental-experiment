@@ -130,7 +130,11 @@ class TestEdTransformer(ExtTestCase):
         diff1 = np.abs(expected.detach().numpy() - results[0]).sum()
         self.assertGreater(diff1, 1000)
         if has_cuda():
-            sess = check_model_ort(onx, providers="cuda")
+            sess = check_model_ort(
+                onx,
+                providers="cuda",
+                dump_file="test_transformer_export_new_2of3_only.onnx",
+            )
             results = sess.run(None, feeds)
             self.assertEqualArray(expected.detach().numpy(), results[0], atol=5)
             diff2 = np.abs(expected.detach().numpy() - results[0]).sum()

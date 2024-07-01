@@ -260,10 +260,10 @@ def export_dynopt(filename, model, *args):
             model_onnx = export_output.model_proto
 
             from experimental_experiment.convert.convert_helper import (
-                optimize_model_proto,
+                optimize_model_proto_oxs,
             )
 
-            optimized_model = optimize_model_proto(model_onnx)
+            optimized_model = optimize_model_proto_oxs(model_onnx)
 
             with open(filename, "wb") as f:
                 f.write(optimized_model.SerializeToString())

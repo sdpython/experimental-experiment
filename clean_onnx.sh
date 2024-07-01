@@ -13,6 +13,7 @@ rm *.sarif
 rm *.svg
 rm dump_models -rf
 rm neural_coder_workspace -rf
+rm output_data*
 
 rm _doc/examples/plot*.onnx
 rm _doc/examples/plot*.txt

@@ -147,6 +147,7 @@ def get_llama_model(
     num_attention_heads: int = 2,
     _attn_implementation: str = "eager",  # needed value to remove graph breaks
     with_mask: bool = True,
+    dynamic_shapes: bool = False,
 ):
     """
     Returns a model.
@@ -157,6 +158,10 @@ def get_llama_model(
     import torch
     from transformers import LlamaConfig
     from transformers.models.llama.modeling_llama import LlamaModel
+
+    _dynamic_shapes = {0: {0: "batch", 1: "length"}}
+    if with_mask:
+        _dynamic_shapes.update({1: {0: "batch", 1: "length"}})
 
     config = LlamaConfig(
         num_hidden_layers=num_hidden_layers,
@@ -177,7 +182,9 @@ def get_llama_model(
                 self.model = LlamaModel(config)
 
             def forward(self, input_ids, attention_mask):
-                model_output = self.model(input_ids, attention_mask=attention_mask)
+                model_output = self.model(
+                    input_ids, attention_mask=attention_mask, use_cache=False
+                )
                 return model_output.to_tuple()
 
         def generate_example_inputs(batch: int, seq: int, vocab_size: int):
@@ -190,7 +197,9 @@ def get_llama_model(
         for b, s in input_dims:
             example_args_collection.append(generate_example_inputs(b, s, vocab_size))
 
-        return LlamaModelWrapper(config), example_args_collection
+        if not dynamic_shapes:
+            return LlamaModelWrapper(config), example_args_collection
+        return LlamaModelWrapper(config), example_args_collection, _dynamic_shapes
 
     # no mask
 
@@ -200,7 +209,7 @@ def get_llama_model(
             self.model = LlamaModel(config)
 
         def forward(self, input_ids):
-            model_output = self.model(input_ids)
+            model_output = self.model(input_ids, use_cache=False)
             return model_output.to_tuple()
 
     def generate_example_inputs(batch: int, seq: int, vocab_size: int):
@@ -211,4 +220,6 @@ def get_llama_model(
     for b, s in input_dims:
         example_args_collection.append(generate_example_inputs(b, s, vocab_size))
 
-    return LlamaModelWrapper(config), example_args_collection
+    if not dynamic_shapes:
+        return LlamaModelWrapper(config), example_args_collection
+    return LlamaModelWrapper(config), example_args_collection, _dynamic_shapes
