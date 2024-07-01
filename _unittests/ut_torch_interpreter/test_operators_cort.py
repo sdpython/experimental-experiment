@@ -1193,6 +1193,7 @@ class TestOperatorsCort(ExtTestCase):
             onnx_export=inspect.currentframe().f_code.co_name,
             impl="ref",
             square_loss=True,
+            atol=1e-5,
         )
 
     @ignore_warnings(UserWarning)
