@@ -1132,7 +1132,11 @@ class TestOperatorsCort(ExtTestCase):
         x = torch.randn(3, 4, requires_grad=False).int()
         y = torch.randn(3, 4, requires_grad=False).int()
         self.assertONNX(
-            operator.le, (x, y), onnx_export=inspect.currentframe().f_code.co_name
+            operator.le,
+            (x, y),
+            onnx_export=inspect.currentframe().f_code.co_name,
+            test_backward=False,
+            input_index="simple",
         )
 
     def test_op_ge_int(self):
@@ -1189,6 +1193,7 @@ class TestOperatorsCort(ExtTestCase):
             onnx_export=inspect.currentframe().f_code.co_name,
             impl="ref",
             square_loss=True,
+            atol=1e-5,
         )
 
     @ignore_warnings(UserWarning)

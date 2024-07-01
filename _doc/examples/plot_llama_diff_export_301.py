@@ -63,7 +63,7 @@ from experimental_experiment.ext_test_case import unit_test_going
 from experimental_experiment.torch_interpreter import to_onnx
 from experimental_experiment.xbuilder import OptimizationOptions
 from experimental_experiment.convert.convert_helper import (
-    optimize_model_proto,
+    optimize_model_proto_oxs,
     ort_optimize,
 )
 from experimental_experiment.torch_models.llama_helper import (
@@ -115,7 +115,7 @@ def export_dynamo(filename, model, *args):
             export_output = torch.onnx.dynamo_export(model, *args)
             model = export_output.model_proto
     try:
-        new_model = optimize_model_proto(model)
+        new_model = optimize_model_proto_oxs(model)
     except ImportError as e:
         print("skipping optimization, missing package or failure:", e)
         new_model = model
