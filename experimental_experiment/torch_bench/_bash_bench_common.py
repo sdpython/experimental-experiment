@@ -1,6 +1,7 @@
 import collections
 import time
-from typing import Any, Callable, Set, Optional, Tuple
+from typing import Any, Callable, Set, Optional, Tuple, List, Dict
+import numpy as np
 import torch
 
 
@@ -88,6 +89,39 @@ def get_peak_memory():
     return torch.cuda.max_memory_allocated() / 10**9
 
 
+class ModelRunner:
+    def __init__(self, model: Any, inputs: Any, device: str, dtype: torch.dtype):
+        if dtype is None:
+            cvt = lambda o: o.to(device)  # noqa: E731
+        else:
+            cvt = lambda o: o.to(dtype).to(device)  # noqa: E731
+        self.model = cvt(model)
+        self.device = device
+        self.dtype = dtype
+        if isinstance(inputs, dict):
+            self.inputs = {k: cvt(v) for k, v in inputs.items()}
+            self.run = self._run_dict
+        elif isinstance(inputs, tuple):
+            self.inputs = tuple(cvt(v) for v in inputs)
+            self.run = self._run_tuple
+        else:
+            raise AssertionError(
+                f"Unexpected type {type(inputs)} for inputs and model {type(model)}."
+            )
+
+    def _run_dict(self) -> Any:
+        return self.model(**self.inputs)
+
+    def _run_tuple(self) -> Any:
+        return self.model(*self.inputs)
+
+    def parameters_size(self) -> int:
+        res = 0
+        for p in self.model.parameters():
+            res += np.prod(list(p.shape))
+        return res
+
+
 class BenchmarkRunner:
     def __init__(
         self,
@@ -100,6 +134,7 @@ class BenchmarkRunner:
         training: bool = False,
         use_eval_mode: bool = False,
         enable_activation_checkpointing: bool = False,
+        dtype: Optional[torch.dtype] = None,
         verbose: int = 0,
     ):
         self.suite_name = suite_name
@@ -112,6 +147,7 @@ class BenchmarkRunner:
         self.training = training
         self.use_eval_mode = use_eval_mode
         self.enable_activation_checkpointing = enable_activation_checkpointing
+        self.dtype = dtype
 
     def get_model_name_list(self):
         return list(self.iter_model_names())
@@ -126,6 +162,9 @@ class BenchmarkRunner:
         return start, end
 
     def iter_models(self):
+        """
+        Loads the models,
+        """
         names = self.get_model_name_list()
         for model_name in names:
             if self.verbose:
@@ -138,9 +177,14 @@ class BenchmarkRunner:
                 )
             yield res
 
-    def benchmark(self):
+    def run_models(self, process: bool = False) -> List[Dict[str, Any]]:
         names = self.get_model_name_list()
         for model_name in names:
             if self.verbose:
                 print(f"[BenchmarkRunner.benchmark] run model {model_name!r}")
-            self.load_model(model_name)
+            model_runner = self.load_model(model_name)
+            if self.verbose > 1:
+                print(
+                    f"[BenchmarkRunner.benchmark] parameters size {model_runner.parameters_size()!r}"
+                )
+            model_runner.run()

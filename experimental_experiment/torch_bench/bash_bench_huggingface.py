@@ -9,6 +9,7 @@ from ._bash_bench_common import (
     download_retry_decorator,
     _rand_int_tensor,
     BenchmarkRunner,
+    ModelRunner,
 )
 
 
@@ -182,8 +183,23 @@ class HuggingfaceRunner(BenchmarkRunner):
             batch_size = int(batch_size)
             container.BATCH_SIZE_KNOWN_MODELS[model_name] = batch_size
 
+        class Neuron(torch.nn.Module):
+            def __init__(self, n_dims: int = 5, n_targets: int = 3):
+                super(Neuron, self).__init__()
+                print(n_dims, n_targets)
+                self.linear = torch.nn.Linear(n_dims, n_targets)
+
+            def forward(self, x):
+                return torch.sigmoid(self.linear(x))
+
+            config_class = 5, 3
+
         container.EXTRA_MODELS.update(
             {
+                "dummy": (
+                    None,
+                    Neuron,
+                ),
                 "AllenaiLongformerBase": (
                     transformers.AutoConfig.from_pretrained(
                         "allenai/longformer-base-4096"
@@ -406,6 +422,7 @@ class HuggingfaceRunner(BenchmarkRunner):
         total_partitions: int = 1,
         include_model_names: Optional[Set[str]] = None,
         exclude_model_names: Optional[Set[str]] = None,
+        verbose: int = 0,
     ):
         super().__init__(
             "huggingface",
@@ -414,7 +431,10 @@ class HuggingfaceRunner(BenchmarkRunner):
             total_partitions=total_partitions,
             include_model_names=include_model_names,
             exclude_model_names=exclude_model_names,
+            verbose=verbose,
         )
+        if not self.EXTRA_MODELS:
+            self.initialize()
 
     def _get_model_cls_and_config(self, model_name: str) -> Tuple[type, Any]:
         if model_name not in self.EXTRA_MODELS:
@@ -422,7 +442,7 @@ class HuggingfaceRunner(BenchmarkRunner):
 
             model_cls = self._get_module_cls_by_model_name(model_name)
             config_cls = model_cls.config_class
-            config = config_cls()
+            config = config_cls() if config_cls else None
 
             # NB: some models need a pad token defined to handle BS > 1
             if (
@@ -456,7 +476,7 @@ class HuggingfaceRunner(BenchmarkRunner):
         self,
         model_name: str,
         batch_size: Optional[int] = None,
-    ) -> Tuple[Any, Any, int]:
+    ) -> ModelRunner:
         is_training = self.training
         use_eval_mode = self.use_eval_mode
         dtype = torch.float32
@@ -496,7 +516,7 @@ class HuggingfaceRunner(BenchmarkRunner):
         else:
             model.eval()
 
-        return model, example_inputs, batch_size
+        return ModelRunner(model, example_inputs, device=self.device, dtype=self.dtype)
 
     def iter_model_names(self):
         model_names = list(self.BATCH_SIZE_KNOWN_MODELS.keys()) + list(
@@ -531,9 +551,3 @@ class HuggingfaceRunner(BenchmarkRunner):
         if collect_outputs:
             return collect_results(mod, pred, loss, cloned_inputs)
         return None
-
-
-def create_huggingface_runner(**kwargs) -> HuggingfaceRunner:
-    HuggingfaceRunner.initialize()
-    runner = HuggingfaceRunner(**kwargs)
-    return runner
