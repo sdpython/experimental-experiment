@@ -1,8 +1,16 @@
 import collections
 import time
-from typing import Any, Callable, Set, Optional, Tuple, List, Dict
+from typing import Any, Callable, Set, Optional, Tuple, List
 import numpy as np
 import torch
+
+
+class MakeConfig:
+    """Creates a dummy configtation."""
+
+    def __init__(self, **kwargs):
+        for k, v in kwargs.items():
+            setattr(self, k, v)
 
 
 def _rand_int_tensor(
@@ -177,8 +185,9 @@ class BenchmarkRunner:
                 )
             yield res
 
-    def run_models(self, process: bool = False) -> List[Dict[str, Any]]:
+    def run_models(self, process: bool = False) -> List[Any]:
         names = self.get_model_name_list()
+        results = []
         for model_name in names:
             if self.verbose:
                 print(f"[BenchmarkRunner.benchmark] run model {model_name!r}")
@@ -187,4 +196,5 @@ class BenchmarkRunner:
                 print(
                     f"[BenchmarkRunner.benchmark] parameters size {model_runner.parameters_size()!r}"
                 )
-            model_runner.run()
+            results.append(model_runner.run())
+        return results

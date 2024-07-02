@@ -1,5 +1,4 @@
 import importlib
-import os
 import textwrap
 from typing import Any, Optional, Set, Tuple
 import torch
@@ -10,6 +9,7 @@ from ._bash_bench_common import (
     _rand_int_tensor,
     BenchmarkRunner,
     ModelRunner,
+    MakeConfig,
 )
 
 
@@ -167,12 +167,10 @@ class HuggingfaceRunner(BenchmarkRunner):
         """
         import transformers
 
-        if "TORCHINDUCTOR_FX_GRAPH_CACHE" not in os.environ:
-            torch._inductor.config.fx_graph_cache = True
-
         for cls in container.imports:
-            if not hasattr(transformers, cls):
-                raise ModuleNotFoundError(f"{cls!r} is here, update transformers")
+            assert hasattr(
+                transformers, cls
+            ), f"{cls!r} not found, update transformers."
 
         lines = container.MODELS_FILENAME.split("\n")
         lines = [line.rstrip() for line in lines]
@@ -186,18 +184,20 @@ class HuggingfaceRunner(BenchmarkRunner):
         class Neuron(torch.nn.Module):
             def __init__(self, n_dims: int = 5, n_targets: int = 3):
                 super(Neuron, self).__init__()
-                print(n_dims, n_targets)
                 self.linear = torch.nn.Linear(n_dims, n_targets)
 
             def forward(self, x):
                 return torch.sigmoid(self.linear(x))
 
-            config_class = 5, 3
+            def _get_random_inputs(self, device: str):
+                return (torch.randn(1, 5).to(device),)
+
+            config = MakeConfig(download=False)
 
         container.EXTRA_MODELS.update(
             {
                 "dummy": (
-                    None,
+                    Neuron.config,
                     Neuron,
                 ),
                 "AllenaiLongformerBase": (
@@ -291,6 +291,9 @@ class HuggingfaceRunner(BenchmarkRunner):
     def _generate_inputs_for_model(
         container, model_cls, model, model_name, bs, device, include_loss_args=False
     ):
+        if hasattr(model, "_get_random_inputs"):
+            return model._get_random_inputs(device)
+
         import transformers
 
         num_choices = 3
@@ -460,6 +463,7 @@ class HuggingfaceRunner(BenchmarkRunner):
         else:
             config, model_cls = self.EXTRA_MODELS[model_name]
 
+        assert config is not None, f"Config cannot be None for model {model_name!r}."
         return model_cls, config
 
     @download_retry_decorator(retry=5)
@@ -482,7 +486,11 @@ class HuggingfaceRunner(BenchmarkRunner):
         dtype = torch.float32
         reset_rng_state()
         model_cls, config = self._get_model_cls_and_config(model_name)
-        model = self._download_model(model_name)
+        if getattr(config, "download", True):
+            print("***", type(config), config.__dict__)
+            model = self._download_model(model_name)
+        else:
+            model = model_cls()
         model = model.to(self.device, dtype=dtype)
         if self.enable_activation_checkpointing:
             model.gradient_checkpointing_enable()
