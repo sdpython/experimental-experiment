@@ -159,6 +159,7 @@ class ModelRunner:
         no_grad: bool,
         optimization: str,
         verbose: int,
+        target_opset: int,
     ):
         assert not fake_tensor, "fake_tensor not implemented."
         if exporter == "custom":
@@ -169,6 +170,7 @@ class ModelRunner:
                 no_grad=no_grad,
                 optimization=optimization,
                 verbose=verbose,
+                target_opset=target_opset,
             )
         raise AssertionError(f"Exporter {exporter!r} is not implemented.")
 
@@ -180,8 +182,11 @@ class ModelRunner:
         no_grad: bool,
         optimization: str,
         verbose: int,
+        target_opset: int,
     ):
+        assert not fake_tensor, "fake_tensor not implemented."
         assert not dynamic, "dynamic true not implemented yet"
+        assert not no_grad, "no_grad true not implemented yet"
         from ..torch_interpreter import to_onnx
 
         onx = to_onnx(
@@ -190,6 +195,7 @@ class ModelRunner:
             optimize=bool(optimization),
             large_model=True,
             verbose=verbose,
+            target_opset=target_opset,
         )
         onx.save(name)
 
@@ -225,6 +231,7 @@ class BenchmarkRunner:
         repeat: int = 30,
         fake_tensor: bool = False,
         no_grad: bool = False,
+        target_opset: int = 18,
     ):
         self.suite_name = suite_name
         self.device = device
@@ -241,6 +248,7 @@ class BenchmarkRunner:
         self.warmup = warmup
         self.fake_tensor = fake_tensor
         self.no_grad = no_grad
+        self.target_opset = target_opset
 
     def get_model_name_list(self):
         return list(self.iter_model_names())
@@ -350,7 +358,7 @@ class BenchmarkRunner:
 
             # export
             filename = os.path.join(
-                folder, f"{model_name}-{exporter}-{self.device}-{self.dtype}.onnx"
+                folder, f"{model_name}-{exporter}-{self.device}-{self.dtype or ''}.onnx"
             )
             stats["filename"] = filename
             begin = time.perf_counter()
@@ -362,6 +370,7 @@ class BenchmarkRunner:
                 verbose=self.verbose + 1,
                 fake_tensor=self.fake_tensor,
                 no_grad=self.no_grad,
+                target_opset=self.target_opset,
             )
             stats["time_export"] = time.perf_counter() - begin
 
@@ -391,6 +400,7 @@ class BenchmarkRunner:
             for w in range(warmup):
                 got = self.ort_run(sess, feeds)
             stats["time_onnx_warmup"] = (time.perf_counter() - begin) / warmup
+            stats["device"] = self.device
 
             if self.verbose > 1:
                 print(f"[BenchmarkRunner.benchmark] repeat ort {model_name!r}")
