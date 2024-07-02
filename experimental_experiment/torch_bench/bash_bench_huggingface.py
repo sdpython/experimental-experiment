@@ -524,7 +524,14 @@ class HuggingfaceRunner(BenchmarkRunner):
         else:
             model.eval()
 
-        return ModelRunner(model, example_inputs, device=self.device, dtype=self.dtype)
+        return ModelRunner(
+            model,
+            example_inputs,
+            device=self.device,
+            dtype=self.dtype,
+            warmup=self.warmup,
+            repeat=self.repeat,
+        )
 
     def iter_model_names(self):
         model_names = list(self.BATCH_SIZE_KNOWN_MODELS.keys()) + list(

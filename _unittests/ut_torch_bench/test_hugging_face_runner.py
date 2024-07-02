@@ -5,6 +5,7 @@ from experimental_experiment.ext_test_case import (
     # ignore_warnings,
     requires_torch,
     # requires_onnxruntime_training,
+    hide_stdout,
 )
 from experimental_experiment.torch_bench.bash_bench_huggingface import (
     HuggingfaceRunner,
@@ -26,24 +27,37 @@ class TestHuggingFaceRunner(ExtTestCase):
         names = runner.get_model_name_list()
         self.assertIn("BartForCausalLM", names)
 
-    @requires_torch("2.3")
     @skipif_ci_windows("not useful")
+    @requires_torch("2.3")
+    @hide_stdout()
     def test_load_model(self):
         runner = HuggingfaceRunner(
-            device="cpu", include_model_names={"MobileBertForMaskedLM"}
+            device="cpu", include_model_names={"MobileBertForMaskedLM"}, verbose=3
         )
-        res = list(runner.iter_models())
+        res = list(runner.enumerate_load_models())
         self.assertIsInstance(res, list)
         self.assertEqual(len(res), 1)
         self.assertIsInstance(res[0], ModelRunner)
 
-    @requires_torch("2.3")
     @skipif_ci_windows("not useful")
+    @requires_torch("2.3")
+    @hide_stdout()
     def test_run_model(self):
         runner = HuggingfaceRunner(
             device="cpu", include_model_names={"dummy"}, verbose=2
         )
-        data = runner.run_models(process=False)
+        data = list(runner.enumerate_run_models())
+        self.assertEqual(len(data), 1)
+
+    @skipif_ci_windows("not useful")
+    @requires_torch("2.3")
+    @hide_stdout()
+    def test_test_model(self):
+        runner = HuggingfaceRunner(
+            device="cpu", include_model_names={"dummy"}, verbose=2
+        )
+        data = list(runner.enumerate_test_models(process=False, exporter="custom"))
+        print(data)
         self.assertEqual(len(data), 1)
 
 
