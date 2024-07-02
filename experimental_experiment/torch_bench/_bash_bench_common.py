@@ -143,6 +143,13 @@ class ModelRunner:
             res += np.prod(list(p.shape))
         return res
 
+    def parameters_dtype(self) -> str:
+        return ",".join(
+            sorted(
+                set(str(p.dtype).replace("torch.", "") for p in self.model.parameters())
+            )
+        )
+
     def to_onnx(
         self,
         exporter: str,
@@ -261,10 +268,6 @@ class BenchmarkRunner:
                 print(
                     f"[BenchmarkRunner.benchmark] loaded model {model_name!r} in {time.perf_counter() - begin}"
                 )
-            if self.verbose:
-                print(
-                    f"[BenchmarkRunner.benchmark] loaded model {model_name!r} in {time.perf_counter() - begin}"
-                )
             yield res
 
     def enumerate_run_models(self) -> Iterator[Any]:
@@ -314,10 +317,17 @@ class BenchmarkRunner:
             warmup = model_runner.warmup
             stats["model_name"] = model_name
             stats["time_load"] = time.perf_counter() - begin
-            stats["size_params"] = model_runner.parameters_size()
+            stats["params_size"] = model_runner.parameters_size()
+            stats["params_dtype"] = model_runner.parameters_dtype()
             stats["warmup"] = warmup
             stats["repeat"] = repeat
             stats["exporter"] = exporter
+
+            if self.verbose > 1:
+                print(
+                    f"[BenchmarkRunner.benchmark] model size, dtype "
+                    f"{stats['params_size']}, {stats['params_dtype']}"
+                )
 
             # warmup
             if self.verbose > 1:
@@ -396,6 +406,8 @@ class BenchmarkRunner:
             a, r = self.max_diff(expected, got)
             stats["discrepancies_abs"] = a
             stats["discrepancies_rel"] = r
+            if self.verbose:
+                print(f"[BenchmarkRunner.benchmark] done model {stats}")
             yield stats
 
     def ort_run(

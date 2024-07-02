@@ -194,11 +194,28 @@ class HuggingfaceRunner(BenchmarkRunner):
 
             config = MakeConfig(download=False)
 
+        class Neuron16(Neuron):
+            def __init__(self, n_dims: int = 5, n_targets: int = 3):
+                super(Neuron, self).__init__()
+                self.linear = torch.nn.Linear(n_dims, n_targets, dtype=torch.float16)
+                assert self.linear.weight.dtype == torch.float16
+                assert self.linear.bias.dtype == torch.float16
+
+            def forward(self, x):
+                return torch.sigmoid(self.linear(x))
+
+            def _get_random_inputs(self, device: str):
+                return (torch.randn(1, 5).to(torch.float16).to(device),)
+
         container.EXTRA_MODELS.update(
             {
                 "dummy": (
                     Neuron.config,
                     Neuron,
+                ),
+                "dummy16": (
+                    Neuron16.config,
+                    Neuron16,
                 ),
                 "AllenaiLongformerBase": (
                     transformers.AutoConfig.from_pretrained(
@@ -483,15 +500,17 @@ class HuggingfaceRunner(BenchmarkRunner):
     ) -> ModelRunner:
         is_training = self.training
         use_eval_mode = self.use_eval_mode
-        dtype = torch.float32
+        dtype = self.dtype
         reset_rng_state()
         model_cls, config = self._get_model_cls_and_config(model_name)
         if getattr(config, "download", True):
-            print("***", type(config), config.__dict__)
             model = self._download_model(model_name)
         else:
             model = model_cls()
-        model = model.to(self.device, dtype=dtype)
+        if dtype is None:
+            model = model.to(self.device)
+        else:
+            model = model.to(self.device, dtype=dtype)
         if self.enable_activation_checkpointing:
             model.gradient_checkpointing_enable()
         if model_name in self.BATCH_SIZE_KNOWN_MODELS:

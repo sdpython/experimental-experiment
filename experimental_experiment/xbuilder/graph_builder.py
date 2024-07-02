@@ -3165,8 +3165,11 @@ class GraphBuilder:
         assert perm, f"perm not here in node {node}"
         x = feeds[node.input[0]]
         if isinstance(x, np.ndarray):
-            x = self.torch.Tensor(x)
-        return [self.torch.permute(x, perm)]
+            # Type conversion between numpy and torch is not robust.
+            itype = dtype_to_tensor_dtype(x.dtype)
+            ttype = onnx_dtype_to_torch_dtype(itype)
+            x = self.torch.Tensor(x).to(ttype)
+        return [self.torch.permute(x, perm).to(x.dtype)]
 
     def _apply_trilu(
         self, node: NodeProto, feeds: Dict[str, "torch.Tensor"]  # noqa: F821

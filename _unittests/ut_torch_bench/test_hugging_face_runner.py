@@ -4,7 +4,7 @@ from experimental_experiment.ext_test_case import (
     skipif_ci_windows,
     # ignore_warnings,
     requires_torch,
-    # requires_onnxruntime_training,
+    requires_onnxruntime_training,
     hide_stdout,
 )
 from experimental_experiment.torch_bench.bash_bench_huggingface import (
@@ -52,9 +52,22 @@ class TestHuggingFaceRunner(ExtTestCase):
     @skipif_ci_windows("not useful")
     @requires_torch("2.3")
     @hide_stdout()
-    def test_test_model(self):
+    @requires_onnxruntime_training()
+    def test_test_model_32(self):
         runner = HuggingfaceRunner(
             device="cpu", include_model_names={"dummy"}, verbose=2
+        )
+        data = list(runner.enumerate_test_models(process=False, exporter="custom"))
+        print(data)
+        self.assertEqual(len(data), 1)
+
+    @skipif_ci_windows("not useful")
+    @requires_torch("2.3")
+    @hide_stdout()
+    @requires_onnxruntime_training()
+    def test_test_model_16(self):
+        runner = HuggingfaceRunner(
+            device="cpu", include_model_names={"dummy16"}, verbose=2
         )
         data = list(runner.enumerate_test_models(process=False, exporter="custom"))
         print(data)
