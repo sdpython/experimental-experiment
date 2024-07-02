@@ -10,7 +10,7 @@ from .export_model_helper import WrapInferenceSessionForTorch
 
 
 class MakeConfig:
-    """Creates a dummy configtation."""
+    """Creates a dictionary where keys are attributes."""
 
     def __init__(self, **kwargs):
         for k, v in kwargs.items():
@@ -20,7 +20,14 @@ class MakeConfig:
 def _rand_int_tensor(
     device: str, low: int, high: int, shape: Tuple[int, ...]
 ) -> torch.Tensor:
-    """Creates a random input integer tensor."""
+    """Creates a random input integer tensor.
+
+    :param device: device
+    :param low: lower value
+    :param high: high value
+    :param shape: shape
+    :return: tensor
+    """
     return torch.randint(
         low,
         high,
@@ -39,6 +46,8 @@ def download_retry_decorator(retry: int = 5) -> Callable:  # type: ignore[arg-ty
     and raises an exception if the function fails each time.
     After each unsuccessful attempt, there is a delay before
     the next attempt, which is increased linearly with the number of tries.
+
+    :param retry: number of times to retry
 
     Usage:
 
@@ -74,9 +83,10 @@ def download_retry_decorator(retry: int = 5) -> Callable:  # type: ignore[arg-ty
     return decorator
 
 
-def get_dynamo_stats():
-    # TODO: consider deepcopy'ing the entire counters struct and
-    # adding a helper to do subtraction on it
+def get_dynamo_stats() -> Dict[str, float]:
+    """
+    Returns statistics on memory as a dictionary.
+    """
     return collections.Counter(
         {
             "calls_captured": torch._dynamo.utils.counters["stats"]["calls_captured"],
@@ -98,10 +108,26 @@ def get_dynamo_stats():
 
 
 def get_peak_memory():
+    """Retuns the memory peak."""
     return torch.cuda.max_memory_allocated() / 10**9
 
 
 class ModelRunner:
+    """
+    Wrappers around a model.
+    Makes it easier to load, run inference.
+
+    :param model: torch model
+    :param inputs: example of inputs
+    :param device: device
+    :param dtype: if the model needs to be converted
+    :param warmup: number of iteration to warmup the model
+    :param repeat: number of iteration to repeat the model
+
+    The constructor creates the alias run which points either to
+    ``_run_dict`` or ``_run_tuple``.
+    """
+
     def __init__(
         self,
         model: Any,
@@ -138,12 +164,14 @@ class ModelRunner:
         return self.model(*self.inputs)
 
     def parameters_size(self) -> int:
+        """Returns the size of all parameters (do not take into account dtype)."""
         res = 0
         for p in self.model.parameters():
             res += np.prod(list(p.shape))
         return res
 
     def parameters_dtype(self) -> str:
+        """Returns the unique dtypes of all parameters."""
         return ",".join(
             sorted(
                 set(str(p.dtype).replace("torch.", "") for p in self.model.parameters())
@@ -161,6 +189,18 @@ class ModelRunner:
         verbose: int,
         target_opset: int,
     ):
+        """
+        Converts a model into onnx.
+
+        :param exporter: exporter
+        :param name: filename
+        :param dynamic: use dynamic shape
+        :param fake_tensor: use fake_tensor
+        :param no_grad: use no_grad
+        :param optimization: defines the optimizations
+        :param verbose: verbosity
+        :param target_opset: target opset
+        """
         assert not fake_tensor, "fake_tensor not implemented."
         if exporter == "custom":
             return self._to_onnx_custom(
@@ -200,6 +240,7 @@ class ModelRunner:
         onx.save(name)
 
     def make_feeds(self, filename):
+        """Creates feed inputs."""
         onx = onnx.load(filename, load_external_data=False)
         names = [_.name for _ in onx.graph.input]
         if isinstance(self.inputs, dict):
@@ -214,6 +255,27 @@ class ModelRunner:
 
 
 class BenchmarkRunner:
+    """
+    Class running the benchmark.
+
+    :param suite_name: suite name
+    :param device: device
+    :param partition_id: partition id
+    :param total_partition: number of total partition
+    :param include_model_names: models to include
+    :param exclude_model_names: models to exclude
+    :param training: training mode (CHECK)
+    :param use_eval_mode: use eval mode (CHECK)
+    :param enable_activation_checkpointing: (CHECK)
+    :param dtype: default dtype (None to change nothing)
+    :param verbose: verbosity
+    :param warmup: number of iteration to warmup the model
+    :param repeat: number of iteration to repeat the model
+    :param fake_tensor: use fake_tensor
+    :param no_grad: use no_grad
+    :param target_opset: target opset
+    """
+
     def __init__(
         self,
         suite_name: str,
@@ -250,10 +312,12 @@ class BenchmarkRunner:
         self.no_grad = no_grad
         self.target_opset = target_opset
 
-    def get_model_name_list(self):
+    def get_model_name_list(self) -> List[str]:
+        """Returns the model list."""
         return list(self.iter_model_names())
 
     def get_benchmark_indices(self, length):
+        """Returns the model indices in the benchmark to run."""
         start = self.partition_id * (length // self.total_partitions)
         end = (
             (self.partition_id + 1) * (length // self.total_partitions)
@@ -279,6 +343,9 @@ class BenchmarkRunner:
             yield res
 
     def enumerate_run_models(self) -> Iterator[Any]:
+        """
+        Runs the models once.
+        """
         names = self.get_model_name_list()
         for model_name in names:
             if self.verbose:
@@ -303,6 +370,9 @@ class BenchmarkRunner:
         dynamic: bool = False,
         optimization: str = "",
     ) -> Iterator[Dict[Any, Any]]:
+        """
+        Runs the benchmarks, run, export, run in onnx, measure the speedup.
+        """
         assert not process, "process=True not implemented."
         assert not dynamic, "dynamic=True not implemented."
         assert not optimization, "optimization=True not implemented."
@@ -423,10 +493,14 @@ class BenchmarkRunner:
     def ort_run(
         self, sess: WrapInferenceSessionForTorch, feeds: List[torch.Tensor]
     ) -> List[torch.Tensor]:
+        """Runs with onnxruntme."""
         list_feeds = [feeds[k] for k in sess.input_names]
         return sess.run_dlpack(*list_feeds)
 
     def max_diff(self, expected: Any, got: Any) -> Tuple[float, float]:
+        """
+        Returns the maximum discrepancy.
+        """
         if isinstance(expected, torch.Tensor):
             if isinstance(got, torch.Tensor):
                 diff = (got - expected).abs()
