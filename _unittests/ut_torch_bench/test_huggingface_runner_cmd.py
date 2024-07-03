@@ -71,6 +71,18 @@ class TestHuggingFaceRunnerCmd(ExtTestCase):
     def test_huggingface_export_bench_custom_cpu_last(self):
         self._huggingface_export_bench_cpu("custom", "-1")
 
+    @ignore_warnings((DeprecationWarning, UserWarning))
+    def test_huggingface_export_bench_script_cpu(self):
+        self._huggingface_export_bench_cpu("script", "dummy")
+
+    @ignore_warnings((DeprecationWarning, UserWarning))
+    def test_huggingface_export_bench_dynamo_cpu(self):
+        self._huggingface_export_bench_cpu("dynamo", "dummy")
+
+    @ignore_warnings((DeprecationWarning, UserWarning))
+    def test_huggingface_export_bench_dynamo2_cpu(self):
+        self._huggingface_export_bench_cpu("dynamo2", "dummy")
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

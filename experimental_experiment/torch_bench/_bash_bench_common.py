@@ -212,8 +212,28 @@ class ModelRunner:
                 verbose=verbose,
                 target_opset=target_opset,
             )
-        if exporter == "export":
-            return self._to_export(
+        if exporter == "script":
+            return self._to_onnx_script(
+                name,
+                dynamic=dynamic,
+                fake_tensor=fake_tensor,
+                no_grad=no_grad,
+                optimization=optimization,
+                verbose=verbose,
+                target_opset=target_opset,
+            )
+        if exporter == "dynamo":
+            return self._to_onnx_dynamo(
+                name,
+                dynamic=dynamic,
+                fake_tensor=fake_tensor,
+                no_grad=no_grad,
+                optimization=optimization,
+                verbose=verbose,
+                target_opset=target_opset,
+            )
+        if exporter == "dynamo2":
+            return self._to_onnx_dynamo2(
                 name,
                 dynamic=dynamic,
                 fake_tensor=fake_tensor,
@@ -234,6 +254,16 @@ class ModelRunner:
             )
         if exporter == "compile":
             return self._to_compile(
+                name,
+                dynamic=dynamic,
+                fake_tensor=fake_tensor,
+                no_grad=no_grad,
+                optimization=optimization,
+                verbose=verbose,
+                target_opset=target_opset,
+            )
+        if exporter == "export":
+            return self._to_export(
                 name,
                 dynamic=dynamic,
                 fake_tensor=fake_tensor,
@@ -269,6 +299,75 @@ class ModelRunner:
         )
         onx.save(name)
         return onx
+
+    def _to_onnx_script(
+        self,
+        name: str,
+        dynamic: bool,
+        fake_tensor: bool,
+        no_grad: bool,
+        optimization: str,
+        verbose: int,
+        target_opset: int,
+    ):
+        assert not fake_tensor, "fake_tensor not implemented."
+        assert not dynamic, "dynamic true not implemented yet"
+        assert not no_grad, "no_grad true not implemented yet"
+
+        torch.onnx.export(
+            self.model,
+            self.inputs,
+            name,
+            do_constant_folding=False,
+            opset_version=target_opset,
+        )
+        return onnx.load(name, load_external_data=False)
+
+    def _to_onnx_dynamo(
+        self,
+        name: str,
+        dynamic: bool,
+        fake_tensor: bool,
+        no_grad: bool,
+        optimization: str,
+        verbose: int,
+        target_opset: int,
+    ):
+        assert not fake_tensor, "fake_tensor not implemented."
+        assert not dynamic, "dynamic true not implemented yet"
+        assert not no_grad, "no_grad true not implemented yet"
+
+        torch.onnx.export(
+            self.model,
+            self.inputs,
+            name,
+            do_constant_folding=False,
+            opset_version=target_opset,
+            dynamo=True,
+        )
+        return onnx.load(name, load_external_data=False)
+
+    def _to_onnx_dynamo2(
+        self,
+        name: str,
+        dynamic: bool,
+        fake_tensor: bool,
+        no_grad: bool,
+        optimization: str,
+        verbose: int,
+        target_opset: int,
+    ):
+        assert not fake_tensor, "fake_tensor not implemented."
+        assert not dynamic, "dynamic true not implemented yet"
+        assert not no_grad, "no_grad true not implemented yet"
+
+        exported = torch.onnx.dynamo_export(
+            self.model,
+            *self.inputs,
+            opset_version=target_opset,
+        )
+        exported.save(name)
+        return onnx.load(name, load_external_data=False)
 
     def _to_export(
         self,
@@ -337,7 +436,7 @@ class ModelRunner:
             return self.inputs
         assert len(names) == len(
             self.inputs
-        ), f"Mismatch number of outputs, {list(self.inputs)} != {names}"
+        ), f"Mismatch number of outputs, {len(self.inputs)} inputs for {names}"
         return dict(zip(names, self.inputs))
 
 
@@ -531,7 +630,13 @@ class BenchmarkRunner:
             )
             stats["time_export"] = time.perf_counter() - begin
 
-            feeds = model_runner.make_feeds(exporter, filename)
+            try:
+                feeds = model_runner.make_feeds(exporter, filename)
+            except AssertionError as e:
+                stats["err_feeds"] = str(e)
+                yield stats
+                continue
+
             del model_runner
             gc.collect()
 

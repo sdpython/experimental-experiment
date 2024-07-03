@@ -3,6 +3,15 @@ Benchmark exporters
 ===================
 
 Benchmarks many models from the `HuggingFace <https://huggingface.co/models>`_.
+Available exporters:
+
+* eager: identity
+* export: :func:`torch.export.export`
+* compile: :func:`torch.compile`
+* custom: :func:`experimental_experiment.torch_interpreter.to_onnx`
+* script: :func:`torch.onnx.export`
+* dynamo: :func:`torch.onnx.export` with ``dynamo=True``
+* dynamo: :func:`torch.onnx.dynamo_export`
 
 ::
 
