@@ -4,9 +4,9 @@ from onnx.reference.op_run import OpRun
 class Rotary(OpRun):
     op_domain = "onnx_extended.ortops.optim.cuda"
 
-    def _run(self, X, splits, side=None):
+    def _run(self, X, splits=None, side=None):
         assert (
-            splits.shape == (2,) and splits[0] == splits[1]
+            splits is None or splits.shape == (2,) and splits[0] == splits[1]
         ), f"Unexpected split value {splits}"
         last_dim = X.shape[-1] // 2
         cp = X.copy()

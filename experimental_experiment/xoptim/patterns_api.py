@@ -348,6 +348,7 @@ class EasyPatternOptimization(PatternOptimization):
         node: NodeProto,
         pat: "GraphBuilderPatternOptimization",  # noqa: F821
         marked: Dict[int, Tuple[NodeProto, NodeProto]],
+        pair_results_names: Dict[str, str],
         stacked: List[int],
         n: NodeProto,
         pn: NodeProto,
@@ -433,6 +434,7 @@ class EasyPatternOptimization(PatternOptimization):
         node: NodeProto,
         pat: "GraphBuilderPatternOptimization",  # noqa: F821
         marked: Dict[int, Tuple[NodeProto, NodeProto]],
+        pair_results_names: Dict[str, str],
         stacked: List[int],
         n: Union[NodeProto, str],
         pn: Union[NodeProto, str],
@@ -707,6 +709,35 @@ class EasyPatternOptimization(PatternOptimization):
         """
         return True
 
+    def _update_ambiguities(
+        self, pair_results_names, node: NodeProto, pattern_node: NodeProto
+    ):
+        for a, b in zip(node.input, pattern_node.input):
+            if b in pair_results_names:
+                assert (
+                    pair_results_names[b] == a
+                ), f"Ambiguity {b!r} is mapped to {pair_results_names[b]!r} and {a!r}."
+            else:
+                pair_results_names[b] = a
+        for a, b in zip(node.output, pattern_node.output):
+            if b in pair_results_names:
+                assert (
+                    pair_results_names[b] == a
+                ), f"Ambiguity {b!r} is mapped to {pair_results_names[b]!r} and {a!r}."
+            else:
+                pair_results_names[b] = a
+
+    def _has_ambiguities(
+        self, pair_results_names, node: NodeProto, pattern_node: NodeProto
+    ) -> bool:
+        for a, b in zip(node.input, pattern_node.input):
+            if b in pair_results_names and pair_results_names[b] != a:
+                return True
+        for a, b in zip(node.output, pattern_node.output):
+            if b in pair_results_names and pair_results_names[b] != a:
+                return True
+        return False
+
     def match(
         self,
         g: "GraphBuilderPatternOptimization",  # noqa: F821
@@ -736,6 +767,8 @@ class EasyPatternOptimization(PatternOptimization):
                     textwrap.indent(self.display_pattern(g, self.match_pattern), "    ")
                 )
 
+        pair_results_names = {}
+        self._update_ambiguities(pair_results_names, node, p_node)
         marked = {id(p_node): (node, p_node)}
         stacked = [id(p_node)]
         iteration = 0
@@ -772,7 +805,9 @@ class EasyPatternOptimization(PatternOptimization):
             fall_back_candidates = None
             if any(map(lambda i: pat.node_before(i) is not None, pn.input)):
                 # There are backward nodes in the pattern.
-                res = self._match_backward(g, node, pat, marked, stacked, n, pn)
+                res = self._match_backward(
+                    g, node, pat, marked, pair_results_names, stacked, n, pn
+                )
                 if res is None:
                     if self.verbose > 5:
                         print("[EasyPatternOptimization.match] done. backward failed.")
@@ -796,7 +831,9 @@ class EasyPatternOptimization(PatternOptimization):
                 f"marked={set(id(b[1]) for b in marked.values())}"
             )
 
-            res = self._match_forward(g, node, pat, marked, stacked, n, pn)
+            res = self._match_forward(
+                g, node, pat, marked, pair_results_names, stacked, n, pn
+            )
             if res is None:
                 if self.verbose > 5:
                     print("[EasyPatternOptimization.match] done. forward failed.")
@@ -807,7 +844,9 @@ class EasyPatternOptimization(PatternOptimization):
                 # We make sure that one of pattern inputs is not linked to another
                 # node in the pattern itself.
                 for candidate in fall_back_candidates:
-                    res = self._match_forward(g, node, pat, marked, stacked, *candidate)
+                    res = self._match_forward(
+                        g, node, pat, marked, pair_results_names, stacked, *candidate
+                    )
                     if res is None or res == 0:
                         continue
                     break

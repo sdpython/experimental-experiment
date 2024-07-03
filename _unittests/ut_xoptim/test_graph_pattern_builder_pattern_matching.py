@@ -918,9 +918,11 @@ class TestGraphPatternBuilder(ExtTestCase):
                 got = ref2.run(None, feeds)
                 np.testing.assert_allclose(expected[0], got[0], atol=1e-5)
 
-    def test_simple_rotary(self):
-        self._simple_rotary("right")
+    def test_simple_rotary_left(self):
         self._simple_rotary("left")
+
+    def test_simple_rotary_right(self):
+        self._simple_rotary("right")
 
     def _get_shared_input_model(self, op_type: str, left: bool):
         model = oh.make_model(
@@ -1042,7 +1044,7 @@ class TestGraphPatternBuilder(ExtTestCase):
                     x, y, z, domain="onnx_extended.ortops.optim.cuda", outputs=2
                 )
 
-        verbose = 10
+        verbose = 0
         for op_type, left in itertools.product(["Add", "Mul"], [False, True]):
             with self.subTest(op_type=op_type, left=left):
                 model = self._get_shared_input_model(
@@ -1057,7 +1059,7 @@ class TestGraphPatternBuilder(ExtTestCase):
                     optimization_options=OptimizationOptions(
                         patterns=[
                             AddSharedInput1(verbose=verbose),
-                            # AddSharedInput2(verbose=verbose),
+                            AddSharedInput2(verbose=verbose),
                             MulSharedInput1(verbose=verbose),
                             MulSharedInput2(verbose=verbose),
                         ],
