@@ -570,7 +570,10 @@ class BenchmarkRunner:
         names = self.get_model_name_list()
         for model_name in names:
             if self.verbose:
-                print(f"[BenchmarkRunner.benchmark] test model {model_name!r}")
+                print(
+                    f"[BenchmarkRunner.benchmark] test model {model_name!r} "
+                    f"with exporter={exporter!r}"
+                )
             if self.verbose > 1:
                 print(f"[BenchmarkRunner.benchmark] load model {model_name!r}")
 
@@ -595,7 +598,10 @@ class BenchmarkRunner:
 
             # warmup
             if self.verbose > 1:
-                print(f"[BenchmarkRunner.benchmark] warmup model {model_name!r}")
+                print(
+                    f"[BenchmarkRunner.benchmark] warmup model {model_name!r}"
+                    f"- {warmup} times"
+                )
             begin = time.perf_counter()
             for w in range(warmup):
                 expected = model_runner.run()
@@ -603,7 +609,10 @@ class BenchmarkRunner:
 
             # repeat
             if self.verbose > 1:
-                print(f"[BenchmarkRunner.benchmark] repeat model {model_name!r}")
+                print(
+                    f"[BenchmarkRunner.benchmark] repeat model {model_name!r}"
+                    f"- {repeat} times"
+                )
             begin = time.perf_counter()
             for w in range(repeat):
                 expected = model_runner.run()
@@ -658,8 +667,13 @@ class BenchmarkRunner:
             stats["time_session"] = time.perf_counter() - begin
 
             if self.verbose > 1:
-                print(f"[BenchmarkRunner.benchmark] warmup ort {model_name!r}")
+                print(
+                    f"[BenchmarkRunner.benchmark] warmup "
+                    f"{exporter} - {model_name!r}"
+                )
             stats["device"] = self.device
+            if os.path.exists(filename):
+                stats["filesize"] = os.stat(filename).st_size
 
             got = None
             if isinstance(exported_model, onnx.ModelProto):
@@ -699,7 +713,7 @@ class BenchmarkRunner:
                     stats["time_warmup"] = (time.perf_counter() - begin) / warmup
 
                 if self.verbose > 1:
-                    print(f"[BenchmarkRunner.benchmark] repeat ort {model_name!r}")
+                    print(f"[BenchmarkRunner.benchmark] repeat torch {model_name!r}")
 
                 # repeat
                 if "err_warmup" not in stats:
@@ -713,7 +727,7 @@ class BenchmarkRunner:
 
             # discrepancies
             if got is not None:
-                a, r = self.max_diff(expected, got)
+                a, r = self.max_diff(expected, got, verbose=self.verbose)
                 stats["discrepancies_abs"] = a
                 stats["discrepancies_rel"] = r
                 if self.verbose:
@@ -727,10 +741,18 @@ class BenchmarkRunner:
         list_feeds = [feeds[k] for k in sess.input_names]
         return sess.run_dlpack(*list_feeds)
 
-    def max_diff(self, expected: Any, got: Any) -> Tuple[float, float]:
+    def max_diff(
+        self, expected: Any, got: Any, verbose: int = 0
+    ) -> Tuple[float, float]:
         """
         Returns the maximum discrepancy.
         """
+        if hasattr(expected, "to_tuple"):
+            return self.max_diff(expected.to_tuple(), got, verbose=verbose)
+
+        if hasattr(got, "to_tuple"):
+            return self.max_diff(expected, got.to_tuple(), verbose=verbose)
+
         if isinstance(expected, torch.Tensor):
             if isinstance(got, torch.Tensor):
                 diff = (got - expected).abs()
@@ -739,22 +761,38 @@ class BenchmarkRunner:
                 )
             if isinstance(got, (list, tuple)):
                 if len(got) != 1:
+                    if verbose > 2:
+                        print(
+                            f"[max_diff] inf because len(expected)={len(expected)}!=1, "
+                            f"len(got)={len(got)}"
+                        )
                     return np.inf, np.inf
-                return self.max_diff(expected, got[0])
+                return self.max_diff(expected, got[0], verbose=verbose)
         if isinstance(expected, (tuple, list)):
             if len(expected) == 1:
-                return self.max_diff(expected[0], got)
+                return self.max_diff(expected[0], got, verbose=verbose)
             if not isinstance(got, (tuple, list)):
+                if verbose > 2:
+                    print(
+                        f"[max_diff] inf because type(expected)={type(expected)}, "
+                        f"type(got)={type(got)}"
+                    )
                 return np.inf, np.inf
             if len(got) != len(expected):
+                if verbose > 2:
+                    print(
+                        f"[max_diff] inf because len(expected)={len(expected)}, "
+                        f"len(got)={len(got)}"
+                    )
                 return np.inf, np.inf
             am, rm = 0, 0
             for e, g in zip(expected, got):
-                a, r = self.max_diff(e, g)
+                a, r = self.max_diff(e, g, verbose=verbose)
                 am = max(am, a)
                 rm = max(rm, r)
             return am, rm
 
         raise AssertionError(
-            f"Not implemented with type(expected)={type(expected)}, type(results)={type(got)}"
+            f"Not implemented with type(expected)={type(expected)}, type(results)={type(got)}, "
+            f"dir(expected)={dir(expected)}"
         )

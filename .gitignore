@@ -11,12 +11,14 @@
 *.pkl
 *.xlsx
 *.sarif
-*.sqlite
+*.sqlitest
 *.svg
 *.onnx.stats
 _tools/benchenv**
 _tools/repos**
-_tools/miniconda**
+_tools/mamba**
+_tools/results**
+_tools/bin**
 coverage.html/*
 temp*.txt*
 tt_*.txt

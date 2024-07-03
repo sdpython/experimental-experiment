@@ -443,6 +443,10 @@ class HuggingfaceRunner(BenchmarkRunner):
         include_model_names: Optional[Set[str]] = None,
         exclude_model_names: Optional[Set[str]] = None,
         verbose: int = 0,
+        warmup: int = 10,
+        repeat: int = 30,
+        fake_tensor: bool = False,
+        no_grad: bool = False,
         target_opset: int = 18,
     ):
         super().__init__(
@@ -454,6 +458,10 @@ class HuggingfaceRunner(BenchmarkRunner):
             exclude_model_names=exclude_model_names,
             verbose=verbose,
             target_opset=target_opset,
+            warmup=warmup,
+            repeat=repeat,
+            fake_tensor=fake_tensor,
+            no_grad=no_grad,
         )
         if not self.EXTRA_MODELS:
             self.initialize()
