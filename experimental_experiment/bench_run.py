@@ -213,7 +213,7 @@ def measure_discrepancies(
 
     :param expected: list of outputs coming from a torch model
     :param outputs: list of outputs coming from an onnx model
-    :return: max absole errors, max relative errors
+    :return: max absolute errors, max relative errors
     """
 
     def _flatten(outputs):

@@ -497,7 +497,7 @@ def dort_args(name: str, description: str, new_args: Optional[List[str]] = None)
         ),
         output_data=(
             "output_data_multi.csv",
-            "when running multiple configuration, " "save the results in that file",
+            "when running multiple configuration, save the results in that file",
         ),
         expose="backend,repeat,warmup,device,num_hidden_layers,"
         "mixed,export,config,target_opset,dynamic,verbose,dump_folder,shape_scenario"

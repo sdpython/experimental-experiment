@@ -218,6 +218,21 @@ def run_inference(
     return stats
 
 
+class WrapForTorch:
+    """
+    Wraps  a torch model.
+    """
+
+    def __init__(self, torch_model: Any):
+        if hasattr(torch_model, "graph_module"):
+            self.model = torch_model.graph_module
+        else:
+            self.model = torch_model
+
+    def run(self, inputs):
+        return self.model(*inputs)
+
+
 class WrapInferenceSessionForTorch:
     def __init__(self, sess: Any):
         # onnxruntime is importing when needed as it takes a couple of seconds if it contains CUDA EP.
