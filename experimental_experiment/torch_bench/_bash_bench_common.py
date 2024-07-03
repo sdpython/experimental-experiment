@@ -6,7 +6,7 @@ from typing import Any, Callable, Set, Optional, Tuple, Iterator, Dict, List
 import numpy as np
 import onnx
 import torch
-from .export_model_helper import WrapInferenceSessionForTorch
+from .export_model_helper import WrapInferenceSessionForTorch, WrapForTorch
 
 
 class MakeConfig:
@@ -212,6 +212,36 @@ class ModelRunner:
                 verbose=verbose,
                 target_opset=target_opset,
             )
+        if exporter == "export":
+            return self._to_export(
+                name,
+                dynamic=dynamic,
+                fake_tensor=fake_tensor,
+                no_grad=no_grad,
+                optimization=optimization,
+                verbose=verbose,
+                target_opset=target_opset,
+            )
+        if exporter == "eager":
+            return self._to_eager(
+                name,
+                dynamic=dynamic,
+                fake_tensor=fake_tensor,
+                no_grad=no_grad,
+                optimization=optimization,
+                verbose=verbose,
+                target_opset=target_opset,
+            )
+        if exporter == "compile":
+            return self._to_compile(
+                name,
+                dynamic=dynamic,
+                fake_tensor=fake_tensor,
+                no_grad=no_grad,
+                optimization=optimization,
+                verbose=verbose,
+                target_opset=target_opset,
+            )
         raise AssertionError(f"Exporter {exporter!r} is not implemented.")
 
     def _to_onnx_custom(
@@ -238,9 +268,66 @@ class ModelRunner:
             target_opset=target_opset,
         )
         onx.save(name)
+        return onx
 
-    def make_feeds(self, filename):
+    def _to_export(
+        self,
+        name: str,
+        dynamic: bool,
+        fake_tensor: bool,
+        no_grad: bool,
+        optimization: str,
+        verbose: int,
+        target_opset: int,
+    ):
+        assert not fake_tensor, "fake_tensor not implemented."
+        assert not dynamic, "dynamic true not implemented yet"
+        assert not no_grad, "no_grad true not implemented yet"
+        from torch.export import export
+
+        return export(self.model, self.inputs)
+
+    def _to_eager(
+        self,
+        name: str,
+        dynamic: bool,
+        fake_tensor: bool,
+        no_grad: bool,
+        optimization: str,
+        verbose: int,
+        target_opset: int,
+    ):
+        assert not fake_tensor, "fake_tensor not implemented."
+        assert not dynamic, "dynamic true not implemented yet"
+        assert not no_grad, "no_grad true not implemented yet"
+
+        return self.model
+
+    def _to_compile(
+        self,
+        name: str,
+        dynamic: bool,
+        fake_tensor: bool,
+        no_grad: bool,
+        optimization: str,
+        verbose: int,
+        target_opset: int,
+    ):
+        assert not fake_tensor, "fake_tensor not implemented."
+        assert not dynamic, "dynamic true not implemented yet"
+        assert not no_grad, "no_grad true not implemented yet"
+
+        def custom_backend(
+            gm: torch.fx.GraphModule, example_inputs: List[torch.Tensor]
+        ):
+            return gm.forward
+
+        return torch.compile(self.model, backend=lambda gm, inputs: gm.forward)
+
+    def make_feeds(self, exporter: str, filename: Optional[str] = None):
         """Creates feed inputs."""
+        if exporter in {"eager", "export", "compile"}:
+            return self.inputs
         onx = onnx.load(filename, load_external_data=False)
         names = [_.name for _ in onx.graph.input]
         if isinstance(self.inputs, dict):
@@ -432,7 +519,7 @@ class BenchmarkRunner:
             )
             stats["filename"] = filename
             begin = time.perf_counter()
-            model_runner.to_onnx(
+            exported_model = model_runner.to_onnx(
                 exporter,
                 name=filename,
                 dynamic=dynamic,
@@ -444,7 +531,7 @@ class BenchmarkRunner:
             )
             stats["time_export"] = time.perf_counter() - begin
 
-            feeds = model_runner.make_feeds(filename)
+            feeds = model_runner.make_feeds(exporter, filename)
             del model_runner
             gc.collect()
 
@@ -457,37 +544,75 @@ class BenchmarkRunner:
                 providers = providers[1:]
             stats["providers"] = ",".join(providers)
             begin = time.perf_counter()
-            sess = WrapInferenceSessionForTorch(
-                onnxruntime.InferenceSession(filename, providers=providers)
-            )
+            if isinstance(exported_model, onnx.ModelProto):
+                sess = WrapInferenceSessionForTorch(
+                    onnxruntime.InferenceSession(filename, providers=providers)
+                )
+            else:
+                sess = WrapForTorch(exported_model)
             stats["time_session"] = time.perf_counter() - begin
 
             if self.verbose > 1:
                 print(f"[BenchmarkRunner.benchmark] warmup ort {model_name!r}")
-
-            # warmup
-            begin = time.perf_counter()
-            for w in range(warmup):
-                got = self.ort_run(sess, feeds)
-            stats["time_onnx_warmup"] = (time.perf_counter() - begin) / warmup
             stats["device"] = self.device
 
-            if self.verbose > 1:
-                print(f"[BenchmarkRunner.benchmark] repeat ort {model_name!r}")
+            got = None
+            if isinstance(exported_model, onnx.ModelProto):
+                # warmup
+                begin = time.perf_counter()
+                try:
+                    for _ in range(warmup):
+                        got = self.ort_run(sess, feeds)
+                except Exception as e:
+                    stats["err_warmup"] = str(e)
+                stats["time_warmup"] = (time.perf_counter() - begin) / warmup
 
-            # repeat
-            begin = time.perf_counter()
-            for w in range(repeat):
-                got = self.ort_run(sess, feeds)
-            stats["time_onnx_repeat"] = (time.perf_counter() - begin) / repeat
-            stats["speedup"] = stats["time_eager_repeat"] / stats["time_onnx_repeat"]
+                if self.verbose > 1:
+                    print(f"[BenchmarkRunner.benchmark] repeat ort {model_name!r}")
+
+                # repeat
+                if "err_warmup" not in stats:
+                    begin = time.perf_counter()
+                    for _ in range(repeat):
+                        got = self.ort_run(sess, feeds)
+                    stats["time_repeat"] = (time.perf_counter() - begin) / repeat
+            else:
+                # warmup
+                if exporter == "eager":
+                    # no try, catch needed for eager mode.
+                    begin = time.perf_counter()
+                    for _ in range(warmup):
+                        got = sess.run(feeds)
+                    stats["time_warmup"] = (time.perf_counter() - begin) / warmup
+                else:
+                    begin = time.perf_counter()
+                    try:
+                        for _ in range(warmup):
+                            got = sess.run(feeds)
+                    except Exception as e:
+                        stats["err_warmup"] = str(e)
+                    stats["time_warmup"] = (time.perf_counter() - begin) / warmup
+
+                if self.verbose > 1:
+                    print(f"[BenchmarkRunner.benchmark] repeat ort {model_name!r}")
+
+                # repeat
+                if "err_warmup" not in stats:
+                    begin = time.perf_counter()
+                    for _ in range(repeat):
+                        got = sess.run(feeds)
+                    stats["time_repeat"] = (time.perf_counter() - begin) / repeat
+
+            if "time_repeat" in stats:
+                stats["speedup"] = stats["time_eager_repeat"] / stats["time_repeat"]
 
             # discrepancies
-            a, r = self.max_diff(expected, got)
-            stats["discrepancies_abs"] = a
-            stats["discrepancies_rel"] = r
-            if self.verbose:
-                print(f"[BenchmarkRunner.benchmark] done model {stats}")
+            if got is not None:
+                a, r = self.max_diff(expected, got)
+                stats["discrepancies_abs"] = a
+                stats["discrepancies_rel"] = r
+                if self.verbose:
+                    print(f"[BenchmarkRunner.benchmark] done model {stats}")
             yield stats
 
     def ort_run(

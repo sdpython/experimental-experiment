@@ -18,7 +18,7 @@ class TestHuggingFaceRunnerCmd(ExtTestCase):
         logger.setLevel(logging.ERROR)
         ExtTestCase.setUpClass()
 
-    def _hugging_face_export_bench_cpu(self, exporter, models):
+    def _huggingface_export_bench_cpu(self, exporter, models):
         from experimental_experiment.torch_bench.bash_bench_huggingface import main
 
         args = [
@@ -44,22 +44,32 @@ class TestHuggingFaceRunnerCmd(ExtTestCase):
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_onnxruntime_training()
     @requires_torch("2.4")
-    def test_hugging_face_export_bench_cpu(self):
-        self._hugging_face_export_bench_cpu("custom", "dummy")
+    def test_huggingface_export_bench_custom_cpu(self):
+        self._huggingface_export_bench_cpu("custom", "dummy")
+
+    @skipif_ci_windows("exporter does not work on Windows")
+    @ignore_warnings((DeprecationWarning, UserWarning))
+    @requires_torch("2.4")
+    def test_huggingface_export_bench_export_cpu(self):
+        self._huggingface_export_bench_cpu("export", "dummy")
+
+    @ignore_warnings((DeprecationWarning, UserWarning))
+    def test_huggingface_export_bench_eager_cpu(self):
+        self._huggingface_export_bench_cpu("eager", "dummy")
 
     @skipif_ci_windows("exporter does not work on Windows")
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_onnxruntime_training()
     @requires_torch("2.4")
-    def test_hugging_face_export_bench_cpu2(self):
-        self._hugging_face_export_bench_cpu("custom", "dummy,dummy16")
+    def test_huggingface_export_bench_custom_cpu2(self):
+        self._huggingface_export_bench_cpu("custom", "dummy,dummy16")
 
     @skipif_ci_windows("exporter does not work on Windows")
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_onnxruntime_training()
     @requires_torch("2.4")
-    def test_hugging_face_export_bench_cpu_last(self):
-        self._hugging_face_export_bench_cpu("custom", "-1")
+    def test_huggingface_export_bench_custom_cpu_last(self):
+        self._huggingface_export_bench_cpu("custom", "-1")
 
 
 if __name__ == "__main__":
