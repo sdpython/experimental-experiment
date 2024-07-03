@@ -479,8 +479,19 @@ class EasyPatternOptimization(PatternOptimization):
                 # The pattern has no node forward, the matching stops.
                 continue
             if len(ns) < len(pns):
-                # Not enough node in the graph to match the pattern,
+                # Not enough nodes in the graph to match the pattern,
                 # the result is known.
+                self._hint(
+                    "FORWARD: not enough nodes in the graph to match the pattern",
+                    "-- o",
+                    o,
+                    "-- po",
+                    op,
+                    "-- len(ns)",
+                    len(ns),
+                    "-- len(pns)",
+                    len(pns),
+                )
                 return self.none(node, inspect.currentframe().f_lineno)
 
             # Here comes the fun part, there is the same number of successors or more
@@ -501,10 +512,19 @@ class EasyPatternOptimization(PatternOptimization):
                         pns[0],
                     )
                     return self.none(node, inspect.currentframe().f_lineno)
+                amb = self._has_ambiguities(pair_results_names, ns[0], pns[0])
+                if amb:
+                    self._hint(
+                        "BACKWARD: ambiguities with names",
+                        "-- ambiguities",
+                        amb,
+                    )
+                    return self.none(node, inspect.currentframe().f_lineno)
 
                 key = id(pns[0])
                 if key not in marked:
                     marked[key] = ns[0], pns[0]
+                    self._update_ambiguities(pair_results_names, ns[0], pns[0])
                     stacked.append(key)
                     res += 1
                 continue
@@ -542,10 +562,19 @@ class EasyPatternOptimization(PatternOptimization):
                         free[0],
                     )
                     return self.none(node, inspect.currentframe().f_lineno)
+                amb = self._has_ambiguities(pair_results_names, free[0], p_marked[0])
+                if amb:
+                    self._hint(
+                        "FORWARD: ambiguities with names",
+                        "-- ambiguities",
+                        amb,
+                    )
+                    return self.none(node, inspect.currentframe().f_lineno)
 
                 key = id(p_marked[0])
                 if key not in marked:
                     marked[key] = free[0], p_marked[0]
+                    self._update_ambiguities(pair_results_names, free[0], p_marked[0])
                     stacked.append(key)
                     res += 1
                 continue
@@ -585,7 +614,13 @@ class EasyPatternOptimization(PatternOptimization):
             for k, v in ec.items():
                 if gc[k] == v == 1:
                     key = id(ptype_to_node[k])
-                    if key not in marked:
+                    amb = self._has_ambiguities(
+                        pair_results_names, gtype_to_node[k], ptype_to_node[k]
+                    )
+                    if not amb and key not in marked:
+                        self._update_ambiguities(
+                            pair_results_names, gtype_to_node[k], ptype_to_node[k]
+                        )
                         marked[key] = gtype_to_node[k], ptype_to_node[k]
                         stacked.append(key)
                         res += 1
@@ -678,7 +713,6 @@ class EasyPatternOptimization(PatternOptimization):
         node: NodeProto,
         matched: List[MatchResult],
     ) -> Optional[MatchResult]:
-
         pat = self._get_match_pattern(g)
 
         # Let's match the first node.
@@ -791,11 +825,18 @@ class EasyPatternOptimization(PatternOptimization):
             return self.none(node, inspect.currentframe().f_lineno)
 
         # At this point, the pattern is matched but let's make sure.
-        assert len(marked) == len(pat.nodes), (
-            f"Number of marked nodes is different, {len(marked)} marked nodes, "
-            f"and {len(pat.nodes)} nodes in the pattern, marked is {marked}"
-        )
         assert len(stacked) == 0, f"There are still {len(stacked)} nodes to explore."
+        if len(marked) != len(pat.nodes):
+            # This should matched in most cases but when there are
+            # multiple outputs,
+            self._hint(
+                "MATCH: not enough matched nodes",
+                "-- len(marked)",
+                len(marked),
+                "-- len(pat.nodes)",
+                len(pat.nodes),
+            )
+            return self.none(node, inspect.currentframe().f_lineno)
 
         # We order the matched nodes in the same order than the pattern
         # to let next functions to be able to build the matching again.
@@ -811,9 +852,16 @@ class EasyPatternOptimization(PatternOptimization):
 
         if self.verbose > 5:
             print(
-                f"[EasyPatternOptimization.match] done. "
+                f"[EasyPatternOptimization.match] done = matched. "
                 f"{len(marked)} marked nodes with {iteration} iterations"
             )
+            if self.verbose >= 10:
+                for node, pat_node in zip(matched_nodes, pat.nodes):
+                    sleft = f"{node.op_type}({node.input})->{node.output}"
+                    print(
+                        f"    {sleft}{' ' * (60 - len(sleft))}"
+                        f"MATCHED  {pat_node.op_type}({pat_node.input})->{pat_node.output}"
+                    )
 
         return MatchResult(self, matched_nodes, self.apply)
 
@@ -877,7 +925,7 @@ class EasyPatternOptimization(PatternOptimization):
                 if b in matched_pattern_to_graph_name:
                     assert matched_pattern_to_graph_name[b] == a, (
                         f"Ambiguities, pattern name {b!r} means "
-                        f"{a!r} or {matched_pattern_to_graph_name[b]}"
+                        f"{a!r} or {matched_pattern_to_graph_name[b]!r}"
                     )
                 else:
                     matched_pattern_to_graph_name[b] = a

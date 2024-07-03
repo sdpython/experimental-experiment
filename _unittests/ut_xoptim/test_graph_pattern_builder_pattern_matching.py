@@ -1,3 +1,4 @@
+import itertools
 import os
 import time
 import unittest
@@ -899,7 +900,6 @@ class TestGraphPatternBuilder(ExtTestCase):
                         verbose=0,
                     ),
                 )
-
                 opt_onx = gr.to_onnx()
                 self.assertEqual(["Rotary"], [n.op_type for n in opt_onx.graph.node])
 
@@ -921,6 +921,167 @@ class TestGraphPatternBuilder(ExtTestCase):
     def test_simple_rotary(self):
         self._simple_rotary("right")
         self._simple_rotary("left")
+
+    def _get_shared_input_model(self, op_type: str, left: bool):
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node(op_type, ["X", "Y"], ["F1"]),
+                    oh.make_node(op_type, ["X", "Z"] if left else ["Y", "Z"], ["F2"]),
+                ],
+                "dummy",
+                [
+                    oh.make_tensor_value_info("X", TFLOAT, ["d"]),
+                    oh.make_tensor_value_info("Y", TFLOAT, ["d"]),
+                    oh.make_tensor_value_info("Z", TFLOAT, ["d"]),
+                ],
+                [
+                    oh.make_tensor_value_info("F1", TFLOAT, ["d"]),
+                    oh.make_tensor_value_info("F2", TFLOAT, ["d"]),
+                ],
+            ),
+            opset_imports=[
+                oh.make_opsetid("", 18),
+                oh.make_opsetid("com.microsoft", 1),
+            ],
+            ir_version=9,
+        )
+        check_model(model)
+        return model
+
+    def test_add_mul_shared_input_pattern(self):
+
+        class _CombineBinary(EasyPatternOptimization):
+            @classmethod
+            def _same_shape(
+                cls, sh1: tuple[int, ...], sh2: tuple[int, ...], broadcast: bool = False
+            ) -> bool:
+                if broadcast:
+                    if len(sh1) != len(sh2):
+                        rk = max(len(sh1), len(sh2))
+                        sh1 = (1,) * (rk - len(sh1)) + sh1
+                        sh2 = (1,) * (rk - len(sh2)) + sh2
+                    allow_one1 = True
+                    allow_one2 = True
+                    for a, b in zip(sh1, sh2):
+                        if a == b:
+                            if a != 1:
+                                allow_one1 = False
+                            if b != 1:
+                                allow_one2 = False
+                            continue
+                        if a == 1 and allow_one1:
+                            allow_one2 = False
+                            continue
+                        if b == 1 and allow_one2:
+                            allow_one1 = False
+                            continue
+                        return False
+                    return True
+                return sh1 == sh2
+
+            def validate_mapping(
+                self,
+                g: GraphBuilderPatternOptimization,
+                deleted_nodes: List[NodeProto],
+                pattern_nodes: Optional[List[NodeProto]] = None,
+            ) -> bool:
+                assert (
+                    len(deleted_nodes) == 2
+                ), f"Unexpected number of nodes in {deleted_nodes}"
+                x, y, z = set(
+                    list(deleted_nodes[0].input) + list(deleted_nodes[1].input)
+                )
+                if not g.has_shape(x) or not g.has_shape(y) or not g.has_shape(z):
+                    return False
+                x_shape, y_shape, z_shape = (
+                    g.get_shape(x),
+                    g.get_shape(y),
+                    g.get_shape(z),
+                )
+
+                if x_shape is None or y_shape is None or z_shape is None:
+                    return False
+                return self._same_shape(
+                    x_shape, y_shape, broadcast=True
+                ) and self._same_shape(y_shape, z_shape, broadcast=True)
+
+        class AddSharedInput1(_CombineBinary):
+            def match_pattern(self, g: GraphBuilder, x, y, z):
+                return g.op.Add(x, y), g.op.Add(x, z)
+
+            def apply_pattern(self, g: GraphBuilderPatternOptimization, x, y, z):
+                return g.op.AddSharedInput(
+                    x, y, z, domain="onnx_extended.ortops.optim.cuda", outputs=2
+                )
+
+        class AddSharedInput2(_CombineBinary):
+            def match_pattern(self, g: GraphBuilder, x, y, z):
+                return g.op.Add(x, y), g.op.Add(y, z)
+
+            def apply_pattern(self, g: GraphBuilderPatternOptimization, x, y, z):
+                return g.op.AddSharedInput(
+                    x, y, z, domain="onnx_extended.ortops.optim.cuda", outputs=2
+                )
+
+        class MulSharedInput1(_CombineBinary):
+            def match_pattern(self, g: GraphBuilder, x, y, z):
+                return g.op.Mul(x, y), g.op.Mul(x, z)
+
+            def apply_pattern(self, g: GraphBuilderPatternOptimization, x, y, z):
+                return g.op.MulSharedInput(
+                    x, y, z, domain="onnx_extended.ortops.optim.cuda", outputs=2
+                )
+
+        class MulSharedInput2(_CombineBinary):
+            def match_pattern(self, g: GraphBuilder, x, y, z):
+                return g.op.Mul(y, x), g.op.Mul(x, z)
+
+            def apply_pattern(self, g: GraphBuilderPatternOptimization, x, y, z):
+                return g.op.MulSharedInput(
+                    x, y, z, domain="onnx_extended.ortops.optim.cuda", outputs=2
+                )
+
+        verbose = 10
+        for op_type, left in itertools.product(["Add", "Mul"], [False, True]):
+            with self.subTest(op_type=op_type, left=left):
+                model = self._get_shared_input_model(
+                    op_type=op_type,
+                    left=left,
+                )
+                self.assertEqual(len(model.graph.node), 2)
+
+                gr = GraphBuilder(
+                    model,
+                    infer_shapes=True,
+                    optimization_options=OptimizationOptions(
+                        patterns=[
+                            AddSharedInput1(verbose=verbose),
+                            # AddSharedInput2(verbose=verbose),
+                            MulSharedInput1(verbose=verbose),
+                            MulSharedInput2(verbose=verbose),
+                        ],
+                        verbose=0,
+                    ),
+                )
+                opt_onx = gr.to_onnx()
+                self.assertEqual(
+                    [f"{op_type}SharedInput"], [_.op_type for _ in opt_onx.graph.node]
+                )
+                opsets = {v.domain: v.version for v in opt_onx.opset_import}
+                self.assertIn("onnx_extended.ortops.optim.cuda", opsets)
+                self.assertEqual(opsets["onnx_extended.ortops.optim.cuda"], 1)
+
+                feeds = {
+                    "X": np.array([10, 11], dtype=np.float32),
+                    "Y": np.array([10, 12], dtype=np.float32),
+                    "Z": np.array([10, 13], dtype=np.float32),
+                }
+                ref1 = ExtendedReferenceEvaluator(model)
+                expected = ref1.run(None, feeds)
+                ref2 = ExtendedReferenceEvaluator(opt_onx)
+                got = ref2.run(None, feeds)
+                np.testing.assert_allclose(expected[0], got[0])
 
 
 if __name__ == "__main__":
