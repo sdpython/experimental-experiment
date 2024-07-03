@@ -406,16 +406,17 @@ class EasyPatternOptimization(PatternOptimization):
                     ppred,
                 )
                 return self.none(node, inspect.currentframe().f_lineno)
-            if pred.op_type != ppred.op_type:
+            if pred.op_type != ppred.op_type or len(pred.input) != len(ppred.input):
                 # Distinct type
                 self._hint(
-                    "BACKWARD: distinct types",
+                    "BACKWARD: distinct types or distinct number of inputs",
                     "-- pred",
                     pred,
                     "-- ppred",
                     ppred,
                 )
                 return self.none(node, inspect.currentframe().f_lineno)
+
             # matching backward
             key = id(ppred)
             if key not in marked:
@@ -489,7 +490,16 @@ class EasyPatternOptimization(PatternOptimization):
 
             if len(ns) == len(pns) == 1:
                 # Let's deal with the simple case
-                if ns[0].op_type != pns[0].op_type:
+                if ns[0].op_type != pns[0].op_type or len(ns[0].input) != len(
+                    pns[0].input
+                ):
+                    self._hint(
+                        "FORWARD: distinct types or distinct number of inputs",
+                        "-- pred",
+                        ns[0],
+                        "-- ppred",
+                        pns[0],
+                    )
                     return self.none(node, inspect.currentframe().f_lineno)
 
                 key = id(pns[0])
@@ -521,7 +531,16 @@ class EasyPatternOptimization(PatternOptimization):
                 return self.none(node, inspect.currentframe().f_lineno)
             if len(p_marked) == len(free) == 1:
                 # Only one option again.
-                if p_marked[0].op_type != free[0].op_type:
+                if p_marked[0].op_type != free[0].op_type or len(
+                    p_marked[0].input
+                ) != len(free[0].input):
+                    self._hint(
+                        "FORWARD: distinct types or distinct number of inputs",
+                        "-- pred",
+                        p_marked[0],
+                        "-- ppred",
+                        free[0],
+                    )
                     return self.none(node, inspect.currentframe().f_lineno)
 
                 key = id(p_marked[0])
@@ -639,7 +658,7 @@ class EasyPatternOptimization(PatternOptimization):
 
     def validate_mapping(
         self,
-        g: "GraphBuilder",  # noqa: F821
+        g: "GraphBuilderPatternOptimization",  # noqa: F821
         deleted_nodes: List[NodeProto],
         pattern_nodes: Optional[List[NodeProto]] = None,
     ) -> bool:
@@ -668,6 +687,8 @@ class EasyPatternOptimization(PatternOptimization):
         if node.op_type != p_node.op_type:
             # The first node does not have the same type.
             return self.none()
+        if len(node.input) != len(p_node.input):
+            return self.none(node, inspect.currentframe().f_lineno)
 
         check_ids = set(id(n) for n in pat.nodes)
         if self.verbose > 5:

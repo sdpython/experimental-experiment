@@ -229,7 +229,7 @@ class TestGraphPatternBuilder(ExtTestCase):
 
             def validate_mapping(
                 self,
-                g,
+                g: GraphBuilderPatternOptimization,
                 deleted_nodes,
                 pattern_nodes,
             ) -> bool:
@@ -318,7 +318,7 @@ class TestGraphPatternBuilder(ExtTestCase):
 
             def validate_mapping(
                 self,
-                g,
+                g: GraphBuilderPatternOptimization,
                 deleted_nodes,
                 pattern_nodes,
             ) -> bool:
@@ -403,7 +403,7 @@ class TestGraphPatternBuilder(ExtTestCase):
 
             def validate_mapping(
                 self,
-                g,
+                g: GraphBuilderPatternOptimization,
                 deleted_nodes,
                 pattern_nodes,
             ) -> bool:
@@ -589,7 +589,7 @@ class TestGraphPatternBuilder(ExtTestCase):
 
             def validate_mapping(
                 self,
-                g: GraphBuilder,
+                g: GraphBuilderPatternOptimization,
                 deleted_nodes: List[NodeProto],
                 pattern_nodes: Optional[List[NodeProto]] = None,
             ) -> bool:
@@ -639,7 +639,7 @@ class TestGraphPatternBuilder(ExtTestCase):
 
             def validate_mapping(
                 self,
-                g: GraphBuilder,
+                g: GraphBuilderPatternOptimization,
                 deleted_nodes: List[NodeProto],
                 pattern_nodes: Optional[List[NodeProto]] = None,
             ) -> bool:
@@ -724,7 +724,7 @@ class TestGraphPatternBuilder(ExtTestCase):
 
             def validate_mapping(
                 self,
-                g: GraphBuilder,
+                g: GraphBuilderPatternOptimization,
                 deleted_nodes: List[NodeProto],
                 pattern_nodes: Optional[List[NodeProto]] = None,
             ) -> bool:
@@ -747,6 +747,180 @@ class TestGraphPatternBuilder(ExtTestCase):
 
         new_proto = gr.to_onnx()
         self.assertEqual(len(new_proto.graph.node), len(proto.graph.node))
+
+    def _simple_rotary(self, side):
+        models = [
+            oh.make_model(
+                oh.make_graph(
+                    [
+                        oh.make_node(
+                            "Split", ["X"], ["s1", "s2"], axis=-1, num_outputs=2
+                        ),
+                        (
+                            oh.make_node("Neg", ["s1"], ["ns1"])
+                            if side == "left"
+                            else oh.make_node("Neg", ["s2"], ["ns2"])
+                        ),
+                        (
+                            oh.make_node("Concat", ["s2", "ns1"], ["Y"], axis=-1)
+                            if side == "left"
+                            else oh.make_node("Concat", ["ns2", "s1"], ["Y"], axis=-1)
+                        ),
+                    ],
+                    "dummy",
+                    [oh.make_tensor_value_info("X", TFLOAT, [None, None])],
+                    [oh.make_tensor_value_info("Y", TFLOAT, [None, None])],
+                ),
+                opset_imports=[
+                    oh.make_opsetid("", 18),
+                ],
+                ir_version=9,
+            ),
+            oh.make_model(
+                oh.make_graph(
+                    [
+                        oh.make_node("Split", ["X", "splits"], ["s1", "s2"], axis=-1),
+                        (
+                            oh.make_node("Neg", ["s1"], ["ns1"])
+                            if side == "left"
+                            else oh.make_node("Neg", ["s2"], ["ns2"])
+                        ),
+                        (
+                            oh.make_node("Concat", ["s2", "ns1"], ["Y"], axis=-1)
+                            if side == "left"
+                            else oh.make_node("Concat", ["ns2", "s1"], ["Y"], axis=-1)
+                        ),
+                    ],
+                    "dummy",
+                    [oh.make_tensor_value_info("X", TFLOAT, [None, None])],
+                    [oh.make_tensor_value_info("Y", TFLOAT, [None, None])],
+                    [onh.from_array(np.array([4, 4], dtype=np.int64), name="splits")],
+                ),
+                opset_imports=[
+                    oh.make_opsetid("", 18),
+                ],
+                ir_version=9,
+            ),
+        ]
+
+        class Rotary1(EasyPatternOptimization):
+            def match_pattern(self, g: GraphBuilder, x):
+                x1, x2 = g.op.Split(x, axis=-1, outputs=2, num_outputs=2)
+                return g.op.Concat(g.op.Neg(x2), x1, axis=-1)
+
+            def apply_pattern(self, g: GraphBuilder, x):
+                return g.op.Rotary(
+                    x, side="right", domain="onnx_extended.ortops.optim.cuda"
+                )
+
+            def validate_mapping(
+                self,
+                g: GraphBuilderPatternOptimization,
+                deleted_nodes: List[NodeProto],
+                pattern_nodes: Optional[List[NodeProto]] = None,
+            ) -> bool:
+                split = deleted_nodes[0]
+                assert split.op_type == "Split", f"Unexpected node {split}"
+                axis = g.get_attribute(split, "axis", exc=False)
+                axis = 0 if axis is None else axis.i
+                if axis != -1:
+                    rank = g.get_rank(split.input[0])
+                    return rank - 1 == axis
+                return True
+
+        class Rotary2(Rotary1):
+            def match_pattern(self, g: GraphBuilder, x):
+                x1, x2 = g.op.Split(x, num_outputs=2, axis=-1, outputs=2)
+                return g.op.Concat(x2, g.op.Neg(x1), axis=-1)
+
+            def apply_pattern(self, g: GraphBuilder, x):
+                return g.op.Rotary(
+                    x, side="left", domain="onnx_extended.ortops.optim.cuda"
+                )
+
+        class Rotary3(EasyPatternOptimization):
+            def match_pattern(self, g: GraphBuilder, x, splits):
+                x1, x2 = g.op.Split(x, splits, axis=-1, outputs=2)
+                return g.op.Concat(g.op.Neg(x2), x1, axis=-1)
+
+            def validate_mapping(
+                self,
+                g: GraphBuilderPatternOptimization,
+                deleted_nodes: List[NodeProto],
+                pattern_nodes: Optional[List[NodeProto]] = None,
+            ) -> bool:
+                split = deleted_nodes[0]
+                assert split.op_type == "Split", f"Unexpected node {split}"
+                assert len(split.input) == len(
+                    pattern_nodes[0].input
+                ), f"Unexpected number of inputs in {split}, expected {pattern_nodes[0]}"
+                axis = g.get_attribute(split, "axis", exc=False)
+                axis = 0 if axis is None else axis.i
+                if axis != -1:
+                    rank = g.get_rank(split.input[0])
+                    if rank - 1 != axis:
+                        return False
+
+                cst = g.get_computed_constant(split.input[1])
+                if cst.shape != (2,) or cst[0] != cst[1]:
+                    return False
+                return True
+
+            def apply_pattern(self, g: GraphBuilder, x, splits):
+                return g.op.Rotary(
+                    x, splits, side="right", domain="onnx_extended.ortops.optim.cuda"
+                )
+
+        class Rotary4(Rotary3):
+            def match_pattern(self, g: GraphBuilder, x, splits):
+                x1, x2 = g.op.Split(x, splits, axis=-1, outputs=2)
+                return g.op.Concat(x2, g.op.Neg(x1), axis=-1)
+
+            def apply_pattern(self, g: GraphBuilder, x, splits):
+                return g.op.Rotary(
+                    x, splits, side="left", domain="onnx_extended.ortops.optim.cuda"
+                )
+
+        verbose = 0
+        for i, proto in enumerate(models):
+            with self.subTest(i=i):
+                check_model(proto)
+
+                gr = GraphBuilder(
+                    proto,
+                    infer_shapes=True,
+                    optimization_options=OptimizationOptions(
+                        patterns=[
+                            Rotary1(verbose=verbose),
+                            Rotary2(verbose=verbose),
+                            Rotary3(verbose=verbose),
+                            Rotary4(verbose=verbose),
+                        ],
+                        verbose=0,
+                    ),
+                )
+
+                opt_onx = gr.to_onnx()
+                self.assertEqual(["Rotary"], [n.op_type for n in opt_onx.graph.node])
+
+                feeds = {
+                    "X": np.arange(24).reshape((3, 8)).astype(np.float32),
+                }
+                ref1 = ExtendedReferenceEvaluator(proto)
+                expected = ref1.run(None, feeds)
+
+                check_model(opt_onx)
+                opsets = {v.domain: v.version for v in opt_onx.opset_import}
+                self.assertIn("onnx_extended.ortops.optim.cuda", opsets)
+                self.assertEqual(opsets["onnx_extended.ortops.optim.cuda"], 1)
+
+                ref2 = ExtendedReferenceEvaluator(opt_onx)
+                got = ref2.run(None, feeds)
+                np.testing.assert_allclose(expected[0], got[0], atol=1e-5)
+
+    def test_simple_rotary(self):
+        self._simple_rotary("right")
+        self._simple_rotary("left")
 
 
 if __name__ == "__main__":
