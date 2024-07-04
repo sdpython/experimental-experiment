@@ -709,6 +709,7 @@ class BenchmarkRunner:
             stats["repeat"] = repeat
             stats["exporter"] = exporter
             stats["input_size"] = self.obj_size(model_runner.inputs)
+            stats["_index"] = f"{model_name}-{exporter}"
 
             if self.device == "cuda":
                 stats["gpu_allocation_1_after_loading"] = torch.cuda.memory_allocated(0)
@@ -735,21 +736,46 @@ class BenchmarkRunner:
                 )
 
             begin = time.perf_counter()
-            with torch.no_grad():
-                # training mode consumes too much memory
-                for w in range(warmup):
-                    if w == warmup - 1:
-                        expected = model_runner.run()
-                    else:
-                        model_runner.run()
-                        # we don't plan to keep expected on CUDA
-                        # del expected
-                    if self.device == "cuda" and self.verbose > 1:
-                        print(
-                            f"[benchmarkrunner.benchmark] gpu_allocation={torch.cuda.memory_allocated(0)} "
-                            f"reserved={torch.cuda.memory_reserved(0)} after iteration {w}"
-                        )
-            stats["time_warmup_eager"] = (time.perf_counter() - begin) / warmup
+            if quiet:
+                try:
+                    with torch.no_grad():
+                        # training mode consumes too much memory
+                        for w in range(warmup):
+                            if w == warmup - 1:
+                                expected = model_runner.run()
+                            else:
+                                model_runner.run()
+                                # we don't plan to keep expected on CUDA
+                                # del expected
+                            if self.device == "cuda" and self.verbose > 1:
+                                print(
+                                    f"[benchmarkrunner.benchmark] gpu_allocation={torch.cuda.memory_allocated(0)} "
+                                    f"reserved={torch.cuda.memory_reserved(0)} after iteration {w}"
+                                )
+                except Exception as e:
+                    stats["ERR_warmup_eager"] = str(e)
+                    stats["time_warmup_eager"] = (time.perf_counter() - begin) / warmup
+                    if self.verbose:
+                        print(f"[benchmarkrunner.benchmark] time_warmup_eager {e}")
+                    yield stats
+                    continue
+                stats["time_warmup_eager"] = (time.perf_counter() - begin) / warmup
+            else:
+                with torch.no_grad():
+                    # training mode consumes too much memory
+                    for w in range(warmup):
+                        if w == warmup - 1:
+                            expected = model_runner.run()
+                        else:
+                            model_runner.run()
+                            # we don't plan to keep expected on CUDA
+                            # del expected
+                        if self.device == "cuda" and self.verbose > 1:
+                            print(
+                                f"[benchmarkrunner.benchmark] gpu_allocation={torch.cuda.memory_allocated(0)} "
+                                f"reserved={torch.cuda.memory_reserved(0)} after iteration {w}"
+                            )
+                stats["time_warmup_eager"] = (time.perf_counter() - begin) / warmup
 
             expected = self.move_to("cpu", expected)
             stats["output_size"] = self.obj_size(expected)
@@ -801,17 +827,39 @@ class BenchmarkRunner:
             )
             stats["filename"] = filename
             begin = time.perf_counter()
-            exported_model = model_runner.export_as(
-                exporter,
-                name=filename,
-                dynamic=dynamic,
-                optimization=optimization,
-                verbose=self.verbose + 1,
-                fake_tensor=self.fake_tensor,
-                no_grad=self.no_grad,
-                target_opset=self.target_opset,
-            )
-            stats["time_export"] = time.perf_counter() - begin
+            if quiet:
+                try:
+                    exported_model = model_runner.export_as(
+                        exporter,
+                        name=filename,
+                        dynamic=dynamic,
+                        optimization=optimization,
+                        verbose=self.verbose + 1,
+                        fake_tensor=self.fake_tensor,
+                        no_grad=self.no_grad,
+                        target_opset=self.target_opset,
+                    )
+                except Exception as e:
+                    stats["time_export"] = time.perf_counter() - begin
+                    stats["ERR_export"] = str(e)
+                    if self.verbose:
+                        print(f"[benchmarkrunner.benchmark] err_export {e}")
+                    yield stats
+                    continue
+                stats["time_export"] = time.perf_counter() - begin
+            else:
+                exported_model = model_runner.export_as(
+                    exporter,
+                    name=filename,
+                    dynamic=dynamic,
+                    optimization=optimization,
+                    verbose=self.verbose + 1,
+                    fake_tensor=self.fake_tensor,
+                    no_grad=self.no_grad,
+                    target_opset=self.target_opset,
+                )
+                stats["time_export"] = time.perf_counter() - begin
+
             if self.device == "cuda":
                 stats["gpu_allocation_5_after_export"] = torch.cuda.memory_allocated(0)
                 if self.verbose > 1:
@@ -824,7 +872,9 @@ class BenchmarkRunner:
                 try:
                     feeds = model_runner.make_feeds(exporter, filename)
                 except AssertionError as e:
-                    stats["err_feeds"] = str(e)
+                    stats["ERR_feeds"] = str(e)
+                    if self.verbose:
+                        print(f"[benchmarkrunner.benchmark] err_feeds {e}")
                     yield stats
                     continue
             else:
@@ -890,7 +940,12 @@ class BenchmarkRunner:
                             else:
                                 self.ort_run(sess, feeds)
                     except Exception as e:
-                        stats["err_warmup"] = str(e)
+                        if self.verbose:
+                            print(f"[benchmarkrunner.benchmark] err_warmup {e}")
+                        stats["ERR_warmup"] = str(e)
+                        stats["time_warmup"] = (time.perf_counter() - begin) / warmup
+                        yield stats
+                        continue
                 else:
                     for _ in range(warmup):
                         if _ == warmup - 1:
@@ -913,7 +968,7 @@ class BenchmarkRunner:
                     print(f"[BenchmarkRunner.benchmark] repeat ort {model_name!r}")
 
                 # repeat
-                if "err_warmup" not in stats:
+                if "ERR_warmup" not in stats:
                     begin = time.perf_counter()
                     for _ in range(repeat):
                         self.ort_run(sess, feeds)
@@ -948,7 +1003,14 @@ class BenchmarkRunner:
                                 else:
                                     sess.run(feeds)
                         except Exception as e:
-                            stats["err_warmup"] = str(e)
+                            if self.verbose:
+                                print(f"[benchmarkrunner.benchmark] err_warmup {e}")
+                            stats["ERR_warmup"] = str(e)
+                            stats["time_warmup"] = (
+                                time.perf_counter() - begin
+                            ) / warmup
+                            yield stats
+                            continue
                     else:
                         for _ in range(warmup):
                             if _ == warmup - 1:
@@ -971,7 +1033,7 @@ class BenchmarkRunner:
                     print(f"[BenchmarkRunner.benchmark] repeat torch {model_name!r}")
 
                 # repeat session
-                if "err_warmup" not in stats:
+                if "ERR_warmup" not in stats:
                     begin = time.perf_counter()
                     for _ in range(repeat):
                         sess.run(feeds)

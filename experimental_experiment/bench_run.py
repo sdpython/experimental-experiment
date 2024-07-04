@@ -59,7 +59,7 @@ def _extract_metrics(text: str) -> Dict[str, str]:
         ), f"Unexpected type for k={k!r}, types={type(k)}, {type(w)})."
         assert "\n" not in w, f"Unexpected multi-line value for k={k!r}, value is\n{w}"
         assert (
-            "err" in k or len(w) < 100
+            "err" in k.lower() or len(w) < 100
         ), f"Unexpected long value for k={k!r}, value is\n{w}"
         try:
             wi = int(w)
@@ -219,11 +219,16 @@ def make_dataframe_from_benchmark_data(data: List[Dict], detailed: bool = True) 
             if not isinstance(v, str):
                 g[k] = v
                 continue
-            if "\n" in v or len(v) > 100:
-                continue
+            v = v.replace("\n", " -- ").replace(",", "_")
+            if len(v) > 200:
+                v = v[:200]
             g[k] = v
         new_data.append(g)
-    return pandas.DataFrame(new_data)
+    df = pandas.DataFrame(new_data)
+    sorted_columns = list(sorted(df.columns))
+    if "_index" in sorted_columns:
+        sorted_columns = ["_index", *[i for i in sorted_columns if i != "_index"]]
+    return df[sorted_columns].copy()
 
 
 def measure_discrepancies(
