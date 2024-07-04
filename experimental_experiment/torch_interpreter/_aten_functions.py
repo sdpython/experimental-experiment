@@ -2385,6 +2385,106 @@ def aten_new_zeros(
     )
 
 
+def aten_nll_loss_forward(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    self: T,
+    target: T,
+    weight: Optional[T] = None,
+    reduction: int = 0,
+    ignore_index: int = -1,
+    name: str = "nll_loss_forward",
+) -> Tuple[T, T]:
+    """nll_loss_forward"""
+    print("****", reduction)
+    n_dims = g.get_rank(self)
+    channel_dim = 1
+    if n_dims < 2:
+        channel_dim = 0
+
+    if weight is not None:
+        weight_shape = g.get_shape(weight)
+        if n_dims > 1:
+            shape = [1] * n_dims
+            shape[channel_dim] = weight_shape[0]
+            w = g.op.Reshape(weight, np.array([shape], dtype=np.int64), name=name)
+        else:
+            w = weight
+        self = g.op.Mul(self, w, name=name)
+
+    target_not = g.op.Not(
+        g.op.Equal(target, np.array([ignore_index], dtype=np.int64), name=name),
+        name=name,
+    )
+    itype = g.get_type(target)
+    dtype = tensor_dtype_to_np_dtype(itype)
+    safe_target = g.op.Where(target_not, target, np.array([0], dtype=dtype), name=name)
+    g.set_type_shape_or_rank(safe_target, like=target)
+    safe_target_ = g.op.UnsqueezeAnyOpset(
+        safe_target, np.array([channel_dim], dtype=np.int64), name=name
+    )
+
+    # result = -torch.gather(self, channel_dim, safe_target_).squeeze(channel_dim)
+    result_ = g.op.Neg(
+        g.op.SqueezeAnyOpset(
+            g.op.Gather(
+                self, np.array([channel_dim], dtype=np.int64), safe_target_, name=name
+            ),
+            np.array([channel_dim], dtype=np.int64),
+            name=name,
+        ),
+        name=name,
+    )
+
+    # result = torch.where(target != ignore_index, result, 0)
+    result = g.op.Where(target_not, result_, np.array([0], dtype=dtype), name=name)
+    g.set_type_shape_or_rank(result, like=result_)
+
+    if reduction is None and n_dims > 1:
+        return g.op.Identity(result, name=name, outputs=outputs[:1]), g.op.Identity(
+            np.array([0], dtype=dtype), name=name, outputs=outputs[1:]
+        )
+
+    if weight is not None:
+        # w = w.expand(self.shape)
+        self_shape = g.op.Shape(self, name=name)
+        w_ = g.op.Expand(w, self_shape, name=name)
+
+        # wsum = torch.gather(w, channel_dim, safe_target_).squeeze(channel_dim)
+        wsum = g.op.SqueezeAnyOpset(
+            g.op.Gather(
+                w_, np.array([channel_dim], dtype=np.int64), safe_target_, name=name
+            ),
+            np.array([channel_dim], dtype=np.int64),
+            name=name,
+        )
+
+        # wsum = torch.where(target != ignore_index, wsum, 0)
+        wsum_ = g.op.Where(target_not, wsum, np.array([0], dtype=dtype), name=name)
+        g.set_type_shape_or_rank(wsum_, like=wsum)
+        total_weight = g.op.ReduceSumAnyOpset(wsum_, name=name, outputs=outputs[1:])
+    else:
+        # total_weight = (target != ignore_index).sum().to(self)
+        total_weight = g.op.ReduceSumAnyOpset(
+            g.op.Cast(target_not, to=itype, name=name), name=name, outputs=outputs[1:]
+        )
+
+    if reduction == "sum":
+        final_result = g.op.ReduceSumAnyOpset(result, name=name, outputs=outputs[:1])
+    elif reduction == "mean":
+        final_result = g.op.Div(
+            g.op.ReduceSumAnyOpset(result, name=name),
+            total_weight,
+            outputs=outputs[:1],
+            name=name,
+        )
+    else:
+        final_result = g.op.Identity(result, name=name, outputs=outputs[:1])
+
+    return final_result, total_weight
+
+
 def aten_not(
     g: GraphBuilder,
     sts: Optional[Dict[str, Any]],

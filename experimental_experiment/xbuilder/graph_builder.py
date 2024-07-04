@@ -834,6 +834,17 @@ class GraphBuilder:
         if set_rank and not self.has_rank(name):
             self.set_rank(name, len(shape))
 
+    def set_type_shape_or_rank(self, name: str, like: str):
+        """
+        Sets the type and the shape of *name* like *like*.
+        """
+        if self.has_type(like):
+            self.set_type(name, self.get_type(like))
+        if self.has_shape(like):
+            self.set_shape(name, self.get_shape(like))
+        elif self.has_rank(like):
+            self.set_rank(name, self.get_rank(like))
+
     def set_type(self, name: str, dtype: int):
         """
         Sets the shape for a result. It is exists, it checks the new shape

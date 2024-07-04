@@ -205,6 +205,9 @@ class ModelRunner:
             inputs = tuple(new_inputs)
             self.raw_input_names = new_names
             self.raw_use_defaults = use_default
+        else:
+            self.raw_input_names = ["input{i}" for i in range(len(inputs))]
+            self.raw_use_defaults = [i is None for i in inputs]
 
         self.model = WrappedModel(cvt(model))
         self.device = device
