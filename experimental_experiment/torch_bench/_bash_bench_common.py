@@ -664,6 +664,7 @@ class BenchmarkRunner:
             os.makedirs(folder)
         names = self.get_model_name_list()
         for model_name in names:
+            begin_total = time.perf_counter()
             if self.verbose:
                 print(
                     f"[BenchmarkRunner.benchmark] test model {model_name!r} "
@@ -994,6 +995,14 @@ class BenchmarkRunner:
                 stats["discrepancies_rel"] = r
                 if self.verbose:
                     print(f"[BenchmarkRunner.benchmark] done model {stats}")
+
+            total_time = time.perf_counter() - begin_total
+            stats["time_total"] = total_time
+            if self.verbose:
+                print(
+                    f"[BenchmarkRunner.benchmark] done model {model_name!r} "
+                    f"with exporter={exporter!r} in {total_time}"
+                )
             yield stats
 
     def ort_run(
