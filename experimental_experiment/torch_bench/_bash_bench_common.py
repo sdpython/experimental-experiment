@@ -1,4 +1,5 @@
 import collections
+import inspect
 import os
 import gc
 import time
@@ -112,6 +113,28 @@ def get_peak_memory():
     return torch.cuda.max_memory_allocated() / 10**9
 
 
+class WrappedModel(torch.nn.Module):
+    def __init__(self, model):
+        super().__init__()
+        self.model = model
+
+    def __call__(self, *args, **kwargs):
+        res = self.model(*args, **kwargs)
+        if hasattr(res, "to_tuple"):
+            return res.to_tuple()
+        return res
+
+    def forward(self, *args, **kwargs):
+        res = self.model.forward(*args, **kwargs)
+        if hasattr(res, "to_tuple"):
+            return res.to_tuple()
+        return res
+
+    def parameters(self):
+        for k in self.model.parameters():
+            yield k
+
+
 class ModelRunner:
     """
     Wrappers around a model.
@@ -123,9 +146,6 @@ class ModelRunner:
     :param dtype: if the model needs to be converted
     :param warmup: number of iteration to warmup the model
     :param repeat: number of iteration to repeat the model
-
-    The constructor creates the alias run which points either to
-    ``_run_dict`` or ``_run_tuple``.
     """
 
     def __init__(
@@ -141,26 +161,43 @@ class ModelRunner:
             cvt = lambda o: o.to(device)  # noqa: E731
         else:
             cvt = lambda o: o.to(dtype).to(device)  # noqa: E731
-        self.model = cvt(model)
+
+        if isinstance(inputs, dict):
+            inputs = {k: cvt(v) for k, v in inputs.items()}
+        elif isinstance(inputs, (list, tuple)):
+            inputs = tuple(cvt(v) for v in inputs)
+        else:
+            raise AssertionError - (f"Input type is {type(inputs)}")
+
+        if isinstance(inputs, dict):
+            # torch.export.export does not allow that.
+            print(inputs)
+            sig = inspect.signature(model.forward)
+            added = 0
+            new_inputs = []
+            for n in sig.parameters:
+                if n in inputs:
+                    new_inputs.append(inputs[n])
+                    added += 1
+                    if added == len(inputs):
+                        break
+                else:
+                    new_inputs.append(sig.parameters[n].default)
+            assert added == len(inputs), (
+                f"Unexpected input name in {list(sorted(inputs))} and "
+                f"parameters={list(sig.parameters)}"
+            )
+            inputs = tuple(new_inputs)
+            print(inputs)
+
+        self.model = WrappedModel(cvt(model))
         self.device = device
         self.dtype = dtype
-        if isinstance(inputs, dict):
-            self.inputs = {k: cvt(v) for k, v in inputs.items()}
-            self.run = self._run_dict
-        elif isinstance(inputs, tuple):
-            self.inputs = tuple(cvt(v) for v in inputs)
-            self.run = self._run_tuple
-        else:
-            raise AssertionError(
-                f"Unexpected type {type(inputs)} for inputs and model {type(model)}."
-            )
+        self.inputs = inputs
         self.repeat = repeat
         self.warmup = warmup
 
-    def _run_dict(self) -> Any:
-        return self.model(**self.inputs)
-
-    def _run_tuple(self) -> Any:
+    def run(self) -> Any:
         return self.model(*self.inputs)
 
     def parameters_size(self) -> int:
@@ -178,7 +215,7 @@ class ModelRunner:
             )
         )
 
-    def to_onnx(
+    def export_as(
         self,
         exporter: str,
         name: str,
@@ -627,7 +664,7 @@ class BenchmarkRunner:
             )
             stats["filename"] = filename
             begin = time.perf_counter()
-            exported_model = model_runner.to_onnx(
+            exported_model = model_runner.export_as(
                 exporter,
                 name=filename,
                 dynamic=dynamic,
@@ -724,6 +761,7 @@ class BenchmarkRunner:
 
             if "time_repeat" in stats:
                 stats["speedup"] = stats["time_eager_repeat"] / stats["time_repeat"]
+                stats["speedup_increase"] = stats["speedup"] - 1
 
             # discrepancies
             if got is not None:

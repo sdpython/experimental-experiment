@@ -76,10 +76,12 @@ class TestHuggingFaceRunnerCmd(ExtTestCase):
         self._huggingface_export_bench_cpu("script", "dummy")
 
     @ignore_warnings((DeprecationWarning, UserWarning))
+    @requires_torch("2.5")
     def test_huggingface_export_bench_dynamo_cpu(self):
         self._huggingface_export_bench_cpu("dynamo", "dummy")
 
     @ignore_warnings((DeprecationWarning, UserWarning))
+    @requires_torch("2.4")
     def test_huggingface_export_bench_dynamo2_cpu(self):
         self._huggingface_export_bench_cpu("dynamo2", "dummy")
 
