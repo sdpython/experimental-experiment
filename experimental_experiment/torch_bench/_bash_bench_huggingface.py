@@ -446,7 +446,7 @@ class HuggingfaceRunner(BenchmarkRunner):
         warmup: int = 10,
         repeat: int = 30,
         fake_tensor: bool = False,
-        no_grad: bool = False,
+        no_grad: bool = True,
         target_opset: int = 18,
     ):
         super().__init__(

@@ -171,7 +171,6 @@ class ModelRunner:
 
         if isinstance(inputs, dict):
             # torch.export.export does not allow that.
-            print(inputs)
             sig = inspect.signature(model.forward)
             added = 0
             new_inputs = []
@@ -188,7 +187,6 @@ class ModelRunner:
                 f"parameters={list(sig.parameters)}"
             )
             inputs = tuple(new_inputs)
-            print(inputs)
 
         self.model = WrappedModel(cvt(model))
         self.device = device
@@ -323,7 +321,7 @@ class ModelRunner:
     ):
         assert not fake_tensor, "fake_tensor not implemented."
         assert not dynamic, "dynamic true not implemented yet"
-        assert not no_grad, "no_grad true not implemented yet"
+        assert no_grad, "no_grad false not implemented yet"
         from ..torch_interpreter import to_onnx
 
         onx = to_onnx(
@@ -349,7 +347,7 @@ class ModelRunner:
     ):
         assert not fake_tensor, "fake_tensor not implemented."
         assert not dynamic, "dynamic true not implemented yet"
-        assert not no_grad, "no_grad true not implemented yet"
+        assert no_grad, "no_grad false not implemented yet"
 
         torch.onnx.export(
             self.model,
@@ -372,7 +370,7 @@ class ModelRunner:
     ):
         assert not fake_tensor, "fake_tensor not implemented."
         assert not dynamic, "dynamic true not implemented yet"
-        assert not no_grad, "no_grad true not implemented yet"
+        assert no_grad, "no_grad false not implemented yet"
 
         torch.onnx.export(
             self.model,
@@ -396,7 +394,7 @@ class ModelRunner:
     ):
         assert not fake_tensor, "fake_tensor not implemented."
         assert not dynamic, "dynamic true not implemented yet"
-        assert not no_grad, "no_grad true not implemented yet"
+        assert no_grad, "no_grad false not implemented yet"
 
         exported = torch.onnx.dynamo_export(
             self.model,
@@ -418,7 +416,7 @@ class ModelRunner:
     ):
         assert not fake_tensor, "fake_tensor not implemented."
         assert not dynamic, "dynamic true not implemented yet"
-        assert not no_grad, "no_grad true not implemented yet"
+        assert no_grad, "no_grad false not implemented yet"
         from torch.export import export
 
         return export(self.model, self.inputs)
@@ -435,7 +433,7 @@ class ModelRunner:
     ):
         assert not fake_tensor, "fake_tensor not implemented."
         assert not dynamic, "dynamic true not implemented yet"
-        assert not no_grad, "no_grad true not implemented yet"
+        assert no_grad, "no_grad false not implemented yet"
 
         return self.model
 
@@ -451,7 +449,7 @@ class ModelRunner:
     ):
         assert not fake_tensor, "fake_tensor not implemented."
         assert not dynamic, "dynamic true not implemented yet"
-        assert not no_grad, "no_grad true not implemented yet"
+        assert no_grad, "no_grad true not implemented yet"
 
         def custom_backend(
             gm: torch.fx.GraphModule, example_inputs: List[torch.Tensor]
@@ -515,7 +513,7 @@ class BenchmarkRunner:
         warmup: int = 10,
         repeat: int = 30,
         fake_tensor: bool = False,
-        no_grad: bool = False,
+        no_grad: bool = True,
         target_opset: int = 18,
     ):
         self.suite_name = suite_name
@@ -534,6 +532,7 @@ class BenchmarkRunner:
         self.fake_tensor = fake_tensor
         self.no_grad = no_grad
         self.target_opset = target_opset
+        assert no_grad, "no_grad true not implemented yet"
 
     def get_model_name_list(self) -> List[str]:
         """Returns the model list."""
@@ -585,6 +584,24 @@ class BenchmarkRunner:
                 )
             yield model_runner.run()
 
+    def move_to(self, device: str, obj: Any) -> Any:
+        if isinstance(obj, torch.Tensor):
+            return obj.to(device)
+        if isinstance(obj, tuple):
+            return tuple(self.move_to(device, o) for o in obj)
+        if obj is None:
+            return None
+        raise AssertionError(f"move_to not implemented for type {type(obj)}")
+
+    def obj_size(self, obj: Any) -> int:
+        if isinstance(obj, torch.Tensor):
+            return np.prod(list(obj.shape))
+        if isinstance(obj, tuple):
+            return sum(self.obj_size(o) for o in obj)
+        if obj is None:
+            return 0
+        raise AssertionError(f"input_size not implemented for type {type(obj)}")
+
     def enumerate_test_models(
         self,
         exporter: str,
@@ -592,6 +609,7 @@ class BenchmarkRunner:
         folder: str = "dump_test_models",
         dynamic: bool = False,
         optimization: str = "",
+        quiet: bool = True,
     ) -> Iterator[Dict[Any, Any]]:
         """
         Runs the benchmarks, run, export, run in onnx, measure the speedup.
@@ -600,6 +618,7 @@ class BenchmarkRunner:
         assert not dynamic, "dynamic=True not implemented."
         assert not optimization, "optimization=True not implemented."
 
+        import transformers
         import onnxruntime
 
         if not os.path.exists(folder):
@@ -614,9 +633,28 @@ class BenchmarkRunner:
             if self.verbose > 1:
                 print(f"[BenchmarkRunner.benchmark] load model {model_name!r}")
 
-            stats = {}
+            stats = {
+                "torch_version": torch.__version__,
+                "transformers_version": transformers.__version__,
+                "onnxruntime_version": transformers.__version__,
+            }
+            if self.device == "cuda":
+                stats["gpu_allocation_0_before_loading"] = torch.cuda.memory_allocated(
+                    0
+                )
+                if self.verbose > 1:
+                    print(
+                        f"[benchmarkrunner.benchmark] gpu_allocation={stats['gpu_allocation_0_before_loading']} "
+                        f"reserved={torch.cuda.memory_reserved(0)} before loading"
+                    )
+
             begin = time.perf_counter()
             model_runner = self.load_model(model_name)
+            if self.device == "cuda" and self.verbose > 1:
+                print(
+                    f"[benchmarkrunner.benchmark] gpu_allocation={torch.cuda.memory_allocated(0)} "
+                    f"reserved={torch.cuda.memory_reserved(0)} just after loading"
+                )
             repeat = model_runner.repeat
             warmup = model_runner.warmup
             stats["model_name"] = model_name
@@ -626,10 +664,22 @@ class BenchmarkRunner:
             stats["warmup"] = warmup
             stats["repeat"] = repeat
             stats["exporter"] = exporter
+            stats["input_size"] = self.obj_size(model_runner.inputs)
+
+            if self.device == "cuda":
+                stats["gpu_allocation_1_after_loading"] = torch.cuda.memory_allocated(0)
+                if self.verbose > 1:
+                    print(
+                        f"[benchmarkrunner.benchmark] input_size={stats['input_size']}"
+                    )
+                    print(
+                        f"[benchmarkrunner.benchmark] gpu_allocation={stats['gpu_allocation_1_after_loading']} "
+                        f"reserved={torch.cuda.memory_reserved(0)} after loading"
+                    )
 
             if self.verbose > 1:
                 print(
-                    f"[BenchmarkRunner.benchmark] model size, dtype "
+                    f"[BenchmarkRunner.benchmark] model size and dtype "
                     f"{stats['params_size']}, {stats['params_dtype']}"
                 )
 
@@ -639,10 +689,43 @@ class BenchmarkRunner:
                     f"[BenchmarkRunner.benchmark] warmup model {model_name!r}"
                     f"- {warmup} times"
                 )
+
             begin = time.perf_counter()
-            for w in range(warmup):
-                expected = model_runner.run()
-            stats["time_eager_warmup"] = (time.perf_counter() - begin) / warmup
+            with torch.no_grad():
+                # training mode consumes too much memory
+                for w in range(warmup):
+                    if w == warmup - 1:
+                        expected = model_runner.run()
+                    else:
+                        model_runner.run()
+                        # we don't plan to keep expected on CUDA
+                        # del expected
+                    if self.device == "cuda" and self.verbose > 1:
+                        print(
+                            f"[benchmarkrunner.benchmark] gpu_allocation={torch.cuda.memory_allocated(0)} "
+                            f"reserved={torch.cuda.memory_reserved(0)} after iteration {w}"
+                        )
+            stats["time_warmup_eager"] = (time.perf_counter() - begin) / warmup
+
+            expected = self.move_to("cpu", expected)
+            stats["output_size"] = self.obj_size(expected)
+            if self.verbose > 1:
+                print(f"[benchmarkrunner.benchmark] output_size={stats['output_size']}")
+
+            if self.device == "cuda":
+                stats["gpu_allocation_2_after_warmup"] = torch.cuda.memory_allocated(0)
+                if self.verbose > 1:
+                    print(
+                        f"[benchmarkrunner.benchmark] gpu_allocation={stats['gpu_allocation_2_after_warmup']} "
+                        f"reserved={torch.cuda.memory_reserved(0)} after warmup"
+                    )
+                torch.cuda.empty_cache()
+                stats["gpu_allocation_3_empty_cache"] = torch.cuda.memory_allocated(0)
+                if self.verbose > 1:
+                    print(
+                        f"[benchmarkrunner.benchmark] gpu_allocation={stats['gpu_allocation_3_empty_cache']} "
+                        f"reserved={torch.cuda.memory_reserved(0)} after empty_cache"
+                    )
 
             # repeat
             if self.verbose > 1:
@@ -650,11 +733,21 @@ class BenchmarkRunner:
                     f"[BenchmarkRunner.benchmark] repeat model {model_name!r}"
                     f"- {repeat} times"
                 )
-            begin = time.perf_counter()
-            for w in range(repeat):
-                expected = model_runner.run()
-            stats["time_eager_repeat"] = (time.perf_counter() - begin) / repeat
 
+            begin = time.perf_counter()
+            with torch.no_grad():
+                # training mode consumes too much memory
+                for w in range(repeat):
+                    model_runner.run()
+            stats["time_repeat_eager"] = (time.perf_counter() - begin) / repeat
+
+            if self.device == "cuda":
+                stats["gpu_allocation_4_after_repeat"] = torch.cuda.memory_allocated(0)
+                if self.verbose > 1:
+                    print(
+                        f"[benchmarkrunner.benchmark] gpu_allocation={stats['gpu_allocation_4_after_repeat']} "
+                        f"reserved={torch.cuda.memory_reserved(0)} after repeat"
+                    )
             if self.verbose > 1:
                 print(f"[BenchmarkRunner.benchmark] export model {model_name!r}")
 
@@ -675,16 +768,36 @@ class BenchmarkRunner:
                 target_opset=self.target_opset,
             )
             stats["time_export"] = time.perf_counter() - begin
+            if self.device == "cuda":
+                stats["gpu_allocation_5_after_export"] = torch.cuda.memory_allocated(0)
+                if self.verbose > 1:
+                    print(
+                        f"[benchmarkrunner.benchmark] gpu_allocation={stats['gpu_allocation_5_after_export']} "
+                        f"reserved={torch.cuda.memory_reserved(0)} after export"
+                    )
 
-            try:
+            if quiet:
+                try:
+                    feeds = model_runner.make_feeds(exporter, filename)
+                except AssertionError as e:
+                    stats["err_feeds"] = str(e)
+                    yield stats
+                    continue
+            else:
                 feeds = model_runner.make_feeds(exporter, filename)
-            except AssertionError as e:
-                stats["err_feeds"] = str(e)
-                yield stats
-                continue
 
             del model_runner
             gc.collect()
+
+            if self.device == "cuda":
+                stats["gpu_allocation_6_after_gcollect"] = torch.cuda.memory_allocated(
+                    0
+                )
+                if self.verbose > 1:
+                    print(
+                        f"[benchmarkrunner.benchmark] gpu_allocation={stats['gpu_allocation_6_after_gcollect']} "
+                        f"reserved={torch.cuda.memory_reserved(0)} after gc.collect"
+                    )
 
             if self.verbose > 1:
                 print(f"[BenchmarkRunner.benchmark] inference model {model_name!r}")
@@ -702,6 +815,13 @@ class BenchmarkRunner:
             else:
                 sess = WrapForTorch(exported_model)
             stats["time_session"] = time.perf_counter() - begin
+            if self.device == "cuda":
+                stats["gpu_allocation_7_after_session"] = torch.cuda.memory_allocated(0)
+                if self.verbose > 1:
+                    print(
+                        f"[benchmarkrunner.benchmark] gpu_allocation={stats['gpu_allocation_7_after_session']} "
+                        f"reserved={torch.cuda.memory_reserved(0)} after session"
+                    )
 
             if self.verbose > 1:
                 print(
@@ -709,19 +829,41 @@ class BenchmarkRunner:
                     f"{exporter} - {model_name!r}"
                 )
             stats["device"] = self.device
+
             if os.path.exists(filename):
                 stats["filesize"] = os.stat(filename).st_size
 
+            # warmup session
             got = None
             if isinstance(exported_model, onnx.ModelProto):
-                # warmup
+                # warmup session
                 begin = time.perf_counter()
-                try:
+                if quiet:
+                    try:
+                        for _ in range(warmup):
+                            if _ == warmup - 1:
+                                got = self.ort_run(sess, feeds)
+                            else:
+                                self.ort_run(sess, feeds)
+                    except Exception as e:
+                        stats["err_warmup"] = str(e)
+                else:
                     for _ in range(warmup):
-                        got = self.ort_run(sess, feeds)
-                except Exception as e:
-                    stats["err_warmup"] = str(e)
+                        if _ == warmup - 1:
+                            got = self.ort_run(sess, feeds)
+                        else:
+                            self.ort_run(sess, feeds)
                 stats["time_warmup"] = (time.perf_counter() - begin) / warmup
+                if self.device == "cuda":
+                    stats["gpu_allocation_8_after_export_warmup"] = (
+                        torch.cuda.memory_allocated(0)
+                    )
+                    if self.verbose > 1:
+                        print(
+                            f"[benchmarkrunner.benchmark] gpu_allocation={stats['gpu_allocation_8_after_export_warmup']} "
+                            f"reserved={torch.cuda.memory_reserved(0)} after export warmup"
+                        )
+                got = self.move_to("cpu", got)
 
                 if self.verbose > 1:
                     print(f"[BenchmarkRunner.benchmark] repeat ort {model_name!r}")
@@ -730,37 +872,79 @@ class BenchmarkRunner:
                 if "err_warmup" not in stats:
                     begin = time.perf_counter()
                     for _ in range(repeat):
-                        got = self.ort_run(sess, feeds)
+                        self.ort_run(sess, feeds)
                     stats["time_repeat"] = (time.perf_counter() - begin) / repeat
+                if self.device == "cuda":
+                    stats["gpu_allocation_9_after_export_repeat"] = (
+                        torch.cuda.memory_allocated(0)
+                    )
+                    if self.verbose > 1:
+                        print(
+                            f"[benchmarkrunner.benchmark] gpu_allocation={stats['gpu_allocation_9_after_export_repeat']} "
+                            f"reserved={torch.cuda.memory_reserved(0)} after export repeat"
+                        )
             else:
-                # warmup
+                # warmup session
                 if exporter == "eager":
                     # no try, catch needed for eager mode.
                     begin = time.perf_counter()
                     for _ in range(warmup):
-                        got = sess.run(feeds)
+                        if _ == warmup - 1:
+                            got = sess.run(feeds)
+                        else:
+                            sess.run(feeds)
                     stats["time_warmup"] = (time.perf_counter() - begin) / warmup
                 else:
                     begin = time.perf_counter()
-                    try:
+                    if quiet:
+                        try:
+                            for _ in range(warmup):
+                                if _ == warmup - 1:
+                                    got = sess.run(feeds)
+                                else:
+                                    sess.run(feeds)
+                        except Exception as e:
+                            stats["err_warmup"] = str(e)
+                    else:
                         for _ in range(warmup):
-                            got = sess.run(feeds)
-                    except Exception as e:
-                        stats["err_warmup"] = str(e)
+                            if _ == warmup - 1:
+                                got = sess.run(feeds)
+                            else:
+                                sess.run(feeds)
                     stats["time_warmup"] = (time.perf_counter() - begin) / warmup
+                if self.device == "cuda":
+                    stats["gpu_allocation_8_after_export_warmup"] = (
+                        torch.cuda.memory_allocated(0)
+                    )
+                    if self.verbose > 1:
+                        print(
+                            f"[benchmarkrunner.benchmark] gpu_allocation={stats['gpu_allocation_8_after_export_warmup']} "
+                            f"reserved={torch.cuda.memory_reserved(0)} after export warmup"
+                        )
+                got = self.move_to("cpu", got)
 
                 if self.verbose > 1:
                     print(f"[BenchmarkRunner.benchmark] repeat torch {model_name!r}")
 
-                # repeat
+                # repeat session
                 if "err_warmup" not in stats:
                     begin = time.perf_counter()
                     for _ in range(repeat):
-                        got = sess.run(feeds)
+                        sess.run(feeds)
                     stats["time_repeat"] = (time.perf_counter() - begin) / repeat
 
+                if self.device == "cuda":
+                    stats["gpu_allocation_9_after_export_repeat"] = (
+                        torch.cuda.memory_allocated(0)
+                    )
+                    if self.verbose > 1:
+                        print(
+                            f"[benchmarkrunner.benchmark] gpu_allocation={stats['gpu_allocation_9_after_export_repeat']} "
+                            f"reserved={torch.cuda.memory_reserved(0)} after export repeat"
+                        )
+
             if "time_repeat" in stats:
-                stats["speedup"] = stats["time_eager_repeat"] / stats["time_repeat"]
+                stats["speedup"] = stats["time_repeat_eager"] / stats["time_repeat"]
                 stats["speedup_increase"] = stats["speedup"] - 1
 
             # discrepancies

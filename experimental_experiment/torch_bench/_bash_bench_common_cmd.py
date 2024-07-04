@@ -28,6 +28,7 @@ def bash_bench_parse_args(name: str, doc: str, new_args: Optional[List[str]] = N
         disable_pattern=("", "a list of optimization patterns to disable"),
         enable_pattern=("default", "list of optimization patterns to enable"),
         dump_folder=("dump_bash_bench", "where to dump the exported model"),
+        quiet=("1", "catch exception and go on or fail"),
         output_data=(
             f"output_data_{name}.csv",
             "when running multiple configuration, save the results in that file",
@@ -118,12 +119,13 @@ def bash_bench_main(name: str, doc: str, args: Optional[List[str]] = None):
                 runner.enumerate_test_models(
                     process=args.process in ("1", 1, "True", True),
                     exporter=args.exporter,
+                    quiet=args.quiet in ("1", 1, "True", True),
                 )
             )
             if len(data) == 1:
-                for k, v in data[0].items():
+                for k, v in sorted(data[0].items()):
                     print(f":{k},{v};")
             else:
-                print(f"::model_name,{name};")
+                print(f":model_name,{name};")
                 print(f":device,{args.device};")
                 print(f":ERROR,unexpected number of data {len(data)};")
