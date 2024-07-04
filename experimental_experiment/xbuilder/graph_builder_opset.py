@@ -134,6 +134,9 @@ class Opset:
                 # torch.fx.Node
                 assert i.name is not None, f"Unexpected name for type {type(i)}"
                 new_inputs.append(i.name)
+            elif i is None:
+                # Optional input
+                new_inputs.append("")
             else:
                 cst_name = self.builder.make_initializer(
                     "", i, msg=f"input {i} of op_type={op_type!r}"

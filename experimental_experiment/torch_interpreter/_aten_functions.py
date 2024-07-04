@@ -140,6 +140,18 @@ def aten_and_(
     return aten_and(g, sts, outputs, x, y, name="and_")
 
 
+def aten_logical_and(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    y: T,
+    name="and",
+) -> T:
+    "and"
+    return aten_and(g, sts, outputs, x, y, name="logical_and")
+
+
 def aten_addmm(
     g: GraphBuilder,
     sts: Optional[Dict[str, Any]],
@@ -675,9 +687,9 @@ def aten_clamp(
 
     itype = g.get_type(x)
     dtype = tensor_dtype_to_np_dtype(itype)
-    if min is not None:
+    if max is None:
         res = g.op.Clip(x, np.array([min], dtype=dtype), outputs=outputs)
-    elif max is not None:
+    elif min is None:
         res = g.op.Clip(x, None, np.array([max], dtype=dtype), outputs=outputs)
     else:
         res = g.op.Clip(
@@ -1497,6 +1509,13 @@ def aten_ge(
     return res
 
 
+def aten_ge_Scalar(
+    g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T, y: T
+) -> T:
+    "greater or equal"
+    return aten_ge(g, sts, outputs, x, y, name="ge_Scalar")
+
+
 def aten_ge_Tensor(
     g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T, y: T
 ) -> T:
@@ -1734,6 +1753,13 @@ def aten_le(
     if not sts:
         set_type_shape_binary_op(g, outputs[0], x, y, cmp_op=True)
     return res
+
+
+def aten_le_Scalar(
+    g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T, y: T
+) -> T:
+    "less or equal"
+    return aten_le(g, sts, outputs, x, y, name="le_Scalar")
 
 
 def aten_le_Tensor(
@@ -2744,6 +2770,35 @@ def _causal_attention_mask(
         name=name,
     )
     return new_attn_mask
+
+
+def aten_scalar_tensor(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    s: float,
+    dtype: Optional[int] = None,
+    layout: str = "",
+    device: Optional["torch.device"] = None,  # noqa: F821
+    pin_memory=None,
+) -> T:
+    """constant"""
+    import torch
+
+    assert (
+        layout == torch.strided
+    ), f"not implemented for layout={layout!r}{g.get_debug_msg()}"
+    assert (
+        pin_memory is None
+    ), f"not implemented for pin_memory={pin_memory!r}{g.get_debug_msg()}"
+    assert dtype is not None, f"not implemented for dtype={dtype!r}{g.get_debug_msg()}"
+    assert isinstance(
+        s, (float, int)
+    ), f"not implemented for type(s)={type(s)!r}{g.get_debug_msg()}"
+    return g.op.Identity(
+        np.array(s, dtype=tensor_dtype_to_np_dtype(torch_dtype_to_onnx_dtype(dtype))),
+        outputs=outputs,
+    )
 
 
 def aten_scaled_dot_product_attention(
@@ -4113,6 +4168,34 @@ def aten__unsafe_view(
 ) -> T:
     "slice"
     return aten_view(g, sts, outputs, x, size, node_name="_unsafe_view")
+
+
+def aten_where(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    condition: T,
+    x: T,
+    other: T,
+    name: str = "where",
+) -> T:
+    """where"""
+    res = g.op.Where(condition, x, other, name=name)
+    if sts:
+        set_type_shape_binary_op(g, res, condition, x, other, begin=1)
+    return res
+
+
+def aten_where_self(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    condition: T,
+    x: T,
+    other: T,
+) -> T:
+    """where"""
+    return aten_where(g, sts, outputs, condition, x, other, name="where_self")
 
 
 def aten_zeros(
