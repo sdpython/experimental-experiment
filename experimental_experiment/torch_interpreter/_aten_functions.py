@@ -1,3 +1,4 @@
+from enum import Enum
 from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 import numpy as np
 from onnx import TensorProto
@@ -2385,6 +2386,12 @@ def aten_new_zeros(
     )
 
 
+class Reduction(Enum):
+    NONE = 0
+    MEAN = 1
+    SUM = 2
+
+
 def aten_nll_loss_forward(
     g: GraphBuilder,
     sts: Optional[Dict[str, Any]],
@@ -2397,7 +2404,6 @@ def aten_nll_loss_forward(
     name: str = "nll_loss_forward",
 ) -> Tuple[T, T]:
     """nll_loss_forward"""
-    print("****", reduction)
     n_dims = g.get_rank(self)
     channel_dim = 1
     if n_dims < 2:
@@ -2417,9 +2423,12 @@ def aten_nll_loss_forward(
         g.op.Equal(target, np.array([ignore_index], dtype=np.int64), name=name),
         name=name,
     )
-    itype = g.get_type(target)
-    dtype = tensor_dtype_to_np_dtype(itype)
-    safe_target = g.op.Where(target_not, target, np.array([0], dtype=dtype), name=name)
+    safe_target = g.op.Where(
+        target_not,
+        target,
+        np.array([0], dtype=tensor_dtype_to_np_dtype(g.get_type(target))),
+        name=name,
+    )
     g.set_type_shape_or_rank(safe_target, like=target)
     safe_target_ = g.op.UnsqueezeAnyOpset(
         safe_target, np.array([channel_dim], dtype=np.int64), name=name
@@ -2436,14 +2445,23 @@ def aten_nll_loss_forward(
         ),
         name=name,
     )
+    g.set_type(result_, g.get_type(self))
+    g.set_rank(result_, g.get_rank(self) - 1)
 
     # result = torch.where(target != ignore_index, result, 0)
-    result = g.op.Where(target_not, result_, np.array([0], dtype=dtype), name=name)
+    result = g.op.Where(
+        target_not,
+        result_,
+        np.array([0], dtype=tensor_dtype_to_np_dtype(g.get_type(self))),
+        name=name,
+    )
     g.set_type_shape_or_rank(result, like=result_)
 
     if reduction is None and n_dims > 1:
         return g.op.Identity(result, name=name, outputs=outputs[:1]), g.op.Identity(
-            np.array([0], dtype=dtype), name=name, outputs=outputs[1:]
+            np.array([0], dtype=tensor_dtype_to_np_dtype(g.get_type(result))),
+            name=name,
+            outputs=outputs[1:],
         )
 
     if weight is not None:
@@ -2461,20 +2479,32 @@ def aten_nll_loss_forward(
         )
 
         # wsum = torch.where(target != ignore_index, wsum, 0)
-        wsum_ = g.op.Where(target_not, wsum, np.array([0], dtype=dtype), name=name)
+        wsum_ = g.op.Where(
+            target_not,
+            wsum,
+            np.array([0], dtype=tensor_dtype_to_np_dtype(g.get_type(wsum))),
+            name=name,
+        )
         g.set_type_shape_or_rank(wsum_, like=wsum)
-        total_weight = g.op.ReduceSumAnyOpset(wsum_, name=name, outputs=outputs[1:])
+        total_weight = g.op.ReduceSumAnyOpset(
+            wsum_, name=name, outputs=outputs[1:], keepdims=0
+        )
     else:
         # total_weight = (target != ignore_index).sum().to(self)
         total_weight = g.op.ReduceSumAnyOpset(
-            g.op.Cast(target_not, to=itype, name=name), name=name, outputs=outputs[1:]
+            g.op.Cast(target_not, to=g.get_type(self), name=name),
+            name=name,
+            outputs=outputs[1:],
+            keepdims=0,
         )
 
-    if reduction == "sum":
-        final_result = g.op.ReduceSumAnyOpset(result, name=name, outputs=outputs[:1])
-    elif reduction == "mean":
+    if reduction == Reduction.SUM.value:
+        final_result = g.op.ReduceSumAnyOpset(
+            result, name=name, outputs=outputs[:1], keepdims=0
+        )
+    elif reduction == Reduction.MEAN.value:
         final_result = g.op.Div(
-            g.op.ReduceSumAnyOpset(result, name=name),
+            g.op.ReduceSumAnyOpset(result, name=name, keepdims=0),
             total_weight,
             outputs=outputs[:1],
             name=name,
@@ -2885,8 +2915,9 @@ def aten_scalar_tensor(
     """constant"""
     import torch
 
-    assert (
-        layout in (None, torch.strided)
+    assert layout in (
+        None,
+        torch.strided,
     ), f"not implemented for layout={layout!r}{g.get_debug_msg()}"
     assert (
         pin_memory is None

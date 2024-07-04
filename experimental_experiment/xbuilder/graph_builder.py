@@ -1,5 +1,6 @@
 import pprint
 import time
+import os
 import sys
 from collections import Counter
 from typing import Any, Dict, List, Optional, Sequence, Set, Tuple, Union
@@ -105,6 +106,9 @@ class GraphBuilder:
 
     - `_raise_list: Set[str]`: the builder stop if a result falls in that list
       (debugging tool)
+
+    You can setup environment variable ``ONNXSTOP`` to raise an exception when the type or shape
+    of a variable is set.
     """
 
     _op_type_element_wise_types = element_wise_binary_op_types()
@@ -223,6 +227,7 @@ class GraphBuilder:
 
         self.op = Opset(self)
         self.anyop = Opset(self, allow_unknown=True)
+        self._debug_stop = os.environ.get("ONNXSTOP", "#?#")
 
     @property
     def output_names(self) -> List[str]:
@@ -682,20 +687,27 @@ class GraphBuilder:
                         self.torch.float32,
                         self.torch.float64,
                         self.torch.float16,
+                        self.torch.bfloat16,
                     ):
                         return False
                     if len(size) >= 2:
                         return False
-                    if el_type == self.torch.int64 and len(size) == 0:
+                    if (
+                        el_type in (self.torch.int64, self.torch.int32)
+                        and len(size) == 0
+                    ):
                         # A single integer with no shape, it looks like a dimension.
                         # Let's assume it is. It is more efficient to consider it as
                         # a dimension.
-                        return False
+                        return True
+                    # In another case, let's assume it is not.
+                    return False
                 else:
                     if elem_type is not None and elem_type in (
                         self.torch.float32,
                         self.torch.float64,
                         self.torch.float16,
+                        self.torch.bfloat16,
                     ):
                         return False
                     if shape is not None and len(shape) >= 2:
@@ -732,6 +744,7 @@ class GraphBuilder:
                         self.torch.float32,
                         self.torch.float64,
                         self.torch.float16,
+                        self.torch.bfloat16,
                     ):
                         return False
                     if len(size) >= 2:
@@ -795,6 +808,8 @@ class GraphBuilder:
         :param set_if_more_precise: change the shape if it is more precise
         :param exc: raise an exception if inconsistency
         """
+        if name == self._debug_stop:
+            raise AssertionError(f"Requested stop, name={name!r}, shape={shape}")
         assert isinstance(name, str), f"Unexpected type {type(name)} for name."
         assert "torch.Size" not in str(shape), (
             f"Unexpected type {type(shape)} for a "
@@ -853,6 +868,8 @@ class GraphBuilder:
         :param name: name
         :param dtype: element type (an integer, ONNX)
         """
+        if name == self._debug_stop:
+            raise AssertionError(f"Requested stop, name={name!r}, dtype={dtype}")
         assert isinstance(name, str), f"Unexpected type {type(name)} for name."
         if isinstance(dtype, int):
             int_type = dtype
