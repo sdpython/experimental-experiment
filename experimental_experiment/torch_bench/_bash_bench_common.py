@@ -677,9 +677,9 @@ class BenchmarkRunner:
                 print(f"[BenchmarkRunner.benchmark] load model {model_name!r}")
 
             stats = {
-                "torch_version": torch.__version__,
-                "transformers_version": transformers.__version__,
-                "onnxruntime_version": transformers.__version__,
+                "version_torch": torch.__version__,
+                "version_transformers": transformers.__version__,
+                "version_onnxruntime": onnxruntime.__version__,
             }
             stats.update(machine_specs)
             if self.device == "cuda":
