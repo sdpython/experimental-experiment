@@ -2636,7 +2636,7 @@ class GraphBuilder:
             if len(rows) > 1000:
                 rows.append("...")
                 rows.append(
-                    f"Stopped with {len(self.initiliazer)} "
+                    f"Stopped with {len(self.initializers_dict)} "
                     f"initializers and {len(self.nodes)} nodes."
                 )
                 return "\n".join(rows)

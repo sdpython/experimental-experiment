@@ -148,10 +148,9 @@ class DynamoInterpreter:
                     node.name, None, None, is_dimension=False
                 )
             if example_value is None:
-                raise RuntimeError(
-                    f"Unable to guess what node is, node={node}, "
-                    f"meta={node.meta} {node.__dict__}."
-                )
+                # The input is not defined.
+                # We return.
+                return
             if isinstance(example_value, self.builder.torch.SymInt):
                 # torch.SymInt
                 self.builder.make_dynamic_object(node.name, example_value)

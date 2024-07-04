@@ -6,7 +6,7 @@ import re
 import subprocess
 import sys
 from argparse import Namespace
-from typing import Any, Dict, List, Tuple, Union
+from typing import Any, Dict, List, Tuple, Union, Optional
 
 
 class BenchmarkError(RuntimeError):
@@ -15,12 +15,12 @@ class BenchmarkError(RuntimeError):
 
 def get_machine() -> Dict[str, Union[str, int, float, Tuple[int, int]]]:
     """
-    Returns the machine specification.
+    Returns the machine specifications.
     """
     config: Dict[str, Union[str, int, float, Tuple[int, int]]] = dict(
         machine=str(platform.machine()),
         processor=str(platform.processor()),
-        version=str(sys.version),
+        version=str(sys.version).split()[0],
         cpu=int(multiprocessing.cpu_count()),
         executable=str(sys.executable),
     )
@@ -86,6 +86,8 @@ def run_benchmark(
     verbose: int = 0,
     stop_if_exception: bool = True,
     dump: bool = False,
+    temp_output_data: Optional[str] = None,
+    dump_std: Optional[str] = None,
 ) -> List[Dict[str, Union[str, int, float, Tuple[int, int]]]]:
     """
     Runs a script multiple times and extract information from the output
@@ -95,7 +97,9 @@ def run_benchmark(
     :param configs: list of execution to do
     :param stop_if_exception: stop if one experiment failed, otherwise continue
     :param verbose: use tqdm to follow the progress
-    :param dump: dump onnx file
+    :param dump: dump onnx file, sets variable ONNXRT_DUMP_PATH
+    :param temp_output_data: to save the data after every run to avoid losing data
+    :param dump_std: dumps stdout and stderr in this folder
     :return: values
     """
     assert configs, f"No configuration was given (script_name={script_name!r})"
@@ -123,6 +127,16 @@ def run_benchmark(
         out, err = res
         sout = out.decode("utf-8", errors="ignore")
         serr = err.decode("utf-8", errors="ignore")
+
+        if dump_std:
+            if not os.path.exists(dump_std):
+                os.makedirs(dump_std)
+            root = os.path.split(script_name)[-1]
+            filename = os.path.join(dump_std, f"{root}.{i}")
+            with open(f"{filename}.stdout", "w") as f:
+                f.write(sout)
+            with open(f"{filename}.stderr", "w") as f:
+                f.write(serr)
 
         if "ONNXRuntimeError" in serr or "ONNXRuntimeError" in sout:
             if stop_if_exception:
@@ -152,6 +166,12 @@ def run_benchmark(
         if verbose >= 10:
             print("--------------- OUTPUT")
             print(sout)
+        if temp_output_data:
+            df = make_dataframe_from_benchmark_data(data, detailed=False)
+            if verbose > 2:
+                print("Prints the results into file {temp_output_data!r}")
+            df.to_csv(temp_output_data, index=False)
+            df.to_excel(temp_output_data + ".xlsx", index=False)
 
     return data
 

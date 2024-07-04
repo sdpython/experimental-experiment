@@ -1,3 +1,4 @@
+import os
 import pprint
 from typing import Optional, List
 
@@ -29,6 +30,11 @@ def bash_bench_parse_args(name: str, doc: str, new_args: Optional[List[str]] = N
         enable_pattern=("default", "list of optimization patterns to enable"),
         dump_folder=("dump_bash_bench", "where to dump the exported model"),
         quiet=("1", "catch exception and go on or fail"),
+        dtype=(
+            "",
+            "converts the model using this type, empty for no change, "
+            "possible value, float16, float32, ...",
+        ),
         output_data=(
             f"output_data_{name}.csv",
             "when running multiple configuration, save the results in that file",
@@ -81,11 +87,18 @@ def bash_bench_main(name: str, doc: str, args: Optional[List[str]] = None):
 
         if multi_run(args):
             configs = make_configs(args)
+            if args.output_data:
+                name, ext = os.path.splitext(args.output_data)
+                temp_output_data = f"{name}.temp{ext}"
+            else:
+                temp_output_data = None
             data = run_benchmark(
                 "experimental_experiment.torch_bench.bash_bench_huggingface",
                 configs,
                 args.verbose,
                 stop_if_exception=False,
+                temp_output_data=temp_output_data,
+                dump_std="dump_test_models",
             )
             if args.verbose > 2:
                 pprint.pprint(data if args.verbose > 3 else data[:2])
@@ -114,12 +127,14 @@ def bash_bench_main(name: str, doc: str, args: Optional[List[str]] = None):
                 target_opset=args.target_opset,
                 repeat=args.repeat,
                 warmup=args.warmup,
+                dtype=args.dtype,
             )
             data = list(
                 runner.enumerate_test_models(
                     process=args.process in ("1", 1, "True", True),
                     exporter=args.exporter,
                     quiet=args.quiet in ("1", 1, "True", True),
+                    folder="dump_test_models",
                 )
             )
             if len(data) == 1:

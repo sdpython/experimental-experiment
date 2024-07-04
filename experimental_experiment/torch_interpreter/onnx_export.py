@@ -221,7 +221,9 @@ def _make_builder_interpreter(
         )
 
         if verbose > 0:
-            msg = ", ".join(f"{a.dtype}:{tuple(a.shape)})" for a in args)
+            msg = ", ".join(
+                ("None" if a is None else f"{a.dtype}:{tuple(a.shape)})") for a in args
+            )
             print(f"[_make_builder_interpreter] args={msg}")
             print(f"[_make_builder_interpreter] dynamic_shapes={dynamic_shapes}")
             if verbose > 2:

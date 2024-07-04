@@ -448,6 +448,7 @@ class HuggingfaceRunner(BenchmarkRunner):
         fake_tensor: bool = False,
         no_grad: bool = True,
         target_opset: int = 18,
+        dtype: Optional[Any] = None,
     ):
         super().__init__(
             "huggingface",
@@ -462,6 +463,7 @@ class HuggingfaceRunner(BenchmarkRunner):
             repeat=repeat,
             fake_tensor=fake_tensor,
             no_grad=no_grad,
+            dtype=dtype,
         )
         if not self.EXTRA_MODELS:
             self.initialize()

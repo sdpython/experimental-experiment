@@ -661,6 +661,36 @@ def aten_cat(
     return res
 
 
+def aten_clamp(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    min: Optional[float] = None,
+    max: Optional[float] = None,
+) -> T:
+    """clip"""
+    if min is None and max is None:
+        return g.op.Identity(x, outputs=outputs)
+
+    itype = g.get_type(x)
+    dtype = tensor_dtype_to_np_dtype(itype)
+    if min is not None:
+        res = g.op.Clip(x, np.array([min], dtype=dtype), outputs=outputs)
+    elif max is not None:
+        res = g.op.Clip(x, None, np.array([max], dtype=dtype), outputs=outputs)
+    else:
+        res = g.op.Clip(
+            x,
+            np.array([min], dtype=dtype),
+            np.array([max], dtype=dtype),
+            outputs=outputs,
+        )
+    if not sts:
+        set_type_shape_unary_op(g, res, x)
+    return res
+
+
 def aten_clone(
     g: GraphBuilder,
     sts: Optional[Dict[str, Any]],
@@ -949,7 +979,7 @@ def aten_embedding(
 ) -> T:
     "embedding"
     if (
-        (padding_idx is not None and padding_idx != -1)
+        (padding_idx is not None and padding_idx not in (0, -1))
         or scale_grad_by_freq
         or sparse
         or max_norm is not None
@@ -962,7 +992,7 @@ def aten_embedding(
                 and isinstance(shape[0], int)
                 and shape[0] == padding_idx + 1
             ):
-                # padding_idx should probabily be -1, shape are probably dynamic
+                # padding_idx should probably be -1, shape are probably dynamic
                 padding_idx = -1
                 exc = False
         if exc:
@@ -2384,7 +2414,9 @@ def aten_ones(
         isize = g.op.Cast(size, to=TensorProto.INT64)
         new_shape = None
     if dtype is None:
-        dtype = TensorProto.FLOAT
+        import torch
+
+        dtype = torch.float32
     res = g.op.ConstantOfShape(
         isize,
         value=from_array(

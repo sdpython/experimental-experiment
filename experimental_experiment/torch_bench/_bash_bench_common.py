@@ -3,7 +3,7 @@ import inspect
 import os
 import gc
 import time
-from typing import Any, Callable, Set, Optional, Tuple, Iterator, Dict, List
+from typing import Any, Callable, Set, Optional, Tuple, Iterator, Dict, List, Union
 import numpy as np
 import onnx
 import torch
@@ -148,6 +148,19 @@ class ModelRunner:
     :param repeat: number of iteration to repeat the model
     """
 
+    @classmethod
+    def _to_type(cls, o, dtype):
+        assert dtype in {
+            torch.float32,
+            torch.float16,
+            torch.bfloat16,
+        }, f"Unexpected value for dtype={dtype}."
+        if dtype is None:
+            return o
+        if o.dtype in {torch.float32, torch.float64, torch.float16, torch.bfloat16}:
+            return o.to(dtype)
+        return o
+
     def __init__(
         self,
         model: Any,
@@ -160,7 +173,7 @@ class ModelRunner:
         if dtype is None:
             cvt = lambda o: o.to(device)  # noqa: E731
         else:
-            cvt = lambda o: o.to(dtype).to(device)  # noqa: E731
+            cvt = lambda o: self._to_type(o, dtype).to(device)  # noqa: E731
 
         if isinstance(inputs, dict):
             inputs = {k: cvt(v) for k, v in inputs.items()}
@@ -174,19 +187,24 @@ class ModelRunner:
             sig = inspect.signature(model.forward)
             added = 0
             new_inputs = []
+            new_names = []
+            use_default = []
             for n in sig.parameters:
                 if n in inputs:
                     new_inputs.append(inputs[n])
                     added += 1
-                    if added == len(inputs):
-                        break
+                    use_default.append(False)
                 else:
                     new_inputs.append(sig.parameters[n].default)
+                    use_default.append(True)
+                new_names.append(n)
             assert added == len(inputs), (
                 f"Unexpected input name in {list(sorted(inputs))} and "
                 f"parameters={list(sig.parameters)}"
             )
             inputs = tuple(new_inputs)
+            self.raw_input_names = new_names
+            self.raw_use_defaults = use_default
 
         self.model = WrappedModel(cvt(model))
         self.device = device
@@ -324,14 +342,15 @@ class ModelRunner:
         assert no_grad, "no_grad false not implemented yet"
         from ..torch_interpreter import to_onnx
 
-        onx = to_onnx(
-            self.model,
-            self.inputs,
-            optimize=bool(optimization),
-            large_model=True,
-            verbose=verbose,
-            target_opset=target_opset,
-        )
+        with torch.no_grad():
+            onx = to_onnx(
+                self.model,
+                self.inputs,
+                optimize=bool(optimization),
+                large_model=True,
+                verbose=0,  # max(verbose - 1, 0),
+                target_opset=target_opset,
+            )
         onx.save(name)
         return onx
 
@@ -349,13 +368,14 @@ class ModelRunner:
         assert not dynamic, "dynamic true not implemented yet"
         assert no_grad, "no_grad false not implemented yet"
 
-        torch.onnx.export(
-            self.model,
-            self.inputs,
-            name,
-            do_constant_folding=False,
-            opset_version=target_opset,
-        )
+        with torch.no_grad():
+            torch.onnx.export(
+                self.model,
+                self.inputs,
+                name,
+                do_constant_folding=False,
+                opset_version=target_opset,
+            )
         return onnx.load(name, load_external_data=False)
 
     def _to_onnx_dynamo(
@@ -372,14 +392,15 @@ class ModelRunner:
         assert not dynamic, "dynamic true not implemented yet"
         assert no_grad, "no_grad false not implemented yet"
 
-        torch.onnx.export(
-            self.model,
-            self.inputs,
-            name,
-            do_constant_folding=False,
-            opset_version=target_opset,
-            dynamo=True,
-        )
+        with torch.no_grad():
+            torch.onnx.export(
+                self.model,
+                self.inputs,
+                name,
+                do_constant_folding=False,
+                opset_version=target_opset,
+                dynamo=True,
+            )
         return onnx.load(name, load_external_data=False)
 
     def _to_onnx_dynamo2(
@@ -396,11 +417,15 @@ class ModelRunner:
         assert not dynamic, "dynamic true not implemented yet"
         assert no_grad, "no_grad false not implemented yet"
 
-        exported = torch.onnx.dynamo_export(
-            self.model,
-            *self.inputs,
-            opset_version=target_opset,
-        )
+        with torch.no_grad():
+            exported = torch.onnx.dynamo_export(
+                self.model,
+                *self.inputs,
+                export_options=torch.onnx.ExportOptions(
+                    dynamic_shapes=dynamic,
+                    # registry=torch.onnx.OnnxRegistry()
+                ),
+            )
         exported.save(name)
         return onnx.load(name, load_external_data=False)
 
@@ -419,7 +444,9 @@ class ModelRunner:
         assert no_grad, "no_grad false not implemented yet"
         from torch.export import export
 
-        return export(self.model, self.inputs)
+        with torch.no_grad():
+            res = export(self.model, self.inputs)
+        return res
 
     def _to_eager(
         self,
@@ -456,7 +483,9 @@ class ModelRunner:
         ):
             return gm.forward
 
-        return torch.compile(self.model, backend=lambda gm, inputs: gm.forward)
+        with torch.no_grad():
+            res = torch.compile(self.model, backend=lambda gm, inputs: gm.forward)
+        return res
 
     def make_feeds(self, exporter: str, filename: Optional[str] = None):
         """Creates feed inputs."""
@@ -465,14 +494,18 @@ class ModelRunner:
         onx = onnx.load(filename, load_external_data=False)
         names = [_.name for _ in onx.graph.input]
         if isinstance(self.inputs, dict):
-            assert set(names) == set(
-                self.inputs
-            ), f"Input names mismatch, got {set(self.inputs)}, expecting {set(names)}."
+            assert set(names) == set(self.inputs), (
+                f"Input names mismatch, "
+                f"got {set(self.inputs)}, expecting {set(names)}."
+            )
             return self.inputs
-        assert len(names) == len(
-            self.inputs
-        ), f"Mismatch number of outputs, {len(self.inputs)} inputs for {names}"
-        return dict(zip(names, self.inputs))
+        inputs = [i for i, d in zip(self.inputs, self.raw_use_defaults) if not d]
+        assert len(names) == len(inputs), (
+            f"Mismatch number of outputs, {len(inputs)} inputs for {names}. "
+            f"self.raw_input_names={self.raw_input_names}, "
+            f"self.raw_use_defaults={self.raw_use_defaults}"
+        )
+        return dict(zip(names, inputs))
 
 
 class BenchmarkRunner:
@@ -508,7 +541,7 @@ class BenchmarkRunner:
         training: bool = False,
         use_eval_mode: bool = False,
         enable_activation_checkpointing: bool = False,
-        dtype: Optional[torch.dtype] = None,
+        dtype: Optional[Union[str, torch.dtype]] = None,
         verbose: int = 0,
         warmup: int = 10,
         repeat: int = 30,
@@ -526,7 +559,10 @@ class BenchmarkRunner:
         self.training = training
         self.use_eval_mode = use_eval_mode
         self.enable_activation_checkpointing = enable_activation_checkpointing
-        self.dtype = dtype
+        if isinstance(dtype, str):
+            self.dtype = getattr(torch, dtype) if dtype else None
+        else:
+            self.dtype = dtype
         self.repeat = repeat
         self.warmup = warmup
         self.fake_tensor = fake_tensor
@@ -620,6 +656,9 @@ class BenchmarkRunner:
 
         import transformers
         import onnxruntime
+        from experimental_experiment.bench_run import get_machine
+
+        machine_specs = get_machine()
 
         if not os.path.exists(folder):
             os.makedirs(folder)
@@ -638,6 +677,7 @@ class BenchmarkRunner:
                 "transformers_version": transformers.__version__,
                 "onnxruntime_version": transformers.__version__,
             }
+            stats.update(machine_specs)
             if self.device == "cuda":
                 stats["gpu_allocation_0_before_loading"] = torch.cuda.memory_allocated(
                     0
@@ -686,7 +726,7 @@ class BenchmarkRunner:
             # warmup
             if self.verbose > 1:
                 print(
-                    f"[BenchmarkRunner.benchmark] warmup model {model_name!r}"
+                    f"[BenchmarkRunner.benchmark] warmup model {model_name!r} "
                     f"- {warmup} times"
                 )
 
@@ -730,7 +770,7 @@ class BenchmarkRunner:
             # repeat
             if self.verbose > 1:
                 print(
-                    f"[BenchmarkRunner.benchmark] repeat model {model_name!r}"
+                    f"[BenchmarkRunner.benchmark] repeat model {model_name!r} "
                     f"- {repeat} times"
                 )
 

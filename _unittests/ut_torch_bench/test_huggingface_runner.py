@@ -50,7 +50,7 @@ class TestHuggingFaceRunner(ExtTestCase):
         self.assertEqual(len(data), 1)
 
     @skipif_ci_windows("not useful")
-    @requires_torch("2.3")
+    @requires_torch("2.5")
     @hide_stdout()
     @requires_onnxruntime_training()
     def test_test_model_32(self):
@@ -62,7 +62,7 @@ class TestHuggingFaceRunner(ExtTestCase):
         self.assertEqual(len(data), 1)
 
     @skipif_ci_windows("not useful")
-    @requires_torch("2.3")
+    @requires_torch("2.5")
     @hide_stdout()
     @requires_onnxruntime_training()
     def test_test_model_16(self):
