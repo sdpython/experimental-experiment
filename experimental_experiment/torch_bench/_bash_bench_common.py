@@ -750,7 +750,7 @@ class BenchmarkRunner:
                                     f"reserved={torch.cuda.memory_reserved(0)} after iteration {w}"
                                 )
                 except Exception as e:
-                    stats["ERR_warmup_eager"] = str(e)
+                    stats["ERR_warmup_eager"] = str(e).replace("\n", "_ ")
                     stats["time_warmup_eager"] = (time.perf_counter() - begin) / warmup
                     if self.verbose:
                         print(f"[benchmarkrunner.benchmark] time_warmup_eager {e}")
@@ -822,7 +822,6 @@ class BenchmarkRunner:
             filename = os.path.join(
                 folder, f"{model_name}-{exporter}-{self.device}-{self.dtype or ''}.onnx"
             )
-            stats["filename"] = filename
             begin = time.perf_counter()
             if quiet:
                 try:
@@ -838,7 +837,7 @@ class BenchmarkRunner:
                     )
                 except Exception as e:
                     stats["time_export"] = time.perf_counter() - begin
-                    stats["ERR_export"] = str(e)
+                    stats["ERR_export"] = str(e).replace("\n", "_ ")
                     if self.verbose:
                         print(f"[benchmarkrunner.benchmark] err_export {e}")
                     yield stats
@@ -865,11 +864,12 @@ class BenchmarkRunner:
                         f"reserved={torch.cuda.memory_reserved(0)} after export"
                     )
 
+            stats["filename"] = filename
             if quiet:
                 try:
                     feeds = model_runner.make_feeds(exporter, filename)
                 except AssertionError as e:
-                    stats["ERR_feeds"] = str(e)
+                    stats["ERR_feeds"] = str(e).replace("\n", "_ ")
                     if self.verbose:
                         print(f"[benchmarkrunner.benchmark] err_feeds {e}")
                     yield stats
@@ -939,7 +939,7 @@ class BenchmarkRunner:
                     except Exception as e:
                         if self.verbose:
                             print(f"[benchmarkrunner.benchmark] err_warmup {e}")
-                        stats["ERR_warmup"] = str(e)
+                        stats["ERR_warmup"] = str(e).replace("\n", "_ ")
                         stats["time_warmup"] = (time.perf_counter() - begin) / warmup
                         yield stats
                         continue
@@ -1002,7 +1002,7 @@ class BenchmarkRunner:
                         except Exception as e:
                             if self.verbose:
                                 print(f"[benchmarkrunner.benchmark] err_warmup {e}")
-                            stats["ERR_warmup"] = str(e)
+                            stats["ERR_warmup"] = str(e).replace("\n", "_ ")
                             stats["time_warmup"] = (
                                 time.perf_counter() - begin
                             ) / warmup

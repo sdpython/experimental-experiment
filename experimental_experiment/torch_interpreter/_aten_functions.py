@@ -2785,8 +2785,9 @@ def aten_scalar_tensor(
     """constant"""
     import torch
 
-    assert (
-        layout in (None, torch.strided)
+    assert layout in (
+        None,
+        torch.strided,
     ), f"not implemented for layout={layout!r}{g.get_debug_msg()}"
     assert (
         pin_memory is None
