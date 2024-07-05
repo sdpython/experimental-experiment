@@ -197,12 +197,10 @@ class ModelRunner:
                     added += 1
                     use_default.append(False)
                 else:
-                    value = (
-                        None
-                        if sig.parameters[n].default is inspect._empty
-                        else sig.parameters[n].default
-                    )
-                    new_inputs.append(value)
+                    if sig.parameters[n].default is inspect._empty:
+                        # probably one optional input
+                        continue
+                    new_inputs.append(sig.parameters[n].default)
                     use_default.append(True)
                 new_names.append(n)
             assert added == len(inputs), (
@@ -669,11 +667,13 @@ class BenchmarkRunner:
         from experimental_experiment.bench_run import get_machine
 
         machine_specs = get_machine()
+        initial_no_grad = torch.is_grad_enabled()
 
         if not os.path.exists(folder):
             os.makedirs(folder)
         names = self.get_model_name_list()
         for model_name in names:
+            torch.set_grad_enabled(initial_no_grad)
             begin_total = time.perf_counter()
             if self.verbose:
                 print(
