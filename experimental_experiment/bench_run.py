@@ -9,8 +9,18 @@ from argparse import Namespace
 from typing import Any, Dict, List, Tuple, Union, Optional
 
 
+ILLEGAL_CHARACTERS_RE = re.compile(r"([\000-\010]|[\013-\014]|[\016-\037])")
+
+
 class BenchmarkError(RuntimeError):
     pass
+
+
+def _clean_string(s: str) -> str:
+    if next(ILLEGAL_CHARACTERS_RE.finditer(s), None):
+        ns = ILLEGAL_CHARACTERS_RE.sub("", s)
+        return ns
+    return s
 
 
 def get_machine() -> Dict[str, Union[str, int, float, Tuple[int, int]]]:
@@ -164,8 +174,8 @@ def run_benchmark(
             else:
                 metrics = {}
         metrics.update(config)
-        metrics["ERROR"] = serr
-        metrics["OUTPUT"] = sout
+        metrics["ERROR"] = _clean_string(serr)
+        metrics["OUTPUT"] = _clean_string(sout)
         metrics["CMD"] = f"[{' '.join(map(_cmd_string, cmd))}]"
         data.append(metrics)
         if verbose > 5:
@@ -179,7 +189,14 @@ def run_benchmark(
             if verbose > 2:
                 print("Prints the results into file {temp_output_data!r}")
             df.to_csv(temp_output_data, index=False)
-            df.to_excel(temp_output_data + ".xlsx", index=False)
+            try:
+                df.to_excel(temp_output_data + ".xlsx", index=False)
+            except Exception as e:
+                print(e)
+                import pprint
+
+                pprint.pprint(data)
+                raise
 
     return data
 

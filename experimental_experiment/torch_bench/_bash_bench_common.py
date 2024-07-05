@@ -664,7 +664,7 @@ class BenchmarkRunner:
 
         import transformers
         import onnxruntime
-        from experimental_experiment.bench_run import get_machine
+        from experimental_experiment.bench_run import get_machine, _clean_string
 
         machine_specs = get_machine()
         initial_no_grad = torch.is_grad_enabled()
@@ -763,7 +763,9 @@ class BenchmarkRunner:
                                     f"reserved={torch.cuda.memory_reserved(0)} after iteration {w}"
                                 )
                 except Exception as e:
-                    stats["ERR_warmup_eager"] = str(e).replace("\n", "_ ")
+                    stats["ERR_warmup_eager"] = _clean_string(str(e)).replace(
+                        "\n", "_ "
+                    )
                     stats["time_warmup_eager"] = (time.perf_counter() - begin) / warmup
                     if self.verbose:
                         print(f"[benchmarkrunner.benchmark] time_warmup_eager {e}")
@@ -832,9 +834,13 @@ class BenchmarkRunner:
                 print(f"[BenchmarkRunner.benchmark] export model {model_name!r}")
 
             # export
-            filename = os.path.join(
-                folder, f"{model_name}-{exporter}-{self.device}-{self.dtype or ''}.onnx"
+            pfilename = os.path.join(
+                folder, f"{model_name}-{exporter}-{self.device}-{self.dtype or ''}"
             )
+            if not os.path.exists(pfilename):
+                os.mkdir(pfilename)
+            filename = os.path.join(pfilename, "model.onnx")
+
             begin = time.perf_counter()
             if quiet:
                 try:
@@ -850,7 +856,7 @@ class BenchmarkRunner:
                     )
                 except Exception as e:
                     stats["time_export"] = time.perf_counter() - begin
-                    stats["ERR_export"] = str(e).replace("\n", "_ ")
+                    stats["ERR_export"] = _clean_string(str(e)).replace("\n", "_ ")
                     if self.verbose:
                         print(f"[benchmarkrunner.benchmark] err_export {e}")
                     yield stats
@@ -882,7 +888,7 @@ class BenchmarkRunner:
                 try:
                     feeds = model_runner.make_feeds(exporter, filename)
                 except AssertionError as e:
-                    stats["ERR_feeds"] = str(e).replace("\n", "_ ")
+                    stats["ERR_feeds"] = _clean_string(str(e)).replace("\n", "_ ")
                     if self.verbose:
                         print(f"[benchmarkrunner.benchmark] err_feeds {e}")
                     yield stats
@@ -960,7 +966,7 @@ class BenchmarkRunner:
                     except Exception as e:
                         if self.verbose:
                             print(f"[benchmarkrunner.benchmark] err_warmup {e}")
-                        stats["ERR_warmup"] = str(e).replace("\n", "_ ")
+                        stats["ERR_warmup"] = _clean_string(str(e)).replace("\n", "_ ")
                         stats["time_warmup"] = (time.perf_counter() - begin) / warmup
                         yield stats
                         continue
@@ -1028,7 +1034,9 @@ class BenchmarkRunner:
                         except Exception as e:
                             if self.verbose:
                                 print(f"[benchmarkrunner.benchmark] err_warmup {e}")
-                            stats["ERR_warmup"] = str(e).replace("\n", "_ ")
+                            stats["ERR_warmup"] = _clean_string(str(e)).replace(
+                                "\n", "_ "
+                            )
                             stats["time_warmup"] = (
                                 time.perf_counter() - begin
                             ) / warmup
