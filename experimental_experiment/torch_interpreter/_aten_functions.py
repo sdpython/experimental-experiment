@@ -2414,7 +2414,7 @@ def aten_nll_loss_forward(
         if n_dims > 1:
             shape = [1] * n_dims
             shape[channel_dim] = weight_shape[0]
-            w = g.op.Reshape(weight, np.array([shape], dtype=np.int64), name=name)
+            w = g.op.Reshape(weight, np.array(shape, dtype=np.int64), name=name)
         else:
             w = weight
         self = g.op.Mul(self, w, name=name)
@@ -2437,16 +2437,12 @@ def aten_nll_loss_forward(
     # result = -torch.gather(self, channel_dim, safe_target_).squeeze(channel_dim)
     result_ = g.op.Neg(
         g.op.SqueezeAnyOpset(
-            g.op.Gather(
-                self, np.array([channel_dim], dtype=np.int64), safe_target_, name=name
-            ),
+            g.op.GatherElements(self, safe_target_, axis=channel_dim, name=name),
             np.array([channel_dim], dtype=np.int64),
             name=name,
         ),
         name=name,
     )
-    g.set_type(result_, g.get_type(self))
-    g.set_rank(result_, g.get_rank(self) - 1)
 
     # result = torch.where(target != ignore_index, result, 0)
     result = g.op.Where(
@@ -2470,10 +2466,9 @@ def aten_nll_loss_forward(
         w_ = g.op.Expand(w, self_shape, name=name)
 
         # wsum = torch.gather(w, channel_dim, safe_target_).squeeze(channel_dim)
+        gathered = g.op.GatherElements(w_, safe_target_, axis=channel_dim, name=name)
         wsum = g.op.SqueezeAnyOpset(
-            g.op.Gather(
-                w_, np.array([channel_dim], dtype=np.int64), safe_target_, name=name
-            ),
+            gathered,
             np.array([channel_dim], dtype=np.int64),
             name=name,
         )
@@ -2919,17 +2914,20 @@ def aten_scalar_tensor(
         None,
         torch.strided,
     ), f"not implemented for layout={layout!r}{g.get_debug_msg()}"
-    assert (
-        pin_memory is None
-    ), f"not implemented for pin_memory={pin_memory!r}{g.get_debug_msg()}"
-    assert dtype is not None, f"not implemented for dtype={dtype!r}{g.get_debug_msg()}"
+    assert pin_memory in (None, False), (
+        f"not implemented for pin_memory={pin_memory!r}" f"{g.get_debug_msg()}"
+    )
     assert isinstance(
         s, (float, int)
     ), f"not implemented for type(s)={type(s)!r}{g.get_debug_msg()}"
-    return g.op.Identity(
-        np.array(s, dtype=tensor_dtype_to_np_dtype(torch_dtype_to_onnx_dtype(dtype))),
-        outputs=outputs,
-    )
+    if dtype is None:
+        if g.has_type(outputs[0]):
+            dtype = tensor_dtype_to_np_dtype(g.get_type(outputs[0]))
+        else:
+            np_dtype = np.float32  # if isinstance(s, float) else np.int64
+    else:
+        np_dtype = tensor_dtype_to_np_dtype(torch_dtype_to_onnx_dtype(dtype))
+    return g.op.Identity(np.array(s, dtype=np_dtype), outputs=outputs)
 
 
 def aten_scaled_dot_product_attention(

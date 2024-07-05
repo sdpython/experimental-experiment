@@ -2246,13 +2246,12 @@ class GraphBuilder:
                     self.set_shape(node.output[0], tuple(cst[0].shape))
         elif not sts:
             if node.op_type == "GatherElements":
-                if self.has_rank(node.input[0]) and self.has_rank(node.input[0]):
-                    r1 = self.get_rank(node.input[0])
-                    assert r1 == self.get_rank(node.input[1]), (
-                        f"Rank mismatch {r1} != {self.get_rank(node.input[1])} "
-                        f"(GatherElements:{node.input}){self.get_debug_msg()}"
-                    )
-                    self.set_rank(node.output[0], r1)
+                if self.has_type(node.input[0]):
+                    self.set_type(node.output[0], self.get_type(node.input[0]))
+                if self.has_shape(node.input[1]):
+                    self.set_shape(node.output[0], self.get_shape(node.input[1]))
+                elif self.has_rank(node.input[1]):
+                    self.set_rank(node.output[0], self.get_rank(node.input[1]))
 
     def get_attribute(
         self, node: NodeProto, att_name: str, exc: bool = True

@@ -2004,7 +2004,7 @@ class TestOperatorsCort(ExtTestCase):
         )
 
     def test_dim(self):
-        x = torch.ones((2, 2), requires_grad=True)
+        x = torch.ones((2, 2), requires_grad=True, dtype=torch.float32)
         self.assertONNX(
             lambda x: torch.scalar_tensor(x.dim()),
             x,
