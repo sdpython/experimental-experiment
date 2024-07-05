@@ -171,6 +171,9 @@ class GraphBuilder:
         self._unique_node_names = set()
         self._known_value_shape = {}
         self.constants_ = {}
+        self.op = Opset(self)
+        self.anyop = Opset(self, allow_unknown=True)
+        self._debug_stop = os.environ.get("ONNXSTOP", "#?#")
 
         if self.dynamic_shapes:
             for input_name, v in self.dynamic_shapes.items():
@@ -224,10 +227,6 @@ class GraphBuilder:
             raise NotImplementedError(
                 f"{type(target_opset_or_existing_proto)} is not supported."
             )
-
-        self.op = Opset(self)
-        self.anyop = Opset(self, allow_unknown=True)
-        self._debug_stop = os.environ.get("ONNXSTOP", "#?#")
 
     @property
     def output_names(self) -> List[str]:
