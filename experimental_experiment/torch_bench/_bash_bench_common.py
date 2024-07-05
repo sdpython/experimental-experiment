@@ -157,9 +157,11 @@ class ModelRunner:
         }, f"Unexpected value for dtype={dtype}."
         if dtype is None:
             return o
-        if o.dtype in {torch.float32, torch.float64, torch.float16, torch.bfloat16}:
-            return o.to(dtype)
-        return o
+        if hasattr(o, "dtype"):
+            if o.dtype in {torch.float32, torch.float64, torch.float16, torch.bfloat16}:
+                return o.to(dtype)
+            return o
+        return o.to(dtype)
 
     def __init__(
         self,
@@ -195,7 +197,12 @@ class ModelRunner:
                     added += 1
                     use_default.append(False)
                 else:
-                    new_inputs.append(sig.parameters[n].default)
+                    value = (
+                        None
+                        if sig.parameters[n].default is inspect._empty
+                        else sig.parameters[n].default
+                    )
+                    new_inputs.append(value)
                     use_default.append(True)
                 new_names.append(n)
             assert added == len(inputs), (
@@ -707,6 +714,9 @@ class BenchmarkRunner:
             stats["params_dtype"] = model_runner.parameters_dtype()
             stats["warmup"] = warmup
             stats["repeat"] = repeat
+            stats["no_grad"] = self.no_grad
+            stats["fake_tensor"] = self.fake_tensor
+            stats["training"] = self.training
             stats["exporter"] = exporter
             stats["input_size"] = self.obj_size(model_runner.inputs)
             stats["_index"] = f"{model_name}-{exporter}"
@@ -927,7 +937,15 @@ class BenchmarkRunner:
             if os.path.exists(filename):
                 stats["filesize"] = os.stat(filename).st_size
 
+            torch.set_grad_enabled(not self.no_grad)
+
             # warmup session
+            if self.verbose > 1:
+                print(
+                    f"[benchmarkrunner.benchmark] no_grad={self.no_grad} "
+                    f"torch.is_grad_enabled()={torch.is_grad_enabled()} before warmup"
+                )
+
             got = None
             if isinstance(exported_model, onnx.ModelProto):
                 # warmup session
@@ -962,6 +980,11 @@ class BenchmarkRunner:
                             f"[benchmarkrunner.benchmark] gpu_allocation={stats['gpu_allocation_8_after_export_warmup']} "
                             f"reserved={torch.cuda.memory_reserved(0)} after export warmup"
                         )
+                if self.verbose > 1:
+                    print(
+                        f"[benchmarkrunner.benchmark] torch.is_grad_enabled()="
+                        f"{torch.is_grad_enabled()} after warmup"
+                    )
                 got = self.move_to("cpu", got)
 
                 if self.verbose > 1:
@@ -1027,6 +1050,11 @@ class BenchmarkRunner:
                             f"[benchmarkrunner.benchmark] gpu_allocation={stats['gpu_allocation_8_after_export_warmup']} "
                             f"reserved={torch.cuda.memory_reserved(0)} after export warmup"
                         )
+                if self.verbose > 1:
+                    print(
+                        f"[benchmarkrunner.benchmark] torch.is_grad_enabled()="
+                        f"{torch.is_grad_enabled()} after warmup"
+                    )
                 got = self.move_to("cpu", got)
 
                 if self.verbose > 1:

@@ -31,7 +31,7 @@ def get_machine() -> Dict[str, Union[str, int, float, Tuple[int, int]]]:
 
     config["has_cuda"] = bool(torch.cuda.is_available())
     if config["has_cuda"]:
-        config["capability"] = torch.cuda.get_device_capability(0)
+        config["capability"] = ".".join(map(str, torch.cuda.get_device_capability(0)))
         config["device_name"] = str(torch.cuda.get_device_name(0))
     return config
 
@@ -80,6 +80,12 @@ def _extract_metrics(text: str) -> Dict[str, str]:
 def _make_prefix(script_name: str, index: int) -> str:
     name = os.path.splitext(script_name)[0]
     return f"{name}_dort_c{index}_"
+
+
+def _cmd_string(s: str) -> str:
+    if s == "":
+        return '""'
+    return s.replace('"', '\\"')
 
 
 def run_benchmark(
@@ -160,7 +166,7 @@ def run_benchmark(
         metrics.update(config)
         metrics["ERROR"] = serr
         metrics["OUTPUT"] = sout
-        metrics["CMD"] = f"[{' '.join(cmd)}]"
+        metrics["CMD"] = f"[{' '.join(map(_cmd_string, cmd))}]"
         data.append(metrics)
         if verbose > 5:
             print("--------------- ERROR")
@@ -220,14 +226,24 @@ def make_dataframe_from_benchmark_data(data: List[Dict], detailed: bool = True) 
                 g[k] = v
                 continue
             v = v.replace("\n", " -- ").replace(",", "_")
-            if len(v) > 200:
-                v = v[:200]
+            if len(v) > 300:
+                v = v[:300]
             g[k] = v
         new_data.append(g)
     df = pandas.DataFrame(new_data)
     sorted_columns = list(sorted(df.columns))
     if "_index" in sorted_columns:
-        sorted_columns = ["_index", *[i for i in sorted_columns if i != "_index"]]
+        set_cols = set(df.columns)
+        addition = {"_index", "CMD", "OUTPUT", "ERROR"} & set_cols
+        new_columns = []
+        if "_index" in addition:
+            new_columns.append("_index")
+            new_columns.extend([i for i in sorted_columns if i not in addition])
+            for c in ["ERROR", "OUTPUT", "CMD"]:
+                if c in addition:
+                    new_columns.append(c)
+        sorted_columns = new_columns
+
     return df[sorted_columns].copy()
 
 
