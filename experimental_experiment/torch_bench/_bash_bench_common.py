@@ -1098,6 +1098,9 @@ class BenchmarkRunner:
                 )
             yield stats
 
+        # restore the initial state
+        torch.set_grad_enabled(initial_no_grad)
+
     def ort_run(
         self, sess: WrapInferenceSessionForTorch, feeds: List[torch.Tensor]
     ) -> List[torch.Tensor]:
