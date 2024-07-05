@@ -1894,7 +1894,7 @@ class TestOperatorsCort(ExtTestCase):
             onnx_export=inspect.currentframe().f_code.co_name,
         )
 
-    def test_remainder(self):
+    def test_remainder_float(self):
         x = torch.randn(2, 3, 4)
         y = torch.randn(2, 1, 4)
         self.assertONNX(
@@ -1903,7 +1903,17 @@ class TestOperatorsCort(ExtTestCase):
             onnx_export=inspect.currentframe().f_code.co_name,
         )
 
-    def test_fmod(self):
+    def test_remainder_int(self):
+        x = (torch.randn(2, 3, 4).abs() + 1).to(torch.int64)
+        y = (torch.randn(2, 1, 4).abs() + 2).to(torch.int64)
+        self.assertONNX(
+            lambda x, y: torch.remainder(x, y),
+            (x, y),
+            onnx_export=inspect.currentframe().f_code.co_name,
+            test_backward=False,
+        )
+
+    def test_fmod_10(self):
         x = torch.randn(2, 3, 4)
         y = torch.randn(2, 1, 4)
         self.assertONNX(
@@ -1913,12 +1923,31 @@ class TestOperatorsCort(ExtTestCase):
             onnx_export=inspect.currentframe().f_code.co_name,
         )
 
-    def test_gelu(self):
+    def test_gelu_none_18(self):
         x = torch.randn(2, 3, 4, 5, requires_grad=True)
         self.assertONNX(
-            lambda x: torch.nn.functional.gelu(x),
+            lambda x: torch.nn.functional.gelu(x, approximate="none"),
             x,
             onnx_export=inspect.currentframe().f_code.co_name,
+            opset_version=18,
+        )
+
+    def test_gelu_tanh_20(self):
+        x = torch.randn(2, 3, 4, 5, requires_grad=True)
+        self.assertONNX(
+            lambda x: torch.nn.functional.gelu(x, approximate="tanh"),
+            x,
+            onnx_export=inspect.currentframe().f_code.co_name,
+            opset_version=20,
+        )
+
+    def test_gelu_tanh_18(self):
+        x = torch.randn(2, 3, 4, 5, requires_grad=True)
+        self.assertONNX(
+            lambda x: torch.nn.functional.gelu(x, approximate="tanh"),
+            x,
+            onnx_export=inspect.currentframe().f_code.co_name,
+            opset_version=18,
         )
 
     @unittest.skipIf(not DYNAMIC_SHAPE_SUPPORTED, reason="dynamic shape")

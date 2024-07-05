@@ -1,3 +1,4 @@
+import math
 from enum import Enum
 from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 import numpy as np
@@ -1524,6 +1525,57 @@ def aten_ge_Tensor(
     return aten_ge(g, sts, outputs, x, y, name="ge_Tensor")
 
 
+def aten_gelu(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    approximate: str = "none",
+    name: str = "gelu",
+) -> T:
+    """gelu"""
+
+    if g.main_opset >= 20:
+        res = g.op.Gelu(x, approximate=approximate, name=name, outputs=outputs)
+        if sts:
+            set_type_shape_unary_op(g, res, x)
+        return res
+
+    if approximate == "none":
+        # GELU(x) = 0.5 * x * [1 + ERF(x/sqrt(2)]
+        dtype = tensor_dtype_to_np_dtype(g.get_type(x))
+        inner = g.op.Div(x, np.array([1.4142135623730951], dtype=dtype), name=name)
+        erf = g.op.Erf(inner, name=name)
+        inner = g.op.Add(erf, np.array([1], dtype=dtype), name=name)
+        inner = g.op.Mul(x, inner, name=name)
+        res = g.op.Mul(np.array([0.5], dtype=dtype), inner, name=name, outputs=outputs)
+        if sts:
+            set_type_shape_unary_op(g, res, x)
+        return res
+
+    if approximate == "tanh":
+        # GELU(x) = 0.5 * x * {1 + Tanh[\sqrt(2/pi) * (x + 0.044715 * x^3)]}
+        dtype = tensor_dtype_to_np_dtype(g.get_type(x))
+        cubed = g.op.Pow(x, np.array([3], dtype=np.int64), name=name)
+        inner = g.op.Mul(np.array([0.044715], dtype=dtype), cubed, name=name)
+        inner = g.op.Add(x, inner, name=name)
+        # Prefer explicit graph construction over precomputed constants for clarity.
+        inner = g.op.Mul(
+            np.array([(2 / math.pi) ** 0.5], dtype=dtype), inner, name=name
+        )
+        inner = g.op.Tanh(inner, name=name)
+        inner = g.op.Add(inner, np.array([1], dtype=dtype), name=name)
+        inner = g.op.Mul(x, inner, name=name)
+        res = g.op.Mul(np.array([0.5], dtype=dtype), inner, outputs=outputs, name=name)
+        if sts:
+            set_type_shape_unary_op(g, res, x)
+        return res
+
+    raise AssertionError(
+        f"Unexpected value for approximate={approximate!r}{g.get_debug_msg()}"
+    )
+
+
 def aten_gt(
     g: GraphBuilder,
     sts: Optional[Dict[str, Any]],
@@ -1538,6 +1590,13 @@ def aten_gt(
     if not sts:
         set_type_shape_binary_op(g, outputs[0], x, y, cmp_op=True)
     return res
+
+
+def aten_gt_Scalar(
+    g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T, y: T
+) -> T:
+    "greater"
+    return aten_gt(g, sts, outputs, x, y, name="gt_Scalar")
 
 
 def aten_gt_Tensor(
@@ -2332,6 +2391,21 @@ def aten_ne(
     return res
 
 
+def aten_ne_Scalar(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    y: T,
+    name="ne_Scalar",
+) -> T:
+    "not equal"
+    res = aten_ne(g, sts, outputs, x, y, name=name)
+    if not sts:
+        set_type_shape_binary_op(g, outputs[0], x, y, cmp_op=True)
+    return res
+
+
 def aten_ne_Tensor(
     g: GraphBuilder,
     sts: Optional[Dict[str, Any]],
@@ -2755,6 +2829,54 @@ def aten_rrelu_with_noise_backward(
     return aten_leaky_relu_backward(
         g, sts, outputs, grad_output, x, negative_slope, self_is_result, name=name
     )
+
+
+def aten_remainder(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    other: T,
+    name="remainder",
+) -> T:
+    """mod"""
+
+    # a - a.div(b, rounding_mode="floor") * b
+    if isinstance(other, (int, float)):
+        dtype = tensor_dtype_to_np_dtype(g.get_type(x))
+        res = g.op.Mod(x, np.array([other], dtype=dtype), name=name, outputs=outputs)
+        if sts:
+            set_type_shape_unary_op(g, res, x)
+        return res
+
+    # rounded_quotient = g.op.Floor(g.op.Div(self, other))
+    # return op.Sub(self, op.Mul(rounded_quotient, other))
+    itype = g.get_type(x)
+    if itype in {
+        TensorProto.FLOAT,
+        TensorProto.DOUBLE,
+        TensorProto.FLOAT16,
+        TensorProto.BFLOAT16,
+    }:
+        # This does not work for negative values.
+        # res = g.op.Mod(x, other, name=name, outputs=outputs, fmod=1)
+
+        rounded_quotient = g.op.Floor(g.op.Div(x, other, name=name), name=name)
+        res = g.op.Sub(
+            x, g.op.Mul(rounded_quotient, other, name=name), outputs=outputs, name=name
+        )
+    else:
+        res = g.op.Mod(x, other, name=name, outputs=outputs)
+    if sts:
+        set_type_shape_unary_op(g, res, x)
+    return res
+
+
+def aten_remainder_Tensor(
+    g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T, other: T
+) -> T:
+    """mod"""
+    return aten_remainder(g, sts, outputs, x, other, name="remainder_Tensor")
 
 
 def aten_repeat(
