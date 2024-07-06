@@ -3,6 +3,7 @@ import inspect
 import os
 import gc
 import time
+from datetime import datetime
 from typing import Any, Callable, Set, Optional, Tuple, Iterator, Dict, List, Union
 import numpy as np
 import onnx
@@ -720,6 +721,7 @@ class BenchmarkRunner:
             stats["exporter"] = exporter
             stats["input_size"] = self.obj_size(model_runner.inputs)
             stats["_index"] = f"{model_name}-{exporter}"
+            stats["date_start"] = f"{datetime.now():%Y-%m-%d}"
 
             if self.device == "cuda":
                 stats["gpu_allocation_1_after_loading"] = torch.cuda.memory_allocated(0)

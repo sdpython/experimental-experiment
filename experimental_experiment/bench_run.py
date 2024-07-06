@@ -5,7 +5,9 @@ import platform
 import re
 import subprocess
 import sys
+import time
 from argparse import Namespace
+from datetime import datetime
 from typing import Any, Dict, List, Tuple, Union, Optional
 
 
@@ -129,11 +131,12 @@ def run_benchmark(
         loop = configs
 
     data: List[Dict[str, Union[str, int, float, Tuple[int, int]]]] = []
-    for i, config in enumerate(loop):
+    for iter_loop, config in enumerate(loop):
         cmd = _cmd_line(script_name, **config)
+        begin = time.perf_counter()
 
         if dump:
-            os.environ["ONNXRT_DUMP_PATH"] = _make_prefix(script_name, i)
+            os.environ["ONNXRT_DUMP_PATH"] = _make_prefix(script_name, iter_loop)
         else:
             os.environ["ONNXRT_DUMP_PATH"] = ""
         if verbose > 3:
@@ -150,7 +153,7 @@ def run_benchmark(
             if not os.path.exists(dump_std):
                 os.makedirs(dump_std)
             root = os.path.split(script_name)[-1]
-            filename = os.path.join(dump_std, f"{root}.{i}")
+            filename = os.path.join(dump_std, f"{root}.{iter_loop}")
             with open(f"{filename}.stdout", "w") as f:
                 f.write(sout)
             with open(f"{filename}.stderr", "w") as f:
@@ -174,11 +177,15 @@ def run_benchmark(
             else:
                 metrics = {}
         metrics.update(config)
+        metrics["DATE"] = f"{datetime.now():%Y-%m-%d}"
+        metrics["ITER"] = iter_loop
+        metrics["TIME_ITER"] = time.perf_counter() - begin
         metrics["ERROR"] = _clean_string(serr)
         metrics["OUTPUT"] = _clean_string(sout)
         metrics["CMD"] = f"[{' '.join(map(_cmd_string, cmd))}]"
         data.append(metrics)
         if verbose > 5:
+            print(f"--------------- ITER={iter_loop} in {metrics['TIME_ITER']}")
             print("--------------- ERROR")
             print(serr)
         if verbose >= 10:
