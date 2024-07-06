@@ -18,7 +18,7 @@ class TestHuggingFaceRunnerCmd(ExtTestCase):
         logger.setLevel(logging.ERROR)
         ExtTestCase.setUpClass()
 
-    def _huggingface_export_bench_cpu(self, exporter, models):
+    def _huggingface_export_bench_cpu(self, exporter, models, verbose=0, debug=False):
         from experimental_experiment.torch_bench.bash_bench_huggingface import main
 
         args = [
@@ -29,16 +29,21 @@ class TestHuggingFaceRunnerCmd(ExtTestCase):
             "--exporter",
             exporter,
             "--verbose",
+            str(verbose),
+            "--quiet",
             "0",
         ]
         st = io.StringIO()
         with contextlib.redirect_stdout(st):
             main(args=args)
         out = st.getvalue()
+        if debug:
+            print(out)
         if "," in models:
             self.assertIn("Prints", out)
         else:
             self.assertIn(":model_name,", out)
+        self.assertNotIn(":discrepancies_abs,inf;", out)
 
     @skipif_ci_windows("exporter does not work on Windows")
     @ignore_warnings((DeprecationWarning, UserWarning))
@@ -84,6 +89,13 @@ class TestHuggingFaceRunnerCmd(ExtTestCase):
     @requires_torch("2.4")
     def test_huggingface_export_bench_dynamo2_cpu(self):
         self._huggingface_export_bench_cpu("dynamo2", "dummy")
+
+    @skipif_ci_windows("exporter does not work on Windows")
+    @ignore_warnings((DeprecationWarning, UserWarning))
+    @requires_onnxruntime_training()
+    @requires_torch("2.4")
+    def test_huggingface_export_bench_custom_cpu_tuple(self):
+        self._huggingface_export_bench_cpu("custom", "dummy-tuple")
 
 
 if __name__ == "__main__":

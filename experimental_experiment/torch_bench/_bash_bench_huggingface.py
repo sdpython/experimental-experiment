@@ -207,6 +207,20 @@ class HuggingfaceRunner(BenchmarkRunner):
             def _get_random_inputs(self, device: str):
                 return (torch.randn(1, 5).to(torch.float16).to(device),)
 
+        class NeuronTuple(torch.nn.Module):
+            def __init__(self, n_dims: int = 5, n_targets: int = 3):
+                super(NeuronTuple, self).__init__()
+                self.linear = torch.nn.Linear(n_dims, n_targets)
+
+            def forward(self, x):
+                y = self.linear(x)
+                return (torch.sigmoid(y), (x, y))
+
+            def _get_random_inputs(self, device: str):
+                return (torch.randn(1, 5).to(device),)
+
+            config = MakeConfig(download=False)
+
         container.EXTRA_MODELS.update(
             {
                 "dummy": (
@@ -216,6 +230,10 @@ class HuggingfaceRunner(BenchmarkRunner):
                 "dummy16": (
                     Neuron16.config,
                     Neuron16,
+                ),
+                "dummy-tuple": (
+                    NeuronTuple.config,
+                    NeuronTuple,
                 ),
                 "AllenaiLongformerBase": (
                     transformers.AutoConfig.from_pretrained(

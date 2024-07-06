@@ -361,7 +361,7 @@ class ModelRunner:
                 target_opset=target_opset,
             )
         onx.save(name)
-        return onx
+        return onx.model_proto
 
     def _to_onnx_script(
         self,
@@ -819,6 +819,7 @@ class BenchmarkRunner:
             ########
             # repeat
             ########
+
             if self.verbose > 1:
                 print(
                     f"[BenchmarkRunner.benchmark] repeat model {model_name!r} "
@@ -932,6 +933,7 @@ class BenchmarkRunner:
             stats["providers"] = ",".join(providers)
             begin = time.perf_counter()
             if isinstance(exported_model, onnx.ModelProto):
+                is_onnx = True
                 ort_sess = onnxruntime.InferenceSession(filename, providers=providers)
                 sess = WrapInferenceSessionForTorch(ort_sess)
                 stats["onnx_model"] = "1"
@@ -942,6 +944,7 @@ class BenchmarkRunner:
                 stats["onnx_input_names"] = "|".join(i.name for i in onx_inputs)
                 stats["onnx_output_names"] = "|".join(i.name for i in onx_outputs)
             else:
+                is_onnx = False
                 sess = WrapForTorch(exported_model)
                 stats["onnx_model"] = "0"
 
@@ -1125,7 +1128,9 @@ class BenchmarkRunner:
             ###############
 
             if got is not None:
-                a, r = self.max_diff(expected, got, verbose=self.verbose)
+                a, r = self.max_diff(
+                    expected, got, verbose=self.verbose, flatten=is_onnx
+                )
                 stats["discrepancies_abs"] = a
                 stats["discrepancies_rel"] = r
                 if self.verbose:
@@ -1150,12 +1155,35 @@ class BenchmarkRunner:
         list_feeds = [feeds[k] for k in sess.input_names]
         return sess.run_dlpack(*list_feeds)
 
+    @classmethod
+    def _flatten(cls, value):
+        res = []
+        assert not isinstance(value, dict), "Unable to flatten a dictionary."
+        if isinstance(value, (list, tuple)):
+            for v in value:
+                res.extend(cls._flatten(v))
+        else:
+            res.append(value)
+        return tuple(res)
+
     def max_diff(
-        self, expected: Any, got: Any, verbose: int = 0, level: int = 0
+        self,
+        expected: Any,
+        got: Any,
+        verbose: int = 0,
+        level: int = 0,
+        flatten: bool = False,
     ) -> Tuple[float, float]:
         """
         Returns the maximum discrepancy.
         """
+        if flatten:
+            return self.max_diff(
+                self._flatten(expected),
+                self._flatten(got),
+                verbose=verbose,
+                flatten=False,
+            )
         if hasattr(expected, "to_tuple"):
             return self.max_diff(
                 expected.to_tuple(), got, verbose=verbose, level=level + 1
