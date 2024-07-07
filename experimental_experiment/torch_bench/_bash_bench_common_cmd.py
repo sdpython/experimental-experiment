@@ -13,7 +13,7 @@ def bash_bench_parse_args(name: str, doc: str, new_args: Optional[List[str]] = N
         f"experimental_experiment.torch_bench.{name}",
         description=doc,
         model=(
-            "dummy",
+            "101Dummy",
             "if empty, prints the list of models, "
             "all for all models, a list of indices works as well",
         ),

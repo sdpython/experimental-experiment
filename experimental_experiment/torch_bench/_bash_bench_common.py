@@ -114,26 +114,33 @@ def get_peak_memory():
     return torch.cuda.max_memory_allocated() / 10**9
 
 
-class WrappedModel(torch.nn.Module):
+class WrappedModelBase(torch.nn.Module):
     def __init__(self, model):
         super().__init__()
         self.model = model
 
     def __call__(self, *args, **kwargs):
-        res = self.model(*args, **kwargs)
-        if hasattr(res, "to_tuple"):
-            return res.to_tuple()
-        return res
+        return self.model(*args, **kwargs)
 
     def forward(self, *args, **kwargs):
-        res = self.model.forward(*args, **kwargs)
-        if hasattr(res, "to_tuple"):
-            return res.to_tuple()
-        return res
+        return self.model.forward(*args, **kwargs)
 
     def parameters(self):
         for k in self.model.parameters():
             yield k
+
+
+class WrappedModelToTuple(WrappedModelBase):
+    def __init__(self, model):
+        super().__init__(model)
+
+    def __call__(self, *args, **kwargs):
+        res = self.model(*args, **kwargs)
+        return res.to_tuple()
+
+    def forward(self, *args, **kwargs):
+        res = self.model.forward(*args, **kwargs)
+        return res.to_tuple()
 
 
 class ModelRunner:
@@ -215,7 +222,13 @@ class ModelRunner:
             self.raw_input_names = ["input{i}" for i in range(len(inputs))]
             self.raw_use_defaults = [i is None for i in inputs]
 
-        self.model = WrappedModel(cvt(model))
+        config = model.config
+        model_cvt = cvt(model)
+        del model
+        if hasattr(config, "to_tuple") and not config.to_tuple:
+            self.model = WrappedModelBase(model_cvt)
+        else:
+            self.model = WrappedModelToTuple(model_cvt)
         self.device = device
         self.dtype = dtype
         self.inputs = inputs
@@ -705,6 +718,10 @@ class BenchmarkRunner:
 
             begin = time.perf_counter()
             model_runner = self.load_model(model_name)
+            if self.verbose:
+                print(
+                    f"[benchmarkrunner.benchmark] model wrapped with class {type(model_runner.model)}"
+                )
             if self.device == "cuda" and self.verbose > 1:
                 print(
                     f"[benchmarkrunner.benchmark] gpu_allocation={torch.cuda.memory_allocated(0)} "
@@ -1134,7 +1151,9 @@ class BenchmarkRunner:
                 stats["discrepancies_abs"] = a
                 stats["discrepancies_rel"] = r
                 if self.verbose:
-                    print(f"[BenchmarkRunner.benchmark] done model {stats}")
+                    print(
+                        f"[BenchmarkRunner.benchmark] done model with {len(stats)} metrics"
+                    )
 
             total_time = time.perf_counter() - begin_total
             stats["time_total"] = total_time

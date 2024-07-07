@@ -32,6 +32,12 @@ from ._exceptions import FunctionNotFoundError
 T = str
 
 
+class Reduction(Enum):
+    NONE = 0
+    MEAN = 1
+    SUM = 2
+
+
 def aten_abs(
     g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T
 ) -> T:
@@ -876,6 +882,75 @@ def aten_cosh(
     res = g.make_node("Cosh", [x], outputs, name="cosh")
     if not sts:
         set_type_shape_unary_op(g, outputs[0], x)
+    return res
+
+
+def aten_cross_entropy_loss(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    target: T,
+    weight: Optional[T] = None,
+    reduction: int = Reduction.MEAN.value,
+    ignore_index: int = -100,
+    label_smoothing: float = 0.0,
+) -> T:
+    """cross_entropy_loss"""
+    assert (
+        label_smoothing == 0.0
+    ), f"Unexpected value for label_smoothing={label_smoothing}{g.get_debug_msg()}"
+
+    if reduction == Reduction.NONE.value:
+        reduction_name = "none"
+    elif reduction == Reduction.SUM.value:
+        reduction_name = "sum"
+    elif reduction == Reduction.MEAN.value:
+        reduction_name = "mean"
+    else:
+        raise AssertionError(
+            f"Unexpected value for reduction={reduction}{g.get_debug_msg()}"
+        )
+
+    res = g.op.SoftmaxCrossEntropyLoss(
+        x,
+        target,
+        weight,
+        reduction=reduction_name,
+        ignore_index=ignore_index,
+        outputs=outputs,
+    )
+
+    if sts:
+        g.set_type(outputs[0], g.get_type(x))
+        if len(outputs) > 1:
+            g.set_type(outputs[1], g.get_type(x))
+
+    return res
+
+
+def aten_cumsum(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    dim: T,
+    dtype: Optional["torch.dtype"] = None,  # noqa: F821
+    name: str = "cumsum",
+) -> T:
+    """cumsum"""
+    assert isinstance(dim, int), f"Not implemented for dim={dim!r}{g.get_debug_msg()}"
+
+    if dtype is None:
+        xi = x
+        itype = g.get_type(x)
+    else:
+        itype = dtype if isinstance(dtype, int) else torch_dtype_to_onnx_dtype(dtype)
+        xi = g.op.Cast(x, to=itype, name=name)
+
+    res = g.op.CumSum(xi, np.array([dim], dtype=np.int64), outputs=outputs, name=name)
+    if sts:
+        set_type_shape_unary_op(g, res, x, itype=itype)
     return res
 
 
@@ -1994,6 +2069,13 @@ def aten_lt(
     return res
 
 
+def aten_lt_Scalar(
+    g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T, y: T
+) -> T:
+    "less"
+    return aten_lt(g, sts, outputs, x, y, name="lt_Scalar")
+
+
 def aten_lt_Tensor(
     g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T, y: T
 ) -> T:
@@ -2460,12 +2542,6 @@ def aten_new_zeros(
     )
 
 
-class Reduction(Enum):
-    NONE = 0
-    MEAN = 1
-    SUM = 2
-
-
 def aten_nll_loss_forward(
     g: GraphBuilder,
     sts: Optional[Dict[str, Any]],
@@ -2870,6 +2946,13 @@ def aten_remainder(
     if sts:
         set_type_shape_unary_op(g, res, x)
     return res
+
+
+def aten_remainder_Scalar(
+    g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T, other: T
+) -> T:
+    """mod"""
+    return aten_remainder(g, sts, outputs, x, other, name="remainder_Scalar")
 
 
 def aten_remainder_Tensor(

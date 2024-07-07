@@ -14,9 +14,18 @@ from experimental_experiment.ext_test_case import (
 class TestHuggingFaceRunnerCmd(ExtTestCase):
     @classmethod
     def setUpClass(cls):
+        import torch
+
         logger = logging.getLogger("onnxscript.optimizer.constant_folding")
         logger.setLevel(logging.ERROR)
         ExtTestCase.setUpClass()
+        cls.is_grad_enabled = torch.is_grad_enabled()
+
+    @classmethod
+    def tearDownClass(cls):
+        import torch
+
+        torch.set_grad_enabled(cls.is_grad_enabled)
 
     def _huggingface_export_bench_cpu(self, exporter, models, verbose=0, debug=False):
         from experimental_experiment.torch_bench.bash_bench_huggingface import main
@@ -32,7 +41,14 @@ class TestHuggingFaceRunnerCmd(ExtTestCase):
             str(verbose),
             "--quiet",
             "0",
+            "-w",
+            "1",
+            "-r",
+            "1",
         ]
+        if debug:
+            print("CMD")
+            print(" ".join(args))
         st = io.StringIO()
         with contextlib.redirect_stdout(st):
             main(args=args)
@@ -50,13 +66,13 @@ class TestHuggingFaceRunnerCmd(ExtTestCase):
     @requires_onnxruntime_training()
     @requires_torch("2.4")
     def test_huggingface_export_bench_custom_cpu(self):
-        self._huggingface_export_bench_cpu("custom", "dummy")
+        self._huggingface_export_bench_cpu("custom", "101Dummy")
 
     @skipif_ci_windows("exporter does not work on Windows")
     @ignore_warnings((DeprecationWarning, UserWarning))
-    @requires_torch("2.4")
+    @requires_torch("2.6")
     def test_huggingface_export_bench_export_cpu(self):
-        self._huggingface_export_bench_cpu("export", "dummy")
+        self._huggingface_export_bench_cpu("export", "101Dummy")
 
     @ignore_warnings((DeprecationWarning, UserWarning))
     def test_huggingface_export_bench_eager_cpu(self):
@@ -67,35 +83,44 @@ class TestHuggingFaceRunnerCmd(ExtTestCase):
     @requires_onnxruntime_training()
     @requires_torch("2.4")
     def test_huggingface_export_bench_custom_cpu2(self):
-        self._huggingface_export_bench_cpu("custom", "dummy,dummy16")
+        self._huggingface_export_bench_cpu("custom", "101Dummy,101Dummy16")
 
     @skipif_ci_windows("exporter does not work on Windows")
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_onnxruntime_training()
     @requires_torch("2.4")
     def test_huggingface_export_bench_custom_cpu_last(self):
-        self._huggingface_export_bench_cpu("custom", "-1")
+        self._huggingface_export_bench_cpu("custom", "0")
 
     @ignore_warnings((DeprecationWarning, UserWarning))
     def test_huggingface_export_bench_script_cpu(self):
-        self._huggingface_export_bench_cpu("script", "dummy")
+        self._huggingface_export_bench_cpu("script", "101Dummy")
 
     @ignore_warnings((DeprecationWarning, UserWarning))
-    @requires_torch("2.5")
+    @requires_torch("2.6")
     def test_huggingface_export_bench_dynamo_cpu(self):
-        self._huggingface_export_bench_cpu("dynamo", "dummy")
+        self._huggingface_export_bench_cpu("dynamo", "101Dummy")
 
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.4")
     def test_huggingface_export_bench_dynamo2_cpu(self):
-        self._huggingface_export_bench_cpu("dynamo2", "dummy")
+        self._huggingface_export_bench_cpu("dynamo2", "101Dummy")
 
     @skipif_ci_windows("exporter does not work on Windows")
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_onnxruntime_training()
     @requires_torch("2.4")
     def test_huggingface_export_bench_custom_cpu_tuple(self):
-        self._huggingface_export_bench_cpu("custom", "dummy-tuple")
+        self._huggingface_export_bench_cpu("custom", "101DummyTuple")
+
+    @skipif_ci_windows("exporter does not work on Windows")
+    @ignore_warnings((DeprecationWarning, UserWarning))
+    @requires_onnxruntime_training()
+    @requires_torch("2.4")
+    def test_huggingface_export_bench_custom_cpu_electra(self):
+        self._huggingface_export_bench_cpu(
+            "custom", "ElectraForQuestionAnswering", verbose=3
+        )
 
 
 if __name__ == "__main__":

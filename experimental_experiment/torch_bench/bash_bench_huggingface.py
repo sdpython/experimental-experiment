@@ -24,11 +24,11 @@ Available exporters:
     
 ::
 
-    python -m experimental_experiment.torch_bench.bash_bench_huggingface --model dummy --exporter eager
+    python -m experimental_experiment.torch_bench.bash_bench_huggingface --model 101Dummy --exporter eager
     
 ::
 
-    python -m experimental_experiment.torch_bench.bash_bench_huggingface --model dummy,dummy16 --verbose=1
+    python -m experimental_experiment.torch_bench.bash_bench_huggingface --model 101Dummy,101Dummy16 --verbose=1
     
 """
 
