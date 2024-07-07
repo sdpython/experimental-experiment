@@ -92,6 +92,7 @@ class TestHuggingFaceRunnerCmd(ExtTestCase):
     def test_huggingface_export_bench_custom_cpu_last(self):
         self._huggingface_export_bench_cpu("custom", "0")
 
+    @requires_onnxruntime_training()
     @ignore_warnings((DeprecationWarning, UserWarning))
     def test_huggingface_export_bench_script_cpu(self):
         self._huggingface_export_bench_cpu("script", "101Dummy")
@@ -103,6 +104,7 @@ class TestHuggingFaceRunnerCmd(ExtTestCase):
 
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.4")
+    @requires_onnxruntime_training()
     def test_huggingface_export_bench_dynamo2_cpu(self):
         self._huggingface_export_bench_cpu("dynamo2", "101Dummy")
 
