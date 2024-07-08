@@ -560,6 +560,10 @@ def _set_shape_type_op_any_concat(self: "GraphBuilder", node: NodeProto):  # noq
 
 
 def _set_shape_type_op_any_split(self: "GraphBuilder", node: NodeProto):  # noqa: F821
+    num_outputs = self.get_attribute(node, "num_outputs", exc=False)
+    assert num_outputs is None or num_outputs.i == len(
+        node.output
+    ), f"Unexpected number of outputs (should be {num_outputs.i}) for node {node}"
     if not self.has_type(node.input[0]):
         # the main type is missing, cannot continue
         return
@@ -582,7 +586,7 @@ def _set_shape_type_op_any_split(self: "GraphBuilder", node: NodeProto):  # noqa
         for i, o in enumerate(node.output):
             sh[axis] = int(splits[i])
             self.set_shape(o, tuple(sh))
-    else:
+    elif self.has_rank(node.input[0]):
         rank = self.get_rank(node.input[0])
         for o in node.output:
             self.set_rank(o, rank)
@@ -672,6 +676,43 @@ def _set_shape_type_op_any_unsqueeze(
         self.set_rank(node.output[0], self.get_rank(node.input[0]) + cst.size)
 
 
+def _set_shape_type_op_any_squeeze(self: "GraphBuilder", node: NodeProto):  # noqa: F821
+    if not self.has_type(node.input[0]):
+        # the main type is missing, cannot continue
+        return
+    dtype = self.get_type(node.input[0])
+    self.set_type(node.output[0], dtype)
+    if self.has_shape(node.input[0]):
+        if len(node.input) == 1:
+            c = self.get_attribute(node, "axes")
+            cst = np.array(c.ints, dtype=np.int64)
+        else:
+            assert self.is_constant(node.input[1]), (
+                f"axes from node {node.op_type}, "
+                f"name={node.name!r} is not a constant, "
+                f"the new shape cannot be infered{self.get_debug_msg()}"
+            )
+            cst = self.get_constant(node.input[1])
+            if isinstance(cst, NodeProto) and cst.op_type in (
+                "Constant",
+                "Identity",
+                "ConstantOfShape",
+            ):
+                cst = self.get_constant(node.input[1], computed_value=True)
+        assert isinstance(cst, np.ndarray), (
+            f"Unexpected type {type(cst)} for {node.input[1]!r}, "
+            f"unable to set type and shape for node {node.op_type} "
+            f"with name={node.name!r}{self.get_debug_msg()}"
+        )
+        iaxes = set((int(cst),) if len(cst.shape) == 0 else tuple(int(i) for i in cst))
+        shape = list(self.get_shape(node.input[0]))
+        new_shape = tuple(s for i, s in enumerate(shape) if i not in iaxes)
+        self.set_shape(node.output[0], new_shape)
+    elif self.has_rank(node.input[0]) and self.is_constant(node.input[1]):
+        cst = self.get_constant(node.input[1], computed_value=True)
+        self.set_rank(node.output[0], self.get_rank(node.input[0]) - cst.size)
+
+
 def _set_shape_type_op_any_where(self: "GraphBuilder", node: NodeProto):  # noqa: F821
     self.set_type(node.output[0], self.get_type(node.input[2]))
     if (
@@ -701,6 +742,7 @@ _set_shape_type_op_any_known = {
     "Sign": _set_shape_type_op_any_sign,
     "Slice": _set_shape_type_op_any_slice,
     "Split": _set_shape_type_op_any_split,
+    "Squeeze": _set_shape_type_op_any_squeeze,
     "Tile": _set_shape_type_op_any_tile,
     "Transpose": _set_shape_type_op_any_transpose,
     "Unsqueeze": _set_shape_type_op_any_unsqueeze,
@@ -746,7 +788,7 @@ def set_type_shape_fused_matmul(self: "GraphBuilder", node: NodeProto):  # noqa:
         new_shape = (sh1[-1] if transA else sh1[-2], sh2[-2] if transB else sh2[-1])
         self.set_shape(name, prefix + new_shape)
         self.set_shape(name, prefix + new_shape)
-    else:
+    elif self.has_rank(x) and self.has_rank(y):
         self.set_rank(name, max(self.get_rank(x), self.get_rank(y)))
 
 

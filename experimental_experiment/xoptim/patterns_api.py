@@ -284,6 +284,8 @@ class EasyPatternOptimization(PatternOptimization):
         for name, ann in zip(args, anns):
             if ann is None or ann is str or ann is inspect._empty:
                 g2.make_tensor_input(name, 0, None, False)
+                # Type is unknown
+                g2.set_type(name, -1)
                 continue
             assert isinstance(
                 ann, str
@@ -346,6 +348,7 @@ class EasyPatternOptimization(PatternOptimization):
         node: NodeProto,
         pat: "GraphBuilderPatternOptimization",  # noqa: F821
         marked: Dict[int, Tuple[NodeProto, NodeProto]],
+        pair_results_names: Dict[str, str],
         stacked: List[int],
         n: NodeProto,
         pn: NodeProto,
@@ -354,7 +357,7 @@ class EasyPatternOptimization(PatternOptimization):
         Matches backward.
 
         :param g: graph
-        :param node: root node (the node the matched begain with,
+        :param node: root node (the node the matched began with,
             used only for debugging)
         :param pat: pattern
         :param marked: nodes of the pattern marked as already matched
@@ -376,6 +379,18 @@ class EasyPatternOptimization(PatternOptimization):
                 n,
             )
             return self.none(node, inspect.currentframe().f_lineno)
+
+        for nr, pnr in zip(n.input, pn.input):
+            if len(g.next_nodes(nr)) != len(pat.next_nodes(pnr)):
+                self._hint(
+                    "BACKWARD: one input is used outside the pattern",
+                    "-- pattern",
+                    pn,
+                    "-- model",
+                    n,
+                )
+                return self.none(node, inspect.currentframe().f_lineno)
+
         for i, pi in zip(n.input, pn.input):
             ppred = pat.node_before(pi)
             if ppred is None:
@@ -392,16 +407,17 @@ class EasyPatternOptimization(PatternOptimization):
                     ppred,
                 )
                 return self.none(node, inspect.currentframe().f_lineno)
-            if pred.op_type != ppred.op_type:
+            if pred.op_type != ppred.op_type or len(pred.input) != len(ppred.input):
                 # Distinct type
                 self._hint(
-                    "BACKWARD: distinct types",
+                    "BACKWARD: distinct types or distinct number of inputs",
                     "-- pred",
                     pred,
                     "-- ppred",
                     ppred,
                 )
                 return self.none(node, inspect.currentframe().f_lineno)
+
             # matching backward
             key = id(ppred)
             if key not in marked:
@@ -418,46 +434,66 @@ class EasyPatternOptimization(PatternOptimization):
         node: NodeProto,
         pat: "GraphBuilderPatternOptimization",  # noqa: F821
         marked: Dict[int, Tuple[NodeProto, NodeProto]],
+        pair_results_names: Dict[str, str],
         stacked: List[int],
-        n: NodeProto,
-        pn: NodeProto,
+        n: Union[NodeProto, str],
+        pn: Union[NodeProto, str],
     ) -> Optional[int]:
         """
         Matches forward.
 
         :param g: graph
-        :param node: root node (the node the matched begain with,
-            used only for debugging)
+        :param node: root node (the node the matched began with,
+            used only for debugging),
         :param pat: pattern
         :param marked: nodes of the pattern marked as already matched
         :param stacked: next node to look into
-        :param n: node coming from the graph
-        :param ns: node coming from the pattern
+        :param n: node coming from the graph, it can be a string to start from a result
+        :param ns: node coming from the pattern, it can be a string to start from a result
         :return: number of matched nodes to continue, None or False to indicate a failed match
         """
         res = 0
 
         # successors
-        if len(n.output) != len(pn.output):
-            # not the same number of outputs
-            self._hint(
-                "FORWARD: not the same number of outputs",
-                "-- pattern",
-                pn,
-                "-- model",
-                n,
+        if isinstance(n, NodeProto) and isinstance(pn, NodeProto):
+            if len(n.output) != len(pn.output):
+                # not the same number of outputs
+                self._hint(
+                    "FORWARD: not the same number of outputs",
+                    "-- pattern",
+                    pn,
+                    "-- model",
+                    n,
+                )
+                return self.none(node, inspect.currentframe().f_lineno)
+            matched_results = list(zip(n.output, pn.output))
+        elif isinstance(n, str) and isinstance(pn, str):
+            matched_results = [(n, pn)]
+        else:
+            raise AssertionError(
+                f"Unexpected types for n: {type(n)} and pn: {type(pn)}."
             )
-            return self.none(node, inspect.currentframe().f_lineno)
 
-        for o, op in zip(n.output, pn.output):
+        for o, op in matched_results:
             ns = g.next_nodes(o)
             pns = pat.next_nodes(op)
             if len(pns) == 0:
                 # The pattern has no node forward, the matching stops.
                 continue
             if len(ns) < len(pns):
-                # Not enough node in the graph to match the pattern,
+                # Not enough nodes in the graph to match the pattern,
                 # the result is known.
+                self._hint(
+                    "FORWARD: not enough nodes in the graph to match the pattern",
+                    "-- o",
+                    o,
+                    "-- po",
+                    op,
+                    "-- len(ns)",
+                    len(ns),
+                    "-- len(pns)",
+                    len(pns),
+                )
                 return self.none(node, inspect.currentframe().f_lineno)
 
             # Here comes the fun part, there is the same number of successors or more
@@ -467,12 +503,30 @@ class EasyPatternOptimization(PatternOptimization):
 
             if len(ns) == len(pns) == 1:
                 # Let's deal with the simple case
-                if ns[0].op_type != pns[0].op_type:
+                if ns[0].op_type != pns[0].op_type or len(ns[0].input) != len(
+                    pns[0].input
+                ):
+                    self._hint(
+                        "FORWARD: distinct types or distinct number of inputs",
+                        "-- pred",
+                        ns[0],
+                        "-- ppred",
+                        pns[0],
+                    )
+                    return self.none(node, inspect.currentframe().f_lineno)
+                amb = self._has_ambiguities(pair_results_names, ns[0], pns[0])
+                if amb:
+                    self._hint(
+                        "BACKWARD: ambiguities with names",
+                        "-- ambiguities",
+                        amb,
+                    )
                     return self.none(node, inspect.currentframe().f_lineno)
 
                 key = id(pns[0])
                 if key not in marked:
                     marked[key] = ns[0], pns[0]
+                    self._update_ambiguities(pair_results_names, ns[0], pns[0])
                     stacked.append(key)
                     res += 1
                 continue
@@ -499,12 +553,30 @@ class EasyPatternOptimization(PatternOptimization):
                 return self.none(node, inspect.currentframe().f_lineno)
             if len(p_marked) == len(free) == 1:
                 # Only one option again.
-                if p_marked[0].op_type != free[0].op_type:
+                if p_marked[0].op_type != free[0].op_type or len(
+                    p_marked[0].input
+                ) != len(free[0].input):
+                    self._hint(
+                        "FORWARD: distinct types or distinct number of inputs",
+                        "-- pred",
+                        p_marked[0],
+                        "-- ppred",
+                        free[0],
+                    )
+                    return self.none(node, inspect.currentframe().f_lineno)
+                amb = self._has_ambiguities(pair_results_names, free[0], p_marked[0])
+                if amb:
+                    self._hint(
+                        "FORWARD: ambiguities with names",
+                        "-- ambiguities",
+                        amb,
+                    )
                     return self.none(node, inspect.currentframe().f_lineno)
 
                 key = id(p_marked[0])
                 if key not in marked:
                     marked[key] = free[0], p_marked[0]
+                    self._update_ambiguities(pair_results_names, free[0], p_marked[0])
                     stacked.append(key)
                     res += 1
                 continue
@@ -544,7 +616,13 @@ class EasyPatternOptimization(PatternOptimization):
             for k, v in ec.items():
                 if gc[k] == v == 1:
                     key = id(ptype_to_node[k])
-                    if key not in marked:
+                    amb = self._has_ambiguities(
+                        pair_results_names, gtype_to_node[k], ptype_to_node[k]
+                    )
+                    if not amb and key not in marked:
+                        self._update_ambiguities(
+                            pair_results_names, gtype_to_node[k], ptype_to_node[k]
+                        )
                         marked[key] = gtype_to_node[k], ptype_to_node[k]
                         stacked.append(key)
                         res += 1
@@ -562,7 +640,7 @@ class EasyPatternOptimization(PatternOptimization):
                 f"ec={ec}, gc={gc}"
             )
         if self.verbose > 5 and res > 0:
-            print(f"[EasyPatternOptimization._match_foward] add {res} nodes")
+            print(f"[EasyPatternOptimization._match_forward] add {res} nodes")
         return res
 
     def _debug_print(self) -> str:
@@ -617,7 +695,7 @@ class EasyPatternOptimization(PatternOptimization):
 
     def validate_mapping(
         self,
-        g: "GraphBuilder",  # noqa: F821
+        g: "GraphBuilderPatternOptimization",  # noqa: F821
         deleted_nodes: List[NodeProto],
         pattern_nodes: Optional[List[NodeProto]] = None,
     ) -> bool:
@@ -631,13 +709,41 @@ class EasyPatternOptimization(PatternOptimization):
         """
         return True
 
+    def _update_ambiguities(
+        self, pair_results_names, node: NodeProto, pattern_node: NodeProto
+    ):
+        for a, b in zip(node.input, pattern_node.input):
+            if b in pair_results_names:
+                assert (
+                    pair_results_names[b] == a
+                ), f"Ambiguity {b!r} is mapped to {pair_results_names[b]!r} and {a!r}."
+            else:
+                pair_results_names[b] = a
+        for a, b in zip(node.output, pattern_node.output):
+            if b in pair_results_names:
+                assert (
+                    pair_results_names[b] == a
+                ), f"Ambiguity {b!r} is mapped to {pair_results_names[b]!r} and {a!r}."
+            else:
+                pair_results_names[b] = a
+
+    def _has_ambiguities(
+        self, pair_results_names, node: NodeProto, pattern_node: NodeProto
+    ) -> bool:
+        for a, b in zip(node.input, pattern_node.input):
+            if b in pair_results_names and pair_results_names[b] != a:
+                return True
+        for a, b in zip(node.output, pattern_node.output):
+            if b in pair_results_names and pair_results_names[b] != a:
+                return True
+        return False
+
     def match(
         self,
         g: "GraphBuilderPatternOptimization",  # noqa: F821
         node: NodeProto,
         matched: List[MatchResult],
     ) -> Optional[MatchResult]:
-
         pat = self._get_match_pattern(g)
 
         # Let's match the first node.
@@ -646,6 +752,8 @@ class EasyPatternOptimization(PatternOptimization):
         if node.op_type != p_node.op_type:
             # The first node does not have the same type.
             return self.none()
+        if len(node.input) != len(p_node.input):
+            return self.none(node, inspect.currentframe().f_lineno)
 
         check_ids = set(id(n) for n in pat.nodes)
         if self.verbose > 5:
@@ -659,6 +767,8 @@ class EasyPatternOptimization(PatternOptimization):
                     textwrap.indent(self.display_pattern(g, self.match_pattern), "    ")
                 )
 
+        pair_results_names = {}
+        self._update_ambiguities(pair_results_names, node, p_node)
         marked = {id(p_node): (node, p_node)}
         stacked = [id(p_node)]
         iteration = 0
@@ -692,22 +802,54 @@ class EasyPatternOptimization(PatternOptimization):
             idn = stacked.pop()
             n, pn = marked[idn]
 
-            res = self._match_backward(g, node, pat, marked, stacked, n, pn)
-            if res is None:
-                if self.verbose > 5:
-                    print("[EasyPatternOptimization.match] done. backward failed.")
-                return res
+            fall_back_candidates = None
+            if any(map(lambda i: pat.node_before(i) is not None, pn.input)):
+                # There are backward nodes in the pattern.
+                res = self._match_backward(
+                    g, node, pat, marked, pair_results_names, stacked, n, pn
+                )
+                if res is None:
+                    if self.verbose > 5:
+                        print("[EasyPatternOptimization.match] done. backward failed.")
+                    return res
+            else:
+                # We check then if an input or pn has an unmatched node.
+                for x in pn.input:
+                    psuccessors = pat.next_nodes(x)
+                    if len(psuccessors) == 1:
+                        # It is itself.
+                        continue
+                    for pnn in psuccessors:
+                        if id(pnn) not in marked:
+                            # One unmarked node is consuming the input.
+                            # The potential list of candidates.
+                            fall_back_candidates = list(zip(n.input, pn.input))
+                            break
 
             assert all(map(lambda b: id(b[1]) in check_ids, marked.values())), (
                 f"At least one id is not part of the pattern ids={check_ids}, "
                 f"marked={set(id(b[1]) for b in marked.values())}"
             )
 
-            res = self._match_forward(g, node, pat, marked, stacked, n, pn)
+            res = self._match_forward(
+                g, node, pat, marked, pair_results_names, stacked, n, pn
+            )
             if res is None:
                 if self.verbose > 5:
                     print("[EasyPatternOptimization.match] done. forward failed.")
                 return res
+
+            if res == 0 and fall_back_candidates:
+                # No backward possible, no forward either.
+                # We make sure that one of pattern inputs is not linked to another
+                # node in the pattern itself.
+                for candidate in fall_back_candidates:
+                    res = self._match_forward(
+                        g, node, pat, marked, pair_results_names, stacked, *candidate
+                    )
+                    if res is None or res == 0:
+                        continue
+                    break
 
             assert all(map(lambda b: id(b[1]) in check_ids, marked.values())), (
                 f"At least one id is not part of the pattern ids={check_ids}, "
@@ -722,11 +864,18 @@ class EasyPatternOptimization(PatternOptimization):
             return self.none(node, inspect.currentframe().f_lineno)
 
         # At this point, the pattern is matched but let's make sure.
-        assert len(marked) == len(pat.nodes), (
-            f"Number of marked nodes is different, {len(marked)} marked nodes, "
-            f"and {len(pat.nodes)} nodes in the pattern, marked is {marked}"
-        )
         assert len(stacked) == 0, f"There are still {len(stacked)} nodes to explore."
+        if len(marked) != len(pat.nodes):
+            # This should matched in most cases but when there are
+            # multiple outputs,
+            self._hint(
+                "MATCH: not enough matched nodes",
+                "-- len(marked)",
+                len(marked),
+                "-- len(pat.nodes)",
+                len(pat.nodes),
+            )
+            return self.none(node, inspect.currentframe().f_lineno)
 
         # We order the matched nodes in the same order than the pattern
         # to let next functions to be able to build the matching again.
@@ -742,9 +891,16 @@ class EasyPatternOptimization(PatternOptimization):
 
         if self.verbose > 5:
             print(
-                f"[EasyPatternOptimization.match] done. "
+                f"[EasyPatternOptimization.match] done = matched. "
                 f"{len(marked)} marked nodes with {iteration} iterations"
             )
+            if self.verbose >= 10:
+                for node, pat_node in zip(matched_nodes, pat.nodes):
+                    sleft = f"{node.op_type}({node.input})->{node.output}"
+                    print(
+                        f"    {sleft}{' ' * (60 - len(sleft))}"
+                        f"MATCHED  {pat_node.op_type}({pat_node.input})->{pat_node.output}"
+                    )
 
         return MatchResult(self, matched_nodes, self.apply)
 
@@ -761,7 +917,8 @@ class EasyPatternOptimization(PatternOptimization):
         g: "GraphBuilder",  # noqa: F821
         *nodes: Sequence[NodeProto],
     ) -> List[NodeProto]:
-        pat = self._build_pattern(g, self.match_pattern)
+        # Why build the pattern gain
+        pat = self._get_match_pattern(g)
         assert len(nodes) == len(pat.nodes), (
             f"Mismatch matched nodes pattern has {len(pat.nodes)} != {len(nodes)} = "
             f"the number of matched nodes"
@@ -807,7 +964,7 @@ class EasyPatternOptimization(PatternOptimization):
                 if b in matched_pattern_to_graph_name:
                     assert matched_pattern_to_graph_name[b] == a, (
                         f"Ambiguities, pattern name {b!r} means "
-                        f"{a!r} or {matched_pattern_to_graph_name[b]}"
+                        f"{a!r} or {matched_pattern_to_graph_name[b]!r}"
                     )
                 else:
                     matched_pattern_to_graph_name[b] = a

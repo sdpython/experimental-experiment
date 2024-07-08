@@ -30,6 +30,8 @@ def _get_session(
         except Exception as e:
             from onnx_array_api.plotting.text_plot import onnx_simple_text_plot
 
+            with open("dump_debug_get_session.onnx", "wb") as f:
+                f.write(onx.SerializeToString())
             raise AssertionError(
                 f"Unable to build session ({str(e)})\n{onnx_simple_text_plot(onx)}"
             ) from e

@@ -11,7 +11,7 @@ class TestIssuePytorch_126856(ExtTestCase):
 
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_onnxscript("0.2")
-    @requires_torch("2.4")
+    @requires_torch("2.6")
     def test_export_dynamo(self):
         import torch
         import onnxruntime as rt
@@ -34,7 +34,14 @@ class TestIssuePytorch_126856(ExtTestCase):
             onnx_program.model_proto.SerializeToString(),
             providers=["CPUExecutionProvider"],
         )
-        results = session.run(None, {"l_x_": input_tensor.cpu().numpy()})
+        feeds = {
+            onnx_program.model_proto.graph.input[0].name: input_tensor.cpu().numpy()
+        }
+        try:
+            results = session.run(None, feeds)
+        except ValueError as e:
+            if "are missing from input feed" in str(e):
+                raise unittest.SkipTest(f"bug in dynamo exporter: {e}")
         self.assertEqualArray(expected, results[0])
 
     @ignore_warnings((DeprecationWarning, UserWarning))

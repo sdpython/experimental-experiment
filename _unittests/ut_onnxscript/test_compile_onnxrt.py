@@ -36,7 +36,7 @@ def return_module_cls_pool():
 class TestDynamoOnnxRtBackend(ExtTestCase):
     @skipif_ci_apple("crash on apple")
     @skipif_ci_windows("not supported yet on Windows")
-    @requires_torch("2.2", "export fails")
+    @requires_torch("2.5", "export fails")
     @ignore_warnings((DeprecationWarning, UserWarning))
     def test_onnxrt_tutorial_0a(self):
         from onnxruntime import InferenceSession
@@ -72,7 +72,7 @@ class TestDynamoOnnxRtBackend(ExtTestCase):
 
     @skipif_ci_apple("crash on apple")
     @skipif_ci_windows("not supported yet on Windows")
-    @requires_torch("2.2", "export fails")
+    @requires_torch("2.5", "export fails")
     @ignore_warnings((DeprecationWarning, UserWarning))
     def test_onnxrt_tutorial_0b(self):
         from onnxruntime import InferenceSession

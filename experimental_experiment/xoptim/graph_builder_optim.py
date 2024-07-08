@@ -1,7 +1,7 @@
 import os
 import pprint
 import time
-from typing import Any, Callable, Dict, Iterator, List, Optional, Union
+from typing import Any, Callable, Dict, Iterator, List, Optional, Tuple, Union
 import numpy as np
 from onnx import AttributeProto, NodeProto, TensorProto
 from onnx.shape_inference import infer_shapes
@@ -230,6 +230,9 @@ class GraphBuilderPatternOptimization:
         """
         if not self.is_constant(name):
             return False
+        cst_shape = self.get_constant_shape(name, exc=False)
+        if cst_shape is None or cst_shape not in (tuple(), (1,)):
+            return False
         cst = self.get_computed_constant(name)
         if hasattr(cst, "numpy"):
             # This could fail xith bfloat16, ...
@@ -245,6 +248,62 @@ class GraphBuilderPatternOptimization:
         if cst.shape == (1,):
             return all(cst == value)
         return cst == value
+
+    def get_constant_shape(
+        self, name: str, exc: bool = True
+    ) -> Optional[Tuple[int, ...]]:
+        """
+        Returns the shape of a constant.
+
+        :param name: name
+        :param exc: raises an exception is not possible
+        :return: shape
+        """
+        if name in self._cache_computed_constant:
+            return self._cache_computed_constant[name].shape
+        if name in self.builder.initializers_dict:
+            proto = self.builder.initializers_dict[name]
+        elif name in self.builder.constants_:
+            proto = self.builder.constants_[name]
+        else:
+            if exc:
+                raise AssertionError(
+                    f"Unable to retrieve initializer or constant for {name!r}"
+                )
+            return None
+
+        if isinstance(proto, TensorProto):
+            return tuple(proto.dims)
+        if isinstance(proto, NodeProto) and proto.domain == "":
+            if proto.op_type == "Cast":
+                return self.get_constant_shape(proto.input[0], exc=exc)
+            if proto.op_type != "Constant":
+                if exc:
+                    raise AssertionError(
+                        f"Unable to retrieve shape for name={name!r} and node {proto.op_type!r}."
+                    )
+                return None
+            assert (
+                len(proto.attribute) == 1
+            ), f"Unexpected number of attribute for node={proto}"
+            for att in proto.attribute:
+                if att.name == "value":
+                    return tuple(proto.value.dims)
+                if att.name in {"value_float", "value_int"}:
+                    return tuple()
+            raise AssertionError(
+                f"Unable to retrieve shape for name={name!r} (type is NodeProto), "
+                f"node.op_type={proto.op_type!r}, "
+                f"attributes={[att.name for att in proto.attribute]}."
+            )
+            return None
+        if hasattr(proto, "shape"):
+            return proto.shape
+        if exc:
+            raise AssertionError(
+                f"Unable to retrieve shape for name={name!r} and type {type(proto)}"
+            )
+        return None
 
     def get_constant_scalar(self, name: str) -> Union[int, float]:
         """

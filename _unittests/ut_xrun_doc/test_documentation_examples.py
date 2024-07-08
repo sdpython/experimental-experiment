@@ -72,12 +72,18 @@ class TestDocumentationExamples(ExtTestCase):
                 continue
             reason = None
 
+            if sys.version_info >= (3, 12, 0):
+                reason = "too long"
+
             if name in {"plot_torch_export_201.py"}:
                 if sys.platform in {"win32"}:
                     # dynamo not supported on windows
                     reason = "windows not supported"
 
-            if name in {"plot_llama_bench_102.py", "plot_torch_custom_backend_101.py"}:
+            if not reason and name in {
+                "plot_llama_bench_102.py",
+                "plot_torch_custom_backend_101.py",
+            }:
                 if sys.platform in {"win32", "darwin"}:
                     # dynamo not supported on windows
                     reason = "onnxruntime-training not available"
@@ -93,12 +99,16 @@ class TestDocumentationExamples(ExtTestCase):
                     reason = "graphviz not installed"
 
             if name in {"plot_llama_diff_dort_301.py", "plot_llama_diff_export_301.py"}:
-                import torch
+                from torch import __version__ as tv
 
-                if pv.Version(".".join(torch.__version__.split(".")[:2])) < pv.Version(
-                    "2.4"
-                ):
+                if pv.Version(".".join(tv.split(".")[:2])) < pv.Version("2.4"):
                     reason = "requires torch 2.4"
+
+            if name in {"plot_torch_export_201.py"}:
+                from torch import __version__ as tv
+
+                if pv.Version(".".join(tv.split(".")[:2])) < pv.Version("2.5"):
+                    reason = "requires torch 2.5"
 
             if name in {"plot_llama_bench_102.py"}:
                 if sys.platform in {"darwin"}:

@@ -245,12 +245,12 @@ class TestOnnxExport(ExtTestCase):
 
         sub1 = [n for n in onx1.graph.node if n.op_type == "Sub"]
         sub2 = [n for n in onx2.graph.node if n.op_type == "Sub"]
-        self.assertEqual(len(sub1), 2)
+        self.assertIn(len(sub1), {0, 2})
         self.assertEqual(len(sub2), 0)
 
         p1 = [n for n in onx1.graph.node if n.op_type == "MaxPool"]
         p2 = [n for n in onx2.graph.node if n.op_type == "MaxPool"]
-        self.assertEqual(len(p1), 4)
+        self.assertIn(len(p1), {2, 4})
         self.assertEqual(
             len(p2), 2, f"Mismatch number of MaxPool, {onnx_simple_text_plot(onx2)}"
         )

@@ -13,7 +13,7 @@ class TestBenchScript(ExtTestCase):
     def test_reg(self):
         text = ":m,6;"
         m = _extract_metrics(text)
-        self.assertEqual(m, {"m": "6"})
+        self.assertEqual(m, {"m": 6})
 
     def test_cmd(self):
         cmd = _cmd_line("l", m=6)
@@ -34,7 +34,7 @@ class TestBenchScript(ExtTestCase):
         except BenchmarkError as e:
             raise unittest.SkipTest(f"Probably no metric collected due to {e}")
         self.assertEqual(len(res), 1)
-        expected = {"metric1": "0.5", "metric2": "5", "metric3": "dummy", "m": 6}
+        expected = {"metric1": 0.5, "metric2": 5, "metric3": "dummy", "m": 6}
         got = res[0]
         for k, v in expected.items():
             self.assertIn(k, got)

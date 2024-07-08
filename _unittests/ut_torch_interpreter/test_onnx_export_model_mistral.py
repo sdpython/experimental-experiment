@@ -9,6 +9,7 @@ from experimental_experiment.ext_test_case import (
     ExtTestCase,
     ignore_warnings,
     requires_torch,
+    requires_transformers,
     has_cuda,
 )
 from experimental_experiment.xbuilder import OptimizationOptions
@@ -85,6 +86,7 @@ class TestOnnxExportMistral(ExtTestCase):
     @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
     @requires_torch("2.3", "bug")
     @ignore_warnings(DeprecationWarning)
+    @requires_transformers("4.42", or_older_than="4.38")
     def test_mistral_model(self):
         model, input_tensors = get_mistral_model()
         input_tensors = input_tensors[0]

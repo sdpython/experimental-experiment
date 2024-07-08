@@ -48,8 +48,8 @@ config_dict = create_configuration_for_benchmark(
 )
 
 verbose = int(args.verbose)
-disable_pattern = [_ for _ in args.disable_pattern.split(",") if _]
-enable_pattern = [_ for _ in args.enable_pattern.split(",") if _]
+disable_pattern = [_ for _ in args.disable_pattern.split("+") if _]
+enable_pattern = [_ for _ in args.enable_pattern.split("+") if _]
 print(f"model config={config_dict}")
 print(f"backend={args.backend}")
 print(f"verbose={args.verbose}")

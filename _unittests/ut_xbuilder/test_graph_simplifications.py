@@ -12,6 +12,7 @@ from experimental_experiment.reference import ExtendedReferenceEvaluator
 class TestGraphSimplification(ExtTestCase):
     def call_optimizer(self, onx):
         gr = GraphBuilder(onx, infer_shapes=True)
+        assert hasattr(gr, "_debug_stop")
         gr.remove_unused()
         return gr.to_onnx()
 

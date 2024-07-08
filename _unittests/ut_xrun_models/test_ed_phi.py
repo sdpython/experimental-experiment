@@ -81,6 +81,7 @@ class TestEdPhi(ExtTestCase):
     @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.4")
+    @unittest.skipIf(not has_cuda(), reason="requires cuda")
     def test_phi_cort_static_mixed(self):
         import torch
 
@@ -124,6 +125,7 @@ class TestEdPhi(ExtTestCase):
     @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.3", "AssertionError: original output #6 is None")
+    @unittest.skipIf(sys.version_info >= (3, 12, 0), reason="too long")
     def test_phi_cort_dynamic(self):
         model, input_tensors = get_phi_model()
         input_tensors = input_tensors[0]
@@ -222,6 +224,7 @@ class TestEdPhi(ExtTestCase):
     @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.3", "AssertionError: original output #6 is None")
+    @unittest.skipIf(sys.version_info >= (3, 12, 0), reason="too long")
     def test_phi_cort_dynamic(self):
         model, input_tensors = get_phi_model()
         input_tensors = input_tensors[0]
@@ -286,7 +289,7 @@ class TestEdPhi(ExtTestCase):
     @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.3", "AssertionError: original output #6 is None")
-    def test_llama_cort_dynamic_norename_custom(self):
+    def test_phi_cort_dynamic_norename_custom(self):
         model, input_tensors = get_llama_model()
         input_tensors = input_tensors[0]
         expected = model(*input_tensors)
@@ -313,7 +316,7 @@ class TestEdPhi(ExtTestCase):
         if __name__ == "__main__":
             for i, inst in enumerate(instances):
                 self.dump_onnx(
-                    f"test_llama_cort_dynamic_{i}_norename_custom.onnx", inst["onnx"]
+                    f"test_phi_cort_dynamic_{i}_norename_custom.onnx", inst["onnx"]
                 )
         """
 

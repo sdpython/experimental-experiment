@@ -7,17 +7,21 @@ import io
 import os
 import warnings
 from typing import Any, Dict, List, Optional, Union
-from onnx import ModelProto
+from onnx import ModelProto, save
 
 
 def check_model_ort(
-    onx: ModelProto, providers: Optional[Union[str, List[str]]] = None
+    onx: ModelProto,
+    providers: Optional[Union[str, List[str]]] = None,
+    dump_file: Optional[str] = None,
 ) -> "onnxruntime.InferenceSession":  # noqa: F821
     """
     Loads a model with onnxruntime.
 
     :param onx: ModelProto
     :param providers: list of providers, None fur CPU, cpu for CPU, cuda for CUDA
+    :param dump_file: if not empty, dumps the model into this file if
+        an error happened
     :return: InferenceSession
     """
     from onnxruntime import InferenceSession
@@ -34,6 +38,9 @@ def check_model_ort(
             import onnx
             from onnx_array_api.plotting.text_plot import onnx_simple_text_plot
 
+            if dump_file:
+                save(onx, dump_file)
+
             raise AssertionError(
                 f"onnxruntime cannot load the model "
                 f"due to {e}\n{onnx_simple_text_plot(onnx.load(onx))}"
@@ -43,6 +50,9 @@ def check_model_ort(
         return InferenceSession(onx.SerializeToString(), providers=providers)
     except Exception as e:
         from onnx_array_api.plotting.text_plot import onnx_simple_text_plot
+
+        if dump_file:
+            save(onx, dump_file)
 
         raise AssertionError(
             f"onnxruntime cannot load the model"

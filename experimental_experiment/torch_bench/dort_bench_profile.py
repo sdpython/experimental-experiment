@@ -44,7 +44,7 @@ from onnxruntime.capi import _pybind_state as ORTC
 from experimental_experiment.torch_dynamo.fast_backend import (
     _run_onnx_session_with_ortvaluevector,
 )
-from experimental_experiment.convert.convert_helper import optimize_model_proto
+from experimental_experiment.convert.convert_helper import optimize_model_proto_oxs
 from experimental_experiment.torch_dynamo.backend_helper import get_dimensions
 
 
@@ -81,7 +81,7 @@ if args.rewrite in (1, "1"):
     model_model = args.model.replace(".onnx", ".rewrite.onnx")
     print(f"-- optimize again into {model_model}")
     proto = onnx.load(args.model)
-    new_proto = optimize_model_proto(proto, verbose=args.verbose)
+    new_proto = optimize_model_proto_oxs(proto, verbose=args.verbose)
     onnx.save(new_proto, model_model)
     print("-- done")
 else:

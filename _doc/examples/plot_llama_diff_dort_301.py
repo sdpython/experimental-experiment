@@ -66,7 +66,7 @@ import torch
 from torch._dynamo.backends.common import aot_autograd
 from experimental_experiment.ext_test_case import unit_test_going
 from experimental_experiment.convert.convert_helper import (
-    optimize_model_proto,
+    optimize_model_proto_oxs,
     ort_optimize,
 )
 from experimental_experiment.torch_models.llama_helper import (
@@ -339,7 +339,7 @@ reorder_functions_in_proto(model_onnxrt)
 
 debug = onnx.load(model_debug)
 try:
-    onnxrt = optimize_model_proto(onnx.load(model_onnxrt))
+    onnxrt = optimize_model_proto_oxs(onnx.load(model_onnxrt))
 except ImportError as e:
     print("missing library", e)
     onnxrt = debug

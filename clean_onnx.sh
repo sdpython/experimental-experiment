@@ -11,8 +11,11 @@ rm temp* -rf
 rm dump* -rf
 rm *.sarif
 rm *.svg
+rm output_data_bash*
 rm dump_models -rf
+rm dump_test_models -rf
 rm neural_coder_workspace -rf
+rm output_data*
 
 rm _doc/examples/plot*.onnx
 rm _doc/examples/plot*.txt

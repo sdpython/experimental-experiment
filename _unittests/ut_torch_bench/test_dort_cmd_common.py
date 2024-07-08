@@ -38,6 +38,11 @@ class TestDortCmdCommond(ExtTestCase):
             "dynger",
             "trt",
         }:
+            if bck == "trt":
+                try:
+                    import torch_tensorrt  # noqa: F401
+                except ImportError:
+                    continue
             cp = create_compiled_model(
                 model,
                 backend=bck,

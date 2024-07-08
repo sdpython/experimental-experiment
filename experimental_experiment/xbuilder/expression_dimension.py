@@ -28,14 +28,25 @@ def parse_expression(
     :param context: known variables (or dimensions)
     :return: an expression
     """
-    assert isinstance(expr, str), f"Unexpected type {type(expr)} for expr={expr!r}"
+    if hasattr(expr, "__sym_float__"):
+        # torch.SymInt
+        return parse_expression(expr.node, context=context)
+    if hasattr(expr, "_expr"):
+        # torch.fx.experimental.sym_node.SymNode
+        return parse_expression(str(expr._expr), context=context)
+
+    assert isinstance(
+        expr, str
+    ), f"Unexpected type {type(expr)} for expr={expr!r} and context={context}"
     assert exc, "parse_expression not implemented when exc is False"
     if context is None:
         context = {}
     st = ast.parse(expr, mode="eval")
     for node in ast.walk(st):
         if isinstance(node, ast.Name):
-            assert node.id in context, (
+            assert node.id in context or node.id in set(
+                str(d) for d in context.values()
+            ), (
                 f"Unable to find name {node.id!r} in expression {expr!r}, "
                 f"context is {context}"
             )

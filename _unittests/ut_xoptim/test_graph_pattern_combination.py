@@ -19,7 +19,11 @@ from onnx.checker import check_model
 from onnx.shape_inference import infer_shapes
 from onnx.onnx_cpp2py_export.shape_inference import InferenceError
 from experimental_experiment.reference import ExtendedReferenceEvaluator
-from experimental_experiment.ext_test_case import ExtTestCase
+from experimental_experiment.ext_test_case import (
+    ExtTestCase,
+    skipif_ci_windows,
+    requires_onnxruntime_training,
+)
 from experimental_experiment.xbuilder.graph_builder import (
     GraphBuilder,
     OptimizationOptions,
@@ -164,7 +168,7 @@ class TestGraphPatternCombination(ExtTestCase):
         if skip and not os.path.exists(p):
             raise unittest.SkipTest(f"Unable to find {p!r}.")
         self.assertExists(p)
-        return load_onnx(p)
+        return load_onnx(p, load_external_data=False)
 
     def _range(self, *shape, bias: float = None):
         n = np.prod(shape)
@@ -454,6 +458,7 @@ class TestGraphPatternCombination(ExtTestCase):
                 self.assertIn("SimplifiedLayerNormalization", types)
                 self._check_ort_cpu_or_cuda(onx)
 
+    @requires_onnxruntime_training()
     def test_simplified_with_all_default(self):
         self._simplified_with_all(
             {}, experimental=False, check_ort=cuda_recent_enough()
@@ -497,6 +502,8 @@ class TestGraphPatternCombination(ExtTestCase):
             "dort-model-llama-ort+_0.onnx",
             "dort-model-llama-ort+_1.onnx",
             "dort-model-llama-ort+_1_split.onnx",
+            "em_llama_custom_static_fp32_cuda_large_h6_58fa9.onnx.2.onnx",
+            "em_phi_custom_static_fp32_cuda_large_h6_58fa9.onnx.2.onnx",
         ]:
             if model in {
                 "noopt-llama-custom__1.onnx",
@@ -552,12 +559,13 @@ class TestGraphPatternCombination(ExtTestCase):
             if check_ort:
                 self._check_ort_cpu_or_cuda(new_onx, model=model)
 
+    @skipif_ci_windows("crash")
     def test_study(self):
-        model = "dort-llama2-llama-ort+_1.onnx"
+        model = "em_llama_custom_static_fp32_cuda_large_h6_58fa9.onnx.2.onnx"
         enabled = {
             "RotaryConcatPartPattern",
         }
-        # enabled = {}
+        enabled = {}
         disabled = {}
         options = OptimizationOptions(
             patterns="default+onnxruntime+experimental",
@@ -603,12 +611,24 @@ class TestGraphPatternCombination(ExtTestCase):
         with open(f"test_study_{os.path.split(model)[-1]}", "wb") as f:
             f.write(new_onx.SerializeToString())
 
-        from onnxruntime.capi.onnxruntime_pybind11_state import NotImplemented
+        from onnxruntime.capi.onnxruntime_pybind11_state import (
+            Fail,
+            NotImplemented,
+            RuntimeException,
+        )
 
         try:
             self._check_ort_cpu_or_cuda(onx)
         except NotImplemented as e:
             raise unittest.SkipTest(f"missing extension: {e}")
+        except Fail as e:
+            if "com.microsoft:SoftmaxGrad(-1) is not a registered function" in str(e):
+                unittest.SkipTest(f"onnxruntime-training is needed for {e}")
+            raise
+        except RuntimeException as e:
+            if "Invalid fd was supplied" in str(e):
+                raise unittest.SkipTest(f"missing extension: {e}")
+            raise
         self._check_ort_cpu_or_cuda(new_onx)
 
 

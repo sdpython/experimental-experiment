@@ -562,17 +562,24 @@ def requires_torch(version: str, msg: str = "") -> Callable:
     return lambda x: x
 
 
-def requires_transformers(version: str, msg: str = "") -> Callable:
+def requires_transformers(
+    version: str, msg: str = "", or_older_than: Optional[str] = None
+) -> Callable:
     """
     Skips a unit test if :epkg:`transformers` is not recent enough.
     """
     import packaging.version as pv
     import transformers
 
-    if pv.Version(".".join(transformers.__version__.split(".")[:2])) < pv.Version(
-        version
-    ):
+    v = pv.Version(".".join(transformers.__version__.split(".")[:2]))
+    if v < pv.Version(version):
         msg = f"transformers version {transformers.__version__} < {version}: {msg}"
+        return unittest.skip(msg)
+    if or_older_than and v > pv.Version(or_older_than):
+        msg = (
+            f"transformers version {or_older_than} < "
+            f"{transformers.__version__} < {version}: {msg}"
+        )
         return unittest.skip(msg)
     return lambda x: x
 

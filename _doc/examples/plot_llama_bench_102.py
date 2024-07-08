@@ -180,6 +180,12 @@ def make_config(
 
 
 if parsed_args.check not in (1, "1") and not unit_test_going():
+
+    def _split(s):
+        if isinstance(s, int):
+            return [s]
+        return [int(i) for i in s.split(",")]
+
     verbose = parsed_args.verbose
     configs = []
     for (
@@ -194,12 +200,12 @@ if parsed_args.check not in (1, "1") and not unit_test_going():
     ) in itertools.product(
         parsed_args.backend.split(","),
         parsed_args.device.split(","),
-        list(map(int, parsed_args.num_hidden_layers.split(","))),
-        list(map(int, parsed_args.mixed.split(","))),
-        list(map(int, parsed_args.dynamic.split(","))),
+        _split(parsed_args.num_hidden_layers),
+        _split(parsed_args.mixed),
+        _split(parsed_args.dynamic),
         parsed_args.patterns.split(","),
         parsed_args.implementation.split(","),
-        list(map(int, parsed_args.ort_optimize.split(","))),
+        _split(parsed_args.ort_optimize),
     ):
         if mixed == 1 and device == "cpu":
             continue
