@@ -153,7 +153,6 @@ class BenchmarkRunner:
         """
         assert not process, "process=True not implemented."
         assert not dynamic, "dynamic=True not implemented."
-        assert not optimization, "optimization=True not implemented."
 
         import transformers
         import onnxruntime
@@ -221,6 +220,7 @@ class BenchmarkRunner:
             stats["input_size"] = self.obj_size(model_runner.inputs)
             stats["_index"] = f"{model_name}-{exporter}"
             stats["date_start"] = f"{datetime.now():%Y-%m-%d}"
+            stats["opt_patterns"] = optimization
 
             if self.device == "cuda":
                 stats["mema_gpu_1_after_loading"] = torch.cuda.memory_allocated(0)
@@ -353,7 +353,7 @@ class BenchmarkRunner:
             begin = time.perf_counter()
             if quiet:
                 try:
-                    exported_model = model_runner.export_as(
+                    exported_model, opt_stats = model_runner.export_as(
                         exporter,
                         name=filename,
                         dynamic=dynamic,
@@ -372,7 +372,7 @@ class BenchmarkRunner:
                     continue
                 stats["time_export"] = time.perf_counter() - begin
             else:
-                exported_model = model_runner.export_as(
+                exported_model, opt_stats = model_runner.export_as(
                     exporter,
                     name=filename,
                     dynamic=dynamic,
@@ -392,6 +392,7 @@ class BenchmarkRunner:
                         f"reserved={torch.cuda.memory_reserved(0)} after export"
                     )
 
+            stats.update(self._post_process_optimization_statistics(opt_stats))
             stats["filename"] = filename
             if quiet:
                 try:
@@ -666,6 +667,54 @@ class BenchmarkRunner:
         """Runs with onnxruntme."""
         list_feeds = [feeds[k] for k in sess.input_names]
         return sess.run_dlpack(*list_feeds)
+
+    @classmethod
+    def _post_process_optimization_statistics(
+        cls, opt_stats: List[Dict[str, Any]]
+    ) -> Dict[str, Any]:
+        """
+        Example:
+
+        ::
+
+            [{'pattern': 'check_A', 'time_in': 0.004310695920139551},
+             {'pattern': 'remove_identity_nodes', 'removed': 393, 'added': 243, 'time_in': 0.008972601033747196},
+             {'pattern': 'check_B', 'time_in': 0.00272956071421504},
+             {'pattern': 'remove_unused', 'removed': 0, 'time_in': 0.007460766937583685},
+             {'pattern': 'check_C', 'time_in': 0.002775861881673336},
+             {'pattern': 'match_CastPattern', 'iteration': 0, 'instances': 26, 'time_in': 0.001641636248677969, 'match_index': 26},
+             {'pattern': 'match_ExpandPattern', 'iteration': 0, 'instances': 0, 'time_in': 0.0013782307505607605, 'match_index': 26},
+             {'pattern': 'match_IdentityPattern', 'iteration': 0, 'instances': 73, 'time_in': 0.0037209829315543175, 'match_index': 99},
+             {'pattern': 'apply_IdentityPattern', 'added': 1, 'removed': 1, 'iteration': 0, 'match_index': 88, 'instances': 1, 'time_in': 0.0004087090492248535}
+        """
+        time_in = 0.0
+        added = 0
+        removed = 0
+        max_iter = 0
+        applied = set()
+        matched = set()
+        n_applied = 0
+        for obs in opt_stats:
+            time_in += obs.get("time_in", 0)
+            added += obs.get("added", 0)
+            removed += obs.get("removed", 0)
+            max_iter = max(max_iter, obs.get("iteration", 0))
+            p = obs["pattern"]
+            if p.startswith("match_"):
+                matched.add(p)
+            elif p.startswith("apply_"):
+                applied.add(p)
+                n_applied += 1
+        return dict(
+            onnx_optimized=1,
+            onnx_opt_time_in=time_in,
+            onnx_opt_added=added,
+            onnx_opt_removed=removed,
+            onnx_opt_max_iter=max_iter,
+            onnx_opt_unique_matched=len(matched),
+            onnx_opt_unique_applied=len(applied),
+            onnx_opt_n_applied=n_applied,
+        )
 
     @classmethod
     def _flatten(cls, value):

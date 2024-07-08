@@ -359,18 +359,26 @@ class ModelRunner:
         assert not dynamic, "dynamic true not implemented yet"
         assert no_grad, "no_grad false not implemented yet"
         from ..torch_interpreter import to_onnx
+        from ..xbuilder import OptimizationOptions
+
+        if optimization:
+            options = OptimizationOptions(patterns=optimization)
+        else:
+            options = None
 
         with torch.no_grad():
-            onx = to_onnx(
+            onx, stats = to_onnx(
                 self.model,
                 self.inputs,
                 optimize=bool(optimization),
                 large_model=True,
                 verbose=0,  # max(verbose - 1, 0),
                 target_opset=target_opset,
+                return_optimize_report=True,
+                options=options,
             )
         onx.save(name)
-        return onx.model_proto
+        return onx.model_proto, stats
 
     def _to_onnx_script(
         self,
@@ -394,7 +402,7 @@ class ModelRunner:
                 do_constant_folding=False,
                 opset_version=target_opset,
             )
-        return onnx.load(name, load_external_data=False)
+        return onnx.load(name, load_external_data=False), None
 
     def _to_onnx_dynamo(
         self,
@@ -419,7 +427,7 @@ class ModelRunner:
                 opset_version=target_opset,
                 dynamo=True,
             )
-        return onnx.load(name, load_external_data=False)
+        return onnx.load(name, load_external_data=False), None
 
     def _to_onnx_dynamo2(
         self,
@@ -445,7 +453,7 @@ class ModelRunner:
                 ),
             )
         exported.save(name)
-        return onnx.load(name, load_external_data=False)
+        return onnx.load(name, load_external_data=False), None
 
     def _to_export(
         self,
@@ -464,7 +472,7 @@ class ModelRunner:
 
         with torch.no_grad():
             res = export(self.model, self.inputs)
-        return res
+        return res, None
 
     def _to_eager(
         self,
@@ -480,7 +488,7 @@ class ModelRunner:
         assert not dynamic, "dynamic true not implemented yet"
         assert no_grad, "no_grad false not implemented yet"
 
-        return self.model
+        return self.model, None
 
     def _to_compile(
         self,
@@ -503,7 +511,7 @@ class ModelRunner:
 
         with torch.no_grad():
             res = torch.compile(self.model, backend=lambda gm, inputs: gm.forward)
-        return res
+        return res, None
 
     def make_feeds(self, exporter: str, filename: Optional[str] = None):
         """Creates feed inputs."""

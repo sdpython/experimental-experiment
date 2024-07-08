@@ -2716,6 +2716,7 @@ class GraphBuilder:
         optimize: bool = True,
         large_model: bool = False,
         external_threshold: int = 1024,
+        return_optimize_report: bool = False,
     ) -> Union[FunctionProto, ModelProto, TorchModelContainer]:
         """
         Conversion to onnx. Only then the initializer are converted into
@@ -2729,6 +2730,7 @@ class GraphBuilder:
             or saved as external weights
         :param external_threshold: if large_model is True, every tensor above this limit
             is stored as external
+        :param return_optimize_report: return statistics about the optimization as well
         :return: the proto
         """
         if len(self.nodes) == 0:
@@ -2736,7 +2738,9 @@ class GraphBuilder:
                 f"The onnx model is empty (no node).\n{self.get_debug_msg()}"
             )
         if optimize:
-            self.optimize()
+            stats = self.optimize()
+        else:
+            stats = None
         assert len(self.nodes) > 0, (
             f"The onnx model is empty after optimization (no node)."
             f"\n{self.get_debug_msg()}"
@@ -2790,9 +2794,9 @@ class GraphBuilder:
             if large_initializers:
                 lm.set_large_initializers(large_initializers)
                 lm.check_large_initializers()
-            return lm
+            return (lm, stats) if return_optimize_report else lm
 
-        return model
+        return (model, stats) if return_optimize_report else model
 
     def _add_shape_information(self, model: ModelProto):
 
@@ -2856,7 +2860,7 @@ class GraphBuilder:
     def optimize(self) -> List[Dict[str, Any]]:
         """
         Optimizes a graph.
-        Returns the list of applied processed.
+        Returns the list of applied processes.
         """
 
         def _check(stats, step):
@@ -3261,7 +3265,12 @@ class GraphBuilder:
             max_dim = 0
             for _v in feeds.values():
                 max_dim = max(max_dim, np.prod(_v.shape))
-            if max_dim >= 2**16:
+            if max_dim >= 2**22:
+                if self.verbose > 1:
+                    print(
+                        f"[GraphBuilder.compute_constant] stop computing a "
+                        f"constant as it may be too big, shapes are {[_.shape for _ in feeds.values()]}"
+                    )
                 return None, None
             ref = ExtendedReferenceEvaluator(v)
             output = ref.run(None, feeds)

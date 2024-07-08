@@ -338,6 +338,7 @@ def to_onnx(
     large_model: bool = False,
     external_threshold: int = 1024,
     api_two: bool = False,
+    return_optimize_report: bool = False,
 ) -> Union[
     Union[ModelProto, ModelContainer],
     Tuple[Union[ModelProto, ModelContainer], GraphBuilder],
@@ -366,6 +367,7 @@ def to_onnx(
     :param external_threshold: if large_model is True, every tensor above this limit
         is stored as external
     :param api_two: use ``torch._dynamo.export`` instead of ``torch.export.export``
+    :param return_optimize_report: returns statistics on the optimization as well
     :return: onnx model
     """
     if target_opset is None:
@@ -423,12 +425,12 @@ def to_onnx(
         print("[to_onnx] start conversion to onnx (before optimization)")
         begin = t
 
-    onx = builder.to_onnx(
+    onx, stats = builder.to_onnx(
         optimize=optimize,
         large_model=large_model,
         external_threshold=external_threshold,
+        return_optimize_report=True,
     )
-
     if verbose:
         t = time.perf_counter()
         proto = onx if isinstance(onx, ModelProto) else onx.model_proto
@@ -443,5 +445,5 @@ def to_onnx(
             print(builder.get_debug_msg())
 
     if return_builder:
-        return onx, builder
-    return onx
+        return (onx, builder, stats) if return_optimize_report else (onx, builder)
+    return (onx, stats) if return_optimize_report else onx
