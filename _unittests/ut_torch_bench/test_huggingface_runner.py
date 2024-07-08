@@ -8,7 +8,9 @@ from experimental_experiment.ext_test_case import (
     hide_stdout,
 )
 from experimental_experiment.torch_bench._bash_bench_model_runner import ModelRunner
-from experimental_experiment.torch_bench._bash_bench_set_huggingface import HuggingfaceRunner
+from experimental_experiment.torch_bench._bash_bench_set_huggingface import (
+    HuggingfaceRunner,
+)
 
 
 class TestHuggingFaceRunner(ExtTestCase):
