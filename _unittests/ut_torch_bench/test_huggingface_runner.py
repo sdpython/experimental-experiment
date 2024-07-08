@@ -7,10 +7,8 @@ from experimental_experiment.ext_test_case import (
     requires_onnxruntime_training,
     hide_stdout,
 )
-from experimental_experiment.torch_bench._bash_bench_huggingface import (
-    HuggingfaceRunner,
-    ModelRunner,
-)
+from experimental_experiment.torch_bench._bash_bench_model_runner import ModelRunner
+from experimental_experiment.torch_bench._bash_bench_set_huggingface import HuggingfaceRunner
 
 
 class TestHuggingFaceRunner(ExtTestCase):
