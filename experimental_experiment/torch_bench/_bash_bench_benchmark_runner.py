@@ -343,8 +343,9 @@ class BenchmarkRunner:
             # export
             ########
 
+            sopt = ("-" + optimization.replace("+", "_").replace("/", "_")) if optimization else ""                
             pfilename = os.path.join(
-                folder, f"{model_name}-{exporter}-{self.device}-{self.dtype or ''}"
+                folder, f"{model_name}-{exporter}-{self.device}-{self.dtype or ''}{sopt}"
             )
             if not os.path.exists(pfilename):
                 os.mkdir(pfilename)
@@ -687,6 +688,8 @@ class BenchmarkRunner:
              {'pattern': 'match_IdentityPattern', 'iteration': 0, 'instances': 73, 'time_in': 0.0037209829315543175, 'match_index': 99},
              {'pattern': 'apply_IdentityPattern', 'added': 1, 'removed': 1, 'iteration': 0, 'match_index': 88, 'instances': 1, 'time_in': 0.0004087090492248535}
         """
+        if opt_stats is None:
+            return dict(onnx_optimized=0)
         time_in = 0.0
         added = 0
         removed = 0
