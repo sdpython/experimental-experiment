@@ -4,13 +4,13 @@ from typing import Any, Optional, Set, Tuple
 import torch
 from torch._dynamo.testing import collect_results, reset_rng_state
 from torch._dynamo.utils import clone_inputs
-from experimental_experiment.torch_bench._bash_bench_common import (
+from ._bash_bench_model_runner import (
     download_retry_decorator,
     _rand_int_tensor,
-    BenchmarkRunner,
     ModelRunner,
     MakeConfig,
 )
+from ._bash_bench_benchmark_runner import BenchmarkRunner
 
 
 class Neuron(torch.nn.Module):

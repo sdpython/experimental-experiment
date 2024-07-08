@@ -67,7 +67,7 @@ def bash_bench_main(name: str, doc: str, args: Optional[List[str]] = None):
     )
 
     if name == "bash_bench_huggingface":
-        from ._bash_bench_huggingface import HuggingfaceRunner
+        from ._bash_bench_set_huggingface import HuggingfaceRunner
 
         runner = HuggingfaceRunner(device=args.device)
     else:
