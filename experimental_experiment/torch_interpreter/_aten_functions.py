@@ -615,6 +615,23 @@ def aten_avg_pool2d_backward(
     return grad
 
 
+def aten_bitwise_not(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    name: str = "bitwise_not",
+) -> T:
+    "bitwise not"
+    if g.get_type(x) == TensorProto.BOOL:
+        res = g.op.Not(x, outputs=outputs, name=name)
+    else:
+        res = g.op.BitwiseNot(x, outputs=outputs, name=name)
+    if not sts:
+        set_type_shape_unary_op(g, res, x)
+    return res
+
+
 def aten_bitwise_or(
     g: GraphBuilder,
     sts: Optional[Dict[str, Any]],
@@ -624,7 +641,7 @@ def aten_bitwise_or(
     name: str = "bitwise_or",
 ) -> T:
     "bitwise or"
-    if g.get_type(x) == TensorProto.BOOL and g.get_type(x) == TensorProto.BOOL:
+    if g.get_type(x) == TensorProto.BOOL and g.get_type(y) == TensorProto.BOOL:
         x, y = prepare_inputs_homogeneous_operator(g, x, y, name=name)
         res = g.op.Or(x, y, outputs=outputs, name=name)
         if not sts:
@@ -2099,7 +2116,7 @@ def aten_masked_fill_Scalar(
     outputs: List[str],
     x: T,
     mask: T,
-    value,
+    value: T,
     name="masked_fill_Scalar",
 ) -> T:
     "masked"
@@ -2109,7 +2126,11 @@ def aten_masked_fill_Scalar(
     else:
         cmask = mask
     dtx = g.get_type(x)
-    avalue = np.array([value], dtype=tensor_dtype_to_np_dtype(dtx))
+    if isinstance(value, T):
+        # A tensor then
+        avalue = value
+    else:
+        avalue = np.array([value], dtype=tensor_dtype_to_np_dtype(dtx))
     res = g.op.Where(cmask, avalue, x, name=name)
     if not sts:
         g.set_type(res, dtx)
@@ -2118,6 +2139,19 @@ def aten_masked_fill_Scalar(
         else:
             g.set_rank(res, g.get_rank(mask))
     return res
+
+
+def aten_masked_fill_Tensor(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    mask: T,
+    value,
+    name="masked_fill_Tensor",
+) -> T:
+    "masked"
+    return aten_masked_fill_Scalar(g, sts, outputs, x, mask, value, name=name)
 
 
 def _aten_max_pool_onnx(
