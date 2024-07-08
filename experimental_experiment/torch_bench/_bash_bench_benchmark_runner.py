@@ -817,3 +817,232 @@ class BenchmarkRunner:
             f"Not implemented with type(expected)={type(expected)}, type(results)={type(got)}, "
             f"dir(expected)={dir(expected)}, level={level}"
         )
+
+
+def merge_benchmark_reports(
+    data: List[str],
+    model="model_name",
+    keys=(
+        "exporter",
+        "opt_patterns",
+        "device",
+        "dtype",
+        "dynamic",
+        "version",
+        "version_onnxruntime",
+        "version_torch",
+        "version_transformers",
+        "flag_fake_tensor",
+        "flag_no_grad",
+        "flag_training",
+        "machine",
+    ),
+    report_on=(
+        "speedup",
+        "speedup_increase",
+        "discrepancies_abs",
+        "time_load",
+        "time_warmup",
+        "time_repeat",
+        "time_export",
+        "time_repeat_eager",
+        "TIME_ITER",
+        "onnx_filesize",
+        "time_session",
+        "ERR_export",
+        "ERR_warmup",
+        "onnx_opt_max_iter",
+        "onnx_opt_n_applied",
+        "onnx_opt_added",
+        "onnx_opt_removed",
+        "onnx_opt_time_in",
+        "onnx_opt_unique_applied",
+        "onnx_opt_unique_matched",
+        "onnx_nodes",
+    ),
+    formulas=("memory_peak_load", "buckets", "pass"),
+    excel_output: Optional[str] = None,
+) -> Dict[str, "pandas.DataFrame"]:  # noqa: F821
+    """
+    Merges multiple files produced by bash_benchmark...
+
+    ::
+
+        _index,DATE,ERR_export,ITER,TIME_ITER,capability,cpu,date_start,device,device_name,...
+        101Dummy-custom,2024-07-08,,0,7.119158490095288,7.0,40,2024-07-08,cuda,...
+        101Dummy-script,2024-07-08,,1,6.705480073112994,7.0,40,2024-07-08,cuda,...
+        101Dummy16-custom,2024-07-08,,2,6.970448340754956,7.0,40,2024-07-08,cuda,...
+
+    Every key with a unique value is removed.
+    Every column with a unique value is displayed on main.
+    List of knowns columns::
+
+        DATE
+        ERR_export
+        ERR_warmup
+        ITER
+        TIME_ITER
+        capability
+        cpu
+        date_start
+        device
+        device_name
+        discrepancies_abs
+        discrepancies_rel
+        dtype
+        dump_folder
+        dynamic
+        executable
+        exporter
+        filename
+        flag_fake_tensor
+        flag_no_grad
+        flag_training
+        has_cuda
+        input_size
+        machine
+        mema_gpu_0_before_loading
+        mema_gpu_1_after_loading
+        mema_gpu_2_after_warmup
+        mema_gpu_3_empty_cache
+        mema_gpu_4_after_repeat
+        mema_gpu_5_after_export
+        mema_gpu_6_after_gcollect
+        mema_gpu_7_after_session
+        mema_gpu_8_after_export_warmup
+        mema_gpu_9_after_export_repeat
+        model,
+        model_name,
+        onnx_filesize
+        onnx_input_names,
+        onnx_model
+        onnx_n_inputs,
+        onnx_n_outputs,
+        onnx_optimized,
+        onnx_output_names,
+        opt_patterns,
+        output_data,
+        output_size,
+        params_dtype,
+        params_size,
+        process,
+        processor,
+        providers,
+        quiet,
+        repeat,
+        speedup,
+        speedup_increase,
+        target_opset,
+        time_export,
+        time_load,
+        time_repeat,
+        time_repeat_eager,
+        time_session,
+        time_total,
+        time_warmup,
+        time_warmup_eager,
+        verbose,
+        version,
+        version_onnxruntime,
+        version_torch,
+        version_transformers,
+        warmup,
+        ERROR,
+        OUTPUT,
+        CMD
+    """
+    import pandas
+
+    dfs = []
+    for filename in data:
+        df = pandas.read_csv(filename)
+        dfs.append(df)
+
+    df = pandas.concat(dfs, axis=0)
+
+    # replace nan values
+    set_columns = set(df.columns)
+    for c in ["opt_patterns", "ERR_export", "ERR_warmup"]:
+        if c in set_columns:
+            df[c] = df[c].fillna("-")
+
+    res = {"0raw": df}
+
+    # uniques keys
+    keys = [k for k in keys if k in set_columns]
+    report_on = [k for k in report_on if k in set_columns]
+    unique = {}
+    for c in df.columns:
+        u = df[c].unique()
+        if len(u) == 1:
+            unique[c] = u.tolist()[0]
+
+    main = [dict(column="dates", value=", ".join(sorted(df["DATE"].unique().tolist())))]
+    for k, v in unique.items():
+        main.append(dict(column=k, value=v))
+    res["0main"] = pandas.DataFrame(main)
+    new_keys = [k for k in keys if k not in unique]
+
+    # formulas
+    bucket_columns = []
+    for expr in formulas:
+        if expr == "memory_peak_load":
+            if (
+                "mema_gpu_5_after_export" in set_columns
+                and "mema_gpu_1_after_loading" in set_columns
+            ):
+                df[expr] = (
+                    df["mema_gpu_5_after_export"] - df["mema_gpu_1_after_loading"]
+                )
+                report_on.append(expr)
+            continue
+        if expr == "pass":
+            if "discrepancies_abs" in set_columns:
+                df[expr] = (~df["discrepancies_abs"].isna()).astype(int)
+                report_on.append(expr)
+            continue
+        if expr == "buckets":
+            if "speedup_increase" in set_columns:
+                c = "speedup_increase"
+                scale = [-np.inf, -20, -10, -5, -2, 2, 5, 10, 20, np.inf]
+                for i in range(1, len(scale)):
+                    val = (df[c] >= scale[i - 1] / 100) & (df[c] < scale[i] / 100)
+                    v1 = f"[{scale[i-1]}%" if not np.isinf(scale[i - 1]) else ""
+                    v2 = f"{scale[i]}%]" if not np.isinf(scale[i]) else ""
+                    d = f"[{v1},{v2}]" if v1 and v2 else (f"<{v2}" if v2 else f">={v1}")
+                    bucket_columns.append(d)
+                    df[d] = val.astype(int)
+            continue
+
+    # values
+    for c in report_on:
+        keep = [model, *new_keys, c]
+        dfc = df[keep]
+        pivot = dfc.pivot(index=model, columns=new_keys, values=c)
+        res[c] = pivot
+
+    # buckets
+    if bucket_columns:
+        bucket_columns = ["speedup_increase", *bucket_columns]
+        for c in sorted(set(df["exporter"].dropna())):
+            table = df[df["exporter"] == c][["model_name", *bucket_columns]].copy()
+            summary = table.sum(axis=0).copy()
+            table.loc["SUM"] = summary
+            res[f"bucket-{c}"] = table
+
+    # add summary at the end
+    times = [c for c in res if c.startswith("time_") or c.startswith("onnx_")]
+    for c in ["pass", *times]:
+        if c in res:
+            summary = res[c].mean(axis=0).copy()
+            res[c].loc["MEAN"] = summary
+    for c in ["speedup"]:
+        if c in res:
+            summary = np.exp(np.log(res[c]).mean(axis=0))
+            res[c].loc["GMEAN"] = summary
+
+    if excel_output:
+        with pandas.ExcelWriter(excel_output) as writer:
+            for k, v in sorted(res.items()):
+                v.to_excel(writer, sheet_name=k, index=k not in {"0raw", "0main"})
+    return res
