@@ -32,7 +32,7 @@ Available exporters:
     
 """
 
-from experimental_experiment.torch_bench._bash_bench_common_cmd import bash_bench_main
+from experimental_experiment.torch_bench._bash_bench_cmd import bash_bench_main
 
 
 def main(args=None):

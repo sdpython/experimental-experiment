@@ -71,7 +71,9 @@ def _extract_metrics(text: str) -> Dict[str, str]:
         ), f"Unexpected type for k={k!r}, types={type(k)}, {type(w)})."
         assert "\n" not in w, f"Unexpected multi-line value for k={k!r}, value is\n{w}"
         assert (
-            "err" in k.lower() or len(w) < 100
+            "err" in k.lower()
+            or k in {"onnx_output_names", "onnx_input_names"}
+            or len(w) < 100
         ), f"Unexpected long value for k={k!r}, value is\n{w}"
         try:
             wi = int(w)
