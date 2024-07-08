@@ -530,6 +530,9 @@ class GraphBuilder:
             )
             if computed_value and isinstance(possible_value, NodeProto):
                 res = self.compute_constant(name, exc=exc)[0]
+                if res is None:
+                    # The constant is too big to be computed.
+                    return None
                 if len(res) == 1:
                     return res[0]
                 index = list(possible_value.output).index(name)
@@ -3254,6 +3257,12 @@ class GraphBuilder:
             # bypassing onnx.numpy_helper.from_array, too slow
             output = self._apply_trilu(v, feeds)
         else:
+            # Let's avoid big computation on CPU.
+            max_dim = 0
+            for _v in feeds.values():
+                max_dim = max(max_dim, np.prod(_v.shape))
+            if max_dim >= 2**16:
+                return None, None
             ref = ExtendedReferenceEvaluator(v)
             output = ref.run(None, feeds)
         new_outputs = []

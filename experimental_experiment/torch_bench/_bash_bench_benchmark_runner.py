@@ -430,9 +430,23 @@ class BenchmarkRunner:
             begin = time.perf_counter()
             if isinstance(exported_model, onnx.ModelProto):
                 is_onnx = True
-                ort_sess = onnxruntime.InferenceSession(filename, providers=providers)
-                sess = WrapInferenceSessionForTorch(ort_sess)
                 stats["onnx_model"] = "1"
+                if quiet:
+                    try:
+                        ort_sess = onnxruntime.InferenceSession(
+                            filename, providers=providers
+                        )
+                    except Exception as e:
+                        stats["ERR_ort"] = str(e)
+                        if self.verbose:
+                            print(f"[benchmarkrunner.benchmark] err_ort {e}")
+                        yield stats
+                        continue
+                else:
+                    ort_sess = onnxruntime.InferenceSession(
+                        filename, providers=providers
+                    )
+                sess = WrapInferenceSessionForTorch(ort_sess)
                 onx_inputs = ort_sess.get_inputs()
                 onx_outputs = ort_sess.get_outputs()
                 stats["onnx_n_inputs"] = len(onx_inputs)
