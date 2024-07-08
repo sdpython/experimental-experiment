@@ -21,6 +21,14 @@ def _retrieve(
     Sent to the :class:`DynamoInterpreter
     <experimental_experiment.torch_interpreter.interpreter.DynamoInterpreter>`.
     It retrieves the weights.
+
+    :param name: name to retrieve
+    :param value: value
+    :param weights: mapping name, weights
+    :param buffers: mapping name, buffer
+    :param constants: mapping name, constants
+    :param mapping: mapping name, (new_name, is_weight)
+    :param graph_builder: graph builder
     """
     if name not in mapping:
         import torch
@@ -221,7 +229,9 @@ def _make_builder_interpreter(
         )
 
         if verbose > 0:
-            msg = ", ".join(f"{a.dtype}:{tuple(a.shape)})" for a in args)
+            msg = ", ".join(
+                ("None" if a is None else f"{a.dtype}:{tuple(a.shape)})") for a in args
+            )
             print(f"[_make_builder_interpreter] args={msg}")
             print(f"[_make_builder_interpreter] dynamic_shapes={dynamic_shapes}")
             if verbose > 2:
@@ -241,6 +251,7 @@ def _make_builder_interpreter(
             # A bug may appear later.
             constants = {}
         if hasattr(exported_mod, "graph_signature"):
+            sig_mismatch_constants = set(k.replace(".", "_") for k in constants)
             signature = exported_mod.graph_signature
             mapping = {}
             for k, v in signature.inputs_to_parameters.items():
@@ -249,7 +260,11 @@ def _make_builder_interpreter(
                 mapping[k] = v, False
             for k, v in signature.inputs_to_lifted_tensor_constants.items():
                 mapping[k] = v, False
-                assert k in constants or k[2:] in constants, (
+                assert (
+                    k in constants
+                    or k[2:] in constants
+                    or k[2:] in sig_mismatch_constants
+                ), (
                     f"A constant {k!r}, v={v!r} was detected "
                     f"in the signature was not retrieved from the model. "
                     f"\nlist(constants)={list(sorted(constants))}"

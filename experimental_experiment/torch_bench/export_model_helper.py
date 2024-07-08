@@ -23,7 +23,7 @@ def common_export(
     order: bool = False,
     enable_pattern: Optional[Union[str, List[str]]] = None,
     disable_pattern: Optional[Union[str, List[str]]] = None,
-    stats: Dict[str, Any] | None = None,
+    stats: Optional[Dict[str, Any]] = None,
 ):
     """
     Exports a model into a folder.
@@ -230,6 +230,8 @@ class WrapForTorch:
             self.model = torch_model
 
     def run(self, inputs):
+        if isinstance(inputs, dict):
+            return self.model(**inputs)
         return self.model(*inputs)
 
 
@@ -363,8 +365,8 @@ def run_onnx_inference(
     repeat: int = 5,
     verbose: int = 0,
     ort_optimize: bool = True,
-    torch_model: Any | None = None,
-) -> dict[str, Any]:
+    torch_model: Optional[Any] = None,
+) -> Optional[Dict[str, Any]]:
     """
     Runs multiple times the same inference with onnxruntime.
 

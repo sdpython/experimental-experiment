@@ -1,3 +1,5 @@
+import math
+from enum import Enum
 from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 import numpy as np
 from onnx import TensorProto
@@ -28,6 +30,12 @@ from ._exceptions import FunctionNotFoundError
 
 
 T = str
+
+
+class Reduction(Enum):
+    NONE = 0
+    MEAN = 1
+    SUM = 2
 
 
 def aten_abs(
@@ -138,6 +146,18 @@ def aten_and_(
 ) -> T:
     "and"
     return aten_and(g, sts, outputs, x, y, name="and_")
+
+
+def aten_logical_and(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    y: T,
+    name="and",
+) -> T:
+    "and"
+    return aten_and(g, sts, outputs, x, y, name="logical_and")
 
 
 def aten_addmm(
@@ -595,6 +615,23 @@ def aten_avg_pool2d_backward(
     return grad
 
 
+def aten_bitwise_not(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    name: str = "bitwise_not",
+) -> T:
+    "bitwise not"
+    if g.get_type(x) == TensorProto.BOOL:
+        res = g.op.Not(x, outputs=outputs, name=name)
+    else:
+        res = g.op.BitwiseNot(x, outputs=outputs, name=name)
+    if not sts:
+        set_type_shape_unary_op(g, res, x)
+    return res
+
+
 def aten_bitwise_or(
     g: GraphBuilder,
     sts: Optional[Dict[str, Any]],
@@ -604,7 +641,7 @@ def aten_bitwise_or(
     name: str = "bitwise_or",
 ) -> T:
     "bitwise or"
-    if g.get_type(x) == TensorProto.BOOL and g.get_type(x) == TensorProto.BOOL:
+    if g.get_type(x) == TensorProto.BOOL and g.get_type(y) == TensorProto.BOOL:
         x, y = prepare_inputs_homogeneous_operator(g, x, y, name=name)
         res = g.op.Or(x, y, outputs=outputs, name=name)
         if not sts:
@@ -658,6 +695,36 @@ def aten_cat(
         assert all(map(lambda t: g.get_rank(t) == r0, tensors))
         g.set_type(outputs[0], dt0)
         g.set_rank(outputs[0], r0)
+    return res
+
+
+def aten_clamp(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    min: Optional[float] = None,
+    max: Optional[float] = None,
+) -> T:
+    """clip"""
+    if min is None and max is None:
+        return g.op.Identity(x, outputs=outputs)
+
+    itype = g.get_type(x)
+    dtype = tensor_dtype_to_np_dtype(itype)
+    if max is None:
+        res = g.op.Clip(x, np.array([min], dtype=dtype), outputs=outputs)
+    elif min is None:
+        res = g.op.Clip(x, None, np.array([max], dtype=dtype), outputs=outputs)
+    else:
+        res = g.op.Clip(
+            x,
+            np.array([min], dtype=dtype),
+            np.array([max], dtype=dtype),
+            outputs=outputs,
+        )
+    if not sts:
+        set_type_shape_unary_op(g, res, x)
     return res
 
 
@@ -835,6 +902,75 @@ def aten_cosh(
     return res
 
 
+def aten_cross_entropy_loss(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    target: T,
+    weight: Optional[T] = None,
+    reduction: int = Reduction.MEAN.value,
+    ignore_index: int = -100,
+    label_smoothing: float = 0.0,
+) -> T:
+    """cross_entropy_loss"""
+    assert (
+        label_smoothing == 0.0
+    ), f"Unexpected value for label_smoothing={label_smoothing}{g.get_debug_msg()}"
+
+    if reduction == Reduction.NONE.value:
+        reduction_name = "none"
+    elif reduction == Reduction.SUM.value:
+        reduction_name = "sum"
+    elif reduction == Reduction.MEAN.value:
+        reduction_name = "mean"
+    else:
+        raise AssertionError(
+            f"Unexpected value for reduction={reduction}{g.get_debug_msg()}"
+        )
+
+    res = g.op.SoftmaxCrossEntropyLoss(
+        x,
+        target,
+        weight,
+        reduction=reduction_name,
+        ignore_index=ignore_index,
+        outputs=outputs,
+    )
+
+    if sts:
+        g.set_type(outputs[0], g.get_type(x))
+        if len(outputs) > 1:
+            g.set_type(outputs[1], g.get_type(x))
+
+    return res
+
+
+def aten_cumsum(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    dim: T,
+    dtype: Optional["torch.dtype"] = None,  # noqa: F821
+    name: str = "cumsum",
+) -> T:
+    """cumsum"""
+    assert isinstance(dim, int), f"Not implemented for dim={dim!r}{g.get_debug_msg()}"
+
+    if dtype is None:
+        xi = x
+        itype = g.get_type(x)
+    else:
+        itype = dtype if isinstance(dtype, int) else torch_dtype_to_onnx_dtype(dtype)
+        xi = g.op.Cast(x, to=itype, name=name)
+
+    res = g.op.CumSum(xi, np.array([dim], dtype=np.int64), outputs=outputs, name=name)
+    if sts:
+        set_type_shape_unary_op(g, res, x, itype=itype)
+    return res
+
+
 def aten_detach(
     g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T
 ) -> T:
@@ -949,7 +1085,7 @@ def aten_embedding(
 ) -> T:
     "embedding"
     if (
-        (padding_idx is not None and padding_idx != -1)
+        (padding_idx is not None and padding_idx not in (0, -1))
         or scale_grad_by_freq
         or sparse
         or max_norm is not None
@@ -962,7 +1098,7 @@ def aten_embedding(
                 and isinstance(shape[0], int)
                 and shape[0] == padding_idx + 1
             ):
-                # padding_idx should probabily be -1, shape are probably dynamic
+                # padding_idx should probably be -1, shape are probably dynamic
                 padding_idx = -1
                 exc = False
         if exc:
@@ -1467,11 +1603,69 @@ def aten_ge(
     return res
 
 
+def aten_ge_Scalar(
+    g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T, y: T
+) -> T:
+    "greater or equal"
+    return aten_ge(g, sts, outputs, x, y, name="ge_Scalar")
+
+
 def aten_ge_Tensor(
     g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T, y: T
 ) -> T:
     "greater or equal"
     return aten_ge(g, sts, outputs, x, y, name="ge_Tensor")
+
+
+def aten_gelu(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    approximate: str = "none",
+    name: str = "gelu",
+) -> T:
+    """gelu"""
+
+    if g.main_opset >= 20:
+        res = g.op.Gelu(x, approximate=approximate, name=name, outputs=outputs)
+        if sts:
+            set_type_shape_unary_op(g, res, x)
+        return res
+
+    if approximate == "none":
+        # GELU(x) = 0.5 * x * [1 + ERF(x/sqrt(2)]
+        dtype = tensor_dtype_to_np_dtype(g.get_type(x))
+        inner = g.op.Div(x, np.array([1.4142135623730951], dtype=dtype), name=name)
+        erf = g.op.Erf(inner, name=name)
+        inner = g.op.Add(erf, np.array([1], dtype=dtype), name=name)
+        inner = g.op.Mul(x, inner, name=name)
+        res = g.op.Mul(np.array([0.5], dtype=dtype), inner, name=name, outputs=outputs)
+        if sts:
+            set_type_shape_unary_op(g, res, x)
+        return res
+
+    if approximate == "tanh":
+        # GELU(x) = 0.5 * x * {1 + Tanh[\sqrt(2/pi) * (x + 0.044715 * x^3)]}
+        dtype = tensor_dtype_to_np_dtype(g.get_type(x))
+        cubed = g.op.Pow(x, np.array([3], dtype=np.int64), name=name)
+        inner = g.op.Mul(np.array([0.044715], dtype=dtype), cubed, name=name)
+        inner = g.op.Add(x, inner, name=name)
+        # Prefer explicit graph construction over precomputed constants for clarity.
+        inner = g.op.Mul(
+            np.array([(2 / math.pi) ** 0.5], dtype=dtype), inner, name=name
+        )
+        inner = g.op.Tanh(inner, name=name)
+        inner = g.op.Add(inner, np.array([1], dtype=dtype), name=name)
+        inner = g.op.Mul(x, inner, name=name)
+        res = g.op.Mul(np.array([0.5], dtype=dtype), inner, outputs=outputs, name=name)
+        if sts:
+            set_type_shape_unary_op(g, res, x)
+        return res
+
+    raise AssertionError(
+        f"Unexpected value for approximate={approximate!r}{g.get_debug_msg()}"
+    )
 
 
 def aten_gt(
@@ -1488,6 +1682,13 @@ def aten_gt(
     if not sts:
         set_type_shape_binary_op(g, outputs[0], x, y, cmp_op=True)
     return res
+
+
+def aten_gt_Scalar(
+    g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T, y: T
+) -> T:
+    "greater"
+    return aten_gt(g, sts, outputs, x, y, name="gt_Scalar")
 
 
 def aten_gt_Tensor(
@@ -1706,6 +1907,13 @@ def aten_le(
     return res
 
 
+def aten_le_Scalar(
+    g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T, y: T
+) -> T:
+    "less or equal"
+    return aten_le(g, sts, outputs, x, y, name="le_Scalar")
+
+
 def aten_le_Tensor(
     g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T, y: T
 ) -> T:
@@ -1878,6 +2086,13 @@ def aten_lt(
     return res
 
 
+def aten_lt_Scalar(
+    g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T, y: T
+) -> T:
+    "less"
+    return aten_lt(g, sts, outputs, x, y, name="lt_Scalar")
+
+
 def aten_lt_Tensor(
     g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T, y: T
 ) -> T:
@@ -1901,7 +2116,7 @@ def aten_masked_fill_Scalar(
     outputs: List[str],
     x: T,
     mask: T,
-    value,
+    value: T,
     name="masked_fill_Scalar",
 ) -> T:
     "masked"
@@ -1911,7 +2126,11 @@ def aten_masked_fill_Scalar(
     else:
         cmask = mask
     dtx = g.get_type(x)
-    avalue = np.array([value], dtype=tensor_dtype_to_np_dtype(dtx))
+    if isinstance(value, T):
+        # A tensor then
+        avalue = value
+    else:
+        avalue = np.array([value], dtype=tensor_dtype_to_np_dtype(dtx))
     res = g.op.Where(cmask, avalue, x, name=name)
     if not sts:
         g.set_type(res, dtx)
@@ -1920,6 +2139,19 @@ def aten_masked_fill_Scalar(
         else:
             g.set_rank(res, g.get_rank(mask))
     return res
+
+
+def aten_masked_fill_Tensor(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    mask: T,
+    value,
+    name="masked_fill_Tensor",
+) -> T:
+    "masked"
+    return aten_masked_fill_Scalar(g, sts, outputs, x, mask, value, name=name)
 
 
 def _aten_max_pool_onnx(
@@ -2275,6 +2507,21 @@ def aten_ne(
     return res
 
 
+def aten_ne_Scalar(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    y: T,
+    name="ne_Scalar",
+) -> T:
+    "not equal"
+    res = aten_ne(g, sts, outputs, x, y, name=name)
+    if not sts:
+        set_type_shape_binary_op(g, outputs[0], x, y, cmp_op=True)
+    return res
+
+
 def aten_ne_Tensor(
     g: GraphBuilder,
     sts: Optional[Dict[str, Any]],
@@ -2327,6 +2574,124 @@ def aten_new_zeros(
         pin_memory=pin_memory,
         name=name,
     )
+
+
+def aten_nll_loss_forward(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    self: T,
+    target: T,
+    weight: Optional[T] = None,
+    reduction: int = 0,
+    ignore_index: int = -1,
+    name: str = "nll_loss_forward",
+) -> Tuple[T, T]:
+    """nll_loss_forward"""
+    n_dims = g.get_rank(self)
+    channel_dim = 1
+    if n_dims < 2:
+        channel_dim = 0
+
+    if weight is not None:
+        weight_shape = g.get_shape(weight)
+        if n_dims > 1:
+            shape = [1] * n_dims
+            shape[channel_dim] = weight_shape[0]
+            w = g.op.Reshape(weight, np.array(shape, dtype=np.int64), name=name)
+        else:
+            w = weight
+        self = g.op.Mul(self, w, name=name)
+
+    target_not = g.op.Not(
+        g.op.Equal(target, np.array([ignore_index], dtype=np.int64), name=name),
+        name=name,
+    )
+    safe_target = g.op.Where(
+        target_not,
+        target,
+        np.array([0], dtype=tensor_dtype_to_np_dtype(g.get_type(target))),
+        name=name,
+    )
+    g.set_type_shape_or_rank(safe_target, like=target)
+    safe_target_ = g.op.UnsqueezeAnyOpset(
+        safe_target, np.array([channel_dim], dtype=np.int64), name=name
+    )
+
+    # result = -torch.gather(self, channel_dim, safe_target_).squeeze(channel_dim)
+    result_ = g.op.Neg(
+        g.op.SqueezeAnyOpset(
+            g.op.GatherElements(self, safe_target_, axis=channel_dim, name=name),
+            np.array([channel_dim], dtype=np.int64),
+            name=name,
+        ),
+        name=name,
+    )
+
+    # result = torch.where(target != ignore_index, result, 0)
+    result = g.op.Where(
+        target_not,
+        result_,
+        np.array([0], dtype=tensor_dtype_to_np_dtype(g.get_type(self))),
+        name=name,
+    )
+    g.set_type_shape_or_rank(result, like=result_)
+
+    if reduction is None and n_dims > 1:
+        return g.op.Identity(result, name=name, outputs=outputs[:1]), g.op.Identity(
+            np.array([0], dtype=tensor_dtype_to_np_dtype(g.get_type(result))),
+            name=name,
+            outputs=outputs[1:],
+        )
+
+    if weight is not None:
+        # w = w.expand(self.shape)
+        self_shape = g.op.Shape(self, name=name)
+        w_ = g.op.Expand(w, self_shape, name=name)
+
+        # wsum = torch.gather(w, channel_dim, safe_target_).squeeze(channel_dim)
+        gathered = g.op.GatherElements(w_, safe_target_, axis=channel_dim, name=name)
+        wsum = g.op.SqueezeAnyOpset(
+            gathered,
+            np.array([channel_dim], dtype=np.int64),
+            name=name,
+        )
+
+        # wsum = torch.where(target != ignore_index, wsum, 0)
+        wsum_ = g.op.Where(
+            target_not,
+            wsum,
+            np.array([0], dtype=tensor_dtype_to_np_dtype(g.get_type(wsum))),
+            name=name,
+        )
+        g.set_type_shape_or_rank(wsum_, like=wsum)
+        total_weight = g.op.ReduceSumAnyOpset(
+            wsum_, name=name, outputs=outputs[1:], keepdims=0
+        )
+    else:
+        # total_weight = (target != ignore_index).sum().to(self)
+        total_weight = g.op.ReduceSumAnyOpset(
+            g.op.Cast(target_not, to=g.get_type(self), name=name),
+            name=name,
+            outputs=outputs[1:],
+            keepdims=0,
+        )
+
+    if reduction == Reduction.SUM.value:
+        final_result = g.op.ReduceSumAnyOpset(
+            result, name=name, outputs=outputs[:1], keepdims=0
+        )
+    elif reduction == Reduction.MEAN.value:
+        final_result = g.op.Div(
+            g.op.ReduceSumAnyOpset(result, name=name, keepdims=0),
+            total_weight,
+            outputs=outputs[:1],
+            name=name,
+        )
+    else:
+        final_result = g.op.Identity(result, name=name, outputs=outputs[:1])
+
+    return final_result, total_weight
 
 
 def aten_not(
@@ -2384,7 +2749,9 @@ def aten_ones(
         isize = g.op.Cast(size, to=TensorProto.INT64)
         new_shape = None
     if dtype is None:
-        dtype = TensorProto.FLOAT
+        import torch
+
+        dtype = torch.float32
     res = g.op.ConstantOfShape(
         isize,
         value=from_array(
@@ -2574,6 +2941,61 @@ def aten_rrelu_with_noise_backward(
     )
 
 
+def aten_remainder(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    other: T,
+    name="remainder",
+) -> T:
+    """mod"""
+
+    # a - a.div(b, rounding_mode="floor") * b
+    if isinstance(other, (int, float)):
+        dtype = tensor_dtype_to_np_dtype(g.get_type(x))
+        res = g.op.Mod(x, np.array([other], dtype=dtype), name=name, outputs=outputs)
+        if sts:
+            set_type_shape_unary_op(g, res, x)
+        return res
+
+    # rounded_quotient = g.op.Floor(g.op.Div(self, other))
+    # return op.Sub(self, op.Mul(rounded_quotient, other))
+    itype = g.get_type(x)
+    if itype in {
+        TensorProto.FLOAT,
+        TensorProto.DOUBLE,
+        TensorProto.FLOAT16,
+        TensorProto.BFLOAT16,
+    }:
+        # This does not work for negative values.
+        # res = g.op.Mod(x, other, name=name, outputs=outputs, fmod=1)
+
+        rounded_quotient = g.op.Floor(g.op.Div(x, other, name=name), name=name)
+        res = g.op.Sub(
+            x, g.op.Mul(rounded_quotient, other, name=name), outputs=outputs, name=name
+        )
+    else:
+        res = g.op.Mod(x, other, name=name, outputs=outputs)
+    if sts:
+        set_type_shape_unary_op(g, res, x)
+    return res
+
+
+def aten_remainder_Scalar(
+    g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T, other: T
+) -> T:
+    """mod"""
+    return aten_remainder(g, sts, outputs, x, other, name="remainder_Scalar")
+
+
+def aten_remainder_Tensor(
+    g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T, other: T
+) -> T:
+    """mod"""
+    return aten_remainder(g, sts, outputs, x, other, name="remainder_Tensor")
+
+
 def aten_repeat(
     g: GraphBuilder,
     sts: Optional[Dict[str, Any]],
@@ -2712,6 +3134,39 @@ def _causal_attention_mask(
         name=name,
     )
     return new_attn_mask
+
+
+def aten_scalar_tensor(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    s: float,
+    dtype: Optional[int] = None,
+    layout: str = "",
+    device: Optional["torch.device"] = None,  # noqa: F821
+    pin_memory=None,
+) -> T:
+    """constant"""
+    import torch
+
+    assert layout in (
+        None,
+        torch.strided,
+    ), f"not implemented for layout={layout!r}{g.get_debug_msg()}"
+    assert pin_memory in (None, False), (
+        f"not implemented for pin_memory={pin_memory!r}" f"{g.get_debug_msg()}"
+    )
+    assert isinstance(
+        s, (float, int)
+    ), f"not implemented for type(s)={type(s)!r}{g.get_debug_msg()}"
+    if dtype is None:
+        if g.has_type(outputs[0]):
+            dtype = tensor_dtype_to_np_dtype(g.get_type(outputs[0]))
+        else:
+            np_dtype = np.float32  # if isinstance(s, float) else np.int64
+    else:
+        np_dtype = tensor_dtype_to_np_dtype(torch_dtype_to_onnx_dtype(dtype))
+    return g.op.Identity(np.array(s, dtype=np_dtype), outputs=outputs)
 
 
 def aten_scaled_dot_product_attention(
@@ -4081,6 +4536,34 @@ def aten__unsafe_view(
 ) -> T:
     "slice"
     return aten_view(g, sts, outputs, x, size, node_name="_unsafe_view")
+
+
+def aten_where(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    condition: T,
+    x: T,
+    other: T,
+    name: str = "where",
+) -> T:
+    """where"""
+    res = g.op.Where(condition, x, other, name=name)
+    if sts:
+        set_type_shape_binary_op(g, res, condition, x, other, begin=1)
+    return res
+
+
+def aten_where_self(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    condition: T,
+    x: T,
+    other: T,
+) -> T:
+    """where"""
+    return aten_where(g, sts, outputs, condition, x, other, name="where_self")
 
 
 def aten_zeros(

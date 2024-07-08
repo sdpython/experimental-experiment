@@ -13,6 +13,49 @@ from experimental_experiment.torch_bench._bash_bench_common import (
 )
 
 
+class Neuron(torch.nn.Module):
+    def __init__(self, n_dims: int = 5, n_targets: int = 3):
+        super(Neuron, self).__init__()
+        self.linear = torch.nn.Linear(n_dims, n_targets)
+
+    def forward(self, x):
+        return torch.sigmoid(self.linear(x))
+
+    def _get_random_inputs(self, device: str):
+        return (torch.randn(1, 5).to(device),)
+
+    config = MakeConfig(download=False, to_tuple=False)
+
+
+class Neuron16(Neuron):
+    def __init__(self, n_dims: int = 5, n_targets: int = 3):
+        super(Neuron, self).__init__()
+        self.linear = torch.nn.Linear(n_dims, n_targets, dtype=torch.float16)
+        assert self.linear.weight.dtype == torch.float16
+        assert self.linear.bias.dtype == torch.float16
+
+    def forward(self, x):
+        return torch.sigmoid(self.linear(x))
+
+    def _get_random_inputs(self, device: str):
+        return (torch.randn(1, 5).to(torch.float16).to(device),)
+
+
+class NeuronTuple(torch.nn.Module):
+    def __init__(self, n_dims: int = 5, n_targets: int = 3):
+        super(NeuronTuple, self).__init__()
+        self.linear = torch.nn.Linear(n_dims, n_targets)
+
+    def forward(self, x):
+        y = self.linear(x)
+        return (torch.sigmoid(y), (x, y))
+
+    def _get_random_inputs(self, device: str):
+        return (torch.randn(1, 5).to(device),)
+
+    config = MakeConfig(download=False, to_tuple=False)
+
+
 class HuggingfaceRunner(BenchmarkRunner):
 
     imports = [
@@ -181,41 +224,19 @@ class HuggingfaceRunner(BenchmarkRunner):
             batch_size = int(batch_size)
             container.BATCH_SIZE_KNOWN_MODELS[model_name] = batch_size
 
-        class Neuron(torch.nn.Module):
-            def __init__(self, n_dims: int = 5, n_targets: int = 3):
-                super(Neuron, self).__init__()
-                self.linear = torch.nn.Linear(n_dims, n_targets)
-
-            def forward(self, x):
-                return torch.sigmoid(self.linear(x))
-
-            def _get_random_inputs(self, device: str):
-                return (torch.randn(1, 5).to(device),)
-
-            config = MakeConfig(download=False)
-
-        class Neuron16(Neuron):
-            def __init__(self, n_dims: int = 5, n_targets: int = 3):
-                super(Neuron, self).__init__()
-                self.linear = torch.nn.Linear(n_dims, n_targets, dtype=torch.float16)
-                assert self.linear.weight.dtype == torch.float16
-                assert self.linear.bias.dtype == torch.float16
-
-            def forward(self, x):
-                return torch.sigmoid(self.linear(x))
-
-            def _get_random_inputs(self, device: str):
-                return (torch.randn(1, 5).to(torch.float16).to(device),)
-
         container.EXTRA_MODELS.update(
             {
-                "dummy": (
+                "101Dummy": (
                     Neuron.config,
                     Neuron,
                 ),
-                "dummy16": (
+                "101Dummy16": (
                     Neuron16.config,
                     Neuron16,
+                ),
+                "101DummyTuple": (
+                    NeuronTuple.config,
+                    NeuronTuple,
                 ),
                 "AllenaiLongformerBase": (
                     transformers.AutoConfig.from_pretrained(
@@ -443,7 +464,12 @@ class HuggingfaceRunner(BenchmarkRunner):
         include_model_names: Optional[Set[str]] = None,
         exclude_model_names: Optional[Set[str]] = None,
         verbose: int = 0,
+        warmup: int = 10,
+        repeat: int = 30,
+        fake_tensor: bool = False,
+        no_grad: bool = True,
         target_opset: int = 18,
+        dtype: Optional[Any] = None,
     ):
         super().__init__(
             "huggingface",
@@ -454,6 +480,11 @@ class HuggingfaceRunner(BenchmarkRunner):
             exclude_model_names=exclude_model_names,
             verbose=verbose,
             target_opset=target_opset,
+            warmup=warmup,
+            repeat=repeat,
+            fake_tensor=fake_tensor,
+            no_grad=no_grad,
+            dtype=dtype,
         )
         if not self.EXTRA_MODELS:
             self.initialize()

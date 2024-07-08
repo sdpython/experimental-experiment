@@ -5,22 +5,34 @@ import platform
 import re
 import subprocess
 import sys
+import time
 from argparse import Namespace
-from typing import Any, Dict, List, Tuple, Union
+from datetime import datetime
+from typing import Any, Dict, List, Tuple, Union, Optional
+
+
+ILLEGAL_CHARACTERS_RE = re.compile(r"([\000-\010]|[\013-\014]|[\016-\037])")
 
 
 class BenchmarkError(RuntimeError):
     pass
 
 
+def _clean_string(s: str) -> str:
+    if next(ILLEGAL_CHARACTERS_RE.finditer(s), None):
+        ns = ILLEGAL_CHARACTERS_RE.sub("", s)
+        return ns
+    return s
+
+
 def get_machine() -> Dict[str, Union[str, int, float, Tuple[int, int]]]:
     """
-    Returns the machine specification.
+    Returns the machine specifications.
     """
     config: Dict[str, Union[str, int, float, Tuple[int, int]]] = dict(
         machine=str(platform.machine()),
         processor=str(platform.processor()),
-        version=str(sys.version),
+        version=str(sys.version).split()[0],
         cpu=int(multiprocessing.cpu_count()),
         executable=str(sys.executable),
     )
@@ -31,7 +43,7 @@ def get_machine() -> Dict[str, Union[str, int, float, Tuple[int, int]]]:
 
     config["has_cuda"] = bool(torch.cuda.is_available())
     if config["has_cuda"]:
-        config["capability"] = torch.cuda.get_device_capability(0)
+        config["capability"] = ".".join(map(str, torch.cuda.get_device_capability(0)))
         config["device_name"] = str(torch.cuda.get_device_name(0))
     return config
 
@@ -58,7 +70,9 @@ def _extract_metrics(text: str) -> Dict[str, str]:
             w, str
         ), f"Unexpected type for k={k!r}, types={type(k)}, {type(w)})."
         assert "\n" not in w, f"Unexpected multi-line value for k={k!r}, value is\n{w}"
-        assert len(w) < 100, f"Unexpected long value for k={k!r}, value is\n{w}"
+        assert (
+            "err" in k.lower() or len(w) < 100
+        ), f"Unexpected long value for k={k!r}, value is\n{w}"
         try:
             wi = int(w)
             new_kw[k] = wi
@@ -80,12 +94,20 @@ def _make_prefix(script_name: str, index: int) -> str:
     return f"{name}_dort_c{index}_"
 
 
+def _cmd_string(s: str) -> str:
+    if s == "":
+        return '""'
+    return s.replace('"', '\\"')
+
+
 def run_benchmark(
     script_name: str,
     configs: List[Dict[str, Union[str, int, float]]],
     verbose: int = 0,
     stop_if_exception: bool = True,
     dump: bool = False,
+    temp_output_data: Optional[str] = None,
+    dump_std: Optional[str] = None,
 ) -> List[Dict[str, Union[str, int, float, Tuple[int, int]]]]:
     """
     Runs a script multiple times and extract information from the output
@@ -95,7 +117,9 @@ def run_benchmark(
     :param configs: list of execution to do
     :param stop_if_exception: stop if one experiment failed, otherwise continue
     :param verbose: use tqdm to follow the progress
-    :param dump: dump onnx file
+    :param dump: dump onnx file, sets variable ONNXRT_DUMP_PATH
+    :param temp_output_data: to save the data after every run to avoid losing data
+    :param dump_std: dumps stdout and stderr in this folder
     :return: values
     """
     assert configs, f"No configuration was given (script_name={script_name!r})"
@@ -107,11 +131,12 @@ def run_benchmark(
         loop = configs
 
     data: List[Dict[str, Union[str, int, float, Tuple[int, int]]]] = []
-    for i, config in enumerate(loop):
+    for iter_loop, config in enumerate(loop):
         cmd = _cmd_line(script_name, **config)
+        begin = time.perf_counter()
 
         if dump:
-            os.environ["ONNXRT_DUMP_PATH"] = _make_prefix(script_name, i)
+            os.environ["ONNXRT_DUMP_PATH"] = _make_prefix(script_name, iter_loop)
         else:
             os.environ["ONNXRT_DUMP_PATH"] = ""
         if verbose > 3:
@@ -123,6 +148,16 @@ def run_benchmark(
         out, err = res
         sout = out.decode("utf-8", errors="ignore")
         serr = err.decode("utf-8", errors="ignore")
+
+        if dump_std:
+            if not os.path.exists(dump_std):
+                os.makedirs(dump_std)
+            root = os.path.split(script_name)[-1]
+            filename = os.path.join(dump_std, f"{root}.{iter_loop}")
+            with open(f"{filename}.stdout", "w") as f:
+                f.write(sout)
+            with open(f"{filename}.stderr", "w") as f:
+                f.write(serr)
 
         if "ONNXRuntimeError" in serr or "ONNXRuntimeError" in sout:
             if stop_if_exception:
@@ -142,16 +177,33 @@ def run_benchmark(
             else:
                 metrics = {}
         metrics.update(config)
-        metrics["ERROR"] = serr
-        metrics["OUTPUT"] = sout
-        metrics["CMD"] = f"[{' '.join(cmd)}]"
+        metrics["DATE"] = f"{datetime.now():%Y-%m-%d}"
+        metrics["ITER"] = iter_loop
+        metrics["TIME_ITER"] = time.perf_counter() - begin
+        metrics["ERROR"] = _clean_string(serr)
+        metrics["OUTPUT"] = _clean_string(sout)
+        metrics["CMD"] = f"[{' '.join(map(_cmd_string, cmd))}]"
         data.append(metrics)
         if verbose > 5:
+            print(f"--------------- ITER={iter_loop} in {metrics['TIME_ITER']}")
             print("--------------- ERROR")
             print(serr)
         if verbose >= 10:
             print("--------------- OUTPUT")
             print(sout)
+        if temp_output_data:
+            df = make_dataframe_from_benchmark_data(data, detailed=False)
+            if verbose > 2:
+                print("Prints the results into file {temp_output_data!r}")
+            df.to_csv(temp_output_data, index=False)
+            try:
+                df.to_excel(temp_output_data + ".xlsx", index=False)
+            except Exception as e:
+                print(e)
+                import pprint
+
+                pprint.pprint(data)
+                raise
 
     return data
 
@@ -197,11 +249,26 @@ def make_dataframe_from_benchmark_data(data: List[Dict], detailed: bool = True) 
             if not isinstance(v, str):
                 g[k] = v
                 continue
-            if "\n" in v or len(v) > 100:
-                continue
+            v = v.replace("\n", " -- ").replace(",", "_")
+            if len(v) > 300:
+                v = v[:300]
             g[k] = v
         new_data.append(g)
-    return pandas.DataFrame(new_data)
+    df = pandas.DataFrame(new_data)
+    sorted_columns = list(sorted(df.columns))
+    if "_index" in sorted_columns:
+        set_cols = set(df.columns)
+        addition = {"_index", "CMD", "OUTPUT", "ERROR"} & set_cols
+        new_columns = []
+        if "_index" in addition:
+            new_columns.append("_index")
+            new_columns.extend([i for i in sorted_columns if i not in addition])
+            for c in ["ERROR", "OUTPUT", "CMD"]:
+                if c in addition:
+                    new_columns.append(c)
+        sorted_columns = new_columns
+
+    return df[sorted_columns].copy()
 
 
 def measure_discrepancies(

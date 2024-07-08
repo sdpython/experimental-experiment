@@ -1,6 +1,6 @@
 import os
 import sys
-from typing import Any
+from typing import Any, Optional
 import numpy as np
 import onnx.helper as oh
 from onnx import ModelProto, StringStringEntryProto, TensorProto
@@ -147,7 +147,7 @@ class TorchModelContainer(ModelContainer):
         for tensor in _get_all_tensors(copy):
             if not uses_external_data(tensor):
                 continue
-            prop: StringStringEntryProto | None = None
+            prop: Optional[StringStringEntryProto] = None
             for ext in tensor.external_data:  # type: ignore[assignment]
                 if ext.key == "location":  # type: ignore[attr-defined]
                     prop = ext  # type: ignore[assignment]

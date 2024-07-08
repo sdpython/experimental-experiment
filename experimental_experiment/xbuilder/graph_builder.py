@@ -1,5 +1,6 @@
 import pprint
 import time
+import os
 import sys
 from collections import Counter
 from typing import Any, Dict, List, Optional, Sequence, Set, Tuple, Union
@@ -105,6 +106,9 @@ class GraphBuilder:
 
     - `_raise_list: Set[str]`: the builder stop if a result falls in that list
       (debugging tool)
+
+    You can setup environment variable ``ONNXSTOP`` to raise an exception when the type or shape
+    of a variable is set.
     """
 
     _op_type_element_wise_types = element_wise_binary_op_types()
@@ -167,6 +171,9 @@ class GraphBuilder:
         self._unique_node_names = set()
         self._known_value_shape = {}
         self.constants_ = {}
+        self.op = Opset(self)
+        self.anyop = Opset(self, allow_unknown=True)
+        self._debug_stop = os.environ.get("ONNXSTOP", "#?#")
 
         if self.dynamic_shapes:
             for input_name, v in self.dynamic_shapes.items():
@@ -220,9 +227,6 @@ class GraphBuilder:
             raise NotImplementedError(
                 f"{type(target_opset_or_existing_proto)} is not supported."
             )
-
-        self.op = Opset(self)
-        self.anyop = Opset(self, allow_unknown=True)
 
     @property
     def output_names(self) -> List[str]:
@@ -682,20 +686,27 @@ class GraphBuilder:
                         self.torch.float32,
                         self.torch.float64,
                         self.torch.float16,
+                        self.torch.bfloat16,
                     ):
                         return False
                     if len(size) >= 2:
                         return False
-                    if el_type == self.torch.int64 and len(size) == 0:
+                    if (
+                        el_type in (self.torch.int64, self.torch.int32)
+                        and len(size) == 0
+                    ):
                         # A single integer with no shape, it looks like a dimension.
                         # Let's assume it is. It is more efficient to consider it as
                         # a dimension.
-                        return False
+                        return True
+                    # In another case, let's assume it is not.
+                    return False
                 else:
                     if elem_type is not None and elem_type in (
                         self.torch.float32,
                         self.torch.float64,
                         self.torch.float16,
+                        self.torch.bfloat16,
                     ):
                         return False
                     if shape is not None and len(shape) >= 2:
@@ -732,6 +743,7 @@ class GraphBuilder:
                         self.torch.float32,
                         self.torch.float64,
                         self.torch.float16,
+                        self.torch.bfloat16,
                     ):
                         return False
                     if len(size) >= 2:
@@ -795,6 +807,8 @@ class GraphBuilder:
         :param set_if_more_precise: change the shape if it is more precise
         :param exc: raise an exception if inconsistency
         """
+        if name == self._debug_stop:
+            raise AssertionError(f"Requested stop, name={name!r}, shape={shape}")
         assert isinstance(name, str), f"Unexpected type {type(name)} for name."
         assert "torch.Size" not in str(shape), (
             f"Unexpected type {type(shape)} for a "
@@ -834,6 +848,17 @@ class GraphBuilder:
         if set_rank and not self.has_rank(name):
             self.set_rank(name, len(shape))
 
+    def set_type_shape_or_rank(self, name: str, like: str):
+        """
+        Sets the type and the shape of *name* like *like*.
+        """
+        if self.has_type(like):
+            self.set_type(name, self.get_type(like))
+        if self.has_shape(like):
+            self.set_shape(name, self.get_shape(like))
+        elif self.has_rank(like):
+            self.set_rank(name, self.get_rank(like))
+
     def set_type(self, name: str, dtype: int):
         """
         Sets the shape for a result. It is exists, it checks the new shape
@@ -842,6 +867,8 @@ class GraphBuilder:
         :param name: name
         :param dtype: element type (an integer, ONNX)
         """
+        if name == self._debug_stop:
+            raise AssertionError(f"Requested stop, name={name!r}, dtype={dtype}")
         assert isinstance(name, str), f"Unexpected type {type(name)} for name."
         if isinstance(dtype, int):
             int_type = dtype
@@ -2219,13 +2246,12 @@ class GraphBuilder:
                     self.set_shape(node.output[0], tuple(cst[0].shape))
         elif not sts:
             if node.op_type == "GatherElements":
-                if self.has_rank(node.input[0]) and self.has_rank(node.input[0]):
-                    r1 = self.get_rank(node.input[0])
-                    assert r1 == self.get_rank(node.input[1]), (
-                        f"Rank mismatch {r1} != {self.get_rank(node.input[1])} "
-                        f"(GatherElements:{node.input}){self.get_debug_msg()}"
-                    )
-                    self.set_rank(node.output[0], r1)
+                if self.has_type(node.input[0]):
+                    self.set_type(node.output[0], self.get_type(node.input[0]))
+                if self.has_shape(node.input[1]):
+                    self.set_shape(node.output[0], self.get_shape(node.input[1]))
+                elif self.has_rank(node.input[1]):
+                    self.set_rank(node.output[0], self.get_rank(node.input[1]))
 
     def get_attribute(
         self, node: NodeProto, att_name: str, exc: bool = True
@@ -2636,7 +2662,7 @@ class GraphBuilder:
             if len(rows) > 1000:
                 rows.append("...")
                 rows.append(
-                    f"Stopped with {len(self.initiliazer)} "
+                    f"Stopped with {len(self.initializers_dict)} "
                     f"initializers and {len(self.nodes)} nodes."
                 )
                 return "\n".join(rows)

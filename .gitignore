@@ -11,12 +11,14 @@
 *.pkl
 *.xlsx
 *.sarif
-*.sqlite
+*.sqlitest
 *.svg
 *.onnx.stats
 _tools/benchenv**
 _tools/repos**
-_tools/miniconda**
+_tools/mamba**
+_tools/results**
+_tools/bin**
 coverage.html/*
 temp*.txt*
 tt_*.txt
@@ -27,6 +29,7 @@ temp_data/*
 debug_data/*
 dump_models/*
 dump_llama/*
+dump_test*
 dump_sdpa_*
 temp_dump_models/*
 dump_dort_bench/*

@@ -44,30 +44,30 @@ class TestHuggingFaceRunner(ExtTestCase):
     @hide_stdout()
     def test_run_model(self):
         runner = HuggingfaceRunner(
-            device="cpu", include_model_names={"dummy"}, verbose=2
+            device="cpu", include_model_names={"101Dummy"}, verbose=2
         )
         data = list(runner.enumerate_run_models())
         self.assertEqual(len(data), 1)
 
     @skipif_ci_windows("not useful")
-    @requires_torch("2.3")
+    @requires_torch("2.5")
     @hide_stdout()
     @requires_onnxruntime_training()
     def test_test_model_32(self):
         runner = HuggingfaceRunner(
-            device="cpu", include_model_names={"dummy"}, verbose=2
+            device="cpu", include_model_names={"101Dummy"}, verbose=2
         )
         data = list(runner.enumerate_test_models(process=False, exporter="custom"))
-        print(data)
-        self.assertEqual(len(data), 1)
+        # print(data)
+        self.assertEqual(1, len(data))
 
     @skipif_ci_windows("not useful")
-    @requires_torch("2.3")
+    @requires_torch("2.5")
     @hide_stdout()
     @requires_onnxruntime_training()
     def test_test_model_16(self):
         runner = HuggingfaceRunner(
-            device="cpu", include_model_names={"dummy16"}, verbose=2
+            device="cpu", include_model_names={"101Dummy16"}, verbose=2
         )
         data = list(runner.enumerate_test_models(process=False, exporter="custom"))
         print(data)
