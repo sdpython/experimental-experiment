@@ -343,9 +343,14 @@ class BenchmarkRunner:
             # export
             ########
 
-            sopt = ("-" + optimization.replace("+", "_").replace("/", "_")) if optimization else ""                
+            sopt = (
+                ("-" + optimization.replace("+", "_").replace("/", "_"))
+                if optimization
+                else ""
+            )
             pfilename = os.path.join(
-                folder, f"{model_name}-{exporter}-{self.device}-{self.dtype or ''}{sopt}"
+                folder,
+                f"{model_name}-{exporter}-{self.device}-{self.dtype or ''}{sopt}",
             )
             if not os.path.exists(pfilename):
                 os.mkdir(pfilename)
