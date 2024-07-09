@@ -111,13 +111,16 @@ def set_type_shape_binary_op(
     *input_names: List[str],
     begin: int = 0,
     cmp_op: bool = False,
+    itype: Optional[int] = None,
 ):
     """
     Sets the shape and type for a binary operator (add, mul, ...).
     """
     # type
     dtype = None
-    if cmp_op:
+    if itype:
+        g.set_type(name, itype)
+    elif cmp_op:
         # operator comparing values
         g.set_type(name, TensorProto.BOOL)
     else:
@@ -729,12 +732,19 @@ def _set_shape_type_op_any_where(self: "GraphBuilder", node: NodeProto):  # noqa
         self.set_rank(node.output[0], max(map(self.get_rank, node.input)))
 
 
+def _set_shape_type_op_any_unary(
+    self: "GraphBuilder", node: NodeProto, itype: Optional[int] = None  # noqa: F821
+):
+    return set_type_shape_unary_op(self, node.output[0], node.input[0], itype=itype)
+
+
 _set_shape_type_op_any_known = {
     "Cast": _set_shape_type_op_any_cast,
     "Concat": _set_shape_type_op_any_concat,
     "Expand": _set_shape_type_op_any_reshape,
     "GatherElements": _set_shape_type_op_any_gather_elements,
     "Gemm": _set_shape_type_op_any_gemm,
+    "IsInf": lambda *args: _set_shape_type_op_any_unary(*args, itype=TensorProto.BOOL),
     "MatMul": _set_shape_type_op_any_matmul,
     "MaxPool": _set_shape_type_op_any_maxpool,
     "Reshape": _set_shape_type_op_any_reshape,
@@ -762,6 +772,11 @@ def set_shape_type_op_any(self: "GraphBuilder", node: NodeProto):  # noqa: F821
         set_type_shape_binary_op(self, node.output[0], *node.input, cmp_op=True)
     elif node.op_type in self._op_type_element_wise_types:
         set_type_shape_binary_op(self, node.output[0], *node.input)
+    elif node.op_type in {"CastLike", "DequantizeLinear", "DynamicQuantizeLinear"}:
+        raise AssertionError(
+            f"set_shape_type_op_any not implemented for "
+            f"{node.op_type!r}{self.get_debug_msg()}"
+        )
     elif node.op_type in self._op_type_unary_like:
         set_type_shape_unary_op(self, node.output[0], node.input[0])
 

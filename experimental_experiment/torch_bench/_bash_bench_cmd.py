@@ -26,8 +26,7 @@ def bash_bench_parse_args(name: str, doc: str, new_args: Optional[List[str]] = N
         dynamic=("0", "use dynamic shapes"),
         target_opset=("18", "opset to convert into, use with backend=custom"),
         verbose=("0", "verbosity"),
-        disable_pattern=("", "a list of optimization patterns to disable"),
-        enable_pattern=("default", "list of optimization patterns to enable"),
+        opt_patterns=("", "a list of optimization patterns to disable"),
         dump_folder=("dump_bash_bench", "where to dump the exported model"),
         quiet=("1", "catch exception and go on or fail"),
         dtype=(
@@ -78,12 +77,14 @@ def bash_bench_main(name: str, doc: str, args: Optional[List[str]] = None):
         # prints the list of models.
         print(f"list of models for device={args.device} (args.model={args.model!r})")
         print("--")
-        print("\n".join([f"{i+1: 3d} - {n}" for i, n in enumerate(names)]))
+        print("\n".join([f"{i: 3d} - {n}" for i, n in enumerate(names)]))
         print("--")
 
     else:
         if args.model == "all":
             args.model = ",".join(names)
+        elif args.model == "All":
+            args.model = ",".join(n for n in names if not n.startswith("101"))
 
         if multi_run(args):
             configs = make_configs(args)
@@ -135,6 +136,7 @@ def bash_bench_main(name: str, doc: str, args: Optional[List[str]] = None):
                     exporter=args.exporter,
                     quiet=args.quiet in ("1", 1, "True", True),
                     folder="dump_test_models",
+                    optimization=args.opt_patterns,
                 )
             )
             if len(data) == 1:

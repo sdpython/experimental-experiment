@@ -175,6 +175,7 @@ class ModelRunner:
         dtype: torch.dtype,
         warmup: int,
         repeat: int,
+        suite: str,
     ):
         if dtype is None:
             cvt = lambda o: o.to(device)  # noqa: E731
@@ -230,6 +231,7 @@ class ModelRunner:
         self.inputs = inputs
         self.repeat = repeat
         self.warmup = warmup
+        self.suite = suite
 
     def run(self) -> Any:
         return self.model(*self.inputs)
@@ -343,6 +345,16 @@ class ModelRunner:
                 verbose=verbose,
                 target_opset=target_opset,
             )
+        if exporter == "inductor":
+            return self._to_inductor(
+                name,
+                dynamic=dynamic,
+                fake_tensor=fake_tensor,
+                no_grad=no_grad,
+                optimization=optimization,
+                verbose=verbose,
+                target_opset=target_opset,
+            )
         raise AssertionError(f"Exporter {exporter!r} is not implemented.")
 
     def _to_onnx_custom(
@@ -359,18 +371,26 @@ class ModelRunner:
         assert not dynamic, "dynamic true not implemented yet"
         assert no_grad, "no_grad false not implemented yet"
         from ..torch_interpreter import to_onnx
+        from ..xbuilder import OptimizationOptions
+
+        if optimization:
+            options = OptimizationOptions(patterns=optimization)
+        else:
+            options = None
 
         with torch.no_grad():
-            onx = to_onnx(
+            onx, stats = to_onnx(
                 self.model,
                 self.inputs,
                 optimize=bool(optimization),
                 large_model=True,
-                verbose=0,  # max(verbose - 1, 0),
+                verbose=1 if verbose > 1 else 0,
                 target_opset=target_opset,
+                return_optimize_report=True,
+                options=options,
             )
         onx.save(name)
-        return onx.model_proto
+        return onx.model_proto, stats
 
     def _to_onnx_script(
         self,
@@ -394,7 +414,7 @@ class ModelRunner:
                 do_constant_folding=False,
                 opset_version=target_opset,
             )
-        return onnx.load(name, load_external_data=False)
+        return onnx.load(name, load_external_data=False), None
 
     def _to_onnx_dynamo(
         self,
@@ -419,7 +439,7 @@ class ModelRunner:
                 opset_version=target_opset,
                 dynamo=True,
             )
-        return onnx.load(name, load_external_data=False)
+        return onnx.load(name, load_external_data=False), None
 
     def _to_onnx_dynamo2(
         self,
@@ -445,7 +465,7 @@ class ModelRunner:
                 ),
             )
         exported.save(name)
-        return onnx.load(name, load_external_data=False)
+        return onnx.load(name, load_external_data=False), None
 
     def _to_export(
         self,
@@ -464,7 +484,7 @@ class ModelRunner:
 
         with torch.no_grad():
             res = export(self.model, self.inputs)
-        return res
+        return res, None
 
     def _to_eager(
         self,
@@ -480,7 +500,7 @@ class ModelRunner:
         assert not dynamic, "dynamic true not implemented yet"
         assert no_grad, "no_grad false not implemented yet"
 
-        return self.model
+        return self.model, None
 
     def _to_compile(
         self,
@@ -502,12 +522,32 @@ class ModelRunner:
             return gm.forward
 
         with torch.no_grad():
-            res = torch.compile(self.model, backend=lambda gm, inputs: gm.forward)
-        return res
+            res = torch.compile(
+                self.model, fullgraph=True, backend=lambda gm, inputs: gm.forward
+            )
+        return res, None
+
+    def _to_inductor(
+        self,
+        name: str,
+        dynamic: bool,
+        fake_tensor: bool,
+        no_grad: bool,
+        optimization: str,
+        verbose: int,
+        target_opset: int,
+    ):
+        assert not fake_tensor, "fake_tensor not implemented."
+        assert not dynamic, "dynamic true not implemented yet"
+        assert no_grad, "no_grad true not implemented yet"
+
+        with torch.no_grad():
+            res = torch.compile(self.model, backend="inductor", fullgraph=True)
+        return res, None
 
     def make_feeds(self, exporter: str, filename: Optional[str] = None):
         """Creates feed inputs."""
-        if exporter in {"eager", "export", "compile"}:
+        if exporter in {"eager", "export", "compile", "inductor"}:
             return self.inputs
         onx = onnx.load(filename, load_external_data=False)
         names = [_.name for _ in onx.graph.input]

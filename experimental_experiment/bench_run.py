@@ -72,8 +72,8 @@ def _extract_metrics(text: str) -> Dict[str, str]:
         assert "\n" not in w, f"Unexpected multi-line value for k={k!r}, value is\n{w}"
         assert (
             "err" in k.lower()
-            or k in {"onnx_output_names", "onnx_input_names"}
-            or len(w) < 100
+            or k in {"onnx_output_names", "onnx_input_names", "filename"}
+            or len(w) < 200
         ), f"Unexpected long value for k={k!r}, value is\n{w}"
         try:
             wi = int(w)

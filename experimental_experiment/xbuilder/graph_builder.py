@@ -39,7 +39,11 @@ from ._onnx_helper import (
     unary_like_op_types,
 )
 from .model_container import TorchModelContainer, proto_from_array, _get_type
-from ._dtype_helper import dtype_to_tensor_dtype, onnx_dtype_to_torch_dtype
+from ._dtype_helper import (
+    dtype_to_tensor_dtype,
+    onnx_dtype_to_torch_dtype,
+    torch_dtype_to_onnx_dtype,
+)
 from ._helper import make_hash
 from .optimization_options import OptimizationOptions
 from .expression_dimension import Expression, parse_expression
@@ -174,6 +178,7 @@ class GraphBuilder:
         self.op = Opset(self)
         self.anyop = Opset(self, allow_unknown=True)
         self._debug_stop = os.environ.get("ONNXSTOP", "#?#")
+        self.time_evaluation_constants_ = 0
 
         if self.dynamic_shapes:
             for input_name, v in self.dynamic_shapes.items():
@@ -530,6 +535,9 @@ class GraphBuilder:
             )
             if computed_value and isinstance(possible_value, NodeProto):
                 res = self.compute_constant(name, exc=exc)[0]
+                if res is None:
+                    # The constant is too big to be computed.
+                    return None
                 if len(res) == 1:
                     return res[0]
                 index = list(possible_value.output).index(name)
@@ -877,10 +885,17 @@ class GraphBuilder:
         if name in self._known_types:
             # 0 is undefined
             if self._known_types[name] != 0 and int_type != self._known_types[name]:
+                mapping = [
+                    (getattr(TensorProto, att), att)
+                    for att in dir(TensorProto)
+                    if att.upper() == att and isinstance(getattr(TensorProto, att), int)
+                ]
+                mapping.sort()
+                smap = ",".join(f"{k}:{v}" for k, v in mapping)
                 raise RuntimeError(
                     f"Type for name {name!r} already exists and it is different, "
                     f"known is {self._known_types[name]} != {int_type} (new)"
-                    f"{self.get_debug_msg()}"
+                    f"(mapping={smap}){self.get_debug_msg()}"
                 )
         if self.verbose > 5:
             print(f"[GraphBuilder-{self._hash()}.set_type] {name}:{int_type}")
@@ -935,6 +950,28 @@ class GraphBuilder:
             f"known_shapes={self._known_shapes}{self.get_debug_msg()}"
         )
         return self._known_shapes[name]
+
+    def get_type_known(self, name: str) -> Optional[int]:
+        """Returns the type known by torch to help solve mismatches."""
+        if name in self._known_torch_value:
+            value = self._known_torch_value[name]
+            # something like (
+            #                   'run_node',
+            #                   (
+            #                       '',
+            #                       ('val', torch.float16, torch.Size([2, 12, 2048, 2048]))
+            #                   )
+            #                )
+            assert (
+                isinstance(value, tuple)
+                and len(value) == 2
+                and isinstance(value[1], tuple)
+                and len(value[1][1]) == 3
+            ), f"Unexpected value {value} for {name!r}{self.get_debug_msg()}"
+            dtype = value[1][1][1]
+            itype = torch_dtype_to_onnx_dtype(dtype)
+            return itype
+        return None
 
     def get_type(self, name: str) -> int:
         """Returns the type of a result."""
@@ -2713,6 +2750,7 @@ class GraphBuilder:
         optimize: bool = True,
         large_model: bool = False,
         external_threshold: int = 1024,
+        return_optimize_report: bool = False,
     ) -> Union[FunctionProto, ModelProto, TorchModelContainer]:
         """
         Conversion to onnx. Only then the initializer are converted into
@@ -2726,6 +2764,7 @@ class GraphBuilder:
             or saved as external weights
         :param external_threshold: if large_model is True, every tensor above this limit
             is stored as external
+        :param return_optimize_report: return statistics about the optimization as well
         :return: the proto
         """
         if len(self.nodes) == 0:
@@ -2733,7 +2772,9 @@ class GraphBuilder:
                 f"The onnx model is empty (no node).\n{self.get_debug_msg()}"
             )
         if optimize:
-            self.optimize()
+            stats = self.optimize()
+        else:
+            stats = None
         assert len(self.nodes) > 0, (
             f"The onnx model is empty after optimization (no node)."
             f"\n{self.get_debug_msg()}"
@@ -2757,6 +2798,10 @@ class GraphBuilder:
 
         if self.verbose:
             print(f"[GraphBuilder-{self._hash()}.to_onnx] make_model")
+            print(
+                f"[GraphBuilder-{self._hash()}.time_evaluation_constants_] "
+                f"{self.time_evaluation_constants_}"
+            )
 
         # building the model
         model = ModelProto()
@@ -2787,9 +2832,9 @@ class GraphBuilder:
             if large_initializers:
                 lm.set_large_initializers(large_initializers)
                 lm.check_large_initializers()
-            return lm
+            return (lm, stats) if return_optimize_report else lm
 
-        return model
+        return (model, stats) if return_optimize_report else model
 
     def _add_shape_information(self, model: ModelProto):
 
@@ -2853,7 +2898,7 @@ class GraphBuilder:
     def optimize(self) -> List[Dict[str, Any]]:
         """
         Optimizes a graph.
-        Returns the list of applied processed.
+        Returns the list of applied processes.
         """
 
         def _check(stats, step):
@@ -3254,8 +3299,25 @@ class GraphBuilder:
             # bypassing onnx.numpy_helper.from_array, too slow
             output = self._apply_trilu(v, feeds)
         else:
+            # Let's avoid big computation on CPU.
+            max_dim = 0
+            for _v in feeds.values():
+                max_dim = max(max_dim, np.prod(_v.shape))
+            if max_dim >= 2**22:
+                if self.verbose > 1:
+                    print(
+                        f"[GraphBuilder.compute_constant] stop computing a "
+                        f"constant as it may be too big, shapes are {[_.shape for _ in feeds.values()]}"
+                    )
+                return None, None
+            begin = time.perf_counter()
             ref = ExtendedReferenceEvaluator(v)
-            output = ref.run(None, feeds)
+            try:
+                output = ref.run(None, feeds)
+            except ValueError as e:
+                sf = ", ".join(f"{k}:{v.dtype}:{v.shape}" for k, v in feeds.items())
+                raise RuntimeError(f"Issue with v={v}, feeds={sf}") from e
+            self.time_evaluation_constants_ += time.perf_counter() - begin
         new_outputs = []
         for name, val in zip(v.output, output):
             if self.has_type(name):
