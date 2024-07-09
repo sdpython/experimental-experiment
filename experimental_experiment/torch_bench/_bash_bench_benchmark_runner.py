@@ -1015,9 +1015,9 @@ def merge_benchmark_reports(
                 scale = [-np.inf, -20, -10, -5, -2, 2, 5, 10, 20, np.inf]
                 for i in range(1, len(scale)):
                     val = (df[c] >= scale[i - 1] / 100) & (df[c] < scale[i] / 100)
-                    v1 = f"[{scale[i-1]}%" if not np.isinf(scale[i - 1]) else ""
-                    v2 = f"{scale[i]}%]" if not np.isinf(scale[i]) else ""
-                    d = f"[{v1},{v2}]" if v1 and v2 else (f"<{v2}" if v2 else f">={v1}")
+                    v1 = f"{scale[i-1]}%" if not np.isinf(scale[i - 1]) else ""
+                    v2 = f"{scale[i]}%" if not np.isinf(scale[i]) else ""
+                    d = f"[{v1},{v2}[" if v1 and v2 else (f"<{v2}" if v2 else f">={v1}")
                     bucket_columns.append(d)
                     df[d] = val.astype(int)
             continue
@@ -1031,12 +1031,40 @@ def merge_benchmark_reports(
 
     # buckets
     if bucket_columns:
-        bucket_columns = ["speedup_increase", *bucket_columns]
-        for c in sorted(set(df["exporter"].dropna())):
-            table = df[df["exporter"] == c][["model_name", *bucket_columns]].copy()
-            summary = table.sum(axis=0).copy()
-            table.loc["SUM"] = summary
-            res[f"bucket-{c}"] = table
+        table = df[
+            [*new_keys, "model_name", *bucket_columns, "speedup_increase"]
+        ].copy()
+        pivot = table.pivot(
+            index=[*[c for c in new_keys if c != "exporter"], "model_name"],
+            columns=["exporter"],
+            values=bucket_columns,
+        )
+
+        # the following code switches places between exporter and buckets
+        tpiv = pivot.T.reset_index(drop=False)
+
+        def _order(index):
+            if index.name == "exporter":
+                return index
+            order = [
+                "<-20%",
+                "[-20%,-10%[",
+                "[-10%,-5%[",
+                "[-5%,-2%[",
+                "[-2%,2%[",
+                "[2%,5%[",
+                "[5%,10%[",
+                "[10%,20%[",
+                ">=20%",
+            ]
+            position = {v: i for i, v in enumerate(order)}
+            return [position[s] for s in index]
+
+        tpiv = tpiv.set_index(["exporter", "level_0"]).sort_index(key=_order).T.copy()
+        summary = tpiv.sum(axis=0).copy()
+
+        tpiv.loc["SUM"] = summary
+        res["bucket"] = tpiv.fillna(0).astype(int)
 
     # add summary at the end
     times = [c for c in res if c.startswith("time_") or c.startswith("onnx_")]
