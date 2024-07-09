@@ -7,7 +7,6 @@ Calls :func:`experimental_experiment.torch_bench._bash_bench_benchmark_runner.me
 ::
 
     python -m experimental_experiment.torch_bench.bash_bench_agg summary.xlsx a.csv b.csv
-    
 """
 
 from argparse import ArgumentParser

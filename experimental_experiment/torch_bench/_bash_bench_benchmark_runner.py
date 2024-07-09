@@ -458,6 +458,17 @@ class BenchmarkRunner:
                 sess = WrapInferenceSessionForTorch(ort_sess)
                 onx_inputs = ort_sess.get_inputs()
                 onx_outputs = ort_sess.get_outputs()
+                stats["onnx_n_nodes"] = len(exported_model.graph.node)
+                stats["onnx_n_functions"] = len(exported_model.functions)
+                stats["onnx_n_sequence"] = len(
+                    [n for n in exported_model.graph.node if n.op_type == "Sequence"]
+                )
+                stats["onnx_n_if"] = len(
+                    [n for n in exported_model.graph.node if n.op_type == "If"]
+                )
+                stats["onnx_n_loop"] = len(
+                    [n for n in exported_model.graph.node if n.op_type == "Loop"]
+                )
                 stats["onnx_n_inputs"] = len(onx_inputs)
                 stats["onnx_n_outputs"] = len(onx_outputs)
                 stats["onnx_input_names"] = "|".join(i.name for i in onx_inputs)
@@ -849,16 +860,17 @@ def merge_benchmark_reports(
         "speedup",
         "speedup_increase",
         "discrepancies_abs",
+        "discrepancies_rel",
         "time_load",
         "time_warmup",
         "time_repeat",
         "time_export",
         "time_repeat_eager",
         "TIME_ITER",
-        "onnx_filesize",
         "time_session",
         "ERR_export",
         "ERR_warmup",
+        "onnx_filesize",
         "onnx_opt_max_iter",
         "onnx_opt_n_applied",
         "onnx_opt_added",
@@ -866,7 +878,9 @@ def merge_benchmark_reports(
         "onnx_opt_time_in",
         "onnx_opt_unique_applied",
         "onnx_opt_unique_matched",
-        "onnx_nodes",
+        "onnx_n_nodes",
+        "onnx_n_functions",
+        "onnx_n_sequence",
     ),
     formulas=("memory_peak_load", "buckets", "pass"),
     excel_output: Optional[str] = None,
@@ -1114,6 +1128,28 @@ def merge_benchmark_reports(
         if c in res:
             summary = np.exp(np.log(res[c]).mean(axis=0))
             res[c].loc["GMEAN"] = summary
+
+    # final fusion
+
+    def _merge(res, merge, prefix):
+        m = None
+        for name in merge:
+            df = res[name].T
+            cols = set(df.columns)
+            df = df.reset_index(drop=False).copy()
+            index_cols = set(df.columns) - cols
+            df["stat"] = name[len(prefix) :]
+            df = df.set_index([*list(index_cols), "stat"]).T
+            if m is None:
+                m = df
+                continue
+            m = pandas.merge(m, df, how="outer", left_index=True, right_index=True)
+        return m
+
+    for prefix in ["onnx_", "time_", "discrepancies_", "memory_", "ERR_"]:
+        merge = [k for k in res if k.startswith(prefix)]
+        res[prefix[:-1]] = _merge(res, merge, prefix)
+        res = {k: v for k, v in res.items() if k not in set(merge)}
 
     if excel_output:
         with pandas.ExcelWriter(excel_output) as writer:
