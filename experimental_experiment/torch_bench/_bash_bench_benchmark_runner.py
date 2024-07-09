@@ -1145,11 +1145,15 @@ def merge_benchmark_reports(
     for c in ["pass", *times, *discrepancies, "speedup_increase"]:
         if c in res:
             summary = res[c].mean(axis=0).copy()
+            med = res[c].median(axis=0)
             res[c].loc["MEAN"] = summary
+            res[c].loc["MED"] = med
     for c in ["speedup"]:
         if c in res:
             summary = np.exp(np.log(res[c]).mean(axis=0))
+            med = res[c].median(axis=0)
             res[c].loc["GMEAN"] = summary
+            res[c].loc["MED"] = med
 
     # final fusion
 
