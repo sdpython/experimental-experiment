@@ -272,6 +272,10 @@ class HuggingfaceRunner(BenchmarkRunner):
                     transformers.AutoConfig.from_pretrained("camembert-base"),
                     transformers.AutoModelForMaskedLM,
                 ),
+                "Phi2": (
+                    transformers.AutoConfig.from_pretrained("microsoft/phi-2"),
+                    transformers.AutoModelForCausalLM,
+                ),
             }
         )
 
@@ -291,7 +295,7 @@ class HuggingfaceRunner(BenchmarkRunner):
             seq_length = 128
         elif model_name.startswith(("GPT2", "Bart", "T5", "PLBart", "MBart")):
             seq_length = 1024
-        elif model_name in ("AllenaiLongformerBase", "BigBird"):
+        elif model_name in {"AllenaiLongformerBase", "BigBird", "Phi2"}:
             seq_length = 1024
         elif model_name.startswith("OPT"):
             seq_length = 2048
@@ -583,6 +587,7 @@ class HuggingfaceRunner(BenchmarkRunner):
             dtype=self.dtype,
             warmup=self.warmup,
             repeat=self.repeat,
+            suite="HuggingFace",
         )
 
     def iter_model_names(self):

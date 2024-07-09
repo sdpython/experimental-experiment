@@ -175,6 +175,7 @@ class ModelRunner:
         dtype: torch.dtype,
         warmup: int,
         repeat: int,
+        suite: str,
     ):
         if dtype is None:
             cvt = lambda o: o.to(device)  # noqa: E731
@@ -230,6 +231,7 @@ class ModelRunner:
         self.inputs = inputs
         self.repeat = repeat
         self.warmup = warmup
+        self.suite = suite
 
     def run(self) -> Any:
         return self.model(*self.inputs)

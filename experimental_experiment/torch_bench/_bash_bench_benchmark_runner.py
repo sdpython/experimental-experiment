@@ -208,6 +208,7 @@ class BenchmarkRunner:
             repeat = model_runner.repeat
             warmup = model_runner.warmup
             stats["model_name"] = model_name
+            stats["suite"] = model_runner.suite
             stats["time_load"] = time.perf_counter() - begin
             stats["params_size"] = model_runner.parameters_size()
             stats["params_dtype"] = model_runner.parameters_dtype()
@@ -242,6 +243,7 @@ class BenchmarkRunner:
             ########
             # warmup
             ########
+
             if self.verbose > 1:
                 print(
                     f"[BenchmarkRunner.benchmark] warmup model {model_name!r} "
@@ -828,6 +830,7 @@ def merge_benchmark_reports(
     data: List[str],
     model="model_name",
     keys=(
+        "suite",
         "exporter",
         "opt_patterns",
         "device",
