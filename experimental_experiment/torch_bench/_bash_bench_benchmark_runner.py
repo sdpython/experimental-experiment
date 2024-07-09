@@ -1139,7 +1139,10 @@ def merge_benchmark_reports(
 
     # add summary at the end
     times = [c for c in res if c.startswith("time_") or c.startswith("onnx_")]
-    for c in ["pass", *times]:
+    discrepancies = [
+        c for c in res if c.startswith("time_") or c.startswith("discrepancies_")
+    ]
+    for c in ["pass", *times, *discrepancies, "speedup_increase"]:
         if c in res:
             summary = res[c].mean(axis=0).copy()
             res[c].loc["MEAN"] = summary
@@ -1163,6 +1166,14 @@ def merge_benchmark_reports(
                 m = df
                 continue
             m = pandas.merge(m, df, how="outer", left_index=True, right_index=True)
+
+        # We need to change the columns index order.
+        df = m.T
+        setc = set(df.columns)
+        df = df.reset_index(drop=False)
+        index = set(df.columns) - setc
+        if index == {"stat", "exporter"}:
+            m = df.set_index(["stat", "exporter"]).T
         return m
 
     for prefix in ["onnx_", "time_", "discrepancies_", "memory_", "ERR_"]:
