@@ -1004,22 +1004,45 @@ def merge_benchmark_reports(
                 )
                 report_on.append(expr)
             continue
+
         if expr == "pass":
             if "discrepancies_abs" in set_columns:
                 df[expr] = (~df["discrepancies_abs"].isna()).astype(int)
                 report_on.append(expr)
             continue
+
         if expr == "buckets":
-            if "speedup_increase" in set_columns:
-                c = "speedup_increase"
+            if "exporter" in set_columns and "script" in set(df.exporter):
+                # Do the same with the exporter as a baseline.
+                keep = [model, *new_keys, "speedup"]
+                gr = df[df.exporter == "script"][keep].copy()
+                gr["speedup_script"] = gr["speedup"]
+                gr = gr.drop("speedup", axis=1)
+                on = [k for k in keep[:-1] if k != "exporter"]
+                joined = pandas.merge(df, gr, left_on=on, right_on=on, how="left")
+                joined["speedup_increase_script"] = (
+                    joined["speedup_script"] / joined["speedup"] - 1
+                ).fillna(np.inf)
+                assert df.shape[0] == joined.shape[0]
+                df = joined.drop("exporter_y", axis=1).copy()
+                df["exporter"] = df["exporter_x"]
+                df = df.drop("exporter_x", axis=1)
+                set_columns = set(df.columns)
+
+            for c in ["speedup_increase", "speedup_increase_script"]:
+                if c not in set_columns:
+                    continue
                 scale = [-np.inf, -20, -10, -5, -2, 2, 5, 10, 20, np.inf]
                 for i in range(1, len(scale)):
                     val = (df[c] >= scale[i - 1] / 100) & (df[c] < scale[i] / 100)
                     v1 = f"{scale[i-1]}%" if not np.isinf(scale[i - 1]) else ""
                     v2 = f"{scale[i]}%" if not np.isinf(scale[i]) else ""
                     d = f"[{v1},{v2}[" if v1 and v2 else (f"<{v2}" if v2 else f">={v1}")
+                    if c == "speedup_increase_script":
+                        d = f"script {d}"
                     bucket_columns.append(d)
                     df[d] = val.astype(int)
+
             continue
 
     # values
@@ -1031,11 +1054,9 @@ def merge_benchmark_reports(
 
     # buckets
     if bucket_columns:
-        table = df[
-            [*new_keys, "model_name", *bucket_columns, "speedup_increase"]
-        ].copy()
+        table = df[[*new_keys, model, *bucket_columns, "speedup_increase"]].copy()
         pivot = table.pivot(
-            index=[*[c for c in new_keys if c != "exporter"], "model_name"],
+            index=[*[c for c in new_keys if c != "exporter"], model],
             columns=["exporter"],
             values=bucket_columns,
         )
@@ -1056,15 +1077,32 @@ def merge_benchmark_reports(
                 "[5%,10%[",
                 "[10%,20%[",
                 ">=20%",
+                "script <-20%",
+                "script [-20%,-10%[",
+                "script [-10%,-5%[",
+                "script [-5%,-2%[",
+                "script [-2%,2%[",
+                "script [2%,5%[",
+                "script [5%,10%[",
+                "script [10%,20%[",
+                "script >=20%",
             ]
             position = {v: i for i, v in enumerate(order)}
             return [position[s] for s in index]
 
-        tpiv = tpiv.set_index(["exporter", "level_0"]).sort_index(key=_order).T.copy()
-        summary = tpiv.sum(axis=0).copy()
+        tpiv1 = tpiv[~tpiv.level_0.str.startswith("script")]
+        tpiv2 = tpiv[tpiv.level_0.str.startswith("script")].copy()
+        tpiv1 = tpiv1.set_index(["exporter", "level_0"]).sort_index(key=_order).T.copy()
+        tpiv1.loc["SUM"] = tpiv1.sum(axis=0).copy()
+        res["bucket"] = tpiv1.fillna(0).astype(int)
 
-        tpiv.loc["SUM"] = summary
-        res["bucket"] = tpiv.fillna(0).astype(int)
+        if tpiv2.shape[0] > 0:
+            tpiv2["level_0"] = tpiv2["level_0"].apply(lambda s: s[len("script ") :])
+            tpiv2 = (
+                tpiv2.set_index(["exporter", "level_0"]).sort_index(key=_order).T.copy()
+            )
+            tpiv2.loc["SUM"] = tpiv2.sum(axis=0).copy()
+            res["bucket_script"] = tpiv2.fillna(0).astype(int)
 
     # add summary at the end
     times = [c for c in res if c.startswith("time_") or c.startswith("onnx_")]
