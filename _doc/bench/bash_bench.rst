@@ -141,3 +141,12 @@ Multiple fields may have multiple values.
 Every run outputs some variable following the format
 ``:<name>,<value>;``. All of these expressions are collected
 and aggregated in a csv file.
+
+Aggregated Report
+=================
+
+An aggregated report can be produced by command line:
+
+::
+
+    python -m experimental_experiment.torch_bench.bash_bench_agg summary.xlsx bench1.csv bench2.csv ...
