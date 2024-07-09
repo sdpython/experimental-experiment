@@ -1138,11 +1138,14 @@ def merge_benchmark_reports(
             res["bucket_script"] = tpiv2.fillna(0).astype(int)
 
     # add summary at the end
-    times = [c for c in res if c.startswith("time_") or c.startswith("onnx_")]
-    discrepancies = [
-        c for c in res if c.startswith("time_") or c.startswith("discrepancies_")
+    mean_med = [
+        c
+        for c in res
+        if c.startswith("time_")
+        or c.startswith("onnx_")
+        or c.startswith("discrepancies_")
     ]
-    for c in ["pass", *times, *discrepancies, "speedup_increase"]:
+    for c in ["pass", *mean_med, "speedup_increase"]:
         if c in res:
             summary = res[c].mean(axis=0).copy()
             med = res[c].median(axis=0)
