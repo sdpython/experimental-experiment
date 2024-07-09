@@ -83,6 +83,8 @@ def bash_bench_main(name: str, doc: str, args: Optional[List[str]] = None):
     else:
         if args.model == "all":
             args.model = ",".join(names)
+        elif args.model == "All":
+            args.model = ",".join(n for n in names if not n.startswith("101"))
 
         if multi_run(args):
             configs = make_configs(args)

@@ -984,8 +984,14 @@ def aten_cumsum(
     assert isinstance(dim, int), f"Not implemented for dim={dim!r}{g.get_debug_msg()}"
 
     if dtype is None:
-        xi = x
         itype = g.get_type(x)
+        if itype == TensorProto.INT32:
+            # computation is done with INT64
+            itype = TensorProto.INT64
+            xi = g.op.Cast(x, to=itype, name=name)
+        else:
+            xi = x
+
     else:
         itype = dtype if isinstance(dtype, int) else torch_dtype_to_onnx_dtype(dtype)
         xi = g.op.Cast(x, to=itype, name=name)
@@ -1629,6 +1635,51 @@ def aten_FunctionCtx(
     raise NotImplementedError(f"args={args}, kwargs={kwargs}")
 
 
+def aten_gather(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    dim: int,
+    index: T,
+    sparse_grad: bool = False,
+    name: str = "gather",
+) -> T:
+    """gather"""
+    assert (
+        not sparse_grad
+    ), f"not implemented with sparse_grad={sparse_grad}{g.get_debug_msg()}"
+    assert isinstance(
+        index, str
+    ), f"not implemented with index={index}{g.get_debug_msg()}"
+    assert g.has_shape(index), f"Missing shape for index={index}{g.get_debug_msg()}"
+
+    shape = g.has_shape(index)
+    if shape in (tuple(), (1,)):
+        # index is a scalar
+        assert False
+
+    if g.get_type(index) != TensorProto.INT64:
+        new_index = g.op.Cast(index, to=TensorProto.INT64, name=name)
+    else:
+        new_index = index
+
+    res = g.op.GatherElements(x, new_index, axis=dim, name=name, outputs=outputs)
+
+    # if g.is_constant(index)
+    # if IsScalar(index):  # When (index) is empty, return (self)
+    #    result = self
+    # else:
+    #    if IsScalar(self):  # Unsqueeze for GatherElements op
+    #        self = op.Reshape(self, op.Constant(value_ints=[-1]))
+    #    if op.Size(index) == 0:  # Return empty array
+    #        result = op.CastLike(index, self)
+
+    if sts:
+        g.set_type(res, g.get_type(x))
+    return res
+
+
 def aten_ge(
     g: GraphBuilder,
     sts: Optional[Dict[str, Any]],
@@ -2250,6 +2301,54 @@ def aten_masked_fill_Tensor(
 ) -> T:
     "masked"
     return aten_masked_fill_Scalar(g, sts, outputs, x, mask, value, name=name)
+
+
+def aten_max_other(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    y: T,
+    name: str = "max_other",
+) -> T:
+    """maximum"""
+
+    if g.has_type(x) and g.has_type(y) and g.get_type(x) == g.get_type(y):
+        res = g.op.Max(x, y, name=name, outputs=outputs)
+        if sts:
+            set_type_shape_binary_op(g, res, x, y)
+        return res
+
+    if g.has_type(x) and g.has_type(y):
+        # types are different
+        assert g.get_type_known(outputs[0]), (
+            f"Type mismatch for {x!r} ({g.get_type(x)}) and {y!r} ({g.get_type(y)}), "
+            f"output {outputs[0]!r} has no type{g.get_debug_msg()}"
+        )
+        itype = g.get_type_known(outputs[0])
+        if itype == g.get_type(x):
+            res = g.op.Max(
+                x, g.op.Cast(y, to=itype, name=name), name=name, outputs=outputs
+            )
+        elif itype == g.get_type(y):
+            res = g.op.Max(
+                g.op.Cast(x, to=itype, name=name), y, name=name, outputs=outputs
+            )
+        else:
+            res = g.op.Max(
+                g.op.Cast(x, to=itype, name=name),
+                g.op.Cast(y, to=itype, name=name),
+                name=name,
+                outputs=outputs,
+            )
+        if sts:
+            set_type_shape_binary_op(g, res, x, y, itype=itype)
+        return res
+
+    assert False, (
+        f"Unable to guess the output type for {x!r} (type={g.get_type(x)}) "
+        f"and {y!r} (type={g.get_type(y)})"
+    )
 
 
 def _aten_max_pool_onnx(

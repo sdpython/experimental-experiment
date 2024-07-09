@@ -779,9 +779,28 @@ class BenchmarkRunner:
         if isinstance(expected, torch.Tensor):
             if isinstance(got, torch.Tensor):
                 diff = (got - expected).abs()
-                return float(diff.max()), float(
-                    ((diff.abs()) / (expected.abs() + 1e-7)).max()
-                )
+                rdiff = diff / (expected.abs() + 1e-3)
+                abs_diff, rel_diff = float(diff.max()), float(rdiff.max())
+                if self.verbose >= 10 and (abs_diff >= 10 or rel_diff >= 10):
+                    # To understand the value if comes from.
+                    print(
+                        f"[max_diff] abs_diff={abs_diff}, rel_diff={rel_diff}, "
+                        f"dtype={expected.dtype}, shape={expected.shape}"
+                    )
+                    if abs_diff >= 10:
+                        idiff = torch.argmax(diff.reshape((-1,)))
+                        x = expected.reshape((-1,))[idiff]
+                        y = got.reshape((-1,))[idiff]
+                        print(f"   [max_diff] abs diff={abs_diff}, x={x}, y={y}")
+
+                    if rel_diff >= 10:
+                        idiff = torch.argmax(rdiff.reshape((-1,)))
+                        x = expected.reshape((-1,))[idiff]
+                        y = got.reshape((-1,))[idiff]
+                        print(f"   [max_diff] rel diff={rel_diff}, x={x}, y={y}")
+
+                return abs_diff, rel_diff
+
             if isinstance(got, (list, tuple)):
                 if len(got) != 1:
                     if verbose > 2:

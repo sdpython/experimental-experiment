@@ -123,6 +123,8 @@ Multiple Runs
 =============
 
 ``--model all`` runs the same command as above a in new process each time.
+``--model All`` runs the same command as above a in new process each time
+without the dummy models starting with ``101``.
 Any value with ``,`` means the command line needs to be run multiple times
 with multiple values. For example, the following command line:
 

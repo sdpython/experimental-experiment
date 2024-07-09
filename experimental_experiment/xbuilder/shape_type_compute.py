@@ -111,13 +111,16 @@ def set_type_shape_binary_op(
     *input_names: List[str],
     begin: int = 0,
     cmp_op: bool = False,
+    itype: Optional[int] = None,
 ):
     """
     Sets the shape and type for a binary operator (add, mul, ...).
     """
     # type
     dtype = None
-    if cmp_op:
+    if itype:
+        g.set_type(name, itype)
+    elif cmp_op:
         # operator comparing values
         g.set_type(name, TensorProto.BOOL)
     else:

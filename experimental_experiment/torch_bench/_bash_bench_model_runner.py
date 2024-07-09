@@ -345,6 +345,16 @@ class ModelRunner:
                 verbose=verbose,
                 target_opset=target_opset,
             )
+        if exporter == "inductor":
+            return self._to_inductor(
+                name,
+                dynamic=dynamic,
+                fake_tensor=fake_tensor,
+                no_grad=no_grad,
+                optimization=optimization,
+                verbose=verbose,
+                target_opset=target_opset,
+            )
         raise AssertionError(f"Exporter {exporter!r} is not implemented.")
 
     def _to_onnx_custom(
@@ -374,7 +384,7 @@ class ModelRunner:
                 self.inputs,
                 optimize=bool(optimization),
                 large_model=True,
-                verbose=0,  # max(verbose - 1, 0),
+                verbose=1 if verbose > 1 else 0,
                 target_opset=target_opset,
                 return_optimize_report=True,
                 options=options,
@@ -512,12 +522,32 @@ class ModelRunner:
             return gm.forward
 
         with torch.no_grad():
-            res = torch.compile(self.model, backend=lambda gm, inputs: gm.forward)
+            res = torch.compile(
+                self.model, fullgraph=True, backend=lambda gm, inputs: gm.forward
+            )
+        return res, None
+
+    def _to_inductor(
+        self,
+        name: str,
+        dynamic: bool,
+        fake_tensor: bool,
+        no_grad: bool,
+        optimization: str,
+        verbose: int,
+        target_opset: int,
+    ):
+        assert not fake_tensor, "fake_tensor not implemented."
+        assert not dynamic, "dynamic true not implemented yet"
+        assert no_grad, "no_grad true not implemented yet"
+
+        with torch.no_grad():
+            res = torch.compile(self.model, backend="inductor", fullgraph=True)
         return res, None
 
     def make_feeds(self, exporter: str, filename: Optional[str] = None):
         """Creates feed inputs."""
-        if exporter in {"eager", "export", "compile"}:
+        if exporter in {"eager", "export", "compile", "inductor"}:
             return self.inputs
         onx = onnx.load(filename, load_external_data=False)
         names = [_.name for _ in onx.graph.input]
