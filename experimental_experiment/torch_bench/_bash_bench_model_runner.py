@@ -506,31 +506,44 @@ class ModelRunner:
         if not optimization:
             return onnx.load(name, load_external_data=False), None
 
-        if optimization == "default":
-            from onnxscript.optimizer import optimize
-            from onnxscript.rewriter import rewrite
-            from onnx.inliner import inline_local_functions
+        opts = optimization.split("+")
+        shutil.copy(name, name + ".raw.onnx")
+        model_proto = onnx.load(name, load_external_data=False)
 
-            model_proto = onnx.load(name, load_external_data=False)
+        for opt in opts:
+            if opt == "default":
+                from onnxscript.optimizer import optimize
+                from onnxscript.rewriter import rewrite
+                from onnx.inliner import inline_local_functions
 
-            first_model_proto = model_proto
-            model_proto = optimize(
-                model_proto,
-                num_iterations=2,
-                onnx_shape_inference=False,
-            )
-            model_proto = rewrite(model_proto)
-            model_proto = inline_local_functions(model_proto)
-            del first_model_proto.graph.node[:]
-            del first_model_proto.functions[:]
-            first_model_proto.graph.node.extend(model_proto.graph.node)
-            first_model_proto.functions.extend(model_proto.functions)
+                first_model_proto = model_proto
+                model_proto = optimize(
+                    model_proto,
+                    num_iterations=2,
+                    onnx_shape_inference=False,
+                )
+                model_proto = rewrite(model_proto)
+                model_proto = inline_local_functions(model_proto)
+                del first_model_proto.graph.node[:]
+                del first_model_proto.functions[:]
+                first_model_proto.graph.node.extend(model_proto.graph.node)
+                first_model_proto.functions.extend(model_proto.functions)
+                continue
 
-            shutil.copy(name, name + ".raw.onnx")
-            onnx.save(model_proto, name)
-            return model_proto, None
+            if opt == "llm":
+                from onnxscript import ir
+                from onnxscript.rewriter.llama_rule_sets import llama_p0_rule_set
 
-        raise AssertionError(f"Unexpected value for optimization={optimization!r}.")
+                ir_model = ir.serde.deserialize_model(model_proto)
+                rule_set = llama_p0_rule_set()
+                rule_set.apply_to_model(ir_model)
+                model_proto = ir.serde.serialize_model(ir_model)
+                continue
+
+            raise AssertionError(f"Unexpected value for optimization={optimization!r}.")
+
+        onnx.save(model_proto, name)
+        return model_proto, None
 
     def _to_export(
         self,
