@@ -1226,7 +1226,7 @@ def merge_benchmark_reports(
 
     # final fusion
 
-    def _merge(res, merge, prefix, reverse=True):
+    def _merge(res, merge, prefix, reverse=True, transpose=False):
         m = None
         for name in merge:
             df = res[name].T
@@ -1250,6 +1250,16 @@ def merge_benchmark_reports(
                 m = df.set_index(["stat", "exporter"]).T
         else:
             m = m.T.sort_index().T
+        if transpose:
+            m = m.T.stack().reset_index(drop=False)
+            cols = m.columns
+            assert len(cols) == 4, f"Unexpected number of columns in {cols}"
+            assert (
+                "stat" in cols and "exporter" in cols and model in cols
+            ), f"Unexpeted columns {cols}"
+            last = [c for c in cols if c not in {"stat", "exporter", model}]
+            m = m.pivot(index="stat", columns=[model, "exporter"], values=last[0])
+            m = m.T.sort_index().T
         return m
 
     for prefix in [
@@ -1265,7 +1275,13 @@ def merge_benchmark_reports(
         merge = [k for k in res if k.startswith(prefix)]
         if len(merge) == 0:
             continue
-        res[prefix[:-1]] = _merge(res, merge, prefix, reverse=prefix != "status_")
+        res[prefix[:-1]] = _merge(
+            res,
+            merge,
+            prefix,
+            reverse=prefix != "status_",
+            transpose=prefix.startswith("op_"),
+        )
         res = {k: v for k, v in res.items() if k not in set(merge)}
 
     if excel_output:
