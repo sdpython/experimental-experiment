@@ -919,6 +919,7 @@ def merge_benchmark_reports(
         "onnx_*",
         "op_*",
         "memory_*",
+        "mem_*",
     ),
     formulas=("memory_peak_load", "buckets", "status"),
     excel_output: Optional[str] = None,
@@ -1114,7 +1115,7 @@ def merge_benchmark_reports(
                 on = [k for k in keep[:-1] if k != "exporter"]
                 joined = pandas.merge(df, gr, left_on=on, right_on=on, how="left")
                 joined["speedup_increase_script"] = (
-                    joined["speedup_script"] / joined["speedup"] - 1
+                    joined["speedup"] / joined["speedup_script"] - 1
                 ).fillna(np.inf)
                 assert df.shape[0] == joined.shape[0]
                 df = joined.drop("exporter_y", axis=1).copy()
@@ -1122,7 +1123,7 @@ def merge_benchmark_reports(
                 df = df.drop("exporter_x", axis=1)
                 set_columns = set(df.columns)
                 df["status_lat<=script+2%"] = (
-                    df["speedup_increase_script"] >= 1 / 1.02
+                    df["speedup_increase_script"] >= (1 / 1.02 - 1)
                 ).astype(int)
                 report_on.append("status_lat<=script+2%")
 
@@ -1139,7 +1140,6 @@ def merge_benchmark_reports(
                         d = f"script {d}"
                     bucket_columns.append(d)
                     df[d] = val.astype(int)
-
             continue
 
     # values
@@ -1206,17 +1206,35 @@ def merge_benchmark_reports(
         c
         for c in res
         if c.startswith("time_")
+        or c.startswith("TIME_")
         or c.startswith("onnx_")
         or c.startswith("op_")
         or c.startswith("discrepancies_")
         or c.startswith("status_")
     ]
     for c in [*mean_med, "speedup_increase"]:
-        if c in res and set(res[c].dtypes) in {np.float64, np.float32}:
-            summary = res[c].mean(axis=0).copy()
-            med = res[c].median(axis=0)
-            res[c].loc["MEAN"] = summary
-            res[c].loc["MED"] = med
+        num = all(
+            [
+                n
+                in {
+                    np.float32,
+                    np.float64,
+                    np.dtype("float64"),
+                    np.dtype("float32"),
+                    np.int32,
+                    np.int64,
+                    np.dtype("int64"),
+                    np.dtype("int32"),
+                }
+                for n in set(res[c].dtypes)
+            ]
+        )
+        if c in res:
+            if num:
+                summary = res[c].mean(axis=0).copy()
+                med = res[c].median(axis=0)
+                res[c].loc["MEAN"] = summary
+                res[c].loc["MED"] = med
     for c in ["speedup"]:
         if c in res:
             summary = np.exp(np.log(res[c]).mean(axis=0))
@@ -1286,6 +1304,176 @@ def merge_benchmark_reports(
 
     if excel_output:
         with pandas.ExcelWriter(excel_output) as writer:
+            from openpyxl.styles import Font, Alignment, numbers, PatternFill
+
             for k, v in sorted(res.items()):
                 v.to_excel(writer, sheet_name=k, index=k not in {"0raw", "0main"})
+            bold_font = Font(bold=True)
+            alignment = Alignment(horizontal="left")
+            center = Alignment(horizontal="center")
+            red = Font(color="FF0000")
+            gray = PatternFill(
+                start_color="AAAAAA", end_color="AAAAAA", fill_type="solid"
+            )
+            yellow = PatternFill(
+                start_color="FFFF00", end_color="FFFF00", fill_type="solid"
+            )
+            redf = PatternFill(
+                start_color="FF0000", end_color="FF0000", fill_type="solid"
+            )
+            for k, v in res.items():
+                sheet = writer.sheets[k]
+                if k == "0main":
+                    for c in "AB":
+                        sheet.column_dimensions[c].width = 40
+                        sheet.column_dimensions["ABCDEFGHIJ"[i]].alignment = alignment
+                    for cell in sheet[1]:
+                        cell.font = bold_font
+                        cell.alignment = alignment
+                    continue
+                if k == "0raw":
+                    continue
+                n_cols = 1 if isinstance(v.index[0], str) else len(v.index[0])
+                n_rows = 1 if isinstance(v.columns[0], str) else len(v.columns[0])
+                for i in range(n_cols):
+                    sheet.column_dimensions["ABCDEFGHIJ"[i]].width = 40
+
+                first_row = n_cols + n_rows + 1
+                last_row = first_row + v.shape[0] + 1
+                for row in sheet.iter_rows(
+                    min_row=first_row,
+                    max_row=last_row,
+                    min_col=1,
+                    max_col=n_cols,
+                ):
+                    for cell in row:
+                        cell.alignment = alignment
+                        cell.font = bold_font
+                for i in range(n_rows):
+                    for cell in sheet[i + 1]:
+                        cell.font = bold_font
+
+                if k == "memory":
+                    for row in sheet.iter_rows(
+                        min_row=first_row,
+                        max_row=last_row,
+                        min_col=n_cols + 1,
+                        max_col=n_cols + v.shape[1],
+                    ):
+                        for cell in row:
+                            cell.number_format = numbers.FORMAT_NUMBER
+                    continue
+                if k == "ERR":
+                    for i in range(n_cols + v.shape[1]):
+                        sheet.column_dimensions[
+                            "ABCDEFGHIJKLMNOPQRSTUVWXYZ"[i]
+                        ].alignment = alignment
+                        sheet.column_dimensions[
+                            "ABCDEFGHIJKLMNOPQRSTUVWXYZ"[i]
+                        ].width = 50
+                        if i >= 25:
+                            break
+                    continue
+                if k in ("TIME_ITER", "discrepancies", "speedup", "speedup_increase"):
+                    if k == "TIME_ITER":
+                        qt = np.quantile(v.values, 0.9)
+                        qb = None
+                        fmt = numbers.FORMAT_NUMBER_00
+                    elif k == "speedup":
+                        qb = 0.98
+                        qt = None
+                        fmt = "0.000"
+                    elif k == "speedup_increase":
+                        qb = -0.02
+                        qt = None
+                        fmt = "0.00%"
+                    else:
+                        qt = 0.01
+                        qb = None
+                        fmt = "0.00000"
+
+                    for row in sheet.iter_rows(
+                        min_row=first_row,
+                        max_row=last_row,
+                        min_col=n_cols + 1,
+                        max_col=n_cols + v.shape[1],
+                    ):
+                        for cell in row:
+                            if cell.value is None or isinstance(cell.value, str):
+                                continue
+                            if qt and cell.value > qt:
+                                cell.font = red
+                            if qb and cell.value < qb:
+                                cell.font = red
+                            cell.number_format = fmt
+                    continue
+                if k in ("bucket", "bucket_script", "status", "op_onnx", "op_torch"):
+                    has_convert = [("convert" in str(c)) for c in v.columns]
+                    has_20 = [("-20%" in str(c)) for c in v.columns]
+                    assert k != "status" or any(
+                        has_convert
+                    ), f"has_convert={has_convert} but df.columns={[str(c) for c in v.columns]}"
+                    assert not k.startswith("bucket") or any(
+                        has_20
+                    ), f"has_20={has_20} but df.columns={[str(c) for c in v.columns]}"
+                    for row in sheet.iter_rows(
+                        min_row=first_row,
+                        max_row=last_row,
+                        min_col=n_cols + 1,
+                        max_col=n_cols + v.shape[1],
+                    ):
+                        for cell in row:
+                            if cell.value is None or isinstance(cell.value, str):
+                                continue
+                            if cell.value == 0:
+                                cell.value = None
+                            cell.number_format = numbers.FORMAT_NUMBER
+                            cell.alignment = center
+                            if k == "status":
+                                idx = cell.col_idx - n_cols - 1
+                                if has_convert[idx]:
+                                    cell.fill = yellow
+                            elif k in ("bucket", "bucket_script"):
+                                idx = cell.col_idx - n_cols - 1
+                                if has_20[idx]:
+                                    cell.fill = redf
+                    continue
+                if k == "time":
+                    for row in sheet.iter_rows(
+                        min_row=first_row,
+                        max_row=last_row,
+                        min_col=n_cols + 1,
+                        max_col=n_cols + v.shape[1],
+                    ):
+                        for cell in row:
+                            if cell.value is None or isinstance(cell.value, str):
+                                continue
+                            cell.number_format = "0.000"
+                    continue
+            for k, v in res.items():
+                sheet = writer.sheets[k]
+                if (
+                    "MEAN" in v.index
+                    or "GMEAN" in v.index
+                    or "SUM" in v.index
+                    or "MED" in v.index
+                ):
+                    for row in sheet.iter_rows(
+                        min_row=first_row,
+                        max_row=last_row,
+                        min_col=n_cols + 1,
+                        max_col=n_cols + v.shape[1],
+                    ):
+                        for cell in row:
+                            if sheet.cell(row=cell.row, column=1).value in {
+                                "MEAN",
+                                "GMEAN",
+                                "SUM",
+                                "MED",
+                            }:
+                                cell.fill = gray
+                                cell.font = bold_font
+                                if "." not in cell.number_format:
+                                    cell.number_format = "0.000"
+
     return res
