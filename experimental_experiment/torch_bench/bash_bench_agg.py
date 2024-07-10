@@ -20,7 +20,7 @@ def main(args=None):
     parser.add_argument("inputs", nargs="+", help="input csv files, at least 1")
     res = parser.parse_args(args=args)
 
-    from experimental_experiment.torch_bench._bash_bench_benchmark_runner import (
+    from experimental_experiment.torch_bench._bash_bench_benchmark_runner_agg import (
         merge_benchmark_reports,
     )
 
