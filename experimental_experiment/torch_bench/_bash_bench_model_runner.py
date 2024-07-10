@@ -367,6 +367,16 @@ class ModelRunner:
                 verbose=verbose,
                 target_opset=target_opset,
             )
+        if exporter == "ORTModule":
+            return self._to_ortmodule(
+                name,
+                dynamic=dynamic,
+                fake_tensor=fake_tensor,
+                no_grad=no_grad,
+                optimization=optimization,
+                verbose=verbose,
+                target_opset=target_opset,
+            )
         raise AssertionError(f"Exporter {exporter!r} is not implemented.")
 
     def _to_onnx_custom(
@@ -562,6 +572,26 @@ class ModelRunner:
         ), f"optimization {optimization!r} not compatible with eager"
 
         return self.model, None
+
+    def _to_ortmodule(
+        self,
+        name: str,
+        dynamic: bool,
+        fake_tensor: bool,
+        no_grad: bool,
+        optimization: str,
+        verbose: int,
+        target_opset: int,
+    ):
+        assert not fake_tensor, "fake_tensor not implemented."
+        assert not dynamic, "dynamic true not implemented yet"
+        assert no_grad, "no_grad false not implemented yet"
+        assert (
+            not optimization
+        ), f"optimization {optimization!r} not compatible with eager"
+        from onnxruntime.training.ortmodule import ORTModule
+
+        return ORTModule(self.model), None
 
     def _to_compile(
         self,
