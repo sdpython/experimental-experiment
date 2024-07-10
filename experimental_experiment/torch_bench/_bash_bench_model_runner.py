@@ -417,7 +417,9 @@ class ModelRunner:
         assert not fake_tensor, "fake_tensor not implemented."
         assert not dynamic, "dynamic true not implemented yet"
         assert no_grad, "no_grad false not implemented yet"
-        assert not optimization, "optimization not compatible with script"
+        assert (
+            not optimization
+        ), f"optimization {optimization!r} not compatible with script"
 
         with torch.no_grad():
             torch.onnx.export(
@@ -442,7 +444,9 @@ class ModelRunner:
         assert not fake_tensor, "fake_tensor not implemented."
         assert not dynamic, "dynamic true not implemented yet"
         assert no_grad, "no_grad false not implemented yet"
-        assert not optimization, "optimization not compatible with dynamo"
+        assert (
+            not optimization
+        ), f"optimization {optimization!r} not compatible with dynamo"
 
         with torch.no_grad():
             torch.onnx.export(
@@ -531,7 +535,9 @@ class ModelRunner:
         assert not fake_tensor, "fake_tensor not implemented."
         assert not dynamic, "dynamic true not implemented yet"
         assert no_grad, "no_grad false not implemented yet"
-        assert not optimization, "optimization not compatible with export"
+        assert (
+            not optimization
+        ), f"optimization {optimization!r} not compatible with export"
         from torch.export import export
 
         with torch.no_grad():
@@ -551,7 +557,9 @@ class ModelRunner:
         assert not fake_tensor, "fake_tensor not implemented."
         assert not dynamic, "dynamic true not implemented yet"
         assert no_grad, "no_grad false not implemented yet"
-        assert not optimization, "optimization not compatible with eager"
+        assert (
+            not optimization
+        ), f"optimization {optimization!r} not compatible with eager"
 
         return self.model, None
 
@@ -568,7 +576,9 @@ class ModelRunner:
         assert not fake_tensor, "fake_tensor not implemented."
         assert not dynamic, "dynamic true not implemented yet"
         assert no_grad, "no_grad true not implemented yet"
-        assert not optimization, "optimization not compatible with compile"
+        assert (
+            not optimization
+        ), f"optimization {optimization!r} not compatible with compile"
 
         def custom_backend(
             gm: torch.fx.GraphModule, example_inputs: List[torch.Tensor]
@@ -594,7 +604,9 @@ class ModelRunner:
         assert not fake_tensor, "fake_tensor not implemented."
         assert not dynamic, "dynamic true not implemented yet"
         assert no_grad, "no_grad true not implemented yet"
-        assert not optimization, "optimization not compatible with inductor"
+        assert (
+            not optimization
+        ), f"optimization {optimization!r} not compatible with inductor"
 
         with torch.no_grad():
             res = torch.compile(self.model, backend="inductor", fullgraph=True)
@@ -613,7 +625,9 @@ class ModelRunner:
         assert not fake_tensor, "fake_tensor not implemented."
         assert not dynamic, "dynamic true not implemented yet"
         assert no_grad, "no_grad true not implemented yet"
-        assert not optimization, "optimization not compatible with dort"
+        assert (
+            not optimization
+        ), f"optimization {optimization!r} not compatible with dort"
 
         with torch.no_grad():
             res = torch.compile(self.model, backend="onnxrt", fullgraph=True)

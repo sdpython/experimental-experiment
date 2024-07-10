@@ -110,7 +110,7 @@ def bash_bench_main(name: str, doc: str, args: Optional[List[str]] = None):
                 pprint.pprint(data if args.verbose > 3 else data[:2])
             if args.output_data:
                 df = make_dataframe_from_benchmark_data(data, detailed=False)
-                print("Prints the results into file {args.output_data!r}")
+                print(f"Prints out the results into file {args.output_data!r}")
                 df.to_csv(args.output_data, index=False)
                 df.to_excel(args.output_data + ".xlsx", index=False)
                 if args.verbose:

@@ -1177,6 +1177,7 @@ def merge_benchmark_reports(
         for c in res
         if c.startswith("time_")
         or c.startswith("onnx_")
+        or c.startswith("op_")
         or c.startswith("discrepancies_")
     ]
     for c in ["pass", *mean_med, "speedup_increase"]:
@@ -1217,8 +1218,18 @@ def merge_benchmark_reports(
             m = df.set_index(["stat", "exporter"]).T
         return m
 
-    for prefix in ["onnx_", "time_", "discrepancies_", "memory_", "ERR_"]:
+    for prefix in [
+        "onnx_",
+        "time_",
+        "discrepancies_",
+        "memory_",
+        "ERR_",
+        "op_onnx_",
+        "op_torch_",
+    ]:
         merge = [k for k in res if k.startswith(prefix)]
+        if len(merge) == 0:
+            continue
         res[prefix[:-1]] = _merge(res, merge, prefix)
         res = {k: v for k, v in res.items() if k not in set(merge)}
 

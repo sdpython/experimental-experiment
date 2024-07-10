@@ -196,7 +196,7 @@ def run_benchmark(
         if temp_output_data:
             df = make_dataframe_from_benchmark_data(data, detailed=False)
             if verbose > 2:
-                print("Prints the results into file {temp_output_data!r}")
+                print(f"Prints out the results into file {temp_output_data!r}")
             df.to_csv(temp_output_data, index=False)
             try:
                 df.to_excel(temp_output_data + ".xlsx", index=False)
