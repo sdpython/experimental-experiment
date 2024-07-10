@@ -29,6 +29,7 @@ def bash_bench_parse_args(name: str, doc: str, new_args: Optional[List[str]] = N
         opt_patterns=("", "a list of optimization patterns to disable"),
         dump_folder=("dump_bash_bench", "where to dump the exported model"),
         quiet=("1", "catch exception and go on or fail"),
+        start=("0", "first model to run (to continue a bench)"),
         dtype=(
             "",
             "converts the model using this type, empty for no change, "
@@ -105,6 +106,7 @@ def bash_bench_main(name: str, doc: str, args: Optional[List[str]] = None):
                 stop_if_exception=False,
                 temp_output_data=temp_output_data,
                 dump_std="dump_test_models",
+                start=args.start,
             )
             if args.verbose > 2:
                 pprint.pprint(data if args.verbose > 3 else data[:2])
