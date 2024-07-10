@@ -7,6 +7,7 @@ import numpy as np
 import onnx
 import torch
 from .export_model_helper import WrapInferenceSessionForTorch, WrapForTorch
+from ..memory_peak import start_spying_on, flatten
 
 
 class BenchmarkRunner:
@@ -147,6 +148,7 @@ class BenchmarkRunner:
         dynamic: bool = False,
         optimization: str = "",
         quiet: bool = True,
+        memory_peak: bool = False,
     ) -> Iterator[Dict[Any, Any]]:
         """
         Runs the benchmarks, run, export, run in onnx, measure the speedup.
@@ -358,6 +360,12 @@ class BenchmarkRunner:
                 os.mkdir(pfilename)
             filename = os.path.join(pfilename, "model.onnx")
 
+            memory_session = (
+                start_spying_on(cuda=self.device == "cuda")
+                if memory_peak
+                else None
+            )
+
             begin = time.perf_counter()
             if quiet:
                 try:
@@ -376,6 +384,10 @@ class BenchmarkRunner:
                     stats["ERR_export"] = _clean_string(str(e)).replace("\n", "_ ")
                     if self.verbose:
                         print(f"[benchmarkrunner.benchmark] err_export {e}")
+                    if memory_session is not None:
+                        memory_results = memory_session.stop()
+                        memory_stats = flatten(memory_results, prefix="memory_")
+                        stats.update(memory_stats)
                     yield stats
                     continue
                 stats["time_export"] = time.perf_counter() - begin
@@ -391,6 +403,12 @@ class BenchmarkRunner:
                     target_opset=self.target_opset,
                 )
                 stats["time_export"] = time.perf_counter() - begin
+
+            if memory_session is not None:
+                memory_results = memory_session.stop()
+                print(f"[export_model] ends memory monitoring {memory_results}")
+                memory_stats = flatten(memory_results, prefix="memory_")
+                stats.update(memory_stats)
 
             if self.device == "cuda":
                 stats["mema_gpu_5_after_export"] = torch.cuda.memory_allocated(0)
@@ -456,23 +474,7 @@ class BenchmarkRunner:
                         filename, providers=providers
                     )
                 sess = WrapInferenceSessionForTorch(ort_sess)
-                onx_inputs = ort_sess.get_inputs()
-                onx_outputs = ort_sess.get_outputs()
-                stats["onnx_n_nodes"] = len(exported_model.graph.node)
-                stats["onnx_n_functions"] = len(exported_model.functions)
-                stats["onnx_n_sequence"] = len(
-                    [n for n in exported_model.graph.node if n.op_type == "Sequence"]
-                )
-                stats["onnx_n_if"] = len(
-                    [n for n in exported_model.graph.node if n.op_type == "If"]
-                )
-                stats["onnx_n_loop"] = len(
-                    [n for n in exported_model.graph.node if n.op_type == "Loop"]
-                )
-                stats["onnx_n_inputs"] = len(onx_inputs)
-                stats["onnx_n_outputs"] = len(onx_outputs)
-                stats["onnx_input_names"] = "|".join(i.name for i in onx_inputs)
-                stats["onnx_output_names"] = "|".join(i.name for i in onx_outputs)
+                stats.update(self._post_process_onnx_statistics(exported_model))
             else:
                 is_onnx = False
                 sess = WrapForTorch(exported_model)
@@ -708,34 +710,68 @@ class BenchmarkRunner:
         """
         if opt_stats is None:
             return dict(onnx_optimized=0)
-        time_in = 0.0
-        added = 0
-        removed = 0
-        max_iter = 0
-        applied = set()
-        matched = set()
-        n_applied = 0
-        for obs in opt_stats:
-            time_in += obs.get("time_in", 0)
-            added += obs.get("added", 0)
-            removed += obs.get("removed", 0)
-            max_iter = max(max_iter, obs.get("iteration", 0))
-            p = obs["pattern"]
-            if p.startswith("match_"):
-                matched.add(p)
-            elif p.startswith("apply_"):
-                applied.add(p)
-                n_applied += 1
-        return dict(
-            onnx_optimized=1,
-            onnx_opt_time_in=time_in,
-            onnx_opt_added=added,
-            onnx_opt_removed=removed,
-            onnx_opt_max_iter=max_iter,
-            onnx_opt_unique_matched=len(matched),
-            onnx_opt_unique_applied=len(applied),
-            onnx_opt_n_applied=n_applied,
+        new_stat = {}
+        if "optimization" in opt_stats:
+            time_in = 0.0
+            added = 0
+            removed = 0
+            max_iter = 0
+            applied = set()
+            matched = set()
+            n_applied = 0
+            for obs in opt_stats["optimization"]:
+                time_in += obs.get("time_in", 0)
+                added += obs.get("added", 0)
+                removed += obs.get("removed", 0)
+                max_iter = max(max_iter, obs.get("iteration", 0))
+                p = obs["pattern"]
+                if p.startswith("match_"):
+                    matched.add(p)
+                elif p.startswith("apply_"):
+                    applied.add(p)
+                    n_applied += 1
+            new_stat.update(
+                dict(
+                    onnx_optimized=1,
+                    onnx_opt_time_in=time_in,
+                    onnx_opt_added=added,
+                    onnx_opt_removed=removed,
+                    onnx_opt_max_iter=max_iter,
+                    onnx_opt_unique_matched=len(matched),
+                    onnx_opt_unique_applied=len(applied),
+                    onnx_opt_n_applied=n_applied,
+                )
+            )
+        if "builder" in opt_stats:
+            builder = opt_stats["builder"]
+            if "aten" in builder:
+                new_stat.update(
+                    {f"op_torch_{k}": v for k, v in builder["aten"].items()}
+                )
+        return new_stat
+
+    @classmethod
+    def _post_process_onnx_statistics(cls, model: onnx.ModelProto) -> Dict[str, Any]:
+        stats = {}
+        stats["onnx_n_nodes"] = len(model.graph.node)
+        stats["onnx_n_functions"] = len(model.functions)
+        stats["onnx_n_sequence"] = len(
+            [n for n in model.graph.node if n.op_type == "Sequence"]
         )
+        stats["onnx_n_inputs"] = len(model.graph.input)
+        stats["onnx_n_outputs"] = len(model.graph.output)
+        stats["onnx_input_names"] = "|".join(i.name for i in model.graph.input)
+        stats["onnx_output_names"] = "|".join(i.name for i in model.graph.output)
+        for node in model.graph.node:
+            if node.domain == "":
+                key = f"op_onnx_{node.op_type}"
+            else:
+                key = f"op_onnx_{node.domain}_{node.op_type}"
+            if key in stats:
+                stats[key] += 1
+            else:
+                stats[key] = 1
+        return stats
 
     @classmethod
     def _flatten(cls, value):
