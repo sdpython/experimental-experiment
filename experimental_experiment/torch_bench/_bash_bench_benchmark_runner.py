@@ -361,9 +361,7 @@ class BenchmarkRunner:
             filename = os.path.join(pfilename, "model.onnx")
 
             memory_session = (
-                start_spying_on(cuda=self.device == "cuda")
-                if memory_peak
-                else None
+                start_spying_on(cuda=self.device == "cuda") if memory_peak else None
             )
 
             begin = time.perf_counter()

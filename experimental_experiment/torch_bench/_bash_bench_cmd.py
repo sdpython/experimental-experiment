@@ -38,8 +38,11 @@ def bash_bench_parse_args(name: str, doc: str, new_args: Optional[List[str]] = N
             f"output_data_{name}.csv",
             "when running multiple configuration, save the results in that file",
         ),
-        memory_peak=("0", "measure the memory peak during exporter, "
-        "it starts another process to monitor the memory"),
+        memory_peak=(
+            "0",
+            "measure the memory peak during exporter, "
+            "it starts another process to monitor the memory",
+        ),
         new_args=new_args,
         expose="repeat,warmup",
     )
@@ -139,7 +142,7 @@ def bash_bench_main(name: str, doc: str, args: Optional[List[str]] = None):
                     quiet=args.quiet in ("1", 1, "True", True),
                     folder="dump_test_models",
                     optimization=args.opt_patterns,
-                    memory_peak=args.memory_peak in("1", 1, "True", True)
+                    memory_peak=args.memory_peak in ("1", 1, "True", True),
                 )
             )
             if len(data) == 1:
