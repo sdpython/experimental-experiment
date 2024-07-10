@@ -1,6 +1,8 @@
 import collections
 import inspect
 import time
+import shutil
+import os
 from typing import Any, Callable, Optional, Tuple, Dict, List
 import numpy as np
 import onnx
@@ -355,6 +357,16 @@ class ModelRunner:
                 verbose=verbose,
                 target_opset=target_opset,
             )
+        if exporter == "dort":
+            return self._to_dort(
+                name,
+                dynamic=dynamic,
+                fake_tensor=fake_tensor,
+                no_grad=no_grad,
+                optimization=optimization,
+                verbose=verbose,
+                target_opset=target_opset,
+            )
         raise AssertionError(f"Exporter {exporter!r} is not implemented.")
 
     def _to_onnx_custom(
@@ -405,6 +417,7 @@ class ModelRunner:
         assert not fake_tensor, "fake_tensor not implemented."
         assert not dynamic, "dynamic true not implemented yet"
         assert no_grad, "no_grad false not implemented yet"
+        assert not optimization, "optimization not compatible with script"
 
         with torch.no_grad():
             torch.onnx.export(
@@ -429,6 +442,7 @@ class ModelRunner:
         assert not fake_tensor, "fake_tensor not implemented."
         assert not dynamic, "dynamic true not implemented yet"
         assert no_grad, "no_grad false not implemented yet"
+        assert not optimization, "optimization not compatible with dynamo"
 
         with torch.no_grad():
             torch.onnx.export(
@@ -439,6 +453,14 @@ class ModelRunner:
                 opset_version=target_opset,
                 dynamo=True,
             )
+        sarif = "report_dynamo_export.sarif"
+        if os.path.exist(sarif):
+            folder = os.path.split(name)[0]
+            with open(sarif, "r", encoding="utf-8") as f:
+                self.error_report = f.read()
+            os.remove(sarif)
+            with open(os.path.join(folder, sarif), "w", encoding="utf-8") as f:
+                f.write(self.error_report)
         return onnx.load(name, load_external_data=False), None
 
     def _to_onnx_dynamo2(
@@ -464,8 +486,37 @@ class ModelRunner:
                     # registry=torch.onnx.OnnxRegistry()
                 ),
             )
+
         exported.save(name)
-        return onnx.load(name, load_external_data=False), None
+
+        if not optimization:
+            return onnx.load(name, load_external_data=False), None
+
+        if optimization == "default":
+            from onnxscript.optimizer import optimize
+            from onnxscript.rewriter import rewrite
+            from onnx.inliner import inline_local_functions
+
+            model_proto = onnx.load(name, load_external_data=False)
+
+            first_model_proto = model_proto
+            model_proto = optimize(
+                model_proto,
+                num_iterations=2,
+                onnx_shape_inference=False,
+            )
+            model_proto = rewrite(model_proto)
+            model_proto = inline_local_functions(model_proto)
+            del first_model_proto.graph.node[:]
+            del first_model_proto.functions[:]
+            first_model_proto.graph.node.extend(model_proto.graph.node)
+            first_model_proto.functions.extend(model_proto.functions)
+
+            shutil.copy(name, name + ".raw.onnx")
+            onnx.save(model_proto, name)
+            return model_proto, None
+
+        raise AssertionError(f"Unexpected value for optimization={optimization!r}.")
 
     def _to_export(
         self,
@@ -480,6 +531,7 @@ class ModelRunner:
         assert not fake_tensor, "fake_tensor not implemented."
         assert not dynamic, "dynamic true not implemented yet"
         assert no_grad, "no_grad false not implemented yet"
+        assert not optimization, "optimization not compatible with export"
         from torch.export import export
 
         with torch.no_grad():
@@ -499,6 +551,7 @@ class ModelRunner:
         assert not fake_tensor, "fake_tensor not implemented."
         assert not dynamic, "dynamic true not implemented yet"
         assert no_grad, "no_grad false not implemented yet"
+        assert not optimization, "optimization not compatible with eager"
 
         return self.model, None
 
@@ -515,6 +568,7 @@ class ModelRunner:
         assert not fake_tensor, "fake_tensor not implemented."
         assert not dynamic, "dynamic true not implemented yet"
         assert no_grad, "no_grad true not implemented yet"
+        assert not optimization, "optimization not compatible with compile"
 
         def custom_backend(
             gm: torch.fx.GraphModule, example_inputs: List[torch.Tensor]
@@ -540,14 +594,34 @@ class ModelRunner:
         assert not fake_tensor, "fake_tensor not implemented."
         assert not dynamic, "dynamic true not implemented yet"
         assert no_grad, "no_grad true not implemented yet"
+        assert not optimization, "optimization not compatible with inductor"
 
         with torch.no_grad():
             res = torch.compile(self.model, backend="inductor", fullgraph=True)
         return res, None
 
+    def _to_dort(
+        self,
+        name: str,
+        dynamic: bool,
+        fake_tensor: bool,
+        no_grad: bool,
+        optimization: str,
+        verbose: int,
+        target_opset: int,
+    ):
+        assert not fake_tensor, "fake_tensor not implemented."
+        assert not dynamic, "dynamic true not implemented yet"
+        assert no_grad, "no_grad true not implemented yet"
+        assert not optimization, "optimization not compatible with dort"
+
+        with torch.no_grad():
+            res = torch.compile(self.model, backend="onnxrt", fullgraph=True)
+        return res, None
+
     def make_feeds(self, exporter: str, filename: Optional[str] = None):
         """Creates feed inputs."""
-        if exporter in {"eager", "export", "compile", "inductor"}:
+        if exporter in {"eager", "export", "compile", "inductor", "dort"}:
             return self.inputs
         onx = onnx.load(filename, load_external_data=False)
         names = [_.name for _ in onx.graph.input]
