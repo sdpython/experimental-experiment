@@ -6,6 +6,7 @@ import re
 import subprocess
 import sys
 import time
+import warnings
 from argparse import Namespace
 from datetime import datetime
 from typing import Any, Dict, List, Tuple, Union, Optional
@@ -70,11 +71,15 @@ def _extract_metrics(text: str) -> Dict[str, str]:
             w, str
         ), f"Unexpected type for k={k!r}, types={type(k)}, {type(w)})."
         assert "\n" not in w, f"Unexpected multi-line value for k={k!r}, value is\n{w}"
-        assert (
+        if not (
             "err" in k.lower()
             or k in {"onnx_output_names", "onnx_input_names", "filename"}
             or len(w) < 500
-        ), f"Unexpected long value for k={k!r}, value has length {len(w)} is\n{w}"
+        ):
+            warnings.warn(
+                f"Unexpected long value for model={kw.get('model_name', '?')}, k={k!r}, value has length {len(w)} is\n{w}"
+            )
+            continue
         try:
             wi = int(w)
             new_kw[k] = wi

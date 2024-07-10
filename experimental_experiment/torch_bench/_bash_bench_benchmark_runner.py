@@ -752,6 +752,8 @@ class BenchmarkRunner:
     def _post_process_onnx_statistics(cls, model: onnx.ModelProto) -> Dict[str, Any]:
         stats = {}
         stats["onnx_n_nodes"] = len(model.graph.node)
+        stats["onnx_n_initializer"] = len(model.graph.initializer)
+        stats["onnx_n_sparse_initializer"] = len(model.graph.sparse_initializer)
         stats["onnx_n_functions"] = len(model.functions)
         stats["onnx_n_sequence"] = len(
             [n for n in model.graph.node if n.op_type == "Sequence"]
@@ -760,6 +762,8 @@ class BenchmarkRunner:
         stats["onnx_n_outputs"] = len(model.graph.output)
         stats["onnx_input_names"] = "|".join(i.name for i in model.graph.input)
         stats["onnx_output_names"] = "|".join(i.name for i in model.graph.output)
+        stats["op_onnx_initializer"] = len(model.graph.initializer)
+        stats["op_onnx_sparse_initializer"] = len(model.graph.sparse_initializer)
         for node in model.graph.node:
             if node.domain == "":
                 key = f"op_onnx_{node.op_type}"
