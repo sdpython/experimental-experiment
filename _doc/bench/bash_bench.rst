@@ -81,9 +81,9 @@ into onnx, and do the same. One example:
     :speedup,1.3189447836001065;
     :speedup_increase,0.3189447836001065;
     :time_export,19.68962045799981;
+    :time_latency,10.412437652000031;
+    :time_latency_eager,13.733430325666783;
     :time_load,0.3337397940003939;
-    :time_repeat,10.412437652000031;
-    :time_repeat_eager,13.733430325666783;
     :time_session,0.22385592099999485;
     :time_total,116.15856191800003;
     :time_warmup,10.869273103000069;

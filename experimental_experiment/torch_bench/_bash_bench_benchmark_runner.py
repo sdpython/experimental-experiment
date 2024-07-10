@@ -331,7 +331,7 @@ class BenchmarkRunner:
                 # training mode consumes too much memory
                 for w in range(repeat):
                     model_runner.run()
-            stats["time_repeat_eager"] = (time.perf_counter() - begin) / repeat
+            stats["time_latency_eager"] = (time.perf_counter() - begin) / repeat
 
             if self.device == "cuda":
                 stats["mema_gpu_4_after_repeat"] = torch.cuda.memory_allocated(0)
@@ -562,7 +562,7 @@ class BenchmarkRunner:
                     begin = time.perf_counter()
                     for _ in range(repeat):
                         self.ort_run(sess, feeds)
-                    stats["time_repeat"] = (time.perf_counter() - begin) / repeat
+                    stats["time_latency"] = (time.perf_counter() - begin) / repeat
                 if self.device == "cuda":
                     stats["mema_gpu_9_after_export_repeat"] = (
                         torch.cuda.memory_allocated(0)
@@ -637,7 +637,7 @@ class BenchmarkRunner:
                     begin = time.perf_counter()
                     for _ in range(repeat):
                         sess.run(feeds)
-                    stats["time_repeat"] = (time.perf_counter() - begin) / repeat
+                    stats["time_latency"] = (time.perf_counter() - begin) / repeat
 
                 if self.device == "cuda":
                     stats["mema_gpu_9_after_export_repeat"] = (
@@ -649,8 +649,8 @@ class BenchmarkRunner:
                             f"reserved={torch.cuda.memory_reserved(0)} after export repeat"
                         )
 
-            if "time_repeat" in stats:
-                stats["speedup"] = stats["time_repeat_eager"] / stats["time_repeat"]
+            if "time_latency" in stats:
+                stats["speedup"] = stats["time_latency_eager"] / stats["time_latency"]
                 stats["speedup_increase"] = stats["speedup"] - 1
 
             ###############
@@ -912,30 +912,15 @@ def merge_benchmark_reports(
     report_on=(
         "speedup",
         "speedup_increase",
-        "discrepancies_abs",
-        "discrepancies_rel",
-        "time_load",
-        "time_warmup",
-        "time_repeat",
-        "time_export",
-        "time_repeat_eager",
+        "discrepancies_*",
         "TIME_ITER",
-        "time_session",
-        "ERR_export",
-        "ERR_warmup",
-        "onnx_filesize",
-        "onnx_opt_max_iter",
-        "onnx_opt_n_applied",
-        "onnx_opt_added",
-        "onnx_opt_removed",
-        "onnx_opt_time_in",
-        "onnx_opt_unique_applied",
-        "onnx_opt_unique_matched",
-        "onnx_n_nodes",
-        "onnx_n_functions",
-        "onnx_n_sequence",
+        "time_*",
+        "ERR_*",
+        "onnx_*",
+        "op_*",
+        "memory_*",
     ),
-    formulas=("memory_peak_load", "buckets", "pass"),
+    formulas=("memory_peak_load", "buckets", "status"),
     excel_output: Optional[str] = None,
 ) -> Dict[str, "pandas.DataFrame"]:  # noqa: F821
     """
@@ -986,6 +971,16 @@ def merge_benchmark_reports(
         mema_gpu_7_after_session
         mema_gpu_8_after_export_warmup
         mema_gpu_9_after_export_repeat
+        memory_begin,
+        memory_end,
+        memory_gpu0_begin,
+        memory_gpu0_end,
+        memory_gpu0_mean,
+        memory_gpu0_n,
+        memory_gpu0_peak,
+        memory_mean,
+        memory_n,
+        memory_peak,
         model,
         model_name,
         onnx_filesize
@@ -1010,8 +1005,8 @@ def merge_benchmark_reports(
         target_opset,
         time_export,
         time_load,
-        time_repeat,
-        time_repeat_eager,
+        time_latency,
+        time_latency_eager,
         time_session,
         time_total,
         time_warmup,
@@ -1044,8 +1039,18 @@ def merge_benchmark_reports(
     res = {"0raw": df}
 
     # uniques keys
+    report_on_star = [r for r in report_on if "*" in r]
+    report_on = [r for r in report_on if "*" not in r]
     keys = [k for k in keys if k in set_columns]
     report_on = [k for k in report_on if k in set_columns]
+    for col in sorted(set_columns):
+        for star in report_on_star:
+            assert star[-1] == "*", f"Unsupported position for * in {star!r}"
+            s = star[:-1]
+            if col.startswith(s):
+                report_on.append(col)
+                break
+
     unique = {}
     for c in df.columns:
         u = df[c].unique()
@@ -1072,10 +1077,31 @@ def merge_benchmark_reports(
                 report_on.append(expr)
             continue
 
-        if expr == "pass":
+        if expr == "status":
             if "discrepancies_abs" in set_columns:
-                df[expr] = (~df["discrepancies_abs"].isna()).astype(int)
-                report_on.append(expr)
+                df["status_convert"] = (~df["discrepancies_abs"].isna()).astype(int)
+                df["status_err<1e-2"] = (
+                    ~df["discrepancies_abs"].isna() & (df["discrepancies_abs"] < 1e-2)
+                ).astype(int)
+                df["status_err<1e-3"] = (
+                    ~df["discrepancies_abs"].isna() & (df["discrepancies_abs"] < 1e-3)
+                ).astype(int)
+                df["status_err<1e-4"] = (
+                    ~df["discrepancies_abs"].isna() & (df["discrepancies_abs"] < 1e-4)
+                ).astype(int)
+                df["status_<=eager+2%"] = (
+                    ~df["discrepancies_abs"].isna()
+                    & (df["time_latency"] <= df["time_latency_eager"] * 1.02)
+                ).astype(int)
+                report_on.extend(
+                    [
+                        "status_convert",
+                        "status_err<1e-2",
+                        "status_err<1e-3",
+                        "status_err<1e-4",
+                        "status_lat<=eager+2%",
+                    ]
+                )
             continue
 
         if expr == "buckets":
@@ -1095,6 +1121,10 @@ def merge_benchmark_reports(
                 df["exporter"] = df["exporter_x"]
                 df = df.drop("exporter_x", axis=1)
                 set_columns = set(df.columns)
+                df["status_<=script+2%"] = (
+                    df["speedup_increase_script"] >= 1 / 1.02
+                ).astype(int)
+                report_on.append("status_lat<=script+2%")
 
             for c in ["speedup_increase", "speedup_increase_script"]:
                 if c not in set_columns:
@@ -1179,9 +1209,10 @@ def merge_benchmark_reports(
         or c.startswith("onnx_")
         or c.startswith("op_")
         or c.startswith("discrepancies_")
+        or c.startswith("status_")
     ]
-    for c in ["pass", *mean_med, "speedup_increase"]:
-        if c in res:
+    for c in [*mean_med, "speedup_increase"]:
+        if c in res and set(res[c].dtypes) in {np.float64, np.float32}:
             summary = res[c].mean(axis=0).copy()
             med = res[c].median(axis=0)
             res[c].loc["MEAN"] = summary
@@ -1195,7 +1226,7 @@ def merge_benchmark_reports(
 
     # final fusion
 
-    def _merge(res, merge, prefix):
+    def _merge(res, merge, prefix, reverse=True):
         m = None
         for name in merge:
             df = res[name].T
@@ -1210,19 +1241,23 @@ def merge_benchmark_reports(
             m = pandas.merge(m, df, how="outer", left_index=True, right_index=True)
 
         # We need to change the columns index order.
-        df = m.T
-        setc = set(df.columns)
-        df = df.reset_index(drop=False)
-        index = set(df.columns) - setc
-        if index == {"stat", "exporter"}:
-            m = df.set_index(["stat", "exporter"]).T
+        if reverse:
+            df = m.T
+            setc = set(df.columns)
+            df = df.reset_index(drop=False)
+            index = set(df.columns) - setc
+            if index == {"stat", "exporter"}:
+                m = df.set_index(["stat", "exporter"]).T
+        else:
+            m = m.T.sort_index().T
         return m
 
     for prefix in [
-        "onnx_",
-        "time_",
+        "status_",
         "discrepancies_",
         "memory_",
+        "onnx_",
+        "time_",
         "ERR_",
         "op_onnx_",
         "op_torch_",
@@ -1230,7 +1265,7 @@ def merge_benchmark_reports(
         merge = [k for k in res if k.startswith(prefix)]
         if len(merge) == 0:
             continue
-        res[prefix[:-1]] = _merge(res, merge, prefix)
+        res[prefix[:-1]] = _merge(res, merge, prefix, reverse=prefix != "status_")
         res = {k: v for k, v in res.items() if k not in set(merge)}
 
     if excel_output:
