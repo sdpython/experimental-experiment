@@ -442,6 +442,17 @@ def merge_benchmark_reports(
         res = {k: v for k, v in res.items() if k not in set(merge)}
 
     if excel_output:
+
+        def _isnan(x):
+            if x is None:
+                return True
+            if isinstance(x, str):
+                return False
+            try:
+                return np.isnan(x)
+            except TypeError:
+                return False
+
         with pandas.ExcelWriter(excel_output) as writer:
             from openpyxl.styles import Font, Alignment, numbers, PatternFill
 
@@ -489,7 +500,9 @@ def merge_benchmark_reports(
                     max_col=n_rows + n_cols + 1,
                 ):
                     for cell in row:
-                        if cell.value == look:
+                        if hasattr(cell, "col_idx") and (
+                            cell.value == look or (_isnan(cell.value) and _isnan(look))
+                        ):
                             first_row = cell.row
                             first_col = (
                                 cell.col_idx if hasattr(cell, "col_idx") else first_col
@@ -499,8 +512,8 @@ def merge_benchmark_reports(
                     if first_row is not None:
                         break
                 assert first_row is not None and first_col is not None, (
-                    f"Unable to find the first value in {k!r}, "
-                    f"look={look!r}, values={values}"
+                    f"Unable to find the first value in {k!r}, first_row={first_row}, "
+                    f"first_col={first_col}, look={look!r} ({type(look)}), values={values}"
                 )
 
                 last_row = first_row + v.shape[0] + 1
