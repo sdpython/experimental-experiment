@@ -1089,7 +1089,7 @@ def merge_benchmark_reports(
                 df["status_err<1e-4"] = (
                     ~df["discrepancies_abs"].isna() & (df["discrepancies_abs"] < 1e-4)
                 ).astype(int)
-                df["status_<=eager+2%"] = (
+                df["status_lat<=eager+2%"] = (
                     ~df["discrepancies_abs"].isna()
                     & (df["time_latency"] <= df["time_latency_eager"] * 1.02)
                 ).astype(int)
@@ -1121,7 +1121,7 @@ def merge_benchmark_reports(
                 df["exporter"] = df["exporter_x"]
                 df = df.drop("exporter_x", axis=1)
                 set_columns = set(df.columns)
-                df["status_<=script+2%"] = (
+                df["status_lat<=script+2%"] = (
                     df["speedup_increase_script"] >= 1 / 1.02
                 ).astype(int)
                 report_on.append("status_lat<=script+2%")
