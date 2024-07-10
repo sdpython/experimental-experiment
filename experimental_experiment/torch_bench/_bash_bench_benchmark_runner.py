@@ -363,6 +363,8 @@ class BenchmarkRunner:
             memory_session = (
                 start_spying_on(cuda=self.device == "cuda") if memory_peak else None
             )
+            if memory_session is not None and self.verbose:
+                print("[BenchmarkRunner.benchmark] start_spying_on")
 
             begin = time.perf_counter()
             if quiet:
@@ -386,6 +388,8 @@ class BenchmarkRunner:
                         memory_results = memory_session.stop()
                         memory_stats = flatten(memory_results, prefix="memory_")
                         stats.update(memory_stats)
+                    if self.verbose:
+                        print("[BenchmarkRunner.benchmark] stop_spying_on")
                     yield stats
                     continue
                 stats["time_export"] = time.perf_counter() - begin
@@ -407,6 +411,8 @@ class BenchmarkRunner:
                 print(f"[export_model] ends memory monitoring {memory_results}")
                 memory_stats = flatten(memory_results, prefix="memory_")
                 stats.update(memory_stats)
+                if self.verbose:
+                    print("[BenchmarkRunner.benchmark] stop_spying_on")
 
             if self.device == "cuda":
                 stats["mema_gpu_5_after_export"] = torch.cuda.memory_allocated(0)
