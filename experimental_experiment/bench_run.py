@@ -73,8 +73,8 @@ def _extract_metrics(text: str) -> Dict[str, str]:
         assert (
             "err" in k.lower()
             or k in {"onnx_output_names", "onnx_input_names", "filename"}
-            or len(w) < 200
-        ), f"Unexpected long value for k={k!r}, value is\n{w}"
+            or len(w) < 500
+        ), f"Unexpected long value for k={k!r}, value has length {len(w)} is\n{w}"
         try:
             wi = int(w)
             new_kw[k] = wi
@@ -110,6 +110,7 @@ def run_benchmark(
     dump: bool = False,
     temp_output_data: Optional[str] = None,
     dump_std: Optional[str] = None,
+    start: int = 0,
 ) -> List[Dict[str, Union[str, int, float, Tuple[int, int]]]]:
     """
     Runs a script multiple times and extract information from the output
@@ -122,6 +123,7 @@ def run_benchmark(
     :param dump: dump onnx file, sets variable ONNXRT_DUMP_PATH
     :param temp_output_data: to save the data after every run to avoid losing data
     :param dump_std: dumps stdout and stderr in this folder
+    :param start: start at this iteration
     :return: values
     """
     assert configs, f"No configuration was given (script_name={script_name!r})"
@@ -134,6 +136,8 @@ def run_benchmark(
 
     data: List[Dict[str, Union[str, int, float, Tuple[int, int]]]] = []
     for iter_loop, config in enumerate(loop):
+        if iter_loop < start:
+            continue
         cmd = _cmd_line(script_name, **config)
         begin = time.perf_counter()
 
