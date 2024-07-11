@@ -502,9 +502,13 @@ def merge_benchmark_reports(
     # buckets
     if bucket_columns:
         table = df[[*new_keys, model, *bucket_columns, "speedup_increase"]].copy()
+        pcolumns = [c for c in ["exporter", "opt_patterns"] if c in new_keys]
         pivot = table.pivot(
-            index=[*[c for c in new_keys if c != "exporter"], model],
-            columns=["exporter"],
+            index=[
+                *[c for c in new_keys if c not in ("exporter", "opt_patterns")],
+                model,
+            ],
+            columns=pcolumns,
             values=bucket_columns,
         )
 
@@ -512,7 +516,7 @@ def merge_benchmark_reports(
         tpiv = pivot.T.reset_index(drop=False)
 
         def _order(index):
-            if index.name == "exporter":
+            if index.name in pcolumns:
                 return index
             order = [
                 "<-20%",
@@ -539,16 +543,24 @@ def merge_benchmark_reports(
 
         tpiv1 = tpiv[~tpiv.level_0.str.startswith("script")]
         tpiv2 = tpiv[tpiv.level_0.str.startswith("script")].copy()
-        tpiv1 = tpiv1.set_index(["exporter", "level_0"]).sort_index(key=_order).T.copy()
-        tpiv1.loc["~SUM"] = tpiv1.sum(axis=0).copy()
+        tpiv1 = tpiv1.set_index([*pcolumns, "level_0"]).sort_index(key=_order).T.copy()
+        summ = tpiv1.sum(axis=0)
+        mean = tpiv1.sum(axis=0)
+        tpiv1.loc["~COUNT"] = tpiv1.shape[0]
+        tpiv1.loc["~SUM"] = summ
+        tpiv1.loc["~MEAN"] = summ / tpiv1.loc["~COUNT"]
         res["bucket"] = tpiv1.fillna(0).astype(int)
 
         if tpiv2.shape[0] > 0:
             tpiv2["level_0"] = tpiv2["level_0"].apply(lambda s: s[len("script ") :])
             tpiv2 = (
-                tpiv2.set_index(["exporter", "level_0"]).sort_index(key=_order).T.copy()
+                tpiv2.set_index([*pcolumns, "level_0"]).sort_index(key=_order).T.copy()
             )
-            tpiv2.loc["~SUM"] = tpiv2.sum(axis=0).copy()
+            summ = tpiv2.sum(axis=0)
+            mean = tpiv2.mean(axis=0)
+            tpiv2.loc["~COUNT"] = tpiv2.shape[0]
+            tpiv2.loc["~SUM"] = summ
+            tpiv2.loc["~MEAN"] = summ / tpiv2.loc["~COUNT"]
             res["bucket_script"] = tpiv2.fillna(0).astype(int)
 
     # let's remove empty variables
@@ -568,10 +580,10 @@ def merge_benchmark_reports(
         if c.startswith("time_")
         or c.startswith("TIME_")
         or c.startswith("onnx_")
-        or c.startswith("op_")
         or c.startswith("discrepancies_")
         or c.startswith("status_")
         or c.startswith("mempeak_")
+        or c.startswith("memory_")
     ]
     for c in [*mean_med, "speedup_increase"]:
         num = all(
@@ -679,6 +691,11 @@ def merge_benchmark_reports(
         )
         res = {k: v for k, v in res.items() if k not in set(merge)}
 
+    for c in res:
+        if c.startswith("op_"):
+            summ = res[c].sum(axis=0)
+            res[c].loc["~SUM"] = summ
+
     reorder = {
         "ERR",
         "TIME_ITER",
@@ -690,7 +707,6 @@ def merge_benchmark_reports(
         "speedup_increase",
         "status",
         "time",
-        "bucket",
     }
     final_res = {
         k: _reorder_indices(
