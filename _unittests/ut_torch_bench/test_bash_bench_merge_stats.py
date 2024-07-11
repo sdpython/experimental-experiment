@@ -42,6 +42,20 @@ class TestBashBenchMergeStats(ExtTestCase):
         self.assertIn("op_onnx", set(df))
         self.assertIn("op_torch", set(df))
 
+    def test_merge_stats_gpu_big(self):
+        ddata = os.path.join(os.path.dirname(__file__), "data")
+        data = [
+            os.path.join(ddata, "huggingface_benchmark_v100_main.csv"),
+            os.path.join(ddata, "huggingface_benchmark_v100_default_opt.csv"),
+            os.path.join(ddata, "huggingface_benchmark_v100_custom.csv"),
+        ]
+        df = merge_benchmark_reports(data, excel_output="test_merge_stats_gpu_big.xlsx")
+        self.assertIsInstance(df, dict)
+        self.assertIn("status", set(df))
+        self.assertIn("memory", set(df))
+        self.assertIn("op_onnx", set(df))
+        self.assertIn("op_torch", set(df))
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
