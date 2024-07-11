@@ -44,6 +44,8 @@ def bash_bench_parse_args(name: str, doc: str, new_args: Optional[List[str]] = N
             "measure the memory peak during exporter, "
             "it starts another process to monitor the memory",
         ),
+        nvtx=("0", "add events to profile"),
+        dump_ort=("0", "dump the onnxruntime optimized graph"),
         new_args=new_args,
         expose="repeat,warmup",
     )
@@ -136,6 +138,8 @@ def bash_bench_main(name: str, doc: str, args: Optional[List[str]] = None):
                 repeat=args.repeat,
                 warmup=args.warmup,
                 dtype=args.dtype,
+                nvtx=args.nvtx in (1, "1", "True", "true"),
+                dump_ort=args.dump_ort in (1, "1", "True", "true"),
             )
             data = list(
                 runner.enumerate_test_models(
