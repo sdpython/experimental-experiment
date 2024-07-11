@@ -29,6 +29,7 @@ def bash_bench_parse_args(name: str, doc: str, new_args: Optional[List[str]] = N
         opt_patterns=("", "a list of optimization patterns to disable"),
         dump_folder=("dump_bash_bench", "where to dump the exported model"),
         quiet=("1", "catch exception and go on or fail"),
+        start=("0", "first model to run (to continue a bench)"),
         dtype=(
             "",
             "converts the model using this type, empty for no change, "
@@ -37,6 +38,11 @@ def bash_bench_parse_args(name: str, doc: str, new_args: Optional[List[str]] = N
         output_data=(
             f"output_data_{name}.csv",
             "when running multiple configuration, save the results in that file",
+        ),
+        memory_peak=(
+            "0",
+            "measure the memory peak during exporter, "
+            "it starts another process to monitor the memory",
         ),
         new_args=new_args,
         expose="repeat,warmup",
@@ -100,12 +106,13 @@ def bash_bench_main(name: str, doc: str, args: Optional[List[str]] = None):
                 stop_if_exception=False,
                 temp_output_data=temp_output_data,
                 dump_std="dump_test_models",
+                start=args.start,
             )
             if args.verbose > 2:
                 pprint.pprint(data if args.verbose > 3 else data[:2])
             if args.output_data:
                 df = make_dataframe_from_benchmark_data(data, detailed=False)
-                print("Prints the results into file {args.output_data!r}")
+                print(f"Prints out the results into file {args.output_data!r}")
                 df.to_csv(args.output_data, index=False)
                 df.to_excel(args.output_data + ".xlsx", index=False)
                 if args.verbose:
@@ -137,6 +144,7 @@ def bash_bench_main(name: str, doc: str, args: Optional[List[str]] = None):
                     quiet=args.quiet in ("1", 1, "True", True),
                     folder="dump_test_models",
                     optimization=args.opt_patterns,
+                    memory_peak=args.memory_peak in ("1", 1, "True", True),
                 )
             )
             if len(data) == 1:

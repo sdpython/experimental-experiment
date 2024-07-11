@@ -19,6 +19,7 @@ from experimental_experiment.ext_test_case import (
     ignore_warnings,
     requires_torch,
     hide_stdout,
+    requires_onnxscript,
 )
 from experimental_experiment.torch_interpreter import FunctionNotFoundError
 from experimental_experiment.torch_models.training_helper import make_aot_ort
@@ -970,7 +971,8 @@ class TestOperatorsOnnxrt(ExtTestCase):
             onnx_export=inspect.currentframe().f_code.co_name,
         )
 
-    @hide_stdout()
+    @requires_onnxscript("0.2.1")
+    # @hide_stdout()
     def test_xt_reduced_prod_dtype(self):
         x = torch.randn(1, 2, 3, 4, requires_grad=True)
         self.assertONNX(

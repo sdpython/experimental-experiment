@@ -179,6 +179,7 @@ class GraphBuilder:
         self.anyop = Opset(self, allow_unknown=True)
         self._debug_stop = os.environ.get("ONNXSTOP", "#?#")
         self.time_evaluation_constants_ = 0
+        self.statistics_ = {}
 
         if self.dynamic_shapes:
             for input_name, v in self.dynamic_shapes.items():
@@ -232,6 +233,18 @@ class GraphBuilder:
             raise NotImplementedError(
                 f"{type(target_opset_or_existing_proto)} is not supported."
             )
+
+    def add_stat(self, kind: str, name: str):
+        """
+        Increments a counter.
+        """
+        if kind not in self.statistics_:
+            self.statistics_[kind] = {}
+        stat = self.statistics_[kind]
+        if name not in stat:
+            stat[name] = 1
+        else:
+            stat[name] += 1
 
     @property
     def output_names(self) -> List[str]:

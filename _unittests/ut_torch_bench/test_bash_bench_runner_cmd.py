@@ -11,7 +11,7 @@ from experimental_experiment.ext_test_case import (
 )
 
 
-class TestHuggingFaceRunnerCmd(ExtTestCase):
+class TestBashBenchRunnerCmd(ExtTestCase):
     @classmethod
     def setUpClass(cls):
         import torch

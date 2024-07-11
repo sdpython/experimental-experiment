@@ -32,7 +32,7 @@ class Monitor:
         return dict(
             peak=self.max_peak / funit,
             mean=self.average * 1.0 / self.n_measures / funit,
-            n=self.n_measures / funit,
+            n=self.n_measures,
             begin=self.begin / funit,
             end=self.end / funit,
         )

@@ -35,9 +35,14 @@ class SimpleRotaryPattern(PatternOptimization):
         if axis != rk - 1:
             return self.none(node, inspect.currentframe().f_lineno)
 
-        cst = g.get_computed_constant(node.input[1])
-        if cst.dtype != np.int64 or cst.shape != (2,) or cst[0] != cst[1]:
-            return self.none(node, inspect.currentframe().f_lineno)
+        if len(node.input) == 2:
+            cst = g.get_computed_constant(node.input[1])
+            if cst.dtype != np.int64 or cst.shape != (2,) or cst[0] != cst[1]:
+                return self.none(node, inspect.currentframe().f_lineno)
+        else:
+            att = g.get_attribute(node, "num_outputs", exc=False)
+            if att is None or att.i != 2:
+                return self.none(node, inspect.currentframe().f_lineno)
 
         if g.is_used_more_than_once(node.output[0]) or g.is_used_more_than_once(
             node.output[1]

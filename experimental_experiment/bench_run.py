@@ -6,6 +6,7 @@ import re
 import subprocess
 import sys
 import time
+import warnings
 from argparse import Namespace
 from datetime import datetime
 from typing import Any, Dict, List, Tuple, Union, Optional
@@ -70,11 +71,15 @@ def _extract_metrics(text: str) -> Dict[str, str]:
             w, str
         ), f"Unexpected type for k={k!r}, types={type(k)}, {type(w)})."
         assert "\n" not in w, f"Unexpected multi-line value for k={k!r}, value is\n{w}"
-        assert (
+        if not (
             "err" in k.lower()
             or k in {"onnx_output_names", "onnx_input_names", "filename"}
-            or len(w) < 200
-        ), f"Unexpected long value for k={k!r}, value is\n{w}"
+            or len(w) < 500
+        ):
+            warnings.warn(
+                f"Unexpected long value for model={kw.get('model_name', '?')}, k={k!r}, value has length {len(w)} is\n{w}"
+            )
+            continue
         try:
             wi = int(w)
             new_kw[k] = wi
@@ -110,6 +115,7 @@ def run_benchmark(
     dump: bool = False,
     temp_output_data: Optional[str] = None,
     dump_std: Optional[str] = None,
+    start: int = 0,
 ) -> List[Dict[str, Union[str, int, float, Tuple[int, int]]]]:
     """
     Runs a script multiple times and extract information from the output
@@ -122,6 +128,7 @@ def run_benchmark(
     :param dump: dump onnx file, sets variable ONNXRT_DUMP_PATH
     :param temp_output_data: to save the data after every run to avoid losing data
     :param dump_std: dumps stdout and stderr in this folder
+    :param start: start at this iteration
     :return: values
     """
     assert configs, f"No configuration was given (script_name={script_name!r})"
@@ -134,6 +141,8 @@ def run_benchmark(
 
     data: List[Dict[str, Union[str, int, float, Tuple[int, int]]]] = []
     for iter_loop, config in enumerate(loop):
+        if iter_loop < start:
+            continue
         cmd = _cmd_line(script_name, **config)
         begin = time.perf_counter()
 
@@ -196,7 +205,7 @@ def run_benchmark(
         if temp_output_data:
             df = make_dataframe_from_benchmark_data(data, detailed=False)
             if verbose > 2:
-                print("Prints the results into file {temp_output_data!r}")
+                print(f"Prints out the results into file {temp_output_data!r}")
             df.to_csv(temp_output_data, index=False)
             try:
                 df.to_excel(temp_output_data + ".xlsx", index=False)

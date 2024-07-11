@@ -9,6 +9,7 @@ rm plot*
 rm test* -rf
 rm temp* -rf
 rm dump* -rf
+rm *.xlsx
 rm *.sarif
 rm *.svg
 rm output_data_bash*

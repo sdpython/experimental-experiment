@@ -764,6 +764,7 @@ class DynamoInterpreter:
         """
         fx_args, fx_kwargs = self._fill_in_default_kwargs(node)
         aten_name = self._get_aten_name(node)
+        self.builder.add_stat(kind="aten", name=aten_name)
         if aten_name == "getitem":
             return self.getitem(node)
         fct, lookup, lookup_names = None, None, None

@@ -431,6 +431,9 @@ def to_onnx(
         external_threshold=external_threshold,
         return_optimize_report=True,
     )
+    all_stats = dict(builder=builder.statistics_)
+    if stats is not None:
+        all_stats["optimization"] = stats
     if verbose:
         t = time.perf_counter()
         proto = onx if isinstance(onx, ModelProto) else onx.model_proto
@@ -445,5 +448,5 @@ def to_onnx(
             print(builder.get_debug_msg())
 
     if return_builder:
-        return (onx, builder, stats) if return_optimize_report else (onx, builder)
-    return (onx, stats) if return_optimize_report else onx
+        return (onx, builder, all_stats) if return_optimize_report else (onx, builder)
+    return (onx, all_stats) if return_optimize_report else onx

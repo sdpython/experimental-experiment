@@ -7,6 +7,7 @@ import numpy as np
 import onnx
 import torch
 from .export_model_helper import WrapInferenceSessionForTorch, WrapForTorch
+from ..memory_peak import start_spying_on, flatten
 
 
 class BenchmarkRunner:
@@ -147,6 +148,7 @@ class BenchmarkRunner:
         dynamic: bool = False,
         optimization: str = "",
         quiet: bool = True,
+        memory_peak: bool = False,
     ) -> Iterator[Dict[Any, Any]]:
         """
         Runs the benchmarks, run, export, run in onnx, measure the speedup.
@@ -329,7 +331,7 @@ class BenchmarkRunner:
                 # training mode consumes too much memory
                 for w in range(repeat):
                     model_runner.run()
-            stats["time_repeat_eager"] = (time.perf_counter() - begin) / repeat
+            stats["time_latency_eager"] = (time.perf_counter() - begin) / repeat
 
             if self.device == "cuda":
                 stats["mema_gpu_4_after_repeat"] = torch.cuda.memory_allocated(0)
@@ -358,6 +360,12 @@ class BenchmarkRunner:
                 os.mkdir(pfilename)
             filename = os.path.join(pfilename, "model.onnx")
 
+            memory_session = (
+                start_spying_on(cuda=self.device == "cuda") if memory_peak else None
+            )
+            if memory_session is not None and self.verbose:
+                print("[BenchmarkRunner.benchmark] start_spying_on")
+
             begin = time.perf_counter()
             if quiet:
                 try:
@@ -376,6 +384,12 @@ class BenchmarkRunner:
                     stats["ERR_export"] = _clean_string(str(e)).replace("\n", "_ ")
                     if self.verbose:
                         print(f"[benchmarkrunner.benchmark] err_export {e}")
+                    if memory_session is not None:
+                        memory_results = memory_session.stop()
+                        memory_stats = flatten(memory_results, prefix="memory_")
+                        stats.update(memory_stats)
+                    if self.verbose:
+                        print("[BenchmarkRunner.benchmark] stop_spying_on")
                     yield stats
                     continue
                 stats["time_export"] = time.perf_counter() - begin
@@ -391,6 +405,14 @@ class BenchmarkRunner:
                     target_opset=self.target_opset,
                 )
                 stats["time_export"] = time.perf_counter() - begin
+
+            if memory_session is not None:
+                memory_results = memory_session.stop()
+                print(f"[export_model] ends memory monitoring {memory_results}")
+                memory_stats = flatten(memory_results, prefix="memory_")
+                stats.update(memory_stats)
+                if self.verbose:
+                    print("[BenchmarkRunner.benchmark] stop_spying_on")
 
             if self.device == "cuda":
                 stats["mema_gpu_5_after_export"] = torch.cuda.memory_allocated(0)
@@ -436,14 +458,28 @@ class BenchmarkRunner:
             if self.device == "cpu":
                 providers = providers[1:]
             stats["providers"] = ",".join(providers)
+
             begin = time.perf_counter()
             if isinstance(exported_model, onnx.ModelProto):
+                domains = set(d.domain for d in exported_model.opset_import)
+                session_options = onnxruntime.SessionOptions()
+                if "onnx_extended.ortops.optim.cuda" in domains:
+                    try:
+                        from onnx_extended.ortops.optim.cuda import get_ort_ext_libs
+                    except ImportError as e:
+                        stats["ERR_ort"] = str(e)
+                        if self.verbose:
+                            print(f"[benchmarkrunner.benchmark] err_ort {e}")
+                        yield stats
+                        continue
+                    session_options.register_custom_ops_library(get_ort_ext_libs()[0])
+
                 is_onnx = True
                 stats["onnx_model"] = "1"
                 if quiet:
                     try:
                         ort_sess = onnxruntime.InferenceSession(
-                            filename, providers=providers
+                            filename, session_options, providers=providers
                         )
                     except Exception as e:
                         stats["ERR_ort"] = str(e)
@@ -453,26 +489,10 @@ class BenchmarkRunner:
                         continue
                 else:
                     ort_sess = onnxruntime.InferenceSession(
-                        filename, providers=providers
+                        filename, session_options, providers=providers
                     )
                 sess = WrapInferenceSessionForTorch(ort_sess)
-                onx_inputs = ort_sess.get_inputs()
-                onx_outputs = ort_sess.get_outputs()
-                stats["onnx_n_nodes"] = len(exported_model.graph.node)
-                stats["onnx_n_functions"] = len(exported_model.functions)
-                stats["onnx_n_sequence"] = len(
-                    [n for n in exported_model.graph.node if n.op_type == "Sequence"]
-                )
-                stats["onnx_n_if"] = len(
-                    [n for n in exported_model.graph.node if n.op_type == "If"]
-                )
-                stats["onnx_n_loop"] = len(
-                    [n for n in exported_model.graph.node if n.op_type == "Loop"]
-                )
-                stats["onnx_n_inputs"] = len(onx_inputs)
-                stats["onnx_n_outputs"] = len(onx_outputs)
-                stats["onnx_input_names"] = "|".join(i.name for i in onx_inputs)
-                stats["onnx_output_names"] = "|".join(i.name for i in onx_outputs)
+                stats.update(self._post_process_onnx_statistics(exported_model))
             else:
                 is_onnx = False
                 sess = WrapForTorch(exported_model)
@@ -562,7 +582,7 @@ class BenchmarkRunner:
                     begin = time.perf_counter()
                     for _ in range(repeat):
                         self.ort_run(sess, feeds)
-                    stats["time_repeat"] = (time.perf_counter() - begin) / repeat
+                    stats["time_latency"] = (time.perf_counter() - begin) / repeat
                 if self.device == "cuda":
                     stats["mema_gpu_9_after_export_repeat"] = (
                         torch.cuda.memory_allocated(0)
@@ -637,7 +657,7 @@ class BenchmarkRunner:
                     begin = time.perf_counter()
                     for _ in range(repeat):
                         sess.run(feeds)
-                    stats["time_repeat"] = (time.perf_counter() - begin) / repeat
+                    stats["time_latency"] = (time.perf_counter() - begin) / repeat
 
                 if self.device == "cuda":
                     stats["mema_gpu_9_after_export_repeat"] = (
@@ -649,8 +669,8 @@ class BenchmarkRunner:
                             f"reserved={torch.cuda.memory_reserved(0)} after export repeat"
                         )
 
-            if "time_repeat" in stats:
-                stats["speedup"] = stats["time_repeat_eager"] / stats["time_repeat"]
+            if "time_latency" in stats:
+                stats["speedup"] = stats["time_latency_eager"] / stats["time_latency"]
                 stats["speedup_increase"] = stats["speedup"] - 1
 
             ###############
@@ -708,34 +728,72 @@ class BenchmarkRunner:
         """
         if opt_stats is None:
             return dict(onnx_optimized=0)
-        time_in = 0.0
-        added = 0
-        removed = 0
-        max_iter = 0
-        applied = set()
-        matched = set()
-        n_applied = 0
-        for obs in opt_stats:
-            time_in += obs.get("time_in", 0)
-            added += obs.get("added", 0)
-            removed += obs.get("removed", 0)
-            max_iter = max(max_iter, obs.get("iteration", 0))
-            p = obs["pattern"]
-            if p.startswith("match_"):
-                matched.add(p)
-            elif p.startswith("apply_"):
-                applied.add(p)
-                n_applied += 1
-        return dict(
-            onnx_optimized=1,
-            onnx_opt_time_in=time_in,
-            onnx_opt_added=added,
-            onnx_opt_removed=removed,
-            onnx_opt_max_iter=max_iter,
-            onnx_opt_unique_matched=len(matched),
-            onnx_opt_unique_applied=len(applied),
-            onnx_opt_n_applied=n_applied,
+        new_stat = {}
+        if "optimization" in opt_stats:
+            time_in = 0.0
+            added = 0
+            removed = 0
+            max_iter = 0
+            applied = set()
+            matched = set()
+            n_applied = 0
+            for obs in opt_stats["optimization"]:
+                time_in += obs.get("time_in", 0)
+                added += obs.get("added", 0)
+                removed += obs.get("removed", 0)
+                max_iter = max(max_iter, obs.get("iteration", 0))
+                p = obs["pattern"]
+                if p.startswith("match_"):
+                    matched.add(p)
+                elif p.startswith("apply_"):
+                    applied.add(p)
+                    n_applied += 1
+            new_stat.update(
+                dict(
+                    onnx_optimized=1,
+                    onnx_opt_time_in=time_in,
+                    onnx_opt_added=added,
+                    onnx_opt_removed=removed,
+                    onnx_opt_max_iter=max_iter,
+                    onnx_opt_unique_matched=len(matched),
+                    onnx_opt_unique_applied=len(applied),
+                    onnx_opt_n_applied=n_applied,
+                )
+            )
+        if "builder" in opt_stats:
+            builder = opt_stats["builder"]
+            if "aten" in builder:
+                new_stat.update(
+                    {f"op_torch_{k}": v for k, v in builder["aten"].items()}
+                )
+        return new_stat
+
+    @classmethod
+    def _post_process_onnx_statistics(cls, model: onnx.ModelProto) -> Dict[str, Any]:
+        stats = {}
+        stats["onnx_n_nodes"] = len(model.graph.node)
+        stats["onnx_n_initializer"] = len(model.graph.initializer)
+        stats["onnx_n_sparse_initializer"] = len(model.graph.sparse_initializer)
+        stats["onnx_n_functions"] = len(model.functions)
+        stats["onnx_n_sequence"] = len(
+            [n for n in model.graph.node if n.op_type == "Sequence"]
         )
+        stats["onnx_n_inputs"] = len(model.graph.input)
+        stats["onnx_n_outputs"] = len(model.graph.output)
+        stats["onnx_input_names"] = "|".join(i.name for i in model.graph.input)
+        stats["onnx_output_names"] = "|".join(i.name for i in model.graph.output)
+        stats["op_onnx_initializer"] = len(model.graph.initializer)
+        stats["op_onnx_sparse_initializer"] = len(model.graph.sparse_initializer)
+        for node in model.graph.node:
+            if node.domain == "":
+                key = f"op_onnx_{node.op_type}"
+            else:
+                key = f"op_onnx_{node.domain}_{node.op_type}"
+            if key in stats:
+                stats[key] += 1
+            else:
+                stats[key] = 1
+        return stats
 
     @classmethod
     def _flatten(cls, value):
@@ -854,342 +912,3 @@ class BenchmarkRunner:
             f"Not implemented with type(expected)={type(expected)}, type(results)={type(got)}, "
             f"dir(expected)={dir(expected)}, level={level}"
         )
-
-
-def merge_benchmark_reports(
-    data: List[str],
-    model="model_name",
-    keys=(
-        "suite",
-        "exporter",
-        "opt_patterns",
-        "device",
-        "dtype",
-        "dynamic",
-        "version",
-        "version_onnxruntime",
-        "version_torch",
-        "version_transformers",
-        "flag_fake_tensor",
-        "flag_no_grad",
-        "flag_training",
-        "machine",
-    ),
-    report_on=(
-        "speedup",
-        "speedup_increase",
-        "discrepancies_abs",
-        "discrepancies_rel",
-        "time_load",
-        "time_warmup",
-        "time_repeat",
-        "time_export",
-        "time_repeat_eager",
-        "TIME_ITER",
-        "time_session",
-        "ERR_export",
-        "ERR_warmup",
-        "onnx_filesize",
-        "onnx_opt_max_iter",
-        "onnx_opt_n_applied",
-        "onnx_opt_added",
-        "onnx_opt_removed",
-        "onnx_opt_time_in",
-        "onnx_opt_unique_applied",
-        "onnx_opt_unique_matched",
-        "onnx_n_nodes",
-        "onnx_n_functions",
-        "onnx_n_sequence",
-    ),
-    formulas=("memory_peak_load", "buckets", "pass"),
-    excel_output: Optional[str] = None,
-) -> Dict[str, "pandas.DataFrame"]:  # noqa: F821
-    """
-    Merges multiple files produced by bash_benchmark...
-
-    ::
-
-        _index,DATE,ERR_export,ITER,TIME_ITER,capability,cpu,date_start,device,device_name,...
-        101Dummy-custom,2024-07-08,,0,7.119158490095288,7.0,40,2024-07-08,cuda,...
-        101Dummy-script,2024-07-08,,1,6.705480073112994,7.0,40,2024-07-08,cuda,...
-        101Dummy16-custom,2024-07-08,,2,6.970448340754956,7.0,40,2024-07-08,cuda,...
-
-    Every key with a unique value is removed.
-    Every column with a unique value is displayed on main.
-    List of knowns columns::
-
-        DATE
-        ERR_export
-        ERR_warmup
-        ITER
-        TIME_ITER
-        capability
-        cpu
-        date_start
-        device
-        device_name
-        discrepancies_abs
-        discrepancies_rel
-        dtype
-        dump_folder
-        dynamic
-        executable
-        exporter
-        filename
-        flag_fake_tensor
-        flag_no_grad
-        flag_training
-        has_cuda
-        input_size
-        machine
-        mema_gpu_0_before_loading
-        mema_gpu_1_after_loading
-        mema_gpu_2_after_warmup
-        mema_gpu_3_empty_cache
-        mema_gpu_4_after_repeat
-        mema_gpu_5_after_export
-        mema_gpu_6_after_gcollect
-        mema_gpu_7_after_session
-        mema_gpu_8_after_export_warmup
-        mema_gpu_9_after_export_repeat
-        model,
-        model_name,
-        onnx_filesize
-        onnx_input_names,
-        onnx_model
-        onnx_n_inputs,
-        onnx_n_outputs,
-        onnx_optimized,
-        onnx_output_names,
-        opt_patterns,
-        output_data,
-        output_size,
-        params_dtype,
-        params_size,
-        process,
-        processor,
-        providers,
-        quiet,
-        repeat,
-        speedup,
-        speedup_increase,
-        target_opset,
-        time_export,
-        time_load,
-        time_repeat,
-        time_repeat_eager,
-        time_session,
-        time_total,
-        time_warmup,
-        time_warmup_eager,
-        verbose,
-        version,
-        version_onnxruntime,
-        version_torch,
-        version_transformers,
-        warmup,
-        ERROR,
-        OUTPUT,
-        CMD
-    """
-    import pandas
-
-    dfs = []
-    for filename in data:
-        df = pandas.read_csv(filename)
-        dfs.append(df)
-
-    df = pandas.concat(dfs, axis=0)
-
-    # replace nan values
-    set_columns = set(df.columns)
-    for c in ["opt_patterns", "ERR_export", "ERR_warmup"]:
-        if c in set_columns:
-            df[c] = df[c].fillna("-")
-
-    res = {"0raw": df}
-
-    # uniques keys
-    keys = [k for k in keys if k in set_columns]
-    report_on = [k for k in report_on if k in set_columns]
-    unique = {}
-    for c in df.columns:
-        u = df[c].unique()
-        if len(u) == 1:
-            unique[c] = u.tolist()[0]
-
-    main = [dict(column="dates", value=", ".join(sorted(df["DATE"].unique().tolist())))]
-    for k, v in unique.items():
-        main.append(dict(column=k, value=v))
-    res["0main"] = pandas.DataFrame(main)
-    new_keys = [k for k in keys if k not in unique]
-
-    # formulas
-    bucket_columns = []
-    for expr in formulas:
-        if expr == "memory_peak_load":
-            if (
-                "mema_gpu_5_after_export" in set_columns
-                and "mema_gpu_1_after_loading" in set_columns
-            ):
-                df[expr] = (
-                    df["mema_gpu_5_after_export"] - df["mema_gpu_1_after_loading"]
-                )
-                report_on.append(expr)
-            continue
-
-        if expr == "pass":
-            if "discrepancies_abs" in set_columns:
-                df[expr] = (~df["discrepancies_abs"].isna()).astype(int)
-                report_on.append(expr)
-            continue
-
-        if expr == "buckets":
-            if "exporter" in set_columns and "script" in set(df.exporter):
-                # Do the same with the exporter as a baseline.
-                keep = [model, *new_keys, "speedup"]
-                gr = df[df.exporter == "script"][keep].copy()
-                gr["speedup_script"] = gr["speedup"]
-                gr = gr.drop("speedup", axis=1)
-                on = [k for k in keep[:-1] if k != "exporter"]
-                joined = pandas.merge(df, gr, left_on=on, right_on=on, how="left")
-                joined["speedup_increase_script"] = (
-                    joined["speedup_script"] / joined["speedup"] - 1
-                ).fillna(np.inf)
-                assert df.shape[0] == joined.shape[0]
-                df = joined.drop("exporter_y", axis=1).copy()
-                df["exporter"] = df["exporter_x"]
-                df = df.drop("exporter_x", axis=1)
-                set_columns = set(df.columns)
-
-            for c in ["speedup_increase", "speedup_increase_script"]:
-                if c not in set_columns:
-                    continue
-                scale = [-np.inf, -20, -10, -5, -2, 2, 5, 10, 20, np.inf]
-                for i in range(1, len(scale)):
-                    val = (df[c] >= scale[i - 1] / 100) & (df[c] < scale[i] / 100)
-                    v1 = f"{scale[i-1]}%" if not np.isinf(scale[i - 1]) else ""
-                    v2 = f"{scale[i]}%" if not np.isinf(scale[i]) else ""
-                    d = f"[{v1},{v2}[" if v1 and v2 else (f"<{v2}" if v2 else f">={v1}")
-                    if c == "speedup_increase_script":
-                        d = f"script {d}"
-                    bucket_columns.append(d)
-                    df[d] = val.astype(int)
-
-            continue
-
-    # values
-    for c in report_on:
-        keep = [model, *new_keys, c]
-        dfc = df[keep]
-        pivot = dfc.pivot(index=model, columns=new_keys, values=c)
-        res[c] = pivot
-
-    # buckets
-    if bucket_columns:
-        table = df[[*new_keys, model, *bucket_columns, "speedup_increase"]].copy()
-        pivot = table.pivot(
-            index=[*[c for c in new_keys if c != "exporter"], model],
-            columns=["exporter"],
-            values=bucket_columns,
-        )
-
-        # the following code switches places between exporter and buckets
-        tpiv = pivot.T.reset_index(drop=False)
-
-        def _order(index):
-            if index.name == "exporter":
-                return index
-            order = [
-                "<-20%",
-                "[-20%,-10%[",
-                "[-10%,-5%[",
-                "[-5%,-2%[",
-                "[-2%,2%[",
-                "[2%,5%[",
-                "[5%,10%[",
-                "[10%,20%[",
-                ">=20%",
-                "script <-20%",
-                "script [-20%,-10%[",
-                "script [-10%,-5%[",
-                "script [-5%,-2%[",
-                "script [-2%,2%[",
-                "script [2%,5%[",
-                "script [5%,10%[",
-                "script [10%,20%[",
-                "script >=20%",
-            ]
-            position = {v: i for i, v in enumerate(order)}
-            return [position[s] for s in index]
-
-        tpiv1 = tpiv[~tpiv.level_0.str.startswith("script")]
-        tpiv2 = tpiv[tpiv.level_0.str.startswith("script")].copy()
-        tpiv1 = tpiv1.set_index(["exporter", "level_0"]).sort_index(key=_order).T.copy()
-        tpiv1.loc["SUM"] = tpiv1.sum(axis=0).copy()
-        res["bucket"] = tpiv1.fillna(0).astype(int)
-
-        if tpiv2.shape[0] > 0:
-            tpiv2["level_0"] = tpiv2["level_0"].apply(lambda s: s[len("script ") :])
-            tpiv2 = (
-                tpiv2.set_index(["exporter", "level_0"]).sort_index(key=_order).T.copy()
-            )
-            tpiv2.loc["SUM"] = tpiv2.sum(axis=0).copy()
-            res["bucket_script"] = tpiv2.fillna(0).astype(int)
-
-    # add summary at the end
-    mean_med = [
-        c
-        for c in res
-        if c.startswith("time_")
-        or c.startswith("onnx_")
-        or c.startswith("discrepancies_")
-    ]
-    for c in ["pass", *mean_med, "speedup_increase"]:
-        if c in res:
-            summary = res[c].mean(axis=0).copy()
-            med = res[c].median(axis=0)
-            res[c].loc["MEAN"] = summary
-            res[c].loc["MED"] = med
-    for c in ["speedup"]:
-        if c in res:
-            summary = np.exp(np.log(res[c]).mean(axis=0))
-            med = res[c].median(axis=0)
-            res[c].loc["GMEAN"] = summary
-            res[c].loc["MED"] = med
-
-    # final fusion
-
-    def _merge(res, merge, prefix):
-        m = None
-        for name in merge:
-            df = res[name].T
-            cols = set(df.columns)
-            df = df.reset_index(drop=False).copy()
-            index_cols = set(df.columns) - cols
-            df["stat"] = name[len(prefix) :]
-            df = df.set_index([*list(index_cols), "stat"]).T
-            if m is None:
-                m = df
-                continue
-            m = pandas.merge(m, df, how="outer", left_index=True, right_index=True)
-
-        # We need to change the columns index order.
-        df = m.T
-        setc = set(df.columns)
-        df = df.reset_index(drop=False)
-        index = set(df.columns) - setc
-        if index == {"stat", "exporter"}:
-            m = df.set_index(["stat", "exporter"]).T
-        return m
-
-    for prefix in ["onnx_", "time_", "discrepancies_", "memory_", "ERR_"]:
-        merge = [k for k in res if k.startswith(prefix)]
-        res[prefix[:-1]] = _merge(res, merge, prefix)
-        res = {k: v for k, v in res.items() if k not in set(merge)}
-
-    if excel_output:
-        with pandas.ExcelWriter(excel_output) as writer:
-            for k, v in sorted(res.items()):
-                v.to_excel(writer, sheet_name=k, index=k not in {"0raw", "0main"})
-    return res
