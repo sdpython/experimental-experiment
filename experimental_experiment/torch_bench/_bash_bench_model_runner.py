@@ -396,7 +396,12 @@ class ModelRunner:
         from ..xbuilder import OptimizationOptions
 
         if optimization:
-            options = OptimizationOptions(patterns=optimization)
+            # cuda = any(m.is_cuda for m in self.model.parameters())
+            options = OptimizationOptions(
+                patterns=optimization,
+                verbose=10 if verbose >= 100 else (1 if verbose > 1 else 0),
+                processor="CUDA" if self.device == "cuda" else "CPU",
+            )
         else:
             options = None
 
@@ -406,7 +411,7 @@ class ModelRunner:
                 self.inputs,
                 optimize=bool(optimization),
                 large_model=True,
-                verbose=1 if verbose > 1 else 0,
+                verbose=10 if verbose >= 100 else (1 if verbose > 1 else 0),
                 target_opset=target_opset,
                 return_optimize_report=True,
                 options=options,
@@ -502,13 +507,15 @@ class ModelRunner:
             )
 
         exported.save(name)
+        onx = onnx.load(name, load_external_data=True)
+        onnx.save(onx, name, save_as_external_data=True)
 
         if not optimization:
             return onnx.load(name, load_external_data=False), None
 
         opts = optimization.split("+")
         shutil.copy(name, name + ".raw.onnx")
-        model_proto = onnx.load(name, load_external_data=False)
+        model_proto = onnx.load(name, load_external_data=True)
 
         for opt in opts:
             if opt == "default":
@@ -542,7 +549,8 @@ class ModelRunner:
 
             raise AssertionError(f"Unexpected value for optimization={optimization!r}.")
 
-        onnx.save(model_proto, name)
+        onnx.save(model_proto, name, save_as_external_data=True)
+        model_proto = onnx.load(name, load_external_data=False)
         return model_proto, None
 
     def _to_export(

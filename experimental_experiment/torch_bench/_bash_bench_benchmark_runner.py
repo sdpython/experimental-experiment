@@ -458,14 +458,28 @@ class BenchmarkRunner:
             if self.device == "cpu":
                 providers = providers[1:]
             stats["providers"] = ",".join(providers)
+
             begin = time.perf_counter()
             if isinstance(exported_model, onnx.ModelProto):
+                domains = set(d.domain for d in exported_model.opset_import)
+                session_options = onnxruntime.SessionOptions()
+                if "onnx_extended.ortops.optim.cuda" in domains:
+                    try:
+                        from onnx_extended.ortops.optim.cuda import get_ort_ext_libs
+                    except ImportError as e:
+                        stats["ERR_ort"] = str(e)
+                        if self.verbose:
+                            print(f"[benchmarkrunner.benchmark] err_ort {e}")
+                        yield stats
+                        continue
+                    session_options.register_custom_ops_library(get_ort_ext_libs()[0])
+
                 is_onnx = True
                 stats["onnx_model"] = "1"
                 if quiet:
                     try:
                         ort_sess = onnxruntime.InferenceSession(
-                            filename, providers=providers
+                            filename, session_options, providers=providers
                         )
                     except Exception as e:
                         stats["ERR_ort"] = str(e)
@@ -475,7 +489,7 @@ class BenchmarkRunner:
                         continue
                 else:
                     ort_sess = onnxruntime.InferenceSession(
-                        filename, providers=providers
+                        filename, session_options, providers=providers
                     )
                 sess = WrapInferenceSessionForTorch(ort_sess)
                 stats.update(self._post_process_onnx_statistics(exported_model))
