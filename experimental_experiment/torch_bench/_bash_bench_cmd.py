@@ -1,5 +1,7 @@
 import os
 import pprint
+import time
+from datetime import datetime
 from typing import Optional, List
 
 
@@ -44,6 +46,8 @@ def bash_bench_parse_args(name: str, doc: str, new_args: Optional[List[str]] = N
             "measure the memory peak during exporter, "
             "it starts another process to monitor the memory",
         ),
+        nvtx=("0", "add events to profile"),
+        dump_ort=("0", "dump the onnxruntime optimized graph"),
         new_args=new_args,
         expose="repeat,warmup",
     )
@@ -96,12 +100,14 @@ def bash_bench_main(name: str, doc: str, args: Optional[List[str]] = None):
             args.model = ",".join(n for n in names if not n.startswith("101"))
 
         if multi_run(args):
-            configs = make_configs(args)
+            args_output_data = args.output_data
             if args.output_data:
                 name, ext = os.path.splitext(args.output_data)
                 temp_output_data = f"{name}.temp{ext}"
+                args.output_data = ""
             else:
                 temp_output_data = None
+            configs = make_configs(args)
             data = run_benchmark(
                 f"experimental_experiment.torch_bench.{name}",
                 configs,
@@ -113,11 +119,19 @@ def bash_bench_main(name: str, doc: str, args: Optional[List[str]] = None):
             )
             if args.verbose > 2:
                 pprint.pprint(data if args.verbose > 3 else data[:2])
-            if args.output_data:
+            if args_output_data:
                 df = make_dataframe_from_benchmark_data(data, detailed=False)
-                print(f"Prints out the results into file {args.output_data!r}")
-                df.to_csv(args.output_data, index=False)
-                df.to_excel(args.output_data + ".xlsx", index=False)
+                filename = args_output_data
+                if os.path.exists(filename):
+                    # Let's avoid losing data.
+                    name, ext = os.path.splitext(filename)
+                    i = 2
+                    while os.path.exists(filename):
+                        filename = f"{name}.{i}{ext}"
+                        i += 1
+                print(f"Prints out the results into file {filename!r}")
+                df.to_csv(filename, index=False)
+                df.to_excel(filename + ".xlsx", index=False)
                 if args.verbose:
                     print(df)
 
@@ -139,7 +153,10 @@ def bash_bench_main(name: str, doc: str, args: Optional[List[str]] = None):
                 repeat=args.repeat,
                 warmup=args.warmup,
                 dtype=args.dtype,
+                nvtx=args.nvtx in (1, "1", "True", "true"),
+                dump_ort=args.dump_ort in (1, "1", "True", "true"),
             )
+            begin = time.perf_counter()
             data = list(
                 runner.enumerate_test_models(
                     process=args.process in ("1", 1, "True", True),
@@ -150,6 +167,7 @@ def bash_bench_main(name: str, doc: str, args: Optional[List[str]] = None):
                     memory_peak=args.memory_peak in ("1", 1, "True", True),
                 )
             )
+            duration = time.perf_counter() - begin
             if len(data) == 1:
                 for k, v in sorted(data[0].items()):
                     print(f":{k},{v};")
@@ -157,3 +175,25 @@ def bash_bench_main(name: str, doc: str, args: Optional[List[str]] = None):
                 print(f":model_name,{name};")
                 print(f":device,{args.device};")
                 print(f":ERROR,unexpected number of data {len(data)};")
+
+            if args.output_data:
+
+                df = make_dataframe_from_benchmark_data(data, detailed=False)
+
+                df["DATE"] = f"{datetime.now():%Y-%m-%d}"
+                df["ITER"] = 0
+                df["TIME_ITER"] = duration
+
+                filename = args.output_data
+                if os.path.exists(filename):
+                    # Let's avoid losing data.
+                    name, ext = os.path.splitext(filename)
+                    i = 2
+                    while os.path.exists(filename):
+                        filename = f"{name}.{i}{ext}"
+                        i += 1
+                print(f"Prints out the results into file {filename!r}")
+                df.to_csv(filename, index=False)
+                df.to_excel(filename + ".xlsx", index=False)
+                if args.verbose:
+                    print(df)
