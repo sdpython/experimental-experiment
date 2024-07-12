@@ -97,12 +97,14 @@ def bash_bench_main(name: str, doc: str, args: Optional[List[str]] = None):
             args.model = ",".join(n for n in names if not n.startswith("101"))
 
         if multi_run(args):
-            configs = make_configs(args)
+            args_output_data = args.output_data
             if args.output_data:
                 name, ext = os.path.splitext(args.output_data)
                 temp_output_data = f"{name}.temp{ext}"
+                args.output_data = ""
             else:
                 temp_output_data = None
+            configs = make_configs(args)
             data = run_benchmark(
                 "experimental_experiment.torch_bench.bash_bench_huggingface",
                 configs,
@@ -114,9 +116,9 @@ def bash_bench_main(name: str, doc: str, args: Optional[List[str]] = None):
             )
             if args.verbose > 2:
                 pprint.pprint(data if args.verbose > 3 else data[:2])
-            if args.output_data:
+            if args_output_data:
                 df = make_dataframe_from_benchmark_data(data, detailed=False)
-                filename = args.output_data
+                filename = args_output_data
                 if os.path.exists(filename):
                     # Let's avoid losing data.
                     name, ext = os.path.splitext(filename)
