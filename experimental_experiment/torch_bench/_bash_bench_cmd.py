@@ -58,8 +58,7 @@ def bash_bench_main(name: str, doc: str, args: Optional[List[str]] = None):
     :param doc: documentation
     :param args: optional arguments
     """
-
-    args = bash_bench_parse_args("bash_bench_huggingface.py", __doc__, new_args=args)
+    args = bash_bench_parse_args(f"{name}.py", __doc__, new_args=args)
     print(f"[{name}] start")
     for k, v in sorted(args.__dict__.items()):
         print(f"{k}={v}")
@@ -75,6 +74,10 @@ def bash_bench_main(name: str, doc: str, args: Optional[List[str]] = None):
         from ._bash_bench_set_huggingface import HuggingfaceRunner
 
         runner = HuggingfaceRunner(device=args.device)
+    elif name == "bash_bench_torchbench":
+        from ._bash_bench_set_torchbench import TorchBenchRunner
+
+        runner = TorchBenchRunner(device=args.device)
     else:
         raise AssertionError(f"Unexpected bash_bench name {name!r}.")
     names = runner.get_model_name_list()
@@ -100,7 +103,7 @@ def bash_bench_main(name: str, doc: str, args: Optional[List[str]] = None):
             else:
                 temp_output_data = None
             data = run_benchmark(
-                "experimental_experiment.torch_bench.bash_bench_huggingface",
+                f"experimental_experiment.torch_bench.{name}",
                 configs,
                 args.verbose,
                 stop_if_exception=False,
@@ -128,7 +131,7 @@ def bash_bench_main(name: str, doc: str, args: Optional[List[str]] = None):
             if args.verbose:
                 print(f"Running model {name!r}")
 
-            runner = HuggingfaceRunner(
+            runner = runner.__class__(
                 include_model_names={name},
                 verbose=args.verbose,
                 device=args.device,

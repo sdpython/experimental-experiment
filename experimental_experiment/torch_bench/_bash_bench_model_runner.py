@@ -167,7 +167,12 @@ class ModelRunner:
             if o.dtype in {torch.float32, torch.float64, torch.float16, torch.bfloat16}:
                 return o.to(dtype)
             return o
-        return o.to(dtype)
+        try:
+            return o.to(dtype)
+        except AttributeError as e:
+            raise AssertionError(
+                f"Unable to convert class {type(o)} to {dtype} (o={o})"
+            ) from e
 
     def __init__(
         self,
