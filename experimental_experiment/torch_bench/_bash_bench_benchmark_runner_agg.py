@@ -64,6 +64,7 @@ def _apply_excel_style(
                 values.append(cell.value)
             if first_row is not None:
                 break
+
         assert first_row is not None and first_col is not None, (
             f"Unable to find the first value in {k!r}, first_row={first_row}, "
             f"first_col={first_col}, look={look!r} ({type(look)}), values={values}"
@@ -355,6 +356,7 @@ def merge_benchmark_reports(
         dfs.append(df)
 
     df = pandas.concat(dfs, axis=0)
+    df = df[~df[model].isna()]
 
     # replace nan values
     set_columns = set(df.columns)
@@ -460,6 +462,7 @@ def merge_benchmark_reports(
                 # Do the same with the exporter as a baseline.
                 keep = [model, *new_keys, "speedup"]
                 gr = df[df.exporter == "script"][keep].copy()
+                gr = gr[~gr["speedup"].isna()]
                 gr["speedup_script"] = gr["speedup"]
                 gr = gr.drop("speedup", axis=1)
                 on = [k for k in keep[:-1] if k != "exporter"]
@@ -467,7 +470,10 @@ def merge_benchmark_reports(
                 joined["speedup_increase_script"] = (
                     joined["speedup"] / joined["speedup_script"] - 1
                 ).fillna(np.inf)
-                assert df.shape[0] == joined.shape[0]
+                assert joined.shape[0] == df.shape[0], (
+                    f"Join issue df.shape={df.shape}, joined.shaped={joined.shape}, "
+                    f"gr.shape={gr.shape}"
+                )
                 df = joined.drop("exporter_y", axis=1).copy()
                 df["exporter"] = df["exporter_x"]
                 df = df.drop("exporter_x", axis=1)
@@ -496,6 +502,7 @@ def merge_benchmark_reports(
     for c in report_on:
         keep = [model, *new_keys, c]
         dfc = df[keep]
+        dfc = dfc[~dfc[model].isna()]
         if new_keys:
             pivot = dfc.pivot(index=model, columns=new_keys, values=c)
         else:
@@ -506,13 +513,12 @@ def merge_benchmark_reports(
     if bucket_columns:
         table = df[[*new_keys, model, *bucket_columns, "speedup_increase"]].copy()
         pcolumns = [c for c in ["exporter", "opt_patterns"] if c in new_keys]
-        pivot = table.pivot(
-            index=[
-                *[c for c in new_keys if c not in ("exporter", "opt_patterns")],
-                model,
-            ],
-            columns=pcolumns,
-            values=bucket_columns,
+        index_col = [
+            *[c for c in new_keys if c not in ("exporter", "opt_patterns")],
+            model,
+        ]
+        pivot = table[~table[index_col[0]].isna()].pivot(
+            index=index_col, columns=pcolumns, values=bucket_columns
         )
 
         # the following code switches places between exporter and buckets
@@ -790,7 +796,8 @@ def _reorder_indices(
 
     raise AssertionError(
         f"Not implemented for row_names={row_names!r}, "
-        f"col_names={col_names!r}, column_keys={column_keys!r}, row_keys={row_keys!r}"
+        f"col_names={col_names!r}, column_keys={column_keys!r}, "
+        f"row_keys={row_keys!r}, name={name!r}"
     )
 
 

@@ -3,7 +3,7 @@ import importlib
 import textwrap
 from typing import Any, Optional, Set, Tuple
 import torch
-from torch._dynamo.testing import collect_results
+from torch._dynamo.testing import collect_results, reduce_to_scalar_loss
 from torch._dynamo.utils import clone_inputs
 from ._bash_bench_model_runner import (
     download_retry_decorator,
@@ -489,6 +489,10 @@ class TimmRunner(BenchmarkRunner):
         else:
             model.config = MakeConfig(to_tuple=False)
         return model
+
+    def scaled_compute_loss(self, pred):
+        # Loss values need zoom out further.
+        return reduce_to_scalar_loss(pred) / 1000.0
 
     def load_model(
         self,
