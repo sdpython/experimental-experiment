@@ -2871,6 +2871,26 @@ class TestGraphPatternOptimization(ExtTestCase):
         got = opt_ref.run(None, feeds)[0]
         self.assertEqualArray(expected, got, atol=1e-3)
 
+    def test_layer_normalization(self):
+        data = os.path.join(os.path.dirname(__file__), "data", "layernorm.onnx")
+        model = onnx.load(data, load_external_data=False)
+
+        gr = GraphBuilder(
+            model,
+            infer_shapes=True,
+            optimization_options=OptimizationOptions(
+                patterns=["LayerNormalization"], verbose=0
+            ),
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+        self.assertEqual(
+            ["LayerNormalization"],
+            [n.op_type for n in opt_onx.graph.node],
+        )
+        self.assertEqual(2, len(opt_onx.graph.initializer))
+        new_inputs = [tuple(n.input) for n in opt_onx.graph.node]
+        self.assertNotEqual(inputs, new_inputs)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

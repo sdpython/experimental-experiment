@@ -779,6 +779,24 @@ class TestGraphPatternOptimizationOrt(ExtTestCase):
         got = opt_ref.run(None, feeds)
         self.assertEqualArray(expected[0], got[0])
 
+    def test_fast_gelu(self):
+        data = os.path.join(os.path.dirname(__file__), "data", "layernorm.onnx")
+        model = onnx.load(data, load_external_data=False)
+
+        gr = GraphBuilder(
+            model,
+            infer_shapes=True,
+            optimization_options=OptimizationOptions(patterns=["FastGelu"], verbose=0),
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+        self.assertEqual(
+            ["FastGelu"],
+            [n.op_type for n in opt_onx.graph.node],
+        )
+        self.assertEqual(2, len(opt_onx.graph.initializer))
+        new_inputs = [tuple(n.input) for n in opt_onx.graph.node]
+        self.assertNotEqual(inputs, new_inputs)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
