@@ -54,17 +54,16 @@ def bash_bench_parse_args(name: str, doc: str, new_args: Optional[List[str]] = N
     return args
 
 
-def bash_bench_main(name: str, doc: str, args: Optional[List[str]] = None):
+def bash_bench_main(script_name: str, doc: str, args: Optional[List[str]] = None):
     """
     Main command line for all bash_bench script.
 
-    :param name: suffix for the bash
+    :param script_name: suffix for the bash
     :param doc: documentation
     :param args: optional arguments
     """
-
-    args = bash_bench_parse_args("bash_bench_huggingface.py", __doc__, new_args=args)
-    print(f"[{name}] start")
+    args = bash_bench_parse_args(f"{script_name}.py", __doc__, new_args=args)
+    print(f"[{script_name}] start")
     for k, v in sorted(args.__dict__.items()):
         print(f"{k}={v}")
 
@@ -75,12 +74,16 @@ def bash_bench_main(name: str, doc: str, args: Optional[List[str]] = None):
         run_benchmark,
     )
 
-    if name == "bash_bench_huggingface":
+    if script_name == "bash_bench_huggingface":
         from ._bash_bench_set_huggingface import HuggingfaceRunner
 
         runner = HuggingfaceRunner(device=args.device)
+    elif script_name == "bash_bench_torchbench":
+        from ._bash_bench_set_torchbench import TorchBenchRunner
+
+        runner = TorchBenchRunner(device=args.device)
     else:
-        raise AssertionError(f"Unexpected bash_bench name {name!r}.")
+        raise AssertionError(f"Unexpected bash_bench name {script_name!r}.")
     names = runner.get_model_name_list()
 
     if not args.model and args.model not in ("0", 0):
@@ -106,7 +109,7 @@ def bash_bench_main(name: str, doc: str, args: Optional[List[str]] = None):
                 temp_output_data = None
             configs = make_configs(args)
             data = run_benchmark(
-                "experimental_experiment.torch_bench.bash_bench_huggingface",
+                f"experimental_experiment.torch_bench.{script_name}",
                 configs,
                 args.verbose,
                 stop_if_exception=False,
@@ -142,7 +145,7 @@ def bash_bench_main(name: str, doc: str, args: Optional[List[str]] = None):
             if args.verbose:
                 print(f"Running model {name!r}")
 
-            runner = HuggingfaceRunner(
+            runner = runner.__class__(
                 include_model_names={name},
                 verbose=args.verbose,
                 device=args.device,

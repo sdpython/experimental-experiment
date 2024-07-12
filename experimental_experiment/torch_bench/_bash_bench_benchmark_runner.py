@@ -144,6 +144,9 @@ class BenchmarkRunner:
             return sum(self.obj_size(o) for o in obj)
         if obj is None:
             return 0
+        if obj.__class__.__name__.endswith("KeyedJaggedTensor"):
+            # Not implemented yet.
+            return 0
         raise AssertionError(f"input_size not implemented for type {type(obj)}")
 
     def enumerate_test_models(

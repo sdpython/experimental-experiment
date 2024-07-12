@@ -8,52 +8,9 @@ from ._bash_bench_model_runner import (
     download_retry_decorator,
     _rand_int_tensor,
     ModelRunner,
-    MakeConfig,
 )
 from ._bash_bench_benchmark_runner import BenchmarkRunner
-
-
-class Neuron(torch.nn.Module):
-    def __init__(self, n_dims: int = 5, n_targets: int = 3):
-        super(Neuron, self).__init__()
-        self.linear = torch.nn.Linear(n_dims, n_targets)
-
-    def forward(self, x):
-        return torch.sigmoid(self.linear(x))
-
-    def _get_random_inputs(self, device: str):
-        return (torch.randn(1, 5).to(device),)
-
-    config = MakeConfig(download=False, to_tuple=False)
-
-
-class Neuron16(Neuron):
-    def __init__(self, n_dims: int = 5, n_targets: int = 3):
-        super(Neuron, self).__init__()
-        self.linear = torch.nn.Linear(n_dims, n_targets, dtype=torch.float16)
-        assert self.linear.weight.dtype == torch.float16
-        assert self.linear.bias.dtype == torch.float16
-
-    def forward(self, x):
-        return torch.sigmoid(self.linear(x))
-
-    def _get_random_inputs(self, device: str):
-        return (torch.randn(1, 5).to(torch.float16).to(device),)
-
-
-class NeuronTuple(torch.nn.Module):
-    def __init__(self, n_dims: int = 5, n_targets: int = 3):
-        super(NeuronTuple, self).__init__()
-        self.linear = torch.nn.Linear(n_dims, n_targets)
-
-    def forward(self, x):
-        y = self.linear(x)
-        return (torch.sigmoid(y), (x, y))
-
-    def _get_random_inputs(self, device: str):
-        return (torch.randn(1, 5).to(device),)
-
-    config = MakeConfig(download=False, to_tuple=False)
+from ._bash_bench_set_dummies import Neuron, Neuron16, NeuronTuple
 
 
 class HuggingfaceRunner(BenchmarkRunner):
@@ -548,10 +505,12 @@ class HuggingfaceRunner(BenchmarkRunner):
             model = self._download_model(model_name)
         else:
             model = model_cls()
+
         if dtype is None:
             model = model.to(self.device)
         else:
             model = model.to(self.device, dtype=dtype)
+
         if self.enable_activation_checkpointing:
             model.gradient_checkpointing_enable()
         if model_name in self.BATCH_SIZE_KNOWN_MODELS:
