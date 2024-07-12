@@ -253,12 +253,21 @@ class ModelRunner:
             self.raw_use_defaults = [i is None for i in inputs]
 
         config = getattr(model, "config", {})
+        to_tuple = not (hasattr(config, "to_tuple") and not config.to_tuple)
+        assert (
+            "AlexNet" not in model.__class__.__name__
+            and "Mixer" not in model.__class__.__name__
+        ) or not to_tuple, (
+            f"Model {type(model)} does not need to call "
+            f"to_tuple, has config={hasattr(model, 'config')}."
+        )
+
         model_cvt = cvt(model)
         del model
-        if hasattr(config, "to_tuple") and not config.to_tuple:
-            self.model = WrappedModelBase(model_cvt)
-        else:
+        if to_tuple:
             self.model = WrappedModelToTuple(model_cvt)
+        else:
+            self.model = WrappedModelBase(model_cvt)
         self.device = device
         self.dtype = dtype
         self.inputs = inputs

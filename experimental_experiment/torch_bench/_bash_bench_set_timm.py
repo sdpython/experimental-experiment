@@ -484,7 +484,10 @@ class TimmRunner(BenchmarkRunner):
             drop_block_rate=None,
             pretrained=True,
         )
-        model.config = MakeConfig(to_tuple=False)
+        if hasattr(model, "config"):
+            model.config.to_tuple = False
+        else:
+            model.config = MakeConfig(to_tuple=False)
         return model
 
     def load_model(
