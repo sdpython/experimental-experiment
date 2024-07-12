@@ -2874,6 +2874,7 @@ class TestGraphPatternOptimization(ExtTestCase):
     def test_layer_normalization(self):
         data = os.path.join(os.path.dirname(__file__), "data", "layernorm.onnx")
         model = onnx.load(data, load_external_data=False)
+        inputs = [tuple(n.input) for n in model.graph.node]
 
         gr = GraphBuilder(
             model,
