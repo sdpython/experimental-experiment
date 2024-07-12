@@ -344,6 +344,12 @@ class TorchBenchRunner(BenchmarkRunner):
         """
         Steps to run before running the benchmark.
         """
+        try:
+            import torch
+
+            torch.ops.fbgemm.asynchronous_complete_cumsum
+        except (AttributeError, ImportError) as e:
+            raise AssertionError(f"Something wrong in the installation {e}.") from e
         container._config = container.load_yaml_file()
         lines = container.MODELS_FILENAME.split("\n")
         lines = [line.rstrip() for line in lines]
@@ -557,6 +563,8 @@ class TorchBenchRunner(BenchmarkRunner):
         no_grad: bool = True,
         target_opset: int = 18,
         dtype: Optional[Any] = None,
+        nvtx: bool = False,
+        dump_ort: bool = False,
     ):
         super().__init__(
             "torchbench",
@@ -572,6 +580,8 @@ class TorchBenchRunner(BenchmarkRunner):
             fake_tensor=fake_tensor,
             no_grad=no_grad,
             dtype=dtype,
+            dump_ort=dump_ort,
+            nvtx=nvtx,
         )
         if not self._config:
             self.initialize()
