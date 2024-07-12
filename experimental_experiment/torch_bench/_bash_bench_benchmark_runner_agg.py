@@ -496,7 +496,10 @@ def merge_benchmark_reports(
     for c in report_on:
         keep = [model, *new_keys, c]
         dfc = df[keep]
-        pivot = dfc.pivot(index=model, columns=new_keys, values=c)
+        if new_keys:
+            pivot = dfc.pivot(index=model, columns=new_keys, values=c)
+        else:
+            pivot = dfc.set_index(model)
         res[c] = pivot
 
     # buckets
@@ -541,27 +544,32 @@ def merge_benchmark_reports(
             position = {v: i for i, v in enumerate(order)}
             return [position[s] for s in index]
 
-        tpiv1 = tpiv[~tpiv.level_0.str.startswith("script")]
-        tpiv2 = tpiv[tpiv.level_0.str.startswith("script")].copy()
-        tpiv1 = tpiv1.set_index([*pcolumns, "level_0"]).sort_index(key=_order).T.copy()
-        summ = tpiv1.sum(axis=0)
-        mean = tpiv1.sum(axis=0)
-        tpiv1.loc["~COUNT"] = tpiv1.shape[0]
-        tpiv1.loc["~SUM"] = summ
-        tpiv1.loc["~MEAN"] = summ / tpiv1.loc["~COUNT"]
-        res["bucket"] = tpiv1.fillna(0).astype(int)
-
-        if tpiv2.shape[0] > 0:
-            tpiv2["level_0"] = tpiv2["level_0"].apply(lambda s: s[len("script ") :])
-            tpiv2 = (
-                tpiv2.set_index([*pcolumns, "level_0"]).sort_index(key=_order).T.copy()
+        if "level_0" in tpiv.columns:
+            tpiv1 = tpiv[~tpiv.level_0.str.startswith("script")]
+            tpiv2 = tpiv[tpiv.level_0.str.startswith("script")].copy()
+            tpiv1 = (
+                tpiv1.set_index([*pcolumns, "level_0"]).sort_index(key=_order).T.copy()
             )
-            summ = tpiv2.sum(axis=0)
-            mean = tpiv2.mean(axis=0)
-            tpiv2.loc["~COUNT"] = tpiv2.shape[0]
-            tpiv2.loc["~SUM"] = summ
-            tpiv2.loc["~MEAN"] = summ / tpiv2.loc["~COUNT"]
-            res["bucket_script"] = tpiv2.fillna(0).astype(int)
+            summ = tpiv1.sum(axis=0)
+            mean = tpiv1.sum(axis=0)
+            tpiv1.loc["~COUNT"] = tpiv1.shape[0]
+            tpiv1.loc["~SUM"] = summ
+            tpiv1.loc["~MEAN"] = summ / tpiv1.loc["~COUNT"]
+            res["bucket"] = tpiv1.fillna(0).astype(int)
+
+            if tpiv2.shape[0] > 0:
+                tpiv2["level_0"] = tpiv2["level_0"].apply(lambda s: s[len("script ") :])
+                tpiv2 = (
+                    tpiv2.set_index([*pcolumns, "level_0"])
+                    .sort_index(key=_order)
+                    .T.copy()
+                )
+                summ = tpiv2.sum(axis=0)
+                mean = tpiv2.mean(axis=0)
+                tpiv2.loc["~COUNT"] = tpiv2.shape[0]
+                tpiv2.loc["~SUM"] = summ
+                tpiv2.loc["~MEAN"] = summ / tpiv2.loc["~COUNT"]
+                res["bucket_script"] = tpiv2.fillna(0).astype(int)
 
     # let's remove empty variables
     for k, v in res.items():
@@ -632,10 +640,19 @@ def merge_benchmark_reports(
             index_cols = set(df.columns) - cols
             df["stat"] = name[len(prefix) :]
             df = df.set_index([*list(index_cols), "stat"]).T
+            # Let's remove duplicated experiment, the last one is kept.
+            df = df[~df.index.duplicated(keep="last")].copy()
             if m is None:
                 m = df
                 continue
+            m0 = m
             m = pandas.merge(m, df, how="outer", left_index=True, right_index=True)
+            assert m.shape[0] <= df.shape[0] + m0.shape[0], (
+                f"Something is going wrong for prefix {prefix!r} "
+                f"(probably a same experiment reported twice), "
+                f"df.shape={df.shape}, new_shape is {m.shape} (before shape={m0.shape})"
+                f"\n-- m0=\n{m0}\n-- df=\n{df}"
+            )
 
         # We need to change the columns index order.
         if reverse:
@@ -651,10 +668,11 @@ def merge_benchmark_reports(
             m = m.T.stack().reset_index(drop=False)
             cols = m.columns
             assert len(cols) >= 4, f"Unexpected number of columns in {cols}"
+            exporter_column = "exporter" if "exporter" in cols else "index"
             assert (
-                "stat" in cols and "exporter" in cols and model in cols
+                "stat" in cols and exporter_column in cols and model in cols
             ), f"Unexpeted columns {cols}"
-            last = [c for c in cols if c not in {"stat", "exporter", model}]
+            last = [c for c in cols if c not in {"stat", exporter_column, model}]
             added_columns = [c for c in last if c in new_keys]
             last = [c for c in last if c not in new_keys]
             assert (
@@ -662,7 +680,7 @@ def merge_benchmark_reports(
             ), f"Unexpected columns in {cols}, added={added_columns}, last={last}"
             m = m.pivot(
                 index="stat",
-                columns=[model, "exporter", *added_columns],
+                columns=[model, exporter_column, *added_columns],
                 values=last[0],
             )
             m = m.T.sort_index().T
@@ -766,6 +784,9 @@ def _reorder_indices(
         piv = piv.sort_index()
 
         return piv.copy()
+
+    if len(column_keys) == 0 or "index" in col_names:
+        return df
 
     raise AssertionError(
         f"Not implemented for row_names={row_names!r}, "

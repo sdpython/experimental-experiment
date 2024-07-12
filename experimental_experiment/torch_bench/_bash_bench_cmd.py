@@ -1,5 +1,7 @@
 import os
 import pprint
+import time
+from datetime import datetime
 from typing import Optional, List
 
 
@@ -114,9 +116,17 @@ def bash_bench_main(name: str, doc: str, args: Optional[List[str]] = None):
                 pprint.pprint(data if args.verbose > 3 else data[:2])
             if args.output_data:
                 df = make_dataframe_from_benchmark_data(data, detailed=False)
-                print(f"Prints out the results into file {args.output_data!r}")
-                df.to_csv(args.output_data, index=False)
-                df.to_excel(args.output_data + ".xlsx", index=False)
+                filename = args.output_data
+                if os.path.exists(filename):
+                    # Let's avoid losing data.
+                    name, ext = os.path.splitext(filename)
+                    i = 2
+                    while os.path.exists(filename):
+                        filename = f"{name}.{i}{ext}"
+                        i += 1
+                print(f"Prints out the results into file {filename!r}")
+                df.to_csv(filename, index=False)
+                df.to_excel(filename + ".xlsx", index=False)
                 if args.verbose:
                     print(df)
 
@@ -141,6 +151,7 @@ def bash_bench_main(name: str, doc: str, args: Optional[List[str]] = None):
                 nvtx=args.nvtx in (1, "1", "True", "true"),
                 dump_ort=args.dump_ort in (1, "1", "True", "true"),
             )
+            begin = time.perf_counter()
             data = list(
                 runner.enumerate_test_models(
                     process=args.process in ("1", 1, "True", True),
@@ -151,6 +162,7 @@ def bash_bench_main(name: str, doc: str, args: Optional[List[str]] = None):
                     memory_peak=args.memory_peak in ("1", 1, "True", True),
                 )
             )
+            duration = time.perf_counter() - begin
             if len(data) == 1:
                 for k, v in sorted(data[0].items()):
                     print(f":{k},{v};")
@@ -158,3 +170,25 @@ def bash_bench_main(name: str, doc: str, args: Optional[List[str]] = None):
                 print(f":model_name,{name};")
                 print(f":device,{args.device};")
                 print(f":ERROR,unexpected number of data {len(data)};")
+
+            if args.output_data:
+
+                df = make_dataframe_from_benchmark_data(data, detailed=False)
+
+                df["DATE"] = f"{datetime.now():%Y-%m-%d}"
+                df["ITER"] = 0
+                df["TIME_ITER"] = duration
+
+                filename = args.output_data
+                if os.path.exists(filename):
+                    # Let's avoid losing data.
+                    name, ext = os.path.splitext(filename)
+                    i = 2
+                    while os.path.exists(filename):
+                        filename = f"{name}.{i}{ext}"
+                        i += 1
+                print(f"Prints out the results into file {filename!r}")
+                df.to_csv(filename, index=False)
+                df.to_excel(filename + ".xlsx", index=False)
+                if args.verbose:
+                    print(df)

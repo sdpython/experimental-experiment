@@ -483,6 +483,12 @@ class BenchmarkRunner:
                 session_options = onnxruntime.SessionOptions()
                 if self.dump_ort:
                     session_options.optimized_model_filepath = f"{filename}-ortopt.onnx"
+                    if self.verbose > 1:
+                        print(
+                            f"[BenchmarkRunner.benchmark] saves opptimized "
+                            f"model by onnxruntime in "
+                            f"{session_options.optimized_model_filepath!r}"
+                        )
                 if "onnx_extended.ortops.optim.cuda" in domains:
                     try:
                         from onnx_extended.ortops.optim.cuda import get_ort_ext_libs
@@ -513,6 +519,28 @@ class BenchmarkRunner:
                     )
                 sess = WrapInferenceSessionForTorch(ort_sess)
                 stats.update(self._post_process_onnx_statistics(exported_model))
+
+                if self.dump_ort and os.path.exists(
+                    session_options.optimized_model_filepath
+                ):
+                    # Let's save the optimized model with external weights.
+                    fold = os.path.join(
+                        os.path.split(session_options.optimized_model_filepath)[0],
+                        "ort_optimized",
+                    )
+                    new_filename = os.path.join(fold, "model_ort_optimized.onnx")
+                    if self.verbose > 1:
+                        print(
+                            f"[BenchmarkRunner.benchmark] load and saves with "
+                            f"external weights the optimized model by onnxruntime in "
+                            f"{new_filename!r}"
+                        )
+                    if not os.path.exists(fold):
+                        os.mkdir(fold)
+                    ortops = onnx.load(session_options.optimized_model_filepath)
+                    onnx.save(ortops, new_filename, save_as_external_data=True)
+                    # Let's free some space.
+                    os.remove(session_options.optimized_model_filepath)
             else:
                 is_onnx = False
                 sess = WrapForTorch(exported_model)
