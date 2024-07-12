@@ -474,6 +474,8 @@ class HuggingfaceRunner(BenchmarkRunner):
         no_grad: bool = True,
         target_opset: int = 18,
         dtype: Optional[Any] = None,
+        nvtx: bool = False,
+        dump_ort: bool = False,
     ):
         super().__init__(
             "huggingface",
@@ -489,6 +491,8 @@ class HuggingfaceRunner(BenchmarkRunner):
             fake_tensor=fake_tensor,
             no_grad=no_grad,
             dtype=dtype,
+            nvtx=nvtx,
+            dump_ort=dump_ort,
         )
         if not self.EXTRA_MODELS:
             self.initialize()

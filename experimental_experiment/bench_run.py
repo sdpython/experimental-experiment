@@ -54,6 +54,8 @@ def _cmd_line(
 ) -> List[str]:
     args = [sys.executable, "-m", script_name]
     for k, v in kwargs.items():
+        if v is None:
+            continue
         args.append(f"--{k}")
         args.append(str(v))
     return args

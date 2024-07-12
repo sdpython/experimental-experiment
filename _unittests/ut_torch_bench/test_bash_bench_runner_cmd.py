@@ -28,7 +28,13 @@ class TestBashBenchRunnerCmd(ExtTestCase):
         torch.set_grad_enabled(cls.is_grad_enabled)
 
     def _huggingface_export_bench_cpu(
-        self, exporter, models, verbose=0, debug=False, optimization=None
+        self,
+        exporter,
+        models,
+        verbose=0,
+        debug=False,
+        optimization=None,
+        dump_ort=False,
     ):
         from experimental_experiment.torch_bench.bash_bench_huggingface import main
 
@@ -47,6 +53,8 @@ class TestBashBenchRunnerCmd(ExtTestCase):
             "1",
             "-r",
             "1",
+            "--dump_ort",
+            "1" if dump_ort else "0",
         ]
         if optimization:
             args.extend(["--opt_patterns", optimization])
@@ -71,6 +79,13 @@ class TestBashBenchRunnerCmd(ExtTestCase):
     @requires_torch("2.4")
     def test_huggingface_export_bench_custom_cpu(self):
         self._huggingface_export_bench_cpu("custom", "101Dummy")
+
+    @skipif_ci_windows("exporter does not work on Windows")
+    @ignore_warnings((DeprecationWarning, UserWarning))
+    @requires_onnxruntime_training()
+    @requires_torch("2.4")
+    def test_huggingface_export_bench_custom_cpu_dump_ort(self):
+        self._huggingface_export_bench_cpu("custom", "101Dummy", dump_ort=True)
 
     @skipif_ci_windows("exporter does not work on Windows")
     @ignore_warnings((DeprecationWarning, UserWarning))

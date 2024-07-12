@@ -30,6 +30,8 @@ class BenchmarkRunner:
     :param fake_tensor: use fake_tensor
     :param no_grad: use no_grad
     :param target_opset: target opset
+    :param nvtx: add events to profile
+    :param dump_ort: dumps onnxruntime optimized graph
     """
 
     def __init__(
@@ -50,6 +52,8 @@ class BenchmarkRunner:
         fake_tensor: bool = False,
         no_grad: bool = True,
         target_opset: int = 18,
+        nvtx: bool = False,
+        dump_ort: bool = False,
     ):
         self.suite_name = suite_name
         self.device = device
@@ -70,6 +74,8 @@ class BenchmarkRunner:
         self.fake_tensor = fake_tensor
         self.no_grad = no_grad
         self.target_opset = target_opset
+        self.nvtx = nvtx
+        self.dump_ort = dump_ort
         assert no_grad, "no_grad true not implemented yet"
 
     def get_model_name_list(self) -> List[str]:
@@ -258,12 +264,16 @@ class BenchmarkRunner:
                     with torch.no_grad():
                         # training mode consumes too much memory
                         for w in range(warmup):
+                            if self.nvtx:
+                                torch.cuda.nvtx.range_push("EAGER-WARMUP")
                             if w == warmup - 1:
                                 expected = model_runner.run()
                             else:
                                 model_runner.run()
                                 # we don't plan to keep expected on CUDA
                                 # del expected
+                            if self.nvtx:
+                                torch.cuda.nvtx.range_pop()
                             if self.device == "cuda" and self.verbose > 1:
                                 print(
                                     f"[benchmarkrunner.benchmark] gpu_allocation={torch.cuda.memory_allocated(0)} "
@@ -283,12 +293,16 @@ class BenchmarkRunner:
                 with torch.no_grad():
                     # training mode consumes too much memory
                     for w in range(warmup):
+                        if self.nvtx:
+                            torch.cuda.nvtx.range_push("EAGER-WARMUP")
                         if w == warmup - 1:
                             expected = model_runner.run()
                         else:
                             model_runner.run()
                             # we don't plan to keep expected on CUDA
                             # del expected
+                        if self.nvtx:
+                            torch.cuda.nvtx.range_pop()
                         if self.device == "cuda" and self.verbose > 1:
                             print(
                                 f"[benchmarkrunner.benchmark] gpu_allocation={torch.cuda.memory_allocated(0)} "
@@ -330,7 +344,11 @@ class BenchmarkRunner:
             with torch.no_grad():
                 # training mode consumes too much memory
                 for w in range(repeat):
+                    if self.nvtx:
+                        torch.cuda.nvtx.range_push("EAGER-ITER")
                     model_runner.run()
+                    if self.nvtx:
+                        torch.cuda.nvtx.range_pop()
             stats["time_latency_eager"] = (time.perf_counter() - begin) / repeat
 
             if self.device == "cuda":
@@ -463,6 +481,14 @@ class BenchmarkRunner:
             if isinstance(exported_model, onnx.ModelProto):
                 domains = set(d.domain for d in exported_model.opset_import)
                 session_options = onnxruntime.SessionOptions()
+                if self.dump_ort:
+                    session_options.optimized_model_filepath = f"{filename}-ortopt.onnx"
+                    if self.verbose > 1:
+                        print(
+                            f"[BenchmarkRunner.benchmark] saves opptimized "
+                            f"model by onnxruntime in "
+                            f"{session_options.optimized_model_filepath!r}"
+                        )
                 if "onnx_extended.ortops.optim.cuda" in domains:
                     try:
                         from onnx_extended.ortops.optim.cuda import get_ort_ext_libs
@@ -493,6 +519,28 @@ class BenchmarkRunner:
                     )
                 sess = WrapInferenceSessionForTorch(ort_sess)
                 stats.update(self._post_process_onnx_statistics(exported_model))
+
+                if self.dump_ort and os.path.exists(
+                    session_options.optimized_model_filepath
+                ):
+                    # Let's save the optimized model with external weights.
+                    fold = os.path.join(
+                        os.path.split(session_options.optimized_model_filepath)[0],
+                        "ort_optimized",
+                    )
+                    new_filename = os.path.join(fold, "model_ort_optimized.onnx")
+                    if self.verbose > 1:
+                        print(
+                            f"[BenchmarkRunner.benchmark] load and saves with "
+                            f"external weights the optimized model by onnxruntime in "
+                            f"{new_filename!r}"
+                        )
+                    if not os.path.exists(fold):
+                        os.mkdir(fold)
+                    ortops = onnx.load(session_options.optimized_model_filepath)
+                    onnx.save(ortops, new_filename, save_as_external_data=True)
+                    # Let's free some space.
+                    os.remove(session_options.optimized_model_filepath)
             else:
                 is_onnx = False
                 sess = WrapForTorch(exported_model)
@@ -537,10 +585,14 @@ class BenchmarkRunner:
                 if quiet:
                     try:
                         for _ in range(warmup):
+                            if self.nvtx:
+                                torch.cuda.nvtx.range_push("ORT-WARMUP")
                             if _ == warmup - 1:
                                 got = self.ort_run(sess, feeds)
                             else:
                                 self.ort_run(sess, feeds)
+                            if self.nvtx:
+                                torch.cuda.nvtx.range_pop()
                     except Exception as e:
                         if self.verbose:
                             print(f"[benchmarkrunner.benchmark] err_warmup {e}")
@@ -550,10 +602,14 @@ class BenchmarkRunner:
                         continue
                 else:
                     for _ in range(warmup):
+                        if self.nvtx:
+                            torch.cuda.nvtx.range_push("ORT-WARMUP")
                         if _ == warmup - 1:
                             got = self.ort_run(sess, feeds)
                         else:
                             self.ort_run(sess, feeds)
+                        if self.nvtx:
+                            torch.cuda.range_pop()
                 stats["time_warmup"] = (time.perf_counter() - begin) / warmup
                 if self.device == "cuda":
                     stats["mema_gpu_8_after_export_warmup"] = (
@@ -581,7 +637,11 @@ class BenchmarkRunner:
                 if "ERR_warmup" not in stats:
                     begin = time.perf_counter()
                     for _ in range(repeat):
+                        if self.nvtx:
+                            torch.cuda.nvtx.range_push("ORT-ITER")
                         self.ort_run(sess, feeds)
+                        if self.nvtx:
+                            torch.cuda.nvtx.range_pop()
                     stats["time_latency"] = (time.perf_counter() - begin) / repeat
                 if self.device == "cuda":
                     stats["mema_gpu_9_after_export_repeat"] = (
@@ -598,20 +658,28 @@ class BenchmarkRunner:
                     # no try, catch needed for eager mode.
                     begin = time.perf_counter()
                     for _ in range(warmup):
+                        if self.nvtx:
+                            torch.cuda.nvtx.range_push("EAGER-WARMUP")
                         if _ == warmup - 1:
                             got = sess.run(feeds)
                         else:
                             sess.run(feeds)
+                        if self.nvtx:
+                            torch.cuda.nvtx.range_pop()
                     stats["time_warmup"] = (time.perf_counter() - begin) / warmup
                 else:
                     begin = time.perf_counter()
                     if quiet:
                         try:
                             for _ in range(warmup):
+                                if self.nvtx:
+                                    torch.cuda.nvtx.range_push("CPL-WARMUP")
                                 if _ == warmup - 1:
                                     got = sess.run(feeds)
                                 else:
                                     sess.run(feeds)
+                                if self.nvtx:
+                                    torch.cuda.nvtx.range_pop()
                         except Exception as e:
                             if self.verbose:
                                 print(f"[benchmarkrunner.benchmark] err_warmup {e}")
@@ -625,10 +693,14 @@ class BenchmarkRunner:
                             continue
                     else:
                         for _ in range(warmup):
+                            if self.nvtx:
+                                torch.cuda.nvtx.range_push("CPL-WARMUP")
                             if _ == warmup - 1:
                                 got = sess.run(feeds)
                             else:
                                 sess.run(feeds)
+                            if self.nvtx:
+                                torch.cuda.nvtx.range_pop()
                     stats["time_warmup"] = (time.perf_counter() - begin) / warmup
                 if self.device == "cuda":
                     stats["mema_gpu_8_after_export_warmup"] = (
@@ -656,7 +728,11 @@ class BenchmarkRunner:
                 if "ERR_warmup" not in stats:
                     begin = time.perf_counter()
                     for _ in range(repeat):
+                        if self.nvtx:
+                            torch.cuda.nvtx.range_push("CPL-ITER")
                         sess.run(feeds)
+                        if self.nvtx:
+                            torch.cuda.nvtx.range_pop()
                     stats["time_latency"] = (time.perf_counter() - begin) / repeat
 
                 if self.device == "cuda":
