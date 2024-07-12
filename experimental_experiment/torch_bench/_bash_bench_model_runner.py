@@ -68,6 +68,8 @@ def download_retry_decorator(retry: int = 5) -> Callable:  # type: ignore[arg-ty
                     model = download_fn(*args, **kwargs)
                     return model
                 except RuntimeError as e:
+                    if "Unknown model" in str(e):
+                        raise
                     tries += 1
                     if tries <= total_allowed_tries:
                         wait = tries * 30
