@@ -180,6 +180,9 @@ then
     pip install numpy==1.26.4 pandas matplotlib openpyxl sympy flatbuffers h5py packaging onnx cerberus pybind11 cython onnx-array-api boto3
     echo "[$0] done numpy"
 
+    pip install iopath fbgemm_gpu_nightly pyre-extensions torchrec
+    echo "[$0] done other dependencies"
+
     echo "[$0] Install pytorch"
     if [[ $PYTORCH_VERSION == "nightly" ]];
     then
