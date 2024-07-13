@@ -12,7 +12,7 @@ def _apply_excel_style(
         if x is None:
             return True
         if isinstance(x, str):
-            return False
+            return x == ""
         try:
             return np.isnan(x)
         except TypeError:
