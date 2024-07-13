@@ -13,6 +13,7 @@ from .onnx_cast import (
 )
 from .onnx_equal import UnsqueezeEqualPattern
 from .onnx_expand import ExpandPattern, ExpandBroadcastPattern, ExpandSwapPattern
+from .onnx_functions import GeluPattern
 from .onnx_mul import (
     DivByMulScalarPattern,
     MulMulMulScalarPattern,
@@ -95,6 +96,7 @@ def get_default_patterns(verbose: int = 0) -> List[PatternOptimization]:
         ExpandPattern(verbose=verbose),
         ExpandBroadcastPattern(verbose=verbose),
         ExpandSwapPattern(verbose=verbose),
+        GeluPattern(verbose=verbose),
         IdentityPattern(verbose=verbose),
         MulMulMulScalarPattern(verbose=verbose),
         ReduceReshapePattern(verbose=verbose),

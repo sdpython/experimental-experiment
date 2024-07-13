@@ -10,7 +10,13 @@ import os
 import unittest
 import numpy as np
 import onnx
-from onnx import ModelProto, TensorProto, helper as oh, numpy_helper as onh
+from onnx import (
+    ModelProto,
+    TensorProto,
+    helper as oh,
+    numpy_helper as onh,
+    load as onnx_load,
+)
 from onnx.checker import check_model
 from experimental_experiment.reference import ExtendedReferenceEvaluator
 from experimental_experiment.ext_test_case import (
@@ -2889,6 +2895,24 @@ class TestGraphPatternOptimization(ExtTestCase):
             [n.op_type for n in opt_onx.graph.node],
         )
         self.assertEqual(2, len(opt_onx.graph.initializer))
+        new_inputs = [tuple(n.input) for n in opt_onx.graph.node]
+        self.assertNotEqual(inputs, new_inputs)
+
+    def test_gelu(self):
+        data = os.path.join(os.path.dirname(__file__), "data", "layernorm.onnx")
+        model = onnx_load(data, load_external_data=False)
+        inputs = [tuple(n.input) for n in model.graph.node]
+
+        gr = GraphBuilder(
+            model,
+            infer_shapes=True,
+            optimization_options=OptimizationOptions(
+                patterns=["Cast", "Gelu"], verbose=0
+            ),
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+        self.assertIn("Gelu", set(n.op_type for n in opt_onx.graph.node))
+        self.assertEqual(154, len(opt_onx.graph.initializer))
         new_inputs = [tuple(n.input) for n in opt_onx.graph.node]
         self.assertNotEqual(inputs, new_inputs)
 
