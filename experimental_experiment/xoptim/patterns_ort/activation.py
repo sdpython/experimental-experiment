@@ -30,6 +30,6 @@ class FastGeluPattern(PatternOptimization):
                 gelu_node.output,
                 domain="com.microsoft",
                 doc_string=gelu_node.doc_string,
-                name=f"{self.__class__.__name__}--{dropout_node.name}",
+                name=f"{self.__class__.__name__}--{gelu_node.name}",
             )
         ]

@@ -70,7 +70,8 @@ def get_pattern(
     if obj in mapping:
         return [mapping[obj]] if as_list else mapping[obj]
     raise RuntimeError(
-        f"Unable to find pattern for {obj!r} among {pprint.pformat(mapping)}."
+        f"Unable to find pattern for {obj!r} among {len(mapping)} "
+        f"pattenrs\n{pprint.pformat(mapping)}."
     )
 
 
