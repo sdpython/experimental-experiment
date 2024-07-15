@@ -61,16 +61,17 @@ class GraphBuilderPatternOptimization:
             "CUDA",
             "CPU",
             "CPU,CUDA",
-        }, f"Unknown processor {processor!r}"
+        }, (
+            f"Unknown processor {processor!r}, "
+            f"if should be string with comma separated value"
+        )
         self.builder = builder
         self.verbose = max(verbose, int(os.environ.get("LOG_PATTERN_OPTIMIZE", "0")))
         self.patterns = patterns or get_default_patterns(self.verbose)
         self.recursive = recursive
         self.verifies = verifies
         self.dump_applied_patterns = dump_applied_patterns
-        self.processor = (
-            processor if "," not in processor else set(processor.split(","))
-        )
+        self.processor = processor
         self._build()
         # This assume a name is given once and
         # no constant can replace an existing one.

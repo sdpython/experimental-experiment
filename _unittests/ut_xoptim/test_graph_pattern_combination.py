@@ -486,6 +486,8 @@ class TestGraphPatternCombination(ExtTestCase):
     def _simplified_with_all(
         self, disabled, experimental=False, check_ort=True, models_list=None
     ):
+        import torch
+
         for model in models_list or [
             "noopt-llama-custom__1.onnx",
             "noopt-llama-custom__0.onnx",
@@ -523,7 +525,7 @@ class TestGraphPatternCombination(ExtTestCase):
                 ),
                 verbose=0,
                 verifies=False,
-                processor="CPU,CUDA",
+                processor="CPU,CUDA" if torch.cuda.is_available() else "CPU",
             )
             options.patterns = [
                 p for p in options.patterns if p.__class__.__name__ not in disabled
