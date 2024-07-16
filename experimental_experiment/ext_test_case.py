@@ -618,6 +618,26 @@ def requires_onnxruntime(version: str, msg: str = "") -> Callable:
     return lambda x: x
 
 
+def has_onnxruntime_training(push_back_batch: bool = False):
+    """
+    Tells if onnxruntime_training is installed.
+    """
+    try:
+        from onnxruntime import training
+    except ImportError:
+        # onnxruntime not training
+        training = None
+    if training is None:
+        return False
+
+    if push_back_batch:
+        from onnxruntime.capi.onnxruntime_pybind11_state import OrtValue
+
+        if not hasattr(OrtValue, "push_back_batch"):
+            return False
+    return True
+
+
 def requires_onnxruntime_training(
     push_back_batch: bool = False, msg: str = ""
 ) -> Callable:
