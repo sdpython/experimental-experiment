@@ -1145,10 +1145,18 @@ class GraphBuilder:
         self.dynamic_objects[name] = value
         if name not in self._known_value_shape:
             self._known_value_shape[name] = name
-        key = str(value)
+
+        if isinstance(value, self.torch.SymInt):
+            if hasattr(value, "node") and isinstance(value.node, str):
+                key = f"SymInt-{value.node}"
+            else:
+                key = str(value)
+        else:
+            key = str(value)
+
         if key not in self.dynamic_objects_rev:
             self.dynamic_objects_rev[key] = []
-        self.dynamic_objects_rev[str(value)].append((name, value))
+        self.dynamic_objects_rev[key].append((name, value))
         if shape_as_input:
             # torch.compile adds input for dynamic shapes
             return self.make_tensor_input(
