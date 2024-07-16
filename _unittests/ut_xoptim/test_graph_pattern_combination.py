@@ -23,6 +23,7 @@ from experimental_experiment.ext_test_case import (
     ExtTestCase,
     skipif_ci_windows,
     requires_onnxruntime_training,
+    has_onnxruntime_training,
 )
 from experimental_experiment.xbuilder.graph_builder import (
     GraphBuilder,
@@ -560,7 +561,7 @@ class TestGraphPatternCombination(ExtTestCase):
                 ):
                     self.dump_onnx(f"dump_{model}", new_onx)
                     raise AssertionError(f"Model {model!r} has ScatterND.")
-            if check_ort:
+            if check_ort and has_onnxruntime_training():
                 self._check_ort_cpu_or_cuda(new_onx, model=model)
 
     @skipif_ci_windows("crash")
