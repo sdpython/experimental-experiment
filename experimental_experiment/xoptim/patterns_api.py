@@ -107,7 +107,7 @@ class PatternOptimization:
         """
         Basic comparison based on the class name.
         """
-        return type(o) == type(self)
+        return type(o) == type(self)  # noqa: E721
 
     def enumerate_matches(
         self, g: "GraphBuilderPatternOptimization"  # noqa: F821
