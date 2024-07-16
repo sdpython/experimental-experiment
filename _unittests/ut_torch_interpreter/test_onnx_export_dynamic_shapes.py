@@ -70,7 +70,7 @@ class TestOnnxExportDynamicShapes(ExtTestCase):
             input_names=["x"],
             options=OptimizationOptions(patterns=None),
             dynamic_shapes=dynamic_shapes,
-            verbose=0,
+            verbose=10,
         )
 
         shape = tuple(
