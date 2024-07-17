@@ -159,6 +159,8 @@ class IdentityPattern(PatternOptimization):
 
         if not g.is_constant(node.input[1]):
             return self.none(node, inspect.currentframe().f_lineno)
+        if not g.is_constant(node.input[1]):
+            return self.none(node, inspect.currentframe().f_lineno)
         shape = g.get_constant_shape(node.input[1])
         if shape in (tuple(), (1,)):
             # simple case
