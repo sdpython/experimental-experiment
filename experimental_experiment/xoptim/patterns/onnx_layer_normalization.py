@@ -1,6 +1,8 @@
 import inspect
 from typing import List, Optional
+import numpy as np
 from onnx import NodeProto, TensorProto
+from onnx.helper import tensor_dtype_to_np_dtype
 from ..patterns_api import MatchResult, PatternOptimization
 
 
@@ -74,9 +76,11 @@ class LayerNormalizationPattern(PatternOptimization):
         div: NodeProto,
     ) -> List[NodeProto]:
         eps = g.get_constant_scalar(add.input[1])
+        dtype = tensor_dtype_to_np_dtype(g.get_type(red.input[0]))
+        scale = g.make_initializer("", np.array([1], dtype=dtype))
         new_node = g.make_node(
             "LayerNormalization",
-            [red.input[0]],
+            [red.input[0], scale],
             [div.output[0], div.input[1]],
             epsilon=float(eps),
             name=f"{self.__class__.__name__}--{node.name}",
