@@ -175,6 +175,7 @@ class BenchmarkRunner:
         if not os.path.exists(folder):
             os.makedirs(folder)
         names = self.get_model_name_list()
+        assert len(names) > 0, "no model to run"
         for model_name in names:
 
             #######

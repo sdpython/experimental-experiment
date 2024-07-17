@@ -101,7 +101,7 @@ class TestBashBenchRunnerCmd(ExtTestCase):
 
     @ignore_warnings((DeprecationWarning, UserWarning))
     def test_huggingface_export_bench_eager_cpu(self):
-        self._huggingface_export_bench_cpu("eager", "dummy")
+        self._huggingface_export_bench_cpu("eager", "101Dummy")
 
     @skipif_ci_windows("exporter does not work on Windows")
     @ignore_warnings((DeprecationWarning, UserWarning))
@@ -156,6 +156,59 @@ class TestBashBenchRunnerCmd(ExtTestCase):
         self._huggingface_export_bench_cpu(
             "custom", "ElectraForQuestionAnswering", verbose=3
         )
+
+    def _timm_export_bench_cpu(
+        self,
+        exporter,
+        models,
+        verbose=0,
+        debug=False,
+        optimization=None,
+        dump_ort=False,
+    ):
+        from experimental_experiment.torch_bench.bash_bench_timm import main
+
+        args = [
+            "--model",
+            models,
+            "--device",
+            "cpu",
+            "--exporter",
+            exporter,
+            "--verbose",
+            str(verbose),
+            "--quiet",
+            "0",
+            "-w",
+            "1",
+            "-r",
+            "1",
+            "--dump_ort",
+            "1" if dump_ort else "0",
+        ]
+        if optimization:
+            args.extend(["--opt_patterns", optimization])
+        if debug:
+            print("CMD")
+            print(" ".join(args))
+        st = io.StringIO()
+        with contextlib.redirect_stdout(st):
+            main(args=args)
+        out = st.getvalue()
+        if debug:
+            print(out)
+        if "," in models:
+            self.assertIn("Prints", out)
+        else:
+            self.assertIn(":model_name,", out)
+        self.assertNotIn(":discrepancies_abs,inf;", out)
+
+    @skipif_ci_windows("exporter does not work on Windows")
+    @ignore_warnings((DeprecationWarning, UserWarning))
+    @requires_onnxruntime_training()
+    @requires_torch("2.4")
+    def test_timm_export_bench_script_cpu(self):
+        self._timm_export_bench_cpu("script", "mobilenetv2_100")
 
 
 if __name__ == "__main__":

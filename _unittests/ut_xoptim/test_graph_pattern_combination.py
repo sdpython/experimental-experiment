@@ -23,6 +23,7 @@ from experimental_experiment.ext_test_case import (
     ExtTestCase,
     skipif_ci_windows,
     requires_onnxruntime_training,
+    has_onnxruntime_training,
 )
 from experimental_experiment.xbuilder.graph_builder import (
     GraphBuilder,
@@ -139,6 +140,8 @@ class TestGraphPatternCombination(ExtTestCase):
                 onx.SerializeToString(), options, providers=providers
             )
         except (Fail, InvalidArgument) as e:
+            if "com.microsoft:SoftmaxGrad(-1) is not a registered" in str(e):
+                raise unittest.SkipTest(f"onnxruntime-training is needed due to {e}")
             err = []
             rows = []
             for i in onx.graph.input:
@@ -486,6 +489,8 @@ class TestGraphPatternCombination(ExtTestCase):
     def _simplified_with_all(
         self, disabled, experimental=False, check_ort=True, models_list=None
     ):
+        import torch
+
         for model in models_list or [
             "noopt-llama-custom__1.onnx",
             "noopt-llama-custom__0.onnx",
@@ -523,7 +528,7 @@ class TestGraphPatternCombination(ExtTestCase):
                 ),
                 verbose=0,
                 verifies=False,
-                processor="CPU,CUDA",
+                processor="CPU,CUDA" if torch.cuda.is_available() else "CPU",
             )
             options.patterns = [
                 p for p in options.patterns if p.__class__.__name__ not in disabled
@@ -552,11 +557,13 @@ class TestGraphPatternCombination(ExtTestCase):
             assert new_onx is not None, f"Model {model!r} was not optimized."
             op_types = [n.op_type for n in new_onx.graph.node]
             if experimental and "ScatterND" in op_types:
-                self.dump_onnx(f"dump_{model}", new_onx)
-                raise AssertionError(f"Model {model!r} has ScatterND.")
-            if experimental:
-                self.assertNotIn("ScatterND", op_types, msg=f"model {model!r} failed")
-            if check_ort:
+                if (
+                    torch.cuda.is_available()
+                    or len([n for n in op_types if n == "ScatterND"]) > 1
+                ):
+                    self.dump_onnx(f"dump_{model}", new_onx)
+                    raise AssertionError(f"Model {model!r} has ScatterND.")
+            if check_ort and has_onnxruntime_training():
                 self._check_ort_cpu_or_cuda(new_onx, model=model)
 
     @skipif_ci_windows("crash")

@@ -1145,10 +1145,19 @@ class GraphBuilder:
         self.dynamic_objects[name] = value
         if name not in self._known_value_shape:
             self._known_value_shape[name] = name
-        key = str(value)
+
+        if isinstance(value, self.torch.SymInt):
+            if hasattr(value, "node") and isinstance(value.node, str):
+                key = f"{value.node}"
+            else:
+                key = str(value)
+        else:
+            key = str(value)
+
         if key not in self.dynamic_objects_rev:
             self.dynamic_objects_rev[key] = []
-        self.dynamic_objects_rev[str(value)].append((name, value))
+
+        self.dynamic_objects_rev[key].append((name, value))
         if shape_as_input:
             # torch.compile adds input for dynamic shapes
             return self.make_tensor_input(
@@ -2629,11 +2638,52 @@ class GraphBuilder:
             raise RuntimeError(f"Values unknown for type {type(t)}-{t}.")
 
         rows = ["", "--DEBUG--", "--SHAPE--"]
-        rows.append(f"dynamic_objects={pprint.pformat(self.dynamic_objects)[:10000]}")
-        rows.append(
-            f"dynamic_objects_rev="
-            f"{pprint.pformat(self.dynamic_objects_rev)[:10000]}"
-        )
+
+        rows.append("dynamic_objects=")
+        for i, (k, v) in enumerate(sorted(self.dynamic_objects.items())):
+            try:
+                rows.append(f"   {k} = {v!r}")
+            except AttributeError:
+                rows.append(
+                    f"   {k} = ERR: {type(v)!r}:{getattr(v, 'node', 'node=?')!r}"
+                )
+            if i >= 10000:
+                break
+
+        rows.append("dynamic_objects_rev=")
+        for i, (k, v) in enumerate(sorted(self.dynamic_objects_rev.items())):
+            if isinstance(v, (list, tuple)):
+                rows.append(f"   {k} = {type(v)}")
+                for vv in v:
+                    if isinstance(vv, tuple):
+                        rows.append("     tuple")
+                        for vvv in vv:
+                            try:
+                                rows.append(f"       {vvv!r}")
+                            except AttributeError:
+                                rows.append(
+                                    f"       ERR**: {type(vvv)!r}:"
+                                    f"{getattr(vvv, 'node', 'node=?')!r}"
+                                )
+                    else:
+                        try:
+                            rows.append(f"       {vv!r}")
+                        except AttributeError:
+                            rows.append(
+                                f"       ERR*: {type(vv)!r}:"
+                                f"{getattr(vv, 'node', 'node=?')!r}"
+                            )
+            else:
+                try:
+                    rows.append(f"   {k} = {v!r}")
+                except AttributeError:
+                    rows.append(
+                        f"   {k} = ERR-: {type(v)!r}:"
+                        f"{getattr(v, 'node', 'node=?')!r}"
+                    )
+            if i >= 10000:
+                break
+
         rows.append(
             f"dynamic_dimensions_source="
             f"{pprint.pformat(self.dynamic_dimensions_source)[:10000]}"

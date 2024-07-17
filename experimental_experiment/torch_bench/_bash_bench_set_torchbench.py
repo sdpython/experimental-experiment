@@ -3,6 +3,7 @@ import os
 import importlib
 import textwrap
 import gc
+import warnings
 from typing import Any, Optional, Set, Tuple
 from collections import namedtuple
 import torch
@@ -12,6 +13,7 @@ from ._bash_bench_model_runner import (
     download_retry_decorator,
     _rand_int_tensor,
     ModelRunner,
+    MakeConfig,
 )
 from ._bash_bench_benchmark_runner import BenchmarkRunner
 
@@ -349,7 +351,7 @@ class TorchBenchRunner(BenchmarkRunner):
 
             torch.ops.fbgemm.asynchronous_complete_cumsum
         except (AttributeError, ImportError) as e:
-            raise AssertionError(f"Something wrong in the installation {e}.") from e
+            warnings.warn(f"Something wrong in the installation because of {e}.")
         container._config = container.load_yaml_file()
         lines = container.MODELS_FILENAME.split("\n")
         lines = [line.rstrip() for line in lines]
@@ -638,6 +640,10 @@ class TorchBenchRunner(BenchmarkRunner):
             model = model_cls.from_config(config)
         else:
             model = model_cls(config)
+        if hasattr(model, "config"):
+            model.config.to_tuple = False
+        else:
+            model.config = MakeConfig(to_tuple=False)
         return model
 
     @property
@@ -774,6 +780,10 @@ class TorchBenchRunner(BenchmarkRunner):
         if model_name == "vision_maskrcnn":
             batch_size = 1
 
+        if hasattr(model, "config"):
+            model.config.to_tuple = False
+        else:
+            model.config = MakeConfig(to_tuple=False)
         return ModelRunner(
             model,
             example_inputs,
@@ -796,11 +806,14 @@ class TorchBenchRunner(BenchmarkRunner):
         models.sort()
 
         start, end = self.get_benchmark_indices(len(models))
-        for index, model_path in enumerate(models):
+        for index, model_name in enumerate(models):
+            model_name = os.path.basename(model_name)
             if index < start or index >= end:
                 continue
-
-            model_name = os.path.basename(model_path)
+            if (
+                self.include_model_names and model_name not in self.include_model_names
+            ) or model_name in self.exclude_model_names:
+                continue
             yield model_name
 
     def forward_pass(self, mod, inputs, collect_outputs=True):

@@ -74,7 +74,7 @@ def compatible_shapes(sh1: DYNAMIC_SHAPE, sh2: DYNAMIC_SHAPE) -> bool:
     for a, b in zip(sh1, sh2):
         if a == b:
             continue
-        if type(a) == type(b):
+        if type(a) == type(b):  # noqa: E721
             # The same name should be used for the same value.
             if a != b:
                 return False

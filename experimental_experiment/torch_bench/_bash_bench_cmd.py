@@ -82,6 +82,10 @@ def bash_bench_main(script_name: str, doc: str, args: Optional[List[str]] = None
         from ._bash_bench_set_torchbench import TorchBenchRunner
 
         runner = TorchBenchRunner(device=args.device)
+    elif script_name == "bash_bench_timm":
+        from ._bash_bench_set_timm import TimmRunner
+
+        runner = TimmRunner(device=args.device)
     else:
         raise AssertionError(f"Unexpected bash_bench name {script_name!r}.")
     names = runner.get_model_name_list()
@@ -92,7 +96,10 @@ def bash_bench_main(script_name: str, doc: str, args: Optional[List[str]] = None
         print("--")
         print("\n".join([f"{i: 3d} - {n}" for i, n in enumerate(names)]))
         print("--")
-
+    elif args.model == "Refresh":
+        names = "\n".join(sorted(runner.refresh_model_names()))
+        print("Refresh the list with:")
+        print(names)
     else:
         if args.model == "all":
             args.model = ",".join(names)
