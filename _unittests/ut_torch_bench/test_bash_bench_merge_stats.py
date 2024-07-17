@@ -71,6 +71,18 @@ class TestBashBenchMergeStats(ExtTestCase):
         self.assertIn("op_onnx", set(df))
         self.assertIn("op_torch", set(df))
 
+    def test_merge_stats_bug_timm(self):
+        ddata = os.path.join(os.path.dirname(__file__), "data")
+        data = [os.path.join(ddata, "bug_timm.csv")]
+        df = merge_benchmark_reports(
+            data, excel_output="test_merge_stats_bug_timm.xlsx"
+        )
+        self.assertIsInstance(df, dict)
+        self.assertIn("status", set(df))
+        self.assertIn("memory", set(df))
+        self.assertIn("op_onnx", set(df))
+        self.assertIn("op_torch", set(df))
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

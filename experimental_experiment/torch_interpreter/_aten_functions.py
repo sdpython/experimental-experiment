@@ -164,7 +164,7 @@ def aten_any(
 
     self_bool = g.op.Cast(x, to=TensorProto.BOOL, name=name)
     res = g.op.ReduceMax(self_bool, keepdims=0, name=name, outputs=outputs)
-    if sts:
+    if not sts:
         g.set_type(res, TensorProto.BOOL)
         g.set_shape(res, tuple())
     return res
@@ -963,7 +963,7 @@ def aten_cross_entropy_loss(
         outputs=outputs,
     )
 
-    if sts:
+    if not sts:
         g.set_type(outputs[0], g.get_type(x))
         if len(outputs) > 1:
             g.set_type(outputs[1], g.get_type(x))
@@ -997,7 +997,7 @@ def aten_cumsum(
         xi = g.op.Cast(x, to=itype, name=name)
 
     res = g.op.CumSum(xi, np.array([dim], dtype=np.int64), outputs=outputs, name=name)
-    if sts:
+    if not sts:
         set_type_shape_unary_op(g, res, x, itype=itype)
     return res
 
@@ -1675,7 +1675,7 @@ def aten_gather(
     #    if op.Size(index) == 0:  # Return empty array
     #        result = op.CastLike(index, self)
 
-    if sts:
+    if not sts:
         g.set_type(res, g.get_type(x))
     return res
 
@@ -1722,7 +1722,7 @@ def aten_gelu(
 
     if g.main_opset >= 20:
         res = g.op.Gelu(x, approximate=approximate, name=name, outputs=outputs)
-        if sts:
+        if not sts:
             set_type_shape_unary_op(g, res, x)
         return res
 
@@ -1734,7 +1734,7 @@ def aten_gelu(
         inner = g.op.Add(erf, np.array([1], dtype=dtype), name=name)
         inner = g.op.Mul(x, inner, name=name)
         res = g.op.Mul(np.array([0.5], dtype=dtype), inner, name=name, outputs=outputs)
-        if sts:
+        if not sts:
             set_type_shape_unary_op(g, res, x)
         return res
 
@@ -1752,7 +1752,7 @@ def aten_gelu(
         inner = g.op.Add(inner, np.array([1], dtype=dtype), name=name)
         inner = g.op.Mul(x, inner, name=name)
         res = g.op.Mul(np.array([0.5], dtype=dtype), inner, outputs=outputs, name=name)
-        if sts:
+        if not sts:
             set_type_shape_unary_op(g, res, x)
         return res
 
@@ -1830,7 +1830,7 @@ def aten_index_Tensor(
         ]
         concat = g.op.Concat(*reshaped, axis=-1, name=name)
         res = g.op.GatherND(x, concat, batch_dims=0, outputs=outputs)
-        if sts:
+        if not sts:
             g.set_type(res, g.get_type(x))
         return res
 
@@ -1938,7 +1938,7 @@ def aten_isinf(
 ) -> T:
     "isinf"
     res = g.op.IsInf(x, outputs=outputs, name=name)
-    if sts:
+    if not sts:
         set_type_shape_unary_op(g, res, x, itype=TensorProto.BOOL)
     return res
 
@@ -2146,7 +2146,7 @@ def aten_log(
 ) -> T:
     """log"""
     res = g.op.Log(x)
-    if sts:
+    if not sts:
         set_type_shape_unary_op(g, res, x)
     return res
 
@@ -2315,7 +2315,7 @@ def aten_max_other(
 
     if g.has_type(x) and g.has_type(y) and g.get_type(x) == g.get_type(y):
         res = g.op.Max(x, y, name=name, outputs=outputs)
-        if sts:
+        if not sts:
             set_type_shape_binary_op(g, res, x, y)
         return res
 
@@ -2341,7 +2341,7 @@ def aten_max_other(
                 name=name,
                 outputs=outputs,
             )
-        if sts:
+        if not sts:
             set_type_shape_binary_op(g, res, x, y, itype=itype)
         return res
 
@@ -2566,7 +2566,7 @@ def aten_min_other(
     """minimum"""
 
     res = g.op.Min(x, y, name=name, outputs=outputs)
-    if sts:
+    if not sts:
         set_type_shape_binary_op(g, res, x, y)
     return res
 
@@ -3098,7 +3098,7 @@ def aten_reciprocal(
 ) -> T:
     """reciprocal"""
     res = g.op.Reciprocal(x, name=name, outputs=outputs)
-    if sts:
+    if not sts:
         set_type_shape_unary_op(g, res, x)
     return res
 
@@ -3206,7 +3206,7 @@ def aten_remainder(
     if isinstance(other, (int, float)):
         dtype = tensor_dtype_to_np_dtype(g.get_type(x))
         res = g.op.Mod(x, np.array([other], dtype=dtype), name=name, outputs=outputs)
-        if sts:
+        if not sts:
             set_type_shape_unary_op(g, res, x)
         return res
 
@@ -3228,7 +3228,7 @@ def aten_remainder(
         )
     else:
         res = g.op.Mod(x, other, name=name, outputs=outputs)
-    if sts:
+    if not sts:
         set_type_shape_unary_op(g, res, x)
     return res
 
@@ -4743,7 +4743,7 @@ def aten_type_as(
         return g.op.Identity(x, name=name, outputs=outputs)
     # res = g.op.CastLike(x, other, name=name, outputs=outputs)
     res = g.op.Cast(x, to=g.get_type(other), name=name, outputs=outputs)
-    if sts:
+    if not sts:
         set_type_shape_unary_op(g, res, x, itype=g.get_type(other))
     return res
 
@@ -4818,7 +4818,7 @@ def aten_where(
 ) -> T:
     """where"""
     res = g.op.Where(condition, x, other, name=name)
-    if sts:
+    if not sts:
         set_type_shape_binary_op(g, res, condition, x, other, begin=1)
     return res
 
