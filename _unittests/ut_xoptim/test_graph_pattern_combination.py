@@ -140,6 +140,8 @@ class TestGraphPatternCombination(ExtTestCase):
                 onx.SerializeToString(), options, providers=providers
             )
         except (Fail, InvalidArgument) as e:
+            if "com.microsoft:SoftmaxGrad(-1) is not a registered" in str(e):
+                raise unittest.SkipTest(f"onnxruntime-training is needed due to {e}")
             err = []
             rows = []
             for i in onx.graph.input:
