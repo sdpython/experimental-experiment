@@ -23,6 +23,8 @@ class LayerNormalizationPattern(PatternOptimization):
         # before
 
         pow = g.node_before(node.input[0])
+        if pow is None:
+            return self.none(node, inspect.currentframe().f_lineno)
         if pow.op_type != "Pow" or len(g.next_nodes(pow.output[0])) != 1:
             return self.none(node, inspect.currentframe().f_lineno)
         if (
@@ -31,9 +33,13 @@ class LayerNormalizationPattern(PatternOptimization):
         ):
             return self.none(node, inspect.currentframe().f_lineno)
         sub = g.node_before(pow.input[0])
+        if sub is None:
+            return self.none(node, inspect.currentframe().f_lineno)
         if sub.op_type != "Sub" or len(g.next_nodes(sub.output[0])) != 2:
             return self.none(node, inspect.currentframe().f_lineno)
         red = g.node_before(sub.input[1])
+        if red is None:
+            return self.none(node, inspect.currentframe().f_lineno)
         if red.op_type != "ReduceMean" or len(g.next_nodes(red.output[0])) != 1:
             return self.none(node, inspect.currentframe().f_lineno)
         if sub.input[0] != red.input[0]:

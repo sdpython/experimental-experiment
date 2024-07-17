@@ -8,6 +8,7 @@ from experimental_experiment.ext_test_case import (
     skipif_ci_windows,
     requires_torch,
     requires_cuda,
+    requires_onnxruntime_training,
 )
 from experimental_experiment.torch_models.dump_helper import assert_all_close
 from experimental_experiment.torch_dynamo import (
@@ -440,6 +441,7 @@ class TestDynamoLlama(ExtTestCase):
 
     @ignore_warnings((UserWarning, DeprecationWarning))
     @skipif_ci_windows("torch.compile not supported on Windows")
+    @requires_onnxruntime_training()
     def test_llama_model_backward_forward(self):
         import torch
         from experimental_experiment.torch_models.llama_helper import get_llama_model
