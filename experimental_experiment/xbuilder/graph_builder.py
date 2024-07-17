@@ -1148,7 +1148,7 @@ class GraphBuilder:
 
         if isinstance(value, self.torch.SymInt):
             if hasattr(value, "node") and isinstance(value.node, str):
-                key = f"SymInt-{value.node}"
+                key = f"{value.node}"
             else:
                 key = str(value)
         else:
@@ -2652,22 +2652,33 @@ class GraphBuilder:
 
         rows.append("dynamic_objects_rev=")
         for i, (k, v) in enumerate(sorted(self.dynamic_objects_rev.items())):
-            if isinstance(v, list):
-                rows.append(f"   {k} = ")
+            if isinstance(v, (list, tuple)):
+                rows.append(f"   {k} = {type(v)}")
                 for vv in v:
-                    try:
-                        rows.append(f"       {vv!r}")
-                    except AttributeError:
-                        rows.append(
-                            f"       ERR: {type(vv)!r}:"
-                            f"{getattr(vv, 'node', 'node=?')!r}"
-                        )
+                    if isinstance(vv, tuple):
+                        rows.append("     tuple")
+                        for vvv in vv:
+                            try:
+                                rows.append(f"       {vvv!r}")
+                            except AttributeError:
+                                rows.append(
+                                    f"       ERR**: {type(vvv)!r}:"
+                                    f"{getattr(vvv, 'node', 'node=?')!r}"
+                                )
+                    else:
+                        try:
+                            rows.append(f"       {vv!r}")
+                        except AttributeError:
+                            rows.append(
+                                f"       ERR*: {type(vv)!r}:"
+                                f"{getattr(vv, 'node', 'node=?')!r}"
+                            )
             else:
                 try:
                     rows.append(f"   {k} = {v!r}")
                 except AttributeError:
                     rows.append(
-                        f"   {k} = ERR: {type(v)!r}:"
+                        f"   {k} = ERR-: {type(v)!r}:"
                         f"{getattr(v, 'node', 'node=?')!r}"
                     )
             if i >= 10000:
