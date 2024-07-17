@@ -101,7 +101,7 @@ class TestBashBenchRunnerCmd(ExtTestCase):
 
     @ignore_warnings((DeprecationWarning, UserWarning))
     def test_huggingface_export_bench_eager_cpu(self):
-        self._huggingface_export_bench_cpu("eager", "dummy")
+        self._huggingface_export_bench_cpu("eager", "101Dummy")
 
     @skipif_ci_windows("exporter does not work on Windows")
     @ignore_warnings((DeprecationWarning, UserWarning))
