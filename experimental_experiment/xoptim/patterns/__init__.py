@@ -15,7 +15,10 @@ from .onnx_dropout import DropoutPattern
 from .onnx_equal import UnsqueezeEqualPattern
 from .onnx_expand import ExpandPattern, ExpandBroadcastPattern, ExpandSwapPattern
 from .onnx_functions import GeluPattern
-from .onnx_layer_normalization import LayerNormalizationPattern
+from .onnx_layer_normalization import (
+    LayerNormalizationPattern,
+    LayerNormalizationScalePattern,
+)
 from .onnx_mul import (
     DivByMulScalarPattern,
     MulMulMulScalarPattern,
@@ -102,6 +105,7 @@ def get_default_patterns(verbose: int = 0) -> List[PatternOptimization]:
         GeluPattern(verbose=verbose),
         IdentityPattern(verbose=verbose),
         LayerNormalizationPattern(verbose=verbose),
+        LayerNormalizationScalePattern(verbose=verbose),
         MulMulMulScalarPattern(verbose=verbose),
         ReduceReshapePattern(verbose=verbose),
         ReduceSumNormalizePattern(verbose=verbose),

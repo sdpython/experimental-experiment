@@ -2976,6 +2976,108 @@ class TestGraphPatternOptimization(ExtTestCase):
         new_inputs = [tuple(n.input) for n in opt_onx.graph.node]
         self.assertNotEqual(inputs, new_inputs)
 
+    def _get_model_ln_scale_bias(self, **kwargs):
+        return oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node(
+                        "LayerNormalization", ["X", "one"], ["norm"], **kwargs
+                    ),
+                    oh.make_node("Mul", ["norm", "scale"], ["scaled"]),
+                    oh.make_node("Add", ["scaled", "bias"], ["Y"]),
+                ],
+                "dummy",
+                [oh.make_tensor_value_info("X", TFLOAT, ["a", "b"])],
+                [oh.make_tensor_value_info("Y", TFLOAT, ["a", "b"])],
+                [
+                    onh.from_array(np.array([1], dtype=np.float32), name="one"),
+                    onh.from_array(
+                        np.array([[2, 3]], dtype=np.float32).T, name="scale"
+                    ),
+                    onh.from_array(
+                        np.array([[-10, -100]], dtype=np.float32).T, name="bias"
+                    ),
+                ],
+            )
+        )
+
+    def test_layer_normalization_scale_bias(self):
+        for kwargs in [{}, dict(axis=0), dict(stash_type=1), dict(epsilon=1e-1)]:
+            model = self._get_model_ln_scale_bias(**kwargs)
+            feeds = {"X": self._range(2, 3).astype(np.float32)}
+            ref = ExtendedReferenceEvaluator(model, verbose=0)
+            expected = ref.run(None, feeds)[0]
+            inputs = [tuple(n.input) for n in model.graph.node]
+
+            gr = GraphBuilder(
+                model,
+                infer_shapes=True,
+                optimization_options=OptimizationOptions(
+                    patterns=["LayerNormalizationScale"], verbose=0
+                ),
+            )
+            opt_onx = gr.to_onnx(optimize=True)
+            self.assertEqual(
+                ["LayerNormalization"],
+                [n.op_type for n in opt_onx.graph.node],
+            )
+            self.assertEqual(2, len(opt_onx.graph.initializer))
+            new_inputs = [tuple(n.input) for n in opt_onx.graph.node]
+            self.assertNotEqual(inputs, new_inputs)
+
+            opt_ref = ExtendedReferenceEvaluator(opt_onx)
+            got = opt_ref.run(None, feeds)[0]
+            self.assertEqualArray(expected, got, atol=1e-3)
+
+    def _get_model_ln_scale_no_bias(self, **kwargs):
+        return oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("LayerNormalization", ["X", "s0"], ["norm"], **kwargs),
+                    oh.make_node("Mul", ["norm", "scale"], ["Y"]),
+                ],
+                "dummy",
+                [oh.make_tensor_value_info("X", TFLOAT, ["a", "b"])],
+                [oh.make_tensor_value_info("Y", TFLOAT, ["a", "b"])],
+                [
+                    onh.from_array(
+                        np.array([[2, 3]], dtype=np.float32).T, name="scale"
+                    ),
+                    onh.from_array(
+                        np.array([[-0.1, -0.01]], dtype=np.float32).T, name="s0"
+                    ),
+                ],
+            )
+        )
+
+    def test_layer_normalization_scale_no_bias(self):
+        for kwargs in [{}, dict(axis=0), dict(stash_type=1), dict(epsilon=1e-1)]:
+            model = self._get_model_ln_scale_no_bias(**kwargs)
+            feeds = {"X": self._range(2, 3).astype(np.float32)}
+            ref = ExtendedReferenceEvaluator(model, verbose=0)
+            expected = ref.run(None, feeds)[0]
+            inputs = [tuple(n.input) for n in model.graph.node]
+
+            gr = GraphBuilder(
+                model,
+                infer_shapes=True,
+                optimization_options=OptimizationOptions(
+                    patterns=["LayerNormalizationScale"], verbose=0
+                ),
+            )
+            opt_onx = gr.to_onnx(optimize=True)
+            self.assertEqual(
+                ["Mul", "LayerNormalization"],
+                [n.op_type for n in opt_onx.graph.node],
+            )
+            self.assertEqual(2, len(opt_onx.graph.initializer))
+            new_inputs = [tuple(n.input) for n in opt_onx.graph.node]
+            self.assertNotEqual(inputs, new_inputs)
+
+            opt_ref = ExtendedReferenceEvaluator(opt_onx)
+            got = opt_ref.run(None, feeds)[0]
+            self.assertEqualArray(expected, got, atol=1e-3)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
