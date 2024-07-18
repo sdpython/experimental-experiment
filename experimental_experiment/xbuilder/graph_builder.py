@@ -1156,7 +1156,6 @@ class GraphBuilder:
 
         if key not in self.dynamic_objects_rev:
             self.dynamic_objects_rev[key] = []
-
         self.dynamic_objects_rev[key].append((name, value))
         if shape_as_input:
             # torch.compile adds input for dynamic shapes

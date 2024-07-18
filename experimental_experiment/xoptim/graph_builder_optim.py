@@ -61,16 +61,17 @@ class GraphBuilderPatternOptimization:
             "CUDA",
             "CPU",
             "CPU,CUDA",
-        }, f"Unknown processor {processor!r}"
+        }, (
+            f"Unknown processor {processor!r}, "
+            f"if should be string with comma separated value"
+        )
         self.builder = builder
         self.verbose = max(verbose, int(os.environ.get("LOG_PATTERN_OPTIMIZE", "0")))
         self.patterns = patterns or get_default_patterns(self.verbose)
         self.recursive = recursive
         self.verifies = verifies
         self.dump_applied_patterns = dump_applied_patterns
-        self.processor = (
-            processor if "," not in processor else set(processor.split(","))
-        )
+        self.processor = processor
         self._build()
         # This assume a name is given once and
         # no constant can replace an existing one.
@@ -277,25 +278,29 @@ class GraphBuilderPatternOptimization:
         if isinstance(proto, NodeProto) and proto.domain == "":
             if proto.op_type == "Cast":
                 return self.get_constant_shape(proto.input[0], exc=exc)
-            if proto.op_type != "Constant":
-                if exc:
-                    raise AssertionError(
-                        f"Unable to retrieve shape for name={name!r} and node {proto.op_type!r}."
-                    )
-                return None
-            assert (
-                len(proto.attribute) == 1
-            ), f"Unexpected number of attribute for node={proto}"
-            for att in proto.attribute:
-                if att.name == "value":
-                    return tuple(proto.value.dims)
-                if att.name in {"value_float", "value_int"}:
-                    return tuple()
-            raise AssertionError(
-                f"Unable to retrieve shape for name={name!r} (type is NodeProto), "
-                f"node.op_type={proto.op_type!r}, "
-                f"attributes={[att.name for att in proto.attribute]}."
-            )
+            if proto.op_type == "Constant":
+                assert (
+                    len(proto.attribute) == 1
+                ), f"Unexpected number of attribute for node={proto}"
+                for att in proto.attribute:
+                    if att.name == "value":
+                        return tuple(proto.value.dims)
+                    if att.name in {"value_float", "value_int"}:
+                        return tuple()
+                raise AssertionError(
+                    f"Unable to retrieve shape for name={name!r} (type is NodeProto), "
+                    f"node.op_type={proto.op_type!r}, "
+                    f"attributes={[att.name for att in proto.attribute]}."
+                )
+            if self.is_constant(name):
+                cst = self.get_computed_constant(name)
+                return cst.shape
+            if exc:
+                raise AssertionError(
+                    f"Unable to retrieve shape for name={name!r} "
+                    f"bash and node {proto.op_type!r}"
+                    # f"{self.builder.get_debug_msg()}"
+                )
             return None
         if hasattr(proto, "shape"):
             return proto.shape

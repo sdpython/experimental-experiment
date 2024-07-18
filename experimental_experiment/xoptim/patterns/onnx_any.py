@@ -157,18 +157,36 @@ class IdentityPattern(PatternOptimization):
                 return self.none(node, inspect.currentframe().f_lineno)
             return MatchResult(node, [node], self.apply, insert_at=node)
 
-        if not g.is_constant_scalar(node.input[1]):
+        if not g.is_constant(node.input[1]):
             return self.none(node, inspect.currentframe().f_lineno)
-
-        cst = g.get_computed_constant(node.input[1])
-        if cst.shape not in (tuple(), (1,)):
-            return self.none(node, inspect.currentframe().f_lineno)
-
-        val = float(cst[0] if len(cst.shape) == 1 else cst)
-        if val == 0 and node.op_type in {"Add", "Sub"}:
+        shape = g.get_constant_shape(node.input[1])
+        if shape in (tuple(), (1,)):
+            # simple case
+            if not g.is_constant_scalar(node.input[1]):
+                return self.none(node, inspect.currentframe().f_lineno)
+            val = float(g.get_constant_scalar(node.input[1]))
+            if val == 0 and node.op_type in {"Add", "Sub"}:
+                return MatchResult(node, [node], self.apply, insert_at=node)
+            if val == 1 and node.op_type in {"Mul", "Div"}:
+                return MatchResult(node, [node], self.apply, insert_at=node)
+        elif len(shape) == 1 and node.op_type in {"Add", "Mul", "Sub", "Div"}:
+            # less simple case, the tensor is multiplied on its last dimension.
+            cst = g.get_computed_constant(node.input[1])
+            unique = set(cst)
+            if len(unique) != 1:
+                return self.none(node, inspect.currentframe().f_lineno)
+            unique = list(unique)
+            if not g.has_shape(node.input[0]):
+                return self.none(node, inspect.currentframe().f_lineno)
+            shape = g.get_shape(node.input[0])
+            if shape[-1] != cst.shape[0]:
+                return self.none(node, inspect.currentframe().f_lineno)
+            if node.op_type in {"Add", "Sub"} and unique[0] != 0:
+                return self.none(node, inspect.currentframe().f_lineno)
+            if node.op_type in {"Mul", "Div"} and unique[0] != 1:
+                return self.none(node, inspect.currentframe().f_lineno)
             return MatchResult(node, [node], self.apply, insert_at=node)
-        if val == 1 and node.op_type in {"Mul", "Div"}:
-            return MatchResult(node, [node], self.apply, insert_at=node)
+
         return self.none(node, inspect.currentframe().f_lineno)
 
     def apply(
