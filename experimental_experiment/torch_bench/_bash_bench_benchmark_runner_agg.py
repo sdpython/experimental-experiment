@@ -191,8 +191,8 @@ def _apply_excel_style(
             "~MEAN" in v.index
             or "~GMEAN" in v.index
             or "~COUNT" in v.index
+            or "~TOTAL" in v.index
             or "~SUM" in v.index
-            or "~COUNT" in v.index
             or "~MED" in v.index
         ):
             for row in sheet.iter_rows(
@@ -206,13 +206,20 @@ def _apply_excel_style(
                         "~MEAN",
                         "~GMEAN",
                         "~SUM",
-                        "~COUNT",
                         "~MED",
                     }:
                         cell.fill = gray
                         cell.font = bold_font
                         if "." not in cell.number_format:
                             cell.number_format = "0.000"
+                    elif sheet.cell(row=cell.row, column=1).value in {
+                        "~COUNT",
+                        "~TOTAL",
+                    }:
+                        cell.fill = gray
+                        cell.font = bold_font
+                        if "." not in cell.number_format:
+                            cell.number_format = "0"
 
 
 def merge_benchmark_reports(
@@ -558,9 +565,7 @@ def merge_benchmark_reports(
             )
             summ = tpiv1.sum(axis=0)
             mean = tpiv1.sum(axis=0)
-            tpiv1.loc["~COUNT"] = tpiv1.shape[0]
-            tpiv1.loc["~SUM"] = summ
-            tpiv1.loc["~MEAN"] = summ / tpiv1.loc["~COUNT"]
+            tpiv1.loc["~COUNT"] = summ.astype(int)
             res["bucket"] = tpiv1.fillna(0).astype(int)
 
             if tpiv2.shape[0] > 0:
@@ -572,9 +577,7 @@ def merge_benchmark_reports(
                 )
                 summ = tpiv2.sum(axis=0)
                 mean = tpiv2.mean(axis=0)
-                tpiv2.loc["~COUNT"] = tpiv2.shape[0]
-                tpiv2.loc["~SUM"] = summ
-                tpiv2.loc["~MEAN"] = summ / tpiv2.loc["~COUNT"]
+                tpiv2.loc["~COUNT"] = summ.astype(int)
                 res["bucket_script"] = tpiv2.fillna(0).astype(int)
 
     # let's remove empty variables
@@ -621,7 +624,13 @@ def merge_benchmark_reports(
                 mean = res[c].mean(axis=0).copy()
                 med = res[c].median(axis=0)
                 summ = res[c].sum(axis=0)
-                res[c].loc["~COUNT"] = res[c].shape[0]
+                count = (
+                    res[c].sum(axis=0)
+                    if c.startswith("status_")
+                    else (~res[c].isna()).astype(int).sum(axis=0)
+                )
+                res[c].loc["~TOTAL"] = res[c].shape[0]
+                res[c].loc["~COUNT"] = count
                 res[c].loc["~SUM"] = summ
                 res[c].loc["~MEAN"] = mean
                 res[c].loc["~MED"] = med
@@ -630,7 +639,9 @@ def merge_benchmark_reports(
             mean = np.exp(np.log(res[c]).mean(axis=0))
             med = res[c].median(axis=0)
             summ = res[c].sum(axis=0)
-            res[c].loc["~COUNT"] = res[c].shape[0]
+            count = (~res[c].isna()).astype(int).sum(axis=0)
+            res[c].loc["~TOTAL"] = res[c].shape[0]
+            res[c].loc["~COUNT"] = count
             res[c].loc["~SUM"] = summ
             res[c].loc["~GMEAN"] = mean
             res[c].loc["~MED"] = med

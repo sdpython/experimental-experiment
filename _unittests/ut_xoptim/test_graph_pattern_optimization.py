@@ -92,7 +92,7 @@ class TestGraphPatternOptimization(ExtTestCase):
             verbose=0,
             optimization_options=OptimizationOptions(
                 remove_identity=False,
-                verbose=10 if __name__ == "__main__" else 0,
+                verbose=0 if __name__ == "__main__" else 0,
                 patterns="default",
             ),
         )
@@ -150,7 +150,7 @@ class TestGraphPatternOptimization(ExtTestCase):
         gr = GraphBuilder(
             origin,
             optimization_options=OptimizationOptions(
-                patterns=["UnsqueezeUnsqueeze"], verbose=10
+                patterns=["UnsqueezeUnsqueeze"], verbose=0
             ),
         )
         res, out, err = self.capture(lambda: gr.optimize_with_patterns())
@@ -168,7 +168,7 @@ class TestGraphPatternOptimization(ExtTestCase):
         before = [node for node in origin.graph.node if node.op_type == "Cast"]
         gr = GraphBuilder(
             origin,
-            optimization_options=OptimizationOptions(patterns=["Cast"], verbose=10),
+            optimization_options=OptimizationOptions(patterns=["Cast"], verbose=0),
         )
         res, out, err = self.capture(lambda: gr.optimize_with_patterns())
         self.assertEmpty(err)
@@ -188,7 +188,7 @@ class TestGraphPatternOptimization(ExtTestCase):
         gr = GraphBuilder(
             origin,
             optimization_options=OptimizationOptions(
-                patterns=["ReshapeMatMulReshape"], verbose=10
+                patterns=["ReshapeMatMulReshape"], verbose=0
             ),
             infer_shapes=True,
         )
@@ -2945,6 +2945,8 @@ class TestGraphPatternOptimization(ExtTestCase):
     def test_gelu(self):
         data = os.path.join(os.path.dirname(__file__), "data", "layernorm.onnx")
         model = onnx_load(data, load_external_data=False)
+        del model.opset_import[:]
+        model.opset_import.append(oh.make_opsetid("", 20))
         inputs = [tuple(n.input) for n in model.graph.node]
 
         gr = GraphBuilder(
@@ -3105,7 +3107,8 @@ class TestGraphPatternOptimization(ExtTestCase):
                     onh.from_array(np.array([axis], dtype=np.int64), name="axis"),
                     onh.from_array(np.array([2], dtype=np.float32).T, name="two"),
                 ],
-            )
+            ),
+            opset_imports=[oh.make_opsetid("", 20)],
         )
 
     def test_layer_normalization_simple(self):
