@@ -6,7 +6,6 @@ import os
 from typing import Any, Callable, Optional, Tuple, Dict, List
 import numpy as np
 import onnx
-import onnx.numpy_helper as onh
 import torch
 
 
@@ -374,7 +373,6 @@ class ModelRunner:
                 verbose=verbose,
                 target_opset=target_opset,
             )
-            # onx = self._add_weights_as_initializers(name, onx)
             return onx, stats
 
         if exporter == "dynamo":
@@ -458,39 +456,6 @@ class ModelRunner:
                 target_opset=target_opset,
             )
         raise AssertionError(f"Exporter {exporter!r} is not implemented.")
-
-    def _add_weights_as_initializers(
-        self, name: str, onx: onnx.ModelProto
-    ) -> List[str]:
-        assert (
-            len(onx.graph.sparse_initializer) == 0
-        ), "Sparse initializers not implemented."
-        weights_name = set(name for name, _ in self.model.named_parameters())
-        existing = set(init.name for init in onx.graph.initializer)
-        add = set()
-        for i in onx.graph.input:
-            if i.name in weights_name and i.name not in existing:
-                add.add(i.name)
-        if not add:
-            # no change
-            return onx
-
-        # we load the model with external weights
-        onx = onnx.load(name)
-        ret = []
-        for name, p in self.model.named_parameters():
-            if name in add:
-                w = p.detach().cpu().numpy()
-                onx.graph.initializer.append(onh.from_array(w, name=name))
-                ret.append(name)
-        new_inputs = [i for i in onx.graph.input if i.name not in weights_name]
-        del onx.graph.input[:]
-        onx.graph.input.extend(new_inputs)
-
-        # we save the model with external weights
-        onnx.save(onx, name, save_as_external_data=True)
-        onx = onnx.load(name, load_external_data=False)
-        return onx
 
     def _to_onnx_custom(
         self,
