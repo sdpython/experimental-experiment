@@ -374,7 +374,7 @@ class ModelRunner:
                 verbose=verbose,
                 target_opset=target_opset,
             )
-            onx = self._add_weights_as_initializers(name, onx)
+            # onx = self._add_weights_as_initializers(name, onx)
             return onx, stats
 
         if exporter == "dynamo":
