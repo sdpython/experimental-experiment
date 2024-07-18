@@ -1,6 +1,27 @@
 from typing import List, Optional
 from onnx import NodeProto
 from ..patterns_api import MatchResult, PatternOptimization
+from ..patterns.onnx_function import GeluPattern
+
+
+class GeluOrtPattern(GeluPattern):
+    """
+    Detects the decomposed version of Gelu with Tanh
+
+    .. math::
+
+        y = \\frac{x}{2} \\left(1 + \\tanh\\left(\\sqrt{\\frac{2}{\\pi}} (x + 0.044715 * x^3)\\rigth)\\rigth)
+    """
+
+    def __init__(
+        self,
+        verbose: int = 0,
+        priority: int = 0,
+        min_opset: int = 20,
+        domain: str = "com.microsoft",
+    ):
+        super(GeluOrtPattern, self).__init__(verbose, priority, min_opset=min_opset)
+        self.domain = domain
 
 
 class FastGeluPattern(PatternOptimization):
@@ -14,7 +35,7 @@ class FastGeluPattern(PatternOptimization):
         node: NodeProto,
         matched: List[MatchResult],
     ) -> Optional[MatchResult]:
-        if node.op_type != "Gelu" or node.domain != "":
+        if node.op_type != "Gelu" or node.domain not in ("", "com.microsoft"):
             return self.none()
         return MatchResult(self, [node], self.apply, insert_at=node)
 

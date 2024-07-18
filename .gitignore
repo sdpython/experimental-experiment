@@ -28,6 +28,7 @@ temp_dump/*
 temp_data/*
 debug_data/*
 dump_models/*
+dump_bash_bench/*
 dump_llama/*
 dump_test*
 dump_sdpa_*

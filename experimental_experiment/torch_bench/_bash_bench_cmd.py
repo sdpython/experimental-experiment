@@ -170,7 +170,7 @@ def bash_bench_main(script_name: str, doc: str, args: Optional[List[str]] = None
                     process=args.process in ("1", 1, "True", True),
                     exporter=args.exporter,
                     quiet=args.quiet in ("1", 1, "True", True),
-                    folder="dump_test_models",
+                    folder=args.dump_folder,
                     optimization=args.opt_patterns,
                     memory_peak=args.memory_peak in ("1", 1, "True", True),
                 )

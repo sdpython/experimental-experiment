@@ -9,6 +9,7 @@ rm plot*
 rm test* -rf
 rm temp* -rf
 rm dump* -rf
+rm onnx_export*.md
 rm *.xlsx
 rm *.sarif
 rm *.svg

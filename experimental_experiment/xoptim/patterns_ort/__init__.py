@@ -15,7 +15,7 @@ def get_onnxruntime_patterns(
         from experimental_experiment.xoptim.patterns_ort import get_onnxruntime_patterns
         pprint.pprint(get_onnxruntime_patterns())
     """
-    from .activation import FastGeluPattern
+    from .activation import FastGeluPattern, GeluOrtPattern
     from .activation_grad import SoftmaxGradPattern
     from .fused_matmul import (
         FusedMatMulDivPattern,
@@ -28,6 +28,7 @@ def get_onnxruntime_patterns(
     from .simplified_layer_normalization import SimplifiedLayerNormalizationPattern
 
     return [
+        GeluOrtPattern(verbose=verbose),
         FastGeluPattern(verbose=verbose),
         FusedMatMulPattern(verbose=verbose),
         FusedMatMulx2Pattern(verbose=verbose),

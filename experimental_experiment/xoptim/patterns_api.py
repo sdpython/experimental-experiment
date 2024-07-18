@@ -90,12 +90,14 @@ class PatternOptimization:
         environment variable ``LOG_PATTERN_OPTIMIZE=10``
     :param priority: at each iteration, all patterns whose priority is below one threshold
         are executed, if none of them matches, the priority is increase
+    :param min_opset: can be applied if main opset is > min_opset
     """
 
-    def __init__(self, verbose: int = 0, priority: int = 1):
+    def __init__(self, verbose: int = 0, priority: int = 1, min_opset: int = 1):
         value = os.environ.get("LOG_PATTERN_OPTIMIZE", "0")
         self.verbose = max(verbose, int(value))
         self.priority = priority
+        self.min_opset = min_opset
 
     def __str__(self) -> str:
         return self.__class__.__name__
@@ -115,20 +117,21 @@ class PatternOptimization:
         """
         Enumerates all the
         """
-        matched = []
-        # g.iter_nodes() iterates on g.builder.nodes: -> too slow to have a secondary iterator
-        for node in g.builder.nodes:
-            # This expression seems awkard but it saves 10% just by looking into
-            # the first item of the list and then, if necessary, walking through the
-            # rest of the outputs.
-            if g.is_used(node.output[0]) or any(
-                map(lambda o: g.is_used(o), node.output[1:])
-            ):
-                # We avoid processing a node which is not used.
-                res = self.match(g, node, matched)
-                if res:
-                    matched.append(res)
-                    yield res
+        if g.main_opset >= self.min_opset:
+            matched = []
+            # g.iter_nodes() iterates on g.builder.nodes: -> too slow to have a secondary iterator
+            for node in g.builder.nodes:
+                # This expression seems awkard but it saves 10% just by looking into
+                # the first item of the list and then, if necessary, walking through the
+                # rest of the outputs.
+                if g.is_used(node.output[0]) or any(
+                    map(lambda o: g.is_used(o), node.output[1:])
+                ):
+                    # We avoid processing a node which is not used.
+                    res = self.match(g, node, matched)
+                    if res:
+                        matched.append(res)
+                        yield res
 
     def match(
         self,
@@ -240,8 +243,8 @@ class EasyPatternOptimization(PatternOptimization):
     It does not compares attributes either.
     """
 
-    def __init__(self, verbose: int = 0):
-        super().__init__(verbose=verbose)
+    def __init__(self, verbose: int = 0, priority: int = 0, min_opset: int = 1):
+        super().__init__(verbose=verbose, priority=priority, min_opset=min_opset)
         self._cache = {}
 
     def match_pattern(
