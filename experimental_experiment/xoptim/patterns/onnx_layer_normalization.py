@@ -20,6 +20,10 @@ class LayerNormalizationPattern(PatternOptimization):
         if node.op_type != "ReduceMean" or node.domain != "":
             return self.none()
 
+        if not g.is_constant_scalar(node.input[1]):
+            return self.none(node, inspect.currentframe().f_lineno)
+        axis = g.get_constant_scalar(node.input[1])
+
         # before
 
         pow = g.node_before(node.input[0])
@@ -42,6 +46,11 @@ class LayerNormalizationPattern(PatternOptimization):
             return self.none(node, inspect.currentframe().f_lineno)
         if red.op_type != "ReduceMean" or len(g.next_nodes(red.output[0])) != 1:
             return self.none(node, inspect.currentframe().f_lineno)
+        if not g.is_constant_scalar(red.input[1]):
+            return self.none(node, inspect.currentframe().f_lineno)
+        axis2 = g.get_constant_scalar(red.input[1])
+        if axis != axis2:
+            return self.none(node, inspect.currentframe().f_lineno)
         if sub.input[0] != red.input[0]:
             return self.none(node, inspect.currentframe().f_lineno)
         kp = g.get_attribute(red, "keepdims", exc=False)
@@ -50,12 +59,17 @@ class LayerNormalizationPattern(PatternOptimization):
 
         # after
         add = g.next_nodes(node.output[0])
-        if len(add) != 1 or add[0].op_type != "Add":
+        if len(add) != 1:
             return self.none(node, inspect.currentframe().f_lineno)
-        add = add[0]
-        if not g.is_constant_scalar(add.input[1]):
-            return self.none(node, inspect.currentframe().f_lineno)
-        sqrt = g.next_nodes(add.output[0])
+        if add[0].op_type == "Add":
+            add = add[0]
+            if not g.is_constant_scalar(add.input[1]):
+                return self.none(node, inspect.currentframe().f_lineno)
+            sqrt = g.next_nodes(add.output[0])
+        else:
+            add = None
+        if add is None:
+            sqrt = g.next_nodes(node.output[0])
         if len(sqrt) != 1 or sqrt[0].op_type != "Sqrt":
             return self.none(node, inspect.currentframe().f_lineno)
         sqrt = sqrt[0]
@@ -63,6 +77,8 @@ class LayerNormalizationPattern(PatternOptimization):
         if len(div) != 1 or div[0].op_type != "Div":
             return self.none(node, inspect.currentframe().f_lineno)
         div = div[0]
+        if len(g.next_nodes(div.input[1])) != 1:
+            return self.none(node, inspect.currentframe().f_lineno)
         if div.input[0] != sub.output[0]:
             return self.none(node, inspect.currentframe().f_lineno)
 
@@ -77,22 +93,32 @@ class LayerNormalizationPattern(PatternOptimization):
         sub: NodeProto,
         pow: NodeProto,
         node: NodeProto,
-        add: NodeProto,
+        add: Optional[NodeProto],
         sqrt: NodeProto,
         div: NodeProto,
     ) -> List[NodeProto]:
-        eps = g.get_constant_scalar(add.input[1])
-        dtype = tensor_dtype_to_np_dtype(g.get_type(red.input[0]))
+        itype = g.get_type(red.input[0])
+        dtype = tensor_dtype_to_np_dtype(itype)
+
+        axis = int(g.get_constant_scalar(red.input[1]))
         scale = g.make_initializer("", np.array([1], dtype=dtype))
-        new_node = g.make_node(
-            "LayerNormalization",
-            [red.input[0], scale],
-            [div.output[0], div.input[1]],
-            epsilon=float(eps),
-            name=f"{self.__class__.__name__}--{node.name}",
-            doc_string=node.doc_string,
+
+        eps = g.get_constant_scalar(add.input[1]) if add else 9.999999960041972e-13
+
+        new_nodes = []
+        new_nodes.append(
+            g.make_node(
+                "LayerNormalization",
+                [red.input[0], scale],
+                [div.output[0]],
+                epsilon=float(eps),
+                name=f"{self.__class__.__name__}--{node.name}",
+                doc_string=node.doc_string,
+                stash_type=1,  # itype,
+                axis=axis,
+            )
         )
-        return [new_node]
+        return new_nodes
 
 
 class LayerNormalizationScalePattern(PatternOptimization):

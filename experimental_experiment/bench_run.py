@@ -9,7 +9,7 @@ import time
 import warnings
 from argparse import Namespace
 from datetime import datetime
-from typing import Any, Dict, List, Tuple, Union, Optional
+from typing import Any, Dict, List, Set, Tuple, Union, Optional
 
 
 ILLEGAL_CHARACTERS_RE = re.compile(r"([\000-\010]|[\013-\014]|[\016-\037])")
@@ -230,12 +230,16 @@ def multi_run(kwargs: Namespace) -> bool:
     return any(isinstance(v, str) and "," in v for v in kwargs.__dict__.values())
 
 
-def make_configs(kwargs: Namespace) -> List[Dict[str, Any]]:
+def make_configs(
+    kwargs: Namespace, drop: Optional[Set[str]] = None
+) -> List[Dict[str, Any]]:
     """
     Creates all the configurations based on the command line arguments.
     """
     args = []
     for k, v in kwargs.__dict__.items():
+        if drop and k in drop:
+            continue
         if isinstance(v, str):
             args.append([(k, s) for s in v.split(",")])
         else:

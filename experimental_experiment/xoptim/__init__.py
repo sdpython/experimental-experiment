@@ -92,6 +92,8 @@ def get_pattern_list(
     """
     if positive_list is None:
         return []
+    if isinstance(positive_list, str) and "-" in positive_list and not negative_list:
+        positive_list, negative_list = positive_list.split("-")
     pos_list = get_pattern(positive_list, as_list=True, verbose=verbose)
     if negative_list is None:
         return pos_list

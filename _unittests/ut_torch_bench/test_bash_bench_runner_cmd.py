@@ -35,6 +35,7 @@ class TestBashBenchRunnerCmd(ExtTestCase):
         debug=False,
         optimization=None,
         dump_ort=False,
+        process=False,
     ):
         from experimental_experiment.torch_bench.bash_bench_huggingface import main
 
@@ -55,15 +56,20 @@ class TestBashBenchRunnerCmd(ExtTestCase):
             "1",
             "--dump_ort",
             "1" if dump_ort else "0",
+            "--dump_folder",
+            "dump_test_bash_bench",
         ]
+        if process:
+            args.extend(["--process", "1"])
         if optimization:
             args.extend(["--opt_patterns", optimization])
         if debug:
             print("CMD")
             print(" ".join(args))
         st = io.StringIO()
-        with contextlib.redirect_stdout(st):
-            main(args=args)
+        with contextlib.redirect_stderr(st):
+            with contextlib.redirect_stdout(st):
+                main(args=args)
         out = st.getvalue()
         if debug:
             print(out)
@@ -79,6 +85,15 @@ class TestBashBenchRunnerCmd(ExtTestCase):
     @requires_torch("2.4")
     def test_huggingface_export_bench_custom_cpu(self):
         self._huggingface_export_bench_cpu("custom", "101Dummy")
+
+    @skipif_ci_windows("exporter does not work on Windows")
+    @ignore_warnings((DeprecationWarning, UserWarning))
+    @requires_onnxruntime_training()
+    @requires_torch("2.4")
+    def test_huggingface_export_bench_torch_onnx_cpu(self):
+        self._huggingface_export_bench_cpu(
+            "torch-onnx", "101Dummy", process=True, verbose=20
+        )
 
     @skipif_ci_windows("exporter does not work on Windows")
     @ignore_warnings((DeprecationWarning, UserWarning))
@@ -185,6 +200,8 @@ class TestBashBenchRunnerCmd(ExtTestCase):
             "1",
             "--dump_ort",
             "1" if dump_ort else "0",
+            "--dump_folder",
+            "dump_test_bash_bench",
         ]
         if optimization:
             args.extend(["--opt_patterns", optimization])

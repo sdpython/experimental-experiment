@@ -156,6 +156,8 @@ class ModelRunner:
     :param repeat: number of iteration to repeat the model
     """
 
+    _patched = None
+
     @classmethod
     def isinstance_namedtuple(cls, x):
         return isinstance(x, tuple) and getattr(x, "_fields", None) is not None
@@ -249,7 +251,7 @@ class ModelRunner:
             self.raw_input_names = new_names
             self.raw_use_defaults = use_default
         else:
-            self.raw_input_names = ["input{i}" for i in range(len(inputs))]
+            self.raw_input_names = [f"input{i}" for i in range(len(inputs))]
             self.raw_use_defaults = [i is None for i in inputs]
 
         config = getattr(model, "config", {})
@@ -317,6 +319,20 @@ class ModelRunner:
         :param target_opset: target opset
         """
         assert not fake_tensor, "fake_tensor not implemented."
+
+        if ModelRunner._patched == "torch-onnx":
+            try:
+                import torch_onnx
+
+                torch_onnx.unpatch_torch()
+                ModelRunner._patched = "unpatched"
+            except ImportError:
+                pass
+
+        assert ModelRunner._patched in (None, "unpatched") or (
+            ModelRunner._patched == "torch-onnx" and exporter == "torch-onnx"
+        ), f"Unable to continue as ModelRunner is patched with {ModelRunner._patched!r}."
+
         if exporter == "custom":
             return self._to_onnx_custom(
                 name,
@@ -337,6 +353,28 @@ class ModelRunner:
                 verbose=verbose,
                 target_opset=target_opset,
             )
+
+        if exporter == "torch-onnx":
+            assert ModelRunner._patched in (
+                None,
+                "torch-onnx",
+            ), f"A new patch should not be applied on {ModelRunner._patched!r}."
+            import torch_onnx
+
+            if ModelRunner._patched is None:
+                torch_onnx.patch_torch(error_report=True)
+                ModelRunner._patched = "torch-onnx"
+            onx, stats = self._to_onnx_script(
+                name,
+                dynamic=dynamic,
+                fake_tensor=fake_tensor,
+                no_grad=no_grad,
+                optimization=optimization,
+                verbose=verbose,
+                target_opset=target_opset,
+            )
+            return onx, stats
+
         if exporter == "dynamo":
             return self._to_onnx_dynamo(
                 name,
@@ -729,7 +767,8 @@ class ModelRunner:
         if exporter in {"eager", "export", "compile", "inductor", "dort"}:
             return self.inputs
         onx = onnx.load(filename, load_external_data=False)
-        names = [_.name for _ in onx.graph.input]
+        initializer_names = set(i.name for i in onx.graph.initializer)
+        names = [_.name for _ in onx.graph.input if _.name not in initializer_names]
         if isinstance(self.inputs, dict):
             assert set(names) == set(self.inputs), (
                 f"Input names mismatch, "

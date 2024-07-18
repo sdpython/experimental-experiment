@@ -92,7 +92,7 @@ class TestGraphPatternOptimization(ExtTestCase):
             verbose=0,
             optimization_options=OptimizationOptions(
                 remove_identity=False,
-                verbose=10 if __name__ == "__main__" else 0,
+                verbose=0 if __name__ == "__main__" else 0,
                 patterns="default",
             ),
         )
@@ -2945,6 +2945,8 @@ class TestGraphPatternOptimization(ExtTestCase):
     def test_gelu(self):
         data = os.path.join(os.path.dirname(__file__), "data", "layernorm.onnx")
         model = onnx_load(data, load_external_data=False)
+        del model.opset_import[:]
+        model.opset_import.append(oh.make_opsetid("", 20))
         inputs = [tuple(n.input) for n in model.graph.node]
 
         gr = GraphBuilder(
@@ -3077,6 +3079,79 @@ class TestGraphPatternOptimization(ExtTestCase):
             opt_ref = ExtendedReferenceEvaluator(opt_onx)
             got = opt_ref.run(None, feeds)[0]
             self.assertEqualArray(expected, got, atol=1e-3)
+
+    def _get_model_redln(self, dtype=None, axis=-1, fixed=True):
+        itype = TFLOAT if dtype in (None, np.float32) else TensorProto.FLOAT16
+        return oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("ReduceMean", ["X", "axis"], ["mean"], keepdims=1),
+                    oh.make_node("Sub", ["X", "mean"], ["xc"]),
+                    oh.make_node("Pow", ["xc", "two"], ["x2"]),
+                    oh.make_node("ReduceMean", ["x2", "axis"], ["mean2"], keepdims=1),
+                    oh.make_node("Sqrt", ["mean2"], ["mean2s"]),
+                    oh.make_node("Div", ["xc", "mean2s"], ["Y"]),
+                ],
+                "dummy",
+                [
+                    oh.make_tensor_value_info(
+                        "X", itype, [2, 3] if fixed else ["a", "b"]
+                    )
+                ],
+                [
+                    oh.make_tensor_value_info(
+                        "Y", itype, [2, 3] if fixed else ["a", "b"]
+                    )
+                ],
+                [
+                    onh.from_array(np.array([axis], dtype=np.int64), name="axis"),
+                    onh.from_array(np.array([2], dtype=np.float32).T, name="two"),
+                ],
+            ),
+            opset_imports=[oh.make_opsetid("", 20)],
+        )
+
+    def test_layer_normalization_simple(self):
+        for dtype in [np.float32, np.float16]:
+            for kwargs in [
+                dict(axis=0),
+                {},
+                dict(axis=0, fixed=False),
+                dict(fixed=False),
+            ]:
+                model = self._get_model_redln(dtype=dtype, **kwargs)
+                feeds = {"X": (self._range(2, 3) + np.array([1, 2, 3])).astype(dtype)}
+                ref = ExtendedReferenceEvaluator(model)
+                expected = ref.run(None, feeds)[0]
+                inputs = [tuple(n.input) for n in model.graph.node]
+
+                gr = GraphBuilder(
+                    model,
+                    infer_shapes=True,
+                    optimization_options=OptimizationOptions(
+                        patterns=["LayerNormalization"], verbose=0
+                    ),
+                )
+                opt_onx = gr.to_onnx(optimize=True)
+                self.assertEqual(
+                    ["LayerNormalization"],
+                    [n.op_type for n in opt_onx.graph.node],
+                )
+                self.assertEqual(1, len(opt_onx.graph.initializer))
+                new_inputs = [tuple(n.input) for n in opt_onx.graph.node]
+                self.assertNotEqual(inputs, new_inputs)
+
+                opt_ref = ExtendedReferenceEvaluator(model)
+                got = opt_ref.run(None, feeds)[0]
+                self.assertEqualArray(expected, got, atol=1e-3)
+
+                from onnxruntime import InferenceSession
+
+                opt_ref = InferenceSession(
+                    model.SerializeToString(), providers=["CPUExecutionProvider"]
+                )
+                got = opt_ref.run(None, feeds)[0]
+                self.assertEqualArray(expected, got, atol=1e-3)
 
 
 if __name__ == "__main__":

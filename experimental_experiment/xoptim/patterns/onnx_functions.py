@@ -13,6 +13,12 @@ class GeluPattern(EasyPatternOptimization):
         y = \\frac{x}{2} \\left(1 + \\tanh\\left(\\sqrt{\\frac{2}{\\pi}} (x + 0.044715 * x^3)\\rigth)\\rigth)
     """
 
+    def __init__(
+        self, verbose: int = 0, priority: int = 0, min_opset: int = 20, domain: str = ""
+    ):
+        super(GeluPattern, self).__init__(verbose, priority, min_opset=min_opset)
+        self.domain = domain
+
     def match_pattern(self, g: "GraphBuilder", x, c3, c04, cpi, one, c2):  # noqa: F821
         x3 = g.op.Pow(x, c3)  # 3
         cx3 = g.op.Mul(x3, c04)  # 0.044715
@@ -33,7 +39,7 @@ class GeluPattern(EasyPatternOptimization):
         one,
         c2,
     ):
-        return g.op.Gelu(x, approximate="tanh")
+        return g.op.Gelu(x, approximate="tanh", domain=self.domain)
 
     def validate_mapping(
         self,

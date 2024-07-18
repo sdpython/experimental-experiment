@@ -106,7 +106,7 @@ def bash_bench_main(script_name: str, doc: str, args: Optional[List[str]] = None
         elif args.model == "All":
             args.model = ",".join(n for n in names if not n.startswith("101"))
 
-        if multi_run(args):
+        if multi_run(args) or args.process in ("1", 1, "True", True):
             args_output_data = args.output_data
             if args.output_data:
                 name, ext = os.path.splitext(args.output_data)
@@ -114,14 +114,15 @@ def bash_bench_main(script_name: str, doc: str, args: Optional[List[str]] = None
                 args.output_data = ""
             else:
                 temp_output_data = None
-            configs = make_configs(args)
+            configs = make_configs(args, drop={"process"})
+            assert configs, f"No configuration configs={configs} for args={args}"
             data = run_benchmark(
                 f"experimental_experiment.torch_bench.{script_name}",
                 configs,
                 args.verbose,
                 stop_if_exception=False,
                 temp_output_data=temp_output_data,
-                dump_std="dump_test_models",
+                dump_std=args.dump_folder,
                 start=args.start,
             )
             if args.verbose > 2:
@@ -169,7 +170,7 @@ def bash_bench_main(script_name: str, doc: str, args: Optional[List[str]] = None
                     process=args.process in ("1", 1, "True", True),
                     exporter=args.exporter,
                     quiet=args.quiet in ("1", 1, "True", True),
-                    folder="dump_test_models",
+                    folder=args.dump_folder,
                     optimization=args.opt_patterns,
                     memory_peak=args.memory_peak in ("1", 1, "True", True),
                 )
