@@ -1,7 +1,7 @@
 from typing import List, Optional
 from onnx import NodeProto
 from ..patterns_api import MatchResult, PatternOptimization
-from ..patterns.onnx_function import GeluPattern
+from ..patterns.onnx_functions import GeluPattern
 
 
 class GeluOrtPattern(GeluPattern):
