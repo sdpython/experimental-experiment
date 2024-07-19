@@ -720,11 +720,13 @@ def merge_benchmark_reports(
             m = m.T.stack().reset_index(drop=False)
             cols = m.columns
             assert len(cols) >= 4, f"Unexpected number of columns in {cols}"
-            exporter_column = "exporter" if "exporter" in cols else "index"
+            exporter_column = [c for c in cols if c in ["exporter", "ort_patterns"]]
+            if not exporter_column:
+                exporter_column = ["index"]
             assert (
-                "stat" in cols and exporter_column in cols and model in cols
-            ), f"Unexpeted columns {cols}"
-            last = [c for c in cols if c not in {"stat", exporter_column, model}]
+                "stat" in cols and model in cols
+            ), f"Unexpected columns {cols}, expecting 'stat', {exporter_column!r}, {model!r}"
+            last = [c for c in cols if c not in {"stat", *exporter_column, model}]
             added_columns = [c for c in last if c in new_keys]
             last = [c for c in last if c not in new_keys]
             assert (
@@ -732,7 +734,7 @@ def merge_benchmark_reports(
             ), f"Unexpected columns in {cols}, added={added_columns}, last={last}"
             m = m.pivot(
                 index="stat",
-                columns=[model, exporter_column, *added_columns],
+                columns=[model, *exporter_column, *added_columns],
                 values=last[0],
             )
             m = m.T.sort_index().T
@@ -752,13 +754,18 @@ def merge_benchmark_reports(
         merge = [k for k in res if k.startswith(prefix)]
         if len(merge) == 0:
             continue
-        res[prefix[:-1]] = _merge(
-            res,
-            merge,
-            prefix,
-            reverse=prefix != "status_",
-            transpose=prefix.startswith("op_"),
-        )
+
+        try:
+            sheet = _merge(
+                res,
+                merge,
+                prefix,
+                reverse=prefix != "status_",
+                transpose=prefix.startswith("op_"),
+            )
+        except KeyError as e:
+            sheet = pandas.DataFrame([{"error": str(e)}])
+        res[prefix[:-1]] = sheet
         res = {k: v for k, v in res.items() if k not in set(merge)}
 
     for c in res:
@@ -806,7 +813,10 @@ def merge_benchmark_reports(
                     index=k not in no_index,
                     freeze_panes=(frow, fcol) if k not in no_index else None,
                 )
-            _apply_excel_style(final_res, writer)
+            try:
+                _apply_excel_style(final_res, writer)
+            except TypeError:
+                pass
 
     return final_res
 
