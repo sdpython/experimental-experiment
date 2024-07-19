@@ -418,6 +418,7 @@ class BenchmarkRunner:
                     yield stats
                     continue
                 stats["time_export"] = time.perf_counter() - begin
+                stats["time_export_success"] = time.perf_counter() - begin
             else:
                 exported_model, opt_stats = model_runner.export_as(
                     exporter,
