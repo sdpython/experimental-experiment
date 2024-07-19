@@ -803,7 +803,7 @@ def merge_benchmark_reports(
                 )
             _apply_excel_style(final_res, writer)
 
-    return res
+    return final_res
 
 
 def _reorder_indices(

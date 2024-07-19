@@ -219,7 +219,7 @@ def run_benchmark(
                 continue
             if summary and iter_loop % 10 == 1:
                 n, e = os.path.splitext(temp_output_data)
-                fn = f"{n}.summary.xlsx"
+                fn = f"{n}.summary-partial.xlsx"
                 summary(df, excel_output=fn)
 
     return data

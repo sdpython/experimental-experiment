@@ -146,6 +146,10 @@ def bash_bench_main(script_name: str, doc: str, args: Optional[List[str]] = None
                 if args.verbose:
                     print(df)
 
+                # also write a summary
+                n, e = os.path.splitext(filename)
+                fn = f"{n}.summary.xlsx"
+                merge_benchmark_reports(df, excel_output=fn)
         else:
             try:
                 indice = int(args.model)
@@ -211,5 +215,5 @@ def bash_bench_main(script_name: str, doc: str, args: Optional[List[str]] = None
 
                 # also write a summary
                 n, e = os.path.splitext(filename)
-                fn = f"{n}.summary.xlsx"
+                fn = f"{n}.summary-one.xlsx"
                 merge_benchmark_reports(df, excel_output=fn)
