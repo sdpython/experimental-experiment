@@ -472,12 +472,12 @@ class BenchmarkRunner:
                         f"reserved={torch.cuda.memory_reserved(0)} after gc.collect"
                     )
 
-            if self.verbose > 1:
-                print(f"[BenchmarkRunner.benchmark] inference model {model_name!r}")
-
             #########
             # session
             #########
+
+            if self.verbose > 1:
+                print(f"[BenchmarkRunner.benchmark] inference model {model_name!r}")
 
             providers = ["CUDAExecutionProvider", "CPUExecutionProvider"]
             if self.device == "cpu":
@@ -492,7 +492,7 @@ class BenchmarkRunner:
                     session_options.optimized_model_filepath = f"{filename}-ortopt.onnx"
                     if self.verbose > 1:
                         print(
-                            f"[BenchmarkRunner.benchmark] saves opptimized "
+                            f"[BenchmarkRunner.benchmark] saves optimized "
                             f"model by onnxruntime in "
                             f"{session_options.optimized_model_filepath!r}"
                         )
@@ -505,8 +505,14 @@ class BenchmarkRunner:
                             print(f"[benchmarkrunner.benchmark] err_ort {e}")
                         yield stats
                         continue
+                    if self.verbose > 2:
+                        print(
+                            f"[BenchmarkRunner.benchmark] register {get_ort_ext_libs()[0]!r}"
+                        )
                     session_options.register_custom_ops_library(get_ort_ext_libs()[0])
 
+                if self.verbose > 2:
+                    print("[BenchmarkRunner.benchmark] create session")
                 is_onnx = True
                 stats["onnx_model"] = "1"
                 if quiet:
@@ -524,6 +530,8 @@ class BenchmarkRunner:
                     ort_sess = onnxruntime.InferenceSession(
                         filename, session_options, providers=providers
                     )
+                if self.verbose > 1:
+                    print("[BenchmarkRunner.benchmark] WrapInferenceSessionForTorch")
                 sess = WrapInferenceSessionForTorch(ort_sess)
                 stats.update(self._post_process_onnx_statistics(exported_model))
 
@@ -549,6 +557,8 @@ class BenchmarkRunner:
                     # Let's free some space.
                     os.remove(session_options.optimized_model_filepath)
             else:
+                if self.verbose > 1:
+                    print("[BenchmarkRunner.benchmark] WrapForTorch")
                 is_onnx = False
                 sess = WrapForTorch(exported_model)
                 stats["onnx_model"] = "0"

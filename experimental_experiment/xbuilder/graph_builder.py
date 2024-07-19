@@ -2172,7 +2172,6 @@ class GraphBuilder:
             node.attribute.extend(attributes)
 
         if node.domain == "" and node.op_type in {"Constant", "ConstantOfShape"}:
-
             if len(node.attribute) == 1 and node.attribute[0].name == "value":
                 t = node.attribute[0].t
                 size = np.prod(t.dims)
@@ -2272,6 +2271,7 @@ class GraphBuilder:
             )
             k = node.output[0]
             self.constants_[k] = node
+            node.doc_string += ":constant-3:"
             shape = self._get_tensor_shape(node)
             dtype = self._get_tensor_type(node)
             self.set_shape(k, shape)
@@ -2287,6 +2287,7 @@ class GraphBuilder:
                 self.set_type(node.output[0], self.get_type(node.input[0]))
             if self.is_constant(node.input[0]):
                 self.constants_[node.output[0]] = node
+                node.doc_string += ":constant-4:"
         elif node.op_type == "Shape":
             self.set_type(node.output[0], TensorProto.INT64)
             if self.has_shape(node.input[0]) and len(node.attribute) == 0:
@@ -2294,7 +2295,11 @@ class GraphBuilder:
                 self.set_shape(node.output[0], (len(shape),))
             else:
                 self.set_rank(node.output[0], 1)
-        elif all(map(self.is_constant, node.input)):
+            if self.is_constant(node.input[0]):
+                self.constants_[node.output[0]] = node
+                node.doc_string += ":constant-2:"
+        elif all(map(self.is_constant, node.input)) and "Random" not in node.op_type:
+            node.doc_string += ":constant-1:"
             for o in node.output:
                 self.constants_[o] = node
             if len(node.output) == 1:

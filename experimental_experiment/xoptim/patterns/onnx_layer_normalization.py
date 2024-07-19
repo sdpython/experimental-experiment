@@ -119,6 +119,7 @@ class LayerNormalizationPattern(PatternOptimization):
                 shape = g.get_shape(red.input[0])
                 if isinstance(shape[-1], int):
                     scale = g.make_initializer("", np.ones((shape[-1],), dtype=dtype))
+                    bias = g.make_initializer("", np.zeros((shape[-1],), dtype=dtype))
         else:
             ly_axis = min(axis)
         if scale is None:
@@ -142,13 +143,23 @@ class LayerNormalizationPattern(PatternOptimization):
                     value=from_array(np.array([1], dtype=dtype)),
                 )
             )
+            bias = g.unique_name(f"{self.__class__.__name__}_Bi_{red.input[0]}")
+            new_nodes.append(
+                g.make_node(
+                    "ConstantOfShape",
+                    [shape],
+                    [scale],
+                    name=f"{self.__class__.__name__}--{red.name}",
+                    value=from_array(np.array([0], dtype=dtype)),
+                )
+            )
 
         eps = g.get_constant_scalar(add.input[1]) if add else 9.999999960041972e-13
 
         new_nodes.append(
             g.make_node(
                 "LayerNormalization",
-                [red.input[0], scale],
+                [red.input[0], scale, bias],
                 [div.output[0]],
                 epsilon=float(eps),
                 name=f"{self.__class__.__name__}--{node.name}",
