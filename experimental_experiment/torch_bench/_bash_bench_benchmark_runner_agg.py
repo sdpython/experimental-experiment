@@ -720,7 +720,7 @@ def merge_benchmark_reports(
             m = m.T.stack().reset_index(drop=False)
             cols = m.columns
             assert len(cols) >= 4, f"Unexpected number of columns in {cols}"
-            exporter_column = [c for c in cols if c in ["exporter", "ort_patterns"]]
+            exporter_column = [c for c in cols if c in ["exporter", "opt_patterns"]]
             if not exporter_column:
                 exporter_column = ["index"]
             assert (
@@ -755,16 +755,13 @@ def merge_benchmark_reports(
         if len(merge) == 0:
             continue
 
-        try:
-            sheet = _merge(
-                res,
-                merge,
-                prefix,
-                reverse=prefix != "status_",
-                transpose=prefix.startswith("op_"),
-            )
-        except KeyError as e:
-            sheet = pandas.DataFrame([{"error": str(e)}])
+        sheet = _merge(
+            res,
+            merge,
+            prefix,
+            reverse=prefix != "status_",
+            transpose=prefix.startswith("op_"),
+        )
         res[prefix[:-1]] = sheet
         res = {k: v for k, v in res.items() if k not in set(merge)}
 
@@ -813,10 +810,7 @@ def merge_benchmark_reports(
                     index=k not in no_index,
                     freeze_panes=(frow, fcol) if k not in no_index else None,
                 )
-            try:
-                _apply_excel_style(final_res, writer)
-            except TypeError:
-                pass
+            _apply_excel_style(final_res, writer)
 
     return final_res
 
