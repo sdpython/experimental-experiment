@@ -167,7 +167,7 @@ class BenchmarkRunner:
 
         import transformers
         import onnxruntime
-        import onnxscript  # noqa: F401
+        import onnxscript
         from experimental_experiment.bench_run import get_machine, _clean_string
 
         machine_specs = get_machine()
@@ -197,7 +197,7 @@ class BenchmarkRunner:
                 "version_torch": getattr(torch, "__version__", "dev"),
                 "version_transformers": getattr(transformers, "__version__", "dev"),
                 "version_onnxruntime": getattr(onnxruntime, "__version__", "dev"),
-                "version_onnxscript": getattr("onnxscript", "__version__", "dev"),
+                "version_onnxscript": getattr(onnxscript, "__version__", "dev"),
                 "version_onnx": getattr(onnx, "__version__", "dev"),
             }
             stats.update(machine_specs)

@@ -268,6 +268,7 @@ def merge_benchmark_reports(
     ),
     formulas=("memory_peak_load", "buckets", "status", "memory_delta"),
     excel_output: Optional[str] = None,
+    exc: bool = True,
 ) -> Dict[str, "pandas.DataFrame"]:  # noqa: F821
     """
     Merges multiple files produced by bash_benchmark...
@@ -388,8 +389,12 @@ def merge_benchmark_reports(
         raise AssertionError(f"Unexpected type {type(data)} for data")
 
     if model not in df.columns:
-        raise AssertionError(f"{model!r} cannot be found in {df.columns}\n{df.head()}")
-    df = df[~df[model].isna()]
+        if exc:
+            raise AssertionError(
+                f"{model!r} cannot be found in {df.columns}\n{df.head()}"
+            )
+        return None
+    df = df[~df[model].isna()].copy()
 
     # replace nan values
     set_columns = set(df.columns)

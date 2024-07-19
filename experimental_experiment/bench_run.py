@@ -135,6 +135,7 @@ def run_benchmark(
     :param summary: function to call on the temporary data and the final data
     :return: values
     """
+    assert "temp" in temp_output_data, f"Unexpected value for {temp_output_data!r}"
     assert configs, f"No configuration was given (script_name={script_name!r})"
     if verbose:
         from tqdm import tqdm
@@ -217,10 +218,11 @@ def run_benchmark(
                 df.to_excel(temp_output_data + ".xlsx", index=False)
             except Exception:
                 continue
-            if summary and iter_loop % 10 == 1:
-                n, e = os.path.splitext(temp_output_data)
-                fn = f"{n}.summary-partial.xlsx"
-                summary(df, excel_output=fn)
+            if summary:
+                fn = f"{temp_output_data}.summary-partial.xlsx"
+                if verbose > 2:
+                    print(f"Prints out the results into file {fn!r}")
+                summary(df, excel_output=fn, exc=False)
 
     return data
 
@@ -233,7 +235,9 @@ def multi_run(kwargs: Namespace) -> bool:
 
 
 def make_configs(
-    kwargs: Namespace, drop: Optional[Set[str]] = None
+    kwargs: Namespace,
+    drop: Optional[Set[str]] = None,
+    replace: Optional[Dict[str, str]] = None,
 ) -> List[Dict[str, Any]]:
     """
     Creates all the configurations based on the command line arguments.
@@ -242,6 +246,8 @@ def make_configs(
     for k, v in kwargs.__dict__.items():
         if drop and k in drop:
             continue
+        if replace and k in replace:
+            v = replace[k]
         if isinstance(v, str):
             args.append([(k, s) for s in v.split(",")])
         else:
