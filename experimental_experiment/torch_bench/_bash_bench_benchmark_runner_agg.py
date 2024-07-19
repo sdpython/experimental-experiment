@@ -18,6 +18,16 @@ def _apply_excel_style(
         except TypeError:
             return False
 
+    def _isinf(x):
+        if x is None:
+            return True
+        if isinstance(x, str):
+            return x == "inf"
+        try:
+            return np.isinf(x)
+        except TypeError:
+            return False
+
     bold_font = Font(bold=True)
     alignment = Alignment(horizontal="left")
     center = Alignment(horizontal="center")
@@ -56,7 +66,9 @@ def _apply_excel_style(
         ):
             for cell in row:
                 if hasattr(cell, "col_idx") and (
-                    cell.value == look or (_isnan(cell.value) and _isnan(look))
+                    cell.value == look
+                    or (_isnan(cell.value) and _isnan(look))
+                    or (_isinf(cell.value) and _isinf(look))
                 ):
                     first_row = cell.row
                     first_col = cell.col_idx if hasattr(cell, "col_idx") else first_col
@@ -479,7 +491,11 @@ def merge_benchmark_reports(
             continue
 
         if expr == "buckets":
-            if "exporter" in set_columns and "script" in set(df.exporter):
+            if (
+                "exporter" in set_columns
+                and "script" in set(df.exporter)
+                and len(set(df.exporter)) > 1
+            ):
                 # Do the same with the exporter as a baseline.
                 keep = [model, *new_keys, "speedup"]
                 gr = df[df.exporter == "script"][keep].copy()

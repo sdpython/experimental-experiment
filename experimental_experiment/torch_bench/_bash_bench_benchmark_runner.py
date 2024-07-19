@@ -896,6 +896,7 @@ class BenchmarkRunner:
         verbose: int = 0,
         level: int = 0,
         flatten: bool = False,
+        debug_info: Optional[List[str]] = None,
     ) -> Tuple[float, float]:
         """
         Returns the maximum discrepancy.
@@ -906,15 +907,49 @@ class BenchmarkRunner:
                 self._flatten(got),
                 verbose=verbose,
                 flatten=False,
+                debug_info=(
+                    debug_info
+                    if verbose < 10
+                    else (
+                        [f"{' ' * level}flatten"]
+                        if not debug_info
+                        else (debug_info + [f"{' ' * level}flatten"])
+                    )
+                ),
+                level=level,
             )
         if hasattr(expected, "to_tuple"):
             return self.max_diff(
-                expected.to_tuple(), got, verbose=verbose, level=level + 1
+                expected.to_tuple(),
+                got,
+                verbose=verbose,
+                level=level + 1,
+                debug_info=(
+                    debug_info
+                    if verbose < 10
+                    else (
+                        [f"{' ' * level}to_tupleA"]
+                        if not debug_info
+                        else (debug_info + [f"{' ' * level}to_tupleA"])
+                    )
+                ),
             )
 
         if hasattr(got, "to_tuple"):
             return self.max_diff(
-                expected, got.to_tuple(), verbose=verbose, level=level + 1
+                expected,
+                got.to_tuple(),
+                verbose=verbose,
+                level=level + 1,
+                debug_info=(
+                    debug_info
+                    if verbose < 10
+                    else (
+                        [f"{' ' * level}to_tupleB"]
+                        if not debug_info
+                        else (debug_info + [f"{' ' * level}to_tupleB"])
+                    )
+                ),
             )
 
         if isinstance(expected, torch.Tensor):
@@ -923,22 +958,29 @@ class BenchmarkRunner:
                 rdiff = diff / (expected.abs() + 1e-3)
                 abs_diff, rel_diff = float(diff.max()), float(rdiff.max())
                 if self.verbose >= 10 and (abs_diff >= 10 or rel_diff >= 10):
-                    # To understand the value if comes from.
+                    # To understand the value it comes from.
+                    if debug_info:
+                        print("\n".join(debug_info))
                     print(
-                        f"[max_diff] abs_diff={abs_diff}, rel_diff={rel_diff}, "
-                        f"dtype={expected.dtype}, shape={expected.shape}"
+                        f"[max_diff-1] abs_diff={abs_diff}, rel_diff={rel_diff}, "
+                        f"dtype={expected.dtype}, shape={expected.shape}, level={level}"
                     )
                     if abs_diff >= 10:
                         idiff = torch.argmax(diff.reshape((-1,)))
                         x = expected.reshape((-1,))[idiff]
                         y = got.reshape((-1,))[idiff]
-                        print(f"   [max_diff] abs diff={abs_diff}, x={x}, y={y}")
+                        print(
+                            f"   [max_diff-2] abs diff={abs_diff}, x={x}, y={y}, level={level}"
+                        )
+                        print(y)
 
                     if rel_diff >= 10:
                         idiff = torch.argmax(rdiff.reshape((-1,)))
                         x = expected.reshape((-1,))[idiff]
                         y = got.reshape((-1,))[idiff]
-                        print(f"   [max_diff] rel diff={rel_diff}, x={x}, y={y}")
+                        print(
+                            f"   [max_diff-3] rel diff={rel_diff}, x={x}, y={y}, level={level}"
+                        )
 
                 return abs_diff, rel_diff
 
@@ -985,8 +1027,25 @@ class BenchmarkRunner:
                             print(f"    i={i} a is {type(a)}, b is {type(b)}")
                 return np.inf, np.inf
             am, rm = 0, 0
-            for e, g in zip(expected, got):
-                a, r = self.max_diff(e, g, verbose=verbose, level=level + 1)
+            for ip, (e, g) in enumerate(zip(expected, got)):
+                a, r = self.max_diff(
+                    e,
+                    g,
+                    verbose=verbose,
+                    level=level + 1,
+                    debug_info=(
+                        debug_info
+                        if verbose < 10
+                        else (
+                            [f"{' ' * level}[{ip}] so far abs {am} - rel {rm}"]
+                            if not debug_info
+                            else (
+                                debug_info
+                                + [f"{' ' * level}[{ip}] so far abs {am} - rel {rm}"]
+                            )
+                        )
+                    ),
+                )
                 am = max(am, a)
                 rm = max(rm, r)
             return am, rm

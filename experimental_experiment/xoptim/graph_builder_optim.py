@@ -266,10 +266,14 @@ class GraphBuilderPatternOptimization:
             proto = self.builder.initializers_dict[name]
         elif name in self.builder.constants_:
             proto = self.builder.constants_[name]
+        elif self.is_constant(name):
+            self.get_computed_constant(name)
+            return self.get_constant_shape(name, exc=exc)
         else:
             if exc:
                 raise AssertionError(
-                    f"Unable to retrieve initializer or constant for {name!r}"
+                    f"Unable to retrieve initializer or constant for {name!r}, "
+                    f"is_constant={self.is_constant(name)}"
                 )
             return None
 
