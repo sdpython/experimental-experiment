@@ -360,10 +360,10 @@ class BenchmarkRunner:
                         torch.cuda.nvtx.range_pop()
             if len(lats) > 0:
                 stats["time_latency_eager"] = sum(lats) / len(lats)
-                stats["time_latency_eager_min"] = min(lats)
-                stats["time_latency_eager_max"] = max(lats)
-                stats["time_latency_eager_std"] = np.std(lats)
-                stats["time_latency_eager_med"] = np.median(lats)
+                stats["time_latency_eager_t_min"] = min(lats)
+                stats["time_latency_eager_t_max"] = max(lats)
+                stats["time_latency_eager_t_std"] = np.std(lats)
+                stats["time_latency_eager_t_med"] = np.median(lats)
 
             if self.device == "cuda":
                 stats["mema_gpu_4_after_repeat"] = torch.cuda.memory_allocated(0)
@@ -671,10 +671,10 @@ class BenchmarkRunner:
                             torch.cuda.nvtx.range_pop()
                     if len(lats) > 0:
                         stats["time_latency"] = sum(lats) / len(lats)
-                        stats["time_latency_min"] = min(lats)
-                        stats["time_latency_max"] = max(lats)
-                        stats["time_latency_std"] = np.std(lats)
-                        stats["time_latency_med"] = np.median(lats)
+                        stats["time_latency_t_min"] = min(lats)
+                        stats["time_latency_t_max"] = max(lats)
+                        stats["time_latency_t_std"] = np.std(lats)
+                        stats["time_latency_t_med"] = np.median(lats)
                 if self.device == "cuda":
                     stats["mema_gpu_9_after_export_repeat"] = (
                         torch.cuda.memory_allocated(0)
@@ -769,10 +769,10 @@ class BenchmarkRunner:
                             torch.cuda.nvtx.range_pop()
                     if len(lats) > 0:
                         stats["time_latency"] = sum(lats) / len(lats)
-                        stats["time_latency_min"] = min(lats)
-                        stats["time_latency_max"] = max(lats)
-                        stats["time_latency_std"] = np.std(lats)
-                        stats["time_latency_med"] = np.median(lats)
+                        stats["time_latency_t_min"] = min(lats)
+                        stats["time_latency_t_max"] = max(lats)
+                        stats["time_latency_t_std"] = np.std(lats)
+                        stats["time_latency_t_med"] = np.median(lats)
 
                 if self.device == "cuda":
                     stats["mema_gpu_9_after_export_repeat"] = (
@@ -787,7 +787,7 @@ class BenchmarkRunner:
             if "time_latency" in stats:
                 stats["speedup"] = stats["time_latency_eager"] / stats["time_latency"]
                 stats["speedup_med"] = (
-                    stats["time_latency_eager_med"] / stats["time_latency_med"]
+                    stats["time_latency_eager_t_med"] / stats["time_latency_t_med"]
                 )
                 stats["speedup_increase"] = stats["speedup"] - 1
 
