@@ -1,4 +1,4 @@
-from typing import Optional, Dict, List, Sequence
+from typing import Optional, Dict, List, Sequence, Union
 import numpy as np
 
 
@@ -223,7 +223,7 @@ def _apply_excel_style(
 
 
 def merge_benchmark_reports(
-    data: List[str],
+    data: Union["pandas.DataFrame", List[str]],  # noqa: F821
     model="model_name",
     keys=(
         "suite",
@@ -357,12 +357,26 @@ def merge_benchmark_reports(
     """
     import pandas
 
-    dfs = []
-    for filename in data:
-        df = pandas.read_csv(filename)
-        dfs.append(df)
+    if isinstance(data, list):
+        dfs = []
+        for filename in data:
+            if isinstance(filename, str):
+                df = pandas.read_csv(filename)
+            elif isinstance(filename, pandas.DataFrame):
+                df = filename
+            else:
+                raise AssertionError(
+                    f"Unexpected type {type(filename)} for one element of data"
+                )
+            dfs.append(df)
+        df = pandas.concat(dfs, axis=0)
+    elif isinstance(data, pandas.DataFrame):
+        df = data
+    else:
+        raise AssertionError(f"Unexpected type {type(data)} for data")
 
-    df = pandas.concat(dfs, axis=0)
+    if model not in df.columns:
+        raise AssertionError(f"{model!r} cannot be found in {df.columns}\n{df.head()}")
     df = df[~df[model].isna()]
 
     # replace nan values

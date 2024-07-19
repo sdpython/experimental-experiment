@@ -167,6 +167,7 @@ class BenchmarkRunner:
 
         import transformers
         import onnxruntime
+        import onnxscript  # noqa: F401
         from experimental_experiment.bench_run import get_machine, _clean_string
 
         machine_specs = get_machine()
@@ -193,9 +194,11 @@ class BenchmarkRunner:
                 print(f"[BenchmarkRunner.benchmark] load model {model_name!r}")
 
             stats = {
-                "version_torch": torch.__version__,
-                "version_transformers": transformers.__version__,
-                "version_onnxruntime": onnxruntime.__version__,
+                "version_torch": getattr(torch, "__version__", "dev"),
+                "version_transformers": getattr(transformers, "__version__", "dev"),
+                "version_onnxruntime": getattr(onnxruntime, "__version__", "dev"),
+                "version_onnxscript": getattr("onnxscript", "__version__", "dev"),
+                "version_onnx": getattr(onnx, "__version__", "dev"),
             }
             stats.update(machine_specs)
             if self.device == "cuda":

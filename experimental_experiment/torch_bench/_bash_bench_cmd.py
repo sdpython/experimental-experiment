@@ -73,6 +73,9 @@ def bash_bench_main(script_name: str, doc: str, args: Optional[List[str]] = None
         make_dataframe_from_benchmark_data,
         run_benchmark,
     )
+    from experimental_experiment.torch_bench._bash_bench_benchmark_runner_agg import (
+        merge_benchmark_reports,
+    )
 
     if script_name == "bash_bench_huggingface":
         from ._bash_bench_set_huggingface import HuggingfaceRunner
@@ -111,7 +114,6 @@ def bash_bench_main(script_name: str, doc: str, args: Optional[List[str]] = None
             if args.output_data:
                 name, ext = os.path.splitext(args.output_data)
                 temp_output_data = f"{name}.temp{ext}"
-                args.output_data = ""
             else:
                 temp_output_data = None
             configs = make_configs(args, drop={"process"})
@@ -124,6 +126,7 @@ def bash_bench_main(script_name: str, doc: str, args: Optional[List[str]] = None
                 temp_output_data=temp_output_data,
                 dump_std=args.dump_folder,
                 start=args.start,
+                summary=merge_benchmark_reports,
             )
             if args.verbose > 2:
                 pprint.pprint(data if args.verbose > 3 else data[:2])
@@ -205,3 +208,8 @@ def bash_bench_main(script_name: str, doc: str, args: Optional[List[str]] = None
                 df.to_excel(filename + ".xlsx", index=False)
                 if args.verbose:
                     print(df)
+
+                # also write a summary
+                n, e = os.path.splitext(filename)
+                fn = f"{n}.summary.xlsx"
+                merge_benchmark_reports(df, excel_output=fn)

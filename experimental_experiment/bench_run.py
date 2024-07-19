@@ -9,7 +9,7 @@ import time
 import warnings
 from argparse import Namespace
 from datetime import datetime
-from typing import Any, Dict, List, Set, Tuple, Union, Optional
+from typing import Any, Callable, Dict, List, Set, Tuple, Union, Optional
 
 
 ILLEGAL_CHARACTERS_RE = re.compile(r"([\000-\010]|[\013-\014]|[\016-\037])")
@@ -118,6 +118,7 @@ def run_benchmark(
     temp_output_data: Optional[str] = None,
     dump_std: Optional[str] = None,
     start: int = 0,
+    summary: Optional[Callable] = None,
 ) -> List[Dict[str, Union[str, int, float, Tuple[int, int]]]]:
     """
     Runs a script multiple times and extract information from the output
@@ -131,6 +132,7 @@ def run_benchmark(
     :param temp_output_data: to save the data after every run to avoid losing data
     :param dump_std: dumps stdout and stderr in this folder
     :param start: start at this iteration
+    :param summary: function to call on the temporary data and the final data
     :return: values
     """
     assert configs, f"No configuration was given (script_name={script_name!r})"
@@ -213,12 +215,12 @@ def run_benchmark(
             df.to_csv(temp_output_data, index=False)
             try:
                 df.to_excel(temp_output_data + ".xlsx", index=False)
-            except Exception as e:
-                print(e)
-                import pprint
-
-                pprint.pprint(data)
-                raise
+            except Exception:
+                continue
+            if summary and iter_loop % 10 == 1:
+                n, e = os.path.splitext(temp_output_data)
+                fn = f"{n}.summary.xlsx"
+                summary(df, excel_output=fn)
 
     return data
 
