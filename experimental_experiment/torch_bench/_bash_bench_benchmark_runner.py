@@ -347,16 +347,23 @@ class BenchmarkRunner:
                     f"- {repeat} times"
                 )
 
-            begin = time.perf_counter()
             with torch.no_grad():
                 # training mode consumes too much memory
+                lats = []
                 for w in range(repeat):
                     if self.nvtx:
                         torch.cuda.nvtx.range_push("EAGER-ITER")
+                    begin = time.perf_counter()
                     model_runner.run()
+                    lats.append(time.perf_counter() - begin)
                     if self.nvtx:
                         torch.cuda.nvtx.range_pop()
-            stats["time_latency_eager"] = (time.perf_counter() - begin) / repeat
+            if len(lats) > 0:
+                stats["time_latency_eager"] = sum(lats) / len(lats)
+                stats["time_latency_eager_min"] = min(lats)
+                stats["time_latency_eager_max"] = max(lats)
+                stats["time_latency_eager_std"] = np.std(lats)
+                stats["time_latency_eager_med"] = np.median(lats)
 
             if self.device == "cuda":
                 stats["mema_gpu_4_after_repeat"] = torch.cuda.memory_allocated(0)
@@ -653,14 +660,21 @@ class BenchmarkRunner:
                 ################
 
                 if "ERR_warmup" not in stats:
-                    begin = time.perf_counter()
+                    lats = []
                     for _ in range(repeat):
                         if self.nvtx:
                             torch.cuda.nvtx.range_push("ORT-ITER")
+                        begin = time.perf_counter()
                         self.ort_run(sess, feeds)
+                        lats.append(time.perf_counter() - begin)
                         if self.nvtx:
                             torch.cuda.nvtx.range_pop()
-                    stats["time_latency"] = (time.perf_counter() - begin) / repeat
+                    if len(lats) > 0:
+                        stats["time_latency"] = sum(lats) / len(lats)
+                        stats["time_latency_min"] = min(lats)
+                        stats["time_latency_max"] = max(lats)
+                        stats["time_latency_std"] = np.std(lats)
+                        stats["time_latency_med"] = np.median(lats)
                 if self.device == "cuda":
                     stats["mema_gpu_9_after_export_repeat"] = (
                         torch.cuda.memory_allocated(0)
@@ -744,14 +758,21 @@ class BenchmarkRunner:
                 ################
 
                 if "ERR_warmup" not in stats:
-                    begin = time.perf_counter()
+                    lats = []
                     for _ in range(repeat):
                         if self.nvtx:
                             torch.cuda.nvtx.range_push("CPL-ITER")
+                        begin = time.perf_counter()
                         sess.run(feeds)
+                        lats.append(time.perf_counter() - begin)
                         if self.nvtx:
                             torch.cuda.nvtx.range_pop()
-                    stats["time_latency"] = (time.perf_counter() - begin) / repeat
+                    if len(lats) > 0:
+                        stats["time_latency"] = sum(lats) / len(lats)
+                        stats["time_latency_min"] = min(lats)
+                        stats["time_latency_max"] = max(lats)
+                        stats["time_latency_std"] = np.std(lats)
+                        stats["time_latency_med"] = np.median(lats)
 
                 if self.device == "cuda":
                     stats["mema_gpu_9_after_export_repeat"] = (
@@ -765,6 +786,9 @@ class BenchmarkRunner:
 
             if "time_latency" in stats:
                 stats["speedup"] = stats["time_latency_eager"] / stats["time_latency"]
+                stats["speedup_med"] = (
+                    stats["time_latency_eager_med"] / stats["time_latency_med"]
+                )
                 stats["speedup_increase"] = stats["speedup"] - 1
 
             ###############

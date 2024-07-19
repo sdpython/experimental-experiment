@@ -125,15 +125,15 @@ def _apply_excel_style(
             elif k == "speedup":
                 qb = 0.98
                 qt = None
-                fmt = "0.000"
+                fmt = "0.0000"
             elif k == "speedup_increase":
                 qb = -0.02
                 qt = None
-                fmt = "0.00%"
+                fmt = "0.000%"
             else:
                 qt = 0.01
                 qb = None
-                fmt = "0.00000"
+                fmt = "0.000000"
 
             for row in sheet.iter_rows(
                 min_row=first_row,
@@ -191,7 +191,7 @@ def _apply_excel_style(
                 for cell in row:
                     if cell.value is None or isinstance(cell.value, str):
                         continue
-                    cell.number_format = "0.000"
+                    cell.number_format = "0.000000"
             continue
     for k, v in res.items():
         if k not in lasts:
@@ -223,7 +223,7 @@ def _apply_excel_style(
                         cell.fill = gray
                         cell.font = bold_font
                         if "." not in cell.number_format:
-                            cell.number_format = "0.000"
+                            cell.number_format = "0.0000"
                     elif sheet.cell(row=cell.row, column=1).value in {
                         "~COUNT",
                         "~TOTAL",
@@ -257,6 +257,7 @@ def merge_benchmark_reports(
     report_on=(
         "speedup",
         "speedup_increase",
+        "speedup_med",
         "discrepancies_*",
         "TIME_ITER",
         "time_*",
@@ -457,6 +458,7 @@ def merge_benchmark_reports(
             if delta_gpu is not None:
                 df["mempeak_gpu"] = delta_gpu
                 report_on.append("mempeak_gpu")
+
         if expr == "memory_peak_load":
             if (
                 "mema_gpu_5_after_export" in set_columns
@@ -669,7 +671,7 @@ def merge_benchmark_reports(
                 res[c].loc["~SUM"] = summ
                 res[c].loc["~MEAN"] = mean
                 res[c].loc["~MED"] = med
-    for c in ["speedup"]:
+    for c in ["speedup", "speedup_med"]:
         if c in res:
             mean = np.exp(np.log(res[c]).mean(axis=0))
             med = res[c].median(axis=0)
@@ -778,6 +780,7 @@ def merge_benchmark_reports(
         "mempeak",
         "onnx",
         "speedup",
+        "speedup_med",
         "speedup_increase",
         "status",
         "time",
