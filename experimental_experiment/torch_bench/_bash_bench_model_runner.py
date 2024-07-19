@@ -551,7 +551,7 @@ class ModelRunner:
                 dynamo=True,
             )
         sarif = "report_dynamo_export.sarif"
-        if os.path.exist(sarif):
+        if os.path.exists(sarif):
             folder = os.path.split(name)[0]
             with open(sarif, "r", encoding="utf-8") as f:
                 self.error_report = f.read()
@@ -777,8 +777,9 @@ class ModelRunner:
             return self.inputs
         inputs = [i for i, d in zip(self.inputs, self.raw_use_defaults) if not d]
         assert len(names) == len(inputs), (
-            f"Mismatch number of outputs, {len(inputs)} inputs for {names}. "
-            f"self.raw_input_names={self.raw_input_names}, "
-            f"self.raw_use_defaults={self.raw_use_defaults}"
+            f"Mismatch number of outputs, {len(inputs)} inputs for {names}.\n"
+            f"self.raw_input_names={self.raw_input_names},\n"
+            f"self.raw_use_defaults={self.raw_use_defaults},\n"
+            f"initializer_names={initializer_names}"
         )
         return dict(zip(names, inputs))

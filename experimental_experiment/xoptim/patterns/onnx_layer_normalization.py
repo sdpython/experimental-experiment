@@ -3,6 +3,7 @@ from typing import List, Optional
 import numpy as np
 from onnx import NodeProto
 from onnx.helper import tensor_dtype_to_np_dtype
+from onnx.numpy_helper import from_array
 from ..patterns_api import MatchResult, PatternOptimization
 
 
@@ -20,9 +21,17 @@ class LayerNormalizationPattern(PatternOptimization):
         if node.op_type != "ReduceMean" or node.domain != "":
             return self.none()
 
-        if not g.is_constant_scalar(node.input[1]):
+        if not g.is_constant(node.input[1]):
             return self.none(node, inspect.currentframe().f_lineno)
-        axis = g.get_constant_scalar(node.input[1])
+        axis = g.get_computed_constant(node.input[1])
+        if axis.tolist() != [-1]:
+            if not g.has_rank(node.input[0]):
+                return self.none(node, inspect.currentframe().f_lineno)
+            rk = g.get_rank(node.input[0])
+            al = axis.tolist()
+            if al != list(range(rk - len(al), rk)):
+                print("***", al, rk, list(range(rk - len(al), rk)))
+                return self.none(node, inspect.currentframe().f_lineno)
 
         # before
 
@@ -46,10 +55,10 @@ class LayerNormalizationPattern(PatternOptimization):
             return self.none(node, inspect.currentframe().f_lineno)
         if red.op_type != "ReduceMean" or len(g.next_nodes(red.output[0])) != 1:
             return self.none(node, inspect.currentframe().f_lineno)
-        if not g.is_constant_scalar(red.input[1]):
+        if not g.is_constant(red.input[1]):
             return self.none(node, inspect.currentframe().f_lineno)
-        axis2 = g.get_constant_scalar(red.input[1])
-        if axis != axis2:
+        axis2 = g.get_computed_constant(red.input[1])
+        if axis.tolist() != axis2.tolist():
             return self.none(node, inspect.currentframe().f_lineno)
         if sub.input[0] != red.input[0]:
             return self.none(node, inspect.currentframe().f_lineno)
@@ -100,12 +109,42 @@ class LayerNormalizationPattern(PatternOptimization):
         itype = g.get_type(red.input[0])
         dtype = tensor_dtype_to_np_dtype(itype)
 
-        axis = int(g.get_constant_scalar(red.input[1]))
-        scale = g.make_initializer("", np.array([1], dtype=dtype))
+        axis = g.get_computed_constant(red.input[1]).tolist()
+        scale = None
+        dtype = tensor_dtype_to_np_dtype(g.get_type(red.input[0]))
+        new_nodes = []
+        if axis == [-1]:
+            ly_axis = -1
+            if g.has_shape(red.input[0]):
+                shape = g.get_shape(red.input[0])
+                if isinstance(shape[-1], int):
+                    scale = g.make_initializer("", np.ones((shape[-1],), dtype=dtype))
+        else:
+            ly_axis = min(axis)
+        if scale is None:
+            shape = g.unique_name(f"{self.__class__.__name__}_Sh_{red.input[0]}")
+            new_nodes.append(
+                g.make_node(
+                    "Shape",
+                    [red.input[0]],
+                    [shape],
+                    start=ly_axis,
+                    name=f"{self.__class__.__name__}--{red.name}",
+                )
+            )
+            scale = g.unique_name(f"{self.__class__.__name__}_Sc_{red.input[0]}")
+            new_nodes.append(
+                g.make_node(
+                    "ConstantOfShape",
+                    [shape],
+                    [scale],
+                    name=f"{self.__class__.__name__}--{red.name}",
+                    value=from_array(np.array([1], dtype=dtype)),
+                )
+            )
 
         eps = g.get_constant_scalar(add.input[1]) if add else 9.999999960041972e-13
 
-        new_nodes = []
         new_nodes.append(
             g.make_node(
                 "LayerNormalization",
@@ -115,7 +154,7 @@ class LayerNormalizationPattern(PatternOptimization):
                 name=f"{self.__class__.__name__}--{node.name}",
                 doc_string=node.doc_string,
                 stash_type=1,  # itype,
-                axis=axis,
+                axis=ly_axis,
             )
         )
         return new_nodes
@@ -134,6 +173,10 @@ class LayerNormalizationScalePattern(PatternOptimization):
     ) -> Optional[MatchResult]:
         if node.op_type != "LayerNormalization" or node.domain != "":
             return self.none()
+
+        if len(node.output) != 1:
+            # No need for the scale.
+            return self.none(node, inspect.currentframe().f_lineno)
 
         nodes = g.next_nodes(node.output[0])
         if len(nodes) != 1 or nodes[0].op_type != "Mul":
@@ -210,7 +253,7 @@ class LayerNormalizationScalePattern(PatternOptimization):
                 if new_bias
                 else [ln_node.input[0], new_scale]
             ),
-            [(add_node or mul_node).output[0], ln_node.input[1]],
+            [(add_node or mul_node).output[0]],
             name=f"{self.__class__.__name__}--{ln_node.name}",
             doc_string=ln_node.doc_string,
             **kwargs,

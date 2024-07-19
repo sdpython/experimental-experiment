@@ -2659,7 +2659,7 @@ def aten_native_layer_norm(
     sts: Optional[Dict[str, Any]],
     outputs: List[str],
     x: T,
-    normalized_shape: T,  # int64
+    normalized_shape: Tuple[int, ...],  # int64
     weight: Optional[T] = None,
     bias: Optional[T] = None,
     eps: float = 1e-05,

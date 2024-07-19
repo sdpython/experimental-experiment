@@ -2992,72 +2992,38 @@ class TestGraphPatternOptimization(ExtTestCase):
                 [oh.make_tensor_value_info("X", TFLOAT, ["a", "b"])],
                 [oh.make_tensor_value_info("Y", TFLOAT, ["a", "b"])],
                 [
-                    onh.from_array(np.array([1], dtype=np.float32), name="one"),
                     onh.from_array(
-                        np.array([[2, 3]], dtype=np.float32).T, name="scale"
+                        np.array(
+                            (
+                                [1, 1, 1, 1, 1, 1]
+                                if kwargs.get("axis", -1) == 0
+                                else [1, 1, 1]
+                            ),
+                            dtype=np.float32,
+                        ),
+                        name="one",
                     ),
-                    onh.from_array(
-                        np.array([[-10, -100]], dtype=np.float32).T, name="bias"
-                    ),
+                    onh.from_array(np.array([2.5], dtype=np.float32), name="scale"),
+                    onh.from_array(np.array([2], dtype=np.float32), name="bias"),
                 ],
             )
         )
 
     def test_layer_normalization_scale_bias(self):
-        for kwargs in [{}, dict(axis=0), dict(stash_type=1), dict(epsilon=1e-1)]:
-            model = self._get_model_ln_scale_bias(**kwargs)
-            feeds = {"X": self._range(2, 3).astype(np.float32)}
-            ref = ExtendedReferenceEvaluator(model, verbose=0)
-            expected = ref.run(None, feeds)[0]
-            inputs = [tuple(n.input) for n in model.graph.node]
+        from onnxruntime import InferenceSession
 
-            gr = GraphBuilder(
-                model,
-                infer_shapes=True,
-                optimization_options=OptimizationOptions(
-                    patterns=["LayerNormalizationScale"], verbose=0
-                ),
-            )
-            opt_onx = gr.to_onnx(optimize=True)
-            self.assertEqual(
-                ["LayerNormalization"],
-                [n.op_type for n in opt_onx.graph.node],
-            )
-            self.assertEqual(2, len(opt_onx.graph.initializer))
-            new_inputs = [tuple(n.input) for n in opt_onx.graph.node]
-            self.assertNotEqual(inputs, new_inputs)
-
-            opt_ref = ExtendedReferenceEvaluator(opt_onx)
-            got = opt_ref.run(None, feeds)[0]
-            self.assertEqualArray(expected, got, atol=1e-3)
-
-    def _get_model_ln_scale_no_bias(self, **kwargs):
-        return oh.make_model(
-            oh.make_graph(
-                [
-                    oh.make_node("LayerNormalization", ["X", "s0"], ["norm"], **kwargs),
-                    oh.make_node("Mul", ["norm", "scale"], ["Y"]),
-                ],
-                "dummy",
-                [oh.make_tensor_value_info("X", TFLOAT, ["a", "b"])],
-                [oh.make_tensor_value_info("Y", TFLOAT, ["a", "b"])],
-                [
-                    onh.from_array(
-                        np.array([[2, 3]], dtype=np.float32).T, name="scale"
-                    ),
-                    onh.from_array(
-                        np.array([[-0.1, -0.01]], dtype=np.float32).T, name="s0"
-                    ),
-                ],
-            )
-        )
-
-    def test_layer_normalization_scale_no_bias(self):
         for kwargs in [{}, dict(axis=0), dict(stash_type=1), dict(epsilon=1e-1)]:
             model = self._get_model_ln_scale_no_bias(**kwargs)
             feeds = {"X": self._range(2, 3).astype(np.float32)}
-            ref = ExtendedReferenceEvaluator(model, verbose=0)
-            expected = ref.run(None, feeds)[0]
+
+            try:
+                sess = InferenceSession(
+                    model.SerializeToString(), providers=["CPUExecutionProvider"]
+                )
+                expected = sess.run(None, feeds)[0]
+            except Exception as e:
+                raise AssertionError(f"Issue with kwargs={kwargs}, model{model}") from e
+
             inputs = [tuple(n.input) for n in model.graph.node]
 
             gr = GraphBuilder(
@@ -3076,12 +3042,133 @@ class TestGraphPatternOptimization(ExtTestCase):
             new_inputs = [tuple(n.input) for n in opt_onx.graph.node]
             self.assertNotEqual(inputs, new_inputs)
 
-            opt_ref = ExtendedReferenceEvaluator(opt_onx)
-            got = opt_ref.run(None, feeds)[0]
+            try:
+                opt_ref = InferenceSession(
+                    opt_onx.SerializeToString(), providers=["CPUExecutionProvider"]
+                )
+            except Exception as e:
+                raise AssertionError(
+                    f"Issue with kwargs={kwargs}, model{opt_onx}"
+                ) from e
+            try:
+                got = opt_ref.run(None, feeds)[0]
+            except Exception as e:
+                raise AssertionError(
+                    f"Issue with kwargs={kwargs}, model{opt_onx}"
+                ) from e
             self.assertEqualArray(expected, got, atol=1e-3)
+
+            import torch
+
+            if torch.cuda.is_available():
+                opt_ref = InferenceSession(
+                    opt_onx.SerializeToString(),
+                    providers=["CUDAExecutionProvider"],
+                )
+                got = opt_ref.run(None, feeds)[0]
+                self.assertEqualArray(expected, got, atol=1e-3)
+
+    def _get_model_ln_scale_no_bias(self, **kwargs):
+        return oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("LayerNormalization", ["X", "s0"], ["norm"], **kwargs),
+                    oh.make_node("Mul", ["norm", "scale"], ["Y"]),
+                ],
+                "dummy",
+                [oh.make_tensor_value_info("X", TFLOAT, ["a", "b"])],
+                [oh.make_tensor_value_info("Y", TFLOAT, ["a", "b"])],
+                [
+                    onh.from_array(
+                        np.array(
+                            (
+                                [-0.1, -0.01, -0.05, -0.1, -0.01, -0.08]
+                                if kwargs.get("axis", -1) == 0
+                                else [-0.1, -0.01, -0.05]
+                            ),
+                            dtype=np.float32,
+                        ),
+                        name="s0",
+                    ),
+                    onh.from_array(
+                        np.array(
+                            [2] if kwargs.get("axis", -1) == 0 else [2, 3, 4],
+                            dtype=np.float32,
+                        ),
+                        name="scale",
+                    ),
+                ],
+            )
+        )
+
+    def test_layer_normalization_scale_no_bias(self):
+        from onnxruntime import InferenceSession
+
+        for kwargs in [
+            dict(axis=0),
+            {},
+            dict(axis=1),
+            dict(stash_type=1),
+            dict(epsilon=1e-1),
+        ]:
+            model = self._get_model_ln_scale_no_bias(**kwargs)
+            feeds = {"X": self._range(2, 3).astype(np.float32)}
+
+            try:
+                sess = InferenceSession(
+                    model.SerializeToString(), providers=["CPUExecutionProvider"]
+                )
+                expected = sess.run(None, feeds)[0]
+            except Exception as e:
+                raise AssertionError(f"Issue with kwargs={kwargs}, model{model}") from e
+
+            inputs = [tuple(n.input) for n in model.graph.node]
+
+            gr = GraphBuilder(
+                model,
+                infer_shapes=True,
+                optimization_options=OptimizationOptions(
+                    patterns=["LayerNormalizationScale"], verbose=0
+                ),
+            )
+            opt_onx = gr.to_onnx(optimize=True)
+            self.assertEqual(
+                ["Mul", "LayerNormalization"],
+                [n.op_type for n in opt_onx.graph.node],
+            )
+            self.assertEqual(2, len(opt_onx.graph.initializer))
+            new_inputs = [tuple(n.input) for n in opt_onx.graph.node]
+            self.assertNotEqual(inputs, new_inputs)
+
+            try:
+                opt_ref = InferenceSession(
+                    opt_onx.SerializeToString(), providers=["CPUExecutionProvider"]
+                )
+            except Exception as e:
+                raise AssertionError(
+                    f"Issue with kwargs={kwargs}, model{opt_onx}"
+                ) from e
+            try:
+                got = opt_ref.run(None, feeds)[0]
+            except Exception as e:
+                raise AssertionError(
+                    f"Issue with kwargs={kwargs}, model{opt_onx}"
+                ) from e
+            self.assertEqualArray(expected, got, atol=1e-3)
+
+            import torch
+
+            if torch.cuda.is_available():
+                opt_ref = InferenceSession(
+                    opt_onx.SerializeToString(),
+                    providers=["CUDAExecutionProvider"],
+                )
+                got = opt_ref.run(None, feeds)[0]
+                self.assertEqualArray(expected, got, atol=1e-3)
 
     def _get_model_redln(self, dtype=None, axis=-1, fixed=True):
         itype = TFLOAT if dtype in (None, np.float32) else TensorProto.FLOAT16
+        axis_ = [axis] if axis in (-1, 1) else [0, 1]
         return oh.make_model(
             oh.make_graph(
                 [
@@ -3104,7 +3191,7 @@ class TestGraphPatternOptimization(ExtTestCase):
                     )
                 ],
                 [
-                    onh.from_array(np.array([axis], dtype=np.int64), name="axis"),
+                    onh.from_array(np.array(axis_, dtype=np.int64), name="axis"),
                     onh.from_array(np.array([2], dtype=np.float32).T, name="two"),
                 ],
             ),
@@ -3112,6 +3199,8 @@ class TestGraphPatternOptimization(ExtTestCase):
         )
 
     def test_layer_normalization_simple(self):
+        from onnxruntime import InferenceSession
+
         for dtype in [np.float32, np.float16]:
             for kwargs in [
                 dict(axis=0),
@@ -3121,8 +3210,17 @@ class TestGraphPatternOptimization(ExtTestCase):
             ]:
                 model = self._get_model_redln(dtype=dtype, **kwargs)
                 feeds = {"X": (self._range(2, 3) + np.array([1, 2, 3])).astype(dtype)}
-                ref = ExtendedReferenceEvaluator(model)
-                expected = ref.run(None, feeds)[0]
+
+                try:
+                    sess = InferenceSession(
+                        model.SerializeToString(), providers=["CPUExecutionProvider"]
+                    )
+                    expected = sess.run(None, feeds)[0]
+                except Exception as e:
+                    raise AssertionError(
+                        f"Issue with kwargs={kwargs}, model{model}"
+                    ) from e
+
                 inputs = [tuple(n.input) for n in model.graph.node]
 
                 gr = GraphBuilder(
@@ -3133,25 +3231,32 @@ class TestGraphPatternOptimization(ExtTestCase):
                     ),
                 )
                 opt_onx = gr.to_onnx(optimize=True)
-                self.assertEqual(
-                    ["LayerNormalization"],
+                self.assertIn(
                     [n.op_type for n in opt_onx.graph.node],
+                    (
+                        ["LayerNormalization"],
+                        ["Shape", "ConstantOfShape", "LayerNormalization"],
+                    ),
                 )
-                self.assertEqual(1, len(opt_onx.graph.initializer))
+                self.assertIn(len(opt_onx.graph.initializer), (0, 1))
                 new_inputs = [tuple(n.input) for n in opt_onx.graph.node]
                 self.assertNotEqual(inputs, new_inputs)
 
-                opt_ref = ExtendedReferenceEvaluator(model)
-                got = opt_ref.run(None, feeds)[0]
-                self.assertEqualArray(expected, got, atol=1e-3)
-
-                from onnxruntime import InferenceSession
-
                 opt_ref = InferenceSession(
-                    model.SerializeToString(), providers=["CPUExecutionProvider"]
+                    opt_onx.SerializeToString(), providers=["CPUExecutionProvider"]
                 )
                 got = opt_ref.run(None, feeds)[0]
                 self.assertEqualArray(expected, got, atol=1e-3)
+
+                import torch
+
+                if torch.cuda.is_available():
+                    opt_ref = InferenceSession(
+                        opt_onx.SerializeToString(),
+                        providers=["CUDAExecutionProvider"],
+                    )
+                    got = opt_ref.run(None, feeds)[0]
+                    self.assertEqualArray(expected, got, atol=1e-3)
 
 
 if __name__ == "__main__":
