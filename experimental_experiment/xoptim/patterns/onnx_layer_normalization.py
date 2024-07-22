@@ -148,7 +148,7 @@ class LayerNormalizationPattern(PatternOptimization):
                 g.make_node(
                     "ConstantOfShape",
                     [shape],
-                    [scale],
+                    [bias],
                     name=f"{self.__class__.__name__}--{red.name}",
                     value=from_array(np.array([0], dtype=dtype)),
                 )

@@ -2935,10 +2935,10 @@ class TestGraphPatternOptimization(ExtTestCase):
             ),
         )
         opt_onx = gr.to_onnx(optimize=True)
-        with open("gggg.onnx", "wb") as f:
-            f.write(opt_onx.SerializeToString())
+        # with open("gggg.onnx", "wb") as f:
+        #     f.write(opt_onx.SerializeToString())
         self.assertIn("LayerNormalization", set(n.op_type for n in opt_onx.graph.node))
-        self.assertEqual(193, len(opt_onx.graph.initializer))
+        self.assertEqual(219, len(opt_onx.graph.initializer))
         new_inputs = [tuple(n.input) for n in opt_onx.graph.node]
         self.assertNotEqual(inputs, new_inputs)
 
@@ -3006,7 +3006,8 @@ class TestGraphPatternOptimization(ExtTestCase):
                     onh.from_array(np.array([2.5], dtype=np.float32), name="scale"),
                     onh.from_array(np.array([2], dtype=np.float32), name="bias"),
                 ],
-            )
+            ),
+            opset_imports=[oh.make_opsetid("", 20)],
         )
 
     def test_layer_normalization_scale_bias(self):
@@ -3098,7 +3099,8 @@ class TestGraphPatternOptimization(ExtTestCase):
                         name="scale",
                     ),
                 ],
-            )
+            ),
+            opset_imports=[oh.make_opsetid("", 20)],
         )
 
     def test_layer_normalization_scale_no_bias(self):
@@ -3235,10 +3237,15 @@ class TestGraphPatternOptimization(ExtTestCase):
                     [n.op_type for n in opt_onx.graph.node],
                     (
                         ["LayerNormalization"],
-                        ["Shape", "ConstantOfShape", "LayerNormalization"],
+                        [
+                            "Shape",
+                            "ConstantOfShape",
+                            "ConstantOfShape",
+                            "LayerNormalization",
+                        ],
                     ),
                 )
-                self.assertIn(len(opt_onx.graph.initializer), (0, 1))
+                self.assertIn(len(opt_onx.graph.initializer), (0, 2))
                 new_inputs = [tuple(n.input) for n in opt_onx.graph.node]
                 self.assertNotEqual(inputs, new_inputs)
 

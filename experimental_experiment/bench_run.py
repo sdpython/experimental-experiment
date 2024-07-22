@@ -135,7 +135,9 @@ def run_benchmark(
     :param summary: function to call on the temporary data and the final data
     :return: values
     """
-    assert "temp" in temp_output_data, f"Unexpected value for {temp_output_data!r}"
+    assert (
+        temp_output_data is None or "temp" in temp_output_data
+    ), f"Unexpected value for {temp_output_data!r}"
     assert configs, f"No configuration was given (script_name={script_name!r})"
     if verbose:
         from tqdm import tqdm
