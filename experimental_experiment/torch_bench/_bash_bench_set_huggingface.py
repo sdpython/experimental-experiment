@@ -167,10 +167,10 @@ class HuggingfaceRunner(BenchmarkRunner):
         """
         import transformers
 
-        for cls in container.imports:
-            assert hasattr(
-                transformers, cls
-            ), f"{cls!r} not found, update transformers."
+        # for cls in container.imports:
+        #     assert hasattr(
+        #         transformers, cls
+        #     ), f"{cls!r} not found, update transformers."
 
         lines = container.MODELS_FILENAME.split("\n")
         lines = [line.rstrip() for line in lines]
@@ -184,29 +184,33 @@ class HuggingfaceRunner(BenchmarkRunner):
         container.EXTRA_MODELS.update(
             {
                 "101Dummy": (
-                    Neuron.config,
+                    lambda: Neuron.config,
                     Neuron,
                 ),
                 "101Dummy16": (
-                    Neuron16.config,
+                    lambda: Neuron16.config,
                     Neuron16,
                 ),
                 "101DummyTuple": (
-                    NeuronTuple.config,
+                    lambda: NeuronTuple.config,
                     NeuronTuple,
                 ),
+                "101Dummy2": (
+                    lambda: Neuron.config,
+                    Neuron,
+                ),
                 "AllenaiLongformerBase": (
-                    transformers.AutoConfig.from_pretrained(
+                    lambda: transformers.AutoConfig.from_pretrained(
                         "allenai/longformer-base-4096"
                     ),
                     transformers.AutoModelForMaskedLM,
                 ),
                 "Reformer": (
-                    transformers.ReformerConfig(),
+                    lambda: transformers.ReformerConfig(),
                     transformers.AutoModelForMaskedLM,
                 ),
                 "T5Small": (
-                    transformers.AutoConfig.from_pretrained("t5-small"),
+                    lambda: transformers.AutoConfig.from_pretrained("t5-small"),
                     transformers.AutoModelForSeq2SeqLM,
                 ),
                 # "BigBird": (
@@ -214,23 +218,25 @@ class HuggingfaceRunner(BenchmarkRunner):
                 #     AutoModelForMaskedLM,
                 # ),
                 "DistillGPT2": (
-                    transformers.AutoConfig.from_pretrained("distilgpt2"),
+                    lambda: transformers.AutoConfig.from_pretrained("distilgpt2"),
                     transformers.AutoModelForCausalLM,
                 ),
                 "GoogleFnet": (
-                    transformers.AutoConfig.from_pretrained("google/fnet-base"),
+                    lambda: transformers.AutoConfig.from_pretrained("google/fnet-base"),
                     transformers.AutoModelForMaskedLM,
                 ),
                 "YituTechConvBert": (
-                    transformers.AutoConfig.from_pretrained("YituTech/conv-bert-base"),
+                    lambda: transformers.AutoConfig.from_pretrained(
+                        "YituTech/conv-bert-base"
+                    ),
                     transformers.AutoModelForMaskedLM,
                 ),
                 "CamemBert": (
-                    transformers.AutoConfig.from_pretrained("camembert-base"),
+                    lambda: transformers.AutoConfig.from_pretrained("camembert-base"),
                     transformers.AutoModelForMaskedLM,
                 ),
                 "Phi2": (
-                    transformers.AutoConfig.from_pretrained("microsoft/phi-2"),
+                    lambda: transformers.AutoConfig.from_pretrained("microsoft/phi-2"),
                     transformers.AutoModelForCausalLM,
                 ),
             }
@@ -476,7 +482,8 @@ class HuggingfaceRunner(BenchmarkRunner):
                 config.pad_token_id = 0
 
         else:
-            config, model_cls = self.EXTRA_MODELS[model_name]
+            config_fn, model_cls = self.EXTRA_MODELS[model_name]
+            config = config_fn()
 
         assert config is not None, f"Config cannot be None for model {model_name!r}."
         return model_cls, config

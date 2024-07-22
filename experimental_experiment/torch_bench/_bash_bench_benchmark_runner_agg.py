@@ -724,7 +724,8 @@ def merge_benchmark_reports(
             assert m.shape[0] <= df.shape[0] + m0.shape[0], (
                 f"Something is going wrong for prefix {prefix!r} "
                 f"(probably a same experiment reported twice), "
-                f"df.shape={df.shape}, new_shape is {m.shape} (before shape={m0.shape})"
+                f"df.shape={df.shape}, new_shape is {m.shape} "
+                f"(before shape={m0.shape})"
                 f"\n-- m0=\n{m0}\n-- df=\n{df}"
             )
 
@@ -736,21 +737,24 @@ def merge_benchmark_reports(
             index = set(df.columns) - setc
             if index == {"stat", "exporter"}:
                 m = df.set_index(["stat", "exporter"]).T
+            elif index == {"stat", "index"}:
+                m = df.drop("index", axis=1).set_index(["stat"]).T
         else:
             m = m.T.sort_index().T
         if transpose:
             m = m.T.stack().reset_index(drop=False)
             cols = m.columns
-            assert len(cols) >= 4, f"Unexpected number of columns in {cols}"
-            exporter_column = [c for c in cols if c in ["exporter", "opt_patterns"]]
-            if not exporter_column:
-                exporter_column = ["index"]
-            assert (
-                "stat" in cols and model in cols
-            ), f"Unexpected columns {cols}, expecting 'stat', {exporter_column!r}, {model!r}"
+            assert len(cols) >= 3, f"Unexpected number of columns in {cols}"
+            exporter_column = [c for c in cols if c in ("exporter", "opt_patterns")]
+            assert "stat" in cols and model in cols, (
+                f"Unexpected columns {cols}, expecting 'stat', "
+                f"{exporter_column!r}, {model!r}"
+            )
             last = [c for c in cols if c not in {"stat", *exporter_column, model}]
             added_columns = [c for c in last if c in new_keys]
             last = [c for c in last if c not in new_keys]
+            if len(last) == 2 and last[0] == "index":
+                last = last[1:]
             assert (
                 len(last) == 1
             ), f"Unexpected columns in {cols}, added={added_columns}, last={last}"
@@ -762,6 +766,9 @@ def merge_benchmark_reports(
             m = m.T.sort_index().T
         return m
 
+    if "speedup" in res:
+        res["speedup_1speedup"] = res["speedup"]
+        del res["speedup"]
     for prefix in [
         "status_",
         "discrepancies_",
@@ -772,8 +779,10 @@ def merge_benchmark_reports(
         "op_onnx_",
         "op_torch_",
         "mempeak_",
+        "speedup_",
     ]:
         merge = [k for k in res if k.startswith(prefix)]
+        merge.sort()
         if len(merge) == 0:
             continue
 

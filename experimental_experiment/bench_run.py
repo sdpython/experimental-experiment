@@ -75,7 +75,16 @@ def _extract_metrics(text: str) -> Dict[str, str]:
         assert "\n" not in w, f"Unexpected multi-line value for k={k!r}, value is\n{w}"
         if not (
             "err" in k.lower()
-            or k in {"onnx_output_names", "onnx_input_names", "filename"}
+            or k
+            in {
+                "onnx_output_names",
+                "onnx_input_names",
+                "filename",
+                "time_latency_t_detail",
+                "time_latency_t_qu",
+                "time_latency_eager_t_detail",
+                "time_latency_eager_t_qu",
+            }
             or len(w) < 500
         ):
             warnings.warn(
