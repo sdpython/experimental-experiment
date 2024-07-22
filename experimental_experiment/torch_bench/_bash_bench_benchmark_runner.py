@@ -1,5 +1,6 @@
 import os
 import gc
+import pickle
 import time
 from datetime import datetime
 from typing import Any, Set, Optional, Tuple, Iterator, Dict, List, Union
@@ -431,7 +432,7 @@ class BenchmarkRunner:
         quiet: bool = True,
         memory_peak: bool = False,
         part: Optional[int] = None,
-        pickled: Optional[str] = None,
+        pickled_name: Optional[str] = None,
     ) -> Iterator[Dict[Any, Any]]:
         """
         Runs the benchmarks, run, export, run in onnx, measure the speedup.
@@ -459,19 +460,55 @@ class BenchmarkRunner:
 
             begin_total = time.perf_counter()
 
-            stats, context = self._test_model_part_1(
-                model_name=model_name,
-                machine_specs=machine_specs,
-                quiet=quiet,
-                exporter=exporter,
-                optimization=optimization,
-                dynamic=dynamic,
-                memory_peak=memory_peak,
-                folder=folder,
-                initial_no_grad=initial_no_grad,
-            )
-            if context["part1"]:
-                self._test_model_part_2(stats, **context)
+            if part is None or part == 0:
+                stats, context = self._test_model_part_1(
+                    model_name=model_name,
+                    machine_specs=machine_specs,
+                    quiet=quiet,
+                    exporter=exporter,
+                    optimization=optimization,
+                    dynamic=dynamic,
+                    memory_peak=memory_peak,
+                    folder=folder,
+                    initial_no_grad=initial_no_grad,
+                )
+                if part == 0:
+                    assert (
+                        pickled_name
+                    ), f"pickled_name cannot be empty with part={part}"
+                    if os.path.exists(pickled_name):
+                        os.remove(pickled_name)
+                    if self.verbose:
+                        print(
+                            f"[enumerate_test_models] dumps everything into {pickled_name!r}"
+                        )
+                    pkl = dict(stats=stats, context=context)
+                    with open(pickled_name, "wb") as f:
+                        pickle.dump(pkl, f)
+                    if self.verbose:
+                        print(
+                            f"[enumerate_test_models] pickled size {os.stat(pickled_name).st_size}"
+                        )
+
+            if part is None or part == 1:
+                if part == 1:
+                    assert (
+                        pickled_name
+                    ), f"pickled_name cannot be empty with part={part}"
+                    assert os.path.exists(
+                        pickled_name
+                    ), f"{pickled_name!r} does not exist"
+                    with open(pickled_name, "rb") as f:
+                        data = pickle.load(f)
+                    context = data["context"]
+                    stats = data["stats"]
+                    if self.verbose:
+                        print(
+                            f"[enumerate_test_models] restored data from {pickled_name!r}"
+                        )
+                if context["part1"]:
+                    self._test_model_part_2(stats, **context)
+                    stats["STEP"] = "last"
 
             total_time = time.perf_counter() - begin_total
             stats["time_total"] = total_time
@@ -772,6 +809,7 @@ class BenchmarkRunner:
                 target_opset=self.target_opset,
             )
             stats["time_export"] = time.perf_counter() - begin
+            stats["time_export_success"] = time.perf_counter() - begin
 
         if memory_session is not None:
             memory_results = memory_session.stop()

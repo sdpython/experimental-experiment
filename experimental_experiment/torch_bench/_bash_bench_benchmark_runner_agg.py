@@ -389,6 +389,9 @@ def merge_benchmark_reports(
     else:
         raise AssertionError(f"Unexpected type {type(data)} for data")
 
+    if "STEP" in df.columns:
+        df = df[~df["STEP"].isna()]
+
     if model not in df.columns:
         if exc:
             raise AssertionError(
@@ -466,6 +469,7 @@ def merge_benchmark_reports(
                 and "mema_gpu_1_after_loading" in set_columns
                 and "mema_gpu_2_after_warmup" in set_columns
                 and "mema_gpu_6_after_gcollect" in set_columns
+                and "mema_gpu_8_after_export_warmup" in set_columns
             ):
                 col_name = f"{expr}_export"
                 df[col_name] = df["mema_gpu_5_after_export"] - df["mema_gpu_4_reset"]
@@ -653,8 +657,9 @@ def merge_benchmark_reports(
         or c.startswith("status_")
         or c.startswith("mempeak_")
         or c.startswith("memory_")
+        or c.startswith("speedup_increase")
     ]
-    for c in [*mean_med, "speedup_increase"]:
+    for c in mean_med:
         num = all(
             [
                 n

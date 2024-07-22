@@ -240,13 +240,15 @@ def make_configs(
     kwargs: Namespace,
     drop: Optional[Set[str]] = None,
     replace: Optional[Dict[str, str]] = None,
+    last: Optional[List[str]] = None,
 ) -> List[Dict[str, Any]]:
     """
     Creates all the configurations based on the command line arguments.
     """
     args = []
+    slast = set(last) if last else set()
     for k, v in kwargs.__dict__.items():
-        if drop and k in drop:
+        if drop and k in drop or k in slast:
             continue
         if replace and k in replace:
             v = replace[k]
@@ -254,6 +256,15 @@ def make_configs(
             args.append([(k, s) for s in v.split(",")])
         else:
             args.append([(k, v)])
+    if last:
+        for k in last:
+            if k not in kwargs.__dict__:
+                continue
+            if isinstance(v, str):
+                args.append([(k, s) for s in v.split(",")])
+            else:
+                args.append([(k, v)])
+
     configs = list(itertools.product(*args))
     return [dict(c) for c in configs]
 
