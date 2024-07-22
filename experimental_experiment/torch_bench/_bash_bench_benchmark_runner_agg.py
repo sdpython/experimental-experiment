@@ -267,7 +267,7 @@ def merge_benchmark_reports(
         "memory_*",
         "mem_*",
     ),
-    formulas=("memory_peak_load", "buckets", "status", "memory_delta"),
+    formulas=("memory_peak", "buckets", "status", "memory_delta"),
     excel_output: Optional[str] = None,
     exc: bool = True,
 ) -> Dict[str, "pandas.DataFrame"]:  # noqa: F821
@@ -459,15 +459,30 @@ def merge_benchmark_reports(
                 df["mempeak_gpu"] = delta_gpu
                 report_on.append("mempeak_gpu")
 
-        if expr == "memory_peak_load":
+        if expr == "memory_peak":
             if (
                 "mema_gpu_5_after_export" in set_columns
+                and "mema_gpu_4_reset" in set_columns
                 and "mema_gpu_1_after_loading" in set_columns
+                and "mema_gpu_2_after_warmup" in set_columns
+                and "mema_gpu_6_after_gcollect" in set_columns
             ):
-                df[expr] = (
-                    df["mema_gpu_5_after_export"] - df["mema_gpu_1_after_loading"]
+                col_name = f"{expr}_export"
+                df[col_name] = df["mema_gpu_5_after_export"] - df["mema_gpu_4_reset"]
+                report_on.append(col_name)
+
+                col_name = f"{expr}_eager_warmup"
+                df[col_name] = (
+                    df["mema_gpu_2_after_warmup"] - df["mema_gpu_0_before_loading"]
                 )
-                report_on.append(expr)
+                report_on.append(col_name)
+
+                col_name = f"{expr}_warmup"
+                df[col_name] = (
+                    df["mema_gpu_8_after_export_warmup"]
+                    - df["mema_gpu_6_after_gcollect"]
+                )
+                report_on.append(col_name)
             continue
 
         if expr == "status":
