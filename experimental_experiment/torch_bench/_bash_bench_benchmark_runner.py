@@ -727,6 +727,7 @@ class BenchmarkRunner:
                     torch.cuda.nvtx.range_pop()
         if len(lats) > 0:
             stats["time_latency_eager"] = sum(lats) / len(lats)
+            stats["time_latency_eager_t_detail"] = ",".join(map(str, lats))
             stats["time_latency_eager_t_min"] = min(lats)
             stats["time_latency_eager_t_max"] = max(lats)
             stats["time_latency_eager_t_std"] = np.std(lats)
@@ -1079,6 +1080,7 @@ class BenchmarkRunner:
                         torch.cuda.nvtx.range_pop()
                 if len(lats) > 0:
                     stats["time_latency"] = sum(lats) / len(lats)
+                    stats["time_latency_t_detail"] = ",".join(map(str, lats))
                     stats["time_latency_t_min"] = min(lats)
                     stats["time_latency_t_max"] = max(lats)
                     stats["time_latency_t_std"] = np.std(lats)
@@ -1172,6 +1174,7 @@ class BenchmarkRunner:
                         torch.cuda.nvtx.range_pop()
                 if len(lats) > 0:
                     stats["time_latency"] = sum(lats) / len(lats)
+                    stats["time_latency_t_detail"] = ",".join(map(str, lats))
                     stats["time_latency_t_min"] = min(lats)
                     stats["time_latency_t_max"] = max(lats)
                     stats["time_latency_t_std"] = np.std(lats)
