@@ -1,4 +1,4 @@
-from typing import Optional, Dict, List, Sequence
+from typing import Optional, Dict, List, Sequence, Union
 import numpy as np
 
 
@@ -15,6 +15,16 @@ def _apply_excel_style(
             return x == ""
         try:
             return np.isnan(x)
+        except TypeError:
+            return False
+
+    def _isinf(x):
+        if x is None:
+            return True
+        if isinstance(x, str):
+            return x == "inf"
+        try:
+            return np.isinf(x)
         except TypeError:
             return False
 
@@ -56,7 +66,9 @@ def _apply_excel_style(
         ):
             for cell in row:
                 if hasattr(cell, "col_idx") and (
-                    cell.value == look or (_isnan(cell.value) and _isnan(look))
+                    cell.value == look
+                    or (_isnan(cell.value) and _isnan(look))
+                    or (_isinf(cell.value) and _isinf(look))
                 ):
                     first_row = cell.row
                     first_col = cell.col_idx if hasattr(cell, "col_idx") else first_col
@@ -113,15 +125,15 @@ def _apply_excel_style(
             elif k == "speedup":
                 qb = 0.98
                 qt = None
-                fmt = "0.000"
+                fmt = "0.0000"
             elif k == "speedup_increase":
                 qb = -0.02
                 qt = None
-                fmt = "0.00%"
+                fmt = "0.000%"
             else:
                 qt = 0.01
                 qb = None
-                fmt = "0.00000"
+                fmt = "0.000000"
 
             for row in sheet.iter_rows(
                 min_row=first_row,
@@ -179,7 +191,7 @@ def _apply_excel_style(
                 for cell in row:
                     if cell.value is None or isinstance(cell.value, str):
                         continue
-                    cell.number_format = "0.000"
+                    cell.number_format = "0.000000"
             continue
     for k, v in res.items():
         if k not in lasts:
@@ -211,7 +223,7 @@ def _apply_excel_style(
                         cell.fill = gray
                         cell.font = bold_font
                         if "." not in cell.number_format:
-                            cell.number_format = "0.000"
+                            cell.number_format = "0.0000"
                     elif sheet.cell(row=cell.row, column=1).value in {
                         "~COUNT",
                         "~TOTAL",
@@ -223,7 +235,7 @@ def _apply_excel_style(
 
 
 def merge_benchmark_reports(
-    data: List[str],
+    data: Union["pandas.DataFrame", List[str]],  # noqa: F821
     model="model_name",
     keys=(
         "suite",
@@ -245,6 +257,7 @@ def merge_benchmark_reports(
     report_on=(
         "speedup",
         "speedup_increase",
+        "speedup_med",
         "discrepancies_*",
         "TIME_ITER",
         "time_*",
@@ -254,8 +267,9 @@ def merge_benchmark_reports(
         "memory_*",
         "mem_*",
     ),
-    formulas=("memory_peak_load", "buckets", "status", "memory_delta"),
+    formulas=("memory_peak", "buckets", "status", "memory_delta"),
     excel_output: Optional[str] = None,
+    exc: bool = True,
 ) -> Dict[str, "pandas.DataFrame"]:  # noqa: F821
     """
     Merges multiple files produced by bash_benchmark...
@@ -357,13 +371,31 @@ def merge_benchmark_reports(
     """
     import pandas
 
-    dfs = []
-    for filename in data:
-        df = pandas.read_csv(filename)
-        dfs.append(df)
+    if isinstance(data, list):
+        dfs = []
+        for filename in data:
+            if isinstance(filename, str):
+                df = pandas.read_csv(filename)
+            elif isinstance(filename, pandas.DataFrame):
+                df = filename
+            else:
+                raise AssertionError(
+                    f"Unexpected type {type(filename)} for one element of data"
+                )
+            dfs.append(df)
+        df = pandas.concat(dfs, axis=0)
+    elif isinstance(data, pandas.DataFrame):
+        df = data
+    else:
+        raise AssertionError(f"Unexpected type {type(data)} for data")
 
-    df = pandas.concat(dfs, axis=0)
-    df = df[~df[model].isna()]
+    if model not in df.columns:
+        if exc:
+            raise AssertionError(
+                f"{model!r} cannot be found in {df.columns}\n{df.head()}"
+            )
+        return None
+    df = df[~df[model].isna()].copy()
 
     # replace nan values
     set_columns = set(df.columns)
@@ -426,15 +458,31 @@ def merge_benchmark_reports(
             if delta_gpu is not None:
                 df["mempeak_gpu"] = delta_gpu
                 report_on.append("mempeak_gpu")
-        if expr == "memory_peak_load":
+
+        if expr == "memory_peak":
             if (
                 "mema_gpu_5_after_export" in set_columns
+                and "mema_gpu_4_reset" in set_columns
                 and "mema_gpu_1_after_loading" in set_columns
+                and "mema_gpu_2_after_warmup" in set_columns
+                and "mema_gpu_6_after_gcollect" in set_columns
             ):
-                df[expr] = (
-                    df["mema_gpu_5_after_export"] - df["mema_gpu_1_after_loading"]
+                col_name = f"{expr}_export"
+                df[col_name] = df["mema_gpu_5_after_export"] - df["mema_gpu_4_reset"]
+                report_on.append(col_name)
+
+                col_name = f"{expr}_eager_warmup"
+                df[col_name] = (
+                    df["mema_gpu_2_after_warmup"] - df["mema_gpu_0_before_loading"]
                 )
-                report_on.append(expr)
+                report_on.append(col_name)
+
+                col_name = f"{expr}_warmup"
+                df[col_name] = (
+                    df["mema_gpu_8_after_export_warmup"]
+                    - df["mema_gpu_6_after_gcollect"]
+                )
+                report_on.append(col_name)
             continue
 
         if expr == "status":
@@ -465,7 +513,11 @@ def merge_benchmark_reports(
             continue
 
         if expr == "buckets":
-            if "exporter" in set_columns and "script" in set(df.exporter):
+            if (
+                "exporter" in set_columns
+                and "script" in set(df.exporter)
+                and len(set(df.exporter)) > 1
+            ):
                 # Do the same with the exporter as a baseline.
                 keep = [model, *new_keys, "speedup"]
                 gr = df[df.exporter == "script"][keep].copy()
@@ -634,7 +686,7 @@ def merge_benchmark_reports(
                 res[c].loc["~SUM"] = summ
                 res[c].loc["~MEAN"] = mean
                 res[c].loc["~MED"] = med
-    for c in ["speedup"]:
+    for c in ["speedup", "speedup_med"]:
         if c in res:
             mean = np.exp(np.log(res[c]).mean(axis=0))
             med = res[c].median(axis=0)
@@ -685,11 +737,13 @@ def merge_benchmark_reports(
             m = m.T.stack().reset_index(drop=False)
             cols = m.columns
             assert len(cols) >= 4, f"Unexpected number of columns in {cols}"
-            exporter_column = "exporter" if "exporter" in cols else "index"
+            exporter_column = [c for c in cols if c in ["exporter", "opt_patterns"]]
+            if not exporter_column:
+                exporter_column = ["index"]
             assert (
-                "stat" in cols and exporter_column in cols and model in cols
-            ), f"Unexpeted columns {cols}"
-            last = [c for c in cols if c not in {"stat", exporter_column, model}]
+                "stat" in cols and model in cols
+            ), f"Unexpected columns {cols}, expecting 'stat', {exporter_column!r}, {model!r}"
+            last = [c for c in cols if c not in {"stat", *exporter_column, model}]
             added_columns = [c for c in last if c in new_keys]
             last = [c for c in last if c not in new_keys]
             assert (
@@ -697,7 +751,7 @@ def merge_benchmark_reports(
             ), f"Unexpected columns in {cols}, added={added_columns}, last={last}"
             m = m.pivot(
                 index="stat",
-                columns=[model, exporter_column, *added_columns],
+                columns=[model, *exporter_column, *added_columns],
                 values=last[0],
             )
             m = m.T.sort_index().T
@@ -717,13 +771,15 @@ def merge_benchmark_reports(
         merge = [k for k in res if k.startswith(prefix)]
         if len(merge) == 0:
             continue
-        res[prefix[:-1]] = _merge(
+
+        sheet = _merge(
             res,
             merge,
             prefix,
             reverse=prefix != "status_",
             transpose=prefix.startswith("op_"),
         )
+        res[prefix[:-1]] = sheet
         res = {k: v for k, v in res.items() if k not in set(merge)}
 
     for c in res:
@@ -739,6 +795,7 @@ def merge_benchmark_reports(
         "mempeak",
         "onnx",
         "speedup",
+        "speedup_med",
         "speedup_increase",
         "status",
         "time",
@@ -773,7 +830,7 @@ def merge_benchmark_reports(
                 )
             _apply_excel_style(final_res, writer)
 
-    return res
+    return final_res
 
 
 def _reorder_indices(

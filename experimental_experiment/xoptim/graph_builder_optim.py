@@ -266,10 +266,14 @@ class GraphBuilderPatternOptimization:
             proto = self.builder.initializers_dict[name]
         elif name in self.builder.constants_:
             proto = self.builder.constants_[name]
+        elif self.is_constant(name):
+            cst = self.get_computed_constant(name)
+            return cst.shape
         else:
             if exc:
                 raise AssertionError(
-                    f"Unable to retrieve initializer or constant for {name!r}"
+                    f"Unable to retrieve initializer or constant for {name!r}, "
+                    f"is_constant={self.is_constant(name)}"
                 )
             return None
 
@@ -277,6 +281,14 @@ class GraphBuilderPatternOptimization:
             return tuple(proto.dims)
         if isinstance(proto, NodeProto) and proto.domain == "":
             if proto.op_type == "Cast":
+                if self.is_constant(proto.output[0]) and not self.is_constant(
+                    proto.input[0]
+                ):
+                    if exc:
+                        raise AssertionError(
+                            f"Incompatibilities, output is constant when input is not in node {proto}."
+                        )
+                    return None
                 return self.get_constant_shape(proto.input[0], exc=exc)
             if proto.op_type == "Constant":
                 assert (
@@ -681,6 +693,11 @@ class GraphBuilderPatternOptimization:
             name=name,
             **kwargs,
         )
+
+        if all(self.is_constant(i) for i in inputs):
+            for o in outputs:
+                self.builder.constants_[o] = proto
+            proto.doc_string += ":constant-5:"
 
         assert len(outputs) == len(set(outputs)) or "" in outputs, (
             f"Repeated outputs for node {op_type}({', '.join(inputs)}) -> "

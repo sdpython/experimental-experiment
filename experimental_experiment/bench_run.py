@@ -9,7 +9,7 @@ import time
 import warnings
 from argparse import Namespace
 from datetime import datetime
-from typing import Any, Dict, List, Set, Tuple, Union, Optional
+from typing import Any, Callable, Dict, List, Set, Tuple, Union, Optional
 
 
 ILLEGAL_CHARACTERS_RE = re.compile(r"([\000-\010]|[\013-\014]|[\016-\037])")
@@ -118,6 +118,7 @@ def run_benchmark(
     temp_output_data: Optional[str] = None,
     dump_std: Optional[str] = None,
     start: int = 0,
+    summary: Optional[Callable] = None,
 ) -> List[Dict[str, Union[str, int, float, Tuple[int, int]]]]:
     """
     Runs a script multiple times and extract information from the output
@@ -131,8 +132,12 @@ def run_benchmark(
     :param temp_output_data: to save the data after every run to avoid losing data
     :param dump_std: dumps stdout and stderr in this folder
     :param start: start at this iteration
+    :param summary: function to call on the temporary data and the final data
     :return: values
     """
+    assert (
+        temp_output_data is None or "temp" in temp_output_data
+    ), f"Unexpected value for {temp_output_data!r}"
     assert configs, f"No configuration was given (script_name={script_name!r})"
     if verbose:
         from tqdm import tqdm
@@ -213,12 +218,13 @@ def run_benchmark(
             df.to_csv(temp_output_data, index=False)
             try:
                 df.to_excel(temp_output_data + ".xlsx", index=False)
-            except Exception as e:
-                print(e)
-                import pprint
-
-                pprint.pprint(data)
-                raise
+            except Exception:
+                continue
+            if summary:
+                fn = f"{temp_output_data}.summary-partial.xlsx"
+                if verbose > 2:
+                    print(f"Prints out the results into file {fn!r}")
+                summary(df, excel_output=fn, exc=False)
 
     return data
 
@@ -231,7 +237,9 @@ def multi_run(kwargs: Namespace) -> bool:
 
 
 def make_configs(
-    kwargs: Namespace, drop: Optional[Set[str]] = None
+    kwargs: Namespace,
+    drop: Optional[Set[str]] = None,
+    replace: Optional[Dict[str, str]] = None,
 ) -> List[Dict[str, Any]]:
     """
     Creates all the configurations based on the command line arguments.
@@ -240,6 +248,8 @@ def make_configs(
     for k, v in kwargs.__dict__.items():
         if drop and k in drop:
             continue
+        if replace and k in replace:
+            v = replace[k]
         if isinstance(v, str):
             args.append([(k, s) for s in v.split(",")])
         else:

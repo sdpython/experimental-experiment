@@ -1028,7 +1028,7 @@ class DynamoInterpreter:
                 # a SymInt
                 description.append(f"~SumInt:{exa!r}".replace(" ", ""))
         if last_node is not None and description:
-            last_node.doc_string = "\n".join(description)
+            last_node.doc_string += "\n".join(description)
 
     def call_module(self, node: "torch.fx.Node"):  # noqa: F821
         """

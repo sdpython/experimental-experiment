@@ -73,6 +73,9 @@ def bash_bench_main(script_name: str, doc: str, args: Optional[List[str]] = None
         make_dataframe_from_benchmark_data,
         run_benchmark,
     )
+    from experimental_experiment.torch_bench._bash_bench_benchmark_runner_agg import (
+        merge_benchmark_reports,
+    )
 
     if script_name == "bash_bench_huggingface":
         from ._bash_bench_set_huggingface import HuggingfaceRunner
@@ -111,10 +114,9 @@ def bash_bench_main(script_name: str, doc: str, args: Optional[List[str]] = None
             if args.output_data:
                 name, ext = os.path.splitext(args.output_data)
                 temp_output_data = f"{name}.temp{ext}"
-                args.output_data = ""
             else:
                 temp_output_data = None
-            configs = make_configs(args, drop={"process"})
+            configs = make_configs(args, drop={"process"}, replace={"output_data": ""})
             assert configs, f"No configuration configs={configs} for args={args}"
             data = run_benchmark(
                 f"experimental_experiment.torch_bench.{script_name}",
@@ -124,6 +126,7 @@ def bash_bench_main(script_name: str, doc: str, args: Optional[List[str]] = None
                 temp_output_data=temp_output_data,
                 dump_std=args.dump_folder,
                 start=args.start,
+                summary=merge_benchmark_reports,
             )
             if args.verbose > 2:
                 pprint.pprint(data if args.verbose > 3 else data[:2])
@@ -135,14 +138,18 @@ def bash_bench_main(script_name: str, doc: str, args: Optional[List[str]] = None
                     name, ext = os.path.splitext(filename)
                     i = 2
                     while os.path.exists(filename):
-                        filename = f"{name}.{i}{ext}"
+                        filename = f"{name}.m{i}{ext}"
                         i += 1
-                print(f"Prints out the results into file {filename!r}")
+                print(f"Prints out the merged results into file {filename!r}")
                 df.to_csv(filename, index=False)
                 df.to_excel(filename + ".xlsx", index=False)
                 if args.verbose:
                     print(df)
 
+                # also write a summary
+                fn = f"{filename}.summary.xlsx"
+                print(f"Prints out the merged summary into file {fn!r}")
+                merge_benchmark_reports(df, excel_output=fn)
         else:
             try:
                 indice = int(args.model)
@@ -198,10 +205,15 @@ def bash_bench_main(script_name: str, doc: str, args: Optional[List[str]] = None
                     name, ext = os.path.splitext(filename)
                     i = 2
                     while os.path.exists(filename):
-                        filename = f"{name}.{i}{ext}"
+                        filename = f"{name}.i{i}{ext}"
                         i += 1
                 print(f"Prints out the results into file {filename!r}")
                 df.to_csv(filename, index=False)
                 df.to_excel(filename + ".xlsx", index=False)
                 if args.verbose:
                     print(df)
+
+                # also write a summary
+                fn = f"{filename}.summary-one.xlsx"
+                print(f"Prints out the summary into file {fn!r}")
+                merge_benchmark_reports(df, excel_output=fn)
