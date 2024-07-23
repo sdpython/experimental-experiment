@@ -473,6 +473,7 @@ class BenchmarkRunner:
                     initial_no_grad=initial_no_grad,
                 )
                 if part == 0:
+                    stats["STEP"] = "export"
                     assert (
                         pickled_name
                     ), f"pickled_name cannot be empty with part={part}"
@@ -508,7 +509,8 @@ class BenchmarkRunner:
                         )
                 if context["part1"]:
                     self._test_model_part_2(stats, **context)
-                    stats["STEP"] = "last"
+                    if "STEP" in stats:
+                        del stats["STEP"]
 
             total_time = time.perf_counter() - begin_total
             stats["time_total"] = total_time
@@ -895,6 +897,15 @@ class BenchmarkRunner:
 
         import onnxruntime
         from experimental_experiment.bench_run import _clean_string
+
+        if self.device == "cuda":
+            torch.cuda.reset_peak_memory_stats()
+            stats["mema_gpu_6_before_session"] = torch.cuda.max_memory_allocated(0)
+            if self.verbose > 1:
+                print(
+                    f"[benchmarkrunner.benchmark] gpu_allocation={stats['mema_gpu_6_before_session']} "
+                    f"reserved={torch.cuda.memory_reserved(0)} before creating a session"
+                )
 
         #########
         # session

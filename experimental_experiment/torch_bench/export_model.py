@@ -49,7 +49,7 @@ def main(args=None):
             pprint.pprint(data if args.verbose > 3 else data[:2])
         if args.output_data:
             df = make_dataframe_from_benchmark_data(data, detailed=False)
-            df.to_csv(args.output_data, index=False)
+            df.to_csv(args.output_data, index=False, errors="ignore")
             df.to_excel(args.output_data + ".xlsx", index=False)
             if args.verbose:
                 print(df)

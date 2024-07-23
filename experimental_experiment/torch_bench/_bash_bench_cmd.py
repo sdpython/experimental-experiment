@@ -111,6 +111,10 @@ def bash_bench_main(script_name: str, doc: str, args: Optional[List[str]] = None
             args.model = ",".join(names)
         elif args.model == "All":
             args.model = ",".join(n for n in names if not n.startswith("101"))
+        elif args.model == "Head":
+            args.model = ",".join([n for n in names if not n.startswith("101")][:10])
+        elif args.model == "Tail":
+            args.model = ",".join(n for n in names[-10:] if not n.startswith("101"))
 
         if (
             multi_run(args)
@@ -161,7 +165,7 @@ def bash_bench_main(script_name: str, doc: str, args: Optional[List[str]] = None
                         filename = f"{name}.m{i}{ext}"
                         i += 1
                 print(f"Prints out the merged results into file {filename!r}")
-                df.to_csv(filename, index=False)
+                df.to_csv(filename, index=False, errors="ignore")
                 df.to_excel(filename + ".xlsx", index=False)
                 if args.verbose:
                     print(df)
@@ -235,7 +239,7 @@ def bash_bench_main(script_name: str, doc: str, args: Optional[List[str]] = None
                         i += 1
 
                 print(f"Prints out the results into file {filename!r}")
-                df.to_csv(filename, index=False)
+                df.to_csv(filename, index=False, errors="ignore")
                 df.to_excel(filename + ".xlsx", index=False)
                 if args.verbose:
                     print(df)

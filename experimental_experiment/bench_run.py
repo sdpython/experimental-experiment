@@ -224,7 +224,7 @@ def run_benchmark(
             df = make_dataframe_from_benchmark_data(data, detailed=False)
             if verbose > 2:
                 print(f"Prints out the results into file {temp_output_data!r}")
-            df.to_csv(temp_output_data, index=False)
+            df.to_csv(temp_output_data, index=False, errors="ignore")
             try:
                 df.to_excel(temp_output_data + ".xlsx", index=False)
             except Exception:

@@ -3005,6 +3005,41 @@ def aten_ones_like(
     )
 
 
+def aten_pad(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    pad: Tuple[int, ...],
+    mode: str = "constant",
+    value: Optional[float] = None,
+    name: str = "pad",
+) -> T:
+    """pad"""
+    assert mode == "constant", f"Not implemented for mode={mode!r}{g.get_debug_msg()}"
+    assert g.has_rank(
+        x
+    ), f"Not implemented when rank of {x!r} is missing{g.get_debug_msg()}"
+    value = float(value or 0)
+
+    rk = g.get_rank(x)
+    if len(pad) < rk * 2:
+        pad = list(pad) + list((0,) * (rk * 2 - len(pad)))
+
+    new_pad = pad[::2] + pad[1::2]
+
+    dtype = tensor_dtype_to_np_dtype(g.get_type(x))
+    cst = np.array(value, dtype=dtype)
+    res = g.op.Pad(
+        x, np.array(new_pad, dtype=np.int64), cst, name=name, outputs=outputs, mode=mode
+    )
+    if not sts:
+        g.set_type(res, g.get_type(x))
+        if g.has_rank(x):
+            g.set_rank(res, g.get_rank(x))
+    return res
+
+
 def aten_permute(
     g: GraphBuilder,
     sts: Optional[Dict[str, Any]],
@@ -4187,7 +4222,7 @@ def aten_split_Tensor(
     split_sizes: T,
     dim: int = 0,
     name: str = "split_Tensor",
-) -> T:
+) -> Tuple[T, ...]:
     "split_to_sequence or split"
     return aten_split_with_sizes(g, sts, outputs, x, split_sizes, dim, name=name)
 
@@ -4201,7 +4236,7 @@ def aten_split_with_sizes(
     dim: int = 0,
     name: str = "split_with_sizes",
     use_sequence: bool = False,
-) -> T:
+) -> Tuple[T, ...]:
     "split_to_sequence or split"
     if not use_sequence and isinstance(split_sizes, int):
         # Then torch means to split into equal chunk of this size
@@ -4745,6 +4780,55 @@ def aten_type_as(
     res = g.op.Cast(x, to=g.get_type(other), name=name, outputs=outputs)
     if not sts:
         set_type_shape_unary_op(g, res, x, itype=g.get_type(other))
+    return res
+
+
+def aten_unbind_int(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    dim: int = 0,
+    use_sequence: bool = False,
+    name: str = "unbind",
+) -> Tuple[T, ...]:
+    """split"""
+    assert not use_sequence, f"Not implemented for use_sequence={use_sequence}"
+    assert g.has_shape(x), (
+        f"Not implemented when the input {x!r} " f"has no shape{g.get_debug_msg()}"
+    )
+    shape = g.get_shape(x)
+    assert isinstance(shape[dim], int), (
+        f"Not implemented when shape on this axis is dynamic, "
+        f"name={name!r}, shape={shape!r}"
+    )
+
+    if shape[dim] == 1:
+        return g.op.Identity(x, outputs=outputs, name=name)
+
+    if len(outputs) == 1:
+        o = outputs[0]
+        unbind_outputs = [f"{o}_u{i}" for i in range(shape[dim])]
+        new_outputs = [g.unique_name(f"{o}#{i}") for i in range(shape[dim])]
+    else:
+        unbind_outputs = [g.unique_name(f"{o}{i}") for i, o in enumerate(outputs)]
+        new_outputs = outputs
+
+    g.make_node(
+        "Split", [x], unbind_outputs, axis=dim, num_outputs=shape[dim], name=name
+    )
+    dim_np = g.make_initializer("", np.array([dim], dtype=np.int64))
+    for o, u in zip(new_outputs, unbind_outputs):
+        g.make_node("Squeeze", [u, dim_np], [o], name=name)
+    res = outputs
+    if not sts:
+        shape = g.get_shape(x)
+        new_shape = list(shape)
+        del new_shape[dim]
+        t = g.get_type(x)
+        for i, o in enumerate(res):
+            g.set_type(o, t)
+            g.get_shape(o, new_shape)
     return res
 
 

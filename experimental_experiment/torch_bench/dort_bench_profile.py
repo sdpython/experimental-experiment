@@ -220,7 +220,7 @@ if args.profile in (1, "1"):
 
     # first graph: aggregated profile
     df = js_profile_to_dataframe(prof, first_it_out=True)
-    df.to_csv(f"{model_model}.csv")
+    df.to_csv(f"{model_model}.csv", errors="ignore")
     df.to_excel(f"{model_model}.xlsx")
     assert set(df["it==0"]) == {0, 1}
     for v in set(df["it==0"]):
