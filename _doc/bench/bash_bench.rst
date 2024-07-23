@@ -122,9 +122,12 @@ List of models
 Multiple Runs
 =============
 
-``--model all`` runs the same command as above a in new process each time.
-``--model All`` runs the same command as above a in new process each time
-without the dummy models starting with ``101``.
+``--model all`` runs the same command as above a in new process each time,
+``--model All`` runs the same command as above a in new process each time,
+``--model Head`` runs the same command as above a in new process each time
+with the ten first model of the benchark,
+``--model Tail`` runs the same command as above a in new process each time
+with the ten first model of the benchark.
 Any value with ``,`` means the command line needs to be run multiple times
 with multiple values. For example, the following command line:
 

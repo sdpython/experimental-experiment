@@ -32,9 +32,10 @@ Available exporters:
 
 Extra dependencies:
 
-* iopath
-* fbgemm_gpu_nightly
 * https://github.com/pytorch/benchmark
+* fbgemm_gpu_nightly
+* iopath
+* opencv-python
 * pyre-extensions
 * torchrec
 """
