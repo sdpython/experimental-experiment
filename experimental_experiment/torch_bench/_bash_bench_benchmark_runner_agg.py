@@ -442,10 +442,10 @@ def merge_benchmark_reports(
                 and "memory_peak" in set_columns
                 and "memory_end" in set_columns
             ):
-                df["mempeak_cpu"] = (
+                df["memory_peak_cpu_pp"] = (
                     np.maximum(df["memory_peak"], df["memory_end"]) - df["memory_begin"]
                 )
-                report_on.append("mempeak_cpu")
+                report_on.append("memory_peak_cpu_pp")
             delta_gpu = None
             for i in range(1024):
                 c1 = f"memory_gpu{i}_begin"
@@ -459,8 +459,8 @@ def merge_benchmark_reports(
                 else:
                     break
             if delta_gpu is not None:
-                df["mempeak_gpu"] = delta_gpu
-                report_on.append("mempeak_gpu")
+                df["memory_peak_gpu_pp"] = delta_gpu
+                report_on.append("memory_peak_gpu_pp")
 
         if expr == "memory_peak":
             if (
@@ -471,17 +471,17 @@ def merge_benchmark_reports(
                 and "mema_gpu_6_after_gcollect" in set_columns
                 and "mema_gpu_8_after_export_warmup" in set_columns
             ):
-                col_name = f"{expr}_export"
+                col_name = f"{expr}_gpu_export"
                 df[col_name] = df["mema_gpu_5_after_export"] - df["mema_gpu_4_reset"]
                 report_on.append(col_name)
 
-                col_name = f"{expr}_eager_warmup"
+                col_name = f"{expr}_gpu_eager_warmup"
                 df[col_name] = (
                     df["mema_gpu_2_after_warmup"] - df["mema_gpu_0_before_loading"]
                 )
                 report_on.append(col_name)
 
-                col_name = f"{expr}_warmup"
+                col_name = f"{expr}_gpu_warmup"
                 df[col_name] = (
                     df["mema_gpu_8_after_export_warmup"]
                     - df["mema_gpu_6_after_gcollect"]
@@ -490,8 +490,10 @@ def merge_benchmark_reports(
             continue
 
         if expr == "status":
+            if "time_export_success" in set_columns:
+                df["status_convert"] = (~df["time_export_success"].isna()).astype(int)
             if "discrepancies_abs" in set_columns:
-                df["status_convert"] = (~df["discrepancies_abs"].isna()).astype(int)
+                df["status_convert_ort"] = (~df["discrepancies_abs"].isna()).astype(int)
                 df["status_err<1e-2"] = (
                     ~df["discrepancies_abs"].isna() & (df["discrepancies_abs"] < 1e-2)
                 ).astype(int)
@@ -508,6 +510,7 @@ def merge_benchmark_reports(
                 report_on.extend(
                     [
                         "status_convert",
+                        "status_convert_ort",
                         "status_err<1e-2",
                         "status_err<1e-3",
                         "status_err<1e-4",
@@ -699,7 +702,7 @@ def merge_benchmark_reports(
             count = (~res[c].isna()).astype(int).sum(axis=0)
             res[c].loc["~TOTAL"] = res[c].shape[0]
             res[c].loc["~COUNT"] = count
-            res[c].loc["~SUM"] = summ
+            # res[c].loc["~SUM"] = summ
             res[c].loc["~GMEAN"] = mean
             res[c].loc["~MED"] = med
 
@@ -740,7 +743,11 @@ def merge_benchmark_reports(
             elif index == {"stat", "index"}:
                 m = df.drop("index", axis=1).set_index(["stat"]).T
         else:
-            m = m.T.sort_index().T
+            m = m.T.sort_index()
+            m = m.T
+            if list(m.columns.names) == ["index", "stat"]:
+                m.columns = m.columns.droplevel(level=0)
+
         if transpose:
             m = m.T.stack().reset_index(drop=False)
             cols = m.columns
