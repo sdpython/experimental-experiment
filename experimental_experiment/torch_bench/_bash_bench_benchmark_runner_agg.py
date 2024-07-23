@@ -492,6 +492,7 @@ def merge_benchmark_reports(
         if expr == "status":
             if "time_export_success" in set_columns:
                 df["status_convert"] = (~df["time_export_success"].isna()).astype(int)
+                report_on.append("status_convert")
             if "discrepancies_abs" in set_columns:
                 df["status_convert_ort"] = (~df["discrepancies_abs"].isna()).astype(int)
                 df["status_err<1e-2"] = (
@@ -509,7 +510,6 @@ def merge_benchmark_reports(
                 ).astype(int)
                 report_on.extend(
                     [
-                        "status_convert",
                         "status_convert_ort",
                         "status_err<1e-2",
                         "status_err<1e-3",
