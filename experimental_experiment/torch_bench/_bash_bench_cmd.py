@@ -161,7 +161,7 @@ def bash_bench_main(script_name: str, doc: str, args: Optional[List[str]] = None
                         filename = f"{name}.m{i}{ext}"
                         i += 1
                 print(f"Prints out the merged results into file {filename!r}")
-                df.to_csv(filename, index=False)
+                df.to_csv(filename, index=False, errors="ignore")
                 df.to_excel(filename + ".xlsx", index=False)
                 if args.verbose:
                     print(df)
@@ -235,7 +235,7 @@ def bash_bench_main(script_name: str, doc: str, args: Optional[List[str]] = None
                         i += 1
 
                 print(f"Prints out the results into file {filename!r}")
-                df.to_csv(filename, index=False)
+                df.to_csv(filename, index=False, errors="ignore")
                 df.to_excel(filename + ".xlsx", index=False)
                 if args.verbose:
                     print(df)
