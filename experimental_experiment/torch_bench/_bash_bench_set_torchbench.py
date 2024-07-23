@@ -655,6 +655,16 @@ class TorchBenchRunner(BenchmarkRunner):
         model_name: str,
         batch_size: Optional[int] = None,
     ) -> ModelRunner:
+
+        from torchbenchmark import setup
+
+        status = setup(
+            models=[model_name],
+            verbose=self.verbose,
+            continue_on_fail=False,
+        )
+        assert status, f"Could not setup model {model_name!r}, status={status!r}"
+
         is_training = self.training
         use_eval_mode = self.use_eval_mode
         dtype = self.dtype

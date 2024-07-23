@@ -33,6 +33,7 @@ Available exporters:
 Extra dependencies:
 
 * https://github.com/pytorch/benchmark
+* effdet
 * fbgemm_gpu_nightly
 * iopath
 * opencv-python
