@@ -108,6 +108,7 @@ def _apply_excel_style(
                 for cell in row:
                     cell.number_format = numbers.FORMAT_NUMBER
             continue
+
         if k == "ERR":
             for i in range(n_cols + v.shape[1]):
                 sheet.column_dimensions["ABCDEFGHIJKLMNOPQRSTUVWXYZ"[i]].alignment = (
@@ -117,19 +118,48 @@ def _apply_excel_style(
                 if i >= 25:
                     break
             continue
-        if k in ("TIME_ITER", "discrepancies", "speedup", "speedup_increase"):
+
+        if k in ("TIME_ITER", "discrepancies", "speedup"):
+            c1, c2 = None, None
+            qpb, qpt, fmtp = None, None, None
             if k == "TIME_ITER":
                 qt = np.quantile(v.values, 0.9)
                 qb = None
                 fmt = numbers.FORMAT_NUMBER_00
             elif k == "speedup":
+                for row in sheet.iter_rows(
+                    min_row=0,
+                    max_row=5,
+                    min_col=first_col,
+                    max_col=last_col,
+                ):
+                    found = None
+                    for cell in row:
+                        if cell.value == "increase":
+                            c1 = cell.col_idx if c1 is None else min(cell.col_idx, c1)
+                            c2 = cell.col_idx if c2 is None else max(cell.col_idx, c2)
+                            found = cell
+                            last_idx = cell.col_idx
+                        elif cell.value is None:
+                            # merged cell
+                            if found is not None:
+                                last_idx += 1
+                                cid = getattr(cell, "col_idx", last_idx)
+                                c2 = max(cid, c2)
+                        else:
+                            found = None
+
+                assert (
+                    c1 is not None and c2 is not None and c1 <= c2
+                ), f"Unexpected value for c1={c1}, c2={c2}"
+                # ratio
                 qb = 0.98
                 qt = None
                 fmt = "0.0000"
-            elif k == "speedup_increase":
-                qb = -0.02
-                qt = None
-                fmt = "0.000%"
+                # increase
+                qpb = -0.02
+                qpt = None
+                fmtp = "0.000%"
             else:
                 qt = 0.01
                 qb = None
@@ -144,12 +174,20 @@ def _apply_excel_style(
                 for cell in row:
                     if cell.value is None or isinstance(cell.value, str):
                         continue
-                    if qt and cell.value > qt:
-                        cell.font = red
-                    if qb and cell.value < qb:
-                        cell.font = red
-                    cell.number_format = fmt
+                    if c1 is not None and cell.col_idx >= c1 and cell.col_idx <= c2:
+                        if qt and cell.value > qpt:
+                            cell.font = red
+                        if qb and cell.value < qpb:
+                            cell.font = red
+                        cell.number_format = fmtp
+                    else:
+                        if qt and cell.value > qt:
+                            cell.font = red
+                        if qb and cell.value < qb:
+                            cell.font = red
+                        cell.number_format = fmt
             continue
+
         if k in ("bucket", "bucket_script", "status", "op_onnx", "op_torch"):
             has_convert = [("convert" in str(c)) for c in v.columns]
             has_20 = [("-20%" in str(c)) for c in v.columns]
@@ -181,6 +219,7 @@ def _apply_excel_style(
                         if has_20[idx]:
                             cell.fill = redf
             continue
+
         if k == "time":
             for row in sheet.iter_rows(
                 min_row=first_row,
