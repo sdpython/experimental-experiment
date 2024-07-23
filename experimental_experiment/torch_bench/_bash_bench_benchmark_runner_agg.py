@@ -389,6 +389,9 @@ def merge_benchmark_reports(
     else:
         raise AssertionError(f"Unexpected type {type(data)} for data")
 
+    if "STEP" in df.columns:
+        df = df[~df["STEP"].isna()]
+
     if model not in df.columns:
         if exc:
             raise AssertionError(
@@ -439,10 +442,10 @@ def merge_benchmark_reports(
                 and "memory_peak" in set_columns
                 and "memory_end" in set_columns
             ):
-                df["mempeak_cpu"] = (
+                df["memory_peak_cpu_pp"] = (
                     np.maximum(df["memory_peak"], df["memory_end"]) - df["memory_begin"]
                 )
-                report_on.append("mempeak_cpu")
+                report_on.append("memory_peak_cpu_pp")
             delta_gpu = None
             for i in range(1024):
                 c1 = f"memory_gpu{i}_begin"
@@ -456,8 +459,8 @@ def merge_benchmark_reports(
                 else:
                     break
             if delta_gpu is not None:
-                df["mempeak_gpu"] = delta_gpu
-                report_on.append("mempeak_gpu")
+                df["memory_peak_gpu_pp"] = delta_gpu
+                report_on.append("memory_peak_gpu_pp")
 
         if expr == "memory_peak":
             if (
@@ -466,18 +469,19 @@ def merge_benchmark_reports(
                 and "mema_gpu_1_after_loading" in set_columns
                 and "mema_gpu_2_after_warmup" in set_columns
                 and "mema_gpu_6_after_gcollect" in set_columns
+                and "mema_gpu_8_after_export_warmup" in set_columns
             ):
-                col_name = f"{expr}_export"
+                col_name = f"{expr}_gpu_export"
                 df[col_name] = df["mema_gpu_5_after_export"] - df["mema_gpu_4_reset"]
                 report_on.append(col_name)
 
-                col_name = f"{expr}_eager_warmup"
+                col_name = f"{expr}_gpu_eager_warmup"
                 df[col_name] = (
                     df["mema_gpu_2_after_warmup"] - df["mema_gpu_0_before_loading"]
                 )
                 report_on.append(col_name)
 
-                col_name = f"{expr}_warmup"
+                col_name = f"{expr}_gpu_warmup"
                 df[col_name] = (
                     df["mema_gpu_8_after_export_warmup"]
                     - df["mema_gpu_6_after_gcollect"]
@@ -486,8 +490,11 @@ def merge_benchmark_reports(
             continue
 
         if expr == "status":
+            if "time_export_success" in set_columns:
+                df["status_convert"] = (~df["time_export_success"].isna()).astype(int)
+                report_on.append("status_convert")
             if "discrepancies_abs" in set_columns:
-                df["status_convert"] = (~df["discrepancies_abs"].isna()).astype(int)
+                df["status_convert_ort"] = (~df["discrepancies_abs"].isna()).astype(int)
                 df["status_err<1e-2"] = (
                     ~df["discrepancies_abs"].isna() & (df["discrepancies_abs"] < 1e-2)
                 ).astype(int)
@@ -503,7 +510,7 @@ def merge_benchmark_reports(
                 ).astype(int)
                 report_on.extend(
                     [
-                        "status_convert",
+                        "status_convert_ort",
                         "status_err<1e-2",
                         "status_err<1e-3",
                         "status_err<1e-4",
@@ -653,8 +660,9 @@ def merge_benchmark_reports(
         or c.startswith("status_")
         or c.startswith("mempeak_")
         or c.startswith("memory_")
+        or c.startswith("speedup_increase")
     ]
-    for c in [*mean_med, "speedup_increase"]:
+    for c in mean_med:
         num = all(
             [
                 n
@@ -694,7 +702,7 @@ def merge_benchmark_reports(
             count = (~res[c].isna()).astype(int).sum(axis=0)
             res[c].loc["~TOTAL"] = res[c].shape[0]
             res[c].loc["~COUNT"] = count
-            res[c].loc["~SUM"] = summ
+            # res[c].loc["~SUM"] = summ
             res[c].loc["~GMEAN"] = mean
             res[c].loc["~MED"] = med
 
@@ -719,7 +727,8 @@ def merge_benchmark_reports(
             assert m.shape[0] <= df.shape[0] + m0.shape[0], (
                 f"Something is going wrong for prefix {prefix!r} "
                 f"(probably a same experiment reported twice), "
-                f"df.shape={df.shape}, new_shape is {m.shape} (before shape={m0.shape})"
+                f"df.shape={df.shape}, new_shape is {m.shape} "
+                f"(before shape={m0.shape})"
                 f"\n-- m0=\n{m0}\n-- df=\n{df}"
             )
 
@@ -731,21 +740,28 @@ def merge_benchmark_reports(
             index = set(df.columns) - setc
             if index == {"stat", "exporter"}:
                 m = df.set_index(["stat", "exporter"]).T
+            elif index == {"stat", "index"}:
+                m = df.drop("index", axis=1).set_index(["stat"]).T
         else:
-            m = m.T.sort_index().T
+            m = m.T.sort_index()
+            m = m.T
+            if list(m.columns.names) == ["index", "stat"]:
+                m.columns = m.columns.droplevel(level=0)
+
         if transpose:
             m = m.T.stack().reset_index(drop=False)
             cols = m.columns
-            assert len(cols) >= 4, f"Unexpected number of columns in {cols}"
-            exporter_column = [c for c in cols if c in ["exporter", "opt_patterns"]]
-            if not exporter_column:
-                exporter_column = ["index"]
-            assert (
-                "stat" in cols and model in cols
-            ), f"Unexpected columns {cols}, expecting 'stat', {exporter_column!r}, {model!r}"
+            assert len(cols) >= 3, f"Unexpected number of columns in {cols}"
+            exporter_column = [c for c in cols if c in ("exporter", "opt_patterns")]
+            assert "stat" in cols and model in cols, (
+                f"Unexpected columns {cols}, expecting 'stat', "
+                f"{exporter_column!r}, {model!r}"
+            )
             last = [c for c in cols if c not in {"stat", *exporter_column, model}]
             added_columns = [c for c in last if c in new_keys]
             last = [c for c in last if c not in new_keys]
+            if len(last) == 2 and last[0] == "index":
+                last = last[1:]
             assert (
                 len(last) == 1
             ), f"Unexpected columns in {cols}, added={added_columns}, last={last}"
@@ -757,6 +773,9 @@ def merge_benchmark_reports(
             m = m.T.sort_index().T
         return m
 
+    if "speedup" in res:
+        res["speedup_1speedup"] = res["speedup"]
+        del res["speedup"]
     for prefix in [
         "status_",
         "discrepancies_",
@@ -767,8 +786,10 @@ def merge_benchmark_reports(
         "op_onnx_",
         "op_torch_",
         "mempeak_",
+        "speedup_",
     ]:
         merge = [k for k in res if k.startswith(prefix)]
+        merge.sort()
         if len(merge) == 0:
             continue
 

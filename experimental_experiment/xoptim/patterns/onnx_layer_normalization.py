@@ -30,7 +30,6 @@ class LayerNormalizationPattern(PatternOptimization):
             rk = g.get_rank(node.input[0])
             al = axis.tolist()
             if al != list(range(rk - len(al), rk)):
-                print("***", al, rk, list(range(rk - len(al), rk)))
                 return self.none(node, inspect.currentframe().f_lineno)
 
         # before

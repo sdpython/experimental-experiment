@@ -3,6 +3,7 @@ import pprint
 import time
 from datetime import datetime
 from typing import Optional, List
+import numpy as np
 
 
 def bash_bench_parse_args(name: str, doc: str, new_args: Optional[List[str]] = None):
@@ -48,6 +49,8 @@ def bash_bench_parse_args(name: str, doc: str, new_args: Optional[List[str]] = N
         ),
         nvtx=("0", "add events to profile"),
         dump_ort=("0", "dump the onnxruntime optimized graph"),
+        split_process=("0", "run exporter and the inference in two separate processes"),
+        part=("", "which part to run, 0, or 1"),
         new_args=new_args,
         expose="repeat,warmup",
     )
@@ -109,14 +112,31 @@ def bash_bench_main(script_name: str, doc: str, args: Optional[List[str]] = None
         elif args.model == "All":
             args.model = ",".join(n for n in names if not n.startswith("101"))
 
-        if multi_run(args) or args.process in ("1", 1, "True", True):
+        if (
+            multi_run(args)
+            or args.process in ("1", 1, "True", True)
+            or (
+                args.split_process in ("1", 1, "True", True) and args.part in (None, "")
+            )
+        ):
+            assert args.part == "", f"part={args.part} must be empty"
             args_output_data = args.output_data
             if args.output_data:
                 name, ext = os.path.splitext(args.output_data)
                 temp_output_data = f"{name}.temp{ext}"
             else:
                 temp_output_data = None
-            configs = make_configs(args, drop={"process"}, replace={"output_data": ""})
+            split_process = args.split_process in (1, "1", "True", True)
+            if split_process and args.part == "":
+                args.part = "0,1"
+                if args.verbose:
+                    print("Running export and inference in two different processes")
+            configs = make_configs(
+                args,
+                drop={"process"},
+                replace={"output_data": ""},
+                last={"part"} if split_process else None,
+            )
             assert configs, f"No configuration configs={configs} for args={args}"
             data = run_benchmark(
                 f"experimental_experiment.torch_bench.{script_name}",
@@ -171,6 +191,8 @@ def bash_bench_main(script_name: str, doc: str, args: Optional[List[str]] = None
                 nvtx=args.nvtx in (1, "1", "True", "true"),
                 dump_ort=args.dump_ort in (1, "1", "True", "true"),
             )
+
+            split_process = args.split_process in (1, "1", True, "True")
             begin = time.perf_counter()
             data = list(
                 runner.enumerate_test_models(
@@ -180,9 +202,12 @@ def bash_bench_main(script_name: str, doc: str, args: Optional[List[str]] = None
                     folder=args.dump_folder,
                     optimization=args.opt_patterns,
                     memory_peak=args.memory_peak in ("1", 1, "True", True),
+                    part=int(args.part) if split_process else None,
+                    pickled_name="temp_pickled_file.pkl" if split_process else None,
                 )
             )
             duration = time.perf_counter() - begin
+
             if len(data) == 1:
                 for k, v in sorted(data[0].items()):
                     print(f":{k},{v};")
@@ -198,6 +223,7 @@ def bash_bench_main(script_name: str, doc: str, args: Optional[List[str]] = None
                 df["DATE"] = f"{datetime.now():%Y-%m-%d}"
                 df["ITER"] = 0
                 df["TIME_ITER"] = duration
+                df["PART"] = int(args.part) if args.part in (0, 1, "0", "1") else np.nan
 
                 filename = args.output_data
                 if os.path.exists(filename):
@@ -207,6 +233,7 @@ def bash_bench_main(script_name: str, doc: str, args: Optional[List[str]] = None
                     while os.path.exists(filename):
                         filename = f"{name}.i{i}{ext}"
                         i += 1
+
                 print(f"Prints out the results into file {filename!r}")
                 df.to_csv(filename, index=False)
                 df.to_excel(filename + ".xlsx", index=False)
@@ -214,6 +241,7 @@ def bash_bench_main(script_name: str, doc: str, args: Optional[List[str]] = None
                     print(df)
 
                 # also write a summary
-                fn = f"{filename}.summary-one.xlsx"
-                print(f"Prints out the summary into file {fn!r}")
-                merge_benchmark_reports(df, excel_output=fn)
+                if args.part in (None, "", 1, "1"):
+                    fn = f"{filename}.summary-one.xlsx"
+                    print(f"Prints out the summary into file {fn!r}")
+                    merge_benchmark_reports(df, excel_output=fn)

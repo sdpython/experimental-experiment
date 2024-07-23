@@ -1,5 +1,6 @@
 import os
 import gc
+import pickle
 import time
 from datetime import datetime
 from typing import Any, Set, Optional, Tuple, Iterator, Dict, List, Union
@@ -148,681 +149,6 @@ class BenchmarkRunner:
             # Not implemented yet.
             return 0
         raise AssertionError(f"input_size not implemented for type {type(obj)}")
-
-    def enumerate_test_models(
-        self,
-        exporter: str,
-        process: bool = False,
-        folder: str = "dump_test_models",
-        dynamic: bool = False,
-        optimization: str = "",
-        quiet: bool = True,
-        memory_peak: bool = False,
-    ) -> Iterator[Dict[Any, Any]]:
-        """
-        Runs the benchmarks, run, export, run in onnx, measure the speedup.
-        """
-        assert not process, "process=True not implemented."
-        assert not dynamic, "dynamic=True not implemented."
-
-        import transformers
-        import onnxruntime
-        import onnxscript
-        from experimental_experiment.bench_run import get_machine, _clean_string
-
-        machine_specs = get_machine()
-        initial_no_grad = torch.is_grad_enabled()
-
-        if not os.path.exists(folder):
-            os.makedirs(folder)
-        names = self.get_model_name_list()
-        assert len(names) > 0, "no model to run"
-        for model_name in names:
-
-            #######
-            # begin
-            #######
-
-            if self.device == "cuda":
-                torch.cuda.reset_peak_memory_stats()
-            torch.set_grad_enabled(initial_no_grad)
-            begin_total = time.perf_counter()
-            if self.verbose:
-                print(
-                    f"[BenchmarkRunner.benchmark] test model {model_name!r} "
-                    f"with exporter={exporter!r}"
-                )
-            if self.verbose > 1:
-                print(f"[BenchmarkRunner.benchmark] load model {model_name!r}")
-
-            stats = {
-                "version_torch": getattr(torch, "__version__", "dev"),
-                "version_transformers": getattr(transformers, "__version__", "dev"),
-                "version_onnxruntime": getattr(onnxruntime, "__version__", "dev"),
-                "version_onnxscript": getattr(onnxscript, "__version__", "dev"),
-                "version_onnx": getattr(onnx, "__version__", "dev"),
-            }
-            stats.update(machine_specs)
-            if self.device == "cuda":
-                stats["mema_gpu_0_before_loading"] = torch.cuda.max_memory_allocated(0)
-                if self.verbose > 1:
-                    print(
-                        f"[benchmarkrunner.benchmark] gpu_allocation={stats['mema_gpu_0_before_loading']} "
-                        f"reserved={torch.cuda.memory_reserved(0)} before loading"
-                    )
-
-            begin = time.perf_counter()
-            model_runner = self.load_model(model_name)
-            if self.verbose:
-                print(
-                    f"[benchmarkrunner.benchmark] model wrapped with class {type(model_runner.model)}"
-                )
-            if self.device == "cuda" and self.verbose > 1:
-                print(
-                    f"[benchmarkrunner.benchmark] gpu_allocation={torch.cuda.max_memory_allocated(0)} "
-                    f"reserved={torch.cuda.memory_reserved(0)} just after loading"
-                )
-            repeat = model_runner.repeat
-            warmup = model_runner.warmup
-            stats["model_name"] = model_name
-            stats["suite"] = model_runner.suite
-            stats["time_load"] = time.perf_counter() - begin
-            stats["params_size"] = model_runner.parameters_size()
-            stats["params_dtype"] = model_runner.parameters_dtype()
-            stats["warmup"] = warmup
-            stats["repeat"] = repeat
-            stats["flag_no_grad"] = self.no_grad
-            stats["flag_fake_tensor"] = self.fake_tensor
-            stats["flag_training"] = self.training
-            stats["exporter"] = exporter
-            stats["input_size"] = self.obj_size(model_runner.inputs)
-            stats["_index"] = f"{model_name}-{exporter}"
-            stats["date_start"] = f"{datetime.now():%Y-%m-%d}"
-            stats["opt_patterns"] = optimization
-
-            if self.device == "cuda":
-                stats["mema_gpu_1_after_loading"] = torch.cuda.max_memory_allocated(0)
-                if self.verbose > 1:
-                    print(
-                        f"[benchmarkrunner.benchmark] input_size={stats['input_size']}"
-                    )
-                    print(
-                        f"[benchmarkrunner.benchmark] gpu_allocation={stats['mema_gpu_1_after_loading']} "
-                        f"reserved={torch.cuda.memory_reserved(0)} after loading"
-                    )
-
-            if self.verbose > 1:
-                print(
-                    f"[BenchmarkRunner.benchmark] model size and dtype "
-                    f"{stats['params_size']}, {stats['params_dtype']}"
-                )
-
-            ########
-            # warmup
-            ########
-
-            if self.verbose > 1:
-                print(
-                    f"[BenchmarkRunner.benchmark] warmup model {model_name!r} "
-                    f"- {warmup} times"
-                )
-
-            begin = time.perf_counter()
-            if quiet:
-                try:
-                    with torch.no_grad():
-                        # training mode consumes too much memory
-                        for w in range(warmup):
-                            if self.nvtx:
-                                torch.cuda.nvtx.range_push("EAGER-WARMUP")
-                            if w == warmup - 1:
-                                expected = model_runner.run()
-                            else:
-                                model_runner.run()
-                                # we don't plan to keep expected on CUDA
-                                # del expected
-                            if self.nvtx:
-                                torch.cuda.nvtx.range_pop()
-                            if self.device == "cuda" and self.verbose > 1:
-                                print(
-                                    f"[benchmarkrunner.benchmark] gpu_allocation={torch.cuda.max_memory_allocated(0)} "
-                                    f"reserved={torch.cuda.memory_reserved(0)} after iteration {w}"
-                                )
-                except Exception as e:
-                    stats["ERR_warmup_eager"] = _clean_string(str(e)).replace(
-                        "\n", "_ "
-                    )
-                    stats["time_warmup_eager"] = (time.perf_counter() - begin) / warmup
-                    if self.verbose:
-                        print(f"[benchmarkrunner.benchmark] time_warmup_eager {e}")
-                    yield stats
-                    continue
-                stats["time_warmup_eager"] = (time.perf_counter() - begin) / warmup
-            else:
-                with torch.no_grad():
-                    # training mode consumes too much memory
-                    for w in range(warmup):
-                        if self.nvtx:
-                            torch.cuda.nvtx.range_push("EAGER-WARMUP")
-                        if w == warmup - 1:
-                            expected = model_runner.run()
-                        else:
-                            model_runner.run()
-                            # we don't plan to keep expected on CUDA
-                            # del expected
-                        if self.nvtx:
-                            torch.cuda.nvtx.range_pop()
-                        if self.device == "cuda" and self.verbose > 1:
-                            print(
-                                f"[benchmarkrunner.benchmark] gpu_allocation={torch.cuda.max_memory_allocated(0)} "
-                                f"reserved={torch.cuda.memory_reserved(0)} after iteration {w}"
-                            )
-                stats["time_warmup_eager"] = (time.perf_counter() - begin) / warmup
-
-            expected = self.move_to("cpu", expected)
-            stats["output_size"] = self.obj_size(expected)
-            if self.verbose > 1:
-                print(f"[benchmarkrunner.benchmark] output_size={stats['output_size']}")
-
-            if self.device == "cuda":
-                stats["mema_gpu_2_after_warmup"] = torch.cuda.max_memory_allocated(0)
-                if self.verbose > 1:
-                    print(
-                        f"[benchmarkrunner.benchmark] gpu_allocation={stats['mema_gpu_2_after_warmup']} "
-                        f"reserved={torch.cuda.memory_reserved(0)} after warmup"
-                    )
-                torch.cuda.empty_cache()
-                stats["mema_gpu_3_empty_cache"] = torch.cuda.max_memory_allocated(0)
-                if self.verbose > 1:
-                    print(
-                        f"[benchmarkrunner.benchmark] gpu_allocation={stats['mema_gpu_3_empty_cache']} "
-                        f"reserved={torch.cuda.memory_reserved(0)} after empty_cache"
-                    )
-
-            ########
-            # repeat
-            ########
-
-            if self.verbose > 1:
-                print(
-                    f"[BenchmarkRunner.benchmark] repeat model {model_name!r} "
-                    f"- {repeat} times"
-                )
-
-            with torch.no_grad():
-                # training mode consumes too much memory
-                lats = []
-                for w in range(repeat):
-                    if self.nvtx:
-                        torch.cuda.nvtx.range_push("EAGER-ITER")
-                    begin = time.perf_counter()
-                    model_runner.run()
-                    lats.append(time.perf_counter() - begin)
-                    if self.nvtx:
-                        torch.cuda.nvtx.range_pop()
-            if len(lats) > 0:
-                stats["time_latency_eager"] = sum(lats) / len(lats)
-                stats["time_latency_eager_t_min"] = min(lats)
-                stats["time_latency_eager_t_max"] = max(lats)
-                stats["time_latency_eager_t_std"] = np.std(lats)
-                stats["time_latency_eager_t_med"] = np.median(lats)
-
-            if self.device == "cuda":
-                stats["mema_gpu_4_after_repeat"] = torch.cuda.max_memory_allocated(0)
-                if self.verbose > 1:
-                    print(
-                        f"[benchmarkrunner.benchmark] gpu_allocation={stats['mema_gpu_4_after_repeat']} "
-                        f"reserved={torch.cuda.memory_reserved(0)} after repeat"
-                    )
-            if self.verbose > 1:
-                print(f"[BenchmarkRunner.benchmark] export model {model_name!r}")
-
-            ########
-            # export
-            ########
-            if self.device == "cuda":
-                torch.cuda.reset_peak_memory_stats()
-                stats["mema_gpu_4_reset"] = torch.cuda.max_memory_allocated(0)
-
-            sopt = (
-                ("-" + optimization.replace("+", "_").replace("/", "_"))
-                if optimization
-                else ""
-            )
-            pfilename = os.path.join(
-                folder,
-                f"{model_name}-{exporter}-{self.device}-{self.dtype or ''}{sopt}",
-            )
-            if not os.path.exists(pfilename):
-                os.mkdir(pfilename)
-            filename = os.path.join(pfilename, "model.onnx")
-
-            memory_session = (
-                start_spying_on(cuda=self.device == "cuda") if memory_peak else None
-            )
-            if memory_session is not None and self.verbose:
-                print("[BenchmarkRunner.benchmark] start_spying_on")
-
-            begin = time.perf_counter()
-            if quiet:
-                try:
-                    exported_model, opt_stats = model_runner.export_as(
-                        exporter,
-                        name=filename,
-                        dynamic=dynamic,
-                        optimization=optimization,
-                        verbose=self.verbose + 1,
-                        fake_tensor=self.fake_tensor,
-                        no_grad=self.no_grad,
-                        target_opset=self.target_opset,
-                    )
-                except Exception as e:
-                    stats["time_export"] = time.perf_counter() - begin
-                    stats["ERR_export"] = _clean_string(str(e)).replace("\n", "_ ")
-                    if self.verbose:
-                        print(f"[benchmarkrunner.benchmark] err_export {e}")
-                    if memory_session is not None:
-                        memory_results = memory_session.stop()
-                        memory_stats = flatten(memory_results, prefix="memory_")
-                        stats.update(memory_stats)
-                    if self.verbose:
-                        print("[BenchmarkRunner.benchmark] stop_spying_on")
-                    yield stats
-                    continue
-                stats["time_export"] = time.perf_counter() - begin
-                stats["time_export_success"] = time.perf_counter() - begin
-            else:
-                exported_model, opt_stats = model_runner.export_as(
-                    exporter,
-                    name=filename,
-                    dynamic=dynamic,
-                    optimization=optimization,
-                    verbose=self.verbose + 1,
-                    fake_tensor=self.fake_tensor,
-                    no_grad=self.no_grad,
-                    target_opset=self.target_opset,
-                )
-                stats["time_export"] = time.perf_counter() - begin
-
-            if memory_session is not None:
-                memory_results = memory_session.stop()
-                print(f"[export_model] ends memory monitoring {memory_results}")
-                memory_stats = flatten(memory_results, prefix="memory_")
-                stats.update(memory_stats)
-                if self.verbose:
-                    print("[BenchmarkRunner.benchmark] stop_spying_on")
-
-            if self.device == "cuda":
-                stats["mema_gpu_5_after_export"] = torch.cuda.max_memory_allocated(0)
-                if self.verbose > 1:
-                    print(
-                        f"[benchmarkrunner.benchmark] gpu_allocation={stats['mema_gpu_5_after_export']} "
-                        f"reserved={torch.cuda.memory_reserved(0)} after export"
-                    )
-
-            stats.update(self._post_process_optimization_statistics(opt_stats))
-            stats["filename"] = filename
-            if quiet:
-                try:
-                    feeds = model_runner.make_feeds(exporter, filename)
-                except AssertionError as e:
-                    stats["ERR_feeds"] = _clean_string(str(e)).replace("\n", "_ ")
-                    if self.verbose:
-                        print(f"[benchmarkrunner.benchmark] err_feeds {e}")
-                    yield stats
-                    continue
-            else:
-                feeds = model_runner.make_feeds(exporter, filename)
-
-            del model_runner
-            gc.collect()
-
-            if self.device == "cuda":
-                torch.cuda.reset_peak_memory_stats()
-                stats["mema_gpu_6_after_gcollect"] = torch.cuda.max_memory_allocated(0)
-                if self.verbose > 1:
-                    print(
-                        f"[benchmarkrunner.benchmark] gpu_allocation={stats['mema_gpu_6_after_gcollect']} "
-                        f"reserved={torch.cuda.memory_reserved(0)} after gc.collect"
-                    )
-
-            #########
-            # session
-            #########
-
-            if self.verbose > 1:
-                print(f"[BenchmarkRunner.benchmark] inference model {model_name!r}")
-
-            providers = ["CUDAExecutionProvider", "CPUExecutionProvider"]
-            if self.device == "cpu":
-                providers = providers[1:]
-            stats["providers"] = ",".join(providers)
-
-            begin = time.perf_counter()
-            if isinstance(exported_model, onnx.ModelProto):
-                domains = set(d.domain for d in exported_model.opset_import)
-                session_options = onnxruntime.SessionOptions()
-                if self.dump_ort:
-                    session_options.optimized_model_filepath = f"{filename}-ortopt.onnx"
-                    if self.verbose > 1:
-                        print(
-                            f"[BenchmarkRunner.benchmark] saves optimized "
-                            f"model by onnxruntime in "
-                            f"{session_options.optimized_model_filepath!r}"
-                        )
-                if "onnx_extended.ortops.optim.cuda" in domains:
-                    try:
-                        from onnx_extended.ortops.optim.cuda import get_ort_ext_libs
-                    except ImportError as e:
-                        stats["ERR_ort"] = str(e)
-                        if self.verbose:
-                            print(f"[benchmarkrunner.benchmark] err_ort {e}")
-                        yield stats
-                        continue
-                    if self.verbose > 2:
-                        print(
-                            f"[BenchmarkRunner.benchmark] register {get_ort_ext_libs()[0]!r}"
-                        )
-                    session_options.register_custom_ops_library(get_ort_ext_libs()[0])
-
-                if self.verbose > 2:
-                    print("[BenchmarkRunner.benchmark] create session")
-                is_onnx = True
-                stats["onnx_model"] = "1"
-                if quiet:
-                    try:
-                        ort_sess = onnxruntime.InferenceSession(
-                            filename, session_options, providers=providers
-                        )
-                    except Exception as e:
-                        stats["ERR_ort"] = str(e)
-                        if self.verbose:
-                            print(f"[benchmarkrunner.benchmark] err_ort {e}")
-                        yield stats
-                        continue
-                else:
-                    ort_sess = onnxruntime.InferenceSession(
-                        filename, session_options, providers=providers
-                    )
-                if self.verbose > 1:
-                    print("[BenchmarkRunner.benchmark] WrapInferenceSessionForTorch")
-                sess = WrapInferenceSessionForTorch(ort_sess)
-                stats.update(self._post_process_onnx_statistics(exported_model))
-
-                if self.dump_ort and os.path.exists(
-                    session_options.optimized_model_filepath
-                ):
-                    # Let's save the optimized model with external weights.
-                    fold = os.path.join(
-                        os.path.split(session_options.optimized_model_filepath)[0],
-                        "ort_optimized",
-                    )
-                    new_filename = os.path.join(fold, "model_ort_optimized.onnx")
-                    if self.verbose > 1:
-                        print(
-                            f"[BenchmarkRunner.benchmark] load and saves with "
-                            f"external weights the optimized model by onnxruntime in "
-                            f"{new_filename!r}"
-                        )
-                    if not os.path.exists(fold):
-                        os.mkdir(fold)
-                    ortops = onnx.load(session_options.optimized_model_filepath)
-                    onnx.save(ortops, new_filename, save_as_external_data=True)
-                    # Let's free some space.
-                    os.remove(session_options.optimized_model_filepath)
-            else:
-                if self.verbose > 1:
-                    print("[BenchmarkRunner.benchmark] WrapForTorch")
-                is_onnx = False
-                sess = WrapForTorch(exported_model)
-                stats["onnx_model"] = "0"
-
-            stats["time_session"] = time.perf_counter() - begin
-
-            if self.device == "cuda":
-                stats["mema_gpu_7_after_session"] = torch.cuda.max_memory_allocated(0)
-                if self.verbose > 1:
-                    print(
-                        f"[benchmarkrunner.benchmark] gpu_allocation={stats['mema_gpu_7_after_session']} "
-                        f"reserved={torch.cuda.memory_reserved(0)} after session"
-                    )
-
-            if self.verbose > 1:
-                print(
-                    f"[BenchmarkRunner.benchmark] warmup "
-                    f"{exporter} - {model_name!r}"
-                )
-            stats["device"] = self.device
-
-            if os.path.exists(filename):
-                stats["onnx_filesize"] = os.stat(filename).st_size
-
-            torch.set_grad_enabled(not self.no_grad)
-
-            ################
-            # warmup session
-            ################
-
-            if self.verbose > 1:
-                print(
-                    f"[benchmarkrunner.benchmark] no_grad={self.no_grad} "
-                    f"torch.is_grad_enabled()={torch.is_grad_enabled()} before warmup"
-                )
-
-            got = None
-            if isinstance(exported_model, onnx.ModelProto):
-                # warmup session
-                begin = time.perf_counter()
-                if quiet:
-                    try:
-                        for _ in range(warmup):
-                            if self.nvtx:
-                                torch.cuda.nvtx.range_push("ORT-WARMUP")
-                            if _ == warmup - 1:
-                                got = self.ort_run(sess, feeds)
-                            else:
-                                self.ort_run(sess, feeds)
-                            if self.nvtx:
-                                torch.cuda.nvtx.range_pop()
-                    except Exception as e:
-                        if self.verbose:
-                            print(f"[benchmarkrunner.benchmark] err_warmup {e}")
-                        stats["ERR_warmup"] = _clean_string(str(e)).replace("\n", "_ ")
-                        stats["time_warmup"] = (time.perf_counter() - begin) / warmup
-                        yield stats
-                        continue
-                else:
-                    for _ in range(warmup):
-                        if self.nvtx:
-                            torch.cuda.nvtx.range_push("ORT-WARMUP")
-                        if _ == warmup - 1:
-                            got = self.ort_run(sess, feeds)
-                        else:
-                            self.ort_run(sess, feeds)
-                        if self.nvtx:
-                            torch.cuda.range_pop()
-                stats["time_warmup"] = (time.perf_counter() - begin) / warmup
-                if self.device == "cuda":
-                    stats["mema_gpu_8_after_export_warmup"] = (
-                        torch.cuda.max_memory_allocated(0)
-                    )
-                    if self.verbose > 1:
-                        print(
-                            f"[benchmarkrunner.benchmark] gpu_allocation={stats['mema_gpu_8_after_export_warmup']} "
-                            f"reserved={torch.cuda.memory_reserved(0)} after export warmup"
-                        )
-                if self.verbose > 1:
-                    print(
-                        f"[benchmarkrunner.benchmark] torch.is_grad_enabled()="
-                        f"{torch.is_grad_enabled()} after warmup"
-                    )
-                got = self.move_to("cpu", got)
-
-                if self.verbose > 1:
-                    print(f"[BenchmarkRunner.benchmark] repeat ort {model_name!r}")
-
-                ################
-                # repeat session
-                ################
-
-                if "ERR_warmup" not in stats:
-                    lats = []
-                    for _ in range(repeat):
-                        if self.nvtx:
-                            torch.cuda.nvtx.range_push("ORT-ITER")
-                        begin = time.perf_counter()
-                        self.ort_run(sess, feeds)
-                        lats.append(time.perf_counter() - begin)
-                        if self.nvtx:
-                            torch.cuda.nvtx.range_pop()
-                    if len(lats) > 0:
-                        stats["time_latency"] = sum(lats) / len(lats)
-                        stats["time_latency_t_min"] = min(lats)
-                        stats["time_latency_t_max"] = max(lats)
-                        stats["time_latency_t_std"] = np.std(lats)
-                        stats["time_latency_t_med"] = np.median(lats)
-                if self.device == "cuda":
-                    stats["mema_gpu_9_after_export_repeat"] = (
-                        torch.cuda.max_memory_allocated(0)
-                    )
-                    if self.verbose > 1:
-                        print(
-                            f"[benchmarkrunner.benchmark] gpu_allocation={stats['mema_gpu_9_after_export_repeat']} "
-                            f"reserved={torch.cuda.memory_reserved(0)} after export repeat"
-                        )
-            else:
-                # warmup session
-                if exporter == "eager":
-                    # no try, catch needed for eager mode.
-                    begin = time.perf_counter()
-                    for _ in range(warmup):
-                        if self.nvtx:
-                            torch.cuda.nvtx.range_push("EAGER-WARMUP")
-                        if _ == warmup - 1:
-                            got = sess.run(feeds)
-                        else:
-                            sess.run(feeds)
-                        if self.nvtx:
-                            torch.cuda.nvtx.range_pop()
-                    stats["time_warmup"] = (time.perf_counter() - begin) / warmup
-                else:
-                    begin = time.perf_counter()
-                    if quiet:
-                        try:
-                            for _ in range(warmup):
-                                if self.nvtx:
-                                    torch.cuda.nvtx.range_push("CPL-WARMUP")
-                                if _ == warmup - 1:
-                                    got = sess.run(feeds)
-                                else:
-                                    sess.run(feeds)
-                                if self.nvtx:
-                                    torch.cuda.nvtx.range_pop()
-                        except Exception as e:
-                            if self.verbose:
-                                print(f"[benchmarkrunner.benchmark] err_warmup {e}")
-                            stats["ERR_warmup"] = _clean_string(str(e)).replace(
-                                "\n", "_ "
-                            )
-                            stats["time_warmup"] = (
-                                time.perf_counter() - begin
-                            ) / warmup
-                            yield stats
-                            continue
-                    else:
-                        for _ in range(warmup):
-                            if self.nvtx:
-                                torch.cuda.nvtx.range_push("CPL-WARMUP")
-                            if _ == warmup - 1:
-                                got = sess.run(feeds)
-                            else:
-                                sess.run(feeds)
-                            if self.nvtx:
-                                torch.cuda.nvtx.range_pop()
-                    stats["time_warmup"] = (time.perf_counter() - begin) / warmup
-                if self.device == "cuda":
-                    stats["mema_gpu_8_after_export_warmup"] = (
-                        torch.cuda.max_memory_allocated(0)
-                    )
-                    if self.verbose > 1:
-                        print(
-                            f"[benchmarkrunner.benchmark] gpu_allocation={stats['mema_gpu_8_after_export_warmup']} "
-                            f"reserved={torch.cuda.memory_reserved(0)} after export warmup"
-                        )
-                if self.verbose > 1:
-                    print(
-                        f"[benchmarkrunner.benchmark] torch.is_grad_enabled()="
-                        f"{torch.is_grad_enabled()} after warmup"
-                    )
-                got = self.move_to("cpu", got)
-
-                if self.verbose > 1:
-                    print(f"[BenchmarkRunner.benchmark] repeat torch {model_name!r}")
-
-                ################
-                # repeat session
-                ################
-
-                if "ERR_warmup" not in stats:
-                    lats = []
-                    for _ in range(repeat):
-                        if self.nvtx:
-                            torch.cuda.nvtx.range_push("CPL-ITER")
-                        begin = time.perf_counter()
-                        sess.run(feeds)
-                        lats.append(time.perf_counter() - begin)
-                        if self.nvtx:
-                            torch.cuda.nvtx.range_pop()
-                    if len(lats) > 0:
-                        stats["time_latency"] = sum(lats) / len(lats)
-                        stats["time_latency_t_min"] = min(lats)
-                        stats["time_latency_t_max"] = max(lats)
-                        stats["time_latency_t_std"] = np.std(lats)
-                        stats["time_latency_t_med"] = np.median(lats)
-
-                if self.device == "cuda":
-                    stats["mema_gpu_9_after_export_repeat"] = (
-                        torch.cuda.max_memory_allocated(0)
-                    )
-                    if self.verbose > 1:
-                        print(
-                            f"[benchmarkrunner.benchmark] gpu_allocation={stats['mema_gpu_9_after_export_repeat']} "
-                            f"reserved={torch.cuda.memory_reserved(0)} after export repeat"
-                        )
-
-            if "time_latency" in stats:
-                stats["speedup"] = stats["time_latency_eager"] / stats["time_latency"]
-                stats["speedup_med"] = (
-                    stats["time_latency_eager_t_med"] / stats["time_latency_t_med"]
-                )
-                stats["speedup_increase"] = stats["speedup"] - 1
-
-            ###############
-            # discrepancies
-            ###############
-
-            if got is not None:
-                a, r = self.max_diff(
-                    expected, got, verbose=self.verbose, flatten=is_onnx
-                )
-                stats["discrepancies_abs"] = a
-                stats["discrepancies_rel"] = r
-                if self.verbose:
-                    print(
-                        f"[BenchmarkRunner.benchmark] done model with {len(stats)} metrics"
-                    )
-
-            total_time = time.perf_counter() - begin_total
-            stats["time_total"] = total_time
-            if self.verbose:
-                print(
-                    f"[BenchmarkRunner.benchmark] done model {model_name!r} "
-                    f"with exporter={exporter!r} in {total_time}"
-                )
-            yield stats
-
-        # restore the initial state
-        torch.set_grad_enabled(initial_no_grad)
 
     def ort_run(
         self, sess: WrapInferenceSessionForTorch, feeds: List[torch.Tensor]
@@ -1095,3 +421,799 @@ class BenchmarkRunner:
             f"Not implemented with type(expected)={type(expected)}, type(results)={type(got)}, "
             f"dir(expected)={dir(expected)}, level={level}"
         )
+
+    def enumerate_test_models(
+        self,
+        exporter: str,
+        process: bool = False,
+        folder: str = "dump_test_models",
+        dynamic: bool = False,
+        optimization: str = "",
+        quiet: bool = True,
+        memory_peak: bool = False,
+        part: Optional[int] = None,
+        pickled_name: Optional[str] = None,
+    ) -> Iterator[Dict[Any, Any]]:
+        """
+        Runs the benchmarks, run, export, run in onnx, measure the speedup.
+        """
+        assert not process, "process=True not implemented."
+        assert not dynamic, "dynamic=True not implemented."
+
+        from experimental_experiment.bench_run import get_machine
+
+        def _end():
+            # restore the initial state
+            torch.set_grad_enabled(initial_no_grad)
+
+        machine_specs = get_machine()
+        initial_no_grad = torch.is_grad_enabled()
+
+        if not os.path.exists(folder):
+            os.makedirs(folder)
+        names = self.get_model_name_list()
+        assert len(names) > 0, "no model to run"
+        assert len(names) == 1 or part is None, (
+            f"part={part} only works with 1 model " f"at a time not {names}"
+        )
+        for model_name in names:
+
+            begin_total = time.perf_counter()
+
+            if part is None or part == 0:
+                stats, context = self._test_model_part_1(
+                    model_name=model_name,
+                    machine_specs=machine_specs,
+                    quiet=quiet,
+                    exporter=exporter,
+                    optimization=optimization,
+                    dynamic=dynamic,
+                    memory_peak=memory_peak,
+                    folder=folder,
+                    initial_no_grad=initial_no_grad,
+                )
+                if part == 0:
+                    assert (
+                        pickled_name
+                    ), f"pickled_name cannot be empty with part={part}"
+                    if os.path.exists(pickled_name):
+                        os.remove(pickled_name)
+                    if self.verbose:
+                        print(
+                            f"[enumerate_test_models] dumps everything into {pickled_name!r}"
+                        )
+                    pkl = dict(stats=stats, context=context)
+                    with open(pickled_name, "wb") as f:
+                        pickle.dump(pkl, f)
+                    if self.verbose:
+                        print(
+                            f"[enumerate_test_models] pickled size {os.stat(pickled_name).st_size}"
+                        )
+
+            if part is None or part == 1:
+                if part == 1:
+                    assert (
+                        pickled_name
+                    ), f"pickled_name cannot be empty with part={part}"
+                    assert os.path.exists(
+                        pickled_name
+                    ), f"{pickled_name!r} does not exist"
+                    with open(pickled_name, "rb") as f:
+                        data = pickle.load(f)
+                    context = data["context"]
+                    stats = data["stats"]
+                    if self.verbose:
+                        print(
+                            f"[enumerate_test_models] restored data from {pickled_name!r}"
+                        )
+                if context["part1"]:
+                    self._test_model_part_2(stats, **context)
+                    stats["STEP"] = "last"
+
+            total_time = time.perf_counter() - begin_total
+            stats["time_total"] = total_time
+            if self.verbose:
+                print(
+                    f"[BenchmarkRunner.benchmark] done model {model_name!r} "
+                    f"with exporter={exporter!r} in {total_time}"
+                )
+            yield stats
+
+        # final steps
+        _end()
+
+    def _test_model_part_1(
+        self,
+        model_name: str,
+        quiet=None,
+        exporter=None,
+        optimization=None,
+        dynamic=None,
+        memory_peak=None,
+        folder=None,
+        machine_specs=None,
+        initial_no_grad=None,
+    ):
+        assert quiet is not None
+        assert exporter is not None
+        assert optimization is not None
+        assert dynamic is not None
+        assert memory_peak is not None
+        assert folder is not None
+        assert machine_specs is not None
+        assert initial_no_grad is not None
+
+        import transformers
+        import onnxruntime
+        import onnxscript
+        from experimental_experiment.bench_run import _clean_string
+
+        #######
+        # begin
+        #######
+
+        context = {"part1": False}
+
+        if self.device == "cuda":
+            torch.cuda.reset_peak_memory_stats()
+        torch.set_grad_enabled(initial_no_grad)
+        if self.verbose:
+            print(
+                f"[BenchmarkRunner.benchmark] test model {model_name!r} "
+                f"with exporter={exporter!r}"
+            )
+        if self.verbose > 1:
+            print(f"[BenchmarkRunner.benchmark] load model {model_name!r}")
+
+        stats = {
+            "version_torch": getattr(torch, "__version__", "dev"),
+            "version_transformers": getattr(transformers, "__version__", "dev"),
+            "version_onnxruntime": getattr(onnxruntime, "__version__", "dev"),
+            "version_onnxscript": getattr(onnxscript, "__version__", "dev"),
+            "version_onnx": getattr(onnx, "__version__", "dev"),
+        }
+        stats.update(machine_specs)
+        if self.device == "cuda":
+            stats["mema_gpu_0_before_loading"] = torch.cuda.max_memory_allocated(0)
+            if self.verbose > 1:
+                print(
+                    f"[benchmarkrunner.benchmark] gpu_allocation={stats['mema_gpu_0_before_loading']} "
+                    f"reserved={torch.cuda.memory_reserved(0)} before loading"
+                )
+
+        begin = time.perf_counter()
+        model_runner = self.load_model(model_name)
+        if self.verbose:
+            print(
+                f"[benchmarkrunner.benchmark] model wrapped with class {type(model_runner.model)}"
+            )
+        if self.device == "cuda" and self.verbose > 1:
+            print(
+                f"[benchmarkrunner.benchmark] gpu_allocation={torch.cuda.max_memory_allocated(0)} "
+                f"reserved={torch.cuda.memory_reserved(0)} just after loading"
+            )
+        repeat = model_runner.repeat
+        warmup = model_runner.warmup
+        stats["model_name"] = model_name
+        stats["suite"] = model_runner.suite
+        stats["time_load"] = time.perf_counter() - begin
+        stats["params_size"] = model_runner.parameters_size()
+        stats["params_dtype"] = model_runner.parameters_dtype()
+        stats["warmup"] = warmup
+        stats["repeat"] = repeat
+        stats["flag_no_grad"] = self.no_grad
+        stats["flag_fake_tensor"] = self.fake_tensor
+        stats["flag_training"] = self.training
+        stats["exporter"] = exporter
+        stats["input_size"] = self.obj_size(model_runner.inputs)
+        stats["_index"] = f"{model_name}-{exporter}"
+        stats["date_start"] = f"{datetime.now():%Y-%m-%d}"
+        stats["opt_patterns"] = optimization
+
+        if self.device == "cuda":
+            stats["mema_gpu_1_after_loading"] = torch.cuda.max_memory_allocated(0)
+            if self.verbose > 1:
+                print(f"[benchmarkrunner.benchmark] input_size={stats['input_size']}")
+                print(
+                    f"[benchmarkrunner.benchmark] gpu_allocation={stats['mema_gpu_1_after_loading']} "
+                    f"reserved={torch.cuda.memory_reserved(0)} after loading"
+                )
+
+        if self.verbose > 1:
+            print(
+                f"[BenchmarkRunner.benchmark] model size and dtype "
+                f"{stats['params_size']}, {stats['params_dtype']}"
+            )
+
+        ########
+        # warmup
+        ########
+
+        if self.verbose > 1:
+            print(
+                f"[BenchmarkRunner.benchmark] warmup model {model_name!r} "
+                f"- {warmup} times"
+            )
+
+        begin = time.perf_counter()
+        if quiet:
+            try:
+                with torch.no_grad():
+                    # training mode consumes too much memory
+                    for w in range(warmup):
+                        if self.nvtx:
+                            torch.cuda.nvtx.range_push("EAGER-WARMUP")
+                        if w == warmup - 1:
+                            expected = model_runner.run()
+                        else:
+                            model_runner.run()
+                            # we don't plan to keep expected on CUDA
+                            # del expected
+                        if self.nvtx:
+                            torch.cuda.nvtx.range_pop()
+                        if self.device == "cuda" and self.verbose > 1:
+                            print(
+                                f"[benchmarkrunner.benchmark] gpu_allocation={torch.cuda.max_memory_allocated(0)} "
+                                f"reserved={torch.cuda.memory_reserved(0)} after iteration {w}"
+                            )
+            except Exception as e:
+                stats["ERR_warmup_eager"] = _clean_string(str(e)).replace("\n", "_ ")
+                stats["time_warmup_eager"] = (time.perf_counter() - begin) / warmup
+                if self.verbose:
+                    print(f"[benchmarkrunner.benchmark] time_warmup_eager {e}")
+                return stats, context
+            stats["time_warmup_eager"] = (time.perf_counter() - begin) / warmup
+        else:
+            with torch.no_grad():
+                # training mode consumes too much memory
+                for w in range(warmup):
+                    if self.nvtx:
+                        torch.cuda.nvtx.range_push("EAGER-WARMUP")
+                    if w == warmup - 1:
+                        expected = model_runner.run()
+                    else:
+                        model_runner.run()
+                        # we don't plan to keep expected on CUDA
+                        # del expected
+                    if self.nvtx:
+                        torch.cuda.nvtx.range_pop()
+                    if self.device == "cuda" and self.verbose > 1:
+                        print(
+                            f"[benchmarkrunner.benchmark] gpu_allocation={torch.cuda.max_memory_allocated(0)} "
+                            f"reserved={torch.cuda.memory_reserved(0)} after iteration {w}"
+                        )
+            stats["time_warmup_eager"] = (time.perf_counter() - begin) / warmup
+
+        expected = self.move_to("cpu", expected)
+        stats["output_size"] = self.obj_size(expected)
+        if self.verbose > 1:
+            print(f"[benchmarkrunner.benchmark] output_size={stats['output_size']}")
+
+        if self.device == "cuda":
+            stats["mema_gpu_2_after_warmup"] = torch.cuda.max_memory_allocated(0)
+            if self.verbose > 1:
+                print(
+                    f"[benchmarkrunner.benchmark] gpu_allocation={stats['mema_gpu_2_after_warmup']} "
+                    f"reserved={torch.cuda.memory_reserved(0)} after warmup"
+                )
+            torch.cuda.empty_cache()
+            stats["mema_gpu_3_empty_cache"] = torch.cuda.max_memory_allocated(0)
+            if self.verbose > 1:
+                print(
+                    f"[benchmarkrunner.benchmark] gpu_allocation={stats['mema_gpu_3_empty_cache']} "
+                    f"reserved={torch.cuda.memory_reserved(0)} after empty_cache"
+                )
+
+        ########
+        # repeat
+        ########
+
+        if self.verbose > 1:
+            print(
+                f"[BenchmarkRunner.benchmark] repeat model {model_name!r} "
+                f"- {repeat} times"
+            )
+
+        with torch.no_grad():
+            # training mode consumes too much memory
+            lats = []
+            for w in range(repeat):
+                if self.nvtx:
+                    torch.cuda.nvtx.range_push("EAGER-ITER")
+                begin = time.perf_counter()
+                model_runner.run()
+                lats.append(time.perf_counter() - begin)
+                if self.nvtx:
+                    torch.cuda.nvtx.range_pop()
+        if len(lats) > 0:
+            stats["time_latency_eager"] = sum(lats) / len(lats)
+            stats["time_latency_eager_t_qu"] = "/".join(
+                map(str, np.quantile(lats, np.arange(11) / 10.0))
+            )
+            stats["time_latency_eager_t_min"] = min(lats)
+            stats["time_latency_eager_t_max"] = max(lats)
+            stats["time_latency_eager_t_std"] = np.std(lats)
+            stats["time_latency_eager_t_med"] = np.median(lats)
+
+        if self.device == "cuda":
+            stats["mema_gpu_4_after_repeat"] = torch.cuda.max_memory_allocated(0)
+            if self.verbose > 1:
+                print(
+                    f"[benchmarkrunner.benchmark] gpu_allocation={stats['mema_gpu_4_after_repeat']} "
+                    f"reserved={torch.cuda.memory_reserved(0)} after repeat"
+                )
+        if self.verbose > 1:
+            print(f"[BenchmarkRunner.benchmark] export model {model_name!r}")
+
+        ########
+        # export
+        ########
+
+        if self.device == "cuda":
+            torch.cuda.reset_peak_memory_stats()
+            stats["mema_gpu_4_reset"] = torch.cuda.max_memory_allocated(0)
+
+        sopt = (
+            ("-" + optimization.replace("+", "_").replace("/", "_"))
+            if optimization
+            else ""
+        )
+        pfilename = os.path.join(
+            folder,
+            f"{model_name}-{exporter}-{self.device}-{self.dtype or ''}{sopt}",
+        )
+        if not os.path.exists(pfilename):
+            os.mkdir(pfilename)
+        filename = os.path.join(pfilename, "model.onnx")
+
+        memory_session = (
+            start_spying_on(cuda=self.device == "cuda") if memory_peak else None
+        )
+        if memory_session is not None and self.verbose:
+            print("[BenchmarkRunner.benchmark] start_spying_on")
+
+        begin = time.perf_counter()
+        if quiet:
+            try:
+                exported_model, opt_stats = model_runner.export_as(
+                    exporter,
+                    name=filename,
+                    dynamic=dynamic,
+                    optimization=optimization,
+                    verbose=self.verbose + 1,
+                    fake_tensor=self.fake_tensor,
+                    no_grad=self.no_grad,
+                    target_opset=self.target_opset,
+                )
+            except Exception as e:
+                stats["time_export"] = time.perf_counter() - begin
+                stats["ERR_export"] = _clean_string(str(e)).replace("\n", "_ ")
+                if self.verbose:
+                    print(f"[benchmarkrunner.benchmark] err_export {e}")
+                if memory_session is not None:
+                    memory_results = memory_session.stop()
+                    memory_stats = flatten(memory_results, prefix="memory_")
+                    stats.update(memory_stats)
+                if self.verbose:
+                    print("[BenchmarkRunner.benchmark] stop_spying_on")
+                return stats, context
+
+            stats["time_export"] = time.perf_counter() - begin
+            stats["time_export_success"] = time.perf_counter() - begin
+        else:
+            exported_model, opt_stats = model_runner.export_as(
+                exporter,
+                name=filename,
+                dynamic=dynamic,
+                optimization=optimization,
+                verbose=self.verbose + 1,
+                fake_tensor=self.fake_tensor,
+                no_grad=self.no_grad,
+                target_opset=self.target_opset,
+            )
+            stats["time_export"] = time.perf_counter() - begin
+            stats["time_export_success"] = time.perf_counter() - begin
+
+        if memory_session is not None:
+            memory_results = memory_session.stop()
+            print(f"[export_model] ends memory monitoring {memory_results}")
+            memory_stats = flatten(memory_results, prefix="memory_")
+            stats.update(memory_stats)
+            if self.verbose:
+                print("[BenchmarkRunner.benchmark] stop_spying_on")
+
+        if self.device == "cuda":
+            stats["mema_gpu_5_after_export"] = torch.cuda.max_memory_allocated(0)
+            if self.verbose > 1:
+                print(
+                    f"[benchmarkrunner.benchmark] gpu_allocation={stats['mema_gpu_5_after_export']} "
+                    f"reserved={torch.cuda.memory_reserved(0)} after export"
+                )
+
+        stats.update(self._post_process_optimization_statistics(opt_stats))
+        stats["filename"] = filename
+        if quiet:
+            try:
+                feeds = model_runner.make_feeds(exporter, filename)
+            except AssertionError as e:
+                stats["ERR_feeds"] = _clean_string(str(e)).replace("\n", "_ ")
+                if self.verbose:
+                    print(f"[benchmarkrunner.benchmark] err_feeds {e}")
+                return stats, context
+
+        else:
+            feeds = model_runner.make_feeds(exporter, filename)
+            context["feeds"] = feeds
+
+        del model_runner
+        gc.collect()
+
+        if self.device == "cuda":
+            torch.cuda.reset_peak_memory_stats()
+            stats["mema_gpu_6_after_gcollect"] = torch.cuda.max_memory_allocated(0)
+            if self.verbose > 1:
+                print(
+                    f"[benchmarkrunner.benchmark] gpu_allocation={stats['mema_gpu_6_after_gcollect']} "
+                    f"reserved={torch.cuda.memory_reserved(0)} after gc.collect"
+                )
+        context["part1"] = True
+        context["model_name"] = model_name
+        context["filename"] = filename
+        context["exported_model"] = exported_model
+        context["exporter"] = exporter
+        context["quiet"] = quiet
+        context["expected"] = expected
+        context["feeds"] = feeds
+        context["warmup"] = warmup
+        context["repeat"] = repeat
+        return stats, context
+
+    def _test_model_part_2(
+        self,
+        stats: Dict[str, Any],
+        model_name: str,
+        filename=None,
+        exported_model=None,
+        exporter=None,
+        quiet=None,
+        expected=None,
+        feeds=None,
+        warmup=None,
+        repeat=None,
+        part1=None,
+    ):
+        assert expected is not None
+        assert feeds is not None
+        assert repeat is not None
+        assert warmup is not None
+        assert quiet is not None
+        assert exporter is not None
+        assert exported_model is not None
+        assert filename is not None
+        assert part1 is not None
+        assert part1, "Part 1 was not sucessful"
+
+        import onnxruntime
+        from experimental_experiment.bench_run import _clean_string
+
+        #########
+        # session
+        #########
+
+        if self.verbose > 1:
+            print(f"[BenchmarkRunner.benchmark] inference model {model_name!r}")
+
+        providers = ["CUDAExecutionProvider", "CPUExecutionProvider"]
+        if self.device == "cpu":
+            providers = providers[1:]
+        stats["providers"] = "/".join(providers)
+
+        begin = time.perf_counter()
+        if isinstance(exported_model, onnx.ModelProto):
+            domains = set(d.domain for d in exported_model.opset_import)
+            session_options = onnxruntime.SessionOptions()
+            if self.dump_ort:
+                session_options.optimized_model_filepath = f"{filename}-ortopt.onnx"
+                if self.verbose > 1:
+                    print(
+                        f"[BenchmarkRunner.benchmark] saves optimized "
+                        f"model by onnxruntime in "
+                        f"{session_options.optimized_model_filepath!r}"
+                    )
+            if "onnx_extended.ortops.optim.cuda" in domains:
+                try:
+                    from onnx_extended.ortops.optim.cuda import get_ort_ext_libs
+                except ImportError as e:
+                    stats["ERR_ort"] = str(e)
+                    if self.verbose:
+                        print(f"[benchmarkrunner.benchmark] err_ort {e}")
+                    return stats
+
+                if self.verbose > 2:
+                    print(
+                        f"[BenchmarkRunner.benchmark] register {get_ort_ext_libs()[0]!r}"
+                    )
+                session_options.register_custom_ops_library(get_ort_ext_libs()[0])
+
+            if self.verbose > 2:
+                print("[BenchmarkRunner.benchmark] create session")
+            is_onnx = True
+            stats["onnx_model"] = "1"
+            if quiet:
+                try:
+                    ort_sess = onnxruntime.InferenceSession(
+                        filename, session_options, providers=providers
+                    )
+                except Exception as e:
+                    stats["ERR_ort"] = str(e)
+                    if self.verbose:
+                        print(f"[benchmarkrunner.benchmark] err_ort {e}")
+                    return stats
+            else:
+                ort_sess = onnxruntime.InferenceSession(
+                    filename, session_options, providers=providers
+                )
+            if self.verbose > 1:
+                print("[BenchmarkRunner.benchmark] WrapInferenceSessionForTorch")
+            sess = WrapInferenceSessionForTorch(ort_sess)
+            stats.update(self._post_process_onnx_statistics(exported_model))
+
+            if self.dump_ort and os.path.exists(
+                session_options.optimized_model_filepath
+            ):
+                # Let's save the optimized model with external weights.
+                fold = os.path.join(
+                    os.path.split(session_options.optimized_model_filepath)[0],
+                    "ort_optimized",
+                )
+                new_filename = os.path.join(fold, "model_ort_optimized.onnx")
+                if self.verbose > 1:
+                    print(
+                        f"[BenchmarkRunner.benchmark] load and saves with "
+                        f"external weights the optimized model by onnxruntime in "
+                        f"{new_filename!r}"
+                    )
+                if not os.path.exists(fold):
+                    os.mkdir(fold)
+                ortops = onnx.load(session_options.optimized_model_filepath)
+                onnx.save(ortops, new_filename, save_as_external_data=True)
+                # Let's free some space.
+                os.remove(session_options.optimized_model_filepath)
+        else:
+            if self.verbose > 1:
+                print("[BenchmarkRunner.benchmark] WrapForTorch")
+            is_onnx = False
+            sess = WrapForTorch(exported_model)
+            stats["onnx_model"] = "0"
+
+        stats["time_session"] = time.perf_counter() - begin
+
+        if self.device == "cuda":
+            stats["mema_gpu_7_after_session"] = torch.cuda.max_memory_allocated(0)
+            if self.verbose > 1:
+                print(
+                    f"[benchmarkrunner.benchmark] gpu_allocation={stats['mema_gpu_7_after_session']} "
+                    f"reserved={torch.cuda.memory_reserved(0)} after session"
+                )
+
+        if self.verbose > 1:
+            print(f"[BenchmarkRunner.benchmark] warmup " f"{exporter} - {model_name!r}")
+        stats["device"] = self.device
+
+        if os.path.exists(filename):
+            stats["onnx_filesize"] = os.stat(filename).st_size
+
+        torch.set_grad_enabled(not self.no_grad)
+
+        ################
+        # warmup session
+        ################
+
+        if self.verbose > 1:
+            print(
+                f"[benchmarkrunner.benchmark] no_grad={self.no_grad} "
+                f"torch.is_grad_enabled()={torch.is_grad_enabled()} before warmup"
+            )
+
+        got = None
+        if isinstance(exported_model, onnx.ModelProto):
+            # warmup session
+            begin = time.perf_counter()
+            if quiet:
+                try:
+                    for _ in range(warmup):
+                        if self.nvtx:
+                            torch.cuda.nvtx.range_push("ORT-WARMUP")
+                        if _ == warmup - 1:
+                            got = self.ort_run(sess, feeds)
+                        else:
+                            self.ort_run(sess, feeds)
+                        if self.nvtx:
+                            torch.cuda.nvtx.range_pop()
+                except Exception as e:
+                    if self.verbose:
+                        print(f"[benchmarkrunner.benchmark] err_warmup {e}")
+                    stats["ERR_warmup"] = _clean_string(str(e)).replace("\n", "_ ")
+                    stats["time_warmup"] = (time.perf_counter() - begin) / warmup
+                    return stats
+            else:
+                for _ in range(warmup):
+                    if self.nvtx:
+                        torch.cuda.nvtx.range_push("ORT-WARMUP")
+                    if _ == warmup - 1:
+                        got = self.ort_run(sess, feeds)
+                    else:
+                        self.ort_run(sess, feeds)
+                    if self.nvtx:
+                        torch.cuda.range_pop()
+            stats["time_warmup"] = (time.perf_counter() - begin) / warmup
+            if self.device == "cuda":
+                stats["mema_gpu_8_after_export_warmup"] = (
+                    torch.cuda.max_memory_allocated(0)
+                )
+                if self.verbose > 1:
+                    print(
+                        f"[benchmarkrunner.benchmark] gpu_allocation={stats['mema_gpu_8_after_export_warmup']} "
+                        f"reserved={torch.cuda.memory_reserved(0)} after export warmup"
+                    )
+            if self.verbose > 1:
+                print(
+                    f"[benchmarkrunner.benchmark] torch.is_grad_enabled()="
+                    f"{torch.is_grad_enabled()} after warmup"
+                )
+            got = self.move_to("cpu", got)
+
+            if self.verbose > 1:
+                print(f"[BenchmarkRunner.benchmark] repeat ort {model_name!r}")
+
+            ################
+            # repeat session
+            ################
+
+            if "ERR_warmup" not in stats:
+                lats = []
+                for _ in range(repeat):
+                    if self.nvtx:
+                        torch.cuda.nvtx.range_push("ORT-ITER")
+                    begin = time.perf_counter()
+                    self.ort_run(sess, feeds)
+                    lats.append(time.perf_counter() - begin)
+                    if self.nvtx:
+                        torch.cuda.nvtx.range_pop()
+                if len(lats) > 0:
+                    stats["time_latency"] = sum(lats) / len(lats)
+                    stats["time_latency_t_qu"] = "/".join(
+                        map(str, np.quantile(lats, np.arange(11) / 10.0))
+                    )
+                    stats["time_latency_t_min"] = min(lats)
+                    stats["time_latency_t_max"] = max(lats)
+                    stats["time_latency_t_std"] = np.std(lats)
+                    stats["time_latency_t_med"] = np.median(lats)
+            if self.device == "cuda":
+                stats["mema_gpu_9_after_export_repeat"] = (
+                    torch.cuda.max_memory_allocated(0)
+                )
+                if self.verbose > 1:
+                    print(
+                        f"[benchmarkrunner.benchmark] gpu_allocation={stats['mema_gpu_9_after_export_repeat']} "
+                        f"reserved={torch.cuda.memory_reserved(0)} after export repeat"
+                    )
+        else:
+            # warmup session
+            if exporter == "eager":
+                # no try, catch needed for eager mode.
+                begin = time.perf_counter()
+                for _ in range(warmup):
+                    if self.nvtx:
+                        torch.cuda.nvtx.range_push("EAGER-WARMUP")
+                    if _ == warmup - 1:
+                        got = sess.run(feeds)
+                    else:
+                        sess.run(feeds)
+                    if self.nvtx:
+                        torch.cuda.nvtx.range_pop()
+                stats["time_warmup"] = (time.perf_counter() - begin) / warmup
+            else:
+                begin = time.perf_counter()
+                if quiet:
+                    try:
+                        for _ in range(warmup):
+                            if self.nvtx:
+                                torch.cuda.nvtx.range_push("CPL-WARMUP")
+                            if _ == warmup - 1:
+                                got = sess.run(feeds)
+                            else:
+                                sess.run(feeds)
+                            if self.nvtx:
+                                torch.cuda.nvtx.range_pop()
+                    except Exception as e:
+                        if self.verbose:
+                            print(f"[benchmarkrunner.benchmark] err_warmup {e}")
+                        stats["ERR_warmup"] = _clean_string(str(e)).replace("\n", "_ ")
+                        stats["time_warmup"] = (time.perf_counter() - begin) / warmup
+                        return stats
+                else:
+                    for _ in range(warmup):
+                        if self.nvtx:
+                            torch.cuda.nvtx.range_push("CPL-WARMUP")
+                        if _ == warmup - 1:
+                            got = sess.run(feeds)
+                        else:
+                            sess.run(feeds)
+                        if self.nvtx:
+                            torch.cuda.nvtx.range_pop()
+                stats["time_warmup"] = (time.perf_counter() - begin) / warmup
+            if self.device == "cuda":
+                stats["mema_gpu_8_after_export_warmup"] = (
+                    torch.cuda.max_memory_allocated(0)
+                )
+                if self.verbose > 1:
+                    print(
+                        f"[benchmarkrunner.benchmark] gpu_allocation={stats['mema_gpu_8_after_export_warmup']} "
+                        f"reserved={torch.cuda.memory_reserved(0)} after export warmup"
+                    )
+            if self.verbose > 1:
+                print(
+                    f"[benchmarkrunner.benchmark] torch.is_grad_enabled()="
+                    f"{torch.is_grad_enabled()} after warmup"
+                )
+            got = self.move_to("cpu", got)
+
+            if self.verbose > 1:
+                print(f"[BenchmarkRunner.benchmark] repeat torch {model_name!r}")
+
+            ################
+            # repeat session
+            ################
+
+            if "ERR_warmup" not in stats:
+                lats = []
+                for _ in range(repeat):
+                    if self.nvtx:
+                        torch.cuda.nvtx.range_push("CPL-ITER")
+                    begin = time.perf_counter()
+                    sess.run(feeds)
+                    lats.append(time.perf_counter() - begin)
+                    if self.nvtx:
+                        torch.cuda.nvtx.range_pop()
+                if len(lats) > 0:
+                    stats["time_latency"] = sum(lats) / len(lats)
+                    stats["time_latency_t_qu"] = "/".join(
+                        map(str, np.quantile(lats, np.arange(11) / 10.0))
+                    )
+                    stats["time_latency_t_min"] = min(lats)
+                    stats["time_latency_t_max"] = max(lats)
+                    stats["time_latency_t_std"] = np.std(lats)
+                    stats["time_latency_t_med"] = np.median(lats)
+
+            if self.device == "cuda":
+                stats["mema_gpu_9_after_export_repeat"] = (
+                    torch.cuda.max_memory_allocated(0)
+                )
+                if self.verbose > 1:
+                    print(
+                        f"[benchmarkrunner.benchmark] gpu_allocation={stats['mema_gpu_9_after_export_repeat']} "
+                        f"reserved={torch.cuda.memory_reserved(0)} after export repeat"
+                    )
+
+        if "time_latency" in stats:
+            stats["speedup"] = stats["time_latency_eager"] / stats["time_latency"]
+            stats["speedup_med"] = (
+                stats["time_latency_eager_t_med"] / stats["time_latency_t_med"]
+            )
+            stats["speedup_increase"] = stats["speedup"] - 1
+
+        ###############
+        # discrepancies
+        ###############
+
+        if got is not None:
+            a, r = self.max_diff(expected, got, verbose=self.verbose, flatten=is_onnx)
+            stats["discrepancies_abs"] = a
+            stats["discrepancies_rel"] = r
+            if self.verbose:
+                print(
+                    f"[BenchmarkRunner.benchmark] done model with {len(stats)} metrics"
+                )
+
+        return stats

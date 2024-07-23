@@ -537,9 +537,14 @@ class ModelRunner:
         assert not fake_tensor, "fake_tensor not implemented."
         assert not dynamic, "dynamic true not implemented yet"
         assert no_grad, "no_grad false not implemented yet"
+        from ..xbuilder.model_container import proto_from_array
+
         assert (
             not optimization
         ), f"optimization {optimization!r} not compatible with dynamo"
+
+        def _clean(s):
+            return s.replace(".", "_")
 
         with torch.no_grad():
             torch.onnx.export(
@@ -558,7 +563,21 @@ class ModelRunner:
             os.remove(sarif)
             with open(os.path.join(folder, sarif), "w", encoding="utf-8") as f:
                 f.write(self.error_report)
-        return onnx.load(name, load_external_data=False), None
+        onx = onnx.load(name, load_external_data=False)
+        inits = set(i.name for i in onx.graph.initializer)
+        inputs = set(i.name for i in onx.graph.input)
+        add_inits = []
+        for pn, value in self.model.named_parameters():
+            new_name = f"p_{_clean(pn)}"
+            if new_name in inputs and new_name not in inits:
+                init = proto_from_array(value, name=new_name)
+                add_inits.append(init)
+        if add_inits:
+            shutil.copy(name, f"{name}.0.onnx")
+            onx.graph.initializer.extend(add_inits)
+            onnx.save(onx, name, save_as_external_data=True)
+            onx = onnx.load(name, load_external_data=False)
+        return onx, None
 
     def _to_onnx_dynamo2(
         self,
@@ -780,6 +799,7 @@ class ModelRunner:
             f"Mismatch number of outputs, {len(inputs)} inputs for {names}.\n"
             f"self.raw_input_names={self.raw_input_names},\n"
             f"self.raw_use_defaults={self.raw_use_defaults},\n"
-            f"initializer_names={initializer_names}"
+            f"initializer_names={initializer_names}, "
+            f"named parameters={list(p[0] for p in self.model.named_parameters())}"
         )
         return dict(zip(names, inputs))
