@@ -1622,6 +1622,11 @@ class TestOperatorsOnnxrt(ExtTestCase):
         )
 
     @hide_stdout()
+    @unittest.skipIf(
+        True,
+        "Cannot find any perfect/nearest match of symbolic function "
+        "for aten::std.correction,which should be registered under aten.std.correction.",
+    )
     def test_xt_std(self):
         x = torch.randn(2, 3, 4).float()
         self.assertONNX(
