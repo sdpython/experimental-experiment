@@ -149,7 +149,7 @@ class BenchmarkRunner:
 
     @classmethod
     def size_type(cls, dtype) -> int:
-        if dtype in {torch.float64, torch.int64, torch.uint64}:
+        if dtype in {torch.float64, torch.int64}:
             return 8
         if dtype in {torch.float32, torch.int32, torch.uint32}:
             return 4
@@ -157,6 +157,10 @@ class BenchmarkRunner:
             return 2
         if dtype in {torch.int8, torch.uint8, torch.bool}:
             return 1
+        if hasattr(torch, "uint64"):
+            # it fails on mac
+            if dtype in {torch.uint64}:
+                return 8
         raise AssertionError(f"Unexpected dtype={dtype}")
 
     def obj_size(self, obj: Any) -> int:
