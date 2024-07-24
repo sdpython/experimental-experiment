@@ -561,6 +561,7 @@ def merge_benchmark_reports(
         if expr == "buckets":
             if (
                 "exporter" in set_columns
+                and "speedup" in set_columns
                 and "script" in set(df.exporter)
                 and len(set(df.exporter)) > 1
             ):
