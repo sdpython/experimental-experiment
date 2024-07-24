@@ -3016,7 +3016,10 @@ def aten_pad(
     name: str = "pad",
 ) -> T:
     """pad"""
-    assert mode == "constant", f"Not implemented for mode={mode!r}{g.get_debug_msg()}"
+    assert mode in {
+        "constant",
+        "reflect",
+    }, f"Not implemented for mode={mode!r}{g.get_debug_msg()}"
     assert g.has_rank(
         x
     ), f"Not implemented when rank of {x!r} is missing{g.get_debug_msg()}"
@@ -3026,7 +3029,7 @@ def aten_pad(
     if len(pad) < rk * 2:
         pad = list(pad) + list((0,) * (rk * 2 - len(pad)))
 
-    new_pad = pad[::2] + pad[1::2]
+    new_pad = pad[::2][::-1] + pad[1::2][::-1]
 
     dtype = tensor_dtype_to_np_dtype(g.get_type(x))
     cst = np.array(value, dtype=dtype)
@@ -3038,6 +3041,48 @@ def aten_pad(
         if g.has_rank(x):
             g.set_rank(res, g.get_rank(x))
     return res
+
+
+def aten_constant_pad_nd(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    pad: Any,
+    value: float = 0.0,
+    name: str = "constant_pad_nd",
+) -> T:
+    """pad"""
+    if all_int(pad) and isinstance(value, (int, float)):
+        if value == 0:
+            return aten_pad(g, sts, outputs, x, pad, mode="constant", name=name)
+        return aten_pad(
+            g, sts, outputs, x, pad, mode="constant", name=name, value=value
+        )
+
+    raise AssertionError(
+        f"Not implemented for pad={pad!r}, value={value!r}" f"{g.get_debug_msg()}"
+    )
+
+
+def aten_reflection_pad2d(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    pad: Any,
+    value: float = 0.0,
+    name: str = "reflection_pad2d",
+) -> T:
+    """pad"""
+    if all_int(pad) and isinstance(value, (int, float)):
+        if value == 0:
+            return aten_pad(g, sts, outputs, x, pad, mode="reflect", name=name)
+        return aten_pad(g, sts, outputs, x, pad, mode="reflect", name=name, value=value)
+
+    raise AssertionError(
+        f"Not implemented for pad={pad!r}, value={value!r}" f"{g.get_debug_msg()}"
+    )
 
 
 def aten_permute(
@@ -4382,6 +4427,26 @@ def aten_squeeze_dim(
     return g.op.SqueezeAnyOpset(x, np.array([dim], dtype=np.int64), name=name)
 
 
+def aten_stack(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    tensors: Sequence[T],
+    dim: int = 0,
+    name: str = "stack",
+) -> T:
+    """concat"""
+    new_tensors = []
+    adim = g.make_initializer("", np.array([dim], dtype=np.int64))
+    for t in tensors:
+        r = g.op.UnsqueezeAnyOpset(t, adim, name=name)
+        new_tensors.append(r)
+    res = g.op.Concat(*new_tensors, axis=dim, outputs=outputs, name=name)
+    if not sts:
+        g.set_type(res, g.get_type(tensors[0]))
+    return res
+
+
 def aten_sub(
     g: GraphBuilder,
     sts: Optional[Dict[str, Any]],
@@ -4820,7 +4885,7 @@ def aten_unbind_int(
     dim_np = g.make_initializer("", np.array([dim], dtype=np.int64))
     for o, u in zip(new_outputs, unbind_outputs):
         g.make_node("Squeeze", [u, dim_np], [o], name=name)
-    res = outputs
+    res = new_outputs
     if not sts:
         shape = g.get_shape(x)
         new_shape = list(shape)
