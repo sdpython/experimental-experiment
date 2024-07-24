@@ -1,11 +1,11 @@
 """
 to fail on error, use::
 
-    clear&&EXPDORAISE=1 python _unittests/ut_torch_interpreter/test_operators.py -k relu -f
+    clear&&EXPDORAISE=1 python _unittests/ut_torch_interpreter/test_operators_cort.py -f -k relu
 
 or::
 
-    clear&&EXPDORAISE=1 python _unittests/ut_torch_interpreter/test_operators.py -f
+    clear&&EXPDORAISE=1 python _unittests/ut_torch_interpreter/test_operators_cort.py -f
 """
 
 import copy
@@ -655,6 +655,17 @@ class TestOperatorsCort(ExtTestCase):
             input_index=0,
         )
 
+    def test_stack(self):
+        x = torch.randn(2, 3)
+        y = torch.randn(2, 3)
+        self.assertONNX(
+            lambda inputs: torch.stack(inputs, dim=1),
+            ((x, y),),
+            onnx_export=inspect.currentframe().f_code.co_name,
+            test_backward=False,
+            input_index=0,
+        )
+
     def test_mm(self):
         m1 = torch.randn(2, 3, requires_grad=True)
         m2 = torch.randn(3, 4, requires_grad=True)
@@ -682,12 +693,48 @@ class TestOperatorsCort(ExtTestCase):
             onnx_export=inspect.currentframe().f_code.co_name,
         )
 
-    def test_pad(self):
+    def test_pad_op(self):
         x = torch.tensor(
             [[[[0.0, 1.0, 1.0, 1.0], [2.0, 3.0, 7.0, 7.0]]]], requires_grad=True
         )
         self.assertONNX(
             nn.ReflectionPad2d((2, 3, 0, 1)),
+            x,
+            onnx_export=inspect.currentframe().f_code.co_name,
+        )
+
+    def test_pad_1(self):
+        x = torch.tensor(
+            [[0.0, 1.0, 1.0, 1.0], [2.0, 3.0, 7.0, 7.0]], requires_grad=True
+        )
+        self.assertONNX(
+            lambda x: nn.functional.pad(x, (1, 2, 3, 4)),
+            x,
+            onnx_export=inspect.currentframe().f_code.co_name,
+        )
+
+    def test_pad_2(self):
+        x = torch.tensor(
+            [[0.0, 1.0, 1.0, 1.0], [2.0, 3.0, 7.0, 7.0]], requires_grad=True
+        )
+        self.assertONNX(
+            lambda x: nn.functional.pad(
+                x,
+                (
+                    1,
+                    2,
+                ),
+            ),
+            x,
+            onnx_export=inspect.currentframe().f_code.co_name,
+        )
+
+    def test_pad_3(self):
+        x = torch.tensor(
+            [[[0.0, 1.0, 1.0, 1.0], [2.0, 3.0, 7.0, 7.0]]], requires_grad=True
+        )
+        self.assertONNX(
+            lambda x: nn.functional.pad(x, (1, 2, 3, 4, 5, 6)),
             x,
             onnx_export=inspect.currentframe().f_code.co_name,
         )
@@ -2449,6 +2496,17 @@ class TestOperatorsCort(ExtTestCase):
             impl="ref",
             verbose=0,
             use_decomposition=True,
+        )
+
+    def test_unbind(self):
+        x = torch.tensor(
+            [[0.0, 1.0, 1.0, 1.0], [2.0, 3.0, 7.0, 7.0]], requires_grad=True
+        )
+        self.assertONNX(
+            lambda x: torch.unbind(x, dim=0),
+            x,
+            onnx_export=inspect.currentframe().f_code.co_name,
+            input_index="simple",
         )
 
 
