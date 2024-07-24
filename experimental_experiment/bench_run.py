@@ -290,12 +290,13 @@ def make_configs(
     return [dict(c) for c in configs]
 
 
-def make_dataframe_from_benchmark_data(data: List[Dict], detailed: bool = True) -> Any:
+def make_dataframe_from_benchmark_data(data: List[Dict], detailed: bool = True, string_limit: int = 500) -> Any:
     """
     Creates a dataframe from the received data.
 
     :param data: list of dictionaries for every run
     :param detailed: remove multi line and long values
+    :param string_limit: truncate the strings
     :return: dataframe
     """
     import pandas
@@ -311,8 +312,8 @@ def make_dataframe_from_benchmark_data(data: List[Dict], detailed: bool = True) 
                 g[k] = v
                 continue
             v = v.replace("\n", " -- ").replace(",", "_")
-            if len(v) > 300:
-                v = v[:300]
+            if len(v) > string_limit:
+                v = v[:string_limit] + "..."
             g[k] = v
         new_data.append(g)
     df = pandas.DataFrame(new_data)
