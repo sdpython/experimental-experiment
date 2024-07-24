@@ -921,9 +921,10 @@ class GraphBuilder:
 
     def has_name(self, name: str) -> bool:
         """Tells if a result exists."""
-        assert isinstance(
-            name, str
-        ), f"Unexpected type {type(name)} for name (name={name!r})."
+        assert isinstance(name, str), (
+            f"Unexpected type {type(name)} for name "
+            f"(name={name!r}){self.get_debug_msg()}"
+        )
         return name in self._known_names
 
     def has_rank(self, name: str) -> bool:
