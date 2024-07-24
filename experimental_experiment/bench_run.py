@@ -290,7 +290,9 @@ def make_configs(
     return [dict(c) for c in configs]
 
 
-def make_dataframe_from_benchmark_data(data: List[Dict], detailed: bool = True, string_limit: int = 500) -> Any:
+def make_dataframe_from_benchmark_data(
+    data: List[Dict], detailed: bool = True, string_limit: int = 500
+) -> Any:
     """
     Creates a dataframe from the received data.
 
