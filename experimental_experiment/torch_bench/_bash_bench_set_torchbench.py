@@ -3,6 +3,7 @@ import os
 import importlib
 import textwrap
 import gc
+import inspect
 import warnings
 from typing import Any, Optional, Set, Tuple
 from collections import namedtuple
@@ -280,7 +281,7 @@ class TorchBenchRunner(BenchmarkRunner):
     MODELS_FILENAME = textwrap.dedent(
         """
         BERT_pytorch,128
-        Background_Matting, 16
+        Background_Matting,1
         LearningToPaint,1024
         alexnet,1024
         dcgan,1024
@@ -807,11 +808,20 @@ class TorchBenchRunner(BenchmarkRunner):
                 batch_size=batch_size,
             )
         else:
-            benchmark = benchmark_cls(
-                test="eval",
-                device=self.device,
-                batch_size=batch_size,
-            )
+            try:
+                benchmark = benchmark_cls(
+                    test="eval",
+                    device=self.device,
+                    batch_size=batch_size,
+                )
+            except Exception as e:
+                raise AssertionError(
+                    f"Unable to create class {benchmark_cls}, "
+                    f"device={self.device}, batch_size={batch_size}, "
+                    f"signature={[p for p in inspect.signature(benchmark_cls).parameters]}, "
+                    f"DEFAULT_EVAL_BSIZE={getattr(benchmark_cls, 'DEFAULT_EVAL_BSIZE', '?')}, "
+                    f"ALLOW_CUSTOMIZE_BSIZE={getattr(benchmark_cls, 'ALLOW_CUSTOMIZE_BSIZE', '?')}"
+                ) from e
         model, example_inputs = benchmark.get_module()
         if model_name in [
             "basic_gnn_edgecnn",

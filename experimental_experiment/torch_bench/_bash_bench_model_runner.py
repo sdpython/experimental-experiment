@@ -527,7 +527,7 @@ class ModelRunner:
             and isinstance(self.inputs[0], list)
             and len(self.inputs[0]) == 1
             and isinstance(self.inputs[0][0], dict)
-            and set(self.inputs[0][0]) == {"file_name", "height", "image"}
+            and len(set(self.inputs[0][0]) & {"file_name", "image"}) == 2
         ):
             # detectron2 take inputs such as ([{'file_name': ..., 'height': ..., 'image': torch.Tensor(...)}])
             inputs = (self.inputs[0][0]["image"],)
