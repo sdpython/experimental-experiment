@@ -2,6 +2,7 @@ import os
 import gc
 import pickle
 import time
+import sys
 from datetime import datetime
 from typing import Any, Set, Optional, Tuple, Iterator, Dict, List, Union
 import numpy as np
@@ -134,20 +135,52 @@ class BenchmarkRunner:
             return obj.to(device)
         if isinstance(obj, tuple):
             return tuple(self.move_to(device, o) for o in obj)
+        if isinstance(obj, list):
+            return tuple(self.move_to(device, o) for o in obj)
+        if isinstance(obj, dict):
+            return {k: self.move_to(device, o) for k, o in obj.items()}
         if obj is None:
             return None
+        if hasattr(obj, "to"):
+            return obj.to(device)
+        if "SquashedNormal" in obj.__class__.__name__ and device == "cpu":
+            return obj
         raise AssertionError(f"move_to not implemented for type {type(obj)}")
+
+    @classmethod
+    def size_type(cls, dtype) -> int:
+        if dtype in {torch.float64, torch.int64, torch.uint64}:
+            return 8
+        if dtype in {torch.float32, torch.int32, torch.uint32}:
+            return 4
+        if dtype in {torch.float16, torch.int16, torch.uint16, torch.bfloat16}:
+            return 2
+        if dtype in {torch.int8, torch.uint8, torch.bool}:
+            return 1
+        raise AssertionError(f"Unexpected dtype={dtype}")
 
     def obj_size(self, obj: Any) -> int:
         if isinstance(obj, torch.Tensor):
-            return np.prod(list(obj.shape))
-        if isinstance(obj, tuple):
+            return np.prod(list(obj.shape) * self.size_type(obj.dtype))
+        if isinstance(obj, (tuple, list)):
             return sum(self.obj_size(o) for o in obj)
+        if isinstance(obj, dict):
+            return sum(self.obj_size(o) for o in obj.values())
         if obj is None:
             return 0
         if obj.__class__.__name__.endswith("KeyedJaggedTensor"):
             # Not implemented yet.
             return 0
+        if isinstance(obj, (int, float, str, bytes)):
+            return sys.getsizeof(obj)
+        if hasattr(obj, "_fields") and isinstance(obj._fields, dict):
+            # detectron2.structures.instances.Instances
+            return self.obj_size(obj._fields)
+        if hasattr(obj, "tensor") and isinstance(obj.tensor, torch.Tensor):
+            # detectron2.structures.instances.Bowes
+            return self.obj_size(obj.tensor)
+        if "SquashedNormal" in obj.__class__.__name__:
+            return sys.getsizeof(obj)
         raise AssertionError(f"input_size not implemented for type {type(obj)}")
 
     def ort_run(
@@ -248,7 +281,11 @@ class BenchmarkRunner:
     @classmethod
     def _flatten(cls, value):
         res = []
-        assert not isinstance(value, dict), "Unable to flatten a dictionary."
+        if isinstance(value, dict):
+            assert (
+                len(value) == 1
+            ), f"Unable to flatten a dictionary with more than one value ({len(value)})"
+            return tuple(value.values())
         if isinstance(value, (list, tuple)):
             for v in value:
                 res.extend(cls._flatten(v))
@@ -285,6 +322,7 @@ class BenchmarkRunner:
                 ),
                 level=level,
             )
+
         if hasattr(expected, "to_tuple"):
             return self.max_diff(
                 expected.to_tuple(),
@@ -369,6 +407,7 @@ class BenchmarkRunner:
                                 print(f"    i={i} a is {type(a)}, b is {type(b)}")
                     return np.inf, np.inf
                 return self.max_diff(expected, got[0], verbose=verbose, level=level + 1)
+
         if isinstance(expected, (tuple, list)):
             if len(expected) == 1:
                 return self.max_diff(expected[0], got, verbose=verbose, level=level + 1)
@@ -417,9 +456,18 @@ class BenchmarkRunner:
                 rm = max(rm, r)
             return am, rm
 
+        if "SquashedNormal" in expected.__class__.__name__:
+            values = (
+                expected.mean.detach().to("cpu"),
+                expected.scale.detach().to("cpu"),
+            )
+            return self.max_diff(values, got, verbose=verbose, level=level + 1)
+
         raise AssertionError(
-            f"Not implemented with type(expected)={type(expected)}, type(results)={type(got)}, "
-            f"dir(expected)={dir(expected)}, level={level}"
+            f"Not implemented with type(expected)={type(expected)}, type(results)={type(got)},\n"
+            f"dir(expected)={dir(expected)}, level={level}\n"
+            f"expected={expected}\n"
+            f"got={got}"
         )
 
     def enumerate_test_models(
@@ -584,7 +632,19 @@ class BenchmarkRunner:
                 )
 
         begin = time.perf_counter()
-        model_runner = self.load_model(model_name)
+        if quiet:
+            try:
+                model_runner = self.load_model(model_name)
+            except Exception as e:
+                if self.verbose:
+                    print(
+                        f"[benchmarkrunner.benchmark] unable to load model "
+                        f"{model_name} due to {e}"
+                    )
+                stats["ERR_load"] = str(e)
+                return stats
+        else:
+            model_runner = self.load_model(model_name)
         if self.verbose:
             print(
                 f"[benchmarkrunner.benchmark] model wrapped with class {type(model_runner.model)}"

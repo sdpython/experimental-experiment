@@ -171,7 +171,15 @@ def run_benchmark(
                 f"[run_benchmark] cmd={cmd if isinstance(cmd, str) else ' '.join(cmd)}"
             )
         p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        res = p.communicate()
+        timeout_error = ""
+        try:
+            res = p.communicate(timeout=600)
+        except subprocess.TimeoutExpired as e:
+            timeout_error = str(e)
+            if verbose:
+                print(f"[run_benchmark] timeout {e} for cmd={cmd}")
+            p.kill()
+            res = p.communicate()
         out, err = res
         sout = out.decode("utf-8", errors="ignore")
         serr = err.decode("utf-8", errors="ignore")
@@ -210,6 +218,10 @@ def run_benchmark(
         metrics["ITER"] = iter_loop
         metrics["TIME_ITER"] = time.perf_counter() - begin
         metrics["ERROR"] = _clean_string(serr)
+        if metrics["ERROR"]:
+            metrics["ERR_std"] = metrics["ERROR"]
+        if timeout_error:
+            metrics["ERR_timeout"] = _clean_string(timeout_error)
         metrics["OUTPUT"] = _clean_string(sout)
         metrics["CMD"] = f"[{' '.join(map(_cmd_string, cmd))}]"
         data.append(metrics)
