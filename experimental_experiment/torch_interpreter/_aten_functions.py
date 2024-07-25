@@ -813,36 +813,6 @@ def aten_clone(
     return g.make_node("Identity", [x], outputs, name=name)
 
 
-def aten_conv2d_padding(
-    g: GraphBuilder,
-    sts: Optional[Dict[str, Any]],
-    outputs: List[str],
-    x: T,
-    weight: T,
-    bias: T = None,
-    stride: Sequence[int] = (1, 1),
-    padding: Union[str, Sequence[int]] = (0, 0),
-    dilation: Sequence[int] = (1, 1),
-    groups: int = 1,
-    name: str = "conv2d_padding",
-) -> T:
-    "conv"
-    return aten_convolution(
-        g,
-        sts,
-        outputs,
-        x,
-        weight=weight,
-        bias=bias,
-        stride=stride,
-        padding=padding,
-        dilation=dilation,
-        groups=groups,
-        name=name,
-        d=2,
-    )
-
-
 def aten_convolution(
     g: GraphBuilder,
     sts: Optional[Dict[str, Any]],
@@ -946,26 +916,26 @@ def aten_convolution(
     return res
 
 
-def aten_conv2d(
+def aten_conv1d(
     g: GraphBuilder,
     sts: Optional[Dict[str, Any]],
     outputs: List[str],
-    input: T,
+    x: T,
     weight: T,
     bias: T = None,
-    stride: Sequence[int] = (1, 1),
-    padding: Sequence[int] = (0, 0),
-    dilation: Sequence[int] = (1, 1),
+    stride: Sequence[int] = (1,),
+    padding: Union[str, Sequence[int]] = (0,),
+    dilation: Sequence[int] = (1,),
     groups: int = 1,
     auto_pad: str = "NOTSET",
-    name: str = "conv",
+    name: str = "conv1d",
 ) -> T:
-    "conv"
+    "conv1d"
     return aten_convolution(
         g,
         sts,
         outputs,
-        input=input,
+        x,
         weight=weight,
         bias=bias,
         stride=stride,
@@ -974,6 +944,69 @@ def aten_conv2d(
         groups=groups,
         auto_pad=auto_pad,
         name=name,
+        d=1,
+    )
+
+
+def aten_conv2d(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    weight: T,
+    bias: T = None,
+    stride: Sequence[int] = (1, 1),
+    padding: Union[str, Sequence[int]] = (0, 0),
+    dilation: Sequence[int] = (1, 1),
+    groups: int = 1,
+    auto_pad: str = "NOTSET",
+    name: str = "conv2d",
+) -> T:
+    "conv2d"
+    return aten_convolution(
+        g,
+        sts,
+        outputs,
+        x,
+        weight=weight,
+        bias=bias,
+        stride=stride,
+        padding=padding,
+        dilation=dilation,
+        groups=groups,
+        auto_pad=auto_pad,
+        name=name,
+        d=2,
+    )
+
+
+def aten_conv2d_padding(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    weight: T,
+    bias: T = None,
+    stride: Sequence[int] = (1, 1),
+    padding: Union[str, Sequence[int]] = (0, 0),
+    dilation: Sequence[int] = (1, 1),
+    groups: int = 1,
+    name: str = "conv2d_padding",
+) -> T:
+    "conv"
+    return aten_convolution(
+        g,
+        sts,
+        outputs,
+        x,
+        weight=weight,
+        bias=bias,
+        stride=stride,
+        padding=padding,
+        dilation=dilation,
+        groups=groups,
+        name=name,
+        d=2,
     )
 
 
@@ -5265,6 +5298,118 @@ def aten_unsqueeze(
         else:
             g.set_rank(res, g.get_rank(x) + 1)
     return res
+
+
+def _aten_upsample_output_size(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    output_size: T,
+    mode: str,
+    coordinate_transformation_mode: str,
+    d: int,
+    name: str = "upsample_output_size",
+) -> T:
+    batch_channel = None
+    if g.has_shape(x):
+        shape = g.get_shape(x)
+        if is_static_shape(shape):
+            batch_channel = g.make_initializer("", np.array(shape[:2], dtype=np.int64))
+    if batch_channel is None:
+        batch_channel = g.op.Shape(x, start=0, end=2, name=name)
+    if isinstance(output_size, (tuple, list)):
+        assert is_static_shape(output_size), f"output_size={output_size} must be static"
+        rsize = g.make_initializer("", np.array(output_size, dtype=np.int64))
+    else:
+        assert isinstance(
+            output_size, str
+        ), f"Unexpected type {type(output_size)} for output_size"
+        rsize = output_size
+    new_output_size = g.op.Concat(batch_channel, rsize, axis=0, name=name)
+    res = g.op.Resize(
+        x,
+        None,
+        None,
+        new_output_size,
+        mode=mode,
+        coordinate_transformation_mode=coordinate_transformation_mode,
+        nearest_mode="floor",
+        outputs=outputs,
+        name=name,
+    )
+    if not sts:
+        g.set_type(res, g.get_type(x))
+        g.set_rank(res, g.get_rank(x))
+    return res
+
+
+def aten_upsample_nearest2d(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    output_size: T,
+    scales_h: Optional[float] = None,
+    scales_w: Optional[float] = None,
+    name: str = "upsample_nearest2d",
+) -> T:
+    """resize"""
+    assert output_size is not None, "Not implemented when size is None"
+    assert scales_h is None, f"Not impelmented when scales_h={scales_h}"
+    assert scales_w is None, f"Not impelmented when scales_h={scales_w}"
+
+    return _aten_upsample_output_size(
+        g,
+        sts,
+        outputs,
+        x,
+        output_size,
+        mode="nearest",
+        coordinate_transformation_mode="asymmetric",
+        d=2,
+        name=name,
+    )
+
+
+def _upsample_compute_output_size(input_size, output_size, scale_factors):
+    spatial_dimensions = len(input_size) - 2
+    if output_size is not None:
+        assert scale_factors is None, f"scale_factors={scale_factors}"
+        assert len(output_size) == spatial_dimensions, f"output_size={output_size}"
+        return output_size
+    if scale_factors is not None:
+        assert (
+            output_size is None
+        ), f"scale_factors={scale_factors}, output_size={output_size}"
+        assert len(scale_factors) == spatial_dimensions, f"output_size={scale_factors}"
+        output_size = []
+        for i, s in enumerate(scale_factors):
+            assert isinstance(
+                s, (int, float)
+            ), f"Not implemented when a shape is dynamic, scale_factors={scale_factors}"
+            output_size.append(input_size[i + 2] * int(s))
+        return output_size
+    raise AssertionError("Either scale_factors or output_size must be specified.")
+
+
+def aten_upsample_nearest2d_vec(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    output_size: Optional[T] = None,
+    scale_factors: Optional[List[int]] = None,
+    name: str = "upsample_nearest2d_vec",
+) -> T:
+    "resize"
+    assert g.has_shape(x), f"Not implemented when {x!r} has no shape{g.get_debug_msg()}"
+    osize = _upsample_compute_output_size(g.get_shape(x), output_size, scale_factors)
+    # scales = (
+    #     scale_factors if scale_factors else [None] * len(osize)
+    # )
+    scales = [None, None]
+    return aten_upsample_nearest2d(g, sts, outputs, x, osize, *scales, name=name)
 
 
 def aten_view(
