@@ -233,7 +233,9 @@ def set_type_shape_reduce_op(
     keepdim: int,
     axes: Optional[Tuple[int]] = None,
 ):
-    assert keepdim in {0, 1}, f"keepdim={keepdim} must be in {{0, 1}}"
+    assert keepdim in {None, 0, 1}, f"keepdim={keepdim!r} must be in {{0, 1}}"
+    if keepdim is None:
+        keepdim = 1
     g.set_type(name, g.get_type(x))
     if axes is None:
         g.set_rank(name, int(keepdim))
@@ -419,19 +421,21 @@ def _set_shape_type_op_any_reshape(self: "GraphBuilder", node: NodeProto):  # no
     self.set_type(k, self.get_type(node.input[0]))
     shape_set = False
     if self.is_constant(node.input[1]):
-        cst = tuple(
-            self.get_constant(node.input[1], computed_value=True, as_shape=True)
+        value = self.get_constant(
+            node.input[1], computed_value=True, as_shape=True, exc=False
         )
-        if all_int(cst):
-            if -1 not in cst:
-                self.set_shape(k, cst)
-                shape_set = True
-            elif all_int(cst) and self.has_shape(node.input[0]):
-                sh = self.get_shape(node.input[0])
-                new_shape = self._apply_reshape_to_shape(sh, cst)
-                if new_shape is not None:
-                    self.set_shape(k, new_shape)
+        if value is not None:
+            cst = tuple(value)
+            if all_int(cst):
+                if -1 not in cst:
+                    self.set_shape(k, cst)
                     shape_set = True
+                elif all_int(cst) and self.has_shape(node.input[0]):
+                    sh = self.get_shape(node.input[0])
+                    new_shape = self._apply_reshape_to_shape(sh, cst)
+                    if new_shape is not None:
+                        self.set_shape(k, new_shape)
+                        shape_set = True
     if not shape_set:
         if self.has_shape(node.input[1]):
             rk = self.get_shape(node.input[1])

@@ -525,6 +525,12 @@ class GraphBuilder:
             res = self.get_constant(
                 name, exc, computed_value=computed_value, as_shape=False
             )
+            if res is None:
+                assert not exc, (
+                    f"No constant for name={name!r}, exc={exc}, "
+                    f"computed_value={computed_value}, as_shape={as_shape}"
+                )
+                return None
             new_res = []
             for i in res:
                 if isinstance(i, str):
@@ -537,7 +543,9 @@ class GraphBuilder:
             raise ValueError(f"Result {name!r} is not a constant{self.get_debug_msg()}")
         possible_value = self.constants_[name]
         if name in self.constants_computed_:
-            return self.constants_computed_[name]
+            value = self.constants_computed_[name]
+            assert value is not None, f"Constant is empty for name={name!r}"
+            return value
 
         if possible_value is not None:
             assert isinstance(
@@ -554,7 +562,10 @@ class GraphBuilder:
                 if len(res) == 1:
                     return res[0]
                 index = list(possible_value.output).index(name)
-                return res[index]
+                value = res[index]
+                assert value is not None, f"Constant is empty for name={name!r}"
+                return value
+            assert possible_value is not None, f"Constant is empty for name={name!r}"
             return possible_value
 
         if name not in self.initializers_dict:
