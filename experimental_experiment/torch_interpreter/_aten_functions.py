@@ -2947,6 +2947,7 @@ def aten__native_batch_norm_legit_no_training(
         momentum=momentum,
         eps=eps,
         name=name,
+        empty_mean_std=True,
     )
 
 
@@ -2990,6 +2991,7 @@ def aten__native_batch_norm(
     momentum: float = 0.9,
     eps: float = 1e-05,
     name: str = "_native_batch_norm",
+    empty_mean_std: bool = False,
 ) -> Tuple[T, T, T]:
     """batch normalization"""
     assert g.has_rank(x), f"{x!r} must have a known rank{g.get_debug_msg()}"
@@ -3065,20 +3067,28 @@ def aten__native_batch_norm(
         name=name,
         outputs=outputs[:1],
     )
-    # CUDA and CPU gives different shapes:
-    # https://github.com/pytorch/pytorch/blob/a44f8894fa6d973693aab44a3dda079a168b05c1/torch/_decomp/decompositions.py#L1451-L1457
-    # We use CUDA's output here
-    invstd = g.op.Reciprocal(
-        g.op.Sqrt(
-            g.op.Add(running_var, np.array([eps], dtype=dtype), name=name), name=name
-        ),
-        name=name,
-    )
-    # https://github.com/pytorch/pytorch/blob/a44f8894fa6d973693aab44a3dda079a168b05c1/torch/_decomp/decompositions.py#L1475
-    running_mean_fp32 = g.op.Cast(
-        running_mean, to=TensorProto.FLOAT, name=name, outputs=outputs[1:2]
-    )
-    invstd = g.op.Cast(invstd, to=TensorProto.FLOAT, name=name, outputs=outputs[2:])
+
+    if empty_mean_std:
+        running_mean_fp32 = g.op.ConstantOfShape(
+            np.array([0], dtype=np.int64), name=name, outputs=outputs[1:2]
+        )
+        invstd = g.op.Identity(running_mean_fp32, outputs=outputs[2:], name=name)
+    else:
+        # CUDA and CPU gives different shapes:
+        # https://github.com/pytorch/pytorch/blob/a44f8894fa6d973693aab44a3dda079a168b05c1/torch/_decomp/decompositions.py#L1451-L1457
+        # We use CUDA's output here
+        invstd = g.op.Reciprocal(
+            g.op.Sqrt(
+                g.op.Add(running_var, np.array([eps], dtype=dtype), name=name),
+                name=name,
+            ),
+            name=name,
+        )
+        # https://github.com/pytorch/pytorch/blob/a44f8894fa6d973693aab44a3dda079a168b05c1/torch/_decomp/decompositions.py#L1475
+        running_mean_fp32 = g.op.Cast(
+            running_mean, to=TensorProto.FLOAT, name=name, outputs=outputs[1:2]
+        )
+        invstd = g.op.Cast(invstd, to=TensorProto.FLOAT, name=name, outputs=outputs[2:])
 
     if not sts:
         g.set_type(running_mean_fp32, TensorProto.FLOAT)
