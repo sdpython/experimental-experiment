@@ -884,6 +884,20 @@ class TestOperatorsCort(ExtTestCase):
             rtol=1e-4,
         )
 
+    def test_adaptative_avg_pool2d_global(self):
+        x = torch.randn(20, 16, 50, 32)
+        self.assertONNX(
+            nn.AdaptiveAvgPool2d([1, 1]),
+            x,
+            impl="ref",
+            onnx_export=inspect.currentframe().f_code.co_name,
+            verbose=0,
+            save_onnx=True,
+            optimize=False,
+            # intermediate=True,
+            rtol=1e-4,
+        )
+
     def test_maxpool_indices(self):
         x = torch.randn(20, 16, 50)
         self.assertONNX(

@@ -657,6 +657,47 @@ def aten_bitwise_not(
     return res
 
 
+def aten_adaptive_avg_pool2d(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    output_size: Tuple[int, ...],
+    name="aten.adaptive_avg_pool2d",
+):
+    """adaptative AvgPool"""
+    return _aten_adaptive_avg_poolnd(g, sts, outputs, x, output_size, d=2, name=name)
+
+
+def _aten_adaptive_avg_poolnd(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    output_size: Tuple[int, ...],
+    d: int,
+    name="aten.adaptive_avg_poolnd",
+):
+    """adaptative AvgPool"""
+    assert (
+        len(output_size) == d
+    ), f"Dimension mismatch between d={2} and output_size={output_size}"
+    if output_size == [1, 1]:
+        res = g.op.GlobalAveragePool(x, outputs=outputs, name=name)
+        if not sts:
+            g.set_type(res, g.get_type(x))
+            if g.has_shape(x):
+                shape = g.get_shape(x)
+                new_shape = shape[:-d] + tuple(output_size)
+                g.set_shape(res, new_shape)
+            elif g.has_rank(x):
+                rk = g.get_rank(x)
+                g.get_shape(res, rk)
+        return res
+
+    raise AssertionError(f"Not yet implemented for output_size={output_size!r}")
+
+
 def aten_bitwise_or(
     g: GraphBuilder,
     sts: Optional[Dict[str, Any]],
@@ -2700,6 +2741,151 @@ def aten_native_layer_norm(
         g.set_shape(outputs[2], (1,))
 
     return tuple(outputs)
+
+
+def aten__native_batch_norm_legit_no_training(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    weight: Optional[T] = None,
+    bias: Optional[T] = None,
+    running_mean: Optional[T] = None,
+    running_var: Optional[T] = None,
+    momentum: float = 0.9,
+    eps: float = 1e-05,
+    name: str = "_native_batch_norm_legit_no_training",
+) -> Tuple[T, T, T]:
+    """batch normalization"""
+    return aten__native_batch_norm(
+        g,
+        sts,
+        outputs,
+        x,
+        weight=weight,
+        bias=bias,
+        running_mean=running_mean,
+        running_var=running_var,
+        training=False,
+        momentum=momentum,
+        eps=eps,
+        name=name,
+    )
+
+
+def aten__native_batch_norm(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    weight: Optional[T] = None,
+    bias: Optional[T] = None,
+    running_mean: Optional[T] = None,
+    running_var: Optional[T] = None,
+    training: bool = False,
+    momentum: float = 0.9,
+    eps: float = 1e-05,
+    name: str = "_native_batch_norm",
+) -> Tuple[T, T, T]:
+    """batch normalization"""
+    assert g.has_rank(x), f"{x!r} must have a known rank{g.get_debug_msg()}"
+    assert g.has_type(x), f"{x!r} must have a known type{g.get_debug_msg()}"
+    dtype = tensor_dtype_to_np_dtype(g.get_type(x))
+
+    if weight is None:
+        # default is 1
+        cst = np.array([1], dtype=dtype)
+        weight = g.op.Expand(cst, g.op.Shape(x, start=1, end=2, name=name), name=name)
+
+    if bias is None:
+        # default is 0
+        cst = np.array([0], dtype=dtype)
+        bias = g.op.Expand(cst, g.op.Shape(input, start=1, end=2, name=name), name=name)
+
+    axes_py = list(range(g.get_rank(x)))
+    axes_py.pop(1)
+    axes_np = np.array(axes_py, dtype=np.int64)
+    rmean = None
+
+    if running_mean is None:
+        # default is mean
+        rmean = g.op.ReduceMeanAnyOpset(x, axes_np, name=name)
+        running_mean = g.op.Squeeze(rmean, name=name)
+
+    if running_var is None:
+        # default is var
+        mean = (
+            g.op.ReduceMeanAnyOpset(x, axes_np, name=name) if rmean is None else rmean
+        )
+        input_sub_mean = g.op.Sub(x, mean, name=name)
+        sqr_input_sub_mean = g.op.Pow(
+            input_sub_mean, np.array([2], dtype=np.int64), name=name
+        )
+        running_var = g.op.Squeeze(
+            g.op.ReduceMean(sqr_input_sub_mean, axes_np, name=name), name=name
+        )
+
+    # We have to split to two private functions, because BatchNormalization returns
+    # three outputs when training_mode=True and one when it is False.
+    if training:
+        assert not training, f"Not implementation when training={training}"
+        # norm, input_mean, input_rstd, _, _ = _aten_native_batch_norm_training_onnx(
+        #     input,
+        #     weight,
+        #     bias,
+        #     running_mean,
+        #     running_var,
+        #     axes,
+        #     momentum=1.0 - momentum,
+        #     eps=eps,
+        # )
+
+    # norm, input_mean, input_rstd, _, _ = _aten_native_batch_norm_inference_onnx(
+    #     input,
+    #     weight,
+    #     bias,
+    #     running_mean,
+    #     running_var,
+    #     momentum=1.0 - momentum,
+    #     eps=eps,
+    # )
+    assert (
+        len(outputs) == 3
+    ), f"Unexpected number of outputs {outputs!r}{g.get_debug_msg()}"
+
+    norm = g.op.BatchNormalization(
+        x,
+        weight,
+        bias,
+        running_mean,
+        running_var,
+        epsilon=eps,
+        momentum=momentum,
+        training_mode=False,
+        name=name,
+        outputs=outputs[:1],
+    )
+    # CUDA and CPU gives different shapes:
+    # https://github.com/pytorch/pytorch/blob/a44f8894fa6d973693aab44a3dda079a168b05c1/torch/_decomp/decompositions.py#L1451-L1457
+    # We use CUDA's output here
+    invstd = g.op.Reciprocal(
+        g.op.Sqrt(
+            g.op.Add(running_var, np.array([eps], dtype=dtype), name=name), name=name
+        ),
+        name=name,
+    )
+    # https://github.com/pytorch/pytorch/blob/a44f8894fa6d973693aab44a3dda079a168b05c1/torch/_decomp/decompositions.py#L1475
+    running_mean_fp32 = g.op.Cast(
+        running_mean, to=TensorProto.FLOAT, name=name, outputs=outputs[1:2]
+    )
+    invstd = g.op.Cast(invstd, to=TensorProto.FLOAT, name=name, outputs=outputs[2:])
+
+    if not sts:
+        g.set_type(running_mean_fp32, TensorProto.FLOAT)
+        g.set_type(invstd, TensorProto.FLOAT)
+        set_type_shape_unary_op(g, norm, x)
+
+    return norm, running_mean_fp32, invstd
 
 
 def aten_ne(
