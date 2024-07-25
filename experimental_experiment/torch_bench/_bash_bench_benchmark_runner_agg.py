@@ -2,6 +2,22 @@ from typing import Optional, Dict, List, Sequence, Union
 import numpy as np
 
 
+def _key(v):
+    if isinstance(v, (int, float)):
+        return v, ""
+    if isinstance(v, str):
+        return 1e10, v
+    if isinstance(v, tuple):
+        return tuple([1e10, *v])
+    raise AssertionError(f"Unexpected type for v={v!r}, type is {type(v)}")
+
+
+def sort_index_key(index):
+    import pandas
+
+    return pandas.Index(_key(v) for v in index)
+
+
 def _apply_excel_style(
     res: Dict[str, "pandas.DataFrame"],  # noqa: F821
     writer: "ExcelWriter",  # noqa: F821
@@ -376,11 +392,8 @@ def merge_benchmark_reports(
     # checks all columns defining a model are available
     for m in model:
         if m not in df.columns:
-            if exc:
-                raise AssertionError(
-                    f"{model!r} cannot be found in {df.columns}\n{df.head()}"
-                )
-            return None
+            df = df.copy()
+            df[m] = ""
 
     # let's remove the empty line
     df = df[~df[model].isna().max(axis=1)].copy()
@@ -608,9 +621,6 @@ def merge_benchmark_reports(
             tpiv1 = (
                 tpiv1.set_index([*pcolumns, "level_0"]).sort_index(key=_order).T.copy()
             )
-            summ = tpiv1.sum(axis=0)
-            mean = tpiv1.sum(axis=0)
-            tpiv1.loc["~COUNT"] = summ.astype(int)
             res["bucket"] = tpiv1.fillna(0).astype(int)
 
             if tpiv2.shape[0] > 0:
@@ -620,9 +630,6 @@ def merge_benchmark_reports(
                     .sort_index(key=_order)
                     .T.copy()
                 )
-                summ = tpiv2.sum(axis=0)
-                mean = tpiv2.mean(axis=0)
-                tpiv2.loc["~COUNT"] = summ.astype(int)
                 res["bucket_script"] = tpiv2.fillna(0).astype(int)
 
     # let's remove empty variables
@@ -635,63 +642,6 @@ def merge_benchmark_reports(
             v.drop(drop, axis=1, inplace=True)
     res = {k: v for k, v in res.items() if v.shape[1] > 0}
 
-    # add summary at the end
-    mean_med = [
-        c
-        for c in res
-        if c.startswith("time_")
-        or c.startswith("TIME_")
-        or c.startswith("onnx_")
-        or c.startswith("discrepancies_")
-        or c.startswith("status_")
-        or c.startswith("mempeak_")
-        or c.startswith("memory_")
-        or c.startswith("speedup_increase")
-    ]
-    for c in mean_med:
-        num = all(
-            [
-                n
-                in {
-                    np.float32,
-                    np.float64,
-                    np.dtype("float64"),
-                    np.dtype("float32"),
-                    np.int32,
-                    np.int64,
-                    np.dtype("int64"),
-                    np.dtype("int32"),
-                }
-                for n in set(res[c].dtypes)
-            ]
-        )
-        if c in res:
-            if num:
-                mean = res[c].mean(axis=0).copy()
-                med = res[c].median(axis=0)
-                summ = res[c].sum(axis=0)
-                count = (
-                    res[c].sum(axis=0)
-                    if c.startswith("status_")
-                    else (~res[c].isna()).astype(int).sum(axis=0)
-                )
-                res[c].loc["~TOTAL"] = res[c].shape[0]
-                res[c].loc["~COUNT"] = count
-                res[c].loc["~SUM"] = summ
-                res[c].loc["~MEAN"] = mean
-                res[c].loc["~MED"] = med
-    for c in ["speedup", "speedup_med"]:
-        if c in res:
-            mean = np.exp(np.log(res[c]).mean(axis=0))
-            med = res[c].median(axis=0)
-            summ = res[c].sum(axis=0)
-            count = (~res[c].isna()).astype(int).sum(axis=0)
-            res[c].loc["~TOTAL"] = res[c].shape[0]
-            res[c].loc["~COUNT"] = count
-            # res[c].loc["~SUM"] = summ
-            res[c].loc["~GMEAN"] = mean
-            res[c].loc["~MED"] = med
-
     # final fusion
 
     def _merge(res, merge, prefix, reverse=True, transpose=False):
@@ -699,11 +649,8 @@ def merge_benchmark_reports(
         for name in merge:
             df = res[name].T
             index_cols = df.index.names
-            # g = df.columns.names, res[name].index.names
-            # cols = set(df.columns)
-            # df = df.reset_index(drop=False).copy()
-            # index_cols = set(df.columns) - cols
-            # print("--", prefix, index_cols, g)
+            if index_cols == [None]:
+                index_cols = ["index"]
             df["stat"] = name[len(prefix) :]
             df = df.reset_index(drop=False).set_index([*list(index_cols), "stat"])
             # Let's remove duplicated experiment, the last one is kept.
@@ -714,13 +661,20 @@ def merge_benchmark_reports(
                 continue
             m0 = m
             try:
-                m = pandas.merge(m, df, how="outer", left_index=True, right_index=True)
-            except ValueError as e:
-                print(
-                    f"Unable to join for name={name}, df.index={df.index.names}, "
-                    f"m.index={m.index.names} e={e}"
+                m = pandas.merge(
+                    m,
+                    df,
+                    how="outer",
+                    left_index=True,
+                    right_index=True,
+                    validate="1:1",
                 )
-                continue
+            except ValueError as e:
+                raise AssertionError(
+                    f"Unable to join for name={name}, df.index={df.index.names}, "
+                    f"m.index={m.index.names} e={e}\n----\n+ m0.index\n{m0.index[:3]}"
+                    f"\n---\n+ df.index\n{df.index[:3]}"
+                ) from e
             assert m.shape[0] <= df.shape[0] + m0.shape[0], (
                 f"Something is going wrong for prefix {prefix!r} "
                 f"(probably a same experiment reported twice), "
@@ -750,23 +704,27 @@ def merge_benchmark_reports(
 
         if transpose:
             m0 = m
-            m = m.T.stack().reset_index(drop=False)
-            cols = m0.columns.names
-            assert len(cols) >= 3, (
+            m = m.T.stack(level=list(range(len(m.index.names)))).reset_index(drop=False)
+            cols = m.columns
+            assert len(cols) >= 4, (
                 f"Unexpected number of columns in {cols}, "
                 f"prefix={prefix!r}, m.columns={m.columns}, "
                 f"m0.index.names={m0.index.names}, "
                 f"m0.columns.names={m0.columns.names}\n---\n{m0}"
             )
             exporter_column = [c for c in cols if c in ("exporter", "opt_patterns")]
-            assert "stat" in cols and all(m not in cols for m in model), (
+            assert "stat" in cols, (
                 f"Unexpected columns {cols}, expecting 'stat', "
                 f"{exporter_column!r}, {model!r}, reverse={reverse}, "
                 f"transpose={transpose}, m0.index.names={m0.index.names}, "
-                f"m0.columns.names={m0.columns.names}\n---\n{m0}"
+                f"m0.columns.names={m0.columns.names}\n---"
+                f"\n{m0.head()}\n---\n{m.head()}"
             )
             last = [c for c in cols if c not in {"stat", *exporter_column, *model}]
-            print("***", last)
+            assert last, (
+                f"last cannot be empty, exporter_column={exporter_column}, "
+                f"model={model}, cols={cols}\n----\n{m0.head()}"
+            )
             added_columns = [c for c in last if c in new_keys]
             last = [c for c in last if c not in new_keys]
             if len(last) == 2 and last[0] == "index":
@@ -862,6 +820,69 @@ def merge_benchmark_reports(
     }
     final_res.update({k: v for k, v in res.items() if k not in reorder})
 
+    # add summary at the end
+
+    new_final_res = {}
+    for k, v in final_res.items():
+        if k in {"onnx", "ERR", "0raw", "0main"}:
+            new_final_res[k] = v
+            continue
+        try:
+            mean = v.mean(axis=0)
+            col_by_col = False
+        except TypeError:
+            col_by_col = True
+        if not col_by_col:
+            med = v.median(axis=0)
+            summ = v.sum(axis=0)
+            amin = v.min(axis=0)
+            amax = v.max(axis=0)
+            count = (
+                v.sum(axis=0) if k == "status" else (~v.isna()).astype(int).sum(axis=0)
+            )
+            gmean = (
+                np.exp(np.log(np.maximum(v, 1e-10)).mean(axis=0))
+                if k in {"speedup"}
+                else None
+            )
+            v.loc["~TOTAL"] = v.shape[0]
+            v.loc["~COUNT"] = count
+            v.loc["~SUM"] = summ
+            v.loc["~MEAN"] = mean
+            if gmean is not None:
+                v.loc["~GEO_MEAN"] = gmean
+            v.loc["~MIN"] = amin
+            v.loc["~MED"] = med
+            v.loc["~MAX"] = amax
+            new_final_res[k] = v
+            continue
+
+        for c in v.columns:
+            if v[c].dtype not in {np.float32, np.float64, np.int32, np.int64}:
+                continue
+            mean = v[c].mean(axis=0)
+            med = v[c].median(axis=0)
+            summ = v[c].sum(axis=0)
+            amin = v[c].min(axis=0)
+            amax = v[c].max(axis=0)
+            count = (
+                v[c].sum(axis=0)
+                if k == "status"
+                else (~v[c].isna()).astype(int).sum(axis=0)
+            )
+            gmean = (
+                np.exp(np.log(np.maximum(v, 1e-10)).mean(axis=0))
+                if k in {"speedup"}
+                else None
+            )
+            v.loc["~TOTAL", c] = v.shape[0]
+            v.loc["~COUNT", c] = count
+            v.loc["~SUM", c] = summ
+            v.loc["~MEAN", c] = mean
+            new_final_res[k] = v
+
+    final_res = new_final_res
+
     if excel_output:
         with pandas.ExcelWriter(excel_output) as writer:
             no_index = {"0raw", "0main"}
@@ -900,12 +921,12 @@ def _reorder_indices(
         first = list(column_keys)
         second = [c for c in m.columns if c not in first]
         m = m[first + second]
-        m = m.set_index(first).sort_index().reset_index(drop=False)
+        m = m.set_index(first).sort_index(key=sort_index_key).reset_index(drop=False)
 
         value = m.columns[-1]
         row = [c for c in m.columns[:-1] if c not in first]
         piv = m.pivot(index=row, columns=first, values=value)
-        piv = piv.sort_index()
+        piv = piv.sort_index(key=sort_index_key)
 
         return piv.copy()
 
