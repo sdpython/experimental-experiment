@@ -1,6 +1,7 @@
 import os
 import unittest
-from experimental_experiment.ext_test_case import ExtTestCase
+from pandas.errors import PerformanceWarning
+from experimental_experiment.ext_test_case import ExtTestCase, ignore_warnings
 from experimental_experiment.torch_bench._bash_bench_benchmark_runner_agg import (
     merge_benchmark_reports,
 )
@@ -11,14 +12,18 @@ class TestBashBenchMergeStats(ExtTestCase):
     def test_merge_stats0(self):
         ddata = os.path.join(os.path.dirname(__file__), "data")
         data = [os.path.join(ddata, "keep.csv"), os.path.join(ddata, "keep2.csv")]
-        df = merge_benchmark_reports(data, excel_output="test_merge_stats0.xlsx")
+        df = merge_benchmark_reports(
+            data, excel_output="test_merge_stats0.xlsx", model="model_name"
+        )
         self.assertIsInstance(df, dict)
         self.assertIn("status", set(df))
 
     def test_merge_stats1(self):
         ddata = os.path.join(os.path.dirname(__file__), "data")
         data = [os.path.join(ddata, "output_data_bash_bench_huggingface.py.temp.csv")]
-        df = merge_benchmark_reports(data, excel_output="test_merge_stats1.xlsx")
+        df = merge_benchmark_reports(
+            data, excel_output="test_merge_stats1.xlsx", model="model_name"
+        )
         self.assertIsInstance(df, dict)
         self.assertIn("status", set(df))
 
@@ -56,6 +61,7 @@ class TestBashBenchMergeStats(ExtTestCase):
         self.assertIn("op_onnx", set(df))
         self.assertIn("op_torch", set(df))
 
+    @ignore_warnings((PerformanceWarning,))
     def test_merge_stats_duplicate(self):
         ddata = os.path.join(os.path.dirname(__file__), "data")
         data = [
@@ -71,6 +77,7 @@ class TestBashBenchMergeStats(ExtTestCase):
         self.assertIn("op_onnx", set(df))
         self.assertIn("op_torch", set(df))
 
+    @ignore_warnings((FutureWarning,))
     def test_merge_stats_bug_timm(self):
         ddata = os.path.join(os.path.dirname(__file__), "data")
         data = [os.path.join(ddata, "bug_timm.csv")]
@@ -83,6 +90,7 @@ class TestBashBenchMergeStats(ExtTestCase):
         self.assertIn("op_onnx", set(df))
         self.assertIn("op_torch", set(df))
 
+    @ignore_warnings((PerformanceWarning,))
     def test_merge_stats_bug_one_export(self):
         ddata = os.path.join(os.path.dirname(__file__), "data")
         data = [os.path.join(ddata, "bug_one_export.csv")]
@@ -95,6 +103,7 @@ class TestBashBenchMergeStats(ExtTestCase):
         self.assertIn("op_onnx", set(df))
         self.assertIn("op_torch", set(df))
 
+    @ignore_warnings((PerformanceWarning,))
     def test_merge_stats_bug_op_onnx(self):
         ddata = os.path.join(os.path.dirname(__file__), "data")
         data = [os.path.join(ddata, "bug_op_onnx.csv")]
@@ -109,6 +118,7 @@ class TestBashBenchMergeStats(ExtTestCase):
         dfo = df["op_onnx"]
         self.assertNotIn("op_onnx_MatMul", str(dfo.columns))
 
+    @ignore_warnings((PerformanceWarning,))
     def test_merge_stats_empty(self):
         ddata = os.path.join(os.path.dirname(__file__), "data")
         data = [os.path.join(ddata, "bug_timm_empty.csv")]
