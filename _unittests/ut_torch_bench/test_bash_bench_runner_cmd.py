@@ -166,7 +166,7 @@ class TestBashBenchRunnerCmd(ExtTestCase):
     @skipif_ci_windows("exporter does not work on Windows")
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_onnxruntime_training()
-    @requires_torch("2.4")
+    @requires_torch("2.5")
     def test_huggingface_export_bench_custom_cpu_electra(self):
         self._huggingface_export_bench_cpu(
             "custom", "ElectraForQuestionAnswering", verbose=3

@@ -3,6 +3,7 @@ import os
 import importlib
 import textwrap
 import gc
+import inspect
 import warnings
 from typing import Any, Optional, Set, Tuple
 from collections import namedtuple
@@ -280,7 +281,7 @@ class TorchBenchRunner(BenchmarkRunner):
     MODELS_FILENAME = textwrap.dedent(
         """
         BERT_pytorch,128
-        Background_Matting, 16
+        Background_Matting,1
         LearningToPaint,1024
         alexnet,1024
         dcgan,1024
@@ -307,6 +308,67 @@ class TorchBenchRunner(BenchmarkRunner):
         timm_vision_transformer,256
         timm_vovnet,128
         vgg16,128
+        """
+    )
+
+    EXPECTED_MODELS = textwrap.dedent(
+        """
+        Background_Matting
+        DALLE2_pytorch
+        Super_SloMo
+        alexnet
+        basic_gnn_edgecnn
+        basic_gnn_gcn
+        basic_gnn_gin
+        basic_gnn_sage
+        dcgan
+        demucs
+        detectron2_fasterrcnn_r_101_c4
+        detectron2_fasterrcnn_r_101_dc5
+        detectron2_fasterrcnn_r_101_fpn
+        detectron2_fasterrcnn_r_50_c4
+        detectron2_fasterrcnn_r_50_dc5
+        detectron2_fasterrcnn_r_50_fpn
+        detectron2_fcos_r_50_fpn
+        detectron2_maskrcnn_r_101_c4
+        detectron2_maskrcnn_r_101_fpn
+        detectron2_maskrcnn_r_50_c4
+        detectron2_maskrcnn_r_50_fpn
+        dlrm
+        doctr_det_predictor
+        doctr_reco_predictor
+        drq
+        fastNLP_Bert
+        hf_Bart
+        hf_Bert
+        hf_Bert_large
+        hf_BigBird
+        hf_DistilBert
+        hf_GPT2
+        hf_GPT2_large
+        hf_Longformer
+        hf_Reformer
+        hf_T5_generate
+        hf_T5_large
+        hf_Whisper
+        lennard_jones
+        maml
+        mobilenet_v2_quantized_qat
+        nvidia_deeprecommender
+        pyhpc_turbulent_kinetic_energy
+        pytorch_stargan
+        pytorch_unet
+        resnet50_quantized_qat
+        sam
+        sam_fast
+        soft_actor_critic
+        speech_transformer
+        timm_regnet
+        timm_vision_transformer_large
+        tts_angular
+        vgg16
+        vision_maskrcnn
+        yolov3
         """
     )
 
@@ -355,10 +417,15 @@ class TorchBenchRunner(BenchmarkRunner):
         container._config = container.load_yaml_file()
         lines = container.MODELS_FILENAME.split("\n")
         lines = [line.rstrip() for line in lines]
+        expected_models = set(
+            _.strip() for _ in container.EXPECTED_MODELS.split("\n") if _
+        )
         for line in lines:
             if not line or len(line) < 2:
                 continue
             model_name, batch_size = line.split(",")
+            if model_name not in expected_models:
+                continue
             batch_size = int(batch_size)
             if (
                 "batch_size" not in container._config
@@ -372,6 +439,12 @@ class TorchBenchRunner(BenchmarkRunner):
                 container._config["batch_size"]["inference"] = {}
             assert "inference" in container._config["batch_size"]
             container._config["batch_size"]["inference"][model_name] = batch_size
+        for o in expected_models:
+            model_name = o.strip()
+            if len(model_name) < 3:
+                continue
+            if model_name not in container._config["batch_size"]["inference"]:
+                container._config["batch_size"]["inference"][model_name] = 1
 
     @classmethod
     def _get_module_cls_by_model_name(container, model_cls_name):
@@ -735,11 +808,20 @@ class TorchBenchRunner(BenchmarkRunner):
                 batch_size=batch_size,
             )
         else:
-            benchmark = benchmark_cls(
-                test="eval",
-                device=self.device,
-                batch_size=batch_size,
-            )
+            try:
+                benchmark = benchmark_cls(
+                    test="eval",
+                    device=self.device,
+                    batch_size=batch_size,
+                )
+            except Exception as e:
+                raise AssertionError(
+                    f"Unable to create class {benchmark_cls}, "
+                    f"device={self.device}, batch_size={batch_size}, "
+                    f"signature={[p for p in inspect.signature(benchmark_cls).parameters]}, "
+                    f"DEFAULT_EVAL_BSIZE={getattr(benchmark_cls, 'DEFAULT_EVAL_BSIZE', '?')}, "
+                    f"ALLOW_CUSTOMIZE_BSIZE={getattr(benchmark_cls, 'ALLOW_CUSTOMIZE_BSIZE', '?')}"
+                ) from e
         model, example_inputs = benchmark.get_module()
         if model_name in [
             "basic_gnn_edgecnn",
@@ -807,12 +889,15 @@ class TorchBenchRunner(BenchmarkRunner):
     def iter_model_names(self):
         from torchbenchmark import _list_canary_model_paths, _list_model_paths
 
+        expected_models = set(_.strip() for _ in self.EXPECTED_MODELS.split("\n") if _)
+
         models = _list_model_paths()
         models += [
             f
             for f in _list_canary_model_paths()
             if os.path.basename(f) in self._config["canary_models"]
         ]
+        models = [m for m in models if os.path.basename(m) in expected_models]
         models.sort()
 
         start, end = self.get_benchmark_indices(len(models))

@@ -168,6 +168,8 @@ class ModelRunner:
             return o
         if isinstance(o, list):
             return [cls._to_type(v, dtype) for v in o]
+        if isinstance(o, tuple):
+            return tuple(cls._to_type(v, dtype) for v in o)
         if hasattr(o, "dtype"):
             if o.dtype in {torch.float32, torch.float64, torch.float16, torch.bfloat16}:
                 return o.to(dtype)
@@ -194,6 +196,11 @@ class ModelRunner:
             )
             ext = {k: cls._to_type(v, dtype) for k, v in ext.items()}
             return o.__class__(**ext)
+        if isinstance(o, dict):
+            res = {}
+            for k, v in o.items():
+                res[k] = cls._to_type(v, dtype)
+            return res
         try:
             return o.to(dtype)
         except (AttributeError, AssertionError) as e:
@@ -514,10 +521,23 @@ class ModelRunner:
             not optimization
         ), f"optimization {optimization!r} not compatible with script"
 
+        if (
+            isinstance(self.inputs, tuple)
+            and len(self.inputs) == 1
+            and isinstance(self.inputs[0], list)
+            and len(self.inputs[0]) == 1
+            and isinstance(self.inputs[0][0], dict)
+            and len(set(self.inputs[0][0]) & {"file_name", "image"}) == 2
+        ):
+            # detectron2 take inputs such as ([{'file_name': ..., 'height': ..., 'image': torch.Tensor(...)}])
+            inputs = (self.inputs[0][0]["image"],)
+        else:
+            inputs = self.inputs
+
         with torch.no_grad():
             torch.onnx.export(
                 self.model,
-                self.inputs,
+                inputs,
                 name,
                 do_constant_folding=False,
                 opset_version=target_opset,
@@ -795,11 +815,32 @@ class ModelRunner:
             )
             return self.inputs
         inputs = [i for i, d in zip(self.inputs, self.raw_use_defaults) if not d]
-        assert len(names) == len(inputs), (
-            f"Mismatch number of outputs, {len(inputs)} inputs for {names}.\n"
+        if len(names) > len(inputs) and any(isinstance(i, list) for i in inputs):
+            # We need to flatten the inputs.
+            new_inputs = []
+            for i in inputs:
+                if isinstance(i, torch.Tensor):
+                    new_inputs.append(i)
+                    continue
+                if isinstance(i, list):
+                    for u in i:
+                        if isinstance(u, torch.Tensor):
+                            new_inputs.append(u)
+                            continue
+                        raise AssertionError(
+                            f"Unable to process input type {type(u)} in input list"
+                        )
+                    continue
+                raise AssertionError(f"Unable to process input type {type(i)}")
+        else:
+            new_inputs = inputs
+        assert len(names) == len(new_inputs), (
+            f"Mismatch number of outputs, {len(inputs)} inputs for {names}, "
+            f"{len(new_inputs)} flattened inputs.\n"
+            f"ipnut types={[type(i) for i in inputs]},\n"
             f"self.raw_input_names={self.raw_input_names},\n"
             f"self.raw_use_defaults={self.raw_use_defaults},\n"
             f"initializer_names={initializer_names}, "
             f"named parameters={list(p[0] for p in self.model.named_parameters())}"
         )
-        return dict(zip(names, inputs))
+        return dict(zip(names, new_inputs))

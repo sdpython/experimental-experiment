@@ -19,6 +19,7 @@ _tools/repos**
 _tools/mamba**
 _tools/results**
 _tools/bin**
+nohup.out
 coverage.html/*
 temp*.txt*
 tt_*.txt
