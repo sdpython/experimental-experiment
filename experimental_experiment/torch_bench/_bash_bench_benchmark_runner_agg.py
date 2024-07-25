@@ -127,14 +127,16 @@ def _apply_excel_style(
                 qb = None
                 fmt = numbers.FORMAT_NUMBER_00
             elif k == "speedup":
+                debug_values = []
                 for row in sheet.iter_rows(
                     min_row=0,
-                    max_row=5,
+                    max_row=30,
                     min_col=first_col,
                     max_col=last_col,
                 ):
                     found = None
                     for cell in row:
+                        debug_values.append(cell.value)
                         if cell.value == "increase":
                             c1 = cell.col_idx if c1 is None else min(cell.col_idx, c1)
                             c2 = cell.col_idx if c2 is None else max(cell.col_idx, c2)
@@ -151,7 +153,7 @@ def _apply_excel_style(
 
                 assert (
                     c1 is not None and c2 is not None and c1 <= c2
-                ), f"Unexpected value for c1={c1}, c2={c2}"
+                ), f"Unexpected value for c1={c1}, c2={c2}\ndebug_values={debug_values}"
                 # ratio
                 qb = 0.98
                 qt = None
@@ -275,9 +277,8 @@ def _apply_excel_style(
 
 def merge_benchmark_reports(
     data: Union["pandas.DataFrame", List[str]],  # noqa: F821
-    model="model_name",
+    model=("suite", "model_name"),
     keys=(
-        "suite",
         "exporter",
         "opt_patterns",
         "device",
@@ -341,72 +342,7 @@ def merge_benchmark_reports(
         dynamic
         executable
         exporter
-        filename
-        flag_fake_tensor
-        flag_no_grad
-        flag_training
-        has_cuda
-        input_size
-        machine
-        mema_gpu_0_before_loading
-        mema_gpu_1_after_loading
-        mema_gpu_2_after_warmup
-        mema_gpu_3_empty_cache
-        mema_gpu_4_after_repeat
-        mema_gpu_5_after_export
-        mema_gpu_6_after_gcollect
-        mema_gpu_7_after_session
-        mema_gpu_8_after_export_warmup
-        mema_gpu_9_after_export_repeat
-        memory_begin,
-        memory_end,
-        memory_gpu0_begin,
-        memory_gpu0_end,
-        memory_gpu0_mean,
-        memory_gpu0_n,
-        memory_gpu0_peak,
-        memory_mean,
-        memory_n,
-        memory_peak,
-        model,
-        model_name,
-        onnx_filesize
-        onnx_input_names,
-        onnx_model
-        onnx_n_inputs,
-        onnx_n_outputs,
-        onnx_optimized,
-        onnx_output_names,
-        opt_patterns,
-        output_data,
-        output_size,
-        params_dtype,
-        params_size,
-        process,
-        processor,
-        providers,
-        quiet,
-        repeat,
-        speedup,
-        speedup_increase,
-        target_opset,
-        time_export,
-        time_load,
-        time_latency,
-        time_latency_eager,
-        time_session,
-        time_total,
-        time_warmup,
-        time_warmup_eager,
-        verbose,
-        version,
-        version_onnxruntime,
-        version_torch,
-        version_transformers,
-        warmup,
-        ERROR,
-        OUTPUT,
-        CMD
+        ...
     """
     import pandas
 
@@ -431,13 +367,23 @@ def merge_benchmark_reports(
     if "STEP" in df.columns:
         df = df[(df["STEP"].isna()) | (df["STEP"] != "export")]
 
-    if model not in df.columns:
-        if exc:
-            raise AssertionError(
-                f"{model!r} cannot be found in {df.columns}\n{df.head()}"
-            )
-        return None
-    df = df[~df[model].isna()].copy()
+    if isinstance(model, str):
+        model = [model]
+    elif isinstance(model, tuple):
+        model = list(model)
+    assert isinstance(model, list), f"Unexpected type {type(model)} for model={model}"
+
+    # checks all columns defining a model are available
+    for m in model:
+        if m not in df.columns:
+            if exc:
+                raise AssertionError(
+                    f"{model!r} cannot be found in {df.columns}\n{df.head()}"
+                )
+            return None
+
+    # let's remove the empty line
+    df = df[~df[model].isna().max(axis=1)].copy()
 
     # replace nan values
     set_columns = set(df.columns)
@@ -566,7 +512,7 @@ def merge_benchmark_reports(
                 and len(set(df.exporter)) > 1
             ):
                 # Do the same with the exporter as a baseline.
-                keep = [model, *new_keys, "speedup"]
+                keep = [*model, *new_keys, "speedup"]
                 gr = df[df.exporter == "script"][keep].copy()
                 gr = gr[~gr["speedup"].isna()]
                 gr["speedup_script"] = gr["speedup"]
@@ -606,9 +552,9 @@ def merge_benchmark_reports(
 
     # values
     for c in report_on:
-        keep = [model, *new_keys, c]
+        keep = [*model, *new_keys, c]
         dfc = df[keep]
-        dfc = dfc[~dfc[model].isna()]
+        dfc = dfc[~dfc[model].isna().min(axis=1)]
         if new_keys:
             pivot = dfc.pivot(index=model, columns=new_keys, values=c)
         else:
@@ -617,11 +563,11 @@ def merge_benchmark_reports(
 
     # buckets
     if bucket_columns:
-        table = df[[*new_keys, model, *bucket_columns, "speedup_increase"]].copy()
+        table = df[[*new_keys, *model, *bucket_columns, "speedup_increase"]].copy()
         pcolumns = [c for c in ["exporter", "opt_patterns"] if c in new_keys]
         index_col = [
             *[c for c in new_keys if c not in ("exporter", "opt_patterns")],
-            model,
+            *model,
         ]
         pivot = table[~table[index_col[0]].isna()].pivot(
             index=index_col, columns=pcolumns, values=bucket_columns
@@ -752,18 +698,29 @@ def merge_benchmark_reports(
         m = None
         for name in merge:
             df = res[name].T
-            cols = set(df.columns)
-            df = df.reset_index(drop=False).copy()
-            index_cols = set(df.columns) - cols
+            index_cols = df.index.names
+            # g = df.columns.names, res[name].index.names
+            # cols = set(df.columns)
+            # df = df.reset_index(drop=False).copy()
+            # index_cols = set(df.columns) - cols
+            # print("--", prefix, index_cols, g)
             df["stat"] = name[len(prefix) :]
-            df = df.set_index([*list(index_cols), "stat"]).T
+            df = df.reset_index(drop=False).set_index([*list(index_cols), "stat"])
             # Let's remove duplicated experiment, the last one is kept.
+            df = df.T
             df = df[~df.index.duplicated(keep="last")].copy()
             if m is None:
                 m = df
                 continue
             m0 = m
-            m = pandas.merge(m, df, how="outer", left_index=True, right_index=True)
+            try:
+                m = pandas.merge(m, df, how="outer", left_index=True, right_index=True)
+            except ValueError as e:
+                print(
+                    f"Unable to join for name={name}, df.index={df.index.names}, "
+                    f"m.index={m.index.names} e={e}"
+                )
+                continue
             assert m.shape[0] <= df.shape[0] + m0.shape[0], (
                 f"Something is going wrong for prefix {prefix!r} "
                 f"(probably a same experiment reported twice), "
@@ -775,13 +732,16 @@ def merge_benchmark_reports(
         # We need to change the columns index order.
         if reverse:
             df = m.T
-            setc = set(df.columns)
-            df = df.reset_index(drop=False)
-            index = set(df.columns) - setc
+            index = set(df.index.names)
             if index == {"stat", "exporter"}:
-                m = df.set_index(["stat", "exporter"]).T
+                m = df.reset_index(drop=False).set_index(["stat", "exporter"]).T
             elif index == {"stat", "index"}:
-                m = df.drop("index", axis=1).set_index(["stat"]).T
+                m = (
+                    df.reset_index(drop=False)
+                    .drop("index", axis=1)
+                    .set_index(["stat"])
+                    .T
+                )
         else:
             m = m.T.sort_index()
             m = m.T
@@ -789,25 +749,44 @@ def merge_benchmark_reports(
                 m.columns = m.columns.droplevel(level=0)
 
         if transpose:
+            m0 = m
             m = m.T.stack().reset_index(drop=False)
-            cols = m.columns
-            assert len(cols) >= 3, f"Unexpected number of columns in {cols}"
-            exporter_column = [c for c in cols if c in ("exporter", "opt_patterns")]
-            assert "stat" in cols and model in cols, (
-                f"Unexpected columns {cols}, expecting 'stat', "
-                f"{exporter_column!r}, {model!r}"
+            cols = m0.columns.names
+            assert len(cols) >= 3, (
+                f"Unexpected number of columns in {cols}, "
+                f"prefix={prefix!r}, m.columns={m.columns}, "
+                f"m0.index.names={m0.index.names}, "
+                f"m0.columns.names={m0.columns.names}\n---\n{m0}"
             )
-            last = [c for c in cols if c not in {"stat", *exporter_column, model}]
+            exporter_column = [c for c in cols if c in ("exporter", "opt_patterns")]
+            assert "stat" in cols and all(m not in cols for m in model), (
+                f"Unexpected columns {cols}, expecting 'stat', "
+                f"{exporter_column!r}, {model!r}, reverse={reverse}, "
+                f"transpose={transpose}, m0.index.names={m0.index.names}, "
+                f"m0.columns.names={m0.columns.names}\n---\n{m0}"
+            )
+            last = [c for c in cols if c not in {"stat", *exporter_column, *model}]
+            print("***", last)
             added_columns = [c for c in last if c in new_keys]
             last = [c for c in last if c not in new_keys]
             if len(last) == 2 and last[0] == "index":
                 last = last[1:]
-            assert (
-                len(last) == 1
-            ), f"Unexpected columns in {cols}, added={added_columns}, last={last}"
+            assert len(last) == 1, (
+                f"Unexpected columns in {cols}, added={added_columns}, "
+                f"last={last}, new_keys={new_keys}, exporter_column={exporter_column}, "
+                f"prefix={prefix!r}"
+                f"\nm0.index.names={m0.index.names}"
+                f"\nm0.columns.names={m0.columns.names}"
+                f"\nm0.columns[0]={m0.columns[0]}"
+                f"\nm0.columns={m0.columns}\n----"
+                f"\nm.index.names={m.index.names}"
+                f"\nm.columns.names={m.columns.names}"
+                f"\nm.columns[0]={m.columns[0]}"
+                f"\nm.columns={m.columns}\n----"
+            )
             m = m.pivot(
                 index="stat",
-                columns=[model, *exporter_column, *added_columns],
+                columns=[*model, *exporter_column, *added_columns],
                 values=last[0],
             )
             m = m.T.sort_index().T
@@ -816,6 +795,16 @@ def merge_benchmark_reports(
     if "speedup" in res:
         res["speedup_1speedup"] = res["speedup"]
         del res["speedup"]
+
+    # verification
+
+    for c, v in res.items():
+        assert v.index.names in ([None], model), (
+            f"There should not be any multiindex but c={c!r}, " f"names={v.index.names}"
+        )
+
+    # merging
+
     for prefix in [
         "status_",
         "discrepancies_",
@@ -923,10 +912,15 @@ def _reorder_indices(
     if len(column_keys) == 0 or "index" in col_names:
         return df
 
+    if (set(col_names) & set(column_keys)) == set(column_keys):
+        return df
+
     raise AssertionError(
         f"Not implemented for row_names={row_names!r}, "
         f"col_names={col_names!r}, column_keys={column_keys!r}, "
         f"row_keys={row_keys!r}, name={name!r}"
+        f"\nset(column_keys)={list(sorted(column_keys))}"
+        f"\nset(col_names)={list(sorted(col_names))}"
     )
 
 
