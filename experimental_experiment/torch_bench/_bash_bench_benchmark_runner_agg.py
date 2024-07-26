@@ -1301,9 +1301,9 @@ def _select_metrics(
     dfi["order"] = [k[3] for k in keep]
     dfi = dfi.copy()
     dd = set(select[0].keys())
-    cols = ["METRIC"]
+    cols = ["order", "METRIC"]
     for c in dfi.columns:
-        if c == "METRIC" or c in dd:
+        if c in {"METRIC", "order"} or c in dd:
             continue
         cols.append(c)
     cols.append("unit")
