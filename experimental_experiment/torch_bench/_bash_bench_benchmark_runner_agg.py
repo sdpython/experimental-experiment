@@ -1,4 +1,5 @@
-from typing import Optional, Dict, List, Sequence, Union
+import glob
+from typing import Optional, Dict, List, Sequence, Set, Union
 import numpy as np
 
 
@@ -48,12 +49,13 @@ def _apply_excel_style(
     alignment = Alignment(horizontal="left")
     center = Alignment(horizontal="center")
     red = Font(color="FF0000")
-    gray = PatternFill(start_color="AAAAAA", end_color="AAAAAA", fill_type="solid")
     yellow = PatternFill(start_color="FFFF00", end_color="FFFF00", fill_type="solid")
     redf = PatternFill(start_color="FF0000", end_color="FF0000", fill_type="solid")
     lasts = {}
     for k, v in res.items():
         sheet = writer.sheets[k]
+        if 0 in v.shape:
+            continue
         if k == "0main":
             for c in "AB":
                 sheet.column_dimensions[c].width = 40
@@ -256,40 +258,6 @@ def _apply_excel_style(
         sheet = writer.sheets[k]
         last_row, last_col = lasts[k]
 
-        if (
-            "~MEAN" in v.index
-            or "~GMEAN" in v.index
-            or "~COUNT" in v.index
-            or "~TOTAL" in v.index
-            or "~SUM" in v.index
-            or "~MED" in v.index
-        ):
-            for row in sheet.iter_rows(
-                min_row=first_row,
-                max_row=last_row,
-                min_col=1,
-                max_col=last_col,
-            ):
-                for cell in row:
-                    if sheet.cell(row=cell.row, column=1).value in {
-                        "~MEAN",
-                        "~GMEAN",
-                        "~SUM",
-                        "~MED",
-                    }:
-                        cell.fill = gray
-                        cell.font = bold_font
-                        if "." not in cell.number_format:
-                            cell.number_format = "0.0000"
-                    elif sheet.cell(row=cell.row, column=1).value in {
-                        "~COUNT",
-                        "~TOTAL",
-                    }:
-                        cell.fill = gray
-                        cell.font = bold_font
-                        if "." not in cell.number_format:
-                            cell.number_format = "0"
-
 
 def merge_benchmark_reports(
     data: Union["pandas.DataFrame", List[str]],  # noqa: F821
@@ -366,7 +334,16 @@ def merge_benchmark_reports(
         dfs = []
         for filename in data:
             if isinstance(filename, str):
-                df = pandas.read_csv(filename)
+                try:
+                    df = pandas.read_csv(filename)
+                except FileNotFoundError as e:
+                    found = glob.glob(filename)
+                    if not found:
+                        raise AssertionError(f"Unable to find {filename!r}") from e
+                    for f in found:
+                        df = pandas.read_csv(f)
+                        dfs.append(df)
+                    continue
             elif isinstance(filename, pandas.DataFrame):
                 df = filename
             else:
@@ -577,11 +554,8 @@ def merge_benchmark_reports(
     # buckets
     if bucket_columns:
         table = df[[*new_keys, *model, *bucket_columns, "speedup_increase"]].copy()
-        pcolumns = [c for c in ["exporter", "opt_patterns"] if c in new_keys]
-        index_col = [
-            *[c for c in new_keys if c not in ("exporter", "opt_patterns")],
-            *model,
-        ]
+        pcolumns = [c for c in new_keys if c not in model]
+        index_col = model
         pivot = table[~table[index_col[0]].isna()].pivot(
             index=index_col, columns=pcolumns, values=bucket_columns
         )
@@ -756,10 +730,11 @@ def merge_benchmark_reports(
 
     # verification
 
+    set_model = set(model)
     for c, v in res.items():
-        assert v.index.names in ([None], model), (
-            f"There should not be any multiindex but c={c!r}, " f"names={v.index.names}"
-        )
+        assert (
+            c in {"0raw", "0main"} or set_model & set(v.index.names) == set_model
+        ), f"There should not be any multiindex but c={c!r}, names={v.index.names}"
 
     # merging
 
@@ -795,93 +770,15 @@ def merge_benchmark_reports(
             summ = res[c].sum(axis=0)
             res[c].loc["~SUM"] = summ
 
-    reorder = {
-        "ERR",
-        "TIME_ITER",
-        "discrepancies",
-        "memory",
-        "mempeak",
-        "onnx",
-        "speedup",
-        "speedup_med",
-        "speedup_increase",
-        "status",
-        "time",
-    }
-    final_res = {
-        k: _reorder_indices(
-            v,
-            row_keys=[k for k in keys if k not in column_keys],
-            column_keys=column_keys,
-            name=k,
+    # add pages for the summary
+    final_res = res.copy()
+    final_res.update(
+        _create_aggregation_figures(
+            res,
+            skip={"onnx", "ERR", "0raw", "0main", "op_onnx", "op_torch"},
+            model=model,
         )
-        for k, v in res.items()
-        if k in reorder
-    }
-    final_res.update({k: v for k, v in res.items() if k not in reorder})
-
-    # add summary at the end
-
-    new_final_res = {}
-    for k, v in final_res.items():
-        if k in {"onnx", "ERR", "0raw", "0main"}:
-            new_final_res[k] = v
-            continue
-        try:
-            mean = v.mean(axis=0)
-            col_by_col = False
-        except TypeError:
-            col_by_col = True
-        if not col_by_col:
-            med = v.median(axis=0)
-            summ = v.sum(axis=0)
-            amin = v.min(axis=0)
-            amax = v.max(axis=0)
-            count = (
-                v.sum(axis=0) if k == "status" else (~v.isna()).astype(int).sum(axis=0)
-            )
-            gmean = (
-                np.exp(np.log(np.maximum(v, 1e-10)).mean(axis=0))
-                if k in {"speedup"}
-                else None
-            )
-            v.loc["~TOTAL"] = v.shape[0]
-            v.loc["~COUNT"] = count
-            v.loc["~SUM"] = summ
-            v.loc["~MEAN"] = mean
-            if gmean is not None:
-                v.loc["~GEO_MEAN"] = gmean
-            v.loc["~MIN"] = amin
-            v.loc["~MED"] = med
-            v.loc["~MAX"] = amax
-            new_final_res[k] = v
-            continue
-
-        for c in v.columns:
-            if v[c].dtype not in {np.float32, np.float64, np.int32, np.int64}:
-                continue
-            mean = v[c].mean(axis=0)
-            med = v[c].median(axis=0)
-            summ = v[c].sum(axis=0)
-            amin = v[c].min(axis=0)
-            amax = v[c].max(axis=0)
-            count = (
-                v[c].sum(axis=0)
-                if k == "status"
-                else (~v[c].isna()).astype(int).sum(axis=0)
-            )
-            gmean = (
-                np.exp(np.log(np.maximum(v, 1e-10)).mean(axis=0))
-                if k in {"speedup"}
-                else None
-            )
-            v.loc["~TOTAL", c] = v.shape[0]
-            v.loc["~COUNT", c] = count
-            v.loc["~SUM", c] = summ
-            v.loc["~MEAN", c] = mean
-            new_final_res[k] = v
-
-    final_res = new_final_res
+    )
 
     if excel_output:
         with pandas.ExcelWriter(excel_output) as writer:
@@ -902,6 +799,66 @@ def merge_benchmark_reports(
             _apply_excel_style(final_res, writer)
 
     return final_res
+
+
+def _geo_mean(serie):
+    return np.exp(np.log(np.maximum(serie, 1e-10)).mean())
+
+
+def _create_aggregation_figures(
+    final_res: Dict[str, "pandas.DataFrame"],  # noqa: F821
+    model: List[str],
+    skip: Optional[Set[str]] = None,
+    key: str = "suite",
+) -> Dict[str, "pandas.DataFrame"]:  # noqa: F821
+    import pandas
+
+    assert key in model, f"Key {key!r} missing in model={model!r}"
+    model_not_key = [c for c in model if c != key]
+
+    aggs = {}
+    for k, v in final_res.items():
+        if k in skip:
+            continue
+        if key not in v.index.names:
+            v = v.copy()
+            v[key] = "?"
+            v = v.reset_index(drop=False).set_index([key, *v.index.names])
+        assert (
+            key in v.index.names
+        ), f"Unable to find key={key} in {v.index.names} for k={k!r}"
+        assert len(v.index.names) == len(
+            model
+        ), f"Length mismatch for k={k!r}, v.index.names={v.index.names}, model={model}"
+
+        # Let's drop any non numerical features.
+        v = v.select_dtypes(include=[np.number])
+        # gv = v.apply(lambda x: np.log(np.maximum(x, 1e-10).values))
+        v = v.reset_index(drop=False).set_index(model_not_key)
+        assert key in v.columns, f"Unable to find column {key!r} in {v.columns}"
+
+        v = v.sort_index(axis=1)
+        gr = v.groupby(key)
+        stats = [
+            ("MEAN", gr.mean()),
+            ("MEDIAN", gr.median()),
+            ("SUM", gr.sum()),
+            ("MIN", gr.min()),
+            ("MAX", gr.max()),
+            ("COUNT", gr.count()),
+            ("TOTAL", gr.agg(len)),
+            ("GEO-MEAN", gr.agg(_geo_mean)),
+        ]
+        dfs = []
+        for name, df in stats:
+            df = df.copy()
+            df["stat"] = name
+            dfs.append(df.reset_index(drop=False))
+        df = pandas.concat(dfs, axis=0)
+        df = df.set_index(["stat", key]).sort_index()
+        aggs[f"agg_{k}"] = df
+
+    return aggs
 
 
 def _reorder_indices(
