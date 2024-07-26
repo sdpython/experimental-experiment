@@ -1,5 +1,5 @@
 import glob
-from typing import Optional, Dict, List, Sequence, Set, Union
+from typing import Optional, Dict, List, Set, Union
 import numpy as np
 
 
@@ -64,12 +64,14 @@ def _apply_excel_style(
                 cell.font = bold_font
                 cell.alignment = alignment
             continue
-        if k == "0raw":
+
+        if k in {"0raw", "AGG", "SUMMARY"}:
             continue
+
         n_cols = 1 if isinstance(v.index[0], str) else len(v.index[0])
         n_rows = 1 if isinstance(v.columns[0], str) else len(v.columns[0])
         for i in range(n_cols):
-            sheet.column_dimensions["ABCDEFGHIJ"[i]].width = 40
+            sheet.column_dimensions["ABCDEFGHIJKLMNOPQRSTUVWXYZ"[i]].width = 40
 
         first_row = None
         first_col = None
@@ -470,6 +472,9 @@ def merge_benchmark_reports(
                 report_on.append("status_convert")
             if "discrepancies_abs" in set_columns:
                 df["status_convert_ort"] = (~df["discrepancies_abs"].isna()).astype(int)
+                df["status_err<1e-1"] = (
+                    ~df["discrepancies_abs"].isna() & (df["discrepancies_abs"] < 1e-1)
+                ).astype(int)
                 df["status_err<1e-2"] = (
                     ~df["discrepancies_abs"].isna() & (df["discrepancies_abs"] < 1e-2)
                 ).astype(int)
@@ -771,18 +776,190 @@ def merge_benchmark_reports(
             res[c].loc["~SUM"] = summ
 
     # add pages for the summary
-    final_res = res.copy()
-    final_res.update(
-        _create_aggregation_figures(
-            res,
-            skip={"onnx", "ERR", "0raw", "0main", "op_onnx", "op_torch"},
-            model=model,
+    res["AGG"] = _create_aggregation_figures(
+        res,
+        skip={
+            "onnx",
+            "ERR",
+            "0raw",
+            "0main",
+            "op_onnx",
+            "op_torch",
+            "bucket",
+            "bucket_script",
+        },
+        model=model,
+    )
+
+    names = res["AGG"].index.names
+    new_names = []
+    for c in ["cat", "stat"]:
+        if c in names:
+            new_names.append(c)
+    last_names = []
+    for c in column_keys:
+        if c == "stat" or c not in names:
+            continue
+        last_names.append(c)
+    if "agg" in names:
+        last_names.append("agg")
+    for c in names:
+        if c not in new_names and c not in last_names:
+            new_names.append(c)
+
+    res["AGG"] = _reorder_index_level(res["AGG"], new_names + last_names)
+
+    final_res = {
+        k: (
+            v
+            if k in {"0raw", "0main", "AGG"}
+            else _reorder_columns_level(v, column_keys, prefix=k)
         )
+        for k, v in res.items()
+    }
+
+    final_res["SUMMARY"] = _select_metrics(
+        res["AGG"],
+        select=[
+            dict(
+                cat="TIME_ITER",
+                stat="TIME_ITER",
+                agg="TOTAL",
+                new_name="0 number of models",
+                unit="N",
+            ),
+            dict(
+                cat="speedup",
+                agg="COUNT",
+                stat="increase",
+                new_name="A number of running models",
+                unit="N",
+            ),
+            dict(
+                cat="time",
+                agg="COUNT%",
+                stat="export_success",
+                new_name="B pass rate",
+                unit="%",
+            ),
+            dict(
+                cat="time",
+                agg="MEAN",
+                stat="export_success",
+                new_name="C average export time",
+                unit="s",
+            ),
+            dict(
+                cat="speedup",
+                agg="GEO-MEAN",
+                stat="1speedup",
+                new_name="D average speedup (geo)",
+                unit="s",
+            ),
+            dict(
+                cat="status",
+                agg="MEAN",
+                stat="err<1e-1",
+                new_name="E discrepancies < 0.1",
+                unit="%",
+            ),
+            dict(
+                cat="status",
+                agg="MEAN",
+                stat="lat<=script+2%",
+                new_name="F model equal or faster than torch.script",
+                unit="%",
+            ),
+            dict(
+                cat="status",
+                agg="MEAN",
+                stat="lat<=eager+2%",
+                new_name="G model equal or faster than eager",
+                unit="%",
+            ),
+            dict(
+                cat="status",
+                agg="MEAN",
+                stat="err<1e-2",
+                new_name="H discrepancies < 0.01",
+                unit="%",
+            ),
+            dict(
+                cat="TIME_ITER",
+                stat="TIME_ITER",
+                agg="MEAN",
+                new_name="I average iteration time",
+                unit="s",
+            ),
+            dict(
+                cat="discrepancies",
+                stat="abs",
+                agg="MEAN",
+                new_name="J average absolute discrepancies",
+                unit="f",
+            ),
+            dict(
+                cat="time",
+                agg="MEAN",
+                stat="latency_eager",
+                new_name="average latency eager",
+                unit="s",
+            ),
+            dict(
+                cat="time",
+                agg="MEAN",
+                stat="latency",
+                new_name="average latency ort",
+                unit="s",
+            ),
+            dict(
+                cat="memory",
+                agg="MEAN",
+                stat="peak_gpu_eager_warmup",
+                new_name="average GPU peak (eager warmup)",
+                unit="bytes",
+            ),
+            dict(
+                cat="memory",
+                agg="MEAN",
+                stat="peak_gpu_warmup",
+                new_name="average GPU peak (warmup)",
+                unit="bytes",
+            ),
+            dict(
+                cat="memory",
+                agg="MEAN",
+                stat="peak_cpu_pp",
+                new_name="average CPU peak",
+                unit="Mb",
+            ),
+            dict(
+                cat="memory",
+                agg="MEAN",
+                stat="peak_gpu_pp",
+                new_name="average GPU peak",
+                unit="Mb",
+            ),
+            dict(
+                cat="memory",
+                agg="MEAN",
+                stat="peak_gpu_export",
+                new_name="average GPU peak (export)",
+                unit="bytes",
+            ),
+            dict(
+                cat="speedup",
+                agg="GEO-MEAN",
+                stat="increase",
+                new_name="average speedup increase",
+                unit="%",
+            ),
+        ],
     )
 
     if excel_output:
         with pandas.ExcelWriter(excel_output) as writer:
-            no_index = {"0raw", "0main"}
+            no_index = {"0raw", "0main", "SUMMARY"}
             for k, v in sorted(final_res.items()):
                 ev = _reverse_column_names_order(v, name=k)
                 frow = (
@@ -803,6 +980,103 @@ def merge_benchmark_reports(
 
 def _geo_mean(serie):
     return np.exp(np.log(np.maximum(serie, 1e-10)).mean())
+
+
+def _reorder_columns_level(
+    df: "pandas.DataFrame",  # noqa: F821
+    first_level: List[str],
+    prefix: Optional[str] = None,
+) -> "pandas.DataFrame":  # noqa: F821
+    assert None not in df.index.names, f"None in df.index.names={df.index.names}"
+    assert None not in df.columns.names, f"None in df.index.names={df.columns.names}"
+    assert set(df.columns.names) & set(first_level), (
+        f"Nothing to sort, prefix={prefix!r} "
+        f"df.columns={df.columns}, first_level={first_level}"
+    )
+
+    c_in = [c for c in first_level if c in set(df.columns.names)]
+    c_out = [c for c in df.columns.names if c not in set(c_in)]
+    levels = c_in + c_out
+    for i in range(len(levels)):
+        if levels[i] == df.columns.names[i]:
+            continue
+        j = list(df.columns.names).index(levels[i])
+        df = df.swaplevel(i, j, axis=1)
+    assert (
+        list(df.columns.names) == levels
+    ), f"Issue levels={levels}, df.columns.names={df.columns.names}"
+    assert None not in df.index.names, f"None in df.index.names={df.index.names}"
+    assert None not in df.columns.names, f"None in df.index.names={df.columns.names}"
+    return df.sort_index(axis=1)
+
+
+def _sort_index_level(
+    df: "pandas.DataFrame",  # noqa: F821
+) -> "pandas.DataFrame":  # noqa: F821
+    assert None not in df.index.names, f"None in df.index.names={df.index.names}"
+    assert None not in df.columns.names, f"None in df.index.names={df.columns.names}"
+    levels = list(df.index.names)
+    levels.sort()
+    for i in range(len(levels)):
+        if levels[i] == df.index.names[i]:
+            continue
+        j = list(df.index.names).index(levels[i])
+        df = df.swaplevel(i, j, axis=0)
+    assert (
+        list(df.index.names) == levels
+    ), f"Issue levels={levels}, df.index.names={df.index.names}"
+    assert None not in df.index.names, f"None in df.index.names={df.index.names}"
+    assert None not in df.columns.names, f"None in df.index.names={df.columns.names}"
+    return df.sort_index(axis=0)
+
+
+def _reorder_index_level(
+    df: "pandas.DataFrame",  # noqa: F821
+    first_level: List[str],
+    prefix: Optional[str] = None,
+) -> "pandas.DataFrame":  # noqa: F821
+    assert None not in df.index.names, f"None in df.index.names={df.index.names}"
+    assert None not in df.columns.names, f"None in df.index.names={df.columns.names}"
+    assert set(df.index.names) & set(first_level), (
+        f"Nothing to sort, prefix={prefix!r} "
+        f"df.columns={df.index}, first_level={first_level}"
+    )
+
+    c_in = [c for c in first_level if c in set(df.index.names)]
+    c_out = [c for c in df.index.names if c not in set(c_in)]
+    levels = c_in + c_out
+    for i in range(len(levels)):
+        if levels[i] == df.index.names[i]:
+            continue
+        j = list(df.index.names).index(levels[i])
+        df = df.swaplevel(i, j, axis=0)
+    assert (
+        list(df.index.names) == levels
+    ), f"Issue levels={levels}, df.columns.names={df.index.names}"
+    assert None not in df.index.names, f"None in df.index.names={df.index.names}"
+    assert None not in df.columns.names, f"None in df.index.names={df.columns.names}"
+    return df.sort_index(axis=0)
+
+
+def _add_level(
+    index: "pandas.MultiIndex", name: str, value: str  # noqa: F821
+) -> "pandas.MultiIndex":  # noqa: F821
+    import pandas
+
+    if len(index.names) == 1:
+        v = index.tolist()
+        nv = [[value, _] for _ in v]
+        nn = [name, index.names[0]]
+        aa = np.array(nv).T.tolist()
+        new_index = pandas.MultiIndex.from_arrays(aa, names=nn)
+        return new_index
+
+    v = index.tolist()
+    nv = [[value, *_] for _ in v]
+    nn = [name, *index.names]
+    aa = np.array(nv).T.tolist()
+    new_index = pandas.MultiIndex.from_arrays(aa, names=nn)
+    return new_index
 
 
 def _create_aggregation_figures(
@@ -846,60 +1120,44 @@ def _create_aggregation_figures(
             ("MIN", gr.min()),
             ("MAX", gr.max()),
             ("COUNT", gr.count()),
+            ("COUNT%", gr.agg(lambda x: x.count() / len(x))),
             ("TOTAL", gr.agg(len)),
             ("GEO-MEAN", gr.agg(_geo_mean)),
         ]
         dfs = []
         for name, df in stats:
-            df = df.copy()
-            df["stat"] = name
-            dfs.append(df.reset_index(drop=False))
+            df.index = _add_level(df.index, "agg", name)
+            df.index = _add_level(df.index, "cat", k)
+            dfs.append(df)
+
         df = pandas.concat(dfs, axis=0)
-        df = df.set_index(["stat", key]).sort_index()
+        if "stat" in df.columns.names:
+            df = df.stack("stat")
         aggs[f"agg_{k}"] = df
 
-    return aggs
+    # check stat is part of the column otherwise the concatenation fails
 
+    set_names = set()
+    for df in aggs.values():
+        set_names |= set(df.index.names)
 
-def _reorder_indices(
-    df: "pandas.DataFrame",  # noqa: F821
-    row_keys: Sequence[str],
-    column_keys: Sequence[str],
-    name: Optional[str] = None,
-) -> "pandas.DataFrame":  # noqa: F821
-    col_names = (
-        df.columns.names if isinstance(df.columns.names, list) else [df.columns.names]
-    )
-    row_names = df.index.names if isinstance(df.index.names, list) else [df.index.names]
-    column_keys = [k for k in column_keys if k in (set(col_names) | set(row_names))]
+    for k, df in aggs.items():
+        if len(df.index.names) == len(set_names):
+            continue
+        missing = set_names - set(df.index.names)
+        for g in missing:
+            df.index = _add_level(df.index, g, k.replace("agg_", ""))
 
-    if set(col_names) == set(column_keys):
-        m = df.T.stack().reset_index(drop=False)
-        first = list(column_keys)
-        second = [c for c in m.columns if c not in first]
-        m = m[first + second]
-        m = m.set_index(first).sort_index(key=sort_index_key).reset_index(drop=False)
+    aggs = {k: _sort_index_level(df) for k, df in aggs.items()}
 
-        value = m.columns[-1]
-        row = [c for c in m.columns[:-1] if c not in first]
-        piv = m.pivot(index=row, columns=first, values=value)
-        piv = piv.sort_index(key=sort_index_key)
-
-        return piv.copy()
-
-    if len(column_keys) == 0 or "index" in col_names:
-        return df
-
-    if (set(col_names) & set(column_keys)) == set(column_keys):
-        return df
-
-    raise AssertionError(
-        f"Not implemented for row_names={row_names!r}, "
-        f"col_names={col_names!r}, column_keys={column_keys!r}, "
-        f"row_keys={row_keys!r}, name={name!r}"
-        f"\nset(column_keys)={list(sorted(column_keys))}"
-        f"\nset(col_names)={list(sorted(col_names))}"
-    )
+    # concatenation
+    dfs = pandas.concat([df for df in aggs.values()], axis=0)
+    names = list(dfs.columns.names)
+    dfs = dfs.unstack(key)
+    for n in names:
+        dfs = dfs.stack(n)
+    dfs = dfs.sort_index(axis=1).sort_index(axis=0)
+    return dfs
 
 
 def _reverse_column_names_order(
@@ -912,7 +1170,38 @@ def _reverse_column_names_order(
     assert isinstance(col_names, list), f"Unexpected type for {df.columns.names!r}"
     return df
 
-    # m = df.T.stack().reset_index(drop=False)
-    # new_names = list(reversed(col_names))
-    # m = m.set_index(new_names).T
-    # return m
+
+def _select_metrics(
+    df: "pandas.DataFrame", select: List[Dict[str, str]]  # noqa: F821
+) -> "pandas.DataFrame":  # noqa: F821
+
+    rows = []
+    names = list(df.index.names)
+    set_names = set(names)
+    for i in df.index.tolist():
+        rows.append(set(dict(zip(names, i)).items()))
+
+    subset = [
+        (s, set({k: v for k, v in s.items() if k in set_names}.items())) for s in select
+    ]
+
+    keep = []
+    for i, row in enumerate(rows):
+        for d, s in subset:
+            if (s & row) == s:
+                keep.append((i, d["new_name"], d["unit"]))
+                break
+
+    dfi = df.iloc[[k[0] for k in keep]].reset_index(drop=False).copy()
+    dfi["METRIC"] = [k[1] for k in keep]
+    dfi["unit"] = [k[2] for k in keep]
+    dfi = dfi.copy()
+    dd = set(select[0].keys())
+    cols = ["METRIC"]
+    for c in dfi.columns:
+        if c == "METRIC" or c in dd:
+            continue
+        cols.append(c)
+    cols.append("unit")
+    dfi = dfi[cols].sort_values(cols[:-1])
+    return dfi
