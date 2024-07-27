@@ -1,6 +1,135 @@
 import glob
+from collections import Counter
 from typing import Optional, Dict, List, Set, Union
 import numpy as np
+
+SELECTED_FEATURES = [
+    dict(
+        cat="TIME_ITER",
+        stat="TIME_ITER",
+        agg="TOTAL",
+        new_name="number of models",
+        unit="N",
+    ),
+    dict(
+        cat="speedup",
+        agg="COUNT",
+        stat="increase",
+        new_name="number of running models",
+        unit="N",
+    ),
+    dict(
+        cat="time", agg="COUNT%", stat="export_success", new_name="pass rate", unit="%"
+    ),
+    dict(
+        cat="time",
+        agg="MEAN",
+        stat="export_success",
+        new_name="average export time",
+        unit="s",
+    ),
+    dict(
+        cat="speedup",
+        agg="GEO-MEAN",
+        stat="1speedup",
+        new_name="average speedup (geo)",
+        unit="x",
+    ),
+    dict(
+        cat="status",
+        agg="MEAN",
+        stat="err<1e-1",
+        new_name="discrepancies < 0.1",
+        unit="%",
+    ),
+    dict(
+        cat="status",
+        agg="MEAN",
+        stat="lat<=script+2%",
+        new_name="model equal or faster than torch.script",
+        unit="%",
+    ),
+    dict(
+        cat="status",
+        agg="MEAN",
+        stat="lat<=eager+2%",
+        new_name="model equal or faster than eager",
+        unit="%",
+    ),
+    dict(
+        cat="status",
+        agg="MEAN",
+        stat="err<1e-2",
+        new_name="discrepancies < 0.01",
+        unit="%",
+    ),
+    dict(
+        cat="TIME_ITER",
+        stat="TIME_ITER",
+        agg="MEAN",
+        new_name="average iteration time",
+        unit="s",
+    ),
+    dict(
+        cat="discrepancies",
+        stat="abs",
+        agg="MEAN",
+        new_name="average absolute discrepancies",
+        unit="f",
+    ),
+    dict(
+        cat="time",
+        agg="MEAN",
+        stat="latency_eager",
+        new_name="average latency eager",
+        unit="s",
+    ),
+    dict(
+        cat="time", agg="MEAN", stat="latency", new_name="average latency ort", unit="s"
+    ),
+    dict(
+        cat="memory",
+        agg="MEAN",
+        stat="peak_gpu_eager_warmup",
+        new_name="average GPU peak (eager warmup)",
+        unit="bytes",
+    ),
+    dict(
+        cat="memory",
+        agg="MEAN",
+        stat="peak_gpu_warmup",
+        new_name="average GPU peak (warmup)",
+        unit="bytes",
+    ),
+    dict(
+        cat="memory",
+        agg="MEAN",
+        stat="peak_cpu_pp",
+        new_name="average CPU peak",
+        unit="Mb",
+    ),
+    dict(
+        cat="memory",
+        agg="MEAN",
+        stat="peak_gpu_pp",
+        new_name="average GPU peak",
+        unit="Mb",
+    ),
+    dict(
+        cat="memory",
+        agg="MEAN",
+        stat="peak_gpu_export",
+        new_name="average GPU peak (export)",
+        unit="bytes",
+    ),
+    dict(
+        cat="speedup",
+        agg="GEO-MEAN",
+        stat="increase",
+        new_name="average speedup increase",
+        unit="%",
+    ),
+]
 
 
 def _key(v):
@@ -19,35 +148,38 @@ def sort_index_key(index):
     return pandas.Index(_key(v) for v in index)
 
 
+def _isnan(x):
+    if x is None:
+        return True
+    if isinstance(x, str):
+        return x == ""
+    try:
+        return np.isnan(x)
+    except TypeError:
+        return False
+
+
+def _isinf(x):
+    if x is None:
+        return True
+    if isinstance(x, str):
+        return x == "inf"
+    try:
+        return np.isinf(x)
+    except TypeError:
+        return False
+
+
 def _apply_excel_style(
     res: Dict[str, "pandas.DataFrame"],  # noqa: F821
     writer: "ExcelWriter",  # noqa: F821
 ):
     from openpyxl.styles import Font, Alignment, numbers, PatternFill
 
-    def _isnan(x):
-        if x is None:
-            return True
-        if isinstance(x, str):
-            return x == ""
-        try:
-            return np.isnan(x)
-        except TypeError:
-            return False
-
-    def _isinf(x):
-        if x is None:
-            return True
-        if isinstance(x, str):
-            return x == "inf"
-        try:
-            return np.isinf(x)
-        except TypeError:
-            return False
-
     bold_font = Font(bold=True)
     alignment = Alignment(horizontal="left")
     center = Alignment(horizontal="center")
+    right = Alignment(horizontal="right")
     red = Font(color="FF0000")
     yellow = PatternFill(start_color="FFFF00", end_color="FFFF00", fill_type="solid")
     redf = PatternFill(start_color="FF0000", end_color="FF0000", fill_type="solid")
@@ -56,6 +188,7 @@ def _apply_excel_style(
         sheet = writer.sheets[k]
         if 0 in v.shape:
             continue
+
         if k == "0main":
             for c in "AB":
                 sheet.column_dimensions[c].width = 40
@@ -65,11 +198,20 @@ def _apply_excel_style(
                 cell.alignment = alignment
             continue
 
-        if k in {"0raw", "AGG", "SUMMARY"}:
+        if k in {"0raw", "AGG"}:
             continue
 
-        n_cols = 1 if isinstance(v.index[0], str) else len(v.index[0])
-        n_rows = 1 if isinstance(v.columns[0], str) else len(v.columns[0])
+        n_cols = (
+            1
+            if isinstance(v.index[0], (str, int, np.int64, np.int32))
+            else len(v.index[0])
+        )
+        n_rows = (
+            1
+            if isinstance(v.columns[0], (str, int, np.int64, np.int32))
+            else len(v.columns[0])
+        )
+
         for i in range(n_cols):
             sheet.column_dimensions["ABCDEFGHIJKLMNOPQRSTUVWXYZ"[i]].width = 40
 
@@ -254,6 +396,81 @@ def _apply_excel_style(
                         continue
                     cell.number_format = "0.000000"
             continue
+
+        if k == "SUMMARY":
+            fmt = {
+                "x": "0.000",
+                "%": "0.000%",
+                "byes": "0 000 000 000",
+                "Mb": "0.000",
+                "N": "0",
+                "f": "0.000",
+            }
+            for row in sheet.iter_rows(
+                min_row=first_row,
+                max_row=last_row,
+                min_col=first_col,
+                max_col=last_col,
+            ):
+                for cell in row:
+                    if cell.value in fmt:
+                        fcell = row[cell.col_idx - 2]
+                        fcell.number_format = fmt[cell.value]
+                        if cell.value == "x" and fcell.value < 1.02:
+                            fcell.font = red
+            cols = {}
+            for row in sheet.iter_rows(
+                min_row=1,
+                max_row=2,
+                min_col=first_col,
+                max_col=last_col,
+            ):
+                for cell in row:
+                    if isinstance(cell.value, str):
+                        cols[cell.value] = cell.col_idx
+
+            maxc = None
+            done = set()
+            for k, ci in cols.items():
+                if k is None or isinstance(k, int):
+                    continue
+                c = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"[ci - 1]
+                if k == "order":
+                    sheet.column_dimensions[c].width = 5
+                    for cell in sheet[c]:
+                        cell.alignment = right
+                    done.add(c)
+                    continue
+                if k == "METRIC":
+                    sheet.column_dimensions[c].width = 50
+                    for cell in sheet[c]:
+                        cell.alignment = alignment
+                    done.add(c)
+                    continue
+                if k in {"exporter", "opt_patterns"} or k.startswith("version"):
+                    sheet.column_dimensions[c].width = 15
+                    for cell in sheet[c]:
+                        cell.alignment = alignment
+                    done.add(c)
+                    continue
+                if k == "unit":
+                    sheet.column_dimensions[c].width = 7
+                    for cell in sheet[c]:
+                        cell.alignment = right
+                    maxc = c
+                    done.add(c)
+                    continue
+
+            for c in "ABCDEFGHIJKLMNOPQRSTUVWXYZ":
+                if c == maxc:
+                    break
+                if c in done:
+                    continue
+                sheet.column_dimensions[c].width = 20
+                for cell in sheet[c]:
+                    cell.alignment = right
+            continue
+
     for k, v in res.items():
         if k not in lasts:
             continue
@@ -262,7 +479,7 @@ def _apply_excel_style(
 
 
 def merge_benchmark_reports(
-    data: Union["pandas.DataFrame", List[str]],  # noqa: F821
+    data: Union["pandas.DataFrame", List[str], str],  # noqa: F821
     model=("suite", "model_name"),
     keys=(
         "exporter",
@@ -332,6 +549,9 @@ def merge_benchmark_reports(
     """
     import pandas
 
+    if isinstance(data, str):
+        data = [data]
+
     if isinstance(data, list):
         dfs = []
         for filename in data:
@@ -360,7 +580,27 @@ def merge_benchmark_reports(
         raise AssertionError(f"Unexpected type {type(data)} for data")
 
     if "STEP" in df.columns:
-        df = df[(df["STEP"].isna()) | (df["STEP"] != "export")]
+        # Experiment is run in two step. We remove the export rows
+        # if it was successful as the metrics are reported in the row with the speedup.
+        if any(df["STEP"].isna()):
+            vals = set(df["STEP"][~df["STEP"].isna()])
+            if vals == {"last"}:
+                if "ERR_export" in df.columns:
+                    df = df[(df["STEP"] == "last") | ~df["ERR_export"].isna()]
+                else:
+                    df = df[(df["STEP"] == "last")]
+            elif "ERR_export" in df.columns:
+                df = df[
+                    (df["STEP"].isna())
+                    | (df["STEP"] != "export")
+                    | ~df["ERR_export"].isna()
+                ]
+            else:
+                df = df[(df["STEP"].isna()) | (df["STEP"] != "export")]
+        elif "ERR_export" in df.columns:
+            df = df[(df["STEP"] != "export") | ~df["ERR_export"].isna()]
+        else:
+            df = df[df["STEP"] != "export"]
 
     if isinstance(model, str):
         model = [model]
@@ -409,6 +649,21 @@ def merge_benchmark_reports(
         main.append(dict(column=k, value=v))
     res["0main"] = pandas.DataFrame(main)
     new_keys = [k for k in keys if k not in unique]
+
+    # new_keys should not be empty.
+    if not new_keys:
+        for m in column_keys:
+            if m == "stat":
+                continue
+            if m in df.columns:
+                new_keys.append(m)
+                break
+    assert new_keys, f"new_keys is empty, column_keys={column_keys}"
+
+    # remove duplicated rows
+    full_index = [s for s in df.columns if s in set([*column_keys, *keys, *model])]
+    dupli = ~df.duplicated(full_index, keep="last")
+    df = df[dupli].copy()
 
     # formulas
     bucket_columns = []
@@ -674,6 +929,7 @@ def merge_benchmark_reports(
             elif index == {"stat", "index"}:
                 m = (
                     df.reset_index(drop=False)
+                    .sort_index(axis=1)
                     .drop("index", axis=1)
                     .set_index(["stat"])
                     .T
@@ -779,6 +1035,24 @@ def merge_benchmark_reports(
         res[prefix[:-1]] = sheet
         res = {k: v for k, v in res.items() if k not in set(merge)}
 
+    # try to use numerical value everywhere
+    for k, v in res.items():
+        for c in v.columns:
+            cc = v[c]
+            if cc.dtype == np.object_:
+                try:
+                    dd = cc.astype(float)
+                    v[c] = dd
+                except ValueError:
+                    types = [type(_) for _ in cc]
+                    if set(types) == {str}:
+                        continue
+                    co = Counter(types)
+                    assert str in co and co[str] >= len(types) // 4 + 1, (
+                        f"Unexpected values for k={k!r}, columns={c!r}, "
+                        f"types={set(types)}, values={v[c]}"
+                    )
+
     # add pages for the summary
     res["AGG"] = _create_aggregation_figures(
         res,
@@ -794,9 +1068,9 @@ def merge_benchmark_reports(
         },
         model=model,
     )
-    assert (
-        None not in res["AGG"].index.names
-    ), f"None in res['AGG'].index.names={res['AGG'].index.names}, prefix='AGG'"
+    assert None not in res["AGG"].index.names, (
+        f"None in res['AGG'].index.names={res['AGG'].index.names}, " f"prefix='AGG'"
+    )
 
     names = res["AGG"].index.names
     new_names = []
@@ -825,144 +1099,7 @@ def merge_benchmark_reports(
         for k, v in res.items()
     }
 
-    final_res["SUMMARY"] = _select_metrics(
-        res["AGG"],
-        select=[
-            dict(
-                cat="TIME_ITER",
-                stat="TIME_ITER",
-                agg="TOTAL",
-                new_name="number of models",
-                unit="N",
-            ),
-            dict(
-                cat="speedup",
-                agg="COUNT",
-                stat="increase",
-                new_name="number of running models",
-                unit="N",
-            ),
-            dict(
-                cat="time",
-                agg="COUNT%",
-                stat="export_success",
-                new_name="pass rate",
-                unit="%",
-            ),
-            dict(
-                cat="time",
-                agg="MEAN",
-                stat="export_success",
-                new_name="average export time",
-                unit="s",
-            ),
-            dict(
-                cat="speedup",
-                agg="GEO-MEAN",
-                stat="1speedup",
-                new_name="average speedup (geo)",
-                unit="s",
-            ),
-            dict(
-                cat="status",
-                agg="MEAN",
-                stat="err<1e-1",
-                new_name="discrepancies < 0.1",
-                unit="%",
-            ),
-            dict(
-                cat="status",
-                agg="MEAN",
-                stat="lat<=script+2%",
-                new_name="model equal or faster than torch.script",
-                unit="%",
-            ),
-            dict(
-                cat="status",
-                agg="MEAN",
-                stat="lat<=eager+2%",
-                new_name="model equal or faster than eager",
-                unit="%",
-            ),
-            dict(
-                cat="status",
-                agg="MEAN",
-                stat="err<1e-2",
-                new_name="discrepancies < 0.01",
-                unit="%",
-            ),
-            dict(
-                cat="TIME_ITER",
-                stat="TIME_ITER",
-                agg="MEAN",
-                new_name="average iteration time",
-                unit="s",
-            ),
-            dict(
-                cat="discrepancies",
-                stat="abs",
-                agg="MEAN",
-                new_name="average absolute discrepancies",
-                unit="f",
-            ),
-            dict(
-                cat="time",
-                agg="MEAN",
-                stat="latency_eager",
-                new_name="average latency eager",
-                unit="s",
-            ),
-            dict(
-                cat="time",
-                agg="MEAN",
-                stat="latency",
-                new_name="average latency ort",
-                unit="s",
-            ),
-            dict(
-                cat="memory",
-                agg="MEAN",
-                stat="peak_gpu_eager_warmup",
-                new_name="average GPU peak (eager warmup)",
-                unit="bytes",
-            ),
-            dict(
-                cat="memory",
-                agg="MEAN",
-                stat="peak_gpu_warmup",
-                new_name="average GPU peak (warmup)",
-                unit="bytes",
-            ),
-            dict(
-                cat="memory",
-                agg="MEAN",
-                stat="peak_cpu_pp",
-                new_name="average CPU peak",
-                unit="Mb",
-            ),
-            dict(
-                cat="memory",
-                agg="MEAN",
-                stat="peak_gpu_pp",
-                new_name="average GPU peak",
-                unit="Mb",
-            ),
-            dict(
-                cat="memory",
-                agg="MEAN",
-                stat="peak_gpu_export",
-                new_name="average GPU peak (export)",
-                unit="bytes",
-            ),
-            dict(
-                cat="speedup",
-                agg="GEO-MEAN",
-                stat="increase",
-                new_name="average speedup increase",
-                unit="%",
-            ),
-        ],
-    )
+    final_res["SUMMARY"] = _select_metrics(res["AGG"], select=SELECTED_FEATURES)
 
     if excel_output:
         with pandas.ExcelWriter(excel_output) as writer:
@@ -1115,15 +1252,20 @@ def _create_aggregation_figures(
         if k in skip:
             continue
         assert (
+            v.select_dtypes(include=np.number).shape[1] > 0
+        ), f"No numeric column for k={k!r}, dtypes=\n{v.dtypes}"
+        assert (
             None not in v.index.names
         ), f"None in v.index.names={v.index.names}, k={k!r}"
         assert (
             None not in v.columns.names
         ), f"None in v.columns.names={v.columns.names}, k={k!r}"
+
         if key not in v.index.names:
             v = v.copy()
             v[key] = "?"
             v = v.reset_index(drop=False).set_index([key, *v.index.names])
+
         assert (
             key in v.index.names
         ), f"Unable to find key={key} in {v.index.names} for k={k!r}"
@@ -1135,9 +1277,11 @@ def _create_aggregation_figures(
         v = v.select_dtypes(include=[np.number])
         # gv = v.apply(lambda x: np.log(np.maximum(x, 1e-10).values))
         v = v.reset_index(drop=False).set_index(model_not_key)
+
         assert key in v.columns, f"Unable to find column {key!r} in {v.columns}"
 
         v = v.sort_index(axis=1)
+
         assert (
             None not in v.index.names
         ), f"None in v.index.names={v.index.names}, k={k!r}"
@@ -1177,7 +1321,12 @@ def _create_aggregation_figures(
             ), f"None in df.columns.names={df.columns.names}, k={k!r}, name={name!r}"
             dfs.append(df)
 
+        if len(dfs) == 0:
+            continue
         df = pandas.concat(dfs, axis=0)
+        assert df.shape[0] > 0, f"Empty set for k={k!r}"
+        assert df.shape[1] > 0, f"Empty columns for k={k!r}"
+
         assert (
             None not in df.index.names
         ), f"None in df.index.names={df.index.names}, k={k!r}"
@@ -1187,16 +1336,17 @@ def _create_aggregation_figures(
         assert isinstance(
             df, pandas.DataFrame
         ), f"Unexpected type {type(df)} for k={k!r}"
+
         if "stat" in df.columns.names:
             df = df.stack("stat")
             if not isinstance(df, pandas.DataFrame):
                 assert (
                     "opt_patterns" not in df.index.names
                 ), f"Unexpected names for df.index.names={df.index.names} (k={k!r})"
-                df = df.to_frame(name="opt_patterns")
+                df = df.to_frame()
                 if df.columns.names == [None]:
                     df.columns = pandas.MultiIndex.from_arrays(
-                        [("k",)], names=["boolean"]
+                        [("_dummy_",)], names=["_dummy_"]
                     )
                     assert (
                         None not in df.columns.names
@@ -1277,7 +1427,6 @@ def _reverse_column_names_order(
 def _select_metrics(
     df: "pandas.DataFrame", select: List[Dict[str, str]]  # noqa: F821
 ) -> "pandas.DataFrame":  # noqa: F821
-
     rows = []
     names = list(df.index.names)
     set_names = set(names)
@@ -1290,9 +1439,9 @@ def _select_metrics(
 
     keep = []
     for i, row in enumerate(rows):
-        for i, (d, s) in enumerate(subset):
+        for j, (d, s) in enumerate(subset):
             if (s & row) == s:
-                keep.append((i, d["new_name"], d["unit"], d.get("order", i)))
+                keep.append((i, d["new_name"], d["unit"], d.get("order", j)))
                 break
 
     dfi = df.iloc[[k[0] for k in keep]].reset_index(drop=False).copy()

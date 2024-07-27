@@ -1,5 +1,6 @@
 import os
 import unittest
+import numpy as np
 from pandas.errors import PerformanceWarning
 from experimental_experiment.ext_test_case import ExtTestCase, ignore_warnings
 from experimental_experiment.torch_bench._bash_bench_benchmark_runner_agg import (
@@ -143,6 +144,35 @@ class TestBashBenchMergeStats(ExtTestCase):
         self.assertIn("memory", set(df))
         self.assertIn("op_onnx", set(df))
         self.assertIn("ERR", set(df))
+
+    @ignore_warnings((FutureWarning,))
+    def test_merge_stats_bug_speedup(self):
+        data = os.path.join(os.path.dirname(__file__), "data", "bug_speed_up.csv")
+        df = merge_benchmark_reports(
+            data, excel_output="test_merge_stats_bug_speedup.xlsx"
+        )
+        self.assertIsInstance(df, dict)
+        self.assertIn("status", set(df))
+        self.assertIn("memory", set(df))
+        self.assertIn("op_onnx", set(df))
+        self.assertIn("ERR", set(df))
+        self.assertIn("AGG", set(df))
+        self.assertIn("SUMMARY", set(df))
+        agg = df["AGG"].reset_index(drop=False)
+        sp = agg[(agg["cat"] == "speedup") & (agg["agg"] == "GEO-MEAN")]
+        values = sp["HuggingFace"].values
+        self.assertEqualArray(
+            np.array([0.952044, 0.000001, 1.020653]), values, atol=1e-5
+        )
+        summary = df["SUMMARY"]
+        self.assertNotIn("_dummy_", summary.columns)
+        values = summary.values
+        self.assertEqual(0.9520435772282563, values[3, 3])
+        self.assertEqual("x", values[3, 4])
+        metrics = set(summary["METRIC"])
+        self.assertIn("number of running models", metrics)
+        self.assertIn("pass rate", metrics)
+        self.assertIn("average export time", metrics)
 
 
 if __name__ == "__main__":
