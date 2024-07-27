@@ -861,7 +861,7 @@ class GraphBuilder:
             old_shape = self._known_shapes[name]
             if len(shape) == len(old_shape) and set_if_more_precise:
                 if not self.is_more_precise(shape=shape, base=old_shape):
-                    if old_shape == (0,):
+                    if old_shape == (0,) or shape == (0,):
                         if "warnings" not in self._debug_msg:
                             self._debug_msg["warnings"] = []
                         self._debug_msg["warnings"].append(

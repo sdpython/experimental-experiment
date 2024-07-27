@@ -1051,7 +1051,11 @@ def merge_benchmark_reports(
                     dd = cc.astype(float)
                     v[c] = dd
                 except ValueError:
-                    types = [type(_) for _ in cc]
+                    types = [
+                        type(_)
+                        for _ in cc
+                        if not isinstance(_, float) or not np.isnan(_)
+                    ]
                     if set(types) == {str}:
                         continue
                     co = Counter(types)
