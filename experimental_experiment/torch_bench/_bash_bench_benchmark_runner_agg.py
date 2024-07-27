@@ -1037,6 +1037,8 @@ def merge_benchmark_reports(
 
     # try to use numerical value everywhere
     for k, v in res.items():
+        if k in {"0main"}:
+            continue
         for c in v.columns:
             cc = v[c]
             if cc.dtype == np.object_:
