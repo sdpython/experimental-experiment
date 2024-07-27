@@ -1,4 +1,5 @@
 import glob
+import warnings
 from collections import Counter
 from typing import Optional, Dict, List, Set, Union
 import numpy as np
@@ -942,7 +943,11 @@ def merge_benchmark_reports(
 
         if transpose:
             m0 = m
-            m = m.T.stack(level=list(range(len(m.index.names)))).reset_index(drop=False)
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", category=FutureWarning)
+                m = m.T.stack(level=list(range(len(m.index.names)))).reset_index(
+                    drop=False
+                )
             cols = m.columns
             assert len(cols) >= 4, (
                 f"Unexpected number of columns in {cols}, "
@@ -1340,7 +1345,9 @@ def _create_aggregation_figures(
         ), f"Unexpected type {type(df)} for k={k!r}"
 
         if "stat" in df.columns.names:
-            df = df.stack("stat")
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", category=FutureWarning)
+                df = df.stack("stat")
             if not isinstance(df, pandas.DataFrame):
                 assert (
                     "opt_patterns" not in df.index.names
@@ -1404,7 +1411,9 @@ def _create_aggregation_figures(
     dfs = dfs.unstack(key)
     assert None not in dfs.index.names, f"None in dfs.index.names={dfs.index.names}"
     for n in names:
-        dfs = dfs.stack(n)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", category=FutureWarning)
+            dfs = dfs.stack(n)
         assert (
             None not in dfs.index.names
         ), f"None in dfs.index.names={dfs.index.names}, n={n!r}"

@@ -3090,8 +3090,19 @@ def aten__native_batch_norm(
     )
 
     if empty_mean_std:
+        assert g.has_shape(
+            x
+        ), f"Not implemented when shape for {x!r} is not known{g.get_debug_msg()}"
+        shape = g.get_shape(x)
+        assert (
+            len(shape) >= 2
+        ), f"Not implemented when shape of {x!r} is {shape}{g.get_debug_msg()}"
+        assert is_static_dimension(
+            shape[1]
+        ), f"Not implemented when shape of {x!r} is {shape}{g.get_debug_msg()}"
+        size = shape[1]
         running_mean_fp32 = g.op.ConstantOfShape(
-            np.array([0], dtype=np.int64), name=name, outputs=outputs[1:2]
+            np.array([size], dtype=np.int64), name=name, outputs=outputs[1:2]
         )
         invstd = g.op.Identity(running_mean_fp32, outputs=outputs[2:], name=name)
     else:
