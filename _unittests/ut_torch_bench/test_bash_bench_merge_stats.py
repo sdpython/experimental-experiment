@@ -2,7 +2,11 @@ import os
 import unittest
 import numpy as np
 from pandas.errors import PerformanceWarning
-from experimental_experiment.ext_test_case import ExtTestCase, ignore_warnings
+from experimental_experiment.ext_test_case import (
+    ExtTestCase,
+    ignore_warnings,
+    skipif_ci_windows,
+)
 from experimental_experiment.torch_bench._bash_bench_benchmark_runner_agg import (
     merge_benchmark_reports,
 )
@@ -132,6 +136,7 @@ class TestBashBenchMergeStats(ExtTestCase):
         self.assertIn("op_torch", set(df))
         self.assertIn("ERR", set(df))
 
+    @skipif_ci_windows("pandas and *.csv do not work well on Windows")
     @ignore_warnings((FutureWarning,))
     def test_merge_stats_many_days(self):
         ddata = os.path.join(os.path.dirname(__file__), "data", "rawdata")
