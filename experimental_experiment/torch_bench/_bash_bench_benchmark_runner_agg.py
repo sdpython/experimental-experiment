@@ -747,6 +747,7 @@ def merge_benchmark_reports(
                 report_on.extend(
                     [
                         "status_convert_ort",
+                        "status_err<1e-1",
                         "status_err<1e-2",
                         "status_err<1e-3",
                         "status_err<1e-4",
