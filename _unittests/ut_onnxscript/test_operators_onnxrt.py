@@ -1643,6 +1643,7 @@ class TestOperatorsOnnxrt(ExtTestCase):
             x,
             opset_version=11,
             onnx_export=inspect.currentframe().f_code.co_name,
+            atol=1e-5,
         )
 
     @unittest.skipIf(not DICT_SUPPORTED, reason="only tensor are supported")

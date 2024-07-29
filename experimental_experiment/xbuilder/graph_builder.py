@@ -861,10 +861,18 @@ class GraphBuilder:
             old_shape = self._known_shapes[name]
             if len(shape) == len(old_shape) and set_if_more_precise:
                 if not self.is_more_precise(shape=shape, base=old_shape):
-                    raise RuntimeError(
-                        f"Name {name!r} already exists and it is not compatible "
-                        f"{old_shape} != {shape}{self.get_debug_msg()}"
-                    )
+                    if old_shape == (0,) or shape == (0,):
+                        if "warnings" not in self._debug_msg:
+                            self._debug_msg["warnings"] = []
+                        self._debug_msg["warnings"].append(
+                            f"Name {name!r} already exists and it is not compatible "
+                            f"existing {old_shape} != {shape} (new)"
+                        )
+                    else:
+                        raise RuntimeError(
+                            f"Name {name!r} already exists and it is not compatible "
+                            f"existing {old_shape} != {shape} (new) {self.get_debug_msg()}"
+                        )
             elif shape != old_shape:
                 if exc:
                     raise RuntimeError(
@@ -3395,7 +3403,14 @@ class GraphBuilder:
                 output = ref.run(None, feeds)
             except ValueError as e:
                 sf = ", ".join(f"{k}:{v.dtype}:{v.shape}" for k, v in feeds.items())
-                raise RuntimeError(f"Issue with v={v}, feeds={sf}") from e
+                if "warnings" not in self._debug_msg:
+                    self._debug_msg["warnings"] = []
+                sv = str(v).replace("\n", " ")
+                self._debug_msg["warnings"].append(
+                    f"Issue with v={sv}, feeds={sf}, e={e}"
+                )
+                self.time_evaluation_constants_ += time.perf_counter() - begin
+                return None, None
             self.time_evaluation_constants_ += time.perf_counter() - begin
         new_outputs = []
         for name, val in zip(v.output, output):

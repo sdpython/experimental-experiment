@@ -1,5 +1,174 @@
-from typing import Optional, Dict, List, Sequence, Union
+import glob
+import warnings
+from collections import Counter
+from typing import Optional, Dict, List, Set, Union
 import numpy as np
+
+SELECTED_FEATURES = [
+    dict(
+        cat="TIME_ITER",
+        stat="TIME_ITER",
+        agg="TOTAL",
+        new_name="number of models",
+        unit="N",
+    ),
+    dict(
+        cat="speedup",
+        agg="COUNT",
+        stat="increase",
+        new_name="number of running models",
+        unit="N",
+    ),
+    dict(
+        cat="time", agg="COUNT%", stat="export_success", new_name="pass rate", unit="%"
+    ),
+    dict(
+        cat="time",
+        agg="MEAN",
+        stat="export_success",
+        new_name="average export time",
+        unit="s",
+    ),
+    dict(
+        cat="speedup",
+        agg="GEO-MEAN",
+        stat="1speedup",
+        new_name="average speedup (geo)",
+        unit="x",
+    ),
+    dict(
+        cat="status",
+        agg="MEAN",
+        stat="err<1e-1",
+        new_name="discrepancies < 0.1",
+        unit="%",
+    ),
+    dict(
+        cat="status",
+        agg="MEAN",
+        stat="lat<=script+2%",
+        new_name="model equal or faster than torch.script",
+        unit="%",
+    ),
+    dict(
+        cat="status",
+        agg="MEAN",
+        stat="lat<=eager+2%",
+        new_name="model equal or faster than eager",
+        unit="%",
+    ),
+    dict(
+        cat="status",
+        agg="MEAN",
+        stat="err<1e-2",
+        new_name="discrepancies < 0.01",
+        unit="%",
+    ),
+    dict(
+        cat="TIME_ITER",
+        stat="TIME_ITER",
+        agg="MEAN",
+        new_name="average iteration time",
+        unit="s",
+    ),
+    dict(
+        cat="discrepancies",
+        stat="abs",
+        agg="MEAN",
+        new_name="average absolute discrepancies",
+        unit="f",
+    ),
+    dict(
+        cat="time",
+        agg="MEAN",
+        stat="latency_eager",
+        new_name="average latency eager",
+        unit="s",
+    ),
+    dict(
+        cat="time", agg="MEAN", stat="latency", new_name="average latency ort", unit="s"
+    ),
+    dict(
+        cat="memory",
+        agg="MEAN",
+        stat="peak_gpu_eager_warmup",
+        new_name="average GPU peak (eager warmup)",
+        unit="bytes",
+    ),
+    dict(
+        cat="memory",
+        agg="MEAN",
+        stat="peak_gpu_warmup",
+        new_name="average GPU peak (warmup)",
+        unit="bytes",
+    ),
+    dict(
+        cat="memory",
+        agg="MEAN",
+        stat="peak_cpu_pp",
+        new_name="average CPU peak",
+        unit="Mb",
+    ),
+    dict(
+        cat="memory",
+        agg="MEAN",
+        stat="peak_gpu_pp",
+        new_name="average GPU peak",
+        unit="Mb",
+    ),
+    dict(
+        cat="memory",
+        agg="MEAN",
+        stat="peak_gpu_export",
+        new_name="average GPU peak (export)",
+        unit="bytes",
+    ),
+    dict(
+        cat="speedup",
+        agg="GEO-MEAN",
+        stat="increase",
+        new_name="average speedup increase",
+        unit="%",
+    ),
+]
+
+
+def _key(v):
+    if isinstance(v, (int, float)):
+        return v, ""
+    if isinstance(v, str):
+        return 1e10, v
+    if isinstance(v, tuple):
+        return tuple([1e10, *v])
+    raise AssertionError(f"Unexpected type for v={v!r}, type is {type(v)}")
+
+
+def sort_index_key(index):
+    import pandas
+
+    return pandas.Index(_key(v) for v in index)
+
+
+def _isnan(x):
+    if x is None:
+        return True
+    if isinstance(x, str):
+        return x == ""
+    try:
+        return np.isnan(x)
+    except TypeError:
+        return False
+
+
+def _isinf(x):
+    if x is None:
+        return True
+    if isinstance(x, str):
+        return x == "inf"
+    try:
+        return np.isinf(x)
+    except TypeError:
+        return False
 
 
 def _apply_excel_style(
@@ -8,36 +177,19 @@ def _apply_excel_style(
 ):
     from openpyxl.styles import Font, Alignment, numbers, PatternFill
 
-    def _isnan(x):
-        if x is None:
-            return True
-        if isinstance(x, str):
-            return x == ""
-        try:
-            return np.isnan(x)
-        except TypeError:
-            return False
-
-    def _isinf(x):
-        if x is None:
-            return True
-        if isinstance(x, str):
-            return x == "inf"
-        try:
-            return np.isinf(x)
-        except TypeError:
-            return False
-
     bold_font = Font(bold=True)
     alignment = Alignment(horizontal="left")
     center = Alignment(horizontal="center")
+    right = Alignment(horizontal="right")
     red = Font(color="FF0000")
-    gray = PatternFill(start_color="AAAAAA", end_color="AAAAAA", fill_type="solid")
     yellow = PatternFill(start_color="FFFF00", end_color="FFFF00", fill_type="solid")
     redf = PatternFill(start_color="FF0000", end_color="FF0000", fill_type="solid")
     lasts = {}
     for k, v in res.items():
         sheet = writer.sheets[k]
+        if 0 in v.shape:
+            continue
+
         if k == "0main":
             for c in "AB":
                 sheet.column_dimensions[c].width = 40
@@ -46,12 +198,23 @@ def _apply_excel_style(
                 cell.font = bold_font
                 cell.alignment = alignment
             continue
-        if k == "0raw":
+
+        if k in {"0raw", "AGG"}:
             continue
-        n_cols = 1 if isinstance(v.index[0], str) else len(v.index[0])
-        n_rows = 1 if isinstance(v.columns[0], str) else len(v.columns[0])
+
+        n_cols = (
+            1
+            if isinstance(v.index[0], (str, int, np.int64, np.int32))
+            else len(v.index[0])
+        )
+        n_rows = (
+            1
+            if isinstance(v.columns[0], (str, int, np.int64, np.int32))
+            else len(v.columns[0])
+        )
+
         for i in range(n_cols):
-            sheet.column_dimensions["ABCDEFGHIJ"[i]].width = 40
+            sheet.column_dimensions["ABCDEFGHIJKLMNOPQRSTUVWXYZ"[i]].width = 40
 
         first_row = None
         first_col = None
@@ -127,14 +290,16 @@ def _apply_excel_style(
                 qb = None
                 fmt = numbers.FORMAT_NUMBER_00
             elif k == "speedup":
+                debug_values = []
                 for row in sheet.iter_rows(
                     min_row=0,
-                    max_row=5,
+                    max_row=30,
                     min_col=first_col,
                     max_col=last_col,
                 ):
                     found = None
                     for cell in row:
+                        debug_values.append(cell.value)
                         if cell.value == "increase":
                             c1 = cell.col_idx if c1 is None else min(cell.col_idx, c1)
                             c2 = cell.col_idx if c2 is None else max(cell.col_idx, c2)
@@ -151,7 +316,7 @@ def _apply_excel_style(
 
                 assert (
                     c1 is not None and c2 is not None and c1 <= c2
-                ), f"Unexpected value for c1={c1}, c2={c2}"
+                ), f"Unexpected value for c1={c1}, c2={c2}\ndebug_values={debug_values}"
                 # ratio
                 qb = 0.98
                 qt = None
@@ -232,52 +397,92 @@ def _apply_excel_style(
                         continue
                     cell.number_format = "0.000000"
             continue
+
+        if k == "SUMMARY":
+            fmt = {
+                "x": "0.000",
+                "%": "0.000%",
+                "byes": "0 000 000 000",
+                "Mb": "0.000",
+                "N": "0",
+                "f": "0.000",
+            }
+            for row in sheet.iter_rows(
+                min_row=first_row,
+                max_row=last_row,
+                min_col=first_col,
+                max_col=last_col,
+            ):
+                for cell in row:
+                    if cell.value in fmt:
+                        fcell = row[cell.col_idx - 2]
+                        fcell.number_format = fmt[cell.value]
+                        if cell.value == "x" and fcell.value < 1.02:
+                            fcell.font = red
+            cols = {}
+            for row in sheet.iter_rows(
+                min_row=1,
+                max_row=2,
+                min_col=first_col,
+                max_col=last_col,
+            ):
+                for cell in row:
+                    if isinstance(cell.value, str):
+                        cols[cell.value] = cell.col_idx
+
+            maxc = None
+            done = set()
+            for k, ci in cols.items():
+                if k is None or isinstance(k, int):
+                    continue
+                c = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"[ci - 1]
+                if k == "order":
+                    sheet.column_dimensions[c].width = 5
+                    for cell in sheet[c]:
+                        cell.alignment = right
+                    done.add(c)
+                    continue
+                if k == "METRIC":
+                    sheet.column_dimensions[c].width = 50
+                    for cell in sheet[c]:
+                        cell.alignment = alignment
+                    done.add(c)
+                    continue
+                if k in {"exporter", "opt_patterns"} or k.startswith("version"):
+                    sheet.column_dimensions[c].width = 15
+                    for cell in sheet[c]:
+                        cell.alignment = alignment
+                    done.add(c)
+                    continue
+                if k == "unit":
+                    sheet.column_dimensions[c].width = 7
+                    for cell in sheet[c]:
+                        cell.alignment = right
+                    maxc = c
+                    done.add(c)
+                    continue
+
+            for c in "ABCDEFGHIJKLMNOPQRSTUVWXYZ":
+                if c == maxc:
+                    break
+                if c in done:
+                    continue
+                sheet.column_dimensions[c].width = 20
+                for cell in sheet[c]:
+                    cell.alignment = right
+            continue
+
     for k, v in res.items():
         if k not in lasts:
             continue
         sheet = writer.sheets[k]
         last_row, last_col = lasts[k]
 
-        if (
-            "~MEAN" in v.index
-            or "~GMEAN" in v.index
-            or "~COUNT" in v.index
-            or "~TOTAL" in v.index
-            or "~SUM" in v.index
-            or "~MED" in v.index
-        ):
-            for row in sheet.iter_rows(
-                min_row=first_row,
-                max_row=last_row,
-                min_col=1,
-                max_col=last_col,
-            ):
-                for cell in row:
-                    if sheet.cell(row=cell.row, column=1).value in {
-                        "~MEAN",
-                        "~GMEAN",
-                        "~SUM",
-                        "~MED",
-                    }:
-                        cell.fill = gray
-                        cell.font = bold_font
-                        if "." not in cell.number_format:
-                            cell.number_format = "0.0000"
-                    elif sheet.cell(row=cell.row, column=1).value in {
-                        "~COUNT",
-                        "~TOTAL",
-                    }:
-                        cell.fill = gray
-                        cell.font = bold_font
-                        if "." not in cell.number_format:
-                            cell.number_format = "0"
-
 
 def merge_benchmark_reports(
-    data: Union["pandas.DataFrame", List[str]],  # noqa: F821
-    model="model_name",
+    data: Union["pandas.DataFrame", List[str], str],  # noqa: F821
+    model=("suite", "model_name"),
     keys=(
-        "suite",
         "exporter",
         "opt_patterns",
         "device",
@@ -341,80 +546,27 @@ def merge_benchmark_reports(
         dynamic
         executable
         exporter
-        filename
-        flag_fake_tensor
-        flag_no_grad
-        flag_training
-        has_cuda
-        input_size
-        machine
-        mema_gpu_0_before_loading
-        mema_gpu_1_after_loading
-        mema_gpu_2_after_warmup
-        mema_gpu_3_empty_cache
-        mema_gpu_4_after_repeat
-        mema_gpu_5_after_export
-        mema_gpu_6_after_gcollect
-        mema_gpu_7_after_session
-        mema_gpu_8_after_export_warmup
-        mema_gpu_9_after_export_repeat
-        memory_begin,
-        memory_end,
-        memory_gpu0_begin,
-        memory_gpu0_end,
-        memory_gpu0_mean,
-        memory_gpu0_n,
-        memory_gpu0_peak,
-        memory_mean,
-        memory_n,
-        memory_peak,
-        model,
-        model_name,
-        onnx_filesize
-        onnx_input_names,
-        onnx_model
-        onnx_n_inputs,
-        onnx_n_outputs,
-        onnx_optimized,
-        onnx_output_names,
-        opt_patterns,
-        output_data,
-        output_size,
-        params_dtype,
-        params_size,
-        process,
-        processor,
-        providers,
-        quiet,
-        repeat,
-        speedup,
-        speedup_increase,
-        target_opset,
-        time_export,
-        time_load,
-        time_latency,
-        time_latency_eager,
-        time_session,
-        time_total,
-        time_warmup,
-        time_warmup_eager,
-        verbose,
-        version,
-        version_onnxruntime,
-        version_torch,
-        version_transformers,
-        warmup,
-        ERROR,
-        OUTPUT,
-        CMD
+        ...
     """
     import pandas
+
+    if isinstance(data, str):
+        data = [data]
 
     if isinstance(data, list):
         dfs = []
         for filename in data:
             if isinstance(filename, str):
-                df = pandas.read_csv(filename)
+                try:
+                    df = pandas.read_csv(filename)
+                except FileNotFoundError as e:
+                    found = glob.glob(filename)
+                    if not found:
+                        raise AssertionError(f"Unable to find {filename!r}") from e
+                    for f in found:
+                        df = pandas.read_csv(f)
+                        dfs.append(df)
+                    continue
             elif isinstance(filename, pandas.DataFrame):
                 df = filename
             else:
@@ -429,15 +581,42 @@ def merge_benchmark_reports(
         raise AssertionError(f"Unexpected type {type(data)} for data")
 
     if "STEP" in df.columns:
-        df = df[(df["STEP"].isna()) | (df["STEP"] != "export")]
+        # Experiment is run in two step. We remove the export rows
+        # if it was successful as the metrics are reported in the row with the speedup.
+        if any(df["STEP"].isna()):
+            vals = set(df["STEP"][~df["STEP"].isna()])
+            if vals == {"last"}:
+                if "ERR_export" in df.columns:
+                    df = df[(df["STEP"] == "last") | ~df["ERR_export"].isna()]
+                else:
+                    df = df[(df["STEP"] == "last")]
+            elif "ERR_export" in df.columns:
+                df = df[
+                    (df["STEP"].isna())
+                    | (df["STEP"] != "export")
+                    | ~df["ERR_export"].isna()
+                ]
+            else:
+                df = df[(df["STEP"].isna()) | (df["STEP"] != "export")]
+        elif "ERR_export" in df.columns:
+            df = df[(df["STEP"] != "export") | ~df["ERR_export"].isna()]
+        else:
+            df = df[df["STEP"] != "export"]
 
-    if model not in df.columns:
-        if exc:
-            raise AssertionError(
-                f"{model!r} cannot be found in {df.columns}\n{df.head()}"
-            )
-        return None
-    df = df[~df[model].isna()].copy()
+    if isinstance(model, str):
+        model = [model]
+    elif isinstance(model, tuple):
+        model = list(model)
+    assert isinstance(model, list), f"Unexpected type {type(model)} for model={model}"
+
+    # checks all columns defining a model are available
+    for m in model:
+        if m not in df.columns:
+            df = df.copy()
+            df[m] = ""
+
+    # let's remove the empty line
+    df = df[~df[model].isna().max(axis=1)].copy()
 
     # replace nan values
     set_columns = set(df.columns)
@@ -471,6 +650,21 @@ def merge_benchmark_reports(
         main.append(dict(column=k, value=v))
     res["0main"] = pandas.DataFrame(main)
     new_keys = [k for k in keys if k not in unique]
+
+    # new_keys should not be empty.
+    if not new_keys:
+        for m in column_keys:
+            if m == "stat":
+                continue
+            if m in df.columns:
+                new_keys.append(m)
+                break
+    assert new_keys, f"new_keys is empty, column_keys={column_keys}"
+
+    # remove duplicated rows
+    full_index = [s for s in df.columns if s in set([*column_keys, *keys, *model])]
+    dupli = ~df.duplicated(full_index, keep="last")
+    df = df[dupli].copy()
 
     # formulas
     bucket_columns = []
@@ -534,6 +728,9 @@ def merge_benchmark_reports(
                 report_on.append("status_convert")
             if "discrepancies_abs" in set_columns:
                 df["status_convert_ort"] = (~df["discrepancies_abs"].isna()).astype(int)
+                df["status_err<1e-1"] = (
+                    ~df["discrepancies_abs"].isna() & (df["discrepancies_abs"] < 1e-1)
+                ).astype(int)
                 df["status_err<1e-2"] = (
                     ~df["discrepancies_abs"].isna() & (df["discrepancies_abs"] < 1e-2)
                 ).astype(int)
@@ -566,7 +763,7 @@ def merge_benchmark_reports(
                 and len(set(df.exporter)) > 1
             ):
                 # Do the same with the exporter as a baseline.
-                keep = [model, *new_keys, "speedup"]
+                keep = [*model, *new_keys, "speedup"]
                 gr = df[df.exporter == "script"][keep].copy()
                 gr = gr[~gr["speedup"].isna()]
                 gr["speedup_script"] = gr["speedup"]
@@ -606,9 +803,9 @@ def merge_benchmark_reports(
 
     # values
     for c in report_on:
-        keep = [model, *new_keys, c]
+        keep = [*model, *new_keys, c]
         dfc = df[keep]
-        dfc = dfc[~dfc[model].isna()]
+        dfc = dfc[~dfc[model].isna().min(axis=1)]
         if new_keys:
             pivot = dfc.pivot(index=model, columns=new_keys, values=c)
         else:
@@ -617,12 +814,9 @@ def merge_benchmark_reports(
 
     # buckets
     if bucket_columns:
-        table = df[[*new_keys, model, *bucket_columns, "speedup_increase"]].copy()
-        pcolumns = [c for c in ["exporter", "opt_patterns"] if c in new_keys]
-        index_col = [
-            *[c for c in new_keys if c not in ("exporter", "opt_patterns")],
-            model,
-        ]
+        table = df[[*new_keys, *model, *bucket_columns, "speedup_increase"]].copy()
+        pcolumns = [c for c in new_keys if c not in model]
+        index_col = model
         pivot = table[~table[index_col[0]].isna()].pivot(
             index=index_col, columns=pcolumns, values=bucket_columns
         )
@@ -662,9 +856,6 @@ def merge_benchmark_reports(
             tpiv1 = (
                 tpiv1.set_index([*pcolumns, "level_0"]).sort_index(key=_order).T.copy()
             )
-            summ = tpiv1.sum(axis=0)
-            mean = tpiv1.sum(axis=0)
-            tpiv1.loc["~COUNT"] = summ.astype(int)
             res["bucket"] = tpiv1.fillna(0).astype(int)
 
             if tpiv2.shape[0] > 0:
@@ -674,9 +865,6 @@ def merge_benchmark_reports(
                     .sort_index(key=_order)
                     .T.copy()
                 )
-                summ = tpiv2.sum(axis=0)
-                mean = tpiv2.mean(axis=0)
-                tpiv2.loc["~COUNT"] = summ.astype(int)
                 res["bucket_script"] = tpiv2.fillna(0).astype(int)
 
     # let's remove empty variables
@@ -688,63 +876,9 @@ def merge_benchmark_reports(
         if drop:
             v.drop(drop, axis=1, inplace=True)
     res = {k: v for k, v in res.items() if v.shape[1] > 0}
-
-    # add summary at the end
-    mean_med = [
-        c
-        for c in res
-        if c.startswith("time_")
-        or c.startswith("TIME_")
-        or c.startswith("onnx_")
-        or c.startswith("discrepancies_")
-        or c.startswith("status_")
-        or c.startswith("mempeak_")
-        or c.startswith("memory_")
-        or c.startswith("speedup_increase")
-    ]
-    for c in mean_med:
-        num = all(
-            [
-                n
-                in {
-                    np.float32,
-                    np.float64,
-                    np.dtype("float64"),
-                    np.dtype("float32"),
-                    np.int32,
-                    np.int64,
-                    np.dtype("int64"),
-                    np.dtype("int32"),
-                }
-                for n in set(res[c].dtypes)
-            ]
-        )
-        if c in res:
-            if num:
-                mean = res[c].mean(axis=0).copy()
-                med = res[c].median(axis=0)
-                summ = res[c].sum(axis=0)
-                count = (
-                    res[c].sum(axis=0)
-                    if c.startswith("status_")
-                    else (~res[c].isna()).astype(int).sum(axis=0)
-                )
-                res[c].loc["~TOTAL"] = res[c].shape[0]
-                res[c].loc["~COUNT"] = count
-                res[c].loc["~SUM"] = summ
-                res[c].loc["~MEAN"] = mean
-                res[c].loc["~MED"] = med
-    for c in ["speedup", "speedup_med"]:
-        if c in res:
-            mean = np.exp(np.log(res[c]).mean(axis=0))
-            med = res[c].median(axis=0)
-            summ = res[c].sum(axis=0)
-            count = (~res[c].isna()).astype(int).sum(axis=0)
-            res[c].loc["~TOTAL"] = res[c].shape[0]
-            res[c].loc["~COUNT"] = count
-            # res[c].loc["~SUM"] = summ
-            res[c].loc["~GMEAN"] = mean
-            res[c].loc["~MED"] = med
+    if "TIME_ITER" in res:
+        res["time_ITER"] = res["TIME_ITER"]
+        del res["TIME_ITER"]
 
     # final fusion
 
@@ -752,18 +886,33 @@ def merge_benchmark_reports(
         m = None
         for name in merge:
             df = res[name].T
-            cols = set(df.columns)
-            df = df.reset_index(drop=False).copy()
-            index_cols = set(df.columns) - cols
+            index_cols = df.index.names
+            if index_cols == [None]:
+                index_cols = ["index"]
             df["stat"] = name[len(prefix) :]
-            df = df.set_index([*list(index_cols), "stat"]).T
+            df = df.reset_index(drop=False).set_index([*list(index_cols), "stat"])
             # Let's remove duplicated experiment, the last one is kept.
+            df = df.T
             df = df[~df.index.duplicated(keep="last")].copy()
             if m is None:
                 m = df
                 continue
             m0 = m
-            m = pandas.merge(m, df, how="outer", left_index=True, right_index=True)
+            try:
+                m = pandas.merge(
+                    m,
+                    df,
+                    how="outer",
+                    left_index=True,
+                    right_index=True,
+                    validate="1:1",
+                )
+            except ValueError as e:
+                raise AssertionError(
+                    f"Unable to join for name={name}, df.index={df.index.names}, "
+                    f"m.index={m.index.names} e={e}\n----\n+ m0.index\n{m0.index[:3]}"
+                    f"\n---\n+ df.index\n{df.index[:3]}"
+                ) from e
             assert m.shape[0] <= df.shape[0] + m0.shape[0], (
                 f"Something is going wrong for prefix {prefix!r} "
                 f"(probably a same experiment reported twice), "
@@ -775,13 +924,17 @@ def merge_benchmark_reports(
         # We need to change the columns index order.
         if reverse:
             df = m.T
-            setc = set(df.columns)
-            df = df.reset_index(drop=False)
-            index = set(df.columns) - setc
+            index = set(df.index.names)
             if index == {"stat", "exporter"}:
-                m = df.set_index(["stat", "exporter"]).T
+                m = df.reset_index(drop=False).set_index(["stat", "exporter"]).T
             elif index == {"stat", "index"}:
-                m = df.drop("index", axis=1).set_index(["stat"]).T
+                m = (
+                    df.reset_index(drop=False)
+                    .sort_index(axis=1)
+                    .drop("index", axis=1)
+                    .set_index(["stat"])
+                    .T
+                )
         else:
             m = m.T.sort_index()
             m = m.T
@@ -789,25 +942,52 @@ def merge_benchmark_reports(
                 m.columns = m.columns.droplevel(level=0)
 
         if transpose:
-            m = m.T.stack().reset_index(drop=False)
+            m0 = m
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", category=FutureWarning)
+                m = m.T.stack(level=list(range(len(m.index.names)))).reset_index(
+                    drop=False
+                )
             cols = m.columns
-            assert len(cols) >= 3, f"Unexpected number of columns in {cols}"
-            exporter_column = [c for c in cols if c in ("exporter", "opt_patterns")]
-            assert "stat" in cols and model in cols, (
-                f"Unexpected columns {cols}, expecting 'stat', "
-                f"{exporter_column!r}, {model!r}"
+            assert len(cols) >= 4, (
+                f"Unexpected number of columns in {cols}, "
+                f"prefix={prefix!r}, m.columns={m.columns}, "
+                f"m0.index.names={m0.index.names}, "
+                f"m0.columns.names={m0.columns.names}\n---\n{m0}"
             )
-            last = [c for c in cols if c not in {"stat", *exporter_column, model}]
+            exporter_column = [c for c in cols if c in ("exporter", "opt_patterns")]
+            assert "stat" in cols, (
+                f"Unexpected columns {cols}, expecting 'stat', "
+                f"{exporter_column!r}, {model!r}, reverse={reverse}, "
+                f"transpose={transpose}, m0.index.names={m0.index.names}, "
+                f"m0.columns.names={m0.columns.names}\n---"
+                f"\n{m0.head()}\n---\n{m.head()}"
+            )
+            last = [c for c in cols if c not in {"stat", *exporter_column, *model}]
+            assert last, (
+                f"last cannot be empty, exporter_column={exporter_column}, "
+                f"model={model}, cols={cols}\n----\n{m0.head()}"
+            )
             added_columns = [c for c in last if c in new_keys]
             last = [c for c in last if c not in new_keys]
             if len(last) == 2 and last[0] == "index":
                 last = last[1:]
-            assert (
-                len(last) == 1
-            ), f"Unexpected columns in {cols}, added={added_columns}, last={last}"
+            assert len(last) == 1, (
+                f"Unexpected columns in {cols}, added={added_columns}, "
+                f"last={last}, new_keys={new_keys}, exporter_column={exporter_column}, "
+                f"prefix={prefix!r}"
+                f"\nm0.index.names={m0.index.names}"
+                f"\nm0.columns.names={m0.columns.names}"
+                f"\nm0.columns[0]={m0.columns[0]}"
+                f"\nm0.columns={m0.columns}\n----"
+                f"\nm.index.names={m.index.names}"
+                f"\nm.columns.names={m.columns.names}"
+                f"\nm.columns[0]={m.columns[0]}"
+                f"\nm.columns={m.columns}\n----"
+            )
             m = m.pivot(
                 index="stat",
-                columns=[model, *exporter_column, *added_columns],
+                columns=[*model, *exporter_column, *added_columns],
                 values=last[0],
             )
             m = m.T.sort_index().T
@@ -816,6 +996,17 @@ def merge_benchmark_reports(
     if "speedup" in res:
         res["speedup_1speedup"] = res["speedup"]
         del res["speedup"]
+
+    # verification
+
+    set_model = set(model)
+    for c, v in res.items():
+        assert (
+            c in {"0raw", "0main"} or set_model & set(v.index.names) == set_model
+        ), f"There should not be any multiindex but c={c!r}, names={v.index.names}"
+
+    # merging
+
     for prefix in [
         "status_",
         "discrepancies_",
@@ -840,42 +1031,90 @@ def merge_benchmark_reports(
             reverse=prefix != "status_",
             transpose=prefix.startswith("op_"),
         )
+        assert (
+            None not in sheet.index.names
+        ), f"None in sheet.index.names={sheet.index.names}, prefix={prefix!r}"
+        assert (
+            None not in sheet.columns.names
+        ), f"None in sheet.columns.names={sheet.columns.names}, prefix={prefix!r}"
         res[prefix[:-1]] = sheet
         res = {k: v for k, v in res.items() if k not in set(merge)}
 
-    for c in res:
-        if c.startswith("op_"):
-            summ = res[c].sum(axis=0)
-            res[c].loc["~SUM"] = summ
+    # try to use numerical value everywhere
+    for k, v in res.items():
+        if k in {"0main"}:
+            continue
+        for c in v.columns:
+            cc = v[c]
+            if cc.dtype == np.object_:
+                try:
+                    dd = cc.astype(float)
+                    v[c] = dd
+                except ValueError:
+                    types = [
+                        type(_)
+                        for _ in cc
+                        if not isinstance(_, float) or not np.isnan(_)
+                    ]
+                    if set(types) == {str}:
+                        continue
+                    co = Counter(types)
+                    assert str in co and co[str] >= len(types) // 4 + 1, (
+                        f"Unexpected values for k={k!r}, columns={c!r}, "
+                        f"types={set(types)}, values={v[c]}"
+                    )
 
-    reorder = {
-        "ERR",
-        "TIME_ITER",
-        "discrepancies",
-        "memory",
-        "mempeak",
-        "onnx",
-        "speedup",
-        "speedup_med",
-        "speedup_increase",
-        "status",
-        "time",
-    }
+    # add pages for the summary
+    res["AGG"] = _create_aggregation_figures(
+        res,
+        skip={
+            "onnx",
+            "ERR",
+            "0raw",
+            "0main",
+            "op_onnx",
+            "op_torch",
+            "bucket",
+            "bucket_script",
+        },
+        model=model,
+    )
+    assert None not in res["AGG"].index.names, (
+        f"None in res['AGG'].index.names={res['AGG'].index.names}, " f"prefix='AGG'"
+    )
+
+    names = res["AGG"].index.names
+    new_names = []
+    for c in ["cat", "stat"]:
+        if c in names:
+            new_names.append(c)
+    last_names = []
+    for c in column_keys:
+        if c == "stat" or c not in names:
+            continue
+        last_names.append(c)
+    if "agg" in names:
+        last_names.append("agg")
+    for c in names:
+        if c not in new_names and c not in last_names:
+            new_names.append(c)
+
+    res["AGG"] = _reorder_index_level(res["AGG"], new_names + last_names, prefix="AGG")
+
     final_res = {
-        k: _reorder_indices(
-            v,
-            row_keys=[k for k in keys if k not in column_keys],
-            column_keys=column_keys,
-            name=k,
+        k: (
+            v
+            if k in {"0raw", "0main", "AGG", "op_onnx", "op_torch"}
+            else _reorder_columns_level(v, column_keys, prefix=k)
         )
         for k, v in res.items()
-        if k in reorder
     }
-    final_res.update({k: v for k, v in res.items() if k not in reorder})
+
+    final_res["SUMMARY"] = _select_metrics(res["AGG"], select=SELECTED_FEATURES)
 
     if excel_output:
         with pandas.ExcelWriter(excel_output) as writer:
-            no_index = {"0raw", "0main"}
+            no_index = {"0raw", "0main", "SUMMARY"}
             for k, v in sorted(final_res.items()):
                 ev = _reverse_column_names_order(v, name=k)
                 frow = (
@@ -894,40 +1133,299 @@ def merge_benchmark_reports(
     return final_res
 
 
-def _reorder_indices(
+def _geo_mean(serie):
+    return np.exp(np.log(np.maximum(serie, 1e-10)).mean())
+
+
+def _reorder_columns_level(
     df: "pandas.DataFrame",  # noqa: F821
-    row_keys: Sequence[str],
-    column_keys: Sequence[str],
-    name: Optional[str] = None,
+    first_level: List[str],
+    prefix: Optional[str] = None,
 ) -> "pandas.DataFrame":  # noqa: F821
-    col_names = (
-        df.columns.names if isinstance(df.columns.names, list) else [df.columns.names]
+    assert None not in df.index.names, f"None in df.index.names={df.index.names}"
+    assert None not in df.columns.names, f"None in df.index.names={df.columns.names}"
+    assert set(df.columns.names) & set(first_level), (
+        f"Nothing to sort, prefix={prefix!r} "
+        f"df.columns={df.columns}, first_level={first_level}\n--\n{df}"
     )
-    row_names = df.index.names if isinstance(df.index.names, list) else [df.index.names]
-    column_keys = [k for k in column_keys if k in (set(col_names) | set(row_names))]
 
-    if set(col_names) == set(column_keys):
-        m = df.T.stack().reset_index(drop=False)
-        first = list(column_keys)
-        second = [c for c in m.columns if c not in first]
-        m = m[first + second]
-        m = m.set_index(first).sort_index().reset_index(drop=False)
+    c_in = [c for c in first_level if c in set(df.columns.names)]
+    c_out = [c for c in df.columns.names if c not in set(c_in)]
+    levels = c_in + c_out
+    for i in range(len(levels)):
+        if levels[i] == df.columns.names[i]:
+            continue
+        j = list(df.columns.names).index(levels[i])
+        df = df.swaplevel(i, j, axis=1)
+    assert (
+        list(df.columns.names) == levels
+    ), f"Issue levels={levels}, df.columns.names={df.columns.names}"
+    assert None not in df.index.names, f"None in df.index.names={df.index.names}"
+    assert None not in df.columns.names, f"None in df.index.names={df.columns.names}"
+    return df.sort_index(axis=1)
 
-        value = m.columns[-1]
-        row = [c for c in m.columns[:-1] if c not in first]
-        piv = m.pivot(index=row, columns=first, values=value)
-        piv = piv.sort_index()
 
-        return piv.copy()
+def _sort_index_level(
+    df: "pandas.DataFrame",  # noqa: F821
+    debug: Optional[str] = None,
+) -> "pandas.DataFrame":  # noqa: F821
+    assert (
+        None not in df.index.names
+    ), f"None in df.index.names={df.index.names}, debug={debug!r}"
+    assert (
+        df.columns.names == [None] or None not in df.columns.names
+    ), f"None in df.columns.names={df.columns.names}, debug={debug!r}"
+    levels = list(df.index.names)
+    levels.sort()
+    for i in range(len(levels)):
+        if levels[i] == df.index.names[i]:
+            continue
+        j = list(df.index.names).index(levels[i])
+        df = df.swaplevel(i, j, axis=0)
+    assert (
+        list(df.index.names) == levels
+    ), f"Issue levels={levels}, df.index.names={df.index.names}, debug={debug!r}"
+    assert (
+        None not in df.index.names
+    ), f"None in df.index.names={df.index.names}, debug={debug!r}"
+    assert (
+        df.columns.names == [None] or None not in df.columns.names
+    ), f"None in df.columns.names={df.columns.names}, debug={debug!r}"
+    return df.sort_index(axis=0)
 
-    if len(column_keys) == 0 or "index" in col_names:
-        return df
 
-    raise AssertionError(
-        f"Not implemented for row_names={row_names!r}, "
-        f"col_names={col_names!r}, column_keys={column_keys!r}, "
-        f"row_keys={row_keys!r}, name={name!r}"
+def _reorder_index_level(
+    df: "pandas.DataFrame",  # noqa: F821
+    first_level: List[str],
+    prefix: Optional[str] = None,
+) -> "pandas.DataFrame":  # noqa: F821
+    assert (
+        None not in df.index.names
+    ), f"None in df.index.names={df.index.names}, prefix={prefix!r}"
+    assert (
+        None not in df.columns.names
+    ), f"None in df.index.names={df.columns.names}, prefix={prefix!r}"
+    assert set(df.index.names) & set(first_level), (
+        f"Nothing to sort, prefix={prefix!r} "
+        f"df.columns={df.index}, first_level={first_level}"
     )
+
+    c_in = [c for c in first_level if c in set(df.index.names)]
+    c_out = [c for c in df.index.names if c not in set(c_in)]
+    levels = c_in + c_out
+    for i in range(len(levels)):
+        if levels[i] == df.index.names[i]:
+            continue
+        j = list(df.index.names).index(levels[i])
+        df = df.swaplevel(i, j, axis=0)
+    assert (
+        list(df.index.names) == levels
+    ), f"Issue levels={levels}, df.columns.names={df.index.names}"
+    assert None not in df.index.names, f"None in df.index.names={df.index.names}"
+    assert None not in df.columns.names, f"None in df.index.names={df.columns.names}"
+    return df.sort_index(axis=0)
+
+
+def _add_level(
+    index: "pandas.MultiIndex", name: str, value: str  # noqa: F821
+) -> "pandas.MultiIndex":  # noqa: F821
+    import pandas
+
+    if len(index.names) == 1:
+        v = index.tolist()
+        nv = [[value, _] for _ in v]
+        nn = [name, index.names[0]]
+        aa = np.array(nv).T.tolist()
+        new_index = pandas.MultiIndex.from_arrays(aa, names=nn)
+        return new_index
+
+    v = index.tolist()
+    nv = [[value, *_] for _ in v]
+    nn = [name, *index.names]
+    aa = np.array(nv).T.tolist()
+    new_index = pandas.MultiIndex.from_arrays(aa, names=nn)
+    return new_index
+
+
+def _create_aggregation_figures(
+    final_res: Dict[str, "pandas.DataFrame"],  # noqa: F821
+    model: List[str],
+    skip: Optional[Set[str]] = None,
+    key: str = "suite",
+) -> Dict[str, "pandas.DataFrame"]:  # noqa: F821
+    import pandas
+
+    assert key in model, f"Key {key!r} missing in model={model!r}"
+    model_not_key = [c for c in model if c != key]
+
+    aggs = {}
+    for k, v in final_res.items():
+        if k in skip:
+            continue
+        assert (
+            v.select_dtypes(include=np.number).shape[1] > 0
+        ), f"No numeric column for k={k!r}, dtypes=\n{v.dtypes}"
+        assert (
+            None not in v.index.names
+        ), f"None in v.index.names={v.index.names}, k={k!r}"
+        assert (
+            None not in v.columns.names
+        ), f"None in v.columns.names={v.columns.names}, k={k!r}"
+
+        if key not in v.index.names:
+            v = v.copy()
+            v[key] = "?"
+            v = v.reset_index(drop=False).set_index([key, *v.index.names])
+
+        assert (
+            key in v.index.names
+        ), f"Unable to find key={key} in {v.index.names} for k={k!r}"
+        assert len(v.index.names) == len(
+            model
+        ), f"Length mismatch for k={k!r}, v.index.names={v.index.names}, model={model}"
+
+        # Let's drop any non numerical features.
+        v = v.select_dtypes(include=[np.number])
+        # gv = v.apply(lambda x: np.log(np.maximum(x, 1e-10).values))
+        v = v.reset_index(drop=False).set_index(model_not_key)
+
+        assert key in v.columns, f"Unable to find column {key!r} in {v.columns}"
+
+        v = v.sort_index(axis=1)
+
+        assert (
+            None not in v.index.names
+        ), f"None in v.index.names={v.index.names}, k={k!r}"
+        assert (
+            None not in v.columns.names
+        ), f"None in v.columns.names={v.columns.names}, k={k!r}"
+        try:
+            gr = v.groupby(key)
+        except ValueError as e:
+            raise AssertionError(
+                f"Unable to grouby by key={key!r}, "
+                f"shape={v.shape} v.columns={v.columns}, values={set(v[key])}\n---\n{v}"
+            ) from e
+        stats = [
+            ("MEAN", gr.mean()),
+            ("MEDIAN", gr.median()),
+            ("SUM", gr.sum()),
+            ("MIN", gr.min()),
+            ("MAX", gr.max()),
+            ("COUNT", gr.count()),
+            ("COUNT%", gr.agg(lambda x: x.count() / len(x))),
+            ("TOTAL", gr.agg(len)),
+            ("GEO-MEAN", gr.agg(_geo_mean)),
+        ]
+        dfs = []
+        for name, df in stats:
+            assert isinstance(
+                df, pandas.DataFrame
+            ), f"Unexpected type {type(df)} for k={k!r} and name={name!r}"
+            df.index = _add_level(df.index, "agg", name)
+            df.index = _add_level(df.index, "cat", k)
+            assert (
+                None not in df.index.names
+            ), f"None in df.index.names={df.index.names}, k={k!r}, name={name!r}"
+            assert (
+                None not in df.columns.names
+            ), f"None in df.columns.names={df.columns.names}, k={k!r}, name={name!r}"
+            dfs.append(df)
+
+        if len(dfs) == 0:
+            continue
+        df = pandas.concat(dfs, axis=0)
+        assert df.shape[0] > 0, f"Empty set for k={k!r}"
+        assert df.shape[1] > 0, f"Empty columns for k={k!r}"
+
+        assert (
+            None not in df.index.names
+        ), f"None in df.index.names={df.index.names}, k={k!r}"
+        assert (
+            None not in df.columns.names
+        ), f"None in df.columns.names={df.columns.names}, k={k!r}"
+        assert isinstance(
+            df, pandas.DataFrame
+        ), f"Unexpected type {type(df)} for k={k!r}"
+
+        if "stat" in df.columns.names:
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", category=FutureWarning)
+                df = df.stack("stat")
+            if not isinstance(df, pandas.DataFrame):
+                assert (
+                    "opt_patterns" not in df.index.names
+                ), f"Unexpected names for df.index.names={df.index.names} (k={k!r})"
+                df = df.to_frame()
+                if df.columns.names == [None]:
+                    df.columns = pandas.MultiIndex.from_arrays(
+                        [("_dummy_",)], names=["_dummy_"]
+                    )
+                    assert (
+                        None not in df.columns.names
+                    ), f"None in df.columns.names={df.columns.names}, k={k!r}, df={df}"
+            assert isinstance(
+                df, pandas.DataFrame
+            ), f"Unexpected type {type(df)} for k={k!r}"
+            assert (
+                None not in df.index.names
+            ), f"None in df.index.names={df.index.names}, k={k!r}"
+            assert (
+                None not in df.columns.names
+            ), f"None in df.columns.names={df.columns.names}, k={k!r}, df={df}"
+        assert isinstance(
+            df, pandas.DataFrame
+        ), f"Unexpected type {type(df)} for k={k!r}"
+        assert (
+            None not in df.index.names
+        ), f"None in df.index.names={df.index.names}, k={k!r}"
+        assert (
+            None not in df.columns.names
+        ), f"None in df.columns.names={df.columns.names}, k={k!r}"
+        aggs[f"agg_{k}"] = df
+
+    # check stat is part of the column otherwise the concatenation fails
+
+    set_names = set()
+    for df in aggs.values():
+        set_names |= set(df.index.names)
+
+    for k, df in aggs.items():
+        assert (
+            None not in df.index.names
+        ), f"None in df.index.names={df.index.names}, k={k!r}"
+        assert (
+            None not in df.columns.names
+        ), f"None in df.columns.names={df.columns.names}, k={k!r}"
+        if len(df.index.names) == len(set_names):
+            continue
+        missing = set_names - set(df.index.names)
+        for g in missing:
+            df.index = _add_level(df.index, g, k.replace("agg_", ""))
+
+    aggs = {k: _sort_index_level(df, debug=k) for k, df in aggs.items()}
+
+    # concatenation
+    dfs = pandas.concat([df for df in aggs.values()], axis=0)
+    assert None not in dfs.index.names, f"None in dfs.index.names={dfs.index.names}"
+    assert (
+        None not in dfs.columns.names
+    ), f"None in dfs.columns.names={dfs.columns.names}"
+    names = list(dfs.columns.names)
+    dfs = dfs.unstack(key)
+    assert None not in dfs.index.names, f"None in dfs.index.names={dfs.index.names}"
+    for n in names:
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", category=FutureWarning)
+            dfs = dfs.stack(n)
+        assert (
+            None not in dfs.index.names
+        ), f"None in dfs.index.names={dfs.index.names}, n={n!r}"
+
+    assert None not in dfs.index.names, f"None in dfs.index.names={dfs.index.names}"
+    dfs = dfs.sort_index(axis=1).sort_index(axis=0)
+    assert None not in dfs.index.names, f"None in dfs.index.names={dfs.index.names}"
+    return dfs
 
 
 def _reverse_column_names_order(
@@ -940,7 +1438,38 @@ def _reverse_column_names_order(
     assert isinstance(col_names, list), f"Unexpected type for {df.columns.names!r}"
     return df
 
-    # m = df.T.stack().reset_index(drop=False)
-    # new_names = list(reversed(col_names))
-    # m = m.set_index(new_names).T
-    # return m
+
+def _select_metrics(
+    df: "pandas.DataFrame", select: List[Dict[str, str]]  # noqa: F821
+) -> "pandas.DataFrame":  # noqa: F821
+    rows = []
+    names = list(df.index.names)
+    set_names = set(names)
+    for i in df.index.tolist():
+        rows.append(set(dict(zip(names, i)).items()))
+
+    subset = [
+        (s, set({k: v for k, v in s.items() if k in set_names}.items())) for s in select
+    ]
+
+    keep = []
+    for i, row in enumerate(rows):
+        for j, (d, s) in enumerate(subset):
+            if (s & row) == s:
+                keep.append((i, d["new_name"], d["unit"], d.get("order", j)))
+                break
+
+    dfi = df.iloc[[k[0] for k in keep]].reset_index(drop=False).copy()
+    dfi["METRIC"] = [k[1] for k in keep]
+    dfi["unit"] = [k[2] for k in keep]
+    dfi["order"] = [k[3] for k in keep]
+    dfi = dfi.copy()
+    dd = set(select[0].keys())
+    cols = ["order", "METRIC"]
+    for c in dfi.columns:
+        if c in {"METRIC", "order"} or c in dd:
+            continue
+        cols.append(c)
+    cols.append("unit")
+    dfi = dfi[cols].sort_values(cols[:-1])
+    return dfi

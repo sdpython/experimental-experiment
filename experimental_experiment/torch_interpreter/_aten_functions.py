@@ -1537,7 +1537,12 @@ def aten_expand(
 
 
 def aten_fill_Scalar(
-    g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T, v: T
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    v: T,
+    name: str = "fill_Scalar",
 ) -> T:
     "constantofshape"
     if g.has_shape(x) and is_static_shape(g.get_shape(x)):
@@ -1548,11 +1553,27 @@ def aten_fill_Scalar(
             g.get_shape(x),
             v,
             dtype=g.get_type(x),
-            name="fill_Scalar",
+            name=name,
         )
     raise RuntimeError(
         f"fill is not implemented when shape is not fully known{g.get_debug_msg()}"
     )
+
+
+def aten_fill_Tensor(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    v: T,
+    name: str = "fill_Tensor",
+) -> T:
+    "constantofshape"
+    assert g.get_type(x) == g.get_type(
+        v
+    ), f"Type mismatch {g.get_type(x)} != {g.get_type(v)}{g.get_debug_msg()}"
+    shape = g.op.Shape(x, name=name)
+    return g.op.Expand(v, shape, name=name, outputs=outputs)
 
 
 def aten_flatten(
@@ -3069,8 +3090,19 @@ def aten__native_batch_norm(
     )
 
     if empty_mean_std:
+        assert g.has_shape(
+            x
+        ), f"Not implemented when shape for {x!r} is not known{g.get_debug_msg()}"
+        shape = g.get_shape(x)
+        assert (
+            len(shape) >= 2
+        ), f"Not implemented when shape of {x!r} is {shape}{g.get_debug_msg()}"
+        assert is_static_dimension(
+            shape[1]
+        ), f"Not implemented when shape of {x!r} is {shape}{g.get_debug_msg()}"
+        size = shape[1]
         running_mean_fp32 = g.op.ConstantOfShape(
-            np.array([0], dtype=np.int64), name=name, outputs=outputs[1:2]
+            np.array([size], dtype=np.int64), name=name, outputs=outputs[1:2]
         )
         invstd = g.op.Identity(running_mean_fp32, outputs=outputs[2:], name=name)
     else:
@@ -4109,6 +4141,31 @@ def aten_select_int(
             g.set_shape(res, tuple(new_shape))
         else:
             g.get_rank(res, g.get_rank(x) - 1)
+    return res
+
+
+def aten_select_scatter(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    src: T,
+    dim: int,
+    index: int,
+    name: str = "select_scatter",
+) -> T:
+    """scatter elements"""
+
+    # Change src rank to self rank according to dim
+    # e.g. if self is [2,3,4], src is [2,4], dim=1, then update is [2,1,4]
+    update = g.op.Unsqueeze(src, axes=dim, name=name)
+    # Change index rank to the same as 'update' [2,1,4]
+    indices = g.op.Expand(index, g.op.Shape(update, name=name), name=name)
+    res = g.op.ScatterElements(
+        x, indices, update, axis=dim, reduction="none", name=name, outputs=outputs
+    )
+    if not sts:
+        g.set_type(res, g.get_type(x))
     return res
 
 
