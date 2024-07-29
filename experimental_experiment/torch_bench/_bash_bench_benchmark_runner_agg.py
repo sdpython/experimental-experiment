@@ -644,6 +644,8 @@ def merge_benchmark_reports(
         u = df[c].unique()
         if len(u) == 1:
             unique[c] = u.tolist()[0]
+    if "exporter" in unique:
+        del unique["exporter"]
 
     main = [dict(column="dates", value=", ".join(sorted(df["DATE"].unique().tolist())))]
     for k, v in unique.items():
@@ -815,7 +817,8 @@ def merge_benchmark_reports(
 
     # buckets
     if bucket_columns:
-        table = df[[*new_keys, *model, *bucket_columns, "speedup_increase"]].copy()
+        keepc = [*new_keys, *model, *bucket_columns, "speedup_increase"]
+        table = df[keepc].copy()
         pcolumns = [c for c in new_keys if c not in model]
         index_col = model
         pivot = table[~table[index_col[0]].isna()].pivot(

@@ -179,6 +179,20 @@ class TestBashBenchMergeStats(ExtTestCase):
         self.assertIn("pass rate", metrics)
         self.assertIn("average export time", metrics)
 
+    @ignore_warnings((FutureWarning,))
+    def test_merge_stats_bug_cpu_cuda(self):
+        data = os.path.join(os.path.dirname(__file__), "data", "bug_cpu_cuda.csv")
+        df = merge_benchmark_reports(
+            data, excel_output="test_merge_stats_bug_cpu_cuda.xlsx"
+        )
+        self.assertIsInstance(df, dict)
+        self.assertIn("status", set(df))
+        self.assertIn("memory", set(df))
+        self.assertIn("op_onnx", set(df))
+        self.assertIn("ERR", set(df))
+        self.assertIn("AGG", set(df))
+        self.assertIn("SUMMARY", set(df))
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
