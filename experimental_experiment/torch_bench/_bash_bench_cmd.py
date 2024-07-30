@@ -216,16 +216,15 @@ def bash_bench_main(script_name: str, doc: str, args: Optional[List[str]] = None
             )
             duration = time.perf_counter() - begin
 
+            if args.tag:
+                for d in data:
+                    d["version_tag"] = args.tag
             if len(data) == 1:
                 for k, v in sorted(data[0].items()):
                     print(f":{k},{v};")
-                if args.tag:
-                    print(f":version_tag,{args.tag};")
             else:
                 print(f":model_name,{name};")
                 print(f":device,{args.device};")
-                if args.tag:
-                    print(f":version_tag,{args.tag};")
                 print(f":ERROR,unexpected number of data {len(data)};")
 
             if args.output_data:
