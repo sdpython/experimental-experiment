@@ -51,6 +51,7 @@ def bash_bench_parse_args(name: str, doc: str, new_args: Optional[List[str]] = N
         dump_ort=("0", "dump the onnxruntime optimized graph"),
         split_process=("0", "run exporter and the inference in two separate processes"),
         part=("", "which part to run, 0, or 1"),
+        tag=("", "add a version tag when everything else did not change"),
         new_args=new_args,
         expose="repeat,warmup",
     )
@@ -116,6 +117,9 @@ def bash_bench_main(script_name: str, doc: str, args: Optional[List[str]] = None
         elif args.model == "Tail":
             args.model = ",".join(n for n in names[-10:] if not n.startswith("101"))
 
+        assert (
+            "," not in args.tag
+        ), f"Parameter tag={args.tag!r} does not support multiple values."
         if (
             multi_run(args)
             or args.process in ("1", 1, "True", True)
@@ -215,9 +219,13 @@ def bash_bench_main(script_name: str, doc: str, args: Optional[List[str]] = None
             if len(data) == 1:
                 for k, v in sorted(data[0].items()):
                     print(f":{k},{v};")
+                if args.tag:
+                    print(f":version_tag,{args.tag};")
             else:
                 print(f":model_name,{name};")
                 print(f":device,{args.device};")
+                if args.tag:
+                    print(f":version_tag,{args.tag};")
                 print(f":ERROR,unexpected number of data {len(data)};")
 
             if args.output_data:

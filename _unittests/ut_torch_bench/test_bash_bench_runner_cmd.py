@@ -36,6 +36,7 @@ class TestBashBenchRunnerCmd(ExtTestCase):
         optimization=None,
         dump_ort=False,
         process=False,
+        tag=None,
     ):
         from experimental_experiment.torch_bench.bash_bench_huggingface import main
 
@@ -63,6 +64,8 @@ class TestBashBenchRunnerCmd(ExtTestCase):
             args.extend(["--process", "1"])
         if optimization:
             args.extend(["--opt_patterns", optimization])
+        if tag:
+            args.extend(["--tag", tag])
         if debug:
             print("CMD")
             print(" ".join(args))
@@ -78,6 +81,8 @@ class TestBashBenchRunnerCmd(ExtTestCase):
         else:
             self.assertIn(":model_name,", out)
         self.assertNotIn(":discrepancies_abs,inf;", out)
+        if tag:
+            self.assertIn(f":version_tag,{tag};", out)
 
     @skipif_ci_windows("exporter does not work on Windows")
     @ignore_warnings((DeprecationWarning, UserWarning))
@@ -136,6 +141,11 @@ class TestBashBenchRunnerCmd(ExtTestCase):
     @ignore_warnings((DeprecationWarning, UserWarning))
     def test_huggingface_export_bench_script_cpu(self):
         self._huggingface_export_bench_cpu("script", "101Dummy")
+
+    @requires_onnxruntime_training()
+    @ignore_warnings((DeprecationWarning, UserWarning))
+    def test_huggingface_export_bench_script_cpu_tag(self):
+        self._huggingface_export_bench_cpu("script", "101Dummy", tag="taggy")
 
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.6")
