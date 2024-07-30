@@ -654,7 +654,7 @@ class BenchmarkRunner:
                         f"{model_name} due to {e}"
                     )
                 stats["ERR_load"] = str(e)
-                return stats
+                return stats, context
         else:
             model_runner = self.load_model(model_name)
         if self.verbose:

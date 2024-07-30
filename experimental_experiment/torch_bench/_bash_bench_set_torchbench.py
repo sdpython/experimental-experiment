@@ -21,6 +21,69 @@ from ._bash_bench_benchmark_runner import BenchmarkRunner
 
 class TorchBenchRunner(BenchmarkRunner):
 
+    @staticmethod
+    def _patch_install_deps(model_path: str, verbose: bool = True) -> Tuple[bool, Any]:
+        import sys
+        import subprocess
+        import tempfile
+        from pathlib import Path
+        from torchbenchmark import TORCH_DEPS, install_file, this_dir
+        from torchbenchmark.util.env_check import get_pkg_versions
+
+        run_args = [
+            [sys.executable, install_file],
+        ]
+        run_env = os.environ.copy()
+        run_env["PYTHONPATH"] = Path(this_dir.parent).as_posix()
+        run_kwargs = {
+            "cwd": model_path,
+            "check": True,
+            "env": run_env,
+        }
+
+        output_buffer = None
+        fd, stdout_fpath = tempfile.mkstemp()
+
+        try:
+            output_buffer = io.FileIO(stdout_fpath, mode="w")
+            if os.path.exists(os.path.join(model_path, install_file)):
+                if not verbose:
+                    run_kwargs["stderr"] = subprocess.STDOUT
+                    run_kwargs["stdout"] = output_buffer
+                versions = get_pkg_versions(TORCH_DEPS)
+                subprocess.run(*run_args, **run_kwargs)  # type: ignore
+                new_versions = get_pkg_versions(TORCH_DEPS)
+                if versions != new_versions:
+                    if len(versions) != len(new_versions) or set(versions) != set(
+                        new_versions
+                    ):
+                        import pprint
+
+                        errmsg = f"The torch packages are re-installed after installing the benchmark deps. \
+                                Before: {pprint.pformat(versions)}, after: {pprint.pformat(new_versions)}"
+                        return (False, errmsg, None)
+                    for k in versions:
+                        if k == "torchvision":
+                            # not reliable
+                            continue
+                        if versions[k] != new_versions[k]:
+                            errmsg = f"The torch packages are re-installed after installing the benchmark deps. \
+                                    For package {k!r}, before: {versions[k]}, after: {new_versions[k]}."
+                            return (False, errmsg, None)
+            else:
+                return (True, f"No install.py is found in {model_path}. Skip.", None)
+        except subprocess.CalledProcessError as e:
+            return (False, e.output, io.FileIO(stdout_fpath, mode="r").read().decode())
+        except Exception as e:
+            return (False, e, io.FileIO(stdout_fpath, mode="r").read().decode())
+        finally:
+            output_buffer.close()
+            del output_buffer
+            os.close(fd)
+            os.remove(stdout_fpath)
+
+        return (True, None, None)
+
     YAML = textwrap.dedent(
         """
         # Some models have large dataset that doesn't fit in memory. Lower the batch
@@ -698,8 +761,10 @@ class TorchBenchRunner(BenchmarkRunner):
         # Since it is unusual thing to do, we just reassign them to parameters
         def state_dict_hook(module, destination, prefix, local_metadata):
             for name, param in module.named_parameters():
-                if isinstance(destination[name], torch.Tensor) and not isinstance(
-                    destination[name], torch.nn.Parameter
+                if (
+                    name in destination
+                    and isinstance(destination[name], torch.Tensor)
+                    and not isinstance(destination[name], torch.nn.Parameter)
                 ):
                     destination[name] = torch.nn.Parameter(destination[name])
 
@@ -729,6 +794,10 @@ class TorchBenchRunner(BenchmarkRunner):
         batch_size: Optional[int] = None,
     ) -> ModelRunner:
 
+        # patching
+        import torchbenchmark
+
+        torchbenchmark._install_deps = TorchBenchRunner._patch_install_deps
         from torchbenchmark import setup
 
         status = setup(
