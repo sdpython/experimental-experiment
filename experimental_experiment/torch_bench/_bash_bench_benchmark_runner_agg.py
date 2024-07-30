@@ -1052,6 +1052,8 @@ def merge_benchmark_reports(
         if k in {"0main"}:
             continue
         for c in v.columns:
+            if "output_names" in c or "input_names" in c:
+                continue
             cc = v[c]
             if cc.dtype == np.object_:
                 try:
@@ -1068,7 +1070,7 @@ def merge_benchmark_reports(
                     co = Counter(types)
                     assert str in co and co[str] >= len(types) // 4 + 1, (
                         f"Unexpected values for k={k!r}, columns={c!r}, "
-                        f"types={set(types)}, values={v[c]}"
+                        f"types={set(types)}, values={v[c]}, co={co}"
                     )
 
     # add pages for the summary
