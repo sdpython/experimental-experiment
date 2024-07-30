@@ -6,8 +6,8 @@ import numpy as np
 
 SELECTED_FEATURES = [
     dict(
-        cat="TIME_ITER",
-        stat="TIME_ITER",
+        cat="time",
+        stat="ITER",
         agg="TOTAL",
         new_name="number of models",
         unit="N",
@@ -417,7 +417,9 @@ def _apply_excel_style(
                     if cell.value in fmt:
                         fcell = row[cell.col_idx - 2]
                         fcell.number_format = fmt[cell.value]
-                        if cell.value == "x" and fcell.value < 1.02:
+                        if cell.value == "x" and (
+                            not isinstance(fcell, (float, int)) or fcell.value < 1.02
+                        ):
                             fcell.font = red
             cols = {}
             for row in sheet.iter_rows(
