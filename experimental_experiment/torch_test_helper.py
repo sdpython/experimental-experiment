@@ -28,8 +28,12 @@ def check_model_ort(
 
     if providers is None or providers == "cpu":
         providers = ["CPUExecutionProvider"]
-    elif providers.startswith("cuda"):
-        providers = ["CUDAExecutionProvider", "CPUExecutionProvider"]
+    elif not isinstance(providers, list) and providers.startswith("cuda"):
+        device_id = 0 if ":" not in providers else int(providers.split(":")[1])
+        providers = [
+            ("CUDAExecutionProvider", {"device_id": device_id}),
+            ("CPUExecutionProvider", {}),
+        ]
 
     if isinstance(onx, str):
         try:

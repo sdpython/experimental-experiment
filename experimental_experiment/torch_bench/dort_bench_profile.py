@@ -65,8 +65,9 @@ for i, t in enumerate(inputs[1]):
     else:
         print(f"input {i}: type={type(t)}")
 
+
 providers = (
-    [("CUDAExecutionProvider", {}), ("CPUExecutionProvider", {})]
+    [("CUDAExecutionProvider", {"device_id": max_device}), ("CPUExecutionProvider", {})]
     if max_device >= 0
     else ["CPUExecutionProvider"]
 )

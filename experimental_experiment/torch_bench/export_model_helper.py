@@ -149,13 +149,16 @@ def common_export(
         from ..convert.convert_helper import ort_optimize as fopt
 
         is_cuda = next(model.parameters()).is_cuda
-        providers = ["CUDAExecutionProvider", "CPUExecutionProvider"]
-        fopt(
-            onx,
-            output,
-            providers=providers if is_cuda else providers[-1:],
-            disable_aot=False,
-        )
+        if is_cuda:
+            device_id = next(model.parameters()).get_device()
+            providers = [
+                ("CUDAExecutionProvider", {"device_id": device_id}),
+                ("CPUExecutionProvider", {}),
+            ]
+        else:
+            providers = ["CPUExecutionProvider"]
+
+        fopt(onx, output, providers=providers, disable_aot=False)
         if verbose:
             print("[common_export] done")
 
