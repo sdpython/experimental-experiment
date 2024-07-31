@@ -21,11 +21,13 @@ SELECTED_FEATURES = [
         unit="N",
     ),
     dict(
-        cat="time", agg="COUNT%", stat="export_success", new_name="export rate", unit="%"
+        cat="time",
+        agg="COUNT%",
+        stat="export_success",
+        new_name="export rate",
+        unit="%",
     ),
-    dict(
-        cat="speedup", agg="COUNT%", stat="increase", new_name="run rate", unit="%"
-    ),
+    dict(cat="speedup", agg="COUNT%", stat="increase", new_name="run rate", unit="%"),
     dict(
         cat="time",
         agg="MEAN",
