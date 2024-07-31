@@ -1,4 +1,5 @@
 import glob
+import itertools
 import warnings
 from collections import Counter
 from typing import Optional, Dict, List, Set, Union
@@ -46,6 +47,27 @@ SELECTED_FEATURES = [
     dict(
         cat="status",
         agg="MEAN",
+        stat="err<1e-2",
+        new_name="discrepancies < 0.01",
+        unit="%",
+    ),
+    dict(
+        cat="status",
+        agg="MEAN",
+        stat="err_0<1e-1",
+        new_name="discrepancies first output < 0.1",
+        unit="%",
+    ),
+    dict(
+        cat="status",
+        agg="MEAN",
+        stat="err_0<1e-2",
+        new_name="discrepancies first output < 0.01",
+        unit="%",
+    ),
+    dict(
+        cat="status",
+        agg="MEAN",
         stat="lat<=script+2%",
         new_name="model equal or faster than torch.script",
         unit="%",
@@ -55,13 +77,6 @@ SELECTED_FEATURES = [
         agg="MEAN",
         stat="lat<=eager+2%",
         new_name="model equal or faster than eager",
-        unit="%",
-    ),
-    dict(
-        cat="status",
-        agg="MEAN",
-        stat="err<1e-2",
-        new_name="discrepancies < 0.01",
         unit="%",
     ),
     dict(
@@ -735,18 +750,16 @@ def merge_benchmark_reports(
                 report_on.append("status_convert")
             if "discrepancies_abs" in set_columns:
                 df["status_convert_ort"] = (~df["discrepancies_abs"].isna()).astype(int)
-                df["status_err<1e-1"] = (
-                    ~df["discrepancies_abs"].isna() & (df["discrepancies_abs"] < 1e-1)
-                ).astype(int)
-                df["status_err<1e-2"] = (
-                    ~df["discrepancies_abs"].isna() & (df["discrepancies_abs"] < 1e-2)
-                ).astype(int)
-                df["status_err<1e-3"] = (
-                    ~df["discrepancies_abs"].isna() & (df["discrepancies_abs"] < 1e-3)
-                ).astype(int)
-                df["status_err<1e-4"] = (
-                    ~df["discrepancies_abs"].isna() & (df["discrepancies_abs"] < 1e-4)
-                ).astype(int)
+                mets = []
+                for th, mt in itertools.product(
+                    ["1e-1", "1e-2", "1e-3", "1e-4"], ["abs", "abs_0", "abs_1+"]
+                ):
+                    met = f"status_err{mt[3:]}<{th}"
+                    mets.append(met)
+                    df[met] = (
+                        ~df[f"discrepancies_{mt}"].isna()
+                        & (df[f"discrepancies_{mt}"] < float(th))
+                    ).astype(int)
                 df["status_lat<=eager+2%"] = (
                     ~df["discrepancies_abs"].isna()
                     & (df["time_latency"] <= df["time_latency_eager"] * 1.02)
@@ -754,10 +767,7 @@ def merge_benchmark_reports(
                 report_on.extend(
                     [
                         "status_convert_ort",
-                        "status_err<1e-1",
-                        "status_err<1e-2",
-                        "status_err<1e-3",
-                        "status_err<1e-4",
+                        *mets,
                         "status_lat<=eager+2%",
                     ]
                 )

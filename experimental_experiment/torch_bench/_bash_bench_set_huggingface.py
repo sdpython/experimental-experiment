@@ -10,7 +10,7 @@ from ._bash_bench_model_runner import (
     ModelRunner,
 )
 from ._bash_bench_benchmark_runner import BenchmarkRunner
-from ._bash_bench_set_dummies import Neuron, Neuron16, NeuronTuple
+from ._bash_bench_set_dummies import Neuron, Neuron16, NeuronTuple, Neuron2Outputs
 
 
 class HuggingfaceRunner(BenchmarkRunner):
@@ -194,6 +194,10 @@ class HuggingfaceRunner(BenchmarkRunner):
                 "101DummyTuple": (
                     lambda: NeuronTuple.config,
                     NeuronTuple,
+                ),
+                "101Dummy2Outputs": (
+                    lambda: Neuron2Outputs.config,
+                    Neuron2Outputs,
                 ),
                 "101Dummy2": (
                     lambda: Neuron.config,

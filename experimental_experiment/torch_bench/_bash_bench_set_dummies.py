@@ -16,6 +16,20 @@ class Neuron(torch.nn.Module):
     config = MakeConfig(download=False, to_tuple=False)
 
 
+class Neuron2Outputs(torch.nn.Module):
+    def __init__(self, n_dims: int = 1000, n_targets: int = 100):
+        super(Neuron2Outputs, self).__init__()
+        self.linear = torch.nn.Linear(n_dims, n_targets)
+
+    def forward(self, x):
+        return torch.sigmoid(self.linear(x + 10)), torch.softmax(self.linear(x), dim=1)
+
+    def _get_random_inputs(self, device: str):
+        return (torch.randn(1, 1000).to(device),)
+
+    config = MakeConfig(download=False, to_tuple=False)
+
+
 class Neuron16(Neuron):
     def __init__(self, n_dims: int = 5, n_targets: int = 3):
         super(Neuron, self).__init__()
