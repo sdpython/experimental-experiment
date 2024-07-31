@@ -905,7 +905,10 @@ class BenchmarkRunner:
         )
         pfilename = os.path.join(
             folder,
-            f"{model_name}-{exporter}-{self.device}-{self.dtype or ''}{sopt}",
+            (
+                f"{model_name}-{exporter}-{self.device.replace(':', '')}"
+                f"-{self.dtype or ''}{sopt}"
+            ),
         )
         if pfilename and not os.path.exists(pfilename):
             os.makedirs(pfilename)
