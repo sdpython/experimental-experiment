@@ -151,10 +151,10 @@ class TestBashBenchMergeStats(ExtTestCase):
         self.assertIn("ERR", set(df))
 
     @ignore_warnings((FutureWarning,))
-    def test_merge_stats_bug_speedup(self):
+    def test_merge_stats_bug_speedup_summary(self):
         data = os.path.join(os.path.dirname(__file__), "data", "bug_speed_up.csv")
         df = merge_benchmark_reports(
-            data, excel_output="test_merge_stats_bug_speedup.xlsx"
+            data, excel_output="test_merge_stats_bug_speedup_summary.xlsx"
         )
         self.assertIsInstance(df, dict)
         self.assertIn("status", set(df))

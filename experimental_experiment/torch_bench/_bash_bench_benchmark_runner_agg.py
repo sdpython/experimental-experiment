@@ -1076,7 +1076,7 @@ def merge_benchmark_reports(
                     )
 
     # add pages for the summary
-    res["AGG"] = _create_aggregation_figures(
+    res["AGG"], res["AGG2"] = _create_aggregation_figures(
         res,
         skip={
             "onnx",
@@ -1092,6 +1092,9 @@ def merge_benchmark_reports(
     )
     assert None not in res["AGG"].index.names, (
         f"None in res['AGG'].index.names={res['AGG'].index.names}, " f"prefix='AGG'"
+    )
+    assert None not in res["AGG2"].index.names, (
+        f"None in res['AGG2'].index.names={res['AGG2'].index.names}, " f"prefix='AGG2'"
     )
 
     names = res["AGG"].index.names
@@ -1111,17 +1114,23 @@ def merge_benchmark_reports(
             new_names.append(c)
 
     res["AGG"] = _reorder_index_level(res["AGG"], new_names + last_names, prefix="AGG")
+    res["AGG2"] = _reorder_index_level(
+        res["AGG2"], new_names + last_names, prefix="AGG2"
+    )
 
     final_res = {
         k: (
             v
-            if k in {"0raw", "0main", "AGG", "op_onnx", "op_torch"}
+            if k in {"0raw", "0main", "AGG", "AGG2", "op_onnx", "op_torch"}
             else _reorder_columns_level(v, column_keys, prefix=k)
         )
         for k, v in res.items()
     }
 
-    final_res["SUMMARY"] = _select_metrics(res["AGG"], select=SELECTED_FEATURES)
+    final_res["SUMMARY"], suites = _select_metrics(res["AGG"], select=SELECTED_FEATURES)
+    final_res["SUMMARY2"], suites = _select_metrics(
+        res["AGG2"], select=SELECTED_FEATURES
+    )
 
     if excel_output:
         with pandas.ExcelWriter(excel_output) as writer:
@@ -1291,9 +1300,10 @@ def _create_aggregation_figures(
         assert (
             key in v.index.names
         ), f"Unable to find key={key} in {v.index.names} for k={k!r}"
-        assert len(v.index.names) == len(
-            model
-        ), f"Length mismatch for k={k!r}, v.index.names={v.index.names}, model={model}"
+        assert len(v.index.names) == len(model), (
+            f"Length mismatch for k={k!r}, "
+            f"v.index.names={v.index.names}, model={model}"
+        )
 
         # Let's drop any non numerical features.
         v = v.select_dtypes(include=[np.number])
@@ -1315,7 +1325,8 @@ def _create_aggregation_figures(
         except ValueError as e:
             raise AssertionError(
                 f"Unable to grouby by key={key!r}, "
-                f"shape={v.shape} v.columns={v.columns}, values={set(v[key])}\n---\n{v}"
+                f"shape={v.shape} v.columns={v.columns}, "
+                f"values={set(v[key])}\n---\n{v}"
             ) from e
         stats = [
             ("MEAN", gr.mean()),
@@ -1424,6 +1435,7 @@ def _create_aggregation_figures(
     ), f"None in dfs.columns.names={dfs.columns.names}"
     names = list(dfs.columns.names)
     dfs = dfs.unstack(key)
+    keep_columns = dfs
     assert None not in dfs.index.names, f"None in dfs.index.names={dfs.index.names}"
     for n in names:
         with warnings.catch_warnings():
@@ -1435,8 +1447,9 @@ def _create_aggregation_figures(
 
     assert None not in dfs.index.names, f"None in dfs.index.names={dfs.index.names}"
     dfs = dfs.sort_index(axis=1).sort_index(axis=0)
+    keep_columns = keep_columns.sort_index(axis=1).sort_index(axis=0)
     assert None not in dfs.index.names, f"None in dfs.index.names={dfs.index.names}"
-    return dfs
+    return dfs, keep_columns
 
 
 def _reverse_column_names_order(
@@ -1453,6 +1466,7 @@ def _reverse_column_names_order(
 def _select_metrics(
     df: "pandas.DataFrame", select: List[Dict[str, str]]  # noqa: F821
 ) -> "pandas.DataFrame":  # noqa: F821
+    suites = set(df.columns)
     rows = []
     names = list(df.index.names)
     set_names = set(names)
@@ -1475,12 +1489,21 @@ def _select_metrics(
     dfi["unit"] = [k[2] for k in keep]
     dfi["order"] = [k[3] for k in keep]
     dfi = dfi.copy()
-    dd = set(select[0].keys())
-    cols = ["order", "METRIC"]
+    dd_ = set(select[0].keys())
+    dd = set()
+    for d in dd_:
+        cs = [c for c in dfi.columns if d in c]
+        if cs:
+            dd.add(cs[0])
+    cols = [
+        *[c for c in dfi.columns if "order" in c],
+        *[c for c in dfi.columns if "METRIC" in c],
+    ]
+    skip = set([*cols, *[c for c in dfi.columns if "unit" in c]])
     for c in dfi.columns:
-        if c in {"METRIC", "order"} or c in dd:
+        if c in skip or c in dd:
             continue
         cols.append(c)
-    cols.append("unit")
+    cols.extend([c for c in dfi.columns if "unit" in c])
     dfi = dfi[cols].sort_values(cols[:-1])
-    return dfi
+    return dfi, suites

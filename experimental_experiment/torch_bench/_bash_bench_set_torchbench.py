@@ -376,16 +376,20 @@ class TorchBenchRunner(BenchmarkRunner):
 
     EXPECTED_MODELS = textwrap.dedent(
         """
+        BERT_pytorch
         Background_Matting
         DALLE2_pytorch
+        LearningToPaint
         Super_SloMo
         alexnet
         basic_gnn_edgecnn
         basic_gnn_gcn
         basic_gnn_gin
         basic_gnn_sage
+        cm3leon_generate
         dcgan
         demucs
+        densenet121
         detectron2_fasterrcnn_r_101_c4
         detectron2_fasterrcnn_r_101_dc5
         detectron2_fasterrcnn_r_101_fpn
@@ -402,6 +406,9 @@ class TorchBenchRunner(BenchmarkRunner):
         doctr_reco_predictor
         drq
         fastNLP_Bert
+        functorch_dp_cifar10
+        functorch_maml_omniglot
+        hf_Albert
         hf_Bart
         hf_Bert
         hf_Bert_large
@@ -411,23 +418,48 @@ class TorchBenchRunner(BenchmarkRunner):
         hf_GPT2_large
         hf_Longformer
         hf_Reformer
+        hf_T5
+        hf_T5_base
         hf_T5_generate
         hf_T5_large
         hf_Whisper
         lennard_jones
+        llama
         maml
+        maml_omniglot
+        mnasnet1_0
+        mobilenet_v2
         mobilenet_v2_quantized_qat
+        mobilenet_v3_large
+        moco
+        nanogpt
         nvidia_deeprecommender
+        opacus_cifar10
+        phlippe_densenet
+        phlippe_resnet
+        pyhpc_equation_of_state
+        pyhpc_isoneutral_mixing
         pyhpc_turbulent_kinetic_energy
         pytorch_stargan
         pytorch_unet
+        resnet152
+        resnet18
+        resnet50
         resnet50_quantized_qat
+        resnext50_32x4d
         sam
         sam_fast
+        shufflenet_v2_x1_0
         soft_actor_critic
         speech_transformer
+        squeezenet1_1
+        timm_efficientnet
+        timm_nfnet
         timm_regnet
+        timm_resnest
+        timm_vision_transformer
         timm_vision_transformer_large
+        timm_vovnet
         tts_angular
         vgg16
         vision_maskrcnn
