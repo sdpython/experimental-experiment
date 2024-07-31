@@ -486,7 +486,7 @@ class ModelRunner:
             options = OptimizationOptions(
                 patterns=optimization,
                 verbose=10 if verbose >= 100 else (1 if verbose > 1 else 0),
-                processor="CUDA" if self.device == "cuda" else "CPU",
+                processor="CUDA" if self.device.startswith("cuda") else "CPU",
             )
         else:
             options = None

@@ -28,7 +28,7 @@ def check_model_ort(
 
     if providers is None or providers == "cpu":
         providers = ["CPUExecutionProvider"]
-    elif providers == "cuda":
+    elif providers.startswith("cuda"):
         providers = ["CUDAExecutionProvider", "CPUExecutionProvider"]
 
     if isinstance(onx, str):

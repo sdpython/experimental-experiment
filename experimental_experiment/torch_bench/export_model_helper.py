@@ -385,7 +385,7 @@ def run_onnx_inference(
     stats: dict[str, Any] = {}
     device = example_inputs[0][0].get_device()
     providers = (
-        ["CUDAExecutionProvider", "CPUExecutionProvider"]
+        [("CUDAExecutionProvider", {"device_id": device}), "CPUExecutionProvider"]
         if device >= 0
         else ["CPUExecutionProvider"]
     )

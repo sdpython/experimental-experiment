@@ -104,7 +104,7 @@ def main(args=None):
             print(f"disable_pattern={disable_pattern!r}")
             print(f"enable_pattern={enable_pattern!r}")
 
-        is_cuda = args.device == "cuda"
+        is_cuda = args.device.startswith("cuda")
         if is_cuda:
             print(
                 f"CUDA no model: memory allocated={torch.cuda.memory_allocated(0)}, "
@@ -168,7 +168,7 @@ def main(args=None):
             begin = time.perf_counter()
 
             memory_session = (
-                start_spying_on(cuda=args.device == "cuda")
+                start_spying_on(cuda=args.device.startswith("cuda"))
                 if args.memory_peak
                 else None
             )

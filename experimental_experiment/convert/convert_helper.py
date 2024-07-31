@@ -182,7 +182,7 @@ def ort_optimize(
 
     if providers == "cpu":
         providers = ["CPUExecutionProvider"]
-    elif providers == "cuda":
+    elif providers.startswith("cuda"):
         providers = [("CUDAExecutionProvider", {}), ("CPUExecutionProvider", {})]
     assert isinstance(providers, list), f"Unexpected value for providers={providers!r}"
 

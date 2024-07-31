@@ -134,7 +134,7 @@ def main(args=None):
             f"dump_patterns={dump_patterns!r}, export={args.export}"
         )
 
-        is_cuda = args.device == "cuda"
+        is_cuda = args.device.startswith("cuda")
         if is_cuda:
             print(
                 f"CUDA no model: memory allocated={torch.cuda.memory_allocated(0)}, "
