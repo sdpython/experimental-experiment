@@ -534,6 +534,8 @@ def merge_benchmark_reports(
     formulas=("memory_peak", "buckets", "status", "memory_delta"),
     excel_output: Optional[str] = None,
     exc: bool = True,
+    filter_in: Optional[str] = None,
+    filter_out: Optional[str] = None,
 ) -> Dict[str, "pandas.DataFrame"]:  # noqa: F821
     """
     Merges multiple files produced by bash_benchmark...
@@ -544,6 +546,18 @@ def merge_benchmark_reports(
         101Dummy-custom,2024-07-08,,0,7.119158490095288,7.0,40,2024-07-08,cuda,...
         101Dummy-script,2024-07-08,,1,6.705480073112994,7.0,40,2024-07-08,cuda,...
         101Dummy16-custom,2024-07-08,,2,6.970448340754956,7.0,40,2024-07-08,cuda,...
+
+    :param data: dataframe with the raw data
+    :param model: columns defining a unique model
+    :param keys: colimns definined a unique experiment
+    :param report_on: report on those metrics, ``<prefix>*`` means all
+        columns starting with this prefix
+    :param formulas: add computed metrics
+    :param excel_output: output the computed dataframe into a excel document
+    :param exc: raise exception by default (not used)
+    :param filter_in: filter in some data to make the report smaller (see below)
+    :param filter_out: filter out some data to make the report smaller (see below)
+    :return: dictionary of dataframes
 
     Every key with a unique value is removed.
     Every column with a unique value is displayed on main.
@@ -567,6 +581,13 @@ def merge_benchmark_reports(
         executable
         exporter
         ...
+
+    Argument `filter_in` or `filter_out` follows the syntax
+    ``<column1>:<fmt1>/<column2>:<fmt2>``.
+
+    The format is the following:
+
+    * a value or a set of values separated by ``;``
     """
     import pandas
 
@@ -634,6 +655,8 @@ def merge_benchmark_reports(
         if m not in df.columns:
             df = df.copy()
             df[m] = ""
+
+    df = _filter_data(df, filter_in=filter_in, filter_out=filter_out)
 
     # let's remove the empty line
     df = df[~df[model].isna().max(axis=1)].copy()
@@ -754,12 +777,12 @@ def merge_benchmark_reports(
                 for th, mt in itertools.product(
                     ["1e-1", "1e-2", "1e-3", "1e-4"], ["abs", "abs_0", "abs_1+"]
                 ):
+                    dis = f"discrepancies_{mt}"
+                    if dis not in df.columns:
+                        continue
                     met = f"status_err{mt[3:]}<{th}"
                     mets.append(met)
-                    df[met] = (
-                        ~df[f"discrepancies_{mt}"].isna()
-                        & (df[f"discrepancies_{mt}"] < float(th))
-                    ).astype(int)
+                    df[met] = (~df[dis].isna() & (df[dis] < float(th))).astype(int)
                 df["status_lat<=eager+2%"] = (
                     ~df["discrepancies_abs"].isna()
                     & (df["time_latency"] <= df["time_latency_eager"] * 1.02)
@@ -1517,3 +1540,53 @@ def _select_metrics(
     cols.extend([c for c in dfi.columns if "unit" in c])
     dfi = dfi[cols].sort_values(cols[:-1])
     return dfi, suites
+
+
+def _filter_data(
+    df: "pandas.DataFrame",  # noqa: F821
+    filter_in: Optional[str] = None,
+    filter_out: Optional[str] = None,
+) -> "pandas.DataFrame":  # noqa: F821
+    """
+    Argument `filter` follows the syntax
+    ``<column1>:<fmt1>/<column2>:<fmt2>``.
+
+    The format is the following:
+
+    * a value or a set of values separated by ``;``
+    """
+    if not filter_in and not filter_out:
+        return df
+
+    def _f(fmt):
+        cond = {}
+        if isinstance(fmt, str):
+            cols = fmt.split("/")
+            for c in cols:
+                assert ":" in c, f"Unexpected value {c!r} in fmt={fmt!r}"
+                spl = c.split(":")
+                assert len(spl) == 2, f"Unexpected value {c!r} in fmt={fmt!r}"
+                name, fil = spl
+                cond[name] = set(fil.split(";"))
+        return cond
+
+    if filter_in:
+        cond = _f(filter_in)
+        assert isinstance(
+            cond, dict
+        ), f"Unexpected type {type(cond)} for fmt={filter_in!r}"
+        for k, v in cond.items():
+            if k not in df.columns:
+                continue
+            df = df[df[k].isin(v)]
+
+    if filter_out:
+        cond = _f(filter_out)
+        assert isinstance(
+            cond, dict
+        ), f"Unexpected type {type(cond)} for fmt={filter_out!r}"
+        for k, v in cond.items():
+            if k not in df.columns:
+                continue
+            df = df[~df[k].isin(v)]
+    return df
