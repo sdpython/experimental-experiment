@@ -515,6 +515,8 @@ def merge_benchmark_reports(
         "flag_fake_tensor",
         "flag_no_grad",
         "flag_training",
+        "machine",
+		"processor",
         "version",
         "version_onnx",
         "version_onnxruntime",
@@ -522,7 +524,6 @@ def merge_benchmark_reports(
         "version_tag",
         "version_torch",
         "version_transformers",
-        "machine",
     ),
     column_keys=("stat", "exporter", "opt_patterns"),
     report_on=(

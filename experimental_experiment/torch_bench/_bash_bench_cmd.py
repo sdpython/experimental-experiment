@@ -169,6 +169,9 @@ def bash_bench_main(script_name: str, doc: str, args: Optional[List[str]] = None
                         filename = f"{name}.m{i}{ext}"
                         i += 1
                 print(f"Prints out the merged results into file {filename!r}")
+                fold, _ = os.path.split(filename)
+                if fold and not os.path.exists(fold):
+                    os.makedirs(fold)
                 df.to_csv(filename, index=False, errors="ignore")
                 df.to_excel(filename + ".xlsx", index=False)
                 if args.verbose:
@@ -246,6 +249,9 @@ def bash_bench_main(script_name: str, doc: str, args: Optional[List[str]] = None
                         i += 1
 
                 print(f"Prints out the results into file {filename!r}")
+                fold, _ = os.path.split(filename)
+                if not os.path.exists(fold):
+                    os.makedirs(fold)
                 df.to_csv(filename, index=False, errors="ignore")
                 df.to_excel(filename + ".xlsx", index=False)
                 if args.verbose:
