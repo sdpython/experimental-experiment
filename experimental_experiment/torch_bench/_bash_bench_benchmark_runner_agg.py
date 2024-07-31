@@ -214,7 +214,7 @@ def _apply_excel_style(
                 cell.alignment = alignment
             continue
 
-        if k in {"0raw", "AGG"}:
+        if k in {"0raw", "AGG", "AGG2"}:
             continue
 
         n_cols = (
@@ -413,7 +413,7 @@ def _apply_excel_style(
                     cell.number_format = "0.000000"
             continue
 
-        if k == "SUMMARY":
+        if k in {"SUMMARY", "SUMMARY2"}:
             fmt = {
                 "x": "0.000",
                 "%": "0.000%",
