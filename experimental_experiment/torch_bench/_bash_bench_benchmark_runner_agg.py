@@ -12,6 +12,7 @@ SELECTED_FEATURES = [
         agg="TOTAL",
         new_name="number of models",
         unit="N",
+        help="Number of models evaluated in this document.",
     ),
     dict(
         cat="speedup",
@@ -19,6 +20,10 @@ SELECTED_FEATURES = [
         stat="increase",
         new_name="number of running models",
         unit="N",
+        help="Number of models converted and running with onnxruntime. "
+        "The outputs may be right or wrong. Unit test ensures every aten functions "
+        "is correctly converted but the combination may produce outputs "
+        "with higher discrepancies than expected.",
     ),
     dict(
         cat="time",
@@ -26,14 +31,31 @@ SELECTED_FEATURES = [
         stat="export_success",
         new_name="export rate",
         unit="%",
+        help="Proportion of models successfully converted into ONNX. "
+        "The ONNX model may not be run through onnxruntime or with "
+        "significant discrepancies.",
     ),
-    dict(cat="speedup", agg="COUNT%", stat="increase", new_name="run rate", unit="%"),
+    dict(
+        cat="speedup",
+        agg="COUNT%",
+        stat="increase",
+        new_name="run rate",
+        unit="%",
+        help="Proportion of models successfully converted into ONNX "
+        "and onnxruntime can run it. "
+        "The outputs may be right or wrong. Unit test ensures every aten functions "
+        "is correctly converted but the combination may produce outputs "
+        "with higher discrepancies than expected.",
+    ),
     dict(
         cat="time",
         agg="MEAN",
         stat="export_success",
         new_name="average export time",
         unit="s",
+        help="Average export time when the export succeeds. "
+        "The model may not run through onnxruntime and the model "
+        "may produce higher discrepancies than expected (lower is better).",
     ),
     dict(
         cat="speedup",
@@ -41,6 +63,7 @@ SELECTED_FEATURES = [
         stat="1speedup",
         new_name="average speedup (geo)",
         unit="x",
+        help="Geometric mean of all speedup for all model converted and runnning.",
     ),
     # e-1
     dict(
@@ -49,6 +72,8 @@ SELECTED_FEATURES = [
         stat="err<1e-1",
         new_name="discrepancies < 0.1",
         unit="%",
+        help="Proportion of models for which the maximum discrepancies is "
+        "below 0.1 for all outputs.",
     ),
     dict(
         cat="status",
@@ -56,6 +81,8 @@ SELECTED_FEATURES = [
         stat="err_0<1e-1",
         new_name="discrepancies first output < 0.1",
         unit="%",
+        help="Proportion of models for which the maximum discrepancies is "
+        "below 0.1 for the first output.",
     ),
     dict(
         cat="status",
@@ -63,6 +90,8 @@ SELECTED_FEATURES = [
         stat="err_1+<1e-1",
         new_name="discrepancies second+ output < 0.1",
         unit="%",
+        help="Proportion of models for which the maximum discrepancies is "
+        "below 0.1 for all the outputs except the first one.",
     ),
     # e-2
     dict(
@@ -71,6 +100,8 @@ SELECTED_FEATURES = [
         stat="err<1e-2",
         new_name="discrepancies < 0.01",
         unit="%",
+        help="Proportion of models for which the maximum discrepancies is "
+        "below 0.01 for all outputs.",
     ),
     dict(
         cat="status",
@@ -78,6 +109,8 @@ SELECTED_FEATURES = [
         stat="err_0<1e-2",
         new_name="discrepancies first output < 0.01",
         unit="%",
+        help="Proportion of models for which the maximum discrepancies is "
+        "below 0.01 for the first output.",
     ),
     dict(
         cat="status",
@@ -85,6 +118,8 @@ SELECTED_FEATURES = [
         stat="err_1+<1e-2",
         new_name="discrepancies second+ output < 0.01",
         unit="%",
+        help="Proportion of models for which the maximum discrepancies is "
+        "below 0.01 for all the outputs except the first one.",
     ),
     dict(
         cat="status",
@@ -92,6 +127,9 @@ SELECTED_FEATURES = [
         stat="lat<=script+2%",
         new_name="model equal or faster than torch.script",
         unit="%",
+        help="Proportion of models successfully converted with torch.script "
+        "and the other exporter, and the second exporter is as fast or faster "
+        "than torch.script.",
     ),
     dict(
         cat="status",
@@ -99,13 +137,16 @@ SELECTED_FEATURES = [
         stat="lat<=eager+2%",
         new_name="model equal or faster than eager",
         unit="%",
+        help="Proportion of models as fast or faster than torch eager mode.",
     ),
     dict(
-        cat="TIME_ITER",
-        stat="TIME_ITER",
+        cat="time",
+        stat="ITER",
         agg="MEAN",
         new_name="average iteration time",
         unit="s",
+        help="Average total time per model and scenario. "
+        "It usually reflects how long the export time is (lower is better).",
     ),
     dict(
         cat="discrepancies",
@@ -113,6 +154,8 @@ SELECTED_FEATURES = [
         agg="MEAN",
         new_name="average absolute discrepancies",
         unit="f",
+        help="Average maximum absolute discrepancies "
+        "assuming it can be measured (lower is better).",
     ),
     dict(
         cat="discrepancies",
@@ -120,6 +163,8 @@ SELECTED_FEATURES = [
         agg="MEAN",
         new_name="average absolute discrepancies first output",
         unit="f",
+        help="Average maximum absolute discrepancies "
+        "for the first output assuming it can be measured (lower is better).",
     ),
     dict(
         cat="discrepancies",
@@ -127,6 +172,9 @@ SELECTED_FEATURES = [
         agg="MEAN",
         new_name="average absolute discrepancies second+ output",
         unit="f",
+        help="Average maximum absolute discrepancies "
+        "for all the outputs except the first one "
+        "assuming it can be measured (lower is better).",
     ),
     dict(
         cat="time",
@@ -134,9 +182,15 @@ SELECTED_FEATURES = [
         stat="latency_eager",
         new_name="average latency eager",
         unit="s",
+        help="Average latency for eager mode (lower is better)",
     ),
     dict(
-        cat="time", agg="MEAN", stat="latency", new_name="average latency ort", unit="s"
+        cat="time",
+        agg="MEAN",
+        stat="latency",
+        new_name="average latency ort",
+        unit="s",
+        help="Average latency for onnxruntime (lower is better)",
     ),
     dict(
         cat="memory",
@@ -144,6 +198,7 @@ SELECTED_FEATURES = [
         stat="peak_gpu_eager_warmup",
         new_name="average GPU peak (eager warmup)",
         unit="bytes",
+        help="Average GPU peak while warming up eager mode (torch metric)",
     ),
     dict(
         cat="memory",
@@ -151,6 +206,7 @@ SELECTED_FEATURES = [
         stat="peak_gpu_warmup",
         new_name="average GPU peak (warmup)",
         unit="bytes",
+        help="Average GPU peak while warming up onnxruntime (torch metric)",
     ),
     dict(
         cat="memory",
@@ -158,6 +214,8 @@ SELECTED_FEATURES = [
         stat="peak_cpu_pp",
         new_name="average CPU peak",
         unit="Mb",
+        help="Average CPU peak while warming up onnxruntime"
+        "(measured in a secondary process)",
     ),
     dict(
         cat="memory",
@@ -165,6 +223,8 @@ SELECTED_FEATURES = [
         stat="peak_gpu_pp",
         new_name="average GPU peak",
         unit="Mb",
+        help="Average GPU peak while converting the model "
+        "(measured in a secondary process)",
     ),
     dict(
         cat="memory",
@@ -172,6 +232,7 @@ SELECTED_FEATURES = [
         stat="peak_gpu_export",
         new_name="average GPU peak (export)",
         unit="bytes",
+        help="Average GPU peak while converting the model " "(torch metric)",
     ),
     dict(
         cat="speedup",
@@ -179,6 +240,7 @@ SELECTED_FEATURES = [
         stat="increase",
         new_name="average speedup increase",
         unit="%",
+        help="Average speedup increase compare to eager mode.",
     ),
 ]
 
@@ -516,12 +578,15 @@ def _apply_excel_style(
             ):
                 for cell in row:
                     if cell.value in fmt:
-                        fcell = row[cell.col_idx - 2]
-                        fcell.number_format = fmt[cell.value]
-                        if cell.value == "x" and (
-                            not isinstance(fcell, (float, int)) or fcell.value < 1.02
-                        ):
-                            fcell.font = red
+                        for idx in range(2, cell.col_idx):
+                            fcell = row[idx]
+                            if isinstance(fcell.value, (int, float)):
+                                fcell.number_format = fmt[cell.value]
+                                if cell.value == "x" and (
+                                    not isinstance(fcell, (float, int))
+                                    or fcell.value < 0.98
+                                ):
+                                    fcell.font = red
             cols = {}
             for row in sheet.iter_rows(
                 min_row=1,
@@ -1603,13 +1668,14 @@ def _select_metrics(
     for i, row in enumerate(rows):
         for j, (d, s) in enumerate(subset):
             if (s & row) == s:
-                keep.append((i, d["new_name"], d["unit"], d.get("order", j)))
+                keep.append((i, d["new_name"], d["unit"], d.get("order", j), d["help"]))
                 break
 
     dfi = df.iloc[[k[0] for k in keep]].reset_index(drop=False).copy()
     dfi["METRIC"] = [k[1] for k in keep]
     dfi["unit"] = [k[2] for k in keep]
     dfi["order"] = [k[3] for k in keep]
+    dfi["help"] = [k[4] for k in keep]
     dfi = dfi.copy()
     dd_ = set(select[0].keys())
     dd = set()
@@ -1621,13 +1687,14 @@ def _select_metrics(
         *[c for c in dfi.columns if "order" in c],
         *[c for c in dfi.columns if "METRIC" in c],
     ]
-    skip = set([*cols, *[c for c in dfi.columns if "unit" in c]])
+    skip = set([*cols, *[c for c in dfi.columns if "unit" in c or "help" in c]])
     for c in dfi.columns:
         if c in skip or c in dd:
             continue
         cols.append(c)
     cols.extend([c for c in dfi.columns if "unit" in c])
-    dfi = dfi[cols].sort_values(cols[:-1])
+    cols.extend([c for c in dfi.columns if "help" in c])
+    dfi = dfi[cols].sort_values(cols[:-2])
     return dfi, suites
 
 
