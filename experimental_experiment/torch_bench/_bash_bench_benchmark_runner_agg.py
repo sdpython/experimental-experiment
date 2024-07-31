@@ -94,6 +94,13 @@ SELECTED_FEATURES = [
         unit="f",
     ),
     dict(
+        cat="discrepancies",
+        stat="abs_0",
+        agg="MEAN",
+        new_name="average absolute discrepancies first output",
+        unit="f",
+    ),
+    dict(
         cat="time",
         agg="MEAN",
         stat="latency_eager",
