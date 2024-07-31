@@ -516,7 +516,7 @@ def merge_benchmark_reports(
         "flag_no_grad",
         "flag_training",
         "machine",
-		"processor",
+        "processor",
         "version",
         "version_onnx",
         "version_onnxruntime",
