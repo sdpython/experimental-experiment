@@ -313,9 +313,23 @@ class BenchmarkRunner:
         level: int = 0,
         flatten: bool = False,
         debug_info: Optional[List[str]] = None,
+        begin: int = 0,
+        end: int = -1,
+        _index: int = 0,
     ) -> Tuple[float, float]:
         """
         Returns the maximum discrepancy.
+
+        :param expected: expected values
+        :param got: values
+        :param verbose: verbosity level
+        :param level: for embedded outputs, used for debug purpposes
+        :param flatten: flatten outputs
+        :param debug_info: debug information
+        :param begin: first output to considered
+        :param end: last output to considered (-1 for the last one)
+        :param _index: used with begin and end
+        :return: maximum absolute and relatives discrepancies
         """
         if flatten:
             return self.max_diff(
@@ -333,6 +347,9 @@ class BenchmarkRunner:
                     )
                 ),
                 level=level,
+                begin=begin,
+                end=end,
+                _index=_index,
             )
 
         if hasattr(expected, "to_tuple"):
@@ -350,6 +367,9 @@ class BenchmarkRunner:
                         else (debug_info + [f"{' ' * level}to_tupleA"])
                     )
                 ),
+                begin=begin,
+                end=end,
+                _index=_index,
             )
 
         if hasattr(got, "to_tuple"):
@@ -367,10 +387,16 @@ class BenchmarkRunner:
                         else (debug_info + [f"{' ' * level}to_tupleB"])
                     )
                 ),
+                begin=begin,
+                end=end,
+                _index=_index,
             )
 
         if isinstance(expected, torch.Tensor):
             if isinstance(got, torch.Tensor):
+                if _index < begin or (end != -1 and _index >= end):
+                    # out of boundary
+                    return 0.0, 0.0
                 diff = (got - expected).abs()
                 rdiff = diff / (expected.abs() + 1e-3)
                 abs_diff, rel_diff = float(diff.max()), float(rdiff.max())
@@ -380,14 +406,16 @@ class BenchmarkRunner:
                         print("\n".join(debug_info))
                     print(
                         f"[max_diff-1] abs_diff={abs_diff}, rel_diff={rel_diff}, "
-                        f"dtype={expected.dtype}, shape={expected.shape}, level={level}"
+                        f"dtype={expected.dtype}, shape={expected.shape}, level={level}, "
+                        f"_index={_index}"
                     )
                     if abs_diff >= 10:
                         idiff = torch.argmax(diff.reshape((-1,)))
                         x = expected.reshape((-1,))[idiff]
                         y = got.reshape((-1,))[idiff]
                         print(
-                            f"   [max_diff-2] abs diff={abs_diff}, x={x}, y={y}, level={level}"
+                            f"   [max_diff-2] abs diff={abs_diff}, x={x}, y={y}, level={level}, "
+                            f"_index={_index}"
                         )
                         print(y)
 
@@ -396,7 +424,8 @@ class BenchmarkRunner:
                         x = expected.reshape((-1,))[idiff]
                         y = got.reshape((-1,))[idiff]
                         print(
-                            f"   [max_diff-3] rel diff={rel_diff}, x={x}, y={y}, level={level}"
+                            f"   [max_diff-3] rel diff={rel_diff}, x={x}, y={y}, level={level}, "
+                            f"_index={_index}"
                         )
 
                 return abs_diff, rel_diff
@@ -406,40 +435,61 @@ class BenchmarkRunner:
                     if verbose > 2:
                         print(
                             f"[max_diff] (a) inf because len(expected)={len(expected)}!=1, "
-                            f"len(got)={len(got)}, level={level}"
+                            f"len(got)={len(got)}, level={level}, _index={_index}"
                         )
                         for i, (a, b) in enumerate(zip(expected, got)):
                             if isinstance(a, torch.Tensor) and isinstance(
                                 b, torch.Tensor
                             ):
                                 print(
-                                    f"    i={i} expected {a.dtype}:{a.shape}, has {b.dtype}:{b.shape}"
+                                    f"    i={i} expected {a.dtype}:{a.shape}, "
+                                    f"has {b.dtype}:{b.shape}, _index={_index}"
                                 )
                             else:
-                                print(f"    i={i} a is {type(a)}, b is {type(b)}")
+                                print(
+                                    f"    i={i} a is {type(a)}, "
+                                    f"b is {type(b)}, _index={_index}"
+                                )
                     return np.inf, np.inf
-                return self.max_diff(expected, got[0], verbose=verbose, level=level + 1)
+                return self.max_diff(
+                    expected,
+                    got[0],
+                    verbose=verbose,
+                    level=level + 1,
+                    begin=begin,
+                    end=end,
+                    _index=_index,
+                )
 
         if isinstance(expected, (tuple, list)):
             if len(expected) == 1:
-                return self.max_diff(expected[0], got, verbose=verbose, level=level + 1)
+                return self.max_diff(
+                    expected[0],
+                    got,
+                    verbose=verbose,
+                    level=level + 1,
+                    begin=begin,
+                    end=end,
+                    _index=_index,
+                )
             if not isinstance(got, (tuple, list)):
                 if verbose > 2:
                     print(
                         f"[max_diff] inf because type(expected)={type(expected)}, "
-                        f"type(got)={type(got)}, level={level}"
+                        f"type(got)={type(got)}, level={level}, _index={_index}"
                     )
                 return np.inf, np.inf
             if len(got) != len(expected):
                 if verbose > 2:
                     print(
                         f"[max_diff] (b) inf because len(expected)={len(expected)}, "
-                        f"len(got)={len(got)}, level={level}"
+                        f"len(got)={len(got)}, level={level}, _index={_index}"
                     )
                     for i, (a, b) in enumerate(zip(expected, got)):
                         if isinstance(a, torch.Tensor) and isinstance(b, torch.Tensor):
                             print(
-                                f"    i={i} expected {a.dtype}:{a.shape}, has {b.dtype}:{b.shape}"
+                                f"    i={i} expected {a.dtype}:{a.shape}, "
+                                f"has {b.dtype}:{b.shape}, _index={_index}"
                             )
                         else:
                             print(f"    i={i} a is {type(a)}, b is {type(b)}")
@@ -463,6 +513,9 @@ class BenchmarkRunner:
                             )
                         )
                     ),
+                    begin=begin,
+                    end=end,
+                    _index=_index + ip,
                 )
                 am = max(am, a)
                 rm = max(rm, r)
@@ -473,7 +526,15 @@ class BenchmarkRunner:
                 expected.mean.detach().to("cpu"),
                 expected.scale.detach().to("cpu"),
             )
-            return self.max_diff(values, got, verbose=verbose, level=level + 1)
+            return self.max_diff(
+                values,
+                got,
+                verbose=verbose,
+                level=level + 1,
+                begin=begin,
+                end=end,
+                _index=_index,
+            )
 
         raise AssertionError(
             f"Not implemented with type(expected)={type(expected)}, type(results)={type(got)},\n"
@@ -1294,6 +1355,16 @@ class BenchmarkRunner:
             a, r = self.max_diff(expected, got, verbose=self.verbose, flatten=is_onnx)
             stats["discrepancies_abs"] = a
             stats["discrepancies_rel"] = r
+            a, r = self.max_diff(
+                expected, got, verbose=self.verbose, flatten=is_onnx, begin=0, end=1
+            )
+            stats["discrepancies_abs_0"] = a
+            stats["discrepancies_rel_0"] = r
+            a, r = self.max_diff(
+                expected, got, verbose=self.verbose, flatten=is_onnx, begin=1
+            )
+            stats["discrepancies_abs_1+"] = a
+            stats["discrepancies_rel_1+"] = r
             if self.verbose:
                 print(
                     f"[BenchmarkRunner.benchmark] done model with {len(stats)} metrics"
