@@ -332,6 +332,12 @@ class ExtTestCase(unittest.TestCase):
                 f"{a} < {b}, a not greater or equal than b\n{msg or ''}"
             )
 
+    def assertInOr(self, tofind: Tuple[str, ...], text: str):
+        for tof in tofind:
+            if tof in text:
+                return
+        raise AssertionError(f"Unable to find the list of strings {tofind} in\n{text}")
+
     def assertEqualArrays(
         self,
         expected: Sequence[numpy.ndarray],

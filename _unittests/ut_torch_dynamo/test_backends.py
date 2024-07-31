@@ -279,7 +279,7 @@ class TestBackend(ExtTestCase):
         self.assertEqualArray(expected, got, atol=1e-5)
         out = buf.getvalue()
         self.assertIn("[dynger_backend] done", out)
-        self.assertIn("Linear((l_x_,))", out)
+        self.assertInOr(("Linear((l_x_,))", "built-in function linear"), out)
 
     @skipif_ci_windows("no torch dynamo")
     @requires_onnxruntime_training()
