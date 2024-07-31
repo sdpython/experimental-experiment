@@ -154,6 +154,57 @@ SELECTED_FEATURES = [
     ),
 ]
 
+FILTERS = {
+    "HG": [
+        "AlbertForMaskedLM",
+        "AlbertForQuestionAnswering",
+        "AllenaiLongformerBase",
+        "BartForCausalLM",
+        "BartForConditionalGeneration",
+        "BertForMaskedLM",
+        "BertForQuestionAnswering",
+        "BlenderbotForCausalLM",
+        "BlenderbotSmallForCausalLM",
+        "BlenderbotSmallForConditionalGeneration",
+        "CamemBert",
+        "DebertaForMaskedLM",
+        "DebertaForQuestionAnswering",
+        "DebertaV2ForMaskedLM",
+        "DebertaV2ForQuestionAnswering",
+        "DistilBertForMaskedLM",
+        "DistilBertForQuestionAnswering",
+        "DistillGPT2",
+        "ElectraForCausalLM",
+        "ElectraForQuestionAnswering",
+        "GPT2ForSequenceClassification",
+        "GoogleFnet",
+        "LayoutLMForMaskedLM",
+        "LayoutLMForSequenceClassification",
+        "M2M100ForConditionalGeneration",
+        "MBartForCausalLM",
+        "MBartForConditionalGeneration",
+        "MT5ForConditionalGeneration",
+        "MegatronBertForCausalLM",
+        "MegatronBertForQuestionAnswering",
+        "MobileBertForMaskedLM",
+        "MobileBertForQuestionAnswering",
+        "OPTForCausalLM",
+        "PLBartForCausalLM",
+        "PLBartForConditionalGeneration",
+        "PegasusForCausalLM",
+        "PegasusForConditionalGeneration",
+        "RobertaForCausalLM",
+        "RobertaForQuestionAnswering",
+        "Speech2Text2ForCausalLM",
+        "T5ForConditionalGeneration",
+        "T5Small",
+        "TrOCRForCausalLM",
+        "XGLMForCausalLM",
+        "XLNetLMHeadModel",
+        "YituTechConvBert",
+    ]
+}
+
 
 def _key(v):
     if isinstance(v, (int, float)):
@@ -665,6 +716,8 @@ def merge_benchmark_reports(
             df[m] = ""
 
     df = _filter_data(df, filter_in=filter_in, filter_out=filter_out)
+    if df.shape[0] == 0:
+        return {}
 
     # let's remove the empty line
     df = df[~df[model].isna().max(axis=1)].copy()
@@ -1575,7 +1628,7 @@ def _filter_data(
                 spl = c.split(":")
                 assert len(spl) == 2, f"Unexpected value {c!r} in fmt={fmt!r}"
                 name, fil = spl
-                cond[name] = set(fil.split(";"))
+                cond[name] = FILTERS[fil] if fil in FILTERS else set(fil.split(";"))
         return cond
 
     if filter_in:

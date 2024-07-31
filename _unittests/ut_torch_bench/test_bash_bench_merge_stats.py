@@ -226,6 +226,26 @@ class TestBashBenchMergeStats(ExtTestCase):
                 self.assertNotIn(["device", "cuda"], df3[k].values.tolist())
                 self.assertIn(["device", "cuda"], df2[k].values.tolist())
 
+    @ignore_warnings((FutureWarning,))
+    def test_merge_stats_filter_hg(self):
+        data = os.path.join(os.path.dirname(__file__), "data", "bug_speed_up.csv")
+        df = merge_benchmark_reports(
+            data,
+            excel_output="test_merge_stats_filter_hg.xlsx",
+            filter_in="model_name:HG",
+        )
+        self.assertIsInstance(df, dict)
+        for k, v in df.items():
+            sh = v.shape
+            if k == "speedup":
+                self.assertEqual(sh, (12, 3))
+        df = merge_benchmark_reports(
+            data,
+            excel_output="test_merge_stats_filter_hg_none.xlsx",
+            filter_in="model_name:NONE",
+        )
+        self.assertEqual(df, {})
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
