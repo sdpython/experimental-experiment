@@ -112,7 +112,7 @@ class GraphBuilder:
       (debugging tool)
 
     You can setup environment variable ``ONNXSTOP`` to raise an exception when the type or shape
-    of a variable is set.
+    of a variable is set. Example: ``ONNXSTOP=attn_output python ...
     """
 
     _op_type_element_wise_types = element_wise_binary_op_types()
