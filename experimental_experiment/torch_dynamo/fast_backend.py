@@ -328,8 +328,8 @@ class OrtBackend:
         with open(os.path.join(folder, "model.onnx"), "wb") as f:
             f.write(self.onnx_model.SerializeToString())
         case = os.path.join(folder, f"test_case_{test_case}")
-        if not os.path.exists(case):
-            os.mkdir(case)
+        if case and not os.path.exists(case):
+            os.makedirs(case)
         assert (
             len(inputs) > 0
         ), f"Empty sequence of inputs, cannot save into {folder!r}."

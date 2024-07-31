@@ -304,7 +304,7 @@ class ExtTestCase(unittest.TestCase):
         """
         if folder is None:
             folder = "dump_test"
-        if not os.path.exists(folder):
+        if folder and not os.path.exists(folder):
             os.mkdir(folder)
         return os.path.join(folder, name)
 

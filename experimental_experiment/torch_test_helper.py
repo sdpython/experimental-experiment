@@ -117,9 +117,9 @@ def export_to_onnx(
     ret["proto"] = onx
     if prefix is not None:
         filename = f"{prefix}.custom.onnx"
-        if folder is not None:
+        if folder:
             if not os.path.exists(folder):
-                os.mkdir(folder)
+                os.makedirs(folder)
             filename = os.path.join(folder, filename)
         with open(filename, "wb") as f:
             f.write((onx[0] if return_builder else onx).SerializeToString())

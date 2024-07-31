@@ -133,8 +133,8 @@ def main(args=None):
         print(f"dynamic={use_dynamic}")
 
         folder = args.dump_folder
-        if not os.path.exists(folder):
-            os.mkdir(folder)
+        if folder and not os.path.exists(folder):
+            os.makedirs(folder)
 
         filename = (
             f"export_{args.model}_{args.exporter}_{'dyn' if use_dynamic else 'static'}"

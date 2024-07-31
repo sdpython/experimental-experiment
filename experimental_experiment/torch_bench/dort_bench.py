@@ -164,8 +164,8 @@ def main(args=None):
 
         dump_folder = args.dump_folder
 
-        if args.export and not os.path.exists(dump_folder):
-            os.mkdir(dump_folder)
+        if args.export and dump_folder and not os.path.exists(dump_folder):
+            os.makedirs(dump_folder)
 
         if dump_patterns:
             dump_patterns_folder = os.path.join(dump_folder, "patterns")

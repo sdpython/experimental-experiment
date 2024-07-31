@@ -570,7 +570,7 @@ class BenchmarkRunner:
         machine_specs = get_machine()
         initial_no_grad = torch.is_grad_enabled()
 
-        if not os.path.exists(folder):
+        if folder and not os.path.exists(folder):
             os.makedirs(folder)
         names = self.get_model_name_list()
         assert len(names) > 0, "no model to run"
@@ -907,8 +907,8 @@ class BenchmarkRunner:
             folder,
             f"{model_name}-{exporter}-{self.device}-{self.dtype or ''}{sopt}",
         )
-        if not os.path.exists(pfilename):
-            os.mkdir(pfilename)
+        if pfilename and not os.path.exists(pfilename):
+            os.makedirs(pfilename)
         filename = os.path.join(pfilename, "model.onnx")
 
         memory_session = (
@@ -1144,8 +1144,8 @@ class BenchmarkRunner:
                         f"external weights the optimized model by onnxruntime in "
                         f"{new_filename!r}"
                     )
-                if not os.path.exists(fold):
-                    os.mkdir(fold)
+                if fold and not os.path.exists(fold):
+                    os.makedirs(fold)
                 ortops = onnx.load(session_options.optimized_model_filepath)
                 onnx.save(ortops, new_filename, save_as_external_data=True)
                 # Let's free some space.
