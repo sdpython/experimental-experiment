@@ -21,7 +21,10 @@ SELECTED_FEATURES = [
         unit="N",
     ),
     dict(
-        cat="time", agg="COUNT%", stat="export_success", new_name="pass rate", unit="%"
+        cat="time", agg="COUNT%", stat="export_success", new_name="export rate", unit="%"
+    ),
+    dict(
+        cat="speedup", agg="COUNT%", stat="increase", new_name="run rate", unit="%"
     ),
     dict(
         cat="time",
@@ -37,18 +40,12 @@ SELECTED_FEATURES = [
         new_name="average speedup (geo)",
         unit="x",
     ),
+    # e-1
     dict(
         cat="status",
         agg="MEAN",
         stat="err<1e-1",
         new_name="discrepancies < 0.1",
-        unit="%",
-    ),
-    dict(
-        cat="status",
-        agg="MEAN",
-        stat="err<1e-2",
-        new_name="discrepancies < 0.01",
         unit="%",
     ),
     dict(
@@ -61,8 +58,30 @@ SELECTED_FEATURES = [
     dict(
         cat="status",
         agg="MEAN",
+        stat="err_1+<1e-1",
+        new_name="discrepancies second+ output < 0.1",
+        unit="%",
+    ),
+    # e-2
+    dict(
+        cat="status",
+        agg="MEAN",
+        stat="err<1e-2",
+        new_name="discrepancies < 0.01",
+        unit="%",
+    ),
+    dict(
+        cat="status",
+        agg="MEAN",
         stat="err_0<1e-2",
         new_name="discrepancies first output < 0.01",
+        unit="%",
+    ),
+    dict(
+        cat="status",
+        agg="MEAN",
+        stat="err_1+<1e-2",
+        new_name="discrepancies second+ output < 0.01",
         unit="%",
     ),
     dict(
@@ -98,6 +117,13 @@ SELECTED_FEATURES = [
         stat="abs_0",
         agg="MEAN",
         new_name="average absolute discrepancies first output",
+        unit="f",
+    ),
+    dict(
+        cat="discrepancies",
+        stat="abs_1+",
+        agg="MEAN",
+        new_name="average absolute discrepancies second+ output",
         unit="f",
     ),
     dict(
@@ -147,7 +173,7 @@ SELECTED_FEATURES = [
     ),
     dict(
         cat="speedup",
-        agg="GEO-MEAN",
+        agg="MEAN",
         stat="increase",
         new_name="average speedup increase",
         unit="%",
@@ -475,10 +501,10 @@ def _apply_excel_style(
             fmt = {
                 "x": "0.000",
                 "%": "0.000%",
-                "byes": "0 000 000 000",
+                "bytes": "0 000 000 000",
                 "Mb": "0.000",
                 "N": "0",
-                "f": "0.000",
+                "f": "0.0000",
             }
             for row in sheet.iter_rows(
                 min_row=first_row,

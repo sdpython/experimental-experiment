@@ -33,8 +33,8 @@ def main(args=None):
     merge_benchmark_reports(
         res.inputs,
         excel_output=res.output,
-        filter_in=args.filter_in,
-        filter_out=args.filter_out,
+        filter_in=res.filter_in,
+        filter_out=res.filter_out,
     )
 
 
