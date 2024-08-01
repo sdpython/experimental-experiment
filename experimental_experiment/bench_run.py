@@ -30,21 +30,21 @@ def get_processor_name():
     """
     Returns the processor name.
     """
-    if platform.system() == "Windows":
+    if platform.system() in ("Windows", "Darwin"):
         return platform.processor()
-    elif platform.system() == "Darwin":
-        os.environ["PATH"] = os.environ["PATH"] + os.pathsep + "/usr/sbin"
-        command = "sysctl -n machdep.cpu.brand_string"
-        return subprocess.check_output(command).strip()
-    elif platform.system() == "Linux":
+    if platform.system() == "Linux":
         command = "cat /proc/cpuinfo"
         all_info = subprocess.check_output(command, shell=True).decode().strip()
         for line in all_info.split("\n"):
             if "model name" in line:
                 return re.sub(".*model name.*:", "", line, 1).strip()
-    else:
-        raise AssertionError("get_process_name not implemented on this platform.")
-    return ""
+    # fails
+    # if platform.system() == "Darwin":
+    #     os.environ["PATH"] = os.environ["PATH"] + os.pathsep + "/usr/sbin"
+    #     command = "sysctl -n machdep.cpu.brand_string"
+    #     return subprocess.check_output(command).strip()
+
+    raise AssertionError("get_process_name not implemented on this platform.")
 
 
 def get_machine() -> Dict[str, Union[str, int, float, Tuple[int, int]]]:
@@ -63,7 +63,7 @@ def get_machine() -> Dict[str, Union[str, int, float, Tuple[int, int]]]:
         version=str(sys.version).split()[0],
         cpu=int(multiprocessing.cpu_count()),
         executable=str(sys.executable),
-        process_name=get_processor_name(),
+        processor_name=get_processor_name(),
         system=str(platform.system()),
     )
     try:

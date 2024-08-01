@@ -670,6 +670,7 @@ def merge_benchmark_reports(
     data: Union["pandas.DataFrame", List[str], str],  # noqa: F821
     model=("suite", "model_name"),
     keys=(
+        "architecture",
         "exporter",
         "opt_patterns",
         "device",
@@ -680,6 +681,7 @@ def merge_benchmark_reports(
         "flag_training",
         "machine",
         "processor",
+        "processor_name",
         "version",
         "version_onnx",
         "version_onnxruntime",
