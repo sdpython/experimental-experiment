@@ -26,16 +26,45 @@ def _clean_string(s: str) -> str:
     return s
 
 
+def get_processor_name():
+    """
+    Returns the processor name.
+    """
+    if platform.system() == "Windows":
+        return platform.processor()
+    elif platform.system() == "Darwin":
+        os.environ["PATH"] = os.environ["PATH"] + os.pathsep + "/usr/sbin"
+        command = "sysctl -n machdep.cpu.brand_string"
+        return subprocess.check_output(command).strip()
+    elif platform.system() == "Linux":
+        command = "cat /proc/cpuinfo"
+        all_info = subprocess.check_output(command, shell=True).decode().strip()
+        for line in all_info.split("\n"):
+            if "model name" in line:
+                return re.sub(".*model name.*:", "", line, 1).strip()
+    else:
+        raise AssertionError("get_process_name not implemented on this platform.")
+    return ""
+
+
 def get_machine() -> Dict[str, Union[str, int, float, Tuple[int, int]]]:
     """
     Returns the machine specifications.
     """
+    arch = platform.architecture()
     config: Dict[str, Union[str, int, float, Tuple[int, int]]] = dict(
         machine=str(platform.machine()),
+        architecture=(
+            "/".join(str(_) for _ in arch)
+            if isinstance(arch, (list, tuple))
+            else str(arch)
+        ),
         processor=str(platform.processor()),
         version=str(sys.version).split()[0],
         cpu=int(multiprocessing.cpu_count()),
         executable=str(sys.executable),
+        process_name=get_processor_name(),
+        system=str(platform.system()),
     )
     try:
         import torch.cuda

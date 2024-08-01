@@ -1,11 +1,149 @@
 import time
 import os
+import sys
 from typing import Any, Dict, List, Optional, Union
 import numpy as np
 import onnx
-from onnx import ModelProto
+from onnx import (
+    AttributeProto,
+    FunctionProto,
+    GraphProto,
+    ModelProto,
+    TensorProto,
+    NodeProto,
+)
 from ..convert.convert_helper import optimize_model_proto_oxs
 from ..bench_run import measure_discrepancies
+
+
+def size_type(dtype: Any) -> int:
+    if isinstance(dtype, int):
+        # It is a TensorProto.DATATYPE
+        if dtype in {TensorProto.DOUBLE, TensorProto.INT64, TensorProto.UINT64}:
+            return 8
+        if dtype in {TensorProto.FLOAT, TensorProto.INT32, TensorProto.UINT32}:
+            return 4
+        if dtype in {
+            TensorProto.FLOAT16,
+            TensorProto.BFLOAT16,
+            TensorProto.INT16,
+            TensorProto.UINT16,
+        }:
+            return 2
+        if dtype in {TensorProto.INT8, TensorProto.UINT8, TensorProto.BOOL}:
+            return 1
+        raise AssertionError(f"Unable to return the element size for type {dtype}")
+
+    import torch
+
+    if dtype in {torch.float64, torch.int64}:
+        return 8
+    if dtype in {torch.float32, torch.int32}:
+        return 4
+    if dtype in {torch.float16, torch.int16, torch.bfloat16}:
+        return 2
+    if dtype in {torch.int8, torch.uint8, torch.bool}:
+        return 1
+    if hasattr(torch, "uint64"):
+        # it fails on mac
+        if dtype in {torch.uint64}:
+            return 8
+    if hasattr(torch, "uint32"):
+        # it fails on mac
+        if dtype in {torch.uint32}:
+            return 4
+    if hasattr(torch, "uint16"):
+        # it fails on mac
+        if dtype in {torch.uint16}:
+            return 2
+    raise AssertionError(f"Unexpected dtype={dtype}")
+
+
+def obj_size(obj: Any) -> int:
+    import torch
+
+    if isinstance(obj, torch.Tensor):
+        assert not obj.is_sparse, "Sparse tensors not supported yet."
+        return int(np.prod(list(obj.shape)) * size_type(obj.dtype))
+    if isinstance(obj, (tuple, list)):
+        return sum(obj_size(o) for o in obj)
+    if isinstance(obj, dict):
+        return sum(obj_size(o) for o in obj.values())
+    if obj is None:
+        return 0
+    if obj.__class__.__name__.endswith("KeyedJaggedTensor"):
+        # Not implemented yet.
+        return 0
+    if isinstance(obj, (int, float, str, bytes)):
+        return sys.getsizeof(obj)
+    if hasattr(obj, "_fields") and isinstance(obj._fields, dict):
+        # detectron2.structures.instances.Instances
+        return obj_size(obj._fields)
+    if hasattr(obj, "tensor") and isinstance(obj.tensor, torch.Tensor):
+        # detectron2.structures.instances.Bowes
+        return obj_size(obj.tensor)
+    if "SquashedNormal" in obj.__class__.__name__:
+        return sys.getsizeof(obj)
+    raise AssertionError(f"input_size not implemented for type {type(obj)}")
+
+
+def compute_weight_size(model: Any) -> int:
+    """
+    Returns the model size for a torch model or an onnx model.
+    That includes the weights.
+    """
+    if isinstance(model, ModelProto):
+        size = compute_weight_size(model.graph)
+        for f in model.functions:
+            size += compute_weight_size(f)
+        assert isinstance(size, int), f"Unexpected type {type(size)}: {size}"
+        return size
+
+    if isinstance(model, GraphProto):
+        size = 0
+        for init in model.initializer:
+            size += compute_weight_size(init)
+        for init in model.sparse_initializer:
+            size += compute_weight_size(init)
+        for node in model.node:
+            size += compute_weight_size(node)
+        assert isinstance(size, int), f"Unexpected type {type(size)}: {size}"
+        return size
+
+    if isinstance(model, FunctionProto):
+        size = 0
+        for node in model.node:
+            size += compute_weight_size(node)
+        assert isinstance(size, int), f"Unexpected type {type(size)}: {size}"
+        return size
+
+    if isinstance(model, TensorProto):
+        p = int(np.prod(model.dims))
+        size = p * size_type(model.data_type)
+        assert isinstance(size, int), f"Unexpected type {type(size)}: {size}"
+        return size
+
+    if isinstance(model, NodeProto):
+        if model.op_type == "Constant":
+            return len(model.SerializeToString())
+        size = 0
+        for att in model.attribute:
+            if att.type == AttributeProto.GRAPH:
+                size += compute_weight_size(att.g)
+        assert isinstance(size, int), f"Unexpected type {type(size)}: {size}"
+        return size
+
+    if hasattr(model, "parameters"):
+        import torch
+
+        size = 0
+        for p in model.parameters():
+            assert isinstance(p, torch.Tensor), f"Unexpected type {type(p)}"
+            size += obj_size(p)
+        assert isinstance(size, int), f"Unexpected type {type(size)}: {size}"
+        return size
+
+    raise AssertionError(f"Unexpected type {type(model)}.")
 
 
 def common_export(

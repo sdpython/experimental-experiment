@@ -4,9 +4,9 @@ import time
 import shutil
 import os
 from typing import Any, Callable, Optional, Tuple, Dict, List
-import numpy as np
 import onnx
 import torch
+from .export_model_helper import compute_weight_size
 
 
 class MakeConfig:
@@ -287,12 +287,11 @@ class ModelRunner:
     def run(self) -> Any:
         return self.model(*self.inputs)
 
-    def parameters_size(self) -> int:
-        """Returns the size of all parameters (do not take into account dtype)."""
-        res = 0
-        for p in self.model.parameters():
-            res += np.prod(list(p.shape))
-        return res
+    def compute_weight_size(self) -> int:
+        """
+        Returns the weight size.
+        """
+        return compute_weight_size(self.model)
 
     def parameters_dtype(self) -> str:
         """Returns the unique dtypes of all parameters."""

@@ -193,6 +193,25 @@ SELECTED_FEATURES = [
         help="Average latency for onnxruntime (lower is better)",
     ),
     dict(
+        cat="onnx",
+        agg="MEAN",
+        stat="weight_size_torch",
+        new_name="average weight size",
+        unit="bytes",
+        help="Average parameters size, this gives a kind of order "
+        "of magnitude for the memory peak",
+    ),
+    dict(
+        cat="onnx",
+        agg="MEAN",
+        stat="weight_size_proto",
+        new_name="average weight size in ModelProto",
+        unit="bytes",
+        help="Average parameters size in the model proto, "
+        "this gives a kind of order of magnitude for the memory peak "
+        "this should be close to the parameter size",
+    ),
+    dict(
         cat="memory",
         agg="MEAN",
         stat="peak_gpu_eager_warmup",
@@ -1266,7 +1285,6 @@ def merge_benchmark_reports(
     res["AGG"], res["AGG2"] = _create_aggregation_figures(
         res,
         skip={
-            "onnx",
             "ERR",
             "0raw",
             "0main",
@@ -1322,7 +1340,17 @@ def merge_benchmark_reports(
     if excel_output:
         with pandas.ExcelWriter(excel_output) as writer:
             no_index = {"0raw", "0main", "SUMMARY"}
-            for k, v in sorted(final_res.items()):
+            first_sheet = ["0main"]
+            last_sheet = ["ERR", "SUMMARY", "AGG", "AGG2", "0raw"]
+            ordered = set(first_sheet) | set(last_sheet)
+            order = [
+                *first_sheet,
+                *list(sorted([k for k in final_res if k not in ordered])),
+                *last_sheet,
+            ]
+            order = [k for k in order if k in final_res]
+            for k in order:
+                v = final_res[k]
                 ev = _reverse_column_names_order(v, name=k)
                 frow = (
                     len(ev.columns.names) if isinstance(ev.columns.names, list) else 1

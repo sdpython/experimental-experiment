@@ -2,13 +2,18 @@ import os
 import gc
 import pickle
 import time
-import sys
 from datetime import datetime
 from typing import Any, Set, Optional, Tuple, Iterator, Dict, List, Union
 import numpy as np
 import onnx
 import torch
-from .export_model_helper import WrapInferenceSessionForTorch, WrapForTorch
+from .export_model_helper import (
+    WrapInferenceSessionForTorch,
+    WrapForTorch,
+    size_type,
+    obj_size,
+    compute_weight_size,
+)
 from ..memory_peak import start_spying_on, flatten
 
 
@@ -126,7 +131,7 @@ class BenchmarkRunner:
                 )
             if self.verbose > 1:
                 print(
-                    f"[BenchmarkRunner.benchmark] parameters size {model_runner.parameters_size()!r}"
+                    f"[BenchmarkRunner.benchmark] parameters size {model_runner.compute_weight_size()!r}"
                 )
             yield model_runner.run()
 
@@ -149,51 +154,10 @@ class BenchmarkRunner:
 
     @classmethod
     def size_type(cls, dtype) -> int:
-        if dtype in {torch.float64, torch.int64}:
-            return 8
-        if dtype in {torch.float32, torch.int32}:
-            return 4
-        if dtype in {torch.float16, torch.int16, torch.bfloat16}:
-            return 2
-        if dtype in {torch.int8, torch.uint8, torch.bool}:
-            return 1
-        if hasattr(torch, "uint64"):
-            # it fails on mac
-            if dtype in {torch.uint64}:
-                return 8
-        if hasattr(torch, "uint32"):
-            # it fails on mac
-            if dtype in {torch.uint32}:
-                return 4
-        if hasattr(torch, "uint16"):
-            # it fails on mac
-            if dtype in {torch.uint16}:
-                return 2
-        raise AssertionError(f"Unexpected dtype={dtype}")
+        return size_type(dtype)
 
     def obj_size(self, obj: Any) -> int:
-        if isinstance(obj, torch.Tensor):
-            return np.prod(list(obj.shape) * self.size_type(obj.dtype))
-        if isinstance(obj, (tuple, list)):
-            return sum(self.obj_size(o) for o in obj)
-        if isinstance(obj, dict):
-            return sum(self.obj_size(o) for o in obj.values())
-        if obj is None:
-            return 0
-        if obj.__class__.__name__.endswith("KeyedJaggedTensor"):
-            # Not implemented yet.
-            return 0
-        if isinstance(obj, (int, float, str, bytes)):
-            return sys.getsizeof(obj)
-        if hasattr(obj, "_fields") and isinstance(obj._fields, dict):
-            # detectron2.structures.instances.Instances
-            return self.obj_size(obj._fields)
-        if hasattr(obj, "tensor") and isinstance(obj.tensor, torch.Tensor):
-            # detectron2.structures.instances.Bowes
-            return self.obj_size(obj.tensor)
-        if "SquashedNormal" in obj.__class__.__name__:
-            return sys.getsizeof(obj)
-        raise AssertionError(f"input_size not implemented for type {type(obj)}")
+        return obj_size(obj)
 
     def ort_run(
         self, sess: WrapInferenceSessionForTorch, feeds: List[torch.Tensor]
@@ -736,7 +700,7 @@ class BenchmarkRunner:
         stats["model_name"] = model_name
         stats["suite"] = model_runner.suite
         stats["time_load"] = time.perf_counter() - begin
-        stats["params_size"] = model_runner.parameters_size()
+        stats["params_size"] = model_runner.compute_weight_size()
         stats["params_dtype"] = model_runner.parameters_dtype()
         stats["warmup"] = warmup
         stats["repeat"] = repeat
@@ -930,7 +894,7 @@ class BenchmarkRunner:
                     name=filename,
                     dynamic=dynamic,
                     optimization=optimization,
-                    verbose=self.verbose + 1,
+                    verbose=max(self.verbose - 1, 0),
                     fake_tensor=self.fake_tensor,
                     no_grad=self.no_grad,
                     target_opset=self.target_opset,
@@ -956,7 +920,7 @@ class BenchmarkRunner:
                 name=filename,
                 dynamic=dynamic,
                 optimization=optimization,
-                verbose=self.verbose + 1,
+                verbose=max(self.verbose - 1, 0),
                 fake_tensor=self.fake_tensor,
                 no_grad=self.no_grad,
                 target_opset=self.target_opset,
@@ -984,6 +948,8 @@ class BenchmarkRunner:
 
         stats.update(self._post_process_optimization_statistics(opt_stats))
         stats["filename"] = filename
+        stats["onnx_weight_size_proto"] = compute_weight_size(exported_model)
+        stats["onnx_weight_size_torch"] = model_runner.compute_weight_size()
         if quiet:
             try:
                 feeds = model_runner.make_feeds(exporter, filename)

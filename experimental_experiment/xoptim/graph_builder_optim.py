@@ -306,7 +306,7 @@ class GraphBuilderPatternOptimization:
                 )
             if self.is_constant(name):
                 cst = self.get_computed_constant(name)
-                return cst.shape
+                return None if cst is None else cst.shape
             if exc:
                 raise AssertionError(
                     f"Unable to retrieve shape for name={name!r} "
@@ -363,7 +363,8 @@ class GraphBuilderPatternOptimization:
             value = self._cache_computed_constant[name]
         else:
             value = self.builder.get_constant(name, computed_value=True)
-            self._cache_computed_constant[name] = value
+            if value is not None:
+                self._cache_computed_constant[name] = value
         if statistics is None:
             return value
         stats = []

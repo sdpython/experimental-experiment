@@ -25,6 +25,7 @@ class TestBenchScript(ExtTestCase):
         self.assertIn("processor", ma)
         self.assertIn("cpu", ma)
         self.assertIn("has_cuda", ma)
+        self.assertIn("process_name", ma)
 
     def test_run_script(self):
         script_name = "experimental_experiment._bench_test"
