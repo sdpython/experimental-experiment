@@ -133,14 +133,14 @@ with multiple values. For example, the following command line:
 
 ::
 
-    python -m experimental_experiment.torch_bench.bash_bench_huggingface --model ElectraForQuestionAnswering --device cpu --exporter script,dynamo2 --verbose 3 --quiet 1 -w 1 -r 3
+    python -m experimental_experiment.torch_bench.bash_bench_huggingface --model ElectraForQuestionAnswering --device cpu --exporter script,dynamo_export --verbose 3 --quiet 1 -w 1 -r 3
 
 Will run:
 
 ::
 
     python -m experimental_experiment.torch_bench.bash_bench_huggingface --model ElectraForQuestionAnswering --device cpu --exporter script --verbose 3 --quiet 1 -w 1 -r 3
-    python -m experimental_experiment.torch_bench.bash_bench_huggingface --model ElectraForQuestionAnswering --device cpu --exporter dynamo2 --verbose 3 --quiet 1 -w 1 -r 3
+    python -m experimental_experiment.torch_bench.bash_bench_huggingface --model ElectraForQuestionAnswering --device cpu --exporter dynamo_export --verbose 3 --quiet 1 -w 1 -r 3
 
 Multiple fields may have multiple values.
 Every run outputs some variable following the format

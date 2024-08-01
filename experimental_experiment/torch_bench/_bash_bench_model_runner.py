@@ -350,7 +350,7 @@ class ModelRunner:
                 verbose=verbose,
                 target_opset=target_opset,
             )
-        if exporter == "script":
+        if exporter == "torch_script":
             return self._to_onnx_script(
                 name,
                 dynamic=dynamic,
@@ -382,7 +382,7 @@ class ModelRunner:
             )
             return onx, stats
 
-        if exporter == "dynamo":
+        if exporter == "onnx_dynamo":
             return self._to_onnx_dynamo(
                 name,
                 dynamic=dynamic,
@@ -392,7 +392,7 @@ class ModelRunner:
                 verbose=verbose,
                 target_opset=target_opset,
             )
-        if exporter == "dynamo2":
+        if exporter == "dynamo_export":
             return self._to_onnx_dynamo2(
                 name,
                 dynamic=dynamic,
@@ -521,7 +521,7 @@ class ModelRunner:
         assert no_grad, "no_grad false not implemented yet"
         assert (
             not optimization
-        ), f"optimization {optimization!r} not compatible with script"
+        ), f"optimization {optimization!r} not compatible with torch_script"
 
         if (
             isinstance(self.inputs, tuple)
@@ -543,6 +543,7 @@ class ModelRunner:
                 name,
                 do_constant_folding=False,
                 opset_version=target_opset,
+                verbose=max(verbose - 1, 0),
             )
         return onnx.load(name, load_external_data=False), None
 

@@ -10,33 +10,33 @@ Available exporters:
 * compile: :func:`torch.compile`
 * custom: :func:`experimental_experiment.torch_interpreter.to_onnx`
 * torch_script: :func:`torch.onnx.export`
-* dynamo: :func:`torch.onnx.export` with ``dynamo=True``
+* onnx_dynamo: :func:`torch.onnx.export` with ``dynamo=True``
 * dynamo_export: :func:`torch.onnx.dynamo_export`
 
 ::
 
-    python -m experimental_experiment.torch_bench.bash_bench_huggingface --help
-    
-    
+    python -m experimental_experiment.torch_bench.bash_bench_torchbench_ado --help
+
 ::
 
-    python -m experimental_experiment.torch_bench.bash_bench_huggingface --model ""
-    
-::
+    python -m experimental_experiment.torch_bench.bash_bench_torchbench_ado --model ""
 
-    python -m experimental_experiment.torch_bench.bash_bench_huggingface --model 101Dummy --exporter eager
-    
-::
+Extra dependencies:
 
-    python -m experimental_experiment.torch_bench.bash_bench_huggingface --model 101Dummy,101Dummy16 --verbose=1
-    
+* https://github.com/pytorch/benchmark
+* effdet
+* fbgemm_gpu_nightly
+* iopath
+* opencv-python
+* pyre-extensions
+* torchrec
 """
 
 from experimental_experiment.torch_bench._bash_bench_cmd import bash_bench_main
 
 
 def main(args=None):
-    bash_bench_main("bash_bench_huggingface", __doc__, args)
+    bash_bench_main("bash_bench_torchbench_ado", __doc__, args)
 
 
 if __name__ == "__main__":

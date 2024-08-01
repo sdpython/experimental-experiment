@@ -993,12 +993,12 @@ def merge_benchmark_reports(
             if (
                 "exporter" in set_columns
                 and "speedup" in set_columns
-                and "script" in set(df.exporter)
+                and "torch_script" in set(df.exporter)
                 and len(set(df.exporter)) > 1
             ):
                 # Do the same with the exporter as a baseline.
                 keep = [*model, *new_keys, "speedup"]
-                gr = df[df.exporter == "script"][keep].copy()
+                gr = df[df.exporter == "torch_script"][keep].copy()
                 gr = gr[~gr["speedup"].isna()]
                 gr["speedup_script"] = gr["speedup"]
                 gr = gr.drop("speedup", axis=1)

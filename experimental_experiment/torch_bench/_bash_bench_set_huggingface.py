@@ -506,6 +506,7 @@ class HuggingfaceRunner(BenchmarkRunner):
         self,
         model_name: str,
         batch_size: Optional[int] = None,
+        verbose: int = 0,
     ) -> ModelRunner:
         is_training = self.training
         use_eval_mode = self.use_eval_mode

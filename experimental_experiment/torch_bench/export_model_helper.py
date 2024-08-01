@@ -149,7 +149,7 @@ def compute_weight_size(model: Any) -> int:
 def common_export(
     model: Any,
     inputs: List[Any],
-    exporter: str = "dynamo",
+    exporter: str = "custom",
     target_opset: int = 18,
     folder: str = "",
     filename: str = "model.onnx",
@@ -167,7 +167,7 @@ def common_export(
     Exports a model into a folder.
 
     :param model: model
-    :param exporter: script, dynamo
+    :param exporter: torchscript, onnx_dynamo, dynamo_export, custom, ...
     :param folder: folder to export into
     :param filename: onnx filename
     :param inputs: inputs
@@ -210,7 +210,7 @@ def common_export(
             opset_version=target_opset,
             dynamic_axes=dynamic_shapes,
         )
-    elif exporter == "dynamo":
+    elif exporter == "onnx_dynamo":
         assert (
             dynamic_shapes is None
         ), f"dynamic_shapes={dynamic_shapes} is not implemented yet"

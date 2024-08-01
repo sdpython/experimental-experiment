@@ -1,6 +1,7 @@
 import io
 import os
 import importlib
+import pprint
 import textwrap
 import gc
 import inspect
@@ -89,27 +90,26 @@ class TorchBenchRunner(BenchmarkRunner):
         # Some models have large dataset that doesn't fit in memory. Lower the batch
         # size to test the accuracy.
         batch_size:
-        training:
-            demucs: 4
-            dlrm: 1024
-            densenet121: 4
-            hf_Reformer: 4
-            hf_T5_base: 4
-            timm_efficientdet: 1
-            llama_v2_7b_16h: 1
-            # reduced from 16 due to cudagraphs OOM in TorchInductor dashboard
-            yolov3: 8
+            training:
+                demucs: 4
+                dlrm: 1024
+                densenet121: 4
+                hf_Reformer: 4
+                hf_T5_base: 4
+                timm_efficientdet: 1
+                llama_v2_7b_16h: 1
+                # reduced from 16 due to cudagraphs OOM in TorchInductor dashboard
+                yolov3: 8
 
-        inference:
-            timm_efficientdet: 32
+            inference:
+                timm_efficientdet: 32
 
         dont_change_batch_size:
-        - demucs
-        - pytorch_struct
-        - pyhpc_turbulent_kinetic_energy
-        # https://github.com/pytorch/benchmark/pull/1656
-        - vision_maskrcnn
-
+            - demucs
+            - pytorch_struct
+            - pyhpc_turbulent_kinetic_energy
+            # https://github.com/pytorch/benchmark/pull/1656
+            - vision_maskrcnn
 
         tolerance:
         # Need lower tolerance on GPU. GPU kernels have non deterministic kernels for these models.
@@ -144,156 +144,166 @@ class TorchBenchRunner(BenchmarkRunner):
         cosine: []
 
         require_larger_multiplier_for_smaller_tensor:
-        - yolov3
+            - yolov3
 
         # These benchmarks took >600s on an i9-11900K CPU
         very_slow: &VERY_SLOW_MODELS
-        # 3339s
-        - hf_BigBird
-        # 3062s
-        - hf_Longformer
-        # 930s
-        - hf_T5
+            # 3339s
+            - hf_BigBird
+            # 3062s
+            - hf_Longformer
+            # 930s
+            - hf_T5
 
         # These benchmarks took >60s on an i9-11900K CPU
         slow:
-        - *VERY_SLOW_MODELS
-        # 137s
-        - BERT_pytorch
-        # 116s
-        - demucs
-        # 242s
-        - fastNLP_Bert
-        # 221s
-        - hf_Albert
-        # 400s
-        - hf_Bart
-        # 334s
-        - hf_Bert
-        # 187s
-        - hf_DistilBert
-        # 470s
-        - hf_GPT2
-        # 141s
-        - hf_Reformer
-        # 317s
-        - speech_transformer
-        # 99s
-        - vision_maskrcnn
+            - *VERY_SLOW_MODELS
+            # 137s
+            - BERT_pytorch
+            # 116s
+            - demucs
+            # 242s
+            - fastNLP_Bert
+            # 221s
+            - hf_Albert
+            # 400s
+            - hf_Bart
+            # 334s
+            - hf_Bert
+            # 187s
+            - hf_DistilBert
+            # 470s
+            - hf_GPT2
+            # 141s
+            - hf_Reformer
+            # 317s
+            - speech_transformer
+            # 99s
+            - vision_maskrcnn
 
         non_deterministic:
-        # https://github.com/pytorch/pytorch/issues/98355
-        - mobilenet_v3_large
-        - sam_fast
+            # https://github.com/pytorch/pytorch/issues/98355
+            - mobilenet_v3_large
+            - sam_fast
 
         dtype:
-        force_amp_for_fp16_bf16_models:
-            - DALLE2_pytorch
-            - doctr_det_predictor
-            - doctr_reco_predictor
-            - Super_SloMo
-            - tts_angular
-            - pyhpc_turbulent_kinetic_energy
-            - detectron2_fcos_r_50_fpn
+            force_amp_for_fp16_bf16_models:
+                - DALLE2_pytorch
+                - doctr_det_predictor
+                - doctr_reco_predictor
+                - Super_SloMo
+                - tts_angular
+                - pyhpc_turbulent_kinetic_energy
+                - detectron2_fcos_r_50_fpn
 
         force_fp16_for_bf16_models:
             - vision_maskrcnn
 
         # models in canary_models that we should run anyway
         canary_models:
-        - torchrec_dlrm
+            - DALLE2_pytorch
+            - torchrec_dlrm
+            # ado
+            - codellama
+            - hf_mixtral
+            - hf_Yi
+            - mistral_7b_instruct
+            - orca_2
+            - phi_1_5
+            - phi_2
+            - stable_diffusion_xl
 
         detectron2_models: &DETECTRON2_MODELS
-        - detectron2_fasterrcnn_r_101_c4
-        - detectron2_fasterrcnn_r_101_dc5
-        - detectron2_fasterrcnn_r_101_fpn
-        - detectron2_fasterrcnn_r_50_c4
-        - detectron2_fasterrcnn_r_50_dc5
-        - detectron2_fasterrcnn_r_50_fpn
-        - detectron2_maskrcnn_r_101_c4
-        - detectron2_maskrcnn_r_101_fpn
-        - detectron2_maskrcnn_r_50_fpn
+            - detectron2_fasterrcnn_r_101_c4
+            - detectron2_fasterrcnn_r_101_dc5
+            - detectron2_fasterrcnn_r_101_fpn
+            - detectron2_fasterrcnn_r_50_c4
+            - detectron2_fasterrcnn_r_50_dc5
+            - detectron2_fasterrcnn_r_50_fpn
+            - detectron2_maskrcnn_r_101_c4
+            - detectron2_maskrcnn_r_101_fpn
+            - detectron2_maskrcnn_r_50_fpn
 
         # These models support only train mode. So accuracy checking can't be done in
         # eval mode.
         only_training:
-        - *DETECTRON2_MODELS
-        - tts_angular
-        - tacotron2
-        - demucs
-        - hf_Reformer
-        - pytorch_struct
-        - yolov3
+            - *DETECTRON2_MODELS
+            - tts_angular
+            - tacotron2
+            - demucs
+            - hf_Reformer
+            - pytorch_struct
+            - yolov3
 
         trt_not_yet_working:
-        - alexnet
-        - resnet18
-        - resnet50
-        - mobilenet_v2
-        - mnasnet1_0
-        - squeezenet1_1
-        - shufflenetv2_x1_0
-        - vgg16
-        - resnext50_32x4d
+            - alexnet
+            - resnet18
+            - resnet50
+            - mobilenet_v2
+            - mnasnet1_0
+            - squeezenet1_1
+            - shufflenetv2_x1_0
+            - vgg16
+            - resnext50_32x4d
 
         skip:
-        all:
-            # OOMs (A100 40G)
-            - detectron2_maskrcnn
-            # TIMEOUT, https://github.com/pytorch/pytorch/issues/98467
-            - tacotron2
-            # Failing in eager mode
-            - hf_clip
-            # multi gpu not always available in benchmark runners
-            - simple_gpt_tp_manual
+            all:
+                # OOMs (A100 40G)
+                - detectron2_maskrcnn
+                # TIMEOUT, https://github.com/pytorch/pytorch/issues/98467
+                - tacotron2
+                # Failing in eager mode
+                - hf_clip
+                # multi gpu not always available in benchmark runners
+                - simple_gpt_tp_manual
 
         device:
             cpu:
-            # OOMs
-            - hf_T5_generate
-            # model is CUDA only
-            - cm3leon_generate
-            # timeout
-            - nanogpt
-            # timeout
-            - sam
-            # model is CUDA only
-            - sam_fast
-            # model is CUDA only
-            - llama_v2_7b_16h
-            # flaky
-            - stable_diffusion
-            # requires FBGEMM, CUDA only
-            - torchrec_dlrm
-            - simple_gpt
-            # works on cuda, accuracy failure on cpu
-            - hf_Whisper
-            - stable_diffusion_text_encoder
-            - llava
+                # OOMs
+                - hf_T5_generate
+                # model is CUDA only
+                - cm3leon_generate
+                # timeout
+                - nanogpt
+                # timeout
+                - sam
+                # model is CUDA only
+                - sam_fast
+                # model is CUDA only
+                - llama_v2_7b_16h
+                # flaky
+                - stable_diffusion
+                # requires FBGEMM, CUDA only
+                - torchrec_dlrm
+                - simple_gpt
+                # works on cuda, accuracy failure on cpu
+                - hf_Whisper
+                - stable_diffusion_text_encoder
+                - llava
 
             cuda: []
 
         test:
             training:
-            - *DETECTRON2_MODELS
-            # not designed for training
-            - pyhpc_equation_of_state
-            - pyhpc_isoneutral_mixing
-            - pyhpc_turbulent_kinetic_energy
-            - maml
-            - llama
-            - llama_v2_7b_16h
-            - simple_gpt
-            - sam_fast
-            # Model's DEFAULT_TRAIN_BSIZE is not implemented
-            - cm3leon_generate
-            - hf_T5_generate
-            - doctr_det_predictor
-            - doctr_reco_predictor
-            - moondream
-            # doesnt fit in memory
-            - phi_1_5
-            - detectron2_fcos_r_50_fpn
+                - *DETECTRON2_MODELS
+                # not designed for training
+                - pyhpc_equation_of_state
+                - pyhpc_isoneutral_mixing
+                - pyhpc_turbulent_kinetic_energy
+                - maml
+                - llama
+                - llama_v2_7b_16h
+                - simple_gpt
+                - sam_fast
+                # Model's DEFAULT_TRAIN_BSIZE is not implemented
+                - cm3leon_generate
+                - hf_T5_generate
+                - doctr_det_predictor
+                - doctr_reco_predictor
+                - moondream
+                # doesnt fit in memory
+                - phi_1_5
+                - detectron2_fcos_r_50_fpn
 
         control_flow:
             - cm3leon_generate
@@ -317,23 +327,23 @@ class TorchBenchRunner(BenchmarkRunner):
             - shufflenet_v2_x1_0
 
         accuracy:
-        skip:
-            large_models:
-            # Models too large to have eager, dynamo and fp64_numbers simultaneosuly
-            # even for 40 GB machine. We have tested accuracy for smaller version of
-            # these models
-            - hf_GPT2_large
-            - hf_T5_large
-            - timm_vision_transformer_large
-            # accuracy https://github.com/pytorch/pytorch/issues/93847
-            - maml
-            - llama_v2_7b_16h
-            - Background_Matting
-            - stable_diffusion_unet
-            eager_not_deterministic:
-            # Models that deterministic algorithms can not be turned on for eager mode.
-            - Background_Matting
-            - pytorch_unet
+            skip:
+                large_models:
+                # Models too large to have eager, dynamo and fp64_numbers simultaneosuly
+                # even for 40 GB machine. We have tested accuracy for smaller version of
+                # these models
+                - hf_GPT2_large
+                - hf_T5_large
+                - timm_vision_transformer_large
+                # accuracy https://github.com/pytorch/pytorch/issues/93847
+                - maml
+                - llama_v2_7b_16h
+                - Background_Matting
+                - stable_diffusion_unet
+                eager_not_deterministic:
+                # Models that deterministic algorithms can not be turned on for eager mode.
+                - Background_Matting
+                - pytorch_unet
 
         max_batch_size:
             hf_GPT2: 2
@@ -496,7 +506,8 @@ class TorchBenchRunner(BenchmarkRunner):
                 return set(flatten(obj))
             return obj
 
-        return maybe_list_to_set(data)
+        config = maybe_list_to_set(data)
+        return config
 
     @classmethod
     def initialize(container):
@@ -510,6 +521,13 @@ class TorchBenchRunner(BenchmarkRunner):
         except (AttributeError, ImportError) as e:
             warnings.warn(f"Something wrong in the installation because of {e}.")
         container._config = container.load_yaml_file()
+        assert "batch_size" in container._config, f"config wrong {container._config}"
+        assert (
+            container._config["batch_size"] is not None
+        ), f"config wrong {container._config}"
+        assert (
+            "inference" in container._config["batch_size"]
+        ), f"config wrong {container._config}"
         lines = container.MODELS_FILENAME.split("\n")
         lines = [line.rstrip() for line in lines]
         expected_models = set(
@@ -832,6 +850,12 @@ class TorchBenchRunner(BenchmarkRunner):
         torchbenchmark._install_deps = TorchBenchRunner._patch_install_deps
         from torchbenchmark import setup
 
+        if self.verbose:
+            print(
+                f"[{self.__class__.__name__}.load_model] setup {model_name!r} "
+                f"with batch_size={batch_size}"
+            )
+
         status = setup(
             models=[model_name],
             verbose=self.verbose,
@@ -855,7 +879,10 @@ class TorchBenchRunner(BenchmarkRunner):
                 break
             except ModuleNotFoundError as e:
                 if e.name != c:
-                    raise
+                    raise ModuleNotFoundError(
+                        f"Unable to find {c!r}, model_name={model_name!r}, "
+                        f"e.name={e.name!r}, candidates={candidates}"
+                    ) from e
         else:
             raise ImportError(f"could not import any of {candidates}")
         benchmark_cls = getattr(module, "Model", None)
@@ -886,6 +913,8 @@ class TorchBenchRunner(BenchmarkRunner):
 
         # workaround "RuntimeError: not allowed to set torch.backends.cudnn flags"
         torch.backends.__allow_nonbracketed_mutation_flag = True
+        if self.verbose:
+            print(f"[{self.__class__.__name__}.load_model] start loading")
 
         if model_name == "vision_maskrcnn" and is_training:
             # Output of vision_maskrcnn model is a list of bounding boxes,
@@ -923,7 +952,13 @@ class TorchBenchRunner(BenchmarkRunner):
                     f"DEFAULT_EVAL_BSIZE={getattr(benchmark_cls, 'DEFAULT_EVAL_BSIZE', '?')}, "
                     f"ALLOW_CUSTOMIZE_BSIZE={getattr(benchmark_cls, 'ALLOW_CUSTOMIZE_BSIZE', '?')}"
                 ) from e
+        if self.verbose:
+            print(f"[{self.__class__.__name__}.load_model] clsname={benchmark}")
         model, example_inputs = benchmark.get_module()
+        if self.verbose:
+            print(
+                f"[{self.__class__.__name__}.load_model] clsname={benchmark}, done loading"
+            )
         if model_name in [
             "basic_gnn_edgecnn",
             "basic_gnn_gcn",
@@ -999,6 +1034,14 @@ class TorchBenchRunner(BenchmarkRunner):
             if os.path.basename(f) in self._config["canary_models"]
         ]
         model_names = [m for m in models if os.path.basename(m) in expected_models]
+        assert len(model_names) >= len(expected_models), (
+            f"Unexpected names {len(model_names)} < {len(expected_models)} (expected)"
+            f"\n--missing=\n{pprint.pformat(list(sorted(set(expected_models)-set(os.path.basename(m) for m in model_names))))}"
+            f"\n--canary_models=\n{pprint.pformat(self._config['canary_models'])}"
+            f"\n--_list_canary_model_paths()=\n{pprint.pformat(_list_canary_model_paths())}"
+            f"\n--_list_model_paths()=\n{pprint.pformat(_list_model_paths())}"
+        )
+        model_names = [os.path.basename(m) for m in model_names]
         model_names.sort()
 
         start, end = self.get_benchmark_indices(len(model_names))

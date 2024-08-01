@@ -310,10 +310,8 @@ class BenchmarkRunner:
     def _flatten(cls, value):
         res = []
         if isinstance(value, dict):
-            assert (
-                len(value) == 1
-            ), f"Unable to flatten a dictionary with more than one value ({len(value)})"
-            return tuple(value.values())
+            # We assume the dictionary is ordered.
+            return cls._flatten(list(value.values()))
         if isinstance(value, (list, tuple)):
             for v in value:
                 res.extend(cls._flatten(v))

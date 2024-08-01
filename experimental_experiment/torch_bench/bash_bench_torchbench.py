@@ -10,25 +10,16 @@ Available exporters:
 * compile: :func:`torch.compile`
 * custom: :func:`experimental_experiment.torch_interpreter.to_onnx`
 * script: :func:`torch.onnx.export`
-* dynamo: :func:`torch.onnx.export` with ``dynamo=True``
-* dynamo: :func:`torch.onnx.dynamo_export`
+* onnx_dynamo: :func:`torch.onnx.export` with ``dynamo=True``
+* dynamo_export: :func:`torch.onnx.dynamo_export`
 
 ::
 
     python -m experimental_experiment.torch_bench.bash_bench_torchbench --help
-    
-    
+
 ::
 
     python -m experimental_experiment.torch_bench.bash_bench_torchbench --model ""
-    
-::
-
-    python -m experimental_experiment.torch_bench.bash_bench_torchbench --model 101Dummy --exporter eager
-    
-::
-
-    python -m experimental_experiment.torch_bench.bash_bench_torchbench --model 101Dummy,101Dummy16 --verbose=1
 
 Extra dependencies:
 
