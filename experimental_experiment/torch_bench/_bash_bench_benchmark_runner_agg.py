@@ -212,6 +212,24 @@ SELECTED_FEATURES = [
         "this should be close to the parameter size",
     ),
     dict(
+        cat="onnx",
+        agg="MAX",
+        stat="weight_size_torch",
+        new_name="maximum weight size",
+        unit="bytes",
+        help="Maximum parameters size, "
+        "useful to guess how much this machine can handle",
+    ),
+    dict(
+        cat="onnx",
+        agg="MAX",
+        stat="weight_size_proto",
+        new_name="maximum weight size in ModelProto",
+        unit="bytes",
+        help="Maximum parameters size in the model proto, "
+        "useful to guess how much this machine can handle",
+    ),
+    dict(
         cat="memory",
         agg="MEAN",
         stat="peak_gpu_eager_warmup",

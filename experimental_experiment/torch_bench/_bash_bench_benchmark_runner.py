@@ -99,6 +99,58 @@ class BenchmarkRunner:
         )
         return start, end
 
+    def enumerate_model_names(
+        self, model_names: List[str], start: int = 0, end: int = -1
+    ) -> Iterator[str]:
+        """
+        Enumerates model names.
+
+        :param model_names: list of names
+        :param start: index of the first model
+        :param end: index of the last model (excluded) or -1 for the end
+        :return: iterator
+
+        The method uses `self.include_model_names` and `self.exclude_model_names`
+        to filter in or out the models to run.
+        """
+        if end == -1:
+            end = len(model_names)
+        assert (
+            start < end
+        ), f"Empty partition (start={start}, end={end}, model_names={model_names!r})"
+        has_one_model = False
+        done = set()
+        for index, model_name in enumerate(model_names):
+            if index < start or index >= end:
+                continue
+            if model_name in self.exclude_model_names:
+                continue
+            if not self.include_model_names:
+                yield model_name
+                has_one_model = True
+                continue
+            if model_name in self.include_model_names:
+                yield model_name
+                has_one_model = True
+                done.add(model_name)
+                continue
+
+        if self.include_model_names and len(self.include_model_names) != len(done):
+            # Some names were not found.
+            not_found = [_ for _ in self.include_model_names if _ and _ not in done]
+            for sub in not_found:
+                for model_name in model_names[start:end]:
+                    if model_name not in done and sub in model_name:
+                        yield model_name
+                        has_one_model = True
+                        done.add(model_name)
+
+        assert has_one_model, (
+            f"No model listed, model_names={model_names}, start={start}, "
+            f"end={end}, self.include_model_names={self.include_model_names}, "
+            f"self.exclude_model_names={self.exclude_model_names}"
+        )
+
     def enumerate_load_models(self) -> Iterator[Tuple[Any, Any]]:
         """
         Loads the models and returns them.

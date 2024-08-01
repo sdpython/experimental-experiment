@@ -573,25 +573,8 @@ class HuggingfaceRunner(BenchmarkRunner):
         model_names = sorted(model_names)
 
         start, end = self.get_benchmark_indices(len(model_names))
-        assert (
-            start < end
-        ), f"Empty partition (start={start}, end={end}, model_names={model_names!r})"
-        assert model_names, "Empty list of models"
-        has_one_model = False
-        for index, model_name in enumerate(model_names):
-            if index < start or index >= end:
-                continue
-            if (
-                self.include_model_names and model_name not in self.include_model_names
-            ) or model_name in self.exclude_model_names:
-                continue
-            yield model_name
-            has_one_model = True
-        assert has_one_model, (
-            f"No model listed, model_names={model_names}, start={start}, "
-            f"end={end}, self.include_model_names={self.include_model_names}, "
-            f"self.exclude_model_names={self.exclude_model_names}"
-        )
+        for _ in self.enumerate_model_names(model_names, start=start, end=end):
+            yield _
 
     def forward_pass(self, mod, inputs, collect_outputs=True):
         return mod(**inputs)

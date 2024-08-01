@@ -579,17 +579,8 @@ class TimmRunner(BenchmarkRunner):
         # for model_name in list_models(pretrained=True, exclude_filters=["*in21k"]):
         model_names = sorted(self.TIMM_MODELS.keys())
         start, end = self.get_benchmark_indices(len(model_names))
-        assert (
-            start < end
-        ), f"Empty partition (start={start}, end={end}, model_names={model_names!r})"
-        for index, model_name in enumerate(model_names):
-            if index < start or index >= end:
-                continue
-            if (
-                self.include_model_names and model_name not in self.include_model_names
-            ) or model_name in self.exclude_model_names:
-                continue
-            yield model_name
+        for _ in self.enumerate_model_names(model_names, start=start, end=end):
+            yield _
 
     def forward_pass(self, mod, inputs, collect_outputs=True):
         return mod(**inputs)
