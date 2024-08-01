@@ -28,8 +28,12 @@ def check_model_ort(
 
     if providers is None or providers == "cpu":
         providers = ["CPUExecutionProvider"]
-    elif providers == "cuda":
-        providers = ["CUDAExecutionProvider", "CPUExecutionProvider"]
+    elif not isinstance(providers, list) and providers.startswith("cuda"):
+        device_id = 0 if ":" not in providers else int(providers.split(":")[1])
+        providers = [
+            ("CUDAExecutionProvider", {"device_id": device_id}),
+            ("CPUExecutionProvider", {}),
+        ]
 
     if isinstance(onx, str):
         try:
@@ -117,9 +121,9 @@ def export_to_onnx(
     ret["proto"] = onx
     if prefix is not None:
         filename = f"{prefix}.custom.onnx"
-        if folder is not None:
+        if folder:
             if not os.path.exists(folder):
-                os.mkdir(folder)
+                os.makedirs(folder)
             filename = os.path.join(folder, filename)
         with open(filename, "wb") as f:
             f.write((onx[0] if return_builder else onx).SerializeToString())

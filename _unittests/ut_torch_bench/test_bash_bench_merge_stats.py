@@ -151,10 +151,10 @@ class TestBashBenchMergeStats(ExtTestCase):
         self.assertIn("ERR", set(df))
 
     @ignore_warnings((FutureWarning,))
-    def test_merge_stats_bug_speedup(self):
+    def test_merge_stats_bug_speedup_summary(self):
         data = os.path.join(os.path.dirname(__file__), "data", "bug_speed_up.csv")
         df = merge_benchmark_reports(
-            data, excel_output="test_merge_stats_bug_speedup.xlsx"
+            data, excel_output="test_merge_stats_bug_speedup_summary.xlsx"
         )
         self.assertIsInstance(df, dict)
         self.assertIn("status", set(df))
@@ -172,12 +172,79 @@ class TestBashBenchMergeStats(ExtTestCase):
         summary = df["SUMMARY"]
         self.assertNotIn("_dummy_", summary.columns)
         values = summary.values
-        self.assertEqual(0.9520435772282563, values[3, 3])
-        self.assertEqual("x", values[3, 4])
+        self.assertEqual(0.9520435772282563, values[5, 3])
+        self.assertEqual("x", values[5, 4])
         metrics = set(summary["METRIC"])
         self.assertIn("number of running models", metrics)
-        self.assertIn("pass rate", metrics)
+        self.assertIn("export rate", metrics)
         self.assertIn("average export time", metrics)
+
+    @ignore_warnings((FutureWarning,))
+    def test_merge_stats_bug_cpu_cuda(self):
+        data = os.path.join(os.path.dirname(__file__), "data", "bug_cpu_cuda.csv")
+        df = merge_benchmark_reports(
+            data, excel_output="test_merge_stats_bug_cpu_cuda.xlsx"
+        )
+        self.assertIsInstance(df, dict)
+        self.assertIn("status", set(df))
+        self.assertIn("memory", set(df))
+        self.assertIn("op_onnx", set(df))
+        self.assertIn("ERR", set(df))
+        self.assertIn("AGG", set(df))
+        self.assertIn("SUMMARY", set(df))
+
+    @ignore_warnings((FutureWarning,))
+    def test_merge_stats_filter(self):
+        data = os.path.join(os.path.dirname(__file__), "data", "bug_cpu_cuda.csv")
+        df1 = merge_benchmark_reports(
+            data,
+            excel_output="test_merge_stats_filter1.xlsx",
+            filter_in="device:cpu;cuda",
+        )
+        df2 = merge_benchmark_reports(
+            data, excel_output="test_merge_stats_filter2.xlsx", filter_in="device:cuda"
+        )
+        df3 = merge_benchmark_reports(
+            data, excel_output="test_merge_stats_filter3.xlsx", filter_out="device:cuda"
+        )
+        self.assertIsInstance(df1, dict)
+        self.assertIsInstance(df2, dict)
+        self.assertIsInstance(df3, dict)
+        for k, v in df1.items():
+            if k not in df2:
+                continue
+            sh1 = df1[k].shape
+            sh2 = df2[k].shape
+            sh3 = df3[k].shape
+            if k == "speedup":
+                self.assertEqual(sh1, (1, 6))
+                self.assertEqual(sh2, (1, 3))
+                self.assertEqual(sh3, (1, 3))
+            if k == "0main":
+                self.assertNotIn(["device", "cpu"], df2[k].values.tolist())
+                self.assertIn(["device", "cpu"], df3[k].values.tolist())
+                self.assertNotIn(["device", "cuda"], df3[k].values.tolist())
+                self.assertIn(["device", "cuda"], df2[k].values.tolist())
+
+    @ignore_warnings((FutureWarning,))
+    def test_merge_stats_filter_hg(self):
+        data = os.path.join(os.path.dirname(__file__), "data", "bug_speed_up.csv")
+        df = merge_benchmark_reports(
+            data,
+            excel_output="test_merge_stats_filter_hg.xlsx",
+            filter_in="model_name:HG",
+        )
+        self.assertIsInstance(df, dict)
+        for k, v in df.items():
+            sh = v.shape
+            if k == "speedup":
+                self.assertEqual(sh, (12, 3))
+        df = merge_benchmark_reports(
+            data,
+            excel_output="test_merge_stats_filter_hg_none.xlsx",
+            filter_in="model_name:NONE",
+        )
+        self.assertEqual(df, {})
 
 
 if __name__ == "__main__":

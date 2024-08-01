@@ -2375,8 +2375,11 @@ def aten_linear(
             shape_w = g.get_shape(weight)
             new_shape = (shape_x[0], shape_w[0])
             g.set_shape(res, new_shape)
-        else:
-            g.set_rank(res, 2)
+        elif g.has_rank(x) and g.has_rank(weight):
+            rkx = g.get_rank(x)
+            rkw = g.get_rank(weight)
+            if rkw == rkx:
+                g.set_rank(res, rkw)
     return res
 
 

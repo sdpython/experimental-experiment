@@ -772,8 +772,8 @@ class GraphBuilderPatternOptimization:
         self, folder: str, match: MatchResult, new_nodes: List[NodeProto]
     ):
         assert isinstance(folder, str), f"Unexpected type {type(folder)} for folder."
-        if not os.path.exists(folder):
-            os.mkdir(folder)
+        if folder and not os.path.exists(folder):
+            os.makedirs(folder)
 
         name = f"{match.pattern.__class__.__name__}_0.onnx"
         fullname = os.path.join(folder, name)

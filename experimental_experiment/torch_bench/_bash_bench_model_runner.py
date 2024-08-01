@@ -312,7 +312,7 @@ class ModelRunner:
         optimization: str,
         verbose: int,
         target_opset: int,
-    ):
+    ) -> Tuple[onnx.ModelProto, Optional[Dict[str, Any]]]:
         """
         Converts a model into onnx.
 
@@ -324,6 +324,7 @@ class ModelRunner:
         :param optimization: defines the optimizations
         :param verbose: verbosity
         :param target_opset: target opset
+        :return: the model proto with or without weights, statistics
         """
         assert not fake_tensor, "fake_tensor not implemented."
 
@@ -485,7 +486,7 @@ class ModelRunner:
             options = OptimizationOptions(
                 patterns=optimization,
                 verbose=10 if verbose >= 100 else (1 if verbose > 1 else 0),
-                processor="CUDA" if self.device == "cuda" else "CPU",
+                processor="CUDA" if self.device.startswith("cuda") else "CPU",
             )
         else:
             options = None
@@ -501,7 +502,9 @@ class ModelRunner:
                 return_optimize_report=True,
                 options=options,
             )
+        begin = time.perf_counter()
         onx.save(name)
+        stats["time_export_save"] = time.perf_counter() - begin
         return onx.model_proto, stats
 
     def _to_onnx_script(
@@ -612,6 +615,7 @@ class ModelRunner:
         assert not fake_tensor, "fake_tensor not implemented."
         assert not dynamic, "dynamic true not implemented yet"
         assert no_grad, "no_grad false not implemented yet"
+        stats = {}
 
         with torch.no_grad():
             exported = torch.onnx.dynamo_export(
@@ -623,13 +627,17 @@ class ModelRunner:
                 ),
             )
 
+        begin = time.perf_counter()
         exported.save(name)
+        stats["time_export_save"] = time.perf_counter() - begin
+
         onx = onnx.load(name, load_external_data=True)
         onnx.save(onx, name, save_as_external_data=True)
 
         if not optimization:
-            return onnx.load(name, load_external_data=False), None
+            return onnx.load(name, load_external_data=False), stats
 
+        begin = time.perf_counter()
         opts = optimization.split("+")
         shutil.copy(name, name + ".raw.onnx")
         model_proto = onnx.load(name, load_external_data=True)
@@ -668,7 +676,8 @@ class ModelRunner:
 
         onnx.save(model_proto, name, save_as_external_data=True)
         model_proto = onnx.load(name, load_external_data=False)
-        return model_proto, None
+        stats["time_export_optimization"] = time.perf_counter() - begin
+        return model_proto, stats
 
     def _to_export(
         self,

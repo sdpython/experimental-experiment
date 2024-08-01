@@ -21,6 +21,69 @@ from ._bash_bench_benchmark_runner import BenchmarkRunner
 
 class TorchBenchRunner(BenchmarkRunner):
 
+    @staticmethod
+    def _patch_install_deps(model_path: str, verbose: bool = True) -> Tuple[bool, Any]:
+        import sys
+        import subprocess
+        import tempfile
+        from pathlib import Path
+        from torchbenchmark import TORCH_DEPS, install_file, this_dir
+        from torchbenchmark.util.env_check import get_pkg_versions
+
+        run_args = [
+            [sys.executable, install_file],
+        ]
+        run_env = os.environ.copy()
+        run_env["PYTHONPATH"] = Path(this_dir.parent).as_posix()
+        run_kwargs = {
+            "cwd": model_path,
+            "check": True,
+            "env": run_env,
+        }
+
+        output_buffer = None
+        fd, stdout_fpath = tempfile.mkstemp()
+
+        try:
+            output_buffer = io.FileIO(stdout_fpath, mode="w")
+            if os.path.exists(os.path.join(model_path, install_file)):
+                if not verbose:
+                    run_kwargs["stderr"] = subprocess.STDOUT
+                    run_kwargs["stdout"] = output_buffer
+                versions = get_pkg_versions(TORCH_DEPS)
+                subprocess.run(*run_args, **run_kwargs)  # type: ignore
+                new_versions = get_pkg_versions(TORCH_DEPS)
+                if versions != new_versions:
+                    if len(versions) != len(new_versions) or set(versions) != set(
+                        new_versions
+                    ):
+                        import pprint
+
+                        errmsg = f"The torch packages are re-installed after installing the benchmark deps. \
+                                Before: {pprint.pformat(versions)}, after: {pprint.pformat(new_versions)}"
+                        return (False, errmsg, None)
+                    for k in versions:
+                        if k == "torchvision":
+                            # not reliable
+                            continue
+                        if versions[k] != new_versions[k]:
+                            errmsg = f"The torch packages are re-installed after installing the benchmark deps. \
+                                    For package {k!r}, before: {versions[k]}, after: {new_versions[k]}."
+                            return (False, errmsg, None)
+            else:
+                return (True, f"No install.py is found in {model_path}. Skip.", None)
+        except subprocess.CalledProcessError as e:
+            return (False, e.output, io.FileIO(stdout_fpath, mode="r").read().decode())
+        except Exception as e:
+            return (False, e, io.FileIO(stdout_fpath, mode="r").read().decode())
+        finally:
+            output_buffer.close()
+            del output_buffer
+            os.close(fd)
+            os.remove(stdout_fpath)
+
+        return (True, None, None)
+
     YAML = textwrap.dedent(
         """
         # Some models have large dataset that doesn't fit in memory. Lower the batch
@@ -313,16 +376,20 @@ class TorchBenchRunner(BenchmarkRunner):
 
     EXPECTED_MODELS = textwrap.dedent(
         """
+        BERT_pytorch
         Background_Matting
         DALLE2_pytorch
+        LearningToPaint
         Super_SloMo
         alexnet
         basic_gnn_edgecnn
         basic_gnn_gcn
         basic_gnn_gin
         basic_gnn_sage
+        cm3leon_generate
         dcgan
         demucs
+        densenet121
         detectron2_fasterrcnn_r_101_c4
         detectron2_fasterrcnn_r_101_dc5
         detectron2_fasterrcnn_r_101_fpn
@@ -339,6 +406,9 @@ class TorchBenchRunner(BenchmarkRunner):
         doctr_reco_predictor
         drq
         fastNLP_Bert
+        functorch_dp_cifar10
+        functorch_maml_omniglot
+        hf_Albert
         hf_Bart
         hf_Bert
         hf_Bert_large
@@ -348,23 +418,48 @@ class TorchBenchRunner(BenchmarkRunner):
         hf_GPT2_large
         hf_Longformer
         hf_Reformer
+        hf_T5
+        hf_T5_base
         hf_T5_generate
         hf_T5_large
         hf_Whisper
         lennard_jones
+        llama
         maml
+        maml_omniglot
+        mnasnet1_0
+        mobilenet_v2
         mobilenet_v2_quantized_qat
+        mobilenet_v3_large
+        moco
+        nanogpt
         nvidia_deeprecommender
+        opacus_cifar10
+        phlippe_densenet
+        phlippe_resnet
+        pyhpc_equation_of_state
+        pyhpc_isoneutral_mixing
         pyhpc_turbulent_kinetic_energy
         pytorch_stargan
         pytorch_unet
+        resnet152
+        resnet18
+        resnet50
         resnet50_quantized_qat
+        resnext50_32x4d
         sam
         sam_fast
+        shufflenet_v2_x1_0
         soft_actor_critic
         speech_transformer
+        squeezenet1_1
+        timm_efficientnet
+        timm_nfnet
         timm_regnet
+        timm_resnest
+        timm_vision_transformer
         timm_vision_transformer_large
+        timm_vovnet
         tts_angular
         vgg16
         vision_maskrcnn
@@ -698,8 +793,10 @@ class TorchBenchRunner(BenchmarkRunner):
         # Since it is unusual thing to do, we just reassign them to parameters
         def state_dict_hook(module, destination, prefix, local_metadata):
             for name, param in module.named_parameters():
-                if isinstance(destination[name], torch.Tensor) and not isinstance(
-                    destination[name], torch.nn.Parameter
+                if (
+                    name in destination
+                    and isinstance(destination[name], torch.Tensor)
+                    and not isinstance(destination[name], torch.nn.Parameter)
                 ):
                     destination[name] = torch.nn.Parameter(destination[name])
 
@@ -729,6 +826,10 @@ class TorchBenchRunner(BenchmarkRunner):
         batch_size: Optional[int] = None,
     ) -> ModelRunner:
 
+        # patching
+        import torchbenchmark
+
+        torchbenchmark._install_deps = TorchBenchRunner._patch_install_deps
         from torchbenchmark import setup
 
         status = setup(

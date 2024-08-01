@@ -134,7 +134,7 @@ def main(args=None):
             f"dump_patterns={dump_patterns!r}, export={args.export}"
         )
 
-        is_cuda = args.device == "cuda"
+        is_cuda = args.device.startswith("cuda")
         if is_cuda:
             print(
                 f"CUDA no model: memory allocated={torch.cuda.memory_allocated(0)}, "
@@ -164,8 +164,8 @@ def main(args=None):
 
         dump_folder = args.dump_folder
 
-        if args.export and not os.path.exists(dump_folder):
-            os.mkdir(dump_folder)
+        if args.export and dump_folder and not os.path.exists(dump_folder):
+            os.makedirs(dump_folder)
 
         if dump_patterns:
             dump_patterns_folder = os.path.join(dump_folder, "patterns")

@@ -50,8 +50,8 @@ def common_export(
     import torch.onnx
 
     if folder:
-        if not os.path.exists(folder):
-            os.mkdir(folder)
+        if folder and not os.path.exists(folder):
+            os.makedirs(folder)
         filename = os.path.join(folder, filename)
 
     if verbose:
@@ -149,13 +149,16 @@ def common_export(
         from ..convert.convert_helper import ort_optimize as fopt
 
         is_cuda = next(model.parameters()).is_cuda
-        providers = ["CUDAExecutionProvider", "CPUExecutionProvider"]
-        fopt(
-            onx,
-            output,
-            providers=providers if is_cuda else providers[-1:],
-            disable_aot=False,
-        )
+        if is_cuda:
+            device_id = next(model.parameters()).get_device()
+            providers = [
+                ("CUDAExecutionProvider", {"device_id": device_id}),
+                ("CPUExecutionProvider", {}),
+            ]
+        else:
+            providers = ["CPUExecutionProvider"]
+
+        fopt(onx, output, providers=providers, disable_aot=False)
         if verbose:
             print("[common_export] done")
 
@@ -385,7 +388,7 @@ def run_onnx_inference(
     stats: dict[str, Any] = {}
     device = example_inputs[0][0].get_device()
     providers = (
-        ["CUDAExecutionProvider", "CPUExecutionProvider"]
+        [("CUDAExecutionProvider", {"device_id": device}), "CPUExecutionProvider"]
         if device >= 0
         else ["CPUExecutionProvider"]
     )

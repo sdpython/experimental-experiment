@@ -61,7 +61,7 @@ if args.backend == "custom":
     print(f"enable_pattern={enable_pattern!r}")
 
 
-is_cuda = args.device == "cuda"
+is_cuda = args.device.startswith("cuda")
 if is_cuda:
     print(
         f"CUDA no model: memory allocated={torch.cuda.memory_allocated(0)}, "

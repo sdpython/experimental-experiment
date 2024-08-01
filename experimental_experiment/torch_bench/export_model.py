@@ -104,7 +104,7 @@ def main(args=None):
             print(f"disable_pattern={disable_pattern!r}")
             print(f"enable_pattern={enable_pattern!r}")
 
-        is_cuda = args.device == "cuda"
+        is_cuda = args.device.startswith("cuda")
         if is_cuda:
             print(
                 f"CUDA no model: memory allocated={torch.cuda.memory_allocated(0)}, "
@@ -133,8 +133,8 @@ def main(args=None):
         print(f"dynamic={use_dynamic}")
 
         folder = args.dump_folder
-        if not os.path.exists(folder):
-            os.mkdir(folder)
+        if folder and not os.path.exists(folder):
+            os.makedirs(folder)
 
         filename = (
             f"export_{args.model}_{args.exporter}_{'dyn' if use_dynamic else 'static'}"
@@ -168,7 +168,7 @@ def main(args=None):
             begin = time.perf_counter()
 
             memory_session = (
-                start_spying_on(cuda=args.device == "cuda")
+                start_spying_on(cuda=args.device.startswith("cuda"))
                 if args.memory_peak
                 else None
             )

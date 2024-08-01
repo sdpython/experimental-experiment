@@ -304,7 +304,7 @@ class ExtTestCase(unittest.TestCase):
         """
         if folder is None:
             folder = "dump_test"
-        if not os.path.exists(folder):
+        if folder and not os.path.exists(folder):
             os.mkdir(folder)
         return os.path.join(folder, name)
 
@@ -331,6 +331,12 @@ class ExtTestCase(unittest.TestCase):
             return AssertionError(
                 f"{a} < {b}, a not greater or equal than b\n{msg or ''}"
             )
+
+    def assertInOr(self, tofind: Tuple[str, ...], text: str):
+        for tof in tofind:
+            if tof in text:
+                return
+        raise AssertionError(f"Unable to find the list of strings {tofind} in\n{text}")
 
     def assertEqualArrays(
         self,

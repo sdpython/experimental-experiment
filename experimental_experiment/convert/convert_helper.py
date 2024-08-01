@@ -182,8 +182,12 @@ def ort_optimize(
 
     if providers == "cpu":
         providers = ["CPUExecutionProvider"]
-    elif providers == "cuda":
-        providers = [("CUDAExecutionProvider", {}), ("CPUExecutionProvider", {})]
+    elif not isinstance(providers, list) and providers.startswith("cuda"):
+        device_id = 0 if ":" not in providers else int(providers.split(":")[1])
+        providers = [
+            ("CUDAExecutionProvider", {"device_id": device_id}),
+            ("CPUExecutionProvider", {}),
+        ]
     assert isinstance(providers, list), f"Unexpected value for providers={providers!r}"
 
     if isinstance(onnx_model, str):

@@ -54,6 +54,13 @@ class OrtEval:
             providers = ["CPUExecutionProvider"]
         elif providers in ("cuda", "CUDA"):
             providers = ["CUDAExecutionProvider"]
+        elif not isinstance(providers, list) and providers.startswith("cuda"):
+            device_id = 0 if ":" not in self.device else int(self.device.split(":")[1])
+            providers = [
+                ("CUDAExecutionProvider", {"device_id": device_id}),
+                ("CPUExecutionProvider", {}),
+            ]
+
         self.providers = providers
         self._cache = {}
         if isinstance(proto, str):

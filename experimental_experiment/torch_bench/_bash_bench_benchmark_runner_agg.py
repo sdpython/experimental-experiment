@@ -1,4 +1,5 @@
 import glob
+import itertools
 import warnings
 from collections import Counter
 from typing import Optional, Dict, List, Set, Union
@@ -6,11 +7,12 @@ import numpy as np
 
 SELECTED_FEATURES = [
     dict(
-        cat="TIME_ITER",
-        stat="TIME_ITER",
+        cat="time",
+        stat="ITER",
         agg="TOTAL",
         new_name="number of models",
         unit="N",
+        help="Number of models evaluated in this document.",
     ),
     dict(
         cat="speedup",
@@ -18,9 +20,32 @@ SELECTED_FEATURES = [
         stat="increase",
         new_name="number of running models",
         unit="N",
+        help="Number of models converted and running with onnxruntime. "
+        "The outputs may be right or wrong. Unit test ensures every aten functions "
+        "is correctly converted but the combination may produce outputs "
+        "with higher discrepancies than expected.",
     ),
     dict(
-        cat="time", agg="COUNT%", stat="export_success", new_name="pass rate", unit="%"
+        cat="time",
+        agg="COUNT%",
+        stat="export_success",
+        new_name="export rate",
+        unit="%",
+        help="Proportion of models successfully converted into ONNX. "
+        "The ONNX model may not be run through onnxruntime or with "
+        "significant discrepancies.",
+    ),
+    dict(
+        cat="speedup",
+        agg="COUNT%",
+        stat="increase",
+        new_name="run rate",
+        unit="%",
+        help="Proportion of models successfully converted into ONNX "
+        "and onnxruntime can run it. "
+        "The outputs may be right or wrong. Unit test ensures every aten functions "
+        "is correctly converted but the combination may produce outputs "
+        "with higher discrepancies than expected.",
     ),
     dict(
         cat="time",
@@ -28,6 +53,9 @@ SELECTED_FEATURES = [
         stat="export_success",
         new_name="average export time",
         unit="s",
+        help="Average export time when the export succeeds. "
+        "The model may not run through onnxruntime and the model "
+        "may produce higher discrepancies than expected (lower is better).",
     ),
     dict(
         cat="speedup",
@@ -35,13 +63,63 @@ SELECTED_FEATURES = [
         stat="1speedup",
         new_name="average speedup (geo)",
         unit="x",
+        help="Geometric mean of all speedup for all model converted and runnning.",
     ),
+    # e-1
     dict(
         cat="status",
         agg="MEAN",
         stat="err<1e-1",
         new_name="discrepancies < 0.1",
         unit="%",
+        help="Proportion of models for which the maximum discrepancies is "
+        "below 0.1 for all outputs.",
+    ),
+    dict(
+        cat="status",
+        agg="MEAN",
+        stat="err_0<1e-1",
+        new_name="discrepancies first output < 0.1",
+        unit="%",
+        help="Proportion of models for which the maximum discrepancies is "
+        "below 0.1 for the first output.",
+    ),
+    dict(
+        cat="status",
+        agg="MEAN",
+        stat="err_1+<1e-1",
+        new_name="discrepancies second+ output < 0.1",
+        unit="%",
+        help="Proportion of models for which the maximum discrepancies is "
+        "below 0.1 for all the outputs except the first one.",
+    ),
+    # e-2
+    dict(
+        cat="status",
+        agg="MEAN",
+        stat="err<1e-2",
+        new_name="discrepancies < 0.01",
+        unit="%",
+        help="Proportion of models for which the maximum discrepancies is "
+        "below 0.01 for all outputs.",
+    ),
+    dict(
+        cat="status",
+        agg="MEAN",
+        stat="err_0<1e-2",
+        new_name="discrepancies first output < 0.01",
+        unit="%",
+        help="Proportion of models for which the maximum discrepancies is "
+        "below 0.01 for the first output.",
+    ),
+    dict(
+        cat="status",
+        agg="MEAN",
+        stat="err_1+<1e-2",
+        new_name="discrepancies second+ output < 0.01",
+        unit="%",
+        help="Proportion of models for which the maximum discrepancies is "
+        "below 0.01 for all the outputs except the first one.",
     ),
     dict(
         cat="status",
@@ -49,6 +127,9 @@ SELECTED_FEATURES = [
         stat="lat<=script+2%",
         new_name="model equal or faster than torch.script",
         unit="%",
+        help="Proportion of models successfully converted with torch.script "
+        "and the other exporter, and the second exporter is as fast or faster "
+        "than torch.script.",
     ),
     dict(
         cat="status",
@@ -56,20 +137,16 @@ SELECTED_FEATURES = [
         stat="lat<=eager+2%",
         new_name="model equal or faster than eager",
         unit="%",
+        help="Proportion of models as fast or faster than torch eager mode.",
     ),
     dict(
-        cat="status",
-        agg="MEAN",
-        stat="err<1e-2",
-        new_name="discrepancies < 0.01",
-        unit="%",
-    ),
-    dict(
-        cat="TIME_ITER",
-        stat="TIME_ITER",
+        cat="time",
+        stat="ITER",
         agg="MEAN",
         new_name="average iteration time",
         unit="s",
+        help="Average total time per model and scenario. "
+        "It usually reflects how long the export time is (lower is better).",
     ),
     dict(
         cat="discrepancies",
@@ -77,6 +154,27 @@ SELECTED_FEATURES = [
         agg="MEAN",
         new_name="average absolute discrepancies",
         unit="f",
+        help="Average maximum absolute discrepancies "
+        "assuming it can be measured (lower is better).",
+    ),
+    dict(
+        cat="discrepancies",
+        stat="abs_0",
+        agg="MEAN",
+        new_name="average absolute discrepancies first output",
+        unit="f",
+        help="Average maximum absolute discrepancies "
+        "for the first output assuming it can be measured (lower is better).",
+    ),
+    dict(
+        cat="discrepancies",
+        stat="abs_1+",
+        agg="MEAN",
+        new_name="average absolute discrepancies second+ output",
+        unit="f",
+        help="Average maximum absolute discrepancies "
+        "for all the outputs except the first one "
+        "assuming it can be measured (lower is better).",
     ),
     dict(
         cat="time",
@@ -84,9 +182,15 @@ SELECTED_FEATURES = [
         stat="latency_eager",
         new_name="average latency eager",
         unit="s",
+        help="Average latency for eager mode (lower is better)",
     ),
     dict(
-        cat="time", agg="MEAN", stat="latency", new_name="average latency ort", unit="s"
+        cat="time",
+        agg="MEAN",
+        stat="latency",
+        new_name="average latency ort",
+        unit="s",
+        help="Average latency for onnxruntime (lower is better)",
     ),
     dict(
         cat="memory",
@@ -94,6 +198,7 @@ SELECTED_FEATURES = [
         stat="peak_gpu_eager_warmup",
         new_name="average GPU peak (eager warmup)",
         unit="bytes",
+        help="Average GPU peak while warming up eager mode (torch metric)",
     ),
     dict(
         cat="memory",
@@ -101,6 +206,7 @@ SELECTED_FEATURES = [
         stat="peak_gpu_warmup",
         new_name="average GPU peak (warmup)",
         unit="bytes",
+        help="Average GPU peak while warming up onnxruntime (torch metric)",
     ),
     dict(
         cat="memory",
@@ -108,6 +214,8 @@ SELECTED_FEATURES = [
         stat="peak_cpu_pp",
         new_name="average CPU peak",
         unit="Mb",
+        help="Average CPU peak while warming up onnxruntime"
+        "(measured in a secondary process)",
     ),
     dict(
         cat="memory",
@@ -115,6 +223,8 @@ SELECTED_FEATURES = [
         stat="peak_gpu_pp",
         new_name="average GPU peak",
         unit="Mb",
+        help="Average GPU peak while converting the model "
+        "(measured in a secondary process)",
     ),
     dict(
         cat="memory",
@@ -122,15 +232,68 @@ SELECTED_FEATURES = [
         stat="peak_gpu_export",
         new_name="average GPU peak (export)",
         unit="bytes",
+        help="Average GPU peak while converting the model " "(torch metric)",
     ),
     dict(
         cat="speedup",
-        agg="GEO-MEAN",
+        agg="MEAN",
         stat="increase",
         new_name="average speedup increase",
         unit="%",
+        help="Average speedup increase compare to eager mode.",
     ),
 ]
+
+FILTERS = {
+    "HG": [
+        "AlbertForMaskedLM",
+        "AlbertForQuestionAnswering",
+        "AllenaiLongformerBase",
+        "BartForCausalLM",
+        "BartForConditionalGeneration",
+        "BertForMaskedLM",
+        "BertForQuestionAnswering",
+        "BlenderbotForCausalLM",
+        "BlenderbotSmallForCausalLM",
+        "BlenderbotSmallForConditionalGeneration",
+        "CamemBert",
+        "DebertaForMaskedLM",
+        "DebertaForQuestionAnswering",
+        "DebertaV2ForMaskedLM",
+        "DebertaV2ForQuestionAnswering",
+        "DistilBertForMaskedLM",
+        "DistilBertForQuestionAnswering",
+        "DistillGPT2",
+        "ElectraForCausalLM",
+        "ElectraForQuestionAnswering",
+        "GPT2ForSequenceClassification",
+        "GoogleFnet",
+        "LayoutLMForMaskedLM",
+        "LayoutLMForSequenceClassification",
+        "M2M100ForConditionalGeneration",
+        "MBartForCausalLM",
+        "MBartForConditionalGeneration",
+        "MT5ForConditionalGeneration",
+        "MegatronBertForCausalLM",
+        "MegatronBertForQuestionAnswering",
+        "MobileBertForMaskedLM",
+        "MobileBertForQuestionAnswering",
+        "OPTForCausalLM",
+        "PLBartForCausalLM",
+        "PLBartForConditionalGeneration",
+        "PegasusForCausalLM",
+        "PegasusForConditionalGeneration",
+        "RobertaForCausalLM",
+        "RobertaForQuestionAnswering",
+        "Speech2Text2ForCausalLM",
+        "T5ForConditionalGeneration",
+        "T5Small",
+        "TrOCRForCausalLM",
+        "XGLMForCausalLM",
+        "XLNetLMHeadModel",
+        "YituTechConvBert",
+    ]
+}
 
 
 def _key(v):
@@ -199,7 +362,7 @@ def _apply_excel_style(
                 cell.alignment = alignment
             continue
 
-        if k in {"0raw", "AGG"}:
+        if k in {"0raw", "AGG", "AGG2"}:
             continue
 
         n_cols = (
@@ -398,14 +561,14 @@ def _apply_excel_style(
                     cell.number_format = "0.000000"
             continue
 
-        if k == "SUMMARY":
+        if k in {"SUMMARY", "SUMMARY2"}:
             fmt = {
                 "x": "0.000",
                 "%": "0.000%",
-                "byes": "0 000 000 000",
+                "bytes": "0 000 000 000",
                 "Mb": "0.000",
                 "N": "0",
-                "f": "0.000",
+                "f": "0.0000",
             }
             for row in sheet.iter_rows(
                 min_row=first_row,
@@ -415,10 +578,15 @@ def _apply_excel_style(
             ):
                 for cell in row:
                     if cell.value in fmt:
-                        fcell = row[cell.col_idx - 2]
-                        fcell.number_format = fmt[cell.value]
-                        if cell.value == "x" and fcell.value < 1.02:
-                            fcell.font = red
+                        for idx in range(2, cell.col_idx):
+                            fcell = row[idx]
+                            if isinstance(fcell.value, (int, float)):
+                                fcell.number_format = fmt[cell.value]
+                                if cell.value == "x" and (
+                                    not isinstance(fcell, (float, int))
+                                    or fcell.value < 0.98
+                                ):
+                                    fcell.font = red
             cols = {}
             for row in sheet.iter_rows(
                 min_row=1,
@@ -488,14 +656,18 @@ def merge_benchmark_reports(
         "device",
         "dtype",
         "dynamic",
-        "version",
-        "version_onnxruntime",
-        "version_torch",
-        "version_transformers",
         "flag_fake_tensor",
         "flag_no_grad",
         "flag_training",
         "machine",
+        "processor",
+        "version",
+        "version_onnx",
+        "version_onnxruntime",
+        "version_onnxscript",
+        "version_tag",
+        "version_torch",
+        "version_transformers",
     ),
     column_keys=("stat", "exporter", "opt_patterns"),
     report_on=(
@@ -514,6 +686,8 @@ def merge_benchmark_reports(
     formulas=("memory_peak", "buckets", "status", "memory_delta"),
     excel_output: Optional[str] = None,
     exc: bool = True,
+    filter_in: Optional[str] = None,
+    filter_out: Optional[str] = None,
 ) -> Dict[str, "pandas.DataFrame"]:  # noqa: F821
     """
     Merges multiple files produced by bash_benchmark...
@@ -524,6 +698,18 @@ def merge_benchmark_reports(
         101Dummy-custom,2024-07-08,,0,7.119158490095288,7.0,40,2024-07-08,cuda,...
         101Dummy-script,2024-07-08,,1,6.705480073112994,7.0,40,2024-07-08,cuda,...
         101Dummy16-custom,2024-07-08,,2,6.970448340754956,7.0,40,2024-07-08,cuda,...
+
+    :param data: dataframe with the raw data
+    :param model: columns defining a unique model
+    :param keys: colimns definined a unique experiment
+    :param report_on: report on those metrics, ``<prefix>*`` means all
+        columns starting with this prefix
+    :param formulas: add computed metrics
+    :param excel_output: output the computed dataframe into a excel document
+    :param exc: raise exception by default (not used)
+    :param filter_in: filter in some data to make the report smaller (see below)
+    :param filter_out: filter out some data to make the report smaller (see below)
+    :return: dictionary of dataframes
 
     Every key with a unique value is removed.
     Every column with a unique value is displayed on main.
@@ -547,6 +733,13 @@ def merge_benchmark_reports(
         executable
         exporter
         ...
+
+    Argument `filter_in` or `filter_out` follows the syntax
+    ``<column1>:<fmt1>/<column2>:<fmt2>``.
+
+    The format is the following:
+
+    * a value or a set of values separated by ``;``
     """
     import pandas
 
@@ -615,6 +808,10 @@ def merge_benchmark_reports(
             df = df.copy()
             df[m] = ""
 
+    df = _filter_data(df, filter_in=filter_in, filter_out=filter_out)
+    if df.shape[0] == 0:
+        return {}
+
     # let's remove the empty line
     df = df[~df[model].isna().max(axis=1)].copy()
 
@@ -644,6 +841,8 @@ def merge_benchmark_reports(
         u = df[c].unique()
         if len(u) == 1:
             unique[c] = u.tolist()[0]
+    if "exporter" in unique:
+        del unique["exporter"]
 
     main = [dict(column="dates", value=", ".join(sorted(df["DATE"].unique().tolist())))]
     for k, v in unique.items():
@@ -728,18 +927,16 @@ def merge_benchmark_reports(
                 report_on.append("status_convert")
             if "discrepancies_abs" in set_columns:
                 df["status_convert_ort"] = (~df["discrepancies_abs"].isna()).astype(int)
-                df["status_err<1e-1"] = (
-                    ~df["discrepancies_abs"].isna() & (df["discrepancies_abs"] < 1e-1)
-                ).astype(int)
-                df["status_err<1e-2"] = (
-                    ~df["discrepancies_abs"].isna() & (df["discrepancies_abs"] < 1e-2)
-                ).astype(int)
-                df["status_err<1e-3"] = (
-                    ~df["discrepancies_abs"].isna() & (df["discrepancies_abs"] < 1e-3)
-                ).astype(int)
-                df["status_err<1e-4"] = (
-                    ~df["discrepancies_abs"].isna() & (df["discrepancies_abs"] < 1e-4)
-                ).astype(int)
+                mets = []
+                for th, mt in itertools.product(
+                    ["1e-1", "1e-2", "1e-3", "1e-4"], ["abs", "abs_0", "abs_1+"]
+                ):
+                    dis = f"discrepancies_{mt}"
+                    if dis not in df.columns:
+                        continue
+                    met = f"status_err{mt[3:]}<{th}"
+                    mets.append(met)
+                    df[met] = (~df[dis].isna() & (df[dis] < float(th))).astype(int)
                 df["status_lat<=eager+2%"] = (
                     ~df["discrepancies_abs"].isna()
                     & (df["time_latency"] <= df["time_latency_eager"] * 1.02)
@@ -747,9 +944,7 @@ def merge_benchmark_reports(
                 report_on.extend(
                     [
                         "status_convert_ort",
-                        "status_err<1e-2",
-                        "status_err<1e-3",
-                        "status_err<1e-4",
+                        *mets,
                         "status_lat<=eager+2%",
                     ]
                 )
@@ -814,7 +1009,8 @@ def merge_benchmark_reports(
 
     # buckets
     if bucket_columns:
-        table = df[[*new_keys, *model, *bucket_columns, "speedup_increase"]].copy()
+        keepc = [*new_keys, *model, *bucket_columns, "speedup_increase"]
+        table = df[keepc].copy()
         pcolumns = [c for c in new_keys if c not in model]
         index_col = model
         pivot = table[~table[index_col[0]].isna()].pivot(
@@ -1045,6 +1241,8 @@ def merge_benchmark_reports(
         if k in {"0main"}:
             continue
         for c in v.columns:
+            if "output_names" in c or "input_names" in c:
+                continue
             cc = v[c]
             if cc.dtype == np.object_:
                 try:
@@ -1061,11 +1259,11 @@ def merge_benchmark_reports(
                     co = Counter(types)
                     assert str in co and co[str] >= len(types) // 4 + 1, (
                         f"Unexpected values for k={k!r}, columns={c!r}, "
-                        f"types={set(types)}, values={v[c]}"
+                        f"types={set(types)}, values={v[c]}, co={co}"
                     )
 
     # add pages for the summary
-    res["AGG"] = _create_aggregation_figures(
+    res["AGG"], res["AGG2"] = _create_aggregation_figures(
         res,
         skip={
             "onnx",
@@ -1081,6 +1279,9 @@ def merge_benchmark_reports(
     )
     assert None not in res["AGG"].index.names, (
         f"None in res['AGG'].index.names={res['AGG'].index.names}, " f"prefix='AGG'"
+    )
+    assert None not in res["AGG2"].index.names, (
+        f"None in res['AGG2'].index.names={res['AGG2'].index.names}, " f"prefix='AGG2'"
     )
 
     names = res["AGG"].index.names
@@ -1100,17 +1301,23 @@ def merge_benchmark_reports(
             new_names.append(c)
 
     res["AGG"] = _reorder_index_level(res["AGG"], new_names + last_names, prefix="AGG")
+    res["AGG2"] = _reorder_index_level(
+        res["AGG2"], new_names + last_names, prefix="AGG2"
+    )
 
     final_res = {
         k: (
             v
-            if k in {"0raw", "0main", "AGG", "op_onnx", "op_torch"}
+            if k in {"0raw", "0main", "AGG", "AGG2", "op_onnx", "op_torch"}
             else _reorder_columns_level(v, column_keys, prefix=k)
         )
         for k, v in res.items()
     }
 
-    final_res["SUMMARY"] = _select_metrics(res["AGG"], select=SELECTED_FEATURES)
+    final_res["SUMMARY"], suites = _select_metrics(res["AGG"], select=SELECTED_FEATURES)
+    final_res["SUMMARY2"], suites = _select_metrics(
+        res["AGG2"], select=SELECTED_FEATURES
+    )
 
     if excel_output:
         with pandas.ExcelWriter(excel_output) as writer:
@@ -1280,9 +1487,10 @@ def _create_aggregation_figures(
         assert (
             key in v.index.names
         ), f"Unable to find key={key} in {v.index.names} for k={k!r}"
-        assert len(v.index.names) == len(
-            model
-        ), f"Length mismatch for k={k!r}, v.index.names={v.index.names}, model={model}"
+        assert len(v.index.names) == len(model), (
+            f"Length mismatch for k={k!r}, "
+            f"v.index.names={v.index.names}, model={model}"
+        )
 
         # Let's drop any non numerical features.
         v = v.select_dtypes(include=[np.number])
@@ -1304,7 +1512,8 @@ def _create_aggregation_figures(
         except ValueError as e:
             raise AssertionError(
                 f"Unable to grouby by key={key!r}, "
-                f"shape={v.shape} v.columns={v.columns}, values={set(v[key])}\n---\n{v}"
+                f"shape={v.shape} v.columns={v.columns}, "
+                f"values={set(v[key])}\n---\n{v}"
             ) from e
         stats = [
             ("MEAN", gr.mean()),
@@ -1413,6 +1622,7 @@ def _create_aggregation_figures(
     ), f"None in dfs.columns.names={dfs.columns.names}"
     names = list(dfs.columns.names)
     dfs = dfs.unstack(key)
+    keep_columns = dfs
     assert None not in dfs.index.names, f"None in dfs.index.names={dfs.index.names}"
     for n in names:
         with warnings.catch_warnings():
@@ -1424,8 +1634,9 @@ def _create_aggregation_figures(
 
     assert None not in dfs.index.names, f"None in dfs.index.names={dfs.index.names}"
     dfs = dfs.sort_index(axis=1).sort_index(axis=0)
+    keep_columns = keep_columns.sort_index(axis=1).sort_index(axis=0)
     assert None not in dfs.index.names, f"None in dfs.index.names={dfs.index.names}"
-    return dfs
+    return dfs, keep_columns
 
 
 def _reverse_column_names_order(
@@ -1442,6 +1653,7 @@ def _reverse_column_names_order(
 def _select_metrics(
     df: "pandas.DataFrame", select: List[Dict[str, str]]  # noqa: F821
 ) -> "pandas.DataFrame":  # noqa: F821
+    suites = set(df.columns)
     rows = []
     names = list(df.index.names)
     set_names = set(names)
@@ -1456,20 +1668,81 @@ def _select_metrics(
     for i, row in enumerate(rows):
         for j, (d, s) in enumerate(subset):
             if (s & row) == s:
-                keep.append((i, d["new_name"], d["unit"], d.get("order", j)))
+                keep.append((i, d["new_name"], d["unit"], d.get("order", j), d["help"]))
                 break
 
     dfi = df.iloc[[k[0] for k in keep]].reset_index(drop=False).copy()
     dfi["METRIC"] = [k[1] for k in keep]
     dfi["unit"] = [k[2] for k in keep]
     dfi["order"] = [k[3] for k in keep]
+    dfi["help"] = [k[4] for k in keep]
     dfi = dfi.copy()
-    dd = set(select[0].keys())
-    cols = ["order", "METRIC"]
+    dd_ = set(select[0].keys())
+    dd = set()
+    for d in dd_:
+        cs = [c for c in dfi.columns if d in c]
+        if cs:
+            dd.add(cs[0])
+    cols = [
+        *[c for c in dfi.columns if "order" in c],
+        *[c for c in dfi.columns if "METRIC" in c],
+    ]
+    skip = set([*cols, *[c for c in dfi.columns if "unit" in c or "help" in c]])
     for c in dfi.columns:
-        if c in {"METRIC", "order"} or c in dd:
+        if c in skip or c in dd:
             continue
         cols.append(c)
-    cols.append("unit")
-    dfi = dfi[cols].sort_values(cols[:-1])
-    return dfi
+    cols.extend([c for c in dfi.columns if "unit" in c])
+    cols.extend([c for c in dfi.columns if "help" in c])
+    dfi = dfi[cols].sort_values(cols[:-2])
+    return dfi, suites
+
+
+def _filter_data(
+    df: "pandas.DataFrame",  # noqa: F821
+    filter_in: Optional[str] = None,
+    filter_out: Optional[str] = None,
+) -> "pandas.DataFrame":  # noqa: F821
+    """
+    Argument `filter` follows the syntax
+    ``<column1>:<fmt1>/<column2>:<fmt2>``.
+
+    The format is the following:
+
+    * a value or a set of values separated by ``;``
+    """
+    if not filter_in and not filter_out:
+        return df
+
+    def _f(fmt):
+        cond = {}
+        if isinstance(fmt, str):
+            cols = fmt.split("/")
+            for c in cols:
+                assert ":" in c, f"Unexpected value {c!r} in fmt={fmt!r}"
+                spl = c.split(":")
+                assert len(spl) == 2, f"Unexpected value {c!r} in fmt={fmt!r}"
+                name, fil = spl
+                cond[name] = FILTERS[fil] if fil in FILTERS else set(fil.split(";"))
+        return cond
+
+    if filter_in:
+        cond = _f(filter_in)
+        assert isinstance(
+            cond, dict
+        ), f"Unexpected type {type(cond)} for fmt={filter_in!r}"
+        for k, v in cond.items():
+            if k not in df.columns:
+                continue
+            df = df[df[k].isin(v)]
+
+    if filter_out:
+        cond = _f(filter_out)
+        assert isinstance(
+            cond, dict
+        ), f"Unexpected type {type(cond)} for fmt={filter_out!r}"
+        for k, v in cond.items():
+            if k not in df.columns:
+                continue
+            df = df[~df[k].isin(v)]
+    return df

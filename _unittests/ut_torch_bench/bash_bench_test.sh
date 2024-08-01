@@ -8,6 +8,10 @@ clear
 
 python -m experimental_experiment.torch_bench.bash_bench_huggingface --device cuda --dtype float16 --quiet 0 --memory_peak 0 --exporter custom --model 0 -r 30 -w 10 --verbose 1 --output_data test_bash_bench_one.csv || exit 1
 
+# With dynamo
+
+python -m experimental_experiment.torch_bench.bash_bench_huggingface --device cuda --dtype float16 --quiet 0 --memory_peak 0 --exporter dynamo --model 0 -r 30 -w 10 --verbose 1 --output_data test_bash_bench_one_1s.csv || exit 1
+
 # Two models
 
 python -m experimental_experiment.torch_bench.bash_bench_huggingface --device cuda --dtype float16 --quiet 0 --memory_peak 0 --exporter custom --model 0,1 -r 30 -w 10 --verbose 1 --output_data test_bash_bench_two.csv || exit 1
