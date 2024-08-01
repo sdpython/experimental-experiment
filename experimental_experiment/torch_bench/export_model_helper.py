@@ -198,7 +198,7 @@ def common_export(
             f"{len(inputs)} inputs in {filename!r}"
         )
     begin = time.perf_counter()
-    if exporter == "script":
+    if exporter == "torch_script":
         assert isinstance(inputs, tuple), f"{type(inputs)}"
         assert len(inputs) == 2
         torch.onnx.export(

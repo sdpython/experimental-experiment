@@ -10,7 +10,7 @@ Available exporters:
 * compile: :func:`torch.compile`
 * custom: :func:`experimental_experiment.torch_interpreter.to_onnx`
 * torch_script: :func:`torch.onnx.export`
-* dynamo: :func:`torch.onnx.export` with ``dynamo=True``
+* onnx_dynamo: :func:`torch.onnx.export` with ``dynamo=True``
 * dynamo_export: :func:`torch.onnx.dynamo_export`
 
 ::
