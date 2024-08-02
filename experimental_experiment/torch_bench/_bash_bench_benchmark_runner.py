@@ -1042,9 +1042,15 @@ class BenchmarkRunner:
         del model_runner
         gc.collect()
 
-        feeds_values = list(feeds.values())
-        stats["onnx_input_dtypes"] = "/".join(str_dtype(_.dtype) for _ in feeds_values)
-        stats["onnx_input_shapes"] = "/".join(str_shape(_.shape) for _ in feeds_values)
+        if isinstance(feeds, dict):
+            # This is the type for onnx inputs
+            feeds_values = list(feeds.values())
+            stats["onnx_input_dtypes"] = "/".join(
+                str_dtype(getattr(_, "dtype", "?")) for _ in feeds_values
+            )
+            stats["onnx_input_shapes"] = "/".join(
+                str_shape(getattr(_, "shape", "?")) for _ in feeds_values
+            )
 
         if self.device.startswith("cuda"):
             torch.cuda.reset_peak_memory_stats()

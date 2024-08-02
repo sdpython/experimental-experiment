@@ -700,6 +700,7 @@ def merge_benchmark_reports(
         "exporter",
         "opt_patterns",
         "device",
+        "device_name",
         "dtype",
         "dynamic",
         "flag_fake_tensor",

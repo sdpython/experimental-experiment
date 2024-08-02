@@ -3942,9 +3942,11 @@ def aten_scaled_dot_product_attention(
     dropout_p: float = 0.0,
     is_causal: bool = False,
     scale: Optional[T] = None,
+    enable_gqa: bool = False,
     name: str = "aten_scaled_dot_product_attention",
 ):
     "scaled_dot_product_attention"
+    assert not enable_gqa, f"not implemented if enable_gqa={enable_gqa}"
     assert (not is_causal) or (
         (is_causal and attn_mask is None)
     ), f"is_causal and attn_mask cannot be set at the same time{g.get_debug_msg()}"
