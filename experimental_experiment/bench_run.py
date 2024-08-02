@@ -111,8 +111,10 @@ def _extract_metrics(text: str) -> Dict[str, str]:
                 "filename",
                 "time_latency_t_detail",
                 "time_latency_t_qu",
+                "time_latency_t_qu_10t",
                 "time_latency_eager_t_detail",
                 "time_latency_eager_t_qu",
+                "time_latency_eager_t_qu_10t",
             }
             or len(w) < 500
         ):
@@ -220,7 +222,7 @@ def run_benchmark(
         serr = err.decode("utf-8", errors="ignore")
 
         if dump_std:
-            if not os.path.exists(dump_std):
+            if dump_std and not os.path.exists(dump_std):
                 os.makedirs(dump_std)
             root = os.path.split(script_name)[-1]
             filename = os.path.join(dump_std, f"{root}.{iter_loop}")
@@ -271,6 +273,10 @@ def run_benchmark(
             df = make_dataframe_from_benchmark_data(data, detailed=False)
             if verbose > 2:
                 print(f"Prints out the results into file {temp_output_data!r}")
+            fold, _ = os.path.split(temp_output_data)
+            # fold could be empty string
+            if fold and not os.path.exists(fold):
+                os.makedirs(fold)
             df.to_csv(temp_output_data, index=False, errors="ignore")
             try:
                 df.to_excel(temp_output_data + ".xlsx", index=False)

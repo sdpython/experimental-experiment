@@ -168,19 +168,19 @@ class TestBashBenchRunnerCmd(ExtTestCase):
 
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.6")
-    def test_huggingface_export_bench_dynamo_cpu(self):
+    def test_huggingface_export_bench_onnx_dynamo_cpu(self):
         self._huggingface_export_bench_cpu("onnx_dynamo", "101Dummy")
 
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.4")
     @requires_onnxruntime_training()
-    def test_huggingface_export_bench_dynamo2_cpu(self):
+    def test_huggingface_export_bench_dynamo_cpu(self):
         self._huggingface_export_bench_cpu("dynamo_export", "101Dummy")
 
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.4")
     @requires_onnxruntime_training()
-    def test_huggingface_export_bench_dynamo2_cpu_optimize(self):
+    def test_huggingface_export_bench_dynamo_cpu_optimize(self):
         self._huggingface_export_bench_cpu(
             "dynamo_export", "101Dummy", optimization="default"
         )
