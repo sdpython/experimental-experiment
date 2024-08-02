@@ -891,6 +891,14 @@ class BenchmarkRunner:
             stats["time_latency_eager_t_max"] = max(lats)
             stats["time_latency_eager_t_std"] = np.std(lats)
             stats["time_latency_eager_t_med"] = np.median(lats)
+            h = max(1, len(lats) // 10)
+            stats["time_latency_eager_t_qu_10t"] = "/".join(map(str, lats[::h]))
+            stats["time_latency_eager_t_delta"] = (
+                stats["time_latency_eager_t_max"] - stats["time_latency_eager_t_min"]
+            ) / (stats["time_latency_eager_t_med"])
+            stats["time_latency_eager_t_corrt"] = np.corrcoef(
+                lats, list(range(len(lats)))
+            )[0, 1]
 
         if self.device.startswith("cuda"):
             stats["mema_gpu_4_after_repeat"] = torch.cuda.max_memory_allocated(
@@ -1281,6 +1289,15 @@ class BenchmarkRunner:
                     stats["time_latency_t_max"] = max(lats)
                     stats["time_latency_t_std"] = np.std(lats)
                     stats["time_latency_t_med"] = np.median(lats)
+                    h = max(1, len(lats) // 10)
+                    stats["time_latency_t_qu_10t"] = "/".join(map(str, lats[::h]))
+                    stats["time_latency_t_delta"] = (
+                        stats["time_latency_t_max"] - stats["time_latency_t_min"]
+                    ) / (stats["time_latency_t_med"])
+                    stats["time_latency_t_corrt"] = np.corrcoef(
+                        lats, list(range(len(lats)))
+                    )[0, 1]
+
             if self.device.startswith("cuda"):
                 stats["mema_gpu_9_after_export_repeat"] = (
                     torch.cuda.max_memory_allocated(device_id)
@@ -1377,6 +1394,14 @@ class BenchmarkRunner:
                     stats["time_latency_t_max"] = max(lats)
                     stats["time_latency_t_std"] = np.std(lats)
                     stats["time_latency_t_med"] = np.median(lats)
+                    h = max(1, len(lats) // 10)
+                    stats["time_latency_t_qu_10t"] = "/".join(map(str, lats[::h]))
+                    stats["time_latency_t_delta"] = (
+                        stats["time_latency_t_max"] - stats["time_latency_t_min"]
+                    ) / (stats["time_latency_t_med"])
+                    stats["time_latency_t_corrt"] = np.corrcoef(
+                        lats, list(range(len(lats)))
+                    )[0, 1]
 
             if self.device.startswith("cuda"):
                 stats["mema_gpu_9_after_export_repeat"] = (
