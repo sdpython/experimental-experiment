@@ -157,6 +157,7 @@ def run_benchmark(
     dump_std: Optional[str] = None,
     start: int = 0,
     summary: Optional[Callable] = None,
+    timeout: int = 600,
 ) -> List[Dict[str, Union[str, int, float, Tuple[int, int]]]]:
     """
     Runs a script multiple times and extract information from the output
@@ -171,6 +172,7 @@ def run_benchmark(
     :param dump_std: dumps stdout and stderr in this folder
     :param start: start at this iteration
     :param summary: function to call on the temporary data and the final data
+    :param timeout: timeout for the subprocesses
     :return: values
     """
     assert (
@@ -202,12 +204,16 @@ def run_benchmark(
         p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         timeout_error = ""
         try:
-            res = p.communicate(timeout=600)
+            res = p.communicate(timeout=timeout)
         except subprocess.TimeoutExpired as e:
+            # see https://docs.python.org/3/library/subprocess.html#subprocess.Popen.communicate
             timeout_error = str(e)
             if verbose:
                 print(f"[run_benchmark] timeout {e} for cmd={cmd}")
             p.kill()
+            if verbose:
+                print(f"[run_benchmark] poll returns {p.poll()}")
+                timeout_error += f" poll returns {p.poll()}"
             res = p.communicate()
         out, err = res
         sout = out.decode("utf-8", errors="ignore")
@@ -320,7 +326,7 @@ def make_configs(
 
 
 def make_dataframe_from_benchmark_data(
-    data: List[Dict], detailed: bool = True, string_limit: int = 500
+    data: List[Dict], detailed: bool = True, string_limit: int = 2000
 ) -> Any:
     """
     Creates a dataframe from the received data.

@@ -52,6 +52,7 @@ def bash_bench_parse_args(name: str, doc: str, new_args: Optional[List[str]] = N
         split_process=("0", "run exporter and the inference in two separate processes"),
         part=("", "which part to run, 0, or 1"),
         tag=("", "add a version tag when everything else did not change"),
+        timeout=("600", "timeout for subprocesses"),
         new_args=new_args,
         expose="repeat,warmup",
     )
@@ -163,6 +164,7 @@ def bash_bench_main(script_name: str, doc: str, args: Optional[List[str]] = None
                 dump_std=args.dump_folder,
                 start=args.start,
                 summary=merge_benchmark_reports,
+                timeout=int(args.timeout),
             )
             if args.verbose > 2:
                 pprint.pprint(data if args.verbose > 3 else data[:2])
