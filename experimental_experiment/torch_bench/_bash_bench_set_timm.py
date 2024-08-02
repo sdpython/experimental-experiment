@@ -3,8 +3,7 @@ import importlib
 import textwrap
 from typing import Any, Optional, Set, Tuple
 import torch
-from torch._dynamo.testing import collect_results, reduce_to_scalar_loss
-from torch._dynamo.utils import clone_inputs
+from torch._dynamo.testing import reduce_to_scalar_loss
 from ._bash_bench_model_runner import (
     download_retry_decorator,
     _rand_int_tensor,
@@ -581,17 +580,3 @@ class TimmRunner(BenchmarkRunner):
         start, end = self.get_benchmark_indices(len(model_names))
         for _ in self.enumerate_model_names(model_names, start=start, end=end):
             yield _
-
-    def forward_pass(self, mod, inputs, collect_outputs=True):
-        return mod(**inputs)
-
-    def forward_and_backward_pass(self, mod, inputs, collect_outputs=True):
-        cloned_inputs = clone_inputs(inputs)
-        self.optimizer_zero_grad(mod)
-        pred = mod(**cloned_inputs)
-        loss = self.compute_loss(pred)
-        self.grad_scaler.scale(loss).backward()
-        self.optimizer_step()
-        if collect_outputs:
-            return collect_results(mod, pred, loss, cloned_inputs)
-        return None

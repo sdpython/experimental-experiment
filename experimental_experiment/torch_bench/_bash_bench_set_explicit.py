@@ -1,31 +1,26 @@
-import importlib
-import textwrap
-from typing import Any, Optional, Set, Tuple
-import torch
-from torch._dynamo.testing import collect_results, reset_rng_state
-from torch._dynamo.utils import clone_inputs
-from ._bash_bench_model_runner import (
-    download_retry_decorator,
-    _rand_int_tensor,
-    ModelRunner,
-)
+from typing import Any, Callable, Dict, Optional, Set, Tuple
+from torch._dynamo.testing import reset_rng_state
+from ._bash_bench_model_runner import ModelRunner
 from ._bash_bench_benchmark_runner import BenchmarkRunner
-from ._bash_bench_set_dummies import Neuron, Neuron16, NeuronTuple, Neuron2Outputs
+from ._bash_bench_models_helper import (
+    get_dummy_model,
+    get_speech2text2_causal_ml_not_trained_model,
+)
 
 
 class ExplicitRunner(BenchmarkRunner):
+
+    MODELS: Dict[str, Callable] = {}
 
     @classmethod
     def initialize(container):
         """
         Steps to run before running the benchmark.
         """
-        container.EXTRA_MODELS.update(
+        container.MODELS.update(
             {
-                "Speech2Text2": (
-                    lambda: Neuron.config,
-                    Neuron,
-                ),
+                "101Dummy": get_dummy_model,
+                "Speech2Text2ForCausalLMNotTrained": get_speech2text2_causal_ml_not_trained_model,
             }
         )
 
@@ -65,6 +60,12 @@ class ExplicitRunner(BenchmarkRunner):
         )
         self.initialize()
 
+    def _get_model_cls_and_config(self, model_name: str) -> Tuple[Callable, Any]:
+        assert (
+            model_name in self.MODELS
+        ), f"Unable to find {model_name!r} in {list(sorted(self.MODELS))}"
+        return self.MODELS[model_name]
+
     def load_model(
         self,
         model_name: str,
@@ -73,31 +74,10 @@ class ExplicitRunner(BenchmarkRunner):
     ) -> ModelRunner:
         is_training = self.training
         use_eval_mode = self.use_eval_mode
-        dtype = self.dtype
         reset_rng_state()
-        model_cls, config, batch_size = self._get_model_cls_and_config(model_name)
-        assert isinstance(
-            batch_size, int
-        ), f"Unexpected value for batch_size={batch_size}"
+        model_cls, example_inputs = self._get_model_cls_and_config(model_name)()
 
         model = model_cls()
-        if dtype is None:
-            model = model.to(self.device)
-        else:
-            model = model.to(self.device, dtype=dtype)
-
-        example_inputs = self._generate_inputs_for_model(
-            model_cls,
-            model,
-            model_name,
-            batch_size,
-            self.device,
-            include_loss_args=True,
-        )
-
-        for attr in dir(config):
-            if "drop" in attr and isinstance(getattr(config, attr), float):
-                setattr(config, attr, 1e-30)
 
         if is_training and not use_eval_mode:
             model.train()
@@ -111,31 +91,15 @@ class ExplicitRunner(BenchmarkRunner):
             dtype=self.dtype,
             warmup=self.warmup,
             repeat=self.repeat,
-            suite="HuggingFace",
+            suite="Explicit",
+            wrap_kind="nowrap",
         )
 
     def iter_model_names(self):
-        model_names = list(self.BATCH_SIZE_KNOWN_MODELS.keys()) + list(
-            self.EXTRA_MODELS.keys()
-        )
-        model_names = set(model_names)
+        model_names = list(self.MODELS)
         assert model_names, "Empty list of models"
-        model_names = sorted(model_names)
+        model_names.sort()
 
         start, end = self.get_benchmark_indices(len(model_names))
         for _ in self.enumerate_model_names(model_names, start=start, end=end):
             yield _
-
-    def forward_pass(self, mod, inputs, collect_outputs=True):
-        return mod(**inputs)
-
-    def forward_and_backward_pass(self, mod, inputs, collect_outputs=True):
-        cloned_inputs = clone_inputs(inputs)
-        self.optimizer_zero_grad(mod)
-        pred = mod(**cloned_inputs)
-        loss = self.compute_loss(pred)
-        self.grad_scaler.scale(loss).backward()
-        self.optimizer_step()
-        if collect_outputs:
-            return collect_results(mod, pred, loss, cloned_inputs)
-        return None

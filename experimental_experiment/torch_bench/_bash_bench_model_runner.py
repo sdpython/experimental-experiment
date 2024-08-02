@@ -154,6 +154,10 @@ class ModelRunner:
     :param dtype: if the model needs to be converted
     :param warmup: number of iteration to warmup the model
     :param repeat: number of iteration to repeat the model
+    :param suite: model suite
+    :param wrap_kind: to wrap the model and tuple as much as possible,
+        None is default behavior,
+        'nowrap' to explicit avoid wrapping
     """
 
     _patched = None
@@ -163,22 +167,33 @@ class ModelRunner:
         return isinstance(x, tuple) and getattr(x, "_fields", None) is not None
 
     @classmethod
-    def _to_type(cls, o, dtype):
-        if dtype is None or o is None or isinstance(o, (str, bool, int, float)):
+    def _to_type_or_device(cls, o, dtype_or_device):
+        if (
+            dtype_or_device is None
+            or o is None
+            or isinstance(o, (str, bool, int, float))
+        ):
             return o
         if isinstance(o, list):
-            return [cls._to_type(v, dtype) for v in o]
+            return [cls._to_type_or_device(v, dtype_or_device) for v in o]
         if isinstance(o, tuple):
-            return tuple(cls._to_type(v, dtype) for v in o)
+            return tuple(cls._to_type_or_device(v, dtype_or_device) for v in o)
         if hasattr(o, "dtype"):
-            if o.dtype in {torch.float32, torch.float64, torch.float16, torch.bfloat16}:
-                return o.to(dtype)
+            if isinstance(dtype_or_device, str) or o.dtype in {
+                torch.float32,
+                torch.float64,
+                torch.float16,
+                torch.bfloat16,
+            }:
+                return o.to(dtype_or_device)
             return o
+
         if cls.isinstance_namedtuple(o):
             new_vals = {}
             for k in o._fields:
-                new_vals[k] = cls._to_type(getattr(o, k), dtype)
+                new_vals[k] = cls._to_type_or_device(getattr(o, k), dtype_or_device)
             return o.__class__(**new_vals)
+
         if o.__class__.__name__.endswith("KeyedJaggedTensor"):
             ext = dict(
                 weights=o.weights_or_none(),
@@ -194,18 +209,21 @@ class ModelRunner:
                 offset_per_key=o.offset_per_key_or_none(),
                 inverse_indices=o.inverse_indices_or_none(),
             )
-            ext = {k: cls._to_type(v, dtype) for k, v in ext.items()}
+            ext = {
+                k: cls._to_type_or_device(v, dtype_or_device) for k, v in ext.items()
+            }
             return o.__class__(**ext)
+
         if isinstance(o, dict):
             res = {}
             for k, v in o.items():
-                res[k] = cls._to_type(v, dtype)
+                res[k] = cls._to_type_or_device(v, dtype_or_device)
             return res
         try:
-            return o.to(dtype)
+            return o.to(dtype_or_device)
         except (AttributeError, AssertionError) as e:
             raise AssertionError(
-                f"Unable to convert class {type(o)} to {dtype} "
+                f"Unable to convert class {type(o)} to {dtype_or_device} "
                 f"(namedtuple={cls.isinstance_namedtuple(o)}), o={o})"
             ) from e
 
@@ -218,11 +236,14 @@ class ModelRunner:
         warmup: int,
         repeat: int,
         suite: str,
+        wrap_kind: Optional[None] = None,
     ):
         if dtype is None:
-            cvt = lambda o: self._to_type(o, device)  # noqa: E731
+            cvt = lambda o: self._to_type_or_device(o, device)  # noqa: E731
         else:
-            cvt = lambda o: self._to_type(self._to_type(o, dtype), device)  # noqa: E731
+            cvt = lambda o: self._to_type_or_device(  # noqa: E731
+                self._to_type_or_device(o, dtype), device
+            )
 
         if isinstance(inputs, dict):
             inputs = {k: cvt(v) for k, v in inputs.items()}
@@ -273,10 +294,24 @@ class ModelRunner:
 
         model_cvt = cvt(model)
         del model
-        if to_tuple:
-            self.model = WrappedModelToTuple(model_cvt)
+        if wrap_kind == "nowrap":
+            self.model = model_cvt
         else:
-            self.model = WrappedModelBase(model_cvt)
+            assert wrap_kind is None, f"Not implemented for wrap_kind={wrap_kind!r}"
+            if to_tuple:
+                self.model = WrappedModelToTuple(model_cvt)
+            else:
+                self.model = WrappedModelBase(model_cvt)
+
+        assert (
+            not isinstance(inputs, tuple)
+            or not isinstance(inputs[0], torch.Tensor)
+            or "cuda" not in device
+            or inputs[0].get_device() >= 0
+        ), (
+            f"device={device!r} but input device is {inputs[0].get_device()} "
+            f"(check {cvt(inputs[0]).get_device()})"
+        )
         self.device = device
         self.dtype = dtype
         self.inputs = inputs

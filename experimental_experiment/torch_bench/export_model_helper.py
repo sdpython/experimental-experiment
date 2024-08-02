@@ -1,7 +1,7 @@
 import time
 import os
 import sys
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Union, Tuple
 import numpy as np
 import onnx
 from onnx import (
@@ -595,3 +595,13 @@ def run_onnx_inference(
         print(f"[run_inference] measure done in {time.perf_counter() - begin}")
 
     return stats
+
+
+def str_shape(shape: Tuple[Any, ...]) -> str:
+    s = "x".join(str(i) for i in shape)
+    return s
+
+
+def str_dtype(dtype: Any) -> str:
+    s = str(dtype)
+    return s.replace("torch.", "").replace("'", "").replace("<", "").replace(">", "")

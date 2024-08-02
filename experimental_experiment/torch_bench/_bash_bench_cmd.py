@@ -97,6 +97,10 @@ def bash_bench_main(script_name: str, doc: str, args: Optional[List[str]] = None
         from ._bash_bench_set_timm import TimmRunner
 
         runner = TimmRunner(device=args.device)
+    elif script_name == "bash_bench_explicit":
+        from ._bash_bench_set_explicit import ExplicitRunner
+
+        runner = ExplicitRunner(device=args.device)
     else:
         raise AssertionError(f"Unexpected bash_bench name {script_name!r}.")
     names = runner.get_model_name_list()

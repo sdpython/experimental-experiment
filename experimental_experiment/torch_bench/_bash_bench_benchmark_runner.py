@@ -7,12 +7,16 @@ from typing import Any, Set, Optional, Tuple, Iterator, Dict, List, Union
 import numpy as np
 import onnx
 import torch
+from torch._dynamo.testing import collect_results
+from torch._dynamo.utils import clone_inputs
 from .export_model_helper import (
     WrapInferenceSessionForTorch,
     WrapForTorch,
     size_type,
     obj_size,
     compute_weight_size,
+    str_shape,
+    str_dtype,
 )
 from ..memory_peak import start_spying_on, flatten
 
@@ -84,6 +88,20 @@ class BenchmarkRunner:
         self.nvtx = nvtx
         self.dump_ort = dump_ort
         assert no_grad, "no_grad true not implemented yet"
+
+    def forward_pass(self, mod, inputs, collect_outputs=True):
+        return mod(**inputs)
+
+    def forward_and_backward_pass(self, mod, inputs, collect_outputs=True):
+        cloned_inputs = clone_inputs(inputs)
+        self.optimizer_zero_grad(mod)
+        pred = mod(**cloned_inputs)
+        loss = self.compute_loss(pred)
+        self.grad_scaler.scale(loss).backward()
+        self.optimizer_step()
+        if collect_outputs:
+            return collect_results(mod, pred, loss, cloned_inputs)
+        return None
 
     def get_model_name_list(self) -> List[str]:
         """Returns the model list."""
@@ -1023,6 +1041,10 @@ class BenchmarkRunner:
 
         del model_runner
         gc.collect()
+
+        feeds_values = list(feeds.values())
+        stats["onnx_input_dtypes"] = "/".join(str_dtype(_.dtype) for _ in feeds_values)
+        stats["onnx_input_shapes"] = "/".join(str_shape(_.shape) for _ in feeds_values)
 
         if self.device.startswith("cuda"):
             torch.cuda.reset_peak_memory_stats()
