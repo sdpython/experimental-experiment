@@ -371,9 +371,18 @@ def _isinf(x):
         return False
 
 
+def _column_name(ci: int) -> str:
+    if ci < 26:
+        return chr(65 + ci)
+    a = ci // 26
+    b = ci % 26
+    return f"{chr(65+a)}{chr(65+b)}"
+
+
 def _apply_excel_style(
     res: Dict[str, "pandas.DataFrame"],  # noqa: F821
     writer: "ExcelWriter",  # noqa: F821
+    verbose: int = 0,
 ):
     from openpyxl.styles import Font, Alignment, numbers, PatternFill
 
@@ -386,6 +395,8 @@ def _apply_excel_style(
     redf = PatternFill(start_color="FF0000", end_color="FF0000", fill_type="solid")
     lasts = {}
     for k, v in res.items():
+        if verbose:
+            print(f"[_apply_excel_style] apply style on {k!r}, shape={v.shape}")
         sheet = writer.sheets[k]
         if 0 in v.shape:
             continue
@@ -640,7 +651,7 @@ def _apply_excel_style(
             for k, ci in cols.items():
                 if k is None or isinstance(k, int):
                     continue
-                c = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"[ci - 1]
+                c = _column_name(ci - 1)
                 if k == "order":
                     sheet.column_dimensions[c].width = 5
                     for cell in sheet[c]:
@@ -677,11 +688,8 @@ def _apply_excel_style(
                     cell.alignment = right
             continue
 
-    for k, v in res.items():
-        if k not in lasts:
-            continue
-        sheet = writer.sheets[k]
-        last_row, last_col = lasts[k]
+    if verbose:
+        print("[_apply_excel_style] done")
 
 
 def merge_benchmark_reports(
@@ -727,6 +735,7 @@ def merge_benchmark_reports(
     exc: bool = True,
     filter_in: Optional[str] = None,
     filter_out: Optional[str] = None,
+    verbose: int = 0,
 ) -> Dict[str, "pandas.DataFrame"]:  # noqa: F821
     """
     Merges multiple files produced by bash_benchmark...
@@ -748,6 +757,7 @@ def merge_benchmark_reports(
     :param exc: raise exception by default (not used)
     :param filter_in: filter in some data to make the report smaller (see below)
     :param filter_out: filter out some data to make the report smaller (see below)
+    :param verbose: verbosity
     :return: dictionary of dataframes
 
     Every key with a unique value is removed.
@@ -786,6 +796,8 @@ def merge_benchmark_reports(
         data = [data]
 
     if isinstance(data, list):
+        if verbose:
+            print(f"[merge_benchmark_reports] start with {len(data)} dataframes")
         dfs = []
         for filename in data:
             if isinstance(filename, str):
@@ -808,13 +820,21 @@ def merge_benchmark_reports(
             dfs.append(df)
         df = pandas.concat(dfs, axis=0)
     elif isinstance(data, pandas.DataFrame):
+        if verbose:
+            print("[merge_benchmark_reports] start with 1 dataframe")
         df = data
     else:
         raise AssertionError(f"Unexpected type {type(data)} for data")
 
+    if verbose:
+        print(f"[merge_benchmark_reports] shape={df.shape}")
+
     if "STEP" in df.columns:
         # Experiment is run in two step. We remove the export rows
         # if it was successful as the metrics are reported in the row with the speedup.
+        if verbose:
+            print("[merge_benchmark_reports] remove exporter rows (column STEP)")
+
         if any(df["STEP"].isna()):
             vals = set(df["STEP"][~df["STEP"].isna()])
             if vals == {"last"}:
@@ -835,11 +855,17 @@ def merge_benchmark_reports(
         else:
             df = df[df["STEP"] != "export"]
 
+        if verbose:
+            print(f"[merge_benchmark_reports] done, new shape={df.shape}")
+
     if isinstance(model, str):
         model = [model]
     elif isinstance(model, tuple):
         model = list(model)
     assert isinstance(model, list), f"Unexpected type {type(model)} for model={model}"
+
+    if verbose:
+        print(f"[merge_benchmark_reports] model={model!r}")
 
     # checks all columns defining a model are available
     for m in model:
@@ -847,12 +873,24 @@ def merge_benchmark_reports(
             df = df.copy()
             df[m] = ""
 
-    df = _filter_data(df, filter_in=filter_in, filter_out=filter_out)
-    if df.shape[0] == 0:
-        return {}
+    if filter_in or filter_out:
+        if verbose:
+            print("[merge_benchmark_reports] filtering data")
 
+        df = _filter_data(df, filter_in=filter_in, filter_out=filter_out)
+
+        if verbose:
+            print(f"[merge_benchmark_reports] done, new shape={df.shape}")
+        if df.shape[0] == 0:
+            return {}
+
+    if verbose:
+        print("[merge_benchmark_reports] remove empty lines")
     # let's remove the empty line
     df = df[~df[model].isna().max(axis=1)].copy()
+
+    if verbose:
+        print(f"[merge_benchmark_reports] new shape={df.shape}")
 
     # replace nan values
     set_columns = set(df.columns)
@@ -874,6 +912,9 @@ def merge_benchmark_reports(
             if col.startswith(s):
                 report_on.append(col)
                 break
+
+    if verbose:
+        print(f"[merge_benchmark_reports] report_on {len(report_on)} metrics")
 
     unique = {}
     for c in df.columns:
@@ -900,13 +941,24 @@ def merge_benchmark_reports(
     assert new_keys, f"new_keys is empty, column_keys={column_keys}"
 
     # remove duplicated rows
+    if verbose:
+        print("[merge_benchmark_reports] remove duplicated rows")
     full_index = [s for s in df.columns if s in set([*column_keys, *keys, *model])]
     dupli = ~df.duplicated(full_index, keep="last")
     df = df[dupli].copy()
+    if verbose:
+        print(f"[merge_benchmark_reports] done, shape={df.shape}")
+        if verbose > 1 and excel_output:
+            nn = f"{excel_output}.raw.csv"
+            print(f"[merge_benchmark_reports] save raw data in {nn!r}")
+            df.to_csv(nn)
 
     # formulas
     bucket_columns = []
     for expr in formulas:
+        if verbose:
+            print(f"[merge_benchmark_reports] process formula={expr}")
+
         if expr == "memory_delta":
             if (
                 "memory_begin" in set_columns
@@ -1035,6 +1087,9 @@ def merge_benchmark_reports(
                     df[d] = val.astype(int)
             continue
 
+    if verbose:
+        print(f"[merge_benchmark_reports] done, shape={df.shape}")
+
     # values
     for c in report_on:
         keep = [*model, *new_keys, c]
@@ -1046,10 +1101,19 @@ def merge_benchmark_reports(
             pivot = dfc.set_index(model)
         res[c] = pivot
 
+    if verbose:
+        print(f"[merge_benchmark_reports] {len(res)} metrics")
+
     # buckets
     if bucket_columns:
         keepc = [*new_keys, *model, *bucket_columns, "speedup_increase"]
         table = df[keepc].copy()
+
+        if verbose:
+            print(
+                f"[merge_benchmark_reports] speed up buckets with shape={table.shape}"
+            )
+
         pcolumns = [c for c in new_keys if c not in model]
         index_col = model
         pivot = table[~table[index_col[0]].isna()].pivot(
@@ -1085,7 +1149,15 @@ def merge_benchmark_reports(
             position = {v: i for i, v in enumerate(order)}
             return [position[s] for s in index]
 
+        if verbose:
+            print(f"[merge_benchmark_reports] bucket shape={tpiv.shape}")
+
         if "level_0" in tpiv.columns:
+            if verbose:
+                print(
+                    f"[merge_benchmark_reports] bucket script shape ({len(tpiv.level_0)})"
+                )
+
             tpiv1 = tpiv[~tpiv.level_0.str.startswith("script")]
             tpiv2 = tpiv[tpiv.level_0.str.startswith("script")].copy()
             tpiv1 = (
@@ -1102,7 +1174,13 @@ def merge_benchmark_reports(
                 )
                 res["bucket_script"] = tpiv2.fillna(0).astype(int)
 
+            if verbose:
+                print(f"[merge_benchmark_reports] bucket script shape {tpiv2.shape}")
+
     # let's remove empty variables
+    if verbose:
+        print("[merge_benchmark_reports] remove empty variables")
+
     for k, v in res.items():
         drop = []
         for c in v.columns:
@@ -1114,6 +1192,9 @@ def merge_benchmark_reports(
     if "TIME_ITER" in res:
         res["time_ITER"] = res["TIME_ITER"]
         del res["TIME_ITER"]
+
+    if verbose:
+        print(f"[merge_benchmark_reports] final number of metrics={len(res)}")
 
     # final fusion
 
@@ -1256,8 +1337,12 @@ def merge_benchmark_reports(
     ]:
         merge = [k for k in res if k.startswith(prefix)]
         merge.sort()
+
         if len(merge) == 0:
             continue
+
+        if verbose:
+            print(f"[merge_benchmark_reports] start fusion of {prefix!r}")
 
         sheet = _merge(
             res,
@@ -1272,10 +1357,17 @@ def merge_benchmark_reports(
         assert (
             None not in sheet.columns.names
         ), f"None in sheet.columns.names={sheet.columns.names}, prefix={prefix!r}"
+        if verbose:
+            print(
+                f"[merge_benchmark_reports] done, shape of {prefix!r} is {sheet.shape}"
+            )
+
         res[prefix[:-1]] = sheet
         res = {k: v for k, v in res.items() if k not in set(merge)}
 
     # try to use numerical value everywhere
+    if verbose:
+        print("[merge_benchmark_reports] enforce numerical values")
     for k, v in res.items():
         if k in {"0main"}:
             continue
@@ -1301,6 +1393,10 @@ def merge_benchmark_reports(
                         f"types={set(types)}, values={v[c]}, co={co}"
                     )
 
+    if verbose:
+        print("[merge_benchmark_reports] done")
+        print("[merge_benchmark_reports] create aggregated figures")
+
     # add pages for the summary
     res["AGG"], res["AGG2"] = _create_aggregation_figures(
         res,
@@ -1321,6 +1417,10 @@ def merge_benchmark_reports(
     assert None not in res["AGG2"].index.names, (
         f"None in res['AGG2'].index.names={res['AGG2'].index.names}, " f"prefix='AGG2'"
     )
+    if verbose:
+        print(
+            f"[merge_benchmark_reports] done with shapes {res['AGG'].shape} and {res['AGG2'].shape}"
+        )
 
     names = res["AGG"].index.names
     new_names = []
@@ -1338,10 +1438,16 @@ def merge_benchmark_reports(
         if c not in new_names and c not in last_names:
             new_names.append(c)
 
+    if verbose:
+        print("[merge_benchmark_reports] reorder")
+
     res["AGG"] = _reorder_index_level(res["AGG"], new_names + last_names, prefix="AGG")
     res["AGG2"] = _reorder_index_level(
         res["AGG2"], new_names + last_names, prefix="AGG2"
     )
+
+    if verbose:
+        print("[merge_benchmark_reports] done")
 
     final_res = {
         k: (
@@ -1352,12 +1458,24 @@ def merge_benchmark_reports(
         for k, v in res.items()
     }
 
+    if verbose:
+        print(f"[merge_benchmark_reports] done with {len(final_res)} sheets")
+        print("[merge_benchmark_reports] creates SUMMARY")
+
     final_res["SUMMARY"], suites = _select_metrics(res["AGG"], select=SELECTED_FEATURES)
     final_res["SUMMARY2"], suites = _select_metrics(
         res["AGG2"], select=SELECTED_FEATURES
     )
 
+    if verbose:
+        print(
+            f"[merge_benchmark_reports] done with shapes "
+            f"{final_res['SUMMARY'].shape} and {final_res['SUMMARY2'].shape}"
+        )
+
     if excel_output:
+        if verbose:
+            print(f"[merge_benchmark_reports] apply Excel style with {excel_output!r}")
         with pandas.ExcelWriter(excel_output) as writer:
             no_index = {"0raw", "0main", "SUMMARY"}
             first_sheet = ["0main"]
@@ -1369,6 +1487,8 @@ def merge_benchmark_reports(
                 *last_sheet,
             ]
             order = [k for k in order if k in final_res]
+            if verbose:
+                print("[merge_benchmark_reports] some reordering")
             for k in order:
                 v = final_res[k]
                 ev = _reverse_column_names_order(v, name=k)
@@ -1383,7 +1503,9 @@ def merge_benchmark_reports(
                     index=k not in no_index,
                     freeze_panes=(frow, fcol) if k not in no_index else None,
                 )
-            _apply_excel_style(final_res, writer)
+            _apply_excel_style(final_res, writer, verbose=verbose)
+            if verbose:
+                print(f"[merge_benchmark_reports] save in {excel_output!r}")
 
     return final_res
 

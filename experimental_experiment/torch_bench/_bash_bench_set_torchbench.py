@@ -21,6 +21,8 @@ from ._bash_bench_benchmark_runner import BenchmarkRunner
 
 class TorchBenchRunner(BenchmarkRunner):
 
+    SUITE = "TorchBench"
+
     @staticmethod
     def _patch_install_deps(model_path: str, verbose: bool = True) -> Tuple[bool, Any]:
         import sys
@@ -1018,7 +1020,7 @@ class TorchBenchRunner(BenchmarkRunner):
             dtype=self.dtype,
             warmup=self.warmup,
             repeat=self.repeat,
-            suite="TorchBench",
+            suite=self.SUITE,
         )
 
     def iter_model_names(self):

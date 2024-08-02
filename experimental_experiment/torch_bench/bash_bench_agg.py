@@ -24,6 +24,7 @@ def main(args=None):
     parser.add_argument(
         "--filter_out", default="", help="adds a filter to filter out data"
     )
+    parser.add_argument("--verbose", default=0, help="verbosity level")
     res = parser.parse_args(args=args)
 
     from experimental_experiment.torch_bench._bash_bench_benchmark_runner_agg import (
@@ -35,6 +36,7 @@ def main(args=None):
         excel_output=res.output,
         filter_in=res.filter_in,
         filter_out=res.filter_out,
+        verbose=int(res.verbose),
     )
 
 
