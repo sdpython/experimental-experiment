@@ -150,6 +150,15 @@ SELECTED_FEATURES = [
     ),
     dict(
         cat="discrepancies",
+        stat="avg",
+        agg="MEAN",
+        new_name="average average discrepancies",
+        unit="f",
+        help="Average of average absolute discrepancies "
+        "assuming it can be measured (lower is better).",
+    ),
+    dict(
+        cat="discrepancies",
         stat="abs",
         agg="MEAN",
         new_name="average absolute discrepancies",
@@ -1498,6 +1507,8 @@ def merge_benchmark_reports(
                 )
                 fcol = len(ev.index.names) if isinstance(ev.index.names, list) else 1
 
+                if k in {"AGG2", "SUMMARY2"} and "suite" in ev.columns.names:
+                    ev = _reorder_columns_level(ev, first_level=["suite"], prefix=k)
                 ev.to_excel(
                     writer,
                     sheet_name=k,
@@ -1520,8 +1531,9 @@ def _reorder_columns_level(
     first_level: List[str],
     prefix: Optional[str] = None,
 ) -> "pandas.DataFrame":  # noqa: F821
-    assert None not in df.index.names, f"None in df.index.names={df.index.names}"
-    assert None not in df.columns.names, f"None in df.index.names={df.columns.names}"
+    assert (
+        None not in df.columns.names
+    ), f"None in df.index.names={df.columns.names}, prefix={prefix!r}"
     assert set(df.columns.names) & set(first_level), (
         f"Nothing to sort, prefix={prefix!r} "
         f"df.columns={df.columns}, first_level={first_level}\n--\n{df}"
@@ -1538,7 +1550,6 @@ def _reorder_columns_level(
     assert (
         list(df.columns.names) == levels
     ), f"Issue levels={levels}, df.columns.names={df.columns.names}"
-    assert None not in df.index.names, f"None in df.index.names={df.index.names}"
     assert None not in df.columns.names, f"None in df.index.names={df.columns.names}"
     return df.sort_index(axis=1)
 

@@ -379,13 +379,14 @@ def make_dataframe_from_benchmark_data(
 def measure_discrepancies(
     expected: List[Tuple["torch.Tensor", ...]],  # noqa: F821
     outputs: List[Tuple["torch.Tensor", ...]],  # noqa: F821
-) -> Tuple[float, float]:
+) -> Dict[str, float]:
     """
     Computes the discrepancies.
 
     :param expected: list of outputs coming from a torch model
     :param outputs: list of outputs coming from an onnx model
-    :return: max absolute errors, max relative errors
+    :return: dictionary with max absolute errors, max relative errors,
+        sum of absolute error, the number of elements contributing to it
     """
 
     def _flatten(outputs):
@@ -416,4 +417,6 @@ def measure_discrepancies(
             rel_err = float((diff.abs() / torch_tensor).max())
             abs_errs.append(abs_err)
             rel_errs.append(rel_err)
-    return max(abs_errs), max(rel_errs)
+    return dict(
+        abs=max(abs_errs), rel=max(rel_errs), sum=sum(rel_errs), n=len(abs_errs)
+    )

@@ -348,7 +348,7 @@ class BenchmarkRunner:
         begin: int = 0,
         end: int = -1,
         _index: int = 0,
-    ) -> Tuple[float, float]:
+    ) -> Dict[str, float]:
         """
         Returns the maximum discrepancy.
 
@@ -361,7 +361,14 @@ class BenchmarkRunner:
         :param begin: first output to considered
         :param end: last output to considered (-1 for the last one)
         :param _index: used with begin and end
-        :return: maximum absolute and relatives discrepancies
+        :return: dictionary with many values
+
+        * abs: max abolute error
+        * rel: max relative error
+        * sum: sum of the errors
+        * n: number of outputs values, if there is one
+          output, this number will be the number of elements
+          of this output
         """
         if flatten:
             return self.max_diff(
@@ -428,10 +435,15 @@ class BenchmarkRunner:
             if isinstance(got, torch.Tensor):
                 if _index < begin or (end != -1 and _index >= end):
                     # out of boundary
-                    return 0.0, 0.0
+                    return dict(abs=0.0, rel=0.0, sum=0.0, n=0.0)
                 diff = (got - expected).abs()
                 rdiff = diff / (expected.abs() + 1e-3)
-                abs_diff, rel_diff = float(diff.max()), float(rdiff.max())
+                abs_diff, rel_diff, sum_diff, n_diff = (
+                    float(diff.max()),
+                    float(rdiff.max()),
+                    float(diff.sum()),
+                    float(diff.numel()),
+                )
                 if self.verbose >= 10 and (abs_diff >= 10 or rel_diff >= 10):
                     # To understand the value it comes from.
                     if debug_info:
@@ -460,7 +472,7 @@ class BenchmarkRunner:
                             f"_index={_index}"
                         )
 
-                return abs_diff, rel_diff
+                return dict(abs=abs_diff, rel=rel_diff, sum=sum_diff, n=n_diff)
 
             if isinstance(got, (list, tuple)):
                 if len(got) != 1:
@@ -482,7 +494,7 @@ class BenchmarkRunner:
                                     f"    i={i} a is {type(a)}, "
                                     f"b is {type(b)}, _index={_index}"
                                 )
-                    return np.inf, np.inf
+                    return dict(abs=np.inf, rel=np.inf, sum=np.inf, n=np.inf)
                 return self.max_diff(
                     expected,
                     got[0],
@@ -491,6 +503,7 @@ class BenchmarkRunner:
                     begin=begin,
                     end=end,
                     _index=_index,
+                    debug_info=debug_info,
                 )
 
         if isinstance(expected, (tuple, list)):
@@ -503,6 +516,7 @@ class BenchmarkRunner:
                     begin=begin,
                     end=end,
                     _index=_index,
+                    debug_info=debug_info,
                 )
             if not isinstance(got, (tuple, list)):
                 if verbose > 2:
@@ -510,7 +524,7 @@ class BenchmarkRunner:
                         f"[max_diff] inf because type(expected)={type(expected)}, "
                         f"type(got)={type(got)}, level={level}, _index={_index}"
                     )
-                return np.inf, np.inf
+                return dict(abs=np.inf, rel=np.inf, sum=np.inf, n=np.inf)
             if len(got) != len(expected):
                 if verbose > 2:
                     print(
@@ -525,10 +539,10 @@ class BenchmarkRunner:
                             )
                         else:
                             print(f"    i={i} a is {type(a)}, b is {type(b)}")
-                return np.inf, np.inf
-            am, rm = 0, 0
+                return dict(abs=np.inf, rel=np.inf, sum=np.inf, n=np.inf)
+            am, rm, sm, n = 0, 0, 0.0, 0.0
             for ip, (e, g) in enumerate(zip(expected, got)):
-                a, r = self.max_diff(
+                d = self.max_diff(
                     e,
                     g,
                     verbose=verbose,
@@ -549,9 +563,11 @@ class BenchmarkRunner:
                     end=end,
                     _index=_index + ip,
                 )
-                am = max(am, a)
-                rm = max(rm, r)
-            return am, rm
+                am = max(am, d["abs"])
+                rm = max(rm, d["rel"])
+                sm += d["sum"]
+                n += d["n"]
+            return dict(abs=am, rel=rm, sum=sm, n=n)
 
         if "SquashedNormal" in expected.__class__.__name__:
             values = (
@@ -1453,19 +1469,22 @@ class BenchmarkRunner:
         ###############
 
         if got is not None:
-            a, r = self.max_diff(expected, got, verbose=self.verbose, flatten=is_onnx)
-            stats["discrepancies_abs"] = a
-            stats["discrepancies_rel"] = r
-            a, r = self.max_diff(
+            d = self.max_diff(expected, got, verbose=self.verbose, flatten=is_onnx)
+            stats["discrepancies_abs"] = d["abs"]
+            stats["discrepancies_rel"] = d["rel"]
+            stats["discrepancies_avg"] = d["sum"] / max(d["n"], 1)
+            d = self.max_diff(
                 expected, got, verbose=self.verbose, flatten=is_onnx, begin=0, end=1
             )
-            stats["discrepancies_abs_0"] = a
-            stats["discrepancies_rel_0"] = r
-            a, r = self.max_diff(
+            stats["discrepancies_abs_0"] = d["abs"]
+            stats["discrepancies_rel_0"] = d["rel"]
+            stats["discrepancies_avg_0"] = d["sum"] / max(d["n"], 1)
+            d = self.max_diff(
                 expected, got, verbose=self.verbose, flatten=is_onnx, begin=1
             )
-            stats["discrepancies_abs_1+"] = a
-            stats["discrepancies_rel_1+"] = r
+            stats["discrepancies_abs_1+"] = d["abs"]
+            stats["discrepancies_rel_1+"] = d["rel"]
+            stats["discrepancies_avg_1+"] = d["sum"] / max(d["n"], 1)
             if self.verbose:
                 print(
                     f"[BenchmarkRunner.benchmark] done model with {len(stats)} metrics"

@@ -572,9 +572,10 @@ def run_onnx_inference(
     stats["warmup_time"] = end / warmup
     stats["warmup_iter"] = iterations
     if torch_model:
-        abs_err, rel_err = measure_discrepancies(expected, got)
-        stats["discrepancies_abs"] = abs_err
-        stats["discrepancies_rel"] = rel_err
+        d = measure_discrepancies(expected, got)
+        stats["discrepancies_abs"] = d["abs"]
+        stats["discrepancies_rel"] = d["rel"]
+        stats["discrepancies_avg"] = d["avg"]
 
     if verbose:
         print(f"[run_inference] warmup done in {time.perf_counter() - begin}")
