@@ -22,7 +22,7 @@ def bash_bench_parse_args(name: str, doc: str, new_args: Optional[List[str]] = N
         ),
         exporter=(
             "custom",
-            "export, custom, dynamo, dynamo2, script",
+            "export, custom, onnx_dynamo, dynamo_export, torch_script",
         ),
         process=("0", "run every run in a separate process"),
         device=("cpu", "'cpu' or 'cuda'"),
@@ -52,6 +52,7 @@ def bash_bench_parse_args(name: str, doc: str, new_args: Optional[List[str]] = N
         split_process=("0", "run exporter and the inference in two separate processes"),
         part=("", "which part to run, 0, or 1"),
         tag=("", "add a version tag when everything else did not change"),
+        timeout=("600", "timeout for subprocesses"),
         new_args=new_args,
         expose="repeat,warmup",
     )
@@ -89,10 +90,18 @@ def bash_bench_main(script_name: str, doc: str, args: Optional[List[str]] = None
         from ._bash_bench_set_torchbench import TorchBenchRunner
 
         runner = TorchBenchRunner(device=args.device)
+    elif script_name == "bash_bench_torchbench_ado":
+        from ._bash_bench_set_torchbench_ado import TorchBenchAdoRunner
+
+        runner = TorchBenchAdoRunner(device=args.device)
     elif script_name == "bash_bench_timm":
         from ._bash_bench_set_timm import TimmRunner
 
         runner = TimmRunner(device=args.device)
+    elif script_name == "bash_bench_explicit":
+        from ._bash_bench_set_explicit import ExplicitRunner
+
+        runner = ExplicitRunner(device=args.device)
     else:
         raise AssertionError(f"Unexpected bash_bench name {script_name!r}.")
     names = runner.get_model_name_list()
@@ -155,6 +164,7 @@ def bash_bench_main(script_name: str, doc: str, args: Optional[List[str]] = None
                 dump_std=args.dump_folder,
                 start=args.start,
                 summary=merge_benchmark_reports,
+                timeout=int(args.timeout),
             )
             if args.verbose > 2:
                 pprint.pprint(data if args.verbose > 3 else data[:2])

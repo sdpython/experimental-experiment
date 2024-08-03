@@ -37,6 +37,7 @@ class TestBashBenchRunnerCmd(ExtTestCase):
         dump_ort=False,
         process=False,
         tag=None,
+        timeout=600,
     ):
         from experimental_experiment.torch_bench.bash_bench_huggingface import main
 
@@ -59,6 +60,8 @@ class TestBashBenchRunnerCmd(ExtTestCase):
             "1" if dump_ort else "0",
             "--dump_folder",
             "dump_test_bash_bench",
+            "--timeout",
+            str(timeout),
         ]
         if process:
             args.extend(["--process", "1"])
@@ -141,36 +144,45 @@ class TestBashBenchRunnerCmd(ExtTestCase):
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_onnxruntime_training()
     @requires_torch("2.4")
+    def test_huggingface_export_bench_custom_cpu2_timeout(self):
+        self._huggingface_export_bench_cpu(
+            "custom", "101Dummy,101Dummy16", timeout=1, verbose=10, debug=True
+        )
+
+    @skipif_ci_windows("exporter does not work on Windows")
+    @ignore_warnings((DeprecationWarning, UserWarning))
+    @requires_onnxruntime_training()
+    @requires_torch("2.4")
     def test_huggingface_export_bench_custom_cpu_first(self):
         self._huggingface_export_bench_cpu("custom", "0")
 
     @requires_onnxruntime_training()
     @ignore_warnings((DeprecationWarning, UserWarning))
     def test_huggingface_export_bench_script_cpu(self):
-        self._huggingface_export_bench_cpu("script", "101Dummy")
+        self._huggingface_export_bench_cpu("torch_script", "101Dummy")
 
     @requires_onnxruntime_training()
     @ignore_warnings((DeprecationWarning, UserWarning))
     def test_huggingface_export_bench_script_cpu_tag(self):
-        self._huggingface_export_bench_cpu("script", "101Dummy", tag="taggy")
+        self._huggingface_export_bench_cpu("torch_script", "101Dummy", tag="taggy")
 
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.6")
+    def test_huggingface_export_bench_onnx_dynamo_cpu(self):
+        self._huggingface_export_bench_cpu("onnx_dynamo", "101Dummy")
+
+    @ignore_warnings((DeprecationWarning, UserWarning))
+    @requires_torch("2.4")
+    @requires_onnxruntime_training()
     def test_huggingface_export_bench_dynamo_cpu(self):
-        self._huggingface_export_bench_cpu("dynamo", "101Dummy")
+        self._huggingface_export_bench_cpu("dynamo_export", "101Dummy")
 
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.4")
     @requires_onnxruntime_training()
-    def test_huggingface_export_bench_dynamo2_cpu(self):
-        self._huggingface_export_bench_cpu("dynamo2", "101Dummy")
-
-    @ignore_warnings((DeprecationWarning, UserWarning))
-    @requires_torch("2.4")
-    @requires_onnxruntime_training()
-    def test_huggingface_export_bench_dynamo2_cpu_optimize(self):
+    def test_huggingface_export_bench_dynamo_cpu_optimize(self):
         self._huggingface_export_bench_cpu(
-            "dynamo2", "101Dummy", optimization="default"
+            "dynamo_export", "101Dummy", optimization="default"
         )
 
     @skipif_ci_windows("exporter does not work on Windows")
@@ -242,7 +254,7 @@ class TestBashBenchRunnerCmd(ExtTestCase):
     @requires_onnxruntime_training()
     @requires_torch("2.4")
     def test_timm_export_bench_script_cpu(self):
-        self._timm_export_bench_cpu("script", "mobilenetv2_100")
+        self._timm_export_bench_cpu("torch_script", "mobilenetv2_100")
 
 
 if __name__ == "__main__":

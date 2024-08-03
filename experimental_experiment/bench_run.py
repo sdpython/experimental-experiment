@@ -26,16 +26,45 @@ def _clean_string(s: str) -> str:
     return s
 
 
+def get_processor_name():
+    """
+    Returns the processor name.
+    """
+    if platform.system() in ("Windows", "Darwin"):
+        return platform.processor()
+    if platform.system() == "Linux":
+        command = "cat /proc/cpuinfo"
+        all_info = subprocess.check_output(command, shell=True).decode().strip()
+        for line in all_info.split("\n"):
+            if "model name" in line:
+                return re.sub(".*model name.*:", "", line, 1).strip()
+    # fails
+    # if platform.system() == "Darwin":
+    #     os.environ["PATH"] = os.environ["PATH"] + os.pathsep + "/usr/sbin"
+    #     command = "sysctl -n machdep.cpu.brand_string"
+    #     return subprocess.check_output(command).strip()
+
+    raise AssertionError("get_process_name not implemented on this platform.")
+
+
 def get_machine() -> Dict[str, Union[str, int, float, Tuple[int, int]]]:
     """
     Returns the machine specifications.
     """
+    arch = platform.architecture()
     config: Dict[str, Union[str, int, float, Tuple[int, int]]] = dict(
         machine=str(platform.machine()),
+        architecture=(
+            "/".join(str(_) for _ in arch)
+            if isinstance(arch, (list, tuple))
+            else str(arch)
+        ),
         processor=str(platform.processor()),
         version=str(sys.version).split()[0],
         cpu=int(multiprocessing.cpu_count()),
         executable=str(sys.executable),
+        processor_name=get_processor_name(),
+        system=str(platform.system()),
     )
     try:
         import torch.cuda
@@ -82,8 +111,10 @@ def _extract_metrics(text: str) -> Dict[str, str]:
                 "filename",
                 "time_latency_t_detail",
                 "time_latency_t_qu",
+                "time_latency_t_qu_10t",
                 "time_latency_eager_t_detail",
                 "time_latency_eager_t_qu",
+                "time_latency_eager_t_qu_10t",
             }
             or len(w) < 500
         ):
@@ -128,6 +159,7 @@ def run_benchmark(
     dump_std: Optional[str] = None,
     start: int = 0,
     summary: Optional[Callable] = None,
+    timeout: int = 600,
 ) -> List[Dict[str, Union[str, int, float, Tuple[int, int]]]]:
     """
     Runs a script multiple times and extract information from the output
@@ -142,6 +174,7 @@ def run_benchmark(
     :param dump_std: dumps stdout and stderr in this folder
     :param start: start at this iteration
     :param summary: function to call on the temporary data and the final data
+    :param timeout: timeout for the subprocesses
     :return: values
     """
     assert (
@@ -173,19 +206,23 @@ def run_benchmark(
         p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         timeout_error = ""
         try:
-            res = p.communicate(timeout=600)
+            res = p.communicate(timeout=timeout)
         except subprocess.TimeoutExpired as e:
+            # see https://docs.python.org/3/library/subprocess.html#subprocess.Popen.communicate
             timeout_error = str(e)
             if verbose:
                 print(f"[run_benchmark] timeout {e} for cmd={cmd}")
             p.kill()
+            if verbose:
+                print(f"[run_benchmark] poll returns {p.poll()}")
+                timeout_error += f" poll returns {p.poll()}"
             res = p.communicate()
         out, err = res
         sout = out.decode("utf-8", errors="ignore")
         serr = err.decode("utf-8", errors="ignore")
 
         if dump_std:
-            if not os.path.exists(dump_std):
+            if dump_std and not os.path.exists(dump_std):
                 os.makedirs(dump_std)
             root = os.path.split(script_name)[-1]
             filename = os.path.join(dump_std, f"{root}.{iter_loop}")
@@ -236,6 +273,10 @@ def run_benchmark(
             df = make_dataframe_from_benchmark_data(data, detailed=False)
             if verbose > 2:
                 print(f"Prints out the results into file {temp_output_data!r}")
+            fold, _ = os.path.split(temp_output_data)
+            # fold could be empty string
+            if fold and not os.path.exists(fold):
+                os.makedirs(fold)
             df.to_csv(temp_output_data, index=False, errors="ignore")
             try:
                 df.to_excel(temp_output_data + ".xlsx", index=False)
@@ -291,7 +332,7 @@ def make_configs(
 
 
 def make_dataframe_from_benchmark_data(
-    data: List[Dict], detailed: bool = True, string_limit: int = 500
+    data: List[Dict], detailed: bool = True, string_limit: int = 2000
 ) -> Any:
     """
     Creates a dataframe from the received data.

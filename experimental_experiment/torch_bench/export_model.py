@@ -12,7 +12,7 @@ Example, run llama model with onnxrt backend on cuda.
 
 ::
 
-    python -m experimental_experiment.torch_bench.export_model --exporter script --device cuda --config medium
+    python -m experimental_experiment.torch_bench.export_model --exporter torch_script --device cuda --config medium
     
 """
 

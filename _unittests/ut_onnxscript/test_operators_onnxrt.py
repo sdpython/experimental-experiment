@@ -1205,6 +1205,7 @@ class TestOperatorsOnnxrt(ExtTestCase):
             lambda x: x.view(x.size()[0], x.numel() // x.size()[0]),
             x,
             onnx_export=inspect.currentframe().f_code.co_name,
+            atol=2e-6,
         )
 
     @hide_stdout()

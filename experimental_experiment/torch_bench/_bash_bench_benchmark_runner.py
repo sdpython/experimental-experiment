@@ -2,13 +2,22 @@ import os
 import gc
 import pickle
 import time
-import sys
 from datetime import datetime
 from typing import Any, Set, Optional, Tuple, Iterator, Dict, List, Union
 import numpy as np
 import onnx
 import torch
-from .export_model_helper import WrapInferenceSessionForTorch, WrapForTorch
+from torch._dynamo.testing import collect_results
+from torch._dynamo.utils import clone_inputs
+from .export_model_helper import (
+    WrapInferenceSessionForTorch,
+    WrapForTorch,
+    size_type,
+    obj_size,
+    compute_weight_size,
+    str_shape,
+    str_dtype,
+)
 from ..memory_peak import start_spying_on, flatten
 
 
@@ -80,6 +89,20 @@ class BenchmarkRunner:
         self.dump_ort = dump_ort
         assert no_grad, "no_grad true not implemented yet"
 
+    def forward_pass(self, mod, inputs, collect_outputs=True):
+        return mod(**inputs)
+
+    def forward_and_backward_pass(self, mod, inputs, collect_outputs=True):
+        cloned_inputs = clone_inputs(inputs)
+        self.optimizer_zero_grad(mod)
+        pred = mod(**cloned_inputs)
+        loss = self.compute_loss(pred)
+        self.grad_scaler.scale(loss).backward()
+        self.optimizer_step()
+        if collect_outputs:
+            return collect_results(mod, pred, loss, cloned_inputs)
+        return None
+
     def get_model_name_list(self) -> List[str]:
         """Returns the model list."""
         return list(self.iter_model_names())
@@ -93,6 +116,58 @@ class BenchmarkRunner:
             else length
         )
         return start, end
+
+    def enumerate_model_names(
+        self, model_names: List[str], start: int = 0, end: int = -1
+    ) -> Iterator[str]:
+        """
+        Enumerates model names.
+
+        :param model_names: list of names
+        :param start: index of the first model
+        :param end: index of the last model (excluded) or -1 for the end
+        :return: iterator
+
+        The method uses `self.include_model_names` and `self.exclude_model_names`
+        to filter in or out the models to run.
+        """
+        if end == -1:
+            end = len(model_names)
+        assert (
+            start < end
+        ), f"Empty partition (start={start}, end={end}, model_names={model_names!r})"
+        has_one_model = False
+        done = set()
+        for index, model_name in enumerate(model_names):
+            if index < start or index >= end:
+                continue
+            if model_name in self.exclude_model_names:
+                continue
+            if not self.include_model_names:
+                yield model_name
+                has_one_model = True
+                continue
+            if model_name in self.include_model_names:
+                yield model_name
+                has_one_model = True
+                done.add(model_name)
+                continue
+
+        if self.include_model_names and len(self.include_model_names) != len(done):
+            # Some names were not found.
+            not_found = [_ for _ in self.include_model_names if _ and _ not in done]
+            for sub in not_found:
+                for model_name in model_names[start:end]:
+                    if model_name not in done and sub in model_name:
+                        yield model_name
+                        has_one_model = True
+                        done.add(model_name)
+
+        assert has_one_model, (
+            f"No model listed, model_names={model_names}, start={start}, "
+            f"end={end}, self.include_model_names={self.include_model_names}, "
+            f"self.exclude_model_names={self.exclude_model_names}"
+        )
 
     def enumerate_load_models(self) -> Iterator[Tuple[Any, Any]]:
         """
@@ -126,7 +201,7 @@ class BenchmarkRunner:
                 )
             if self.verbose > 1:
                 print(
-                    f"[BenchmarkRunner.benchmark] parameters size {model_runner.parameters_size()!r}"
+                    f"[BenchmarkRunner.benchmark] parameters size {model_runner.compute_weight_size()!r}"
                 )
             yield model_runner.run()
 
@@ -149,51 +224,10 @@ class BenchmarkRunner:
 
     @classmethod
     def size_type(cls, dtype) -> int:
-        if dtype in {torch.float64, torch.int64}:
-            return 8
-        if dtype in {torch.float32, torch.int32}:
-            return 4
-        if dtype in {torch.float16, torch.int16, torch.bfloat16}:
-            return 2
-        if dtype in {torch.int8, torch.uint8, torch.bool}:
-            return 1
-        if hasattr(torch, "uint64"):
-            # it fails on mac
-            if dtype in {torch.uint64}:
-                return 8
-        if hasattr(torch, "uint32"):
-            # it fails on mac
-            if dtype in {torch.uint32}:
-                return 4
-        if hasattr(torch, "uint16"):
-            # it fails on mac
-            if dtype in {torch.uint16}:
-                return 2
-        raise AssertionError(f"Unexpected dtype={dtype}")
+        return size_type(dtype)
 
     def obj_size(self, obj: Any) -> int:
-        if isinstance(obj, torch.Tensor):
-            return np.prod(list(obj.shape) * self.size_type(obj.dtype))
-        if isinstance(obj, (tuple, list)):
-            return sum(self.obj_size(o) for o in obj)
-        if isinstance(obj, dict):
-            return sum(self.obj_size(o) for o in obj.values())
-        if obj is None:
-            return 0
-        if obj.__class__.__name__.endswith("KeyedJaggedTensor"):
-            # Not implemented yet.
-            return 0
-        if isinstance(obj, (int, float, str, bytes)):
-            return sys.getsizeof(obj)
-        if hasattr(obj, "_fields") and isinstance(obj._fields, dict):
-            # detectron2.structures.instances.Instances
-            return self.obj_size(obj._fields)
-        if hasattr(obj, "tensor") and isinstance(obj.tensor, torch.Tensor):
-            # detectron2.structures.instances.Bowes
-            return self.obj_size(obj.tensor)
-        if "SquashedNormal" in obj.__class__.__name__:
-            return sys.getsizeof(obj)
-        raise AssertionError(f"input_size not implemented for type {type(obj)}")
+        return obj_size(obj)
 
     def ort_run(
         self, sess: WrapInferenceSessionForTorch, feeds: List[torch.Tensor]
@@ -294,10 +328,8 @@ class BenchmarkRunner:
     def _flatten(cls, value):
         res = []
         if isinstance(value, dict):
-            assert (
-                len(value) == 1
-            ), f"Unable to flatten a dictionary with more than one value ({len(value)})"
-            return tuple(value.values())
+            # We assume the dictionary is ordered.
+            return cls._flatten(list(value.values()))
         if isinstance(value, (list, tuple)):
             for v in value:
                 res.extend(cls._flatten(v))
@@ -736,7 +768,7 @@ class BenchmarkRunner:
         stats["model_name"] = model_name
         stats["suite"] = model_runner.suite
         stats["time_load"] = time.perf_counter() - begin
-        stats["params_size"] = model_runner.parameters_size()
+        stats["params_size"] = model_runner.compute_weight_size()
         stats["params_dtype"] = model_runner.parameters_dtype()
         stats["warmup"] = warmup
         stats["repeat"] = repeat
@@ -877,6 +909,14 @@ class BenchmarkRunner:
             stats["time_latency_eager_t_max"] = max(lats)
             stats["time_latency_eager_t_std"] = np.std(lats)
             stats["time_latency_eager_t_med"] = np.median(lats)
+            h = max(1, len(lats) // 10)
+            stats["time_latency_eager_t_qu_10t"] = "/".join(map(str, lats[::h]))
+            stats["time_latency_eager_t_delta"] = (
+                stats["time_latency_eager_t_max"] - stats["time_latency_eager_t_min"]
+            ) / (stats["time_latency_eager_t_med"])
+            stats["time_latency_eager_t_corrt"] = np.corrcoef(
+                lats, list(range(len(lats)))
+            )[0, 1]
 
         if self.device.startswith("cuda"):
             stats["mema_gpu_4_after_repeat"] = torch.cuda.max_memory_allocated(
@@ -930,7 +970,7 @@ class BenchmarkRunner:
                     name=filename,
                     dynamic=dynamic,
                     optimization=optimization,
-                    verbose=self.verbose + 1,
+                    verbose=max(self.verbose - 1, 0),
                     fake_tensor=self.fake_tensor,
                     no_grad=self.no_grad,
                     target_opset=self.target_opset,
@@ -956,7 +996,7 @@ class BenchmarkRunner:
                 name=filename,
                 dynamic=dynamic,
                 optimization=optimization,
-                verbose=self.verbose + 1,
+                verbose=max(self.verbose - 1, 0),
                 fake_tensor=self.fake_tensor,
                 no_grad=self.no_grad,
                 target_opset=self.target_opset,
@@ -984,6 +1024,8 @@ class BenchmarkRunner:
 
         stats.update(self._post_process_optimization_statistics(opt_stats))
         stats["filename"] = filename
+        stats["onnx_weight_size_proto"] = compute_weight_size(exported_model)
+        stats["onnx_weight_size_torch"] = model_runner.compute_weight_size()
         if quiet:
             try:
                 feeds = model_runner.make_feeds(exporter, filename)
@@ -999,6 +1041,16 @@ class BenchmarkRunner:
 
         del model_runner
         gc.collect()
+
+        if isinstance(feeds, dict):
+            # This is the type for onnx inputs
+            feeds_values = list(feeds.values())
+            stats["onnx_input_dtypes"] = "/".join(
+                str_dtype(getattr(_, "dtype", "?")) for _ in feeds_values
+            )
+            stats["onnx_input_shapes"] = "/".join(
+                str_shape(getattr(_, "shape", "?")) for _ in feeds_values
+            )
 
         if self.device.startswith("cuda"):
             torch.cuda.reset_peak_memory_stats()
@@ -1265,6 +1317,15 @@ class BenchmarkRunner:
                     stats["time_latency_t_max"] = max(lats)
                     stats["time_latency_t_std"] = np.std(lats)
                     stats["time_latency_t_med"] = np.median(lats)
+                    h = max(1, len(lats) // 10)
+                    stats["time_latency_t_qu_10t"] = "/".join(map(str, lats[::h]))
+                    stats["time_latency_t_delta"] = (
+                        stats["time_latency_t_max"] - stats["time_latency_t_min"]
+                    ) / (stats["time_latency_t_med"])
+                    stats["time_latency_t_corrt"] = np.corrcoef(
+                        lats, list(range(len(lats)))
+                    )[0, 1]
+
             if self.device.startswith("cuda"):
                 stats["mema_gpu_9_after_export_repeat"] = (
                     torch.cuda.max_memory_allocated(device_id)
@@ -1361,6 +1422,14 @@ class BenchmarkRunner:
                     stats["time_latency_t_max"] = max(lats)
                     stats["time_latency_t_std"] = np.std(lats)
                     stats["time_latency_t_med"] = np.median(lats)
+                    h = max(1, len(lats) // 10)
+                    stats["time_latency_t_qu_10t"] = "/".join(map(str, lats[::h]))
+                    stats["time_latency_t_delta"] = (
+                        stats["time_latency_t_max"] - stats["time_latency_t_min"]
+                    ) / (stats["time_latency_t_med"])
+                    stats["time_latency_t_corrt"] = np.corrcoef(
+                        lats, list(range(len(lats)))
+                    )[0, 1]
 
             if self.device.startswith("cuda"):
                 stats["mema_gpu_9_after_export_repeat"] = (

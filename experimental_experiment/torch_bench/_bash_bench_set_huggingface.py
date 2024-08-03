@@ -2,8 +2,7 @@ import importlib
 import textwrap
 from typing import Any, Optional, Set, Tuple
 import torch
-from torch._dynamo.testing import collect_results, reset_rng_state
-from torch._dynamo.utils import clone_inputs
+from torch._dynamo.testing import reset_rng_state
 from ._bash_bench_model_runner import (
     download_retry_decorator,
     _rand_int_tensor,
@@ -573,36 +572,5 @@ class HuggingfaceRunner(BenchmarkRunner):
         model_names = sorted(model_names)
 
         start, end = self.get_benchmark_indices(len(model_names))
-        assert (
-            start < end
-        ), f"Empty partition (start={start}, end={end}, model_names={model_names!r})"
-        assert model_names, "Empty list of models"
-        has_one_model = False
-        for index, model_name in enumerate(model_names):
-            if index < start or index >= end:
-                continue
-            if (
-                self.include_model_names and model_name not in self.include_model_names
-            ) or model_name in self.exclude_model_names:
-                continue
-            yield model_name
-            has_one_model = True
-        assert has_one_model, (
-            f"No model listed, model_names={model_names}, start={start}, "
-            f"end={end}, self.include_model_names={self.include_model_names}, "
-            f"self.exclude_model_names={self.exclude_model_names}"
-        )
-
-    def forward_pass(self, mod, inputs, collect_outputs=True):
-        return mod(**inputs)
-
-    def forward_and_backward_pass(self, mod, inputs, collect_outputs=True):
-        cloned_inputs = clone_inputs(inputs)
-        self.optimizer_zero_grad(mod)
-        pred = mod(**cloned_inputs)
-        loss = self.compute_loss(pred)
-        self.grad_scaler.scale(loss).backward()
-        self.optimizer_step()
-        if collect_outputs:
-            return collect_results(mod, pred, loss, cloned_inputs)
-        return None
+        for _ in self.enumerate_model_names(model_names, start=start, end=end):
+            yield _

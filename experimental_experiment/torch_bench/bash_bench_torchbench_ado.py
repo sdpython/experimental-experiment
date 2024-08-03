@@ -15,18 +15,28 @@ Available exporters:
 
 ::
 
-    python -m experimental_experiment.torch_bench.bash_bench_timm --help
+    python -m experimental_experiment.torch_bench.bash_bench_torchbench_ado --help
 
 ::
 
-    python -m experimental_experiment.torch_bench.bash_bench_timm --model ""
+    python -m experimental_experiment.torch_bench.bash_bench_torchbench_ado --model ""
+
+Extra dependencies:
+
+* https://github.com/pytorch/benchmark
+* effdet
+* fbgemm_gpu_nightly
+* iopath
+* opencv-python
+* pyre-extensions
+* torchrec
 """
 
 from experimental_experiment.torch_bench._bash_bench_cmd import bash_bench_main
 
 
 def main(args=None):
-    bash_bench_main("bash_bench_timm", __doc__, args)
+    bash_bench_main("bash_bench_torchbench_ado", __doc__, args)
 
 
 if __name__ == "__main__":
