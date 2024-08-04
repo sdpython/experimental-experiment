@@ -155,3 +155,9 @@ An aggregated report can be produced by command line:
 ::
 
     python -m experimental_experiment.torch_bench.bash_bench_agg summary.xlsx bench1.csv bench2.csv ...
+
+Other options of this command line allow the user to filter in ir out some data
+(see ``--filter_in``, ``--filter_out``). The aggregator assumes every differences
+in the version is a tested difference. If not, different versions can be ignored
+by using ``--skip_keys=version,version_torch`` or any other key column not meant
+to be used in the report.

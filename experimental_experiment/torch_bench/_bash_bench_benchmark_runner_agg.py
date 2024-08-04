@@ -15,6 +15,14 @@ SELECTED_FEATURES = [
         help="Number of models evaluated in this document.",
     ),
     dict(
+        cat="time",
+        stat="ITER",
+        agg="SUM",
+        new_name="benchmark duration",
+        unit="s",
+        help="Total duration of the benchmark",
+    ),
+    dict(
         cat="speedup",
         agg="COUNT",
         stat="increase",
@@ -434,13 +442,18 @@ def _apply_excel_style(
         )
 
         for i in range(n_cols):
-            sheet.column_dimensions["ABCDEFGHIJKLMNOPQRSTUVWXYZ"[i]].width = 40
+            sheet.column_dimensions[_column_name(i)].width = 40
 
         first_row = None
         first_col = None
         if v.index.names == [None]:
             first_row = len(v.columns.names)
             first_col = len(v.columns.names)
+            if verbose > 1:
+                print(
+                    f"[_apply_excel_style] k={k!r}, first={first_row},{first_col}, "
+                    f"columns.names={v.columns.names}"
+                )
         else:
             look = v.iloc[0, 0]
 
@@ -465,6 +478,12 @@ def _apply_excel_style(
                     values.append(cell.value)
                 if first_row is not None:
                     break
+
+            if verbose > 1:
+                print(
+                    f"[_apply_excel_style] k={k!r}, first={first_row},{first_col}, "
+                    f"index.names={v.index.names}, columns.names={v.columns.names}"
+                )
 
             assert first_row is not None and first_col is not None, (
                 f"Unable to find the first value in {k!r}, first_row={first_row}, "
@@ -503,10 +522,8 @@ def _apply_excel_style(
 
         if k == "ERR":
             for i in range(n_cols + v.shape[1]):
-                sheet.column_dimensions["ABCDEFGHIJKLMNOPQRSTUVWXYZ"[i]].alignment = (
-                    alignment
-                )
-                sheet.column_dimensions["ABCDEFGHIJKLMNOPQRSTUVWXYZ"[i]].width = 50
+                sheet.column_dimensions[_column_name(i)].alignment = alignment
+                sheet.column_dimensions[_column_name(i)].width = 50
                 if i >= 25:
                     break
             continue
@@ -631,10 +648,11 @@ def _apply_excel_style(
             fmt = {
                 "x": "0.000",
                 "%": "0.000%",
-                "bytes": "0 000 000 000",
+                "bytes": "0",
                 "Mb": "0.000",
                 "N": "0",
                 "f": "0.0000",
+                "s": "0.000000",
             }
             for row in sheet.iter_rows(
                 min_row=first_row,
@@ -1514,7 +1532,12 @@ def merge_benchmark_reports(
                 frow = (
                     len(ev.columns.names) if isinstance(ev.columns.names, list) else 1
                 )
-                fcol = len(ev.index.names) if isinstance(ev.index.names, list) else 1
+                if k in {"SUMMARY", "SUMMARY2"}:
+                    fcol = len(v.columns.names)
+                else:
+                    fcol = (
+                        len(ev.index.names) if isinstance(ev.index.names, list) else 1
+                    )
 
                 if k in {"AGG2", "SUMMARY2"} and "suite" in ev.columns.names:
                     ev = _reorder_columns_level(ev, first_level=["suite"], prefix=k)
@@ -1706,6 +1729,23 @@ def _create_aggregation_figures(
                 f"shape={v.shape} v.columns={v.columns}, "
                 f"values={set(v[key])}\n---\n{v}"
             ) from e
+
+        def _count_(x):
+            size = x.size
+            count = x.count()
+            agg = float(count) / max(size, 1)
+            return agg
+
+        def _len_(x):
+            size = x.size
+            return size
+
+        def _try(f, **args):
+            try:
+                return f()
+            except ValueError as e:
+                raise AssertionError(f"Fails with {args}") from e
+
         stats = [
             ("MEAN", gr.mean()),
             ("MEDIAN", gr.median()),
@@ -1713,10 +1753,11 @@ def _create_aggregation_figures(
             ("MIN", gr.min()),
             ("MAX", gr.max()),
             ("COUNT", gr.count()),
-            ("COUNT%", gr.agg(lambda x: x.count() / len(x))),
-            ("TOTAL", gr.agg(len)),
-            ("GEO-MEAN", gr.agg(_geo_mean)),
+            ("COUNT%", _try(lambda: gr.agg(_count_), gr=gr)),
+            ("TOTAL", _try(lambda: gr.agg(_len_), gr=gr)),
+            ("GEO-MEAN", _try(lambda: gr.agg(_geo_mean))),
         ]
+        stats = [_ for _ in stats if _[1] is not None]
         dfs = []
         for name, df in stats:
             assert isinstance(
