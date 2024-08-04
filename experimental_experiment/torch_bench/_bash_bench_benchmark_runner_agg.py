@@ -438,32 +438,41 @@ def _apply_excel_style(
 
         first_row = None
         first_col = None
-        look = v.iloc[0, 0]
+        if v.index.names == [None]:
+            first_row = len(v.columns.names)
+            first_col = len(v.columns.names)
+        else:
+            look = v.iloc[0, 0]
 
-        values = []
-        for row in sheet.iter_rows(
-            min_row=1,
-            max_row=n_rows + n_cols + 1,
-            min_col=1,
-            max_col=n_rows + n_cols + 1,
-        ):
-            for cell in row:
-                if hasattr(cell, "col_idx") and (
-                    cell.value == look
-                    or (_isnan(cell.value) and _isnan(look))
-                    or (_isinf(cell.value) and _isinf(look))
-                ):
-                    first_row = cell.row
-                    first_col = cell.col_idx if hasattr(cell, "col_idx") else first_col
+            values = []
+            for row in sheet.iter_rows(
+                min_row=1,
+                max_row=n_rows + n_cols + 1,
+                min_col=1,
+                max_col=n_rows + n_cols + 1,
+            ):
+                for cell in row:
+                    if hasattr(cell, "col_idx") and (
+                        cell.value == look
+                        or (_isnan(cell.value) and _isnan(look))
+                        or (_isinf(cell.value) and _isinf(look))
+                    ):
+                        first_row = cell.row
+                        first_col = (
+                            cell.col_idx if hasattr(cell, "col_idx") else first_col
+                        )
+                        break
+                    values.append(cell.value)
+                if first_row is not None:
                     break
-                values.append(cell.value)
-            if first_row is not None:
-                break
 
-        assert first_row is not None and first_col is not None, (
-            f"Unable to find the first value in {k!r}, first_row={first_row}, "
-            f"first_col={first_col}, look={look!r} ({type(look)}), values={values}"
-        )
+            assert first_row is not None and first_col is not None, (
+                f"Unable to find the first value in {k!r}, first_row={first_row}, "
+                f"first_col={first_col}, look={look!r} ({type(look)}), "
+                f"n_rows={n_rows}, n_cols={n_cols}, values={values}, "
+                f"iloc[:3,:3]={v.iloc[:3, :3]}, v.index.names={v.index.names}, "
+                f"v.columns={v.columns}"
+            )
 
         last_row = first_row + v.shape[0] + 1
         last_col = first_col + v.shape[1] + 1
