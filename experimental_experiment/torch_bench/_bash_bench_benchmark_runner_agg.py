@@ -688,7 +688,7 @@ def _apply_excel_style(
                 if k is None or isinstance(k, int):
                     continue
                 c = _column_name(ci - 1)
-                if k == "order":
+                if k in ("order", "#order"):
                     sheet.column_dimensions[c].width = 5
                     for cell in sheet[c]:
                         cell.alignment = right
@@ -711,6 +711,12 @@ def _apply_excel_style(
                     for cell in sheet[c]:
                         cell.alignment = right
                     maxc = c
+                    done.add(c)
+                    continue
+                if k in ("help", "~help"):
+                    sheet.column_dimensions[c].width = 20
+                    for cell in sheet[c]:
+                        cell.alignment = alignment
                     done.add(c)
                     continue
 
@@ -909,6 +915,11 @@ def merge_benchmark_reports(
         if m not in df.columns:
             df = df.copy()
             df[m] = ""
+
+    # avoid nan value for all version columns
+    for c in keys:
+        if c.startswith("version") and c in df.columns:
+            df[c] = df[c].fillna("")
 
     if filter_in or filter_out:
         if verbose:
@@ -1554,10 +1565,6 @@ def merge_benchmark_reports(
     return final_res
 
 
-def _geo_mean(serie):
-    return np.exp(np.log(np.maximum(serie, 1e-10)).mean())
-
-
 def _reorder_columns_level(
     df: "pandas.DataFrame",  # noqa: F821
     first_level: List[str],
@@ -1730,22 +1737,12 @@ def _create_aggregation_figures(
                 f"values={set(v[key])}\n---\n{v}"
             ) from e
 
-        def _count_(x):
-            size = x.size
-            count = x.count()
-            agg = float(count) / max(size, 1)
-            return agg
+        def _geo_mean(serie):
+            res = np.exp(np.log(np.maximum(serie.dropna(), 1e-10)).mean())
+            return res
 
-        def _len_(x):
-            size = x.size
-            return size
-
-        def _try(f, **args):
-            try:
-                return f()
-            except ValueError as e:
-                raise AssertionError(f"Fails with {args}") from e
-
+        gr_no_nan = v.fillna(0).groupby(key)
+        total = gr_no_nan.count()
         stats = [
             ("MEAN", gr.mean()),
             ("MEDIAN", gr.median()),
@@ -1753,11 +1750,17 @@ def _create_aggregation_figures(
             ("MIN", gr.min()),
             ("MAX", gr.max()),
             ("COUNT", gr.count()),
-            ("COUNT%", _try(lambda: gr.agg(_count_), gr=gr)),
-            ("TOTAL", _try(lambda: gr.agg(_len_), gr=gr)),
-            ("GEO-MEAN", _try(lambda: gr.agg(_geo_mean))),
+            ("COUNT%", gr.count() / total),
+            ("TOTAL", total),
         ]
-        stats = [_ for _ in stats if _[1] is not None]
+        if k.startswith("speedup"):
+            try:
+                geo_mean = gr.agg(_geo_mean)
+            except ValueError as e:
+                raise AssertionError(
+                    f"Fails for geo_mean, k={k!r}, v=\n{v.head().T}"
+                ) from e
+            stats.append(("GEO-MEAN", geo_mean))
         dfs = []
         for name, df in stats:
             assert isinstance(
@@ -1883,7 +1886,9 @@ def _reverse_column_names_order(
 
 
 def _select_metrics(
-    df: "pandas.DataFrame", select: List[Dict[str, str]]  # noqa: F821
+    df: "pandas.DataFrame",  # noqa: F821
+    select: List[Dict[str, str]],
+    prefix: Optional[str] = None,
 ) -> "pandas.DataFrame":  # noqa: F821
     suites = set(df.columns)
     rows = []
@@ -1904,11 +1909,27 @@ def _select_metrics(
                 break
 
     dfi = df.iloc[[k[0] for k in keep]].reset_index(drop=False).copy()
-    dfi["METRIC"] = [k[1] for k in keep]
-    dfi["unit"] = [k[2] for k in keep]
-    dfi["order"] = [k[3] for k in keep]
-    dfi["help"] = [k[4] for k in keep]
+    has_suite = "suite" in dfi.columns.names and "exporter" in dfi.columns.names
+
+    def _mk(c):
+        if not has_suite:
+            return c
+        cc = []
+        for n in dfi.columns.names:
+            if n == "exporter":
+                cc.append(c)
+            elif c in ("#order", "METRIC"):
+                cc.append("")
+            else:
+                cc.append("~")
+        return tuple(cc)
+
+    dfi[_mk("METRIC")] = [k[1] for k in keep]
+    dfi[_mk("#order")] = [k[3] for k in keep]
+    dfi[_mk("unit")] = [k[2] for k in keep]
+    dfi[_mk("~help")] = [k[4] for k in keep]
     dfi = dfi.copy()
+
     dd_ = set(select[0].keys())
     dd = set()
     for d in dd_:
@@ -1916,16 +1937,16 @@ def _select_metrics(
         if cs:
             dd.add(cs[0])
     cols = [
-        *[c for c in dfi.columns if "order" in c],
+        *[c for c in dfi.columns if "#order" in c],
         *[c for c in dfi.columns if "METRIC" in c],
     ]
-    skip = set([*cols, *[c for c in dfi.columns if "unit" in c or "help" in c]])
+    skip = set([*cols, *[c for c in dfi.columns if "unit" in c or "~help" in c]])
     for c in dfi.columns:
         if c in skip or c in dd:
             continue
         cols.append(c)
     cols.extend([c for c in dfi.columns if "unit" in c])
-    cols.extend([c for c in dfi.columns if "help" in c])
+    cols.extend([c for c in dfi.columns if "~help" in c])
     dfi = dfi[cols].sort_values(cols[:-2])
     return dfi, suites
 
