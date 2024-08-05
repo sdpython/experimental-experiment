@@ -104,7 +104,11 @@ class TestDocumentationExamples(ExtTestCase):
                 if pv.Version(".".join(tv.split(".")[:2])) < pv.Version("2.4"):
                     reason = "requires torch 2.4"
 
-            if name in {"plot_llama_diff_dort_301.py", "plot_llama_diff_export_301.py"}:
+            if name in {
+                "plot_llama_diff_dort_301.py",
+                "plot_llama_diff_export_301.py",
+                "plot_profile_existing_onnx_101.py",
+            }:
                 from torch import __version__ as tv
 
                 if sys.platform == "win32":
