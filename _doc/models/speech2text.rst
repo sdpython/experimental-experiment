@@ -330,7 +330,10 @@ See `Speech2Text2Config
     # conversion to float16
     print("conversion to float16")
     model = model.to(torch.float16)
+<<<<<<< HEAD
     model.eval()
+=======
+>>>>>>> 92a7e35948e24e271cadd9d974703feafc22352a
 
     # is cuda
     if torch.cuda.is_available():
@@ -339,12 +342,18 @@ See `Speech2Text2Config
         inputs = tuple(i.to("cuda:1") for i in inputs)
 
     # warmup
+<<<<<<< HEAD
     print("warmup")
+=======
+>>>>>>> 92a7e35948e24e271cadd9d974703feafc22352a
     for w in range(warmup):
         model(*inputs)
 
     # repeat
+<<<<<<< HEAD
     print("repeat")
+=======
+>>>>>>> 92a7e35948e24e271cadd9d974703feafc22352a
     begin = time.perf_counter()
     for r in range(repeat):
         model(*inputs)
@@ -356,16 +365,27 @@ See `Speech2Text2Config
         model_inductor = torch.compile(model, backend="inductor", fullgraph=True)
 
     # warmup inductor
+<<<<<<< HEAD
     print("warmup")
+=======
+>>>>>>> 92a7e35948e24e271cadd9d974703feafc22352a
     for w in range(warmup):
         model_inductor(*inputs)
 
     # repeat
+<<<<<<< HEAD
     print("repeat")
+=======
+>>>>>>> 92a7e35948e24e271cadd9d974703feafc22352a
     begin = time.perf_counter()
     for r in range(repeat):
         model_inductor(*inputs)
     inductor = time.perf_counter() - begin
+<<<<<<< HEAD
     print(f"eager: {eager}")
     print(f"inductor: {inductor}")
     print(f"speedup: {eager / inductor}")
+=======
+    print(f"inductor: {inductor}")
+
+>>>>>>> 92a7e35948e24e271cadd9d974703feafc22352a
