@@ -648,11 +648,11 @@ def _apply_excel_style(
             fmt = {
                 "x": "0.000",
                 "%": "0.000%",
-                "bytes": "0",
+                "bytes": "0 000",
                 "Mb": "0.000",
                 "N": "0",
-                "f": "0.0000",
-                "s": "0.000000",
+                "f": "0.000",
+                "s": "0.0000",
             }
             for row in sheet.iter_rows(
                 min_row=first_row,
@@ -662,15 +662,25 @@ def _apply_excel_style(
             ):
                 for cell in row:
                     if cell.value in fmt:
-                        for idx in range(2, cell.col_idx):
+                        for idx in range(0, cell.col_idx):
                             fcell = row[idx]
                             if isinstance(fcell.value, (int, float)):
-                                fcell.number_format = fmt[cell.value]
-                                if cell.value == "x" and (
-                                    not isinstance(fcell, (float, int))
-                                    or fcell.value < 0.98
-                                ):
-                                    fcell.font = red
+                                f = fmt[cell.value]
+                                if cell.value == "x":
+                                    if (
+                                        isinstance(fcell.value, (float, int))
+                                        and fcell.value < 0.98
+                                    ):
+                                        fcell.font = red
+                                elif cell.value in ("f", "s", "Mb"):
+                                    if fcell.value >= 1000:
+                                        f = "0 000"
+                                    elif fcell.value >= 10:
+                                        f = "0.00"
+                                    elif fcell.value >= 1:
+                                        f = "0.000"
+                                fcell.number_format = f
+
             cols = {}
             for row in sheet.iter_rows(
                 min_row=1,
