@@ -766,7 +766,7 @@ class BenchmarkRunner:
                         f"[benchmarkrunner.benchmark] unable to load model "
                         f"{model_name} due to {e}"
                     )
-                stats["ERR_load"] = str(e)
+                stats["ERR_load"] = _clean_string(str(e)).replace("\n", " ")
                 return stats, context
         else:
             model_runner = self.load_model(model_name)
@@ -1166,7 +1166,7 @@ class BenchmarkRunner:
                 try:
                     from onnx_extended.ortops.optim.cuda import get_ort_ext_libs
                 except ImportError as e:
-                    stats["ERR_ort"] = str(e)
+                    stats["ERR_ort"] = _clean_string(str(e)).replace("\n", " ")
                     if self.verbose:
                         print(f"[benchmarkrunner.benchmark] err_ort {e}")
                     return stats
@@ -1187,7 +1187,7 @@ class BenchmarkRunner:
                         filename, session_options, providers=providers
                     )
                 except Exception as e:
-                    stats["ERR_ort"] = str(e)
+                    stats["ERR_ort"] = _clean_string(str(e)).replace("\n", " ")
                     if self.verbose:
                         print(f"[benchmarkrunner.benchmark] err_ort {e}")
                     return stats
