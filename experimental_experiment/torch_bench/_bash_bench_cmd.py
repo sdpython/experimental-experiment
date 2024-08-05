@@ -110,7 +110,7 @@ def bash_bench_main(script_name: str, doc: str, args: Optional[List[str]] = None
         # prints the list of models.
         print(f"list of models for device={args.device} (args.model={args.model!r})")
         print("--")
-        print("\n".join([f"{i: 3d} - {n}" for i, n in enumerate(names)]))
+        print("\n".join([f"{i: 3d}/{len(names)} - {n}" for i, n in enumerate(names)]))
         print("--")
     elif args.model == "Refresh":
         names = "\n".join(sorted(runner.refresh_model_names()))

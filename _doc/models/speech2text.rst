@@ -330,6 +330,7 @@ See `Speech2Text2Config
     # conversion to float16
     print("conversion to float16")
     model = model.to(torch.float16)
+    model.eval()
 
     # is cuda
     if torch.cuda.is_available():
@@ -338,10 +339,12 @@ See `Speech2Text2Config
         inputs = tuple(i.to("cuda:1") for i in inputs)
 
     # warmup
+    print("warmup")
     for w in range(warmup):
         model(*inputs)
 
     # repeat
+    print("repeat")
     begin = time.perf_counter()
     for r in range(repeat):
         model(*inputs)
@@ -353,13 +356,16 @@ See `Speech2Text2Config
         model_inductor = torch.compile(model, backend="inductor", fullgraph=True)
 
     # warmup inductor
+    print("warmup")
     for w in range(warmup):
         model_inductor(*inputs)
 
     # repeat
+    print("repeat")
     begin = time.perf_counter()
     for r in range(repeat):
         model_inductor(*inputs)
     inductor = time.perf_counter() - begin
+    print(f"eager: {eager}")
     print(f"inductor: {inductor}")
-
+    print(f"speedup: {eager / inductor}")

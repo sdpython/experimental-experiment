@@ -212,11 +212,16 @@ def run_benchmark(
             timeout_error = str(e)
             if verbose:
                 print(f"[run_benchmark] timeout {e} for cmd={cmd}")
-            p.kill()
-            if verbose:
-                print(f"[run_benchmark] poll returns {p.poll()}")
-                timeout_error += f" poll returns {p.poll()}"
-            res = p.communicate()
+            p.terminate()
+            try:
+                # Use communicate with a timeout to prevent hanging
+                res = p.communicate(timeout=10)
+            except subprocess.TimeoutExpired:
+                # Force kill if terminate doesn't work
+                if verbose:
+                    print(f"[run_benchmark] force killing cmd={cmd}")
+                p.kill()
+                res = p.communicate()
         out, err = res
         sout = out.decode("utf-8", errors="ignore")
         serr = err.decode("utf-8", errors="ignore")
