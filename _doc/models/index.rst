@@ -20,3 +20,4 @@ This projects was started with LLaMa.
     mistral
     phi
     phi3
+    speech2text

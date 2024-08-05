@@ -1,13 +1,64 @@
-=============================================================
-Measuring the exporters on a short list of HuggingFace models
-=============================================================
+=========================================================
+Measuring the exporters on a short list of sets of models
+=========================================================
 
-One Run
-=======
+This benchmark aims measures a couple of exporter or ways to run a pytorch model
+and various sets of models to check which one is running or better in some conditions.
+It can be triggered on sets or models through a different script for each of them:
+
+* **huggingface**: ``python -m experimental_experiment.torch_bench.bash_bench_huggingface``
+* **timm**: ``python -m experimental_experiment.torch_bench.bash_bench_timm``
+* **torchbench**: ``python -m experimental_experiment.torch_bench.bash_bench_torchbench``
+* **torchbench_ado**: ``python -m experimental_experiment.torch_bench.bash_bench_torchbench_ado``
+* **explicit**: ``python -m experimental_experiment.torch_bench.bash_bench_explicit``
+
+**huggingface** is a set of models coming from :epkg:`transformers`,
+**timm** is a set of models coming from :epkg:`timm`,
+**torchbench** and **torchbench_ado** models come from :epkg:`torchbench`,
+**explicit** is a set of custom models.
+
+These scripts are usually uses in two ways:
+
+* a single run: to investigate a failure or a slow model
+* a batch run: to benchmark many models on many exporters
+
+Examples are using with ``bash_bench_huggingface`` but any of the other
+can be used.
+
+List of models
+==============
+
+The list of supported models can be obtained by running:
+
+::
+
+    python -m experimental_experiment.torch_bench.bash_bench_huggingface --model ""
+
+::
+
+     0 - 101Dummy
+     1 - 101Dummy16
+     2 - 101DummyTuple
+     3 - AlbertForMaskedLM
+     4 - AlbertForQuestionAnswering
+     5 - AllenaiLongformerBase
+     6 - BartForCausalLM
+     7 - BartForConditionalGeneration
+     8 - BertForMaskedLM
+     9 - BertForQuestionAnswering
+    10 - BlenderbotForCausalLM
+    11 - BlenderbotForConditionalGeneration
+    12 - BlenderbotSmallForCausalLM
+    13 - BlenderbotSmallForConditionalGeneration
+    ...
+
+Single Run
+==========
 
 The script loads a model, *ElectraForQuestionAnswering* in this case,
 warms up 10 times, measure the time to run inference 30 times. Then it converts it
-into onnx, and do the same. One example:
+into onnx, and do the same. This script is usually run with ``--quiet=0``
+to ensure the script stops as soon as an exception is raised. One example:
 
 ::
 
@@ -94,31 +145,6 @@ into onnx, and do the same. One example:
     :version_transformers,4.42.3;
     :warmup,1;
 
-List of models
-==============
-
-::
-
-    python -m experimental_experiment.torch_bench.bash_bench_huggingface --model ""
-
-::
-
-     0 - 101Dummy
-     1 - 101Dummy16
-     2 - 101DummyTuple
-     3 - AlbertForMaskedLM
-     4 - AlbertForQuestionAnswering
-     5 - AllenaiLongformerBase
-     6 - BartForCausalLM
-     7 - BartForConditionalGeneration
-     8 - BertForMaskedLM
-     9 - BertForQuestionAnswering
-    10 - BlenderbotForCausalLM
-    11 - BlenderbotForConditionalGeneration
-    12 - BlenderbotSmallForCausalLM
-    13 - BlenderbotSmallForConditionalGeneration
-    ...
-
 Multiple Runs
 =============
 
@@ -155,3 +181,9 @@ An aggregated report can be produced by command line:
 ::
 
     python -m experimental_experiment.torch_bench.bash_bench_agg summary.xlsx bench1.csv bench2.csv ...
+
+Other options of this command line allow the user to filter in ir out some data
+(see ``--filter_in``, ``--filter_out``). The aggregator assumes every differences
+in the version is a tested difference. If not, different versions can be ignored
+by using ``--skip_keys=version,version_torch`` or any other key column not meant
+to be used in the report.

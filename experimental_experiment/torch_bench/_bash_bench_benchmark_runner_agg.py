@@ -15,6 +15,14 @@ SELECTED_FEATURES = [
         help="Number of models evaluated in this document.",
     ),
     dict(
+        cat="time",
+        stat="ITER",
+        agg="SUM",
+        new_name="benchmark duration",
+        unit="s",
+        help="Total duration of the benchmark",
+    ),
+    dict(
         cat="speedup",
         agg="COUNT",
         stat="increase",
@@ -147,6 +155,15 @@ SELECTED_FEATURES = [
         unit="s",
         help="Average total time per model and scenario. "
         "It usually reflects how long the export time is (lower is better).",
+    ),
+    dict(
+        cat="discrepancies",
+        stat="avg",
+        agg="MEAN",
+        new_name="average average discrepancies",
+        unit="f",
+        help="Average of average absolute discrepancies "
+        "assuming it can be measured (lower is better).",
     ),
     dict(
         cat="discrepancies",
@@ -425,36 +442,56 @@ def _apply_excel_style(
         )
 
         for i in range(n_cols):
-            sheet.column_dimensions["ABCDEFGHIJKLMNOPQRSTUVWXYZ"[i]].width = 40
+            sheet.column_dimensions[_column_name(i)].width = 40
 
         first_row = None
         first_col = None
-        look = v.iloc[0, 0]
+        if v.index.names == [None]:
+            first_row = len(v.columns.names)
+            first_col = len(v.columns.names)
+            if verbose > 1:
+                print(
+                    f"[_apply_excel_style] k={k!r}, first={first_row},{first_col}, "
+                    f"columns.names={v.columns.names}"
+                )
+        else:
+            look = v.iloc[0, 0]
 
-        values = []
-        for row in sheet.iter_rows(
-            min_row=1,
-            max_row=n_rows + n_cols + 1,
-            min_col=1,
-            max_col=n_rows + n_cols + 1,
-        ):
-            for cell in row:
-                if hasattr(cell, "col_idx") and (
-                    cell.value == look
-                    or (_isnan(cell.value) and _isnan(look))
-                    or (_isinf(cell.value) and _isinf(look))
-                ):
-                    first_row = cell.row
-                    first_col = cell.col_idx if hasattr(cell, "col_idx") else first_col
+            values = []
+            for row in sheet.iter_rows(
+                min_row=1,
+                max_row=n_rows + n_cols + 1,
+                min_col=1,
+                max_col=n_rows + n_cols + 1,
+            ):
+                for cell in row:
+                    if hasattr(cell, "col_idx") and (
+                        cell.value == look
+                        or (_isnan(cell.value) and _isnan(look))
+                        or (_isinf(cell.value) and _isinf(look))
+                    ):
+                        first_row = cell.row
+                        first_col = (
+                            cell.col_idx if hasattr(cell, "col_idx") else first_col
+                        )
+                        break
+                    values.append(cell.value)
+                if first_row is not None:
                     break
-                values.append(cell.value)
-            if first_row is not None:
-                break
 
-        assert first_row is not None and first_col is not None, (
-            f"Unable to find the first value in {k!r}, first_row={first_row}, "
-            f"first_col={first_col}, look={look!r} ({type(look)}), values={values}"
-        )
+            if verbose > 1:
+                print(
+                    f"[_apply_excel_style] k={k!r}, first={first_row},{first_col}, "
+                    f"index.names={v.index.names}, columns.names={v.columns.names}"
+                )
+
+            assert first_row is not None and first_col is not None, (
+                f"Unable to find the first value in {k!r}, first_row={first_row}, "
+                f"first_col={first_col}, look={look!r} ({type(look)}), "
+                f"n_rows={n_rows}, n_cols={n_cols}, values={values}, "
+                f"iloc[:3,:3]={v.iloc[:3, :3]}, v.index.names={v.index.names}, "
+                f"v.columns={v.columns}"
+            )
 
         last_row = first_row + v.shape[0] + 1
         last_col = first_col + v.shape[1] + 1
@@ -485,10 +522,8 @@ def _apply_excel_style(
 
         if k == "ERR":
             for i in range(n_cols + v.shape[1]):
-                sheet.column_dimensions["ABCDEFGHIJKLMNOPQRSTUVWXYZ"[i]].alignment = (
-                    alignment
-                )
-                sheet.column_dimensions["ABCDEFGHIJKLMNOPQRSTUVWXYZ"[i]].width = 50
+                sheet.column_dimensions[_column_name(i)].alignment = alignment
+                sheet.column_dimensions[_column_name(i)].width = 50
                 if i >= 25:
                     break
             continue
@@ -613,10 +648,11 @@ def _apply_excel_style(
             fmt = {
                 "x": "0.000",
                 "%": "0.000%",
-                "bytes": "0 000 000 000",
+                "bytes": "0 000",
                 "Mb": "0.000",
                 "N": "0",
-                "f": "0.0000",
+                "f": "0.000",
+                "s": "0.0000",
             }
             for row in sheet.iter_rows(
                 min_row=first_row,
@@ -626,15 +662,25 @@ def _apply_excel_style(
             ):
                 for cell in row:
                     if cell.value in fmt:
-                        for idx in range(2, cell.col_idx):
+                        for idx in range(0, cell.col_idx):
                             fcell = row[idx]
                             if isinstance(fcell.value, (int, float)):
-                                fcell.number_format = fmt[cell.value]
-                                if cell.value == "x" and (
-                                    not isinstance(fcell, (float, int))
-                                    or fcell.value < 0.98
-                                ):
-                                    fcell.font = red
+                                f = fmt[cell.value]
+                                if cell.value == "x":
+                                    if (
+                                        isinstance(fcell.value, (float, int))
+                                        and fcell.value < 0.98
+                                    ):
+                                        fcell.font = red
+                                elif cell.value in ("f", "s", "Mb"):
+                                    if fcell.value >= 1000:
+                                        f = "0 000"
+                                    elif fcell.value >= 10:
+                                        f = "0.00"
+                                    elif fcell.value >= 1:
+                                        f = "0.000"
+                                fcell.number_format = f
+
             cols = {}
             for row in sheet.iter_rows(
                 min_row=1,
@@ -652,7 +698,7 @@ def _apply_excel_style(
                 if k is None or isinstance(k, int):
                     continue
                 c = _column_name(ci - 1)
-                if k == "order":
+                if k in ("order", "#order"):
                     sheet.column_dimensions[c].width = 5
                     for cell in sheet[c]:
                         cell.alignment = right
@@ -675,6 +721,12 @@ def _apply_excel_style(
                     for cell in sheet[c]:
                         cell.alignment = right
                     maxc = c
+                    done.add(c)
+                    continue
+                if k in ("help", "~help"):
+                    sheet.column_dimensions[c].width = 20
+                    for cell in sheet[c]:
+                        cell.alignment = alignment
                     done.add(c)
                     continue
 
@@ -873,6 +925,11 @@ def merge_benchmark_reports(
         if m not in df.columns:
             df = df.copy()
             df[m] = ""
+
+    # avoid nan value for all version columns
+    for c in keys:
+        if c.startswith("version") and c in df.columns:
+            df[c] = df[c].fillna("")
 
     if filter_in or filter_out:
         if verbose:
@@ -1496,8 +1553,15 @@ def merge_benchmark_reports(
                 frow = (
                     len(ev.columns.names) if isinstance(ev.columns.names, list) else 1
                 )
-                fcol = len(ev.index.names) if isinstance(ev.index.names, list) else 1
+                if k in {"SUMMARY", "SUMMARY2"}:
+                    fcol = len(v.columns.names)
+                else:
+                    fcol = (
+                        len(ev.index.names) if isinstance(ev.index.names, list) else 1
+                    )
 
+                if k in {"AGG2", "SUMMARY2"} and "suite" in ev.columns.names:
+                    ev = _reorder_columns_level(ev, first_level=["suite"], prefix=k)
                 ev.to_excel(
                     writer,
                     sheet_name=k,
@@ -1511,17 +1575,14 @@ def merge_benchmark_reports(
     return final_res
 
 
-def _geo_mean(serie):
-    return np.exp(np.log(np.maximum(serie, 1e-10)).mean())
-
-
 def _reorder_columns_level(
     df: "pandas.DataFrame",  # noqa: F821
     first_level: List[str],
     prefix: Optional[str] = None,
 ) -> "pandas.DataFrame":  # noqa: F821
-    assert None not in df.index.names, f"None in df.index.names={df.index.names}"
-    assert None not in df.columns.names, f"None in df.index.names={df.columns.names}"
+    assert (
+        None not in df.columns.names
+    ), f"None in df.index.names={df.columns.names}, prefix={prefix!r}"
     assert set(df.columns.names) & set(first_level), (
         f"Nothing to sort, prefix={prefix!r} "
         f"df.columns={df.columns}, first_level={first_level}\n--\n{df}"
@@ -1538,7 +1599,6 @@ def _reorder_columns_level(
     assert (
         list(df.columns.names) == levels
     ), f"Issue levels={levels}, df.columns.names={df.columns.names}"
-    assert None not in df.index.names, f"None in df.index.names={df.index.names}"
     assert None not in df.columns.names, f"None in df.index.names={df.columns.names}"
     return df.sort_index(axis=1)
 
@@ -1686,6 +1746,13 @@ def _create_aggregation_figures(
                 f"shape={v.shape} v.columns={v.columns}, "
                 f"values={set(v[key])}\n---\n{v}"
             ) from e
+
+        def _geo_mean(serie):
+            res = np.exp(np.log(np.maximum(serie.dropna(), 1e-10)).mean())
+            return res
+
+        gr_no_nan = v.fillna(0).groupby(key)
+        total = gr_no_nan.count()
         stats = [
             ("MEAN", gr.mean()),
             ("MEDIAN", gr.median()),
@@ -1693,10 +1760,17 @@ def _create_aggregation_figures(
             ("MIN", gr.min()),
             ("MAX", gr.max()),
             ("COUNT", gr.count()),
-            ("COUNT%", gr.agg(lambda x: x.count() / len(x))),
-            ("TOTAL", gr.agg(len)),
-            ("GEO-MEAN", gr.agg(_geo_mean)),
+            ("COUNT%", gr.count() / total),
+            ("TOTAL", total),
         ]
+        if k.startswith("speedup"):
+            try:
+                geo_mean = gr.agg(_geo_mean)
+            except ValueError as e:
+                raise AssertionError(
+                    f"Fails for geo_mean, k={k!r}, v=\n{v.head().T}"
+                ) from e
+            stats.append(("GEO-MEAN", geo_mean))
         dfs = []
         for name, df in stats:
             assert isinstance(
@@ -1822,7 +1896,9 @@ def _reverse_column_names_order(
 
 
 def _select_metrics(
-    df: "pandas.DataFrame", select: List[Dict[str, str]]  # noqa: F821
+    df: "pandas.DataFrame",  # noqa: F821
+    select: List[Dict[str, str]],
+    prefix: Optional[str] = None,
 ) -> "pandas.DataFrame":  # noqa: F821
     suites = set(df.columns)
     rows = []
@@ -1843,11 +1919,27 @@ def _select_metrics(
                 break
 
     dfi = df.iloc[[k[0] for k in keep]].reset_index(drop=False).copy()
-    dfi["METRIC"] = [k[1] for k in keep]
-    dfi["unit"] = [k[2] for k in keep]
-    dfi["order"] = [k[3] for k in keep]
-    dfi["help"] = [k[4] for k in keep]
+    has_suite = "suite" in dfi.columns.names and "exporter" in dfi.columns.names
+
+    def _mk(c):
+        if not has_suite:
+            return c
+        cc = []
+        for n in dfi.columns.names:
+            if n == "exporter":
+                cc.append(c)
+            elif c in ("#order", "METRIC"):
+                cc.append("")
+            else:
+                cc.append("~")
+        return tuple(cc)
+
+    dfi[_mk("METRIC")] = [k[1] for k in keep]
+    dfi[_mk("#order")] = [k[3] for k in keep]
+    dfi[_mk("unit")] = [k[2] for k in keep]
+    dfi[_mk("~help")] = [k[4] for k in keep]
     dfi = dfi.copy()
+
     dd_ = set(select[0].keys())
     dd = set()
     for d in dd_:
@@ -1855,16 +1947,16 @@ def _select_metrics(
         if cs:
             dd.add(cs[0])
     cols = [
-        *[c for c in dfi.columns if "order" in c],
+        *[c for c in dfi.columns if "#order" in c],
         *[c for c in dfi.columns if "METRIC" in c],
     ]
-    skip = set([*cols, *[c for c in dfi.columns if "unit" in c or "help" in c]])
+    skip = set([*cols, *[c for c in dfi.columns if "unit" in c or "~help" in c]])
     for c in dfi.columns:
         if c in skip or c in dd:
             continue
         cols.append(c)
     cols.extend([c for c in dfi.columns if "unit" in c])
-    cols.extend([c for c in dfi.columns if "help" in c])
+    cols.extend([c for c in dfi.columns if "~help" in c])
     dfi = dfi[cols].sort_values(cols[:-2])
     return dfi, suites
 

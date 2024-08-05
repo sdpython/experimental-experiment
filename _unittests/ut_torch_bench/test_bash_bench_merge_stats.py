@@ -172,8 +172,8 @@ class TestBashBenchMergeStats(ExtTestCase):
         summary = df["SUMMARY"]
         self.assertNotIn("_dummy_", summary.columns)
         values = summary.values
-        self.assertEqual(0.9520435772282563, values[5, 3])
-        self.assertEqual("x", values[5, 4])
+        self.assertEqual(0.9520435772282563, values[6, 3])
+        self.assertEqual("x", values[6, 4])
         metrics = set(summary["METRIC"])
         self.assertIn("number of running models", metrics)
         self.assertIn("export rate", metrics)

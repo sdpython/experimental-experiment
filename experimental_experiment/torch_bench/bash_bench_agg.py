@@ -20,13 +20,22 @@ def main(args=None):
     parser.add_argument("output", help="output excel file")
     parser.add_argument("inputs", nargs="+", help="input csv files, at least 1")
     parser.add_argument(
-        "--filter_in", default="", help="adds a filter to filter in data"
+        "--filter_in",
+        default="",
+        help="adds a filter to filter in data, syntax is "
+        '``"<column1>:<value1>;<value2>/<column2>:<value3>"`` ...',
     )
     parser.add_argument(
-        "--filter_out", default="", help="adds a filter to filter out data"
+        "--filter_out",
+        default="",
+        help="adds a filter to filter out data, syntax is "
+        '``"<column1>:<value1>;<value2>/<column2>:<value3>"`` ...',
     )
     parser.add_argument(
-        "--skip_keys", default="", help="skip the differences on those columns"
+        "--skip_keys",
+        default="",
+        help="skip the differences on those columns, example: "
+        "``--skip_keys=version,version_onnxscript,version_torch``",
     )
     parser.add_argument("--verbose", default=0, help="verbosity level")
     res = parser.parse_args(args=args)

@@ -206,7 +206,13 @@ class TimmRunner(BenchmarkRunner):
         """
         import timm
 
-        models = set(timm.list_models())
+        models = set(timm.list_models(pretrained=True, exclude_filters=["*in21k"]))
+        models = set(_.split(".")[0] for _ in models)
+        # add?
+        # inception_v3.tf_adv_in1k
+        # inception_v3.gluon_in1k
+        # nest_base_jx.goog_in1k
+        # resnext101_32x16d.fb_swsl_ig1b_ft_in1k
 
         container._config = {"done": True}
         with io.StringIO(container.MODELS_FILENAME) as fh:
