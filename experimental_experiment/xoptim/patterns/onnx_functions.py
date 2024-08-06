@@ -92,7 +92,7 @@ class SoftmaxCrossEntropyLossCastPattern(EasyPatternOptimization):
         uns = g.op.Unsqueeze(wh1, axis)
         ge = g.op.GatherElements(g.op.LogSoftmax(X, axis=1), uns, axis=1)
         wh2 = g.op.Where(neq1, g.op.Neg(g.op.Squeeze(ge, axis)), zerof)
-        numerator = g.op.Cast(
+        denominator = g.op.Cast(
             g.op.ReduceSum(
                 g.op.Cast(neq1, to=TensorProto.FLOAT),
                 keepdims=0,
@@ -100,7 +100,7 @@ class SoftmaxCrossEntropyLossCastPattern(EasyPatternOptimization):
             ),
             to=TensorProto.FLOAT16,
         )
-        denominator = g.op.Cast(
+        numerator = g.op.Cast(
             g.op.ReduceSum(
                 g.op.Cast(wh2, to=TensorProto.FLOAT),
                 keepdims=0,
