@@ -387,10 +387,18 @@ class EasyPatternOptimization(PatternOptimization):
             if len(g.next_nodes(nr)) != len(pat.next_nodes(pnr)):
                 self._hint(
                     "BACKWARD: one input is used outside the pattern",
-                    "-- pattern",
+                    "-- pattern input and pattern node",
+                    pnr,
                     pn,
-                    "-- model",
+                    "-- model input and model node",
+                    nr,
                     n,
+                    "-- len(pat.next_nodes(pnr))",
+                    len(pat.next_nodes(pnr)),
+                    *pat.next_nodes(pnr),
+                    "-- len(g.next_nodes(nr)))",
+                    len(g.next_nodes(nr)),
+                    *g.next_nodes(nr),
                 )
                 return self.none(node, inspect.currentframe().f_lineno)
 

@@ -1482,9 +1482,10 @@ class BenchmarkRunner:
             d = self.max_diff(
                 expected, got, verbose=self.verbose, flatten=is_onnx, begin=1
             )
-            stats["discrepancies_abs_1+"] = d["abs"]
-            stats["discrepancies_rel_1+"] = d["rel"]
-            stats["discrepancies_avg_1+"] = d["sum"] / max(d["n"], 1)
+            if d["n"] > 0:
+                stats["discrepancies_abs_1+"] = d["abs"]
+                stats["discrepancies_rel_1+"] = d["rel"]
+                stats["discrepancies_avg_1+"] = d["sum"] / max(d["n"], 1)
             if self.verbose:
                 print(
                     f"[BenchmarkRunner.benchmark] done model with {len(stats)} metrics"

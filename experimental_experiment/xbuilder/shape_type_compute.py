@@ -542,7 +542,7 @@ def _set_shape_type_op_any_gather_elements(
         new_shape = list(shape)
         new_shape[axis] = i_shape[axis]
         self.set_shape(node.output[0], tuple(new_shape))
-    else:
+    elif self.has_rank(node.input[0]):
         self.set_rank(node.output[0], self.get_rank(node.input[0]))
 
 
