@@ -404,7 +404,40 @@ class ModelRunner:
             import torch_onnx
 
             if ModelRunner._patched is None:
-                torch_onnx.patch_torch(error_report=True)
+                torch_onnx.patch_torch(
+                    profile=False,
+                    report=False,
+                    verify=False,
+                    dump_exported_program=False,
+                )
+                ModelRunner._patched = "torch-onnx"
+            onx, stats = self._to_onnx_script(
+                name,
+                dynamic=dynamic,
+                fake_tensor=fake_tensor,
+                no_grad=no_grad,
+                optimization=optimization,
+                verbose=verbose,
+                target_opset=target_opset,
+            )
+            return onx, stats
+
+        if exporter == "torch-onnx-detailed":
+            # Detailed run for torch-onnx that enables all analysis and logging
+            assert ModelRunner._patched in (
+                None,
+                "torch-onnx",
+            ), f"A new patch should not be applied on {ModelRunner._patched!r}."
+            import torch_onnx
+
+            if ModelRunner._patched is None:
+                torch_onnx.patch_torch(
+                    profile=True,
+                    report=True,
+                    verify=True,
+                    dump_exported_program=True,
+                    artifacts_dir=os.path.dirname(name),
+                )
                 ModelRunner._patched = "torch-onnx"
             onx, stats = self._to_onnx_script(
                 name,
@@ -554,9 +587,6 @@ class ModelRunner:
         assert not fake_tensor, "fake_tensor not implemented."
         assert not dynamic, "dynamic true not implemented yet"
         assert no_grad, "no_grad false not implemented yet"
-        assert (
-            not optimization
-        ), f"optimization {optimization!r} not compatible with torch_script"
 
         if (
             isinstance(self.inputs, tuple)
@@ -580,7 +610,36 @@ class ModelRunner:
                 opset_version=target_opset,
                 verbose=max(verbose - 1, 0),
             )
-        return onnx.load(name, load_external_data=False), None
+
+        if not optimization:
+            return onnx.load(name, load_external_data=False), None
+        
+        if ModelRunner._patched == "torch-onnx":
+            stats = {}
+            begin = time.perf_counter()
+            shutil.copy(name, name + ".raw.onnx")
+            model_proto = onnx.load(name, load_external_data=True)
+
+            opts = optimization.split("+")
+            for opt in opts:
+                if opt == "default":
+                    from onnxscript.optimizer import optimize
+                    from onnxscript.rewriter import rewrite
+                    model_proto = optimize(
+                        model_proto,
+                        num_iterations=2,
+                        onnx_shape_inference=False,
+                    )
+                    model_proto = rewrite(model_proto)
+
+            onnx.save(model_proto, name, save_as_external_data=True)
+            model_proto = onnx.load(name, load_external_data=False)
+            stats["time_export_optimization"] = time.perf_counter() - begin
+            return model_proto, stats
+
+        assert (
+            not optimization
+        ), f"optimization {optimization!r} not compatible with torch_script"
 
     def _to_onnx_dynamo(
         self,
@@ -673,11 +732,11 @@ class ModelRunner:
             return onnx.load(name, load_external_data=False), stats
 
         begin = time.perf_counter()
-        opts = optimization.split("+")
         shutil.copy(name, name + ".raw.onnx")
         model_proto = onnx.load(name, load_external_data=True)
         rule_sets = []
 
+        opts = optimization.split("+")
         for opt in opts:
             if opt == "default":
                 from onnxscript.optimizer import optimize
