@@ -265,6 +265,7 @@ class OrtEval:
         onx = oh.make_model(
             oh.make_graph([node], "node", vinputs, voutputs),
             ir_version=self.proto.ir_version,
+            functions=self.proto.functions,
         )
         del onx.opset_import[:]
         onx.opset_import.extend(self.proto.opset_import)

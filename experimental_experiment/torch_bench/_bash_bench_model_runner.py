@@ -676,6 +676,7 @@ class ModelRunner:
         opts = optimization.split("+")
         shutil.copy(name, name + ".raw.onnx")
         model_proto = onnx.load(name, load_external_data=True)
+        rule_sets = []
 
         for opt in opts:
             if opt == "default":
@@ -698,16 +699,28 @@ class ModelRunner:
                 continue
 
             if opt == "llm":
-                from onnxscript import ir
                 from onnxscript.rewriter.llama_rule_sets import llama_p0_rule_set
 
-                ir_model = ir.serde.deserialize_model(model_proto)
-                rule_set = llama_p0_rule_set()
-                rule_set.apply_to_model(ir_model)
-                model_proto = ir.serde.serialize_model(ir_model)
+                rule_sets.append(llama_p0_rule_set)
+                continue
+
+            if opt == "fusion":
+                from onnxscript.rewriter.onnx_fusion_rule_sets import (
+                    onnx_fusion_rule_set,
+                )
+
+                rule_sets.append(onnx_fusion_rule_set)
                 continue
 
             raise AssertionError(f"Unexpected value for optimization={optimization!r}.")
+
+        if rule_sets:
+            from onnxscript import ir
+
+            ir_model = ir.serde.deserialize_model(model_proto)
+            for rs in rule_sets:
+                rs().apply_to_model(ir_model)
+            model_proto = ir.serde.serialize_model(ir_model)
 
         onnx.save(model_proto, name, save_as_external_data=True)
         model_proto = onnx.load(name, load_external_data=False)

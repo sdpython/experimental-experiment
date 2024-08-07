@@ -14,6 +14,7 @@ _i1_o1_node_types = {
     "Exp",
     "Expand",
     "Gather",
+    "LogSoftmax",
     "Neg",
     "Pow",
     "Reciprocal",

@@ -131,16 +131,23 @@ def _export(
     same_signature,
     decomposition_table,
     use_dynamo,
+    strict,
 ):
     import torch
 
     if not use_dynamo:
         try:
-            exported_mod = torch.export.export(mod, args, dynamic_shapes=dynamic_shapes)
+            exported_mod = torch.export.export(
+                mod, args, dynamic_shapes=dynamic_shapes, strict=strict
+            )
         except torch._export.verifier.SpecViolationError:
             # see https://github.com/pytorch/pytorch/issues/128394
             exported_mod = torch.export._trace._export(
-                mod, args, dynamic_shapes=dynamic_shapes, pre_dispatch=False
+                mod,
+                args,
+                dynamic_shapes=dynamic_shapes,
+                pre_dispatch=False,
+                strict=strict,
             )
         return exported_mod
 
@@ -180,6 +187,7 @@ def _make_builder_interpreter(
     ] = None,
     dispatcher: Optional["Dispatcher"] = None,  # noqa: F821
     use_dynamo: bool = True,
+    strict: bool = True,
 ) -> Tuple["torch.fx.GraphModule", GraphBuilder, "DynamoInterpreter"]:  # noqa: F821
     """
     Exports a torch model into ONNX using
@@ -201,6 +209,7 @@ def _make_builder_interpreter(
     :param decomposition_table: decomposition table
     :param dispatcher: see :class:`experimental_experiment.torch_interpreter.Dispatcher`
     :param use_dynamo: use ``torch.export.export`` or ``torch._dynamo.export``
+    :param strict: given to ``torch.export.export``
     :return: onnx model
     """
 
@@ -226,6 +235,7 @@ def _make_builder_interpreter(
             same_signature=same_signature,
             decomposition_table=decomposition_table,
             use_dynamo=use_dynamo,
+            strict=strict,
         )
 
         if verbose > 0:
@@ -348,6 +358,7 @@ def to_onnx(
     external_threshold: int = 1024,
     api_two: bool = False,
     return_optimize_report: bool = False,
+    strict: bool = True,
 ) -> Union[
     Union[ModelProto, ModelContainer],
     Tuple[Union[ModelProto, ModelContainer], GraphBuilder],
@@ -377,6 +388,7 @@ def to_onnx(
         is stored as external
     :param api_two: use ``torch._dynamo.export`` instead of ``torch.export.export``
     :param return_optimize_report: returns statistics on the optimization as well
+    :param strict: given to ``torch.export.export``
     :return: onnx model
     """
     if target_opset is None:
@@ -418,6 +430,7 @@ def to_onnx(
         dynamic_shapes=dynamic_shapes,
         dispatcher=dispatcher,
         use_dynamo=api_two,
+        strict=strict,
     )
 
     if verbose:

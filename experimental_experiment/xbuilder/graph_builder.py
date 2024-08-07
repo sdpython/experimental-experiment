@@ -80,7 +80,7 @@ class GraphBuilder:
     - `ir_version: int`: ir version
     - `opsets: Dict[str, int]`: declared opsets
     - `input_args: List[T]`: input tensors when the class is used to convert an existing model
-    - `functions: List[FunctionProto]`: list of functions to add to the model
+    - `functions: Dict[Tuple[str,str], FunctionProto]`: dictionary of functions to add to the model
     - `value_info: List[ValueInfoProto]`: value info of the original model
     - `dynamic_shapes: Union[Dict[str, Any], Tuple[Any]]]`: dynamic_shapes informations
 
@@ -105,6 +105,8 @@ class GraphBuilder:
     - `_values: Dict[key,str]`: cache initializer value to merge those which are equal
     - `_dynamic_alias: Dict[str,str]`: used when the user gives a different
         name to the dynamic shapes
+    - `constraints_: Dict[str, Set[Any]]`: if a broadcast implies a constraints on a dynamic shape,
+        it is stored here
 
     Debugging attributes:
 
@@ -149,7 +151,7 @@ class GraphBuilder:
         self.dynamic_shapes = dynamic_shapes
         self.dynamic_objects = {}
         self.dynamic_objects_rev = {}
-        self.functions = []
+        self.functions = {}
         self.value_info = []
         self.raise_list = raise_list
         self._raise_list = raise_list or set()
@@ -180,6 +182,7 @@ class GraphBuilder:
         self._debug_stop = os.environ.get("ONNXSTOP", "#?#")
         self.time_evaluation_constants_ = 0
         self.statistics_ = {}
+        self.constraints_ = {}
 
         if self.dynamic_shapes:
             for input_name, v in self.dynamic_shapes.items():
@@ -2019,8 +2022,9 @@ class GraphBuilder:
             op_type != "Cast"
             or domain != ""
             or ("to" in kwargs and kwargs["to"] is not None)
+            or (attributes is not None and "to" in set(att.name for att in attributes))
         ), (
-            f"Operator Cast needs arguments to but kwargs={kwargs}"
+            f"Operator Cast needs arguments to but kwargs={kwargs}, name={name!r}"
             f"{self.get_debug_msg()}"
         )
         assert op_type != "Concat" or domain != "" or len(inputs) > 1, (
@@ -2459,7 +2463,7 @@ class GraphBuilder:
 
         assert len(output_names) == len(builder.outputs), (
             f"Inconsistency between output_names={output_names} and "
-            f"outputs={builder.outputs}, renaming={renaming}."
+            f"outputs={builder.outputs}, renaming={renaming}{self.get_debug_msg()}"
         )
         for name, out in zip(output_names, builder.outputs):
             self.make_node("Identity", [renaming[out.name]], [name], name=".make_nodes")
@@ -2661,8 +2665,15 @@ class GraphBuilder:
                 return a.ravel().tolist()
             raise RuntimeError(f"Values unknown for type {type(t)}-{t}.")
 
-        rows = ["", "--DEBUG--", "--SHAPE--"]
-
+        rows = ["", "--DEBUG--"]
+        rows.append("--LOCAL FUNCTIONS--")
+        for k, v in self.functions.items():
+            rows.append(f"{k[0]},{k[1]}({v.input}) -> {v.output}")
+        if self.constraints_:
+            rows.append("--CONSTRAINTS--")
+            for a, b in sorted(self.constraints_.items()):
+                rows.append(f"{a} = {b}")
+        rows.append("--SHAPE--")
         rows.append("dynamic_objects=")
         for i, (k, v) in enumerate(sorted(self.dynamic_objects.items())):
             try:
@@ -2838,6 +2849,8 @@ class GraphBuilder:
         large_model: bool = False,
         external_threshold: int = 1024,
         return_optimize_report: bool = False,
+        function_name: str = "",
+        function_domain: str = "",
     ) -> Union[FunctionProto, ModelProto, TorchModelContainer]:
         """
         Conversion to onnx. Only then the initializer are converted into
@@ -2852,6 +2865,8 @@ class GraphBuilder:
         :param external_threshold: if large_model is True, every tensor above this limit
             is stored as external
         :param return_optimize_report: return statistics about the optimization as well
+        :param function_name: only used if as_function is True
+        :param function_domain: only used if as_function is True
         :return: the proto
         """
         if len(self.nodes) == 0:
@@ -2866,16 +2881,17 @@ class GraphBuilder:
             f"The onnx model is empty after optimization (no node)."
             f"\n{self.get_debug_msg()}"
         )
-        assert not as_function, "Export as FunctionProto is not tested yet."
 
         opsets = [oh.make_opsetid(*o) for o in self.opsets.items()]
         if as_function:
+            assert function_name, "Function name cannot be empty."
             return oh.make_function(
-                self.nodes,
-                self.name,
+                function_domain,
+                function_name,
                 [i.name for i in self.inputs],
                 [o.name for o in self.outputs],
-                domain=self.domain,
+                self.nodes,
+                [_ for _ in opsets if _.domain != function_domain],
             )
 
         if self.ir_version:
@@ -2909,7 +2925,7 @@ class GraphBuilder:
         model.graph.initializer.extend(initializers)
 
         model.opset_import.extend(opsets)
-        model.functions.extend(self.functions)
+        model.functions.extend(self.functions.values())
         model.ir_version = ir_version
         self._add_shape_information(model)
 
@@ -4042,7 +4058,9 @@ class GraphBuilder:
         self.initializers_dict.update(
             {i.name: i for i in proto.graph.sparse_initializer}
         )
-        self.functions = list(proto.functions)
+        self.functions = {}
+        for f in proto.functions:
+            self.functions[f.domain, f.name] = f
         self.value_info = list(proto.graph.value_info)
         self.inputs = list(proto.graph.input)
         self.outputs = list(proto.graph.output)
@@ -4331,3 +4349,47 @@ class GraphBuilder:
         if key in self.constants_node_:
             return self.constants_node_[key]
         return None
+
+    def make_local_function(self, name: str, builder: "GraphBuilder", domain: str = ""):
+        """
+        Adds a local function to exiting graph.
+
+        :param name: local function name
+        :param builder: builder
+        :domain: domain name
+        """
+        assert not self.has_local_function(
+            name=name, domain=domain
+        ), f"Function {name!r}, domain={domain!r} already exists"
+        onx = builder.to_onnx(
+            as_function=True, function_name=name, function_domain=domain
+        )
+        assert isinstance(
+            onx, FunctionProto
+        ), f"Unexpected type {type(onx)}, name={name!r}, domain={domain!r}"
+        self.functions[domain, name] = onx
+        if domain not in self.opsets:
+            self.opsets[domain] = 1
+
+    def has_local_function(self, name: str, domain: str = ""):
+        """
+        Checks if a local function exists.
+        """
+        return (domain, name) in self.functions
+
+    def get_local_function_outputs(self, name: str, domain: str = ""):
+        """
+        Returns the outputs of a local functions.
+        """
+        return self.functions[domain, name].output
+
+    def register_constraint_dimension(self, dim_name: str, value: Any):
+        """
+        Register a constraint on a dimension.
+
+        :param dim_name: dimension name
+        :param value: value to register
+        """
+        if dim_name not in self.constraints_:
+            self.constraints_[dim_name] = set()
+        self.constraints_[dim_name].add(value)

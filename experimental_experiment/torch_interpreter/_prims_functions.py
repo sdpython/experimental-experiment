@@ -552,7 +552,9 @@ def prims_where(
     if not sts:
         g.set_type(res, g.get_type(other))
         if g.has_shape(condition) and g.has_shape(other):
-            shape = broadcast_shape(g.get_shape(condition), g.get_shape(other))
+            shape = broadcast_shape(
+                g.get_shape(condition), g.get_shape(other), graph_builder=g
+            )
             g.set_shape(res, shape)
         else:
             g.set_rank(max(g.get_rank(condition), g.get_rank(other)))
