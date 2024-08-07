@@ -87,7 +87,8 @@ class BenchmarkRunner:
         self.target_opset = target_opset
         self.nvtx = nvtx
         self.dump_ort = dump_ort
-        assert no_grad, "no_grad true not implemented yet"
+        assert no_grad, "no_grad false not implemented yet"
+        assert not fake_tensor, "fake_tensor true not implemented yet"
 
     def forward_pass(self, mod, inputs, collect_outputs=True):
         return mod(**inputs)

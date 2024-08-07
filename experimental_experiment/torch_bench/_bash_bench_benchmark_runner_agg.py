@@ -15,6 +15,17 @@ SELECTED_FEATURES = [
         help="Number of models evaluated in this document.",
     ),
     dict(
+        cat="status",
+        stat="control_flow",
+        agg="SUM",
+        new_name="number of control flow",
+        unit="N",
+        help="torch.export.export does not work because of a "
+        "control flow, in practice, this column means torch.export.export "
+        "succeeds, this metric is only available if the data of exporter "
+        "'export' or 'compile' is aggregated",
+    ),
+    dict(
         cat="time",
         stat="ITER",
         agg="SUM",
@@ -790,7 +801,7 @@ def merge_benchmark_reports(
         "memory_*",
         "mem_*",
     ),
-    formulas=("memory_peak", "buckets", "status", "memory_delta"),
+    formulas=("memory_peak", "buckets", "status", "memory_delta", "control_flow"),
     excel_output: Optional[str] = None,
     exc: bool = True,
     filter_in: Optional[str] = None,
@@ -857,7 +868,7 @@ def merge_benchmark_reports(
     """
     import pandas
 
-    if baseline is not None:
+    if baseline:
         base_dfs = merge_benchmark_reports(
             baseline,
             model=model,
@@ -1061,6 +1072,7 @@ def merge_benchmark_reports(
                 )
                 report_on.append("memory_peak_cpu_pp")
             delta_gpu = None
+            m_gpu = None
             for i in range(1024):
                 c1 = f"memory_gpu{i}_begin"
                 c2 = f"memory_gpu{i}_peak"
@@ -1068,13 +1080,17 @@ def merge_benchmark_reports(
                     d = df[c2] - df[c1]
                     if delta_gpu is None:
                         delta_gpu = d
+                        m_gpu = d
                     else:
                         delta_gpu += d
+                        m_gpu += d
                 else:
                     break
             if delta_gpu is not None:
-                df["memory_peak_gpu_pp"] = delta_gpu
+                df["memory_peak_gpu_pp"] = m_gpu
+                df["memory_delta_peak_gpu_pp"] = delta_gpu
                 report_on.append("memory_peak_gpu_pp")
+                report_on.append("memory_delta_peak_gpu_pp")
 
         if expr == "memory_peak":
             if (
@@ -1085,21 +1101,33 @@ def merge_benchmark_reports(
                 and "mema_gpu_6_before_session" in set_columns
                 and "mema_gpu_8_after_export_warmup" in set_columns
             ):
-                col_name = f"{expr}_gpu_export"
+                col_name = "memory_delta_peak_gpu_export"
                 df[col_name] = df["mema_gpu_5_after_export"] - df["mema_gpu_4_reset"]
                 report_on.append(col_name)
 
-                col_name = f"{expr}_gpu_eager_warmup"
+                col_name = "memory_peak_gpu_export"
+                df[col_name] = df["mema_gpu_5_after_export"]
+                report_on.append(col_name)
+
+                col_name = "memory_delta_peak_gpu_eager_warmup"
                 df[col_name] = (
                     df["mema_gpu_2_after_warmup"] - df["mema_gpu_0_before_loading"]
                 )
                 report_on.append(col_name)
 
-                col_name = f"{expr}_gpu_warmup"
+                col_name = "memory_peak_gpu_eager_warmup"
+                df[col_name] = df["mema_gpu_2_after_warmup"]
+                report_on.append(col_name)
+
+                col_name = "memory_delta_peak_gpu_warmup"
                 df[col_name] = (
                     df["mema_gpu_8_after_export_warmup"]
                     - df["mema_gpu_6_before_session"]
                 )
+                report_on.append(col_name)
+
+                col_name = "memory_peak_gpu_warmup"
+                df[col_name] = df["mema_gpu_8_after_export_warmup"]
                 report_on.append(col_name)
             continue
 
@@ -1130,6 +1158,25 @@ def merge_benchmark_reports(
                         "status_lat<=eager+2%",
                     ]
                 )
+            continue
+
+        if expr == "control_flow":
+            if (
+                "exporter" in set_columns
+                and "time_export_success" in set_columns
+                and ({"export", "compile"} & set(df.exporter))
+                and len(set(df.exporter)) > 1
+            ):
+                expo = "export" if "export" in set(df.exporter) else "compile"
+                keep = [*model, *new_keys, "time_export_success"]
+                gr = df[df.exporter == expo][keep].copy()
+                gr["status_control_flow"] = gr["time_export_success"].isna().astype(int)
+                gr = gr.drop("time_export_success", axis=1)
+                on = [k for k in keep[:-1] if k != "exporter"]
+                joined = pandas.merge(df, gr, left_on=on, right_on=on, how="left")
+                df = joined.drop("exporter_y", axis=1).copy()
+                df["exporter"] = df["exporter_x"]
+                report_on.append("status_control_flow")
             continue
 
         if expr == "buckets":
