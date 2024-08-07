@@ -613,7 +613,7 @@ class ModelRunner:
 
         if not optimization:
             return onnx.load(name, load_external_data=False), None
-        
+
         if ModelRunner._patched == "torch-onnx":
             stats = {}
             begin = time.perf_counter()
@@ -625,6 +625,7 @@ class ModelRunner:
                 if opt == "default":
                     from onnxscript.optimizer import optimize
                     from onnxscript.rewriter import rewrite
+
                     model_proto = optimize(
                         model_proto,
                         num_iterations=2,

@@ -793,7 +793,7 @@ class TorchBenchRunner(BenchmarkRunner):
                 f"with batch_size={batch_size}"
             )
 
-        status = setup(
+        status = torchbenchmark.setup(
             models=[model_name],
             verbose=self.verbose,
             continue_on_fail=False,

@@ -789,6 +789,7 @@ def merge_benchmark_reports(
     filter_in: Optional[str] = None,
     filter_out: Optional[str] = None,
     verbose: int = 0,
+    output_clean_raw_data: Optional[str] = None,
 ) -> Dict[str, "pandas.DataFrame"]:  # noqa: F821
     """
     Merges multiple files produced by bash_benchmark...
@@ -811,6 +812,8 @@ def merge_benchmark_reports(
     :param filter_in: filter in some data to make the report smaller (see below)
     :param filter_out: filter out some data to make the report smaller (see below)
     :param verbose: verbosity
+    :param output_clean_raw_data: output the concatenated raw data so that it can
+        be used later to make a comparison
     :return: dictionary of dataframes
 
     Every key with a unique value is removed.
@@ -1006,7 +1009,12 @@ def merge_benchmark_reports(
     df = df[dupli].copy()
     if verbose:
         print(f"[merge_benchmark_reports] done, shape={df.shape}")
-        if verbose > 1 and excel_output:
+        if output_clean_raw_data:
+            print(
+                f"[merge_benchmark_reports] save clean raw data in {output_clean_raw_data!r}"
+            )
+            df.to_csv(output_clean_raw_data)
+        elif verbose > 1 and excel_output:
             nn = f"{excel_output}.raw.csv"
             print(f"[merge_benchmark_reports] save raw data in {nn!r}")
             df.to_csv(nn)

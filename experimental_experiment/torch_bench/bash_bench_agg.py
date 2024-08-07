@@ -37,6 +37,11 @@ def main(args=None):
         help="skip the differences on those columns, example: "
         "``--skip_keys=version,version_onnxscript,version_torch``",
     )
+    parser.add_argument(
+        "--save_raw",
+        default="",
+        help="save the concatanated cleaned raw data in a csv file",
+    )
     parser.add_argument("--verbose", default=0, help="verbosity level")
     res = parser.parse_args(args=args)
 
@@ -63,7 +68,7 @@ def main(args=None):
         filter_in=res.filter_in,
         filter_out=res.filter_out,
         verbose=int(res.verbose),
-        **kwargs,
+        output_clean_raw_data=res.save_raw**kwargs,
     )
 
 
