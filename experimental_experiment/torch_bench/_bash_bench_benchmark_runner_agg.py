@@ -1752,7 +1752,10 @@ def _create_aggregation_figures(
             ) from e
 
         def _geo_mean(serie):
-            res = np.exp(np.log(np.maximum(serie.dropna(), 1e-10)).mean())
+            nonan = serie.dropna()
+            if len(nonan) == 0:
+                return 0.
+            res = np.exp(np.log(np.maximum(nonan, 1e-10)).mean())
             return res
 
         gr_no_nan = v.fillna(0).groupby(key)
