@@ -153,17 +153,4 @@ class SoftmaxCrossEntropyLossCastPattern(EasyPatternOptimization):
                 if not g.is_constant_scalar(c) or g.get_constant_scalar(c) != -100:
                     return self.none(node, inspect.currentframe().f_lineno)
                 continue
-            if n.op_type in {"GatherElements", "LogSoftmax"}:
-                v = g.get_attribute(n, "axis", exc=False)
-                if v is None or v.i != 1:
-                    return self.none(node, inspect.currentframe().f_lineno)
-                continue
-            if n.op_type in {"ReduceSum"}:
-                v = g.get_attribute(n, "keepdims", exc=False)
-                if v is None or v.i != 0:
-                    return self.none(node, inspect.currentframe().f_lineno)
-                v = g.get_attribute(n, "noop_with_empty_axes", exc=False)
-                if v is None or v.i != 0:
-                    return self.none(node, inspect.currentframe().f_lineno)
-                continue
         return True
