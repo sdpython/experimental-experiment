@@ -49,6 +49,7 @@ class TestEdPhi3(ExtTestCase):
                 rename_inputs=False,
                 optimize=True,
                 prefix="test_phi3_export",
+                strict=True,
             )
         onx = ret["proto"]
         names = [i.name for i in onx.graph.input]

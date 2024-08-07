@@ -80,7 +80,7 @@ class GraphBuilder:
     - `ir_version: int`: ir version
     - `opsets: Dict[str, int]`: declared opsets
     - `input_args: List[T]`: input tensors when the class is used to convert an existing model
-    - `functions: List[FunctionProto]`: list of functions to add to the model
+    - `functions: Dict[Tuple[str,str], FunctionProto]`: dictionary of functions to add to the model
     - `value_info: List[ValueInfoProto]`: value info of the original model
     - `dynamic_shapes: Union[Dict[str, Any], Tuple[Any]]]`: dynamic_shapes informations
 
@@ -149,7 +149,7 @@ class GraphBuilder:
         self.dynamic_shapes = dynamic_shapes
         self.dynamic_objects = {}
         self.dynamic_objects_rev = {}
-        self.functions = []
+        self.functions = {}
         self.value_info = []
         self.raise_list = raise_list
         self._raise_list = raise_list or set()
@@ -2662,8 +2662,11 @@ class GraphBuilder:
                 return a.ravel().tolist()
             raise RuntimeError(f"Values unknown for type {type(t)}-{t}.")
 
-        rows = ["", "--DEBUG--", "--SHAPE--"]
-
+        rows = ["", "--DEBUG--"]
+        rows.append("--LOCAL FUNCTIONS--")
+        for k, v in self.functions.items():
+            rows.append(f"{k[0]},{k[1]}({v.input}) -> {v.output}")
+        rows.append("--SHAPE--")
         rows.append("dynamic_objects=")
         for i, (k, v) in enumerate(sorted(self.dynamic_objects.items())):
             try:
@@ -2839,6 +2842,8 @@ class GraphBuilder:
         large_model: bool = False,
         external_threshold: int = 1024,
         return_optimize_report: bool = False,
+        function_name: str = "",
+        function_domain: str = "",
     ) -> Union[FunctionProto, ModelProto, TorchModelContainer]:
         """
         Conversion to onnx. Only then the initializer are converted into
@@ -2853,6 +2858,8 @@ class GraphBuilder:
         :param external_threshold: if large_model is True, every tensor above this limit
             is stored as external
         :param return_optimize_report: return statistics about the optimization as well
+        :param function_name: only used if as_function is True
+        :param function_domain: only used if as_function is True
         :return: the proto
         """
         if len(self.nodes) == 0:
@@ -2867,16 +2874,17 @@ class GraphBuilder:
             f"The onnx model is empty after optimization (no node)."
             f"\n{self.get_debug_msg()}"
         )
-        assert not as_function, "Export as FunctionProto is not tested yet."
 
         opsets = [oh.make_opsetid(*o) for o in self.opsets.items()]
         if as_function:
+            assert function_name, "Function name cannot be empty."
             return oh.make_function(
-                self.nodes,
-                self.name,
+                function_domain,
+                function_name,
                 [i.name for i in self.inputs],
                 [o.name for o in self.outputs],
-                domain=self.domain,
+                self.nodes,
+                [_ for _ in opsets if _.domain != function_domain],
             )
 
         if self.ir_version:
@@ -2910,7 +2918,7 @@ class GraphBuilder:
         model.graph.initializer.extend(initializers)
 
         model.opset_import.extend(opsets)
-        model.functions.extend(self.functions)
+        model.functions.extend(self.functions.values())
         model.ir_version = ir_version
         self._add_shape_information(model)
 
@@ -4043,7 +4051,9 @@ class GraphBuilder:
         self.initializers_dict.update(
             {i.name: i for i in proto.graph.sparse_initializer}
         )
-        self.functions = list(proto.functions)
+        self.functions = {}
+        for f in proto.functions:
+            self.functions[f.domain, f.name] = f
         self.value_info = list(proto.graph.value_info)
         self.inputs = list(proto.graph.input)
         self.outputs = list(proto.graph.output)
@@ -4332,3 +4342,36 @@ class GraphBuilder:
         if key in self.constants_node_:
             return self.constants_node_[key]
         return None
+
+    def make_local_function(self, name: str, builder: "GraphBuilder", domain: str = ""):
+        """
+        Adds a local function to exiting graph.
+
+        :param name: local function name
+        :param builder: builder
+        :domain: domain name
+        """
+        assert not self.has_local_function(
+            name=name, domain=domain
+        ), f"Function {name!r}, domain={domain!r} already exists"
+        onx = builder.to_onnx(
+            as_function=True, function_name=name, function_domain=domain
+        )
+        assert isinstance(
+            onx, FunctionProto
+        ), f"Unexpected type {type(onx)}, name={name!r}, domain={domain!r}"
+        self.functions[domain, name] = onx
+        if domain not in self.opsets:
+            self.opsets[domain] = 1
+
+    def has_local_function(self, name: str, domain: str = ""):
+        """
+        Checks if a local function exists.
+        """
+        return (domain, name) in self.functions
+
+    def get_local_function_outputs(self, name: str, domain: str = ""):
+        """
+        Returns the outputs of a local functions.
+        """
+        return self.functions[domain, name].output

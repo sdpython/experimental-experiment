@@ -122,23 +122,14 @@ class DynamoInterpreter:
             ) from e
 
         if isinstance(init, self.torch.fx.GraphModule):
+            # This function is meant to be used later.
             builder, args, output_names = self._interpret_sub_module(
                 init, None, source_node=node
             )
-            # Let's assume it is local variables.
-            if not args and builder.inputs:
-                args = [i.name for i in builder.inputs]
-
-            if len(builder.outputs) == 1:
-                self.builder.make_nodes(builder, args, output_names, prefix="_subinit_")
-            else:
-                new_output_names = [
-                    f"{node.name}#{i}" for i in range(len(builder.outputs))
-                ]
-                self.builder.make_nodes(
-                    builder, args, new_output_names, prefix="_subinitN_"
-                )
-            return new_output_names
+            self.builder.make_local_function(
+                node.name, builder, domain="aten_local_function"
+            )
+            return None
 
         self.builder.make_initializer(node.name, init)
         return node.name

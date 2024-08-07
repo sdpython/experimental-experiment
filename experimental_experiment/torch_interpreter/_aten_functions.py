@@ -1,3 +1,8 @@
+"""
+See https://pytorch.org/docs/stable/torch.compiler_ir.html
+for the full list of aten functions.
+"""
+
 import math
 from enum import Enum
 from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
@@ -5571,6 +5576,56 @@ def aten_where_self(
 ) -> T:
     """where"""
     return aten_where(g, sts, outputs, condition, x, other, name="where_self")
+
+
+def aten_wrap_with_autocast(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    device_type: str,
+    dtype: Optional["torch.dtype"],  # noqa: F821
+    enabled: bool,
+    cache_enabled: Optional[bool],
+    wrapped_func,
+    *args: Sequence[T],
+    **kwargs,
+) -> T:
+    "identity"
+    assert dtype is None, f"Not implemented with dtype={enabled}{g.get_debug_msg()}"
+    assert not enabled, f"Not implemented with dtype={enabled}{g.get_debug_msg()}"
+    assert not enabled, f"Not implemented with dtype={enabled}{g.get_debug_msg()}"
+    assert (
+        cache_enabled is None
+    ), f"Not implemented with cache_enabled={cache_enabled}{g.get_debug_msg()}"
+    assert g.has_local_function(
+        wrapped_func, domain="aten_local_function"
+    ), f"No local function {wrapped_func!r}{g.get_debug_msg()}"
+    assert all(
+        isinstance(_, str) for _ in args
+    ), f"Unexpected input types args={args}{g.get_debug_msg()}"
+    local_outputs = g.get_local_function_outputs(
+        wrapped_func, domain="aten_local_function"
+    )
+    if len(outputs) == len(local_outputs):
+        return g.make_node(
+            wrapped_func,
+            args,
+            outputs,
+            name="wrap_with_autocast",
+            domain="aten_local_function",
+        )
+    assert len(outputs) == 1, (
+        f"Unexpected outputs={outputs} but local_outputs={local_outputs} "
+        f"for function {wrapped_func!r}{g.get_debug_msg()}"
+    )
+    new_outputs = [f"{outputs[0]}#{i}" for i in range(len(local_outputs))]
+    return g.make_node(
+        wrapped_func,
+        args,
+        new_outputs,
+        name="wrap_with_autocast",
+        domain="aten_local_function",
+    )
 
 
 def aten_zeros(
