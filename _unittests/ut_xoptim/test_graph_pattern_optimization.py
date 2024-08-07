@@ -39,6 +39,7 @@ from experimental_experiment.xoptim import get_pattern_list
 
 TFLOAT = TensorProto.FLOAT
 TFLOAT16 = TensorProto.FLOAT16
+TINT64 = TensorProto.INT64
 
 
 class TestGraphPatternOptimization(ExtTestCase):

@@ -4,7 +4,7 @@ import textwrap
 from collections import Counter
 from typing import Any, Callable, Dict, Iterator, List, Optional, Sequence, Tuple, Union
 import numpy as np
-from onnx import FunctionProto, ModelProto, NodeProto
+from onnx import AttributeProto, FunctionProto, ModelProto, NodeProto
 from ..xbuilder._dtype_helper import string_to_elem_type
 
 
@@ -387,10 +387,18 @@ class EasyPatternOptimization(PatternOptimization):
             if len(g.next_nodes(nr)) != len(pat.next_nodes(pnr)):
                 self._hint(
                     "BACKWARD: one input is used outside the pattern",
-                    "-- pattern",
+                    "-- pattern input and pattern node",
+                    pnr,
                     pn,
-                    "-- model",
+                    "-- model input and model node",
+                    nr,
                     n,
+                    "-- len(pat.next_nodes(pnr))",
+                    len(pat.next_nodes(pnr)),
+                    *pat.next_nodes(pnr),
+                    "-- len(g.next_nodes(nr)))",
+                    len(g.next_nodes(nr)),
+                    *g.next_nodes(nr),
                 )
                 return self.none(node, inspect.currentframe().f_lineno)
 
@@ -588,10 +596,9 @@ class EasyPatternOptimization(PatternOptimization):
             # there is only one option, matching on node type only returns one
             # option.
             expected_op_type = [_.op_type for _ in p_marked]
-            got_op_type = [_.op_type for _ in free]
 
             ec = Counter(expected_op_type)
-            gc = Counter(got_op_type)
+            gc = Counter(_.op_type for _ in free)
             if len(ec) != len(gc) or set(ec) != set(gc):
                 # number of unique operator types is different.
                 self._hint(
@@ -614,7 +621,7 @@ class EasyPatternOptimization(PatternOptimization):
             # At this stage, we know matching the types is possible.
             # We first mark whatever is possible.
             ptype_to_node = {_.op_type: _ for _ in p_marked}
-            gtype_to_node = {_.op_type: _ for _ in got_op_type}
+            gtype_to_node = {_.op_type: _ for _ in free}
             missing = []
             for k, v in ec.items():
                 if gc[k] == v == 1:
@@ -710,6 +717,52 @@ class EasyPatternOptimization(PatternOptimization):
         :param pattern_nodes: matched nodes coming from the pattern
         :return: validate the mapping or not, default is True
         """
+        return True
+
+    def validate_attribute_mapping(
+        self,
+        g: "GraphBuilderPatternOptimization",  # noqa: F821
+        deleted_nodes: List[NodeProto],
+        pattern_nodes: Optional[List[NodeProto]] = None,
+    ) -> bool:
+        """
+        Validates the mapping of the attributes
+
+        :param g: GraphBuilder
+        :param deleted_nodes: matched nodes from the model (to be deleted)
+        :param pattern_nodes: matched nodes coming from the pattern
+        :return: validate the mapping or not, default is True
+        """
+        assert len(deleted_nodes) == len(pattern_nodes), (
+            f"Mismatch number of nodes len(deleted_nodes)={len(deleted_nodes)}, "
+            f"Mismatch number of nodes len(pattern_nodes)={len(pattern_nodes)}"
+        )
+        for i, (node, pat_node) in enumerate(zip(deleted_nodes, pattern_nodes)):
+            assert node.op_type == pat_node.op_type or node.domain != pat_node.domain, (
+                f"Node type mismatch at position {i}, {node.op_type!r} != "
+                f"{pat_node.op_type!r} or {node.domain!r} != {pat_node.domain!r}"
+            )
+            in_graph = {att.name: att for att in node.attribute}
+            for att in pat_node.attribute:
+                if att.name not in in_graph:
+                    return False
+                n_att = in_graph[att.name]
+                if att.type != n_att.type:
+                    return False
+                if att.type == AttributeProto.INT and att.i != n_att.i:
+                    return False
+                if att.type == AttributeProto.FLOAT and att.f != n_att.f:
+                    return False
+                if att.type == AttributeProto.STRING and att.s != n_att.s:
+                    return False
+                assert att.type in {
+                    AttributeProto.INT,
+                    AttributeProto.FLOAT,
+                    AttributeProto.STRING,
+                }, (
+                    f"Attribute comparison not implemented for data_type={att.type}, "
+                    f"att={att} in node {pat_node}"
+                )
         return True
 
     def _update_ambiguities(
@@ -883,6 +936,14 @@ class EasyPatternOptimization(PatternOptimization):
         # We order the matched nodes in the same order than the pattern
         # to let next functions to be able to build the matching again.
         matched_nodes = [marked[id(n)][0] for i, n in enumerate(pat.nodes)]
+
+        if not self.validate_attribute_mapping(g, matched_nodes, pat.nodes):
+            if self.verbose >= 2:
+                print(
+                    f"[EasyPatternOptimization.match] attribute validation failed "
+                    f"{len(marked)} marked nodes with {iteration} iterations"
+                )
+            return None
 
         if not self.validate_mapping(g, matched_nodes, pat.nodes):
             if self.verbose >= 2:

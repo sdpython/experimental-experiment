@@ -1,6 +1,6 @@
 import inspect
 from typing import List, Optional
-from onnx import NodeProto
+from onnx import NodeProto, TensorProto
 from ..patterns_api import EasyPatternOptimization
 
 
@@ -76,4 +76,81 @@ class GeluPattern(EasyPatternOptimization):
             return self.none(node, inspect.currentframe().f_lineno)
         if not g.is_constant_scalar(c2) or g.get_constant_scalar(c2) != 0.5:
             return self.none(node, inspect.currentframe().f_lineno)
+        return True
+
+
+class SoftmaxCrossEntropyLossCastPattern(EasyPatternOptimization):
+    """
+    Detects one decomposed version of SoftmaxCrossEntropyLoss
+    """
+
+    def __init__(
+        self, verbose: int = 0, priority: int = 0, min_opset: int = 14, domain: str = ""
+    ):
+        super(SoftmaxCrossEntropyLossCastPattern, self).__init__(
+            verbose, priority, min_opset=min_opset
+        )
+        self.domain = domain
+
+    def match_pattern(
+        self, g: "GraphBuilder", X, indices, axis, zerof, zeroi, b  # noqa: F821
+    ):  # noqa: F821
+        neq1 = g.op.Not(g.op.Equal(indices, b))
+        wh1 = g.op.Where(neq1, indices, zeroi)
+        uns = g.op.Unsqueeze(wh1, axis)
+        ge = g.op.GatherElements(g.op.LogSoftmax(X, axis=1), uns, axis=1)
+        wh2 = g.op.Where(neq1, g.op.Neg(g.op.Squeeze(ge, axis)), zerof)
+        denominator = g.op.Cast(
+            g.op.ReduceSum(
+                g.op.Cast(neq1, to=TensorProto.FLOAT),
+                keepdims=0,
+            ),
+            to=TensorProto.FLOAT16,
+        )
+        numerator = g.op.Cast(
+            g.op.ReduceSum(
+                g.op.Cast(wh2, to=TensorProto.FLOAT),
+                keepdims=0,
+            ),
+            to=TensorProto.FLOAT16,
+        )
+        return g.op.Div(numerator, denominator)
+
+    @classmethod
+    def apply_pattern(
+        cls,
+        g: "GraphBuilderPatternOptimization",  # noqa: F821
+        X,
+        indices,
+        axis,
+        zerof,
+        zeroi,
+        b,
+    ):
+        return g.op.SoftmaxCrossEntropyLoss(
+            X, indices, ignore_index=-100, reduction="mean"
+        )
+
+    def validate_mapping(
+        self,
+        g: "GraphBuilderPatternOptimization",  # noqa: F821
+        deleted_nodes: List[NodeProto],
+        pattern_nodes: Optional[List[NodeProto]] = None,
+    ) -> bool:
+        assert (
+            len(deleted_nodes) == 16
+        ), f"Unexpected pattern length {len(deleted_nodes)}"
+        node = deleted_nodes[-1]
+
+        for n in deleted_nodes:
+            if n.op_type in {"Squeeze", "Unsqueeze"}:
+                c = n.input[1]
+                if not g.is_constant_scalar(c) or g.get_constant_scalar(c) != 1:
+                    return self.none(node, inspect.currentframe().f_lineno)
+                continue
+            if n.op_type in {"Equal"}:
+                c = n.input[1]
+                if not g.is_constant_scalar(c) or g.get_constant_scalar(c) != -100:
+                    return self.none(node, inspect.currentframe().f_lineno)
+                continue
         return True
