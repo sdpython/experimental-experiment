@@ -2037,6 +2037,8 @@ def _select_model_metrics(
             metric["new_name"],
             metric["agg"],
         )
+        if new_name.startswith("average "):
+            new_name = new_name[len("average ") :]
         if agg in {"TOTAL", "COUNT", "COUNT%", "MAX", "SUM"}:
             continue
         name = f"{cat}_{stat}"
@@ -2046,14 +2048,14 @@ def _select_model_metrics(
         cols = list(df.columns)
         if len(cols) == 1:
             col = (cols[0],) if isinstance(cols[0], str) else tuple(cols[0])
-            col = (cat, stat, new_name, agg) + col
-            names = ["cat", "stat", "full_name", "agg"] + df.columns.names
+            col = (cat, stat, new_name) + col
+            names = ["cat", "stat", "full_name"] + df.columns.names
             df.columns = pandas.MultiIndex.from_tuples([col], names=names)
             concat.append(df)
         else:
             cols = [((c,) if isinstance(c, str) else tuple(c)) for c in cols]
-            cols = [(cat, stat, new_name, agg) + c for c in cols]
-            names = ["cat", "stat", "full_name", "agg"] + df.columns.names
+            cols = [(cat, stat, new_name) + c for c in cols]
+            names = ["cat", "stat", "full_name"] + df.columns.names
             df.columns = pandas.MultiIndex.from_tuples(cols, names=names)
             concat.append(df)
     df = pandas.concat(concat, axis=1)
