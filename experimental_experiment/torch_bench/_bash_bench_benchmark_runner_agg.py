@@ -174,25 +174,25 @@ SELECTED_FEATURES = [
         help="Average maximum absolute discrepancies "
         "assuming it can be measured (lower is better).",
     ),
-    dict(
-        cat="discrepancies",
-        stat="abs_0",
-        agg="MEAN",
-        new_name="average absolute discrepancies first output",
-        unit="f",
-        help="Average maximum absolute discrepancies "
-        "for the first output assuming it can be measured (lower is better).",
-    ),
-    dict(
-        cat="discrepancies",
-        stat="abs_1+",
-        agg="MEAN",
-        new_name="average absolute discrepancies second+ output",
-        unit="f",
-        help="Average maximum absolute discrepancies "
-        "for all the outputs except the first one "
-        "assuming it can be measured (lower is better).",
-    ),
+    # dict(
+    #    cat="discrepancies",
+    #    stat="abs_0",
+    #    agg="MEAN",
+    #    new_name="average absolute discrepancies first output",
+    #    unit="f",
+    #    help="Average maximum absolute discrepancies "
+    #    "for the first output assuming it can be measured (lower is better).",
+    # ),
+    # dict(
+    #    cat="discrepancies",
+    #    stat="abs_1+",
+    #    agg="MEAN",
+    #    new_name="average absolute discrepancies second+ output",
+    #    unit="f",
+    #    help="Average maximum absolute discrepancies "
+    #    "for all the outputs except the first one "
+    #    "assuming it can be measured (lower is better).",
+    # ),
     dict(
         cat="time",
         agg="MEAN",
@@ -1379,6 +1379,9 @@ def merge_benchmark_reports(
             c in {"0raw", "0main"} or set_model & set(v.index.names) == set_model
         ), f"There should not be any multiindex but c={c!r}, names={v.index.names}"
 
+    # MODELS
+    res["MODELS"] = _select_model_metrics(res, select=SELECTED_FEATURES)
+
     # merging
 
     for prefix in [
@@ -1427,7 +1430,7 @@ def merge_benchmark_reports(
     if verbose:
         print("[merge_benchmark_reports] enforce numerical values")
     for k, v in res.items():
-        if k in {"0main"}:
+        if k in {"0main", "MODELS"}:
             continue
         for c in v.columns:
             if "output_names" in c or "input_names" in c:
@@ -1466,6 +1469,7 @@ def merge_benchmark_reports(
             "op_torch",
             "bucket",
             "bucket_script",
+            "MODELS",
         },
         model=model,
     )
@@ -2008,4 +2012,37 @@ def _filter_data(
             if k not in df.columns:
                 continue
             df = df[~df[k].isin(v)]
+    return df
+
+
+def _select_model_metrics(
+    res: Dict[str, "pandas.DataFrame"],  # noqa: F821
+    select: List[Dict[str, str]],
+) -> "pandas.DataFrame":  # noqa: F821
+    import pandas
+
+    concat = []
+    for metric in select:
+        cat, stat, new_name, agg = metric["cat"], metric["stat"], metric["new_name"], metric["agg"]
+        if agg in {"TOTAL", "COUNT", "COUNT%", "MAX", "SUM"}:
+            continue
+        name = f"{cat}_{stat}"
+        if name not in res:
+            continue
+        df = res[name].copy()
+        cols = list(df.columns)
+        if len(cols) == 1:
+            col = (cols[0],) if isinstance(cols[0], str) else tuple(cols[0])
+            col = (cat, stat, new_name, agg) + col
+            names = ["cat", "stat", "full_name", "agg"] + df.columns.names
+            df.columns = pandas.MultiIndex.from_tuples([col], names=names)
+            concat.append(df)
+        else:
+            cols = [((c,) if isinstance(c, str) else tuple(c)) for c in cols]
+            cols = [(cat, stat, new_name, agg) + c for c in cols]
+            names = ["cat", "stat", "full_name", "agg"] + df.columns.names
+            df.columns = pandas.MultiIndex.from_tuples(cols, names=names)
+            concat.append(df)
+    df = pandas.concat(concat, axis=1)
+    df = df.sort_index(axis=1)
     return df

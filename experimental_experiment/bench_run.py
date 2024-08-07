@@ -417,7 +417,7 @@ def measure_discrepancies(
             assert (
                 torch_tensor.shape == onnx_tensor.shape
             ), f"Type mismatch {torch_tensor.shape} != {onnx_tensor.shape}"
-            diff = torch_tensor - onnx_tensor
+            diff = torch_tensor.astype(float) - onnx_tensor.astype(float)
             abs_err = float(diff.abs().max())
             rel_err = float((diff.abs() / torch_tensor).max())
             abs_errs.append(abs_err)

@@ -436,7 +436,7 @@ class BenchmarkRunner:
                 if _index < begin or (end != -1 and _index >= end):
                     # out of boundary
                     return dict(abs=0.0, rel=0.0, sum=0.0, n=0.0)
-                diff = (got - expected).abs()
+                diff = (got.to(torch.float64) - expected.to(torch.float64)).abs()
                 rdiff = diff / (expected.abs() + 1e-3)
                 abs_diff, rel_diff, sum_diff, n_diff = (
                     float(diff.max()),
