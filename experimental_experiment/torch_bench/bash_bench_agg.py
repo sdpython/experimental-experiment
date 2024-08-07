@@ -42,6 +42,12 @@ def main(args=None):
         default="",
         help="save the concatanated cleaned raw data in a csv file",
     )
+    parser.add_argument(
+        "--baseline",
+        default="",
+        help="a csv file containing the baseline the new figures "
+        "needs to be compared to",
+    )
     parser.add_argument("--verbose", default=0, help="verbosity level")
     res = parser.parse_args(args=args)
 
@@ -68,7 +74,9 @@ def main(args=None):
         filter_in=res.filter_in,
         filter_out=res.filter_out,
         verbose=int(res.verbose),
-        output_clean_raw_data=res.save_raw**kwargs,
+        output_clean_raw_data=res.save_raw,
+        baseline=res.baseline,
+        **kwargs,
     )
 
 

@@ -2688,7 +2688,7 @@ class GraphBuilder:
         rows.append("dynamic_objects_rev=")
         for i, (k, v) in enumerate(sorted(self.dynamic_objects_rev.items())):
             if isinstance(v, (list, tuple)):
-                rows.append(f"   {k} = {type(v)}")
+                rows.append(f"   {k!r} = {type(v)}")
                 for vv in v:
                     if isinstance(vv, tuple):
                         rows.append("     tuple")

@@ -418,7 +418,7 @@ def _apply_excel_style(
         if 0 in v.shape:
             continue
 
-        if k == "0main":
+        if k in ("0main", "0main_base"):
             for c in "AB":
                 sheet.column_dimensions[c].width = 40
                 sheet.column_dimensions[c].alignment = alignment
@@ -427,7 +427,7 @@ def _apply_excel_style(
                 cell.alignment = alignment
             continue
 
-        if k in {"0raw", "AGG", "AGG2"}:
+        if k in {"0raw", "AGG", "AGG2", "0raw_base"}:
             continue
 
         n_cols = (
@@ -644,7 +644,14 @@ def _apply_excel_style(
                     cell.number_format = "0.000000"
             continue
 
-        if k in {"SUMMARY", "SUMMARY2"}:
+        if k in {
+            "SUMMARY",
+            "SUMMARY2",
+            "SUMMARY_base",
+            "SUMMARY2_base",
+            "SUMMARY2_diff",
+            "SUMMARY_diff",
+        }:
             fmt = {
                 "x": "0.000",
                 "%": "0.000%",
@@ -790,6 +797,7 @@ def merge_benchmark_reports(
     filter_out: Optional[str] = None,
     verbose: int = 0,
     output_clean_raw_data: Optional[str] = None,
+    baseline: Optional["pandas.DataFrame"] = None,  # noqa: F821
 ) -> Dict[str, "pandas.DataFrame"]:  # noqa: F821
     """
     Merges multiple files produced by bash_benchmark...
@@ -814,6 +822,7 @@ def merge_benchmark_reports(
     :param verbose: verbosity
     :param output_clean_raw_data: output the concatenated raw data so that it can
         be used later to make a comparison
+    :param baseline: to compute difference
     :return: dictionary of dataframes
 
     Every key with a unique value is removed.
@@ -847,6 +856,22 @@ def merge_benchmark_reports(
     * a value or a set of values separated by ``;``
     """
     import pandas
+
+    if baseline is not None:
+        base_dfs = merge_benchmark_reports(
+            baseline,
+            model=model,
+            keys=keys,
+            column_keys=column_keys,
+            report_on=report_on,
+            formulas=formulas,
+            exc=exc,
+            filter_in=filter_in,
+            filter_out=filter_out,
+            verbose=max(verbose - 1, 0),
+        )
+    else:
+        base_dfs = None
 
     if isinstance(data, str):
         data = [data]
@@ -1547,13 +1572,61 @@ def merge_benchmark_reports(
             f"{final_res['SUMMARY'].shape} and {final_res['SUMMARY2'].shape}"
         )
 
+    if base_dfs:
+        for name in {"0main", "0raw", "SUMMARY", "SUMMARY2", "MODELS"}:
+            if name in base_dfs:
+                final_res[f"{name}_base"] = base_dfs[name]
+
+        for name in {"SUMMARY", "SUMMARY2", "MODELS"}:
+            if name in base_dfs and name in final_res:
+                drop = []
+                df_str = final_res[name].select_dtypes("object")
+                if df_str.shape[1] > 0:
+                    stacked = list(df_str.columns)
+                    order_name = [c for c in final_res[name].columns if "#order" in c]
+                    if len(order_name) == 1:
+                        stacked.extend(order_name)
+                        drop.extend(order_name)
+                    assert all(
+                        (c in final_res[name] and c in base_dfs[name])
+                        for c in df_str.columns
+                    ), (
+                        f"Columns mismatch, df_str.columns={df_str.columns}, "
+                        f"{final_res[name].columns} != {base_dfs[name].columns}"
+                    )
+                    df_this = final_res[name].set_index(stacked)
+                    df_base = base_dfs[name].set_index(stacked)
+                else:
+                    df_this = final_res[name]
+                    df_base = base_dfs[name]
+                    stacked = None
+
+                df_this = df_this.select_dtypes("number")
+                df_base = df_base.select_dtypes("number")
+                df_num = df_this - df_base
+                if stacked:
+                    df_num = df_num.reset_index(drop=False)
+                    order_name = [c for c in df_num.columns if "#order" in c]
+                    if len(order_name) == 1:
+                        df_num = df_num.sort_values(order_name)
+
+                final_res[f"{name}_diff"] = df_num.sort_index(axis=1)
+
     if excel_output:
         if verbose:
             print(f"[merge_benchmark_reports] apply Excel style with {excel_output!r}")
         with pandas.ExcelWriter(excel_output) as writer:
-            no_index = {"0raw", "0main", "SUMMARY"}
+            no_index = {"0raw", "0main", "SUMMARY", "SUMMARY_base", "SUMMARY_diff"}
             first_sheet = ["0main"]
-            last_sheet = ["ERR", "SUMMARY", "AGG", "AGG2", "0raw"]
+            last_sheet = [
+                "ERR",
+                "SUMMARY",
+                "SUMMARY_base",
+                "SUMMARY_diff",
+                "AGG",
+                "AGG2",
+                "0raw",
+            ]
             ordered = set(first_sheet) | set(last_sheet)
             order = [
                 *first_sheet,
@@ -1569,14 +1642,17 @@ def merge_benchmark_reports(
                 frow = (
                     len(ev.columns.names) if isinstance(ev.columns.names, list) else 1
                 )
-                if k in {"SUMMARY", "SUMMARY2"}:
+                if k.startswith("SUMMARY"):
                     fcol = len(v.columns.names)
                 else:
                     fcol = (
                         len(ev.index.names) if isinstance(ev.index.names, list) else 1
                     )
 
-                if k in {"AGG2", "SUMMARY2"} and "suite" in ev.columns.names:
+                if (
+                    k in {"AGG2", "SUMMARY2", "SUMMARY2_base", "SUMMARY2_diff"}
+                    and "suite" in ev.columns.names
+                ):
                     ev = _reorder_columns_level(ev, first_level=["suite"], prefix=k)
                 ev.to_excel(
                     writer,

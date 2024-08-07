@@ -943,9 +943,10 @@ class DynamoInterpreter:
                 f"dtype inconsistency (val, example_value) "
                 f"{val.dtype} != {exa.dtype}{self.builder.get_debug_msg()}"
             )
-            assert hasattr(
-                val, "dtype"
-            ), f"Unexpected type {type(val)} for val={val}{self.builder.get_debug_msg()}"
+            assert hasattr(val, "dtype"), (
+                f"Unexpected type {type(val)} for val={val}, "
+                f"node={node!r}{self.builder.get_debug_msg()}"
+            )
             return val.dtype
         return None
 

@@ -246,6 +246,19 @@ class TestBashBenchMergeStats(ExtTestCase):
         )
         self.assertEqual(df, {})
 
+    @ignore_warnings((FutureWarning,))
+    def test_merge_stats_diff(self):
+        base = os.path.join(os.path.dirname(__file__), "data", "baseline.csv")
+        data = os.path.join(os.path.dirname(__file__), "data", "baseline2.csv")
+        dfs = merge_benchmark_reports(
+            data,
+            excel_output="test_merge_stats_diff.xlsx",
+            baseline=base,
+        )
+        self.assertIn("SUMMARY2_diff", dfs)
+        self.assertIn("MODELS_diff", dfs)
+        self.assertIn("SUMMARY_diff", dfs)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
