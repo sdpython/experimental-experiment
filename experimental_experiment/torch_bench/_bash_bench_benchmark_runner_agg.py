@@ -2,7 +2,7 @@ import glob
 import itertools
 import warnings
 from collections import Counter
-from typing import Optional, Dict, List, Set, Union
+from typing import Optional, Dict, List, Sequence, Set, Union
 import numpy as np
 
 SELECTED_FEATURES = [
@@ -1380,7 +1380,11 @@ def merge_benchmark_reports(
         ), f"There should not be any multiindex but c={c!r}, names={v.index.names}"
 
     # MODELS
-    res["MODELS"] = _select_model_metrics(res, select=SELECTED_FEATURES)
+    res["MODELS"] = _select_model_metrics(
+        res,
+        select=SELECTED_FEATURES,
+        stack_levels=tuple(c for c in column_keys if c != "stat"),
+    )
 
     # merging
 
@@ -1754,7 +1758,7 @@ def _create_aggregation_figures(
         def _geo_mean(serie):
             nonan = serie.dropna()
             if len(nonan) == 0:
-                return 0.
+                return 0.0
             res = np.exp(np.log(np.maximum(nonan, 1e-10)).mean())
             return res
 
@@ -2021,12 +2025,18 @@ def _filter_data(
 def _select_model_metrics(
     res: Dict[str, "pandas.DataFrame"],  # noqa: F821
     select: List[Dict[str, str]],
+    stack_levels: Sequence[str],
 ) -> "pandas.DataFrame":  # noqa: F821
     import pandas
 
     concat = []
     for metric in select:
-        cat, stat, new_name, agg = metric["cat"], metric["stat"], metric["new_name"], metric["agg"]
+        cat, stat, new_name, agg = (
+            metric["cat"],
+            metric["stat"],
+            metric["new_name"],
+            metric["agg"],
+        )
         if agg in {"TOTAL", "COUNT", "COUNT%", "MAX", "SUM"}:
             continue
         name = f"{cat}_{stat}"
@@ -2047,5 +2057,12 @@ def _select_model_metrics(
             df.columns = pandas.MultiIndex.from_tuples(cols, names=names)
             concat.append(df)
     df = pandas.concat(concat, axis=1)
+    if stack_levels:
+        for c in stack_levels:
+            if c in df.columns.names:
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore", category=FutureWarning)
+                    df = df.stack(c, dropna=np.nan)
     df = df.sort_index(axis=1)
+
     return df
