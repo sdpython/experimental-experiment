@@ -84,6 +84,14 @@ class SoftmaxCrossEntropyLossCastPattern(EasyPatternOptimization):
     Detects one decomposed version of SoftmaxCrossEntropyLoss
     """
 
+    def __init__(
+        self, verbose: int = 0, priority: int = 0, min_opset: int = 14, domain: str = ""
+    ):
+        super(SoftmaxCrossEntropyLossCastPattern, self).__init__(
+            verbose, priority, min_opset=min_opset
+        )
+        self.domain = domain
+
     def match_pattern(
         self, g: "GraphBuilder", X, indices, axis, zerof, zeroi, b  # noqa: F821
     ):  # noqa: F821
@@ -96,7 +104,6 @@ class SoftmaxCrossEntropyLossCastPattern(EasyPatternOptimization):
             g.op.ReduceSum(
                 g.op.Cast(neq1, to=TensorProto.FLOAT),
                 keepdims=0,
-                noop_with_empty_axes=0,
             ),
             to=TensorProto.FLOAT16,
         )
@@ -104,7 +111,6 @@ class SoftmaxCrossEntropyLossCastPattern(EasyPatternOptimization):
             g.op.ReduceSum(
                 g.op.Cast(wh2, to=TensorProto.FLOAT),
                 keepdims=0,
-                noop_with_empty_axes=0,
             ),
             to=TensorProto.FLOAT16,
         )
