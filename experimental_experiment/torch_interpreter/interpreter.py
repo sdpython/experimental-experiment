@@ -120,6 +120,26 @@ class DynamoInterpreter:
                 f"Unable to find attribute {node.target!r} (node.name={node.name!r}) in "
                 f"{list(sorted(dir(node.graph.owning_module)))}."
             ) from e
+
+        if isinstance(init, self.torch.fx.GraphModule):
+            builder, args, output_names = self._interpret_sub_module(
+                init, None, source_node=node
+            )
+            # Let's assume it is local variables.
+            if not args and builder.inputs:
+                args = [i.name for i in builder.inputs]
+
+            if len(builder.outputs) == 1:
+                self.builder.make_nodes(builder, args, output_names, prefix="_subinit_")
+            else:
+                new_output_names = [
+                    f"{node.name}#{i}" for i in range(len(builder.outputs))
+                ]
+                self.builder.make_nodes(
+                    builder, args, new_output_names, prefix="_subinitN_"
+                )
+            return new_output_names
+
         self.builder.make_initializer(node.name, init)
         return node.name
 
@@ -1030,6 +1050,64 @@ class DynamoInterpreter:
         if last_node is not None and description:
             last_node.doc_string += "\n".join(description)
 
+    def _interpret_sub_module(self, sub_module, args, source_node=None):
+        from .onnx_export import _make_builder_interpreter
+
+        if hasattr(sub_module, "graph") and isinstance(
+            sub_module, self.torch.fx.GraphModule
+        ):
+            gm = sub_module
+        else:
+            # https://pytorch.org/docs/stable/fx.html
+            tracer_class = self.torch.fx.Tracer
+            graph = tracer_class().trace(sub_module)
+            gm = self.torch.fx.GraphModule(sub_module, graph)
+
+        graph_module, builder, interpreter = _make_builder_interpreter(
+            gm,
+            None if args is None else tuple(args),
+            as_function=True,
+            target_opset=self.builder.opsets,
+            optimization_options=self.builder.optimization_options,
+            verbose=self.builder.verbose,
+            dispatcher=self.dispatcher,
+            raise_list=self.builder.raise_list,
+            dynamic_shapes=self.builder.dynamic_shapes,
+            use_dynamo=self.use_dynamo,
+        )
+        builder.process(graph_module, interpreter)
+        assert builder.outputs, f"No output detected for node={source_node}, graph={gm}"
+
+        fx_args, _ = self._fill_in_default_kwargs(source_node)
+        args = [getattr(i, "name", i) for i in fx_args]
+
+        val = source_node.meta.get("val", None)
+        if val is not None and isinstance(val, tuple):
+            n_outputs = len(val)
+            output_names = [f"{source_node.name}#{i}" for i in range(n_outputs)]
+        else:
+            output_names = [source_node.name]
+            if val is None:
+                val = source_node.meta.get("example_value", None)
+        if val is not None and not isinstance(val, tuple):
+            val = (val,)
+
+        if val is not None:
+            assert len(val) == len(
+                builder.outputs
+            ), f"Output mismatch {len(val)} != {len(builder.outputs)}"
+            for i in range(len(val)):
+                name = builder.outputs[i].name
+                if name not in builder._known_shapes:
+                    builder.set_shape(name, val[i].shape)
+                if name not in builder._known_types:
+                    builder.set_type(name, val[i].dtype)
+                self.builder.set_shapes_types(
+                    source_node.name, "call_module", (val[i].dtype, val[i].shape)
+                )
+
+        return builder, args, output_names
+
     def call_module(self, node: "torch.fx.Node"):  # noqa: F821
         """
         Called for a module.
@@ -1049,8 +1127,6 @@ class DynamoInterpreter:
                 f"\nVALUES\n{pprint.pformat(self.example_values_)}"
             )
 
-        from .onnx_export import _make_builder_interpreter
-
         sub_module = node.graph.owning_module.get_submodule(node.target)
 
         assert isinstance(
@@ -1068,58 +1144,9 @@ class DynamoInterpreter:
                 f"[DynamoInterpreter-{self._hash()}.call_module] class [{type(sub_module)}]"
             )
 
-        if hasattr(sub_module, "graph") and isinstance(
-            sub_module, self.torch.fx.GraphModule
-        ):
-            gm = sub_module
-        else:
-            # https://pytorch.org/docs/stable/fx.html
-            tracer_class = self.torch.fx.Tracer
-            graph = tracer_class().trace(sub_module)
-            gm = self.torch.fx.GraphModule(sub_module, graph)
-
-        graph_module, builder, interpreter = _make_builder_interpreter(
-            gm,
-            tuple(args),
-            as_function=True,
-            target_opset=self.builder.opsets,
-            optimization_options=self.builder.optimization_options,
-            verbose=self.builder.verbose,
-            dispatcher=self.dispatcher,
-            raise_list=self.builder.raise_list,
-            dynamic_shapes=self.builder.dynamic_shapes,
-            use_dynamo=self.use_dynamo,
+        builder, args, output_names = self._interpret_sub_module(
+            sub_module, args, source_node=node
         )
-        builder.process(graph_module, interpreter)
-        assert builder.outputs, f"No output detected for node={node}, graph={gm}"
-
-        fx_args, _ = self._fill_in_default_kwargs(node)
-        args = [getattr(i, "name", i) for i in fx_args]
-
-        val = node.meta.get("val", None)
-        if val is not None and isinstance(val, tuple):
-            n_outputs = len(val)
-            output_names = [f"{node.name}#{i}" for i in range(n_outputs)]
-        else:
-            output_names = [node.name]
-            if val is None:
-                val = node.meta.get("example_value", None)
-        if val is not None and not isinstance(val, tuple):
-            val = (val,)
-
-        if val is not None:
-            assert len(val) == len(
-                builder.outputs
-            ), f"Output mismatch {len(val)} != {len(builder.outputs)}"
-            for i in range(len(val)):
-                name = builder.outputs[i].name
-                if name not in builder._known_shapes:
-                    builder.set_shape(name, val[i].shape)
-                if name not in builder._known_types:
-                    builder.set_type(name, val[i].dtype)
-                self.builder.set_shapes_types(
-                    node.name, "call_module", (val[i].dtype, val[i].shape)
-                )
 
         self.builder.make_nodes(
             builder, args, output_names, prefix=f"_sub_{sub_module.__class__.__name__}_"

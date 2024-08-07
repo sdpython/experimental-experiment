@@ -5033,6 +5033,9 @@ def aten__to_copy(
     if dtype is None:
         return g.op.Identity(x, outputs=outputs, name="_to_copy")
     itype = torch_dtype_to_onnx_dtype(dtype)
+    assert (
+        isinstance(itype, int) and itype > 0
+    ), f"Unexpected value for itype={itype}, dtype={dtype}"
     res = g.op.Cast(x, to=itype, outputs=outputs, name="_to_copy")
     if not sts:
         set_type_shape_unary_op(g, res, x, itype=itype)

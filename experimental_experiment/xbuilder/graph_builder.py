@@ -2019,8 +2019,9 @@ class GraphBuilder:
             op_type != "Cast"
             or domain != ""
             or ("to" in kwargs and kwargs["to"] is not None)
+            or (attributes is not None and "to" in set(att.name for att in attributes))
         ), (
-            f"Operator Cast needs arguments to but kwargs={kwargs}"
+            f"Operator Cast needs arguments to but kwargs={kwargs}, name={name!r}"
             f"{self.get_debug_msg()}"
         )
         assert op_type != "Concat" or domain != "" or len(inputs) > 1, (
@@ -2459,7 +2460,7 @@ class GraphBuilder:
 
         assert len(output_names) == len(builder.outputs), (
             f"Inconsistency between output_names={output_names} and "
-            f"outputs={builder.outputs}, renaming={renaming}."
+            f"outputs={builder.outputs}, renaming={renaming}{self.get_debug_msg()}"
         )
         for name, out in zip(output_names, builder.outputs):
             self.make_node("Identity", [renaming[out.name]], [name], name=".make_nodes")
