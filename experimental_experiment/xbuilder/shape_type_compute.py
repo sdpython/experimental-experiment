@@ -6,12 +6,18 @@ from ..xbuilder.shape_helper import STATIC_SHAPE, is_static_shape, all_int
 from ..xbuilder._dtype_helper import dtype_to_tensor_dtype, torch_dtype_to_onnx_dtype
 
 
-def broadcast_shape(sh1: STATIC_SHAPE, sh2: STATIC_SHAPE) -> STATIC_SHAPE:
+def broadcast_shape(
+    sh1: STATIC_SHAPE,
+    sh2: STATIC_SHAPE,
+    graph_builder: Optional["GraphBuilder"] = None,  # noqa: F821
+) -> STATIC_SHAPE:
     """
     Computes the shape for many broadcasting operators.
 
     :param sh1: first shape
     :param sh2: second shape
+    :param graph_builder: if not None, the function register
+        any constraint which might appear while applying the broadcast
     :return: resulting shape
     """
     if sh1 == sh2:
@@ -41,6 +47,11 @@ def broadcast_shape(sh1: STATIC_SHAPE, sh2: STATIC_SHAPE) -> STATIC_SHAPE:
             # a is str
             if b == 1:
                 d = a
+            elif b != 1:
+                # a is not int, it is str
+                d = b
+                if graph_builder:
+                    graph_builder.register_constraint_dimension(a, b)
             else:
                 d = None
         else:
@@ -49,7 +60,7 @@ def broadcast_shape(sh1: STATIC_SHAPE, sh2: STATIC_SHAPE) -> STATIC_SHAPE:
         if d is None:
             raise RuntimeError(
                 f"Not implemented for sh1={sh1}, sh2={sh2}, a={a}, b={b}, "
-                f"type(a)={type(a)}, type(b)={type(b)}"
+                f"type(a)={type(a)}, type(b)={type(b)}, a={a}, b={b}"
             )
         new_shape.append(d)
     return tuple(new_shape)
@@ -145,7 +156,9 @@ def set_type_shape_binary_op(
                 shape = None
                 break
             shape = (
-                input_shape if shape is None else broadcast_shape(shape, input_shape)
+                input_shape
+                if shape is None
+                else broadcast_shape(shape, input_shape, graph_builder=g)
             )
         else:
             # one shape is missing
@@ -728,9 +741,11 @@ def _set_shape_type_op_any_where(self: "GraphBuilder", node: NodeProto):  # noqa
         and self.has_shape(node.input[2])
     ):
         sh1 = broadcast_shape(
-            self.get_shape(node.input[0]), self.get_shape(node.input[1])
+            self.get_shape(node.input[0]),
+            self.get_shape(node.input[1]),
+            graph_builder=self,
         )
-        sh = broadcast_shape(sh1, self.get_shape(node.input[2]))
+        sh = broadcast_shape(sh1, self.get_shape(node.input[2]), graph_builder=self)
         self.set_shape(node.output[0], sh)
     elif self.has_rank(node.input[2]):
         self.set_rank(node.output[0], max(map(self.get_rank, node.input)))
@@ -803,7 +818,11 @@ def set_type_shape_fused_matmul(self: "GraphBuilder", node: NodeProto):  # noqa:
                 sh1 = ((1,) * (len(sh2) - len(sh1))) + sh1
             else:
                 sh2 = ((1,) * (len(sh1) - len(sh2))) + sh2
-        prefix = broadcast_shape(sh1[:-2], sh2[:-2]) if len(sh1) > 2 else tuple()
+        prefix = (
+            broadcast_shape(sh1[:-2], sh2[:-2], graph_builder=self)
+            if len(sh1) > 2
+            else tuple()
+        )
         new_shape = (sh1[-1] if transA else sh1[-2], sh2[-2] if transB else sh2[-1])
         self.set_shape(name, prefix + new_shape)
         self.set_shape(name, prefix + new_shape)

@@ -136,7 +136,7 @@ class TestGraphPatternOptimizationEasy(ExtTestCase):
                 model,
                 infer_shapes=True,
                 optimization_options=OptimizationOptions(
-                    patterns=["SoftmaxCrossEntropyLossCast"], verbose=10
+                    patterns=["SoftmaxCrossEntropyLossCast"], verbose=0
                 ),
             )
             opt_onx = gr.to_onnx(optimize=True)

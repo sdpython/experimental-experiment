@@ -105,6 +105,8 @@ class GraphBuilder:
     - `_values: Dict[key,str]`: cache initializer value to merge those which are equal
     - `_dynamic_alias: Dict[str,str]`: used when the user gives a different
         name to the dynamic shapes
+    - `constraints_: Dict[str, Set[Any]]`: if a broadcast implies a constraints on a dynamic shape,
+        it is stored here
 
     Debugging attributes:
 
@@ -180,6 +182,7 @@ class GraphBuilder:
         self._debug_stop = os.environ.get("ONNXSTOP", "#?#")
         self.time_evaluation_constants_ = 0
         self.statistics_ = {}
+        self.constraints_ = {}
 
         if self.dynamic_shapes:
             for input_name, v in self.dynamic_shapes.items():
@@ -2666,6 +2669,10 @@ class GraphBuilder:
         rows.append("--LOCAL FUNCTIONS--")
         for k, v in self.functions.items():
             rows.append(f"{k[0]},{k[1]}({v.input}) -> {v.output}")
+        if self.constraints_:
+            rows.append("--CONSTRAINTS--")
+            for a, b in sorted(self.constraints_.items()):
+                rows.append(f"{a} = {b}")
         rows.append("--SHAPE--")
         rows.append("dynamic_objects=")
         for i, (k, v) in enumerate(sorted(self.dynamic_objects.items())):
@@ -4375,3 +4382,14 @@ class GraphBuilder:
         Returns the outputs of a local functions.
         """
         return self.functions[domain, name].output
+
+    def register_constraint_dimension(self, dim_name: str, value: Any):
+        """
+        Register a constraint on a dimension.
+
+        :param dim_name: dimension name
+        :param value: value to register
+        """
+        if dim_name not in self.constraints_:
+            self.constraints_[dim_name] = set()
+        self.constraints_[dim_name].add(value)

@@ -596,10 +596,9 @@ class EasyPatternOptimization(PatternOptimization):
             # there is only one option, matching on node type only returns one
             # option.
             expected_op_type = [_.op_type for _ in p_marked]
-            got_op_type = [_.op_type for _ in free]
 
             ec = Counter(expected_op_type)
-            gc = Counter(got_op_type)
+            gc = Counter(_.op_type for _ in free)
             if len(ec) != len(gc) or set(ec) != set(gc):
                 # number of unique operator types is different.
                 self._hint(
@@ -622,7 +621,7 @@ class EasyPatternOptimization(PatternOptimization):
             # At this stage, we know matching the types is possible.
             # We first mark whatever is possible.
             ptype_to_node = {_.op_type: _ for _ in p_marked}
-            gtype_to_node = {_.op_type: _ for _ in got_op_type}
+            gtype_to_node = {_.op_type: _ for _ in free}
             missing = []
             for k, v in ec.items():
                 if gc[k] == v == 1:
