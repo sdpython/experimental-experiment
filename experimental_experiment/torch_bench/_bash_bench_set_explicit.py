@@ -101,5 +101,4 @@ class ExplicitRunner(BenchmarkRunner):
         model_names.sort()
 
         start, end = self.get_benchmark_indices(len(model_names))
-        for _ in self.enumerate_model_names(model_names, start=start, end=end):
-            yield _
+        yield from self.enumerate_model_names(model_names, start=start, end=end)

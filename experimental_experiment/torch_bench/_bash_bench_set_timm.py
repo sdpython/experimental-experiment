@@ -1,16 +1,17 @@
-import io
 import importlib
+import io
 import textwrap
 from typing import Any, Optional, Set, Tuple
 import torch
 from torch._dynamo.testing import reduce_to_scalar_loss
-from ._bash_bench_model_runner import (
-    download_retry_decorator,
-    _rand_int_tensor,
-    ModelRunner,
-    MakeConfig,
-)
 from ._bash_bench_benchmark_runner import BenchmarkRunner
+from ._bash_bench_model_runner import (
+    MakeConfig,
+    ModelRunner,
+    _rand_int_tensor,
+    download_retry_decorator,
+)
+
 
 
 class TimmRunner(BenchmarkRunner):
@@ -267,13 +268,11 @@ class TimmRunner(BenchmarkRunner):
 
     @classmethod
     def initialize(container):
-        """
-        Steps to run before running the benchmark.
-        """
+        """Steps to run before running the benchmark."""
         import timm
 
         models = set(timm.list_models(pretrained=True, exclude_filters=["*in21k"]))
-        models = set(_.split(".")[0] for _ in models)
+        models = {_.split(".")[0] for _ in models}
         expected = [_ for _ in container.EXPECTED.split("\n") if len(_) > 2]
         expected = set(_ for _ in container.EXPECTED.split("\n") if len(_) > 2)
         missing = expected - set(container.TIMM_MODELS)
@@ -365,9 +364,7 @@ class TimmRunner(BenchmarkRunner):
             }
 
         if model_name.endswith("MultipleChoice"):
-            inputt = _rand_int_tensor(
-                device, 0, vocab_size, (bs, num_choices, seq_length)
-            )
+            inputt = _rand_int_tensor(device, 0, vocab_size, (bs, num_choices, seq_length))
         elif model_name.startswith("Roberta"):
             inputt = _rand_int_tensor(device, 0, 1, (bs, seq_length))
         else:
@@ -378,22 +375,16 @@ class TimmRunner(BenchmarkRunner):
 
         input_dict = {"input_ids": inputt}
 
-        if (
-            model_name.startswith("T5")
-            or model_name.startswith("M2M100")
-            or model_name.startswith("MT5")
-            or model_cls
-            in {
-                transformers.BlenderbotModel,
-                transformers.BlenderbotSmallModel,
-                transformers.BlenderbotForConditionalGeneration,
-                transformers.BlenderbotSmallForConditionalGeneration,
-                transformers.PegasusModel,
-                transformers.PegasusForConditionalGeneration,
-                transformers.MarianModel,
-                transformers.MarianMTModel,
-            }
-        ):
+        if model_name.startswith(("T5", "M2M100", "MT5")) or model_cls in {
+            transformers.BlenderbotModel,
+            transformers.BlenderbotSmallModel,
+            transformers.BlenderbotForConditionalGeneration,
+            transformers.BlenderbotSmallForConditionalGeneration,
+            transformers.PegasusModel,
+            transformers.PegasusForConditionalGeneration,
+            transformers.MarianModel,
+            transformers.MarianMTModel,
+        }:
             input_dict["decoder_input_ids"] = inputt
 
         if model_name.startswith("Lxmert"):
@@ -401,12 +392,8 @@ class TimmRunner(BenchmarkRunner):
                 model.config.visual_feat_dim,
                 model.config.visual_pos_dim,
             )
-            input_dict["visual_feats"] = torch.randn(
-                bs, num_visual_features, visual_feat_dim
-            )
-            input_dict["visual_pos"] = torch.randn(
-                bs, num_visual_features, visual_pos_dim
-            )
+            input_dict["visual_feats"] = torch.randn(bs, num_visual_features, visual_feat_dim)
+            input_dict["visual_pos"] = torch.randn(bs, num_visual_features, visual_pos_dim)
 
         if include_loss_args:
             if model_name.endswith("PreTraining"):
@@ -414,9 +401,7 @@ class TimmRunner(BenchmarkRunner):
                     transformers.ElectraForPreTraining,
                     transformers.LxmertForPreTraining,
                 ]:
-                    input_dict["labels"] = _rand_int_tensor(
-                        device, 0, 1, (bs, seq_length)
-                    )
+                    input_dict["labels"] = _rand_int_tensor(device, 0, 1, (bs, seq_length))
                 else:
                     label_name = (
                         "sentence_order_label"
@@ -428,17 +413,10 @@ class TimmRunner(BenchmarkRunner):
                     )
                     input_dict[label_name] = _rand_int_tensor(device, 0, 1, (bs,))
             elif model_name.endswith("QuestionAnswering"):
-                input_dict["start_positions"] = _rand_int_tensor(
-                    device, 0, seq_length, (bs,)
-                )
-                input_dict["end_positions"] = _rand_int_tensor(
-                    device, 0, seq_length, (bs,)
-                )
-            elif (
-                model_name.endswith("MaskedLM")
-                or model_name.endswith("HeadModel")
-                or model_name.endswith("CausalLM")
-                or model_name.endswith("DoubleHeadsModel")
+                input_dict["start_positions"] = _rand_int_tensor(device, 0, seq_length, (bs,))
+                input_dict["end_positions"] = _rand_int_tensor(device, 0, seq_length, (bs,))
+            elif model_name.endswith(
+                ("MaskedLM", "HeadModel", "CausalLM", "DoubleHeadsModel")
             ):
                 input_dict["labels"] = _rand_int_tensor(
                     device, 0, vocab_size, (bs, seq_length)
@@ -536,10 +514,8 @@ class TimmRunner(BenchmarkRunner):
         return model_cls, config
 
     @classmethod
-    def _gen_target(self, batch_size, device, num_classes):
-        return torch.empty((batch_size,) + (), device=device, dtype=torch.long).random_(
-            num_classes
-        )
+    def _gen_target(cls, batch_size, device, num_classes):
+        return torch.empty((batch_size,), device=device, dtype=torch.long).random_(num_classes)
 
     @download_retry_decorator(retry=5)
     def _download_model(self, model_name):
@@ -611,16 +587,14 @@ class TimmRunner(BenchmarkRunner):
 
         torch.manual_seed(1337)
         input_tensor = torch.randint(
-            256, size=(batch_size,) + input_size, device=self.device
+            256, size=(batch_size, *input_size), device=self.device
         ).to(dtype=torch.float32)
         mean = torch.mean(input_tensor)
         std_dev = torch.std(input_tensor)
         example_inputs = (input_tensor - mean) / std_dev
 
         if channels_last:
-            example_inputs = example_inputs.contiguous(
-                memory_format=torch.channels_last
-            )
+            example_inputs = example_inputs.contiguous(memory_format=torch.channels_last)
         example_inputs = [
             example_inputs,
         ]
@@ -650,5 +624,4 @@ class TimmRunner(BenchmarkRunner):
         # for model_name in list_models(pretrained=True, exclude_filters=["*in21k"]):
         model_names = sorted(self.TIMM_MODELS.keys())
         start, end = self.get_benchmark_indices(len(model_names))
-        for _ in self.enumerate_model_names(model_names, start=start, end=end):
-            yield _
+        yield from self.enumerate_model_names(model_names, start=start, end=end)
