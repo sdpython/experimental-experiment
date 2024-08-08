@@ -73,9 +73,8 @@ class TestBashBenchRunnerCmd(ExtTestCase):
             print("CMD")
             print(" ".join(args))
         st = io.StringIO()
-        with contextlib.redirect_stderr(st):
-            with contextlib.redirect_stdout(st):
-                main(args=args)
+        with contextlib.redirect_stderr(st), contextlib.redirect_stdout(st):
+            main(args=args)
         out = st.getvalue()
         if debug:
             print(out)

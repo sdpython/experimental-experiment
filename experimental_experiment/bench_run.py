@@ -9,8 +9,7 @@ import time
 import warnings
 from argparse import Namespace
 from datetime import datetime
-from typing import Any, Callable, Dict, List, Set, Tuple, Union, Optional
-
+from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
 
 ILLEGAL_CHARACTERS_RE = re.compile(r"([\000-\010]|[\013-\014]|[\016-\037])")
 
@@ -27,9 +26,7 @@ def _clean_string(s: str) -> str:
 
 
 def get_processor_name():
-    """
-    Returns the processor name.
-    """
+    """Returns the processor name."""
     if platform.system() in ("Windows", "Darwin"):
         return platform.processor()
     if platform.system() == "Linux":
@@ -48,16 +45,12 @@ def get_processor_name():
 
 
 def get_machine() -> Dict[str, Union[str, int, float, Tuple[int, int]]]:
-    """
-    Returns the machine specifications.
-    """
+    """Returns the machine specifications."""
     arch = platform.architecture()
     config: Dict[str, Union[str, int, float, Tuple[int, int]]] = dict(
         machine=str(platform.machine()),
         architecture=(
-            "/".join(str(_) for _ in arch)
-            if isinstance(arch, (list, tuple))
-            else str(arch)
+            "/".join(str(_) for _ in arch) if isinstance(arch, (list, tuple)) else str(arch)
         ),
         processor=str(platform.processor()),
         version=str(sys.version).split()[0],
@@ -78,9 +71,7 @@ def get_machine() -> Dict[str, Union[str, int, float, Tuple[int, int]]]:
     return config
 
 
-def _cmd_line(
-    script_name: str, **kwargs: Dict[str, Union[str, int, float]]
-) -> List[str]:
+def _cmd_line(script_name: str, **kwargs: Dict[str, Union[str, int, float]]) -> List[str]:
     args = [sys.executable, "-m", script_name]
     for k, v in kwargs.items():
         if v is None:
@@ -119,8 +110,8 @@ def _extract_metrics(text: str) -> Dict[str, str]:
             or len(w) < 500
         ):
             warnings.warn(
-                f"Unexpected long value for model={kw.get('model_name', '?')}, "
-                f"k={k!r}, value has length {len(w)} is\n{w}"
+                f"Unexpected long value for model={kw.get('model_name', '?')}, k={k!r}, value has length {len(w)} is\n{w}",
+                stacklevel=2,
             )
             continue
         try:
@@ -201,9 +192,7 @@ def run_benchmark(
         else:
             os.environ["ONNXRT_DUMP_PATH"] = ""
         if verbose > 3:
-            print(
-                f"[run_benchmark] cmd={cmd if isinstance(cmd, str) else ' '.join(cmd)}"
-            )
+            print(f"[run_benchmark] cmd={cmd if isinstance(cmd, str) else ' '.join(cmd)}")
         p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         timeout_error = ""
         try:
@@ -298,9 +287,7 @@ def run_benchmark(
 
 
 def multi_run(kwargs: Namespace) -> bool:
-    """
-    Checks if multiple values were sent for one argument.
-    """
+    """Checks if multiple values were sent for one argument."""
     return any(isinstance(v, str) and "," in v for v in kwargs.__dict__.values())
 
 
@@ -310,13 +297,11 @@ def make_configs(
     replace: Optional[Dict[str, str]] = None,
     last: Optional[List[str]] = None,
 ) -> List[Dict[str, Any]]:
-    """
-    Creates all the configurations based on the command line arguments.
-    """
+    """Creates all the configurations based on the command line arguments."""
     args = []
     slast = set(last) if last else set()
     for k, v in kwargs.__dict__.items():
-        if drop and k in drop or k in slast:
+        if (drop and k in drop) or k in slast:
             continue
         if replace and k in replace:
             v = replace[k]
@@ -423,6 +408,4 @@ def measure_discrepancies(
             rel_err = float((diff.abs() / torch_tensor).max())
             abs_errs.append(abs_err)
             rel_errs.append(rel_err)
-    return dict(
-        abs=max(abs_errs), rel=max(rel_errs), sum=sum(rel_errs), n=len(abs_errs)
-    )
+    return dict(abs=max(abs_errs), rel=max(rel_errs), sum=sum(rel_errs), n=len(abs_errs))
