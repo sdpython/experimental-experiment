@@ -73,7 +73,7 @@ parsed_args = get_parsed_args(
     disable_pattern=("none", "pattern or patterns to disable"),
     ort_optimize=(
         "0,1",
-        "enable or disable onnxruntime optimization, " "by default, tries both",
+        "enable or disable onnxruntime optimization, by default, tries both",
     ),
     order=("none", "optimization order see class OrderAlgorithm, none by default"),
     shape_scenario=(

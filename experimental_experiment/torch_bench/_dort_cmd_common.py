@@ -537,7 +537,7 @@ def export_args(name: str, description: str, new_args: Optional[List[str]] = Non
         large_model=("0", "saves weights in a separate file"),
         output_data=(
             "output_data_multi.csv",
-            "when running multiple configuration, " "save the results in that file",
+            "when running multiple configuration, save the results in that file",
         ),
         expose="exporter,device,num_hidden_layers,ort,"
         "mixed,config,target_opset,dynamic,verbose,dump_patterns,"
