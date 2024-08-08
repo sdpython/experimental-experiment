@@ -120,7 +120,8 @@ class SimplifiedLayerNormalizationPattern(PatternOptimization):
                 name=f"{self.__class__.__name__}--{nname}",
             )
             # sc = g.make_node_check_opset(
-            #    "Unsqueeze", [ga.output[0]], axes=[0], name=f"{self.__class__.__name__}--{nname}"
+            #    "Unsqueeze", [ga.output[0]], axes=[0],
+            #       name=f"{self.__class__.__name__}--{nname}"
             # )
             cc = g.make_node(
                 "ConstantOfShape",

@@ -868,7 +868,8 @@ class TestOperatorsOnnxrt(ExtTestCase):
         )
 
     @unittest.skip(
-        reason="Cannot find any perfect/nearest match of symbolic function for aten::mean.default"
+        reason="Cannot find any perfect/nearest match of "
+        "symbolic function for aten::mean.default"
     )
     @hide_stdout()
     def test_xt_mean_dtype(self):
@@ -880,7 +881,8 @@ class TestOperatorsOnnxrt(ExtTestCase):
         )
 
     @unittest.skip(
-        reason="Cannot find any perfect/nearest match of symbolic function for aten::mean.dim"
+        reason="Cannot find any perfect/nearest match of "
+        "symbolic function for aten::mean.dim"
     )
     @hide_stdout()
     def test_xt_reduced_mean_dtype(self):

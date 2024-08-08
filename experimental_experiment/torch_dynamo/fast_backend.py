@@ -237,8 +237,10 @@ class OrtBackend:
                 data_ptrs.append(t.data_ptr())
             else:
                 assert isinstance(tensor, torch.Tensor), (
-                    f"Unexpected type {type(tensor)}, dim={dim}, rk={rk}, name={name!r}, "
-                    f"len(tensors)={len(tensors)}, len(is_dimension_in)={len(self.is_dimension_in)}"
+                    f"Unexpected type {type(tensor)}, "
+                    f"dim={dim}, rk={rk}, name={name!r}, "
+                    f"len(tensors)={len(tensors)}, "
+                    f"len(is_dimension_in)={len(self.is_dimension_in)}"
                 )
                 dtypes.append(self.TORCH_DTYPE_TO_NUMPY_DTYPE[tensor.dtype])
                 shapes.append(tensor.size())

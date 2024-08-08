@@ -248,7 +248,9 @@ class HuggingfaceRunner(BenchmarkRunner):
     @classmethod
     def _get_module_cls_by_model_name(container, model_cls_name):
         _module_by_model_name = {
-            "Speech2Text2Decoder": "transformers.models.speech_to_text_2.modeling_speech_to_text_2",
+            "Speech2Text2Decoder": (
+                "transformers.models.speech_to_text_2." "modeling_speech_to_text_2"
+            ),
             "TrOCRDecoder": "transformers.models.trocr.modeling_trocr",
         }
         module_name = _module_by_model_name.get(model_cls_name, "transformers")

@@ -547,7 +547,8 @@ def benchmark(shape):
         try:
             exported_model = export_fct(model, input_tensor)
         except torch._dynamo.exc.BackendCompilerFailed as e:
-            # Triton only supports devices of CUDA Capability >= 7.0, but your device is of CUDA capability 6.1
+            # Triton only supports devices of CUDA Capability >= 7.0,
+            # but your device is of CUDA capability 6.1
             obs["error"] = str(e)
             data.append(obs)
             continue

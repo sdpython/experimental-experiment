@@ -12,7 +12,8 @@ Example, run llama model with onnxrt backend on cuda.
 
 ::
 
-    python -m experimental_experiment.torch_bench.dort_bench_profile --model model.onnx --inputs model.onnx.pkl
+    python -m experimental_experiment.torch_bench.dort_bench_profile \\
+           --model model.onnx --inputs model.onnx.pkl
     
 """
 

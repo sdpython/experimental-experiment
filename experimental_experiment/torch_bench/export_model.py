@@ -12,7 +12,8 @@ Example, run llama model with onnxrt backend on cuda.
 
 ::
 
-    python -m experimental_experiment.torch_bench.export_model --exporter torch_script --device cuda --config medium
+    python -m experimental_experiment.torch_bench.export_model \\
+           --exporter torch_script --device cuda --config medium
     
 """
 
@@ -150,7 +151,8 @@ def main(args=None):
         memory_stats = {}
 
         print(
-            f"Exporter model with exporter={args.exporter}, n_inputs={len(example_inputs[0])}"
+            f"Exporter model with exporter={args.exporter}, "
+            f"n_inputs={len(example_inputs[0])}"
         )
         if args.exporter == "eager":
             print("[export_model] start benchmark")

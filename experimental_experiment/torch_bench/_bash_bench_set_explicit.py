@@ -20,7 +20,7 @@ class ExplicitRunner(BenchmarkRunner):
         container.MODELS.update(
             {
                 "101Dummy": get_dummy_model,
-                "Speech2Text2ForCausalLMNotTrained": get_speech2text2_causal_ml_not_trained_model,
+                "Speech2Text2ForCausalLMNotTrained": get_speech2text2_causal_ml_not_trained_model,  # noqa: E501
             }
         )
 

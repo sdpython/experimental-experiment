@@ -88,7 +88,8 @@ class PatternOptimization:
 
     :param verbose: determine the verbosity, this can be also dermine by setting up
         environment variable ``LOG_PATTERN_OPTIMIZE=10``
-    :param priority: at each iteration, all patterns whose priority is below one threshold
+    :param priority: at each iteration,
+        all patterns whose priority is below one threshold
         are executed, if none of them matches, the priority is increase
     :param min_opset: can be applied if main opset is > min_opset
     """
@@ -119,7 +120,8 @@ class PatternOptimization:
         """
         if g.main_opset >= self.min_opset:
             matched = []
-            # g.iter_nodes() iterates on g.builder.nodes: -> too slow to have a secondary iterator
+            # g.iter_nodes() iterates on g.builder.nodes: ->
+            #   too slow to have a secondary iterator
             for node in g.builder.nodes:
                 # This expression seems awkard but it saves 10% just by looking into
                 # the first item of the list and then, if necessary, walking through the
@@ -459,9 +461,12 @@ class EasyPatternOptimization(PatternOptimization):
         :param pat: pattern
         :param marked: nodes of the pattern marked as already matched
         :param stacked: next node to look into
-        :param n: node coming from the graph, it can be a string to start from a result
-        :param ns: node coming from the pattern, it can be a string to start from a result
-        :return: number of matched nodes to continue, None or False to indicate a failed match
+        :param n: node coming from the graph,
+            it can be a string to start from a result
+        :param ns: node coming from the pattern,
+            it can be a string to start from a result
+        :return: number of matched nodes to continue,
+            None or False to indicate a failed match
         """
         res = 0
 
@@ -963,7 +968,8 @@ class EasyPatternOptimization(PatternOptimization):
                     sleft = f"{node.op_type}({node.input})->{node.output}"
                     print(
                         f"    {sleft}{' ' * (60 - len(sleft))}"
-                        f"MATCHED  {pat_node.op_type}({pat_node.input})->{pat_node.output}"
+                        f"MATCHED  {pat_node.op_type}"
+                        f"({pat_node.input})->{pat_node.output}"
                     )
 
         return MatchResult(self, matched_nodes, self.apply)

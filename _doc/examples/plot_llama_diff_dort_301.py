@@ -20,7 +20,8 @@ and produces all the intermediate onnx graphs.
 
 ::
 
-    python _doc/examples/plot_llama_diff_dort.py --part model --ortopt 1 --cuda 1 --backward 0 --mixed 1
+    python _doc/examples/plot_llama_diff_dort.py --part model --ortopt 1 \\
+            --cuda 1 --backward 0 --mixed 1
 
 You may use ``--mixed=1`` to compare the backward graphs.
 
@@ -329,7 +330,8 @@ print("debug:", inputs_from_onnx_model(model_debug, init=True))
 # Let's try the model with a python backend (reference implementation).
 # First step, onnxscript uses many functions. The reference evaluation expects
 # every function to be defined so the order of functions in the model matters.
-# No recursivity is allowed by this runtime. We need to reorder as function Rank is usually placed
+# No recursivity is allowed by this runtime.
+# We need to reorder as function Rank is usually placed
 # at the end of the model.
 
 reorder_functions_in_proto(model_onnxrt)

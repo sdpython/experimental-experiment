@@ -1651,7 +1651,8 @@ def merge_benchmark_reports(
     )
     if verbose:
         print(
-            f"[merge_benchmark_reports] done with shapes {res['AGG'].shape} and {res['AGG2'].shape}"
+            f"[merge_benchmark_reports] done with shapes "
+            f"{res['AGG'].shape} and {res['AGG2'].shape}"
         )
 
     names = res["AGG"].index.names
@@ -1755,9 +1756,7 @@ def merge_benchmark_reports(
 
     if excel_output:
         if verbose:
-            print(
-                f"[merge_benchmark_reports] apply Excel style with {excel_output!r}"
-            )
+            print(f"[merge_benchmark_reports] apply Excel style with {excel_output!r}")
         with pandas.ExcelWriter(excel_output) as writer:
             no_index = {
                 "0raw",

@@ -454,9 +454,10 @@ def prims_split_dim(
     assert isinstance(
         shape_dim, int
     ), f"Not implemented for a dynamic dimension {shape_dim}{g.get_debug_msg()}"
-    assert (
-        shape_dim % outer_length == 0
-    ), f"shape_dim={shape_dim} not a multiple of outer_length={outer_length}{g.get_debug_msg()}"
+    assert shape_dim % outer_length == 0, (
+        f"shape_dim={shape_dim} not a multiple of "
+        f"outer_length={outer_length}{g.get_debug_msg()}"
+    )
 
     inner_length = shape_dim // outer_length
     new_shape = shape[0:dim] + (outer_length, inner_length) + shape[dim + 1 :]

@@ -378,7 +378,8 @@ class WrapForTorch:
 
 class WrapInferenceSessionForTorch:
     def __init__(self, sess: Any):
-        # onnxruntime is importing when needed as it takes a couple of seconds if it contains CUDA EP.
+        # onnxruntime is importing when needed as it takes a
+        # couple of seconds if it contains CUDA EP.
         import onnxruntime
         import torch
         from onnxruntime.capi import _pybind_state as ORTC  # noqa: N812
@@ -535,7 +536,8 @@ def run_onnx_inference(
         print(f"[run_inference] create session with providers {providers!r}")
 
     begin = time.perf_counter()
-    # onnxruntime is importing when needed as it takes a couple of seconds if it contains CUDA EP.
+    # onnxruntime is importing when needed as it
+    # takes a couple of seconds if it contains CUDA EP.
     import onnxruntime
 
     so = onnxruntime.SessionOptions()

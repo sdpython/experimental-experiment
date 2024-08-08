@@ -259,7 +259,8 @@ def train_loop_mixed_precision(model, *args, loss_fn=None, optimizer=None):
         optimizer = torch.optim.SGD(model.parameters(), lr=1e-3)
 
     with torch.autocast(device_type="cuda", dtype=torch.float16):
-        # Set the model to training mode - important for batch normalization and dropout layers
+        # Set the model to training mode -
+        # important for batch normalization and dropout layers
         # Unnecessary in this situation but added for best practices
         model.train()
 

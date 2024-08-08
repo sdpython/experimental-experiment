@@ -180,9 +180,10 @@ class OxsOpset:
         :param kwargs: additional arguments
         :return: output name
         """
-        assert (
-            not op_type.startswith("Reduce") or self.builder.main_opset >= 18
-        ), f"Reduce operator {op_type!r} is not tested for opset < 18{self.builder.get_debug_msg()}"
+        assert not op_type.startswith("Reduce") or self.builder.main_opset >= 18, (
+            f"Reduce operator {op_type!r} is not tested for opset < 18"
+            f"{self.builder.get_debug_msg()}"
+        )
 
         if outputs is None:
             outputs = self._implemented[op_type]

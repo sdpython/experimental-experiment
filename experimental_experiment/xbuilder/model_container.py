@@ -188,7 +188,8 @@ class TorchModelContainer(ModelContainer):
                     or len(tensor_bytes) == np.prod(pt.shape) * 4
                 ), (
                     f"Unexpected size mismatch, buffer size is {len(tensor_bytes)}, "
-                    f"but tensor size={np.prod(pt.shape) * 4}, shape={pt.shape}, dtype={pt.dtype}"
+                    f"but tensor size={np.prod(pt.shape) * 4}, "
+                    f"shape={pt.shape}, dtype={pt.dtype}"
                 )
 
             if all_tensors_to_one_file:

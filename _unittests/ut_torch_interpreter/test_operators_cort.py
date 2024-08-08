@@ -1,11 +1,13 @@
 """
 to fail on error, use::
 
-    clear&&EXPDORAISE=1 python _unittests/ut_torch_interpreter/test_operators_cort.py -f -k relu
+    clear&&EXPDORAISE=1 \\
+    python _unittests/ut_torch_interpreter/test_operators_cort.py -f -k relu
 
 or::
 
-    clear&&EXPDORAISE=1 python _unittests/ut_torch_interpreter/test_operators_cort.py -f
+    clear&&EXPDORAISE=1 \\
+    python _unittests/ut_torch_interpreter/test_operators_cort.py -f
 """
 
 import copy
@@ -2423,7 +2425,8 @@ class TestOperatorsCort(ExtTestCase):
     @unittest.skipIf(not DYNAMIC_SHAPE_SUPPORTED, reason="dynamic shape")
     def test_shape_value_map(self):
         # Without shapeValueMap, the onnx graph looks like:
-        # graph(%0 : Float(*, 1, 128, 1, strides=[128, 128, 1, 1], requires_grad=0, device=cpu)):
+        # graph(%0 : Float(*, 1, 128, 1, strides=[128, 128, 1, 1],
+        #       requires_grad=0, device=cpu)):
         #   %2 : Long(4, strides=[1], device=cpu) = onnx::Shape(%0)
         #   %4 : Long(device=cpu) = onnx::Constant[value={0}]()
         #   %5 : Long(device=cpu) = onnx::Gather[axis=0](%2, %4)
@@ -2431,11 +2434,13 @@ class TestOperatorsCort(ExtTestCase):
         #   %7 : Long(device=cpu) = onnx::Constant[value={2}]()
         #   %8 : Long(device=cpu) = onnx::Constant[value={-1}]()
         #   %9 : int[] = prim::ListConstruct(%5, %6, %7, %8)
-        #   %10 : Float(*, *, *, *, strides=[128, 128, 64, 1], requires_grad=0, device=cpu) = onnx::Reshape(%0, %9)
+        #   %10 : Float(*, *, *, *, strides=[128, 128, 64, 1],
+        #       requires_grad=0, device=cpu) = onnx::Reshape(%0, %9)
         #   ...
         # With shapeValueMap, it becomes:
         #   ...
-        #   %10 : Float(*, 1, 2, 64, strides=[128, 128, 64, 1], requires_grad=0, device=cpu) = onnx::Reshape(%0, %9)
+        #   %10 : Float(*, 1, 2, 64, strides=[128, 128, 64, 1],
+        #       requires_grad=0, device=cpu) = onnx::Reshape(%0, %9)
         #   ...
         class RSoftMax(torch.nn.Module):
             def __init__(self, radix, cardinality):

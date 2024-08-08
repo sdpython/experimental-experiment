@@ -98,9 +98,10 @@ class Opset:
             if op_type in self._implemented:
                 outputs = self._implemented[op_type]
             elif op_type == "Split" and kwargs.get("domain", "") == "":
-                assert (
-                    "num_outputs" in kwargs
-                ), f"Number of outputs is not implemented yet for operator {op_type!r} and kwargs={kwargs}"
+                assert "num_outputs" in kwargs, (
+                    "Number of outputs is not implemented yet for operator "
+                    f"{op_type!r} and kwargs={kwargs}"
+                )
                 outputs = kwargs["num_outputs"]
             else:
                 # We assume there is only one outputs.

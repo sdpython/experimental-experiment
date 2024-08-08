@@ -50,7 +50,8 @@ class TorchBenchRunner(BenchmarkRunner):
             - vision_maskrcnn
 
         tolerance:
-        # Need lower tolerance on GPU. GPU kernels have non deterministic kernels for these models.
+        # Need lower tolerance on GPU. GPU kernels
+        # have non deterministic kernels for these models.
         higher:
             - alexnet
             - attention_is_all_you_need_pytorch
@@ -886,8 +887,10 @@ class TorchBenchRunner(BenchmarkRunner):
                     f"Unable to create class {benchmark_cls}, "
                     f"device={self.device}, batch_size={batch_size}, "
                     f"signature={[p for p in inspect.signature(benchmark_cls).parameters]}, "
-                    f"DEFAULT_EVAL_BSIZE={getattr(benchmark_cls, 'DEFAULT_EVAL_BSIZE', '?')}, "
-                    f"ALLOW_CUSTOMIZE_BSIZE={getattr(benchmark_cls, 'ALLOW_CUSTOMIZE_BSIZE', '?')}"
+                    f"DEFAULT_EVAL_BSIZE="
+                    f"{getattr(benchmark_cls, 'DEFAULT_EVAL_BSIZE', '?')}, "
+                    f"ALLOW_CUSTOMIZE_BSIZE="
+                    f"{getattr(benchmark_cls, 'ALLOW_CUSTOMIZE_BSIZE', '?')}"
                 ) from e
         if self.verbose:
             print(f"[{self.__class__.__name__}.load_model] clsname={benchmark}")
@@ -973,7 +976,7 @@ class TorchBenchRunner(BenchmarkRunner):
         model_names = [m for m in models if os.path.basename(m) in expected_models]
         assert len(model_names) >= len(expected_models), (
             f"Unexpected names {len(model_names)} < {len(expected_models)} (expected)"
-            f"\n--missing=\n{pprint.pformat(list(sorted(set(expected_models)-set(os.path.basename(m) for m in model_names))))}"
+            f"\n--missing=\n{pprint.pformat(list(sorted(set(expected_models)-set(os.path.basename(m) for m in model_names))))}"  # noqa: E501
             f"\n--canary_models=\n{pprint.pformat(self._config['canary_models'])}"
             f"\n--_list_canary_model_paths()=\n{pprint.pformat(_list_canary_model_paths())}"
             f"\n--_list_model_paths()=\n{pprint.pformat(_list_model_paths())}"

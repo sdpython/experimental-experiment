@@ -30,8 +30,8 @@ class TestFallbackOxs(ExtTestCase):
         import onnxscript.function_libs.torch_lib.ops.nn
 
         mods = {
-            "onnxscript.function_libs.torch_lib.ops.core": onnxscript.function_libs.torch_lib.ops.core,
-            "onnxscript.function_libs.torch_lib.ops.nn": onnxscript.function_libs.torch_lib.ops.nn,
+            "onnxscript.function_libs.torch_lib.ops.core": onnxscript.function_libs.torch_lib.ops.core,  # noqa: E501
+            "onnxscript.function_libs.torch_lib.ops.nn": onnxscript.function_libs.torch_lib.ops.nn,  # noqa: E501
         }
 
         reg = default_registry
@@ -65,8 +65,8 @@ class TestFallbackOxs(ExtTestCase):
         import onnxscript.function_libs.torch_lib.ops.nn
 
         mods = {
-            "onnxscript.function_libs.torch_lib.ops.core": onnxscript.function_libs.torch_lib.ops.core,
-            "onnxscript.function_libs.torch_lib.ops.nn": onnxscript.function_libs.torch_lib.ops.nn,
+            "onnxscript.function_libs.torch_lib.ops.core": onnxscript.function_libs.torch_lib.ops.core,  # noqa: E501
+            "onnxscript.function_libs.torch_lib.ops.nn": onnxscript.function_libs.torch_lib.ops.nn,  # noqa: E501
         }
 
         reg = default_registry
@@ -102,8 +102,8 @@ class TestFallbackOxs(ExtTestCase):
         import onnxscript.function_libs.torch_lib.ops.nn
 
         mods = {
-            "onnxscript.function_libs.torch_lib.ops.core": onnxscript.function_libs.torch_lib.ops.core,
-            "onnxscript.function_libs.torch_lib.ops.nn": onnxscript.function_libs.torch_lib.ops.nn,
+            "onnxscript.function_libs.torch_lib.ops.core": onnxscript.function_libs.torch_lib.ops.core,  # noqa: E501
+            "onnxscript.function_libs.torch_lib.ops.nn": onnxscript.function_libs.torch_lib.ops.nn,  # noqa: E501
         }
 
         reg = default_registry
@@ -139,8 +139,8 @@ class TestFallbackOxs(ExtTestCase):
         import onnxscript.function_libs.torch_lib.ops.nn
 
         mods = {
-            "onnxscript.function_libs.torch_lib.ops.core": onnxscript.function_libs.torch_lib.ops.core,
-            "onnxscript.function_libs.torch_lib.ops.nn": onnxscript.function_libs.torch_lib.ops.nn,
+            "onnxscript.function_libs.torch_lib.ops.core": onnxscript.function_libs.torch_lib.ops.core,  # noqa: E501
+            "onnxscript.function_libs.torch_lib.ops.nn": onnxscript.function_libs.torch_lib.ops.nn,  # noqa: E501
         }
 
         reg = default_registry
@@ -149,7 +149,8 @@ class TestFallbackOxs(ExtTestCase):
         fct = f.overloads[0]
         mod = mods[fct.function.__module__]
 
-        # def aten_gather(self: TReal, dim: int, index: TInt, sparse_grad: bool = False) -> TReal:
+        # def aten_gather(self: TReal, dim: int, index: TInt,
+        #   sparse_grad: bool = False) -> TReal:
 
         gr = GraphBuilder(18, ir_version=9)
         gr.make_tensor_input("X", TensorProto.INT64, ("a",), is_dimension=False)
