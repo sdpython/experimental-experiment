@@ -881,7 +881,7 @@ def merge_benchmark_reports(
         "machine",
         "processor",
         "processor_name",
-        "version",
+        "version_python",
         "version_onnx",
         "version_onnxruntime",
         "version_onnxscript",
@@ -1057,6 +1057,12 @@ def merge_benchmark_reports(
     elif isinstance(model, tuple):
         model = list(model)
     assert isinstance(model, list), f"Unexpected type {type(model)} for model={model}"
+
+    # Let's rename version into version_python
+    if "version" in df.columns:
+        df = df.copy()
+        df["version_python"] = df["version"]
+        df = df.drop("version", axis=1)
 
     if verbose:
         print(f"[merge_benchmark_reports] model={model!r}")
