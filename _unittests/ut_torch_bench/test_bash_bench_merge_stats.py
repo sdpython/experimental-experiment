@@ -73,7 +73,9 @@ class TestBashBenchMergeStats(ExtTestCase):
             os.path.join(ddata, "duplicate0.csv"),
             os.path.join(ddata, "duplicate2.csv"),
         ]
-        df = merge_benchmark_reports(data, excel_output="test_merge_stats_duplicate.xlsx")
+        df = merge_benchmark_reports(
+            data, excel_output="test_merge_stats_duplicate.xlsx"
+        )
         self.assertIsInstance(df, dict)
         self.assertIn("status", set(df))
         # self.assertIn("memory", set(df))
@@ -84,7 +86,9 @@ class TestBashBenchMergeStats(ExtTestCase):
     def test_merge_stats_bug_timm(self):
         ddata = os.path.join(os.path.dirname(__file__), "data")
         data = [os.path.join(ddata, "bug_timm.csv")]
-        df = merge_benchmark_reports(data, excel_output="test_merge_stats_bug_timm.xlsx")
+        df = merge_benchmark_reports(
+            data, excel_output="test_merge_stats_bug_timm.xlsx"
+        )
         self.assertIsInstance(df, dict)
         self.assertIn("status", set(df))
         self.assertIn("memory", set(df))
@@ -95,7 +99,9 @@ class TestBashBenchMergeStats(ExtTestCase):
     def test_merge_stats_bug_one_export(self):
         ddata = os.path.join(os.path.dirname(__file__), "data")
         data = [os.path.join(ddata, "bug_one_export.csv")]
-        df = merge_benchmark_reports(data, excel_output="test_merge_stats_bug_one_export.xlsx")
+        df = merge_benchmark_reports(
+            data, excel_output="test_merge_stats_bug_one_export.xlsx"
+        )
         self.assertIsInstance(df, dict)
         self.assertIn("status", set(df))
         self.assertIn("memory", set(df))
@@ -106,7 +112,9 @@ class TestBashBenchMergeStats(ExtTestCase):
     def test_merge_stats_bug_op_onnx(self):
         ddata = os.path.join(os.path.dirname(__file__), "data")
         data = [os.path.join(ddata, "bug_op_onnx.csv")]
-        df = merge_benchmark_reports(data, excel_output="test_merge_stats_bug_op_onnx.xlsx")
+        df = merge_benchmark_reports(
+            data, excel_output="test_merge_stats_bug_op_onnx.xlsx"
+        )
         self.assertIsInstance(df, dict)
         self.assertIn("status", set(df))
         self.assertIn("memory", set(df))
@@ -132,7 +140,9 @@ class TestBashBenchMergeStats(ExtTestCase):
     def test_merge_stats_many_days(self):
         ddata = os.path.join(os.path.dirname(__file__), "data", "rawdata")
         data = [os.path.join(ddata, "*.csv")]
-        df = merge_benchmark_reports(data, excel_output="test_merge_stats_many_days.xlsx")
+        df = merge_benchmark_reports(
+            data, excel_output="test_merge_stats_many_days.xlsx"
+        )
         self.assertIsInstance(df, dict)
         self.assertIn("status", set(df))
         self.assertIn("memory", set(df))
@@ -155,7 +165,9 @@ class TestBashBenchMergeStats(ExtTestCase):
         agg = df["AGG"].reset_index(drop=False)
         sp = agg[(agg["cat"] == "speedup") & (agg["agg"] == "GEO-MEAN")]
         values = sp["HuggingFace"].values
-        self.assertEqualArray(np.array([0.952044, 0.000001, 1.020653]), values, atol=1e-5)
+        self.assertEqualArray(
+            np.array([0.952044, 0.000001, 1.020653]), values, atol=1e-5
+        )
         summary = df["SUMMARY"]
         self.assertNotIn("_dummy_", summary.columns)
         values = summary.values
@@ -169,7 +181,9 @@ class TestBashBenchMergeStats(ExtTestCase):
     @ignore_warnings((FutureWarning,))
     def test_merge_stats_bug_cpu_cuda(self):
         data = os.path.join(os.path.dirname(__file__), "data", "bug_cpu_cuda.csv")
-        df = merge_benchmark_reports(data, excel_output="test_merge_stats_bug_cpu_cuda.xlsx")
+        df = merge_benchmark_reports(
+            data, excel_output="test_merge_stats_bug_cpu_cuda.xlsx"
+        )
         self.assertIsInstance(df, dict)
         self.assertIn("status", set(df))
         self.assertIn("memory", set(df))
