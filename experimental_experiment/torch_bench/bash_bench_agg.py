@@ -82,7 +82,7 @@ def main(args=None):
         verbose=int(res.verbose),
         output_clean_raw_data=res.save_raw,
         baseline=res.baseline,
-        exc=args.quiet not in (1, "1", True, "True"),
+        exc=res.quiet not in (1, "1", True, "True"),
         **kwargs,
     )
 

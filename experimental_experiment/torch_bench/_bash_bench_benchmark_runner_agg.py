@@ -73,6 +73,16 @@ def _SELECTED_FEATURES():
             "with higher discrepancies than expected.",
         ),
         dict(
+            cat="status",
+            agg="MEAN",
+            stat="pass_rate",
+            new_name="pass rate",
+            unit="%",
+            help="Proportion of models successfully converted into ONNX, "
+            "with a maximum discrepancy < 0.1 and a speedup > 0.98.",
+            simple=True,
+        ),
+        dict(
             cat="time",
             agg="COUNT%",
             stat="export_success",
@@ -393,9 +403,9 @@ def _SELECTED_FEATURES():
         ag = "torch_script" if s else "eager"
         features.append(
             dict(
-                cat="bucket_script" if s else "bucket",
+                cat="bucket",
                 agg="MEAN",
-                stat=bs,
+                stat=b,
                 new_name=f"speedup/script in {bs}" if s else f"speedup in {bs}",
                 unit="%",
                 help=f"Proportion of models whose speedup against {ag} "
@@ -709,7 +719,7 @@ def _apply_excel_style(
                         cell.number_format = fmt
             continue
 
-        if k in ("bucket", "bucket_script", "status", "op_onnx", "op_torch"):
+        if k in ("bucket", "status", "op_onnx", "op_torch"):
             has_convert = [("convert" in str(c)) for c in v.columns]
             has_20 = [("-20%" in str(c)) for c in v.columns]
             assert k != "status" or any(
@@ -735,7 +745,7 @@ def _apply_excel_style(
                         idx = cell.col_idx - n_cols - 1
                         if has_convert[idx]:
                             cell.fill = yellow
-                    elif k in ("bucket", "bucket_script"):
+                    elif k in ("bucket",):
                         idx = cell.col_idx - n_cols - 1
                         if has_20[idx]:
                             cell.fill = redf
@@ -903,7 +913,14 @@ def merge_benchmark_reports(
         "memory_*",
         "mem_*",
     ),
-    formulas=("memory_peak", "buckets", "status", "memory_delta", "control_flow"),
+    formulas=(
+        "memory_peak",
+        "buckets",
+        "status",
+        "memory_delta",
+        "control_flow",
+        "pass_rate",
+    ),
     excel_output: Optional[str] = None,
     exc: bool = True,
     filter_in: Optional[str] = None,
@@ -1098,10 +1115,22 @@ def merge_benchmark_reports(
         print(f"[merge_benchmark_reports] new shape={df.shape}")
 
     # replace nan values
+    # groupby do not like nan values
     set_columns = set(df.columns)
     for c in ["opt_patterns", "ERR_export", "ERR_warmup"]:
         if c in set_columns:
             df[c] = df[c].fillna("-")
+
+    # replace nan values in key columns
+    # groupby do not like nan values
+    for c in keys:
+        if c in set_columns:
+            if c.startswith("flag"):
+                df[c] = df[c].astype(bool).fillna(False)
+            elif c in {"dynamic"}:
+                df[c] = df[c].fillna(0)
+            else:
+                df[c] = df[c].fillna("-")
 
     res = {"0raw": df}
 
@@ -1164,7 +1193,6 @@ def merge_benchmark_reports(
             df.to_csv(nn)
 
     # formulas
-    bucket_columns = []
     for expr in formulas:
         if verbose:
             print(f"[merge_benchmark_reports] process formula={expr}")
@@ -1237,6 +1265,14 @@ def merge_benchmark_reports(
                 col_name = "memory_peak_gpu_warmup"
                 df[col_name] = df["mema_gpu_8_after_export_warmup"]
                 report_on.append(col_name)
+            continue
+
+        if expr == "pass_rate":
+            if "discrepancies_abs" in set_columns and "speedup" in set_columns:
+                col = (df["discrepancies_abs"] <= 0.1) & (df["speedup"] >= 0.98)
+                df["status_pass_rate"] = col.astype(int)
+                df.loc[df["discrepancies_abs"].isna(), "status_pass_rate"] = np.nan
+                report_on.append("status_pass_rate")
             continue
 
         if expr == "status":
@@ -1322,15 +1358,21 @@ def merge_benchmark_reports(
                 if c not in set_columns:
                     continue
                 scale = BUCKET_SCALES
+                ind = df["speedup_increase"].isna()
                 for i in range(1, len(scale)):
                     val = (df[c] >= scale[i - 1] / 100) & (df[c] < scale[i] / 100)
                     v1 = f"{scale[i-1]}%" if not np.isinf(scale[i - 1]) else ""
                     v2 = f"{scale[i]}%" if not np.isinf(scale[i]) else ""
-                    d = f"[{v1},{v2}[" if v1 and v2 else (f"<{v2}" if v2 else f">={v1}")
+                    suf = (
+                        f"[{v1},{v2}[" if v1 and v2 else (f"<{v2}" if v2 else f">={v1}")
+                    )
                     if c == "speedup_increase_script":
-                        d = f"script {d}"
-                    bucket_columns.append(d)
+                        d = f"bucket_script {suf}"
+                    else:
+                        d = f"bucket_{suf}"
                     df[d] = val.astype(int)
+                    df.loc[ind, d] = np.nan
+                    report_on.append(d)
             continue
 
     if verbose:
@@ -1349,65 +1391,6 @@ def merge_benchmark_reports(
 
     if verbose:
         print(f"[merge_benchmark_reports] {len(res)} metrics")
-
-    # buckets
-    if bucket_columns:
-        keepc = [*new_keys, *model, *bucket_columns, "speedup_increase"]
-        table = df[keepc].copy()
-
-        if verbose:
-            print(
-                f"[merge_benchmark_reports] speed up buckets with shape={table.shape}"
-            )
-
-        pcolumns = [c for c in new_keys if c not in model]
-        index_col = model
-        pivot = table[~table[index_col[0]].isna()].pivot(
-            index=index_col, columns=pcolumns, values=bucket_columns
-        )
-
-        # the following code switches places between exporter and buckets
-        tpiv = pivot.T.reset_index(drop=False)
-
-        def _order(index):
-            order = BUCKETS
-            if index.name in pcolumns:
-                return index
-            position = {v: i for i, v in enumerate(order)}
-            return [position[s] for s in index]
-
-        if verbose:
-            print(f"[merge_benchmark_reports] bucket shape={tpiv.shape}")
-
-        l0 = [c for c in tpiv.columns if "level_0" in c]
-        if len(l0) == 1:
-            cl0 = l0[0]
-            cl1 = (
-                "stat"
-                if isinstance(cl0, str)
-                else tuple(("stat" if i == "level_0" else i) for i in cl0)
-            )
-            tpiv[cl1] = tpiv[cl0]
-            tpiv = tpiv.drop(cl0, axis=1)
-            if verbose:
-                print(
-                    f"[merge_benchmark_reports] bucket script shape ({len(tpiv[cl1])})"
-                )
-
-            tpiv1 = tpiv[~tpiv.stat.str.startswith("script")]
-            tpiv2 = tpiv[tpiv.stat.str.startswith("script")].copy()
-            tpiv1 = tpiv1.set_index([*pcolumns, "stat"]).sort_index(key=_order).T.copy()
-            res["bucket"] = tpiv1.fillna(0).astype(int)
-
-            if tpiv2.shape[0] > 0:
-                tpiv2["stat"] = tpiv2["stat"].apply(lambda s: s[len("script ") :])
-                tpiv2 = (
-                    tpiv2.set_index([*pcolumns, "stat"]).sort_index(key=_order).T.copy()
-                )
-                res["bucket_script"] = tpiv2.fillna(0).astype(int)
-
-            if verbose:
-                print(f"[merge_benchmark_reports] bucket script shape {tpiv2.shape}")
 
     # let's remove empty variables
     if verbose:
@@ -1573,6 +1556,7 @@ def merge_benchmark_reports(
         "op_torch_",
         "mempeak_",
         "speedup_",
+        "bucket_",
     ]:
         merge = [k for k in res if k.startswith(prefix)]
         merge.sort()
@@ -1761,6 +1745,11 @@ def merge_benchmark_reports(
 
                 final_res[f"{name}_diff"] = df_num.sort_index(axis=1)
 
+    # cleaning empty raw and columns
+    for _, v in final_res.items():
+        v.dropna(axis=0, how="all", inplace=True)
+        v.dropna(axis=1, how="all", inplace=True)
+
     if excel_output:
         if verbose:
             print(f"[merge_benchmark_reports] apply Excel style with {excel_output!r}")
@@ -1943,6 +1932,7 @@ def _create_aggregation_figures(
     exc: bool = True,
 ) -> Dict[str, "pandas.DataFrame"]:  # noqa: F821
     import pandas
+    from pandas.errors import PerformanceWarning
 
     assert key in model, f"Key {key!r} missing in model={model!r}"
     model_not_key = [c for c in model if c != key]
@@ -2001,21 +1991,27 @@ def _create_aggregation_figures(
         def _geo_mean(serie):
             nonan = serie.dropna()
             if len(nonan) == 0:
-                return 0.0
+                return np.nan
             res = np.exp(np.log(np.maximum(nonan, 1e-10)).mean())
             return res
 
+        def _propnan(df, is_nan):
+            df[is_nan] = np.nan
+            return df
+
         gr_no_nan = v.fillna(0).groupby(key)
         total = gr_no_nan.count()
+        is_nan = gr_no_nan.count() - gr.count() == total
         stats = [
+            ("NAN", _propnan(is_nan.astype(int), is_nan)),
             ("MEAN", gr.mean()),
             ("MEDIAN", gr.median()),
-            ("SUM", gr.sum()),
+            ("SUM", _propnan(gr.sum(), is_nan)),
             ("MIN", gr.min()),
             ("MAX", gr.max()),
-            ("COUNT", gr.count()),
-            ("COUNT%", gr.count() / total),
-            ("TOTAL", total),
+            ("COUNT", _propnan(gr.count(), is_nan)),
+            ("COUNT%", _propnan(gr.count() / total, is_nan)),
+            ("TOTAL", _propnan(total, is_nan)),
         ]
         if k.startswith("speedup"):
             try:
@@ -2061,7 +2057,9 @@ def _create_aggregation_figures(
 
         if "stat" in df.columns.names:
             with warnings.catch_warnings():
-                warnings.simplefilter("ignore", category=FutureWarning)
+                warnings.simplefilter(
+                    "ignore", category=(FutureWarning, PerformanceWarning)
+                )
                 df = df.stack("stat")
             if not isinstance(df, pandas.DataFrame):
                 assert (
@@ -2231,7 +2229,7 @@ def _select_metrics(
             df["value"] = df[cs]
             df = df.drop(cs, axis=1)
             df.columns = list(str(c) for c in df.columns)
-            dfs.append(df)
+            dfs.append(df[~df["value"].isna()])
         dfi = pandas.concat(dfs, axis=0).reset_index(drop=True)
     return dfi, suites
 
@@ -2292,6 +2290,7 @@ def _select_model_metrics(
     stack_levels: Sequence[str],
 ) -> "pandas.DataFrame":  # noqa: F821
     import pandas
+    from pandas.errors import PerformanceWarning
 
     concat = []
     for i, metric in enumerate(select):
@@ -2303,7 +2302,7 @@ def _select_model_metrics(
         )
         if new_name.startswith("average "):
             new_name = new_name[len("average ") :]
-        if agg in {"TOTAL", "COUNT", "COUNT%", "MAX", "SUM"}:
+        if agg in {"TOTAL", "COUNT", "COUNT%", "MAX", "SUM", "NAN"}:
             continue
         name = f"{cat}_{stat}"
         if name not in res:
@@ -2327,7 +2326,9 @@ def _select_model_metrics(
         for c in stack_levels:
             if c in df.columns.names:
                 with warnings.catch_warnings():
-                    warnings.simplefilter("ignore", category=FutureWarning)
+                    warnings.simplefilter(
+                        "ignore", category=(FutureWarning, PerformanceWarning)
+                    )
                     df = df.stack(c, dropna=np.nan)
     df = df.sort_index(axis=1)
     return df
