@@ -5,309 +5,408 @@ from collections import Counter
 from typing import Optional, Dict, List, Sequence, Set, Union
 import numpy as np
 
-SELECTED_FEATURES = [
-    dict(
-        cat="time",
-        stat="ITER",
-        agg="TOTAL",
-        new_name="number of models",
-        unit="N",
-        help="Number of models evaluated in this document.",
-    ),
-    dict(
-        cat="status",
-        stat="control_flow",
-        agg="SUM",
-        new_name="number of control flow",
-        unit="N",
-        help="torch.export.export does not work because of a "
-        "control flow, in practice, this column means torch.export.export "
-        "succeeds, this metric is only available if the data of exporter "
-        "'export' or 'compile' is aggregated",
-    ),
-    dict(
-        cat="time",
-        stat="ITER",
-        agg="SUM",
-        new_name="benchmark duration",
-        unit="s",
-        help="Total duration of the benchmark",
-    ),
-    dict(
-        cat="speedup",
-        agg="COUNT",
-        stat="increase",
-        new_name="number of running models",
-        unit="N",
-        help="Number of models converted and running with onnxruntime. "
-        "The outputs may be right or wrong. Unit test ensures every aten functions "
-        "is correctly converted but the combination may produce outputs "
-        "with higher discrepancies than expected.",
-    ),
-    dict(
-        cat="time",
-        agg="COUNT%",
-        stat="export_success",
-        new_name="export rate",
-        unit="%",
-        help="Proportion of models successfully converted into ONNX. "
-        "The ONNX model may not be run through onnxruntime or with "
-        "significant discrepancies.",
-    ),
-    dict(
-        cat="speedup",
-        agg="COUNT%",
-        stat="increase",
-        new_name="run rate",
-        unit="%",
-        help="Proportion of models successfully converted into ONNX "
-        "and onnxruntime can run it. "
-        "The outputs may be right or wrong. Unit test ensures every aten functions "
-        "is correctly converted but the combination may produce outputs "
-        "with higher discrepancies than expected.",
-    ),
-    dict(
-        cat="time",
-        agg="MEAN",
-        stat="export_success",
-        new_name="average export time",
-        unit="s",
-        help="Average export time when the export succeeds. "
-        "The model may not run through onnxruntime and the model "
-        "may produce higher discrepancies than expected (lower is better).",
-    ),
-    dict(
-        cat="speedup",
-        agg="GEO-MEAN",
-        stat="1speedup",
-        new_name="average speedup (geo)",
-        unit="x",
-        help="Geometric mean of all speedup for all model converted and runnning.",
-    ),
-    # e-1
-    dict(
-        cat="status",
-        agg="MEAN",
-        stat="err<1e-1",
-        new_name="discrepancies < 0.1",
-        unit="%",
-        help="Proportion of models for which the maximum discrepancies is "
-        "below 0.1 for all outputs.",
-    ),
-    dict(
-        cat="status",
-        agg="MEAN",
-        stat="err_0<1e-1",
-        new_name="discrepancies first output < 0.1",
-        unit="%",
-        help="Proportion of models for which the maximum discrepancies is "
-        "below 0.1 for the first output.",
-    ),
-    dict(
-        cat="status",
-        agg="MEAN",
-        stat="err_1+<1e-1",
-        new_name="discrepancies second+ output < 0.1",
-        unit="%",
-        help="Proportion of models for which the maximum discrepancies is "
-        "below 0.1 for all the outputs except the first one.",
-    ),
-    # e-2
-    dict(
-        cat="status",
-        agg="MEAN",
-        stat="err<1e-2",
-        new_name="discrepancies < 0.01",
-        unit="%",
-        help="Proportion of models for which the maximum discrepancies is "
-        "below 0.01 for all outputs.",
-    ),
-    dict(
-        cat="status",
-        agg="MEAN",
-        stat="err_0<1e-2",
-        new_name="discrepancies first output < 0.01",
-        unit="%",
-        help="Proportion of models for which the maximum discrepancies is "
-        "below 0.01 for the first output.",
-    ),
-    dict(
-        cat="status",
-        agg="MEAN",
-        stat="err_1+<1e-2",
-        new_name="discrepancies second+ output < 0.01",
-        unit="%",
-        help="Proportion of models for which the maximum discrepancies is "
-        "below 0.01 for all the outputs except the first one.",
-    ),
-    dict(
-        cat="status",
-        agg="MEAN",
-        stat="lat<=script+2%",
-        new_name="model equal or faster than torch.script",
-        unit="%",
-        help="Proportion of models successfully converted with torch.script "
-        "and the other exporter, and the second exporter is as fast or faster "
-        "than torch.script.",
-    ),
-    dict(
-        cat="status",
-        agg="MEAN",
-        stat="lat<=eager+2%",
-        new_name="model equal or faster than eager",
-        unit="%",
-        help="Proportion of models as fast or faster than torch eager mode.",
-    ),
-    dict(
-        cat="time",
-        stat="ITER",
-        agg="MEAN",
-        new_name="average iteration time",
-        unit="s",
-        help="Average total time per model and scenario. "
-        "It usually reflects how long the export time is (lower is better).",
-    ),
-    dict(
-        cat="discrepancies",
-        stat="avg",
-        agg="MEAN",
-        new_name="average average discrepancies",
-        unit="f",
-        help="Average of average absolute discrepancies "
-        "assuming it can be measured (lower is better).",
-    ),
-    dict(
-        cat="discrepancies",
-        stat="abs",
-        agg="MEAN",
-        new_name="average absolute discrepancies",
-        unit="f",
-        help="Average maximum absolute discrepancies "
-        "assuming it can be measured (lower is better).",
-    ),
-    # dict(
-    #    cat="discrepancies",
-    #    stat="abs_0",
-    #    agg="MEAN",
-    #    new_name="average absolute discrepancies first output",
-    #    unit="f",
-    #    help="Average maximum absolute discrepancies "
-    #    "for the first output assuming it can be measured (lower is better).",
-    # ),
-    # dict(
-    #    cat="discrepancies",
-    #    stat="abs_1+",
-    #    agg="MEAN",
-    #    new_name="average absolute discrepancies second+ output",
-    #    unit="f",
-    #    help="Average maximum absolute discrepancies "
-    #    "for all the outputs except the first one "
-    #    "assuming it can be measured (lower is better).",
-    # ),
-    dict(
-        cat="time",
-        agg="MEAN",
-        stat="latency_eager",
-        new_name="average latency eager",
-        unit="s",
-        help="Average latency for eager mode (lower is better)",
-    ),
-    dict(
-        cat="time",
-        agg="MEAN",
-        stat="latency",
-        new_name="average latency ort",
-        unit="s",
-        help="Average latency for onnxruntime (lower is better)",
-    ),
-    dict(
-        cat="onnx",
-        agg="MEAN",
-        stat="weight_size_torch",
-        new_name="average weight size",
-        unit="bytes",
-        help="Average parameters size, this gives a kind of order "
-        "of magnitude for the memory peak",
-    ),
-    dict(
-        cat="onnx",
-        agg="MEAN",
-        stat="weight_size_proto",
-        new_name="average weight size in ModelProto",
-        unit="bytes",
-        help="Average parameters size in the model proto, "
-        "this gives a kind of order of magnitude for the memory peak "
-        "this should be close to the parameter size",
-    ),
-    dict(
-        cat="onnx",
-        agg="MAX",
-        stat="weight_size_torch",
-        new_name="maximum weight size",
-        unit="bytes",
-        help="Maximum parameters size, "
-        "useful to guess how much this machine can handle",
-    ),
-    dict(
-        cat="onnx",
-        agg="MAX",
-        stat="weight_size_proto",
-        new_name="maximum weight size in ModelProto",
-        unit="bytes",
-        help="Maximum parameters size in the model proto, "
-        "useful to guess how much this machine can handle",
-    ),
-    dict(
-        cat="memory",
-        agg="MEAN",
-        stat="peak_gpu_eager_warmup",
-        new_name="average GPU peak (eager warmup)",
-        unit="bytes",
-        help="Average GPU peak while warming up eager mode (torch metric)",
-    ),
-    dict(
-        cat="memory",
-        agg="MEAN",
-        stat="peak_gpu_warmup",
-        new_name="average GPU peak (warmup)",
-        unit="bytes",
-        help="Average GPU peak while warming up onnxruntime (torch metric)",
-    ),
-    dict(
-        cat="memory",
-        agg="MEAN",
-        stat="peak_cpu_pp",
-        new_name="average CPU peak",
-        unit="Mb",
-        help="Average CPU peak while warming up onnxruntime"
-        "(measured in a secondary process)",
-    ),
-    dict(
-        cat="memory",
-        agg="MEAN",
-        stat="peak_gpu_pp",
-        new_name="average GPU peak",
-        unit="Mb",
-        help="Average GPU peak while converting the model "
-        "(measured in a secondary process)",
-    ),
-    dict(
-        cat="memory",
-        agg="MEAN",
-        stat="peak_gpu_export",
-        new_name="average GPU peak (export)",
-        unit="bytes",
-        help="Average GPU peak while converting the model " "(torch metric)",
-    ),
-    dict(
-        cat="speedup",
-        agg="MEAN",
-        stat="increase",
-        new_name="average speedup increase",
-        unit="%",
-        help="Average speedup increase compare to eager mode.",
-    ),
+BUCKET_SCALES = [-np.inf, -20, -10, -5, -2, 0, 2, 5, 10, 20, np.inf]
+BUCKETS = [
+    "<-20%",
+    "[-20%,-10%[",
+    "[-10%,-5%[",
+    "[-5%,-2%[",
+    "[-2%,0%[",
+    "[0%,2%[",
+    "[2%,5%[",
+    "[5%,10%[",
+    "[10%,20%[",
+    ">=20%",
+    "script <-20%",
+    "script [-20%,-10%[",
+    "script [-10%,-5%[",
+    "script [-5%,-2%[",
+    "script [-2%,0%[",
+    "script [0%,2%[",
+    "script [2%,5%[",
+    "script [5%,10%[",
+    "script [10%,20%[",
+    "script >=20%",
 ]
+
+
+def _SELECTED_FEATURES():
+    features = [
+        dict(
+            cat="time",
+            stat="ITER",
+            agg="TOTAL",
+            new_name="number of models",
+            unit="N",
+            help="Number of models evaluated in this document.",
+            simple=True,
+        ),
+        dict(
+            cat="status",
+            stat="control_flow",
+            agg="SUM",
+            new_name="number of control flow",
+            unit="N",
+            help="torch.export.export does not work because of a "
+            "control flow, in practice, this column means torch.export.export "
+            "succeeds, this metric is only available if the data of exporter "
+            "'export' or 'compile' is aggregated",
+            simple=True,
+        ),
+        dict(
+            cat="time",
+            stat="ITER",
+            agg="SUM",
+            new_name="benchmark duration",
+            unit="s",
+            help="Total duration of the benchmark",
+        ),
+        dict(
+            cat="speedup",
+            agg="COUNT",
+            stat="increase",
+            new_name="number of running models",
+            unit="N",
+            help="Number of models converted and running with onnxruntime. "
+            "The outputs may be right or wrong. Unit test ensures every aten functions "
+            "is correctly converted but the combination may produce outputs "
+            "with higher discrepancies than expected.",
+        ),
+        dict(
+            cat="time",
+            agg="COUNT%",
+            stat="export_success",
+            new_name="export rate",
+            unit="%",
+            help="Proportion of models successfully converted into ONNX. "
+            "The ONNX model may not be run through onnxruntime or with "
+            "significant discrepancies.",
+            simple=True,
+        ),
+        dict(
+            cat="speedup",
+            agg="COUNT%",
+            stat="increase",
+            new_name="run rate",
+            unit="%",
+            help="Proportion of models successfully converted into ONNX "
+            "and onnxruntime can run it. "
+            "The outputs may be right or wrong. Unit test ensures every aten functions "
+            "is correctly converted but the combination may produce outputs "
+            "with higher discrepancies than expected.",
+        ),
+        dict(
+            cat="time",
+            agg="MEAN",
+            stat="export_success",
+            new_name="average export time",
+            unit="s",
+            help="Average export time when the export succeeds. "
+            "The model may not run through onnxruntime and the model "
+            "may produce higher discrepancies than expected (lower is better).",
+            simple=True,
+        ),
+        dict(
+            cat="speedup",
+            agg="GEO-MEAN",
+            stat="1speedup",
+            new_name="average speedup (geo)",
+            unit="x",
+            help="Geometric mean of all speedup for all model converted and runnning.",
+            simple=True,
+        ),
+        # e-1
+        dict(
+            cat="status",
+            agg="MEAN",
+            stat="err<1e-1",
+            new_name="discrepancies < 0.1",
+            unit="%",
+            help="Proportion of models for which the maximum discrepancies is "
+            "below 0.1 for all outputs.",
+            simple=True,
+        ),
+        dict(
+            cat="status",
+            agg="MEAN",
+            stat="err_0<1e-1",
+            new_name="discrepancies first output < 0.1",
+            unit="%",
+            help="Proportion of models for which the maximum discrepancies is "
+            "below 0.1 for the first output.",
+        ),
+        dict(
+            cat="status",
+            agg="MEAN",
+            stat="err_1+<1e-1",
+            new_name="discrepancies second+ output < 0.1",
+            unit="%",
+            help="Proportion of models for which the maximum discrepancies is "
+            "below 0.1 for all the outputs except the first one.",
+        ),
+        # e-2
+        dict(
+            cat="status",
+            agg="MEAN",
+            stat="err<1e-2",
+            new_name="discrepancies < 0.01",
+            unit="%",
+            help="Proportion of models for which the maximum discrepancies is "
+            "below 0.01 for all outputs.",
+        ),
+        dict(
+            cat="status",
+            agg="MEAN",
+            stat="err_0<1e-2",
+            new_name="discrepancies first output < 0.01",
+            unit="%",
+            help="Proportion of models for which the maximum discrepancies is "
+            "below 0.01 for the first output.",
+        ),
+        dict(
+            cat="status",
+            agg="MEAN",
+            stat="err_1+<1e-2",
+            new_name="discrepancies second+ output < 0.01",
+            unit="%",
+            help="Proportion of models for which the maximum discrepancies is "
+            "below 0.01 for all the outputs except the first one.",
+        ),
+        dict(
+            cat="status",
+            agg="MEAN",
+            stat="lat<=script+2%",
+            new_name="model equal or faster than torch.script",
+            unit="%",
+            help="Proportion of models successfully converted with torch.script "
+            "and the other exporter, and the second exporter is as fast or faster "
+            "than torch.script.",
+            simple=True,
+        ),
+        dict(
+            cat="status",
+            agg="MEAN",
+            stat="lat<=eager+2%",
+            new_name="model equal or faster than eager",
+            unit="%",
+            help="Proportion of models as fast or faster than torch eager mode.",
+            simple=True,
+        ),
+        dict(
+            cat="time",
+            stat="ITER",
+            agg="MEAN",
+            new_name="average iteration time",
+            unit="s",
+            help="Average total time per model and scenario. "
+            "It usually reflects how long the export time is (lower is better).",
+        ),
+        dict(
+            cat="discrepancies",
+            stat="avg",
+            agg="MEAN",
+            new_name="average average discrepancies",
+            unit="f",
+            help="Average of average absolute discrepancies "
+            "assuming it can be measured (lower is better).",
+        ),
+        dict(
+            cat="discrepancies",
+            stat="abs",
+            agg="MEAN",
+            new_name="average absolute discrepancies",
+            unit="f",
+            help="Average maximum absolute discrepancies "
+            "assuming it can be measured (lower is better).",
+        ),
+        # dict(
+        #    cat="discrepancies",
+        #    stat="abs_0",
+        #    agg="MEAN",
+        #    new_name="average absolute discrepancies first output",
+        #    unit="f",
+        #    help="Average maximum absolute discrepancies "
+        #    "for the first output assuming it can be measured (lower is better).",
+        # ),
+        # dict(
+        #    cat="discrepancies",
+        #    stat="abs_1+",
+        #    agg="MEAN",
+        #    new_name="average absolute discrepancies second+ output",
+        #    unit="f",
+        #    help="Average maximum absolute discrepancies "
+        #    "for all the outputs except the first one "
+        #    "assuming it can be measured (lower is better).",
+        # ),
+        dict(
+            cat="time",
+            agg="MEAN",
+            stat="latency_eager",
+            new_name="average latency eager",
+            unit="s",
+            help="Average latency for eager mode (lower is better)",
+        ),
+        dict(
+            cat="time",
+            agg="MEAN",
+            stat="latency",
+            new_name="average latency ort",
+            unit="s",
+            help="Average latency for onnxruntime (lower is better)",
+        ),
+        dict(
+            cat="onnx",
+            agg="MEAN",
+            stat="weight_size_torch",
+            new_name="average weight size",
+            unit="bytes",
+            help="Average parameters size, this gives a kind of order "
+            "of magnitude for the memory peak",
+        ),
+        dict(
+            cat="onnx",
+            agg="MEAN",
+            stat="weight_size_proto",
+            new_name="average weight size in ModelProto",
+            unit="bytes",
+            help="Average parameters size in the model proto, "
+            "this gives a kind of order of magnitude for the memory peak "
+            "this should be close to the parameter size",
+        ),
+        dict(
+            cat="onnx",
+            agg="MAX",
+            stat="weight_size_torch",
+            new_name="maximum weight size",
+            unit="bytes",
+            help="Maximum parameters size, "
+            "useful to guess how much this machine can handle",
+        ),
+        dict(
+            cat="onnx",
+            agg="MAX",
+            stat="weight_size_proto",
+            new_name="maximum weight size in ModelProto",
+            unit="bytes",
+            help="Maximum parameters size in the model proto, "
+            "useful to guess how much this machine can handle",
+        ),
+        dict(
+            cat="memory",
+            agg="MEAN",
+            stat="peak_gpu_eager_warmup",
+            new_name="average GPU peak (eager warmup)",
+            unit="bytes",
+            help="Average GPU peak while warming up eager mode (torch metric)",
+        ),
+        dict(
+            cat="memory",
+            agg="MEAN",
+            stat="delta_peak_gpu_eager_warmup",
+            new_name="average GPU peak (eager warmup)",
+            unit="bytes",
+            help="Average GPU peak of allocated memory while warming up eager "
+            "mode (torch metric)",
+        ),
+        dict(
+            cat="memory",
+            agg="MEAN",
+            stat="peak_gpu_warmup",
+            new_name="average GPU peak (warmup)",
+            unit="bytes",
+            help="Average GPU peak while warming up onnxruntime (torch metric)",
+        ),
+        dict(
+            cat="memory",
+            agg="MEAN",
+            stat="delta_peak_gpu_warmup",
+            new_name="average GPU peak (warmup)",
+            unit="bytes",
+            help="Average GPU peak of allocated memory while warming up "
+            "onnxruntime (torch metric)",
+        ),
+        dict(
+            cat="memory",
+            agg="MEAN",
+            stat="peak_cpu_pp",
+            new_name="average CPU peak",
+            unit="Mb",
+            help="Average CPU peak while warming up onnxruntime"
+            "(measured in a secondary process)",
+        ),
+        dict(
+            cat="memory",
+            agg="MEAN",
+            stat="delta_peak_cpu_pp",
+            new_name="average CPU peak",
+            unit="Mb",
+            help="Average CPU peak of allocated memory while warming "
+            "up onnxruntime (measured in a secondary process)",
+        ),
+        dict(
+            cat="memory",
+            agg="MEAN",
+            stat="peak_gpu_pp",
+            new_name="average GPU peak",
+            unit="Mb",
+            help="Average GPU peak while converting the model "
+            "(measured in a secondary process)",
+        ),
+        dict(
+            cat="memory",
+            agg="MEAN",
+            stat="delta_peak_gpu_pp",
+            new_name="average GPU peak",
+            unit="Mb",
+            help="Average GPU peak of allocated emory while "
+            "converting the model (measured in a secondary process)",
+        ),
+        dict(
+            cat="memory",
+            agg="MEAN",
+            stat="peak_gpu_export",
+            new_name="average GPU peak (export)",
+            unit="bytes",
+            help="Average GPU peak while converting the model " "(torch metric)",
+        ),
+        dict(
+            cat="memory",
+            agg="MEAN",
+            stat="delta_peak_gpu_export",
+            new_name="average GPU peak (export)",
+            unit="bytes",
+            help="Average GPU peak of allocated memory "
+            "while converting the model (torch metric)",
+        ),
+        dict(
+            cat="speedup",
+            agg="MEAN",
+            stat="increase",
+            new_name="average speedup increase",
+            unit="%",
+            help="Average speedup increase compare to eager mode.",
+        ),
+    ]
+    for b in BUCKETS:
+        s = "script" in b
+        bs = b.replace("script ", "")
+        ag = "torch_script" if s else "eager"
+        features.append(
+            dict(
+                cat="bucket_script" if s else "bucket",
+                agg="MEAN",
+                stat=bs,
+                new_name=f"speedup/script in {bs}" if s else f"speedup in {bs}",
+                unit="%",
+                help=f"Proportion of models whose speedup against {ag} "
+                f"falls into this interval",
+                simple=True,
+            )
+        )
+    return features
+
+
+SELECTED_FEATURES = _SELECTED_FEATURES()
 
 FILTERS = {
     "HG": [
@@ -662,6 +761,9 @@ def _apply_excel_style(
             "SUMMARY2_base",
             "SUMMARY2_diff",
             "SUMMARY_diff",
+            "SIMPLE",
+            "SIMPLE_base",
+            "SIMPLE_diff",
         }:
             fmt = {
                 "x": "0.000",
@@ -1213,7 +1315,7 @@ def merge_benchmark_reports(
             for c in ["speedup_increase", "speedup_increase_script"]:
                 if c not in set_columns:
                     continue
-                scale = [-np.inf, -20, -10, -5, -2, 2, 5, 10, 20, np.inf]
+                scale = BUCKET_SCALES
                 for i in range(1, len(scale)):
                     val = (df[c] >= scale[i - 1] / 100) & (df[c] < scale[i] / 100)
                     v1 = f"{scale[i-1]}%" if not np.isinf(scale[i - 1]) else ""
@@ -1262,53 +1364,39 @@ def merge_benchmark_reports(
         tpiv = pivot.T.reset_index(drop=False)
 
         def _order(index):
+            order = BUCKETS
             if index.name in pcolumns:
                 return index
-            order = [
-                "<-20%",
-                "[-20%,-10%[",
-                "[-10%,-5%[",
-                "[-5%,-2%[",
-                "[-2%,2%[",
-                "[2%,5%[",
-                "[5%,10%[",
-                "[10%,20%[",
-                ">=20%",
-                "script <-20%",
-                "script [-20%,-10%[",
-                "script [-10%,-5%[",
-                "script [-5%,-2%[",
-                "script [-2%,2%[",
-                "script [2%,5%[",
-                "script [5%,10%[",
-                "script [10%,20%[",
-                "script >=20%",
-            ]
             position = {v: i for i, v in enumerate(order)}
             return [position[s] for s in index]
 
         if verbose:
             print(f"[merge_benchmark_reports] bucket shape={tpiv.shape}")
 
-        if "level_0" in tpiv.columns:
+        l0 = [c for c in tpiv.columns if "level_0" in c]
+        if len(l0) == 1:
+            cl0 = l0[0]
+            cl1 = (
+                "stat"
+                if isinstance(cl0, str)
+                else tuple(("stat" if i == "level_0" else i) for i in cl0)
+            )
+            tpiv[cl1] = tpiv[cl0]
+            tpiv = tpiv.drop(cl0, axis=1)
             if verbose:
                 print(
-                    f"[merge_benchmark_reports] bucket script shape ({len(tpiv.level_0)})"
+                    f"[merge_benchmark_reports] bucket script shape ({len(tpiv[cl1])})"
                 )
 
-            tpiv1 = tpiv[~tpiv.level_0.str.startswith("script")]
-            tpiv2 = tpiv[tpiv.level_0.str.startswith("script")].copy()
-            tpiv1 = (
-                tpiv1.set_index([*pcolumns, "level_0"]).sort_index(key=_order).T.copy()
-            )
+            tpiv1 = tpiv[~tpiv.stat.str.startswith("script")]
+            tpiv2 = tpiv[tpiv.stat.str.startswith("script")].copy()
+            tpiv1 = tpiv1.set_index([*pcolumns, "stat"]).sort_index(key=_order).T.copy()
             res["bucket"] = tpiv1.fillna(0).astype(int)
 
             if tpiv2.shape[0] > 0:
-                tpiv2["level_0"] = tpiv2["level_0"].apply(lambda s: s[len("script ") :])
+                tpiv2["stat"] = tpiv2["stat"].apply(lambda s: s[len("script ") :])
                 tpiv2 = (
-                    tpiv2.set_index([*pcolumns, "level_0"])
-                    .sort_index(key=_order)
-                    .T.copy()
+                    tpiv2.set_index([*pcolumns, "stat"]).sort_index(key=_order).T.copy()
                 )
                 res["bucket_script"] = tpiv2.fillna(0).astype(int)
 
@@ -1514,7 +1602,7 @@ def merge_benchmark_reports(
     if verbose:
         print("[merge_benchmark_reports] enforce numerical values")
     for k, v in res.items():
-        if k in {"0main", "MODELS"}:
+        if k in {"0main"}:
             continue
         for c in v.columns:
             if "output_names" in c or "input_names" in c:
@@ -1551,8 +1639,6 @@ def merge_benchmark_reports(
             "0main",
             "op_onnx",
             "op_torch",
-            "bucket",
-            "bucket_script",
             "MODELS",
         },
         model=model,
@@ -1606,25 +1692,33 @@ def merge_benchmark_reports(
 
     if verbose:
         print(f"[merge_benchmark_reports] done with {len(final_res)} sheets")
-        print("[merge_benchmark_reports] creates SUMMARY")
+        print("[merge_benchmark_reports] creates SUMMARY, SUMMARY2, SIMPLE")
 
-    final_res["SUMMARY"], suites = _select_metrics(res["AGG"], select=SELECTED_FEATURES)
+    final_res["SUMMARY"], suites = _select_metrics(
+        res["AGG"], select=SELECTED_FEATURES, prefix="SUMMARY"
+    )
+    final_res["SIMPLE"], suites = _select_metrics(
+        res["AGG"],
+        select=[f for f in SELECTED_FEATURES if f.get("simple", False)],
+        prefix="SIMPLE",
+    )
     final_res["SUMMARY2"], suites = _select_metrics(
-        res["AGG2"], select=SELECTED_FEATURES
+        res["AGG2"], select=SELECTED_FEATURES, prefix="SUMMARY2"
     )
 
     if verbose:
         print(
             f"[merge_benchmark_reports] done with shapes "
-            f"{final_res['SUMMARY'].shape} and {final_res['SUMMARY2'].shape}"
+            f"{final_res['SUMMARY'].shape}, {final_res['SUMMARY2'].shape}, "
+            f"{final_res['SIMPLE'].shape}"
         )
 
     if base_dfs:
-        for name in {"0main", "0raw", "SUMMARY", "SUMMARY2", "MODELS"}:
+        for name in {"0main", "0raw", "SUMMARY", "SUMMARY2", "MODELS", "SIMPLE"}:
             if name in base_dfs:
                 final_res[f"{name}_base"] = base_dfs[name]
 
-        for name in {"SUMMARY", "SUMMARY2", "MODELS"}:
+        for name in {"SUMMARY", "SUMMARY2", "MODELS", "SIMPLE"}:
             if name in base_dfs and name in final_res:
                 drop = []
                 df_str = final_res[name].select_dtypes("object")
@@ -1661,9 +1755,18 @@ def merge_benchmark_reports(
 
     if excel_output:
         if verbose:
-            print(f"[merge_benchmark_reports] apply Excel style with {excel_output!r}")
+            print(
+                f"[merge_benchmark_reports] apply Excel style with {excel_output!r}"
+            )
         with pandas.ExcelWriter(excel_output) as writer:
-            no_index = {"0raw", "0main", "SUMMARY", "SUMMARY_base", "SUMMARY_diff"}
+            no_index = {
+                "0raw",
+                "0main",
+                "SUMMARY",
+                "SUMMARY_base",
+                "SIMPLE",
+                "SIMPLE_base",
+            }
             first_sheet = ["0main"]
             last_sheet = [
                 "ERR",
@@ -1701,6 +1804,8 @@ def merge_benchmark_reports(
                     and "suite" in ev.columns.names
                 ):
                     ev = _reorder_columns_level(ev, first_level=["suite"], prefix=k)
+                elif k == "MODELS":
+                    ev = _reorder_columns_level(ev, first_level=["#order"], prefix=k)
                 ev.to_excel(
                     writer,
                     sheet_name=k,
@@ -2100,6 +2205,24 @@ def _select_metrics(
     cols.extend([c for c in dfi.columns if "unit" in c])
     cols.extend([c for c in dfi.columns if "~help" in c])
     dfi = dfi[cols].sort_values(cols[:-2])
+    if prefix == "SIMPLE":
+        # flat table
+        import pandas
+
+        col_suites = [c for c in dfi.columns if c in suites]
+        dfs = []
+        for cs in col_suites:
+            to_drop = [c for c in col_suites if c != cs]
+            if to_drop:
+                df = dfi.drop(to_drop, axis=1).copy()
+            else:
+                df = dfi.copy()
+            df["suite"] = cs
+            df["value"] = df[cs]
+            df = df.drop(cs, axis=1)
+            df.columns = list(str(c) for c in df.columns)
+            dfs.append(df)
+        dfi = pandas.concat(dfs, axis=0).reset_index(drop=True)
     return dfi, suites
 
 
@@ -2161,7 +2284,7 @@ def _select_model_metrics(
     import pandas
 
     concat = []
-    for metric in select:
+    for i, metric in enumerate(select):
         cat, stat, new_name, agg = (
             metric["cat"],
             metric["stat"],
@@ -2179,14 +2302,14 @@ def _select_model_metrics(
         cols = list(df.columns)
         if len(cols) == 1:
             col = (cols[0],) if isinstance(cols[0], str) else tuple(cols[0])
-            col = (cat, stat, new_name) + col
-            names = ["cat", "stat", "full_name"] + df.columns.names
+            col = (i, cat, stat, new_name) + col
+            names = ["#order", "cat", "stat", "full_name"] + df.columns.names
             df.columns = pandas.MultiIndex.from_tuples([col], names=names)
             concat.append(df)
         else:
             cols = [((c,) if isinstance(c, str) else tuple(c)) for c in cols]
-            cols = [(cat, stat, new_name) + c for c in cols]
-            names = ["cat", "stat", "full_name"] + df.columns.names
+            cols = [(i, cat, stat, new_name) + c for c in cols]
+            names = ["#order", "cat", "stat", "full_name"] + df.columns.names
             df.columns = pandas.MultiIndex.from_tuples(cols, names=names)
             concat.append(df)
     df = pandas.concat(concat, axis=1)
@@ -2197,5 +2320,4 @@ def _select_model_metrics(
                     warnings.simplefilter("ignore", category=FutureWarning)
                     df = df.stack(c, dropna=np.nan)
     df = df.sort_index(axis=1)
-
     return df
