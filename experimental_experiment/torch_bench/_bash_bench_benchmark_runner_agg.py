@@ -378,7 +378,7 @@ def _SELECTED_FEATURES():
             stat="peak_gpu_export",
             new_name="average GPU peak (export)",
             unit="bytes",
-            help="Average GPU peak while converting the model " "(torch metric)",
+            help="Average GPU peak while converting the model (torch metric)",
         ),
         dict(
             cat="memory",
@@ -1687,15 +1687,15 @@ def merge_benchmark_reports(
         print(f"[merge_benchmark_reports] done with {len(final_res)} sheets")
         print("[merge_benchmark_reports] creates SUMMARY, SUMMARY2, SIMPLE")
 
-    final_res["SUMMARY"], suites = _select_metrics(
+    final_res["SUMMARY"], _suites = _select_metrics(
         res["AGG"], select=SELECTED_FEATURES, prefix="SUMMARY"
     )
-    final_res["SIMPLE"], suites = _select_metrics(
+    final_res["SIMPLE"], _suites = _select_metrics(
         res["AGG"],
         select=[f for f in SELECTED_FEATURES if f.get("simple", False)],
         prefix="SIMPLE",
     )
-    final_res["SUMMARY2"], suites = _select_metrics(
+    final_res["SUMMARY2"], _suites = _select_metrics(
         res["AGG2"], select=SELECTED_FEATURES, prefix="SUMMARY2"
     )
 
@@ -1747,7 +1747,7 @@ def merge_benchmark_reports(
                 final_res[f"{name}_diff"] = df_num.sort_index(axis=1)
 
     # cleaning empty raw and columns
-    for _, v in final_res.items():
+    for v in final_res.values():
         v.dropna(axis=0, how="all", inplace=True)
         v.dropna(axis=1, how="all", inplace=True)
 
@@ -2228,7 +2228,7 @@ def _select_metrics(
             df["suite"] = cs
             df["value"] = df[cs]
             df = df.drop(cs, axis=1)
-            df.columns = list(str(c) for c in df.columns)
+            df.columns = [str(c) for c in df.columns]
             dfs.append(df[~df["value"].isna()])
         dfi = pandas.concat(dfs, axis=0).reset_index(drop=True)
     return dfi, suites
@@ -2311,14 +2311,14 @@ def _select_model_metrics(
         cols = list(df.columns)
         if len(cols) == 1:
             col = (cols[0],) if isinstance(cols[0], str) else tuple(cols[0])
-            col = (i, cat, stat, new_name) + col
-            names = ["#order", "cat", "stat", "full_name"] + df.columns.names
+            col = (i, cat, stat, new_name, *col)
+            names = ["#order", "cat", "stat", "full_name", *df.columns.names]
             df.columns = pandas.MultiIndex.from_tuples([col], names=names)
             concat.append(df)
         else:
             cols = [((c,) if isinstance(c, str) else tuple(c)) for c in cols]
-            cols = [(i, cat, stat, new_name) + c for c in cols]
-            names = ["#order", "cat", "stat", "full_name"] + df.columns.names
+            cols = [(i, cat, stat, new_name, *c) for c in cols]
+            names = ["#order", "cat", "stat", "full_name", *df.columns.names]
             df.columns = pandas.MultiIndex.from_tuples(cols, names=names)
             concat.append(df)
     df = pandas.concat(concat, axis=1)

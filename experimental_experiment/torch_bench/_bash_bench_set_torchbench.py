@@ -872,7 +872,7 @@ class TorchBenchRunner(BenchmarkRunner):
                 raise AssertionError(
                     f"Unable to create class {benchmark_cls}, "
                     f"device={self.device}, batch_size={batch_size}, "
-                    f"signature={[p for p in inspect.signature(benchmark_cls).parameters]}, "
+                    f"signature={list(p for p in inspect.signature(benchmark_cls).parameters)}, "  # noqa: E501
                     f"DEFAULT_EVAL_BSIZE="
                     f"{getattr(benchmark_cls, 'DEFAULT_EVAL_BSIZE', '?')}, "
                     f"ALLOW_CUSTOMIZE_BSIZE="
