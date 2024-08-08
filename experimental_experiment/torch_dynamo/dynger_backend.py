@@ -137,7 +137,7 @@ def dynger_backend(
 
         for i, node in enumerate(exported_mod.graph.nodes):
             if node.op in ("call_function", "call_method"):
-                node.target = lambda *args, __=node.target, _args=node.args, _name=node.name, **kwargs: _identity(
+                node.target = lambda *args, __=node.target, _args=node.args, _name=node.name, **kwargs: _identity(  # noqa: E501
                     __, _args, _name, *args, **kwargs
                 )
                 continue

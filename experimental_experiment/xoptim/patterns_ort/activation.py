@@ -10,7 +10,8 @@ class GeluOrtPattern(GeluPattern):
 
     .. math::
 
-        y = \\frac{x}{2} \\left(1 + \\tanh\\left(\\sqrt{\\frac{2}{\\pi}} (x + 0.044715 * x^3)\\rigth)\\rigth)
+        y = \\frac{x}{2} \\left(1 + \\tanh\\left(\\sqrt{\\frac{2}{\\pi}}
+        (x + 0.044715 * x^3)\\rigth)\\rigth)
     """
 
     def __init__(

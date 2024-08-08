@@ -286,7 +286,8 @@ class GraphBuilderPatternOptimization:
                 ):
                     if exc:
                         raise AssertionError(
-                            f"Incompatibilities, output is constant when input is not in node {proto}."
+                            f"Incompatibilities, output is constant "
+                            f"when input is not in node {proto}."
                         )
                     return None
                 return self.get_constant_shape(proto.input[0], exc=exc)
@@ -434,9 +435,10 @@ class GraphBuilderPatternOptimization:
         for att in node.attribute:
             if att.name == attribute:
                 found = att
-        assert (
-            found is None
-        ), f"get_constant_or_attribute not implemented for attribute={attribute!r} and node={node}."
+        assert found is None, (
+            f"get_constant_or_attribute not implemented "
+            f"for attribute={attribute!r} and node={node}."
+        )
         assert input_index < len(
             node.input
         ), f"Input {input_index} does not exist in node {node}."
@@ -881,7 +883,8 @@ class GraphBuilderPatternOptimization:
             f.write(model.SerializeToString())
         if self.verbose >= 10:
             print(
-                f"[GraphBuilderPatternOptimization._save_pattern_as_proto] saved {fullname!r}"
+                f"[GraphBuilderPatternOptimization._save_pattern_as_proto] "
+                f"saved {fullname!r}"
             )
 
         name = f"{match.pattern.__class__.__name__}_{n}_apply.onnx"
@@ -890,7 +893,8 @@ class GraphBuilderPatternOptimization:
             f.write(model_apply.SerializeToString())
         if self.verbose >= 10:
             print(
-                f"[GraphBuilderPatternOptimization._save_pattern_as_proto] saved {fullname!r}"
+                f"[GraphBuilderPatternOptimization._save_pattern_as_proto] "
+                f"saved {fullname!r}"
             )
 
     def _check_graph(self, statistics, step, iteration, code, verifies):
@@ -1236,7 +1240,8 @@ class GraphBuilderPatternOptimization:
 
             if self.verbose > 2:
                 print(
-                    f"[GraphBuilderPatternOptimization.optimize] done all: -{n_removed} +{n_added} nodes"
+                    f"[GraphBuilderPatternOptimization.optimize] done all: "
+                    f"-{n_removed} +{n_added} nodes"
                 )
 
             if remove_identity and (it < 3 or "Identity" in added_types):
@@ -1284,7 +1289,8 @@ class GraphBuilderPatternOptimization:
         if self.verbose > 0:
             duration = time.perf_counter() - begin_all
             print(
-                f"[GraphBuilderPatternOptimization.optimize] done after {last_it} iterations with "
+                f"[GraphBuilderPatternOptimization.optimize] "
+                f"done after {last_it} iterations with "
                 f"{len(self.builder.nodes)} nodes in {duration:.3f}"
             )
             if self.verbose > 1:

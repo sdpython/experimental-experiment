@@ -52,8 +52,10 @@ def _get_session(
                 assert hasattr(
                     onnxruntime.GraphOptimizationLevel, ort_optimization_level
                 ), (
-                    f"Unexpected value {ort_optimization_level!r} for GraphOptimizationLevel, "
-                    f"expecting one of the values in {dir(onnxruntime.GraphOptimizationLevel)}"
+                    f"Unexpected value {ort_optimization_level!r} "
+                    f"for GraphOptimizationLevel, "
+                    f"expecting one of the values in "
+                    f"{dir(onnxruntime.GraphOptimizationLevel)}"
                 )
                 opts.graph_optimization_level = getattr(
                     onnxruntime.GraphOptimizationLevel, ort_optimization_level

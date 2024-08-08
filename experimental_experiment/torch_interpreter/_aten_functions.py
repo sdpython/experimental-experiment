@@ -2093,9 +2093,10 @@ def aten_index_Tensor(
                 name="index2_Tensor",
             )
             to_add = list(i for i in range(len(indices)) if i != position)
-            assert (
-                len(to_add) > 0
-            ), f"Unexpected value for to_add={to_add}, position={position}, indices={indices}"
+            assert len(to_add) > 0, (
+                f"Unexpected value for to_add={to_add}, "
+                f"position={position}, indices={indices}"
+            )
             # res = g.op.UnsqueezeAnyOpset(
             #     temp, np.array(to_add, dtype=np.int64), outputs=outputs
             # )

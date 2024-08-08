@@ -427,8 +427,10 @@ class ReshapeMatMulReshapePattern(PatternOptimization):
         # and the Reshape after restores it. They can safely be removed.
         if g.verbose > 3:
             print(
-                f"[ReshapeMatMulReshapePattern] compatible shapes: mshape_left={mshape_left} "
-                f"shape_left={shape_left} | mshape_left={mshape_right} shape_left={shape_right}"
+                f"[ReshapeMatMulReshapePattern] compatible shapes: "
+                f"mshape_left={mshape_left} "
+                f"shape_left={shape_left} | mshape_left={mshape_right} "
+                f"shape_left={shape_right}"
             )
 
         return MatchResult(

@@ -4,7 +4,8 @@
 102: Measure LLAMA speed
 ========================
 
-The script is calling many times the script ``experimental_experiment.torch_bench.dort_bench.py``.
+The script is calling many times the script
+``experimental_experiment.torch_bench.dort_bench.py``.
 
 ::
 
@@ -14,19 +15,25 @@ For exemple, to check mixed precision on multiple backend:
 
 ::
 
-    python _doc/examples/plot_llama_bench_102.py --device=cuda --num_hidden_layers=2 --mixed=1
+    python _doc/examples/plot_llama_bench_102.py \\
+           --device=cuda --num_hidden_layers=2 --mixed=1
 
 ::
 
-    python _doc/examples/plot_llama_bench_102.py --device=cuda --num_hidden_layers=2 --mixed=1 --backend=eager,dynger,ortmodule,inductor,ort+,custom --config=large
+    python _doc/examples/plot_llama_bench_102.py --device=cuda --num_hidden_layers=2 \\
+           --mixed=1 --backend=eager,dynger,ortmodule,inductor,ort+,custom --config=large
 
 With 32Gb GPU memory, the script runs with 6 layers.
 
 ::
 
-    python _doc/examples/plot_llama_bench_102.py --device=cuda --num_hidden_layers=6 --mixed=1 --backend=eager,dynger,ortmodule,inductor,trt,ort+,custom --config=large
+    python _doc/examples/plot_llama_bench_102.py --device=cuda \\
+           --num_hidden_layers=6 --mixed=1 \\
+           --backend=eager,dynger,ortmodule,inductor,trt,ort+,custom --config=large
 
-    python _doc/examples/plot_llama_bench_102.py --device=cuda --num_hidden_layers=2 --mixed=1 --backend=eager,ort+,custom --config=large
+    python _doc/examples/plot_llama_bench_102.py --device=cuda \\
+           --num_hidden_layers=2 --mixed=1 \\
+           --backend=eager,ort+,custom --config=large
 
 Run the following command to run one experiment and get the available options:
 
@@ -46,7 +53,8 @@ parsed_args = get_parsed_args(
     model=("llama", "model to benchmark"),
     backend=(
         "eager,dynger,inductor,ort,ort+,custom,ortmodule",
-        "backend to test, among eager,dynger,inductor,ort,ort+,custom,plug,ortmodule,backort",
+        "backend to test, among eager,dynger,inductor,"
+        "ort,ort+,custom,plug,ortmodule,backort",
     ),
     device=("cuda" if check_cuda_availability() else "cpu", "device to test"),
     num_hidden_layers=("1", "hidden layers to test"),

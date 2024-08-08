@@ -45,7 +45,8 @@ class TestCustomOpsOnnxScript(ExtTestCase):
                             fname = att.s
                     if fname == b"_scaled_dot_product_efficient_attention_backward":
                         print(
-                            "[modify_onnx] ATen, delete last output for _scaled_dot_product_efficient_attention_backward"
+                            "[modify_onnx] ATen, delete last output for "
+                            "_scaled_dot_product_efficient_attention_backward"
                         )
                         outputs = list(node.output)
                         del node.output[:]
@@ -184,7 +185,8 @@ class TestCustomOpsOnnxScript(ExtTestCase):
                     if verbose:
                         print(f"[make_aot_ort] register {names[-1]!r}")
 
-            # from onnxruntime.training.ortmodule.torch_cpp_extensions.cuda import load_aten_op_executor_cpp_extension
+            # from onnxruntime.training.ortmodule.torch_cpp_extensions.cuda
+            # import load_aten_op_executor_cpp_extension
             from onnxruntime.training.ortmodule.torch_cpp_extensions import (
                 aten_op_executor,
             )

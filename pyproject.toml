@@ -10,13 +10,9 @@ exclude = [
 ]
 
 # Same as Black.
-line-length = 88
+line-length = 93
 
-[tool.ruff.lint.mccabe]
-# Unlike Flake8, default to a complexity level of 10.
-max-complexity = 10
-
-[tool.ruff.lint.per-file-ignores]
+[tool.ruff.extend-per-file-ignores]
 "_doc/examples/plot_*.py" = ["E402"]
 "_doc/examples/plot_first_example.py" = ["F811"]
 "experimental_experiment/checks.py" = ["F401"]

@@ -49,7 +49,8 @@ class Dispatcher:
         if key not in self.registered_functions:
             if self.verbose > 3:
                 print(
-                    f"[Dispatcher.find_function] could not find a function for key={key!r} with name={name!r}"
+                    f"[Dispatcher.find_function] could not find a "
+                    f"function for key={key!r} with name={name!r}"
                 )
             return None
 
@@ -159,7 +160,8 @@ class ForceDispatcher(Dispatcher):
                 sig.parameters.values(),
             )
         )
-        # If there is annotation, we assume every result = None without annotation is an optional Tensor.
+        # If there is annotation, we assume every result = None
+        # without annotation is an optional Tensor.
         for name, p in sig.parameters.items():
             ann = p.annotation
             if p.default is inspect._empty:
@@ -261,7 +263,8 @@ class ForceDispatcher(Dispatcher):
                 if not sig:
                     if self.strict:
                         raise RuntimeError(
-                            f"Unsupported type {type(n)} for argument {i} for function {_name!r}{g.get_debug_msg()}"
+                            f"Unsupported type {type(n)} for argument {i} "
+                            f"for function {_name!r}{g.get_debug_msg()}"
                         )
                     kwargs[f"param_{i}"] = n
                     continue

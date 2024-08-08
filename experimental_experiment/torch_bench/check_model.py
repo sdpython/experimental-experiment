@@ -4,7 +4,8 @@ Check Model
 
 ::
 
-    python -m experimental_experiment.torch_bench.check_model --test optimizer --model dump3bug.onnx
+    python -m experimental_experiment.torch_bench.check_model \\
+           --test optimizer --model dump3bug.onnx
 """
 
 from experimental_experiment.args import get_parsed_args

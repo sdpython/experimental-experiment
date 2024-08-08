@@ -172,8 +172,8 @@ class TestBashBenchMergeStats(ExtTestCase):
         summary = df["SUMMARY"]
         self.assertNotIn("_dummy_", summary.columns)
         values = summary.values
-        self.assertEqual(0.9520435772282563, values[6, 3])
-        self.assertEqual("x", values[6, 4])
+        self.assertEqual(0.9520435772282563, values[7, 3])
+        self.assertEqual("x", values[7, 4])
         metrics = set(summary["METRIC"])
         self.assertIn("number of running models", metrics)
         self.assertIn("export rate", metrics)
@@ -238,13 +238,26 @@ class TestBashBenchMergeStats(ExtTestCase):
         for k, v in df.items():
             sh = v.shape
             if k == "speedup":
-                self.assertEqual(sh, (12, 3))
+                self.assertEqual(sh, (9, 3))
         df = merge_benchmark_reports(
             data,
             excel_output="test_merge_stats_filter_hg_none.xlsx",
             filter_in="model_name:NONE",
         )
         self.assertEqual(df, {})
+
+    @ignore_warnings((FutureWarning,))
+    def test_merge_stats_diff(self):
+        base = os.path.join(os.path.dirname(__file__), "data", "baseline.csv")
+        data = os.path.join(os.path.dirname(__file__), "data", "baseline2.csv")
+        dfs = merge_benchmark_reports(
+            data,
+            excel_output="test_merge_stats_diff.xlsx",
+            baseline=base,
+        )
+        self.assertIn("SUMMARY2_diff", dfs)
+        self.assertIn("MODELS_diff", dfs)
+        self.assertIn("SUMMARY_diff", dfs)
 
 
 if __name__ == "__main__":

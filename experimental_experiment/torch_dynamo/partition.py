@@ -149,7 +149,8 @@ def backend_partition_compile(
             fused_module = getattr(partitioned_prim_graph_module.wrapped, node.name)
             if verbose:
                 print(
-                    f"[backend_partition_compile] fused_node={node.name!r}, id={id(fused_module)}"
+                    f"[backend_partition_compile] fused_node={node.name!r}, "
+                    f"id={id(fused_module)}"
                 )
             fused_module._wrapped_call = PartionedBackend(
                 fused_module,

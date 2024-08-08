@@ -119,7 +119,8 @@ def _extract_metrics(text: str) -> Dict[str, str]:
             or len(w) < 500
         ):
             warnings.warn(
-                f"Unexpected long value for model={kw.get('model_name', '?')}, k={k!r}, value has length {len(w)} is\n{w}"
+                f"Unexpected long value for model={kw.get('model_name', '?')}, "
+                f"k={k!r}, value has length {len(w)} is\n{w}"
             )
             continue
         try:
@@ -417,7 +418,7 @@ def measure_discrepancies(
             assert (
                 torch_tensor.shape == onnx_tensor.shape
             ), f"Type mismatch {torch_tensor.shape} != {onnx_tensor.shape}"
-            diff = torch_tensor - onnx_tensor
+            diff = torch_tensor.astype(float) - onnx_tensor.astype(float)
             abs_err = float(diff.abs().max())
             rel_err = float((diff.abs() / torch_tensor).max())
             abs_errs.append(abs_err)

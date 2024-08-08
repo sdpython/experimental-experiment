@@ -3,7 +3,9 @@ Use:
 
 ::
 
-    LOG_PATTERN_OPTIMIZE=10 python _unittests/ut_xoptim/test_graph_pattern_optimization.py -k test_rotary_concat_part_plug 
+    LOG_PATTERN_OPTIMIZE=10 \\
+    python _unittests/ut_xoptim/test_graph_pattern_optimization.py \\
+        -k test_rotary_concat_part_plug 
 """
 
 import os

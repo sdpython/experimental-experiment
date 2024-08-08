@@ -2,7 +2,8 @@
 Benchmark Aggregator
 ====================
 
-Calls :func:`experimental_experiment.torch_bench._bash_bench_benchmark_runner.merge_benchmark_reports`.
+Calls :func:`merge_benchmark_reports
+<experimental_experiment.torch_bench._bash_bench_benchmark_runner.merge_benchmark_reports>`.
 
 ::
 
@@ -37,6 +38,22 @@ def main(args=None):
         help="skip the differences on those columns, example: "
         "``--skip_keys=version,version_onnxscript,version_torch``",
     )
+    parser.add_argument(
+        "--save_raw",
+        default="",
+        help="save the concatanated cleaned raw data in a csv file",
+    )
+    parser.add_argument(
+        "--baseline",
+        default="",
+        help="a csv file containing the baseline the new figures "
+        "needs to be compared to",
+    )
+    parser.add_argument(
+        "--quiet",
+        default=0,
+        help="avoid raising an exception if it fails",
+    )
     parser.add_argument("--verbose", default=0, help="verbosity level")
     res = parser.parse_args(args=args)
 
@@ -63,6 +80,9 @@ def main(args=None):
         filter_in=res.filter_in,
         filter_out=res.filter_out,
         verbose=int(res.verbose),
+        output_clean_raw_data=res.save_raw,
+        baseline=res.baseline,
+        exc=res.quiet not in (1, "1", True, "True"),
         **kwargs,
     )
 

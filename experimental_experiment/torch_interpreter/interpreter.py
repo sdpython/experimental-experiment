@@ -24,7 +24,8 @@ class DynamoInterpreter:
         see function `_retrieve
         <experimental_experiment.torch_interpreter.onnx_export._retrieve>`.
     :param dispatcher: see :class:`experimental_experiment.torch_interpreter.Dispatcher`
-    :param use_dynamo: see :func:`to_onnx <experimental_experiment.torch_interpreter.to_onnx>`
+    :param use_dynamo: see
+        :func:`to_onnx <experimental_experiment.torch_interpreter.to_onnx>`
     """
 
     def _hash(self) -> str:
@@ -892,20 +893,23 @@ class DynamoInterpreter:
             if len(output_names) != 1:
                 if output_names != list(res):
                     raise NotImplementedError(
-                        f"Unexpected output_names {output_names}, res={res!r}, node.name={node.name!r}"
+                        f"Unexpected output_names {output_names}, "
+                        f"res={res!r}, node.name={node.name!r}"
                     )
             elif isinstance(res, list) and len(res) != 1:
                 # SplitToSequence rewritten into a Split
                 name = output_names[0]
                 assert all(map(lambda s: s.startswith(name), res)), (
-                    f"Unexpected output_names={output_names}, res={res}, node.name={node.name}"
+                    f"Unexpected output_names={output_names}, "
+                    f"res={res}, node.name={node.name}"
                     f"{self.builder.get_debug_msg()}"
                 )
                 # nothing to do
                 res = tuple(res)
             elif res != node.name:
                 assert isinstance(res, str), (
-                    f"Unexpected res={res}, output_names={output_names}, node.name={node.name}"
+                    f"Unexpected res={res}, output_names={output_names}, "
+                    f"node.name={node.name}"
                     f"{self.builder.get_debug_msg()}"
                 )
                 self.builder.make_node(
@@ -943,9 +947,10 @@ class DynamoInterpreter:
                 f"dtype inconsistency (val, example_value) "
                 f"{val.dtype} != {exa.dtype}{self.builder.get_debug_msg()}"
             )
-            assert hasattr(
-                val, "dtype"
-            ), f"Unexpected type {type(val)} for val={val}{self.builder.get_debug_msg()}"
+            assert hasattr(val, "dtype"), (
+                f"Unexpected type {type(val)} for val={val}, "
+                f"node={node!r}{self.builder.get_debug_msg()}"
+            )
             return val.dtype
         return None
 
@@ -983,7 +988,8 @@ class DynamoInterpreter:
                         self.builder.set_shape(r, shape, set_if_more_precise=True)
                     elif self.builder.has_rank(r):
                         assert len(shape) == self.builder.get_rank(r), (
-                            f"Rank already set for {r!r}, but rank={self.builder.get_rank(r)} "
+                            f"Rank already set for {r!r}, "
+                            f"but rank={self.builder.get_rank(r)} "
                             f"differs for shape={shape!r}{self.builder.get_debug_msg()}"
                         )
                     else:
@@ -1011,8 +1017,10 @@ class DynamoInterpreter:
                                 )
                             elif self.builder.has_rank(r_):
                                 assert len(shape) == self.builder.get_rank(r_), (
-                                    f"Rank already set for {r_!r}, but rank={self.builder.get_rank(r_)} "
-                                    f"differs for shape={shape!r}{self.builder.get_debug_msg()}"
+                                    f"Rank already set for {r_!r}, "
+                                    f"but rank={self.builder.get_rank(r_)} "
+                                    f"differs for shape={shape!r}"
+                                    f"{self.builder.get_debug_msg()}"
                                 )
                             else:
                                 self.builder.set_rank(r, len(shape))

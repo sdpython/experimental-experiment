@@ -217,7 +217,8 @@ class OrtEval:
                 continue
             if name not in results:
                 raise RuntimeError(
-                    f"Unable to find output name {name!r} in {sorted(results)}, proto is\n{self.proto_}"
+                    f"Unable to find output name {name!r} "
+                    f"in {sorted(results)}, proto is\n{self.proto_}"
                 )
         return [results[name] for name in output_names if name != ""]
 
@@ -413,7 +414,8 @@ class OrtEval:
         for name in output_names:
             if name not in results:
                 raise RuntimeError(
-                    f"Unable to find output name {name!r} in {sorted(results)}, proto is\n{self.proto_}"
+                    f"Unable to find output name {name!r} "
+                    f"in {sorted(results)}, proto is\n{self.proto_}"
                 )
         return [results[name] for name in output_names]
 

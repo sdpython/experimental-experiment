@@ -122,7 +122,12 @@ def onnx_derivative(
 
         opv = onnx_opset_version() - 2
 
-        node = OnnxAdd("X", np.array([1], dtype=np.float32), op_version=opv, output_names=["Y"])
+        node = OnnxAdd(
+            "X",
+            np.array([1], dtype=np.float32),
+            op_version=opv,
+            output_names=["Y"]
+        )
         onx = node.to_onnx(
             {"X": FloatTensorType([None, 10])},
             {"Y": FloatTensorType([None, 10])},
@@ -151,7 +156,12 @@ def onnx_derivative(
 
         opv = onnx_opset_version() - 2
 
-        node = OnnxAdd("X", np.array([1], dtype=np.float32), op_version=opv, output_names=["Y"])
+        node = OnnxAdd(
+            "X",
+            np.array([1], dtype=np.float32),
+            op_version=opv,
+            output_names=["Y"]
+        )
         onx = node.to_onnx(
             {"X": FloatTensorType([None, 10])},
             {"Y": FloatTensorType([None, 10])},
@@ -177,7 +187,12 @@ def onnx_derivative(
 
         opv = onnx_opset_version() - 2
 
-        node = OnnxAdd("X", np.array([1], dtype=np.float32), op_version=opv, output_names=["Y"])
+        node = OnnxAdd(
+            "X",
+            np.array([1], dtype=np.float32),
+            op_version=opv,
+            output_names=["Y"]
+        )
         onx = node.to_onnx(
             {"X": FloatTensorType([None, 10])},
             {"Y": FloatTensorType([None, 10])},
@@ -204,7 +219,12 @@ def onnx_derivative(
 
         opv = onnx_opset_version() - 2
 
-        node = OnnxAdd("X", np.array([1], dtype=np.float32), op_version=opv, output_names=["Y"])
+        node = OnnxAdd(
+            "X",
+            np.array([1], dtype=np.float32),
+            op_version=opv,
+            output_names=["Y"]
+        )
         onx = node.to_onnx(
             {"X": FloatTensorType([None, 10])},
             {"Y": FloatTensorType([None, 10])},
@@ -295,7 +315,8 @@ def _onnx_derivative_fw(
 
     if verbose > 0:
         print(
-            f"[_onnx_derivative_fw] TrainingGraphTransformerConfiguration with inputs_name={inputs_name}"
+            f"[_onnx_derivative_fw] TrainingGraphTransformerConfiguration "
+            f"with inputs_name={inputs_name}"
         )
     p = TrainingGraphTransformerConfiguration()
     if verbose > 0:

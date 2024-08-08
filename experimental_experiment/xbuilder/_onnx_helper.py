@@ -100,9 +100,10 @@ def compatible_opsets(
     hist = _history[domain][op_type]
     version = list(sorted(hist))
     pos = np.searchsorted(version, current, side="right") - 1
-    assert (
-        pos >= 0
-    ), f"Available version for {op_type!r} from {domain!r}, incompatible version is {current}"
+    assert pos >= 0, (
+        f"Available version for {op_type!r} from {domain!r}, "
+        f"incompatible version is {current}"
+    )
     if pos < len(version) - 1:
         a, b = version[pos], version[pos + 1]
         return a <= new_version < b
@@ -166,7 +167,9 @@ def element_wise_binary_op_types() -> Set[str]:
         :showcode:
 
         import pprint
-        from experimental_experiment.xbuilder._onnx_helper import element_wise_binary_op_types
+        from experimental_experiment.xbuilder._onnx_helper import (
+            element_wise_binary_op_types,
+        )
         pprint.pprint(element_wise_binary_op_types())
     """
     return {

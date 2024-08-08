@@ -868,7 +868,8 @@ class TestOperatorsOnnxrt(ExtTestCase):
         )
 
     @unittest.skip(
-        reason="Cannot find any perfect/nearest match of symbolic function for aten::mean.default"
+        reason="Cannot find any perfect/nearest match of "
+        "symbolic function for aten::mean.default"
     )
     @hide_stdout()
     def test_xt_mean_dtype(self):
@@ -880,7 +881,8 @@ class TestOperatorsOnnxrt(ExtTestCase):
         )
 
     @unittest.skip(
-        reason="Cannot find any perfect/nearest match of symbolic function for aten::mean.dim"
+        reason="Cannot find any perfect/nearest match of "
+        "symbolic function for aten::mean.dim"
     )
     @hide_stdout()
     def test_xt_reduced_mean_dtype(self):
@@ -1885,6 +1887,7 @@ class TestOperatorsOnnxrt(ExtTestCase):
             atol=1e-4,
         )
 
+    @requires_onnxscript("0.3")
     @hide_stdout()
     def test_xt_softmaxcrossentropy(self):
         x = torch.randn(3, 5)
@@ -1896,6 +1899,7 @@ class TestOperatorsOnnxrt(ExtTestCase):
             onnx_export=inspect.currentframe().f_code.co_name,
         )
 
+    @requires_onnxscript("0.3")
     @hide_stdout()
     def test_xt_softmaxcrossentropy_ignore_index(self):
         x = torch.randn(3, 5)
@@ -1907,6 +1911,7 @@ class TestOperatorsOnnxrt(ExtTestCase):
             onnx_export=inspect.currentframe().f_code.co_name,
         )
 
+    @requires_onnxscript("0.3")
     @hide_stdout()
     def test_xt_softmaxcrossentropy_weights(self):
         x = torch.randn(3, 5)

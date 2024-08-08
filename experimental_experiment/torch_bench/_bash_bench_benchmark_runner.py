@@ -87,7 +87,8 @@ class BenchmarkRunner:
         self.target_opset = target_opset
         self.nvtx = nvtx
         self.dump_ort = dump_ort
-        assert no_grad, "no_grad true not implemented yet"
+        assert no_grad, "no_grad false not implemented yet"
+        assert not fake_tensor, "fake_tensor true not implemented yet"
 
     def forward_pass(self, mod, inputs, collect_outputs=True):
         return mod(**inputs)
@@ -181,7 +182,8 @@ class BenchmarkRunner:
             res = self.load_model(model_name)
             if self.verbose:
                 print(
-                    f"[BenchmarkRunner.benchmark] loaded model {model_name!r} in {time.perf_counter() - begin}"
+                    f"[BenchmarkRunner.benchmark] loaded model {model_name!r} "
+                    f"in {time.perf_counter() - begin}"
                 )
             yield res
 
@@ -197,11 +199,13 @@ class BenchmarkRunner:
             model_runner = self.load_model(model_name)
             if self.verbose:
                 print(
-                    f"[BenchmarkRunner.benchmark] run model {model_name!r} in {time.perf_counter() - begin}"
+                    f"[BenchmarkRunner.benchmark] run model {model_name!r} "
+                    f"in {time.perf_counter() - begin}"
                 )
             if self.verbose > 1:
                 print(
-                    f"[BenchmarkRunner.benchmark] parameters size {model_runner.compute_weight_size()!r}"
+                    f"[BenchmarkRunner.benchmark] parameters size "
+                    f"{model_runner.compute_weight_size()!r}"
                 )
             yield model_runner.run()
 
@@ -246,14 +250,19 @@ class BenchmarkRunner:
         ::
 
             [{'pattern': 'check_A', 'time_in': 0.004310695920139551},
-             {'pattern': 'remove_identity_nodes', 'removed': 393, 'added': 243, 'time_in': 0.008972601033747196},
+             {'pattern': 'remove_identity_nodes', 'removed': 393, 'added': 243,
+              'time_in': 0.008972601033747196},
              {'pattern': 'check_B', 'time_in': 0.00272956071421504},
              {'pattern': 'remove_unused', 'removed': 0, 'time_in': 0.007460766937583685},
              {'pattern': 'check_C', 'time_in': 0.002775861881673336},
-             {'pattern': 'match_CastPattern', 'iteration': 0, 'instances': 26, 'time_in': 0.001641636248677969, 'match_index': 26},
-             {'pattern': 'match_ExpandPattern', 'iteration': 0, 'instances': 0, 'time_in': 0.0013782307505607605, 'match_index': 26},
-             {'pattern': 'match_IdentityPattern', 'iteration': 0, 'instances': 73, 'time_in': 0.0037209829315543175, 'match_index': 99},
-             {'pattern': 'apply_IdentityPattern', 'added': 1, 'removed': 1, 'iteration': 0, 'match_index': 88, 'instances': 1, 'time_in': 0.0004087090492248535}
+             {'pattern': 'match_CastPattern', 'iteration': 0, 'instances': 26,
+              'time_in': 0.001641636248677969, 'match_index': 26},
+             {'pattern': 'match_ExpandPattern', 'iteration': 0, 'instances': 0,
+              'time_in': 0.0013782307505607605, 'match_index': 26},
+             {'pattern': 'match_IdentityPattern', 'iteration': 0, 'instances': 73,
+              'time_in': 0.0037209829315543175, 'match_index': 99},
+             {'pattern': 'apply_IdentityPattern', 'added': 1, 'removed': 1, 'iteration': 0,
+              'match_index': 88, 'instances': 1, 'time_in': 0.0004087090492248535}
         """
         if opt_stats is None:
             return dict(onnx_optimized=0)
@@ -436,7 +445,7 @@ class BenchmarkRunner:
                 if _index < begin or (end != -1 and _index >= end):
                     # out of boundary
                     return dict(abs=0.0, rel=0.0, sum=0.0, n=0.0)
-                diff = (got - expected).abs()
+                diff = (got.to(torch.float64) - expected.to(torch.float64)).abs()
                 rdiff = diff / (expected.abs() + 1e-3)
                 abs_diff, rel_diff, sum_diff, n_diff = (
                     float(diff.max()),
@@ -458,7 +467,8 @@ class BenchmarkRunner:
                         x = expected.reshape((-1,))[idiff]
                         y = got.reshape((-1,))[idiff]
                         print(
-                            f"   [max_diff-2] abs diff={abs_diff}, x={x}, y={y}, level={level}, "
+                            f"   [max_diff-2] abs diff={abs_diff}, "
+                            f"x={x}, y={y}, level={level}, "
                             f"_index={_index}"
                         )
                         print(y)
@@ -468,7 +478,8 @@ class BenchmarkRunner:
                         x = expected.reshape((-1,))[idiff]
                         y = got.reshape((-1,))[idiff]
                         print(
-                            f"   [max_diff-3] rel diff={rel_diff}, x={x}, y={y}, level={level}, "
+                            f"   [max_diff-3] rel diff={rel_diff}, "
+                            f"x={x}, y={y}, level={level}, "
                             f"_index={_index}"
                         )
 
@@ -585,7 +596,8 @@ class BenchmarkRunner:
             )
 
         raise AssertionError(
-            f"Not implemented with type(expected)={type(expected)}, type(results)={type(got)},\n"
+            f"Not implemented with type(expected)={type(expected)}, "
+            f"type(results)={type(got)},\n"
             f"dir(expected)={dir(expected)}, level={level}\n"
             f"expected={expected}\n"
             f"got={got}"
@@ -657,7 +669,8 @@ class BenchmarkRunner:
                         pickle.dump(pkl, f)
                     if self.verbose:
                         print(
-                            f"[enumerate_test_models] pickled size {os.stat(pickled_name).st_size}"
+                            f"[enumerate_test_models] pickled size "
+                            f"{os.stat(pickled_name).st_size}"
                         )
 
             if part is None or part == 1:
@@ -752,8 +765,10 @@ class BenchmarkRunner:
             )
             if self.verbose > 1:
                 print(
-                    f"[benchmarkrunner.benchmark] gpu_allocation={stats['mema_gpu_0_before_loading']} "
-                    f"reserved={torch.cuda.memory_reserved(device_id)} before loading"
+                    f"[benchmarkrunner.benchmark] gpu_allocation="
+                    f"{stats['mema_gpu_0_before_loading']} "
+                    f"reserved={torch.cuda.memory_reserved(device_id)} "
+                    f"before loading"
                 )
 
         begin = time.perf_counter()
@@ -772,12 +787,15 @@ class BenchmarkRunner:
             model_runner = self.load_model(model_name)
         if self.verbose:
             print(
-                f"[benchmarkrunner.benchmark] model wrapped with class {type(model_runner.model)}"
+                f"[benchmarkrunner.benchmark] model wrapped with class "
+                f"{type(model_runner.model)}"
             )
         if self.device.startswith("cuda") and self.verbose > 1:
             print(
-                f"[benchmarkrunner.benchmark] gpu_allocation={torch.cuda.max_memory_allocated(device_id)} "
-                f"reserved={torch.cuda.memory_reserved(device_id)} just after loading"
+                f"[benchmarkrunner.benchmark] gpu_allocation="
+                f"{torch.cuda.max_memory_allocated(device_id)} "
+                f"reserved={torch.cuda.memory_reserved(device_id)} "
+                f"just after loading"
             )
         repeat = model_runner.repeat
         warmup = model_runner.warmup
@@ -804,8 +822,10 @@ class BenchmarkRunner:
             if self.verbose > 1:
                 print(f"[benchmarkrunner.benchmark] input_size={stats['input_size']}")
                 print(
-                    f"[benchmarkrunner.benchmark] gpu_allocation={stats['mema_gpu_1_after_loading']} "
-                    f"reserved={torch.cuda.memory_reserved(device_id)} after loading"
+                    f"[benchmarkrunner.benchmark] gpu_allocation="
+                    f"{stats['mema_gpu_1_after_loading']} "
+                    f"reserved={torch.cuda.memory_reserved(device_id)} "
+                    f"after loading"
                 )
 
         if self.verbose > 1:
@@ -842,8 +862,10 @@ class BenchmarkRunner:
                             torch.cuda.nvtx.range_pop()
                         if self.device.startswith("cuda") and self.verbose > 1:
                             print(
-                                f"[benchmarkrunner.benchmark] gpu_allocation={torch.cuda.max_memory_allocated(device_id)} "
-                                f"reserved={torch.cuda.memory_reserved(device_id)} after iteration {w}"
+                                f"[benchmarkrunner.benchmark] gpu_allocation="
+                                f"{torch.cuda.max_memory_allocated(device_id)} "
+                                f"reserved={torch.cuda.memory_reserved(device_id)} "
+                                f"after iteration {w}"
                             )
             except Exception as e:
                 stats["ERR_warmup_eager"] = _clean_string(str(e)).replace("\n", "_ ")
@@ -868,8 +890,10 @@ class BenchmarkRunner:
                         torch.cuda.nvtx.range_pop()
                     if self.device.startswith("cuda") and self.verbose > 1:
                         print(
-                            f"[benchmarkrunner.benchmark] gpu_allocation={torch.cuda.max_memory_allocated(device_id)} "
-                            f"reserved={torch.cuda.memory_reserved(device_id)} after iteration {w}"
+                            f"[benchmarkrunner.benchmark] gpu_allocation="
+                            f"{torch.cuda.max_memory_allocated(device_id)} "
+                            f"reserved={torch.cuda.memory_reserved(device_id)} "
+                            f"after iteration {w}"
                         )
             stats["time_warmup_eager"] = (time.perf_counter() - begin) / warmup
 
@@ -884,15 +908,19 @@ class BenchmarkRunner:
             )
             if self.verbose > 1:
                 print(
-                    f"[benchmarkrunner.benchmark] gpu_allocation={stats['mema_gpu_2_after_warmup']} "
-                    f"reserved={torch.cuda.memory_reserved(device_id)} after warmup"
+                    f"[benchmarkrunner.benchmark] gpu_allocation="
+                    f"{stats['mema_gpu_2_after_warmup']} "
+                    f"reserved={torch.cuda.memory_reserved(device_id)} "
+                    f"after warmup"
                 )
             torch.cuda.empty_cache()
             stats["mema_gpu_3_empty_cache"] = torch.cuda.max_memory_allocated(device_id)
             if self.verbose > 1:
                 print(
-                    f"[benchmarkrunner.benchmark] gpu_allocation={stats['mema_gpu_3_empty_cache']} "
-                    f"reserved={torch.cuda.memory_reserved(device_id)} after empty_cache"
+                    f"[benchmarkrunner.benchmark] gpu_allocation="
+                    f"{stats['mema_gpu_3_empty_cache']} "
+                    f"reserved={torch.cuda.memory_reserved(device_id)} "
+                    f"after empty_cache"
                 )
 
         ########
@@ -940,8 +968,10 @@ class BenchmarkRunner:
             )
             if self.verbose > 1:
                 print(
-                    f"[benchmarkrunner.benchmark] gpu_allocation={stats['mema_gpu_4_after_repeat']} "
-                    f"reserved={torch.cuda.memory_reserved(device_id)} after repeat"
+                    f"[benchmarkrunner.benchmark] gpu_allocation="
+                    f"{stats['mema_gpu_4_after_repeat']} "
+                    f"reserved={torch.cuda.memory_reserved(device_id)} "
+                    f"after repeat"
                 )
         if self.verbose > 1:
             print(f"[BenchmarkRunner.benchmark] export model {model_name!r}")
@@ -1034,8 +1064,10 @@ class BenchmarkRunner:
             )
             if self.verbose > 1:
                 print(
-                    f"[benchmarkrunner.benchmark] gpu_allocation={stats['mema_gpu_5_after_export']} "
-                    f"reserved={torch.cuda.memory_reserved(device_id)} after export"
+                    f"[benchmarkrunner.benchmark] gpu_allocation="
+                    f"{stats['mema_gpu_5_after_export']} "
+                    f"reserved={torch.cuda.memory_reserved(device_id)} "
+                    f"after export"
                 )
 
         stats.update(self._post_process_optimization_statistics(opt_stats))
@@ -1075,8 +1107,10 @@ class BenchmarkRunner:
             )
             if self.verbose > 1:
                 print(
-                    f"[benchmarkrunner.benchmark] gpu_allocation={stats['mema_gpu_6_after_gcollect']} "
-                    f"reserved={torch.cuda.memory_reserved(device_id)} after gc.collect"
+                    f"[benchmarkrunner.benchmark] gpu_allocation="
+                    f"{stats['mema_gpu_6_after_gcollect']} "
+                    f"reserved={torch.cuda.memory_reserved(device_id)} "
+                    f"after gc.collect"
                 )
         context["part1"] = True
         context["model_name"] = model_name
@@ -1127,8 +1161,10 @@ class BenchmarkRunner:
             )
             if self.verbose > 1:
                 print(
-                    f"[benchmarkrunner.benchmark] gpu_allocation={stats['mema_gpu_6_before_session']} "
-                    f"reserved={torch.cuda.memory_reserved(device_id)} before creating a session"
+                    f"[benchmarkrunner.benchmark] gpu_allocation="
+                    f"{stats['mema_gpu_6_before_session']} "
+                    f"reserved={torch.cuda.memory_reserved(device_id)} "
+                    f"before creating a session"
                 )
 
         #########
@@ -1236,8 +1272,10 @@ class BenchmarkRunner:
             )
             if self.verbose > 1:
                 print(
-                    f"[benchmarkrunner.benchmark] gpu_allocation={stats['mema_gpu_7_after_session']} "
-                    f"reserved={torch.cuda.memory_reserved(device_id)} after session"
+                    f"[benchmarkrunner.benchmark] gpu_allocation="
+                    f"{stats['mema_gpu_7_after_session']} "
+                    f"reserved={torch.cuda.memory_reserved(device_id)} "
+                    f"after session"
                 )
 
         if self.verbose > 1:
@@ -1297,8 +1335,10 @@ class BenchmarkRunner:
                 )
                 if self.verbose > 1:
                     print(
-                        f"[benchmarkrunner.benchmark] gpu_allocation={stats['mema_gpu_8_after_export_warmup']} "
-                        f"reserved={torch.cuda.memory_reserved(device_id)} after export warmup"
+                        f"[benchmarkrunner.benchmark] gpu_allocation="
+                        f"{stats['mema_gpu_8_after_export_warmup']} "
+                        f"reserved={torch.cuda.memory_reserved(device_id)} "
+                        f"after export warmup"
                     )
             if self.verbose > 1:
                 print(
@@ -1348,8 +1388,10 @@ class BenchmarkRunner:
                 )
                 if self.verbose > 1:
                     print(
-                        f"[benchmarkrunner.benchmark] gpu_allocation={stats['mema_gpu_9_after_export_repeat']} "
-                        f"reserved={torch.cuda.memory_reserved(device_id)} after export repeat"
+                        f"[benchmarkrunner.benchmark] gpu_allocation="
+                        f"{stats['mema_gpu_9_after_export_repeat']} "
+                        f"reserved={torch.cuda.memory_reserved(device_id)} "
+                        f"after export repeat"
                     )
         else:
             # warmup session
@@ -1402,8 +1444,10 @@ class BenchmarkRunner:
                 )
                 if self.verbose > 1:
                     print(
-                        f"[benchmarkrunner.benchmark] gpu_allocation={stats['mema_gpu_8_after_export_warmup']} "
-                        f"reserved={torch.cuda.memory_reserved(device_id)} after export warmup"
+                        f"[benchmarkrunner.benchmark] gpu_allocation="
+                        f"{stats['mema_gpu_8_after_export_warmup']} "
+                        f"reserved={torch.cuda.memory_reserved(device_id)} "
+                        f"after export warmup"
                     )
             if self.verbose > 1:
                 print(
@@ -1453,8 +1497,10 @@ class BenchmarkRunner:
                 )
                 if self.verbose > 1:
                     print(
-                        f"[benchmarkrunner.benchmark] gpu_allocation={stats['mema_gpu_9_after_export_repeat']} "
-                        f"reserved={torch.cuda.memory_reserved(device_id)} after export repeat"
+                        f"[benchmarkrunner.benchmark] gpu_allocation="
+                        f"{stats['mema_gpu_9_after_export_repeat']} "
+                        f"reserved={torch.cuda.memory_reserved(device_id)} "
+                        f"after export repeat"
                     )
 
         if "time_latency" in stats:

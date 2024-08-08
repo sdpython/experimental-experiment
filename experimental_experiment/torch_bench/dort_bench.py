@@ -12,32 +12,40 @@ Example, run llama model with onnxrt backend on cuda.
 
 ::
 
-    python -m experimental_experiment.torch_bench.dort_bench --backend ort --device cuda --config medium
+    python -m experimental_experiment.torch_bench.dort_bench \\
+           --backend ort --device cuda --config medium
     
 To export the models:
 
 ::
 
-    python -m experimental_experiment.torch_bench.dort_bench --backend custom --device cuda --export a -w 3
+    python -m experimental_experiment.torch_bench.dort_bench \\
+           --backend custom --device cuda --export a -w 3
 
 
 Profiling:
 
 ::
 
-    nsys profile python -m experimental_experiment.torch_bench.dort_bench --device cuda -w 3 -r 5 --mixed 1 --config large --backend eager --enable_pattern=default+onnxruntime
+    nsys profile python -m experimental_experiment.torch_bench.dort_bench \\
+                        --device cuda -w 3 -r 5 --mixed 1 --config large \\
+                        --backend eager --enable_pattern=default+onnxruntime
 
 With experimental optimizers:
 
 ::
 
-    python -m experimental_experiment.torch_bench.dort_bench --backend custom --device cuda --mixed=1 --export model -w 3 --enable_pattern=default+onnxruntime+experimental
+    python -m experimental_experiment.torch_bench.dort_bench --backend custom \\
+           --device cuda --mixed=1 --export model -w 3 \\
+           --enable_pattern=default+onnxruntime+experimental
 
 Or:
 
 ::
 
-    python -m experimental_experiment.torch_bench.dort_bench --backend ort+ --device cuda --mixed=1 --export model -w 3 --enable_pattern=default+onnxruntime+experimental
+    python -m experimental_experiment.torch_bench.dort_bench --backend ort+ \\
+          --device cuda --mixed=1 --export model -w 3 \\
+          --enable_pattern=default+onnxruntime+experimental
 """
 
 import os
@@ -229,7 +237,8 @@ def main(args=None):
             else:
                 result = compiled_model(*inputs)
 
-            # dummy_target = torch.ones_like(result[0], memory_format=torch.contiguous_format)
+            # dummy_target = torch.ones_like(result[0],
+            # memory_format=torch.contiguous_format)
             if mixed and is_cuda:
                 with torch.autocast(device_type="cuda", dtype=torch.float16):
                     torch.cuda.nvtx.range_push("DORT-ERROR-MIXED")

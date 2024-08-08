@@ -23,69 +23,6 @@ class TorchBenchRunner(BenchmarkRunner):
 
     SUITE = "TorchBench"
 
-    @staticmethod
-    def _patch_install_deps(model_path: str, verbose: bool = True) -> Tuple[bool, Any]:
-        import sys
-        import subprocess
-        import tempfile
-        from pathlib import Path
-        from torchbenchmark import TORCH_DEPS, install_file, this_dir
-        from torchbenchmark.util.env_check import get_pkg_versions
-
-        run_args = [
-            [sys.executable, install_file],
-        ]
-        run_env = os.environ.copy()
-        run_env["PYTHONPATH"] = Path(this_dir.parent).as_posix()
-        run_kwargs = {
-            "cwd": model_path,
-            "check": True,
-            "env": run_env,
-        }
-
-        output_buffer = None
-        fd, stdout_fpath = tempfile.mkstemp()
-
-        try:
-            output_buffer = io.FileIO(stdout_fpath, mode="w")
-            if os.path.exists(os.path.join(model_path, install_file)):
-                if not verbose:
-                    run_kwargs["stderr"] = subprocess.STDOUT
-                    run_kwargs["stdout"] = output_buffer
-                versions = get_pkg_versions(TORCH_DEPS)
-                subprocess.run(*run_args, **run_kwargs)  # type: ignore
-                new_versions = get_pkg_versions(TORCH_DEPS)
-                if versions != new_versions:
-                    if len(versions) != len(new_versions) or set(versions) != set(
-                        new_versions
-                    ):
-                        import pprint
-
-                        errmsg = f"The torch packages are re-installed after installing the benchmark deps. \
-                                Before: {pprint.pformat(versions)}, after: {pprint.pformat(new_versions)}"
-                        return (False, errmsg, None)
-                    for k in versions:
-                        if k == "torchvision":
-                            # not reliable
-                            continue
-                        if versions[k] != new_versions[k]:
-                            errmsg = f"The torch packages are re-installed after installing the benchmark deps. \
-                                    For package {k!r}, before: {versions[k]}, after: {new_versions[k]}."
-                            return (False, errmsg, None)
-            else:
-                return (True, f"No install.py is found in {model_path}. Skip.", None)
-        except subprocess.CalledProcessError as e:
-            return (False, e.output, io.FileIO(stdout_fpath, mode="r").read().decode())
-        except Exception as e:
-            return (False, e, io.FileIO(stdout_fpath, mode="r").read().decode())
-        finally:
-            output_buffer.close()
-            del output_buffer
-            os.close(fd)
-            os.remove(stdout_fpath)
-
-        return (True, None, None)
-
     YAML = textwrap.dedent(
         """
         # Some models have large dataset that doesn't fit in memory. Lower the batch
@@ -113,7 +50,8 @@ class TorchBenchRunner(BenchmarkRunner):
             - vision_maskrcnn
 
         tolerance:
-        # Need lower tolerance on GPU. GPU kernels have non deterministic kernels for these models.
+        # Need lower tolerance on GPU. GPU kernels
+        # have non deterministic kernels for these models.
         higher:
             - alexnet
             - attention_is_all_you_need_pytorch
@@ -848,8 +786,7 @@ class TorchBenchRunner(BenchmarkRunner):
         # patching
         import torchbenchmark
 
-        torchbenchmark._install_deps = TorchBenchRunner._patch_install_deps
-        from torchbenchmark import setup
+        torchbenchmark.TORCH_DEPS[:] = ["numpy", "torch", "torchaudio"]
 
         if self.verbose:
             print(
@@ -857,7 +794,7 @@ class TorchBenchRunner(BenchmarkRunner):
                 f"with batch_size={batch_size}"
             )
 
-        status = setup(
+        status = torchbenchmark.setup(
             models=[model_name],
             verbose=self.verbose,
             continue_on_fail=False,
@@ -950,8 +887,10 @@ class TorchBenchRunner(BenchmarkRunner):
                     f"Unable to create class {benchmark_cls}, "
                     f"device={self.device}, batch_size={batch_size}, "
                     f"signature={[p for p in inspect.signature(benchmark_cls).parameters]}, "
-                    f"DEFAULT_EVAL_BSIZE={getattr(benchmark_cls, 'DEFAULT_EVAL_BSIZE', '?')}, "
-                    f"ALLOW_CUSTOMIZE_BSIZE={getattr(benchmark_cls, 'ALLOW_CUSTOMIZE_BSIZE', '?')}"
+                    f"DEFAULT_EVAL_BSIZE="
+                    f"{getattr(benchmark_cls, 'DEFAULT_EVAL_BSIZE', '?')}, "
+                    f"ALLOW_CUSTOMIZE_BSIZE="
+                    f"{getattr(benchmark_cls, 'ALLOW_CUSTOMIZE_BSIZE', '?')}"
                 ) from e
         if self.verbose:
             print(f"[{self.__class__.__name__}.load_model] clsname={benchmark}")
@@ -1037,7 +976,7 @@ class TorchBenchRunner(BenchmarkRunner):
         model_names = [m for m in models if os.path.basename(m) in expected_models]
         assert len(model_names) >= len(expected_models), (
             f"Unexpected names {len(model_names)} < {len(expected_models)} (expected)"
-            f"\n--missing=\n{pprint.pformat(list(sorted(set(expected_models)-set(os.path.basename(m) for m in model_names))))}"
+            f"\n--missing=\n{pprint.pformat(list(sorted(set(expected_models)-set(os.path.basename(m) for m in model_names))))}"  # noqa: E501
             f"\n--canary_models=\n{pprint.pformat(self._config['canary_models'])}"
             f"\n--_list_canary_model_paths()=\n{pprint.pformat(_list_canary_model_paths())}"
             f"\n--_list_model_paths()=\n{pprint.pformat(_list_model_paths())}"

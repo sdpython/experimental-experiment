@@ -54,7 +54,8 @@ class TestZooPhi3(ExtTestCase):
                 verbose=1,
                 large_model=True,
                 # dynamic_shapes fails with transformers==4.37.2
-                # TypeError: scaled_dot_product_attention(): argument 'is_causal' must be bool, not SymBool
+                # TypeError: scaled_dot_product_attention():
+                # argument 'is_causal' must be bool, not SymBool
                 # dynamic_shapes={"x": {1: torch.export.Dim("length", min=2)}},
             )
             duration = time.perf_counter() - begin

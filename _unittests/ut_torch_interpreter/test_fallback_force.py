@@ -287,7 +287,7 @@ class TestFallbackForce(ExtTestCase):
                 input_names=["input0"],
                 dispatcher=ForceDispatcher(
                     {
-                        "_scaled_dot_product_flash_attention_for_cpu_default": _f_scaled_dot_product_flash_attention_for_cpu_default
+                        "_scaled_dot_product_flash_attention_for_cpu_default": _f_scaled_dot_product_flash_attention_for_cpu_default  # noqa: E501
                     }
                 ),
             )
@@ -352,7 +352,7 @@ class TestFallbackForce(ExtTestCase):
 
         dispatcher = ForceDispatcher(
             {
-                "_scaled_dot_product_efficient_attention_default": _f_scaled_dot_product_efficient_attention_cuda
+                "_scaled_dot_product_efficient_attention_default": _f_scaled_dot_product_efficient_attention_cuda  # noqa: E501
             }
         )
 
@@ -429,8 +429,8 @@ class TestFallbackForce(ExtTestCase):
 
         dispatcher = ForceDispatcher(
             {
-                "_scaled_dot_product_efficient_attention_default": _f_scaled_dot_product_efficient_attention_cuda,
-                "_scaled_dot_product_efficient_attention_backward_default": _f_scaled_dot_product_efficient_attention_backward_cuda,
+                "_scaled_dot_product_efficient_attention_default": _f_scaled_dot_product_efficient_attention_cuda,  # noqa: E501
+                "_scaled_dot_product_efficient_attention_backward_default": _f_scaled_dot_product_efficient_attention_backward_cuda,  # noqa: E501
             },
             only_registered=True,
         )

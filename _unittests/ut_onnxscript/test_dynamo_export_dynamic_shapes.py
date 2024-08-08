@@ -49,7 +49,8 @@ class TestDynamoExportDynamicShapes(ExtTestCase):
                 export_options, model=exported_program
             )
             params = dict(exported_program.named_parameters())
-            # model.layers.0.self_attn.q_proj.weight --> p_model_layers_0_self_attn_q_proj_weight (in onnx model)
+            # model.layers.0.self_attn.q_proj.weight -->
+            # p_model_layers_0_self_attn_q_proj_weight (in onnx model)
             onnx_program = torch.onnx.dynamo_export(
                 exported_program,
                 *input_tensors,
