@@ -929,7 +929,7 @@ def merge_benchmark_reports(
         columns starting with this prefix
     :param formulas: add computed metrics
     :param excel_output: output the computed dataframe into a excel document
-    :param exc: raise exception by default (not used)
+    :param exc: raise exception by default
     :param filter_in: filter in some data to make the report smaller (see below)
     :param filter_out: filter out some data to make the report smaller (see below)
     :param verbose: verbosity
@@ -1642,6 +1642,7 @@ def merge_benchmark_reports(
             "MODELS",
         },
         model=model,
+        exc=exc,
     )
     assert None not in res["AGG"].index.names, (
         f"None in res['AGG'].index.names={res['AGG'].index.names}, " f"prefix='AGG'"
@@ -1933,6 +1934,7 @@ def _create_aggregation_figures(
     model: List[str],
     skip: Optional[Set[str]] = None,
     key: str = "suite",
+    exc: bool = True,
 ) -> Dict[str, "pandas.DataFrame"]:  # noqa: F821
     import pandas
 
@@ -2013,10 +2015,13 @@ def _create_aggregation_figures(
             try:
                 geo_mean = gr.agg(_geo_mean)
             except ValueError as e:
-                raise AssertionError(
-                    f"Fails for geo_mean, k={k!r}, v=\n{v.head().T}"
-                ) from e
-            stats.append(("GEO-MEAN", geo_mean))
+                if exc:
+                    raise AssertionError(
+                        f"Fails for geo_mean, k={k!r}, v=\n{v.head().T}"
+                    ) from e
+                geo_mean = None
+            if geo_mean is not None:
+                stats.append(("GEO-MEAN", geo_mean))
         dfs = []
         for name, df in stats:
             assert isinstance(

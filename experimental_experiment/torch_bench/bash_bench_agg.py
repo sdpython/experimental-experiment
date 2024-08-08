@@ -49,6 +49,11 @@ def main(args=None):
         help="a csv file containing the baseline the new figures "
         "needs to be compared to",
     )
+    parser.add_argument(
+        "--quiet",
+        default=0,
+        help="avoid raising an exception if it fails",
+    )
     parser.add_argument("--verbose", default=0, help="verbosity level")
     res = parser.parse_args(args=args)
 
@@ -77,6 +82,7 @@ def main(args=None):
         verbose=int(res.verbose),
         output_clean_raw_data=res.save_raw,
         baseline=res.baseline,
+        exc=args.quiet not in (1, "1", True, "True"),
         **kwargs,
     )
 
