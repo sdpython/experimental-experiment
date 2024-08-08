@@ -427,7 +427,7 @@ class TorchBenchRunner(BenchmarkRunner):
     def load_yaml_file(cls):
         import yaml
 
-        with io.StringIO(container.YAML) as f:
+        with io.StringIO(cls.YAML) as f:
             data = yaml.safe_load(f)
 
         def flatten(lst):
@@ -568,7 +568,9 @@ class TorchBenchRunner(BenchmarkRunner):
             }
 
         if model_name.endswith("MultipleChoice"):
-            inputt = _rand_int_tensor(device, 0, vocab_size, (bs, num_choices, seq_length))
+            inputt = _rand_int_tensor(
+                device, 0, vocab_size, (bs, num_choices, seq_length)
+            )
         elif model_name.startswith("Roberta"):
             inputt = _rand_int_tensor(device, 0, 1, (bs, seq_length))
         else:
@@ -596,8 +598,12 @@ class TorchBenchRunner(BenchmarkRunner):
                 model.config.visual_feat_dim,
                 model.config.visual_pos_dim,
             )
-            input_dict["visual_feats"] = torch.randn(bs, num_visual_features, visual_feat_dim)
-            input_dict["visual_pos"] = torch.randn(bs, num_visual_features, visual_pos_dim)
+            input_dict["visual_feats"] = torch.randn(
+                bs, num_visual_features, visual_feat_dim
+            )
+            input_dict["visual_pos"] = torch.randn(
+                bs, num_visual_features, visual_pos_dim
+            )
 
         if include_loss_args:
             if model_name.endswith("PreTraining"):
@@ -605,7 +611,9 @@ class TorchBenchRunner(BenchmarkRunner):
                     transformers.ElectraForPreTraining,
                     transformers.LxmertForPreTraining,
                 ]:
-                    input_dict["labels"] = _rand_int_tensor(device, 0, 1, (bs, seq_length))
+                    input_dict["labels"] = _rand_int_tensor(
+                        device, 0, 1, (bs, seq_length)
+                    )
                 else:
                     label_name = (
                         "sentence_order_label"
@@ -617,8 +625,12 @@ class TorchBenchRunner(BenchmarkRunner):
                     )
                     input_dict[label_name] = _rand_int_tensor(device, 0, 1, (bs,))
             elif model_name.endswith("QuestionAnswering"):
-                input_dict["start_positions"] = _rand_int_tensor(device, 0, seq_length, (bs,))
-                input_dict["end_positions"] = _rand_int_tensor(device, 0, seq_length, (bs,))
+                input_dict["start_positions"] = _rand_int_tensor(
+                    device, 0, seq_length, (bs,)
+                )
+                input_dict["end_positions"] = _rand_int_tensor(
+                    device, 0, seq_length, (bs,)
+                )
             elif model_name.endswith(
                 ("MaskedLM", "HeadModel", "CausalLM", "DoubleHeadsModel")
             ):
@@ -810,7 +822,11 @@ class TorchBenchRunner(BenchmarkRunner):
         )
         if cant_change_batch_size:
             batch_size = None
-        if batch_size is None and is_training and model_name in self._batch_size["training"]:
+        if (
+            batch_size is None
+            and is_training
+            and model_name in self._batch_size["training"]
+        ):
             batch_size = self._batch_size["training"][model_name]
         elif (
             batch_size is None
@@ -866,7 +882,9 @@ class TorchBenchRunner(BenchmarkRunner):
             print(f"[{self.__class__.__name__}.load_model] clsname={benchmark}")
         model, example_inputs = benchmark.get_module()
         if self.verbose:
-            print(f"[{self.__class__.__name__}.load_model] clsname={benchmark}, done loading")
+            print(
+                f"[{self.__class__.__name__}.load_model] clsname={benchmark}, done loading"
+            )
         if model_name in [
             "basic_gnn_edgecnn",
             "basic_gnn_gcn",
@@ -884,7 +902,9 @@ class TorchBenchRunner(BenchmarkRunner):
             model.gradient_checkpointing_enable()
 
         # Models that must be in train mode while training
-        if is_training and (not use_eval_mode or model_name in self._config["only_training"]):
+        if is_training and (
+            not use_eval_mode or model_name in self._config["only_training"]
+        ):
             model.train()
         else:
             model.eval()
@@ -892,7 +912,9 @@ class TorchBenchRunner(BenchmarkRunner):
         gc.collect()
         batch_size = benchmark.batch_size
         if model_name == "torchrec_dlrm":
-            batch_namedtuple = NamedTuple("Batch", "dense_features sparse_features labels")
+            batch_namedtuple = NamedTuple(
+                "Batch", "dense_features sparse_features labels"
+            )
             example_inputs = tuple(
                 batch_namedtuple(
                     dense_features=batch.dense_features,
@@ -940,7 +962,7 @@ class TorchBenchRunner(BenchmarkRunner):
         model_names = [m for m in models if os.path.basename(m) in expected_models]
         assert len(model_names) >= len(expected_models), (
             f"Unexpected names {len(model_names)} < {len(expected_models)} (expected)"
-            f"\n--missing=\n{pprint.pformat(sorted(set(expected_models)-{os.path.basename(m) for m in model_names}))}"
+            f"\n--missing=\n{pprint.pformat(sorted(set(expected_models)-{os.path.basename(m) for m in model_names}))}"  # noqa: E501
             f"\n--canary_models=\n{pprint.pformat(self._config['canary_models'])}"
             f"\n--_list_canary_model_paths()=\n{pprint.pformat(_list_canary_model_paths())}"
             f"\n--_list_model_paths()=\n{pprint.pformat(_list_model_paths())}"

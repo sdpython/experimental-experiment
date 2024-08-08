@@ -229,7 +229,9 @@ class HuggingfaceRunner(BenchmarkRunner):
                     transformers.AutoModelForMaskedLM,
                 ),
                 "YituTechConvBert": (
-                    lambda: transformers.AutoConfig.from_pretrained("YituTech/conv-bert-base"),
+                    lambda: transformers.AutoConfig.from_pretrained(
+                        "YituTech/conv-bert-base"
+                    ),
                     transformers.AutoModelForMaskedLM,
                 ),
                 "CamemBert": (
@@ -246,7 +248,7 @@ class HuggingfaceRunner(BenchmarkRunner):
     @classmethod
     def _get_module_cls_by_model_name(container, model_cls_name):
         _module_by_model_name = {
-            "Speech2Text2Decoder": "transformers.models.speech_to_text_2.modeling_speech_to_text_2",
+            "Speech2Text2Decoder": "transformers.models.speech_to_text_2.modeling_speech_to_text_2",  # noqa: E501
             "TrOCRDecoder": "transformers.models.trocr.modeling_trocr",
         }
         module_name = _module_by_model_name.get(model_cls_name, "transformers")
@@ -319,7 +321,9 @@ class HuggingfaceRunner(BenchmarkRunner):
             }
 
         if model_name.endswith("MultipleChoice"):
-            inputt = _rand_int_tensor(device, 0, vocab_size, (bs, num_choices, seq_length))
+            inputt = _rand_int_tensor(
+                device, 0, vocab_size, (bs, num_choices, seq_length)
+            )
         elif model_name.startswith("Roberta"):
             inputt = _rand_int_tensor(device, 0, 1, (bs, seq_length))
         else:
@@ -347,8 +351,12 @@ class HuggingfaceRunner(BenchmarkRunner):
                 model.config.visual_feat_dim,
                 model.config.visual_pos_dim,
             )
-            input_dict["visual_feats"] = torch.randn(bs, num_visual_features, visual_feat_dim)
-            input_dict["visual_pos"] = torch.randn(bs, num_visual_features, visual_pos_dim)
+            input_dict["visual_feats"] = torch.randn(
+                bs, num_visual_features, visual_feat_dim
+            )
+            input_dict["visual_pos"] = torch.randn(
+                bs, num_visual_features, visual_pos_dim
+            )
 
         if include_loss_args:
             if model_name.endswith("PreTraining"):
@@ -356,7 +364,9 @@ class HuggingfaceRunner(BenchmarkRunner):
                     transformers.ElectraForPreTraining,
                     transformers.LxmertForPreTraining,
                 ]:
-                    input_dict["labels"] = _rand_int_tensor(device, 0, 1, (bs, seq_length))
+                    input_dict["labels"] = _rand_int_tensor(
+                        device, 0, 1, (bs, seq_length)
+                    )
                 else:
                     label_name = (
                         "sentence_order_label"
@@ -368,8 +378,12 @@ class HuggingfaceRunner(BenchmarkRunner):
                     )
                     input_dict[label_name] = _rand_int_tensor(device, 0, 1, (bs,))
             elif model_name.endswith("QuestionAnswering"):
-                input_dict["start_positions"] = _rand_int_tensor(device, 0, seq_length, (bs,))
-                input_dict["end_positions"] = _rand_int_tensor(device, 0, seq_length, (bs,))
+                input_dict["start_positions"] = _rand_int_tensor(
+                    device, 0, seq_length, (bs,)
+                )
+                input_dict["end_positions"] = _rand_int_tensor(
+                    device, 0, seq_length, (bs,)
+                )
             elif model_name.endswith(
                 ("MaskedLM", "HeadModel", "CausalLM", "DoubleHeadsModel")
             ):
@@ -508,7 +522,9 @@ class HuggingfaceRunner(BenchmarkRunner):
         if batch_size is None:
             batch_size = batch_size_default
             if model_name in self.BATCH_SIZE_DIVISORS:
-                batch_size = max(int(batch_size / self.BATCH_SIZE_DIVISORS[model_name]), 1)
+                batch_size = max(
+                    int(batch_size / self.BATCH_SIZE_DIVISORS[model_name]), 1
+                )
 
         example_inputs = self._generate_inputs_for_model(
             model_cls,

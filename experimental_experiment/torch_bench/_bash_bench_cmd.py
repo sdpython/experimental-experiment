@@ -132,7 +132,9 @@ def bash_bench_main(script_name: str, doc: str, args: Optional[List[str]] = None
         if (
             multi_run(args)
             or args.process in ("1", 1, "True", True)
-            or (args.split_process in ("1", 1, "True", True) and args.part in (None, ""))
+            or (
+                args.split_process in ("1", 1, "True", True) and args.part in (None, "")
+            )
         ):
             assert args.part == "", f"part={args.part} must be empty"
             args_output_data = args.output_data

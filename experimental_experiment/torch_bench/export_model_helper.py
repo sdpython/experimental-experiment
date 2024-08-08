@@ -257,7 +257,9 @@ def common_export(
 
     if verbose:
         print(f"[common_export] exporter done in {time.perf_counter() - begin}s")
-        print(f"[common_export] size of the export: {os.stat(filename).st_size / 2**20} Mb")
+        print(
+            f"[common_export] size of the export: {os.stat(filename).st_size / 2**20} Mb"
+        )
 
     with open(filename, "rb") as f:
         onx = onnx.load(f)
@@ -431,7 +433,9 @@ class WrapInferenceSessionForTorch:
         assert tensors is not None, "tensors cannot be None"
         new_tensors = []
         for tensor in tensors:
-            assert isinstance(tensor, self.torch.Tensor), f"Unexpected type {type(tensor)}"
+            assert isinstance(
+                tensor, self.torch.Tensor
+            ), f"Unexpected type {type(tensor)}"
             dtypes.append(self.TORCH_DTYPE_TO_NUMPY_DTYPE[tensor.dtype])
             shapes.append(tensor.size())
             data_ptrs.append(tensor.data_ptr())
@@ -457,7 +461,9 @@ class WrapInferenceSessionForTorch:
 
         from torch._C import _from_dlpack
 
-        if all(map(lambda i: ortvalues[i].has_value(), range(len(ortvalues)))):  # noqa: C417
+        if all(
+            map(lambda i: ortvalues[i].has_value(), range(len(ortvalues)))
+        ):  # noqa: C417
             res = ortvalues.to_dlpacks(_from_dlpack)
         else:
             res = []

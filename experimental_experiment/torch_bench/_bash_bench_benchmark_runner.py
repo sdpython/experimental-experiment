@@ -490,7 +490,9 @@ class BenchmarkRunner:
                             f"len(got)={len(got)}, level={level}, _index={_index}"
                         )
                         for i, (a, b) in enumerate(zip(expected, got)):
-                            if isinstance(a, torch.Tensor) and isinstance(b, torch.Tensor):
+                            if isinstance(a, torch.Tensor) and isinstance(
+                                b, torch.Tensor
+                            ):
                                 print(
                                     f"    i={i} expected {a.dtype}:{a.shape}, "
                                     f"has {b.dtype}:{b.shape}, _index={_index}"
@@ -649,7 +651,9 @@ class BenchmarkRunner:
                 )
                 if part == 0:
                     stats["STEP"] = "export"
-                    assert pickled_name, f"pickled_name cannot be empty with part={part}"
+                    assert (
+                        pickled_name
+                    ), f"pickled_name cannot be empty with part={part}"
                     if os.path.exists(pickled_name):
                         os.remove(pickled_name)
                     if self.verbose:
@@ -667,14 +671,20 @@ class BenchmarkRunner:
 
             if part is None or part == 1:
                 if part == 1:
-                    assert pickled_name, f"pickled_name cannot be empty with part={part}"
-                    assert os.path.exists(pickled_name), f"{pickled_name!r} does not exist"
+                    assert (
+                        pickled_name
+                    ), f"pickled_name cannot be empty with part={part}"
+                    assert os.path.exists(
+                        pickled_name
+                    ), f"{pickled_name!r} does not exist"
                     with open(pickled_name, "rb") as f:
                         data = pickle.load(f)
                     context = data["context"]
                     stats = data["stats"]
                     if self.verbose:
-                        print(f"[enumerate_test_models] restored data from {pickled_name!r}")
+                        print(
+                            f"[enumerate_test_models] restored data from {pickled_name!r}"
+                        )
                 if context["part1"]:
                     self._test_model_part_2(stats, **context)
                     if "STEP" in stats:
@@ -746,7 +756,9 @@ class BenchmarkRunner:
         if self.device.startswith("cuda"):
             device_id = 0 if ":" not in self.device else int(self.device.split(":")[1])
             stats["device_id"] = device_id
-            stats["mema_gpu_0_before_loading"] = torch.cuda.max_memory_allocated(device_id)
+            stats["mema_gpu_0_before_loading"] = torch.cuda.max_memory_allocated(
+                device_id
+            )
             if self.verbose > 1:
                 print(
                     f"[benchmarkrunner.benchmark] gpu_allocation="
@@ -800,7 +812,9 @@ class BenchmarkRunner:
         stats["opt_patterns"] = optimization
 
         if self.device.startswith("cuda"):
-            stats["mema_gpu_1_after_loading"] = torch.cuda.max_memory_allocated(device_id)
+            stats["mema_gpu_1_after_loading"] = torch.cuda.max_memory_allocated(
+                device_id
+            )
             if self.verbose > 1:
                 print(f"[benchmarkrunner.benchmark] input_size={stats['input_size']}")
                 print(
@@ -885,7 +899,9 @@ class BenchmarkRunner:
             print(f"[benchmarkrunner.benchmark] output_size={stats['output_size']}")
 
         if self.device.startswith("cuda"):
-            stats["mema_gpu_2_after_warmup"] = torch.cuda.max_memory_allocated(device_id)
+            stats["mema_gpu_2_after_warmup"] = torch.cuda.max_memory_allocated(
+                device_id
+            )
             if self.verbose > 1:
                 print(
                     f"[benchmarkrunner.benchmark] gpu_allocation="
@@ -938,12 +954,14 @@ class BenchmarkRunner:
             stats["time_latency_eager_t_delta"] = (
                 stats["time_latency_eager_t_max"] - stats["time_latency_eager_t_min"]
             ) / (stats["time_latency_eager_t_med"])
-            stats["time_latency_eager_t_corrt"] = np.corrcoef(lats, list(range(len(lats))))[
-                0, 1
-            ]
+            stats["time_latency_eager_t_corrt"] = np.corrcoef(
+                lats, list(range(len(lats)))
+            )[0, 1]
 
         if self.device.startswith("cuda"):
-            stats["mema_gpu_4_after_repeat"] = torch.cuda.max_memory_allocated(device_id)
+            stats["mema_gpu_4_after_repeat"] = torch.cuda.max_memory_allocated(
+                device_id
+            )
             if self.verbose > 1:
                 print(
                     f"[benchmarkrunner.benchmark] gpu_allocation="
@@ -962,7 +980,11 @@ class BenchmarkRunner:
             torch.cuda.reset_peak_memory_stats()
             stats["mema_gpu_4_reset"] = torch.cuda.max_memory_allocated(device_id)
 
-        sopt = ("-" + optimization.replace("+", "_").replace("/", "_")) if optimization else ""
+        sopt = (
+            ("-" + optimization.replace("+", "_").replace("/", "_"))
+            if optimization
+            else ""
+        )
         pfilename = os.path.join(
             folder,
             (
@@ -975,7 +997,9 @@ class BenchmarkRunner:
         filename = os.path.join(pfilename, "model.onnx")
 
         memory_session = (
-            start_spying_on(cuda=self.device.startswith("cuda")) if memory_peak else None
+            start_spying_on(cuda=self.device.startswith("cuda"))
+            if memory_peak
+            else None
         )
         if memory_session is not None and self.verbose:
             print("[BenchmarkRunner.benchmark] start_spying_on")
@@ -1031,7 +1055,9 @@ class BenchmarkRunner:
                 print("[BenchmarkRunner.benchmark] stop_spying_on")
 
         if self.device.startswith("cuda"):
-            stats["mema_gpu_5_after_export"] = torch.cuda.max_memory_allocated(device_id)
+            stats["mema_gpu_5_after_export"] = torch.cuda.max_memory_allocated(
+                device_id
+            )
             if self.verbose > 1:
                 print(
                     f"[benchmarkrunner.benchmark] gpu_allocation="
@@ -1072,7 +1098,9 @@ class BenchmarkRunner:
 
         if self.device.startswith("cuda"):
             torch.cuda.reset_peak_memory_stats()
-            stats["mema_gpu_6_after_gcollect"] = torch.cuda.max_memory_allocated(device_id)
+            stats["mema_gpu_6_after_gcollect"] = torch.cuda.max_memory_allocated(
+                device_id
+            )
             if self.verbose > 1:
                 print(
                     f"[benchmarkrunner.benchmark] gpu_allocation="
@@ -1125,7 +1153,9 @@ class BenchmarkRunner:
             torch.cuda.reset_peak_memory_stats()
             device_id = 0 if ":" not in self.device else int(self.device.split(":")[1])
             stats["device_id2"] = device_id
-            stats["mema_gpu_6_before_session"] = torch.cuda.max_memory_allocated(device_id)
+            stats["mema_gpu_6_before_session"] = torch.cuda.max_memory_allocated(
+                device_id
+            )
             if self.verbose > 1:
                 print(
                     f"[benchmarkrunner.benchmark] gpu_allocation="
@@ -1149,7 +1179,9 @@ class BenchmarkRunner:
                 ("CUDAExecutionProvider", {"device_id": device_id}),
                 "CPUExecutionProvider",
             ]
-            stats["providers"] = f"CUDAExecutionProvider:{device_id},CPUExecutionProvider"
+            stats["providers"] = (
+                f"CUDAExecutionProvider:{device_id},CPUExecutionProvider"
+            )
 
         begin = time.perf_counter()
         if isinstance(exported_model, onnx.ModelProto):
@@ -1173,7 +1205,9 @@ class BenchmarkRunner:
                     return stats
 
                 if self.verbose > 2:
-                    print(f"[BenchmarkRunner.benchmark] register {get_ort_ext_libs()[0]!r}")
+                    print(
+                        f"[BenchmarkRunner.benchmark] register {get_ort_ext_libs()[0]!r}"
+                    )
                 session_options.register_custom_ops_library(get_ort_ext_libs()[0])
 
             if self.verbose > 2:
@@ -1199,7 +1233,9 @@ class BenchmarkRunner:
             sess = WrapInferenceSessionForTorch(ort_sess)
             stats.update(self._post_process_onnx_statistics(exported_model))
 
-            if self.dump_ort and os.path.exists(session_options.optimized_model_filepath):
+            if self.dump_ort and os.path.exists(
+                session_options.optimized_model_filepath
+            ):
                 # Let's save the optimized model with external weights.
                 fold = os.path.join(
                     os.path.split(session_options.optimized_model_filepath)[0],
@@ -1228,7 +1264,9 @@ class BenchmarkRunner:
         stats["time_session"] = time.perf_counter() - begin
 
         if self.device.startswith("cuda"):
-            stats["mema_gpu_7_after_session"] = torch.cuda.max_memory_allocated(device_id)
+            stats["mema_gpu_7_after_session"] = torch.cuda.max_memory_allocated(
+                device_id
+            )
             if self.verbose > 1:
                 print(
                     f"[benchmarkrunner.benchmark] gpu_allocation="
@@ -1289,8 +1327,8 @@ class BenchmarkRunner:
                         torch.cuda.range_pop()
             stats["time_warmup"] = (time.perf_counter() - begin) / warmup
             if self.device.startswith("cuda"):
-                stats["mema_gpu_8_after_export_warmup"] = torch.cuda.max_memory_allocated(
-                    device_id
+                stats["mema_gpu_8_after_export_warmup"] = (
+                    torch.cuda.max_memory_allocated(device_id)
                 )
                 if self.verbose > 1:
                     print(
@@ -1337,13 +1375,13 @@ class BenchmarkRunner:
                     stats["time_latency_t_delta"] = (
                         stats["time_latency_t_max"] - stats["time_latency_t_min"]
                     ) / (stats["time_latency_t_med"])
-                    stats["time_latency_t_corrt"] = np.corrcoef(lats, list(range(len(lats))))[
-                        0, 1
-                    ]
+                    stats["time_latency_t_corrt"] = np.corrcoef(
+                        lats, list(range(len(lats)))
+                    )[0, 1]
 
             if self.device.startswith("cuda"):
-                stats["mema_gpu_9_after_export_repeat"] = torch.cuda.max_memory_allocated(
-                    device_id
+                stats["mema_gpu_9_after_export_repeat"] = (
+                    torch.cuda.max_memory_allocated(device_id)
                 )
                 if self.verbose > 1:
                     print(
@@ -1398,8 +1436,8 @@ class BenchmarkRunner:
                             torch.cuda.nvtx.range_pop()
                 stats["time_warmup"] = (time.perf_counter() - begin) / warmup
             if self.device.startswith("cuda"):
-                stats["mema_gpu_8_after_export_warmup"] = torch.cuda.max_memory_allocated(
-                    device_id
+                stats["mema_gpu_8_after_export_warmup"] = (
+                    torch.cuda.max_memory_allocated(device_id)
                 )
                 if self.verbose > 1:
                     print(
@@ -1446,13 +1484,13 @@ class BenchmarkRunner:
                     stats["time_latency_t_delta"] = (
                         stats["time_latency_t_max"] - stats["time_latency_t_min"]
                     ) / (stats["time_latency_t_med"])
-                    stats["time_latency_t_corrt"] = np.corrcoef(lats, list(range(len(lats))))[
-                        0, 1
-                    ]
+                    stats["time_latency_t_corrt"] = np.corrcoef(
+                        lats, list(range(len(lats)))
+                    )[0, 1]
 
             if self.device.startswith("cuda"):
-                stats["mema_gpu_9_after_export_repeat"] = torch.cuda.max_memory_allocated(
-                    device_id
+                stats["mema_gpu_9_after_export_repeat"] = (
+                    torch.cuda.max_memory_allocated(device_id)
                 )
                 if self.verbose > 1:
                     print(
@@ -1484,12 +1522,16 @@ class BenchmarkRunner:
             stats["discrepancies_abs_0"] = d["abs"]
             stats["discrepancies_rel_0"] = d["rel"]
             stats["discrepancies_avg_0"] = d["sum"] / max(d["n"], 1)
-            d = self.max_diff(expected, got, verbose=self.verbose, flatten=is_onnx, begin=1)
+            d = self.max_diff(
+                expected, got, verbose=self.verbose, flatten=is_onnx, begin=1
+            )
             if d["n"] > 0:
                 stats["discrepancies_abs_1+"] = d["abs"]
                 stats["discrepancies_rel_1+"] = d["rel"]
                 stats["discrepancies_avg_1+"] = d["sum"] / max(d["n"], 1)
             if self.verbose:
-                print(f"[BenchmarkRunner.benchmark] done model with {len(stats)} metrics")
+                print(
+                    f"[BenchmarkRunner.benchmark] done model with {len(stats)} metrics"
+                )
 
         return stats

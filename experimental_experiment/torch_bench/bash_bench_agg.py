@@ -68,7 +68,9 @@ def main(args=None):
         for p in sig.parameters:
             if p == "keys":
                 keys = sig.parameters[p].default
-        assert keys is not None, f"Unable to extract the default values for keys in {sig}"
+        assert (
+            keys is not None
+        ), f"Unable to extract the default values for keys in {sig}"
         skip = set(res.skip_keys.split(","))
         kwargs["keys"] = tuple(c for c in keys if c not in skip)
 

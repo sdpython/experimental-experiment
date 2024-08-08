@@ -17,7 +17,9 @@ class MakeConfig:
             setattr(self, k, v)
 
 
-def _rand_int_tensor(device: str, low: int, high: int, shape: Tuple[int, ...]) -> torch.Tensor:
+def _rand_int_tensor(
+    device: str, low: int, high: int, shape: Tuple[int, ...]
+) -> torch.Tensor:
     """Creates a random input integer tensor.
 
     :param device: device
@@ -92,9 +94,15 @@ def get_dynamo_stats() -> Dict[str, float]:
             "graph_breaks": sum(torch._dynamo.utils.counters["graph_break"].values()),
             # NB: The plus removes zero counts
             "unique_graph_breaks": len(+torch._dynamo.utils.counters["graph_break"]),
-            "autograd_captures": torch._dynamo.utils.counters["compiled_autograd"]["captures"],
-            "autograd_compiles": torch._dynamo.utils.counters["compiled_autograd"]["compiles"],
-            "cudagraph_skips": torch._dynamo.utils.counters["inductor"]["cudagraph_skips"],
+            "autograd_captures": torch._dynamo.utils.counters["compiled_autograd"][
+                "captures"
+            ],
+            "autograd_compiles": torch._dynamo.utils.counters["compiled_autograd"][
+                "compiles"
+            ],
+            "cudagraph_skips": torch._dynamo.utils.counters["inductor"][
+                "cudagraph_skips"
+            ],
         }
     )
 
@@ -157,7 +165,11 @@ class ModelRunner:
 
     @classmethod
     def _to_type_or_device(cls, o, dtype_or_device):
-        if dtype_or_device is None or o is None or isinstance(o, (str, bool, int, float)):
+        if (
+            dtype_or_device is None
+            or o is None
+            or isinstance(o, (str, bool, int, float))
+        ):
             return o
         if isinstance(o, list):
             return [cls._to_type_or_device(v, dtype_or_device) for v in o]
@@ -194,7 +206,9 @@ class ModelRunner:
                 offset_per_key=o.offset_per_key_or_none(),
                 inverse_indices=o.inverse_indices_or_none(),
             )
-            ext = {k: cls._to_type_or_device(v, dtype_or_device) for k, v in ext.items()}
+            ext = {
+                k: cls._to_type_or_device(v, dtype_or_device) for k, v in ext.items()
+            }
             return o.__class__(**ext)
 
         if isinstance(o, dict):
@@ -312,7 +326,9 @@ class ModelRunner:
     def parameters_dtype(self) -> str:
         """Returns the unique dtypes of all parameters."""
         return ",".join(
-            sorted({str(p.dtype).replace("torch.", "") for p in self.model.parameters()})
+            sorted(
+                {str(p.dtype).replace("torch.", "") for p in self.model.parameters()}
+            )
         )
 
     def export_as(
@@ -637,7 +653,9 @@ class ModelRunner:
         assert no_grad, "no_grad false not implemented yet"
         from ..xbuilder.model_container import proto_from_array
 
-        assert not optimization, f"optimization {optimization!r} not compatible with dynamo"
+        assert (
+            not optimization
+        ), f"optimization {optimization!r} not compatible with dynamo"
 
         def _clean(s):
             return s.replace(".", "_")
@@ -778,7 +796,9 @@ class ModelRunner:
         assert not fake_tensor, "fake_tensor not implemented."
         assert not dynamic, "dynamic true not implemented yet"
         assert no_grad, "no_grad false not implemented yet"
-        assert not optimization, f"optimization {optimization!r} not compatible with export"
+        assert (
+            not optimization
+        ), f"optimization {optimization!r} not compatible with export"
         from torch.export import export
 
         with torch.no_grad():
@@ -798,7 +818,9 @@ class ModelRunner:
         assert not fake_tensor, "fake_tensor not implemented."
         assert not dynamic, "dynamic true not implemented yet"
         assert no_grad, "no_grad false not implemented yet"
-        assert not optimization, f"optimization {optimization!r} not compatible with eager"
+        assert (
+            not optimization
+        ), f"optimization {optimization!r} not compatible with eager"
 
         return self.model, None
 
@@ -815,7 +837,9 @@ class ModelRunner:
         assert not fake_tensor, "fake_tensor not implemented."
         assert not dynamic, "dynamic true not implemented yet"
         assert no_grad, "no_grad false not implemented yet"
-        assert not optimization, f"optimization {optimization!r} not compatible with eager"
+        assert (
+            not optimization
+        ), f"optimization {optimization!r} not compatible with eager"
         from onnxruntime.training.ortmodule import ORTModule
 
         return ORTModule(self.model), None
@@ -833,9 +857,13 @@ class ModelRunner:
         assert not fake_tensor, "fake_tensor not implemented."
         assert not dynamic, "dynamic true not implemented yet"
         assert no_grad, "no_grad true not implemented yet"
-        assert not optimization, f"optimization {optimization!r} not compatible with compile"
+        assert (
+            not optimization
+        ), f"optimization {optimization!r} not compatible with compile"
 
-        def custom_backend(gm: torch.fx.GraphModule, example_inputs: List[torch.Tensor]):
+        def custom_backend(
+            gm: torch.fx.GraphModule, example_inputs: List[torch.Tensor]
+        ):
             return gm.forward
 
         with torch.no_grad():
@@ -857,7 +885,9 @@ class ModelRunner:
         assert not fake_tensor, "fake_tensor not implemented."
         assert not dynamic, "dynamic true not implemented yet"
         assert no_grad, "no_grad true not implemented yet"
-        assert not optimization, f"optimization {optimization!r} not compatible with inductor"
+        assert (
+            not optimization
+        ), f"optimization {optimization!r} not compatible with inductor"
 
         with torch.no_grad():
             res = torch.compile(self.model, backend="inductor", fullgraph=True)
@@ -876,7 +906,9 @@ class ModelRunner:
         assert not fake_tensor, "fake_tensor not implemented."
         assert not dynamic, "dynamic true not implemented yet"
         assert no_grad, "no_grad true not implemented yet"
-        assert not optimization, f"optimization {optimization!r} not compatible with dort"
+        assert (
+            not optimization
+        ), f"optimization {optimization!r} not compatible with dort"
 
         with torch.no_grad():
             res = torch.compile(self.model, backend="onnxrt", fullgraph=True)

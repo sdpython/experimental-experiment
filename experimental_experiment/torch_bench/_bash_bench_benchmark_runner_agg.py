@@ -552,7 +552,9 @@ def _apply_excel_style(
             continue
 
         n_cols = (
-            1 if isinstance(v.index[0], (str, int, np.int64, np.int32)) else len(v.index[0])
+            1
+            if isinstance(v.index[0], (str, int, np.int64, np.int32))
+            else len(v.index[0])
         )
         n_rows = (
             1
@@ -590,7 +592,9 @@ def _apply_excel_style(
                         or (_isinf(cell.value) and _isinf(look))
                     ):
                         first_row = cell.row
-                        first_col = cell.col_idx if hasattr(cell, "col_idx") else first_col
+                        first_col = (
+                            cell.col_idx if hasattr(cell, "col_idx") else first_col
+                        )
                         break
                     values.append(cell.value)
                 if first_row is not None:
@@ -1022,7 +1026,9 @@ def merge_benchmark_reports(
             elif isinstance(filename, pandas.DataFrame):
                 df = filename
             else:
-                raise TypeError(f"Unexpected type {type(filename)} for one element of data")
+                raise TypeError(
+                    f"Unexpected type {type(filename)} for one element of data"
+                )
             dfs.append(df)
         df = pandas.concat(dfs, axis=0)
     elif isinstance(data, pandas.DataFrame):
@@ -1050,7 +1056,9 @@ def merge_benchmark_reports(
                     df = df[(df["STEP"] == "last")]
             elif "ERR_export" in df.columns:
                 df = df[
-                    (df["STEP"].isna()) | (df["STEP"] != "export") | ~df["ERR_export"].isna()
+                    (df["STEP"].isna())
+                    | (df["STEP"] != "export")
+                    | ~df["ERR_export"].isna()
                 ]
             else:
                 df = df[(df["STEP"].isna()) | (df["STEP"] != "export")]
@@ -1469,7 +1477,9 @@ def merge_benchmark_reports(
             m0 = m
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore", category=FutureWarning)
-                m = m.T.stack(level=list(range(len(m.index.names)))).reset_index(drop=False)
+                m = m.T.stack(level=list(range(len(m.index.names)))).reset_index(
+                    drop=False
+                )
             cols = m.columns
             assert len(cols) >= 4, (
                 f"Unexpected number of columns in {cols}, "
@@ -1572,7 +1582,9 @@ def merge_benchmark_reports(
             None not in sheet.columns.names
         ), f"None in sheet.columns.names={sheet.columns.names}, prefix={prefix!r}"
         if verbose:
-            print(f"[merge_benchmark_reports] done, shape of {prefix!r} is {sheet.shape}")
+            print(
+                f"[merge_benchmark_reports] done, shape of {prefix!r} is {sheet.shape}"
+            )
 
         res[prefix[:-1]] = sheet
         res = {k: v for k, v in res.items() if k not in set(merge)}
@@ -1593,7 +1605,9 @@ def merge_benchmark_reports(
                     v[c] = dd
                 except ValueError:
                     types = [
-                        type(_) for _ in cc if not isinstance(_, float) or not np.isnan(_)
+                        type(_)
+                        for _ in cc
+                        if not isinstance(_, float) or not np.isnan(_)
                     ]
                     if set(types) == {str}:
                         continue
@@ -1653,7 +1667,9 @@ def merge_benchmark_reports(
         print("[merge_benchmark_reports] reorder")
 
     res["AGG"] = _reorder_index_level(res["AGG"], new_names + last_names, prefix="AGG")
-    res["AGG2"] = _reorder_index_level(res["AGG2"], new_names + last_names, prefix="AGG2")
+    res["AGG2"] = _reorder_index_level(
+        res["AGG2"], new_names + last_names, prefix="AGG2"
+    )
 
     if verbose:
         print("[merge_benchmark_reports] done")
@@ -1769,11 +1785,15 @@ def merge_benchmark_reports(
             for k in order:
                 v = final_res[k]
                 ev = _reverse_column_names_order(v, name=k)
-                frow = len(ev.columns.names) if isinstance(ev.columns.names, list) else 1
+                frow = (
+                    len(ev.columns.names) if isinstance(ev.columns.names, list) else 1
+                )
                 if k.startswith("SUMMARY"):
                     fcol = len(v.columns.names)
                 else:
-                    fcol = len(ev.index.names) if isinstance(ev.index.names, list) else 1
+                    fcol = (
+                        len(ev.index.names) if isinstance(ev.index.names, list) else 1
+                    )
 
                 if (
                     k in {"AGG2", "SUMMARY2", "SUMMARY2_base", "SUMMARY2_diff"}
@@ -1925,7 +1945,9 @@ def _create_aggregation_figures(
         assert (
             v.select_dtypes(include=np.number).shape[1] > 0
         ), f"No numeric column for k={k!r}, dtypes=\n{v.dtypes}"
-        assert None not in v.index.names, f"None in v.index.names={v.index.names}, k={k!r}"
+        assert (
+            None not in v.index.names
+        ), f"None in v.index.names={v.index.names}, k={k!r}"
         assert (
             None not in v.columns.names
         ), f"None in v.columns.names={v.columns.names}, k={k!r}"
@@ -1935,7 +1957,9 @@ def _create_aggregation_figures(
             v[key] = "?"
             v = v.reset_index(drop=False).set_index([key, *v.index.names])
 
-        assert key in v.index.names, f"Unable to find key={key} in {v.index.names} for k={k!r}"
+        assert (
+            key in v.index.names
+        ), f"Unable to find key={key} in {v.index.names} for k={k!r}"
         assert len(v.index.names) == len(
             model
         ), f"Length mismatch for k={k!r}, v.index.names={v.index.names}, model={model}"
@@ -1949,7 +1973,9 @@ def _create_aggregation_figures(
 
         v = v.sort_index(axis=1)
 
-        assert None not in v.index.names, f"None in v.index.names={v.index.names}, k={k!r}"
+        assert (
+            None not in v.index.names
+        ), f"None in v.index.names={v.index.names}, k={k!r}"
         assert (
             None not in v.columns.names
         ), f"None in v.columns.names={v.columns.names}, k={k!r}"
@@ -2019,11 +2045,15 @@ def _create_aggregation_figures(
         assert df.shape[0] > 0, f"Empty set for k={k!r}"
         assert df.shape[1] > 0, f"Empty columns for k={k!r}"
 
-        assert None not in df.index.names, f"None in df.index.names={df.index.names}, k={k!r}"
+        assert (
+            None not in df.index.names
+        ), f"None in df.index.names={df.index.names}, k={k!r}"
         assert (
             None not in df.columns.names
         ), f"None in df.columns.names={df.columns.names}, k={k!r}"
-        assert isinstance(df, pandas.DataFrame), f"Unexpected type {type(df)} for k={k!r}"
+        assert isinstance(
+            df, pandas.DataFrame
+        ), f"Unexpected type {type(df)} for k={k!r}"
 
         if "stat" in df.columns.names:
             with warnings.catch_warnings():
@@ -2043,15 +2073,21 @@ def _create_aggregation_figures(
                     assert (
                         None not in df.columns.names
                     ), f"None in df.columns.names={df.columns.names}, k={k!r}, df={df}"
-            assert isinstance(df, pandas.DataFrame), f"Unexpected type {type(df)} for k={k!r}"
+            assert isinstance(
+                df, pandas.DataFrame
+            ), f"Unexpected type {type(df)} for k={k!r}"
             assert (
                 None not in df.index.names
             ), f"None in df.index.names={df.index.names}, k={k!r}"
             assert (
                 None not in df.columns.names
             ), f"None in df.columns.names={df.columns.names}, k={k!r}, df={df}"
-        assert isinstance(df, pandas.DataFrame), f"Unexpected type {type(df)} for k={k!r}"
-        assert None not in df.index.names, f"None in df.index.names={df.index.names}, k={k!r}"
+        assert isinstance(
+            df, pandas.DataFrame
+        ), f"Unexpected type {type(df)} for k={k!r}"
+        assert (
+            None not in df.index.names
+        ), f"None in df.index.names={df.index.names}, k={k!r}"
         assert (
             None not in df.columns.names
         ), f"None in df.columns.names={df.columns.names}, k={k!r}"
@@ -2064,7 +2100,9 @@ def _create_aggregation_figures(
         set_names |= set(df.index.names)
 
     for k, df in aggs.items():
-        assert None not in df.index.names, f"None in df.index.names={df.index.names}, k={k!r}"
+        assert (
+            None not in df.index.names
+        ), f"None in df.index.names={df.index.names}, k={k!r}"
         assert (
             None not in df.columns.names
         ), f"None in df.columns.names={df.columns.names}, k={k!r}"
@@ -2079,7 +2117,9 @@ def _create_aggregation_figures(
     # concatenation
     dfs = pandas.concat(list(aggs.values()), axis=0)
     assert None not in dfs.index.names, f"None in dfs.index.names={dfs.index.names}"
-    assert None not in dfs.columns.names, f"None in dfs.columns.names={dfs.columns.names}"
+    assert (
+        None not in dfs.columns.names
+    ), f"None in dfs.columns.names={dfs.columns.names}"
     names = list(dfs.columns.names)
     dfs = dfs.unstack(key)
     keep_columns = dfs
@@ -2122,7 +2162,9 @@ def _select_metrics(
     for i in df.index.tolist():
         rows.append(set(dict(zip(names, i)).items()))
 
-    subset = [(s, set({k: v for k, v in s.items() if k in set_names}.items())) for s in select]
+    subset = [
+        (s, set({k: v for k, v in s.items() if k in set_names}.items())) for s in select
+    ]
 
     keep = []
     for i, row in enumerate(rows):
@@ -2222,7 +2264,9 @@ def _filter_data(
 
     if filter_in:
         cond = _f(filter_in)
-        assert isinstance(cond, dict), f"Unexpected type {type(cond)} for fmt={filter_in!r}"
+        assert isinstance(
+            cond, dict
+        ), f"Unexpected type {type(cond)} for fmt={filter_in!r}"
         for k, v in cond.items():
             if k not in df.columns:
                 continue
@@ -2230,7 +2274,9 @@ def _filter_data(
 
     if filter_out:
         cond = _f(filter_out)
-        assert isinstance(cond, dict), f"Unexpected type {type(cond)} for fmt={filter_out!r}"
+        assert isinstance(
+            cond, dict
+        ), f"Unexpected type {type(cond)} for fmt={filter_out!r}"
         for k, v in cond.items():
             if k not in df.columns:
                 continue
