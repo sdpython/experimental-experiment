@@ -1,9 +1,9 @@
 import collections
 import inspect
-import time
-import shutil
 import os
-from typing import Any, Callable, Optional, Tuple, Dict, List
+import shutil
+import time
+from typing import Any, Callable, Dict, List, Optional, Tuple
 import onnx
 import torch
 from .export_model_helper import compute_weight_size

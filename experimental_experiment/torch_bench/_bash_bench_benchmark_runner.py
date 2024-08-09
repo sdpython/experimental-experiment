@@ -20,7 +20,7 @@ from .export_model_helper import (
     str_dtype,
     str_shape,
 )
-from ..memory_peak import start_spying_on, flatten
+from ..memory_peak import flatten, start_spying_on
 
 
 class BenchmarkRunner:
