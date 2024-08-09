@@ -1015,6 +1015,108 @@ def aten_conv2d_padding(
     )
 
 
+def _convolution(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x,
+    weight,
+    bias,
+    stride,
+    padding,
+    dilation,
+    transposed,
+    output_padding,
+    groups,
+    benchmark,
+    deterministic,
+    cudnn_enabled,
+    allow_tf32=None,
+    name: str = "_convolution",
+):
+    assert g.has_shape(weight), f"weight={weight!r} has no shape{g.get_debug_msg()}"
+    weight_size = g.get_shape(weight)
+    kernel_shape = weight_size[2:]
+    assert is_static_shape(
+        tuple(kernel_shape)
+    ), f"Not implemented for weight shape {weight_size}{g.get_debug_msg()}"
+
+    args = [x, weight]
+
+    if bias is not None and g.has_rank(bias) and g.get_rank(bias) == 1:
+        # ONNX only supports 1D bias
+        args.append(bias)
+        add_bias = False
+    else:
+        add_bias = True
+
+    kwargs = {
+        "kernel_shape": list(weight_size[2:]),
+        "strides": list(stride),
+        # ONNX supports asymmetric padding, whereas PyTorch supports only
+        # symmetric padding
+        "pads": list(padding + padding),
+        "dilations": list(dilation),
+        "group": groups,
+    }
+
+    if any(o != 0 for o in output_padding):
+        # ONNX supports both output_shape and output_padding. they are equivalent expressive.
+        # output_padding is more straightforward, so we use it here.
+        # output_shape = stride * (input_shape - 1) +
+        #                output_padding + kernel_shape - padding * 2
+        assert transposed, f"transposed not specified{g.get_debug_msg()}"
+        assert len(stride) == len(
+            output_padding
+        ), f"Length mismath {len(stride)} != {len(output_padding)}{g.get_debug_msg()}"
+        kwargs["output_padding"] = list(output_padding)
+
+    if transposed:
+        n = g.op.ConvTranspose(*args, name=name, **kwargs)
+    else:
+        n = g.op.Conv(*args, name=name, **kwargs)
+
+    if add_bias:
+        return g.op.Add(n, bias, outputs=outputs, name=name)
+    return g.op.Identity(n, outputs=outputs, name=name)
+
+
+def aten_conv_transpose2d_input(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    weight: T,
+    bias: T,
+    stride: List[int],
+    padding: List[int],
+    output_padding: List[int],
+    groups: List[int],
+    dilation: List[int],
+    name: str = "conv_transpose2d_input",
+) -> T:
+    "conv_transpose"
+    return _convolution(
+        g,
+        sts,
+        outputs,
+        x,
+        weight,
+        bias,
+        stride,
+        padding,
+        dilation,
+        True,
+        output_padding,
+        groups,
+        None,
+        None,
+        None,
+        None,
+        name=name,
+    )
+
+
 def aten_copy(
     g: GraphBuilder,
     sts: Optional[Dict[str, Any]],
@@ -2172,6 +2274,102 @@ def aten_index_put(
         g.set_type(res, g.get_type(x))
         g.set_shape(res, g.get_shape(x))
     return res
+
+
+def aten_instance_norm(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    weight: Optional[T] = None,
+    bias: Optional[T] = None,
+    running_mean: Optional[T] = None,
+    running_var: Optional[T] = None,
+    use_input_stats: bool = True,
+    momentum: float = 0.1,
+    eps: float = 1e-05,
+    cudnn_enabled: bool = False,
+    name: str = "instance_norm",
+) -> T:
+    """instance_norm"""
+    assert cudnn_enabled, "Not implemented when cudnn_enabled is True"
+
+    itype = g.get_type(x)
+    dtype = tensor_dtype_to_np_dtype(itype)
+
+    if weight is None and g.has_shape(x):
+        sh = g.get_shape(x)
+        if is_static_dimension(sh[1]):
+            weight = np.ones(sh[1:2], dtype=dtype)
+    if weight is None:
+        sh = g.op.Shape(x, start=1, end=2, name=name)
+        weight = g.op.Expand(np.array([1], dtype=dtype), sh, name=name)
+
+    if bias is None and g.has_shape(x):
+        sh = g.get_shape(x)
+        if is_static_dimension(sh[1]):
+            bias = np.zeros(sh[1:2], dtype=dtype)
+    if bias is None:
+        sh = g.op.Shape(x, start=1, end=2, name=name)
+        bias = g.op.Expand(np.array([1], dtype=dtype), sh, name=name)
+
+    if use_input_stats:
+        # If `use_input_stats` is set to True,
+        # ignore 'running_mean' and 'running_var' and
+        # compute using input statistics.
+        # Otherwise, compute using the running statistics.
+        return g.op.InstanceNormalization(
+            x, weight, bias, epsilon=eps, name=name, outputs=outputs
+        )
+
+    assert (
+        running_mean is not None and running_var is not None
+    ), "running_mean and running_var must be provided when use_input_stats is False"
+
+    batch_size = None
+    if g.has_shape(x):
+        sh = g.get_shape(x)
+        if is_static_dimension(sh[0]):
+            batch_size = np.array([sh[0]], dtype=np.int64)
+
+    if batch_size is None:
+        batch_size = g.op.Shape(input, start=0, end=1, name=name)
+
+    bias = g.op.Tile(bias, batch_size, name=name)
+    weight = g.op.Tile(weight, batch_size, name=name)
+    n_running_mean = g.op.Tile(running_mean, batch_size, name=name)
+    n_running_var = g.op.Tile(running_var, batch_size, name=name)
+
+    bn_input = None
+    shape_x = None
+    if g.has_shape(x):
+        sh = g.get_shape(x)
+        if is_static_shape(sh[2:]):
+            cst = np.array([1, -1, *sh[2:]], dtype=np.int64)
+            bn_input = g.op.Reshape(x, cst, name=name)
+            shape_x = np.array(sh, dtype=np.int64)
+    if bn_input is None:
+        sh2 = g.op.Concat(
+            [1, -1], g.op.Shape(input, start=2, name=name), axis=0, name=name
+        )
+        bn_input = g.op.Reshape(x, sh2, name=name)
+        shape_x = g.op.Shape(x, name=name)
+
+    assert (
+        len(outputs) == 1
+    ), f"Only one output can be requested but outputs={outputs}{g.get_debug_msg()}"
+    bi_name = g.unique_name(f"{outputs[0]}_bn")
+    g.make_node(
+        "BatchNormalization",
+        [bn_input, weight, bias, n_running_mean, n_running_var],
+        [bi_name],
+        epsilon=eps,
+        momentum=1.0 - momentum,
+        training_mode=False,
+        name=name,
+    )
+
+    return g.op.Reshape(bi_name, shape_x, name=name, outputs=outputs)
 
 
 def aten_isinf(
@@ -3606,17 +3804,18 @@ def aten_pow_Tensor_Tensor(
     return res
 
 
-def aten_reciprocal(
+def aten_prelu(
     g: GraphBuilder,
     sts: Optional[Dict[str, Any]],
     outputs: List[str],
-    x: T,
-    name: str = "reciprocal",
+    a: T,
+    slope: T,
+    name: str = "prelu",
 ) -> T:
-    """reciprocal"""
-    res = g.op.Reciprocal(x, name=name, outputs=outputs)
+    "prelu"
+    res = g.op.PRelu(a, slope, name=name, outputs=outputs)
     if not sts:
-        set_type_shape_unary_op(g, res, x)
+        set_type_shape_unary_op(g, res, a)
     return res
 
 
@@ -3666,6 +3865,20 @@ def aten__prelu_kernel_backward(
         set_type_shape_unary_op(g, input_grad, x)
         set_type_shape_unary_op(g, weight_grad, weight)
     return input_grad, weight_grad
+
+
+def aten_reciprocal(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    name: str = "reciprocal",
+) -> T:
+    """reciprocal"""
+    res = g.op.Reciprocal(x, name=name, outputs=outputs)
+    if not sts:
+        set_type_shape_unary_op(g, res, x)
+    return res
 
 
 def aten_relu(
