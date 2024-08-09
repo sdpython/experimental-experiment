@@ -42,7 +42,7 @@ class FuncModule0(torch.nn.Module):
         self.params = torch.nn.ParameterList(list(params))
 
     def forward(self, *args):
-        args = tuple(args[0] + self.ppp, *args[1:])
+        args = (args[0] + self.ppp, *args[1:])
         res = self.f(*args)
         return res
 

@@ -376,7 +376,7 @@ torch_version = list(set(df["torch"].dropna()))
 transformers_version = list(set(df["transformers"].dropna()))
 ver = f"{torch_version[0]} - {transformers_version[0]}"
 model = parsed_args.model
-modeldf = next(set(df[model].dropna()))
+modeldf = list(set(df[model].dropna()))[0]  # noqa: RUF015
 title_prefix = (
     f"lower better\n"
     f"{parsed_args.model} - {ver} - mask{parsed_args.with_mask}"

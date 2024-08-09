@@ -360,7 +360,7 @@ def prepare_inputs_homogeneous_operator(
         ]
     dtypes = set(dtypes_list_not_none)
     if len(dtypes) == 1:
-        only = next(dtypes)
+        only = list(dtypes)[0]  # noqa: RUF015
     else:
         only = _get_compute_type(set(dtypes))
     inputs = []

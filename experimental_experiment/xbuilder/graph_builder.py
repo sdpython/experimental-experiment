@@ -121,6 +121,9 @@ class GraphBuilder:
     of a variable is set. Example: ``ONNXSTOP=attn_output python ...
     """
 
+    # Size of a tensor kept in the onnx file and not stored as exrternal weight.
+    SMALL_TENSOR = 1024
+
     _op_type_element_wise_types = element_wise_binary_op_types()
     _op_type_element_wise_cmp_types = element_wise_op_cmp_types()
     _op_type_unary_like = unary_like_op_types()
@@ -303,7 +306,7 @@ class GraphBuilder:
         if isinstance(value, int):
             return int, value
         if isinstance(value, np.ndarray):
-            if value.dtype == np.int64 and value.size < 8:
+            if value.size < self.SMALL_TENSOR:
                 return (value.dtype, value.shape, tuple(value.ravel().tolist()))
         return None
 
@@ -592,10 +595,12 @@ class GraphBuilder:
             return v
         if isinstance(value, TensorProto):
             if uses_external_data(value):
-                raise TypeError(
-                    f"Tensor is using external data, data_type={value.data_type}, "
-                    f"dims={value.dims}"
-                )
+                if exc:
+                    raise TypeError(
+                        f"Tensor is using external data, data_type={value.data_type}, "
+                        f"dims={value.dims}"
+                    )
+                return None
             v = onh.to_array(value)
             self.constants_computed_[name] = v
             return v
@@ -1250,7 +1255,7 @@ class GraphBuilder:
             f"Unexpected key {key} type are {[type(_) for _ in key]}, "
             f"shape={shape}{self.get_debug_msg()}"
         )
-        key = tuple("Concat", *key)
+        key = ("Concat", *key)
         if key in self._cache_shape:
             # The same shape was already requested.
             return self._cache_shape[key]
@@ -4167,7 +4172,10 @@ class GraphBuilder:
                 if not self.has_name(node.output[0]):
                     self.set_name(node.output[0])
                 self.set_sequence(
-                    node.output[0], next(unique_dtypes), shapes=None, ranks=ranks
+                    node.output[0],
+                    next(_ for _ in unique_dtypes),
+                    shapes=None,
+                    ranks=ranks,
                 )
                 new_nodes.append(node)
                 continue

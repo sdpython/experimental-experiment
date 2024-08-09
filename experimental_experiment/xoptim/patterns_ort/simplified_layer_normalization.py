@@ -72,7 +72,7 @@ class SimplifiedLayerNormalizationPattern(PatternOptimization):
             return self.none(node, inspect.currentframe().f_lineno)
 
         mul_i = set(node_mul.input)
-        cmp = set(node_pow.input[0], node_reciprocal.output[0])
+        cmp = {node_pow.input[0], node_reciprocal.output[0]}
         if mul_i != cmp:
             # We check the multiplication node takes the output of the div node
             # and the input of the pow node.

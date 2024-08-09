@@ -176,6 +176,8 @@ class IdentityPattern(PatternOptimization):
         elif len(shape) == 1 and node.op_type in {"Add", "Mul", "Sub", "Div"}:
             # less simple case, the tensor is multiplied on its last dimension.
             cst = g.get_computed_constant(node.input[1])
+            if cst is None:
+                return self.none(node, inspect.currentframe().f_lineno)
             unique = set(cst)
             if len(unique) != 1:
                 return self.none(node, inspect.currentframe().f_lineno)

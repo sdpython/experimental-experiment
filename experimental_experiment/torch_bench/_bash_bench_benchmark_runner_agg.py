@@ -1,5 +1,6 @@
 import glob
 import itertools
+import time
 import warnings
 from collections import Counter
 from typing import Dict, List, Optional, Sequence, Set, Union
@@ -836,7 +837,12 @@ def _apply_excel_style(
             ):
                 for cell in row:
                     if cell.value in fmt:
-                        for idx in range(cell.col_idx):
+                        start, end = (
+                            (0, cell.col_idx)
+                            if "SUMMARY" in k
+                            else (cell.col_idx, last_col)
+                        )
+                        for idx in range(start, end):
                             fcell = row[idx]
                             if isinstance(fcell.value, (int, float)):
                                 f = fmt[cell.value]
@@ -853,6 +859,10 @@ def _apply_excel_style(
                                         f = "0.00"
                                     elif fcell.value >= 1:
                                         f = "0.000"
+                                elif cell.value == "date":
+                                    ts = time.gmtime(fcell.value)
+                                    sval = time.strftime("%Y-%m-%d", ts)
+                                    fcell.value = sval
                                 fcell.number_format = f
 
             cols = {}
@@ -1323,7 +1333,10 @@ def merge_benchmark_reports(
 
         if expr == "date":
             if "date_start" in set_columns:
-                df["status_date"] = df["date_start"].to_datetime()
+                df["status_date"] = (
+                    pandas.to_datetime(df["date_start"]).astype("int64").astype(float)
+                    / 1e9
+                )
                 report_on.append("status_date")
             continue
 
@@ -1649,12 +1662,14 @@ def merge_benchmark_reports(
         for c in v.columns:
             if "output_names" in c or "input_names" in c:
                 continue
+            if "date" in c:
+                continue
             cc = v[c]
             if cc.dtype == np.object_:
                 try:
                     dd = cc.astype(float)
                     v[c] = dd
-                except ValueError:
+                except (ValueError, TypeError):
                     types = [
                         type(_)
                         for _ in cc
@@ -2066,6 +2081,7 @@ def _create_aggregation_figures(
             ("COUNT%", _propnan(gr.count() / total, is_nan)),
             ("TOTAL", _propnan(total, is_nan)),
         ]
+
         if k.startswith("speedup"):
             try:
                 geo_mean = gr.agg(_geo_mean)
@@ -2077,6 +2093,7 @@ def _create_aggregation_figures(
                 geo_mean = None
             if geo_mean is not None:
                 stats.append(("GEO-MEAN", geo_mean))
+
         dfs = []
         for name, df in stats:
             assert isinstance(

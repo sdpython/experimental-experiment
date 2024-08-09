@@ -693,7 +693,7 @@ def _aten_adaptive_avg_poolnd(
             g.set_type(res, g.get_type(x))
             if g.has_shape(x):
                 shape = g.get_shape(x)
-                new_shape = shape[:-d] + tuple(output_size)
+                new_shape = (*shape[:-d], *output_size)
                 g.set_shape(res, new_shape)
             elif g.has_rank(x):
                 rk = g.get_rank(x)

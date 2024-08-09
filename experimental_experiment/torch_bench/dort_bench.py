@@ -354,7 +354,7 @@ def main(args=None):
 
         i_shapes = set(config_dict["input_dims"])
         if len(i_shapes) == 1:
-            idims = "x".join(map(str, next(i_shapes)))
+            idims = "x".join(str(i) for i in i_shapes)
         else:
             idims = "|".join("x".join(map(str, shs)) for shs in list(i_shapes)[:2])
         del config_dict["input_dims"]
