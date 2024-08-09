@@ -20,7 +20,6 @@ class CustomOperatorSupport(OperatorSupport):
     def is_node_supported(
         self, submodules: Mapping[str, "torch.nn.Module"], node: "torch.fx.Node"
     ) -> bool:
-
         if node.op not in CALLABLE_NODE_OPS:
             if self.verbose > 1:
                 print(
@@ -112,7 +111,7 @@ def backend_partition_compile(
     args: List[torch.Tensor],
     support: Optional[OperatorSupport] = None,
     allows_single_node_partition: bool = True,
-    backend_function: Callable = None,
+    backend_function: Optional[Callable] = None,
     use_aot_autograd: bool = True,
     decompositions=None,
     partition_fn=None,

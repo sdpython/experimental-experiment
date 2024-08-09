@@ -79,7 +79,7 @@ def make_aot_ort(
     if (
         enable_pattern
         and "experimental" in enable_pattern
-        or any(map(lambda s: "experimental" in s, enable_pattern))
+        or any("experimental" in s for s in enable_pattern)
     ):
         try:
             from onnx_extended.ortops.optim.cuda import get_ort_ext_libs

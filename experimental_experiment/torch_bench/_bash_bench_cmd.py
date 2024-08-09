@@ -2,14 +2,12 @@ import os
 import pprint
 import time
 from datetime import datetime
-from typing import Optional, List
+from typing import List, Optional
 import numpy as np
 
 
 def bash_bench_parse_args(name: str, doc: str, new_args: Optional[List[str]] = None):
-    """
-    Returns parsed arguments.
-    """
+    """Returns parsed arguments."""
     from experimental_experiment.args import get_parsed_args
 
     args = get_parsed_args(
@@ -73,9 +71,9 @@ def bash_bench_main(script_name: str, doc: str, args: Optional[List[str]] = None
         print(f"{k}={v}")
 
     from experimental_experiment.bench_run import (
-        multi_run,
         make_configs,
         make_dataframe_from_benchmark_data,
+        multi_run,
         run_benchmark,
     )
     from experimental_experiment.torch_bench._bash_bench_benchmark_runner_agg import (

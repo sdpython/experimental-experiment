@@ -15,7 +15,6 @@ from experimental_experiment.torch_models.training_helper import train_loop
 
 
 class TestEdMistral(ExtTestCase):
-
     @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
     @ignore_warnings(DeprecationWarning)
     @requires_torch("2.3", "AssertionError: original output #6 is None")
@@ -30,7 +29,9 @@ class TestEdMistral(ExtTestCase):
                 ret = export_to_onnx(model, *input_tensors, rename_inputs=True)
             except RuntimeError as e:
                 if "cannot mutate tensors with frozen storage" in str(e):
-                    raise unittest.SkipTest("cannot mutate tensors with frozen storag")
+                    raise unittest.SkipTest(  # noqa: B904
+                        "cannot mutate tensors with frozen storag"
+                    )
                 raise
         onx = ret["proto"]
         xp = [x.numpy() for x in input_tensors]
@@ -57,7 +58,9 @@ class TestEdMistral(ExtTestCase):
                 ret = export_to_onnx(model, *input_tensors, rename_inputs=False)
             except RuntimeError as e:
                 if "cannot mutate tensors with frozen storage" in str(e):
-                    raise unittest.SkipTest("cannot mutate tensors with frozen storag")
+                    raise unittest.SkipTest(  # noqa: B904
+                        "cannot mutate tensors with frozen storag"
+                    )
                 raise
         onx = ret["proto"]
         names = [i.name for i in onx.graph.input]

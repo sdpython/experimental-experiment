@@ -171,10 +171,7 @@ def pprint_storage(
         rows = [sind + _single_print(storage)]
     elif isinstance(storage, dict):
         if len(storage) <= 10 and all(
-            map(
-                lambda v: isinstance(v, (int, float, str, bool, type(None))),
-                storage.values(),
-            )
+            isinstance(v, (int, float, str, bool, type(None))) for v in storage.values()
         ):
             rows = [sind + str(storage)]
         else:
@@ -190,7 +187,7 @@ def pprint_storage(
             rows.append(sind + "}")
     elif isinstance(storage, list):
         if len(storage) <= 10 and all(
-            map(lambda v: isinstance(v, (int, float, str, bool, type(None))), storage)
+            isinstance(v, (int, float, str, bool, type(None))) for v in storage
         ):
             rows = [sind + str(storage)]
         else:
@@ -205,7 +202,7 @@ def pprint_storage(
             rows.append(sind + "]")
     elif isinstance(storage, tuple):
         if len(storage) <= 10 and all(
-            map(lambda v: isinstance(v, (int, float, str, bool, type(None))), storage)
+            isinstance(v, (int, float, str, bool, type(None))) for v in storage
         ):
             rows = [sind + str(storage)]
         else:

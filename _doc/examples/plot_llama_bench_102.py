@@ -10,7 +10,7 @@ The script is calling many times the script
 ::
 
     python _doc/examples/plot_llama_bench_102.py --help
-    
+
 For exemple, to check mixed precision on multiple backend:
 
 ::
@@ -65,7 +65,7 @@ parsed_args = get_parsed_args(
     check=(0, "just check the script is working, ignores all other parameters"),
     config=("medium", "configuration to use, default or medium"),
     patterns=(
-        "none,default,default+onnxruntime," "default+onnxruntime+experimental",
+        "none,default,default+onnxruntime, default+onnxruntime+experimental",
         "optimization patterns to use",
     ),
     implementation=("eager", "eager or sdpa or both values comma separated value"),
@@ -376,7 +376,7 @@ torch_version = list(set(df["torch"].dropna()))
 transformers_version = list(set(df["transformers"].dropna()))
 ver = f"{torch_version[0]} - {transformers_version[0]}"
 model = parsed_args.model
-modeldf = list(set(df[model].dropna()))[0]
+modeldf = list(set(df[model].dropna()))[0]  # noqa: RUF015
 title_prefix = (
     f"lower better\n"
     f"{parsed_args.model} - {ver} - mask{parsed_args.with_mask}"

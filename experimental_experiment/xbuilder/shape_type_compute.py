@@ -222,7 +222,12 @@ def set_type_shape_matmul(g: "GraphBuilder", name: str, x: str, y: str):  # noqa
 
 
 def set_type_shape_gemm(
-    g: "GraphBuilder", name: str, x: str, y: str, transA: int, transB: int  # noqa: F821
+    g: "GraphBuilder",  # noqa: F821
+    name: str,
+    x: str,
+    y: str,
+    transA: int,
+    transB: int,
 ):
     if transA == 0 and transB == 0:
         return set_type_shape_matmul(g, name, x, y)
@@ -267,7 +272,9 @@ def set_type_shape_reduce_op(
 
 
 def _get_input_type(
-    g: "GraphBuilder", x: Any, python_default: bool  # noqa: F821
+    g: "GraphBuilder",  # noqa: F821
+    x: Any,
+    python_default: bool,
 ) -> int:
     if isinstance(x, int):
         if x is True or x is False:
@@ -308,7 +315,10 @@ def _get_compute_type(dtypes: Set[int]) -> int:
 
 
 def _cast_inputs(
-    g: "GraphBuilder", a: Any, itype: int, name: Optional[str] = None  # noqa: F821
+    g: "GraphBuilder",  # noqa: F821
+    a: Any,
+    itype: int,
+    name: Optional[str] = None,
 ) -> str:
     if isinstance(a, str):
         # a result
@@ -350,7 +360,7 @@ def prepare_inputs_homogeneous_operator(
         ]
     dtypes = set(dtypes_list_not_none)
     if len(dtypes) == 1:
-        only = list(dtypes)[0]
+        only = list(dtypes)[0]  # noqa: RUF015
     else:
         only = _get_compute_type(set(dtypes))
     inputs = []
@@ -383,7 +393,7 @@ def prepare_inputs_homogeneous_operator(
         res = g.op.Cast(tr, to=itype, outputs=outputs, name=name)
         if outputs is None:
             set_type_shape_unary_op(g, res, tr, itype=dtypes_list_not_none[0])
-    return tuple([res, *inputs])
+    return (res, *inputs)
 
 
 def _adjust_attributes_of_max_pool(
@@ -530,7 +540,8 @@ def _set_shape_type_op_any_sign(self: "GraphBuilder", node: NodeProto):  # noqa:
 
 
 def _set_shape_type_op_any_castlike(
-    self: "GraphBuilder", node: NodeProto  # noqa: F821
+    self: "GraphBuilder",  # noqa: F821
+    node: NodeProto,
 ):
     set_type_shape_unary_op(
         self, node.output[0], node.input[0], itype=self.get_type(node.input[1])
@@ -544,7 +555,8 @@ def _set_shape_type_op_any_maxpool(self: "GraphBuilder", node: NodeProto):  # no
 
 
 def _set_shape_type_op_any_gather_elements(
-    self: "GraphBuilder", node: NodeProto  # noqa: F821
+    self: "GraphBuilder",  # noqa: F821
+    node: NodeProto,
 ):
     self.set_type(node.output[0], self.get_type(node.input[0]))
     if self.has_shape(node.input[0]) and self.has_shape(node.input[1]):
@@ -561,9 +573,9 @@ def _set_shape_type_op_any_gather_elements(
 
 def _set_shape_type_op_any_concat(self: "GraphBuilder", node: NodeProto):  # noqa: F821
     self.set_type(node.output[0], self.get_type(node.input[0]))
-    if all(map(lambda s: self.has_shape(s), node.input)):
+    if all(self.has_shape(s) for s in node.input):
         axis = self.get_attribute(node, "axis").i
-        shapes = list(self.get_shape(i) for i in node.input)
+        shapes = [self.get_shape(i) for i in node.input]
         new_shape = list(shapes[0])
         dims = [sh[axis] for sh in shapes]
         if all_int(dims):
@@ -572,7 +584,7 @@ def _set_shape_type_op_any_concat(self: "GraphBuilder", node: NodeProto):  # noq
             new_shape[axis] = "+".join(map(str, dims))
         self.set_shape(node.output[0], tuple(new_shape))
     elif all(map(self.has_rank, node.input)):
-        ranks = list(self.get_rank(i) for i in node.input)
+        ranks = [self.get_rank(i) for i in node.input]
         assert (
             len(set(ranks)) == 1
         ), f"Unexpected ranks={ranks} for node {node.op_type!r}{self.get_debug_msg()}"
@@ -596,9 +608,9 @@ def _set_shape_type_op_any_split(self: "GraphBuilder", node: NodeProto):  # noqa
         and self.is_constant(node.input[1])
     ):
         splits = list(self.get_constant(node.input[1]))
-        assert len(splits) == len(node.output), (
-            f"Unexpected number of outputs, output={node.output} " f"splits={splits}"
-        )
+        assert len(splits) == len(
+            node.output
+        ), f"Unexpected number of outputs, output={node.output} splits={splits}"
         att = self.get_attribute(node, "axis", exc=False)
         axis = 0 if att is None else att.i
 
@@ -613,7 +625,8 @@ def _set_shape_type_op_any_split(self: "GraphBuilder", node: NodeProto):  # noqa
 
 
 def _set_shape_type_op_any_scatternd(
-    self: "GraphBuilder", node: NodeProto  # noqa: F821
+    self: "GraphBuilder",  # noqa: F821
+    node: NodeProto,
 ):
     if not self.has_type(node.input[0]):
         # the main type is missing, cannot continue
@@ -627,7 +640,8 @@ def _set_shape_type_op_any_scatternd(
 
 
 def _set_shape_type_op_any_transpose(
-    self: "GraphBuilder", node: NodeProto  # noqa: F821
+    self: "GraphBuilder",  # noqa: F821
+    node: NodeProto,
 ):
     if not self.has_type(node.input[0]):
         # the main type is missing, cannot continue
@@ -657,7 +671,8 @@ def _set_shape_type_op_any_tile(self: "GraphBuilder", node: NodeProto):  # noqa:
 
 
 def _set_shape_type_op_any_unsqueeze(
-    self: "GraphBuilder", node: NodeProto  # noqa: F821
+    self: "GraphBuilder",  # noqa: F821
+    node: NodeProto,
 ):
     if not self.has_type(node.input[0]):
         # the main type is missing, cannot continue
@@ -752,7 +767,9 @@ def _set_shape_type_op_any_where(self: "GraphBuilder", node: NodeProto):  # noqa
 
 
 def _set_shape_type_op_any_unary(
-    self: "GraphBuilder", node: NodeProto, itype: Optional[int] = None  # noqa: F821
+    self: "GraphBuilder",  # noqa: F821
+    node: NodeProto,
+    itype: Optional[int] = None,
 ):
     return set_type_shape_unary_op(self, node.output[0], node.input[0], itype=itype)
 

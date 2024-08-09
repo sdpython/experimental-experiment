@@ -1,6 +1,7 @@
 import itertools
 import os
 import unittest
+from typing import Optional
 import numpy as np
 from onnx import (
     ModelProto,
@@ -31,7 +32,7 @@ TFLOAT = TensorProto.FLOAT
 
 
 class TestGraphPatternOptimizationOrt(ExtTestCase):
-    def _range(self, *shape, bias: float = None):
+    def _range(self, *shape, bias: Optional[float] = None):
         n = np.prod(shape)
         x = np.arange(n).astype(np.float32) / n
         if bias:

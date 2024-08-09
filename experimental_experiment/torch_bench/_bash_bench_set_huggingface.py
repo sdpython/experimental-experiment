@@ -13,7 +13,6 @@ from ._bash_bench_set_dummies import Neuron, Neuron16, NeuronTuple, Neuron2Outpu
 
 
 class HuggingfaceRunner(BenchmarkRunner):
-
     imports = [
         "AlbertForPreTraining",
         "AutoConfig",

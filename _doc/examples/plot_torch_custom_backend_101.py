@@ -9,7 +9,7 @@ This example leverages the examples introduced on this page
 `Custom Backends <https://pytorch.org/docs/stable/torch.compiler_custom_backends.html>`_.
 It uses backend :func:`experimental_experiment.torch_dynamo.onnx_custom_backend`
 based on :epkg:`onnxruntime` and running on CPU or CUDA.
-It could easily replaced by 
+It could easily replaced by
 :func:`experimental_experiment.torch_dynamo.onnx_debug_backend`.
 This one based on the reference implemented from onnx
 can show the intermediate results if needed. It is very slow.
@@ -147,7 +147,7 @@ def trained_model(max_iter=5, dynamic=False, storage=None):
     for epoch in range(0, max_iter):
         current_loss = 0.0
 
-        for i, data in enumerate(trainloader, 0):
+        for _, data in enumerate(trainloader, 0):
             X, y = data
 
             optimizer.zero_grad()

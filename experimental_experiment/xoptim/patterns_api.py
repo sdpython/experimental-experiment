@@ -113,7 +113,8 @@ class PatternOptimization:
         return type(o) == type(self)  # noqa: E721
 
     def enumerate_matches(
-        self, g: "GraphBuilderPatternOptimization"  # noqa: F821
+        self,
+        g: "GraphBuilderPatternOptimization",  # noqa: F821
     ) -> Iterator:
         """
         Enumerates all the
@@ -127,7 +128,7 @@ class PatternOptimization:
                 # the first item of the list and then, if necessary, walking through the
                 # rest of the outputs.
                 if g.is_used(node.output[0]) or any(
-                    map(lambda o: g.is_used(o), node.output[1:])
+                    g.is_used(o) for o in node.output[1:]
                 ):
                     # We avoid processing a node which is not used.
                     res = self.match(g, node, matched)
@@ -217,7 +218,9 @@ class PatternOptimization:
                 )
 
     def apply(
-        self, g: "GraphBuilder", *nodes: Sequence[NodeProto]  # noqa: F821
+        self,
+        g: "GraphBuilder",  # noqa: F821
+        *nodes: Sequence[NodeProto],
     ) -> List[NodeProto]:
         """
         The method does the rewriting. It assumes it can happen.
@@ -263,7 +266,9 @@ class EasyPatternOptimization(PatternOptimization):
         )
 
     def _build_pattern(
-        self, g: "GraphBuilderPatternOptimization", fct: Callable  # noqa: F821
+        self,
+        g: "GraphBuilderPatternOptimization",  # noqa: F821
+        fct: Callable,
     ) -> "GraphBuilderPatternOptimization":  # noqa: F821
         from .graph_builder_optim import GraphBuilderPatternOptimization
 
@@ -311,7 +316,8 @@ class EasyPatternOptimization(PatternOptimization):
         return pat
 
     def _get_match_pattern(
-        self, g: "GraphBuilderPatternOptimization"  # noqa: F821
+        self,
+        g: "GraphBuilderPatternOptimization",  # noqa: F821
     ) -> "GraphBuilderPatternOptimization":  # noqa: F821
         cache_key = 0, tuple(sorted(g.opsets.items()))
         if cache_key in self._cache:
@@ -322,7 +328,8 @@ class EasyPatternOptimization(PatternOptimization):
         return pat
 
     def _get_apply_pattern(
-        self, g: "GraphBuilderPatternOptimization"  # noqa: F821
+        self,
+        g: "GraphBuilderPatternOptimization",  # noqa: F821
     ) -> "GraphBuilderPatternOptimization":  # noqa: F821
         cache_key = 1, tuple(sorted(g.opsets.items()))
         if cache_key in self._cache:
@@ -549,7 +556,7 @@ class EasyPatternOptimization(PatternOptimization):
 
             # Let's remove the nodes already marked.
             p_marked = [_ for _ in pns if id(_) not in marked]
-            id_marked = list(id(marked[id(_)][0]) for _ in pns if id(_) in marked)
+            id_marked = [id(marked[id(_)][0]) for _ in pns if id(_) in marked]
             assert len(id_marked) + len(p_marked) == len(pns), (
                 f"Unexpected, id_marked={id_marked}, "
                 f"id_p_marked={set(map(id, p_marked))}, "
@@ -848,7 +855,7 @@ class EasyPatternOptimization(PatternOptimization):
         # to avoid infinite loops.
         max_iter = len(pat.nodes) * 2
         while stacked and iteration < max_iter:
-            assert all(map(lambda b: id(b[1]) in check_ids, marked.values())), (
+            assert all(id(b[1]) in check_ids for b in marked.values()), (
                 f"At least one id is not part of the pattern ids={check_ids}, "
                 f"marked={set(id(b[1]) for b in marked.values())}"
             )
@@ -864,7 +871,7 @@ class EasyPatternOptimization(PatternOptimization):
             n, pn = marked[idn]
 
             fall_back_candidates = None
-            if any(map(lambda i: pat.node_before(i) is not None, pn.input)):
+            if any(pat.node_before(i) is not None for i in pn.input):
                 # There are backward nodes in the pattern.
                 res = self._match_backward(
                     g, node, pat, marked, pair_results_names, stacked, n, pn
@@ -887,7 +894,7 @@ class EasyPatternOptimization(PatternOptimization):
                             fall_back_candidates = list(zip(n.input, pn.input))
                             break
 
-            assert all(map(lambda b: id(b[1]) in check_ids, marked.values())), (
+            assert all(id(b[1]) in check_ids for b in marked.values()), (
                 f"At least one id is not part of the pattern ids={check_ids}, "
                 f"marked={set(id(b[1]) for b in marked.values())}"
             )
@@ -912,7 +919,7 @@ class EasyPatternOptimization(PatternOptimization):
                         continue
                     break
 
-            assert all(map(lambda b: id(b[1]) in check_ids, marked.values())), (
+            assert all(id(b[1]) in check_ids for b in marked.values()), (
                 f"At least one id is not part of the pattern ids={check_ids}, "
                 f"marked={set(id(b[1]) for b in marked.values())}"
             )
@@ -1134,7 +1141,9 @@ class OnnxEasyPatternOptimization(EasyPatternOptimization):
         self._apply_model = apply_model
 
     def _build_pattern(
-        self, g: "GraphBuilderPatternOptimization", fct: Callable  # noqa: F821
+        self,
+        g: "GraphBuilderPatternOptimization",  # noqa: F821
+        fct: Callable,
     ) -> "GraphBuilderPatternOptimization":  # noqa: F821
         if fct == self.match_pattern:
             onx = self._match_model

@@ -8,7 +8,9 @@ class Var:
     """
 
     def __init__(
-        self, name: str, builder: Optional["GraphBuilder"] = None  # noqa: F821
+        self,
+        name: str,
+        builder: Optional["GraphBuilder"] = None,  # noqa: F821
     ):
         assert isinstance(name, str), f"Unexpected type {type(name)} for name"
         self.name = name

@@ -443,7 +443,7 @@ def aten_as_strided(
         if np.prod(shape) == np.prod(size):
             return g.op.Reshape(x, np.array(size, dtype=np.int64), outputs=outputs)
 
-    assert False, (
+    raise AssertionError(
         f"The implementation is still incorrect, x={x!r}, "
         f"shape={g.get_shape(x)}, size={size}, "
         f"stride={stride}, storage_offset={storage_offset}{g.get_debug_msg()}"
@@ -693,7 +693,7 @@ def _aten_adaptive_avg_poolnd(
             g.set_type(res, g.get_type(x))
             if g.has_shape(x):
                 shape = g.get_shape(x)
-                new_shape = shape[:-d] + tuple(output_size)
+                new_shape = (*shape[:-d], *output_size)
                 g.set_shape(res, new_shape)
             elif g.has_rank(x):
                 rk = g.get_rank(x)
@@ -761,9 +761,9 @@ def aten_cat(
     res = g.op.Concat(*tensors, axis=dim, outputs=outputs, name="cat")
     if not sts:
         dt0 = g.get_type(tensors[0])
-        assert all(map(lambda t: g.get_type(t) == dt0, tensors))
+        assert all(g.get_type(t) == dt0 for t in tensors)
         r0 = g.get_rank(tensors[0])
-        assert all(map(lambda t: g.get_rank(t) == r0, tensors))
+        assert all(g.get_rank(t) == r0 for t in tensors)
         g.set_type(outputs[0], dt0)
         g.set_rank(outputs[0], r0)
     return res
@@ -859,9 +859,9 @@ def aten_convolution(
             f"{g.get_debug_msg()}"
         )
         shapew = g.get_shape(weight)
-        assert len(shapew) == 4, (
-            f"Unexpected shape={shapew} for the weights" f"{g.get_debug_msg()}"
-        )
+        assert (
+            len(shapew) == 4
+        ), f"Unexpected shape={shapew} for the weights{g.get_debug_msg()}"
         assert set(i % 2 for i in shapew[2:]) == {1}, (
             f"Not implemented for even shape for the weight: {shapew}"
             f"{g.get_debug_msg()}"
@@ -1402,7 +1402,7 @@ def aten__enter_autocast(
     Returns the function returns a dummy which will be removed
     after the graph is created.
     """
-    assert all(map(lambda x: not isinstance(x, str) or x in {"cpu", "cuda"}, args)), (
+    assert all((not isinstance(x, str) or x in {"cpu", "cuda"}) for x in args), (
         f"The function should not take any tensors as input but types are "
         f"{[type(_) for _ in args]}: {args}{g.get_debug_msg()}"
     )
@@ -1496,7 +1496,7 @@ def aten_expand(
     if not isinstance(sizes, str) and g.has_shape(x):
         shape = g.get_shape(x)
         while len(shape) < len(sizes):
-            shape = (1,) + shape
+            shape = (1, *shape)
         assert len(shape) == len(
             sizes
         ), f"Unable to expand x with shape={shape} because sizes={sizes}{g.get_debug_msg()}"
@@ -1818,7 +1818,7 @@ def aten_gather(
     shape = g.has_shape(index)
     if shape in (tuple(), (1,)):
         # index is a scalar
-        assert False
+        raise AssertionError(f"shape={shape!r} a scalar{g.get_debug_msg()}")
 
     if g.get_type(index) != TensorProto.INT64:
         new_index = g.op.Cast(index, to=TensorProto.INT64, name=name)
@@ -2052,7 +2052,7 @@ def aten_index_Tensor(
             g, sts, outputs, x, dim=0, index=indices[0], name="index1_Tensor"
         )
 
-    n_none = len(list(i for i in indices if i is None))
+    n_none = len([i for i in indices if i is None])
     if n_none == 0:
         # No none dimension, example:
         # indices = [A, B]
@@ -2092,7 +2092,7 @@ def aten_index_Tensor(
                 index=index,
                 name="index2_Tensor",
             )
-            to_add = list(i for i in range(len(indices)) if i != position)
+            to_add = [i for i in range(len(indices)) if i != position]
             assert len(to_add) > 0, (
                 f"Unexpected value for to_add={to_add}, "
                 f"position={position}, indices={indices}"
@@ -2152,7 +2152,7 @@ def aten_index_put(
     new_index = g.op.UnsqueezeAnyOpset(index, np.array([-1], dtype=np.int64), name=name)
     g.set_type(new_index, index_dtype)
     if g.has_shape(index):
-        g.set_shape(new_index, g.get_shape(index) + (1,))
+        g.set_shape(new_index, (*g.get_shape(index), 1))
     else:
         g.set_rank(new_index, g.get_rank(index) + 1)
 
@@ -2593,7 +2593,7 @@ def aten_max_other(
             set_type_shape_binary_op(g, res, x, y, itype=itype)
         return res
 
-    assert False, (
+    raise AssertionError(
         f"Unable to guess the output type for {x!r} (type={g.get_type(x)}) "
         f"and {y!r} (type={g.get_type(y)})"
     )
@@ -3374,7 +3374,7 @@ def aten_ones(
     sts: Optional[Dict[str, Any]],
     outputs: List[str],
     size: T,
-    dtype: int = None,
+    dtype: Optional[int] = None,
     layout=None,
     device: Optional["torch.device"] = None,  # noqa: F821
     pin_memory=None,
@@ -3498,7 +3498,7 @@ def aten_constant_pad_nd(
         )
 
     raise AssertionError(
-        f"Not implemented for pad={pad!r}, value={value!r}" f"{g.get_debug_msg()}"
+        f"Not implemented for pad={pad!r}, value={value!r}{g.get_debug_msg()}"
     )
 
 
@@ -3518,7 +3518,7 @@ def aten_reflection_pad2d(
         return aten_pad(g, sts, outputs, x, pad, mode="reflect", name=name, value=value)
 
     raise AssertionError(
-        f"Not implemented for pad={pad!r}, value={value!r}" f"{g.get_debug_msg()}"
+        f"Not implemented for pad={pad!r}, value={value!r}{g.get_debug_msg()}"
     )
 
 
@@ -3921,9 +3921,10 @@ def aten_scalar_tensor(
         None,
         torch.strided,
     ), f"not implemented for layout={layout!r}{g.get_debug_msg()}"
-    assert pin_memory in (None, False), (
-        f"not implemented for pin_memory={pin_memory!r}" f"{g.get_debug_msg()}"
-    )
+    assert pin_memory in (
+        None,
+        False,
+    ), f"not implemented for pin_memory={pin_memory!r} {g.get_debug_msg()}"
     assert isinstance(
         s, (float, int)
     ), f"not implemented for type(s)={type(s)!r}{g.get_debug_msg()}"
@@ -3954,7 +3955,7 @@ def aten_scaled_dot_product_attention(
     "scaled_dot_product_attention"
     assert not enable_gqa, f"not implemented if enable_gqa={enable_gqa}"
     assert (not is_causal) or (
-        (is_causal and attn_mask is None)
+        is_causal and attn_mask is None
     ), f"is_causal and attn_mask cannot be set at the same time{g.get_debug_msg()}"
 
     if scale is None:
@@ -4008,7 +4009,6 @@ def _aten__scaled_dot_product_flash_attention_fillin_empty_outputs(
     query: T,
     name: str = "_scaled_dot_product_flash_attention_fillin_empty_outputs",
 ) -> Tuple[T, T, T, T]:
-
     query_first_three_dims = g.op.Slice(
         g.op.Shape(query, name=name),
         g.op.Constant(value_ints=[0], name=name),
@@ -4777,7 +4777,7 @@ def aten_split_with_sizes(
             new_ranks = []
             shape = g.get_shape(x)
             new_shape = list(shape)
-            for i in range(n_splits):
+            for _ in range(n_splits):
                 s = min(size - split_sizes, split_sizes)
                 new_shape[dim] = s
                 size -= split_sizes
@@ -4796,7 +4796,7 @@ def aten_split_with_sizes(
         f"is a constant{g.get_debug_msg()}"
     )
     assert isinstance(dim, int), f"dim={dim} is not an integer{g.get_debug_msg()}"
-    assert all(map(lambda d: d > 0, split_sizes)), (
+    assert all(d > 0 for d in split_sizes), (
         f"split_with_sizes only implemented when all sizes are positive "
         f"but split_sizes={split_sizes}{g.get_debug_msg()}"
     )
@@ -5326,9 +5326,9 @@ def aten_unbind_int(
 ) -> Tuple[T, ...]:
     """split"""
     assert not use_sequence, f"Not implemented for use_sequence={use_sequence}"
-    assert g.has_shape(x), (
-        f"Not implemented when the input {x!r} " f"has no shape{g.get_debug_msg()}"
-    )
+    assert g.has_shape(
+        x
+    ), f"Not implemented when the input {x!r} has no shape{g.get_debug_msg()}"
     shape = g.get_shape(x)
     assert isinstance(shape[dim], int), (
         f"Not implemented when shape on this axis is dynamic, "
@@ -5358,7 +5358,7 @@ def aten_unbind_int(
         new_shape = list(shape)
         del new_shape[dim]
         t = g.get_type(x)
-        for i, o in enumerate(res):
+        for o in res:
             g.set_type(o, t)
             g.get_shape(o, new_shape)
     return res

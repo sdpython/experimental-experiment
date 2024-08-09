@@ -18,7 +18,6 @@ from experimental_experiment.torch_models.phi3_helper import has_phi3
 
 
 class TestEdPhi3(ExtTestCase):
-
     @classmethod
     def setUp(cls):
         import torch._dynamo
@@ -90,7 +89,7 @@ class TestEdPhi3(ExtTestCase):
             results = compiled_model(*input_tensors)
         except torch._dynamo.exc.Unsupported as e:
             if "Logger not supported for non-export cases" in str(e):
-                raise unittest.SkipTest(
+                raise unittest.SkipTest(  # noqa: B904
                     "transformers which make the torch export fail."
                 )
             raise
@@ -141,7 +140,7 @@ class TestEdPhi3(ExtTestCase):
                 results = compiled_model(*input_tensors)
             except torch._dynamo.exc.Unsupported as e:
                 if "Logger not supported for non-export cases" in str(e):
-                    raise unittest.SkipTest(
+                    raise unittest.SkipTest(  # noqa: B904
                         "transformers which make the torch export fail."
                     )
                 raise
@@ -186,7 +185,7 @@ class TestEdPhi3(ExtTestCase):
             results = compiled_model(*input_tensors)
         except torch._dynamo.exc.Unsupported as e:
             if "You are not running the flash-attention implementation" in str(e):
-                raise unittest.SkipTest(
+                raise unittest.SkipTest(  # noqa: B904
                     "transformers which make the torch export fail."
                 )
             raise
@@ -227,7 +226,7 @@ class TestEdPhi3(ExtTestCase):
             results = compiled_model(*input_tensors)
         except torch._dynamo.exc.Unsupported as e:
             if "Logger not supported for non-export cases" in str(e):
-                raise unittest.SkipTest(
+                raise unittest.SkipTest(  # noqa: B904
                     "transformers which make the torch export fail."
                 )
             raise

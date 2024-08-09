@@ -1,5 +1,6 @@
 import glob
 import itertools
+import time
 import warnings
 from collections import Counter
 from typing import Dict, List, Optional, Sequence, Set, Union
@@ -33,6 +34,15 @@ BUCKETS = [
 
 def _SELECTED_FEATURES():
     features = [
+        dict(
+            cat="status",
+            stat="date",
+            agg="MAX",
+            new_name="date",
+            unit="date",
+            help="Most recent date involved",
+            simple=True,
+        ),
         dict(
             cat="time",
             stat="ITER",
@@ -75,12 +85,33 @@ def _SELECTED_FEATURES():
         ),
         dict(
             cat="status",
+            agg="SUM",
+            stat="pass_rate",
+            new_name="pass number",
+            unit="N",
+            help="Number of models successfully converted into ONNX, "
+            "with a maximum discrepancy < 0.1 and a speedup > 0.98.",
+            simple=True,
+        ),
+        dict(
+            cat="status",
             agg="MEAN",
             stat="pass_rate",
             new_name="pass rate",
             unit="%",
             help="Proportion of models successfully converted into ONNX, "
             "with a maximum discrepancy < 0.1 and a speedup > 0.98.",
+            simple=True,
+        ),
+        dict(
+            cat="time",
+            agg="COUNT",
+            stat="export_success",
+            new_name="export number",
+            unit="N",
+            help="Number of models successfully converted into ONNX. "
+            "The ONNX model may not be run through onnxruntime or with "
+            "significant discrepancies.",
             simple=True,
         ),
         dict(
@@ -93,6 +124,18 @@ def _SELECTED_FEATURES():
             "The ONNX model may not be run through onnxruntime or with "
             "significant discrepancies.",
             simple=True,
+        ),
+        dict(
+            cat="speedup",
+            agg="COUNT",
+            stat="increase",
+            new_name="run number",
+            unit="N",
+            help="Number of models successfully converted into ONNX "
+            "and onnxruntime can run it. "
+            "The outputs may be right or wrong. Unit test ensures every aten functions "
+            "is correctly converted but the combination may produce outputs "
+            "with higher discrepancies than expected.",
         ),
         dict(
             cat="speedup",
@@ -779,11 +822,12 @@ def _apply_excel_style(
             fmt = {
                 "x": "0.000",
                 "%": "0.000%",
-                "bytes": "0 000",
+                "bytes": "# ##0",
                 "Mb": "0.000",
                 "N": "0",
                 "f": "0.000",
                 "s": "0.0000",
+                "date": "aaaa-mm-dd",
             }
             for row in sheet.iter_rows(
                 min_row=first_row,
@@ -793,7 +837,12 @@ def _apply_excel_style(
             ):
                 for cell in row:
                     if cell.value in fmt:
-                        for idx in range(cell.col_idx):
+                        start, end = (
+                            (0, cell.col_idx)
+                            if "SUMMARY" in k
+                            else (cell.col_idx, last_col)
+                        )
+                        for idx in range(start, end):
                             fcell = row[idx]
                             if isinstance(fcell.value, (int, float)):
                                 f = fmt[cell.value]
@@ -810,6 +859,10 @@ def _apply_excel_style(
                                         f = "0.00"
                                     elif fcell.value >= 1:
                                         f = "0.000"
+                                elif cell.value == "date":
+                                    ts = time.gmtime(fcell.value)
+                                    sval = time.strftime("%Y-%m-%d", ts)
+                                    fcell.value = sval
                                 fcell.number_format = f
 
             cols = {}
@@ -899,6 +952,7 @@ def merge_benchmark_reports(
         "version_tag",
         "version_torch",
         "version_transformers",
+        "version_monai",
     ),
     column_keys=("stat", "exporter", "opt_patterns"),
     report_on=(
@@ -921,6 +975,7 @@ def merge_benchmark_reports(
         "memory_delta",
         "control_flow",
         "pass_rate",
+        "date",
     ),
     excel_output: Optional[str] = None,
     exc: bool = True,
@@ -1276,6 +1331,15 @@ def merge_benchmark_reports(
                 report_on.append("status_pass_rate")
             continue
 
+        if expr == "date":
+            if "date_start" in set_columns:
+                df["status_date"] = (
+                    pandas.to_datetime(df["date_start"]).astype("int64").astype(float)
+                    / 1e9
+                )
+                report_on.append("status_date")
+            continue
+
         if expr == "status":
             if "time_export_success" in set_columns:
                 df["status_convert"] = (~df["time_export_success"].isna()).astype(int)
@@ -1598,12 +1662,14 @@ def merge_benchmark_reports(
         for c in v.columns:
             if "output_names" in c or "input_names" in c:
                 continue
+            if "date" in c:
+                continue
             cc = v[c]
             if cc.dtype == np.object_:
                 try:
                     dd = cc.astype(float)
                     v[c] = dd
-                except ValueError:
+                except (ValueError, TypeError):
                     types = [
                         type(_)
                         for _ in cc
@@ -1905,7 +1971,9 @@ def _reorder_index_level(
 
 
 def _add_level(
-    index: "pandas.MultiIndex", name: str, value: str  # noqa: F821
+    index: "pandas.MultiIndex",  # noqa: F821
+    name: str,
+    value: str,
 ) -> "pandas.MultiIndex":  # noqa: F821
     import pandas
 
@@ -2013,6 +2081,7 @@ def _create_aggregation_figures(
             ("COUNT%", _propnan(gr.count() / total, is_nan)),
             ("TOTAL", _propnan(total, is_nan)),
         ]
+
         if k.startswith("speedup"):
             try:
                 geo_mean = gr.agg(_geo_mean)
@@ -2024,6 +2093,7 @@ def _create_aggregation_figures(
                 geo_mean = None
             if geo_mean is not None:
                 stats.append(("GEO-MEAN", geo_mean))
+
         dfs = []
         for name, df in stats:
             assert isinstance(

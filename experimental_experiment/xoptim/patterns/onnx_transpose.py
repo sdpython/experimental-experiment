@@ -10,7 +10,7 @@ class TransposeTransposePattern(PatternOptimization):
     """
 
     def __init__(self, verbose: int = 0, priority: int = 0):
-        super(TransposeTransposePattern, self).__init__(verbose, priority)
+        super().__init__(verbose, priority)
 
     @classmethod
     def apply_transpose(
@@ -65,9 +65,11 @@ class TransposeTransposePattern(PatternOptimization):
         return MatchResult(self, [node, next_node], self.apply)
 
     def apply(
-        self, g: "GraphBuilder", node: NodeProto, next_node: NodeProto  # noqa: F821
+        self,
+        g: "GraphBuilder",  # noqa: F821
+        node: NodeProto,
+        next_node: NodeProto,
     ) -> List[NodeProto]:
-
         perms = [tuple(g.get_attribute(n, "perm").ints) for n in [node, next_node]]
         first = list(range(len(perms[0])))
         last = self.apply_transposes(perms)

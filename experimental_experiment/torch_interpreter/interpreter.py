@@ -328,7 +328,8 @@ class DynamoInterpreter:
         raise TypeError(f"Unexpected output type {type(val)}.")
 
     def _fill_in_default_kwargs(
-        self, node: "torch.fx.Node"  # noqa: F821
+        self,
+        node: "torch.fx.Node",  # noqa: F821
     ) -> Tuple[List[Any], Dict[str, Any]]:
         if hasattr(node.target, "_schema"):
             node_schema = node.target._schema
@@ -683,9 +684,7 @@ class DynamoInterpreter:
                 )
 
         if isinstance(index, tuple):
-            if all(
-                map(lambda x: x is Ellipsis or x is None or isinstance(x, slice), index)
-            ):
+            if all(x is Ellipsis or x is None or isinstance(x, slice) for x in index):
                 # something like x[3:4]
                 axes = []
                 slices = []
@@ -899,7 +898,7 @@ class DynamoInterpreter:
             elif isinstance(res, list) and len(res) != 1:
                 # SplitToSequence rewritten into a Split
                 name = output_names[0]
-                assert all(map(lambda s: s.startswith(name), res)), (
+                assert all(s.startswith(name) for s in res), (
                     f"Unexpected output_names={output_names}, "
                     f"res={res}, node.name={node.name}"
                     f"{self.builder.get_debug_msg()}"
@@ -933,7 +932,8 @@ class DynamoInterpreter:
         return None
 
     def _get_node_output_type(
-        self, node: "torch.fx.Node"  # noqa: F821
+        self,
+        node: "torch.fx.Node",  # noqa: F821
     ) -> Optional[Union["torch.dtype", Tuple["torch.dtype", ...]]]:  # noqa: F821
         val = node.meta.get("val", None)
         if val is not None:
@@ -955,7 +955,9 @@ class DynamoInterpreter:
         return None
 
     def _set_shape_and_type(
-        self, node: "torch.fx.Node", res: Union[str, List[str]]  # noqa: F821
+        self,
+        node: "torch.fx.Node",  # noqa: F821
+        res: Union[str, List[str]],
     ):
         val = node.meta.get("val", None)
         exa = node.meta.get("example_value", None)

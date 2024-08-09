@@ -57,7 +57,6 @@ class SoftmaxGradPattern(PatternOptimization):
         next_mul_node: NodeProto,
         sub_node: NodeProto,
     ) -> List[NodeProto]:
-
         axis = g.get_constant_or_attribute(
             reduce_node, "axes", input_index=1, cvt=tuple
         )

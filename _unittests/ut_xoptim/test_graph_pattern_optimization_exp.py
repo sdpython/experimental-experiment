@@ -1,6 +1,7 @@
 import itertools
 import unittest
 import numpy as np
+from typing import Optional
 from onnx import ModelProto, TensorProto, helper as oh, numpy_helper as onh
 from onnx.checker import check_model
 from experimental_experiment.ext_test_case import ExtTestCase, skipif_ci_windows
@@ -20,7 +21,7 @@ TFLOAT16 = TensorProto.FLOAT16
 
 
 class TestGraphPatternOptimizationExp(ExtTestCase):
-    def _range(self, *shape, bias: float = None):
+    def _range(self, *shape, bias: Optional[float] = None):
         n = np.prod(shape)
         x = np.arange(n).astype(np.float32) / n
         if bias:
@@ -120,7 +121,11 @@ class TestGraphPatternOptimizationExp(ExtTestCase):
         self.assertEqualArray(expected[0], got[0])
 
     def _get_aamm_model(
-        self, op_type: str, left: bool, other_type: str = None, negative: bool = False
+        self,
+        op_type: str,
+        left: bool,
+        other_type: Optional[str] = None,
+        negative: bool = False,
     ) -> ModelProto:
         if other_type is None:
             other_type = op_type
@@ -697,7 +702,7 @@ class TestGraphPatternOptimizationExp(ExtTestCase):
                         patterns=["AddMulTranspose"], processor="CPU,CUDA", verbose=0
                     ),
                 )
-                self.capture(lambda: self.print_model(model))
+                self.capture(lambda model=model: self.print_model(model))
                 opt_onx = gr.to_onnx(optimize=True)
                 self.assertEqual(
                     [f"{op_type1}{op_type2}"], [_.op_type for _ in opt_onx.graph.node]

@@ -45,7 +45,9 @@ def _get_type(elem_type: Any, exc: bool = True) -> int:
 
 
 def proto_from_array(
-    arr: "torch.Tensor", name: str = None, verbose: int = 0  # noqa: F821
+    arr: "torch.Tensor",  # noqa: F821
+    name: Optional[str] = None,
+    verbose: int = 0,  # noqa: F821
 ) -> TensorProto:
     """
     Converts a torch Tensor into a TensorProto.

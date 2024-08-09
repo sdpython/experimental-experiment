@@ -67,7 +67,9 @@ class AlmostDoNothingPattern(PatternOptimization):
         return MatchResult(self, [node], self.apply, insert_at=node)
 
     def apply(
-        self, g: "GraphBuilder", node: NodeProto  # noqa: F821
+        self,
+        g: "GraphBuilder",  # noqa: F821
+        node: NodeProto,
     ) -> List[NodeProto]:
         return [
             g.make_node(

@@ -114,9 +114,7 @@ class MatMulReshape2Of3Pattern(PatternOptimization):
                 g, matmul_shape[:-2], next_shape[:-2]
             ):
                 return self.none(node, inspect.currentframe().f_lineno)
-            first_dims = set(
-                [next_shape[:-2], the_shape_left[:-2], the_shape_right[:-2]]
-            )
+            first_dims = {next_shape[:-2], the_shape_left[:-2], the_shape_right[:-2]}
             if len(first_dims) == 3:
                 # All shapes are different. It is not worth it.
                 return self.none(node, inspect.currentframe().f_lineno)
@@ -126,7 +124,7 @@ class MatMulReshape2Of3Pattern(PatternOptimization):
             ):
                 return self.none(node, inspect.currentframe().f_lineno)
         else:
-            if not (len(the_shape_left) == len(the_shape_right)):
+            if len(the_shape_left) != len(the_shape_right):
                 return self.none(node, inspect.currentframe().f_lineno)
 
         # The pattern is not handling the reshape after the matmul,
@@ -144,7 +142,6 @@ class MatMulReshape2Of3Pattern(PatternOptimization):
         node: NodeProto,
         next_node: Optional[NodeProto],
     ) -> List[NodeProto]:
-
         res = []
 
         shape_left_left = None if node_left is None else g.get_shape(node_left.input[0])
@@ -531,7 +528,6 @@ class TransposeMatMulPattern(PatternOptimization):
         node_before_right: Optional[NodeProto],
         node: NodeProto,
     ) -> List[NodeProto]:
-
         inputs = [
             (node.input[0] if node_before_left is None else node_before_left.input[0]),
             (
@@ -667,7 +663,6 @@ class TransposeReshapeMatMulPattern(PatternOptimization):
         node_right: Optional[NodeProto],
         node_right_tr: Optional[NodeProto],
     ) -> List[NodeProto]:
-
         shape = list(g.get_computed_constant((node_left or node_right).input[1]))
         shape[-2], shape[-1] = shape[-1], shape[-2]
         shape_name = g.make_initializer("", np.array(shape, dtype=np.int64))
