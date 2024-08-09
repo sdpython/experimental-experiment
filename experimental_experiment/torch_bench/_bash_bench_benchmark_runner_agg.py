@@ -88,7 +88,7 @@ def _SELECTED_FEATURES():
             agg="SUM",
             stat="pass_rate",
             new_name="pass number",
-            unit="%",
+            unit="N",
             help="Number of models successfully converted into ONNX, "
             "with a maximum discrepancy < 0.1 and a speedup > 0.98.",
             simple=True,
@@ -108,7 +108,7 @@ def _SELECTED_FEATURES():
             agg="COUNT",
             stat="export_success",
             new_name="export number",
-            unit="%",
+            unit="N",
             help="Number of models successfully converted into ONNX. "
             "The ONNX model may not be run through onnxruntime or with "
             "significant discrepancies.",
@@ -130,7 +130,7 @@ def _SELECTED_FEATURES():
             agg="COUNT",
             stat="increase",
             new_name="run number",
-            unit="%",
+            unit="N",
             help="Number of models successfully converted into ONNX "
             "and onnxruntime can run it. "
             "The outputs may be right or wrong. Unit test ensures every aten functions "
