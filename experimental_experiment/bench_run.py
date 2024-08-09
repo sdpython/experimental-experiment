@@ -21,8 +21,8 @@ class BenchmarkError(RuntimeError):
 def _clean_string(s: str) -> str:
     if next(ILLEGAL_CHARACTERS_RE.finditer(s), None):
         ns = ILLEGAL_CHARACTERS_RE.sub("", s)
-        return ns
-    return s
+        return ns.replace("\n", " ")
+    return s.replace("\n", " ")
 
 
 def get_processor_name():
