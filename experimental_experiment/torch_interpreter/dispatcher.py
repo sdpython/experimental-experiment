@@ -123,7 +123,7 @@ class ForceDispatcher(Dispatcher):
         strict: bool = False,
         only_registered: bool = False,
     ):
-        super(ForceDispatcher, self).__init__({}, verbose=verbose)
+        super().__init__({}, verbose=verbose)
         self.signatures = signatures or {}
         self.domain = domain
         self.version = version
@@ -145,7 +145,7 @@ class ForceDispatcher(Dispatcher):
                 f"annotation.__args__[0]={annotation.__args__[0]!r}"
             )
             t = annotation.__args__[0]
-            return lambda v: list(t(_) for _ in v)
+            return lambda v, t=t: [t(_) for _ in v]
 
         raise RuntimeError(f"Unexpected annotation {annotation!r}")
 
@@ -154,11 +154,8 @@ class ForceDispatcher(Dispatcher):
         kwargs = []
         sig = inspect.signature(f)
         has_annotation = any(
-            map(
-                lambda p: p.annotation is not None
-                and p.annotation is not inspect._empty,
-                sig.parameters.values(),
-            )
+            (p.annotation is not None and p.annotation is not inspect._empty)
+            for p in sig.parameters.values()
         )
         # If there is annotation, we assume every result = None
         # without annotation is an optional Tensor.

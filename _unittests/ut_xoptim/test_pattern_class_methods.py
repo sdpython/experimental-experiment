@@ -6,7 +6,6 @@ from experimental_experiment.xoptim.patterns_exp.binary_operators import (
 
 
 class TestPatternClassMethod(ExtTestCase):
-
     def _check_same_shape(self, sh1, sh2, broadcast=False):
         class MockGB:
             def has_shape(self, _):

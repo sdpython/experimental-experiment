@@ -2,6 +2,7 @@ import gc
 import os
 import pickle
 import time
+import sys
 from datetime import datetime
 from typing import Any, Dict, Iterator, List, Optional, Set, Tuple, Union
 
@@ -19,7 +20,7 @@ from .export_model_helper import (
     str_dtype,
     str_shape,
 )
-from ..memory_peak import start_spying_on, flatten
+from ..memory_peak import flatten, start_spying_on
 
 
 class BenchmarkRunner:
@@ -725,7 +726,15 @@ class BenchmarkRunner:
 
         import onnxruntime
         import onnxscript
-        import transformers
+
+        try:
+            import transformers
+        except ImportError:
+            transformers = None
+        try:
+            import monai
+        except ImportError:
+            monai = None
         from experimental_experiment.bench_run import _clean_string
 
         #######
@@ -746,11 +755,19 @@ class BenchmarkRunner:
             print(f"[BenchmarkRunner.benchmark] load model {model_name!r}")
 
         stats = {
+            "version_python": ".".join(str(i) for i in sys.version_info[:3]),
             "version_torch": getattr(torch, "__version__", "dev"),
-            "version_transformers": getattr(transformers, "__version__", "dev"),
+            "version_transformers": (
+                "-"
+                if transformers is None
+                else getattr(transformers, "__version__", "dev")
+            ),
             "version_onnxruntime": getattr(onnxruntime, "__version__", "dev"),
             "version_onnxscript": getattr(onnxscript, "__version__", "dev"),
             "version_onnx": getattr(onnx, "__version__", "dev"),
+            "version_monai": (
+                "-" if monai is None else getattr(monai, "__version__", "dev")
+            ),
         }
         stats.update(machine_specs)
         if self.device.startswith("cuda"):

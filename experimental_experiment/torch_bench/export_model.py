@@ -14,14 +14,13 @@ Example, run llama model with onnxrt backend on cuda.
 
     python -m experimental_experiment.torch_bench.export_model \\
            --exporter torch_script --device cuda --config medium
-    
+
 """
 
 import pprint
 
 
 def main(args=None):
-
     from experimental_experiment.torch_bench._dort_cmd_common import export_args
 
     args = export_args(
@@ -38,7 +37,6 @@ def main(args=None):
     )
 
     if multi_run(args):
-
         configs = make_configs(args)
         data = run_benchmark(
             "experimental_experiment.torch_bench.export_model",
@@ -55,7 +53,6 @@ def main(args=None):
             if args.verbose:
                 print(df)
     else:
-
         import os
         import time
         import torch

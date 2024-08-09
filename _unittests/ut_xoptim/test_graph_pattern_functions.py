@@ -4,9 +4,7 @@ from experimental_experiment.xoptim.patterns import SwitchOrderBinaryPattern
 
 
 class TestGraphPatternFunctions(ExtTestCase):
-
     def test_switch_order(self):
-
         pattern = SwitchOrderBinaryPattern()
         case = pattern.switch_order(
             (2, 1024, 1024), (2, 1, 1024), (2, 1024, 1024), (1024,), side=0

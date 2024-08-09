@@ -33,7 +33,7 @@ def _dynamo_export(
     disable_pattern,
     rename_inputs,
     device,
-    **kwargs
+    **kwargs,
 ):
     import torch
     from torch.onnx._internal.fx import fx_onnx_interpreter, onnxfunction_dispatcher

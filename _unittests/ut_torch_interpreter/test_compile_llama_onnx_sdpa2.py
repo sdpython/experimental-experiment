@@ -17,7 +17,6 @@ from experimental_experiment.torch_dynamo import (
 
 
 class TestDynamoLlamaSdpa2(ExtTestCase):
-
     @classmethod
     def get_input_dims(cls, dynamic: bool):
         if dynamic:

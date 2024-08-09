@@ -89,7 +89,7 @@ class TestOnnxExportLarge(ExtTestCase):
                 import onnx
                 from onnx_array_api.plotting.text_plot import onnx_simple_text_plot
 
-                raise AssertionError(
+                raise AssertionError(  # noqa: B904
                     f"onnxruntime cannot load the model "
                     f"due to {e}\n{onnx_simple_text_plot(onnx.load(name))}"
                 )
@@ -101,7 +101,7 @@ class TestOnnxExportLarge(ExtTestCase):
         except Exception as e:
             from onnx_array_api.plotting.text_plot import onnx_simple_text_plot
 
-            raise AssertionError(
+            raise AssertionError(  # noqa: B904
                 f"onnxruntime cannot load the model"
                 f"due to {e}\n{onnx_simple_text_plot(name)}"
             )

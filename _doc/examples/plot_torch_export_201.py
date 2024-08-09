@@ -137,7 +137,7 @@ print(f"maxtime={script_args.maxtime}")
 
 class MyModelClass(nn.Module):
     def __init__(self, scenario=script_args.scenario):
-        super(MyModelClass, self).__init__()
+        super().__init__()
         if scenario == "middle":
             self.large = False
             self.conv1 = nn.Conv2d(1, 128, 5)
@@ -375,7 +375,7 @@ for k, v in supported_exporters.items():
     print(f"run exporter {k}")
     filename = f"plot_torch_export_{k}.onnx"
     times = []
-    for i in range(script_args.repeat):
+    for _ in range(script_args.repeat):
         begin = time.perf_counter()
         v(filename, model, input_tensor)
         duration = time.perf_counter() - begin
@@ -402,7 +402,7 @@ for k, v in supported_exporters.items():
 # except the first one.
 
 times = []
-for i in range(script_args.repeat):
+for _ in range(script_args.repeat):
     begin = time.perf_counter()
     exported_mod = torch.export.export(model, (input_tensor,))
     duration = time.perf_counter() - begin
@@ -462,7 +462,7 @@ def profile_function(name, export_function, verbose=False):
     print(f"profile {name}: {export_function}")
     pr = cProfile.Profile()
     pr.enable()
-    for i in range(script_args.repeat):
+    for _ in range(script_args.repeat):
         export_function("dummyc.onnx", model, input_tensor)
     pr.disable()
     s = io.StringIO()
@@ -594,7 +594,7 @@ def benchmark(shape):
 
         # memory consumption
         stat = start_spying_on(cuda=1 if has_cuda else 0)
-        for i in range(0, script_args.warmup):
+        for _ in range(0, script_args.warmup):
             sess.run(None, feeds)
         memobs = flatten(stat.stop())
         memobs.update(short_obs)
@@ -602,7 +602,7 @@ def benchmark(shape):
 
         obs.update(
             measure_time(
-                lambda: sess.run(None, feeds),
+                lambda sess=sess, feeds=feeds: sess.run(None, feeds),
                 max_time=script_args.maxtime,
                 repeat=script_args.repeat,
                 number=1,
@@ -615,7 +615,9 @@ def benchmark(shape):
         # check first run
         obs1.update(
             measure_time(
-                lambda: InferenceSession(name, opts, providers=ps).run(None, feeds),
+                lambda name=name, opts=opts, ps=ps, feeds=feeds: InferenceSession(
+                    name, opts, providers=ps
+                ).run(None, feeds),
                 max_time=script_args.maxtime,
                 repeat=max(1, script_args.repeat // 2),
                 number=1,

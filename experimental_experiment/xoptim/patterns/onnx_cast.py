@@ -10,7 +10,7 @@ class CastPattern(PatternOptimization):
     """
 
     def __init__(self, verbose: int = 0, priority: int = 0):
-        super(CastPattern, self).__init__(verbose, priority)
+        super().__init__(verbose, priority)
 
     def match(
         self,
@@ -36,7 +36,9 @@ class CastPattern(PatternOptimization):
         return MatchResult(self, [node], self.apply, insert_at=node)
 
     def apply(
-        self, g: "GraphBuilder", node: NodeProto  # noqa: F821
+        self,
+        g: "GraphBuilder",  # noqa: F821
+        node: NodeProto,
     ) -> List[NodeProto]:
         new_node = g.make_node(
             "Identity",
@@ -104,7 +106,6 @@ class CastCastBinaryPattern(PatternOptimization):
         right: NodeProto,
         node: NodeProto,
     ) -> List[NodeProto]:
-
         to = g.get_attribute(left, "to")
 
         new_node = g.make_node(
@@ -341,7 +342,6 @@ class ComputationCastOpCastPattern(PatternOptimization):
         node_right: Optional[NodeProto],
         node: NodeProto,
     ) -> List[NodeProto]:
-
         to_type = g.get_type(node.output[0])
 
         inputs = []

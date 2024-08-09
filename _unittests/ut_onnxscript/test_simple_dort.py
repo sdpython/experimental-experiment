@@ -157,10 +157,10 @@ class TestSimpleDort(ExtTestCase):
             result = compiled_model(*args)
         except torch._dynamo.exc.BackendCompilerFailed as e:
             if "FunctionNotFoundError" in str(e):
-                raise unittest.SkipTest(f"MISSING FOR FORWARD {e}")
+                raise unittest.SkipTest(f"MISSING FOR FORWARD {e}")  # noqa: B904
             raise
         except InferenceError as e:
-            raise unittest.SkipTest(f"Failing due to {e}")
+            raise unittest.SkipTest(f"Failing due to {e}")  # noqa: B904
 
         if isinstance(baseline_result, tuple):
             baseline_result = baseline_result[0]

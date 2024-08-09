@@ -76,7 +76,7 @@ def _serialize(args: Any) -> Any:
     if isinstance(args, tuple):
         return tuple(_serialize(a) for a in args)
     if isinstance(args, list):
-        return list(_serialize(a) for a in args)
+        return [_serialize(a) for a in args]
     if isinstance(args, (int, torch.SymInt)):
         return args
     raise RuntimeError(f"Unable to serialize type {type(args)}.")
@@ -202,7 +202,8 @@ class OrtBackend:
         return res
 
     def _get_ortvalues_from_torch_tensors(
-        self, tensors: Tuple["torch.Tensor", ...]  # noqa: F821
+        self,
+        tensors: Tuple["torch.Tensor", ...],  # noqa: F821
     ) -> Tuple[Tuple["torch.Tensor", ...], Tuple["OrtDevice", ...], Any]:  # noqa: F821
         ortvalues = self.OrtValueVector()
         ortvalues.reserve(len(tensors))
@@ -252,17 +253,15 @@ class OrtBackend:
 
         ortvalues.push_back_batch(new_tensors, data_ptrs, dtypes, shapes, devices)
         output_devices = []
-        for dim, rk, name in self.is_dimension_out:
-            if dim:
-                dev = self.devices[-1]
-            else:
-                dev = self.devices[max_device]
+        for dim, _rk, _name in self.is_dimension_out:
+            dev = self.devices[-1] if dim else self.devices[max_device]
             output_devices.append(dev)
 
         return (ortvalues, output_devices, dimensions)
 
     def _ortvalues_to_torch_tensor(
-        self, ortvalues: "onnxruntime.OrtValueVector"  # noqa: F821
+        self,
+        ortvalues: "onnxruntime.OrtValueVector",  # noqa: F821
     ) -> Tuple["torch.Tensor", ...]:  # noqa: F821
         if len(ortvalues) == 0:
             return tuple()
@@ -273,7 +272,8 @@ class OrtBackend:
         )
 
     def _run_onnx_session_with_ortvaluevector(
-        self, inputs: Tuple["torch.Tensor", ...]  # noqa: F821
+        self,
+        inputs: Tuple["torch.Tensor", ...],  # noqa: F821
     ) -> Tuple["torch.Tensor"]:  # noqa: F821
         # _nvtx_range_push("contiguous")
         contiguous_inputs = tuple(
@@ -639,7 +639,6 @@ def onnx_custom_backend(
     # Applies other transformation.
 
     if pre_ort_model_transforms is not None:
-
         if not isinstance(pre_ort_model_transforms, list):
             pre_ort_model_transforms = [pre_ort_model_transforms]
         for tr in pre_ort_model_transforms:

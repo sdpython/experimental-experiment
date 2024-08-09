@@ -2,6 +2,7 @@ import os
 import unittest
 import numpy as np
 import onnx
+from typing import Optional
 from experimental_experiment.ext_test_case import ExtTestCase
 from experimental_experiment.xbuilder.graph_builder import (
     GraphBuilder,
@@ -11,7 +12,7 @@ from experimental_experiment.xoptim import get_pattern_list
 
 
 class TestGraphPatternOptimizationInvestigation(ExtTestCase):
-    def _range(self, *shape, bias: float = None):
+    def _range(self, *shape, bias: Optional[float] = None):
         n = np.prod(shape)
         x = np.arange(n).astype(np.float32) / n
         if bias:

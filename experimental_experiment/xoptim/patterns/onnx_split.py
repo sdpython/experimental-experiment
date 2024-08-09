@@ -43,11 +43,11 @@ class SlicesSplitPattern(PatternOptimization):
             return self.none(node, inspect.currentframe().f_lineno)
 
         # axis
-        if all(map(lambda op: len(op.input) == 2, users)):
+        if all(len(op.input) == 2 for op in users):
             axis = 0
         else:
             axes = [op.input[3] for op in users]
-            if any(map(lambda a: not g.is_constant_scalar(a), axes)):
+            if any(not g.is_constant_scalar(a) for a in axes):
                 return self.none(node, inspect.currentframe().f_lineno)
 
             csts = [g.get_constant_scalar(a) for a in axes]
@@ -74,8 +74,8 @@ class SlicesSplitPattern(PatternOptimization):
             # 9223372036854775807 is what torch uses to specify the end
             return self.none(node, inspect.currentframe().f_lineno)
 
-        if any(map(lambda i: not g.is_constant(i), starts)) or any(
-            map(lambda i: not g.is_constant(i), ends)
+        if any(not g.is_constant(i) for i in starts) or any(
+            not g.is_constant(i) for i in ends
         ):
             # no constants
             return self.none(node, inspect.currentframe().f_lineno)

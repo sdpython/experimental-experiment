@@ -5,19 +5,19 @@ DYNAMIC_SHAPE = Tuple[Union[int, "torch.SymInt", str], ...]  # noqa: F821
 
 
 def all_int(seq: Sequence[Any]) -> bool:
-    return all(map(lambda i: isinstance(i, int), seq))
+    return all(isinstance(i, int) for i in seq)
 
 
 def all_float(seq: Sequence[Any]) -> bool:
-    return all(map(lambda i: isinstance(i, float), seq))
+    return all(isinstance(i, float) for i in seq)
 
 
 def all_int_or_float(seq: Sequence[Any]) -> bool:
-    return all(map(lambda i: isinstance(i, (int, float)), seq))
+    return all(isinstance(i, (int, float)) for i in seq)
 
 
 def all_int_or_str(seq: Sequence[Any]) -> bool:
-    return all(map(lambda i: isinstance(i, (int, str)), seq))
+    return all(isinstance(i, (int, str)) for i in seq)
 
 
 def is_static_shape(shape: DYNAMIC_SHAPE) -> bool:

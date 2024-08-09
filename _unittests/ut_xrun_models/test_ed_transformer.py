@@ -11,7 +11,6 @@ from experimental_experiment.torch_test_helper import export_to_onnx, check_mode
 
 
 class TestEdTransformer(ExtTestCase):
-
     def _get_model(self):
         if hasattr(self, "model"):
             return self.model, self.expected, self.src, self.tgt

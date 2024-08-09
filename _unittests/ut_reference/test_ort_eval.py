@@ -1,6 +1,7 @@
 import os
 import pickle
 import unittest
+from typing import Optional
 import numpy as np
 from onnx import ModelProto, TensorProto
 from onnx.checker import check_model
@@ -17,7 +18,7 @@ TFLOAT = TensorProto.FLOAT
 
 
 class TestOrtEval(ExtTestCase):
-    def _range(self, *shape, bias: float = None):
+    def _range(self, *shape, bias: Optional[float] = None):
         n = np.prod(shape)
         x = np.arange(n).astype(np.float32) / n
         if bias:

@@ -1,5 +1,5 @@
 import unittest
-from typing import List
+from typing import List, Optional
 import numpy as np
 from onnx.reference.op_run import OpRun
 from experimental_experiment.ext_test_case import (
@@ -129,9 +129,9 @@ if has_cuda():
         philox_seed,
         philox_offset,
         dropout_p: float = 0.0,
-        grad_input_mask: List[bool] = None,
+        grad_input_mask: Optional[List[bool]] = None,
         is_causal: bool = False,
-        scale: float = None,
+        scale: Optional[float] = None,
     ):
         import torch
 
@@ -147,7 +147,6 @@ if has_cuda():
             ]
 
         else:
-
             cudat = [
                 grad.to("cuda"),
                 query.to("cuda"),
@@ -194,9 +193,9 @@ if has_cuda():
             philox_seed,
             philox_offset,
             dropout_p: float = 0.0,
-            grad_input_mask: List[bool] = None,
+            grad_input_mask: Optional[List[bool]] = None,
             is_causal: bool = False,
-            scale: float = None,
+            scale: Optional[float] = None,
         ):
             import torch
 
@@ -232,7 +231,6 @@ if has_cuda():
 
 
 class TestFallbackForce(ExtTestCase):
-
     @skipif_ci_windows("dynamo not supported on Windows")
     def test_fallback_force(self):
         import torch

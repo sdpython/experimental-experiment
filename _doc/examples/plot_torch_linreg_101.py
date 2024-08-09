@@ -76,7 +76,7 @@ print(f"SGDRegressor: sl2={sl2}, sr2={sr2}")
 
 class TorchLinearRegression(torch.nn.Module):
     def __init__(self, n_dims: int, n_targets: int):
-        super(TorchLinearRegression, self).__init__()
+        super().__init__()
         self.linear = torch.nn.Linear(n_dims, n_targets)
 
     def forward(self, x):
@@ -89,7 +89,7 @@ def train_loop(dataloader, model, loss_fn, optimizer):
     # Set the model to training mode - important for batch normalization and dropout layers
     # Unnecessary in this situation but added for best practices
     model.train()
-    for batch, (X, y) in enumerate(dataloader):
+    for X, y in dataloader:
         # Compute prediction and loss
         pred = model(X)
         loss = loss_fn(pred.ravel(), y)

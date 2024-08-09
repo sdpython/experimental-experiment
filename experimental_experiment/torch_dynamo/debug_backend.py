@@ -38,7 +38,6 @@ def _get_session(
     if callable(impl):
         return impl(onx, verbose=verbose)
     if impl == "ref":
-
         from ..reference import ExtendedReferenceEvaluator
 
         return ExtendedReferenceEvaluator(onx, verbose=verbose)

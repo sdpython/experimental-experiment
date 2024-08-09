@@ -62,7 +62,6 @@ class Sub1MulPattern(PatternOptimization):
         node_left: NodeProto,
         node_right: NodeProto,
     ) -> List[NodeProto]:
-
         cst_left = None
         if (
             node_left is not None

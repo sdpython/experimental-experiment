@@ -13,7 +13,6 @@ from experimental_experiment.reference import ExtendedReferenceEvaluator
 
 
 class TestReferenceOps(ExtTestCase):
-
     def test_fused_matmul(self):
         model = make_model(
             make_graph(

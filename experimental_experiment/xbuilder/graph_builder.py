@@ -121,6 +121,9 @@ class GraphBuilder:
     of a variable is set. Example: ``ONNXSTOP=attn_output python ...
     """
 
+    # Size of a tensor kept in the onnx file and not stored as exrternal weight.
+    SMALL_TENSOR = 1024
+
     _op_type_element_wise_types = element_wise_binary_op_types()
     _op_type_element_wise_cmp_types = element_wise_op_cmp_types()
     _op_type_unary_like = unary_like_op_types()
@@ -303,8 +306,8 @@ class GraphBuilder:
         if isinstance(value, int):
             return int, value
         if isinstance(value, np.ndarray):
-            if value.dtype == np.int64 and value.size < 8:
-                return tuple([value.dtype, value.shape, tuple(value.ravel().tolist())])
+            if value.size < self.SMALL_TENSOR:
+                return (value.dtype, value.shape, tuple(value.ravel().tolist()))
         return None
 
     @classmethod
@@ -363,7 +366,7 @@ class GraphBuilder:
             len(indices),
         ), f"Mismatch lengths {len(indices)} != {len(axes)}"
 
-        if all(map(lambda i: isinstance(i, slice), indices)):
+        if all(isinstance(i, slice) for i in indices):
             new_shape = []
             for index, axis in zip(indices, axes):
                 while len(new_shape) < axis:
@@ -592,10 +595,12 @@ class GraphBuilder:
             return v
         if isinstance(value, TensorProto):
             if uses_external_data(value):
-                raise TypeError(
-                    f"Tensor is using external data, data_type={value.data_type}, "
-                    f"dims={value.dims}"
-                )
+                if exc:
+                    raise TypeError(
+                        f"Tensor is using external data, data_type={value.data_type}, "
+                        f"dims={value.dims}"
+                    )
+                return None
             v = onh.to_array(value)
             self.constants_computed_[name] = v
             return v
@@ -825,7 +830,10 @@ class GraphBuilder:
         return res
 
     def set_shapes_types(
-        self, name: Union[str, "torch.fx.Node"], where: str, value: Any  # noqa: F821
+        self,
+        name: Union[str, "torch.fx.Node"],  # noqa: F821
+        where: str,
+        value: Any,
     ):
         if hasattr(name, "name"):
             name = name.name
@@ -858,7 +866,7 @@ class GraphBuilder:
         )
         assert isinstance(shape, tuple), f"Unexpected shape type {type(shape)}"
         shape = self.verify_shape(shape, 0, name=name)
-        assert all(map(lambda t: not isinstance(t, self.torch.SymInt), shape)), (
+        assert all(not isinstance(t, self.torch.SymInt) for t in shape), (
             f"Unexpected type for a shape, shape={shape}, types={[type(_) for _ in shape]}"
             f"{self.get_debug_msg()}"
         )
@@ -1065,9 +1073,9 @@ class GraphBuilder:
             self._known_value_shape[name] = value
             return
 
-        assert name in equal_to, (
-            f"Unexpected name={name!r}, " f"it should be in equal_to={equal_to!r}."
-        )
+        assert (
+            name in equal_to
+        ), f"Unexpected name={name!r}, it should be in equal_to={equal_to!r}."
         values = (
             self._known_value_shape.get(equal_to[0], None),
             self._known_value_shape.get(equal_to[1], None),
@@ -1247,7 +1255,7 @@ class GraphBuilder:
             f"Unexpected key {key} type are {[type(_) for _ in key]}, "
             f"shape={shape}{self.get_debug_msg()}"
         )
-        key = tuple(["Concat"] + key)
+        key = ("Concat", *key)
         if key in self._cache_shape:
             # The same shape was already requested.
             return self._cache_shape[key]
@@ -1379,12 +1387,8 @@ class GraphBuilder:
         self, shape: DYNAMIC_SHAPE, verify: bool = True, allow_none: bool = False
     ) -> bool:
         return all(
-            map(
-                lambda x: self.is_dynamic_dimension(
-                    x, verify=verify, allow_none=allow_none
-                ),
-                shape,
-            )
+            self.is_dynamic_dimension(x, verify=verify, allow_none=allow_none)
+            for x in shape
         )
 
     def is_constant_or_attribute(
@@ -1570,7 +1574,7 @@ class GraphBuilder:
             return False
 
         values = [self.value_as_shape(x) for x in node.input[0]]
-        if any(map(lambda x: x is None, values)):
+        if any(x is None for x in values):
             # it is not a shape
             return False
         if node.op_type == "Concat":
@@ -1863,7 +1867,7 @@ class GraphBuilder:
         elem_type: Optional[int] = None,
         shape: Optional[STATIC_SHAPE] = None,
         indexed: bool = True,
-        is_dimension: bool = None,
+        is_dimension: Optional[bool] = None,
     ) -> Union[str, List[str]]:
         """
         Adds a tensor output to the onnx graph.
@@ -2540,7 +2544,6 @@ class GraphBuilder:
                 )
             initializer = []
             for k, v in init_dict.items():
-
                 if isinstance(v, TensorProto):
                     if self.verbose > 1:
                         print(
@@ -2956,7 +2959,6 @@ class GraphBuilder:
         return (model, stats) if return_optimize_report else model
 
     def _add_shape_information(self, model: ModelProto):
-
         if len(model.graph.node) == 0:
             raise RuntimeError(
                 f"The onnx model is empty after export to onnx (no node)."
@@ -3347,7 +3349,9 @@ class GraphBuilder:
         return start - len(self.nodes)
 
     def _apply_transpose(
-        self, node: NodeProto, feeds: Dict[str, "torch.Tensor"]  # noqa: F821
+        self,
+        node: NodeProto,
+        feeds: Dict[str, "torch.Tensor"],  # noqa: F821
     ) -> "torch.Tensor":  # noqa: F821
         perm = None
         for att in node.attribute:
@@ -3364,7 +3368,9 @@ class GraphBuilder:
         return [self.torch.permute(x, perm).to(x.dtype)]
 
     def _apply_trilu(
-        self, node: NodeProto, feeds: Dict[str, "torch.Tensor"]  # noqa: F821
+        self,
+        node: NodeProto,
+        feeds: Dict[str, "torch.Tensor"],  # noqa: F821
     ) -> "torch.Tensor":  # noqa: F821
         upper = True
         for att in node.attribute:
@@ -3639,9 +3645,7 @@ class GraphBuilder:
 
         # third pass: replacements in node
         if self.verbose > 1:
-            print(
-                f"[GraphBuilder.remove_identity_nodes] " f"kept {len(new_nodes)} nodes"
-            )
+            print(f"[GraphBuilder.remove_identity_nodes] kept {len(new_nodes)} nodes")
         self.nodes = []
         added = 0
         for node in new_nodes:
@@ -4129,7 +4133,6 @@ class GraphBuilder:
         need_identity_removal = False
         new_nodes = []
         for node in self.nodes:
-
             self._unique_names |= set(node.output)
             shape_set = self.simple_update_value_shape_with_node(node)
             if node.name:
@@ -4169,7 +4172,10 @@ class GraphBuilder:
                 if not self.has_name(node.output[0]):
                     self.set_name(node.output[0])
                 self.set_sequence(
-                    node.output[0], list(unique_dtypes)[0], shapes=None, ranks=ranks
+                    node.output[0],
+                    next(_ for _ in unique_dtypes),
+                    shapes=None,
+                    ranks=ranks,
                 )
                 new_nodes.append(node)
                 continue
@@ -4268,10 +4274,8 @@ class GraphBuilder:
 
             if not bypass_shape:
                 if any(
-                    map(
-                        lambda x: x not in available_shapes and not self.has_type(x),
-                        node.output,
-                    )
+                    (x not in available_shapes and not self.has_type(x))
+                    for x in node.output
                 ):
                     # second try
                     self._make_node_set_type_shape(node)

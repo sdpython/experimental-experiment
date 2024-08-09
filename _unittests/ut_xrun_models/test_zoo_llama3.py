@@ -9,13 +9,11 @@ from experimental_experiment.ext_test_case import (
 
 
 class TestZooLlama3(ExtTestCase):
-
     @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
     @ignore_warnings(DeprecationWarning)
     @requires_torch("2.3")
     @requires_zoo()  # ZOO=1 python _unittests/ut_xrun_models/test_zoo_llama3.py
     def test_llama3_export(self):
-
         import os
         import time
         import onnxruntime
@@ -86,14 +84,14 @@ class TestZooLlama3(ExtTestCase):
         N = 5
         print(f"running {N} iterations with torch")
         begin = time.perf_counter()
-        for i in range(N):
+        for _ in range(N):
             model(input_ids)
         d = time.perf_counter() - begin
         print(f"done in {d}s for torch")
 
         print(f"running {N} iterations with onnxruntime")
         begin = time.perf_counter()
-        for i in range(N):
+        for _ in range(N):
             sess.run(None, {name: np_input})
         d = time.perf_counter() - begin
         print(f"done in {d}s for onnxruntime")

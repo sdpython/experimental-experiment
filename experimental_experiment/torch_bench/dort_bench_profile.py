@@ -14,7 +14,7 @@ Example, run llama model with onnxrt backend on cuda.
 
     python -m experimental_experiment.torch_bench.dort_bench_profile \\
            --model model.onnx --inputs model.onnx.pkl
-    
+
 """
 
 from experimental_experiment.args import get_parsed_args
@@ -125,14 +125,14 @@ if args.debug:
     feeds = dict(
         zip(
             input_names,
-            map(
-                lambda t: (
+            [
+                (
                     t.detach().cpu().numpy()
                     if isinstance(t, torch.Tensor)
                     else np.array([int(t)], dtype=np.int64)
-                ),
-                inputs,
-            ),
+                )
+                for t in inputs
+            ],
         )
     )
     ref.run(None, feeds)
@@ -174,7 +174,7 @@ print(f"-- done: warmup time {warmup_time}")
 
 print(f"-- measure: {args.repeat}")
 times = []
-for i in range(args.repeat):
+for _ in range(args.repeat):
     if is_cuda:
         torch.cuda.synchronize()
     begin = time.perf_counter()

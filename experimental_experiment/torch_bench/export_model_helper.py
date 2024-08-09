@@ -461,9 +461,7 @@ class WrapInferenceSessionForTorch:
 
         from torch._C import _from_dlpack
 
-        if all(
-            map(lambda i: ortvalues[i].has_value(), range(len(ortvalues)))
-        ):  # noqa: C417
+        if all(ortvalues[i].has_value() for i in range(len(ortvalues))):  # noqa: C417
             res = ortvalues.to_dlpacks(_from_dlpack)
         else:
             res = []

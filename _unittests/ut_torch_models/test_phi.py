@@ -9,7 +9,6 @@ from experimental_experiment.reference import ExtendedReferenceEvaluator
 
 
 class TestPhi(ExtTestCase):
-
     def test_get_phi_model_export(self):
         import torch
         from experimental_experiment.torch_models.phi_helper import (
@@ -71,7 +70,9 @@ class TestPhi(ExtTestCase):
         except (
             onnxruntime.training.ortmodule._fallback_exceptions.ORTModuleInitException
         ):
-            raise unittest.SkipTest("ORTModule extensions are not installed.")
+            raise unittest.SkipTest(
+                "ORTModule extensions are not installed."
+            )  # noqa: B904
         expected = omodel(*model_inputs[0])
         self.assertNotEmpty(expected)
 
@@ -96,7 +97,9 @@ class TestPhi(ExtTestCase):
         except (
             onnxruntime.training.ortmodule._fallback_exceptions.ORTModuleInitException
         ):
-            raise unittest.SkipTest("ORTModule extensions are not installed.")
+            raise unittest.SkipTest(
+                "ORTModule extensions are not installed."
+            )  # noqa: B904
         expected = omodel(*model_inputs[0])
         self.assertNotEmpty(expected)
         back = expected[0].sum().backward()
@@ -119,7 +122,7 @@ class TestPhi(ExtTestCase):
             _attn_implementation="eager", with_mask=True
         )
         model = model.to("cuda")
-        model_inputs = [list(t.to("cuda") for t in ts) for ts in model_inputs]
+        model_inputs = [[t.to("cuda") for t in ts] for ts in model_inputs]
         self.assertEqual(len(model_inputs[0]), 2)
         omodel = ORTModule(model, opts)
         expected = omodel(*model_inputs[0])

@@ -5,7 +5,6 @@ from experimental_experiment.torch_dynamo import pprint_storage
 
 
 class TestDynamo(ExtTestCase):
-
     def test_pprint_storage(self):
         obs = {"j": 3, "hh": 5}
         o = pprint_storage(obs)

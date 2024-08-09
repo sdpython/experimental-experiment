@@ -98,7 +98,7 @@ def compatible_opsets(
         f"in {list(sorted(_history[domain]))}"
     )
     hist = _history[domain][op_type]
-    version = list(sorted(hist))
+    version = list(sorted(hist))  # noqa: C413
     pos = np.searchsorted(version, current, side="right") - 1
     assert pos >= 0, (
         f"Available version for {op_type!r} from {domain!r}, "

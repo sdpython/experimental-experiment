@@ -81,7 +81,9 @@ class Opset:
     }
 
     def __init__(
-        self, builder: "GraphBuilder", allow_unknown: bool = False  # noqa: F821
+        self,
+        builder: "GraphBuilder",  # noqa: F821
+        allow_unknown: bool = False,
     ):
         self.builder = builder
         self.allow_unknown = allow_unknown

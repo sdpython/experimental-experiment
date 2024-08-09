@@ -95,7 +95,6 @@ def dynger_backend(
             return res
 
         class _identity_graph:
-
             def __init__(
                 self,
                 graph: "torch.fx.graph.Graph",
@@ -135,7 +134,7 @@ def dynger_backend(
                     raise AssertionError(f"Not implemented when type(res)={type(res)}")
                 return res
 
-        for i, node in enumerate(exported_mod.graph.nodes):
+        for node in exported_mod.graph.nodes:
             if node.op in ("call_function", "call_method"):
                 node.target = lambda *args, __=node.target, _args=node.args, _name=node.name, **kwargs: _identity(  # noqa: E501
                     __, _args, _name, *args, **kwargs

@@ -26,8 +26,7 @@ TFLOAT = TensorProto.FLOAT
 
 
 class TestGraphPatternBuilder(ExtTestCase):
-
-    def _range(self, *shape, bias: float = None):
+    def _range(self, *shape, bias: Optional[float] = None):
         n = np.prod(shape)
         x = np.arange(n).astype(np.float32) / n
         if bias:
@@ -35,7 +34,6 @@ class TestGraphPatternBuilder(ExtTestCase):
         return x.reshape(tuple(shape)).astype(np.float32)
 
     def test_graph_pattern_builder(self):
-
         class AddAddPattern(EasyPatternOptimization):
             """
             Replaces ConstantOfShape + ScatterND with ScatterNDOfShape (com.domain).
@@ -111,7 +109,6 @@ class TestGraphPatternBuilder(ExtTestCase):
         self.assertEqualArray(expected[0], got[0])
 
     def test_graph_pattern_builder_multi_outputs(self):
-
         class AddAddAddAddPattern(EasyPatternOptimization):
             """
             Replaces ConstantOfShape + ScatterND with ScatterNDOfShape (com.domain).
@@ -204,7 +201,11 @@ class TestGraphPatternBuilder(ExtTestCase):
             """
 
             def match_pattern(
-                self, g, x: "INT64", pos_ids: "FLOAT", axis: "INT64"  # noqa: F821
+                self,
+                g,
+                x: "INT64",  # noqa: F821
+                pos_ids: "FLOAT",  # noqa: F821
+                axis: "INT64",  # noqa: F821
             ):
                 # original code: the code does verifies the constant yet
                 # unsqueeze = op.Unsqueeze(x, [1])
@@ -238,7 +239,11 @@ class TestGraphPatternBuilder(ExtTestCase):
                 return True
 
             def apply_pattern(
-                self, g, x: "INT64", pos_ids: "FLOAT", axis: "INT64"  # noqa: F821
+                self,
+                g,
+                x: "INT64",  # noqa: F821
+                pos_ids: "FLOAT",  # noqa: F821
+                axis: "INT64",  # noqa: F821
             ):
                 op = g.op
                 cos_cache = op.Constant(
@@ -291,7 +296,11 @@ class TestGraphPatternBuilder(ExtTestCase):
             """
 
             def match_pattern(
-                self, g, x: "INT64", pos_ids: "FLOAT", axis: "INT64"  # noqa: F821
+                self,
+                g,
+                x: "INT64",  # noqa: F821
+                pos_ids: "FLOAT",  # noqa: F821
+                axis: "INT64",  # noqa: F821
             ):
                 # original code: the code does verifies the constant yet
                 # unsqueeze = op.Unsqueeze(x, [1])
@@ -327,7 +336,11 @@ class TestGraphPatternBuilder(ExtTestCase):
                 return True
 
             def apply_pattern(
-                self, g, x: "INT64", pos_ids: "FLOAT", axis: "INT64"  # noqa: F821
+                self,
+                g,
+                x: "INT64",  # noqa: F821
+                pos_ids: "FLOAT",  # noqa: F821
+                axis: "INT64",  # noqa: F821
             ):
                 op = g.op
                 cos_cache = op.Constant(
@@ -462,7 +475,6 @@ class TestGraphPatternBuilder(ExtTestCase):
         self.assertIn("RotaryEmbedding", op_types)
 
     def test_graph_pattern_builder_onnx(self):
-
         class AddAdd(OpRun):
             op_domain = "ZZZ"
 
@@ -555,7 +567,6 @@ class TestGraphPatternBuilder(ExtTestCase):
         self.assertEqualArray(expected[0], got[0])
 
     def test_validate_mapping(self):
-
         proto = oh.make_model(
             oh.make_graph(
                 [
@@ -579,7 +590,6 @@ class TestGraphPatternBuilder(ExtTestCase):
         )
 
         class MulMulSigmoidPattern(EasyPatternOptimization):
-
             def match_pattern(self, g: GraphBuilder, X, Y):
                 return g.op.Mul(X, g.op.Mul(Y, g.op.Sigmoid(Y)))
 
@@ -619,9 +629,7 @@ class TestGraphPatternBuilder(ExtTestCase):
         self.assertEqual(len(new_proto.graph.node), len(proto.graph.node))
 
     def test_graph_pattern_builder_multi_outputs_slice(self):
-
         class SliceSplitPattern(EasyPatternOptimization):
-
             def match_pattern(
                 self,
                 g: GraphBuilder,
@@ -952,7 +960,6 @@ class TestGraphPatternBuilder(ExtTestCase):
         return model
 
     def test_add_mul_shared_input_pattern(self):
-
         class _CombineBinary(EasyPatternOptimization):
             @classmethod
             def _same_shape(

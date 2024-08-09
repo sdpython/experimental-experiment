@@ -13,7 +13,6 @@ TFLOAT = TensorProto.FLOAT
 
 
 class TestOnnxTools(ExtTestCase):
-
     def _get_model(self):
         model = oh.make_model(
             oh.make_graph(

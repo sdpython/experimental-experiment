@@ -10,7 +10,7 @@ class FusedMatMulDivPattern(PatternOptimization):
     """
 
     def __init__(self, verbose: int = 0, priority: int = 2):
-        super(FusedMatMulDivPattern, self).__init__(verbose, priority)
+        super().__init__(verbose, priority)
 
     def match(
         self,
@@ -44,7 +44,6 @@ class FusedMatMulDivPattern(PatternOptimization):
         node: NodeProto,
         node_div: NodeProto,
     ) -> List[NodeProto]:
-
         alpha = 1.0
         atts = []
         if node.op_type == "FusedMatMul":
@@ -80,7 +79,7 @@ class FusedMatMulPattern(PatternOptimization):
     """
 
     def __init__(self, verbose: int = 0, priority: int = 2):
-        super(FusedMatMulPattern, self).__init__(verbose, priority)
+        super().__init__(verbose, priority)
 
     def match(
         self,
@@ -184,7 +183,6 @@ class FusedMatMulPattern(PatternOptimization):
         node: NodeProto,
         scale: Optional[NodeProto] = None,
     ) -> List[NodeProto]:
-
         inputs = [
             (node.input[0] if node_before_left is None else node_before_left.input[0]),
             (
@@ -267,7 +265,7 @@ class FusedMatMulx2Pattern(PatternOptimization):
     """
 
     def __init__(self, verbose: int = 0, priority: int = 3):
-        super(FusedMatMulx2Pattern, self).__init__(verbose, priority)
+        super().__init__(verbose, priority)
 
     def match(
         self,
@@ -297,7 +295,7 @@ class FusedMatMulx2Pattern(PatternOptimization):
 
         next_nodes = g.next_nodes(div_node.output[0])
         op_types = [n.op_type for n in next_nodes]
-        if any(map(lambda t: t not in {"FusedMatMul", "MatMul"}, op_types)):
+        if any(t not in {"FusedMatMul", "MatMul"} for t in op_types):
             return self.none(node, inspect.currentframe().f_lineno)
 
         return MatchResult(self, [div_node, *next_nodes], self.apply)
@@ -347,7 +345,7 @@ class FusedMatMulTransposePattern(PatternOptimization):
     """
 
     def __init__(self, verbose: int = 0, priority: int = 3):
-        super(FusedMatMulTransposePattern, self).__init__(verbose, priority)
+        super().__init__(verbose, priority)
 
     def match(
         self,
@@ -384,7 +382,6 @@ class FusedMatMulTransposePattern(PatternOptimization):
         node: NodeProto,
         transpose_node: NodeProto,
     ) -> List[NodeProto]:
-
         default_values = dict(
             transA=0, transB=0, transBatchA=0, transBatchB=0, alpha=1.0
         )

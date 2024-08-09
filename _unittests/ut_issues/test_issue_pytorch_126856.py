@@ -8,7 +8,6 @@ from experimental_experiment.ext_test_case import (
 
 
 class TestIssuePytorch_126856(ExtTestCase):
-
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_onnxscript("0.2")
     @requires_torch("2.6")

@@ -16,7 +16,6 @@ TFLOAT = TensorProto.FLOAT
 
 
 class TestGraphPatternDynamic(ExtTestCase):
-
     def _get_model(self, name: str, skip=False) -> ModelProto:
         if os.path.exists(name):
             return load_onnx(name)

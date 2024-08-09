@@ -17,7 +17,7 @@ class GeluPattern(EasyPatternOptimization):
     def __init__(
         self, verbose: int = 0, priority: int = 0, min_opset: int = 20, domain: str = ""
     ):
-        super(GeluPattern, self).__init__(verbose, priority, min_opset=min_opset)
+        super().__init__(verbose, priority, min_opset=min_opset)
         self.domain = domain
 
     def match_pattern(self, g: "GraphBuilder", x, c3, c04, cpi, one, c2):  # noqa: F821
@@ -88,14 +88,19 @@ class SoftmaxCrossEntropyLossCastPattern(EasyPatternOptimization):
     def __init__(
         self, verbose: int = 0, priority: int = 0, min_opset: int = 14, domain: str = ""
     ):
-        super(SoftmaxCrossEntropyLossCastPattern, self).__init__(
-            verbose, priority, min_opset=min_opset
-        )
+        super().__init__(verbose, priority, min_opset=min_opset)
         self.domain = domain
 
     def match_pattern(
-        self, g: "GraphBuilder", X, indices, axis, zerof, zeroi, b  # noqa: F821
-    ):  # noqa: F821
+        self,
+        g: "GraphBuilder",  # noqa: F821
+        X,
+        indices,
+        axis,
+        zerof,
+        zeroi,
+        b,
+    ):
         neq1 = g.op.Not(g.op.Equal(indices, b))
         wh1 = g.op.Where(neq1, indices, zeroi)
         uns = g.op.Unsqueeze(wh1, axis)

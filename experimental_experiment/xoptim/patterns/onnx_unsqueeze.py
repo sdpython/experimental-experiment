@@ -11,7 +11,7 @@ class UnsqueezeUnsqueezePattern(PatternOptimization):
     """
 
     def __init__(self, verbose: int = 0, priority: int = 0):
-        super(UnsqueezeUnsqueezePattern, self).__init__(verbose, priority)
+        super().__init__(verbose, priority)
 
     def match(
         self,
@@ -35,7 +35,10 @@ class UnsqueezeUnsqueezePattern(PatternOptimization):
         return MatchResult(self, [node, next_node], self.apply, insert_at=node)
 
     def apply(
-        self, g: "GraphBuilder", node: NodeProto, next_node: NodeProto  # noqa: F821
+        self,
+        g: "GraphBuilder",  # noqa: F821
+        node: NodeProto,
+        next_node: NodeProto,
     ) -> List[NodeProto]:
         axis1 = g.get_constant_or_attribute(node, "axis", 1)
         axis2 = g.get_constant_or_attribute(next_node, "axis", 1)

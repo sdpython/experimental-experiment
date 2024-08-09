@@ -19,7 +19,7 @@ class OxsDispatcher(Dispatcher):
     """
 
     def __init__(self, verbose: int = 0):
-        super(OxsDispatcher, self).__init__({}, verbose=verbose)
+        super().__init__({}, verbose=verbose)
         self._submodule = None
 
     @property

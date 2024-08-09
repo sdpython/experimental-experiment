@@ -45,7 +45,7 @@ def check_model_ort(
             if dump_file:
                 save(onx, dump_file)
 
-            raise AssertionError(
+            raise AssertionError(  # noqa: B904
                 f"onnxruntime cannot load the model "
                 f"due to {e}\n{onnx_simple_text_plot(onnx.load(onx))}"
             )
@@ -58,7 +58,7 @@ def check_model_ort(
         if dump_file:
             save(onx, dump_file)
 
-        raise AssertionError(
+        raise AssertionError(  # noqa: B904
             f"onnxruntime cannot load the model"
             f"due to {e}\n{onnx_simple_text_plot(onx)}"
         )
@@ -101,11 +101,10 @@ def export_to_onnx(
         import torch
 
         filename = f"{prefix}.onnx"
-        with contextlib.redirect_stdout(io.StringIO()):
-            with warnings.catch_warnings():
-                warnings.simplefilter("ignore")
-                torch.onnx.export(model, args, filename, input_names=["input"])
-                ret["torch.script"] = filename
+        with contextlib.redirect_stdout(io.StringIO()), warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            torch.onnx.export(model, args, filename, input_names=["input"])
+            ret["torch.script"] = filename
 
     if isinstance(optimize, str):
         options = OptimizationOptions(verbose=verbose, patterns=optimize)

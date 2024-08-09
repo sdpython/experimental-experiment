@@ -453,9 +453,11 @@ class TorchBenchRunner(BenchmarkRunner):
         try:
             import torch
 
-            torch.ops.fbgemm.asynchronous_complete_cumsum
+            torch.ops.fbgemm.asynchronous_complete_cumsum  # noqa: B018
         except (AttributeError, ImportError) as e:
-            warnings.warn(f"Something wrong in the installation because of {e}.")
+            warnings.warn(
+                f"Something wrong in the installation because of {e}.", stacklevel=1
+            )
         container._config = container.load_yaml_file()
         assert "batch_size" in container._config, f"config wrong {container._config}"
         assert (
@@ -872,7 +874,7 @@ class TorchBenchRunner(BenchmarkRunner):
                 raise AssertionError(
                     f"Unable to create class {benchmark_cls}, "
                     f"device={self.device}, batch_size={batch_size}, "
-                    f"signature={list(p for p in inspect.signature(benchmark_cls).parameters)}, "  # noqa: E501
+                    f"signature={list(p for p in inspect.signature(benchmark_cls).parameters)}, "  # noqa: E501,C400
                     f"DEFAULT_EVAL_BSIZE="
                     f"{getattr(benchmark_cls, 'DEFAULT_EVAL_BSIZE', '?')}, "
                     f"ALLOW_CUSTOMIZE_BSIZE="

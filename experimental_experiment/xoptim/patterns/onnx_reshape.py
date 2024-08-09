@@ -66,7 +66,10 @@ class ReduceReshapePattern(PatternOptimization):
         return MatchResult(self, [node, next_node], self.apply, insert_at=node)
 
     def apply(
-        self, g: "GraphBuilder", node: NodeProto, next_node: NodeProto  # noqa: F821
+        self,
+        g: "GraphBuilder",  # noqa: F821
+        node: NodeProto,
+        next_node: NodeProto,
     ) -> List[NodeProto]:
         axes = g.get_attribute(node, "axes", exc=False)
         if axes is None:
@@ -99,7 +102,7 @@ class ReshapeReshapePattern(PatternOptimization):
     """
 
     def __init__(self, verbose: int = 0, priority: int = 0):
-        super(ReshapeReshapePattern, self).__init__(verbose, priority)
+        super().__init__(verbose, priority)
 
     def match(
         self,
@@ -133,7 +136,10 @@ class ReshapeReshapePattern(PatternOptimization):
         return MatchResult(self, [node, next_node], self.apply, insert_at=next_node)
 
     def apply(
-        self, g: "GraphBuilder", node: NodeProto, next_node: NodeProto  # noqa: F821
+        self,
+        g: "GraphBuilder",  # noqa: F821
+        node: NodeProto,
+        next_node: NodeProto,
     ) -> List[NodeProto]:
         new_node = g.make_node(
             "Reshape",
@@ -235,7 +241,6 @@ class Reshape2Of3Pattern(PatternOptimization):
         next_node: NodeProto,
         node: NodeProto,
     ) -> List[NodeProto]:
-
         compute_shape_name = (
             node_left.input[1] if node_right is None else node_right.input[1]
         )
@@ -377,7 +382,6 @@ class ReshapeReshapeBinaryPattern(PatternOptimization):
         right: NodeProto,
         node: NodeProto,
     ) -> List[NodeProto]:
-
         new_node = g.make_node(
             node.op_type,
             [left.input[0], right.input[0]],

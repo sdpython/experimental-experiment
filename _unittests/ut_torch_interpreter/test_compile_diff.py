@@ -11,7 +11,6 @@ from experimental_experiment.ext_test_case import (
 
 
 class TestDynamoCompileDiff(ExtTestCase):
-
     def _check_ort(self, name: str):
         from onnxruntime import InferenceSession
 

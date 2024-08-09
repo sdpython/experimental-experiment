@@ -113,7 +113,7 @@ def assert_all_close(
         assert len(v1) == len(
             v2
         ), f"tuple have different lengths {len(v1)} != {len(v2)}"
-        for i, (a, b) in enumerate(zip(v1, v2)):
+        for a, b in zip(v1, v2):
             assert_all_close(a, b, atol=aatol, rtol=rtol)
     elif isinstance(v1, int):
         assert isinstance(v2, type(v1)), f"v2 is not a {type(v1)} but {type(v2)}"
@@ -229,7 +229,7 @@ def build_matching_inputs(
     # inputs2
     inputs = inputs_from_onnx_model(model2)
     feeds2 = {}
-    for kind, name, dt, shape in inputs:
+    for _kind, name, dt, shape in inputs:
         dt = tensor_dtype_to_np_dtype(dt)
         key = dt, shape
         if key in feeds_rev:
@@ -254,6 +254,6 @@ def results_to_string(results: Any, indent: str = "") -> str:
         )
     if isinstance(results, tuple):
         return f"{indent}{len(results)} results\n" + "\n".join(
-            map(lambda r: results_to_string(r, indent=indent + "  "), results)
+            results_to_string(r, indent=indent + "  ") for r in results
         )
     raise RuntimeError(f"Unexpected type {type(results)} for results")

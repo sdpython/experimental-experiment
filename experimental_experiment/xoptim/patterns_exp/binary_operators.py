@@ -6,7 +6,6 @@ from ..patterns_api import MatchResult, PatternOptimization
 
 
 class _common:
-
     def __init__(self, broadcast: bool):
         self.broadcast = broadcast
 

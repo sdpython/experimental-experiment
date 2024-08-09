@@ -21,7 +21,7 @@ class GeluOrtPattern(GeluPattern):
         min_opset: int = 1,
         domain: str = "com.microsoft",
     ):
-        super(GeluOrtPattern, self).__init__(verbose, priority, min_opset=min_opset)
+        super().__init__(verbose, priority, min_opset=min_opset)
         self.domain = domain
 
 

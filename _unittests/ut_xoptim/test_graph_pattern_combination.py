@@ -7,6 +7,7 @@
 import os
 import unittest
 import sys
+from typing import Optional
 import numpy as np
 from onnx import (
     ModelProto,
@@ -44,7 +45,6 @@ def cuda_recent_enough():
 
 
 class TestGraphPatternCombination(ExtTestCase):
-
     @classmethod
     def setUpClass(cls):
         for name in [
@@ -70,7 +70,6 @@ class TestGraphPatternCombination(ExtTestCase):
         onx.graph.value_info.extend(new_shapes)
 
     def _check_ort_cpu_or_cuda(self, onx, model=None):
-
         def cl(text):
             return (
                 text.replace("\n", " ")
@@ -123,7 +122,7 @@ class TestGraphPatternCombination(ExtTestCase):
             try:
                 from onnx_extended.ortops.optim.cuda import get_ort_ext_libs
             except ImportError:
-                raise unittest.SkipTest("onnx_extended not installed.")
+                raise unittest.SkipTest("onnx_extended not installed.")  # noqa: B904
 
             options.register_custom_ops_library(get_ort_ext_libs()[0])
             providers = ["CUDAExecutionProvider", "CPUExecutionProvider"]
@@ -131,7 +130,7 @@ class TestGraphPatternCombination(ExtTestCase):
             try:
                 from onnx_extended.ortops.optim.cpu import get_ort_ext_libs
             except ImportError:
-                raise unittest.SkipTest("onnx_extended not installed.")
+                raise unittest.SkipTest("onnx_extended not installed.")  # noqa: B904
 
             options.register_custom_ops_library(get_ort_ext_libs()[0])
 
@@ -141,7 +140,9 @@ class TestGraphPatternCombination(ExtTestCase):
             )
         except (Fail, InvalidArgument) as e:
             if "com.microsoft:SoftmaxGrad(-1) is not a registered" in str(e):
-                raise unittest.SkipTest(f"onnxruntime-training is needed due to {e}")
+                raise unittest.SkipTest(  # noqa: B904
+                    f"onnxruntime-training is needed due to {e}"
+                )
             err = []
             rows = []
             for i in onx.graph.input:
@@ -173,7 +174,7 @@ class TestGraphPatternCombination(ExtTestCase):
         self.assertExists(p)
         return load_onnx(p, load_external_data=False)
 
-    def _range(self, *shape, bias: float = None):
+    def _range(self, *shape, bias: Optional[float] = None):
         n = np.prod(shape)
         x = np.arange(n).astype(np.float32) / n
         if bias:
@@ -457,7 +458,7 @@ class TestGraphPatternCombination(ExtTestCase):
                     infer_shapes=True,
                 )
                 onx = gr.to_onnx(optimize=True)
-                types = set([n.op_type for n in onx.graph.node])
+                types = set(n.op_type for n in onx.graph.node)
                 self.assertIn("SimplifiedLayerNormalization", types)
                 self._check_ort_cpu_or_cuda(onx)
 
@@ -550,10 +551,10 @@ class TestGraphPatternCombination(ExtTestCase):
                     "dort-llama-llama-ort_1.onnx",
                     "dort-llama2-llama-ort+_1.onnx",
                 } and "Node at position 29 cannot be moved." in str(e):
-                    raise unittest.SkipTest(
+                    raise unittest.SkipTest(  # noqa: B904
                         "Algorithm inserting nodes is still not perfect"
                     )
-                raise AssertionError(f"Model {model!r} failed.")
+                raise AssertionError(f"Model {model!r} failed.")  # noqa: B904
             assert new_onx is not None, f"Model {model!r} was not optimized."
             op_types = [n.op_type for n in new_onx.graph.node]
             if experimental and "ScatterND" in op_types:
@@ -627,14 +628,14 @@ class TestGraphPatternCombination(ExtTestCase):
         try:
             self._check_ort_cpu_or_cuda(onx)
         except NotImplemented as e:
-            raise unittest.SkipTest(f"missing extension: {e}")
+            raise unittest.SkipTest(f"missing extension: {e}")  # noqa: B904
         except Fail as e:
             if "com.microsoft:SoftmaxGrad(-1) is not a registered function" in str(e):
                 unittest.SkipTest(f"onnxruntime-training is needed for {e}")
             raise
         except RuntimeException as e:
             if "Invalid fd was supplied" in str(e):
-                raise unittest.SkipTest(f"missing extension: {e}")
+                raise unittest.SkipTest(f"missing extension: {e}")  # noqa: B904
             raise
         self._check_ort_cpu_or_cuda(new_onx)
 

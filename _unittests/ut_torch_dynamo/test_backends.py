@@ -16,7 +16,6 @@ from experimental_experiment.ext_test_case import (
 
 
 class TestBackend(ExtTestCase):
-
     @ignore_warnings(DeprecationWarning)
     @skipif_ci_windows("onnxruntime-training not available")
     @requires_onnxruntime_training()

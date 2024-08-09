@@ -3,7 +3,8 @@ from onnx import ModelProto
 
 
 def append_custom_libraries(
-    onx: ModelProto, options: "onnxruntime.SessionOptions"  # noqa: F821
+    onx: ModelProto,
+    options: "onnxruntime.SessionOptions",  # noqa: F821
 ):
     """
     Appends libraries implementing custom kernels.

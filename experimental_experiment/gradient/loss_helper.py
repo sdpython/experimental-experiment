@@ -591,12 +591,12 @@ def add_loss_output(
 
         nodes.append(make_node("Add", [pen_reshape, loss_reshape], [final_name]))
 
-    inits = list(onx.graph.initializer) + inits
+    inits = [*onx.graph.initializer, *inits]
     graph = make_graph(
-        list(onx.graph.node) + nodes,
+        [*onx.graph.node, *nodes],
         onx.graph.name,
-        list(onx.graph.input) + inputs,
-        outputs + [onx.graph.output[output_index]],
+        [*onx.graph.input, *inputs],
+        [*outputs, onx.graph.output[output_index]],
         inits,
     )
     onnx_model = make_model(graph)

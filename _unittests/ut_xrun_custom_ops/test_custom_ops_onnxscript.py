@@ -210,7 +210,6 @@ class TestCustomOpsOnnxScript(ExtTestCase):
                 )
 
             if rewrite:
-
                 from onnxscript.optimizer import optimize
                 from onnxscript.rewriter import rewrite
                 from onnx.inliner import inline_local_functions

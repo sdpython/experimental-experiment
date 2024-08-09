@@ -58,7 +58,7 @@ class TestGradHelper(ExtTestCase):
         pygot = oinf.run(None, feeds)
         output_names = [o.name for o in onx.graph.output]
         self.assertGreater(len(output_names), 0)
-        for i, o in enumerate(output_names):
+        for i, _o in enumerate(output_names):
             self.assertEqualArray(got[i], pygot[i], atol=atol)
         if verbose:
             print(

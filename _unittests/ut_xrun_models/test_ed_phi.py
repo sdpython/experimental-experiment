@@ -17,7 +17,6 @@ from experimental_experiment.torch_models.training_helper import (
 
 
 class TestEdPhi(ExtTestCase):
-
     @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
     @ignore_warnings(DeprecationWarning)
     @requires_torch("2.3", "AssertionError: original output #6 is None")

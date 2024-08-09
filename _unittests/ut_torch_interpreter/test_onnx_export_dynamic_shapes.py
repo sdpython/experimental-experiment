@@ -16,7 +16,6 @@ from experimental_experiment.torch_models.llama_helper import get_llama_model
 
 
 class TestOnnxExportDynamicShapes(ExtTestCase):
-
     @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
     @ignore_warnings((UserWarning, DeprecationWarning))
     def test_linear_regression_dynamic_batch(self):
@@ -332,7 +331,7 @@ class TestOnnxExportDynamicShapes(ExtTestCase):
         append_custom_libraries(onx, opts)
         providers = ["CUDAExecutionProvider", "CPUExecutionProvider"]
 
-        for i in range(0, len(input_tensors)):
+        for i in range(len(input_tensors)):
             expected = model(*input_tensors[i])
             sess = onnxruntime.InferenceSession(
                 onx.SerializeToString(), opts, providers=providers
@@ -352,7 +351,9 @@ class TestOnnxExportDynamicShapes(ExtTestCase):
                 )
             else:
                 # last dimension is not a dynamic shape after export
-                self.assertRaise(lambda: sess.run(None, feeds), Fail)
+                self.assertRaise(
+                    lambda sess=sess, feeds=feeds: sess.run(None, feeds), Fail
+                )
 
 
 if __name__ == "__main__":

@@ -5,7 +5,7 @@ import torch
 def get_dummy_model() -> Tuple[Callable, Tuple[Any, ...]]:
     class Neuron(torch.nn.Module):
         def __init__(self, n_dims: int = 5, n_targets: int = 3):
-            super(Neuron, self).__init__()
+            super().__init__()
             self.linear = torch.nn.Linear(n_dims, n_targets)
 
         def forward(self, x):
