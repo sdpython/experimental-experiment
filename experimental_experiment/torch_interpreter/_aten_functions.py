@@ -2909,8 +2909,9 @@ def aten_max_pool2d(
     padding: Sequence[int] = (0, 0),
     dilation: Sequence[int] = (1, 1),
     ceil_mode: bool = False,
+    name: str = "max_pool2d",
 ) -> T:
-    "maxpool"
+    "max_pool2d"
     expand_size = 2
 
     kernel_shape, strides, pads, dilations = _adjust_attributes_of_max_pool(
@@ -2928,7 +2929,42 @@ def aten_max_pool2d(
         dilations,
         ceil_mode,
         3,
-        name="max_pool2d",
+        name=name,
+    )
+
+
+def aten_max_pool3d(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    kernel_size: Sequence[int],
+    stride: Sequence[int] = (),
+    padding: Sequence[int] = (0, 0, 0),
+    dilation: Sequence[int] = (1, 1, 1),
+    ceil_mode: bool = False,
+    name: str = "max_pool3d",
+) -> T:
+    """max_pool3d"""
+
+    expand_size = 3
+
+    kernel_shape, strides, pads, dilations = _adjust_attributes_of_max_pool(
+        expand_size, kernel_size, stride, padding, dilation
+    )
+
+    return _aten_max_pool_onnx(
+        g,
+        sts,
+        outputs,
+        x,
+        kernel_shape,
+        strides,
+        pads,
+        dilations,
+        ceil_mode,
+        4,
+        name=name,
     )
 
 
@@ -5779,6 +5815,36 @@ def aten_upsample_nearest2d(
     )
 
 
+def aten_upsample_nearest3d(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    output_size: T,
+    scales_d: Optional[float] = None,
+    scales_h: Optional[float] = None,
+    scales_w: Optional[float] = None,
+    name: str = "upsample_nearest3d",
+) -> T:
+    """resize"""
+    assert output_size is not None, "Not implemented when size is None"
+    assert scales_d is None, f"Not impelmented when scales_h={scales_h}"
+    assert scales_h is None, f"Not impelmented when scales_h={scales_h}"
+    assert scales_w is None, f"Not impelmented when scales_h={scales_w}"
+
+    return _aten_upsample_output_size(
+        g,
+        sts,
+        outputs,
+        x,
+        output_size,
+        mode="nearest",
+        coordinate_transformation_mode="asymmetric",
+        d=3,
+        name=name,
+    )
+
+
 def _upsample_compute_output_size(input_size, output_size, scale_factors):
     spatial_dimensions = len(input_size) - 2
     if output_size is not None:
@@ -5817,6 +5883,25 @@ def aten_upsample_nearest2d_vec(
     # )
     scales = [None, None]
     return aten_upsample_nearest2d(g, sts, outputs, x, osize, *scales, name=name)
+
+
+def aten_upsample_nearest3d_vec(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    output_size: Optional[T] = None,
+    scale_factors: Optional[List[int]] = None,
+    name: str = "upsample_nearest3d_vec",
+) -> T:
+    "resize"
+    assert g.has_shape(x), f"Not implemented when {x!r} has no shape{g.get_debug_msg()}"
+    osize = _upsample_compute_output_size(g.get_shape(x), output_size, scale_factors)
+    # scales = (
+    #     scale_factors if scale_factors else [None] * len(osize)
+    # )
+    scales = [None, None, None]
+    return aten_upsample_nearest3d(g, sts, outputs, x, osize, *scales, name=name)
 
 
 def aten_view(
