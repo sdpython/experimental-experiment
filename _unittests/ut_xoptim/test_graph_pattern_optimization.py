@@ -5,11 +5,12 @@ Use:
 
     LOG_PATTERN_OPTIMIZE=10 \\
     python _unittests/ut_xoptim/test_graph_pattern_optimization.py \\
-        -k test_rotary_concat_part_plug 
+        -k test_rotary_concat_part_plug
 """
 
 import os
 import unittest
+from typing import Optional
 import numpy as np
 import onnx
 from onnx import (
@@ -81,7 +82,9 @@ class TestGraphPatternOptimization(ExtTestCase):
             InferenceSession(proto.SerializeToString(), providers=providers)
         except Fail as e:
             saved = self.dump_onnx("test_graph_pattern_optimization.onnx", proto)
-            raise AssertionError(f"Fails due to {e}, model saved into {saved!r}")
+            raise AssertionError(  # noqa: B904
+                f"Fails due to {e}, model saved into {saved!r}"
+            )
 
     @ignore_warnings(DeprecationWarning)
     def test_try_with_custom_model(self):
@@ -206,7 +209,7 @@ class TestGraphPatternOptimization(ExtTestCase):
         self.assertEqual(len(before), 24)
         self.assertEqual(len(after), 22)
 
-    def _range(self, *shape, bias: float = None):
+    def _range(self, *shape, bias: Optional[float] = None):
         n = np.prod(shape)
         x = np.arange(n).astype(np.float32) / n
         if bias:

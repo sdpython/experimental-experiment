@@ -1656,7 +1656,8 @@ class TestOperatorsOnnxrt(ExtTestCase):
             def forward(self, x_in, *args, **kwargs):
                 x_out = {}
                 x_out["test_key_out"] = torch.add(
-                    x_in[list(x_in.keys())[0]], list(x_in.keys())[0]  # noqa: RUF015
+                    x_in[next(x_in.keys())],
+                    next(x_in.keys()),
                 )
                 return x_out
 

@@ -3,7 +3,6 @@ from onnx.reference.op_run import OpRun
 
 
 class AveragePoolGrad(OpRun):
-
     def _run(
         self,
         out,

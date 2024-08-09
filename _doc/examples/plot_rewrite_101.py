@@ -53,7 +53,6 @@ plot_dot(proto)
 
 
 class MulMulSigmoidPattern(EasyPatternOptimization):
-
     def match_pattern(self, g: GraphBuilder, X, Y):
         return g.op.Mul(X, g.op.Mul(Y, g.op.Sigmoid(Y)))
 
@@ -91,7 +90,6 @@ plot_dot(new_proto)
 
 
 class MulMulSigmoidPattern2(EasyPatternOptimization):
-
     def match_pattern(self, g: GraphBuilder, X, Y):
         return g.op.Mul(X, g.op.Mul(Y, g.op.Sigmoid(Y)))
 

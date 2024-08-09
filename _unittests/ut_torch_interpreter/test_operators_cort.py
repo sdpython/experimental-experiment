@@ -101,11 +101,11 @@ class FuncModule0(Module):
 
     def forward(self, *args):
         if isinstance(args[0], tuple):
-            args = (tuple([args[0][0] * self.ppp, *args[0][1:]]),)
+            args = (tuple(args[0][0] * self.ppp, *args[0][1:]),)
             res = self.f(*args) * self.ppp2
             return res
         else:
-            args = tuple([args[0] * self.ppp, *args[1:]])
+            args = tuple(args[0] * self.ppp, *args[1:])
             res = self.f(*args) * self.ppp2
             return res
 
@@ -117,7 +117,7 @@ class FuncModule1(Module):
         self.ppp = Parameter(torch.Tensor([1]).to(torch.float32))
 
     def forward(self, *args):
-        args = tuple([args[0], args[1] * self.ppp, *args[2:]])
+        args = tuple(args[0], args[1] * self.ppp, *args[2:])
         res = self.f(*args)
         return res
 
@@ -1871,7 +1871,8 @@ class TestOperatorsCort(ExtTestCase):
             def forward(self, x_in, *args, **kwargs):
                 x_out = {}
                 x_out["test_key_out"] = torch.add(
-                    x_in[list(x_in.keys())[0]], list(x_in.keys())[0]  # noqa: RUF015
+                    x_in[next(x_in.keys())],
+                    next(x_in.keys()),
                 )
                 return x_out
 
@@ -2387,7 +2388,7 @@ class TestOperatorsCort(ExtTestCase):
             indices_shape = _get_tensor_sizes(indices)
             if indices_shape is not None and hasattr(weight.type(), "with_sizes"):
                 output_type = weight.type().with_sizes(
-                    indices_shape + [_get_tensor_dim_size(weight, 1)]
+                    [*indices_shape + _get_tensor_dim_size(weight, 1)]
                 )
                 output.setType(output_type)
             return output

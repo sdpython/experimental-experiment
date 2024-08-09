@@ -333,7 +333,7 @@ def _make_builder_interpreter(
 
 
 def _model_signature(
-    model: Union["torch.nn.Module", Callable]  # noqa: F821
+    model: Union["torch.nn.Module", Callable],  # noqa: F821
 ) -> inspect.Signature:
     import torch
 

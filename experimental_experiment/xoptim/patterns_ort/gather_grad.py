@@ -43,7 +43,10 @@ class GatherGradPattern(PatternOptimization):
         return MatchResult(self, [node_before, node], self.apply, insert_at=node)
 
     def apply(
-        self, g: "GraphBuilder", node_before: NodeProto, node: NodeProto  # noqa: F821
+        self,
+        g: "GraphBuilder",  # noqa: F821
+        node_before: NodeProto,
+        node: NodeProto,
     ) -> List[NodeProto]:
         new_node = g.make_node(
             "GatherGrad",

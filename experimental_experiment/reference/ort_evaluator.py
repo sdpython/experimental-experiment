@@ -105,7 +105,7 @@ class OrtEval:
             return self.torch.float16
         if dt == np.int64:
             return self.torch.int64
-        assert False, f"Unexpected type {type(dt)}: {dt}"
+        raise AssertionError(f"Unexpected type {type(dt)}: {dt}")
 
     def _get_itype(self, dt: Any) -> int:
         if isinstance(dt, int):
@@ -212,7 +212,7 @@ class OrtEval:
         if intermediate:
             return results
         output_names = [o.name for o in self.proto.graph.output]
-        for i, name in enumerate(output_names):
+        for name in output_names:
             if name == "":
                 continue
             if name not in results:
@@ -291,7 +291,7 @@ class OrtEval:
         Runs a node.
         """
         types = [(None if a is None else (a.dtype, a.shape)) for a in inputs]
-        key = tuple([id(node), *types])
+        key = tuple(id(node), *types)
         if key in self._cache:
             sess = self._cache[key][1]
         else:
@@ -487,14 +487,15 @@ class OrtEval:
         return ortvalues, output_devices
 
     def _ortvalues_to_torch_tensor(
-        self, ortvalues: "onnxruntime.OrtValueVector"  # noqa: F821
+        self,
+        ortvalues: "onnxruntime.OrtValueVector",  # noqa: F821
     ) -> Tuple["torch.Tensor", ...]:  # noqa: F821
         if len(ortvalues) == 0:
             return tuple()
 
         from torch._C import _from_dlpack
 
-        if all(map(lambda i: ortvalues[i].has_value(), range(len(ortvalues)))):
+        if all(ortvalues[i].has_value() for i in range(len(ortvalues))):
             res = ortvalues.to_dlpacks(_from_dlpack)
         else:
             res = []
@@ -514,7 +515,7 @@ class OrtEval:
         from onnxruntime.capi import _pybind_state as ORTC
 
         types = [(None if a is None else (a.dtype, a.shape)) for a in inputs]
-        key = tuple([id(node), *types])
+        key = tuple(id(node), *types)
         if key in self._cache:
             sess = self._cache[key][1]
         else:

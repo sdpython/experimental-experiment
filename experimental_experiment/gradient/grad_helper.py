@@ -42,7 +42,7 @@ def _random_input(typ, shape, batch):
     if len(shape) <= 1:
         new_shape = shape
     elif shape[0] in (None, 0):
-        new_shape = tuple([batch] + list(shape[1:]))
+        new_shape = tuple(batch, *shape[1:])
     else:
         new_shape = shape
     return np.random.randn(*new_shape).astype(dtype)
@@ -66,9 +66,7 @@ def random_feed(
             shape = tuple(
                 getattr(d, "dim_value", batch) for d in inp.type.tensor_type.shape.dim
             )
-            shape = (shape[0],) + tuple(
-                b if b > 0 else empty_dimension for b in shape[1:]
-            )
+            shape = (shape[0], *[b if b > 0 else empty_dimension for b in shape[1:]])
         else:
             typ = inp.type
             shape = inp.shape

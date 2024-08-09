@@ -212,7 +212,6 @@ class LayerNormalizationScalePattern(PatternOptimization):
         mul_node: NodeProto,
         add_node: Optional[NodeProto],
     ) -> List[NodeProto]:
-
         # scale
         scale = (
             mul_node.input[1]

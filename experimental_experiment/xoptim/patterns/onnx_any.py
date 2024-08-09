@@ -29,7 +29,7 @@ class SameChildrenPattern(PatternOptimization):
         return True
 
     def __init__(self, verbose: int = 0, priority: int = 0):
-        super(SameChildrenPattern, self).__init__(verbose, priority)
+        super().__init__(verbose, priority)
 
     def match(
         self,
@@ -58,7 +58,7 @@ class SameChildrenPattern(PatternOptimization):
                 else:
                     cp[n.op_type] = [n]
             nodes = []
-            for k, v in cp.items():
+            for v in cp.values():
                 if len(v) <= 1:
                     continue
                 if len(v) == 2:
@@ -68,7 +68,7 @@ class SameChildrenPattern(PatternOptimization):
                     nodes.extend([n1, n2])
                     continue
                 enough = False
-                for i in range(0, len(v) - 1):
+                for i in range(len(v) - 1):
                     for j in range(i + 1, len(v)):
                         if self._cmp(v[i], v[j]):
                             nodes.extend([v[i], v[j]])
@@ -101,7 +101,9 @@ class SameChildrenPattern(PatternOptimization):
         return MatchResult(self, nodes, self.apply)
 
     def apply(
-        self, g: "GraphBuilder", *nodes: NodeProto  # noqa: F821
+        self,
+        g: "GraphBuilder",  # noqa: F821
+        *nodes: NodeProto,
     ) -> List[NodeProto]:
         """
         The function receives pairs of nodes. We replace every odd node
@@ -136,7 +138,7 @@ class IdentityPattern(PatternOptimization):
     """
 
     def __init__(self, verbose: int = 0, priority: int = 0):
-        super(IdentityPattern, self).__init__(verbose, priority)
+        super().__init__(verbose, priority)
 
     def match(
         self,
@@ -192,7 +194,9 @@ class IdentityPattern(PatternOptimization):
         return self.none(node, inspect.currentframe().f_lineno)
 
     def apply(
-        self, g: "GraphBuilder", node: NodeProto  # noqa: F821
+        self,
+        g: "GraphBuilder",  # noqa: F821
+        node: NodeProto,
     ) -> List[NodeProto]:
         return [
             g.make_node(

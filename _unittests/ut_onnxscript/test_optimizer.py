@@ -7,7 +7,6 @@ from experimental_experiment.ext_test_case import ExtTestCase, hide_stdout
 
 
 class TestOnnxScriptOptimizer(ExtTestCase):
-
     def _check_ort(self, name: Union[str, onnx.ModelProto]):
         from onnxruntime import InferenceSession
 

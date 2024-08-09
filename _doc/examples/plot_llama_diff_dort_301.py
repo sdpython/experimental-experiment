@@ -212,7 +212,7 @@ if backward:
     )
     onnx_mod = torch.compile(copy.deepcopy(model), backend=aot_compiler, fullgraph=True)
 
-    if False and use_mixed:
+    if use_mixed:
         with torch.autocast(device_type="cuda", dtype=torch.float16):
             torch.cuda.synchronize()
             got = train_loop(onnx_mod, *inputs[0])

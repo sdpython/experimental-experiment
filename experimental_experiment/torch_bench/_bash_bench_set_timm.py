@@ -14,7 +14,6 @@ from ._bash_bench_model_runner import (
 
 
 class TimmRunner(BenchmarkRunner):
-
     MODELS_FILENAME = textwrap.dedent(
         """
         adv_inception_v3 128

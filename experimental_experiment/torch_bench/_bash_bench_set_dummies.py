@@ -4,7 +4,7 @@ from ._bash_bench_model_runner import MakeConfig
 
 class Neuron(torch.nn.Module):
     def __init__(self, n_dims: int = 5, n_targets: int = 3):
-        super(Neuron, self).__init__()
+        super().__init__()
         self.linear = torch.nn.Linear(n_dims, n_targets)
 
     def forward(self, x):
@@ -18,7 +18,7 @@ class Neuron(torch.nn.Module):
 
 class Neuron2Outputs(torch.nn.Module):
     def __init__(self, n_dims: int = 1000, n_targets: int = 100):
-        super(Neuron2Outputs, self).__init__()
+        super().__init__()
         self.linear = torch.nn.Linear(n_dims, n_targets)
 
     def forward(self, x):
@@ -46,7 +46,7 @@ class Neuron16(Neuron):
 
 class NeuronTuple(torch.nn.Module):
     def __init__(self, n_dims: int = 5, n_targets: int = 3):
-        super(NeuronTuple, self).__init__()
+        super().__init__()
         self.linear = torch.nn.Linear(n_dims, n_targets)
 
     def forward(self, x):

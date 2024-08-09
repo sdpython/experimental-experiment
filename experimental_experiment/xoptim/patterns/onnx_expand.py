@@ -12,7 +12,7 @@ class ExpandPattern(PatternOptimization):
     """
 
     def __init__(self, verbose: int = 0, priority: int = 0):
-        super(ExpandPattern, self).__init__(verbose, priority)
+        super().__init__(verbose, priority)
 
     def match(
         self,
@@ -37,7 +37,9 @@ class ExpandPattern(PatternOptimization):
         return MatchResult(self, [node], self.apply, insert_at=node)
 
     def apply(
-        self, g: "GraphBuilder", node: NodeProto  # noqa: F821
+        self,
+        g: "GraphBuilder",  # noqa: F821
+        node: NodeProto,
     ) -> List[NodeProto]:
         new_node = g.make_node(
             "Identity",
@@ -112,7 +114,10 @@ class ExpandBroadcastPattern(PatternOptimization):
         return MatchResult(self, [node, next_node], self.apply, insert_at=next_node)
 
     def apply(
-        self, g: "GraphBuilder", node: NodeProto, next_node: NodeProto  # noqa: F821
+        self,
+        g: "GraphBuilder",  # noqa: F821
+        node: NodeProto,
+        next_node: NodeProto,
     ) -> List[NodeProto]:
         if next_node.input[0] == node.output[0]:
             inputs = [node.input[0], next_node.input[1]]
@@ -173,7 +178,10 @@ class ExpandSwapPattern(PatternOptimization):
         return MatchResult(self, [node, next_node], self.apply, insert_at=node)
 
     def apply(
-        self, g: "GraphBuilder", node: NodeProto, next_node: NodeProto  # noqa: F821
+        self,
+        g: "GraphBuilder",  # noqa: F821
+        node: NodeProto,
+        next_node: NodeProto,
     ) -> List[NodeProto]:
         # We need to create a new name for the intermediate results.
         # The optimizer cannot reuse an existing name if the new result

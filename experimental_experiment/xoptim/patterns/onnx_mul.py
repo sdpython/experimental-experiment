@@ -100,7 +100,6 @@ class MulMulMulScalarPattern(PatternOptimization):
         node_left: NodeProto,
         node_right: NodeProto,
     ) -> List[NodeProto]:
-
         new_node = g.make_node(
             node.op_type,
             [node_left.input[0], node_right.input[0]],
@@ -343,7 +342,6 @@ class SwitchOrderBinaryPattern(PatternOptimization):
         node_left: NodeProto,
         node_right: NodeProto,
     ) -> List[NodeProto]:
-
         side = 1 if node_left is None else 0
         other_node = node_right if node_left is None else node_left
         assert (

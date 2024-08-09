@@ -116,8 +116,7 @@ class GraphBuilderPatternOptimization:
 
     def iter_nodes(self) -> Iterator:
         "iterator"
-        for node in self.builder.nodes:
-            yield node
+        yield from self.builder.nodes
 
     def _build(self):
         """
@@ -213,7 +212,7 @@ class GraphBuilderPatternOptimization:
         """
         next_nodes = self.next_nodes(name)
         allowed = set(id(n) for n in nodes)
-        return all(map(lambda n: id(n) in allowed, next_nodes))
+        return all(id(n) in allowed for n in next_nodes)
 
     def is_constant(self, name: str) -> bool:
         """
@@ -719,14 +718,12 @@ class GraphBuilderPatternOptimization:
         idn = [id(n) for n in match.nodes if n is not None]
 
         assert all(
-            map(lambda i: i in self.nodes_, idn)
+            i in self.nodes_ for i in idn
         ), f"One node in {idn} is not referenced"
 
         positions = {id(n): i for i, n in enumerate(self.builder.nodes)}
 
-        assert all(
-            map(lambda i: i in positions, idn)
-        ), f"One node in {idn} is not referenced"
+        assert all(i in positions for i in idn), f"One node in {idn} is not referenced"
 
         removed = [positions[i] for i in idn]
         position_insert = (
@@ -1032,7 +1029,7 @@ class GraphBuilderPatternOptimization:
         continue_optimization = True
         if max_iter == -1:
             max_iter = len(self.builder.nodes)
-        priorities = list(sorted(set(p.priority for p in self.patterns)))
+        priorities = list(sorted(set(p.priority for p in self.patterns)))  # noqa: C413
         assert priorities, "list of priority is null."
         if self.verbose > 0:
             print(
@@ -1081,7 +1078,6 @@ class GraphBuilderPatternOptimization:
 
                 # loop over the nodes
                 for match in pattern.enumerate_matches(self):
-
                     # bypass this node if the name contains some specific name
                     fail_match = False
                     for n in match.nodes:
@@ -1176,7 +1172,6 @@ class GraphBuilderPatternOptimization:
             n_added = 0
             n_removed = 0
             for im, (pattern, match) in enumerate(matches):
-
                 if self.verbose > 3:
                     print(
                         f"[GraphBuilderPatternOptimization.optimize] "

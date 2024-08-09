@@ -15,7 +15,7 @@ class ReduceSumNormalizePattern(PatternOptimization):
         node: NodeProto,
         matched: List[MatchResult],
     ) -> Optional[MatchResult]:
-        if not node.op_type == "ReduceSum" or node.domain != "":
+        if node.op_type != "ReduceSum" or node.domain != "":
             return self.none()
 
         cast_node = g.node_before(node.input[0])

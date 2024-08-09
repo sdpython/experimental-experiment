@@ -5,7 +5,7 @@ Use:
 
     LOG_PATTERN_OPTIMIZE=10 \\
     python _unittests/ut_xoptim/test_graph_pattern_optimization.py \\
-        -k test_rotary_concat_part_plug 
+        -k test_rotary_concat_part_plug
 """
 
 import unittest
@@ -30,7 +30,6 @@ TINT64 = TensorProto.INT64
 
 
 class TestGraphPatternOptimizationEasy(ExtTestCase):
-
     def _get_random_inputs(self, model: onnx.ModelProto):
         feeds = {}
         for i in model.graph.input:

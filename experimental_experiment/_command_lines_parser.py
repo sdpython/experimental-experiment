@@ -19,7 +19,7 @@ def get_main_parser() -> ArgumentParser:
         help=dedent(
             """
         Selects a command.
-        
+
         'lighten' makes a model lighter by removing the weights,
         'unlighten' restore a model produces by the previous experiment
         """

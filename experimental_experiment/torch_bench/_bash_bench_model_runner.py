@@ -75,7 +75,7 @@ def download_retry_decorator(retry: int = 5) -> Callable:  # type: ignore[arg-ty
                         wait = tries * 30
                         time.sleep(wait)
                     else:
-                        raise RuntimeError(
+                        raise RuntimeError(  # noqa: B904
                             f"Failed to load model {args!r} "
                             f"with following error(s): {e!r}."
                         )

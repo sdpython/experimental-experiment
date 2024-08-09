@@ -10,7 +10,6 @@ from experimental_experiment.xbuilder.graph_builder import (
 
 
 class TestGraphFullModelPatternOptimization(ExtTestCase):
-
     def _check_with_ort(self, proto: ModelProto):
         from onnxruntime import InferenceSession, get_available_providers
 

@@ -10,14 +10,12 @@ from experimental_experiment.torch_models.phi3_helper import has_phi3
 
 
 class TestZooPhi3(ExtTestCase):
-
     @unittest.skipIf(not has_phi3(), reason="transformers not recent enough")
     @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
     @ignore_warnings(DeprecationWarning)
     @requires_torch("2.3")
     @requires_zoo()  # ZOO=1 python _unittests/ut_xrun_models/test_zoo_phi3_mini.py
     def test_phi3_mini_export(self):
-
         import os
         import time
         import onnxruntime
@@ -93,14 +91,14 @@ class TestZooPhi3(ExtTestCase):
         N = 5
         print(f"running {N} iterations with torch")
         begin = time.perf_counter()
-        for i in range(N):
+        for _ in range(N):
             model(input_ids)
         d = time.perf_counter() - begin
         print(f"done in {d}s for torch")
 
         print(f"running {N} iterations with onnxruntime")
         begin = time.perf_counter()
-        for i in range(N):
+        for _ in range(N):
             sess.run(None, {name: np_input})
         d = time.perf_counter() - begin
         print(f"done in {d}s for onnxruntime")

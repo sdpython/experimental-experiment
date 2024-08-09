@@ -172,7 +172,7 @@ def create_compiled_model(
     use_dynamic: bool = False,
     verbose: int = 0,
     enable_pattern: Union[str, List[str]] = "default",
-    disable_pattern: Union[str, List[str]] = None,
+    disable_pattern: Optional[Union[str, List[str]]] = None,
     return_storage: bool = False,
     rename_inputs: bool = True,
     dump_prefix: Optional[str] = None,
@@ -221,9 +221,9 @@ def create_compiled_model(
     assert dump_patterns is None or isinstance(
         dump_patterns, str
     ), f"Unexpected type {type(dump_patterns)} for dump_patterns."
-    assert isinstance(ort_optimize, bool), (
-        f"Unexpected type={type(ort_optimize)} " f"for ort_optimize={ort_optimize}"
-    )
+    assert isinstance(
+        ort_optimize, bool
+    ), f"Unexpected type={type(ort_optimize)} for ort_optimize={ort_optimize}"
     ort_optimization_level = "ORT_ENABLE_ALL" if ort_optimize else "ORT_DISABLE_ALL"
 
     if use_fused_aten_ops and backend in {"ort", "custom", "backort", "plug", "ort+"}:
@@ -613,18 +613,15 @@ def create_model(
 
         res = create_model(model, config_dict, dtype=None)
         torch_dtype = getattr(torch, dtype)
-        return tuple(
+        return (
+            res[0].to(torch_dtype),
             [
-                res[0].to(torch_dtype),
-                [
-                    tuple(
-                        (i.to(torch_dtype) if i.dtype == torch.float32 else i)
-                        for i in obs
-                    )
-                    for obs in res[1]
-                ],
-                *res[2:],
-            ]
+                tuple(
+                    (i.to(torch_dtype) if i.dtype == torch.float32 else i) for i in obs
+                )
+                for obs in res[1]
+            ],
+            *res[2:],
         )
 
     if model == "llama":

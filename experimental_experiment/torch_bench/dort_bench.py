@@ -14,7 +14,7 @@ Example, run llama model with onnxrt backend on cuda.
 
     python -m experimental_experiment.torch_bench.dort_bench \\
            --backend ort --device cuda --config medium
-    
+
 To export the models:
 
 ::
@@ -69,7 +69,6 @@ def main(args=None):
     )
 
     if multi_run(args):
-
         configs = make_configs(args)
         data = run_benchmark(
             "experimental_experiment.torch_bench.dort_bench",
@@ -355,7 +354,7 @@ def main(args=None):
 
         i_shapes = set(config_dict["input_dims"])
         if len(i_shapes) == 1:
-            idims = "x".join(map(str, list(i_shapes)[0]))
+            idims = "x".join(map(str, next(i_shapes)))
         else:
             idims = "|".join("x".join(map(str, shs)) for shs in list(i_shapes)[:2])
         del config_dict["input_dims"]
