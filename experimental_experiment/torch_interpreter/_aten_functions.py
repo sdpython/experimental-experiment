@@ -985,6 +985,38 @@ def aten_conv2d(
     )
 
 
+def aten_conv3d(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    weight: T,
+    bias: T = None,
+    stride: Sequence[int] = (1, 1),
+    padding: Union[str, Sequence[int]] = (0, 0),
+    dilation: Sequence[int] = (1, 1),
+    groups: int = 1,
+    auto_pad: str = "NOTSET",
+    name: str = "conv3d",
+) -> T:
+    "conv3d"
+    return aten_convolution(
+        g,
+        sts,
+        outputs,
+        x,
+        weight=weight,
+        bias=bias,
+        stride=stride,
+        padding=padding,
+        dilation=dilation,
+        groups=groups,
+        auto_pad=auto_pad,
+        name=name,
+        d=3,
+    )
+
+
 def aten_conv2d_padding(
     g: GraphBuilder,
     sts: Optional[Dict[str, Any]],
@@ -1095,7 +1127,43 @@ def aten_conv_transpose2d_input(
     dilation: List[int],
     name: str = "conv_transpose2d_input",
 ) -> T:
-    "conv_transpose"
+    "conv_transpose2d"
+    return _convolution(
+        g,
+        sts,
+        outputs,
+        x,
+        weight,
+        bias,
+        stride,
+        padding,
+        dilation,
+        True,
+        output_padding,
+        groups,
+        None,
+        None,
+        None,
+        None,
+        name=name,
+    )
+
+
+def aten_conv_transpose3d_input(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    weight: T,
+    bias: T,
+    stride: List[int],
+    padding: List[int],
+    output_padding: List[int],
+    groups: List[int],
+    dilation: List[int],
+    name: str = "conv_transpose3d_input",
+) -> T:
+    "conv_transpose3d"
     return _convolution(
         g,
         sts,
@@ -3335,6 +3403,51 @@ def aten__native_batch_norm(
         set_type_shape_unary_op(g, norm, x)
 
     return norm, running_mean_fp32, invstd
+
+
+def aten_cudnn_batch_norm(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    weight: T,
+    bias: Optional[T],
+    running_mean: Optional[T],
+    running_var: Optional[T],
+    training: bool = False,
+    momentum: float = 0.9,
+    eps: float = 1e-05,
+    name: str = "cudnn_batch_norm",
+) -> Tuple[T, T, T]:
+    """cudnn_batch_norm"""
+    a, b, c = aten__native_batch_norm(
+        g,
+        sts,
+        outputs[:3],
+        x,
+        weight,
+        bias,
+        running_mean=running_mean,
+        running_var=running_var,
+        training=training,
+        momentum=momentum,
+        eps=eps,
+        name=name,
+    )
+
+    d = g.op.ConstantOfShape(
+        np.array([0], dtype=np.int64),
+        value=from_array(
+            np.array([0], dtype=tensor_dtype_to_np_dtype(TensorProto.UINT8))
+        ),
+        outputs=outputs[3:],
+        name=name,
+    )
+    if training:
+        # Cudnn return running mean and variance when training is True
+        return a, b, c, d
+
+    return a, b, c, d
 
 
 def aten_ne(
