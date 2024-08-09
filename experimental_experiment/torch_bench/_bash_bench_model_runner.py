@@ -86,9 +86,7 @@ def download_retry_decorator(retry: int = 5) -> Callable:  # type: ignore[arg-ty
 
 
 def get_dynamo_stats() -> Dict[str, float]:
-    """
-    Returns statistics on memory as a dictionary.
-    """
+    """Returns statistics on memory as a dictionary."""
     return collections.Counter(
         {
             "calls_captured": torch._dynamo.utils.counters["stats"]["calls_captured"],
@@ -126,8 +124,7 @@ class WrappedModelBase(torch.nn.Module):
         return self.model.forward(*args, **kwargs)
 
     def parameters(self):
-        for k in self.model.parameters():
-            yield k
+        yield from self.model.parameters()
 
 
 class WrappedModelToTuple(WrappedModelBase):
@@ -323,16 +320,14 @@ class ModelRunner:
         return self.model(*self.inputs)
 
     def compute_weight_size(self) -> int:
-        """
-        Returns the weight size.
-        """
+        """Returns the weight size."""
         return compute_weight_size(self.model)
 
     def parameters_dtype(self) -> str:
         """Returns the unique dtypes of all parameters."""
         return ",".join(
             sorted(
-                set(str(p.dtype).replace("torch.", "") for p in self.model.parameters())
+                {str(p.dtype).replace("torch.", "") for p in self.model.parameters()}
             )
         )
 
@@ -683,8 +678,8 @@ class ModelRunner:
             with open(os.path.join(folder, sarif), "w", encoding="utf-8") as f:
                 f.write(self.error_report)
         onx = onnx.load(name, load_external_data=False)
-        inits = set(i.name for i in onx.graph.initializer)
-        inputs = set(i.name for i in onx.graph.input)
+        inits = {i.name for i in onx.graph.initializer}
+        inputs = {i.name for i in onx.graph.input}
         add_inits = []
         for pn, value in self.model.named_parameters():
             new_name = f"p_{_clean(pn)}"
@@ -741,9 +736,9 @@ class ModelRunner:
         opts = optimization.split("+")
         for opt in opts:
             if opt == "default":
+                from onnx.inliner import inline_local_functions
                 from onnxscript.optimizer import optimize
                 from onnxscript.rewriter import rewrite
-                from onnx.inliner import inline_local_functions
 
                 first_model_proto = model_proto
                 model_proto = optimize(
@@ -924,13 +919,12 @@ class ModelRunner:
         if exporter in {"eager", "export", "compile", "inductor", "dort"}:
             return self.inputs
         onx = onnx.load(filename, load_external_data=False)
-        initializer_names = set(i.name for i in onx.graph.initializer)
+        initializer_names = {i.name for i in onx.graph.initializer}
         names = [_.name for _ in onx.graph.input if _.name not in initializer_names]
         if isinstance(self.inputs, dict):
-            assert set(names) == set(self.inputs), (
-                f"Input names mismatch, "
-                f"got {set(self.inputs)}, expecting {set(names)}."
-            )
+            assert set(names) == set(
+                self.inputs
+            ), f"Input names mismatch, got {set(self.inputs)}, expecting {set(names)}."
             return self.inputs
         inputs = [i for i, d in zip(self.inputs, self.raw_use_defaults) if not d]
         if len(names) > len(inputs) and any(isinstance(i, list) for i in inputs):
@@ -959,6 +953,6 @@ class ModelRunner:
             f"self.raw_input_names={self.raw_input_names},\n"
             f"self.raw_use_defaults={self.raw_use_defaults},\n"
             f"initializer_names={initializer_names}, "
-            f"named parameters={list(p[0] for p in self.model.named_parameters())}"
+            f"named parameters={[p[0] for p in self.model.named_parameters()]}"
         )
         return dict(zip(names, new_inputs))

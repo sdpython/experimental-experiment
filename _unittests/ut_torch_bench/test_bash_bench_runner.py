@@ -14,7 +14,6 @@ from experimental_experiment.torch_bench._bash_bench_set_huggingface import (
 
 
 class TestBashBenchRunner(ExtTestCase):
-
     @requires_torch("2.3")
     def test_create_runner_cpu(self):
         runner = HuggingfaceRunner(device="cpu")

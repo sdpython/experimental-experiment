@@ -3,7 +3,6 @@ from ._bash_bench_set_torchbench import TorchBenchRunner
 
 
 class TorchBenchAdoRunner(TorchBenchRunner):
-
     SUITE = "Ado"
 
     EXPECTED_MODELS = textwrap.dedent(

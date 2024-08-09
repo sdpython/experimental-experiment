@@ -241,7 +241,6 @@ def bash_bench_main(script_name: str, doc: str, args: Optional[List[str]] = None
                 print(f":ERROR,unexpected number of data {len(data)};")
 
             if args.output_data:
-
                 df = make_dataframe_from_benchmark_data(data, detailed=False)
 
                 df["DATE"] = f"{datetime.now():%Y-%m-%d}"

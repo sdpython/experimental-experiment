@@ -248,9 +248,7 @@ class HuggingfaceRunner(BenchmarkRunner):
     @classmethod
     def _get_module_cls_by_model_name(container, model_cls_name):
         _module_by_model_name = {
-            "Speech2Text2Decoder": (
-                "transformers.models.speech_to_text_2." "modeling_speech_to_text_2"
-            ),
+            "Speech2Text2Decoder": "transformers.models.speech_to_text_2.modeling_speech_to_text_2",  # noqa: E501
             "TrOCRDecoder": "transformers.models.trocr.modeling_trocr",
         }
         module_name = _module_by_model_name.get(model_cls_name, "transformers")
@@ -336,22 +334,16 @@ class HuggingfaceRunner(BenchmarkRunner):
 
         input_dict = {"input_ids": inputt}
 
-        if (
-            model_name.startswith("T5")
-            or model_name.startswith("M2M100")
-            or model_name.startswith("MT5")
-            or model_cls
-            in {
-                transformers.BlenderbotModel,
-                transformers.BlenderbotSmallModel,
-                transformers.BlenderbotForConditionalGeneration,
-                transformers.BlenderbotSmallForConditionalGeneration,
-                transformers.PegasusModel,
-                transformers.PegasusForConditionalGeneration,
-                transformers.MarianModel,
-                transformers.MarianMTModel,
-            }
-        ):
+        if model_name.startswith(("T5", "M2M100", "MT5")) or model_cls in {
+            transformers.BlenderbotModel,
+            transformers.BlenderbotSmallModel,
+            transformers.BlenderbotForConditionalGeneration,
+            transformers.BlenderbotSmallForConditionalGeneration,
+            transformers.PegasusModel,
+            transformers.PegasusForConditionalGeneration,
+            transformers.MarianModel,
+            transformers.MarianMTModel,
+        }:
             input_dict["decoder_input_ids"] = inputt
 
         if model_name.startswith("Lxmert"):
@@ -392,11 +384,8 @@ class HuggingfaceRunner(BenchmarkRunner):
                 input_dict["end_positions"] = _rand_int_tensor(
                     device, 0, seq_length, (bs,)
                 )
-            elif (
-                model_name.endswith("MaskedLM")
-                or model_name.endswith("HeadModel")
-                or model_name.endswith("CausalLM")
-                or model_name.endswith("DoubleHeadsModel")
+            elif model_name.endswith(
+                ("MaskedLM", "HeadModel", "CausalLM", "DoubleHeadsModel")
             ):
                 input_dict["labels"] = _rand_int_tensor(
                     device, 0, vocab_size, (bs, seq_length)
@@ -574,5 +563,4 @@ class HuggingfaceRunner(BenchmarkRunner):
         model_names = sorted(model_names)
 
         start, end = self.get_benchmark_indices(len(model_names))
-        for _ in self.enumerate_model_names(model_names, start=start, end=end):
-            yield _
+        yield from self.enumerate_model_names(model_names, start=start, end=end)

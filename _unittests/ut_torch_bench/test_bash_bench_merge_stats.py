@@ -13,7 +13,6 @@ from experimental_experiment.torch_bench._bash_bench_benchmark_runner_agg import
 
 
 class TestBashBenchMergeStats(ExtTestCase):
-
     @ignore_warnings((PerformanceWarning, FutureWarning))
     def test_merge_stats0(self):
         ddata = os.path.join(os.path.dirname(__file__), "data")
@@ -210,7 +209,7 @@ class TestBashBenchMergeStats(ExtTestCase):
         self.assertIsInstance(df1, dict)
         self.assertIsInstance(df2, dict)
         self.assertIsInstance(df3, dict)
-        for k, v in df1.items():
+        for k in df1:
             if k not in df2:
                 continue
             sh1 = df1[k].shape

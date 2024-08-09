@@ -1,7 +1,8 @@
-import time
 import os
 import sys
-from typing import Any, Dict, List, Optional, Union, Tuple
+import time
+from typing import Any, Dict, List, Optional, Tuple, Union
+
 import numpy as np
 import onnx
 from onnx import (
@@ -9,8 +10,8 @@ from onnx import (
     FunctionProto,
     GraphProto,
     ModelProto,
-    TensorProto,
     NodeProto,
+    TensorProto,
 )
 from ..convert.convert_helper import optimize_model_proto_oxs
 from ..bench_run import measure_discrepancies
@@ -360,9 +361,7 @@ def run_inference(
 
 
 class WrapForTorch:
-    """
-    Wraps  a torch model.
-    """
+    """Wraps  a torch model."""
 
     def __init__(self, torch_model: Any):
         if hasattr(torch_model, "graph_module"):

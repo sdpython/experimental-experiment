@@ -1,16 +1,16 @@
-import io
 import importlib
+import io
 import textwrap
 from typing import Any, Optional, Set, Tuple
 import torch
 from torch._dynamo.testing import reduce_to_scalar_loss
-from ._bash_bench_model_runner import (
-    download_retry_decorator,
-    _rand_int_tensor,
-    ModelRunner,
-    MakeConfig,
-)
 from ._bash_bench_benchmark_runner import BenchmarkRunner
+from ._bash_bench_model_runner import (
+    MakeConfig,
+    ModelRunner,
+    _rand_int_tensor,
+    download_retry_decorator,
+)
 
 
 class TimmRunner(BenchmarkRunner):
@@ -267,13 +267,11 @@ class TimmRunner(BenchmarkRunner):
 
     @classmethod
     def initialize(container):
-        """
-        Steps to run before running the benchmark.
-        """
+        """Steps to run before running the benchmark."""
         import timm
 
         models = set(timm.list_models(pretrained=True, exclude_filters=["*in21k"]))
-        models = set(_.split(".")[0] for _ in models)
+        models = {_.split(".")[0] for _ in models}
         expected = [_ for _ in container.EXPECTED.split("\n") if len(_) > 2]
         expected = set(_ for _ in container.EXPECTED.split("\n") if len(_) > 2)
         missing = expected - set(container.TIMM_MODELS)
@@ -378,22 +376,16 @@ class TimmRunner(BenchmarkRunner):
 
         input_dict = {"input_ids": inputt}
 
-        if (
-            model_name.startswith("T5")
-            or model_name.startswith("M2M100")
-            or model_name.startswith("MT5")
-            or model_cls
-            in {
-                transformers.BlenderbotModel,
-                transformers.BlenderbotSmallModel,
-                transformers.BlenderbotForConditionalGeneration,
-                transformers.BlenderbotSmallForConditionalGeneration,
-                transformers.PegasusModel,
-                transformers.PegasusForConditionalGeneration,
-                transformers.MarianModel,
-                transformers.MarianMTModel,
-            }
-        ):
+        if model_name.startswith(("T5", "M2M100", "MT5")) or model_cls in {
+            transformers.BlenderbotModel,
+            transformers.BlenderbotSmallModel,
+            transformers.BlenderbotForConditionalGeneration,
+            transformers.BlenderbotSmallForConditionalGeneration,
+            transformers.PegasusModel,
+            transformers.PegasusForConditionalGeneration,
+            transformers.MarianModel,
+            transformers.MarianMTModel,
+        }:
             input_dict["decoder_input_ids"] = inputt
 
         if model_name.startswith("Lxmert"):
@@ -434,11 +426,8 @@ class TimmRunner(BenchmarkRunner):
                 input_dict["end_positions"] = _rand_int_tensor(
                     device, 0, seq_length, (bs,)
                 )
-            elif (
-                model_name.endswith("MaskedLM")
-                or model_name.endswith("HeadModel")
-                or model_name.endswith("CausalLM")
-                or model_name.endswith("DoubleHeadsModel")
+            elif model_name.endswith(
+                ("MaskedLM", "HeadModel", "CausalLM", "DoubleHeadsModel")
             ):
                 input_dict["labels"] = _rand_int_tensor(
                     device, 0, vocab_size, (bs, seq_length)
@@ -536,8 +525,8 @@ class TimmRunner(BenchmarkRunner):
         return model_cls, config
 
     @classmethod
-    def _gen_target(self, batch_size, device, num_classes):
-        return torch.empty((batch_size,) + (), device=device, dtype=torch.long).random_(
+    def _gen_target(cls, batch_size, device, num_classes):
+        return torch.empty((batch_size,), device=device, dtype=torch.long).random_(
             num_classes
         )
 
@@ -611,7 +600,7 @@ class TimmRunner(BenchmarkRunner):
 
         torch.manual_seed(1337)
         input_tensor = torch.randint(
-            256, size=(batch_size,) + input_size, device=self.device
+            256, size=(batch_size, *input_size), device=self.device
         ).to(dtype=torch.float32)
         mean = torch.mean(input_tensor)
         std_dev = torch.std(input_tensor)
@@ -650,5 +639,4 @@ class TimmRunner(BenchmarkRunner):
         # for model_name in list_models(pretrained=True, exclude_filters=["*in21k"]):
         model_names = sorted(self.TIMM_MODELS.keys())
         start, end = self.get_benchmark_indices(len(model_names))
-        for _ in self.enumerate_model_names(model_names, start=start, end=end):
-            yield _
+        yield from self.enumerate_model_names(model_names, start=start, end=end)

@@ -1,22 +1,23 @@
-import os
 import gc
+import os
 import pickle
 import time
 from datetime import datetime
-from typing import Any, Set, Optional, Tuple, Iterator, Dict, List, Union
+from typing import Any, Dict, Iterator, List, Optional, Set, Tuple, Union
+
 import numpy as np
 import onnx
 import torch
 from torch._dynamo.testing import collect_results
 from torch._dynamo.utils import clone_inputs
 from .export_model_helper import (
-    WrapInferenceSessionForTorch,
     WrapForTorch,
-    size_type,
-    obj_size,
+    WrapInferenceSessionForTorch,
     compute_weight_size,
-    str_shape,
+    obj_size,
+    size_type,
     str_dtype,
+    str_shape,
 )
 from ..memory_peak import start_spying_on, flatten
 
@@ -171,9 +172,7 @@ class BenchmarkRunner:
         )
 
     def enumerate_load_models(self) -> Iterator[Tuple[Any, Any]]:
-        """
-        Loads the models and returns them.
-        """
+        """Loads the models and returns them."""
         names = self.get_model_name_list()
         for model_name in names:
             if self.verbose:
@@ -188,9 +187,7 @@ class BenchmarkRunner:
             yield res
 
     def enumerate_run_models(self) -> Iterator[Any]:
-        """
-        Runs the models once.
-        """
+        """Runs the models once."""
         names = self.get_model_name_list()
         for model_name in names:
             if self.verbose:
@@ -391,7 +388,7 @@ class BenchmarkRunner:
                     else (
                         [f"{' ' * level}flatten"]
                         if not debug_info
-                        else (debug_info + [f"{' ' * level}flatten"])
+                        else ([*debug_info, f"{' ' * level}flatten"])
                     )
                 ),
                 level=level,
@@ -412,7 +409,7 @@ class BenchmarkRunner:
                     else (
                         [f"{' ' * level}to_tupleA"]
                         if not debug_info
-                        else (debug_info + [f"{' ' * level}to_tupleA"])
+                        else ([*debug_info, f"{' ' * level}to_tupleA"])
                     )
                 ),
                 begin=begin,
@@ -432,7 +429,7 @@ class BenchmarkRunner:
                     else (
                         [f"{' ' * level}to_tupleB"]
                         if not debug_info
-                        else (debug_info + [f"{' ' * level}to_tupleB"])
+                        else ([*debug_info, f"{' ' * level}to_tupleB"])
                     )
                 ),
                 begin=begin,
@@ -565,8 +562,10 @@ class BenchmarkRunner:
                             [f"{' ' * level}[{ip}] so far abs {am} - rel {rm}"]
                             if not debug_info
                             else (
-                                debug_info
-                                + [f"{' ' * level}[{ip}] so far abs {am} - rel {rm}"]
+                                [
+                                    *debug_info,
+                                    f"{' ' * level}[{ip}] so far abs {am} - rel {rm}",
+                                ]
                             )
                         )
                     ),
@@ -615,9 +614,7 @@ class BenchmarkRunner:
         part: Optional[int] = None,
         pickled_name: Optional[str] = None,
     ) -> Iterator[Dict[Any, Any]]:
-        """
-        Runs the benchmarks, run, export, run in onnx, measure the speedup.
-        """
+        """Runs the benchmarks, run, export, run in onnx, measure the speedup."""
         assert not process, "process=True not implemented."
         assert not dynamic, "dynamic=True not implemented."
 
@@ -634,11 +631,10 @@ class BenchmarkRunner:
             os.makedirs(folder)
         names = self.get_model_name_list()
         assert len(names) > 0, "no model to run"
-        assert len(names) == 1 or part is None, (
-            f"part={part} only works with 1 model " f"at a time not {names}"
-        )
+        assert (
+            len(names) == 1 or part is None
+        ), f"part={part} only works with 1 model at a time not {names}"
         for model_name in names:
-
             begin_total = time.perf_counter()
 
             if part is None or part == 0:
@@ -727,9 +723,9 @@ class BenchmarkRunner:
         assert machine_specs is not None
         assert initial_no_grad is not None
 
-        import transformers
         import onnxruntime
         import onnxscript
+        import transformers
         from experimental_experiment.bench_run import _clean_string
 
         #######
@@ -936,7 +932,7 @@ class BenchmarkRunner:
         with torch.no_grad():
             # training mode consumes too much memory
             lats = []
-            for w in range(repeat):
+            for _ in range(repeat):
                 if self.nvtx:
                     torch.cuda.nvtx.range_push("EAGER-ITER")
                 begin = time.perf_counter()
@@ -1150,6 +1146,7 @@ class BenchmarkRunner:
         assert part1, "Part 1 was not sucessful"
 
         import onnxruntime
+
         from experimental_experiment.bench_run import _clean_string
 
         if self.device.startswith("cuda"):
@@ -1188,7 +1185,7 @@ class BenchmarkRunner:
 
         begin = time.perf_counter()
         if isinstance(exported_model, onnx.ModelProto):
-            domains = set(d.domain for d in exported_model.opset_import)
+            domains = {d.domain for d in exported_model.opset_import}
             session_options = onnxruntime.SessionOptions()
             if self.dump_ort:
                 session_options.optimized_model_filepath = f"{filename}-ortopt.onnx"
@@ -1279,7 +1276,7 @@ class BenchmarkRunner:
                 )
 
         if self.verbose > 1:
-            print(f"[BenchmarkRunner.benchmark] warmup " f"{exporter} - {model_name!r}")
+            print(f"[BenchmarkRunner.benchmark] warmup {exporter} - {model_name!r}")
         stats["device"] = self.device
 
         if os.path.exists(filename):

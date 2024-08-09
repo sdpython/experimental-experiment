@@ -2,7 +2,8 @@ import glob
 import itertools
 import warnings
 from collections import Counter
-from typing import Optional, Dict, List, Sequence, Set, Union
+from typing import Dict, List, Optional, Sequence, Set, Union
+
 import numpy as np
 
 BUCKET_SCALES = [-np.inf, -20, -10, -5, -2, 0, 2, 5, 10, 20, np.inf]
@@ -377,7 +378,7 @@ def _SELECTED_FEATURES():
             stat="peak_gpu_export",
             new_name="average GPU peak (export)",
             unit="bytes",
-            help="Average GPU peak while converting the model " "(torch metric)",
+            help="Average GPU peak while converting the model (torch metric)",
         ),
         dict(
             cat="memory",
@@ -476,7 +477,7 @@ def _key(v):
     if isinstance(v, str):
         return 1e10, v
     if isinstance(v, tuple):
-        return tuple([1e10, *v])
+        return (1e10, *v)
     raise AssertionError(f"Unexpected type for v={v!r}, type is {type(v)}")
 
 
@@ -521,7 +522,7 @@ def _apply_excel_style(
     writer: "ExcelWriter",  # noqa: F821
     verbose: int = 0,
 ):
-    from openpyxl.styles import Font, Alignment, numbers, PatternFill
+    from openpyxl.styles import Alignment, Font, PatternFill, numbers
 
     bold_font = Font(bold=True)
     alignment = Alignment(horizontal="left")
@@ -792,7 +793,7 @@ def _apply_excel_style(
             ):
                 for cell in row:
                     if cell.value in fmt:
-                        for idx in range(0, cell.col_idx):
+                        for idx in range(cell.col_idx):
                             fcell = row[idx]
                             if isinstance(fcell.value, (int, float)):
                                 f = fmt[cell.value]
@@ -1025,7 +1026,7 @@ def merge_benchmark_reports(
             elif isinstance(filename, pandas.DataFrame):
                 df = filename
             else:
-                raise AssertionError(
+                raise TypeError(
                     f"Unexpected type {type(filename)} for one element of data"
                 )
             dfs.append(df)
@@ -1035,7 +1036,7 @@ def merge_benchmark_reports(
             print("[merge_benchmark_reports] start with 1 dataframe")
         df = data
     else:
-        raise AssertionError(f"Unexpected type {type(data)} for data")
+        raise TypeError(f"Unexpected type {type(data)} for data")
 
     if verbose:
         print(f"[merge_benchmark_reports] shape={df.shape}")
@@ -1177,7 +1178,7 @@ def merge_benchmark_reports(
     # remove duplicated rows
     if verbose:
         print("[merge_benchmark_reports] remove duplicated rows")
-    full_index = [s for s in df.columns if s in set([*column_keys, *keys, *model])]
+    full_index = [s for s in df.columns if s in {*column_keys, *keys, *model}]
     dupli = ~df.duplicated(full_index, keep="last")
     df = df[dupli].copy()
     if verbose:
@@ -1396,7 +1397,7 @@ def merge_benchmark_reports(
     if verbose:
         print("[merge_benchmark_reports] remove empty variables")
 
-    for k, v in res.items():
+    for _, v in res.items():
         drop = []
         for c in v.columns:
             if all(v[c].isna()) or set(v[c]) == {"-"}:
@@ -1634,12 +1635,12 @@ def merge_benchmark_reports(
         model=model,
         exc=exc,
     )
-    assert None not in res["AGG"].index.names, (
-        f"None in res['AGG'].index.names={res['AGG'].index.names}, " f"prefix='AGG'"
-    )
-    assert None not in res["AGG2"].index.names, (
-        f"None in res['AGG2'].index.names={res['AGG2'].index.names}, " f"prefix='AGG2'"
-    )
+    assert (
+        None not in res["AGG"].index.names
+    ), f"None in res['AGG'].index.names={res['AGG'].index.names}, prefix='AGG'"
+    assert (
+        None not in res["AGG2"].index.names
+    ), f"None in res['AGG2'].index.names={res['AGG2'].index.names}, prefix='AGG2'"
     if verbose:
         print(
             f"[merge_benchmark_reports] done with shapes "
@@ -1686,15 +1687,15 @@ def merge_benchmark_reports(
         print(f"[merge_benchmark_reports] done with {len(final_res)} sheets")
         print("[merge_benchmark_reports] creates SUMMARY, SUMMARY2, SIMPLE")
 
-    final_res["SUMMARY"], suites = _select_metrics(
+    final_res["SUMMARY"], _suites = _select_metrics(
         res["AGG"], select=SELECTED_FEATURES, prefix="SUMMARY"
     )
-    final_res["SIMPLE"], suites = _select_metrics(
+    final_res["SIMPLE"], _suites = _select_metrics(
         res["AGG"],
         select=[f for f in SELECTED_FEATURES if f.get("simple", False)],
         prefix="SIMPLE",
     )
-    final_res["SUMMARY2"], suites = _select_metrics(
+    final_res["SUMMARY2"], _suites = _select_metrics(
         res["AGG2"], select=SELECTED_FEATURES, prefix="SUMMARY2"
     )
 
@@ -1746,7 +1747,7 @@ def merge_benchmark_reports(
                 final_res[f"{name}_diff"] = df_num.sort_index(axis=1)
 
     # cleaning empty raw and columns
-    for _, v in final_res.items():
+    for v in final_res.values():
         v.dropna(axis=0, how="all", inplace=True)
         v.dropna(axis=1, how="all", inplace=True)
 
@@ -1775,7 +1776,7 @@ def merge_benchmark_reports(
             ordered = set(first_sheet) | set(last_sheet)
             order = [
                 *first_sheet,
-                *list(sorted([k for k in final_res if k not in ordered])),
+                *sorted([k for k in final_res if k not in ordered]),
                 *last_sheet,
             ]
             order = [k for k in order if k in final_res]
@@ -1959,10 +1960,9 @@ def _create_aggregation_figures(
         assert (
             key in v.index.names
         ), f"Unable to find key={key} in {v.index.names} for k={k!r}"
-        assert len(v.index.names) == len(model), (
-            f"Length mismatch for k={k!r}, "
-            f"v.index.names={v.index.names}, model={model}"
-        )
+        assert len(v.index.names) == len(
+            model
+        ), f"Length mismatch for k={k!r}, v.index.names={v.index.names}, model={model}"
 
         # Let's drop any non numerical features.
         v = v.select_dtypes(include=[np.number])
@@ -2115,7 +2115,7 @@ def _create_aggregation_figures(
     aggs = {k: _sort_index_level(df, debug=k) for k, df in aggs.items()}
 
     # concatenation
-    dfs = pandas.concat([df for df in aggs.values()], axis=0)
+    dfs = pandas.concat(list(aggs.values()), axis=0)
     assert None not in dfs.index.names, f"None in dfs.index.names={dfs.index.names}"
     assert (
         None not in dfs.columns.names
@@ -2205,7 +2205,7 @@ def _select_metrics(
         *[c for c in dfi.columns if "#order" in c],
         *[c for c in dfi.columns if "METRIC" in c],
     ]
-    skip = set([*cols, *[c for c in dfi.columns if "unit" in c or "~help" in c]])
+    skip = {*cols, *[c for c in dfi.columns if "unit" in c or "~help" in c]}
     for c in dfi.columns:
         if c in skip or c in dd:
             continue
@@ -2228,7 +2228,7 @@ def _select_metrics(
             df["suite"] = cs
             df["value"] = df[cs]
             df = df.drop(cs, axis=1)
-            df.columns = list(str(c) for c in df.columns)
+            df.columns = [str(c) for c in df.columns]
             dfs.append(df[~df["value"].isna()])
         dfi = pandas.concat(dfs, axis=0).reset_index(drop=True)
     return dfi, suites
@@ -2311,14 +2311,14 @@ def _select_model_metrics(
         cols = list(df.columns)
         if len(cols) == 1:
             col = (cols[0],) if isinstance(cols[0], str) else tuple(cols[0])
-            col = (i, cat, stat, new_name) + col
-            names = ["#order", "cat", "stat", "full_name"] + df.columns.names
+            col = (i, cat, stat, new_name, *col)
+            names = ["#order", "cat", "stat", "full_name", *df.columns.names]
             df.columns = pandas.MultiIndex.from_tuples([col], names=names)
             concat.append(df)
         else:
             cols = [((c,) if isinstance(c, str) else tuple(c)) for c in cols]
-            cols = [(i, cat, stat, new_name) + c for c in cols]
-            names = ["#order", "cat", "stat", "full_name"] + df.columns.names
+            cols = [(i, cat, stat, new_name, *c) for c in cols]
+            names = ["#order", "cat", "stat", "full_name", *df.columns.names]
             df.columns = pandas.MultiIndex.from_tuples(cols, names=names)
             concat.append(df)
     df = pandas.concat(concat, axis=1)

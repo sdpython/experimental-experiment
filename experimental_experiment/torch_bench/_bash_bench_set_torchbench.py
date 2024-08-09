@@ -1,26 +1,25 @@
+import gc
+import importlib
+import inspect
 import io
 import os
-import importlib
 import pprint
 import textwrap
-import gc
-import inspect
 import warnings
-from typing import Any, Optional, Set, Tuple
-from collections import namedtuple
+from typing import Any, NamedTuple, Optional, Set, Tuple
+
 import torch
 from torch._dynamo.testing import reset_rng_state
-from ._bash_bench_model_runner import (
-    download_retry_decorator,
-    _rand_int_tensor,
-    ModelRunner,
-    MakeConfig,
-)
 from ._bash_bench_benchmark_runner import BenchmarkRunner
+from ._bash_bench_model_runner import (
+    MakeConfig,
+    ModelRunner,
+    _rand_int_tensor,
+    download_retry_decorator,
+)
 
 
 class TorchBenchRunner(BenchmarkRunner):
-
     SUITE = "TorchBench"
 
     YAML = textwrap.dedent(
@@ -425,10 +424,10 @@ class TorchBenchRunner(BenchmarkRunner):
     _config = None
 
     @classmethod
-    def load_yaml_file(container):
+    def load_yaml_file(cls):
         import yaml
 
-        with io.StringIO(container.YAML) as f:
+        with io.StringIO(cls.YAML) as f:
             data = yaml.safe_load(f)
 
         def flatten(lst):
@@ -450,9 +449,7 @@ class TorchBenchRunner(BenchmarkRunner):
 
     @classmethod
     def initialize(container):
-        """
-        Steps to run before running the benchmark.
-        """
+        """Steps to run before running the benchmark."""
         try:
             import torch
 
@@ -584,22 +581,16 @@ class TorchBenchRunner(BenchmarkRunner):
 
         input_dict = {"input_ids": inputt}
 
-        if (
-            model_name.startswith("T5")
-            or model_name.startswith("M2M100")
-            or model_name.startswith("MT5")
-            or model_cls
-            in {
-                transformers.BlenderbotModel,
-                transformers.BlenderbotSmallModel,
-                transformers.BlenderbotForConditionalGeneration,
-                transformers.BlenderbotSmallForConditionalGeneration,
-                transformers.PegasusModel,
-                transformers.PegasusForConditionalGeneration,
-                transformers.MarianModel,
-                transformers.MarianMTModel,
-            }
-        ):
+        if model_name.startswith(("T5", "M2M100", "MT5")) or model_cls in {
+            transformers.BlenderbotModel,
+            transformers.BlenderbotSmallModel,
+            transformers.BlenderbotForConditionalGeneration,
+            transformers.BlenderbotSmallForConditionalGeneration,
+            transformers.PegasusModel,
+            transformers.PegasusForConditionalGeneration,
+            transformers.MarianModel,
+            transformers.MarianMTModel,
+        }:
             input_dict["decoder_input_ids"] = inputt
 
         if model_name.startswith("Lxmert"):
@@ -640,11 +631,8 @@ class TorchBenchRunner(BenchmarkRunner):
                 input_dict["end_positions"] = _rand_int_tensor(
                     device, 0, seq_length, (bs,)
                 )
-            elif (
-                model_name.endswith("MaskedLM")
-                or model_name.endswith("HeadModel")
-                or model_name.endswith("CausalLM")
-                or model_name.endswith("DoubleHeadsModel")
+            elif model_name.endswith(
+                ("MaskedLM", "HeadModel", "CausalLM", "DoubleHeadsModel")
             ):
                 input_dict["labels"] = _rand_int_tensor(
                     device, 0, vocab_size, (bs, seq_length)
@@ -749,7 +737,7 @@ class TorchBenchRunner(BenchmarkRunner):
         # https://github.com/pyg-team/pytorch_geometric/blob/master/torch_geometric/nn/dense/linear.py#L158-L168
         # Since it is unusual thing to do, we just reassign them to parameters
         def state_dict_hook(module, destination, prefix, local_metadata):
-            for name, param in module.named_parameters():
+            for name, _param in module.named_parameters():
                 if (
                     name in destination
                     and isinstance(destination[name], torch.Tensor)
@@ -782,8 +770,6 @@ class TorchBenchRunner(BenchmarkRunner):
         model_name: str,
         batch_size: Optional[int] = None,
     ) -> ModelRunner:
-
-        # patching
         import torchbenchmark
 
         torchbenchmark.TORCH_DEPS[:] = ["numpy", "torch", "torchaudio"]
@@ -886,7 +872,7 @@ class TorchBenchRunner(BenchmarkRunner):
                 raise AssertionError(
                     f"Unable to create class {benchmark_cls}, "
                     f"device={self.device}, batch_size={batch_size}, "
-                    f"signature={[p for p in inspect.signature(benchmark_cls).parameters]}, "
+                    f"signature={list(p for p in inspect.signature(benchmark_cls).parameters)}, "  # noqa: E501
                     f"DEFAULT_EVAL_BSIZE="
                     f"{getattr(benchmark_cls, 'DEFAULT_EVAL_BSIZE', '?')}, "
                     f"ALLOW_CUSTOMIZE_BSIZE="
@@ -926,7 +912,7 @@ class TorchBenchRunner(BenchmarkRunner):
         gc.collect()
         batch_size = benchmark.batch_size
         if model_name == "torchrec_dlrm":
-            batch_namedtuple = namedtuple(
+            batch_namedtuple = NamedTuple(
                 "Batch", "dense_features sparse_features labels"
             )
             example_inputs = tuple(
@@ -965,7 +951,7 @@ class TorchBenchRunner(BenchmarkRunner):
     def iter_model_names(self):
         from torchbenchmark import _list_canary_model_paths, _list_model_paths
 
-        expected_models = set(_.strip() for _ in self.EXPECTED_MODELS.split("\n") if _)
+        expected_models = {_.strip() for _ in self.EXPECTED_MODELS.split("\n") if _}
 
         models = _list_model_paths()
         models += [
@@ -976,7 +962,7 @@ class TorchBenchRunner(BenchmarkRunner):
         model_names = [m for m in models if os.path.basename(m) in expected_models]
         assert len(model_names) >= len(expected_models), (
             f"Unexpected names {len(model_names)} < {len(expected_models)} (expected)"
-            f"\n--missing=\n{pprint.pformat(list(sorted(set(expected_models)-set(os.path.basename(m) for m in model_names))))}"  # noqa: E501
+            f"\n--missing=\n{pprint.pformat(sorted(set(expected_models)-{os.path.basename(m) for m in model_names}))}"  # noqa: E501
             f"\n--canary_models=\n{pprint.pformat(self._config['canary_models'])}"
             f"\n--_list_canary_model_paths()=\n{pprint.pformat(_list_canary_model_paths())}"
             f"\n--_list_model_paths()=\n{pprint.pformat(_list_model_paths())}"
@@ -985,5 +971,4 @@ class TorchBenchRunner(BenchmarkRunner):
         model_names.sort()
 
         start, end = self.get_benchmark_indices(len(model_names))
-        for _ in self.enumerate_model_names(model_names, start=start, end=end):
-            yield _
+        yield from self.enumerate_model_names(model_names, start=start, end=end)
