@@ -42,7 +42,7 @@ def _random_input(typ, shape, batch):
     if len(shape) <= 1:
         new_shape = shape
     elif shape[0] in (None, 0):
-        new_shape = tuple(batch, *shape[1:])
+        new_shape = (batch, *shape[1:])
     else:
         new_shape = shape
     return np.random.randn(*new_shape).astype(dtype)
