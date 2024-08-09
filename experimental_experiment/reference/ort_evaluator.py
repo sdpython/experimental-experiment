@@ -291,7 +291,7 @@ class OrtEval:
         Runs a node.
         """
         types = [(None if a is None else (a.dtype, a.shape)) for a in inputs]
-        key = tuple(id(node), *types)
+        key = (id(node), *types)
         if key in self._cache:
             sess = self._cache[key][1]
         else:
