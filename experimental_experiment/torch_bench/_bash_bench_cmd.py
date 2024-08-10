@@ -104,6 +104,8 @@ def bash_bench_main(script_name: str, doc: str, args: Optional[List[str]] = None
         raise AssertionError(f"Unexpected bash_bench name {script_name!r}.")
     names = runner.get_model_name_list()
 
+    missing = {"suite": runner.SUITE, "model_name": lambda config: config["model"]}
+
     if not args.model and args.model not in ("0", 0):
         # prints the list of models.
         print(f"list of models for device={args.device} (args.model={args.model!r})")
@@ -163,6 +165,7 @@ def bash_bench_main(script_name: str, doc: str, args: Optional[List[str]] = None
                 start=args.start,
                 summary=merge_benchmark_reports,
                 timeout=int(args.timeout),
+                missing=missing,
             )
             if args.verbose > 2:
                 pprint.pprint(data if args.verbose > 3 else data[:2])

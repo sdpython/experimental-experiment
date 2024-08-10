@@ -967,6 +967,7 @@ def merge_benchmark_reports(
         "op_*",
         "memory_*",
         "mem_*",
+        "config_*",
     ),
     formulas=(
         "memory_peak",
@@ -1622,6 +1623,7 @@ def merge_benchmark_reports(
         "mempeak_",
         "speedup_",
         "bucket_",
+        "config_",
     ]:
         merge = [k for k in res if k.startswith(prefix)]
         merge.sort()

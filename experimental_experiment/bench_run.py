@@ -157,6 +157,7 @@ def run_benchmark(
     start: int = 0,
     summary: Optional[Callable] = None,
     timeout: int = 600,
+    missing: Optional[Dict[str, Union[str, Callable]]] = None,
 ) -> List[Dict[str, Union[str, int, float, Tuple[int, int]]]]:
     """
     Runs a script multiple times and extract information from the output
@@ -172,6 +173,7 @@ def run_benchmark(
     :param start: start at this iteration
     :param summary: function to call on the temporary data and the final data
     :param timeout: timeout for the subprocesses
+    :param missing: populate with this missing value if not found
     :return: values
     """
     assert (
@@ -262,6 +264,20 @@ def run_benchmark(
         if timeout_error:
             metrics["ERR_timeout"] = _clean_string(timeout_error)
         metrics["OUTPUT"] = _clean_string(sout)
+        for k, v in config.items():
+            metrics[f"config_{k}"] = str(v).replace("\n", " ")
+        if missing:
+            for k, v in missing.items():
+                if k not in metrics:
+                    if isinstance(v, str):
+                        missing[k] = v
+                        continue
+                    if callable(v):
+                        missing[k] = v(config)
+                        continue
+                    raise AssertionError(
+                        f"Unable to interpret {type(v)} for k={k!r}, config={config!r}"
+                    )
         metrics["CMD"] = f"[{' '.join(map(_cmd_string, cmd))}]"
         data.append(metrics)
         if verbose > 5:

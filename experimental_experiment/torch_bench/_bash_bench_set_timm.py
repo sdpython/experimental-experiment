@@ -14,6 +14,7 @@ from ._bash_bench_model_runner import (
 
 
 class TimmRunner(BenchmarkRunner):
+    SUITE = "Timm"
     MODELS_FILENAME = textwrap.dedent(
         """
         adv_inception_v3 128
@@ -631,7 +632,7 @@ class TimmRunner(BenchmarkRunner):
             dtype=self.dtype,
             warmup=self.warmup,
             repeat=self.repeat,
-            suite="Timm",
+            suite=self.SUITE,
         )
 
     def iter_model_names(self):
