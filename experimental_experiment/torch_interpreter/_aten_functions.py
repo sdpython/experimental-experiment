@@ -2092,6 +2092,79 @@ def aten_gelu(
     )
 
 
+def aten_group_norm(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    num_groups: int,
+    weight: Optional[T] = None,
+    bias: Optional[T] = None,
+    eps: float = 1e-05,
+    cudnn_enabled: bool = True,
+    name: str = "group_norm",
+) -> T:
+    "instance_normalization"
+    assert g.has_rank(x), f"rank for {x!r} is unknown{g.get_debug_msg()}"
+    assert g.has_shape(x), f"shape for {x!r} is unknown{g.get_debug_msg()}"
+    shape_x = g.get_shape(x)
+    assert len(shape_x) > 1, f"Unexpected shape {shape_x} for {x!r}{g.get_debug_msg()}"
+    channel_size = shape_x[1]
+    assert is_static_dimension(
+        channel_size
+    ), f"number of channels cannot be dynamic, shape={shape_x}{g.get_debug_msg()}"
+    assert channel_size % num_groups == 0, (
+        f"number of channels {channel_size} must a multiple of num_groups="
+        f"{num_groups}{g.get_debug_msg()}"
+    )
+    input_rank = g.get_rank(x)
+
+    # 0 in the shape list keeps dimension value unchanged.
+    if is_static_dimension(shape_x[0]):
+        new_shape = np.array([shape_x[0], num_groups, -1], dtype=np.int64)
+        input_reshaped = g.op.Reshape(x, new_shape, name=name)
+    else:
+        raise AssertionError(
+            f"Dynamic batch size for shape={shape_x} "
+            f"is not implemented yet{g.get_debug_msg()}"
+        )
+
+    # C is always divisible by num_groups
+    # Due to shape difference. we need to apply weight and bias after
+    # instance norm computation and reshape
+    itype = g.get_type(x)
+    dtype = tensor_dtype_to_np_dtype(itype)
+    weight_ = np.array([1] * num_groups, dtype=dtype)
+    bias_ = np.array([0] * num_groups, dtype=dtype)
+
+    norm_reshaped = g.op.InstanceNormalization(
+        input_reshaped, weight_, bias_, epsilon=eps, name=name
+    )
+    g.set_type(norm_reshaped, itype)
+    if is_static_shape(shape_x):
+        shape_x_name = np.array(shape_x, dtype=np.int64)
+    else:
+        shape_x_name = g.op.Shape(x, name=name)
+    norm = g.op.Reshape(norm_reshaped, shape_x_name, name=name)
+    g.set_type(norm, itype)
+    g.set_shape(norm, shape_x)
+
+    np_axes = np.array(list(range(1, input_rank - 1)), dtype=np.int64)
+    if weight is None:
+        w = np.array([1], dtype=dtype)
+    else:
+        w = g.op.Unsqueeze(weight, np_axes, name=name)
+
+    if bias is None:
+        b = np.array([0], dtype=dtype)
+    else:
+        b = g.op.Unsqueeze(bias, np_axes, name=name)
+
+    # Norm has shape [N, C, *] so we reshape weight and bias to [C, *]
+    res = g.op.Add(g.op.Mul(norm, w, name=name), b, name=name, outputs=outputs)
+    return res
+
+
 def aten_gt(
     g: GraphBuilder,
     sts: Optional[Dict[str, Any]],
@@ -5902,6 +5975,59 @@ def aten_upsample_nearest3d_vec(
     # )
     scales = [None, None, None]
     return aten_upsample_nearest3d(g, sts, outputs, x, osize, *scales, name=name)
+
+
+def aten_upsample_trilinear3d(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    output_size: T,
+    align_corners: bool,
+    scales_d: Optional[float] = None,
+    scales_h: Optional[float] = None,
+    scales_w: Optional[float] = None,
+    name: str = "upsample_trilinear3d",
+) -> T:
+    """resize"""
+    assert output_size is not None, "Not implemented when size is None"
+    assert scales_d is None, f"Not impelmented when scales_h={scales_h}"
+    assert scales_h is None, f"Not impelmented when scales_h={scales_h}"
+    assert scales_w is None, f"Not impelmented when scales_h={scales_w}"
+
+    return _aten_upsample_output_size(
+        g,
+        sts,
+        outputs,
+        x,
+        output_size,
+        mode="linear",
+        coordinate_transformation_mode=(
+            "align_corners" if align_corners else "pytorch_half_pixel"
+        ),
+        d=3,
+        name=name,
+    )
+
+
+def aten_upsample_trilinear3d_vec(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    output_size: T,
+    align_corners: bool,
+    scale_factors: Optional[Sequence[float]] = None,
+    name: str = "upsample_trilinear3d_vec",
+) -> T:
+    """resize"""
+    assert g.has_shape(x), f"Not implemented when {x!r} has no shape{g.get_debug_msg()}"
+    osize = _upsample_compute_output_size(g.get_shape(x), output_size, scale_factors)
+    # scales = (
+    #     scale_factors if scale_factors else [None] * len(osize)
+    # )
+    scales = [None, None, None]
+    return aten_upsample_trilinear3d(g, sts, outputs, x, osize, *scales, name=name)
 
 
 def aten_view(
