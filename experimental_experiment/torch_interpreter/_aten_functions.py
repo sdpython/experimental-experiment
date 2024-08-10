@@ -662,6 +662,18 @@ def aten_bitwise_not(
     return res
 
 
+def aten_adaptive_avg_pool1d(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    output_size: Tuple[int, ...],
+    name="aten.adaptive_avg_pool1d",
+):
+    """adaptative AvgPool"""
+    return _aten_adaptive_avg_poolnd(g, sts, outputs, x, output_size, d=1, name=name)
+
+
 def aten_adaptive_avg_pool2d(
     g: GraphBuilder,
     sts: Optional[Dict[str, Any]],
@@ -672,6 +684,18 @@ def aten_adaptive_avg_pool2d(
 ):
     """adaptative AvgPool"""
     return _aten_adaptive_avg_poolnd(g, sts, outputs, x, output_size, d=2, name=name)
+
+
+def aten_adaptive_avg_pool3d(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    output_size: Tuple[int, ...],
+    name="aten.adaptive_avg_pool3d",
+):
+    """adaptative AvgPool"""
+    return _aten_adaptive_avg_poolnd(g, sts, outputs, x, output_size, d=3, name=name)
 
 
 def _aten_adaptive_avg_poolnd(
@@ -686,8 +710,8 @@ def _aten_adaptive_avg_poolnd(
     """adaptative AvgPool"""
     assert (
         len(output_size) == d
-    ), f"Dimension mismatch between d={2} and output_size={output_size}"
-    if output_size == [1, 1]:
+    ), f"Dimension mismatch between d={2} and output_size={output_size}{g.get_debug_msg()}"
+    if output_size == [1] * len(output_size):
         res = g.op.GlobalAveragePool(x, outputs=outputs, name=name)
         if not sts:
             g.set_type(res, g.get_type(x))
@@ -2970,6 +2994,41 @@ def _aten_max_pool_onnx(
     #    pool_result = op.SqueezeAnyOpset(pool_result, op.Constant(value_ints=[0]))
 
     return pool_result
+
+
+def aten_max_pool1d(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    kernel_size: Sequence[int],
+    stride: Sequence[int] = (),
+    padding: Sequence[int] = (0, 0),
+    dilation: Sequence[int] = (1, 1),
+    ceil_mode: bool = False,
+    name: str = "max_pool1d",
+) -> T:
+    """max_pool1d"""
+
+    expand_size = 1
+
+    kernel_shape, strides, pads, dilations = _adjust_attributes_of_max_pool(
+        expand_size, kernel_size, stride, padding, dilation
+    )
+
+    return _aten_max_pool_onnx(
+        g,
+        sts,
+        outputs,
+        x,
+        kernel_shape,
+        strides,
+        pads,
+        dilations,
+        ceil_mode,
+        2,
+        name=name,
+    )
 
 
 def aten_max_pool2d(
