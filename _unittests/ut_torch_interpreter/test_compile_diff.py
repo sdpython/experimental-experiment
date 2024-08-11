@@ -11,6 +11,21 @@ from experimental_experiment.ext_test_case import (
 
 
 class TestDynamoCompileDiff(ExtTestCase):
+    @classmethod
+    def setUp(cls):
+        import torch
+
+        cls._old_value = torch._dynamo.variables.misc.LoggingLoggerVariable.call_method
+        torch._dynamo.variables.misc.LoggingLoggerVariable.call_method = (
+            lambda *_, **__: None
+        )
+
+    @classmethod
+    def tearDown(cls):
+        import torch
+
+        torch._dynamo.variables.misc.LoggingLoggerVariable.call_method = cls._old_value
+
     def _check_ort(self, name: str):
         from onnxruntime import InferenceSession
 
