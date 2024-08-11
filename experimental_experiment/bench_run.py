@@ -282,9 +282,6 @@ def run_benchmark(
             if update_missing:
                 metrics.update(update_missing)
         metrics["CMD"] = f"[{' '.join(map(_cmd_string, cmd))}]"
-        import pprint
-
-        pprint.pprint(metrics)
         data.append(metrics)
         if verbose > 5:
             print(f"--------------- ITER={iter_loop} in {metrics['TIME_ITER']}")
