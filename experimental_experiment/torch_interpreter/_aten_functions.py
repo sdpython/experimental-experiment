@@ -124,6 +124,29 @@ def aten_add_Tensor(
     return res
 
 
+def aten_addcmul(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    t1: T,
+    t2: T,
+    value: float = 1.0,
+    name: str = "addcmul",
+) -> T:
+    "addcmul"
+    itype = g.get_type(x)
+    dtype = tensor_dtype_to_np_dtype(itype)
+    cst = np.array([value], dtype=dtype)
+    res = g.op.Add(
+        x,
+        g.op.Mul(g.op.Mul(t1, t2, name=name), cst, name=name),
+        name=name,
+        outputs=outputs,
+    )
+    return res
+
+
 def aten_and(
     g: GraphBuilder,
     sts: Optional[Dict[str, Any]],
@@ -1382,6 +1405,31 @@ def aten_div_Tensor(
     if not sts:
         set_type_shape_binary_op(g, outputs[0], x, y)
     return res
+
+
+def aten_div_Tensor_mode(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    y: T,
+    rounding_mode: Optional[str] = None,
+    name: str = "div_Tensor_mode",
+) -> T:
+    "div_Tensor_mode"
+    if rounding_mode is None:
+        return aten_div(g, sts, outputs, x, y, name=name)
+
+    assert rounding_mode in {
+        "trunc",
+        "floor",
+    }, f"Unexpected value for round_mode={rounding_mode!r}{g.get_debug_msg()}"
+    assert (
+        rounding_mode == "floor"
+    ), f"Not yet implemented for round_mode={rounding_mode!r}{g.get_debug_msg()}"
+    x, y = prepare_inputs_homogeneous_operator(g, x, y)
+    print("***********", x, y)
+    return g.op.Floor(g.op.Div(x, y, name=name), name=name, outputs=outputs)
 
 
 def aten_dropout(

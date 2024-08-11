@@ -2330,6 +2330,13 @@ class GraphBuilder:
             if self.is_constant(node.input[0]):
                 self.constants_[node.output[0]] = node
                 node.doc_string += ":constant-4:"
+        elif node.op_type == "Expand":
+            if self.has_type(node.input[0]):
+                self.set_type(node.output[0], self.get_type(node.input[0]))
+            if self.is_constant(node.input[1]):
+                cst, _ = self.compute_constant(node.input[1], exc=False)
+                if cst is not None:
+                    self.set_shape(node.output[0], tuple(int(i) for i in cst))
         elif node.op_type == "Shape":
             self.set_type(node.output[0], TensorProto.INT64)
             if self.has_shape(node.input[0]) and len(node.attribute) == 0:
@@ -3367,6 +3374,31 @@ class GraphBuilder:
             x = self.torch.Tensor(x).to(ttype)
         return [self.torch.permute(x, perm).to(x.dtype)]
 
+    def _apply_cast(
+        self,
+        node: NodeProto,
+        feeds: Dict[str, "torch.Tensor"],  # noqa: F821
+    ) -> "torch.Tensor":  # noqa: F821
+        to, saturate = None, 1
+        for att in node.attribute:
+            if att.name == "to":
+                to = att.i
+                break
+            if att.name == "saturate":
+                saturate = att.i
+                break
+        assert to, f"to not here in node {node}"
+        assert to <= 11, f"Cast not implemented for to={to}"
+        del saturate
+        x = feeds[node.input[0]]
+        if isinstance(x, np.ndarray):
+            # Type conversion between numpy and torch is not robust.
+            itype = dtype_to_tensor_dtype(x.dtype)
+            ttype = onnx_dtype_to_torch_dtype(itype)
+            x = self.torch.Tensor(x).to(ttype)
+        ttype = onnx_dtype_to_torch_dtype(to)
+        return [x.to(ttype)]
+
     def _apply_trilu(
         self,
         node: NodeProto,
@@ -3408,9 +3440,10 @@ class GraphBuilder:
         self, name: str, exc: bool = True
     ) -> Tuple[np.ndarray, Optional[Dict[str, np.ndarray]]]:
         assert self.is_constant(name), f"Name {name!r} is not a constant."
-        if name is self.initializers_dict:
+        if name in self.initializers_dict:
             return self.initializers_dict[name], None
         v = self.constants_[name]
+        # It should not be None but a node as it is not an initializer.
         assert isinstance(v, NodeProto), f"Unexpected type {type(v)} for name={name!r}"
         feeds = {i: self.get_constant(i, exc=exc, computed_value=True) for i in v.input}
         for val in feeds.values():
@@ -3425,6 +3458,9 @@ class GraphBuilder:
         elif v.op_type == "Trilu":
             # bypassing onnx.numpy_helper.from_array, too slow
             output = self._apply_trilu(v, feeds)
+        elif v.op_type == "Cast":
+            # bypassing onnx.numpy_helper.from_array, too slow
+            output = self._apply_cast(v, feeds)
         else:
             # Let's avoid big computation on CPU.
             max_dim = 0

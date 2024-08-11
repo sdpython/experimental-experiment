@@ -2070,8 +2070,12 @@ def _create_aggregation_figures(
             return df
 
         gr_no_nan = v.fillna(0).groupby(key)
-        total = gr_no_nan.count()
-        is_nan = gr_no_nan.count() - gr.count() == total
+        with warnings.catch_warnings():
+            warnings.simplefilter(
+                "ignore", category=(FutureWarning, PerformanceWarning)
+            )
+            total = gr_no_nan.count()
+            is_nan = gr_no_nan.count() - gr.count() == total
         stats = [
             ("NAN", _propnan(is_nan.astype(int), is_nan)),
             ("MEAN", gr.mean()),
