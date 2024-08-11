@@ -1,3 +1,4 @@
+import contextlib
 import inspect
 import time
 import warnings
@@ -170,6 +171,23 @@ def _export(
     return res
 
 
+@contextlib.contextmanager
+def bypass_export_some_errors():
+    """
+    Tries to bypass some functions torch.export.export does not
+    support such as ``torch.jit.isinstance``.
+    """
+    import torch.jit
+
+    f = torch.jit.isinstance
+    torch.jit.isinstance = isinstance
+
+    try:
+        yield
+    finally:
+        torch.jit.isinstance = f
+
+
 def _make_builder_interpreter(
     mod: Union["torch.nn.Module", "torch.fx.GraphModule"],  # noqa: F821
     args: Optional[Sequence["torch.Tensor"]] = None,  # noqa: F821
@@ -227,16 +245,17 @@ def _make_builder_interpreter(
         constants = mod.state_dict()
         mapping = {}
     else:
-        exported_mod = _export(
-            mod,
-            args,
-            tracing_mode=tracing_mode,
-            dynamic_shapes=dynamic_shapes,
-            same_signature=same_signature,
-            decomposition_table=decomposition_table,
-            use_dynamo=use_dynamo,
-            strict=strict,
-        )
+        with bypass_export_some_errors():
+            exported_mod = _export(
+                mod,
+                args,
+                tracing_mode=tracing_mode,
+                dynamic_shapes=dynamic_shapes,
+                same_signature=same_signature,
+                decomposition_table=decomposition_table,
+                use_dynamo=use_dynamo,
+                strict=strict,
+            )
 
         if verbose > 0:
             msg = ", ".join(

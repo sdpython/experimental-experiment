@@ -267,18 +267,24 @@ def run_benchmark(
         for k, v in config.items():
             metrics[f"config_{k}"] = str(v).replace("\n", " ")
         if missing:
+            update_missing = {}
             for k, v in missing.items():
                 if k not in metrics:
                     if isinstance(v, str):
-                        missing[k] = v
+                        update_missing[k] = v
                         continue
                     if callable(v):
-                        missing[k] = v(config)
+                        update_missing.update(v(missing, config))
                         continue
                     raise AssertionError(
                         f"Unable to interpret {type(v)} for k={k!r}, config={config!r}"
                     )
+            if update_missing:
+                metrics.update(update_missing)
         metrics["CMD"] = f"[{' '.join(map(_cmd_string, cmd))}]"
+        import pprint
+
+        pprint.pprint(metrics)
         data.append(metrics)
         if verbose > 5:
             print(f"--------------- ITER={iter_loop} in {metrics['TIME_ITER']}")
