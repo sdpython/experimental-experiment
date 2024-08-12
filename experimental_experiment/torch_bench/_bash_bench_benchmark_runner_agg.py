@@ -94,16 +94,6 @@ def _SELECTED_FEATURES():
             simple=True,
         ),
         dict(
-            cat="status",
-            agg="MEAN",
-            stat="pass_rate",
-            new_name="pass rate",
-            unit="%",
-            help="Proportion of models successfully converted into ONNX, "
-            "with a maximum discrepancy < 0.1 and a speedup > 0.98.",
-            simple=True,
-        ),
-        dict(
             cat="time",
             agg="COUNT",
             stat="export_success",
@@ -123,7 +113,6 @@ def _SELECTED_FEATURES():
             help="Proportion of models successfully converted into ONNX. "
             "The ONNX model may not be run through onnxruntime or with "
             "significant discrepancies.",
-            simple=True,
         ),
         dict(
             cat="status",
@@ -136,34 +125,12 @@ def _SELECTED_FEATURES():
             simple=True,
         ),
         dict(
-            cat="status",
-            agg="MEAN",
-            stat="accuracy_rate",
-            new_name="accuracy rate",
-            unit="%",
-            help="Proportion of models successfully converted into ONNX. "
-            "It may be slow but the discrepancies are < 0.1.",
-            simple=True,
-        ),
-        dict(
             cat="speedup",
             agg="COUNT",
             stat="increase",
             new_name="run number",
             unit="N",
             help="Number of models successfully converted into ONNX "
-            "and onnxruntime can run it. "
-            "The outputs may be right or wrong. Unit test ensures every aten functions "
-            "is correctly converted but the combination may produce outputs "
-            "with higher discrepancies than expected.",
-        ),
-        dict(
-            cat="speedup",
-            agg="COUNT%",
-            stat="increase",
-            new_name="run rate",
-            unit="%",
-            help="Proportion of models successfully converted into ONNX "
             "and onnxruntime can run it. "
             "The outputs may be right or wrong. Unit test ensures every aten functions "
             "is correctly converted but the combination may produce outputs "
@@ -192,58 +159,58 @@ def _SELECTED_FEATURES():
         # e-1
         dict(
             cat="status",
-            agg="MEAN",
+            agg="SUM",
             stat="err<1e-1",
             new_name="discrepancies < 0.1",
-            unit="%",
-            help="Proportion of models for which the maximum discrepancies is "
+            unit="N",
+            help="Number of models for which the maximum discrepancies is "
             "below 0.1 for all outputs.",
             simple=True,
         ),
         dict(
             cat="status",
-            agg="MEAN",
+            agg="SUM",
             stat="err_0<1e-1",
             new_name="discrepancies first output < 0.1",
-            unit="%",
+            unit="N",
             help="Proportion of models for which the maximum discrepancies is "
             "below 0.1 for the first output.",
         ),
         dict(
             cat="status",
-            agg="MEAN",
+            agg="SUM",
             stat="err_1+<1e-1",
             new_name="discrepancies second+ output < 0.1",
-            unit="%",
-            help="Proportion of models for which the maximum discrepancies is "
+            unit="N",
+            help="Number of models for which the maximum discrepancies is "
             "below 0.1 for all the outputs except the first one.",
         ),
         # e-2
         dict(
             cat="status",
-            agg="MEAN",
+            agg="SUM",
             stat="err<1e-2",
             new_name="discrepancies < 0.01",
-            unit="%",
-            help="Proportion of models for which the maximum discrepancies is "
+            unit="N",
+            help="Number of models for which the maximum discrepancies is "
             "below 0.01 for all outputs.",
         ),
         dict(
             cat="status",
-            agg="MEAN",
+            agg="SUM",
             stat="err_0<1e-2",
             new_name="discrepancies first output < 0.01",
-            unit="%",
-            help="Proportion of models for which the maximum discrepancies is "
+            unit="N",
+            help="Number of models for which the maximum discrepancies is "
             "below 0.01 for the first output.",
         ),
         dict(
             cat="status",
-            agg="MEAN",
+            agg="SUM",
             stat="err_1+<1e-2",
             new_name="discrepancies second+ output < 0.01",
-            unit="%",
-            help="Proportion of models for which the maximum discrepancies is "
+            unit="N",
+            help="Number of models for which the maximum discrepancies is "
             "below 0.01 for all the outputs except the first one.",
         ),
         dict(
@@ -259,31 +226,11 @@ def _SELECTED_FEATURES():
         ),
         dict(
             cat="status",
-            agg="MEAN",
-            stat="lat<=script+2%",
-            new_name="model equal or faster than torch.script (%)",
-            unit="%",
-            help="Proportion of models successfully converted with torch.script "
-            "and the other exporter, and the second exporter is as fast or faster "
-            "than torch.script.",
-            simple=True,
-        ),
-        dict(
-            cat="status",
             agg="SUM",
             stat="lat<=eager+2%",
             new_name="model equal or faster than eager",
             unit="N",
             help="Number of models as fast or faster than torch eager mode.",
-            simple=True,
-        ),
-        dict(
-            cat="status",
-            agg="MEAN",
-            stat="lat<=eager+2%",
-            new_name="model equal or faster than eager (%)",
-            unit="%",
-            help="Proportion of models as fast or faster than torch eager mode.",
             simple=True,
         ),
         dict(
@@ -313,25 +260,6 @@ def _SELECTED_FEATURES():
             help="Average maximum absolute discrepancies "
             "assuming it can be measured (lower is better).",
         ),
-        # dict(
-        #    cat="discrepancies",
-        #    stat="abs_0",
-        #    agg="MEAN",
-        #    new_name="average absolute discrepancies first output",
-        #    unit="f",
-        #    help="Average maximum absolute discrepancies "
-        #    "for the first output assuming it can be measured (lower is better).",
-        # ),
-        # dict(
-        #    cat="discrepancies",
-        #    stat="abs_1+",
-        #    agg="MEAN",
-        #    new_name="average absolute discrepancies second+ output",
-        #    unit="f",
-        #    help="Average maximum absolute discrepancies "
-        #    "for all the outputs except the first one "
-        #    "assuming it can be measured (lower is better).",
-        # ),
         dict(
             cat="time",
             agg="MEAN",
@@ -488,11 +416,11 @@ def _SELECTED_FEATURES():
         features.append(
             dict(
                 cat="bucket",
-                agg="MEAN",
+                agg="SUM",
                 stat=b,
                 new_name=f"speedup/script in {bs}" if s else f"speedup in {bs}",
-                unit="%",
-                help=f"Proportion of models whose speedup against {ag} "
+                unit="N",
+                help=f"Number of models whose speedup against {ag} "
                 f"falls into this interval",
                 simple=True,
             )
@@ -1387,6 +1315,7 @@ def merge_benchmark_reports(
                     pandas.to_datetime(df["date_start"]).astype("int64").astype(float)
                     / 1e9
                 )
+                set_columns = set(df.columns)
                 report_on.append("status_date")
             continue
 
@@ -1410,6 +1339,7 @@ def merge_benchmark_reports(
                     ~df["discrepancies_abs"].isna()
                     & (df["time_latency"] <= df["time_latency_eager"] * 1.02)
                 ).astype(int)
+                set_columns = set(df.columns)
                 report_on.extend(
                     [
                         "status_convert_ort",
@@ -1431,15 +1361,17 @@ def merge_benchmark_reports(
                 gr = df[df.exporter == expo][keep].copy()
                 gr["status_control_flow"] = gr["time_export_success"].isna().astype(int)
                 gr = gr.drop("time_export_success", axis=1)
+
                 if "opt_patterns" in gr.columns and len(set(gr.opt_patterns)) == 1:
                     on = [k for k in keep[:-1] if k not in ("exporter", "opt_patterns")]
                 else:
                     on = [k for k in keep[:-1] if k != "exporter"]
                 joined = pandas.merge(df, gr, left_on=on, right_on=on, how="left")
+
                 assert (
                     df.shape[0] == joined.shape[0]
                 ), f"Shape mismatch after join {df.shape} -> {joined.shape}"
-                df = joined.drop("exporter_y", axis=1).copy()
+                df = joined.copy()
                 if "exporter_x" in df.columns:
                     df["exporter"] = df["exporter_x"]
                 if "opt_patterns_x" in df.columns:
@@ -1455,6 +1387,7 @@ def merge_benchmark_reports(
                     if c in df.columns
                 ]
                 df = df.drop(drop, axis=1)
+                set_columns = set(df.columns)
                 report_on.append("status_control_flow")
             continue
 
@@ -1471,18 +1404,35 @@ def merge_benchmark_reports(
                 gr = gr[~gr["speedup"].isna()]
                 gr["speedup_script"] = gr["speedup"]
                 gr = gr.drop("speedup", axis=1)
-                on = [k for k in keep[:-1] if k != "exporter"]
+
+                if "opt_patterns" in gr.columns and len(set(gr.opt_patterns)) == 1:
+                    on = [k for k in keep[:-1] if k not in ("exporter", "opt_patterns")]
+                else:
+                    on = [k for k in keep[:-1] if k != "exporter"]
                 joined = pandas.merge(df, gr, left_on=on, right_on=on, how="left")
-                joined["speedup_increase_script"] = (
-                    joined["speedup"] / joined["speedup_script"] - 1
+
+                assert (
+                    df.shape[0] == joined.shape[0]
+                ), f"Shape mismatch after join {df.shape} -> {joined.shape}"
+                df = joined.copy()
+                df["speedup_increase_script"] = (
+                    df["speedup"] / df["speedup_script"] - 1
                 ).fillna(np.inf)
-                assert joined.shape[0] == df.shape[0], (
-                    f"Join issue df.shape={df.shape}, joined.shaped={joined.shape}, "
-                    f"gr.shape={gr.shape}"
-                )
-                df = joined.drop("exporter_y", axis=1).copy()
-                df["exporter"] = df["exporter_x"]
-                df = df.drop("exporter_x", axis=1)
+                if "exporter_x" in df.columns:
+                    df["exporter"] = df["exporter_x"]
+                if "opt_patterns_x" in df.columns:
+                    df["opt_patterns"] = df["opt_patterns_x"]
+                drop = [
+                    c
+                    for c in [
+                        "exporter_x",
+                        "exporter_y",
+                        "opt_patterns_x",
+                        "opt_patterns_y",
+                    ]
+                    if c in df.columns
+                ]
+                df = df.drop(drop, axis=1)
                 set_columns = set(df.columns)
                 df["status_lat<=script+2%"] = (
                     df["speedup_increase_script"] >= (1 / 1.02 - 1)
