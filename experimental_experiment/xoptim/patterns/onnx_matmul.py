@@ -2,7 +2,7 @@ import inspect
 from typing import List, Optional, Tuple
 import numpy as np
 from onnx import NodeProto
-from ...xbuilder.shape_helper import (
+from ...xbuilder._shape_helper import (
     compatible_shapes,
     compatible_dimensions,
     is_static_shape,

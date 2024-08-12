@@ -34,7 +34,7 @@ from experimental_experiment.xbuilder.graph_builder import (
 from experimental_experiment.xoptim.graph_builder_optim import (
     GraphBuilderPatternOptimization,
 )
-from experimental_experiment.xbuilder.shape_helper import (
+from experimental_experiment.xbuilder._shape_helper import (
     compatible_shapes,
     compatible_dimensions,
 )

@@ -10,7 +10,7 @@ import numpy as np
 from onnx import TensorProto
 from onnx.helper import tensor_dtype_to_np_dtype, make_tensor
 from onnx.numpy_helper import from_array
-from ..xbuilder.shape_helper import (
+from ..xbuilder._shape_helper import (
     all_float,
     all_int,
     all_int_or_float,
@@ -1428,7 +1428,6 @@ def aten_div_Tensor_mode(
         rounding_mode == "floor"
     ), f"Not yet implemented for round_mode={rounding_mode!r}{g.get_debug_msg()}"
     x, y = prepare_inputs_homogeneous_operator(g, x, y)
-    print("***********", x, y)
     return g.op.Floor(g.op.Div(x, y, name=name), name=name, outputs=outputs)
 
 
@@ -3542,7 +3541,9 @@ def aten__native_batch_norm(
     # We have to split to two private functions, because BatchNormalization returns
     # three outputs when training_mode=True and one when it is False.
     if training:
-        assert not training, f"Not implementation when training={training}"
+        assert (
+            not training
+        ), f"_native_batch_norm not implemented when training={training}"
         # norm, input_mean, input_rstd, _, _ = _aten_native_batch_norm_training_onnx(
         #     input,
         #     weight,
