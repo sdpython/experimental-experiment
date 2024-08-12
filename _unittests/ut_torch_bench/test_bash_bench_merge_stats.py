@@ -171,8 +171,8 @@ class TestBashBenchMergeStats(ExtTestCase):
         summary = df["SUMMARY"]
         self.assertNotIn("_dummy_", summary.columns)
         values = summary.values
-        self.assertEqual(0.9520435772282563, values[10, 3])
-        self.assertEqual("x", values[10, 4])
+        self.assertEqual(0.9520435772282563, values[9, 1])
+        self.assertEqual("x", values[9, 4])
         metrics = set(summary["METRIC"])
         self.assertIn("number of running models", metrics)
         self.assertIn("export rate", metrics)
@@ -237,7 +237,7 @@ class TestBashBenchMergeStats(ExtTestCase):
         for k, v in df.items():
             sh = v.shape
             if k == "speedup":
-                self.assertEqual(sh, (9, 3))
+                self.assertEqual(sh, (12, 3))
         df = merge_benchmark_reports(
             data,
             excel_output="test_merge_stats_filter_hg_none.xlsx",
