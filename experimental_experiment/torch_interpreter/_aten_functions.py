@@ -3538,48 +3538,31 @@ def aten__native_batch_norm(
             sqr_input_sub_mean, axes_np, name=name, keepdims=0
         )
 
-    # We have to split to two private functions, because BatchNormalization returns
-    # three outputs when training_mode=True and one when it is False.
-    if training:
-        assert (
-            not training
-        ), f"_native_batch_norm not implemented when training={training}"
-        # norm, input_mean, input_rstd, _, _ = _aten_native_batch_norm_training_onnx(
-        #     input,
-        #     weight,
-        #     bias,
-        #     running_mean,
-        #     running_var,
-        #     axes,
-        #     momentum=1.0 - momentum,
-        #     eps=eps,
-        # )
+    assert len(outputs) == 3, (
+        f"Unexpected number of outputs {outputs!r}, "
+        f"training_mode={training}{g.get_debug_msg()}"
+    )
 
-    # norm, input_mean, input_rstd, _, _ = _aten_native_batch_norm_inference_onnx(
-    #     input,
-    #     weight,
-    #     bias,
-    #     running_mean,
-    #     running_var,
-    #     momentum=1.0 - momentum,
-    #     eps=eps,
-    # )
-    assert (
-        len(outputs) == 3
-    ), f"Unexpected number of outputs {outputs!r}{g.get_debug_msg()}"
-
-    norm = g.op.BatchNormalization(
+    batch_out = g.op.BatchNormalization(
         x,
         weight,
         bias,
         running_mean,
         running_var,
         epsilon=eps,
-        momentum=momentum,
-        training_mode=False,
+        momentum=1 - momentum,
+        training_mode=0 if not training else 1,
         name=name,
-        outputs=outputs[:1],
+        outputs=outputs if training else outputs[:1],
     )
+
+    if training:
+        norm, bmean, bvar = batch_out
+    else:
+        assert isinstance(
+            batch_out, str
+        ), f"Unexpected output for batch nortmalisation{g.get_debug_msg()}"
+        norm = batch_out
 
     if empty_mean_std:
         assert g.has_shape(
@@ -3597,7 +3580,7 @@ def aten__native_batch_norm(
             np.array([size], dtype=np.int64), name=name, outputs=outputs[1:2]
         )
         invstd = g.op.Identity(running_mean_fp32, outputs=outputs[2:], name=name)
-    else:
+    elif not training:
         # CUDA and CPU gives different shapes:
         # https://github.com/pytorch/pytorch/blob/a44f8894fa6d973693aab44a3dda079a168b05c1/torch/_decomp/decompositions.py#L1451-L1457
         # We use CUDA's output here
@@ -3613,6 +3596,8 @@ def aten__native_batch_norm(
             running_mean, to=TensorProto.FLOAT, name=name, outputs=outputs[1:2]
         )
         invstd = g.op.Cast(invstd, to=TensorProto.FLOAT, name=name, outputs=outputs[2:])
+    else:
+        running_mean_fp32, invstd = bmean, bvar
 
     if not sts:
         g.set_type(running_mean_fp32, TensorProto.FLOAT)
@@ -5905,6 +5890,53 @@ def aten_unbind_int(
             g.set_type(o, t)
             g.get_shape(o, new_shape)
     return res
+
+
+def aten_unfold(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    dimension: int,
+    size: int,
+    step: int,
+    name: str = "unfold",
+) -> T:
+    "unfold"
+    assert g.has_shape(
+        x
+    ), f"Not implemented when x={x!r} has no shape{g.get_debug_msg()}"
+    shape = g.get_shape(x)
+    sizedim = shape[dimension]
+    assert is_static_dimension(sizedim), (
+        f"Dynamic shape is not implemented for x={x!r} and shape={shape!r}"
+        f"{g.get_debug_msg()}"
+    )
+
+    stack = [
+        g.op.Slice(
+            x,
+            np.array([low], dtype=np.int64),
+            np.array([hi], dtype=np.int64),
+            np.array([dimension], dtype=np.int64),
+            name=name,
+        )
+        for low, hi in zip(range(0, sizedim, step), range(size, sizedim + 1, step))
+    ]
+    rk = len(shape)
+    perm = list(range(rk))
+    perm.append(perm.pop(dimension))
+    unsqueeze = [
+        g.op.UnsqueezeAnyOpset(
+            g.op.Transpose(t, perm=perm, name=name),
+            np.array([dimension], dtype=np.int64),
+            name=name,
+        )
+        for t in stack
+    ]
+    if len(unsqueeze) == 1:
+        return g.op.Identity(unsqueeze[0], name=name, outputs=outputs)
+    return g.op.Concat(*unsqueeze, axis=dimension, name=name, outputs=outputs)
 
 
 def aten_unsqueeze(
