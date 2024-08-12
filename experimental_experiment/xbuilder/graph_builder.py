@@ -2354,6 +2354,11 @@ class GraphBuilder:
     ):
         if node.domain != "":
             return
+
+        if all(self.is_constant(i) for i in node.input):
+            for o in node.output:
+                self.update_node_constant(o, node)
+
         if node.op_type == "Constant":
             if len(node.attribute) == 1 and node.attribute[0].name == "value":
                 size = np.prod(node.attribute[0].t.dims)
@@ -2447,6 +2452,11 @@ class GraphBuilder:
         assert node is None or isinstance(
             node, NodeProto
         ), f"Unexpected type {type(node)} for name={name!r}"
+        if self.verbose and self.verbose > 2:
+            print(
+                f"[GraphBuilder.update_node_constant] new constant "
+                f"{name!r}, node={None if node is None else node.op_type}"
+            )
         self.constants_[name] = node
 
     def get_attribute(
@@ -2840,6 +2850,7 @@ class GraphBuilder:
         )
         rows.append(f"_known_types={pprint.pformat(self._known_types)[:10000]}")
         rows.append(f"_known_shapes={pprint.pformat(self._known_shapes)[:10000]}")
+        rows.append(f"_known_constants={pprint.pformat(list(self.constants_)[:10000])}")
         reminaing_ranks = {
             k: v for k, v in self._known_ranks.items() if k not in self._known_shapes
         }

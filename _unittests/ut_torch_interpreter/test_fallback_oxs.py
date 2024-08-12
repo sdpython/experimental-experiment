@@ -75,7 +75,7 @@ class TestFallbackOxs(ExtTestCase):
         fct = f.overloads[0]
         mod = mods[fct.function.__module__]
 
-        gr = GraphBuilder(18, ir_version=9)
+        gr = GraphBuilder(18, ir_version=9, verbose=0)
         gr.make_tensor_input("X", TensorProto.INT64, ("a", "b"), is_dimension=False)
 
         old_value = [mod.op, mod.IsScalar]
