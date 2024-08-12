@@ -1531,7 +1531,7 @@ def merge_benchmark_reports(
     if verbose:
         print("[merge_benchmark_reports] remove empty variables")
 
-    for _, v in res.items():
+    for v in res.values():
         drop = []
         for c in v.columns:
             if all(v[c].isna()) or set(v[c]) == {"-"}:
