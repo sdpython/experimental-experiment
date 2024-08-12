@@ -19,7 +19,9 @@ class TestLlama(ExtTestCase):
         import torch
 
         if hasattr(torch._dynamo.variables.misc, "LoggingLoggerVariable"):
-            cls._old_value = torch._dynamo.variables.misc.LoggingLoggerVariable.call_method
+            cls._old_value = (
+                torch._dynamo.variables.misc.LoggingLoggerVariable.call_method
+            )
             torch._dynamo.variables.misc.LoggingLoggerVariable.call_method = (
                 lambda *_, **__: None
             )
@@ -29,7 +31,9 @@ class TestLlama(ExtTestCase):
         import torch
 
         if hasattr(torch._dynamo.variables.misc, "LoggingLoggerVariable"):
-            torch._dynamo.variables.misc.LoggingLoggerVariable.call_method = cls._old_value
+            torch._dynamo.variables.misc.LoggingLoggerVariable.call_method = (
+                cls._old_value
+            )
 
     def _assert_model_numerically(
         self,

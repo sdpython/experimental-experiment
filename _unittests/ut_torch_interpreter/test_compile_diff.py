@@ -16,7 +16,9 @@ class TestDynamoCompileDiff(ExtTestCase):
         import torch
 
         if hasattr(torch._dynamo.variables.misc, "LoggingLoggerVariable"):
-            cls._old_value = torch._dynamo.variables.misc.LoggingLoggerVariable.call_method
+            cls._old_value = (
+                torch._dynamo.variables.misc.LoggingLoggerVariable.call_method
+            )
             torch._dynamo.variables.misc.LoggingLoggerVariable.call_method = (
                 lambda *_, **__: None
             )
@@ -26,7 +28,9 @@ class TestDynamoCompileDiff(ExtTestCase):
         import torch
 
         if hasattr(torch._dynamo.variables.misc, "LoggingLoggerVariable"):
-            torch._dynamo.variables.misc.LoggingLoggerVariable.call_method = cls._old_value
+            torch._dynamo.variables.misc.LoggingLoggerVariable.call_method = (
+                cls._old_value
+            )
 
     def _check_ort(self, name: str):
         from onnxruntime import InferenceSession

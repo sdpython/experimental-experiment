@@ -23,7 +23,9 @@ class TestDynamoLlamaSdpa(ExtTestCase):
         import torch
 
         if hasattr(torch._dynamo.variables.misc, "LoggingLoggerVariable"):
-            cls._old_value = torch._dynamo.variables.misc.LoggingLoggerVariable.call_method
+            cls._old_value = (
+                torch._dynamo.variables.misc.LoggingLoggerVariable.call_method
+            )
             torch._dynamo.variables.misc.LoggingLoggerVariable.call_method = (
                 lambda *_, **__: None
             )
@@ -33,7 +35,9 @@ class TestDynamoLlamaSdpa(ExtTestCase):
         import torch
 
         if hasattr(torch._dynamo.variables.misc, "LoggingLoggerVariable"):
-            torch._dynamo.variables.misc.LoggingLoggerVariable.call_method = cls._old_value
+            torch._dynamo.variables.misc.LoggingLoggerVariable.call_method = (
+                cls._old_value
+            )
 
     @classmethod
     def get_input_dims(cls, dynamic: bool):
