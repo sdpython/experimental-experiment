@@ -16,6 +16,7 @@ from ..xbuilder._shape_helper import (
     all_int_or_float,
     is_static_dimension,
     is_static_shape,
+    DYNAMIC_SHAPE,
 )
 from ..xbuilder._dtype_helper import (
     onnx_dtype_to_torch_dtype,
@@ -2347,6 +2348,109 @@ def aten_hardtanh_backward(
     if not sts:
         set_type_shape_unary_op(g, res, x)
     return res
+
+
+def _get_im2col_indices_along_dim(
+    input_d: DYNAMIC_SHAPE,
+    kernel_size_d: int,
+    dilation_d: int,
+    padding_d: int,
+    stride_d: int,
+):
+    # Input is always 4-D (N, C, H, W)
+    # Calculate indices of sliding blocks along spatial dimension
+    # Slide kernel over input each dim d:
+    # each dimension d ranges from 0 to input[d]+2xpadding[d]-dilation[d]x(kernel_size[d]-1)
+    # with steps = stride
+
+    if is_static_dimension(input_d):
+        blocks_d = input_d + ((padding_d * 2) - (dilation_d * (kernel_size_d - 1)))
+
+        # Stride kernel over input and find starting indices along dim d
+        blocks_d_indices = np.array(
+            [list(range(0, blocks_d, stride_d))], dtype=np.int64
+        )
+
+        # Apply dilation on kernel and find its indices along dim d
+        kernel_mask = np.array(
+            [list(range(0, kernel_size_d * dilation_d, dilation_d))], dtype=np.int64
+        ).T
+
+        # Broadcast and add kernel staring positions (indices) with
+        # kernel_grid along dim d, to get block indices along dim d
+        block_mask = blocks_d_indices + kernel_mask
+        return block_mask
+
+    raise AssertionError(f"Not impelmented yet for dynamic shapes, input_d={input_d!r}")
+
+
+def aten_im2col(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    kernel_size: Sequence[int],
+    dilation: Sequence[int] = (1, 1),
+    padding: Sequence[int] = (0, 0),
+    stride: Sequence[int] = (1, 1),
+    name: str = "im2col",
+) -> T:
+    """im2col"""
+    if not isinstance(kernel_size, Sequence):
+        kernel_size = (kernel_size, kernel_size)
+    kernel_sizes = list(kernel_size)
+
+    if not isinstance(dilation, Sequence):
+        dilation = (dilation, dilation)
+    dilations = list(dilation)
+
+    if not isinstance(padding, Sequence):
+        padding = (padding, padding)
+    pads = list(padding)
+
+    if isinstance(stride, int):
+        stride = (stride, stride)
+    strides = list(stride)
+
+    stride_h, stride_w = strides[0], strides[1]
+    padding_h, padding_w = pads[0], pads[1]
+    dilation_h, dilation_w = dilations[0], dilations[1]
+    kernel_h, kernel_w = kernel_sizes[0], kernel_sizes[1]
+
+    if g.has_shape(x) and is_static_shape(g.get_shape(x)):
+        input_shape = g.get_shape(x)
+        input_h = input_shape[2]
+        input_w = input_shape[3]
+
+        blocks_row_indices = _get_im2col_indices_along_dim(
+            input_h, kernel_h, dilation_h, padding_h, stride_h
+        )
+        blocks_col_indices = _get_im2col_indices_along_dim(
+            input_w, kernel_w, dilation_w, padding_w, stride_w
+        )
+
+        batch_dim = input_shape[0]
+        channel_dim = input_shape[1]
+        channel_unfolded = channel_dim * kernel_h * kernel_w
+        output_shape = np.array([batch_dim, channel_unfolded, -1], dtype=np.int64)
+
+        padded_input = g.op.Pad(
+            x,
+            np.array(
+                [0, 0, padding_h, padding_w, 0, 0, padding_h, padding_w], dtype=np.int64
+            ),
+            name=name,
+        )
+        g.set_type(padded_input, g.get_type(x))
+
+        output = g.op.Gather(padded_input, blocks_row_indices, axis=2, name=name)
+        output = g.op.Gather(output, blocks_col_indices, axis=4, name=name)
+        output = g.op.Transpose(output, perm=[0, 1, 2, 4, 3, 5], name=name)
+        return g.op.Reshape(output, output_shape, outputs=outputs, name=name)
+
+    raise AssertionError(
+        f"Not implemented with dynamic shape for {x!r}{g.get_debug_msg()}"
+    )
 
 
 def aten_index_Tensor(

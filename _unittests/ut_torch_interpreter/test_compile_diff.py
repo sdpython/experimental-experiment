@@ -15,16 +15,18 @@ class TestDynamoCompileDiff(ExtTestCase):
     def setUp(cls):
         import torch
 
-        cls._old_value = torch._dynamo.variables.misc.LoggingLoggerVariable.call_method
-        torch._dynamo.variables.misc.LoggingLoggerVariable.call_method = (
-            lambda *_, **__: None
-        )
+        if hasattr(torch._dynamo.variables.misc, "LoggingLoggerVariable"):
+            cls._old_value = torch._dynamo.variables.misc.LoggingLoggerVariable.call_method
+            torch._dynamo.variables.misc.LoggingLoggerVariable.call_method = (
+                lambda *_, **__: None
+            )
 
     @classmethod
     def tearDown(cls):
         import torch
 
-        torch._dynamo.variables.misc.LoggingLoggerVariable.call_method = cls._old_value
+        if hasattr(torch._dynamo.variables.misc, "LoggingLoggerVariable"):
+            torch._dynamo.variables.misc.LoggingLoggerVariable.call_method = cls._old_value
 
     def _check_ort(self, name: str):
         from onnxruntime import InferenceSession
