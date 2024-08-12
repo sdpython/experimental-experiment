@@ -4,6 +4,7 @@ from onnx import ModelProto
 from experimental_experiment.ext_test_case import (
     ExtTestCase,
     skipif_ci_windows,
+    skipif_ci_apple,
     requires_cuda,
     requires_onnxscript,
     ignore_warnings,
@@ -36,6 +37,7 @@ class TestConvertHelper(ExtTestCase):
         self.assertIsInstance(model_proto, ModelProto)
 
     @skipif_ci_windows("dynamo not working on windows")
+    @skipif_ci_apple("dynamo fails")
     @ignore_warnings(UserWarning)
     def test_inline_llama(self):
         import torch

@@ -6,6 +6,7 @@ from experimental_experiment.ext_test_case import (
     ExtTestCase,
     ignore_warnings,
     skipif_ci_windows,
+    skipif_ci_apple,
     requires_torch,
     requires_cuda,
     requires_onnxruntime_training,
@@ -412,6 +413,7 @@ class TestDynamoLlama(ExtTestCase):
 
     @ignore_warnings((UserWarning, DeprecationWarning))
     @skipif_ci_windows("torch.compile not supported on Windows")
+    @skipif_ci_apple("torch.compile fails")
     def test_llama_attention_backward(self):
         from experimental_experiment.torch_models.llama_helper import (
             get_llama_attention,
