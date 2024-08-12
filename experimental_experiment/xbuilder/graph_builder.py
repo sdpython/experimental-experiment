@@ -3495,7 +3495,7 @@ class GraphBuilder:
         x = feeds[node.input[0]]
         axis = feeds[node.input[1]]
         if isinstance(x, np.ndarray):
-            return [x.expand_dims(tuple(int(i) for i in axis))]
+            return [np.expand_dims(x, tuple(int(i) for i in axis))]
         return [x.unsqueeze(tuple(int(i) for i in axis))]
 
     def _apply_cast(
@@ -3631,7 +3631,7 @@ class GraphBuilder:
             ref = ExtendedReferenceEvaluator(v)
             try:
                 output = ref.run(None, feeds)
-            except ValueError as e:
+            except (ValueError, TypeError) as e:
                 sf = ", ".join(f"{k}:{v.dtype}:{v.shape}" for k, v in feeds.items())
                 if "warnings" not in self._debug_msg:
                     self._debug_msg["warnings"] = []
