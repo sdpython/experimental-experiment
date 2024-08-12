@@ -10,12 +10,13 @@ import numpy as np
 from onnx import TensorProto
 from onnx.helper import tensor_dtype_to_np_dtype, make_tensor
 from onnx.numpy_helper import from_array
-from ..xbuilder.shape_helper import (
+from ..xbuilder._shape_helper import (
     all_float,
     all_int,
     all_int_or_float,
     is_static_dimension,
     is_static_shape,
+    DYNAMIC_SHAPE,
 )
 from ..xbuilder._dtype_helper import (
     onnx_dtype_to_torch_dtype,
@@ -121,6 +122,29 @@ def aten_add_Tensor(
     res = g.op.Add(x, y, outputs=outputs, name="add_Tensor")
     if not sts:
         set_type_shape_binary_op(g, outputs[0], x, y)
+    return res
+
+
+def aten_addcmul(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    t1: T,
+    t2: T,
+    value: float = 1.0,
+    name: str = "addcmul",
+) -> T:
+    "addcmul"
+    itype = g.get_type(x)
+    dtype = tensor_dtype_to_np_dtype(itype)
+    cst = np.array([value], dtype=dtype)
+    res = g.op.Add(
+        x,
+        g.op.Mul(g.op.Mul(t1, t2, name=name), cst, name=name),
+        name=name,
+        outputs=outputs,
+    )
     return res
 
 
@@ -662,6 +686,18 @@ def aten_bitwise_not(
     return res
 
 
+def aten_adaptive_avg_pool1d(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    output_size: Tuple[int, ...],
+    name="aten.adaptive_avg_pool1d",
+):
+    """adaptative AvgPool"""
+    return _aten_adaptive_avg_poolnd(g, sts, outputs, x, output_size, d=1, name=name)
+
+
 def aten_adaptive_avg_pool2d(
     g: GraphBuilder,
     sts: Optional[Dict[str, Any]],
@@ -672,6 +708,18 @@ def aten_adaptive_avg_pool2d(
 ):
     """adaptative AvgPool"""
     return _aten_adaptive_avg_poolnd(g, sts, outputs, x, output_size, d=2, name=name)
+
+
+def aten_adaptive_avg_pool3d(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    output_size: Tuple[int, ...],
+    name="aten.adaptive_avg_pool3d",
+):
+    """adaptative AvgPool"""
+    return _aten_adaptive_avg_poolnd(g, sts, outputs, x, output_size, d=3, name=name)
 
 
 def _aten_adaptive_avg_poolnd(
@@ -686,8 +734,8 @@ def _aten_adaptive_avg_poolnd(
     """adaptative AvgPool"""
     assert (
         len(output_size) == d
-    ), f"Dimension mismatch between d={2} and output_size={output_size}"
-    if output_size == [1, 1]:
+    ), f"Dimension mismatch between d={2} and output_size={output_size}{g.get_debug_msg()}"
+    if output_size == [1] * len(output_size):
         res = g.op.GlobalAveragePool(x, outputs=outputs, name=name)
         if not sts:
             g.set_type(res, g.get_type(x))
@@ -985,6 +1033,38 @@ def aten_conv2d(
     )
 
 
+def aten_conv3d(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    weight: T,
+    bias: T = None,
+    stride: Sequence[int] = (1, 1),
+    padding: Union[str, Sequence[int]] = (0, 0),
+    dilation: Sequence[int] = (1, 1),
+    groups: int = 1,
+    auto_pad: str = "NOTSET",
+    name: str = "conv3d",
+) -> T:
+    "conv3d"
+    return aten_convolution(
+        g,
+        sts,
+        outputs,
+        x,
+        weight=weight,
+        bias=bias,
+        stride=stride,
+        padding=padding,
+        dilation=dilation,
+        groups=groups,
+        auto_pad=auto_pad,
+        name=name,
+        d=3,
+    )
+
+
 def aten_conv2d_padding(
     g: GraphBuilder,
     sts: Optional[Dict[str, Any]],
@@ -1012,6 +1092,144 @@ def aten_conv2d_padding(
         groups=groups,
         name=name,
         d=2,
+    )
+
+
+def _convolution(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x,
+    weight,
+    bias,
+    stride,
+    padding,
+    dilation,
+    transposed,
+    output_padding,
+    groups,
+    benchmark,
+    deterministic,
+    cudnn_enabled,
+    allow_tf32=None,
+    name: str = "_convolution",
+):
+    assert g.has_shape(weight), f"weight={weight!r} has no shape{g.get_debug_msg()}"
+    weight_size = g.get_shape(weight)
+    kernel_shape = weight_size[2:]
+    assert is_static_shape(
+        tuple(kernel_shape)
+    ), f"Not implemented for weight shape {weight_size}{g.get_debug_msg()}"
+
+    args = [x, weight]
+
+    if bias is not None and g.has_rank(bias) and g.get_rank(bias) == 1:
+        # ONNX only supports 1D bias
+        args.append(bias)
+        add_bias = False
+    else:
+        add_bias = True
+
+    kwargs = {
+        "kernel_shape": list(weight_size[2:]),
+        "strides": list(stride),
+        # ONNX supports asymmetric padding, whereas PyTorch supports only
+        # symmetric padding
+        "pads": list(padding + padding),
+        "dilations": list(dilation),
+        "group": groups,
+    }
+
+    if any(o != 0 for o in output_padding):
+        # ONNX supports both output_shape and output_padding. they are equivalent expressive.
+        # output_padding is more straightforward, so we use it here.
+        # output_shape = stride * (input_shape - 1) +
+        #                output_padding + kernel_shape - padding * 2
+        assert transposed, f"transposed not specified{g.get_debug_msg()}"
+        assert len(stride) == len(
+            output_padding
+        ), f"Length mismath {len(stride)} != {len(output_padding)}{g.get_debug_msg()}"
+        kwargs["output_padding"] = list(output_padding)
+
+    if transposed:
+        n = g.op.ConvTranspose(*args, name=name, **kwargs)
+    else:
+        n = g.op.Conv(*args, name=name, **kwargs)
+
+    if add_bias:
+        return g.op.Add(n, bias, outputs=outputs, name=name)
+    return g.op.Identity(n, outputs=outputs, name=name)
+
+
+def aten_conv_transpose2d_input(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    weight: T,
+    bias: T,
+    stride: List[int],
+    padding: List[int],
+    output_padding: List[int],
+    groups: List[int],
+    dilation: List[int],
+    name: str = "conv_transpose2d_input",
+) -> T:
+    "conv_transpose2d"
+    return _convolution(
+        g,
+        sts,
+        outputs,
+        x,
+        weight,
+        bias,
+        stride,
+        padding,
+        dilation,
+        True,
+        output_padding,
+        groups,
+        None,
+        None,
+        None,
+        None,
+        name=name,
+    )
+
+
+def aten_conv_transpose3d_input(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    weight: T,
+    bias: T,
+    stride: List[int],
+    padding: List[int],
+    output_padding: List[int],
+    groups: List[int],
+    dilation: List[int],
+    name: str = "conv_transpose3d_input",
+) -> T:
+    "conv_transpose3d"
+    return _convolution(
+        g,
+        sts,
+        outputs,
+        x,
+        weight,
+        bias,
+        stride,
+        padding,
+        dilation,
+        True,
+        output_padding,
+        groups,
+        None,
+        None,
+        None,
+        None,
+        name=name,
     )
 
 
@@ -1188,6 +1406,30 @@ def aten_div_Tensor(
     if not sts:
         set_type_shape_binary_op(g, outputs[0], x, y)
     return res
+
+
+def aten_div_Tensor_mode(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    y: T,
+    rounding_mode: Optional[str] = None,
+    name: str = "div_Tensor_mode",
+) -> T:
+    "div_Tensor_mode"
+    if rounding_mode is None:
+        return aten_div(g, sts, outputs, x, y, name=name)
+
+    assert rounding_mode in {
+        "trunc",
+        "floor",
+    }, f"Unexpected value for round_mode={rounding_mode!r}{g.get_debug_msg()}"
+    assert (
+        rounding_mode == "floor"
+    ), f"Not yet implemented for round_mode={rounding_mode!r}{g.get_debug_msg()}"
+    x, y = prepare_inputs_homogeneous_operator(g, x, y)
+    return g.op.Floor(g.op.Div(x, y, name=name), name=name, outputs=outputs)
 
 
 def aten_dropout(
@@ -1922,6 +2164,79 @@ def aten_gelu(
     )
 
 
+def aten_group_norm(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    num_groups: int,
+    weight: Optional[T] = None,
+    bias: Optional[T] = None,
+    eps: float = 1e-05,
+    cudnn_enabled: bool = True,
+    name: str = "group_norm",
+) -> T:
+    "instance_normalization"
+    assert g.has_rank(x), f"rank for {x!r} is unknown{g.get_debug_msg()}"
+    assert g.has_shape(x), f"shape for {x!r} is unknown{g.get_debug_msg()}"
+    shape_x = g.get_shape(x)
+    assert len(shape_x) > 1, f"Unexpected shape {shape_x} for {x!r}{g.get_debug_msg()}"
+    channel_size = shape_x[1]
+    assert is_static_dimension(
+        channel_size
+    ), f"number of channels cannot be dynamic, shape={shape_x}{g.get_debug_msg()}"
+    assert channel_size % num_groups == 0, (
+        f"number of channels {channel_size} must a multiple of num_groups="
+        f"{num_groups}{g.get_debug_msg()}"
+    )
+    input_rank = g.get_rank(x)
+
+    # 0 in the shape list keeps dimension value unchanged.
+    if is_static_dimension(shape_x[0]):
+        new_shape = np.array([shape_x[0], num_groups, -1], dtype=np.int64)
+        input_reshaped = g.op.Reshape(x, new_shape, name=name)
+    else:
+        raise AssertionError(
+            f"Dynamic batch size for shape={shape_x} "
+            f"is not implemented yet{g.get_debug_msg()}"
+        )
+
+    # C is always divisible by num_groups
+    # Due to shape difference. we need to apply weight and bias after
+    # instance norm computation and reshape
+    itype = g.get_type(x)
+    dtype = tensor_dtype_to_np_dtype(itype)
+    weight_ = np.array([1] * num_groups, dtype=dtype)
+    bias_ = np.array([0] * num_groups, dtype=dtype)
+
+    norm_reshaped = g.op.InstanceNormalization(
+        input_reshaped, weight_, bias_, epsilon=eps, name=name
+    )
+    g.set_type(norm_reshaped, itype)
+    if is_static_shape(shape_x):
+        shape_x_name = np.array(shape_x, dtype=np.int64)
+    else:
+        shape_x_name = g.op.Shape(x, name=name)
+    norm = g.op.Reshape(norm_reshaped, shape_x_name, name=name)
+    g.set_type(norm, itype)
+    g.set_shape(norm, shape_x)
+
+    np_axes = np.array(list(range(1, input_rank - 1)), dtype=np.int64)
+    if weight is None:
+        w = np.array([1], dtype=dtype)
+    else:
+        w = g.op.Unsqueeze(weight, np_axes, name=name)
+
+    if bias is None:
+        b = np.array([0], dtype=dtype)
+    else:
+        b = g.op.Unsqueeze(bias, np_axes, name=name)
+
+    # Norm has shape [N, C, *] so we reshape weight and bias to [C, *]
+    res = g.op.Add(g.op.Mul(norm, w, name=name), b, name=name, outputs=outputs)
+    return res
+
+
 def aten_gt(
     g: GraphBuilder,
     sts: Optional[Dict[str, Any]],
@@ -2033,6 +2348,109 @@ def aten_hardtanh_backward(
     if not sts:
         set_type_shape_unary_op(g, res, x)
     return res
+
+
+def _get_im2col_indices_along_dim(
+    input_d: DYNAMIC_SHAPE,
+    kernel_size_d: int,
+    dilation_d: int,
+    padding_d: int,
+    stride_d: int,
+):
+    # Input is always 4-D (N, C, H, W)
+    # Calculate indices of sliding blocks along spatial dimension
+    # Slide kernel over input each dim d:
+    # each dimension d ranges from 0 to input[d]+2xpadding[d]-dilation[d]x(kernel_size[d]-1)
+    # with steps = stride
+
+    if is_static_dimension(input_d):
+        blocks_d = input_d + ((padding_d * 2) - (dilation_d * (kernel_size_d - 1)))
+
+        # Stride kernel over input and find starting indices along dim d
+        blocks_d_indices = np.array(
+            [list(range(0, blocks_d, stride_d))], dtype=np.int64
+        )
+
+        # Apply dilation on kernel and find its indices along dim d
+        kernel_mask = np.array(
+            [list(range(0, kernel_size_d * dilation_d, dilation_d))], dtype=np.int64
+        ).T
+
+        # Broadcast and add kernel staring positions (indices) with
+        # kernel_grid along dim d, to get block indices along dim d
+        block_mask = blocks_d_indices + kernel_mask
+        return block_mask
+
+    raise AssertionError(f"Not impelmented yet for dynamic shapes, input_d={input_d!r}")
+
+
+def aten_im2col(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    kernel_size: Sequence[int],
+    dilation: Sequence[int] = (1, 1),
+    padding: Sequence[int] = (0, 0),
+    stride: Sequence[int] = (1, 1),
+    name: str = "im2col",
+) -> T:
+    """im2col"""
+    if not isinstance(kernel_size, Sequence):
+        kernel_size = (kernel_size, kernel_size)
+    kernel_sizes = list(kernel_size)
+
+    if not isinstance(dilation, Sequence):
+        dilation = (dilation, dilation)
+    dilations = list(dilation)
+
+    if not isinstance(padding, Sequence):
+        padding = (padding, padding)
+    pads = list(padding)
+
+    if isinstance(stride, int):
+        stride = (stride, stride)
+    strides = list(stride)
+
+    stride_h, stride_w = strides[0], strides[1]
+    padding_h, padding_w = pads[0], pads[1]
+    dilation_h, dilation_w = dilations[0], dilations[1]
+    kernel_h, kernel_w = kernel_sizes[0], kernel_sizes[1]
+
+    if g.has_shape(x) and is_static_shape(g.get_shape(x)):
+        input_shape = g.get_shape(x)
+        input_h = input_shape[2]
+        input_w = input_shape[3]
+
+        blocks_row_indices = _get_im2col_indices_along_dim(
+            input_h, kernel_h, dilation_h, padding_h, stride_h
+        )
+        blocks_col_indices = _get_im2col_indices_along_dim(
+            input_w, kernel_w, dilation_w, padding_w, stride_w
+        )
+
+        batch_dim = input_shape[0]
+        channel_dim = input_shape[1]
+        channel_unfolded = channel_dim * kernel_h * kernel_w
+        output_shape = np.array([batch_dim, channel_unfolded, -1], dtype=np.int64)
+
+        padded_input = g.op.Pad(
+            x,
+            np.array(
+                [0, 0, padding_h, padding_w, 0, 0, padding_h, padding_w], dtype=np.int64
+            ),
+            name=name,
+        )
+        g.set_type(padded_input, g.get_type(x))
+
+        output = g.op.Gather(padded_input, blocks_row_indices, axis=2, name=name)
+        output = g.op.Gather(output, blocks_col_indices, axis=4, name=name)
+        output = g.op.Transpose(output, perm=[0, 1, 2, 4, 3, 5], name=name)
+        return g.op.Reshape(output, output_shape, outputs=outputs, name=name)
+
+    raise AssertionError(
+        f"Not implemented with dynamic shape for {x!r}{g.get_debug_msg()}"
+    )
 
 
 def aten_index_Tensor(
@@ -2172,6 +2590,102 @@ def aten_index_put(
         g.set_type(res, g.get_type(x))
         g.set_shape(res, g.get_shape(x))
     return res
+
+
+def aten_instance_norm(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    weight: Optional[T] = None,
+    bias: Optional[T] = None,
+    running_mean: Optional[T] = None,
+    running_var: Optional[T] = None,
+    use_input_stats: bool = True,
+    momentum: float = 0.1,
+    eps: float = 1e-05,
+    cudnn_enabled: bool = False,
+    name: str = "instance_norm",
+) -> T:
+    """instance_norm"""
+    assert cudnn_enabled, "Not implemented when cudnn_enabled is True"
+
+    itype = g.get_type(x)
+    dtype = tensor_dtype_to_np_dtype(itype)
+
+    if weight is None and g.has_shape(x):
+        sh = g.get_shape(x)
+        if is_static_dimension(sh[1]):
+            weight = np.ones(sh[1:2], dtype=dtype)
+    if weight is None:
+        sh = g.op.Shape(x, start=1, end=2, name=name)
+        weight = g.op.Expand(np.array([1], dtype=dtype), sh, name=name)
+
+    if bias is None and g.has_shape(x):
+        sh = g.get_shape(x)
+        if is_static_dimension(sh[1]):
+            bias = np.zeros(sh[1:2], dtype=dtype)
+    if bias is None:
+        sh = g.op.Shape(x, start=1, end=2, name=name)
+        bias = g.op.Expand(np.array([1], dtype=dtype), sh, name=name)
+
+    if use_input_stats:
+        # If `use_input_stats` is set to True,
+        # ignore 'running_mean' and 'running_var' and
+        # compute using input statistics.
+        # Otherwise, compute using the running statistics.
+        return g.op.InstanceNormalization(
+            x, weight, bias, epsilon=eps, name=name, outputs=outputs
+        )
+
+    assert (
+        running_mean is not None and running_var is not None
+    ), "running_mean and running_var must be provided when use_input_stats is False"
+
+    batch_size = None
+    if g.has_shape(x):
+        sh = g.get_shape(x)
+        if is_static_dimension(sh[0]):
+            batch_size = np.array([sh[0]], dtype=np.int64)
+
+    if batch_size is None:
+        batch_size = g.op.Shape(input, start=0, end=1, name=name)
+
+    bias = g.op.Tile(bias, batch_size, name=name)
+    weight = g.op.Tile(weight, batch_size, name=name)
+    n_running_mean = g.op.Tile(running_mean, batch_size, name=name)
+    n_running_var = g.op.Tile(running_var, batch_size, name=name)
+
+    bn_input = None
+    shape_x = None
+    if g.has_shape(x):
+        sh = g.get_shape(x)
+        if is_static_shape(sh[2:]):
+            cst = np.array([1, -1, *sh[2:]], dtype=np.int64)
+            bn_input = g.op.Reshape(x, cst, name=name)
+            shape_x = np.array(sh, dtype=np.int64)
+    if bn_input is None:
+        sh2 = g.op.Concat(
+            [1, -1], g.op.Shape(input, start=2, name=name), axis=0, name=name
+        )
+        bn_input = g.op.Reshape(x, sh2, name=name)
+        shape_x = g.op.Shape(x, name=name)
+
+    assert (
+        len(outputs) == 1
+    ), f"Only one output can be requested but outputs={outputs}{g.get_debug_msg()}"
+    bi_name = g.unique_name(f"{outputs[0]}_bn")
+    g.make_node(
+        "BatchNormalization",
+        [bn_input, weight, bias, n_running_mean, n_running_var],
+        [bi_name],
+        epsilon=eps,
+        momentum=1.0 - momentum,
+        training_mode=False,
+        name=name,
+    )
+
+    return g.op.Reshape(bi_name, shape_x, name=name, outputs=outputs)
 
 
 def aten_isinf(
@@ -2633,6 +3147,41 @@ def _aten_max_pool_onnx(
     return pool_result
 
 
+def aten_max_pool1d(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    kernel_size: Sequence[int],
+    stride: Sequence[int] = (),
+    padding: Sequence[int] = (0, 0),
+    dilation: Sequence[int] = (1, 1),
+    ceil_mode: bool = False,
+    name: str = "max_pool1d",
+) -> T:
+    """max_pool1d"""
+
+    expand_size = 1
+
+    kernel_shape, strides, pads, dilations = _adjust_attributes_of_max_pool(
+        expand_size, kernel_size, stride, padding, dilation
+    )
+
+    return _aten_max_pool_onnx(
+        g,
+        sts,
+        outputs,
+        x,
+        kernel_shape,
+        strides,
+        pads,
+        dilations,
+        ceil_mode,
+        2,
+        name=name,
+    )
+
+
 def aten_max_pool2d(
     g: GraphBuilder,
     sts: Optional[Dict[str, Any]],
@@ -2643,8 +3192,9 @@ def aten_max_pool2d(
     padding: Sequence[int] = (0, 0),
     dilation: Sequence[int] = (1, 1),
     ceil_mode: bool = False,
+    name: str = "max_pool2d",
 ) -> T:
-    "maxpool"
+    "max_pool2d"
     expand_size = 2
 
     kernel_shape, strides, pads, dilations = _adjust_attributes_of_max_pool(
@@ -2662,7 +3212,42 @@ def aten_max_pool2d(
         dilations,
         ceil_mode,
         3,
-        name="max_pool2d",
+        name=name,
+    )
+
+
+def aten_max_pool3d(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    kernel_size: Sequence[int],
+    stride: Sequence[int] = (),
+    padding: Sequence[int] = (0, 0, 0),
+    dilation: Sequence[int] = (1, 1, 1),
+    ceil_mode: bool = False,
+    name: str = "max_pool3d",
+) -> T:
+    """max_pool3d"""
+
+    expand_size = 3
+
+    kernel_shape, strides, pads, dilations = _adjust_attributes_of_max_pool(
+        expand_size, kernel_size, stride, padding, dilation
+    )
+
+    return _aten_max_pool_onnx(
+        g,
+        sts,
+        outputs,
+        x,
+        kernel_shape,
+        strides,
+        pads,
+        dilations,
+        ceil_mode,
+        4,
+        name=name,
     )
 
 
@@ -3057,46 +3642,31 @@ def aten__native_batch_norm(
             sqr_input_sub_mean, axes_np, name=name, keepdims=0
         )
 
-    # We have to split to two private functions, because BatchNormalization returns
-    # three outputs when training_mode=True and one when it is False.
-    if training:
-        assert not training, f"Not implementation when training={training}"
-        # norm, input_mean, input_rstd, _, _ = _aten_native_batch_norm_training_onnx(
-        #     input,
-        #     weight,
-        #     bias,
-        #     running_mean,
-        #     running_var,
-        #     axes,
-        #     momentum=1.0 - momentum,
-        #     eps=eps,
-        # )
+    assert len(outputs) == 3, (
+        f"Unexpected number of outputs {outputs!r}, "
+        f"training_mode={training}{g.get_debug_msg()}"
+    )
 
-    # norm, input_mean, input_rstd, _, _ = _aten_native_batch_norm_inference_onnx(
-    #     input,
-    #     weight,
-    #     bias,
-    #     running_mean,
-    #     running_var,
-    #     momentum=1.0 - momentum,
-    #     eps=eps,
-    # )
-    assert (
-        len(outputs) == 3
-    ), f"Unexpected number of outputs {outputs!r}{g.get_debug_msg()}"
-
-    norm = g.op.BatchNormalization(
+    batch_out = g.op.BatchNormalization(
         x,
         weight,
         bias,
         running_mean,
         running_var,
         epsilon=eps,
-        momentum=momentum,
-        training_mode=False,
+        momentum=1 - momentum,
+        training_mode=0 if not training else 1,
         name=name,
-        outputs=outputs[:1],
+        outputs=outputs if training else outputs[:1],
     )
+
+    if training:
+        norm, bmean, bvar = batch_out
+    else:
+        assert isinstance(
+            batch_out, str
+        ), f"Unexpected output for batch nortmalisation{g.get_debug_msg()}"
+        norm = batch_out
 
     if empty_mean_std:
         assert g.has_shape(
@@ -3114,7 +3684,7 @@ def aten__native_batch_norm(
             np.array([size], dtype=np.int64), name=name, outputs=outputs[1:2]
         )
         invstd = g.op.Identity(running_mean_fp32, outputs=outputs[2:], name=name)
-    else:
+    elif not training:
         # CUDA and CPU gives different shapes:
         # https://github.com/pytorch/pytorch/blob/a44f8894fa6d973693aab44a3dda079a168b05c1/torch/_decomp/decompositions.py#L1451-L1457
         # We use CUDA's output here
@@ -3130,6 +3700,8 @@ def aten__native_batch_norm(
             running_mean, to=TensorProto.FLOAT, name=name, outputs=outputs[1:2]
         )
         invstd = g.op.Cast(invstd, to=TensorProto.FLOAT, name=name, outputs=outputs[2:])
+    else:
+        running_mean_fp32, invstd = bmean, bvar
 
     if not sts:
         g.set_type(running_mean_fp32, TensorProto.FLOAT)
@@ -3137,6 +3709,51 @@ def aten__native_batch_norm(
         set_type_shape_unary_op(g, norm, x)
 
     return norm, running_mean_fp32, invstd
+
+
+def aten_cudnn_batch_norm(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    weight: T,
+    bias: Optional[T],
+    running_mean: Optional[T],
+    running_var: Optional[T],
+    training: bool = False,
+    momentum: float = 0.9,
+    eps: float = 1e-05,
+    name: str = "cudnn_batch_norm",
+) -> Tuple[T, T, T]:
+    """cudnn_batch_norm"""
+    a, b, c = aten__native_batch_norm(
+        g,
+        sts,
+        outputs[:3],
+        x,
+        weight,
+        bias,
+        running_mean=running_mean,
+        running_var=running_var,
+        training=training,
+        momentum=momentum,
+        eps=eps,
+        name=name,
+    )
+
+    d = g.op.ConstantOfShape(
+        np.array([0], dtype=np.int64),
+        value=from_array(
+            np.array([0], dtype=tensor_dtype_to_np_dtype(TensorProto.UINT8))
+        ),
+        outputs=outputs[3:],
+        name=name,
+    )
+    if training:
+        # Cudnn return running mean and variance when training is True
+        return a, b, c, d
+
+    return a, b, c, d
 
 
 def aten_ne(
@@ -3606,17 +4223,18 @@ def aten_pow_Tensor_Tensor(
     return res
 
 
-def aten_reciprocal(
+def aten_prelu(
     g: GraphBuilder,
     sts: Optional[Dict[str, Any]],
     outputs: List[str],
-    x: T,
-    name: str = "reciprocal",
+    a: T,
+    slope: T,
+    name: str = "prelu",
 ) -> T:
-    """reciprocal"""
-    res = g.op.Reciprocal(x, name=name, outputs=outputs)
+    "prelu"
+    res = g.op.PRelu(a, slope, name=name, outputs=outputs)
     if not sts:
-        set_type_shape_unary_op(g, res, x)
+        set_type_shape_unary_op(g, res, a)
     return res
 
 
@@ -3666,6 +4284,20 @@ def aten__prelu_kernel_backward(
         set_type_shape_unary_op(g, input_grad, x)
         set_type_shape_unary_op(g, weight_grad, weight)
     return input_grad, weight_grad
+
+
+def aten_reciprocal(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    name: str = "reciprocal",
+) -> T:
+    """reciprocal"""
+    res = g.op.Reciprocal(x, name=name, outputs=outputs)
+    if not sts:
+        set_type_shape_unary_op(g, res, x)
+    return res
 
 
 def aten_relu(
@@ -3804,15 +4436,60 @@ def aten_repeat(
     return res
 
 
-def aten_rsqrt(
-    g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T
+def aten_roll(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    shifts: List[int],
+    dims: List[int],
+    name: str = "roll",
 ) -> T:
-    "rqsrt"
-    ext = g.make_node("Sqrt", [x], name="rsqrt")
-    res = g.op.Reciprocal(ext, outputs=outputs, name="rsqrt")
-    if not sts:
-        set_type_shape_unary_op(g, outputs[0], x)
-    return res
+    "roll"
+    assert len(shifts) == len(
+        dims
+    ), f"Unexpected values for shifts={shifts} and dims={dims}{g.get_debug_msg()}"
+
+    shape_x = g.get_shape(x) if g.has_shape(x) else None
+    shape_xx = None
+
+    result = x
+    for i in range(len(shifts)):
+        shapes = []
+        if shape_x is not None and is_static_dimension(shape_x[dims[i]]):
+            shape = g.op.Slice(
+                result,
+                np.array([-shifts[i]], dtype=np.int64),
+                np.array([shape_x[dims[i]]], dtype=np.int64),
+                np.array([dims[i]], dtype=np.int64),
+                name=name,
+            )
+        else:
+            if shape_xx is None:
+                shape_xx = g.op.Shape(x, name=name)
+            dim = g.op.Gather(shape_xx, np.array([dims[i]], dtype=np.int64), name=name)
+            shape = g.op.Slice(
+                result,
+                np.array([-shifts[i]], dtype=np.int64),
+                dim,
+                np.array([dims[i]], dtype=np.int64),
+                name=name,
+            )
+        shapes.append(shape)
+        shape = g.op.Slice(
+            result,
+            np.array([dims[i]], dtype=np.int64),
+            np.array([0], dtype=np.int64),
+            np.array([-shifts[i]], dtype=np.int64),
+            name=name,
+        )
+        shapes.append(shape)
+        result = g.op.Concat(*shapes, axis=dims[i], name=name)
+        g.set_type(result, g.get_type(x))
+        if g.has_shape(x):
+            g.set_shape(result, g.get_shape(x))
+
+    return g.op.Identity(result, name=name, outputs=outputs)
 
 
 def aten_round(
@@ -3820,6 +4497,17 @@ def aten_round(
 ) -> T:
     "round"
     res = g.make_node("Round", [x], outputs, name="round")
+    if not sts:
+        set_type_shape_unary_op(g, outputs[0], x)
+    return res
+
+
+def aten_rsqrt(
+    g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T
+) -> T:
+    "rqsrt"
+    ext = g.make_node("Sqrt", [x], name="rsqrt")
+    res = g.op.Reciprocal(ext, outputs=outputs, name="rsqrt")
     if not sts:
         set_type_shape_unary_op(g, outputs[0], x)
     return res
@@ -5291,7 +5979,7 @@ def aten_triu(
     diagonal: int = 0,
 ) -> T:
     """trilu"""
-    res = g.op.Trilu(x, diagonal, upper=1, name="triu")
+    res = g.op.Trilu(x, diagonal, upper=1, name="triu", outputs=outputs)
     if not sts:
         set_type_shape_unary_op(g, res, x)
     return res
@@ -5362,6 +6050,53 @@ def aten_unbind_int(
             g.set_type(o, t)
             g.get_shape(o, new_shape)
     return res
+
+
+def aten_unfold(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    dimension: int,
+    size: int,
+    step: int,
+    name: str = "unfold",
+) -> T:
+    "unfold"
+    assert g.has_shape(
+        x
+    ), f"Not implemented when x={x!r} has no shape{g.get_debug_msg()}"
+    shape = g.get_shape(x)
+    sizedim = shape[dimension]
+    assert is_static_dimension(sizedim), (
+        f"Dynamic shape is not implemented for x={x!r} and shape={shape!r}"
+        f"{g.get_debug_msg()}"
+    )
+
+    stack = [
+        g.op.Slice(
+            x,
+            np.array([low], dtype=np.int64),
+            np.array([hi], dtype=np.int64),
+            np.array([dimension], dtype=np.int64),
+            name=name,
+        )
+        for low, hi in zip(range(0, sizedim, step), range(size, sizedim + 1, step))
+    ]
+    rk = len(shape)
+    perm = list(range(rk))
+    perm.append(perm.pop(dimension))
+    unsqueeze = [
+        g.op.UnsqueezeAnyOpset(
+            g.op.Transpose(t, perm=perm, name=name),
+            np.array([dimension], dtype=np.int64),
+            name=name,
+        )
+        for t in stack
+    ]
+    if len(unsqueeze) == 1:
+        return g.op.Identity(unsqueeze[0], name=name, outputs=outputs)
+    return g.op.Concat(*unsqueeze, axis=dimension, name=name, outputs=outputs)
 
 
 def aten_unsqueeze(
@@ -5453,6 +6188,36 @@ def aten_upsample_nearest2d(
     )
 
 
+def aten_upsample_nearest3d(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    output_size: T,
+    scales_d: Optional[float] = None,
+    scales_h: Optional[float] = None,
+    scales_w: Optional[float] = None,
+    name: str = "upsample_nearest3d",
+) -> T:
+    """resize"""
+    assert output_size is not None, "Not implemented when size is None"
+    assert scales_d is None, f"Not impelmented when scales_h={scales_h}"
+    assert scales_h is None, f"Not impelmented when scales_h={scales_h}"
+    assert scales_w is None, f"Not impelmented when scales_h={scales_w}"
+
+    return _aten_upsample_output_size(
+        g,
+        sts,
+        outputs,
+        x,
+        output_size,
+        mode="nearest",
+        coordinate_transformation_mode="asymmetric",
+        d=3,
+        name=name,
+    )
+
+
 def _upsample_compute_output_size(input_size, output_size, scale_factors):
     spatial_dimensions = len(input_size) - 2
     if output_size is not None:
@@ -5474,6 +6239,57 @@ def _upsample_compute_output_size(input_size, output_size, scale_factors):
     raise AssertionError("Either scale_factors or output_size must be specified.")
 
 
+def aten_upsample_bicubic2d(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    output_size: T,
+    align_corners: bool,
+    scales_d: Optional[float] = None,
+    scales_h: Optional[float] = None,
+    name: str = "upsample_bicubic2d",
+) -> T:
+    """resize"""
+    assert output_size is not None, "Not implemented when size is None"
+    assert scales_d is None, f"Not impelmented when scales_h={scales_h}"
+    assert scales_h is None, f"Not impelmented when scales_h={scales_h}"
+
+    return _aten_upsample_output_size(
+        g,
+        sts,
+        outputs,
+        x,
+        output_size,
+        mode="cubic",
+        coordinate_transformation_mode=(
+            "align_corners" if align_corners else "pytorch_half_pixel"
+        ),
+        d=2,
+        name=name,
+    )
+
+
+def aten_upsample_bicubic2d_vec(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    output_size: T,
+    align_corners: bool,
+    scale_factors: Optional[Sequence[float]] = None,
+    name: str = "upsample_bicubic2d_vec",
+) -> T:
+    """resize"""
+    assert g.has_shape(x), f"Not implemented when {x!r} has no shape{g.get_debug_msg()}"
+    osize = _upsample_compute_output_size(g.get_shape(x), output_size, scale_factors)
+    # scales = (
+    #     scale_factors if scale_factors else [None] * len(osize)
+    # )
+    scales = [None, None, None]
+    return aten_upsample_bicubic2d(g, sts, outputs, x, osize, *scales, name=name)
+
+
 def aten_upsample_nearest2d_vec(
     g: GraphBuilder,
     sts: Optional[Dict[str, Any]],
@@ -5491,6 +6307,78 @@ def aten_upsample_nearest2d_vec(
     # )
     scales = [None, None]
     return aten_upsample_nearest2d(g, sts, outputs, x, osize, *scales, name=name)
+
+
+def aten_upsample_nearest3d_vec(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    output_size: Optional[T] = None,
+    scale_factors: Optional[List[int]] = None,
+    name: str = "upsample_nearest3d_vec",
+) -> T:
+    "resize"
+    assert g.has_shape(x), f"Not implemented when {x!r} has no shape{g.get_debug_msg()}"
+    osize = _upsample_compute_output_size(g.get_shape(x), output_size, scale_factors)
+    # scales = (
+    #     scale_factors if scale_factors else [None] * len(osize)
+    # )
+    scales = [None, None, None]
+    return aten_upsample_nearest3d(g, sts, outputs, x, osize, *scales, name=name)
+
+
+def aten_upsample_trilinear3d(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    output_size: T,
+    align_corners: bool,
+    scales_d: Optional[float] = None,
+    scales_h: Optional[float] = None,
+    scales_w: Optional[float] = None,
+    name: str = "upsample_trilinear3d",
+) -> T:
+    """resize"""
+    assert output_size is not None, "Not implemented when size is None"
+    assert scales_d is None, f"Not impelmented when scales_h={scales_h}"
+    assert scales_h is None, f"Not impelmented when scales_h={scales_h}"
+    assert scales_w is None, f"Not impelmented when scales_h={scales_w}"
+
+    return _aten_upsample_output_size(
+        g,
+        sts,
+        outputs,
+        x,
+        output_size,
+        mode="linear",
+        coordinate_transformation_mode=(
+            "align_corners" if align_corners else "pytorch_half_pixel"
+        ),
+        d=3,
+        name=name,
+    )
+
+
+def aten_upsample_trilinear3d_vec(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    output_size: T,
+    align_corners: bool,
+    scale_factors: Optional[Sequence[float]] = None,
+    name: str = "upsample_trilinear3d_vec",
+) -> T:
+    """resize"""
+    assert g.has_shape(x), f"Not implemented when {x!r} has no shape{g.get_debug_msg()}"
+    osize = _upsample_compute_output_size(g.get_shape(x), output_size, scale_factors)
+    # scales = (
+    #     scale_factors if scale_factors else [None] * len(osize)
+    # )
+    scales = [None, None, None]
+    return aten_upsample_trilinear3d(g, sts, outputs, x, osize, *scales, name=name)
 
 
 def aten_view(

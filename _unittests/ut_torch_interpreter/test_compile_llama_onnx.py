@@ -6,6 +6,7 @@ from experimental_experiment.ext_test_case import (
     ExtTestCase,
     ignore_warnings,
     skipif_ci_windows,
+    skipif_ci_apple,
     requires_torch,
     requires_cuda,
     requires_onnxruntime_training,
@@ -19,6 +20,28 @@ from experimental_experiment.torch_dynamo import (
 
 
 class TestDynamoLlama(ExtTestCase):
+
+    @classmethod
+    def setUp(cls):
+        import torch
+
+        if hasattr(torch._dynamo.variables.misc, "LoggingLoggerVariable"):
+            cls._old_value = (
+                torch._dynamo.variables.misc.LoggingLoggerVariable.call_method
+            )
+            torch._dynamo.variables.misc.LoggingLoggerVariable.call_method = (
+                lambda *_, **__: None
+            )
+
+    @classmethod
+    def tearDown(cls):
+        import torch
+
+        if hasattr(torch._dynamo.variables.misc, "LoggingLoggerVariable"):
+            torch._dynamo.variables.misc.LoggingLoggerVariable.call_method = (
+                cls._old_value
+            )
+
     @ignore_warnings((UserWarning, DeprecationWarning))
     def test_aaaa(self):
         from transformers import LlamaConfig
@@ -390,6 +413,7 @@ class TestDynamoLlama(ExtTestCase):
 
     @ignore_warnings((UserWarning, DeprecationWarning))
     @skipif_ci_windows("torch.compile not supported on Windows")
+    @skipif_ci_apple("torch.compile fails")
     def test_llama_attention_backward(self):
         from experimental_experiment.torch_models.llama_helper import (
             get_llama_attention,

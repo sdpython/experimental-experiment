@@ -9,6 +9,7 @@ from ._bash_bench_models_helper import (
 
 
 class ExplicitRunner(BenchmarkRunner):
+    SUITE = "Explicit"
     MODELS: Dict[str, Callable] = {}
 
     @classmethod
@@ -90,7 +91,7 @@ class ExplicitRunner(BenchmarkRunner):
             dtype=self.dtype,
             warmup=self.warmup,
             repeat=self.repeat,
-            suite="Explicit",
+            suite=self.SUITE,
             wrap_kind="nowrap",
         )
 

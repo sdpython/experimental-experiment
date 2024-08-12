@@ -2,7 +2,7 @@ from typing import Any, Callable, List, Optional, Sequence, Set, Tuple
 import numpy as np
 from onnx import NodeProto, TensorProto
 from onnx.helper import np_dtype_to_tensor_dtype, tensor_dtype_to_np_dtype
-from ..xbuilder.shape_helper import STATIC_SHAPE, is_static_shape, all_int
+from ..xbuilder._shape_helper import STATIC_SHAPE, is_static_shape, all_int
 from ..xbuilder._dtype_helper import dtype_to_tensor_dtype, torch_dtype_to_onnx_dtype
 
 
@@ -477,7 +477,7 @@ def _set_shape_type_op_any_reduce(self: "GraphBuilder", node: NodeProto):  # noq
     if axes is None:
         if len(node.input) == 2:
             assert self.is_constant(node.input[1]), (
-                f"axes from node {node.op_type}, "
+                f"axes {node.input[1]!r} from node {node.op_type}, "
                 f"name={node.name!r} is not a constant, "
                 f"the new shape cannot be infered{self.get_debug_msg()}"
             )

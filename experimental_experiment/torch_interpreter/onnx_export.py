@@ -1,4 +1,6 @@
+import contextlib
 import inspect
+import pprint
 import time
 import warnings
 from typing import Any, Callable, Dict, Optional, Sequence, Set, Tuple, Union
@@ -170,6 +172,23 @@ def _export(
     return res
 
 
+@contextlib.contextmanager
+def bypass_export_some_errors():
+    """
+    Tries to bypass some functions torch.export.export does not
+    support such as ``torch.jit.isinstance``.
+    """
+    import torch.jit
+
+    f = torch.jit.isinstance
+    torch.jit.isinstance = isinstance
+
+    try:
+        yield
+    finally:
+        torch.jit.isinstance = f
+
+
 def _make_builder_interpreter(
     mod: Union["torch.nn.Module", "torch.fx.GraphModule"],  # noqa: F821
     args: Optional[Sequence["torch.Tensor"]] = None,  # noqa: F821
@@ -213,6 +232,17 @@ def _make_builder_interpreter(
     :return: onnx model
     """
 
+    def _get(x, att=None):
+        if att is None:
+            if isinstance(x, dict):
+                return list(sorted(x))
+            if isinstance(x, list):
+                return x
+            return [x]
+        if hasattr(x, att):
+            return _get(getattr(x, att))
+        return ["?"]
+
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         import torch
@@ -227,16 +257,17 @@ def _make_builder_interpreter(
         constants = mod.state_dict()
         mapping = {}
     else:
-        exported_mod = _export(
-            mod,
-            args,
-            tracing_mode=tracing_mode,
-            dynamic_shapes=dynamic_shapes,
-            same_signature=same_signature,
-            decomposition_table=decomposition_table,
-            use_dynamo=use_dynamo,
-            strict=strict,
-        )
+        with bypass_export_some_errors():
+            exported_mod = _export(
+                mod,
+                args,
+                tracing_mode=tracing_mode,
+                dynamic_shapes=dynamic_shapes,
+                same_signature=same_signature,
+                decomposition_table=decomposition_table,
+                use_dynamo=use_dynamo,
+                strict=strict,
+            )
 
         if verbose > 0:
             msg = ", ".join(
@@ -283,13 +314,20 @@ def _make_builder_interpreter(
                     k in constants
                     or k[2:] in constants
                     or k[2:] in sig_mismatch_constants
+                    or k[2:].replace("getattr_l__self", "getattr_L__self") in constants
                 ), (
-                    f"A constant {k!r}, v={v!r} was detected "
+                    f"A constant {k!r}, k[2:]={k[2:]!r}, v={v!r} was detected "
                     f"in the signature was not retrieved from the model. "
-                    f"\nlist(constants)={list(sorted(constants))}"
+                    f"k in constants={k in constants}, "
+                    f"k[2:] in constants={k[2:] in constants}, "
+                    f"type(constants)={type(constants)}, "
+                    f"\nlist(constants)={pprint.pformat(list(sorted(constants)))}"
                     f"\nexported_mod.tensor_constants="
-                    f"{getattr(exported_mod, 'tensor_constants', '?')}"
-                    f"\nexported_mod._constants={getattr(exported_mod, '_constants', '?')}"
+                    f"{pprint.pformat(_get(exported_mod, 'tensor_constants'))}"
+                    f"\nexported_mod._constants="
+                    f"{pprint.pformat(_get(exported_mod, '_constants'))}"
+                    f"\nsig_mismatch_constants="
+                    f"{pprint.pformat(_get(sig_mismatch_constants))}"
                     f"\ndir(export_mod)={dir(exported_mod)}"
                     f"\ndir(mod)={dir(mod)}"
                 )

@@ -13,6 +13,7 @@ from ._bash_bench_set_dummies import Neuron, Neuron16, NeuronTuple, Neuron2Outpu
 
 
 class HuggingfaceRunner(BenchmarkRunner):
+    SUITE = "HuggingFace"
     imports = [
         "AlbertForPreTraining",
         "AutoConfig",
@@ -550,7 +551,7 @@ class HuggingfaceRunner(BenchmarkRunner):
             dtype=self.dtype,
             warmup=self.warmup,
             repeat=self.repeat,
-            suite="HuggingFace",
+            suite=self.SUITE,
         )
 
     def iter_model_names(self):

@@ -296,7 +296,7 @@ class GraphBuilderPatternOptimization:
                 ), f"Unexpected number of attribute for node={proto}"
                 for att in proto.attribute:
                     if att.name == "value":
-                        return tuple(proto.value.dims)
+                        return tuple(att.t.dims)
                     if att.name in {"value_float", "value_int"}:
                         return tuple()
                 raise AssertionError(
@@ -698,7 +698,7 @@ class GraphBuilderPatternOptimization:
 
         if all(self.is_constant(i) for i in inputs):
             for o in outputs:
-                self.builder.constants_[o] = proto
+                self.builder.update_node_constant(o, proto)
             proto.doc_string += ":constant-5:"
 
         assert len(outputs) == len(set(outputs)) or "" in outputs, (

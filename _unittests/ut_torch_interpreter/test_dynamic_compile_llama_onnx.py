@@ -30,6 +30,27 @@ def implements(name: str) -> bool:
 
 class TestDynamoLlamaDynamic(ExtTestCase):
     @classmethod
+    def setUp(cls):
+        import torch
+
+        if hasattr(torch._dynamo.variables.misc, "LoggingLoggerVariable"):
+            cls._old_value = (
+                torch._dynamo.variables.misc.LoggingLoggerVariable.call_method
+            )
+            torch._dynamo.variables.misc.LoggingLoggerVariable.call_method = (
+                lambda *_, **__: None
+            )
+
+    @classmethod
+    def tearDown(cls):
+        import torch
+
+        if hasattr(torch._dynamo.variables.misc, "LoggingLoggerVariable"):
+            torch._dynamo.variables.misc.LoggingLoggerVariable.call_method = (
+                cls._old_value
+            )
+
+    @classmethod
     def get_input_dims(cls, dynamic: bool):
         if dynamic:
             input_dims = ((2, 8), (4, 7), (9, 15))

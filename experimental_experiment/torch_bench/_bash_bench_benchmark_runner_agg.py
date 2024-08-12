@@ -94,16 +94,6 @@ def _SELECTED_FEATURES():
             simple=True,
         ),
         dict(
-            cat="status",
-            agg="MEAN",
-            stat="pass_rate",
-            new_name="pass rate",
-            unit="%",
-            help="Proportion of models successfully converted into ONNX, "
-            "with a maximum discrepancy < 0.1 and a speedup > 0.98.",
-            simple=True,
-        ),
-        dict(
             cat="time",
             agg="COUNT",
             stat="export_success",
@@ -123,6 +113,15 @@ def _SELECTED_FEATURES():
             help="Proportion of models successfully converted into ONNX. "
             "The ONNX model may not be run through onnxruntime or with "
             "significant discrepancies.",
+        ),
+        dict(
+            cat="status",
+            agg="SUM",
+            stat="accuracy_rate",
+            new_name="accuracy number",
+            unit="N",
+            help="Number of models successfully converted into ONNX. "
+            "It may be slow but the discrepancies are < 0.1.",
             simple=True,
         ),
         dict(
@@ -132,18 +131,6 @@ def _SELECTED_FEATURES():
             new_name="run number",
             unit="N",
             help="Number of models successfully converted into ONNX "
-            "and onnxruntime can run it. "
-            "The outputs may be right or wrong. Unit test ensures every aten functions "
-            "is correctly converted but the combination may produce outputs "
-            "with higher discrepancies than expected.",
-        ),
-        dict(
-            cat="speedup",
-            agg="COUNT%",
-            stat="increase",
-            new_name="run rate",
-            unit="%",
-            help="Proportion of models successfully converted into ONNX "
             "and onnxruntime can run it. "
             "The outputs may be right or wrong. Unit test ensures every aten functions "
             "is correctly converted but the combination may produce outputs "
@@ -172,78 +159,78 @@ def _SELECTED_FEATURES():
         # e-1
         dict(
             cat="status",
-            agg="MEAN",
+            agg="SUM",
             stat="err<1e-1",
             new_name="discrepancies < 0.1",
-            unit="%",
-            help="Proportion of models for which the maximum discrepancies is "
+            unit="N",
+            help="Number of models for which the maximum discrepancies is "
             "below 0.1 for all outputs.",
             simple=True,
         ),
         dict(
             cat="status",
-            agg="MEAN",
+            agg="SUM",
             stat="err_0<1e-1",
             new_name="discrepancies first output < 0.1",
-            unit="%",
+            unit="N",
             help="Proportion of models for which the maximum discrepancies is "
             "below 0.1 for the first output.",
         ),
         dict(
             cat="status",
-            agg="MEAN",
+            agg="SUM",
             stat="err_1+<1e-1",
             new_name="discrepancies second+ output < 0.1",
-            unit="%",
-            help="Proportion of models for which the maximum discrepancies is "
+            unit="N",
+            help="Number of models for which the maximum discrepancies is "
             "below 0.1 for all the outputs except the first one.",
         ),
         # e-2
         dict(
             cat="status",
-            agg="MEAN",
+            agg="SUM",
             stat="err<1e-2",
             new_name="discrepancies < 0.01",
-            unit="%",
-            help="Proportion of models for which the maximum discrepancies is "
+            unit="N",
+            help="Number of models for which the maximum discrepancies is "
             "below 0.01 for all outputs.",
         ),
         dict(
             cat="status",
-            agg="MEAN",
+            agg="SUM",
             stat="err_0<1e-2",
             new_name="discrepancies first output < 0.01",
-            unit="%",
-            help="Proportion of models for which the maximum discrepancies is "
+            unit="N",
+            help="Number of models for which the maximum discrepancies is "
             "below 0.01 for the first output.",
         ),
         dict(
             cat="status",
-            agg="MEAN",
+            agg="SUM",
             stat="err_1+<1e-2",
             new_name="discrepancies second+ output < 0.01",
-            unit="%",
-            help="Proportion of models for which the maximum discrepancies is "
+            unit="N",
+            help="Number of models for which the maximum discrepancies is "
             "below 0.01 for all the outputs except the first one.",
         ),
         dict(
             cat="status",
-            agg="MEAN",
+            agg="SUM",
             stat="lat<=script+2%",
             new_name="model equal or faster than torch.script",
-            unit="%",
-            help="Proportion of models successfully converted with torch.script "
+            unit="N",
+            help="Number of models successfully converted with torch.script "
             "and the other exporter, and the second exporter is as fast or faster "
             "than torch.script.",
             simple=True,
         ),
         dict(
             cat="status",
-            agg="MEAN",
+            agg="SUM",
             stat="lat<=eager+2%",
             new_name="model equal or faster than eager",
-            unit="%",
-            help="Proportion of models as fast or faster than torch eager mode.",
+            unit="N",
+            help="Number of models as fast or faster than torch eager mode.",
             simple=True,
         ),
         dict(
@@ -273,25 +260,6 @@ def _SELECTED_FEATURES():
             help="Average maximum absolute discrepancies "
             "assuming it can be measured (lower is better).",
         ),
-        # dict(
-        #    cat="discrepancies",
-        #    stat="abs_0",
-        #    agg="MEAN",
-        #    new_name="average absolute discrepancies first output",
-        #    unit="f",
-        #    help="Average maximum absolute discrepancies "
-        #    "for the first output assuming it can be measured (lower is better).",
-        # ),
-        # dict(
-        #    cat="discrepancies",
-        #    stat="abs_1+",
-        #    agg="MEAN",
-        #    new_name="average absolute discrepancies second+ output",
-        #    unit="f",
-        #    help="Average maximum absolute discrepancies "
-        #    "for all the outputs except the first one "
-        #    "assuming it can be measured (lower is better).",
-        # ),
         dict(
             cat="time",
             agg="MEAN",
@@ -448,11 +416,11 @@ def _SELECTED_FEATURES():
         features.append(
             dict(
                 cat="bucket",
-                agg="MEAN",
+                agg="SUM",
                 stat=b,
                 new_name=f"speedup/script in {bs}" if s else f"speedup in {bs}",
-                unit="%",
-                help=f"Proportion of models whose speedup against {ag} "
+                unit="N",
+                help=f"Number of models whose speedup against {ag} "
                 f"falls into this interval",
                 simple=True,
             )
@@ -967,6 +935,7 @@ def merge_benchmark_reports(
         "op_*",
         "memory_*",
         "mem_*",
+        "config_*",
     ),
     formulas=(
         "memory_peak",
@@ -975,6 +944,7 @@ def merge_benchmark_reports(
         "memory_delta",
         "control_flow",
         "pass_rate",
+        "accuracy_rate",
         "date",
     ),
     excel_output: Optional[str] = None,
@@ -1331,12 +1301,21 @@ def merge_benchmark_reports(
                 report_on.append("status_pass_rate")
             continue
 
+        if expr == "accuracy_rate":
+            if "discrepancies_abs" in set_columns:
+                col = df["discrepancies_abs"] <= 0.1
+                df["status_accuracy_rate"] = col.astype(int)
+                df.loc[df["discrepancies_abs"].isna(), "status_accuracy_rate"] = np.nan
+                report_on.append("status_accuracy_rate")
+            continue
+
         if expr == "date":
             if "date_start" in set_columns:
                 df["status_date"] = (
                     pandas.to_datetime(df["date_start"]).astype("int64").astype(float)
                     / 1e9
                 )
+                set_columns = set(df.columns)
                 report_on.append("status_date")
             continue
 
@@ -1360,6 +1339,7 @@ def merge_benchmark_reports(
                     ~df["discrepancies_abs"].isna()
                     & (df["time_latency"] <= df["time_latency_eager"] * 1.02)
                 ).astype(int)
+                set_columns = set(df.columns)
                 report_on.extend(
                     [
                         "status_convert_ort",
@@ -1381,10 +1361,33 @@ def merge_benchmark_reports(
                 gr = df[df.exporter == expo][keep].copy()
                 gr["status_control_flow"] = gr["time_export_success"].isna().astype(int)
                 gr = gr.drop("time_export_success", axis=1)
-                on = [k for k in keep[:-1] if k != "exporter"]
+
+                if "opt_patterns" in gr.columns and len(set(gr.opt_patterns)) == 1:
+                    on = [k for k in keep[:-1] if k not in ("exporter", "opt_patterns")]
+                else:
+                    on = [k for k in keep[:-1] if k != "exporter"]
                 joined = pandas.merge(df, gr, left_on=on, right_on=on, how="left")
-                df = joined.drop("exporter_y", axis=1).copy()
-                df["exporter"] = df["exporter_x"]
+
+                assert (
+                    df.shape[0] == joined.shape[0]
+                ), f"Shape mismatch after join {df.shape} -> {joined.shape}"
+                df = joined.copy()
+                if "exporter_x" in df.columns:
+                    df["exporter"] = df["exporter_x"]
+                if "opt_patterns_x" in df.columns:
+                    df["opt_patterns"] = df["opt_patterns_x"]
+                drop = [
+                    c
+                    for c in [
+                        "exporter_x",
+                        "exporter_y",
+                        "opt_patterns_x",
+                        "opt_patterns_y",
+                    ]
+                    if c in df.columns
+                ]
+                df = df.drop(drop, axis=1)
+                set_columns = set(df.columns)
                 report_on.append("status_control_flow")
             continue
 
@@ -1401,18 +1404,35 @@ def merge_benchmark_reports(
                 gr = gr[~gr["speedup"].isna()]
                 gr["speedup_script"] = gr["speedup"]
                 gr = gr.drop("speedup", axis=1)
-                on = [k for k in keep[:-1] if k != "exporter"]
+
+                if "opt_patterns" in gr.columns and len(set(gr.opt_patterns)) == 1:
+                    on = [k for k in keep[:-1] if k not in ("exporter", "opt_patterns")]
+                else:
+                    on = [k for k in keep[:-1] if k != "exporter"]
                 joined = pandas.merge(df, gr, left_on=on, right_on=on, how="left")
-                joined["speedup_increase_script"] = (
-                    joined["speedup"] / joined["speedup_script"] - 1
+
+                assert (
+                    df.shape[0] == joined.shape[0]
+                ), f"Shape mismatch after join {df.shape} -> {joined.shape}"
+                df = joined.copy()
+                df["speedup_increase_script"] = (
+                    df["speedup"] / df["speedup_script"] - 1
                 ).fillna(np.inf)
-                assert joined.shape[0] == df.shape[0], (
-                    f"Join issue df.shape={df.shape}, joined.shaped={joined.shape}, "
-                    f"gr.shape={gr.shape}"
-                )
-                df = joined.drop("exporter_y", axis=1).copy()
-                df["exporter"] = df["exporter_x"]
-                df = df.drop("exporter_x", axis=1)
+                if "exporter_x" in df.columns:
+                    df["exporter"] = df["exporter_x"]
+                if "opt_patterns_x" in df.columns:
+                    df["opt_patterns"] = df["opt_patterns_x"]
+                drop = [
+                    c
+                    for c in [
+                        "exporter_x",
+                        "exporter_y",
+                        "opt_patterns_x",
+                        "opt_patterns_y",
+                    ]
+                    if c in df.columns
+                ]
+                df = df.drop(drop, axis=1)
                 set_columns = set(df.columns)
                 df["status_lat<=script+2%"] = (
                     df["speedup_increase_script"] >= (1 / 1.02 - 1)
@@ -1461,7 +1481,7 @@ def merge_benchmark_reports(
     if verbose:
         print("[merge_benchmark_reports] remove empty variables")
 
-    for _, v in res.items():
+    for v in res.values():
         drop = []
         for c in v.columns:
             if all(v[c].isna()) or set(v[c]) == {"-"}:
@@ -1622,6 +1642,7 @@ def merge_benchmark_reports(
         "mempeak_",
         "speedup_",
         "bucket_",
+        "config_",
     ]:
         merge = [k for k in res if k.startswith(prefix)]
         merge.sort()
@@ -1765,6 +1786,31 @@ def merge_benchmark_reports(
         res["AGG2"], select=SELECTED_FEATURES, prefix="SUMMARY2"
     )
 
+    # adding dates
+    df0 = final_res["0raw"]
+    date_col = [
+        c
+        for c in ["DATE", "suite", "exporter", "opt_patterns", "dtype"]
+        if c in df0.columns
+    ]
+    if verbose:
+        print(f"[merge_benchmark_reports] add dates with columns={date_col}")
+    date_col2 = [c for c in date_col if c != "DATE"]
+    assert len(date_col2) != len(
+        date_col
+    ), f"No date found in {list(sorted(df0.columns))}"
+    final_res["dates"] = df0[date_col].groupby(date_col2).max().reset_index(drop=False)
+    date_col2 = [c for c in date_col2 if c in final_res["SIMPLE"]]
+    assert "suite" in date_col2, f"Unable to find 'suite' in {date_col2}"
+    simple = final_res["SIMPLE"].merge(
+        final_res["dates"], left_on=date_col2, right_on=date_col2, how="left"
+    )
+    assert simple.shape[0] == final_res["SIMPLE"].shape[0], (
+        f"Some rows were added or deleted {final_res['SIMPLE'].shape} -> "
+        f"{simple.shape}"
+    )
+    final_res["SIMPLE"] = simple
+
     if verbose:
         print(
             f"[merge_benchmark_reports] done with shapes "
@@ -1812,9 +1858,8 @@ def merge_benchmark_reports(
 
                 final_res[f"{name}_diff"] = df_num.sort_index(axis=1)
 
-    # cleaning empty raw and columns
+    # cleaning empty columns
     for v in final_res.values():
-        v.dropna(axis=0, how="all", inplace=True)
         v.dropna(axis=1, how="all", inplace=True)
 
     if excel_output:
@@ -1846,8 +1891,6 @@ def merge_benchmark_reports(
                 *last_sheet,
             ]
             order = [k for k in order if k in final_res]
-            if verbose:
-                print("[merge_benchmark_reports] some reordering")
             for k in order:
                 v = final_res[k]
                 ev = _reverse_column_names_order(v, name=k)
@@ -1865,15 +1908,23 @@ def merge_benchmark_reports(
                     k in {"AGG2", "SUMMARY2", "SUMMARY2_base", "SUMMARY2_diff"}
                     and "suite" in ev.columns.names
                 ):
+                    if verbose:
+                        print(f"[merge_benchmark_reports] reorder {k!r} (1)")
                     ev = _reorder_columns_level(ev, first_level=["suite"], prefix=k)
                 elif k == "MODELS":
+                    if verbose:
+                        print(f"[merge_benchmark_reports] reorder {k!r} (2)")
                     ev = _reorder_columns_level(ev, first_level=["#order"], prefix=k)
+                if verbose:
+                    print(f"[merge_benchmark_reports] add {k!r} to {excel_output!r}")
                 ev.to_excel(
                     writer,
                     sheet_name=k,
                     index=k not in no_index,
                     freeze_panes=(frow, fcol) if k not in no_index else None,
                 )
+                if verbose:
+                    print(f"[merge_benchmark_reports] added {k!r} to {excel_output!r}")
             _apply_excel_style(final_res, writer, verbose=verbose)
             if verbose:
                 print(f"[merge_benchmark_reports] save in {excel_output!r}")
@@ -2068,8 +2119,12 @@ def _create_aggregation_figures(
             return df
 
         gr_no_nan = v.fillna(0).groupby(key)
-        total = gr_no_nan.count()
-        is_nan = gr_no_nan.count() - gr.count() == total
+        with warnings.catch_warnings():
+            warnings.simplefilter(
+                "ignore", category=(FutureWarning, PerformanceWarning)
+            )
+            total = gr_no_nan.count()
+            is_nan = gr_no_nan.count() - gr.count() == total
         stats = [
             ("NAN", _propnan(is_nan.astype(int), is_nan)),
             ("MEAN", gr.mean()),
@@ -2301,7 +2356,7 @@ def _select_metrics(
             df.columns = [str(c) for c in df.columns]
             dfs.append(df[~df["value"].isna()])
         dfi = pandas.concat(dfs, axis=0).reset_index(drop=True)
-    return dfi, suites
+    return dfi.sort_index(axis=1), suites
 
 
 def _filter_data(

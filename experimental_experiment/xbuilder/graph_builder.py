@@ -20,13 +20,14 @@ from onnx.external_data_helper import uses_external_data
 from onnx.model_container import make_large_tensor_proto
 from onnx.shape_inference import infer_shapes as onnx_infer_shapes
 from experimental_experiment.reference import ExtendedReferenceEvaluator
-from .shape_helper import (
+from ._shape_helper import (
     DYNAMIC_SHAPE,
     STATIC_SHAPE,
     all_int,
     all_int_or_str,
     is_static_dimension,
     is_static_shape,
+    _reshape_shape,
 )
 from .shape_type_compute import set_shape_type_op_any, set_shape_type_custom
 from ._onnx_helper import (
@@ -518,6 +519,7 @@ class GraphBuilder:
         exc: bool = True,
         computed_value: bool = False,
         as_shape: bool = False,
+        multiple_outputs: bool = False,
     ) -> Union[np.ndarray, NodeProto]:
         """
         The method returns the constant *name*. It is a tensor (numpy array)
@@ -529,9 +531,13 @@ class GraphBuilder:
         :param exc: raise an exception if anything is impossible to do
         :param computed_value: compute the value if not a constant
         :param as_shape: returns a tuple for a shape
+        :param multiple_outputs: allow multiple outputs
         :return: value
         """
         if as_shape:
+            assert (
+                not multiple_outputs
+            ), "multiple outputs not allowed with as_shape=True"
             res = self.get_constant(
                 name, exc, computed_value=computed_value, as_shape=False
             )
@@ -541,6 +547,10 @@ class GraphBuilder:
                     f"computed_value={computed_value}, as_shape={as_shape}"
                 )
                 return None
+
+            assert multiple_outputs or not isinstance(
+                res, tuple
+            ), f"Multiple output is not allowed but type is {type(res)} for name={name!r}"
             new_res = []
             for i in res:
                 if isinstance(i, str):
@@ -550,11 +560,18 @@ class GraphBuilder:
             return tuple(new_res)
 
         if not self.is_constant(name):
-            raise ValueError(f"Result {name!r} is not a constant{self.get_debug_msg()}")
+            if exc:
+                raise ValueError(
+                    f"Result {name!r} is not a constant{self.get_debug_msg()}"
+                )
+            return None
         possible_value = self.constants_[name]
         if name in self.constants_computed_:
             value = self.constants_computed_[name]
             assert value is not None, f"Constant is empty for name={name!r}"
+            assert multiple_outputs or not isinstance(
+                value, tuple
+            ), f"Multiple output is not allowed but type is {type(value)} for name={name!r}"
             return value
 
         if possible_value is not None:
@@ -565,17 +582,47 @@ class GraphBuilder:
                 f"constant{self.get_debug_msg()}"
             )
             if computed_value and isinstance(possible_value, NodeProto):
-                res = self.compute_constant(name, exc=exc)[0]
+                res, _ = self.compute_constant(name, exc=exc)
                 if res is None:
                     # The constant is too big to be computed.
                     return None
+
+                assert multiple_outputs or not isinstance(res, tuple), (
+                    f"Multiple output is not allowed but type is {type(res)} "
+                    f"for name={name!r}"
+                )
+                assert not multiple_outputs, (
+                    f"get_constants not implemented when multiple_outputs=True, "
+                    f"name={name!r}"
+                )
+                if not isinstance(res, tuple):
+                    return res
+
+                assert isinstance(res, tuple), (
+                    f"Expecting multiple outputs for name={name!r}, "
+                    f"op_type={possible_value.op_type!r}"
+                )
                 if len(res) == 1:
+                    assert multiple_outputs or not isinstance(value, tuple), (
+                        f"Multiple output is not allowed but type is {type(value)} "
+                        f"for name={name!r}"
+                    )
                     return res[0]
+
                 index = list(possible_value.output).index(name)
                 value = res[index]
                 assert value is not None, f"Constant is empty for name={name!r}"
+                assert multiple_outputs or not isinstance(value, tuple), (
+                    f"Multiple output is not allowed but type is {type(value)} "
+                    f"for name={name!r}"
+                )
                 return value
+
             assert possible_value is not None, f"Constant is empty for name={name!r}"
+            assert multiple_outputs or not isinstance(possible_value, tuple), (
+                f"Multiple output is not allowed but type is {type(possible_value)} "
+                f"for name={name!r}"
+            )
             return possible_value
 
         if name not in self.initializers_dict:
@@ -589,10 +636,15 @@ class GraphBuilder:
 
         if isinstance(value, np.ndarray):
             return value
+
         if isinstance(value, self.torch.Tensor):
             v = value.detach().cpu().numpy()
             self.constants_computed_[name] = v
+            assert (
+                not multiple_outputs
+            ), f"Multiple output is not allowed for name={name!r}"
             return v
+
         if isinstance(value, TensorProto):
             if uses_external_data(value):
                 if exc:
@@ -602,8 +654,12 @@ class GraphBuilder:
                     )
                 return None
             v = onh.to_array(value)
+            assert (
+                not multiple_outputs
+            ), f"Multiple output is not allowed for name={name!r}"
             self.constants_computed_[name] = v
             return v
+
         raise TypeError(f"Unable to convert type {type(value)} into numpy array.")
 
     def is_sequence(self, name: str) -> bool:
@@ -1374,7 +1430,7 @@ class GraphBuilder:
         self.set_type(name, itype)
         self.set_name(name)
         self.initializers_dict[name] = value
-        self.constants_[name] = None
+        self.update_node_constant(name, None)
         if self.verbose and (self.verbose > 1 or np.prod(value.shape) > 100):
             print(
                 f"[GraphBuilder-{self._hash()}.make_initializer] {name}[{itype}:{shape}]"
@@ -2302,6 +2358,11 @@ class GraphBuilder:
     ):
         if node.domain != "":
             return
+
+        if all(self.is_constant(i) for i in node.input):
+            for o in node.output:
+                self.update_node_constant(o, node)
+
         if node.op_type == "Constant":
             if len(node.attribute) == 1 and node.attribute[0].name == "value":
                 size = np.prod(node.attribute[0].t.dims)
@@ -2312,7 +2373,7 @@ class GraphBuilder:
                 f"the constant: {size} >= {self.optimization_options.constant_size}."
             )
             k = node.output[0]
-            self.constants_[k] = node
+            self.update_node_constant(k, node)
             node.doc_string += ":constant-3:"
             shape = self._get_tensor_shape(node)
             dtype = self._get_tensor_type(node)
@@ -2320,6 +2381,19 @@ class GraphBuilder:
             self.set_type(k, dtype)
             if self.verbose and (self.verbose > 3 or np.prod(shape) > 100):
                 print(f"[GraphBuilder-{self._hash()}.make_node] {k}[{dtype}:{shape}]")
+        elif node.op_type == "ConstantOfShape":
+            if len(node.attribute) == 1 and node.attribute[0].name == "value":
+                itype = node.attribute[0].t.data_type
+            else:
+                itype = TensorProto.FLOAT
+            self.set_type(node.output[0], itype)
+            if self.is_constant(node.input[0]):
+                value = self.get_constant(
+                    node.input[0], computed_value=True, as_shape=True
+                )
+                if value is not None:
+                    self.set_shape(node.output[0], value)
+                    node.doc_string += ":constant-9:"
         elif node.op_type == "Identity":
             if self.has_shape(node.input[0]):
                 self.set_shape(node.output[0], self.get_shape(node.input[0]))
@@ -2328,8 +2402,36 @@ class GraphBuilder:
             if self.has_type(node.input[0]):
                 self.set_type(node.output[0], self.get_type(node.input[0]))
             if self.is_constant(node.input[0]):
-                self.constants_[node.output[0]] = node
+                self.update_node_constant(node.output[0], node)
                 node.doc_string += ":constant-4:"
+        elif node.op_type == "Expand":
+            if self.has_type(node.input[0]):
+                self.set_type(node.output[0], self.get_type(node.input[0]))
+            if self.is_constant(node.input[1]):
+                cst, _ = self.compute_constant(
+                    node.input[1], exc=False, only_array=True
+                )
+                if cst is not None:
+                    self.set_shape(node.output[0], tuple(int(i) for i in cst))
+        elif node.op_type == "Reshape":
+            self.set_type(node.output[0], self.get_type(node.input[0]))
+            if self.is_constant(node.input[1]):
+                cst, _ = self.compute_constant(
+                    node.input[1], exc=False, only_array=True
+                )
+                if cst is not None:
+                    shape_cst = tuple(int(i) for i in cst)
+                    if -1 in shape_cst:
+                        if self.has_shape(node.input[0]):
+                            sh = self.get_shape(node.input[0])
+                            if is_static_shape(sh):
+                                self.set_shape(
+                                    node.output[0], _reshape_shape(sh, shape_cst)
+                                )
+                                node.doc_string += ":constant-7:"
+                    else:
+                        self.set_shape(node.output[0], shape_cst)
+                        node.doc_string += ":constant-7:"
         elif node.op_type == "Shape":
             self.set_type(node.output[0], TensorProto.INT64)
             if self.has_shape(node.input[0]) and len(node.attribute) == 0:
@@ -2338,17 +2440,8 @@ class GraphBuilder:
             else:
                 self.set_rank(node.output[0], 1)
             if self.is_constant(node.input[0]):
-                self.constants_[node.output[0]] = node
+                self.update_node_constant(node.output[0], node)
                 node.doc_string += ":constant-2:"
-        elif all(map(self.is_constant, node.input)) and "Random" not in node.op_type:
-            node.doc_string += ":constant-1:"
-            for o in node.output:
-                self.constants_[o] = node
-            if len(node.output) == 1:
-                cst, _ = self.compute_constant(node.output[0], exc=False)
-                if cst is not None:
-                    self.set_type(node.output[0], dtype_to_tensor_dtype(cst[0].dtype))
-                    self.set_shape(node.output[0], tuple(cst[0].shape))
         elif not sts:
             if node.op_type == "GatherElements":
                 if self.has_type(node.input[0]):
@@ -2357,6 +2450,18 @@ class GraphBuilder:
                     self.set_shape(node.output[0], self.get_shape(node.input[1]))
                 elif self.has_rank(node.input[1]):
                     self.set_rank(node.output[0], self.get_rank(node.input[1]))
+
+    def update_node_constant(self, name: str, node: NodeProto):
+        assert isinstance(name, str), f"Unexpected type {type(name)} for name"
+        assert node is None or isinstance(
+            node, NodeProto
+        ), f"Unexpected type {type(node)} for name={name!r}"
+        if self.verbose and self.verbose > 2:
+            print(
+                f"[GraphBuilder.update_node_constant] new constant "
+                f"{name!r}, node={None if node is None else node.op_type}"
+            )
+        self.constants_[name] = node
 
     def get_attribute(
         self, node: NodeProto, att_name: str, exc: bool = True
@@ -2434,7 +2539,7 @@ class GraphBuilder:
                 value.name = name
             self.initializers_dict[name] = value
 
-            self.constants_[name] = None
+            self.update_node_constant(name, None)
             self.set_name(name)
             self.set_shape(name, builder._known_shapes[init])
             self.set_type(name, builder._known_types[init])
@@ -2749,6 +2854,9 @@ class GraphBuilder:
         )
         rows.append(f"_known_types={pprint.pformat(self._known_types)[:10000]}")
         rows.append(f"_known_shapes={pprint.pformat(self._known_shapes)[:10000]}")
+        rows.append(
+            f"_known_constants={pprint.pformat(list(sorted(self.constants_))[:10000])}"
+        )
         reminaing_ranks = {
             k: v for k, v in self._known_ranks.items() if k not in self._known_shapes
         }
@@ -3367,6 +3475,65 @@ class GraphBuilder:
             x = self.torch.Tensor(x).to(ttype)
         return [self.torch.permute(x, perm).to(x.dtype)]
 
+    def _apply_expand(
+        self,
+        node: NodeProto,
+        feeds: Dict[str, "torch.Tensor"],  # noqa: F821
+    ) -> "torch.Tensor":  # noqa: F821
+        x = feeds[node.input[0]]
+        new_shape = feeds[node.input[1]]
+        if isinstance(x, self.torch.Tensor):
+            return [x.expand(tuple(int(i) for i in new_shape))]
+        ones = np.ones(tuple(int(i) for i in new_shape), dtype=x.dtype)
+        return [(x * ones).astype(x.dtype)]
+
+    def _apply_squeeze(
+        self,
+        node: NodeProto,
+        feeds: Dict[str, "torch.Tensor"],  # noqa: F821
+    ) -> "torch.Tensor":  # noqa: F821
+        x = feeds[node.input[0]]
+        axis = feeds[node.input[1]]
+        return [x.squeeze(tuple(int(i) for i in axis))]
+
+    def _apply_unsqueeze(
+        self,
+        node: NodeProto,
+        feeds: Dict[str, "torch.Tensor"],  # noqa: F821
+    ) -> "torch.Tensor":  # noqa: F821
+        x = feeds[node.input[0]]
+        axis = feeds[node.input[1]]
+        if isinstance(x, np.ndarray):
+            return [np.expand_dims(x, tuple(int(i) for i in axis))]
+        if len(axis) == 1:
+            return [x.unsqueeze(int(axis[0]))]
+        raise AssertionError(f"Not implemented for axis={axis}")
+
+    def _apply_cast(
+        self,
+        node: NodeProto,
+        feeds: Dict[str, "torch.Tensor"],  # noqa: F821
+    ) -> "torch.Tensor":  # noqa: F821
+        to, saturate = None, 1
+        for att in node.attribute:
+            if att.name == "to":
+                to = att.i
+                break
+            if att.name == "saturate":
+                saturate = att.i
+                break
+        assert to, f"to not here in node {node}"
+        assert to <= 11, f"Cast not implemented for to={to}"
+        del saturate
+        x = feeds[node.input[0]]
+        if isinstance(x, np.ndarray):
+            # Type conversion between numpy and torch is not robust.
+            itype = dtype_to_tensor_dtype(x.dtype)
+            ttype = onnx_dtype_to_torch_dtype(itype)
+            x = self.torch.Tensor(x).to(ttype)
+        ttype = onnx_dtype_to_torch_dtype(to)
+        return [x.to(ttype)]
+
     def _apply_trilu(
         self,
         node: NodeProto,
@@ -3404,18 +3571,57 @@ class GraphBuilder:
         iak = int(k) if len(k.shape) == 0 else int(k[0])
         return [np.triu(x, iak) if upper else np.tril(x, iak)]
 
+    def _apply_binary_op(
+        self,
+        node: NodeProto,
+        feeds: Dict[str, "torch.Tensor"],  # noqa: F821
+    ) -> "torch.Tensor":  # noqa: F821
+        a, b = feeds[node.input[0]], feeds[node.input[1]]
+        if a.dtype != b.dtype:
+            a = self.torch.Tensor(a)
+            b = self.torch.Tensor(b)
+        if node.op_type == "Add":
+            return [a + b]
+        if node.op_type == "Mul":
+            return [a * b]
+        if node.op_type == "Sub":
+            return [a - b]
+        if node.op_type == "Div":
+            return [a / b]
+        raise AssertionError(f"{node.op_type!r} not implemented")
+
     def compute_constant(
-        self, name: str, exc: bool = True
+        self, name: str, exc: bool = True, only_array: bool = False
     ) -> Tuple[np.ndarray, Optional[Dict[str, np.ndarray]]]:
+        """
+        Computes a constant.
+
+        :param name: constant name
+        :param exc: raises an exception if any failure
+        :param only_array: do not return TensorProto
+        :return: constant
+        """
         assert self.is_constant(name), f"Name {name!r} is not a constant."
-        if name is self.initializers_dict:
-            return self.initializers_dict[name], None
+        if name in self.initializers_dict:
+            value = self.initializers_dict[name]
+            assert not isinstance(
+                value, tuple
+            ), f"Unexpected type {type(value)} for name={name!r}"
+            if only_array and isinstance(value, TensorProto):
+                # Should reuse memory buffer here.
+                v = onh.to_array(value)
+                self.initializers_dict[name] = v
+                return v, None
+            return value, None
+
         v = self.constants_[name]
+        # It should not be None but a node as it is not an initializer.
         assert isinstance(v, NodeProto), f"Unexpected type {type(v)} for name={name!r}"
         feeds = {i: self.get_constant(i, exc=exc, computed_value=True) for i in v.input}
         for val in feeds.values():
             if val is None:
                 return None, None
+
         if v.op_type == "Identity":
             # much faster this way
             output = [feeds[v.input[0]]]
@@ -3425,7 +3631,22 @@ class GraphBuilder:
         elif v.op_type == "Trilu":
             # bypassing onnx.numpy_helper.from_array, too slow
             output = self._apply_trilu(v, feeds)
-        else:
+        elif v.op_type == "Cast":
+            # bypassing onnx.numpy_helper.from_array, too slow
+            output = self._apply_cast(v, feeds)
+        elif v.op_type == "Expand":
+            # bypassing onnx.numpy_helper.from_array, too slow
+            output = self._apply_expand(v, feeds)
+        elif v.op_type == "Unsqueeze":
+            # bypassing onnx.numpy_helper.from_array, too slow
+            output = self._apply_unsqueeze(v, feeds)
+        elif v.op_type == "Squeeze":
+            # bypassing onnx.numpy_helper.from_array, too slow
+            output = self._apply_squeeze(v, feeds)
+        elif v.op_type in {"Mul", "Add", "Sub", "Div"}:
+            # bypassing onnx.numpy_helper.from_array, too slow
+            output = self._apply_binary_op(v, feeds)
+        elif all(isinstance(v, np.ndarray) for v in feeds.values()):
             # Let's avoid big computation on CPU.
             max_dim = 0
             for _v in feeds.values():
@@ -3438,11 +3659,12 @@ class GraphBuilder:
                         f"{[_.shape for _ in feeds.values()]}"
                     )
                 return None, None
+
             begin = time.perf_counter()
             ref = ExtendedReferenceEvaluator(v)
             try:
                 output = ref.run(None, feeds)
-            except ValueError as e:
+            except (ValueError, TypeError) as e:
                 sf = ", ".join(f"{k}:{v.dtype}:{v.shape}" for k, v in feeds.items())
                 if "warnings" not in self._debug_msg:
                     self._debug_msg["warnings"] = []
@@ -3452,20 +3674,30 @@ class GraphBuilder:
                 )
                 self.time_evaluation_constants_ += time.perf_counter() - begin
                 return None, None
+
             self.time_evaluation_constants_ += time.perf_counter() - begin
-        new_outputs = []
-        for name, val in zip(v.output, output):
-            if self.has_type(name):
+        else:
+            return None, None
+
+        cst = None
+        for n, val in zip(v.output, output):
+            assert not isinstance(
+                val, tuple
+            ), f"Unexpected type {type(val)} for n={n!r}"
+            if self.has_type(n):
                 # numpy changes the expected type sometimes
                 # (like transpose(x: float36) --> float32)
-                itype = self.get_type(name)
+                itype = self.get_type(n)
                 if hasattr(val, "detach"):
                     val = val.to(onnx_dtype_to_torch_dtype(itype))
                 else:
                     val = val.astype(oh.tensor_dtype_to_np_dtype(itype))
-            self.constants_computed_[name] = val
-            new_outputs.append(val)
-        return new_outputs, feeds
+            self.constants_computed_[n] = val
+            if name == n:
+                cst = val
+
+        assert cst is not None, f"Constant {name!r} was not found in {v.output}"
+        return cst, feeds
 
     def constant_folding(self, convert_into_initializer: bool = True) -> int:
         """
@@ -3490,18 +3722,24 @@ class GraphBuilder:
             if v is None:
                 # this is an initiliazer
                 continue
+            assert isinstance(v, NodeProto), f"Unexpected type {type(v)} for k={k!r}"
             # a node
             if all(map(self.is_constant, v.input)):
+                # node evaluation
+                output, feeds = self.compute_constant(k, exc=False)
+                if output is None:
+                    # Evaluation failed.
+                    continue
                 if convert_into_initializer:
                     node_to_remove.add(tuple(v.output))
-                # node evaluation
-                output, feeds = self.compute_constant(k)
+                if not isinstance(output, tuple):
+                    output = (output,)
                 for name, value in zip(v.output, output):
                     updates[name] = None
                     if convert_into_initializer:
                         self.initializers_dict[name] = value
                     else:
-                        updates[name] = value
+                        updates[name] = v
                     if self.verbose > 3:
                         print(
                             f"[GraphBuilder.constant_folding] fold_constant:"
@@ -3509,7 +3747,9 @@ class GraphBuilder:
                             f"{value.shape}]:from:{','.join(sorted(feeds))}"
                         )
 
-        self.constants_.update(updates)
+        for k, v in updates.items():
+            self.update_node_constant(k, v)
+
         new_nodes = []
         for node in self.nodes:
             if self.do_not_remove(node):
@@ -3640,7 +3880,7 @@ class GraphBuilder:
                 self.initializers_dict[v] = self.initializers_dict[k]
                 del self.initializers_dict[k]
                 assert self.constants_[v]
-                self.constants_[v] = self.constants_[k]
+                self.update_node_constant(v, self.constants_[k])
                 del self.constants_[k]
 
         # third pass: replacements in node
@@ -4097,7 +4337,7 @@ class GraphBuilder:
             available_shapes = {}
 
         for k, v in self.initializers_dict.items():
-            self.constants_[k] = None
+            self.update_node_constant(k, None)
             self._unique_names.add(k)
             self.set_name(k)
             self.set_shape(k, self._get_tensor_shape(v))
@@ -4220,7 +4460,7 @@ class GraphBuilder:
                     self.add_constant_node(node)
                     replaced = False
 
-                self.constants_[node.output[0]] = node
+                self.update_node_constant(node.output[0], node)
                 if not self.has_name(node.output[0]):
                     self.set_name(node.output[0])
 
@@ -4245,7 +4485,7 @@ class GraphBuilder:
                     self.add_constant_node(node)
                     replaced = False
 
-                self.constants_[node.output[0]] = node
+                self.update_node_constant(node.output[0], node)
                 if not self.has_name(node.output[0]):
                     self.set_name(node.output[0])
 

@@ -1,8 +1,8 @@
 import gc
 import os
 import pickle
-import time
 import sys
+import time
 from datetime import datetime
 from typing import Any, Dict, Iterator, List, Optional, Set, Tuple, Union
 
@@ -243,9 +243,7 @@ class BenchmarkRunner:
         cls, opt_stats: List[Dict[str, Any]]
     ) -> Dict[str, Any]:
         """
-        Example:
-
-        ::
+        Example::
 
             [{'pattern': 'check_A', 'time_in': 0.004310695920139551},
              {'pattern': 'remove_identity_nodes', 'removed': 393, 'added': 243,
