@@ -560,7 +560,11 @@ class GraphBuilder:
             return tuple(new_res)
 
         if not self.is_constant(name):
-            raise ValueError(f"Result {name!r} is not a constant{self.get_debug_msg()}")
+            if exc:
+                raise ValueError(
+                    f"Result {name!r} is not a constant{self.get_debug_msg()}"
+                )
+            return None
         possible_value = self.constants_[name]
         if name in self.constants_computed_:
             value = self.constants_computed_[name]
@@ -2850,7 +2854,9 @@ class GraphBuilder:
         )
         rows.append(f"_known_types={pprint.pformat(self._known_types)[:10000]}")
         rows.append(f"_known_shapes={pprint.pformat(self._known_shapes)[:10000]}")
-        rows.append(f"_known_constants={pprint.pformat(list(self.constants_)[:10000])}")
+        rows.append(
+            f"_known_constants={pprint.pformat(list(sorted(self.constants_))[:10000])}"
+        )
         reminaing_ranks = {
             k: v for k, v in self._known_ranks.items() if k not in self._known_shapes
         }
@@ -3476,7 +3482,10 @@ class GraphBuilder:
     ) -> "torch.Tensor":  # noqa: F821
         x = feeds[node.input[0]]
         new_shape = feeds[node.input[1]]
-        return [x.expand(tuple(int(i) for i in new_shape))]
+        if isinstance(x, self.torch.Tensor):
+            return [x.expand(tuple(int(i) for i in new_shape))]
+        ones = np.ones(tuple(int(i) for i in new_shape), dtype=x.dtype)
+        return [(x * ones).astype(x.dtype)]
 
     def _apply_squeeze(
         self,
@@ -3496,7 +3505,9 @@ class GraphBuilder:
         axis = feeds[node.input[1]]
         if isinstance(x, np.ndarray):
             return [np.expand_dims(x, tuple(int(i) for i in axis))]
-        return [x.unsqueeze(tuple(int(i) for i in axis))]
+        if len(axis) == 1:
+            return [x.unsqueeze(int(axis[0]))]
+        raise AssertionError(f"Not implemented for axis={axis}")
 
     def _apply_cast(
         self,
@@ -3560,6 +3571,25 @@ class GraphBuilder:
         iak = int(k) if len(k.shape) == 0 else int(k[0])
         return [np.triu(x, iak) if upper else np.tril(x, iak)]
 
+    def _apply_binary_op(
+        self,
+        node: NodeProto,
+        feeds: Dict[str, "torch.Tensor"],  # noqa: F821
+    ) -> "torch.Tensor":  # noqa: F821
+        a, b = feeds[node.input[0]], feeds[node.input[1]]
+        if a.dtype != b.dtype:
+            a = self.torch.Tensor(a)
+            b = self.torch.Tensor(b)
+        if node.op_type == "Add":
+            return [a + b]
+        if node.op_type == "Mul":
+            return [a * b]
+        if node.op_type == "Sub":
+            return [a - b]
+        if node.op_type == "Div":
+            return [a / b]
+        raise AssertionError(f"{node.op_type!r} not implemented")
+
     def compute_constant(
         self, name: str, exc: bool = True, only_array: bool = False
     ) -> Tuple[np.ndarray, Optional[Dict[str, np.ndarray]]]:
@@ -3613,7 +3643,10 @@ class GraphBuilder:
         elif v.op_type == "Squeeze":
             # bypassing onnx.numpy_helper.from_array, too slow
             output = self._apply_squeeze(v, feeds)
-        else:
+        elif v.op_type in {"Mul", "Add", "Sub", "Div"}:
+            # bypassing onnx.numpy_helper.from_array, too slow
+            output = self._apply_binary_op(v, feeds)
+        elif all(isinstance(v, np.ndarray) for v in feeds.values()):
             # Let's avoid big computation on CPU.
             max_dim = 0
             for _v in feeds.values():
@@ -3643,6 +3676,8 @@ class GraphBuilder:
                 return None, None
 
             self.time_evaluation_constants_ += time.perf_counter() - begin
+        else:
+            return None, None
 
         cst = None
         for n, val in zip(v.output, output):
@@ -3690,10 +3725,13 @@ class GraphBuilder:
             assert isinstance(v, NodeProto), f"Unexpected type {type(v)} for k={k!r}"
             # a node
             if all(map(self.is_constant, v.input)):
+                # node evaluation
+                output, feeds = self.compute_constant(k, exc=False)
+                if output is None:
+                    # Evaluation failed.
+                    continue
                 if convert_into_initializer:
                     node_to_remove.add(tuple(v.output))
-                # node evaluation
-                output, feeds = self.compute_constant(k)
                 if not isinstance(output, tuple):
                     output = (output,)
                 for name, value in zip(v.output, output):

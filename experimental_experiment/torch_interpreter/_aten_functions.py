@@ -4332,15 +4332,60 @@ def aten_repeat(
     return res
 
 
-def aten_rsqrt(
-    g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T
+def aten_roll(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    shifts: List[int],
+    dims: List[int],
+    name: str = "roll",
 ) -> T:
-    "rqsrt"
-    ext = g.make_node("Sqrt", [x], name="rsqrt")
-    res = g.op.Reciprocal(ext, outputs=outputs, name="rsqrt")
-    if not sts:
-        set_type_shape_unary_op(g, outputs[0], x)
-    return res
+    "roll"
+    assert len(shifts) == len(
+        dims
+    ), f"Unexpected values for shifts={shifts} and dims={dims}{g.get_debug_msg()}"
+
+    shape_x = g.get_shape(x) if g.has_shape(x) else None
+    shape_xx = None
+
+    result = x
+    for i in range(len(shifts)):
+        shapes = []
+        if shape_x is not None and is_static_dimension(shape_x[dims[i]]):
+            shape = g.op.Slice(
+                result,
+                np.array([-shifts[i]], dtype=np.int64),
+                np.array([shape_x[dims[i]]], dtype=np.int64),
+                np.array([dims[i]], dtype=np.int64),
+                name=name,
+            )
+        else:
+            if shape_xx is None:
+                shape_xx = g.op.Shape(x, name=name)
+            dim = g.op.Gather(shape_xx, np.array([dims[i]], dtype=np.int64), name=name)
+            shape = g.op.Slice(
+                result,
+                np.array([-shifts[i]], dtype=np.int64),
+                dim,
+                np.array([dims[i]], dtype=np.int64),
+                name=name,
+            )
+        shapes.append(shape)
+        shape = g.op.Slice(
+            result,
+            np.array([dims[i]], dtype=np.int64),
+            np.array([0], dtype=np.int64),
+            np.array([-shifts[i]], dtype=np.int64),
+            name=name,
+        )
+        shapes.append(shape)
+        result = g.op.Concat(*shapes, axis=dims[i], name=name)
+        g.set_type(result, g.get_type(x))
+        if g.has_shape(x):
+            g.set_shape(result, g.get_shape(x))
+
+    return g.op.Identity(result, name=name, outputs=outputs)
 
 
 def aten_round(
@@ -4348,6 +4393,17 @@ def aten_round(
 ) -> T:
     "round"
     res = g.make_node("Round", [x], outputs, name="round")
+    if not sts:
+        set_type_shape_unary_op(g, outputs[0], x)
+    return res
+
+
+def aten_rsqrt(
+    g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T
+) -> T:
+    "rqsrt"
+    ext = g.make_node("Sqrt", [x], name="rsqrt")
+    res = g.op.Reciprocal(ext, outputs=outputs, name="rsqrt")
     if not sts:
         set_type_shape_unary_op(g, outputs[0], x)
     return res
@@ -5819,7 +5875,7 @@ def aten_triu(
     diagonal: int = 0,
 ) -> T:
     """trilu"""
-    res = g.op.Trilu(x, diagonal, upper=1, name="triu")
+    res = g.op.Trilu(x, diagonal, upper=1, name="triu", outputs=outputs)
     if not sts:
         set_type_shape_unary_op(g, res, x)
     return res
