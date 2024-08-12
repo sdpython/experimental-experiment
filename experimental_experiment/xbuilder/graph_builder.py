@@ -2372,6 +2372,19 @@ class GraphBuilder:
             self.set_type(k, dtype)
             if self.verbose and (self.verbose > 3 or np.prod(shape) > 100):
                 print(f"[GraphBuilder-{self._hash()}.make_node] {k}[{dtype}:{shape}]")
+        elif node.op_type == "ConstantOfShape":
+            if len(node.attribute) == 1 and node.attribute[0].name == "value":
+                itype = node.attribute[0].t.data_type
+            else:
+                itype = TensorProto.FLOAT
+            self.set_type(node.output[0], itype)
+            if self.is_constant(node.input[0]):
+                value = self.get_constant(
+                    node.input[0], computed_value=True, as_shape=True
+                )
+                if value is not None:
+                    self.set_shape(node.output[0], value)
+                    node.doc_string += ":constant-9:"
         elif node.op_type == "Identity":
             if self.has_shape(node.input[0]):
                 self.set_shape(node.output[0], self.get_shape(node.input[0]))
@@ -2394,8 +2407,9 @@ class GraphBuilder:
         elif node.op_type == "Reshape":
             self.set_type(node.output[0], self.get_type(node.input[0]))
             if self.is_constant(node.input[1]):
-                temp = self.compute_constant(node.input[1], exc=False, only_array=True)
-                cst, _ = temp
+                cst, _ = self.compute_constant(
+                    node.input[1], exc=False, only_array=True
+                )
                 if cst is not None:
                     shape_cst = tuple(int(i) for i in cst)
                     if -1 in shape_cst:
@@ -2419,15 +2433,6 @@ class GraphBuilder:
             if self.is_constant(node.input[0]):
                 self.update_node_constant(node.output[0], node)
                 node.doc_string += ":constant-2:"
-        elif all(map(self.is_constant, node.input)) and "Random" not in node.op_type:
-            node.doc_string += ":constant-1:"
-            for o in node.output:
-                self.update_node_constant(o, node)
-            if len(node.output) == 1:
-                cst, _ = self.compute_constant(node.output[0], exc=False)
-                if cst is not None:
-                    self.set_type(node.output[0], dtype_to_tensor_dtype(cst[0].dtype))
-                    self.set_shape(node.output[0], tuple(cst[0].shape))
         elif not sts:
             if node.op_type == "GatherElements":
                 if self.has_type(node.input[0]):
@@ -3462,6 +3467,26 @@ class GraphBuilder:
         new_shape = feeds[node.input[1]]
         return [x.expand(tuple(int(i) for i in new_shape))]
 
+    def _apply_squeeze(
+        self,
+        node: NodeProto,
+        feeds: Dict[str, "torch.Tensor"],  # noqa: F821
+    ) -> "torch.Tensor":  # noqa: F821
+        x = feeds[node.input[0]]
+        axis = feeds[node.input[1]]
+        return [x.squeeze(tuple(int(i) for i in axis))]
+
+    def _apply_unsqueeze(
+        self,
+        node: NodeProto,
+        feeds: Dict[str, "torch.Tensor"],  # noqa: F821
+    ) -> "torch.Tensor":  # noqa: F821
+        x = feeds[node.input[0]]
+        axis = feeds[node.input[1]]
+        if isinstance(x, np.ndarray):
+            return [x.expand_dims(tuple(int(i) for i in axis))]
+        return [x.unsqueeze(tuple(int(i) for i in axis))]
+
     def _apply_cast(
         self,
         node: NodeProto,
@@ -3571,6 +3596,12 @@ class GraphBuilder:
         elif v.op_type == "Expand":
             # bypassing onnx.numpy_helper.from_array, too slow
             output = self._apply_expand(v, feeds)
+        elif v.op_type == "Unsqueeze":
+            # bypassing onnx.numpy_helper.from_array, too slow
+            output = self._apply_unsqueeze(v, feeds)
+        elif v.op_type == "Squeeze":
+            # bypassing onnx.numpy_helper.from_array, too slow
+            output = self._apply_squeeze(v, feeds)
         else:
             # Let's avoid big computation on CPU.
             max_dim = 0
