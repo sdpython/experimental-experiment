@@ -1363,13 +1363,11 @@ def merge_benchmark_reports(
                 gr = df[df.exporter == expo][keep].copy()
                 gr["status_control_flow"] = gr["time_export_success"].isna().astype(int)
                 gr = gr.drop("time_export_success", axis=1)
-
                 if "opt_patterns" in gr.columns and len(set(gr.opt_patterns)) == 1:
                     on = [k for k in keep[:-1] if k not in ("exporter", "opt_patterns")]
                 else:
                     on = [k for k in keep[:-1] if k != "exporter"]
                 joined = pandas.merge(df, gr, left_on=on, right_on=on, how="left")
-
                 assert (
                     df.shape[0] == joined.shape[0]
                 ), f"Shape mismatch after join {df.shape} -> {joined.shape}"
