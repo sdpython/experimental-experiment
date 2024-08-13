@@ -921,6 +921,8 @@ def merge_benchmark_reports(
         "version_torch",
         "version_transformers",
         "version_monai",
+        "version_timm",
+        "version_torch_onnx",
     ),
     column_keys=("stat", "exporter", "opt_patterns"),
     report_on=(

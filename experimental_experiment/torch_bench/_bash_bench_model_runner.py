@@ -233,6 +233,7 @@ class ModelRunner:
         warmup: int,
         repeat: int,
         suite: str,
+        autocast: bool = False,
         wrap_kind: Optional[None] = None,
     ):
         if dtype is None:
@@ -315,8 +316,13 @@ class ModelRunner:
         self.repeat = repeat
         self.warmup = warmup
         self.suite = suite
+        self.autocast = autocast
+        assert self.autocast is not None
 
     def run(self) -> Any:
+        if self.autocast:
+            with torch.autocast(device_type=self.device, dtype=self.dtype):
+                return self.model(*self.inputs)
         return self.model(*self.inputs)
 
     def compute_weight_size(self) -> int:
@@ -553,17 +559,32 @@ class ModelRunner:
         else:
             options = None
 
-        with torch.no_grad():
-            onx, stats = to_onnx(
-                self.model,
-                self.inputs,
-                optimize=bool(optimization),
-                large_model=True,
-                verbose=10 if verbose >= 100 else (1 if verbose > 1 else 0),
-                target_opset=target_opset,
-                return_optimize_report=True,
-                options=options,
-            )
+        if self.autocast:
+            with torch.autocast(
+                device_type=self.device, dtype=self.dtype
+            ), torch.no_grad():
+                onx, stats = to_onnx(
+                    self.model,
+                    self.inputs,
+                    optimize=bool(optimization),
+                    large_model=True,
+                    verbose=10 if verbose >= 100 else (1 if verbose > 1 else 0),
+                    target_opset=target_opset,
+                    return_optimize_report=True,
+                    options=options,
+                )
+        else:
+            with torch.no_grad():
+                onx, stats = to_onnx(
+                    self.model,
+                    self.inputs,
+                    optimize=bool(optimization),
+                    large_model=True,
+                    verbose=10 if verbose >= 100 else (1 if verbose > 1 else 0),
+                    target_opset=target_opset,
+                    return_optimize_report=True,
+                    options=options,
+                )
         begin = time.perf_counter()
         onx.save(name)
         stats["time_export_save"] = time.perf_counter() - begin
@@ -597,15 +618,28 @@ class ModelRunner:
         else:
             inputs = self.inputs
 
-        with torch.no_grad():
-            torch.onnx.export(
-                self.model,
-                inputs,
-                name,
-                do_constant_folding=False,
-                opset_version=target_opset,
-                verbose=max(verbose - 1, 0),
-            )
+        if self.autocast:
+            with torch.autocast(
+                device_type=self.device, dtype=self.dtype
+            ), torch.no_grad():
+                torch.onnx.export(
+                    self.model,
+                    inputs,
+                    name,
+                    do_constant_folding=False,
+                    opset_version=target_opset,
+                    verbose=max(verbose - 1, 0),
+                )
+        else:
+            with torch.no_grad():
+                torch.onnx.export(
+                    self.model,
+                    inputs,
+                    name,
+                    do_constant_folding=False,
+                    opset_version=target_opset,
+                    verbose=max(verbose - 1, 0),
+                )
 
         if not optimization:
             return onnx.load(name, load_external_data=False), None
@@ -660,15 +694,28 @@ class ModelRunner:
         def _clean(s):
             return s.replace(".", "_")
 
-        with torch.no_grad():
-            torch.onnx.export(
-                self.model,
-                self.inputs,
-                name,
-                do_constant_folding=False,
-                opset_version=target_opset,
-                dynamo=True,
-            )
+        if self.autocast:
+            with torch.autocast(
+                device_type=self.device, dtype=self.dtype
+            ), torch.no_grad():
+                torch.onnx.export(
+                    self.model,
+                    self.inputs,
+                    name,
+                    do_constant_folding=False,
+                    opset_version=target_opset,
+                    dynamo=True,
+                )
+        else:
+            with torch.no_grad():
+                torch.onnx.export(
+                    self.model,
+                    self.inputs,
+                    name,
+                    do_constant_folding=False,
+                    opset_version=target_opset,
+                    dynamo=True,
+                )
         sarif = "report_dynamo_export.sarif"
         if os.path.exists(sarif):
             folder = os.path.split(name)[0]
@@ -708,15 +755,28 @@ class ModelRunner:
         assert no_grad, "no_grad false not implemented yet"
         stats = {}
 
-        with torch.no_grad():
-            exported = torch.onnx.dynamo_export(
-                self.model,
-                *self.inputs,
-                export_options=torch.onnx.ExportOptions(
-                    dynamic_shapes=dynamic,
-                    # registry=torch.onnx.OnnxRegistry()
-                ),
-            )
+        if self.autocast:
+            with torch.autocast(
+                device_type=self.device, dtype=self.dtype
+            ), torch.no_grad():
+                exported = torch.onnx.dynamo_export(
+                    self.model,
+                    *self.inputs,
+                    export_options=torch.onnx.ExportOptions(
+                        dynamic_shapes=dynamic,
+                        # registry=torch.onnx.OnnxRegistry()
+                    ),
+                )
+        else:
+            with torch.no_grad():
+                exported = torch.onnx.dynamo_export(
+                    self.model,
+                    *self.inputs,
+                    export_options=torch.onnx.ExportOptions(
+                        dynamic_shapes=dynamic,
+                        # registry=torch.onnx.OnnxRegistry()
+                    ),
+                )
 
         begin = time.perf_counter()
         exported.save(name)
@@ -866,10 +926,20 @@ class ModelRunner:
         ):
             return gm.forward
 
-        with torch.no_grad():
-            res = torch.compile(
-                self.model, fullgraph=True, backend=lambda gm, inputs: gm.forward
-            )
+        if self.autocast:
+            with torch.autocast(
+                device_type=self.device, dtype=self.dtype
+            ), torch.no_grad():
+                res = torch.compile(
+                    self.model,
+                    fullgraph=True,
+                    backend=lambda gm, inputs: gm.forward,
+                )
+        else:
+            with torch.no_grad():
+                res = torch.compile(
+                    self.model, fullgraph=True, backend=lambda gm, inputs: gm.forward
+                )
         return res, None
 
     def _to_inductor(
@@ -889,8 +959,14 @@ class ModelRunner:
             not optimization
         ), f"optimization {optimization!r} not compatible with inductor"
 
-        with torch.no_grad():
-            res = torch.compile(self.model, backend="inductor", fullgraph=True)
+        if self.autocast:
+            with torch.autocast(
+                device_type=self.device, dtype=self.dtype
+            ), torch.no_grad():
+                res = torch.compile(self.model, backend="inductor", fullgraph=True)
+        else:
+            with torch.no_grad():
+                res = torch.compile(self.model, backend="inductor", fullgraph=True)
         return res, None
 
     def _to_dort(
@@ -910,8 +986,14 @@ class ModelRunner:
             not optimization
         ), f"optimization {optimization!r} not compatible with dort"
 
-        with torch.no_grad():
-            res = torch.compile(self.model, backend="onnxrt", fullgraph=True)
+        if self.autocast:
+            with torch.autocast(
+                device_type=self.device, dtype=self.dtype
+            ), torch.no_grad():
+                res = torch.compile(self.model, backend="onnxrt", fullgraph=True)
+        else:
+            with torch.no_grad():
+                res = torch.compile(self.model, backend="onnxrt", fullgraph=True)
         return res, None
 
     def make_feeds(self, exporter: str, filename: Optional[str] = None):
