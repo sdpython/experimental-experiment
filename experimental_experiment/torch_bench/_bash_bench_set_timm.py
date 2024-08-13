@@ -12,6 +12,7 @@ xcit_large_24_p8_224	aten.div'_ overload='Tensor_mode')
 
 import importlib
 import io
+import pprint
 import textwrap
 from typing import Any, Optional, Set, Tuple
 import torch
@@ -301,6 +302,11 @@ class TimmRunner(BenchmarkRunner):
                 if model_name not in models:
                     continue
                 container.TIMM_MODELS[model_name] = int(batch_size)
+        for c in ["convit_base"]:
+            assert c in expected, f"Unable to find {c!r} in {pprint.pformat(expected)}"
+            assert (
+                c in container.TIMM_MODELS
+            ), f"Unable to find {c!r} in {pprint.pformat(container.TIMM_MODELS)}"
 
     @classmethod
     def _get_module_cls_by_model_name(container, model_cls_name):
@@ -489,7 +495,7 @@ class TimmRunner(BenchmarkRunner):
         dump_ort: bool = False,
     ):
         super().__init__(
-            "torchbench",
+            "Timm",
             device=device,
             partition_id=partition_id,
             total_partitions=total_partitions,
@@ -645,6 +651,7 @@ class TimmRunner(BenchmarkRunner):
             warmup=self.warmup,
             repeat=self.repeat,
             suite=self.SUITE,
+            autocast=self.autocast,
         )
 
     def iter_model_names(self):

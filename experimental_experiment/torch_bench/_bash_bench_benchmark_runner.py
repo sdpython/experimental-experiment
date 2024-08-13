@@ -79,9 +79,13 @@ class BenchmarkRunner:
         self.use_eval_mode = use_eval_mode
         self.enable_activation_checkpointing = enable_activation_checkpointing
         if isinstance(dtype, str):
-            self.dtype = getattr(torch, dtype) if dtype else None
+            self.dtype = (
+                getattr(torch, dtype.replace("autocast_", "")) if dtype else None
+            )
+            self.autocast = dtype.startswith("autocast_")
         else:
             self.dtype = dtype
+            self.autocast = False
         self.repeat = repeat
         self.warmup = warmup
         self.fake_tensor = fake_tensor
@@ -94,6 +98,10 @@ class BenchmarkRunner:
 
     def forward_pass(self, mod, inputs, collect_outputs=True):
         return mod(**inputs)
+
+    def forward_pass_autocast(self, mod, inputs, collect_outputs=True):
+        with torch.autocast(device_type=self.device, dtype=self.dtype):
+            return mod(**inputs)
 
     def forward_and_backward_pass(self, mod, inputs, collect_outputs=True):
         cloned_inputs = clone_inputs(inputs)
@@ -712,6 +720,7 @@ class BenchmarkRunner:
         folder=None,
         machine_specs=None,
         initial_no_grad=None,
+        autocast=None,
     ):
         assert quiet is not None
         assert exporter is not None
@@ -733,6 +742,15 @@ class BenchmarkRunner:
             import monai
         except ImportError:
             monai = None
+        try:
+            import timm
+        except ImportError:
+            timm = None
+        try:
+            import torch_onnx
+        except ImportError:
+            torch_onnx = None
+
         from experimental_experiment.bench_run import _clean_string
 
         #######
@@ -765,6 +783,12 @@ class BenchmarkRunner:
             "version_onnx": getattr(onnx, "__version__", "dev"),
             "version_monai": (
                 "-" if monai is None else getattr(monai, "__version__", "dev")
+            ),
+            "version_timm": (
+                "-" if timm is None else getattr(timm, "__version__", "dev")
+            ),
+            "version_torch_onnx": (
+                "-" if torch_onnx is None else getattr(timm, "__version__", "dev")
             ),
         }
         stats.update(machine_specs)

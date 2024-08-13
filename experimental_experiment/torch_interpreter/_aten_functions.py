@@ -2444,8 +2444,11 @@ def aten_im2col(
         g.set_type(padded_input, g.get_type(x))
 
         output = g.op.Gather(padded_input, blocks_row_indices, axis=2, name=name)
+        g.set_type(output, g.get_type(x))
         output = g.op.Gather(output, blocks_col_indices, axis=4, name=name)
+        g.set_type(output, g.get_type(x))
         output = g.op.Transpose(output, perm=[0, 1, 2, 4, 3, 5], name=name)
+        g.set_type(output, g.get_type(x))
         return g.op.Reshape(output, output_shape, outputs=outputs, name=name)
 
     raise AssertionError(
@@ -3063,6 +3066,33 @@ def aten_masked_fill_Tensor(
 ) -> T:
     "masked"
     return aten_masked_fill_Scalar(g, sts, outputs, x, mask, value, name=name)
+
+
+def aten_max_dim(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    dim: int,
+    keepdim: bool = False,
+    name: str = "max_dim",
+) -> T:
+    """maximum"""
+    axes = np.array([dim], dtype=np.int64)
+    res = g.op.ReduceMax(
+        x, axes, name=name, outputs=outputs[:1], keepdims=1 if keepdim else 0
+    )
+    if not sts:
+        set_type_shape_unary_op(g, res, x)
+    if len(outputs) == 1:
+        return res
+
+    indices = g.op.ArgMax(
+        x, axis=dim, keepdims=1 if keepdim else 0, name=name, outputs=outputs[1:]
+    )
+    if not sts:
+        g.get_type(indices, TensorProto.INT64)
+    return res, indices
 
 
 def aten_max_other(
@@ -3754,6 +3784,54 @@ def aten_cudnn_batch_norm(
         return a, b, c, d
 
     return a, b, c, d
+
+
+def aten_col2im(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    output_size: List[int],
+    kernel_size: List[int],
+    dilation: Sequence[int] = (1, 1),
+    padding: Sequence[int] = (0, 0),
+    stride: Sequence[int] = (1, 1),
+    name: str = "col2im",
+) -> T:
+    """col2im"""
+
+    assert (
+        isinstance(output_size, list) and len(output_size) == 2
+    ), f"not supported for output_size={output_size}{g.get_debug_msg()}"
+    assert (
+        isinstance(kernel_size, list) and len(kernel_size) == 2
+    ), f"not supported for kernel_size={kernel_size}{g.get_debug_msg()}"
+    assert isinstance(dilation, (tuple, list)) and (
+        len(dilation) == 2
+    ), f"not supported for dilation={dilation}{g.get_debug_msg()}"
+    assert isinstance(stride, (tuple, list)) and (
+        len(stride) == 2
+    ), f"not supported for stride={stride}{g.get_debug_msg()}"
+
+    # The pads should be [w, x, y, z] for ONNX
+    if len(padding) == 1:  # [w] -> [w, w, w, w]
+        pads = padding * 4
+    elif len(padding) == 2:  # [w, x] -> [w, x, w, x]
+        pads = padding * 2
+    else:  # assert len(padding) == 4, already [w, x, y, z]
+        pads = padding
+
+    # Only one ONNX op here so didn't write a private function
+    return g.op.Col2Im(
+        x,
+        np.array(output_size, dtype=np.int64),
+        np.array(kernel_size, dtype=np.int64),
+        dilations=list(dilation),
+        pads=list(pads),
+        strides=list(stride),
+        name=name,
+        outputs=outputs,
+    )
 
 
 def aten_ne(

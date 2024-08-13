@@ -92,6 +92,7 @@ class ExplicitRunner(BenchmarkRunner):
             warmup=self.warmup,
             repeat=self.repeat,
             suite=self.SUITE,
+            autocast=self.autocast,
             wrap_kind="nowrap",
         )
 
