@@ -2027,6 +2027,7 @@ class TestOperatorsOnnxrt(ExtTestCase):
         )
 
     @hide_stdout()
+    @requires_torch("2.5.0")
     def test_xt_dynamic_axes_matmul_ref(self):
         m1 = torch.randn(2, 2, 4, requires_grad=True)
         m2 = torch.randn(2, 4, 3, requires_grad=True)
