@@ -552,6 +552,7 @@ class HuggingfaceRunner(BenchmarkRunner):
             warmup=self.warmup,
             repeat=self.repeat,
             suite=self.SUITE,
+            autocast=self.autocast,
         )
 
     def iter_model_names(self):
