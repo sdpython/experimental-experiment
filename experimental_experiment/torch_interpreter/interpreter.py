@@ -970,6 +970,7 @@ class DynamoInterpreter:
                 f"shape inconsistency (val, example_value) "
                 f"{val.shape} != {exa.shape}{self.builder.get_debug_msg()}"
             )
+
         description = []
         last_node = self.builder.last_added_node
         if val is not None:
@@ -981,10 +982,17 @@ class DynamoInterpreter:
                 raise RuntimeError(f"Length mismatch between {val} and {res}.")
             output_sets = set(last_node.output) if last_node is not None else {}
 
-            for v, r in zip(val, res):
+            for i, (v, r) in enumerate(zip(val, res)):
                 if isinstance(v, self.torch.Tensor):
                     dtype = _get_type(v.dtype)
-                    self.builder.set_type(r, dtype)
+                    if i >= 1 and node.target.name() in {
+                        "aten::_native_batch_norm_legit.no_stats"
+                    }:
+                        # It seems the type is not very consistant
+                        # and the output might not be used.
+                        self.builder.set_type(r, dtype, exc=False)
+                    else:
+                        self.builder.set_type(r, dtype)
                     shape = tuple(v.shape)
                     if self.builder.is_dynamic_shape(shape):
                         self.builder.set_shape(r, shape, set_if_more_precise=True)

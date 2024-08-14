@@ -3677,6 +3677,10 @@ def aten__native_batch_norm(
         f"training_mode={training}{g.get_debug_msg()}"
     )
 
+    if training:
+        outs = [outputs[0], g.unique_name(f"{name}_mean"), g.unique_name(f"{name}_var")]
+    else:
+        outs = outputs[:1]
     batch_out = g.op.BatchNormalization(
         x,
         weight,
@@ -3687,11 +3691,12 @@ def aten__native_batch_norm(
         momentum=1 - momentum,
         training_mode=0 if not training else 1,
         name=name,
-        outputs=outputs if training else outputs[:1],
+        outputs=outs,
     )
-
     if training:
         norm, bmean, bvar = batch_out
+        g.set_type(bmean, TensorProto.FLOAT)
+        g.set_type(bvar, TensorProto.FLOAT)
     else:
         assert isinstance(
             batch_out, str
@@ -3711,9 +3716,9 @@ def aten__native_batch_norm(
         ), f"Not implemented when shape of {x!r} is {shape}{g.get_debug_msg()}"
         size = shape[1]
         running_mean_fp32 = g.op.ConstantOfShape(
-            np.array([size], dtype=np.int64), name=name, outputs=outputs[1:2]
+            np.array([size], dtype=np.int64), name=name
         )
-        invstd = g.op.Identity(running_mean_fp32, outputs=outputs[2:], name=name)
+        invstd = g.op.Identity(running_mean_fp32, name=name)
     elif not training:
         # CUDA and CPU gives different shapes:
         # https://github.com/pytorch/pytorch/blob/a44f8894fa6d973693aab44a3dda079a168b05c1/torch/_decomp/decompositions.py#L1451-L1457
@@ -3726,19 +3731,18 @@ def aten__native_batch_norm(
             name=name,
         )
         # https://github.com/pytorch/pytorch/blob/a44f8894fa6d973693aab44a3dda079a168b05c1/torch/_decomp/decompositions.py#L1475
-        running_mean_fp32 = g.op.Cast(
-            running_mean, to=TensorProto.FLOAT, name=name, outputs=outputs[1:2]
-        )
-        invstd = g.op.Cast(invstd, to=TensorProto.FLOAT, name=name, outputs=outputs[2:])
+        running_mean_fp32 = g.op.Cast(running_mean, to=TensorProto.FLOAT, name=name)
+        invstd = g.op.Cast(invstd, to=TensorProto.FLOAT, name=name)
     else:
         running_mean_fp32, invstd = bmean, bvar
 
     if not sts:
-        g.set_type(running_mean_fp32, TensorProto.FLOAT)
-        g.set_type(invstd, TensorProto.FLOAT)
         set_type_shape_unary_op(g, norm, x)
 
-    return norm, running_mean_fp32, invstd
+    itype = g.get_type(x)
+    m = g.op.Cast(running_mean_fp32, to=itype, name=name, outputs=outputs[1:2])
+    s = g.op.Cast(invstd, to=itype, name=name, outputs=outputs[2:3])
+    return norm, m, s
 
 
 def aten_cudnn_batch_norm(
