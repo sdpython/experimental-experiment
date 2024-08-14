@@ -1916,7 +1916,9 @@ class TestGraphPatternOptimization(ExtTestCase):
         gr = GraphBuilder(
             model,
             infer_shapes=True,
-            optimization_options=OptimizationOptions(patterns=["ExpandSwap"]),
+            optimization_options=OptimizationOptions(
+                patterns=["ExpandSwap"], verbose=0
+            ),
         )
         opt_onx = gr.to_onnx(optimize=True)
         self.assertEqual(["Pow", "Expand"], [n.op_type for n in opt_onx.graph.node])
