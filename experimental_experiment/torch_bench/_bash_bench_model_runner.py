@@ -586,7 +586,7 @@ class ModelRunner:
                     options=options,
                 )
         begin = time.perf_counter()
-        onx.save(name)
+        onx.save(name, all_tensors_to_one_file=True)
         stats["time_export_save"] = time.perf_counter() - begin
         return onx.model_proto, stats
 

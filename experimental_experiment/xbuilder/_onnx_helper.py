@@ -244,7 +244,6 @@ def unary_like_op_types() -> Set[str]:
         "Neg",
         "Not",
         "PRelu",
-        "Pow",
         "QuantizeLinear",
         "Reciprocal",
         "Relu",

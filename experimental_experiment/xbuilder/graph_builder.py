@@ -944,7 +944,7 @@ class GraphBuilder:
                         )
                     else:
                         raise RuntimeError(
-                            f"Name {name!r} already exists and it is not compatible "
+                            f"Shape {name!r} already exists and it is not compatible "
                             f"existing {old_shape} != {shape} (new) {self.get_debug_msg()}"
                         )
             elif shape != old_shape:
@@ -973,13 +973,14 @@ class GraphBuilder:
         elif self.has_rank(like):
             self.set_rank(name, self.get_rank(like))
 
-    def set_type(self, name: str, dtype: int):
+    def set_type(self, name: str, dtype: int, exc: bool = True):
         """
         Sets the shape for a result. It is exists, it checks the new shape
         is equal to the existing one.
 
         :param name: name
         :param dtype: element type (an integer, ONNX)
+        :param exc: raises an exception
         """
         if name == self._debug_stop:
             raise AssertionError(f"Requested stop, name={name!r}, dtype={dtype}")
@@ -998,11 +999,25 @@ class GraphBuilder:
                 ]
                 mapping.sort()
                 smap = ",".join(f"{k}:{v}" for k, v in mapping)
-                raise RuntimeError(
+                if exc:
+                    raise RuntimeError(
+                        f"Type for name {name!r} already exists and it is different, "
+                        f"known is {self._known_types[name]} != {int_type} (new) - "
+                        f"(mapping={smap}){self.get_debug_msg()}"
+                    )
+                if "warnings" not in self._debug_msg:
+                    self._debug_msg["warnings"] = []
+                self._debug_msg["warnings"].append(
                     f"Type for name {name!r} already exists and it is different, "
-                    f"known is {self._known_types[name]} != {int_type} (new)"
-                    f"(mapping={smap}){self.get_debug_msg()}"
+                    f"known is {self._known_types[name]} != {int_type} (new) - "
                 )
+                if self.verbose > 5:
+                    print(
+                        f"Type for name {name!r} already exists and it is different, "
+                        f"known is {self._known_types[name]} != {int_type} (new) - "
+                    )
+                return
+
         if self.verbose > 5:
             print(f"[GraphBuilder-{self._hash()}.set_type] {name}:{int_type}")
         self._known_types[name] = int_type

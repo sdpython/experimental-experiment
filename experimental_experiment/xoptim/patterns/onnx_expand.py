@@ -142,7 +142,7 @@ class ExpandSwapPattern(PatternOptimization):
     """
 
     _op_types = unary_like_op_types()
-    _other_types = {"NegXplus1", "ReplaceZero"}
+    _other_types = {"NegXplus1", "ReplaceZero", "Pow"}
 
     def match(
         self,
