@@ -944,7 +944,7 @@ class GraphBuilder:
                         )
                     else:
                         raise RuntimeError(
-                            f"Name {name!r} already exists and it is not compatible "
+                            f"Shape {name!r} already exists and it is not compatible "
                             f"existing {old_shape} != {shape} (new) {self.get_debug_msg()}"
                         )
             elif shape != old_shape:

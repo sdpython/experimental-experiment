@@ -16,7 +16,6 @@ _i1_o1_node_types = {
     "Gather",
     "LogSoftmax",
     "Neg",
-    "Pow",
     "Reciprocal",
     "ReduceMean",
     "ReduceSum",
@@ -172,6 +171,15 @@ def _infer_type_eye_like(node: NodeProto, input_types: Sequence[int]) -> Tuple[i
     return (input_types[0],)
 
 
+def _infer_type_pow(node: NodeProto, input_types: Sequence[int]) -> Tuple[int]:
+    """
+    Returns the output type for a node Where.
+    """
+    raise AssertionError(
+        f"Not implemented yet for node={node} and input_types={input_types}"
+    )
+
+
 def _infer_type_range(node: NodeProto, input_types: Sequence[int]) -> Tuple[int]:
     """
     Returns the output type for a node Cast.
@@ -194,6 +202,7 @@ _dict_type_inference = {
     "CastLike": _infer_type_cast_like,
     "ConstantOfShape": _infer_type_constant_of_shape,
     "EyeLike": _infer_type_eye_like,
+    "Pow": _infer_type_pow,
     "Range": _infer_type_range,
     "Where": _infer_type_where,
 }

@@ -4283,7 +4283,7 @@ def aten_pow_Tensor_Tensor(
         x = np.array([x], dtype=tensor_dtype_to_np_dtype(itype))
         res = g.op.Pow(x, exponent, outputs=outputs, name=name)
         if not sts:
-            set_type_shape_unary_op(g, outputs[0], exponent)
+            set_type_shape_unary_op(g, res, exponent)
         return res
 
     if isinstance(exponent, np.ndarray):
@@ -4301,7 +4301,7 @@ def aten_pow_Tensor_Tensor(
         )
     res = g.op.Pow(x, exponent, outputs=outputs, name=name)
     if not sts:
-        set_type_shape_unary_op(g, outputs[0], x)
+        set_type_shape_unary_op(g, res, x)
     return res
 
 

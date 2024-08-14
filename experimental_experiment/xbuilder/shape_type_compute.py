@@ -815,6 +815,11 @@ def set_shape_type_op_any(self: "GraphBuilder", node: NodeProto):  # noqa: F821
         )
     elif node.op_type in self._op_type_unary_like:
         set_type_shape_unary_op(self, node.output[0], node.input[0])
+    elif node.op_type in {"Pow"}:
+        raise AssertionError(
+            f"set_shape_type_op_any not implemented for "
+            f"{node.op_type!r}{self.get_debug_msg()}"
+        )
 
 
 def set_type_shape_fused_matmul(self: "GraphBuilder", node: NodeProto):  # noqa: F821

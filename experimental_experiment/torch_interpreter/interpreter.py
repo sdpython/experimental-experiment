@@ -986,7 +986,8 @@ class DynamoInterpreter:
                 if isinstance(v, self.torch.Tensor):
                     dtype = _get_type(v.dtype)
                     if i >= 1 and node.target.name() in {
-                        "aten::_native_batch_norm_legit.no_stats"
+                        "aten::_native_batch_norm_legit.no_stats",
+                        "aten::_native_batch_norm_legit_no_training",
                     }:
                         # It seems the type is not very consistant
                         # and the output might not be used.
@@ -995,6 +996,7 @@ class DynamoInterpreter:
                         self.builder.set_type(r, dtype)
                     shape = tuple(v.shape)
                     if self.builder.is_dynamic_shape(shape):
+                        # sets shape coming from the original model
                         self.builder.set_shape(r, shape, set_if_more_precise=True)
                     elif self.builder.has_rank(r):
                         assert len(shape) == self.builder.get_rank(r), (
