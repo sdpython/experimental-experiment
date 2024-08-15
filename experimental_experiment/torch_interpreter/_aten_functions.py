@@ -2895,10 +2895,11 @@ def aten_linalg_vector_norm(
     ), f"Rank of {x!r} is unknown or null{g.get_debug_msg()}"
     assert isinstance(dim, list) and all_int(
         dim
-    ), f"Unsupported value for dim={dim}{g.get_debug_msg()}"
-    assert isinstance(
-        ord, float
-    ), f"aten_linalg_vector_norm not implemented for ord={ord}{g.get_debug_msg()}"
+    ), f"Unsupported value for dim={dim} (type is {type(dim)}){g.get_debug_msg()}"
+    assert isinstance(ord, (float, int)), (
+        f"aten_linalg_vector_norm not implemented for ord={ord} "
+        f"(type is {type(ord)}{g.get_debug_msg()}"
+    )
 
     adim = np.array(dim, dtype=np.int64)
     kd = 1 if keepdim else 0

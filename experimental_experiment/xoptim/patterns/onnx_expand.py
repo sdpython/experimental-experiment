@@ -30,7 +30,10 @@ class ExpandPattern(PatternOptimization):
         if not g.is_constant(node.input[1]):
             # It may be a symbolic shape.
             return self.none(node, inspect.currentframe().f_lineno)
-        new_shape = tuple(g.get_computed_constant(node.input[1]))
+        value = g.get_computed_constant(node.input[1])
+        if value is None:
+            return self.none(node, inspect.currentframe().f_lineno)
+        new_shape = tuple(int(i) for i in value)
         if shape != new_shape:
             return self.none(node, inspect.currentframe().f_lineno)
 
@@ -76,7 +79,10 @@ class ExpandBroadcastPattern(PatternOptimization):
         if not g.is_constant(node.input[1]):
             # It may be a symbolic shape.
             return self.none(node, inspect.currentframe().f_lineno)
-        new_shape = tuple(g.get_computed_constant(node.input[1]))
+        value = g.get_computed_constant(node.input[1])
+        if value is None:
+            return self.none(node, inspect.currentframe().f_lineno)
+        new_shape = tuple(int(i) for i in value)
 
         if g.is_used_more_than_once(node.output[0]):
             # More than one output, not handled right now.
