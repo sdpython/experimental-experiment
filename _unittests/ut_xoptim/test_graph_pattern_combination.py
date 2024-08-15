@@ -606,7 +606,7 @@ class TestGraphPatternCombination(ExtTestCase):
                 infer_shapes=False,
                 verbose=2 if __name__ == "__main__" else 0,
             )
-            return gr.to_onnx(optimize=True)
+            return gr.to_onnx(optimize=True, large_model=False)
 
         # from onnx_array_api.profiling import profile, profile2graph
         # ps = profile(do)[0]
