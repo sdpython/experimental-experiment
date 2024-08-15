@@ -496,19 +496,46 @@ class DynamoInterpreter:
                 "", np.array(ends, dtype=np.int64)
             )
 
-        assert all_int(
-            starts
-        ), f"Not implemented for starts={starts}{self.builder.get_debug_msg()}"
-        assert all_int(
-            steps
-        ), f"Not implemented for starts={steps}{self.builder.get_debug_msg()}"
+        assert all_int(steps), (
+            f"Not implemented for steps={steps} (types are "
+            f"{[type(c) for c in steps]}){self.builder.get_debug_msg()}"
+        )
+        if all_int(starts):
+            conc_starts = self.builder.make_initializer(
+                self.builder.unique_name(f"{node.name}_start"),
+                np.array(starts, dtype=np.int64),
+            )
+        else:
+            istarts = []
+            for i in starts:
+                si = i.name if hasattr(i, "name") else i
+                if isinstance(si, str):
+                    if self.builder.get_rank(si) == 0:
+                        istarts.append(
+                            self.builder.op.UnsqueezeAnyOpset(
+                                si, np.array([0], dtype=np.int64), name=f"{name}C"
+                            )
+                        )
+                    else:
+                        assert self.builder.get_rank(si) == 1, (
+                            f"Unexpected rank={self.builder.get_rank(i)} for {si!r}"
+                            f"{self.builder.get_debug_msg()}"
+                        )
+                        istarts.append(si)
+                else:
+                    assert isinstance(si, int), (
+                        f"Unexpected value for end={si!r}"
+                        f"{self.builder.get_debug_msg()}"
+                    )
+                    istarts.append(np.array([si], dtype=np.int64))
+            if len(istarts) > 1:
+                conc_starts = self.builder.op.Concat(*istarts, axis=0, name=f"{name}SD")
+            else:
+                conc_starts = self.builder.op.Identity(istarts[0], name=f"{name}SE")
 
         inputs = [
             input_name,
-            self.builder.make_initializer(
-                self.builder.unique_name(f"{node.name}_start"),
-                np.array(starts, dtype=np.int64),
-            ),
+            conc_starts,
             conc_ends,
             axes_name,
             self.builder.make_initializer(

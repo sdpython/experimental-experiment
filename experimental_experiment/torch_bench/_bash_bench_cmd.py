@@ -31,6 +31,7 @@ def bash_bench_parse_args(name: str, doc: str, new_args: Optional[List[str]] = N
         dump_folder=("dump_bash_bench", "where to dump the exported model"),
         quiet=("1", "catch exception and go on or fail"),
         start=("0", "first model to run (to continue a bench)"),
+        rtopt=("1", "runtime optimization are enabled"),
         dtype=(
             "",
             "converts the model using this type, empty for no change, "
@@ -245,6 +246,7 @@ def bash_bench_main(script_name: str, doc: str, args: Optional[List[str]] = None
                     memory_peak=args.memory_peak in ("1", 1, "True", True),
                     part=int(args.part) if split_process else None,
                     pickled_name="temp_pickled_file.pkl" if split_process else None,
+                    rtopt=args.rtopt in (1, "1", "True", "true"),
                 )
             )
             duration = time.perf_counter() - begin
