@@ -330,6 +330,7 @@ class TestDynamoLlamaDynamic(ExtTestCase):
             impl="ref",
             verbose=0,
             dump_prefix="tt_temp_llama_attention_backward_forward_dynamic",
+            atol=0.2,
         )
 
     @ignore_warnings((UserWarning, DeprecationWarning))

@@ -876,6 +876,8 @@ class GraphBuilder:
                     TensorProto.INT32,
                     TensorProto.UINT64,
                     TensorProto.UINT32,
+                    # not a dimension but a result of a computation involving a dimension
+                    TensorProto.FLOAT,
                 }
             )
             and (shape is None or (isinstance(shape, tuple) and len(shape) == 1))
@@ -914,6 +916,7 @@ class GraphBuilder:
         :param exc: raise an exception if inconsistency
         """
         if name == self._debug_stop:
+            # Set ONNXSTOP to stop here.
             raise AssertionError(f"Requested stop, name={name!r}, shape={shape}")
         assert isinstance(name, str), f"Unexpected type {type(name)} for name."
         assert "torch.Size" not in str(shape), (
@@ -1235,9 +1238,10 @@ class GraphBuilder:
             f"is already there{self.get_debug_msg()}"
         )
         assert isinstance(
-            value, self.torch.SymInt
+            value, (self.torch.SymInt, self.torch.SymFloat)
         ), f"Unexpected type {type(value)} for value{self.get_debug_msg()}"
-        if input_name is not None:
+
+        if input_name is not None and isinstance(value, self.torch.SymInt):
             assert axis is not None, (
                 f"input_name={input_name!r} but axis is None for "
                 f"dynamic shape {name!r}, value is {value!r}{self.get_debug_msg}"
@@ -1251,6 +1255,7 @@ class GraphBuilder:
                 self.dynamic_dimensions_source[name].append(source)
             else:
                 self.dynamic_dimensions_source[name] = [source]
+
         self.dynamic_objects[name] = value
         if name not in self._known_value_shape:
             self._known_value_shape[name] = name
@@ -1267,6 +1272,10 @@ class GraphBuilder:
             self.dynamic_objects_rev[key] = []
         self.dynamic_objects_rev[key].append((name, value))
         if shape_as_input:
+            assert isinstance(value, self.torch.SymInt), (
+                f"shape_as_input={shape_as_input}, unexpected type "
+                f"{type(value)} for value{self.get_debug_msg()}"
+            )
             # torch.compile adds input for dynamic shapes
             return self.make_tensor_input(
                 self._known_value_shape[name],

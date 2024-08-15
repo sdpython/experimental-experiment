@@ -314,15 +314,16 @@ class DynamoInterpreter:
                         self.builder.make_dynamic_object(d, self.torch.SymInt(d))
                     ns.append(d)
                 shape = tuple(ns)
+                is_dimension = self.builder.get_is_dimension(
+                    a or o, elem_type=elem_type, shape=shape
+                )
 
                 self.builder.make_tensor_output(
                     o,
                     elem_type=elem_type,
                     shape=shape,
                     indexed=False,
-                    is_dimension=self.builder.get_is_dimension(
-                        a or o, elem_type=elem_type, shape=shape
-                    ),
+                    is_dimension=is_dimension,
                 )
             return [_[1] for _ in outputs]
 
@@ -951,6 +952,8 @@ class DynamoInterpreter:
                 return tuple((None if v is None else v.dtype) for v in val)
             if isinstance(val, self.torch.SymInt):
                 return self.torch.SymInt
+            if isinstance(val, self.torch.SymFloat):
+                return self.torch.SymFloat
             exa = node.meta.get("example_value", None)
             assert exa is None or val.dtype == exa.dtype, (
                 f"dtype inconsistency (val, example_value) "
@@ -1021,6 +1024,11 @@ class DynamoInterpreter:
                     # this is a shape
                     self.builder.set_shape(r, (1,))
                     self.builder.set_type(r, TensorProto.INT64)
+                    self.builder.make_dynamic_object(r, v)
+                elif isinstance(v, self.torch.SymFloat):
+                    # this is a shape
+                    self.builder.set_shape(r, (1,))
+                    self.builder.set_type(r, TensorProto.FLOAT)
                     self.builder.make_dynamic_object(r, v)
                 elif v is None:
                     continue

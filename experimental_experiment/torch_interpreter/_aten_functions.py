@@ -1875,20 +1875,20 @@ def aten_floor_divide(
     """floor + div"""
     if isinstance(y, str) and isinstance(x, str):
         div = g.op.Div(x, y, name=name)
-        g.set_type(div, g.get_type(x))
+        itype = g.get_type(x)
         g.set_rank(div, max(g.get_rank(x), g.get_rank(y)))
     elif isinstance(x, str) and isinstance(y, int):
-        dtype = tensor_dtype_to_np_dtype(g.get_type(x))
+        itype = g.get_type(x)
+        dtype = tensor_dtype_to_np_dtype(itype)
         div = g.op.Div(x, np.array([y], dtype=dtype), name=name)
-        g.set_type(div, g.get_type(x))
         if g.has_shape(x):
             g.set_shape(div, g.get_shape(x))
         else:
             g.set_rank(div, g.get_rank(x))
     elif isinstance(x, int) and isinstance(y, str):
-        dtype = tensor_dtype_to_np_dtype(g.get_type(y))
+        itype = g.get_type(y)
+        dtype = tensor_dtype_to_np_dtype(itype)
         div = g.op.Div(np.array([x], dtype=dtype), y, name=name)
-        g.set_type(div, g.get_type(y))
         if g.has_shape(y):
             g.set_shape(div, g.get_shape(y))
         else:
@@ -1898,9 +1898,24 @@ def aten_floor_divide(
             f"Unable to implement floordiv for types {[type(x), type(y)]}{g.get_debug_msg()}"
         )
 
-    res = g.op.Floor(div, outputs=outputs, name=name)
+    g.set_type(div, itype)
+    if itype in {
+        TensorProto.INT64,
+        TensorProto.INT32,
+        TensorProto.UINT64,
+        TensorProto.UINT32,
+    }:
+        res = g.op.Identity(div, outputs=outputs, name=name)
+    else:
+        assert itype in {
+            TensorProto.FLOAT,
+            TensorProto.DOUBLE,
+            TensorProto.FLOAT16,
+            TensorProto.BFLOAT16,
+        }, f"Unexpected itype={itype}{g.get_debug_msg()}"
+        res = g.op.Floor(div, outputs=outputs, name=name)
     if not sts:
-        g.set_type(res, g.get_type(x))
+        g.set_type(res, itype)
         if g.has_shape(div):
             g.set_shape(res, g.get_shape(div))
         else:
@@ -5713,12 +5728,30 @@ def aten_sqrt(
 
 
 def aten__sym_sqrt(
-    g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    name: str = "_sym_sqrt",
 ) -> T:
-    "sqrt"
-    res = g.make_node("Sqrt", [x], name="_sym_sqrt")
-    if not sts:
-        set_type_shape_unary_op(g, outputs[0], x)
+    "symbolic sqrt"
+    assert g.has_type(x), f"Missing type for {x!r}{g.get_debug_msg()}"
+    itype = g.get_type(x)
+    if itype == TensorProto.INT64:
+        res = g.op.Sqrt(
+            g.op.Cast(x, to=TensorProto.FLOAT, name=name),
+            name=name,
+            outputs=outputs,
+        )
+        if not sts:
+            set_type_shape_unary_op(g, res, x, itype=TensorProto.FLOAT)
+    else:
+        assert (
+            itype == TensorProto.FLOAT
+        ), f"Unexpected type {itype} for {x!r}{g.get_debug_msg()}"
+        res = g.op.Sqrt(x, name=name, outputs=outputs)
+        if not sts:
+            set_type_shape_unary_op(g, res, x)
     return res
 
 
