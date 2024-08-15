@@ -7,43 +7,6 @@ from ...xbuilder._shape_helper import DYNAMIC_SHAPE
 from ..patterns_api import MatchResult, PatternOptimization
 
 
-class DivByMulScalarPattern(PatternOptimization):
-    """
-    Replaces Div/Scalar by Mul*Scalar.
-    """
-
-    def match(
-        self,
-        g: "GraphBuilderPatternOptimization",  # noqa: F821
-        node: NodeProto,
-        matched: List[MatchResult],
-    ) -> Optional[MatchResult]:
-        if node.op_type not in {"Div"} or node.domain != "":
-            return self.none()
-        if not g.is_constant_scalar(node.input[1]):
-            return self.none(node, inspect.currentframe().f_lineno)
-        return MatchResult(self, [node], self.apply, insert_at=node)
-
-    def apply(
-        self,
-        g: "GraphBuilder",  # noqa: F821
-        node: NodeProto,
-    ) -> List[NodeProto]:
-        csta = g.get_computed_constant(node.input[1])
-        cst = g.get_constant_scalar(node.input[1])
-        cst_name = g.make_initializer(
-            "", np.array([1 / cst], dtype=csta.dtype).reshape(csta.shape)
-        )
-        return [
-            g.make_node(
-                "Mul",
-                [node.input[0], cst_name],
-                node.output,
-                name=f"{self.__class__.__name__}--{node.name}-Cst",
-            )
-        ]
-
-
 class MulMulMulScalarPattern(PatternOptimization):
     """
     Replaces the sequence {Div | Mul} and {Div | Mul} + {Div | Mul} with {Div | Mul} Mul.

@@ -3558,6 +3558,28 @@ class GraphBuilder:
         ttype = onnx_dtype_to_torch_dtype(to)
         return [x.to(ttype)]
 
+    def _apply_unary_function(
+        self,
+        node: NodeProto,
+        feeds: Dict[str, "torch.Tensor"],  # noqa: F821
+    ) -> "torch.Tensor":  # noqa: F821
+        x = feeds[node.input[0]]
+        itype = dtype_to_tensor_dtype(x.dtype)
+        if isinstance(x, np.ndarray):
+            ttype = oh.tensor_dtype_to_np_dtype(itype)
+            if node.op_type == "Sqrt":
+                return [np.sqrt(x).astype(ttype)]
+            raise AssertionError(
+                f"Not implemented for op_type={node.op_type!r}, node={node}, feeds={feeds}"
+            )
+
+        ttype = onnx_dtype_to_torch_dtype(itype)
+        if node.op_type == "Sqrt":
+            return [self.torch.sqrt(x).to(ttype)]
+        raise AssertionError(
+            f"Not implemented for op_type={node.op_type!r}, node={node}, feeds={feeds}"
+        )
+
     def _apply_trilu(
         self,
         node: NodeProto,
@@ -3670,6 +3692,9 @@ class GraphBuilder:
         elif v.op_type in {"Mul", "Add", "Sub", "Div"}:
             # bypassing onnx.numpy_helper.from_array, too slow
             output = self._apply_binary_op(v, feeds)
+        elif v.op_type in {"Sqrt"}:
+            # bypassing onnx.numpy_helper.from_array, too slow
+            output = self._apply_unary_function(v, feeds)
         elif all(isinstance(v, np.ndarray) for v in feeds.values()):
             # Let's avoid big computation on CPU.
             max_dim = 0
