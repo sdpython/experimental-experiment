@@ -184,14 +184,13 @@ class DynamoInterpreter:
             val, (self.torch.Tensor, self.torch._subclasses.fake_tensor.FakeTensor)
         ):
             stack_trace = node.meta.get("stack_trace", None)
+            value = None
             if stack_trace is None and "from_node" not in node.meta:
                 # torch 2.1.0 and 2.2.0 behave differently.
                 # torch 2.4.0, stack_trace is None but from_node is in node.meta
-                return self.builder.make_tensor_input(
-                    node.name, elem_type=val.dtype, shape=val.shape, is_dimension=False
+                value = self.retriever(
+                    node.target, val, debug={"node": node}, exc=False
                 )
-            if "nn_module_stack" not in node.meta:
-                value = self.retriever(node.target, val)
                 if value is None:
                     return self.builder.make_tensor_input(
                         node.name,
@@ -199,8 +198,18 @@ class DynamoInterpreter:
                         shape=val.shape,
                         is_dimension=False,
                     )
-            else:
-                value = self.retriever(node.target, val)
+            if value is None:
+                if "nn_module_stack" not in node.meta:
+                    value = self.retriever(node.target, val, debug={"node": node})
+                    if value is None:
+                        return self.builder.make_tensor_input(
+                            node.name,
+                            elem_type=val.dtype,
+                            shape=val.shape,
+                            is_dimension=False,
+                        )
+                else:
+                    value = self.retriever(node.target, val, debug={"node": node})
             if value is None:
                 if ".FakeTensor" in str(type(val)):
                     dtype = val.dtype
