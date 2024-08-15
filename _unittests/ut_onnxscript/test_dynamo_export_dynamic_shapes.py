@@ -22,7 +22,7 @@ class TestDynamoExportDynamicShapes(ExtTestCase):
         import onnxruntime
 
         try:
-            from torch.onnx._internal import _legacy_exporter as exporter
+            from torch.onnx._internal import _exporter_legacy as exporter
         except ImportError:
             from torch.onnx._internal import exporter
 

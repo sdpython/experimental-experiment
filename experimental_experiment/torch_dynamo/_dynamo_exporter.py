@@ -40,7 +40,7 @@ def _dynamo_export(
     from torch.onnx._internal.fx import diagnostics
 
     try:
-        from torch.onnx._internal._legacy_exporter import OnnxRegistry
+        from torch.onnx._internal._exporter_legacy import OnnxRegistry
     except ImportError:
         from torch.onnx._internal.exporter import OnnxRegistry
     from torch.onnx._internal.diagnostics import infra
