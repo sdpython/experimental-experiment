@@ -15,8 +15,6 @@ Onnx (default) Patterns
 
 .. autoclass:: experimental_experiment.xoptim.patterns.ComputationCastOpCastPattern
 
-.. autoclass:: experimental_experiment.xoptim.patterns.DivByMulScalarPattern
-
 .. autoclass:: experimental_experiment.xoptim.patterns.ExpandPattern
 
 .. autoclass:: experimental_experiment.xoptim.patterns.ExpandBroadcastPattern

@@ -1029,12 +1029,13 @@ class ModelRunner:
         else:
             new_inputs = inputs
         assert len(names) == len(new_inputs), (
-            f"Mismatch number of outputs, {len(inputs)} inputs for {names}, "
-            f"{len(new_inputs)} flattened inputs.\n"
-            f"ipnut types={[type(i) for i in inputs]},\n"
-            f"self.raw_input_names={self.raw_input_names},\n"
-            f"self.raw_use_defaults={self.raw_use_defaults},\n"
-            f"initializer_names={initializer_names}, "
-            f"named parameters={[p[0] for p in self.model.named_parameters()]}"
+            f"Mismatch number of outputs, {len(inputs)} ({len(new_inputs)}) "
+            f"inputs, there are {len(new_inputs)} flattened inputs.\n----\n"
+            f"names={names}\n----\ninput types={[type(i) for i in inputs]}\n----\n"
+            f"named parameters={sorted(p[0] for p in self.model.named_parameters())}"
+            f"\n----\nnamed buffers={sorted(p[0] for p in self.model.named_buffers())}"
+            f"\n----\nself.raw_input_names={self.raw_input_names}\n----\n"
+            f"self.raw_use_defaults={self.raw_use_defaults}\n----\n"
+            f"initializer_names={sorted(initializer_names)}\n----\n"
         )
         return dict(zip(names, new_inputs))

@@ -72,7 +72,11 @@ def get_decomposition_table_dynamo(onnx_registry=None):
     from torch.onnx._internal.fx.decomposition_table import (
         create_onnx_friendly_decomposition_table,
     )
-    from torch.onnx._internal.exporter import OnnxRegistry
+
+    try:
+        from torch.onnx._internal._exporter_legacy import OnnxRegistry
+    except ImportError:
+        from torch.onnx._internal.exporter import OnnxRegistry
 
     return create_onnx_friendly_decomposition_table(onnx_registry or OnnxRegistry())
 

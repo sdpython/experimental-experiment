@@ -862,7 +862,9 @@ def _apply_excel_style(
                         cell.alignment = alignment
                     done.add(c)
                     continue
-                if k in {"exporter", "opt_patterns"} or k.startswith("version"):
+                if k in {"exporter", "opt_patterns", "rtopt"} or k.startswith(
+                    "version"
+                ):
                     sheet.column_dimensions[c].width = 15
                     for cell in sheet[c]:
                         cell.alignment = alignment
@@ -903,6 +905,7 @@ def merge_benchmark_reports(
         "architecture",
         "exporter",
         "opt_patterns",
+        "rtopt",
         "device",
         "device_name",
         "dtype",
@@ -924,7 +927,12 @@ def merge_benchmark_reports(
         "version_timm",
         "version_torch_onnx",
     ),
-    column_keys=("stat", "exporter", "opt_patterns"),
+    column_keys=(
+        "stat",
+        "exporter",
+        "opt_patterns",
+        "rtopt",
+    ),
     report_on=(
         "speedup",
         "speedup_increase",
@@ -1145,7 +1153,7 @@ def merge_benchmark_reports(
     # replace nan values
     # groupby do not like nan values
     set_columns = set(df.columns)
-    for c in ["opt_patterns", "ERR_export", "ERR_warmup"]:
+    for c in ["opt_patterns", "rtopt", "ERR_export", "ERR_warmup"]:
         if c in set_columns:
             df[c] = df[c].fillna("-")
 
@@ -1372,17 +1380,15 @@ def merge_benchmark_reports(
                     df.shape[0] == joined.shape[0]
                 ), f"Shape mismatch after join {df.shape} -> {joined.shape}"
                 df = joined.copy()
-                if "exporter_x" in df.columns:
-                    df["exporter"] = df["exporter_x"]
-                if "opt_patterns_x" in df.columns:
-                    df["opt_patterns"] = df["opt_patterns_x"]
+                for c in column_keys:
+                    cc = f"{c}_x"
+                    if cc in df.columns:
+                        df[c] = df[cc]
                 drop = [
                     c
                     for c in [
-                        "exporter_x",
-                        "exporter_y",
-                        "opt_patterns_x",
-                        "opt_patterns_y",
+                        *[f"{c}_x" for c in column_keys],
+                        *[f"{c}_y" for c in column_keys],
                     ]
                     if c in df.columns
                 ]
@@ -1418,17 +1424,15 @@ def merge_benchmark_reports(
                 df["speedup_increase_script"] = (
                     df["speedup"] / df["speedup_script"] - 1
                 ).fillna(np.inf)
-                if "exporter_x" in df.columns:
-                    df["exporter"] = df["exporter_x"]
-                if "opt_patterns_x" in df.columns:
-                    df["opt_patterns"] = df["opt_patterns_x"]
+                for c in column_keys:
+                    cc = f"{c}_x"
+                    if cc in df.columns:
+                        df[c] = df[cc]
                 drop = [
                     c
                     for c in [
-                        "exporter_x",
-                        "exporter_y",
-                        "opt_patterns_x",
-                        "opt_patterns_y",
+                        *[f"{c}_x" for c in column_keys],
+                        *[f"{c}_y" for c in column_keys],
                     ]
                     if c in df.columns
                 ]
@@ -1571,7 +1575,9 @@ def merge_benchmark_reports(
                 f"m0.index.names={m0.index.names}, "
                 f"m0.columns.names={m0.columns.names}\n---\n{m0}"
             )
-            exporter_column = [c for c in cols if c in ("exporter", "opt_patterns")]
+            exporter_column = [
+                c for c in cols if c in ("exporter", "opt_patterns", "rtopt")
+            ]
             assert "stat" in cols, (
                 f"Unexpected columns {cols}, expecting 'stat', "
                 f"{exporter_column!r}, {model!r}, reverse={reverse}, "
@@ -1790,7 +1796,7 @@ def merge_benchmark_reports(
     df0 = final_res["0raw"]
     date_col = [
         c
-        for c in ["DATE", "suite", "exporter", "opt_patterns", "dtype"]
+        for c in ["DATE", "suite", "exporter", "opt_patterns", "dtype", "rtopt"]
         if c in df0.columns
     ]
     if verbose:
@@ -2189,6 +2195,9 @@ def _create_aggregation_figures(
             if not isinstance(df, pandas.DataFrame):
                 assert (
                     "opt_patterns" not in df.index.names
+                ), f"Unexpected names for df.index.names={df.index.names} (k={k!r})"
+                assert (
+                    "rtopt" not in df.index.names
                 ), f"Unexpected names for df.index.names={df.index.names} (k={k!r})"
                 df = df.to_frame()
                 if df.columns.names == [None]:

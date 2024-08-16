@@ -184,14 +184,13 @@ class DynamoInterpreter:
             val, (self.torch.Tensor, self.torch._subclasses.fake_tensor.FakeTensor)
         ):
             stack_trace = node.meta.get("stack_trace", None)
+            value = None
             if stack_trace is None and "from_node" not in node.meta:
                 # torch 2.1.0 and 2.2.0 behave differently.
                 # torch 2.4.0, stack_trace is None but from_node is in node.meta
-                return self.builder.make_tensor_input(
-                    node.name, elem_type=val.dtype, shape=val.shape, is_dimension=False
+                value = self.retriever(
+                    node.target, val, debug={"node": node}, exc=False
                 )
-            if "nn_module_stack" not in node.meta:
-                value = self.retriever(node.target, val)
                 if value is None:
                     return self.builder.make_tensor_input(
                         node.name,
@@ -199,8 +198,18 @@ class DynamoInterpreter:
                         shape=val.shape,
                         is_dimension=False,
                     )
-            else:
-                value = self.retriever(node.target, val)
+            if value is None:
+                if "nn_module_stack" not in node.meta:
+                    value = self.retriever(node.target, val, debug={"node": node})
+                    if value is None:
+                        return self.builder.make_tensor_input(
+                            node.name,
+                            elem_type=val.dtype,
+                            shape=val.shape,
+                            is_dimension=False,
+                        )
+                else:
+                    value = self.retriever(node.target, val, debug={"node": node})
             if value is None:
                 if ".FakeTensor" in str(type(val)):
                     dtype = val.dtype
@@ -305,15 +314,16 @@ class DynamoInterpreter:
                         self.builder.make_dynamic_object(d, self.torch.SymInt(d))
                     ns.append(d)
                 shape = tuple(ns)
+                is_dimension = self.builder.get_is_dimension(
+                    a or o, elem_type=elem_type, shape=shape
+                )
 
                 self.builder.make_tensor_output(
                     o,
                     elem_type=elem_type,
                     shape=shape,
                     indexed=False,
-                    is_dimension=self.builder.get_is_dimension(
-                        a or o, elem_type=elem_type, shape=shape
-                    ),
+                    is_dimension=is_dimension,
                 )
             return [_[1] for _ in outputs]
 
@@ -486,19 +496,46 @@ class DynamoInterpreter:
                 "", np.array(ends, dtype=np.int64)
             )
 
-        assert all_int(
-            starts
-        ), f"Not implemented for starts={starts}{self.builder.get_debug_msg()}"
-        assert all_int(
-            steps
-        ), f"Not implemented for starts={steps}{self.builder.get_debug_msg()}"
+        assert all_int(steps), (
+            f"Not implemented for steps={steps} (types are "
+            f"{[type(c) for c in steps]}){self.builder.get_debug_msg()}"
+        )
+        if all_int(starts):
+            conc_starts = self.builder.make_initializer(
+                self.builder.unique_name(f"{node.name}_start"),
+                np.array(starts, dtype=np.int64),
+            )
+        else:
+            istarts = []
+            for i in starts:
+                si = i.name if hasattr(i, "name") else i
+                if isinstance(si, str):
+                    if self.builder.get_rank(si) == 0:
+                        istarts.append(
+                            self.builder.op.UnsqueezeAnyOpset(
+                                si, np.array([0], dtype=np.int64), name=f"{name}C"
+                            )
+                        )
+                    else:
+                        assert self.builder.get_rank(si) == 1, (
+                            f"Unexpected rank={self.builder.get_rank(i)} for {si!r}"
+                            f"{self.builder.get_debug_msg()}"
+                        )
+                        istarts.append(si)
+                else:
+                    assert isinstance(si, int), (
+                        f"Unexpected value for end={si!r}"
+                        f"{self.builder.get_debug_msg()}"
+                    )
+                    istarts.append(np.array([si], dtype=np.int64))
+            if len(istarts) > 1:
+                conc_starts = self.builder.op.Concat(*istarts, axis=0, name=f"{name}SD")
+            else:
+                conc_starts = self.builder.op.Identity(istarts[0], name=f"{name}SE")
 
         inputs = [
             input_name,
-            self.builder.make_initializer(
-                self.builder.unique_name(f"{node.name}_start"),
-                np.array(starts, dtype=np.int64),
-            ),
+            conc_starts,
             conc_ends,
             axes_name,
             self.builder.make_initializer(
@@ -942,6 +979,8 @@ class DynamoInterpreter:
                 return tuple((None if v is None else v.dtype) for v in val)
             if isinstance(val, self.torch.SymInt):
                 return self.torch.SymInt
+            if isinstance(val, self.torch.SymFloat):
+                return self.torch.SymFloat
             exa = node.meta.get("example_value", None)
             assert exa is None or val.dtype == exa.dtype, (
                 f"dtype inconsistency (val, example_value) "
@@ -1012,6 +1051,11 @@ class DynamoInterpreter:
                     # this is a shape
                     self.builder.set_shape(r, (1,))
                     self.builder.set_type(r, TensorProto.INT64)
+                    self.builder.make_dynamic_object(r, v)
+                elif isinstance(v, self.torch.SymFloat):
+                    # this is a shape
+                    self.builder.set_shape(r, (1,))
+                    self.builder.set_type(r, TensorProto.FLOAT)
                     self.builder.make_dynamic_object(r, v)
                 elif v is None:
                     continue

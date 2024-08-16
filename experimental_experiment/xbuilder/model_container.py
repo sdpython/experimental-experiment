@@ -132,7 +132,7 @@ class TorchModelContainer(ModelContainer):
 
         unique_names: dict[str, int] = {}
         folder = os.path.dirname(file_path)
-        if not os.path.exists(folder):
+        if folder and not os.path.exists(folder):
             raise FileNotFoundError(f"Folder {folder!r} does not exist.")
         proto = self.model_proto.SerializeToString()
         copy = ModelProto()
@@ -170,6 +170,11 @@ class TorchModelContainer(ModelContainer):
                 tensor_bytes = np_tensor.byteswap().tobytes()
             elif isinstance(np_tensor, np.ndarray):
                 tensor_bytes = np_tensor.tobytes()
+            elif isinstance(np_tensor, TensorProto):
+                tensor_bytes = np_tensor.raw_data
+                assert (
+                    len(tensor_bytes) > 0
+                ), f"One tensor is null, np_tensor={np_tensor}."
             else:
                 import torch
 

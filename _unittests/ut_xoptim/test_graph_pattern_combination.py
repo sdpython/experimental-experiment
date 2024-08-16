@@ -606,7 +606,7 @@ class TestGraphPatternCombination(ExtTestCase):
                 infer_shapes=False,
                 verbose=2 if __name__ == "__main__" else 0,
             )
-            return gr.to_onnx(optimize=True)
+            return gr.to_onnx(optimize=True, large_model=False)
 
         # from onnx_array_api.profiling import profile, profile2graph
         # ps = profile(do)[0]
@@ -634,7 +634,11 @@ class TestGraphPatternCombination(ExtTestCase):
                 unittest.SkipTest(f"onnxruntime-training is needed for {e}")
             raise
         except RuntimeException as e:
-            if "Invalid fd was supplied" in str(e):
+            if (
+                "Invalid fd was supplied" in str(e)
+                or "cannot get file size" in str(e)
+                or "No such file or directory" in str(e)
+            ):
                 raise unittest.SkipTest(f"missing extension: {e}")  # noqa: B904
             raise
         self._check_ort_cpu_or_cuda(new_onx)

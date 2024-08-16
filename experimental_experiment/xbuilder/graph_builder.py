@@ -876,6 +876,8 @@ class GraphBuilder:
                     TensorProto.INT32,
                     TensorProto.UINT64,
                     TensorProto.UINT32,
+                    # not a dimension but a result of a computation involving a dimension
+                    TensorProto.FLOAT,
                 }
             )
             and (shape is None or (isinstance(shape, tuple) and len(shape) == 1))
@@ -914,6 +916,7 @@ class GraphBuilder:
         :param exc: raise an exception if inconsistency
         """
         if name == self._debug_stop:
+            # Set ONNXSTOP to stop here.
             raise AssertionError(f"Requested stop, name={name!r}, shape={shape}")
         assert isinstance(name, str), f"Unexpected type {type(name)} for name."
         assert "torch.Size" not in str(shape), (
@@ -1235,9 +1238,10 @@ class GraphBuilder:
             f"is already there{self.get_debug_msg()}"
         )
         assert isinstance(
-            value, self.torch.SymInt
+            value, (self.torch.SymInt, self.torch.SymFloat)
         ), f"Unexpected type {type(value)} for value{self.get_debug_msg()}"
-        if input_name is not None:
+
+        if input_name is not None and isinstance(value, self.torch.SymInt):
             assert axis is not None, (
                 f"input_name={input_name!r} but axis is None for "
                 f"dynamic shape {name!r}, value is {value!r}{self.get_debug_msg}"
@@ -1251,6 +1255,7 @@ class GraphBuilder:
                 self.dynamic_dimensions_source[name].append(source)
             else:
                 self.dynamic_dimensions_source[name] = [source]
+
         self.dynamic_objects[name] = value
         if name not in self._known_value_shape:
             self._known_value_shape[name] = name
@@ -1267,6 +1272,10 @@ class GraphBuilder:
             self.dynamic_objects_rev[key] = []
         self.dynamic_objects_rev[key].append((name, value))
         if shape_as_input:
+            assert isinstance(value, self.torch.SymInt), (
+                f"shape_as_input={shape_as_input}, unexpected type "
+                f"{type(value)} for value{self.get_debug_msg()}"
+            )
             # torch.compile adds input for dynamic shapes
             return self.make_tensor_input(
                 self._known_value_shape[name],
@@ -3549,6 +3558,28 @@ class GraphBuilder:
         ttype = onnx_dtype_to_torch_dtype(to)
         return [x.to(ttype)]
 
+    def _apply_unary_function(
+        self,
+        node: NodeProto,
+        feeds: Dict[str, "torch.Tensor"],  # noqa: F821
+    ) -> "torch.Tensor":  # noqa: F821
+        x = feeds[node.input[0]]
+        itype = dtype_to_tensor_dtype(x.dtype)
+        if isinstance(x, np.ndarray):
+            ttype = oh.tensor_dtype_to_np_dtype(itype)
+            if node.op_type == "Sqrt":
+                return [np.sqrt(x).astype(ttype)]
+            raise AssertionError(
+                f"Not implemented for op_type={node.op_type!r}, node={node}, feeds={feeds}"
+            )
+
+        ttype = onnx_dtype_to_torch_dtype(itype)
+        if node.op_type == "Sqrt":
+            return [self.torch.sqrt(x).to(ttype)]
+        raise AssertionError(
+            f"Not implemented for op_type={node.op_type!r}, node={node}, feeds={feeds}"
+        )
+
     def _apply_trilu(
         self,
         node: NodeProto,
@@ -3661,6 +3692,9 @@ class GraphBuilder:
         elif v.op_type in {"Mul", "Add", "Sub", "Div"}:
             # bypassing onnx.numpy_helper.from_array, too slow
             output = self._apply_binary_op(v, feeds)
+        elif v.op_type in {"Sqrt"}:
+            # bypassing onnx.numpy_helper.from_array, too slow
+            output = self._apply_unary_function(v, feeds)
         elif all(isinstance(v, np.ndarray) for v in feeds.values()):
             # Let's avoid big computation on CPU.
             max_dim = 0

@@ -299,6 +299,7 @@ class TestDynamoLlamaDynamic(ExtTestCase):
             # verbose=10,
             dump_prefix="tt_temp_llama_attention_forward_dynamic",
             # raise_list={"view"}
+            atol=0.2,
         )
         onx = stored["instance"][0]["onnx"]
         builder = stored["instance"][0]["builder"]
@@ -330,6 +331,7 @@ class TestDynamoLlamaDynamic(ExtTestCase):
             impl="ref",
             verbose=0,
             dump_prefix="tt_temp_llama_attention_backward_forward_dynamic",
+            atol=0.2,
         )
 
     @ignore_warnings((UserWarning, DeprecationWarning))

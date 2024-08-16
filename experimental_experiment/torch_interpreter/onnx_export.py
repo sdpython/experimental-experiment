@@ -1,5 +1,6 @@
 import contextlib
 import inspect
+import os
 import pprint
 import time
 import warnings
@@ -18,6 +19,8 @@ def _retrieve(
     constants: Dict[str, "torch.Tensor"],  # noqa: F821
     mapping: Dict[str, Tuple[str, bool]],
     graph_builder: "GraphBuilder",  # noqa: F821
+    debug: Optional[Any] = None,
+    exc: bool = True,
 ) -> "torch.Tensor":  # noqa: F821
     """
     Sent to the :class:`DynamoInterpreter
@@ -31,6 +34,8 @@ def _retrieve(
     :param constants: mapping name, constants
     :param mapping: mapping name, (new_name, is_weight)
     :param graph_builder: graph builder
+    :param debug: any debug information when an issue is raised
+    :param exc: raises an exception if not found
     """
     if name not in mapping:
         import torch
@@ -41,18 +46,19 @@ def _retrieve(
         if len(weights) == 0 and len(buffers) == 0 and len(constants) == 0:
             # It has to be an input.
             return None
-        raise RuntimeError(
-            f"Unable to find {name!r}."
-            f"\nAvailable weights: {list(sorted(weights))}. "
-            f"\nAvailable buffers: {list(sorted(buffers))}. "
-            f"\nAvailable constants: {list(sorted(constants))}. "
-            f"\nmapping={mapping}"
-            f"{graph_builder.get_debug_msg() if graph_builder else ''}"
-            f"\nvalue={value.dtype}:{value.shape}\n{value}"
-        )
+        if exc:
+            raise RuntimeError(
+                f"Unable to find {name!r}."
+                f"\nAvailable weights: {list(sorted(weights))}. "
+                f"\nAvailable buffers: {list(sorted(buffers))}. "
+                f"\nAvailable constants: {list(sorted(constants))}. "
+                f"\nmapping={mapping}"
+                f"{graph_builder.get_debug_msg() if graph_builder else ''}"
+                f"\nvalue={value.dtype}:{value.shape}\n{value}"
+            )
+        return None
 
     new_name, is_weight = mapping[name]
-
     if is_weight:
         # weights
         if new_name not in weights:
@@ -117,12 +123,14 @@ def _retrieve(
         )
         return value
 
-    raise ValueError(
-        f"Unexpected name {name!r} for input "
-        f"{name!r} mapped to buffer or constant {new_name!r}, "
-        f"cannot be found in {', '.join(sorted(buffers))} or "
-        f"{', '.join(sorted(constants))}"
-    )
+    if exc:
+        raise ValueError(
+            f"Unexpected name {name!r} for input "
+            f"{name!r} mapped to buffer or constant {new_name!r}, "
+            f"cannot be found in {', '.join(sorted(buffers))} or "
+            f"{', '.join(sorted(constants))}"
+        )
+    return None
 
 
 def _export(
@@ -256,6 +264,9 @@ def _make_builder_interpreter(
         buffers = dict(graph_module.named_buffers())
         constants = mod.state_dict()
         mapping = {}
+        if os.environ.get("PRINT_GRAPH_MODULE", "0") in (1, "1"):
+            print("-- GIVEN GRAPH MODULE")
+            print(graph_module.graph)
     else:
         with bypass_export_some_errors():
             exported_mod = _export(
@@ -287,6 +298,9 @@ def _make_builder_interpreter(
             if verbose > 2:
                 print(f"[_make_builder_interpreter] exported_mod {exported_mod}")
         graph_module = exported_mod.graph_module
+        if os.environ.get("PRINT_GRAPH_MODULE", "0") in (1, "1"):
+            print("-- EXPORTED GRAPH MODULE")
+            print(graph_module.graph)
         try:
             weights = dict(exported_mod.named_parameters())
         except AttributeError:
@@ -354,13 +368,17 @@ def _make_builder_interpreter(
     def retrieve(
         name,
         value,
+        debug=None,
         weights=weights,
         buffers=buffers,
         mapping=mapping,
         constants=constants,
         builder=builder,
+        exc=True,
     ):
-        return _retrieve(name, value, weights, buffers, constants, mapping, builder)
+        return _retrieve(
+            name, value, weights, buffers, constants, mapping, builder, debug, exc=exc
+        )
 
     from .interpreter import DynamoInterpreter
 
@@ -429,6 +447,9 @@ def to_onnx(
     :param return_optimize_report: returns statistics on the optimization as well
     :param strict: given to ``torch.export.export``
     :return: onnx model
+
+    If environment variable ``PRINT_GRAPH_MODULE`` is set to one,
+    information about the graph module is printed out.
     """
     if target_opset is None:
         target_opset = min(18, onnx_opset_version() - 1)

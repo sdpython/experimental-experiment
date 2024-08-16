@@ -20,7 +20,11 @@ class TestDynamoExportDynamicShapes(ExtTestCase):
     def test_export_llama_model_dynamic_shapes(self):
         import torch
         import onnxruntime
-        from torch.onnx._internal import exporter
+
+        try:
+            from torch.onnx._internal import _exporter_legacy as exporter
+        except ImportError:
+            from torch.onnx._internal import exporter
 
         with torch.no_grad():
             input_dims = [(2, 1024), (3, 1024)]

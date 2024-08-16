@@ -1875,20 +1875,20 @@ def aten_floor_divide(
     """floor + div"""
     if isinstance(y, str) and isinstance(x, str):
         div = g.op.Div(x, y, name=name)
-        g.set_type(div, g.get_type(x))
+        itype = g.get_type(x)
         g.set_rank(div, max(g.get_rank(x), g.get_rank(y)))
     elif isinstance(x, str) and isinstance(y, int):
-        dtype = tensor_dtype_to_np_dtype(g.get_type(x))
+        itype = g.get_type(x)
+        dtype = tensor_dtype_to_np_dtype(itype)
         div = g.op.Div(x, np.array([y], dtype=dtype), name=name)
-        g.set_type(div, g.get_type(x))
         if g.has_shape(x):
             g.set_shape(div, g.get_shape(x))
         else:
             g.set_rank(div, g.get_rank(x))
     elif isinstance(x, int) and isinstance(y, str):
-        dtype = tensor_dtype_to_np_dtype(g.get_type(y))
+        itype = g.get_type(y)
+        dtype = tensor_dtype_to_np_dtype(itype)
         div = g.op.Div(np.array([x], dtype=dtype), y, name=name)
-        g.set_type(div, g.get_type(y))
         if g.has_shape(y):
             g.set_shape(div, g.get_shape(y))
         else:
@@ -1898,9 +1898,24 @@ def aten_floor_divide(
             f"Unable to implement floordiv for types {[type(x), type(y)]}{g.get_debug_msg()}"
         )
 
-    res = g.op.Floor(div, outputs=outputs, name=name)
+    g.set_type(div, itype)
+    if itype in {
+        TensorProto.INT64,
+        TensorProto.INT32,
+        TensorProto.UINT64,
+        TensorProto.UINT32,
+    }:
+        res = g.op.Identity(div, outputs=outputs, name=name)
+    else:
+        assert itype in {
+            TensorProto.FLOAT,
+            TensorProto.DOUBLE,
+            TensorProto.FLOAT16,
+            TensorProto.BFLOAT16,
+        }, f"Unexpected itype={itype}{g.get_debug_msg()}"
+        res = g.op.Floor(div, outputs=outputs, name=name)
     if not sts:
-        g.set_type(res, g.get_type(x))
+        g.set_type(res, itype)
         if g.has_shape(div):
             g.set_shape(res, g.get_shape(div))
         else:
@@ -2875,6 +2890,68 @@ def aten_lift_fresh_copy(
     return g.op.Identity(x, outputs=outputs, name="lift_fresh_copy")
 
 
+def aten_linalg_vector_norm(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    ord: float = 2.0,
+    dim: Optional[int] = None,
+    keepdim: bool = False,
+    dtype: Optional[int] = None,
+    name: str = "linagl_vector_norm",
+) -> T:
+    """reduce *"""
+    assert (
+        dtype is None
+    ), f"aten_linalg_vector_norm not implementd when dtype={dtype}{g.get_debug_msg()}"
+    assert (
+        g.has_rank(x) and g.get_rank(x) > 0
+    ), f"Rank of {x!r} is unknown or null{g.get_debug_msg()}"
+    assert isinstance(dim, list) and all_int(
+        dim
+    ), f"Unsupported value for dim={dim} (type is {type(dim)}){g.get_debug_msg()}"
+    assert isinstance(ord, (float, int)), (
+        f"aten_linalg_vector_norm not implemented for ord={ord} "
+        f"(type is {type(ord)}{g.get_debug_msg()}"
+    )
+
+    adim = np.array(dim, dtype=np.int64)
+    kd = 1 if keepdim else 0
+
+    # ord = op.Cast(ord, to=FLOAT.dtype)  # Must be FLOAT, due to op.IsInf() needs FLOAT
+
+    if np.isinf(ord) and ord > 0:
+        res = g.op.ReduceMax(
+            g.op.Abs(x, name=name), adim, keepdims=kd, name=name, outputs=outputs
+        )
+    elif np.isinf(ord) and ord < 0:
+        res = g.op.ReduceMin(
+            g.op.Abs(x, name=name), adim, keepdims=kd, name=name, outputs=outputs
+        )
+    elif ord == 0.0:
+        raise AssertionError(
+            f"aten_linalg_vector_norm not yet implemented for ord={ord}{g.get_debug_msg()}"
+        )
+        # self_bool = g.op.Cast(self, to=TensorProto.BOOL)
+        # self_0_1 = op.CastLike(self_bool, self)
+        # result = op.ReduceSum(self_0_1, dim, keepdims=keepdim)
+    elif ord == 1.0:
+        res = g.op.ReduceL1(x, adim, keepdims=kd, name=name, outputs=outputs)
+    elif ord == 2.0:
+        res = g.op.ReduceL2(x, adim, keepdims=kd, name=name, outputs=outputs)
+    else:
+        raise AssertionError(
+            f"aten_linalg_vector_norm not yet implemented for ord={ord}{g.get_debug_msg()}"
+        )
+        # ord_float = op.CastLike(ord, self)
+        # self_pow = op.Pow(self, ord_float)
+        # result = op.Pow(op.ReduceSum(self_pow, dim,
+        # keepdims=keepdim), op.Div(1.0, ord_float))
+
+    return res
+
+
 def aten_linear(
     g: GraphBuilder,
     sts: Optional[Dict[str, Any]],
@@ -3788,6 +3865,28 @@ def aten_cudnn_batch_norm(
         return a, b, c, d
 
     return a, b, c, d
+
+
+def aten_clamp_min(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    min_: T,
+    name: str = "clamp_min",
+) -> T:
+    """clamp_min"""
+    if isinstance(min_, (float, int)):
+        assert g.has_type(x), f"Missing type for x={x!r}{g.get_debug_msg()}"
+        dtype = tensor_dtype_to_np_dtype(g.get_type(x))
+        min_value = np.array([min_], dtype=dtype)
+        res = g.op.Clip(x, min_value, name=name, outputs=outputs)
+    else:
+        assert isinstance(min_, str), f"Unexpected type {type(min_)}{g.get_debug_msg()}"
+        res = g.op.Max(x, min_, name=name, outputs=outputs)
+    if not sts:
+        set_type_shape_unary_op(g, res, x)
+    return res
 
 
 def aten_col2im(
@@ -5629,12 +5728,30 @@ def aten_sqrt(
 
 
 def aten__sym_sqrt(
-    g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    name: str = "_sym_sqrt",
 ) -> T:
-    "sqrt"
-    res = g.make_node("Sqrt", [x], name="_sym_sqrt")
-    if not sts:
-        set_type_shape_unary_op(g, outputs[0], x)
+    "symbolic sqrt"
+    assert g.has_type(x), f"Missing type for {x!r}{g.get_debug_msg()}"
+    itype = g.get_type(x)
+    if itype == TensorProto.INT64:
+        res = g.op.Sqrt(
+            g.op.Cast(x, to=TensorProto.FLOAT, name=name),
+            name=name,
+            outputs=outputs,
+        )
+        if not sts:
+            set_type_shape_unary_op(g, res, x, itype=TensorProto.FLOAT)
+    else:
+        assert (
+            itype == TensorProto.FLOAT
+        ), f"Unexpected type {itype} for {x!r}{g.get_debug_msg()}"
+        res = g.op.Sqrt(x, name=name, outputs=outputs)
+        if not sts:
+            set_type_shape_unary_op(g, res, x)
     return res
 
 

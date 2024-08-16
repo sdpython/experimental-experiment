@@ -20,7 +20,6 @@ from .onnx_layer_normalization import (
     LayerNormalizationScalePattern,
 )
 from .onnx_mul import (
-    DivByMulScalarPattern,
     MulMulMulScalarPattern,
     SwitchOrderBinaryPattern,
 )
@@ -99,7 +98,6 @@ def get_default_patterns(verbose: int = 0) -> List[PatternOptimization]:
         CastCastBinaryPattern(verbose=verbose),
         CastOpCastPattern(verbose=verbose),
         ComputationCastOpCastPattern(verbose=verbose),
-        DivByMulScalarPattern(verbose=verbose),
         DropoutPattern(verbose=verbose),
         ExpandPattern(verbose=verbose),
         ExpandBroadcastPattern(verbose=verbose),

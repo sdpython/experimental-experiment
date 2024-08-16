@@ -620,6 +620,7 @@ class BenchmarkRunner:
         memory_peak: bool = False,
         part: Optional[int] = None,
         pickled_name: Optional[str] = None,
+        rtopt: bool = True,
     ) -> Iterator[Dict[Any, Any]]:
         """Runs the benchmarks, run, export, run in onnx, measure the speedup."""
         assert not process, "process=True not implemented."
@@ -655,6 +656,7 @@ class BenchmarkRunner:
                     memory_peak=memory_peak,
                     folder=folder,
                     initial_no_grad=initial_no_grad,
+                    rtopt=rtopt,
                 )
                 if part == 0:
                     stats["STEP"] = "export"
@@ -721,6 +723,7 @@ class BenchmarkRunner:
         machine_specs=None,
         initial_no_grad=None,
         autocast=None,
+        rtopt=None,
     ):
         assert quiet is not None
         assert exporter is not None
@@ -849,6 +852,7 @@ class BenchmarkRunner:
         stats["_index"] = f"{model_name}-{exporter}"
         stats["date_start"] = f"{datetime.now():%Y-%m-%d}"
         stats["opt_patterns"] = optimization
+        stats["rtopt"] = rtopt
 
         if self.device.startswith("cuda"):
             stats["mema_gpu_1_after_loading"] = torch.cuda.max_memory_allocated(
@@ -1157,6 +1161,7 @@ class BenchmarkRunner:
         context["feeds"] = feeds
         context["warmup"] = warmup
         context["repeat"] = repeat
+        context["rtopt"] = rtopt
         return stats, context
 
     def _test_model_part_2(
@@ -1172,6 +1177,7 @@ class BenchmarkRunner:
         warmup=None,
         repeat=None,
         part1=None,
+        rtopt=None,
     ):
         assert expected is not None
         assert feeds is not None
@@ -1226,6 +1232,10 @@ class BenchmarkRunner:
         if isinstance(exported_model, onnx.ModelProto):
             domains = {d.domain for d in exported_model.opset_import}
             session_options = onnxruntime.SessionOptions()
+            if not rtopt:
+                session_options.graph_optimization_level = (
+                    onnxruntime.GraphOptimizationLevel.ORT_DISABLE_ALL
+                )
             if self.dump_ort:
                 session_options.optimized_model_filepath = f"{filename}-ortopt.onnx"
                 if self.verbose > 1:
