@@ -4288,7 +4288,8 @@ class GraphBuilder:
 
     def _update_shape_types_with_proto_one_result(self, val):
         itype = val.type.tensor_type.elem_type
-        self.set_type(val.name, itype)
+        if itype > 0:
+            self.set_type(val.name, itype)
         shape = tuple(
             d.dim_param if d.dim_param else d.dim_value
             for d in val.type.tensor_type.shape.dim
