@@ -552,6 +552,7 @@ class ModelRunner:
         if optimization:
             # cuda = any(m.is_cuda for m in self.model.parameters())
             options = OptimizationOptions(
+                constant_folding=True,
                 patterns=optimization,
                 verbose=10 if verbose >= 100 else (1 if verbose > 1 else 0),
                 processor="CUDA" if self.device.startswith("cuda") else "CPU",

@@ -3764,14 +3764,24 @@ class GraphBuilder:
                 f"{len(self.constants_)} constants and "
                 f"{len(self.nodes)} nodes."
             )
+            if self.verbose >= 10:
+                for name in self._known_names:
+                    print(
+                        f"[GraphBuilder.constant_folding] "
+                        f"cst:: {1 if self.is_constant(name) else '.'} :: {name}"
+                    )
         start = len(self.nodes)
         updates = {}
         node_to_remove = set()
         for k, v in self.constants_.items():
             if v is None:
                 # this is an initiliazer
+                if self.verbose > 4:
+                    print(f"[GraphBuilder.constant_folding] initializer: {k}")
                 continue
             assert isinstance(v, NodeProto), f"Unexpected type {type(v)} for k={k!r}"
+            if self.verbose > 4:
+                print(f"[GraphBuilder.constant_folding] from: {v.op_type}({k})")
             # a node
             if all(map(self.is_constant, v.input)):
                 # node evaluation
@@ -4556,6 +4566,10 @@ class GraphBuilder:
                         continue
                     if not self.has_name(o):
                         self.set_name(o)
+
+                self._make_node_set_type_shape_constant(node, True)
+                self._make_node_set_type_shape(node)
+
             new_nodes.append(node)
             for o in node.output:
                 if o in available_shapes:
