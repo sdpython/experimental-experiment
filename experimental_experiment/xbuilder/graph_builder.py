@@ -1811,7 +1811,7 @@ class GraphBuilder:
                 f"Unexpected type {type(final)}, final={final}, value={value}, d={d}"
                 f"{self.get_debug_msg()}"
             )
-            name = final[0]
+            name = final
             assert isinstance(name, str), (
                 f"Unexpected type {type(name)}, name={final}, value={value}, d={d}"
                 f"{self.get_debug_msg()}"

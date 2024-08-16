@@ -2201,6 +2201,7 @@ class TestGraphPatternOptimization(ExtTestCase):
             model,
             infer_shapes=True,
             optimization_options=OptimizationOptions(patterns=["ReshapeReshapeBinary"]),
+            verbose=0,
         )
         opt_onx = gr.to_onnx(optimize=True)
         self.assertEqual(["Add", "Reshape"], [n.op_type for n in opt_onx.graph.node])
