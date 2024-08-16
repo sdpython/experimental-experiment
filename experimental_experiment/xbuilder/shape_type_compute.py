@@ -177,10 +177,12 @@ def set_type_shape_binary_op(
                 rank = g.get_rank(input_name)
             else:
                 rank = max(rank, g.get_rank(input_name))
-        elif rank is not None:
-            # one shape is missing
+            continue
+        if rank is not None:
             rank = None
-            break
+        # one shape is missing
+        break
+
     if rank is not None:
         g.set_rank(name, rank)
 
@@ -258,7 +260,8 @@ def set_type_shape_reduce_op(
     if axes is None:
         g.set_rank(name, int(keepdim))
     elif not g.has_shape(x):
-        g.set_rank(name, g.get_rank(x) - int(keepdim) * len(axes))
+        if g.has_rank(x):
+            g.set_rank(name, g.get_rank(x) - int(keepdim) * len(axes))
     else:
         shape = list(g.get_shape(x))
         for d in axes:
@@ -762,8 +765,9 @@ def _set_shape_type_op_any_where(self: "GraphBuilder", node: NodeProto):  # noqa
         )
         sh = broadcast_shape(sh1, self.get_shape(node.input[2]), graph_builder=self)
         self.set_shape(node.output[0], sh)
-    elif self.has_rank(node.input[2]):
-        self.set_rank(node.output[0], max(map(self.get_rank, node.input)))
+    elif all(self.has_rank(i) for i in node.input):
+        print("***", node.input, [self.has_rank(i) for i in node.input])
+        self.set_rank(node.output[0], max(self.get_rank(i) for i in node.input))
 
 
 def _set_shape_type_op_any_unary(

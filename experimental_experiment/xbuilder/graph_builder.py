@@ -1062,8 +1062,9 @@ class GraphBuilder:
         """Returns the rank of a result."""
         assert isinstance(name, str), f"Unexpected type {type(name)} for name."
         assert name in self._known_ranks, (
-            f"rank is unknown for result {name!r}, "
-            f"known_shapes={self._known_ranks}{self.get_debug_msg()}"
+            f"rank is unknown for result {name!r}, has_shape={self.has_shape(name)}, "
+            f"has_rank={self.has_rank(name)}, "
+            f"known_ranks={self._known_ranks}{self.get_debug_msg()}"
         )
         return self._known_ranks[name]
 
@@ -3518,6 +3519,8 @@ class GraphBuilder:
     ) -> "torch.Tensor":  # noqa: F821
         x = feeds[node.input[0]]
         axis = feeds[node.input[1]]
+        if len(axis.shape) == 0:
+            return [np.squeeze(x, (int(axis),))]
         return [x.squeeze(tuple(int(i) for i in axis))]
 
     def _apply_unsqueeze(
@@ -3528,6 +3531,8 @@ class GraphBuilder:
         x = feeds[node.input[0]]
         axis = feeds[node.input[1]]
         if isinstance(x, np.ndarray):
+            if len(axis.shape) == 0:
+                return [np.expand_dims(x, (int(axis),))]
             return [np.expand_dims(x, tuple(int(i) for i in axis))]
         if len(axis) == 1:
             return [x.unsqueeze(int(axis[0]))]
