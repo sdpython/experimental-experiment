@@ -634,7 +634,11 @@ class TestGraphPatternCombination(ExtTestCase):
                 unittest.SkipTest(f"onnxruntime-training is needed for {e}")
             raise
         except RuntimeException as e:
-            if "Invalid fd was supplied" in str(e) or "cannot get file size" in str(e):
+            if (
+                "Invalid fd was supplied" in str(e)
+                or "cannot get file size" in str(e)
+                or "No such file or directory" in str(e)
+            ):
                 raise unittest.SkipTest(f"missing extension: {e}")  # noqa: B904
             raise
         self._check_ort_cpu_or_cuda(new_onx)
