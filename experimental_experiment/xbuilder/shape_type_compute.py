@@ -766,7 +766,6 @@ def _set_shape_type_op_any_where(self: "GraphBuilder", node: NodeProto):  # noqa
         sh = broadcast_shape(sh1, self.get_shape(node.input[2]), graph_builder=self)
         self.set_shape(node.output[0], sh)
     elif all(self.has_rank(i) for i in node.input):
-        print("***", node.input, [self.has_rank(i) for i in node.input])
         self.set_rank(node.output[0], max(self.get_rank(i) for i in node.input))
 
 
