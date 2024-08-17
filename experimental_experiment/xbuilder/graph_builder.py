@@ -1808,10 +1808,17 @@ class GraphBuilder:
             # We assume if len(new_value) > 1 that all names are equivalent.
             # The graph is doing the same computation multiple times.
             final = new_value[0]
-            assert isinstance(final, tuple) and len(final) == 2, (
+            assert isinstance(final, str) or (
+                isinstance(final, tuple) and len(final) == 2
+            ), (
                 f"Unexpected type {type(final)}, final={final}, value={value}, d={d}"
                 f"new_value={new_value}, {self.get_debug_msg()}"
             )
+            if isinstance(final, str):
+                # A formula
+                return final
+
+            # An alias
             name = final[0]
             assert isinstance(name, str), (
                 f"Unexpected type {type(name)}, name={final}, value={value}, d={d}, "
