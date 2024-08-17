@@ -67,7 +67,7 @@ def _get_session(
 
 def onnx_debug_backend(
     graph_module: "torch.fx.GraphModule",  # noqa: F821
-    args: List[Union["torch.Tensor", "torch.SymInt"]],  # noqa: F821
+    args: List[Union["torch.Tensor", "torch.SymInt", "torch.SymFloat"]],  # noqa: F821
     target_opset: Optional[int] = None,
     backend: Union[str, Callable[[ModelProto, Optional[bool]], Any]] = "ort",
     verbose: Union[int, Tuple[int, int]] = 0,

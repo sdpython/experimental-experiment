@@ -1261,12 +1261,28 @@ class GraphBuilder:
         if name not in self._known_value_shape:
             self._known_value_shape[name] = name
 
-        if isinstance(value, self.torch.SymInt):
-            if hasattr(value, "node") and isinstance(value.node, str):
-                key = f"{value.node}"
-            else:
-                key = str(value)
-        else:
+        key = None
+        if isinstance(value, (self.torch.SymInt, self.torch.SymFloat)):
+            if hasattr(value, "node"):
+                from torch.fx.experimental.sym_node import SymNode
+
+                if isinstance(value.node, str):
+                    key = f"{value.node}"
+                elif isinstance(value.node, SymNode):
+                    key = f"{value.node}"
+                    key2 = str(value.node._expr)
+                    if key != key2:
+                        assert key2 not in self.dynamic_objects, (
+                            f"Key {key!r} (key2={key2!r}) already registered, "
+                            f"name={name!r}{self.get_debug_msg()}"
+                        )
+                        self.dynamic_objects[key2] = value
+                else:
+                    raise AssertionError(
+                        f"Unexpected type {type(value.node)} for value.node={value.node}"
+                    )
+                    # key = str(value)
+        if key is None:
             key = str(value)
 
         if key not in self.dynamic_objects_rev:
@@ -1733,7 +1749,7 @@ class GraphBuilder:
 
     def _torch_sym_int(self, d, add: bool = False):
         assert isinstance(
-            d, (self.torch.SymInt, str)
+            d, (self.torch.SymInt, str, self.torch.SymFloat)
         ), f"unexpected type for d={d}, type={type(d)}"
         value = None
         try:

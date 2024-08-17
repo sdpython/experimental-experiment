@@ -167,6 +167,8 @@ for i in range(args.warmup):
                 )
             elif isinstance(t, torch.SymInt):
                 print(f"  output {ti}: dimension {t}")
+            elif isinstance(t, torch.SymFloat):
+                print(f"  output {ti}: dimensiof {t}")
 
 warmup_time = time.perf_counter() - begin
 print(f"-- done: warmup time {warmup_time}")
