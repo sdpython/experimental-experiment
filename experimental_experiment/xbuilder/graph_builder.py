@@ -3541,6 +3541,8 @@ class GraphBuilder:
             if len(axis.shape) == 0:
                 return [np.expand_dims(x, (int(axis),))]
             return [np.expand_dims(x, tuple(int(i) for i in axis))]
+        if isinstance(axis, np.ndarray):
+            axis = [int(axis)] if axis.shape == tuple() else axis.tolist()
         if len(axis) == 1:
             return [x.unsqueeze(int(axis[0]))]
         raise AssertionError(f"Not implemented for axis={axis}")
