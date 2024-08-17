@@ -11,7 +11,7 @@ def create_input_names(
 ):
     res = []
     for i, a in enumerate(args):
-        if isinstance(a, torch.SymInt):
+        if isinstance(a, (torch.SymInt, torch.SymFloat)):
             res.append(f"input_dim_{i}")
         else:
             res.append(f"input{i}")

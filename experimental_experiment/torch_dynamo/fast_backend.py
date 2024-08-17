@@ -77,7 +77,7 @@ def _serialize(args: Any) -> Any:
         return tuple(_serialize(a) for a in args)
     if isinstance(args, list):
         return [_serialize(a) for a in args]
-    if isinstance(args, (int, torch.SymInt)):
+    if isinstance(args, (int, torch.SymInt, float, torch.SymFloat)):
         return args
     raise RuntimeError(f"Unable to serialize type {type(args)}.")
 
@@ -188,7 +188,7 @@ class OrtBackend:
 
         res, dimensions = self._run_onnx_session_with_ortvaluevector(inputs)
         for x, name in zip(res, self.output_names):
-            if isinstance(x, (torch.SymInt, int)):
+            if isinstance(x, (torch.SymInt, int, float, torch.SymFloat)):
                 if x == 0:
                     self.dump_for_debug("debug_data", *inputs)
                 assert x != 0, (
@@ -219,8 +219,9 @@ class OrtBackend:
         new_tensors = []
         for tensor, (dim, rk, name) in zip(tensors, self.is_dimension_in):
             if dim:
+                dim_types = (int, torch.SymInt, float, torch.SymFloat)
                 assert isinstance(
-                    tensor, (int, torch.SymInt)
+                    tensor, dim_types
                 ), f"Unexpected type {type(tensor)} for name={name!r}."
                 dtypes.append(np.int64)
                 ti = int(tensor)
@@ -228,7 +229,7 @@ class OrtBackend:
                     f"Null value for a dimension ti={ti}, "
                     f"tensor={tensor}, rk={rk}, name={name!r}, "
                     f"type(tensor)={type(tensor)}, "
-                    f"dimension={[t for t in tensors if isinstance(t, (int,torch.SymInt))]}"
+                    f"dimension={[t for t in tensors if isinstance(t, dim_types)]}"
                 )
                 t = torch.tensor([ti] if rk == 1 else ti, dtype=torch.int64)
                 devices.append(self.devices[-1])

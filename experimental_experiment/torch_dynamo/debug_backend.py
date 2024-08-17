@@ -306,7 +306,7 @@ def onnx_debug_backend(
                     f"dim={dim}, rk={rk}, dtype={x.dtype}, shape={x.shape}"
                 )
                 nx = x.detach().cpu().numpy()
-            elif isinstance(x, (torch.SymInt, int)):
+            elif isinstance(x, (torch.SymInt, torch.SymFloat, int, float)):
                 assert dim and rk <= 1, (
                     f"Input {name!r} is not declared as a dimension but is, "
                     f"dim={dim}, rk={rk}, x={x}, type={type(x)}, names={names}"

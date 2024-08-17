@@ -1273,14 +1273,18 @@ class GraphBuilder:
             self.dynamic_objects_rev[key] = []
         self.dynamic_objects_rev[key].append((name, value))
         if shape_as_input:
-            assert isinstance(value, self.torch.SymInt), (
+            assert isinstance(value, (self.torch.SymInt, self.torch.SymFloat)), (
                 f"shape_as_input={shape_as_input}, unexpected type "
                 f"{type(value)} for value{self.get_debug_msg()}"
             )
             # torch.compile adds input for dynamic shapes
             return self.make_tensor_input(
                 self._known_value_shape[name],
-                TensorProto.INT64,
+                (
+                    TensorProto.INT64
+                    if isinstance(value, self.torch.SymInt)
+                    else TensorProto.FLOAT
+                ),
                 (1,),
                 is_dimension=True,
             )
@@ -1905,11 +1909,14 @@ class GraphBuilder:
                 self.input_names.append(name)
                 input_name = name
                 self.set_name(name)
+
         assert (is_dimension and "_dim_" in input_name) or (
             not is_dimension and "_dim_" not in input_name
         ), (
             f"Inconsistence for input {name!r}, input_name={input_name!r}, "
-            f"elem_type={elem_type}, shape={shape!r}, is_dimension={is_dimension}"
+            f"elem_type={elem_type}, shape={shape!r}, is_dimension={is_dimension}, "
+            f"self.current_input={self.current_input}, "
+            f"len(self.input_names)={len(self.input_names)}"
         )
 
         self.current_input += 1
