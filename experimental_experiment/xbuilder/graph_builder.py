@@ -946,10 +946,25 @@ class GraphBuilder:
                             f"existing {old_shape} != {shape} (new)"
                         )
                     else:
-                        raise RuntimeError(
-                            f"Shape {name!r} already exists and it is not compatible "
-                            f"existing {old_shape} != {shape} (new) {self.get_debug_msg()}"
-                        )
+                        for d1, d2 in zip(old_shape, shape):
+                            if isinstance(d1, int) and isinstance(d2, int):
+                                assert d1 == d2, (
+                                    f"Shape {name!r} already exists and one dimension "
+                                    f"is not compatible existing {old_shape} != {shape} "
+                                    f"(new) {self.get_debug_msg()}"
+                                )
+                            elif isinstance(d1, str) and isinstance(d2, str):
+                                if d1 == d2:
+                                    continue
+                                self.register_constraint_dimension(d1, d2)
+                            else:
+                                raise RuntimeError(
+                                    f"Shape {name!r} already exists "
+                                    f"and it is not compatible "
+                                    f"existing {old_shape} != {shape} (new) "
+                                    f"{self.get_debug_msg()}"
+                                )
+
             elif shape != old_shape:
                 if exc:
                     raise RuntimeError(
@@ -1272,11 +1287,16 @@ class GraphBuilder:
                     key = f"{value.node}"
                     key2 = str(value.node._expr)
                     if key != key2:
-                        assert key2 not in self.dynamic_objects, (
+                        assert (
+                            key2 not in self.dynamic_objects
+                            or value == self.dynamic_objects[key2]
+                        ), (
                             f"Key {key!r} (key2={key2!r}) already registered, "
+                            f"existing value={self.dynamic_objects.get(key2, '?')!r}, "
                             f"name={name!r}{self.get_debug_msg()}"
                         )
-                        self.dynamic_objects[key2] = value
+                        if key2 not in self.dynamic_objects:
+                            self.dynamic_objects[key2] = value
                 else:
                     raise AssertionError(
                         f"Unexpected type {type(value.node)} for value.node={value.node}"
