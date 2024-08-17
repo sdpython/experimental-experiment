@@ -1315,10 +1315,28 @@ class TestOperatorsCort(ExtTestCase):
             impl="ref",
         )
 
-    def test_slice_dynamic(self):
+    def test_slice_dynamic1(self):
         x = torch.rand(3, 4, requires_grad=True)
         self.assertONNX(
             lambda x: x[x.size(0) :, x.size(1) - 3],
+            x,
+            opset_version=10,
+            onnx_export=inspect.currentframe().f_code.co_name,
+        )
+
+    def test_slice_dynamic2(self):
+        x = torch.rand(7, 9, requires_grad=True)
+        self.assertONNX(
+            lambda x: x[1:, x.size(1) - 3],
+            x,
+            opset_version=10,
+            onnx_export=inspect.currentframe().f_code.co_name,
+        )
+
+    def test_slice_dynamic3(self):
+        x = torch.rand(7, 9, requires_grad=True)
+        self.assertONNX(
+            lambda x: x[1:4, 2 : x.size(1) - 3],
             x,
             opset_version=10,
             onnx_export=inspect.currentframe().f_code.co_name,

@@ -5200,8 +5200,12 @@ def aten_slice_backward(
 
         if isinstance(end, int):
             if end < 9223372036854775807:
+                assert isinstance(input_sizes[dim], int), (
+                    f"Not implemented for input_sizes={input_sizes}, "
+                    f"end={end}{g.get_debug_msg()}"
+                )
                 cst_shape = list(shape)
-                cst_shape[dim] = input_sizes[dim] - shape[dim] - start
+                cst_shape[dim] = input_sizes[dim] - end
                 cst = g.op.ConstantOfShape(
                     np.array(cst_shape, dtype=np.int64), value=value, name=name_s
                 )
@@ -5212,7 +5216,17 @@ def aten_slice_backward(
             cst_shape = g.op.ScatterElements(
                 a_shape,
                 np.array([dim], dtype=np.int64),
-                g.op.Cast(end, to=TensorProto.INT64, name=name_s_),
+                g.op.Sub(
+                    (
+                        np.array([input_sizes[dim]], dtype=np.int64)
+                        if isinstance(input_sizes[dim], int)
+                        else g.op.Cast(
+                            input_sizes[dim], to=TensorProto.INT64, name=name_s_
+                        )
+                    ),
+                    g.op.Cast(end, to=TensorProto.INT64, name=name_s_),
+                    name=name_s_,
+                ),
                 name=name_s_,
             )
             cst = g.op.ConstantOfShape(cst_shape, value=value, name=name_s_)
@@ -5223,16 +5237,14 @@ def aten_slice_backward(
         # dynamic version
         shape = g.op.Shape(grad_output, name=name_d)
 
-        assert isinstance(start, int) and isinstance(end, int), (
-            f"Unexpected type for start {start!r} or end {end!r}"
-            f"step={step}, "
-            f"input_sizes={input_sizes}, outputs={outputs}{g.get_debug_msg()}"
-        )
-        if start > 0:
+        if isinstance(start, str) or start > 0:
+            the_start = (
+                np.array([start], dtype=np.int64) if isinstance(start, int) else start
+            )
             cst_shape = g.op.ScatterElements(
                 shape,
                 np.array([dim], dtype=np.int64),
-                np.array([start], dtype=np.int64),
+                the_start,
                 axis=0,
                 name=name,
             )
@@ -5241,10 +5253,16 @@ def aten_slice_backward(
 
         inputs.append(grad_output)
 
-        if end < 9223372036854775807:
-            shape_dim = g.op.Gather(shape, np.array([dim], dtype=np.int64), name=name_d)
+        if isinstance(end, str) or end < 9223372036854775807:
+            the_end = np.array([end], dtype=np.int64) if isinstance(end, int) else end
             new_dim = g.op.Sub(
-                np.array([input_sizes[dim] - start], dtype=np.int64), shape_dim
+                (
+                    g.op.Cast(input_sizes[dim], to=TensorProto.INT64, name=name_d)
+                    if isinstance(input_sizes[dim], str)
+                    else np.array([input_sizes[dim]], dtype=np.int64)
+                ),
+                the_end,
+                name=name_d,
             )
             cst_shape = g.op.ScatterElements(
                 shape, np.array([dim], dtype=np.int64), new_dim, axis=0, name=name_d
