@@ -144,7 +144,7 @@ class TestEdMistral(ExtTestCase):
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.5", "AssertionError: original output #6 is None")
     @unittest.skipIf(sys.version_info >= (3, 12, 0), reason="too long")
-    def test_mistral_cort_dynamic(self):
+    def test_mistral_cort_dynamic_simple(self):
         model, input_tensors = get_mistral_model()
         input_tensors = input_tensors[0]
         expected = model(*input_tensors)
@@ -157,6 +157,9 @@ class TestEdMistral(ExtTestCase):
             verbose=0,
             return_storage=True,
             rename_inputs=True,
+            dump_prefix=(
+                "test_mistral_cort_dynamic_simple" if __name__ == "__main__" else None
+            ),
         )
         results = compiled_model(*input_tensors)
         self.assertEqualArray(expected[0].detach().numpy(), results[0], atol=1e-5)
@@ -170,7 +173,9 @@ class TestEdMistral(ExtTestCase):
 
         if __name__ == "__main__":
             for i, inst in enumerate(instances):
-                self.dump_onnx(f"test_mistral_cort_dynamic_{i}.onnx", inst["onnx"])
+                self.dump_onnx(
+                    f"test_mistral_cort_dynamic_{i}_simple.onnx", inst["onnx"]
+                )
 
     @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
     @ignore_warnings((DeprecationWarning, UserWarning))

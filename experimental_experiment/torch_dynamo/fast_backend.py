@@ -4,12 +4,14 @@ import time
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 import numpy as np
 from onnx import ModelProto, TensorProto, load
+from onnx.helper import tensor_dtype_to_np_dtype
 from onnx.numpy_helper import from_array, to_array
 import torch
 from torch._C import _from_dlpack
 from onnxruntime.capi import _pybind_state as ORTC
 from ..convert.ort_helper import append_custom_libraries
 from ..xbuilder import OptimizationOptions
+from ..xbuilder._dtype_helper import onnx_dtype_to_torch_dtype
 from ..torch_interpreter import to_onnx
 from ..torch_interpreter._torch_helper import create_input_names
 from ..xoptim import get_pattern_list
@@ -118,8 +120,8 @@ class OrtBackend:
         devices: Optional[Dict[int, Any]] = None,
         input_names: Optional[List[str]] = None,
         output_names: Optional[List[str]] = None,
-        is_dimension_in: Optional[List[Tuple[bool, int, str]]] = None,
-        is_dimension_out: Optional[List[Tuple[bool, int, Optional[str]]]] = None,
+        is_dimension_in: Optional[List[Tuple[bool, int, str, int]]] = None,
+        is_dimension_out: Optional[List[Tuple[bool, int, Optional[str], int]]] = None,
         dump_first_inputs: Optional[str] = None,
         stor: Optional[Dict[str, Any]] = None,
         onnx_model: Optional[ModelProto] = None,
@@ -167,14 +169,16 @@ class OrtBackend:
             for o in sess.get_inputs():
                 b = "_dim_" in o.name
                 rk = len(o.shape)
-                self.is_dimension_in.append((b, rk, o.name))
+                dt = o.type
+                self.is_dimension_in.append((b, rk, o.name, dt))
         if self.is_dimension_out is None:
             self.is_dimension_out = []
             for o in sess.get_outputs():
                 b = "_dim_" in o.name
                 rk = len(o.shape)
+                dt = o.type
                 self.is_dimension_out.append(
-                    (b, rk, None if "_NONE_" in o.name else o.name)
+                    (b, rk, None if "_NONE_" in o.name else o.name, dt)
                 )
 
     def __call__(self, *inputs):
@@ -217,21 +221,33 @@ class OrtBackend:
         assert isinstance(max_device, int), f"unexpected type for device={max_device!r}"
         assert tensors is not None, "tensors cannot be None"
         new_tensors = []
-        for tensor, (dim, rk, name) in zip(tensors, self.is_dimension_in):
+        for tensor, (dim, rk, name, dt) in zip(tensors, self.is_dimension_in):
             if dim:
                 dim_types = (int, torch.SymInt, float, torch.SymFloat)
                 assert isinstance(
                     tensor, dim_types
                 ), f"Unexpected type {type(tensor)} for name={name!r}."
-                dtypes.append(np.int64)
-                ti = int(tensor)
+                dtypes.append(tensor_dtype_to_np_dtype(dt))
+                ti = (
+                    int(tensor)
+                    if dt
+                    in {
+                        TensorProto.INT64,
+                        TensorProto.INT32,
+                        TensorProto.UINT64,
+                        TensorProto.UINT32,
+                    }
+                    else float(tensor)
+                )
                 assert ti != 0, (
                     f"Null value for a dimension ti={ti}, "
                     f"tensor={tensor}, rk={rk}, name={name!r}, "
                     f"type(tensor)={type(tensor)}, "
                     f"dimension={[t for t in tensors if isinstance(t, dim_types)]}"
                 )
-                t = torch.tensor([ti] if rk == 1 else ti, dtype=torch.int64)
+                t = torch.tensor(
+                    [ti] if rk == 1 else ti, dtype=onnx_dtype_to_torch_dtype(dt)
+                )
                 devices.append(self.devices[-1])
                 new_tensors.append(t)
                 dimensions.append(t)
@@ -240,7 +256,7 @@ class OrtBackend:
             else:
                 assert isinstance(tensor, torch.Tensor), (
                     f"Unexpected type {type(tensor)}, "
-                    f"dim={dim}, rk={rk}, name={name!r}, "
+                    f"dim={dim}, rk={rk}, name={name!r}, dt={dt}, "
                     f"len(tensors)={len(tensors)}, "
                     f"len(is_dimension_in)={len(self.is_dimension_in)}"
                 )
@@ -254,7 +270,7 @@ class OrtBackend:
 
         ortvalues.push_back_batch(new_tensors, data_ptrs, dtypes, shapes, devices)
         output_devices = []
-        for dim, _rk, _name in self.is_dimension_out:
+        for dim, _rk, _name, _dt in self.is_dimension_out:
             dev = self.devices[-1] if dim else self.devices[max_device]
             output_devices.append(dev)
 

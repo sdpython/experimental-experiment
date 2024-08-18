@@ -1,7 +1,8 @@
 import os
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
 import numpy as np
-from onnx import ModelProto
+from onnx import ModelProto, TensorProto
+from onnx.helper import tensor_dtype_to_np_dtype
 import torch
 from ..xbuilder import OptimizationOptions
 from ..torch_interpreter._torch_helper import create_input_names
@@ -299,7 +300,7 @@ def onnx_debug_backend(
         max_device = max(x.get_device() for x in inputs if isinstance(x, torch.Tensor))
 
         xnp = []
-        for x, (dim, rk, name) in zip(inputs, is_dimension_in):
+        for x, (dim, rk, name, dt) in zip(inputs, is_dimension_in):
             if isinstance(x, torch.Tensor):
                 assert not dim, (
                     f"Input {name!r} is declared as a dimension but is not, "
@@ -309,13 +310,18 @@ def onnx_debug_backend(
             elif isinstance(x, (torch.SymInt, torch.SymFloat, int, float)):
                 assert dim and rk <= 1, (
                     f"Input {name!r} is not declared as a dimension but is, "
-                    f"dim={dim}, rk={rk}, x={x}, type={type(x)}, names={names}"
+                    f"dim={dim}, rk={rk}, x={x}, dt={dt}, type={type(x)}, names={names}"
                 )
-                if isinstance(x, int):
-                    vi = x
+                if dt in {
+                    TensorProto.INT64,
+                    TensorProto.UINT64,
+                    TensorProto.INT32,
+                    TensorProto.UINT32,
+                }:
+                    vi = x if isinstance(x, int) else int(x)
                 else:
-                    vi = int(x)
-                nx = np.array(vi, dtype=np.int64)
+                    vi = x if isinstance(x, float) else float(x)
+                nx = np.array(vi, dtype=tensor_dtype_to_np_dtype(dt))
                 if rk == 1:
                     nx = nx.reshape((-1,))
             else:
@@ -329,7 +335,7 @@ def onnx_debug_backend(
         feeds = dict(zip(names, xnp))
         results = sess.run(None, feeds)
         res = []
-        for y, (dim, rk, name) in zip(results, is_dimension_out):
+        for y, (dim, rk, name, dt) in zip(results, is_dimension_out):
             if name is None:
                 res.append(None)
                 continue
@@ -338,10 +344,21 @@ def onnx_debug_backend(
                     f"Unexpected shape {y.shape} ({y}) for a dimension {name!r} "
                     f"(rk={rk})"
                 )
-                if y.shape == (1,):
-                    yi = int(y[0])
+                if dt in {
+                    TensorProto.INT64,
+                    TensorProto.UINT64,
+                    TensorProto.INT32,
+                    TensorProto.UINT32,
+                }:
+                    if y.shape == (1,):
+                        yi = int(y[0])
+                    else:
+                        yi = int(y)
                 else:
-                    yi = int(y)
+                    if y.shape == (1,):
+                        yi = float(y[0])
+                    else:
+                        yi = float(y)
                 res.append(yi)
                 continue
             if max_device >= 0:
