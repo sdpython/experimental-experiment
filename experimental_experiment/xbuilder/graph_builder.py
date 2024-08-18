@@ -4150,6 +4150,7 @@ class GraphBuilder:
         new_nodes: List[NodeProto],
         removed: List[int],
         opsets: Optional[Dict[str, int]] = None,
+        debug: Optional[Any] = None,
     ) -> List[NodeProto]:
         """
         Inserts new nodes and removes others.
@@ -4159,6 +4160,7 @@ class GraphBuilder:
         :param new_nodes: list of nodes to insert
         :param removed: list of nodes to removed (based on their positions)
         :param opsets: opsets used
+        :param debug: anything added to exception messages
         :return: list of removed nodes
         """
         assert insert_at is None or not removed or min(removed) <= insert_at, (
@@ -4183,9 +4185,10 @@ class GraphBuilder:
         n_existing = []
         for node in new_nodes:
             for i in node.input:
-                assert self.has_name(
-                    i
-                ), f"Input {i!r} does not exist for node {node.op_type!r}"
+                assert self.has_name(i), (
+                    f"Input {i!r} does not exist for node {node.op_type!r}, "
+                    f"debug={debug}{self.get_debug_msg()}"
+                )
             for o in node.output:
                 if self.has_name(o):
                     # connecting to existing input

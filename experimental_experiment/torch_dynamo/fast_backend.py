@@ -90,6 +90,19 @@ class OrtBackend:
     to implement a backend for ``torch.dynamo``.
     """
 
+    ORT_STR_TYPE_TO_TENSOR_TYPE = {
+        "tensor(int64)": TensorProto.INT64,
+        "tensor(int32)": TensorProto.INT32,
+        "tensor(int16)": TensorProto.INT16,
+        "tensor(uint64)": TensorProto.UINT64,
+        "tensor(uint32)": TensorProto.UINT32,
+        "tensor(uint16)": TensorProto.UINT16,
+        "tensor(float)": TensorProto.FLOAT,
+        "tensor(float16)": TensorProto.FLOAT16,
+        "tensor(double)": TensorProto.DOUBLE,
+        "tensor(bool)": TensorProto.BOOL,
+    }
+
     TORCH_DTYPE_TO_NUMPY_DTYPE = {
         torch.float16: np.float16,
         torch.float32: np.float32,
@@ -169,14 +182,14 @@ class OrtBackend:
             for o in sess.get_inputs():
                 b = "_dim_" in o.name
                 rk = len(o.shape)
-                dt = o.type
+                dt = self.ORT_STR_TYPE_TO_TENSOR_TYPE[o.type]
                 self.is_dimension_in.append((b, rk, o.name, dt))
         if self.is_dimension_out is None:
             self.is_dimension_out = []
             for o in sess.get_outputs():
                 b = "_dim_" in o.name
                 rk = len(o.shape)
-                dt = o.type
+                dt = self.ORT_STR_TYPE_TO_TENSOR_TYPE[o.type]
                 self.is_dimension_out.append(
                     (b, rk, None if "_NONE_" in o.name else o.name, dt)
                 )
@@ -227,7 +240,8 @@ class OrtBackend:
                 assert isinstance(
                     tensor, dim_types
                 ), f"Unexpected type {type(tensor)} for name={name!r}."
-                dtypes.append(tensor_dtype_to_np_dtype(dt))
+                np_dtype = tensor_dtype_to_np_dtype(dt)
+                dtypes.append(np_dtype)
                 ti = (
                     int(tensor)
                     if dt
