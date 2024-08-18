@@ -1941,6 +1941,10 @@ class GraphBuilder:
                         check=False,
                         name="make_tensor_input",
                     )
+                assert self.has_name(
+                    name
+                ), f"Missing name={name!r}, is_dimension={is_dimension}"
+                self.set_name(input_name)
             else:
                 self.input_names.append(name)
                 input_name = name
@@ -3218,6 +3222,9 @@ class GraphBuilder:
                     node.domain in self.opsets
                 ), f"Domain {node.domain!r} is not registered in {self.opsets}"
                 for i in node.input:
+                    assert self.has_name(
+                        i
+                    ), f"Name {i!r} not registered, node is {node}"
                     if i == "":
                         continue
                     assert (

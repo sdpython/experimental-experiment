@@ -3001,16 +3001,17 @@ def aten__log_softmax(
     dim: int = -1,
     unnamed: bool = False,
     dtype: Optional["torch.dtype"] = None,  # noqa: F821
+    name: str = "log_softmax",
 ) -> T:
     "logsoftmax"
     assert not unnamed, "Not implemented when the third parameter is False"
     if dtype is not None:
         itype = torch_dtype_to_onnx_dtype(dtype)
-        xc = g.op.Cast(x, to=itype, name="log_softmax")
+        xc = g.op.Cast(x, to=itype, name=name)
     else:
         itype = None
         xc = x
-    res = g.op.LogSoftmax(xc, axis=dim, outputs=outputs)
+    res = g.op.LogSoftmax(xc, axis=dim, outputs=outputs, name=name)
     if not sts:
         set_type_shape_unary_op(g, res, xc, itype=itype)
     return res
@@ -3024,29 +3025,27 @@ def aten__log_softmax_backward_data(
     output: T,
     dim: int,
     input_dtype: Optional["torch.dtype"] = None,  # noqa: F821
+    name: str = "_log_softmax_backward_data",
 ):
     "logsoftmax backward"
-    if input_dtype is not None:
-        itype = torch_dtype_to_onnx_dtype(input_dtype)
-        grad_outputc = g.op.Cast(
-            grad_output, to=itype, name="log_softmax_backward_data"
-        )
-        set_type_shape_unary_op(g, grad_outputc, grad_output, itype)
-    else:
-        itype = None
-        grad_outputc = grad_output
+    itype = None
+    grad_outputc = grad_output
 
-    vexp = g.op.Exp(output, name="log_softmax_backward_data")
+    vexp = g.op.Exp(output, name=name)
     red = g.op.ReduceSum(
         grad_outputc,
         np.array([dim], dtype=np.int64),
         keepdims=True,
-        name="log_softmax_backward_data",
+        name=name,
     )
-    vmul = g.op.Mul(vexp, red, name="log_softmax_backward_data")
-    res = g.op.Sub(
-        grad_outputc, vmul, outputs=outputs, name="log_softmax_backward_data"
-    )
+    vmul = g.op.Mul(vexp, red, name=name)
+
+    if input_dtype is not None:
+        itype = torch_dtype_to_onnx_dtype(input_dtype)
+        sub = g.op.Sub(grad_outputc, vmul, name=name)
+        res = g.op.Cast(sub, to=itype, name=name, outputs=outputs)
+    else:
+        res = g.op.Sub(grad_outputc, vmul, outputs=outputs, name=name)
 
     set_type_shape_unary_op(g, vexp, output)
     set_type_shape_unary_op(g, vmul, vexp)
@@ -5610,30 +5609,31 @@ def aten__softmax_backward_data(
     y: T,
     dim: int,
     input_dtype: Optional["torch.dtype"] = None,  # noqa: F821
+    name: str = "_softmax_backward_data",
 ) -> T:
     "softmax backward"
-    if input_dtype is not None:
-        itype = torch_dtype_to_onnx_dtype(input_dtype)
-        grad_outputc = g.op.Cast(
-            grad_output, to=itype, name="log_softmax_backward_data"
-        )
-        set_type_shape_unary_op(g, grad_outputc, grad_output, itype=itype)
-    else:
-        itype = None
-        grad_outputc = grad_output
+    itype = None
+    grad_outputc = grad_output
 
-    new_grad_output = g.op.Mul(grad_outputc, y)
+    new_grad_output = g.op.Mul(grad_outputc, y, name=name)
     set_type_shape_unary_op(g, new_grad_output, grad_outputc)
     sums = g.op.ReduceSum(
         new_grad_output,
         np.array([dim], dtype=np.int64),
         keepdims=1,
-        name="softmax_backward_data",
+        name=name,
     )
     set_type_shape_reduce_op(g, sums, new_grad_output, keepdim=1, axes=(dim,))
-    temp = g.op.Mul(y, sums, name="softmax_backward_data")
+    temp = g.op.Mul(y, sums, name=name)
     set_type_shape_unary_op(g, temp, y)
-    res = g.op.Sub(new_grad_output, temp, outputs=outputs, name="softmax_backward_data")
+
+    if input_dtype is not None:
+        itype = torch_dtype_to_onnx_dtype(input_dtype)
+        sub = g.op.Sub(new_grad_output, temp, name=name)
+        res = g.op.Cast(sub, to=itype, name=name, outputs=outputs)
+    else:
+        res = g.op.Sub(new_grad_output, temp, outputs=outputs, name=name)
+
     if not sts:
         set_type_shape_unary_op(g, res, grad_outputc, itype=itype)
     return res

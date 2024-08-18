@@ -146,7 +146,7 @@ class TestEdPhi(ExtTestCase):
                 verbose=0,  # (0, 10),
                 return_storage=True,
                 rename_inputs=False,
-                # dump_prefix="test_phi",
+                dump_prefix="test_phi_ort",
                 optimize=True,
             )
             torch.cuda.synchronize()
