@@ -118,7 +118,7 @@ class TestGraphPatternOptimizationEasy(ExtTestCase):
                     "name",
                     [
                         oh.make_tensor_value_info("X", TFLOAT16, ["A", "B"]),
-                        oh.make_tensor_value_info("I", TINT64, ["C"]),
+                        oh.make_tensor_value_info("I", TINT64, ["A"]),
                     ],
                     [oh.make_tensor_value_info("Y", TFLOAT16, [])],
                     [

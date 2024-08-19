@@ -5,7 +5,7 @@ import torch
 
 def dynger_backend(
     graph_module: "torch.fx.GraphModule",  # noqa: F821
-    args: List[Union["torch.Tensor", "torch.SymInt"]],  # noqa: F821
+    args: List[Union["torch.Tensor", "torch.SymInt", "torch.SymFloat"]],  # noqa: F821
     dynamic_shapes: Optional[Union[Dict[str, Any], Tuple[Any]]] = None,
     optimize: bool = True,
     verbose: Union[int, Tuple[int, int]] = 0,

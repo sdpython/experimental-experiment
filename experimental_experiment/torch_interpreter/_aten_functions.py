@@ -824,24 +824,50 @@ def aten_clamp(
     x: T,
     min: Optional[float] = None,
     max: Optional[float] = None,
+    name: str = "clamp",
 ) -> T:
     """clip"""
     if min is None and max is None:
-        return g.op.Identity(x, outputs=outputs)
+        return g.op.Identity(x, outputs=outputs, name=name)
 
     itype = g.get_type(x)
     dtype = tensor_dtype_to_np_dtype(itype)
     if max is None:
-        res = g.op.Clip(x, np.array([min], dtype=dtype), outputs=outputs)
+        res = g.op.Clip(x, np.array([min], dtype=dtype), outputs=outputs, name=name)
     elif min is None:
-        res = g.op.Clip(x, None, np.array([max], dtype=dtype), outputs=outputs)
+        res = g.op.Clip(
+            x, None, np.array([max], dtype=dtype), outputs=outputs, name=name
+        )
     else:
         res = g.op.Clip(
             x,
             np.array([min], dtype=dtype),
             np.array([max], dtype=dtype),
             outputs=outputs,
+            name=name,
         )
+    if not sts:
+        set_type_shape_unary_op(g, res, x)
+    return res
+
+
+def aten_clamp_min(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    min_: T,
+    name: str = "clamp_min",
+) -> T:
+    """clamp_min"""
+    if isinstance(min_, (float, int)):
+        assert g.has_type(x), f"Missing type for x={x!r}{g.get_debug_msg()}"
+        dtype = tensor_dtype_to_np_dtype(g.get_type(x))
+        min_value = np.array([min_], dtype=dtype)
+        res = g.op.Clip(x, min_value, name=name, outputs=outputs)
+    else:
+        assert isinstance(min_, str), f"Unexpected type {type(min_)}{g.get_debug_msg()}"
+        res = g.op.Max(x, min_, name=name, outputs=outputs)
     if not sts:
         set_type_shape_unary_op(g, res, x)
     return res
@@ -3001,16 +3027,17 @@ def aten__log_softmax(
     dim: int = -1,
     unnamed: bool = False,
     dtype: Optional["torch.dtype"] = None,  # noqa: F821
+    name: str = "log_softmax",
 ) -> T:
     "logsoftmax"
     assert not unnamed, "Not implemented when the third parameter is False"
     if dtype is not None:
         itype = torch_dtype_to_onnx_dtype(dtype)
-        xc = g.op.Cast(x, to=itype, name="log_softmax")
+        xc = g.op.Cast(x, to=itype, name=name)
     else:
         itype = None
         xc = x
-    res = g.op.LogSoftmax(xc, axis=dim, outputs=outputs)
+    res = g.op.LogSoftmax(xc, axis=dim, outputs=outputs, name=name)
     if not sts:
         set_type_shape_unary_op(g, res, xc, itype=itype)
     return res
@@ -3024,29 +3051,27 @@ def aten__log_softmax_backward_data(
     output: T,
     dim: int,
     input_dtype: Optional["torch.dtype"] = None,  # noqa: F821
+    name: str = "_log_softmax_backward_data",
 ):
     "logsoftmax backward"
-    if input_dtype is not None:
-        itype = torch_dtype_to_onnx_dtype(input_dtype)
-        grad_outputc = g.op.Cast(
-            grad_output, to=itype, name="log_softmax_backward_data"
-        )
-        set_type_shape_unary_op(g, grad_outputc, grad_output, itype)
-    else:
-        itype = None
-        grad_outputc = grad_output
+    itype = None
+    grad_outputc = grad_output
 
-    vexp = g.op.Exp(output, name="log_softmax_backward_data")
+    vexp = g.op.Exp(output, name=name)
     red = g.op.ReduceSum(
         grad_outputc,
         np.array([dim], dtype=np.int64),
         keepdims=True,
-        name="log_softmax_backward_data",
+        name=name,
     )
-    vmul = g.op.Mul(vexp, red, name="log_softmax_backward_data")
-    res = g.op.Sub(
-        grad_outputc, vmul, outputs=outputs, name="log_softmax_backward_data"
-    )
+    vmul = g.op.Mul(vexp, red, name=name)
+
+    if input_dtype is not None:
+        itype = torch_dtype_to_onnx_dtype(input_dtype)
+        sub = g.op.Sub(grad_outputc, vmul, name=name)
+        res = g.op.Cast(sub, to=itype, name=name, outputs=outputs)
+    else:
+        res = g.op.Sub(grad_outputc, vmul, outputs=outputs, name=name)
 
     set_type_shape_unary_op(g, vexp, output)
     set_type_shape_unary_op(g, vmul, vexp)
@@ -3865,28 +3890,6 @@ def aten_cudnn_batch_norm(
         return a, b, c, d
 
     return a, b, c, d
-
-
-def aten_clamp_min(
-    g: GraphBuilder,
-    sts: Optional[Dict[str, Any]],
-    outputs: List[str],
-    x: T,
-    min_: T,
-    name: str = "clamp_min",
-) -> T:
-    """clamp_min"""
-    if isinstance(min_, (float, int)):
-        assert g.has_type(x), f"Missing type for x={x!r}{g.get_debug_msg()}"
-        dtype = tensor_dtype_to_np_dtype(g.get_type(x))
-        min_value = np.array([min_], dtype=dtype)
-        res = g.op.Clip(x, min_value, name=name, outputs=outputs)
-    else:
-        assert isinstance(min_, str), f"Unexpected type {type(min_)}{g.get_debug_msg()}"
-        res = g.op.Max(x, min_, name=name, outputs=outputs)
-    if not sts:
-        set_type_shape_unary_op(g, res, x)
-    return res
 
 
 def aten_col2im(
@@ -5176,22 +5179,60 @@ def aten_slice_backward(
         # static version
         shape = g.get_shape(grad_output)
 
-        if start > 0:
-            cst_shape = list(shape)
-            cst_shape[dim] = start
-            cst = g.op.ConstantOfShape(
-                np.array(cst_shape, dtype=np.int64), value=value, name=name_s
+        if isinstance(start, int):
+            if start > 0:
+                cst_shape = list(shape)
+                cst_shape[dim] = start
+                cst = g.op.ConstantOfShape(
+                    np.array(cst_shape, dtype=np.int64), value=value, name=name_s
+                )
+                inputs.append(cst)
+        else:
+            name_s_ = f"{name_s}_2d"
+            a_shape = g.op.Shape(grad_output, name=name_s_)
+            cst_shape = g.op.ScatterElements(
+                a_shape,
+                np.array([dim], dtype=np.int64),
+                g.op.Cast(start, to=TensorProto.INT64, name=name_s_),
+                name=name_s_,
             )
+            cst = g.op.ConstantOfShape(cst_shape, value=value, name=name_s_)
             inputs.append(cst)
 
         inputs.append(grad_output)
 
-        if end < 9223372036854775807:
-            cst_shape = list(shape)
-            cst_shape[dim] = input_sizes[dim] - shape[dim] - start
-            cst = g.op.ConstantOfShape(
-                np.array(cst_shape, dtype=np.int64), value=value, name=name_s
+        if isinstance(end, int):
+            if end < 9223372036854775807:
+                assert isinstance(input_sizes[dim], int), (
+                    f"Not implemented for input_sizes={input_sizes}, "
+                    f"end={end}{g.get_debug_msg()}"
+                )
+                cst_shape = list(shape)
+                cst_shape[dim] = input_sizes[dim] - end
+                cst = g.op.ConstantOfShape(
+                    np.array(cst_shape, dtype=np.int64), value=value, name=name_s
+                )
+                inputs.append(cst)
+        else:
+            name_s_ = f"{name_s}_2d"
+            a_shape = g.op.Shape(grad_output, name=name_s_)
+            cst_shape = g.op.ScatterElements(
+                a_shape,
+                np.array([dim], dtype=np.int64),
+                g.op.Sub(
+                    (
+                        np.array([input_sizes[dim]], dtype=np.int64)
+                        if isinstance(input_sizes[dim], int)
+                        else g.op.Cast(
+                            input_sizes[dim], to=TensorProto.INT64, name=name_s_
+                        )
+                    ),
+                    g.op.Cast(end, to=TensorProto.INT64, name=name_s_),
+                    name=name_s_,
+                ),
+                name=name_s_,
             )
+            cst = g.op.ConstantOfShape(cst_shape, value=value, name=name_s_)
             inputs.append(cst)
 
     else:
@@ -5199,11 +5240,14 @@ def aten_slice_backward(
         # dynamic version
         shape = g.op.Shape(grad_output, name=name_d)
 
-        if start > 0:
+        if isinstance(start, str) or start > 0:
+            the_start = (
+                np.array([start], dtype=np.int64) if isinstance(start, int) else start
+            )
             cst_shape = g.op.ScatterElements(
                 shape,
                 np.array([dim], dtype=np.int64),
-                np.array([start], dtype=np.int64),
+                the_start,
                 axis=0,
                 name=name,
             )
@@ -5212,10 +5256,16 @@ def aten_slice_backward(
 
         inputs.append(grad_output)
 
-        if end < 9223372036854775807:
-            shape_dim = g.op.Gather(shape, np.array([dim], dtype=np.int64), name=name_d)
+        if isinstance(end, str) or end < 9223372036854775807:
+            the_end = np.array([end], dtype=np.int64) if isinstance(end, int) else end
             new_dim = g.op.Sub(
-                np.array([input_sizes[dim] - start], dtype=np.int64), shape_dim
+                (
+                    g.op.Cast(input_sizes[dim], to=TensorProto.INT64, name=name_d)
+                    if isinstance(input_sizes[dim], str)
+                    else np.array([input_sizes[dim]], dtype=np.int64)
+                ),
+                the_end,
+                name=name_d,
             )
             cst_shape = g.op.ScatterElements(
                 shape, np.array([dim], dtype=np.int64), new_dim, axis=0, name=name_d
@@ -5563,30 +5613,31 @@ def aten__softmax_backward_data(
     y: T,
     dim: int,
     input_dtype: Optional["torch.dtype"] = None,  # noqa: F821
+    name: str = "_softmax_backward_data",
 ) -> T:
     "softmax backward"
-    if input_dtype is not None:
-        itype = torch_dtype_to_onnx_dtype(input_dtype)
-        grad_outputc = g.op.Cast(
-            grad_output, to=itype, name="log_softmax_backward_data"
-        )
-        set_type_shape_unary_op(g, grad_outputc, grad_output, itype=itype)
-    else:
-        itype = None
-        grad_outputc = grad_output
+    itype = None
+    grad_outputc = grad_output
 
-    new_grad_output = g.op.Mul(grad_outputc, y)
+    new_grad_output = g.op.Mul(grad_outputc, y, name=name)
     set_type_shape_unary_op(g, new_grad_output, grad_outputc)
     sums = g.op.ReduceSum(
         new_grad_output,
         np.array([dim], dtype=np.int64),
         keepdims=1,
-        name="softmax_backward_data",
+        name=name,
     )
     set_type_shape_reduce_op(g, sums, new_grad_output, keepdim=1, axes=(dim,))
-    temp = g.op.Mul(y, sums, name="softmax_backward_data")
+    temp = g.op.Mul(y, sums, name=name)
     set_type_shape_unary_op(g, temp, y)
-    res = g.op.Sub(new_grad_output, temp, outputs=outputs, name="softmax_backward_data")
+
+    if input_dtype is not None:
+        itype = torch_dtype_to_onnx_dtype(input_dtype)
+        sub = g.op.Sub(new_grad_output, temp, name=name)
+        res = g.op.Cast(sub, to=itype, name=name, outputs=outputs)
+    else:
+        res = g.op.Sub(new_grad_output, temp, outputs=outputs, name=name)
+
     if not sts:
         set_type_shape_unary_op(g, res, grad_outputc, itype=itype)
     return res

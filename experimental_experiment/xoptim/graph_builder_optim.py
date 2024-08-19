@@ -742,7 +742,9 @@ class GraphBuilderPatternOptimization:
                     continue
                 print(f"  + {node.op_type}: {node.input} -> {node.output}")
 
-        self.builder.insert_and_remove_nodes(position_insert, new_nodes, removed)
+        self.builder.insert_and_remove_nodes(
+            position_insert, new_nodes, removed, debug=match
+        )
         if self.verbose >= 10:
             print(f"[GraphBuilderPatternOptimization.apply_match] {match} applied.")
         if self.dump_applied_patterns:

@@ -2,7 +2,9 @@ from typing import Any, Sequence, Tuple, Union
 import numpy as np
 
 STATIC_SHAPE = Tuple[int, ...]
-DYNAMIC_SHAPE = Tuple[Union[int, "torch.SymInt", str], ...]  # noqa: F821
+DYNAMIC_SHAPE = Tuple[
+    Union[int, "torch.SymInt", "torch.SymFloat", float, str], ...  # noqa: F821
+]
 
 
 def all_int(seq: Sequence[Any]) -> bool:
@@ -35,6 +37,13 @@ def is_static_dimension(d: int) -> bool:
     if isinstance(d, torch.SymInt):
         try:
             int(str(d))
+            return True
+        except ValueError:
+            return False
+
+    if isinstance(d, torch.SymFloat):
+        try:
+            int(float(str(d)))
             return True
         except ValueError:
             return False

@@ -222,7 +222,7 @@ class DynamoInterpreter:
                 )
             return self.builder.make_initializer(node.name, value)
 
-        if isinstance(val, self.torch.SymInt):
+        if isinstance(val, (self.torch.SymInt, self.torch.SymFloat)):
             return self.builder.make_dynamic_object(node.name, val, shape_as_input=True)
 
         raise RuntimeError(
