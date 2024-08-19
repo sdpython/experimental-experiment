@@ -2026,6 +2026,9 @@ class GraphBuilder:
             res = []
             for n in name:
                 res.append(self.make_tensor_output(n, elem_type, shape))
+                assert self.has_name(
+                    n
+                ), f"Output {n!r} among {name} not found{self.get_debug_msg()}"
             return res
 
         assert (
@@ -2044,6 +2047,7 @@ class GraphBuilder:
             raise RuntimeError(f"Undefined element type for {name!r}.")
         dyn_shape = self.verify_shape(shape, name=name, elem_type=elem_type)
         self.outputs.append(oh.make_tensor_value_info(name, elem_type, dyn_shape))
+        assert self.has_name(name), f"Output {name!r} not found{self.get_debug_msg()}"
         if self.verbose:
             print(
                 f"[GraphBuilder-{self._hash()}.make_tensor_output] "
@@ -3222,9 +3226,11 @@ class GraphBuilder:
                     node.domain in self.opsets
                 ), f"Domain {node.domain!r} is not registered in {self.opsets}"
                 for i in node.input:
-                    assert self.has_name(
-                        i
-                    ), f"Name {i!r} not registered, node is {node}"
+                    assert not i or self.has_name(i), (
+                        f"Name {i!r} not registered, node type is "
+                        f"{node.op_type!r}, node name is {node.name!r}, "
+                        f"input are {node.input}{self.get_debug_msg()}"
+                    )
                     if i == "":
                         continue
                     assert (

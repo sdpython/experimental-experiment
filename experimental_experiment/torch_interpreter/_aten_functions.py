@@ -824,24 +824,50 @@ def aten_clamp(
     x: T,
     min: Optional[float] = None,
     max: Optional[float] = None,
+    name: str = "clamp",
 ) -> T:
     """clip"""
     if min is None and max is None:
-        return g.op.Identity(x, outputs=outputs)
+        return g.op.Identity(x, outputs=outputs, name=name)
 
     itype = g.get_type(x)
     dtype = tensor_dtype_to_np_dtype(itype)
     if max is None:
-        res = g.op.Clip(x, np.array([min], dtype=dtype), outputs=outputs)
+        res = g.op.Clip(x, np.array([min], dtype=dtype), outputs=outputs, name=name)
     elif min is None:
-        res = g.op.Clip(x, None, np.array([max], dtype=dtype), outputs=outputs)
+        res = g.op.Clip(
+            x, None, np.array([max], dtype=dtype), outputs=outputs, name=name
+        )
     else:
         res = g.op.Clip(
             x,
             np.array([min], dtype=dtype),
             np.array([max], dtype=dtype),
             outputs=outputs,
+            name=name,
         )
+    if not sts:
+        set_type_shape_unary_op(g, res, x)
+    return res
+
+
+def aten_clamp_min(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    min_: T,
+    name: str = "clamp_min",
+) -> T:
+    """clamp_min"""
+    if isinstance(min_, (float, int)):
+        assert g.has_type(x), f"Missing type for x={x!r}{g.get_debug_msg()}"
+        dtype = tensor_dtype_to_np_dtype(g.get_type(x))
+        min_value = np.array([min_], dtype=dtype)
+        res = g.op.Clip(x, min_value, name=name, outputs=outputs)
+    else:
+        assert isinstance(min_, str), f"Unexpected type {type(min_)}{g.get_debug_msg()}"
+        res = g.op.Max(x, min_, name=name, outputs=outputs)
     if not sts:
         set_type_shape_unary_op(g, res, x)
     return res
@@ -3864,28 +3890,6 @@ def aten_cudnn_batch_norm(
         return a, b, c, d
 
     return a, b, c, d
-
-
-def aten_clamp_min(
-    g: GraphBuilder,
-    sts: Optional[Dict[str, Any]],
-    outputs: List[str],
-    x: T,
-    min_: T,
-    name: str = "clamp_min",
-) -> T:
-    """clamp_min"""
-    if isinstance(min_, (float, int)):
-        assert g.has_type(x), f"Missing type for x={x!r}{g.get_debug_msg()}"
-        dtype = tensor_dtype_to_np_dtype(g.get_type(x))
-        min_value = np.array([min_], dtype=dtype)
-        res = g.op.Clip(x, min_value, name=name, outputs=outputs)
-    else:
-        assert isinstance(min_, str), f"Unexpected type {type(min_)}{g.get_debug_msg()}"
-        res = g.op.Max(x, min_, name=name, outputs=outputs)
-    if not sts:
-        set_type_shape_unary_op(g, res, x)
-    return res
 
 
 def aten_col2im(
