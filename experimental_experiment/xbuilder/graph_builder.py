@@ -660,6 +660,10 @@ class GraphBuilder:
             self.constants_computed_[name] = v
             return v
 
+        if isinstance(value, np.float32):
+            # This should not be needed.
+            return np.array(value, dtype=np.float32)
+
         raise TypeError(f"Unable to convert type {type(value)} into numpy array.")
 
     def is_sequence(self, name: str) -> bool:
