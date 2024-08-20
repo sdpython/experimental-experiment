@@ -3243,7 +3243,8 @@ class TestGraphPatternOptimization(ExtTestCase):
                 [
                     oh.make_node("Mul", ["X", "c"], ["a"]),
                     oh.make_node("Mul", ["d", "Y"], ["b"]),
-                    oh.make_node("MatMul", ["a", "b"], ["Z"]),
+                    oh.make_node("MatMul", ["a", "b"], ["z"]),
+                    oh.make_node("Add", ["z", "z"], ["Z"]),
                 ],
                 "dummy",
                 [
@@ -3252,8 +3253,8 @@ class TestGraphPatternOptimization(ExtTestCase):
                 ],
                 [oh.make_tensor_value_info("Z", TFLOAT, [32, 64])],
                 [
-                    onh.from_array(np.array([0], dtype=np.float32), name="c"),
-                    onh.from_array(np.array([1], dtype=np.float32), name="d"),
+                    onh.from_array(np.array([0.4], dtype=np.float32), name="c"),
+                    onh.from_array(np.array([0.6], dtype=np.float32), name="d"),
                 ],
             )
         )
@@ -3272,12 +3273,14 @@ class TestGraphPatternOptimization(ExtTestCase):
             verbose=0,
         )
         opt_onx = gr.to_onnx(optimize=True)
-        self.assertEqual(["MatMul", "Mul"], [n.op_type for n in opt_onx.graph.node])
+        self.assertEqual(
+            ["MatMul", "Mul", "Add"], [n.op_type for n in opt_onx.graph.node]
+        )
         self.assertEqual(1, len(opt_onx.graph.initializer))
 
         opt_ref = ExtendedReferenceEvaluator(opt_onx)
         got = opt_ref.run(None, feeds)[0]
-        self.assertEqualArray(expected, got)
+        self.assertEqualArray(expected, got, atol=1e-5)
 
 
 if __name__ == "__main__":
