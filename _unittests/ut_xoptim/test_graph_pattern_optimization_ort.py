@@ -822,6 +822,67 @@ class TestGraphPatternOptimizationOrt(ExtTestCase):
         new_inputs = [tuple(n.input) for n in opt_onx.graph.node]
         self.assertNotEqual(inputs, new_inputs)
 
+    def test_bias_gelu(self):
+        from onnxruntime import InferenceSession
+
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("Add", ["X", "B"], ["xb"]),
+                    oh.make_node("Div", ["xb", "sq2"], ["xbinv"]),
+                    oh.make_node("Erf", ["xbinv"], ["xerf"]),
+                    oh.make_node("Add", ["xerf", "one"], ["xerf1"]),
+                    oh.make_node("Mul", ["xb", "xerf1"], ["y2"]),
+                    oh.make_node("Mul", ["y2", "half"], ["Y"]),
+                ],
+                "dummy",
+                [oh.make_tensor_value_info("X", TFLOAT, [2, 2, 4, 8])],
+                [oh.make_tensor_value_info("Y", TFLOAT, [2, 2, 4, 8])],
+                [
+                    onh.from_array(np.array([1], dtype=np.float32), name="one"),
+                    onh.from_array(np.array([0.5], dtype=np.float32), name="half"),
+                    onh.from_array(np.array([1.4140625], dtype=np.float32), name="sq2"),
+                    onh.from_array(
+                        np.array(
+                            [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, -0.4, -0.1], dtype=np.float32
+                        ),
+                        name="B",
+                    ),
+                ],
+            ),
+            opset_imports=[
+                oh.make_opsetid("", 18),
+                oh.make_opsetid("com.microsoft", 1),
+            ],
+            ir_version=9,
+        )
+        check_model(model)
+        feeds = {"X": self._range(2, 2, 4, 8)}
+        ref = InferenceSession(
+            model.SerializeToString(), providers=["CPUExecutionProvider"]
+        )
+        expected = ref.run(None, feeds)
+
+        gr = GraphBuilder(
+            model,
+            infer_shapes=True,
+            optimization_options=OptimizationOptions(patterns=["BiasGelu"], verbose=0),
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+        self.assertEqual(
+            ["BiasGelu"],
+            [n.op_type for n in opt_onx.graph.node],
+        )
+        self.assertEqual(1, len(opt_onx.graph.initializer))
+
+        opt_ref = InferenceSession(
+            opt_onx.SerializeToString(), providers=["CPUExecutionProvider"]
+        )
+        got = opt_ref.run(None, feeds)
+        self.assertEqualArray(expected[0], got[0], atol=1e-4)
+        node = opt_onx.graph.node[0]
+        self.assertEqual(node.op_type, "BiasGelu")
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
