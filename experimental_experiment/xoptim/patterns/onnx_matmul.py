@@ -351,6 +351,71 @@ class MatMulReshape2Of3Pattern(PatternOptimization):
         return res
 
 
+class MulMulMatMulPattern(PatternOptimization):
+    """
+    Replaces ``MatMul(a*c, b*d)``
+    where c and d are constant scalar
+    by ``MatMul(a,b) * (c,d)``.
+    """
+
+    def match(
+        self,
+        g: "GraphBuilderPatternOptimization",  # noqa: F821
+        node: NodeProto,
+        matched: List[MatchResult],
+    ) -> Optional[MatchResult]:
+        if node.op_type != "MatMul" or node.domain != "":
+            return self.none()
+
+        node_before = [g.node_before(i) for i in node.input]
+        if None in node_before:
+            return self.none(node, inspect.currentframe().f_lineno)
+        types = set(_.op_type for _ in node_before)
+        if types != {"Mul"}:
+            return self.none(node, inspect.currentframe().f_lineno)
+        cst = [
+            i
+            for i in [*node_before[0].input, *node_before[1].input]
+            if g.is_constant(i)
+        ]
+        if len(cst) != 2 or not all(g.is_constant_scalar(c) for c in cst):
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        return MatchResult(self, [*node_before, node], self.apply)
+
+    def apply(
+        self,
+        g: "GraphBuilder",  # noqa: F821
+        mul1: NodeProto,
+        mul2: NodeProto,
+        node: NodeProto,
+    ) -> List[NodeProto]:
+        cst = [i for i in [*mul1.input, *mul2.input] if g.is_constant(i)]
+        not_cst = [i for i in [*mul1.input, *mul2.input] if i not in cst]
+        assert len(cst) == 2, f"impossible cst={cst!r}"
+        assert len(not_cst) == 2, f"impossible not_cst={not_cst!r}"
+        cs = [g.get_computed_constant(c) for c in cst]
+        c = (cs[0] * cs[1]).astype(cs[0].dtype)
+
+        ccc = g.make_initializer("", c)
+        mul_name = g.unique_name(f"{self.__class__.__name__}_{node.output[0]}")
+
+        return [
+            g.make_node(
+                "MatMul",
+                not_cst,
+                [mul_name],
+                name=f"{self.__class__.__name__}--{node.name}-1",
+            ),
+            g.make_node(
+                "Mul",
+                [mul_name, ccc],
+                node.output,
+                name=f"{self.__class__.__name__}--{node.name}-2",
+            ),
+        ]
+
+
 class ReshapeMatMulReshapePattern(PatternOptimization):
     """
     Replaces the sequence Reshape, Matmul, Reshape by Matmul.

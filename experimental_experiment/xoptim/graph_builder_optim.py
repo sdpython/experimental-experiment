@@ -896,7 +896,14 @@ class GraphBuilderPatternOptimization:
                 f"saved {fullname!r}"
             )
 
-    def _check_graph(self, statistics, step, iteration, code, verifies):
+    def _check_graph(
+        self,
+        statistics: List[Dict[str, Any]],
+        step: str,
+        iteration: int,
+        code: str,
+        verifies: bool,
+    ):
         begin = time.perf_counter()
         assert (
             len(self.builder.nodes) > 0
@@ -910,11 +917,16 @@ class GraphBuilderPatternOptimization:
             for i in node.input:
                 if i == "":
                     continue
-                assert i in known, (
-                    f"Unknown input {i!r}, step {step!r} at position {p} "
-                    f"in node {node.op_type} "
-                    f"[{node.name}]: {node.input} -> {node.output}"
-                )
+                if i not in known:
+                    after = set()
+                    for nn in self.builder.nodes[p:]:
+                        after |= set(nn.output)
+                    raise AssertionError(
+                        f"Unknown input {i!r}, step {step!r} at position {p} "
+                        f"in node {node.op_type!r} "
+                        f"[{node.name}]: {node.input} -> {node.output}, "
+                        f"found after = {i in after}"
+                    )
             known |= set(node.output)
 
             if verifies:
@@ -1049,6 +1061,7 @@ class GraphBuilderPatternOptimization:
 
         begin_all = time.perf_counter()
         statistics = []
+        self._check_graph(statistics, "-", -1, "0", False)
 
         n_applied = 0
         last_it = 0

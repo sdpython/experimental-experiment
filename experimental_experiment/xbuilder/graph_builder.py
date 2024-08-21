@@ -660,6 +660,10 @@ class GraphBuilder:
             self.constants_computed_[name] = v
             return v
 
+        if isinstance(value, np.float32):
+            # This should not be needed.
+            return np.array(value, dtype=np.float32)
+
         raise TypeError(f"Unable to convert type {type(value)} into numpy array.")
 
     def is_sequence(self, name: str) -> bool:
@@ -1469,9 +1473,17 @@ class GraphBuilder:
         key = self.make_key(value)
         if key and key in self._values:
             if name == "":
-                return self._values[key]
+                new_name = self._values[key]
+                assert (
+                    new_name in self.initializers_dict
+                ), f"Unable to find {new_name!r}"
+                return new_name
             return self.make_node(
-                "Identity", [self._values[key]], [name], name="make_initializer"
+                "Identity",
+                [self._values[key]],
+                [name],
+                name="make_initializer",
+                insert_position="HEAD",
             )
 
         if isinstance(value, TensorProto):
@@ -2220,6 +2232,7 @@ class GraphBuilder:
         name: Optional[str] = None,
         sts: Optional[Dict[str, Any]] = None,
         do_not_remove: bool = False,
+        insert_position: Optional[int] = None,
         **kwargs,
     ) -> Union[str, List[str]]:
         """
@@ -2238,6 +2251,8 @@ class GraphBuilder:
             for every node, there is no tool which determines the output shape
             of just one node
         :param do_not_remove: prevent this node from being removed
+        :param insert_position: insert the node at the end (None) or
+            at the top (HEAD).
         :param kwargs: additional attributes to add the node
         :return: output names
         """
@@ -2398,7 +2413,10 @@ class GraphBuilder:
             if o == "":
                 continue
             self.set_name(o)
-        self.nodes.append(node)
+        if insert_position == "HEAD":
+            self.nodes.insert(0, node)
+        else:
+            self.nodes.append(node)
 
         if not shape_set:
             # second try
@@ -2762,6 +2780,11 @@ class GraphBuilder:
                         continue
 
                     from_np = True
+                elif isinstance(v, np.float32):
+                    # This should not happen.
+                    t = onh.from_array(np.array([v], dtype=np.float32), name=k)
+                    initializer.append(t)
+                    continue
                 else:
                     assert isinstance(
                         v, self.torch.Tensor
@@ -3212,6 +3235,7 @@ class GraphBuilder:
         Optimizes a graph.
         Returns the list of applied processes.
         """
+        self._clean_values_cache()
 
         def _check(stats, step):
             begin = time.perf_counter()
@@ -3495,6 +3519,7 @@ class GraphBuilder:
         Everything is done in one pass.
         Returns the number of removed nodes.
         """
+        self._clean_values_cache()
         start = len(self.nodes)
         # mark outputs
         marked = {o.name: set() for o in self.outputs}
@@ -3897,6 +3922,14 @@ class GraphBuilder:
             )
         return start - len(self.nodes)
 
+    def _clean_values_cache(self):
+        """
+        Cleans the cache. The cache is used to avoid the creation of new constants
+        while creating a graph. It should be removed the graph is modified.
+        """
+        if self._values:
+            self._values.clear()
+
     def remove_identity_nodes(self) -> Tuple[int, int]:
         """
         Removes identity nodes. Returns the number of removed nodes
@@ -3911,6 +3944,8 @@ class GraphBuilder:
             marked so that it does not get deleted: its name must start with
             ``'_DONOTREMOVE_'``.
         """
+        self._clean_values_cache()
+        # make_initializer
         if self.verbose > 1:
             begin_ = time.perf_counter()
             print(
