@@ -3291,7 +3291,7 @@ class TestGraphPatternOptimization(ExtTestCase):
                     oh.make_node("Transpose", ["xts"], ["Y"], perm=[0, 3, 1, 2]),
                 ],
                 "dummy",
-                [oh.make_tensor_value_info("X", TFLOAT, [32, 4, 14, 4, 14, 128])],
+                [oh.make_tensor_value_info("X", TFLOAT, [32, 4, 4, 14, 14, 128])],
                 [oh.make_tensor_value_info("Y", TFLOAT, [32, 128, 56, 56])],
                 [
                     onh.from_array(
@@ -3301,7 +3301,7 @@ class TestGraphPatternOptimization(ExtTestCase):
             )
         )
         check_model(model)
-        feeds = {"X": self._range(32, 4, 14, 4, 14, 128)}
+        feeds = {"X": self._range(32, 4, 4, 14, 14, 128)}
         ref = ExtendedReferenceEvaluator(model)
         expected = ref.run(None, feeds)[0]
 

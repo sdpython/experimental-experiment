@@ -167,10 +167,63 @@ class TransposeReshapeTransposePattern(PatternOptimization):
         p2 = list(g.get_attribute(t2_node, "perm").ints)
         if len(p2) > len(p1):
             return None
-        shape = g.get_computed_constant(reshape_node.input[1]).tolist()
-        if not is_static_shape(shape):
+        new_shape = g.get_computed_constant(reshape_node.input[1]).tolist()
+        if not is_static_shape(new_shape):
             return None
-        raise AssertionError("Not implemented yet.")
+        if not g.has_shape(reshape_node.input[0]):
+            return None
+        shape = g.get_shape(reshape_node.input[0])
+
+        mapped: List[Tuple[Tuple[int, ...], Tuple[int, ...]]] = []
+        i, j = 0, 0
+        while i < len(shape) and j < len(new_shape):
+            if shape[i] == new_shape[j]:
+                mapped.append(((i,), (j,)))
+                i += 1
+                j += 1
+                continue
+
+            ii, jj = [i], [j]
+            s1 = shape[i]
+            s2 = new_shape[j]
+            while s1 != s2 and i < len(shape) and j < len(new_shape):
+                if s1 < s2:
+                    i += 1
+                    assert i < len(shape), f"Unxpected index i={i}, shape={shape}"
+                    s1 *= shape[i]
+                    ii.append(i)
+                else:
+                    j += 1
+                    assert j < len(
+                        new_shape
+                    ), f"Unxpected index i={j}, shape={new_shape}"
+                    s2 *= new_shape[j]
+                    jj.append(j)
+
+            if min(len(ii), len(jj)) != 1:
+                return None
+            if len(jj) != 1:
+                return None
+
+            mapped.append((tuple(ii), tuple(jj)))
+            i += 1
+            j += 1
+
+        if i != len(shape) or j != len(new_shape):
+            return None
+        if len(mapped) != len(p2):
+            return None
+
+        # mapping is done, build new permutation
+        new_perm = []
+        for p in p2:
+            new_perm.extend(mapped[p][0])
+
+        new_reshape = [0 for s in p2]
+        for i, p in enumerate(p2):
+            new_reshape[i] = new_shape[p]
+
+        return new_perm, new_reshape
 
     def apply(
         self,
@@ -196,7 +249,6 @@ class TransposeReshapeTransposePattern(PatternOptimization):
                 "Reshape",
                 [new_name, new_shape_name],
                 t2_node.output,
-                perm=new_perm,
                 name=f"{self.__class__.__name__}--{reshape_node.name}",
                 doc_string=reshape_node.doc_string,
             ),
