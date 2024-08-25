@@ -156,24 +156,9 @@ class TransposeReshapeTransposePattern(PatternOptimization):
 
         return MatchResult(self, [node, reshape, transpose], self.apply)
 
-    def _new_shape_perm(
-        self,
-        g: "GraphBulder",  # noqa: F821
-        t1_node: NodeProto,
-        reshape_node: NodeProto,
-        t2_node: NodeProto,
-    ) -> Optional[Tuple[Tuple[int, ...], List[int]]]:
-        p1 = list(g.get_attribute(t1_node, "perm").ints)
-        p2 = list(g.get_attribute(t2_node, "perm").ints)
-        if len(p2) > len(p1):
-            return None
-        new_shape = g.get_computed_constant(reshape_node.input[1]).tolist()
-        if not is_static_shape(new_shape):
-            return None
-        if not g.has_shape(reshape_node.input[0]):
-            return None
-        shape = g.get_shape(reshape_node.input[0])
-
+    def _align_shape(
+        self, shape: Tuple[int, ...], new_shape: Tuple[int, ...]
+    ) -> Optional[List[Tuple[Tuple[int, ...], Tuple[int, ...]]]]:
         mapped: List[Tuple[Tuple[int, ...], Tuple[int, ...]]] = []
         i, j = 0, 0
         while i < len(shape) and j < len(new_shape):
@@ -211,19 +196,41 @@ class TransposeReshapeTransposePattern(PatternOptimization):
 
         if i != len(shape) or j != len(new_shape):
             return None
-        if len(mapped) != len(p2):
-            return None
+        return mapped
 
-        # mapping is done, build new permutation
-        new_perm = []
-        for p in p2:
-            new_perm.extend(mapped[p][0])
+    def _new_shape_perm(
+        self,
+        g: "GraphBulder",  # noqa: F821
+        t1_node: NodeProto,
+        reshape_node: NodeProto,
+        t2_node: NodeProto,
+    ) -> Optional[Tuple[Tuple[int, ...], List[int], bool]]:
+        p1 = list(g.get_attribute(t1_node, "perm").ints)
+        p2 = list(g.get_attribute(t2_node, "perm").ints)
+        if len(p2) <= len(p1):
+            new_shape = g.get_computed_constant(reshape_node.input[1]).tolist()
+            if not is_static_shape(new_shape):
+                return None
+            if not g.has_shape(reshape_node.input[0]):
+                return None
+            shape = g.get_shape(reshape_node.input[0])
 
-        new_reshape = [0 for s in p2]
-        for i, p in enumerate(p2):
-            new_reshape[i] = new_shape[p]
+            mapped = self._align_shape(shape, new_shape)
+            if mapped is None:
+                return None
+            if len(mapped) != len(p2):
+                return None
 
-        return new_perm, new_reshape
+            # mapping is done, build new permutation
+            new_perm = []
+            for p in p2:
+                new_perm.extend(mapped[p][0])
+
+            new_reshape = [0 for s in p2]
+            for i, p in enumerate(p2):
+                new_reshape[i] = new_shape[p]
+
+            return new_perm, new_reshape, True
 
     def apply(
         self,
@@ -232,7 +239,9 @@ class TransposeReshapeTransposePattern(PatternOptimization):
         reshape_node: NodeProto,
         t2_node: NodeProto,
     ) -> List[NodeProto]:
-        new_perm, new_shape = self._new_shape_perm(g, t1_node, reshape_node, t2_node)
+        new_perm, new_shape, after = self._new_shape_perm(
+            g, t1_node, reshape_node, t2_node
+        )
         new_name = g.unique_name(f"{self.__class__.__name__}_{t1_node.output[0]}")
         new_shape_name = g.make_initializer("", np.array(new_shape, dtype=np.int64))
         return [
