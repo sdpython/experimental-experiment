@@ -3359,7 +3359,7 @@ class TestGraphPatternOptimization(ExtTestCase):
         )
         opt_onx = gr.to_onnx(optimize=True)
         self.assertEqual(
-            ["Transpose", "Transpose", "Reshape"],
+            ["Reshape", "Transpose", "Transpose"],
             [n.op_type for n in opt_onx.graph.node],
         )
         self.assertEqual(1, len(opt_onx.graph.initializer))

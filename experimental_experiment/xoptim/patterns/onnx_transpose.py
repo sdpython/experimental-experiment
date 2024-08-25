@@ -187,8 +187,6 @@ class TransposeReshapeTransposePattern(PatternOptimization):
 
             if min(len(ii), len(jj)) != 1:
                 return None
-            if len(jj) != 1:
-                return None
 
             mapped.append((tuple(ii), tuple(jj)))
             i += 1
@@ -207,17 +205,20 @@ class TransposeReshapeTransposePattern(PatternOptimization):
     ) -> Optional[Tuple[Tuple[int, ...], List[int], bool]]:
         p1 = list(g.get_attribute(t1_node, "perm").ints)
         p2 = list(g.get_attribute(t2_node, "perm").ints)
-        if len(p2) <= len(p1):
-            new_shape = g.get_computed_constant(reshape_node.input[1]).tolist()
-            if not is_static_shape(new_shape):
-                return None
-            if not g.has_shape(reshape_node.input[0]):
-                return None
-            shape = g.get_shape(reshape_node.input[0])
+        new_shape = g.get_computed_constant(reshape_node.input[1]).tolist()
+        if not is_static_shape(new_shape):
+            return None
+        if -1 in new_shape:
+            return None
+        if not g.has_shape(reshape_node.input[0]):
+            return None
+        shape = g.get_shape(reshape_node.input[0])
+        mapped = self._align_shape(shape, new_shape)
+        if mapped is None:
+            return None
 
-            mapped = self._align_shape(shape, new_shape)
-            if mapped is None:
-                return None
+        if len(p2) <= len(p1):
+            # move the reshape after the next transpose
             if len(mapped) != len(p2):
                 return None
 
@@ -232,6 +233,22 @@ class TransposeReshapeTransposePattern(PatternOptimization):
 
             return new_perm, new_reshape, True
 
+        # move the reshape before the previous transpose
+        if len(mapped) != len(p1):
+            return None
+
+        # mapping is done, build new permutation
+        new_perm = []
+        for p in p1:
+            new_perm.extend(mapped[p][1])
+
+        new_reshape = []
+        for _a, b in mapped:
+            # fix permutation
+            new_reshape.extend([new_shape[_] for _ in b])
+
+        return new_perm, new_reshape, False
+
     def apply(
         self,
         g: "GraphBuilder",  # noqa: F821
@@ -244,21 +261,41 @@ class TransposeReshapeTransposePattern(PatternOptimization):
         )
         new_name = g.unique_name(f"{self.__class__.__name__}_{t1_node.output[0]}")
         new_shape_name = g.make_initializer("", np.array(new_shape, dtype=np.int64))
+        if after:
+            return [
+                t1_node,
+                g.make_node(
+                    "Transpose",
+                    [t1_node.output[0]],
+                    [new_name],
+                    perm=new_perm,
+                    name=f"{self.__class__.__name__}--C--{t2_node.name}",
+                    doc_string=t2_node.doc_string,
+                ),
+                g.make_node(
+                    "Reshape",
+                    [new_name, new_shape_name],
+                    t2_node.output,
+                    name=f"{self.__class__.__name__}--D--{reshape_node.name}",
+                    doc_string=reshape_node.doc_string,
+                ),
+            ]
+
         return [
-            t1_node,
-            g.make_node(
-                "Transpose",
-                [t1_node.output[0]],
-                [new_name],
-                perm=new_perm,
-                name=f"{self.__class__.__name__}--{t2_node.name}",
-                doc_string=t2_node.doc_string,
-            ),
             g.make_node(
                 "Reshape",
-                [new_name, new_shape_name],
-                t2_node.output,
-                name=f"{self.__class__.__name__}--{reshape_node.name}",
+                [t1_node.input[0], new_shape_name],
+                [new_name],
+                name=f"{self.__class__.__name__}--A--{reshape_node.name}",
                 doc_string=reshape_node.doc_string,
             ),
+            g.make_node(
+                "Transpose",
+                [new_name],
+                [t2_node.input[0]],
+                perm=new_perm,
+                name=f"{self.__class__.__name__}--B--{t1_node.name}",
+                doc_string=t1_node.doc_string,
+            ),
+            t2_node,
         ]
