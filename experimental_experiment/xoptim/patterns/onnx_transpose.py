@@ -242,10 +242,17 @@ class TransposeReshapeTransposePattern(PatternOptimization):
         for p in p1:
             new_perm.extend(mapped[p][1])
 
-        new_reshape = []
+        perm = []
         for _a, b in mapped:
             # fix permutation
-            new_reshape.extend([new_shape[_] for _ in b])
+            perm.extend(b)
+
+        assert len(perm) == len(
+            new_perm
+        ), f"Unexpected length mismatch, perm={perm}, new_perm={new_perm}"
+        new_reshape = [0 for _ in perm]
+        for i, p in enumerate(new_perm):
+            new_reshape[p] = new_shape[i]
 
         return new_perm, new_reshape, False
 
