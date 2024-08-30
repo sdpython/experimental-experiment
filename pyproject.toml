@@ -9,7 +9,6 @@ exclude = [
     "onnxscript",
 ]
 
-# Same as Black.
 line-length = 93
 
 [tool.ruff.lint]

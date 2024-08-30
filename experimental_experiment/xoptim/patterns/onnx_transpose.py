@@ -237,22 +237,18 @@ class TransposeReshapeTransposePattern(PatternOptimization):
         if len(mapped) != len(p1):
             return None
 
-        # mapping is done, build new permutation
-        new_perm = []
-        for p in p1:
-            new_perm.extend(mapped[p][1])
-
-        perm = []
-        for _a, b in mapped:
-            # fix permutation
-            perm.extend(b)
-
-        assert len(perm) == len(
-            new_perm
-        ), f"Unexpected length mismatch, perm={perm}, new_perm={new_perm}"
-        new_reshape = [0 for _ in perm]
-        for i, p in enumerate(new_perm):
-            new_reshape[p] = new_shape[i]
+        # mapping is done, build new permutation and shape
+        rev_p1 = [0 for _ in p1]
+        for i, p in enumerate(p1):
+            rev_p1[p] = i
+        indices = []
+        for p in rev_p1:
+            indices.extend(mapped[p][1])
+        new_reshape = [new_shape[i] for i in indices]
+        rev_indices = [0 for _ in indices]
+        for i, p in enumerate(indices):
+            rev_indices[p] = i
+        new_perm = rev_indices
 
         return new_perm, new_reshape, False
 
