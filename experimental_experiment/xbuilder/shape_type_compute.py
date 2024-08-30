@@ -656,7 +656,7 @@ def _set_shape_type_op_any_transpose(
         shape = self.get_shape(node.input[0])
         assert len(perm) == len(shape), (
             f"Mismatch between perm={perm} and shape={shape}, "
-            f"for op {node.op_type!r} and name={node.name}"
+            f"for op {node.op_type!r} and name={node.name!r}"
             f"{self.get_debug_msg()}"
         )
         new_shape = list(range(len(perm)))
