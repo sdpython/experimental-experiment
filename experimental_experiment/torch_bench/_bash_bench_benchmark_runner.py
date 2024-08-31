@@ -621,6 +621,7 @@ class BenchmarkRunner:
         part: Optional[int] = None,
         pickled_name: Optional[str] = None,
         rtopt: bool = True,
+        shape_again: bool = False,
     ) -> Iterator[Dict[Any, Any]]:
         """Runs the benchmarks, run, export, run in onnx, measure the speedup."""
         assert not process, "process=True not implemented."
@@ -657,6 +658,7 @@ class BenchmarkRunner:
                     folder=folder,
                     initial_no_grad=initial_no_grad,
                     rtopt=rtopt,
+                    shape_again=shape_again,
                 )
                 if part == 0:
                     stats["STEP"] = "export"
@@ -724,6 +726,7 @@ class BenchmarkRunner:
         initial_no_grad=None,
         autocast=None,
         rtopt=None,
+        shape_again=None,
     ):
         assert quiet is not None
         assert exporter is not None
@@ -733,6 +736,7 @@ class BenchmarkRunner:
         assert folder is not None
         assert machine_specs is not None
         assert initial_no_grad is not None
+        assert shape_again is not None
 
         import onnxruntime
         import onnxscript
@@ -1113,6 +1117,25 @@ class BenchmarkRunner:
         stats["filename"] = filename
         stats["onnx_weight_size_proto"] = compute_weight_size(exported_model)
         stats["onnx_weight_size_torch"] = model_runner.compute_weight_size()
+
+        if shape_again:
+            if self.verbose:
+                print(f"[benchmarkrunner.benchmark] redo shapes {filename!r}")
+                if self.verbose > 1:
+                    print(f"[benchmarkrunner.benchmark] load {filename!r}")
+            onx_with_shapes = onnx.load(filename, load_external_data=False)
+            if self.verbose > 1:
+                print("[benchmarkrunner.benchmark] wipe shapes out")
+            del onx_with_shapes.graph.value_info[:]
+            if self.verbose > 1:
+                print("[benchmarkrunner.benchmark] do shape inference again")
+            onx_with_shapes = onnx.shape_inference.infer_shapes(onx_with_shapes)
+            if self.verbose > 1:
+                print("[benchmarkrunner.benchmark] saves {filename!r}")
+            onnx.save(onx_with_shapes, filename, save_as_external_data=False)
+            if self.verbose:
+                print(f"[benchmarkrunner.benchmark] done shapes again {filename!r}")
+
         if quiet:
             try:
                 feeds = model_runner.make_feeds(exporter, filename)

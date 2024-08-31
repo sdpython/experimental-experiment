@@ -2783,6 +2783,7 @@ def aten_index_Tensor(
         return res
 
     if n_none == 1 and indices[0] is None:
+        # TODO: this is doing something wrong
         shapes = [g.get_shape(i) for i in indices if i is not None]
         assert (
             len(set(shapes)) == 1
