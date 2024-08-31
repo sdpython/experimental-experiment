@@ -8,12 +8,13 @@ import sys
 from enum import Enum
 from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 import numpy as np
-from onnx import TensorProto, ValueInfoProto
+from onnx import TensorProto
 from onnx.helper import (
     tensor_dtype_to_np_dtype,
     make_tensor,
     make_graph,
     make_node,
+    make_tensor_value_info,
 )
 from onnx.numpy_helper import from_array
 from ..xbuilder._shape_helper import (
@@ -1634,6 +1635,10 @@ def aten_embedding_bag_padding_idx(
 ) -> Tuple[T, T, T, T]:
     "embedding_bag.padding_idx"
     assert g.has_type(weight), f"unknown type for weight={weight!r}{g.get_debug_msg()}"
+    assert (
+        padding_idx is None
+    ), f"Not implemented for padding_idx={padding_idx}{g.get_debug_msg()}"
+    itype = g.get_type(weight)
 
     # Change padding_idx to positive value, -1 means the last index
     if padding_idx is not None and padding_idx < 0:
@@ -1699,11 +1704,6 @@ def aten_embedding_bag_padding_idx(
     # loop_len = _size_helper(g, offsets_ends, g.op("Constant", value_t=torch.tensor(0)))
     loop_len = g.op.Gather(g.op.Shape(offsets_ends, name=name), zero, name=name)
 
-    def make_value(name):
-        value = ValueInfoProto()
-        value.name = name
-        return value
-
     assert (
         g.main_opset >= 18
     ), f"Not implemented for opset={g.main_opset} and mode={mode}{g.get_debug_msg()}"
@@ -1746,19 +1746,24 @@ def aten_embedding_bag_padding_idx(
     loop_body = make_graph(
         nodes,
         f"loop_body_{name}",
-        [make_value("block_input_iter"), make_value("cond")],
-        [make_value("cond_out"), make_value("reduced_embedings")],
+        [
+            make_tensor_value_info("block_input_iter", TensorProto.INT64, []),
+            make_tensor_value_info("cond", TensorProto.BOOL, []),
+        ],
+        [
+            make_tensor_value_info("cond_out", TensorProto.BOOL, []),
+            make_tensor_value_info("reduced_embedings", itype, None),
+        ],
         [
             from_array(np.array([0], dtype=np.int64), name="zero"),
             from_array(np.array([1], dtype=np.int64), name="one"),
         ],
     )
 
-    cond_out = g.unique_name(f"{name}_cond_out")
     g.make_node(
         "Loop",
         [loop_len, loop_condition],
-        [cond_out, outputs[0]],
+        [outputs[0]],
         body=loop_body,
         name=name,
     )
@@ -2777,8 +2782,28 @@ def aten_index_Tensor(
             g.set_type(res, g.get_type(x))
         return res
 
+    if n_none == 1 and indices[0] is None:
+        shapes = [g.get_shape(i) for i in indices if i is not None]
+        assert (
+            len(set(shapes)) == 1
+        ), f"aten_index is not implemented for shapes={shapes} (1){g.get_debug_msg()}"
+        same_shape = shapes[0]
+        assert (
+            len(same_shape) == 1
+        ), f"aten_index is not implemented for shapes={shapes} (2){g.get_debug_msg()}"
+
+        reshaped = [
+            g.op.Reshape(i, np.array([-1, 1], dtype=np.int64), name=name)
+            for i in indices[1:]
+        ]
+        concat = g.op.Concat(*reshaped, axis=-1, name=name)
+        res = g.op.GatherND(x, concat, batch_dims=1, outputs=outputs)
+        if not sts:
+            g.set_type(res, g.get_type(x))
+        return res
+
     if n_none == len(indices) - 1:
-        # only one dimension is not None, the other must be added
+        # only one dimension is not None, the others must be added
         position = min(i for i, v in enumerate(indices) if v is not None)
         index = indices[position]
         if isinstance(index, str):
@@ -2796,18 +2821,6 @@ def aten_index_Tensor(
                 f"Unexpected value for to_add={to_add}, "
                 f"position={position}, indices={indices}"
             )
-            # res = g.op.UnsqueezeAnyOpset(
-            #     temp, np.array(to_add, dtype=np.int64), outputs=outputs
-            # )
-            # if not sts:
-            #     g.set_type(res, g.get_type(x))
-            #     if g.has_shape(temp):
-            #         shape = list(g.get_shape(temp))
-            #         for i in to_add:
-            #            shape.insert(i, 1)
-            #         g.set_shape(res, tuple(shape))
-            #     else:
-            #         g.set_rank(res, g.get_rank(temp) + 2)
             return g.op.Identity(res, name="index2_Tensor", outputs=outputs)
 
     raise RuntimeError(
