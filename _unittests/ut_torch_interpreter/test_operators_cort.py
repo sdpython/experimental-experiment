@@ -26,11 +26,6 @@ import torch.nn.functional as F
 import torch.onnx
 from torch.autograd import Function
 from torch.nn import functional, Module, Parameter
-from torch.onnx.symbolic_helper import (
-    _get_tensor_dim_size,
-    _get_tensor_sizes,
-    parse_args,
-)
 from torch._dynamo.backends.common import aot_autograd
 from experimental_experiment.ext_test_case import (
     ExtTestCase,
@@ -174,7 +169,12 @@ class TestOperatorsCort(ExtTestCase):
 
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", UserWarning)
-            if isinstance(f, nn.Module):
+            if input_index == "all":
+                assert params is None
+                if verbose:
+                    print("[assertONNX] +None")
+                model = f
+            elif isinstance(f, nn.Module):
                 if verbose:
                     print("[assertONNX] +FuncModuleModule")
                 model = FuncModuleModule(f)
@@ -1567,7 +1567,6 @@ class TestOperatorsCort(ExtTestCase):
             onnx_export=inspect.currentframe().f_code.co_name,
         )
 
-    @unittest.skip("+1 in ModuleModule is failing this test")
     def test_embedding_bags(self):
         emb_bag = nn.EmbeddingBag(10, 8)
         input = torch.tensor([1, 2, 3, 4]).long()
@@ -1576,6 +1575,7 @@ class TestOperatorsCort(ExtTestCase):
             emb_bag,
             (input, offset),
             keep_initializers_as_inputs=True,
+            input_index="all",
             onnx_export=inspect.currentframe().f_code.co_name,
         )
 
@@ -2333,113 +2333,6 @@ class TestOperatorsCort(ExtTestCase):
             onnx_export=inspect.currentframe().f_code.co_name,
             impl="ref",
         )
-
-    @unittest.skip("+1 in ModuleModule is failing this test")
-    def test_aten_embedding_1(self):
-        _onnx_opset_version = 12
-
-        @parse_args("v", "v", "i", "b", "b")
-        def embedding(g, weight, indices, padding_idx, scale_grad_by_freq, sparse):
-            custom_attributes_json = (
-                "{"
-                f'"padding_idx":{str(padding_idx)},'
-                f'"scale_grad_by_freq":{str(scale_grad_by_freq).lower()},'
-                f'"sparse":{str(sparse).lower()}'
-                "}"
-            )
-            output = g.at(
-                "embedding",
-                weight,
-                indices,
-                custom_attributes_json_s=custom_attributes_json,
-            )
-            return output
-
-        torch.onnx.register_custom_op_symbolic(
-            "::embedding", embedding, _onnx_opset_version
-        )
-
-        class Model(torch.nn.Module):
-            def __init__(self):
-                super().__init__()
-                self.emb = torch.nn.Embedding(4, 8)
-
-            def forward(self, x, y):
-                res = self.emb(x)
-                res = res + y
-                return torch.ones(res.shape[0])
-
-        model = Model()
-        x = torch.ones(32, dtype=torch.long)
-        y = torch.randn(1, 8)
-        self.assertONNX(
-            model,
-            (x, y),
-            opset_version=_onnx_opset_version,
-            onnx_export=inspect.currentframe().f_code.co_name,
-            test_backward=False,
-        )
-
-        torch.onnx.unregister_custom_op_symbolic("::embedding", _onnx_opset_version)
-
-    @unittest.skip("+1 in ModuleModule is failing this test")
-    def test_aten_embedding_2(self):
-        _onnx_opset_version = 12
-
-        @parse_args("v", "v", "i", "b", "b")
-        def embedding(g, weight, indices, padding_idx, scale_grad_by_freq, sparse):
-            custom_attributes_json = (
-                "{"
-                f'"padding_idx":{str(padding_idx)},'
-                f'"scale_grad_by_freq":{str(scale_grad_by_freq).lower()},'
-                f'"sparse":{str(sparse).lower()}'
-                "}"
-            )
-            output = g.at(
-                "embedding",
-                weight,
-                indices,
-                custom_attributes_json_s=custom_attributes_json,
-            )
-
-            # do shape inference and set it via setType
-            indices_shape = _get_tensor_sizes(indices)
-            if indices_shape is not None and hasattr(weight.type(), "with_sizes"):
-                output_type = weight.type().with_sizes(
-                    [*indices_shape + _get_tensor_dim_size(weight, 1)]
-                )
-                output.setType(output_type)
-            return output
-
-        torch.onnx.register_custom_op_symbolic(
-            "::embedding", embedding, _onnx_opset_version
-        )
-
-        class Model(torch.nn.Module):
-            def __init__(self):
-                super().__init__()
-                self.emb = torch.nn.Embedding(4, 8)
-
-            def forward(self, x, y):
-                res = self.emb(x)
-                res = res + y
-                return torch.ones(res.shape[0])
-
-        model = Model()
-        x = torch.ones(32, dtype=torch.long)
-        y = torch.randn(1, 8)
-        self.assertONNX(
-            model,
-            (x, y),
-            opset_version=_onnx_opset_version,
-            input_names=["input_1", "input_2"],
-            dynamic_axes={"input_1": {0: "dim_0"}, "input_2": {0: "dim_1", 1: "dim_2"}},
-            keep_initializers_as_inputs=False,
-            onnx_export=inspect.currentframe().f_code.co_name,
-            test_backward=False,
-        )
-
-        torch.onnx.unregister_custom_op_symbolic("::embedding", _onnx_opset_version)
 
     @unittest.skipIf(not DYNAMIC_SHAPE_SUPPORTED, reason="dynamic shape")
     def test_shape_value_map(self):

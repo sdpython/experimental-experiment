@@ -2543,6 +2543,12 @@ class GraphBuilder:
             if self.is_constant(node.input[0]):
                 self.update_node_constant(node.output[0], node)
                 node.doc_string += ":constant-2:"
+        elif node.op_type == "Size":
+            self.set_type(node.output[0], TensorProto.INT64)
+            self.set_shape(node.output[0], (1,))
+            if self.is_constant(node.input[0]):
+                self.update_node_constant(node.output[0], node)
+                node.doc_string += ":constant-2s:"
         elif not sts:
             if node.op_type == "GatherElements":
                 if self.has_type(node.input[0]):
