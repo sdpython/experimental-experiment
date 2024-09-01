@@ -2785,8 +2785,7 @@ def aten_index_Tensor(
             g.set_type(res, g.get_type(x))
         return res
 
-    if n_none == 1 and indices[0] is None:
-        # TODO: this is doing something wrong
+    if n_none == 1 and indices[0] is None and len(indices) == 3:
         shapes = [g.get_shape(i) for i in indices if i is not None]
         assert (
             len(set(shapes)) == 1
@@ -2795,13 +2794,18 @@ def aten_index_Tensor(
         assert (
             len(same_shape) == 1
         ), f"aten_index is not implemented for shapes={shapes} (2){g.get_debug_msg()}"
+        dim = g.op.Shape(x, start=1, end=2, name=name)
+        flat_index = g.op.Add(
+            g.op.Mul(indices[1], dim, name=name), indices[2], name=name
+        )
 
-        reshaped = [
-            g.op.Reshape(i, np.array([-1, 1], dtype=np.int64), name=name)
-            for i in indices[1:]
-        ]
-        concat = g.op.Concat(*reshaped, axis=-1, name=name)
-        res = g.op.GatherND(x, concat, batch_dims=1, outputs=outputs)
+        dimx1 = g.op.Shape(x, start=0, end=1, name=name)
+        new_shapex = g.op.Concat(
+            dimx1, np.array([-1], dtype=np.int64), name=name, axis=0
+        )
+        reshaped_x = g.op.Reshape(x, new_shapex, name=name)
+
+        res = g.op.Gather(reshaped_x, flat_index, axis=1, outputs=outputs)
         if not sts:
             g.set_type(res, g.get_type(x))
         return res
