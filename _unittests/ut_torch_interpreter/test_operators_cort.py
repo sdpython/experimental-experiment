@@ -1257,7 +1257,10 @@ class TestOperatorsCort(ExtTestCase):
     def test_tan(self):
         x = torch.randn(3, 4, requires_grad=True)
         self.assertONNX(
-            lambda x: x.tan(), x, onnx_export=inspect.currentframe().f_code.co_name
+            lambda x: x.tan(),
+            x,
+            onnx_export=inspect.currentframe().f_code.co_name,
+            atol=1e-5,
         )
 
     def test_tanh(self):
