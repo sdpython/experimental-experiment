@@ -480,12 +480,24 @@ class TestOperatorsCort(ExtTestCase):
             lambda x: x[0], x, onnx_export=inspect.currentframe().f_code.co_name
         )
 
-    def test_index_tensor(self):
+    def test_index_tensor1(self):
         x = torch.arange(12, requires_grad=True, dtype=torch.float32).reshape((-1, 4))
         y = x[[0, 2]]
         assert y.shape == (2, 4), f"{y.shape}"
         self.assertONNX(
             lambda x: x[[0, 2]],
+            x,
+            onnx_export=inspect.currentframe().f_code.co_name,
+            test_backward=False,
+        )
+
+    @unittest.skip(reason="Not implemented yet")
+    def test_index_tensor2(self):
+        x = torch.arange(12, requires_grad=True, dtype=torch.float32).reshape((-1, 4))
+        y = x[[0, 2]]
+        assert y.shape == (2, 4), f"{y.shape}"
+        self.assertONNX(
+            lambda x: x[:, [0, 2]],
             x,
             onnx_export=inspect.currentframe().f_code.co_name,
             test_backward=False,

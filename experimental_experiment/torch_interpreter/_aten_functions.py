@@ -1634,10 +1634,13 @@ def aten_embedding_bag_padding_idx(
     name: str = "embedding_bag.padding_idx",
 ) -> Tuple[T, T, T, T]:
     "embedding_bag.padding_idx"
+    if padding_idx == -1:
+        padding_idx = None
     assert g.has_type(weight), f"unknown type for weight={weight!r}{g.get_debug_msg()}"
-    assert (
-        padding_idx is None
-    ), f"Not implemented for padding_idx={padding_idx}{g.get_debug_msg()}"
+    assert padding_idx is None, (
+        f"Not implemented for padding_idx={padding_idx}, "
+        f"include_last_offset={include_last_offset}{g.get_debug_msg()}"
+    )
     itype = g.get_type(weight)
 
     # Change padding_idx to positive value, -1 means the last index
