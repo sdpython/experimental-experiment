@@ -3,7 +3,7 @@ import time
 import os
 import sys
 from collections import Counter
-from typing import Any, Dict, List, Optional, Sequence, Set, Tuple, Union
+from typing import Any, Dict, Iterator, List, Optional, Sequence, Set, Tuple, Union
 import numpy as np
 from onnx import (
     AttributeProto,
@@ -2543,6 +2543,12 @@ class GraphBuilder:
             if self.is_constant(node.input[0]):
                 self.update_node_constant(node.output[0], node)
                 node.doc_string += ":constant-2:"
+        elif node.op_type == "Size":
+            self.set_type(node.output[0], TensorProto.INT64)
+            self.set_shape(node.output[0], (1,))
+            if self.is_constant(node.input[0]):
+                self.update_node_constant(node.output[0], node)
+                node.doc_string += ":constant-2s:"
         elif not sts:
             if node.op_type == "GatherElements":
                 if self.has_type(node.input[0]):
@@ -3512,6 +3518,40 @@ class GraphBuilder:
         )
         return opt.optimize()
 
+    @classmethod
+    def _get_hidden_inputs(self, graph: GraphProto) -> Set[str]:
+        """
+        Returns the hidden inputs (inputs coming from an upper context)
+        used by a subgraph.
+        """
+        hidden = set()
+        memo = set(i.name for i in graph.initializer)
+        memo |= set(i.name for i in graph.sparse_initializer)
+        for node in graph.node:
+            for i in node.input:
+                if i not in memo:
+                    hidden.add(i)
+            for att in node.attribute:
+                if att.type == AttributeProto.GRAPH and att.g:
+                    hid = self._get_hidden_inputs(att.g)
+                    less = set(h for h in hid if h not in memo)
+                    hidden |= less
+            memo |= set(node.output)
+        return hidden
+
+    @classmethod
+    def _enumerate_inputs_with_subgraph(cls, node: NodeProto) -> Iterator[str]:
+        """
+        Enumerates all inputs from a node including all the hidden inputs
+        from subgraphs.
+        """
+        yield from node.input
+        if node.op_type in {"Loop", "Scan", "If", "SequenceMap"}:
+            for att in node.attribute:
+                if att.type == AttributeProto.GRAPH:
+                    hidden_inputs = cls._get_hidden_inputs(att.g)
+                    yield from hidden_inputs
+
     def remove_unused(self) -> int:
         """
         Simple function to remove unused nodes.
@@ -3525,13 +3565,14 @@ class GraphBuilder:
         marked = {o.name: set() for o in self.outputs}
         for node in reversed(self.nodes):
             used = False
+            node_inputs = list(self._enumerate_inputs_with_subgraph(node))
             for o in node.output:
                 if o in marked:
-                    for i in node.input:
+                    for i in node_inputs:
                         marked[o].add(i)
                         used = True
             if used or self.do_not_remove(node):
-                for i in node.input:
+                for i in node_inputs:
                     marked[i] = set()
 
         # removed nodes
@@ -3930,6 +3971,66 @@ class GraphBuilder:
         if self._values:
             self._values.clear()
 
+    @classmethod
+    def _rename_inputs_in_node(
+        cls, node: NodeProto, replacements: Dict[str, str], to_rename: Set[str]
+    ) -> NodeProto:
+        set_inputs = set(cls._enumerate_inputs_with_subgraph(node))
+        if set_inputs & to_rename:
+            new_inputs = [replacements.get(i, i) for i in node.input]
+            new_outputs = [replacements.get(i, i) for i in node.output]
+            assert set(new_inputs) & set(new_outputs) in ({""}, set()), (
+                f"Node type {node.op_type}-{node.name} is incorrectly replaced "
+                f"{node.input}->{new_inputs} and {node.output}->{new_outputs}\n"
+                f"replacements are\n{pprint.pformat(replacements)}"
+            )
+            new_node = oh.make_node(
+                node.op_type,
+                new_inputs,
+                new_outputs,
+                domain=node.domain,
+                name=node.name,
+            )
+
+            if node.op_type in {"Loop", "Scan", "If", "SequenceMap"}:
+                # Hidden inputs must be taken care of.
+                node_attributes = []
+                for att in node.attribute:
+                    node_attributes.append(
+                        att
+                        if att.type != AttributeProto.GRAPH
+                        else oh.make_attribute(
+                            att.name,
+                            cls._rename_inputs_in_subgraph(att.g, replacements),
+                        )
+                    )
+            else:
+                node_attributes = node.attribute
+            new_node.attribute.extend(node_attributes)
+            return new_node
+        return node
+
+    @classmethod
+    def _rename_inputs_in_subgraph(
+        cls, graph: GraphProto, replacements: Dict[str, str]
+    ) -> GraphProto:
+        """
+        Renames inputs.
+        """
+        # graph inputs and outputs should node be changed, initializer as well
+        to_rename = set(replacements)
+        nodes = []
+        for node in graph.node:
+            nodes.append(cls._rename_inputs_in_node(node, replacements, to_rename))
+        return oh.make_graph(
+            nodes,
+            graph.name,
+            graph.input,
+            graph.output,
+            graph.initializer,
+            sparse_initializer=graph.sparse_initializer,
+        )
+
     def remove_identity_nodes(self) -> Tuple[int, int]:
         """
         Removes identity nodes. Returns the number of removed nodes
@@ -4054,7 +4155,11 @@ class GraphBuilder:
         added = 0
         for node in new_nodes:
             repo = {o for o in node.output if o in replacements}
-            repi = {o for o in node.input if o in replacements}
+            repi = {
+                o
+                for o in self._enumerate_inputs_with_subgraph(node)
+                if o in replacements
+            }
             if repi or repo:
                 new_inputs = [replacements.get(i, i) for i in node.input]
                 new_outputs = [replacements.get(i, i) for i in node.output]
@@ -4078,7 +4183,22 @@ class GraphBuilder:
                 )
                 added += 1
                 removed += 1
-                new_node.attribute.extend(node.attribute)
+
+                if node.op_type in {"Loop", "Scan", "If", "SequenceMap"}:
+                    # Hidden inputs must be taken care of.
+                    node_attributes = []
+                    for att in node.attribute:
+                        node_attributes.append(
+                            att
+                            if att.type != AttributeProto.GRAPH
+                            else oh.make_attribute(
+                                att.name,
+                                self._rename_inputs_in_subgraph(att.g, replacements),
+                            )
+                        )
+                else:
+                    node_attributes = node.attribute
+                new_node.attribute.extend(node_attributes)
                 self.nodes.append(new_node)
             else:
                 self.nodes.append(node)
@@ -4232,7 +4352,7 @@ class GraphBuilder:
 
         n_existing = []
         for node in new_nodes:
-            for i in node.input:
+            for i in self._enumerate_inputs_with_subgraph(node):
                 assert self.has_name(i), (
                     f"Input {i!r} does not exist for node {node.op_type!r}, "
                     f"debug={debug}{self.get_debug_msg()}"

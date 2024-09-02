@@ -52,6 +52,7 @@ def bash_bench_parse_args(name: str, doc: str, new_args: Optional[List[str]] = N
         part=("", "which part to run, 0, or 1"),
         tag=("", "add a version tag when everything else did not change"),
         timeout=("600", "timeout for subprocesses"),
+        shape2=("0", "redo the shape inference"),
         new_args=new_args,
         expose="repeat,warmup",
     )
@@ -247,6 +248,7 @@ def bash_bench_main(script_name: str, doc: str, args: Optional[List[str]] = None
                     part=int(args.part) if split_process else None,
                     pickled_name="temp_pickled_file.pkl" if split_process else None,
                     rtopt=args.rtopt in (1, "1", "True", "true"),
+                    shape_again=args.shape2 in (1, "1", "True", "true"),
                 )
             )
             duration = time.perf_counter() - begin

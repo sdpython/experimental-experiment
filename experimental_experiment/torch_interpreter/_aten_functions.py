@@ -4,11 +4,18 @@ for the full list of aten functions.
 """
 
 import math
+import sys
 from enum import Enum
 from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 import numpy as np
 from onnx import TensorProto
-from onnx.helper import tensor_dtype_to_np_dtype, make_tensor
+from onnx.helper import (
+    tensor_dtype_to_np_dtype,
+    make_tensor,
+    make_graph,
+    make_node,
+    make_tensor_value_info,
+)
 from onnx.numpy_helper import from_array
 from ..xbuilder._shape_helper import (
     all_float,
@@ -1566,7 +1573,7 @@ def aten_embedding(
                 f"{g.get_debug_msg()}"
             )
     assert g.get_type(indices) == 7, (
-        f"indices be integer not {g.get_type(indices)}, "
+        f"indices must be integer not {g.get_type(indices)}, "
         f"weight is {g.get_type(weight)}"
         f"{g.get_debug_msg()}"
     )
@@ -1576,6 +1583,244 @@ def aten_embedding(
         g.set_type(res, g.get_type(weight))
         g.set_rank(res, g.get_rank(weight) + g.get_rank(indices) - 1)
     return res
+
+
+def aten__embedding_bag(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    weight: T,
+    indices: T,  # INT64
+    offsets: T,  # INT64
+    scale_grad_by_freq: bool = False,
+    mode: int = 0,  # [0,1,2] indicate ["sum", "mean", "max"]
+    sparse: bool = False,
+    per_sample_weights: Optional[T] = None,
+    include_last_offset: bool = False,
+    padding_idx: Optional[int] = None,
+    name: str = "_embedding_bag",
+) -> Tuple[T, T, T, T]:
+    "_embedding_bag"
+    return aten_embedding_bag_padding_idx(
+        g,
+        sts,
+        outputs,
+        weight,
+        indices,
+        offsets,
+        scale_grad_by_freq,
+        mode=mode,
+        sparse=sparse,
+        per_sample_weights=per_sample_weights,
+        include_last_offset=include_last_offset,
+        padding_idx=padding_idx,
+        name=name,
+    )
+
+
+def aten_embedding_bag_padding_idx(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    weight: T,
+    indices: T,  # INT64
+    offsets: T,  # INT64
+    scale_grad_by_freq: bool = False,
+    mode: int = 0,  # [0,1,2] indicate ["sum", "mean", "max"]
+    sparse: bool = False,
+    per_sample_weights: Optional[T] = None,
+    include_last_offset: bool = False,
+    padding_idx: Optional[int] = None,
+    name: str = "embedding_bag.padding_idx",
+) -> Tuple[T, T, T, T]:
+    "embedding_bag.padding_idx"
+    if padding_idx == -1:
+        padding_idx = None
+    assert g.has_type(weight), f"unknown type for weight={weight!r}{g.get_debug_msg()}"
+    assert padding_idx is None, (
+        f"Not implemented for padding_idx={padding_idx}, "
+        f"include_last_offset={include_last_offset}{g.get_debug_msg()}"
+    )
+    itype = g.get_type(weight)
+
+    # Change padding_idx to positive value, -1 means the last index
+    if padding_idx is not None and padding_idx < 0:
+        assert g.has_shape(
+            weight
+        ), f"unknown shape for weight={weight!r}{g.get_debug_msg()}"
+        shape_weight = g.get_shape(weight)
+        assert isinstance(
+            shape_weight[0], int
+        ), f"Not implemented for dynamic dimension in {shape_weight}{g.get_debug_msg()}"
+        padding_idx = shape_weight[0] + padding_idx
+        assert (
+            padding_idx >= 0
+        ), f"Unexpected padding_idx={padding_idx}{g.get_debug_msg()}"
+
+    if mode == 0:  # sum
+        assert (
+            g.main_opset >= 13
+        ), f"Not implemented for opset={g.main_opset} and mode={mode}{g.get_debug_msg()}"
+        op_type = "ReduceSum"
+    elif mode == 1:  # mean
+        assert (
+            g.main_opset >= 18
+        ), f"Not implemented for opset={g.main_opset} and mode={mode}{g.get_debug_msg()}"
+        op_type = "ReduceMean"
+    elif mode == 2:
+        assert (
+            g.main_opset >= 18
+        ), f"Not implemented for opset={g.main_opset} and mode={mode}{g.get_debug_msg()}"
+        op_type = "ReduceMax"
+    else:
+        raise AssertionError(f"Unexpected value for mode={mode}{g.get_debug_msg()}")
+
+    # loop_condition = g.op("Constant", value_t=torch.tensor(1))
+    # loop_condition = g.op("Cast", loop_condition, to_i=_C_onnx.TensorProtoDataType.BOOL)
+    # zero = g.op("Constant", value_t=torch.tensor([0]))
+    loop_condition = g.make_initializer("", np.array(True, dtype=np.bool_))
+    zero = g.make_initializer("", np.array([0], dtype=np.int64))
+    one = g.make_initializer("", np.array([1], dtype=np.int64))
+    very_end = g.make_initializer("", np.array([sys.maxsize], dtype=np.int64))
+
+    # indices_len = _unsqueeze_helper(g,
+    #   _size_helper(g, indices, g.op("Constant", value_t=torch.tensor(0))),[0],)
+    indices_len = g.op.UnsqueezeAnyOpset(
+        g.op.Gather(
+            g.op.Shape(indices, name=name), np.array(0, dtype=np.int64), name=name
+        ),
+        zero,
+        name=name,
+    )
+    if not include_last_offset:
+        offsets = g.op.Concat(offsets, indices_len, axis=0, name=name)
+
+    # Offsets holds the starting index position of each bag.
+    # So we create a list of the indices slices (determined by
+    # offsets) and gather those indices in indices_row.
+    # Then we use this subset of indices to gather from embeddings.
+    # The embeddings output is a loop scan output,
+    # so we can avoid creating a sequence and inserting elements in.
+    offsets_starts = g.op.Slice(offsets, zero, very_end, zero, name=name)
+    offsets_ends = g.op.Slice(offsets, one, very_end, zero, name=name)
+
+    # loop_len = _size_helper(g, offsets_ends, g.op("Constant", value_t=torch.tensor(0)))
+    loop_len = g.op.Gather(g.op.Shape(offsets_ends, name=name), zero, name=name)
+
+    assert (
+        g.main_opset >= 18
+    ), f"Not implemented for opset={g.main_opset} and mode={mode}{g.get_debug_msg()}"
+
+    if per_sample_weights is None:
+        per_sample_nodes = [make_node("Identity", ["embeddings_0"], ["embeddings"])]
+    else:
+        per_sample_nodes = [
+            make_node(
+                "Slice",
+                [per_sample_weights, "indices_start", "indices_end", "zero"],
+                ["per_sample_weights_row_0"],
+            ),
+            make_node(
+                "Unsqueeze",
+                ["per_sample_weights_row_0", "one"],
+                ["per_sample_weights_row"],
+            ),
+            make_node("Mul", [weight, "per_sample_weights_row"], ["embeddings"]),
+        ]
+
+    nodes = [
+        make_node(
+            "Gather", [offsets_starts, "block_input_iter"], ["indices_starts"], axis=0
+        ),
+        make_node(
+            "Gather", [offsets_ends, "block_input_iter"], ["indices_ends"], axis=0
+        ),
+        make_node("Unsqueeze", ["indices_starts", "zero"], ["indices_start"]),
+        make_node("Unsqueeze", ["indices_ends", "zero"], ["indices_end"]),
+        make_node(
+            "Slice", [indices, "indices_start", "indices_end", zero], ["indices_row"]
+        ),
+        make_node("Gather", [weight, "indices_row"], ["embeddings_0"], axis=0),
+        *per_sample_nodes,
+        make_node(op_type, ["embeddings", "zero"], ["reduced_embedings"], keepdims=0),
+        make_node("Identity", ["cond"], ["cond_out"]),
+    ]
+
+    loop_body = make_graph(
+        nodes,
+        f"loop_body_{name}",
+        [
+            make_tensor_value_info("block_input_iter", TensorProto.INT64, []),
+            make_tensor_value_info("cond", TensorProto.BOOL, []),
+        ],
+        [
+            make_tensor_value_info("cond_out", TensorProto.BOOL, []),
+            make_tensor_value_info("reduced_embedings", itype, None),
+        ],
+        [
+            from_array(np.array([0], dtype=np.int64), name="zero"),
+            from_array(np.array([1], dtype=np.int64), name="one"),
+        ],
+    )
+
+    g.make_node(
+        "Loop",
+        [loop_len, loop_condition],
+        [outputs[0]],
+        body=loop_body,
+        name=name,
+    )
+
+    if len(outputs) == 1:
+        return outputs[0]
+
+    offsets_shape = g.op.Shape(offsets, name=name)
+    if op_type == "ReduceSum":
+        offset2bag_shape = g.op.Shape(indices, name=name)
+        bag_size_shape = (
+            offsets_shape
+            if include_last_offset
+            else g.op.Sub(offsets_shape, one, name=name)
+        )
+        max_indices_shape = bag_size_shape
+    elif op_type == "ReduceMean":
+        offset2bag_shape = g.op.Shape(indices, start=0, end=1, name=name)
+        bag_size_shape = g.op.Sub(offsets_shape, one, name=name)
+        max_indices_shape = bag_size_shape
+    elif op_type == "ReduceMax":
+        offset2bag_shape = g.op.Shape(indices, start=0, end=1, name=name)
+        bag_size_shape = g.op.Sub(offsets_shape, one, name=name)
+        # shape = (bag_size.dim[0], weight.dim[1])
+        dim_0 = g.op.Gather(bag_size_shape, zero, name=name)
+        dim_1 = g.op.Shape(weight, start=1, end=2, name=name)
+        max_indices_shape = g.op.Concat(dim_0, dim_1, axis=0, name=name)
+    else:
+        raise AssertionError(f"Unexpeted op_type={op_type!r}{g.get_debug_msg()}")
+
+    offset2bag = g.op.ConstantOfShape(
+        offset2bag_shape,
+        value=from_array(np.array([0], dtype=np.int64)),
+        name=name,
+        outputs=[outputs[1]],
+    )
+    new_outputs = [outputs[0], offset2bag]
+    if len(outputs) > 2:
+        bag_size = g.op.ConstantOfShape(
+            bag_size_shape,
+            value=from_array(np.array([0], dtype=np.int64)),
+            name=name,
+            outputs=[outputs[2]],
+        )
+        new_outputs.append(bag_size)
+    if len(outputs) > 3:
+        max_indices = g.op.ConstantOfShape(
+            max_indices_shape,
+            value=from_array(np.array([0], dtype=np.int64)),
+            name=name,
+            outputs=[outputs[3]],
+        )
+        new_outputs.append(max_indices)
+    return tuple(new_outputs)
 
 
 def aten_empty_like(
@@ -2540,8 +2785,33 @@ def aten_index_Tensor(
             g.set_type(res, g.get_type(x))
         return res
 
+    if n_none == 1 and indices[0] is None and len(indices) == 3:
+        shapes = [g.get_shape(i) for i in indices if i is not None]
+        assert (
+            len(set(shapes)) == 1
+        ), f"aten_index is not implemented for shapes={shapes} (1){g.get_debug_msg()}"
+        same_shape = shapes[0]
+        assert (
+            len(same_shape) == 1
+        ), f"aten_index is not implemented for shapes={shapes} (2){g.get_debug_msg()}"
+        dim = g.op.Shape(x, start=1, end=2, name=name)
+        flat_index = g.op.Add(
+            g.op.Mul(indices[1], dim, name=name), indices[2], name=name
+        )
+
+        dimx1 = g.op.Shape(x, start=0, end=1, name=name)
+        new_shapex = g.op.Concat(
+            dimx1, np.array([-1], dtype=np.int64), name=name, axis=0
+        )
+        reshaped_x = g.op.Reshape(x, new_shapex, name=name)
+
+        res = g.op.Gather(reshaped_x, flat_index, axis=1, outputs=outputs)
+        if not sts:
+            g.set_type(res, g.get_type(x))
+        return res
+
     if n_none == len(indices) - 1:
-        # only one dimension is not None, the other must be added
+        # only one dimension is not None, the others must be added
         position = min(i for i, v in enumerate(indices) if v is not None)
         index = indices[position]
         if isinstance(index, str):
@@ -2559,18 +2829,6 @@ def aten_index_Tensor(
                 f"Unexpected value for to_add={to_add}, "
                 f"position={position}, indices={indices}"
             )
-            # res = g.op.UnsqueezeAnyOpset(
-            #     temp, np.array(to_add, dtype=np.int64), outputs=outputs
-            # )
-            # if not sts:
-            #     g.set_type(res, g.get_type(x))
-            #     if g.has_shape(temp):
-            #         shape = list(g.get_shape(temp))
-            #         for i in to_add:
-            #            shape.insert(i, 1)
-            #         g.set_shape(res, tuple(shape))
-            #     else:
-            #         g.set_rank(res, g.get_rank(temp) + 2)
             return g.op.Identity(res, name="index2_Tensor", outputs=outputs)
 
     raise RuntimeError(
