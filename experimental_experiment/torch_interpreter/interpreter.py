@@ -7,7 +7,10 @@ import numpy as np
 from onnx import TensorProto
 from ..xbuilder._shape_helper import all_int
 from ..xbuilder._helper import make_hash
-from ..xbuilder._dtype_helper import torch_dtype_to_onnx_dtype
+from ..xbuilder._dtype_helper import (
+    torch_dtype_to_onnx_dtype,
+    onnx_dtype_to_torch_dtype,
+)
 from ..xbuilder.model_container import _get_type
 from ._exceptions import FunctionNotFoundError
 from .aten_functions import find_function
@@ -94,19 +97,38 @@ class DynamoInterpreter:
         self.builder.set_shapes_types(node.name, "run_node", (exa, val))
 
         if node.op == "placeholder":
-            return self.placeholder(node)
-        if node.op == "call_function":
-            return self.call_function(node)
-        if node.op == "output":
-            return self.output(node)
-        if node.op == "call_module":
-            return self.call_module(node)
-        if node.op == "get_attr":
-            return self.get_attr(node)
-        if node.op == "call_method":
-            return self.call_method(node)
+            res = self.placeholder(node)
+        elif node.op == "call_function":
+            res = self.call_function(node)
+        elif node.op == "output":
+            res = self.output(node)
+        elif node.op == "call_module":
+            res = self.call_module(node)
+        elif node.op == "get_attr":
+            res = self.get_attr(node)
+        elif node.op == "call_method":
+            res = self.call_method(node)
+        else:
+            raise ValueError(f"Unable to process node kind {node.op!r} ({node}).")
 
-        raise ValueError(f"Unable to process node kind {node.op!r} ({node}).")
+        # Checks consistency of shapes and types
+        name = node.name
+        if val and len(val) == 3:
+            exp_dtype, exp_shape = val[1:]
+            if self.builder.has_type(name):
+                itype = self.builder.get_type(name)
+                ttype = onnx_dtype_to_torch_dtype(itype)
+                assert ttype == exp_dtype, (
+                    f"Type mismatch for {name!r}, onnx {ttype} != expected torch "
+                    f"{exp_dtype}{self.builder.get_debug_msg()}"
+                )
+            if self.builder.has_shape(name):
+                shape = self.builder.get_shape(name)
+                assert tuple(exp_shape) == shape, (
+                    f"Shape mismatch for {name!r}, onnx {shape} != expected torch "
+                    f"{exp_shape} (tuple: {tuple(exp_shape)}){self.builder.get_debug_msg()}"
+                )
+        return res
 
     def get_attr(self, node: "torch.fx.Node"):  # noqa: F821
         """

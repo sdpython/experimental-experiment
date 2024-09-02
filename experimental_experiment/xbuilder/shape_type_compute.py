@@ -744,6 +744,7 @@ def _set_shape_type_op_any_squeeze(self: "GraphBuilder", node: NodeProto):  # no
         )
         iaxes = set((int(cst),) if len(cst.shape) == 0 else tuple(int(i) for i in cst))
         shape = list(self.get_shape(node.input[0]))
+        iaxes = set((i + len(shape)) % len(shape) for i in iaxes)  # for negative value
         new_shape = tuple(s for i, s in enumerate(shape) if i not in iaxes)
         self.set_shape(node.output[0], new_shape)
     elif self.has_rank(node.input[0]) and self.is_constant(node.input[1]):

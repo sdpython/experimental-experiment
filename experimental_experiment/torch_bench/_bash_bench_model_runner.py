@@ -1058,7 +1058,7 @@ class ModelRunner:
         else:
             new_inputs = inputs
         assert len(names) == len(new_inputs), (
-            f"Mismatch number of outputs, {len(inputs)} ({len(new_inputs)}) "
+            f"Mismatch number of inputs, {len(inputs)} ({len(new_inputs)}) "
             f"inputs, there are {len(new_inputs)} flattened inputs.\n----\n"
             f"names={names}\n----\ninput types={[type(i) for i in inputs]}\n----\n"
             f"named parameters={sorted(p[0] for p in self.model.named_parameters())}"
