@@ -306,7 +306,7 @@ class TimmRunner(BenchmarkRunner):
             assert c in expected, f"Unable to find {c!r} in {pprint.pformat(expected)}"
             assert (
                 c in cls.TIMM_MODELS
-            ), f"Unable to find {c!r} in {pprint.pformat(container.TIMM_MODELS)}"
+            ), f"Unable to find {c!r} in {pprint.pformat(cls.TIMM_MODELS)}"
 
     @classmethod
     def _get_module_cls_by_model_name(cls, model_cls_name):

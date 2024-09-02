@@ -96,6 +96,10 @@ class BenchmarkRunner:
         assert no_grad, "no_grad false not implemented yet"
         assert not fake_tensor, "fake_tensor true not implemented yet"
 
+        from ..ext_test_case import has_onnxruntime_training
+
+        self.dlpack = has_onnxruntime_training(push_back_batch=True)
+
     def forward_pass(self, mod, inputs, collect_outputs=True):
         return mod(**inputs)
 
@@ -228,6 +232,10 @@ class BenchmarkRunner:
             return None
         if hasattr(obj, "to"):
             return obj.to(device)
+        # if isinstance(obj, onnxruntime.capi.onnxruntime_pybind11_state.OrtValue):
+        if hasattr(obj, "numpy"):
+            # Implicit copy to torch.Tensor
+            return torch.Tensor(obj.numpy()).to(device)
         if "SquashedNormal" in obj.__class__.__name__ and device == "cpu":
             return obj
         raise AssertionError(f"move_to not implemented for type {type(obj)}")
@@ -243,11 +251,10 @@ class BenchmarkRunner:
         self,
         sess: WrapInferenceSessionForTorch,
         feeds: List[torch.Tensor],
-        dlpack: bool = False,
     ) -> List[torch.Tensor]:
         """Runs with onnxruntme."""
         list_feeds = [feeds[k] for k in sess.input_names]
-        if dlpack:
+        if self.dlpack:
             return sess.run_dlpack(*list_feeds)
         return sess.run_ort_inference(*list_feeds)
 
@@ -318,8 +325,8 @@ class BenchmarkRunner:
     @classmethod
     def _post_process_onnx_statistics(cls, model: onnx.ModelProto) -> Dict[str, Any]:
         stats = {}
-		nodes = list(model.graph.node)
-		for f in model.function:
+        nodes = list(model.graph.node)
+        for f in model.functions:
             nodes.extend(f.node)
         stats["onnx_n_nodes"] = len(nodes)
         stats["onnx_n_initializer"] = len(model.graph.initializer)
@@ -803,7 +810,7 @@ class BenchmarkRunner:
                 "-" if timm is None else getattr(timm, "__version__", "dev")
             ),
             "version_torch_onnx": (
-                "-" if torch_onnx is None else metadata.version("torch_onnx")
+                "-" if torch_onnx is None else getattr(torch_onnx, "__version__", "dev")
             ),
         }
         stats.update(machine_specs)

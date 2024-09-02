@@ -386,7 +386,6 @@ class WrapInferenceSessionForTorch:
         self.sess = sess
         self.input_names = [i.name for i in sess.get_inputs()]
         self.output_names = [i.name for i in sess.get_outputs()]
-        self.bind = onnxruntime.SessionIOBinding(sess._sess)
         self.OrtValue = ORTC.OrtValue
         self.ORTC = ORTC
         self.torch = torch
@@ -421,6 +420,7 @@ class WrapInferenceSessionForTorch:
         tensors: tuple[Any, ...],  # tuple["torch.Tensor", ...],
         n_outputs: int,
     ) -> tuple[Any, Any]:  # tuple[tuple["torch.Tensor", ...], tuple["OrtDevice", ...]]:
+        assert tensors is not None, "tensors cannot be None"
         ortvalues = self.ORTC.OrtValueVector()
         ortvalues.reserve(len(tensors))
         dtypes = []
@@ -429,8 +429,6 @@ class WrapInferenceSessionForTorch:
         devices = []
 
         max_device = -1
-        assert isinstance(max_device, int), f"unexpected type for device={max_device!r}"
-        assert tensors is not None, "tensors cannot be None"
         new_tensors = []
         for tensor in tensors:
             assert isinstance(
@@ -442,8 +440,9 @@ class WrapInferenceSessionForTorch:
             d = tensor.get_device()
             devices.append(self.DEVICES[d])
             new_tensors.append(tensor)
-            max_device = max(max_device, tensor.get_device())
+            max_device = max(max_device, d)
 
+        assert isinstance(max_device, int), f"unexpected type for device={max_device!r}"
         ortvalues.push_back_batch(new_tensors, data_ptrs, dtypes, shapes, devices)
         output_devices = []
         for _ in range(n_outputs):
@@ -473,25 +472,54 @@ class WrapInferenceSessionForTorch:
                 )
         return tuple(res)
 
-    def run(self, output_names, feeds, dlpack:Optional[bool]=None):
-        assert dlpack is not None, f"dlpack={dlpack} must be explicitly specified."
+    def run(self, output_names, feeds):
         inputs = [feeds[i] for i in self.input_names]
-        if dlpack:
+        if self.dlpack:
             return self.run_dlpack(*inputs, output_names=output_names)
         return self.run_ort_inference(*inputs)
 
-    def run_ort_inference(self, *inputs):
-        onnxruntime_input = {
-            k.name: v.numpy(force=True)  # type: ignore[union-attr]
-            for k, v in zip(self.sess.get_inputs(), inputs)
-        }
-
-        ort_outputs = self.sess.run(
-            None,
-            onnxruntime_input,
+    def _bind_torch_tensors(
+        self,
+        tensors: tuple[Any, ...],  # tuple["torch.Tensor", ...],
+        output_names: List[str],
+    ) -> "SessionIBinding":  # noqa: F821
+        assert tensors is not None, "tensors cannot be None"
+        assert len(tensors) == len(self.input_names), (
+            f"Mismatch got {len(tensors)}, {len(self.input_names)} are expected, "
+            f"names={self.input_names}"
         )
-        pth_outputs = [torch.from_numpy(output) for output in ort_outputs]
-        return pth_outputs
+        bind = self.ORTC.SessionIOBinding(self.sess._sess)
+        max_device = -1
+        for name, tensor in zip(self.input_names, tensors):
+            assert isinstance(
+                tensor, self.torch.Tensor
+            ), f"Unexpected type {type(tensor)}"
+            d = tensor.get_device()
+            max_device = max(d, max_device)
+            bind.bind_input(
+                name,
+                self.DEVICES[d],
+                self.TORCH_DTYPE_TO_NUMPY_DTYPE[tensor.dtype],
+                tensor.shape,
+                tensor.data_ptr(),
+            )
+
+        device = self.DEVICES[max_device]
+        for o in output_names:
+            bind.bind_output(o, device)
+        return bind
+
+    def run_ort_inference(self, *inputs, output_names=None):
+        if output_names is None:
+            output_names = self.output_names
+        bind = self._bind_torch_tensors(inputs, output_names=output_names)
+        self.sess._sess.run_with_iobinding(bind, self.run_options)
+        ort_vector_outputs = bind.get_outputs()
+        # The function returns OrtValue, the code computing the discrepancies will
+        # have to convert. DlPack mechanism should be implemented in onnxruntime
+        # (not only in onnxruntime-training).
+        ort_outputs = [ort_vector_outputs[i] for i in range(len(ort_vector_outputs))]
+        return ort_outputs
 
     def run_dlpack(self, *inputs, output_names=None):
         if output_names is None:

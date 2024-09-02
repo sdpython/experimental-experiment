@@ -7,7 +7,6 @@ from experimental_experiment.ext_test_case import (
     ignore_warnings,
     requires_torch,
     skipif_ci_windows,
-    skipif_no_experimental_experiment,
 )
 
 
@@ -136,7 +135,6 @@ class TestBashBenchRunnerCmd(ExtTestCase):
 
     @skipif_ci_windows("exporter does not work on Windows")
     @ignore_warnings((DeprecationWarning, UserWarning))
-    @requires_onnxruntime_training()
     @requires_torch("2.4")
     def test_huggingface_export_bench_custom_cpu2_timeout(self):
         self._huggingface_export_bench_cpu(

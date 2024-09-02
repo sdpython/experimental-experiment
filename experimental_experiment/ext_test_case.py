@@ -634,9 +634,12 @@ def has_onnxruntime_training(push_back_batch: bool = False):
         return False
 
     if push_back_batch:
-        from onnxruntime.capi.onnxruntime_pybind11_state import OrtValue
+        try:
+            from onnxruntime.capi.onnxruntime_pybind11_state import OrtValueVector
+        except ImportError:
+            return False
 
-        if not hasattr(OrtValue, "push_back_batch"):
+        if not hasattr(OrtValueVector, "push_back_batch"):
             return False
     return True
 
@@ -657,9 +660,13 @@ def requires_onnxruntime_training(
         return unittest.skip(msg)
 
     if push_back_batch:
-        from onnxruntime.capi.onnxruntime_pybind11_state import OrtValue
+        try:
+            from onnxruntime.capi.onnxruntime_pybind11_state import OrtValueVector
+        except ImportError:
+            msg = msg or "OrtValue has no method push_back_batch"
+            return unittest.skip(msg)
 
-        if not hasattr(OrtValue, "push_back_batch"):
+        if not hasattr(OrtValueVector, "push_back_batch"):
             msg = msg or "OrtValue has no method push_back_batch"
             return unittest.skip(msg)
     return lambda x: x

@@ -12,7 +12,6 @@ from experimental_experiment.ext_test_case import (
 )
 
 
-
 class TestBashBenchRunner(ExtTestCase):
     @requires_torch("2.3")
     def test_create_runner_cpu(self):
