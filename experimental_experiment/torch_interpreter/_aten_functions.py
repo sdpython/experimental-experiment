@@ -7110,11 +7110,13 @@ def aten_zeros_like(
     layout=None,
     device: Optional["torch.device"] = None,  # noqa: F821
     pin_memory=None,
-    memory_format:Optional[str]=None,
+    memory_format: Optional[str] = None,
     name: str = "zeros_like",
 ) -> T:
     "constantofshape"
-    assert memory_format is None, f"unexpected value for memory_format={memory_format}{g.get_debug_msg()}"
+    assert (
+        memory_format is None
+    ), f"unexpected value for memory_format={memory_format}{g.get_debug_msg()}"
     return aten_full_like(
         g,
         sts,

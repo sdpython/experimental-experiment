@@ -185,7 +185,9 @@ class DynamoInterpreter:
                 # The input is not defined.
                 # We return.
                 return
-            if isinstance(example_value, self.builder.torch.SymInt):
+            if isinstance(
+                example_value, (self.builder.torch.SymInt, self.builder.torch.SymFloat)
+            ):
                 # torch.SymInt
                 self.builder.make_dynamic_object(node.name, example_value)
                 return self.builder.make_tensor_input(
