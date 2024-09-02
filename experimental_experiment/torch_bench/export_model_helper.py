@@ -461,7 +461,7 @@ class WrapInferenceSessionForTorch:
 
         from torch._C import _from_dlpack
 
-        if all(ortvalues[i].has_value() for i in range(len(ortvalues))):  # noqa: C417
+        if all(ortvalues[i].has_value() for i in range(len(ortvalues))):
             res = ortvalues.to_dlpacks(_from_dlpack)
         else:
             res = []
@@ -473,9 +473,25 @@ class WrapInferenceSessionForTorch:
                 )
         return tuple(res)
 
-    def run(self, output_names, feeds):
+    def run(self, output_names, feeds, dlpack:Optional[bool]=None):
+        assert dlpack is not None, f"dlpack={dlpack} must be explicitly specified."
         inputs = [feeds[i] for i in self.input_names]
-        return self.run_dlpack(*inputs, output_names=output_names)
+        if dlpack:
+            return self.run_dlpack(*inputs, output_names=output_names)
+        return self.run_ort_inference(*inputs)
+
+    def run_ort_inference(self, *inputs):
+        onnxruntime_input = {
+            k.name: v.numpy(force=True)  # type: ignore[union-attr]
+            for k, v in zip(self.sess.get_inputs(), inputs)
+        }
+
+        ort_outputs = self.sess.run(
+            None,
+            onnxruntime_input,
+        )
+        pth_outputs = [torch.from_numpy(output) for output in ort_outputs]
+        return pth_outputs
 
     def run_dlpack(self, *inputs, output_names=None):
         if output_names is None:

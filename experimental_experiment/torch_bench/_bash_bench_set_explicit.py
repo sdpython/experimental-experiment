@@ -13,11 +13,9 @@ class ExplicitRunner(BenchmarkRunner):
     MODELS: Dict[str, Callable] = {}
 
     @classmethod
-    def initialize(container):
-        """
-        Steps to run before running the benchmark.
-        """
-        container.MODELS.update(
+    def initialize(cls):
+        """Steps to run before running the benchmark."""
+        cls.MODELS.update(
             {
                 "101Dummy": get_dummy_model,
                 "Speech2Text2ForCausalLMNotTrained": get_speech2text2_causal_ml_not_trained_model,  # noqa: E501

@@ -240,11 +240,16 @@ class BenchmarkRunner:
         return obj_size(obj)
 
     def ort_run(
-        self, sess: WrapInferenceSessionForTorch, feeds: List[torch.Tensor]
+        self,
+        sess: WrapInferenceSessionForTorch,
+        feeds: List[torch.Tensor],
+        dlpack: bool = False,
     ) -> List[torch.Tensor]:
         """Runs with onnxruntme."""
         list_feeds = [feeds[k] for k in sess.input_names]
-        return sess.run_dlpack(*list_feeds)
+        if dlpack:
+            return sess.run_dlpack(*list_feeds)
+        return sess.run_ort_inference(*list_feeds)
 
     @classmethod
     def _post_process_optimization_statistics(
@@ -313,7 +318,10 @@ class BenchmarkRunner:
     @classmethod
     def _post_process_onnx_statistics(cls, model: onnx.ModelProto) -> Dict[str, Any]:
         stats = {}
-        stats["onnx_n_nodes"] = len(model.graph.node)
+		nodes = list(model.graph.node)
+		for f in model.function:
+            nodes.extend(f.node)
+        stats["onnx_n_nodes"] = len(nodes)
         stats["onnx_n_initializer"] = len(model.graph.initializer)
         stats["onnx_n_sparse_initializer"] = len(model.graph.sparse_initializer)
         stats["onnx_n_functions"] = len(model.functions)
@@ -326,7 +334,7 @@ class BenchmarkRunner:
         stats["onnx_output_names"] = "|".join(i.name for i in model.graph.output)
         stats["op_onnx_initializer"] = len(model.graph.initializer)
         stats["op_onnx_sparse_initializer"] = len(model.graph.sparse_initializer)
-        for node in model.graph.node:
+        for node in nodes:
             if node.domain == "":
                 key = f"op_onnx_{node.op_type}"
             else:
@@ -795,7 +803,7 @@ class BenchmarkRunner:
                 "-" if timm is None else getattr(timm, "__version__", "dev")
             ),
             "version_torch_onnx": (
-                "-" if torch_onnx is None else getattr(timm, "__version__", "dev")
+                "-" if torch_onnx is None else metadata.version("torch_onnx")
             ),
         }
         stats.update(machine_specs)

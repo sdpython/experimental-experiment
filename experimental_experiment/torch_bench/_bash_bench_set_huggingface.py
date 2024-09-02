@@ -160,10 +160,8 @@ class HuggingfaceRunner(BenchmarkRunner):
     EXTRA_MODELS = {}
 
     @classmethod
-    def initialize(container):
-        """
-        Steps to run before running the benchmark.
-        """
+    def initialize(cls):
+        """Steps to run before running the benchmark."""
         import transformers
 
         # for cls in container.imports:
@@ -171,16 +169,16 @@ class HuggingfaceRunner(BenchmarkRunner):
         #         transformers, cls
         #     ), f"{cls!r} not found, update transformers."
 
-        lines = container.MODELS_FILENAME.split("\n")
+        lines = cls.MODELS_FILENAME.split("\n")
         lines = [line.rstrip() for line in lines]
         for line in lines:
             if not line or len(line) < 2:
                 continue
             model_name, batch_size = line.split(",")
             batch_size = int(batch_size)
-            container.BATCH_SIZE_KNOWN_MODELS[model_name] = batch_size
+            cls.BATCH_SIZE_KNOWN_MODELS[model_name] = batch_size
 
-        container.EXTRA_MODELS.update(
+        cls.EXTRA_MODELS.update(
             {
                 "101Dummy": (
                     lambda: Neuron.config,
@@ -246,7 +244,7 @@ class HuggingfaceRunner(BenchmarkRunner):
         )
 
     @classmethod
-    def _get_module_cls_by_model_name(container, model_cls_name):
+    def _get_module_cls_by_model_name(cls, model_cls_name):
         _module_by_model_name = {
             "Speech2Text2Decoder": "transformers.models.speech_to_text_2.modeling_speech_to_text_2",  # noqa: E501
             "TrOCRDecoder": "transformers.models.trocr.modeling_trocr",
@@ -256,7 +254,7 @@ class HuggingfaceRunner(BenchmarkRunner):
         return getattr(module, model_cls_name)
 
     @classmethod
-    def _get_sequence_length(container, model_cls, model_name):
+    def _get_sequence_length(cls, model_cls, model_name):
         if model_name.startswith(("Blenderbot",)):
             seq_length = 128
         elif model_name.startswith(("GPT2", "Bart", "T5", "PLBart", "MBart")):
@@ -297,7 +295,7 @@ class HuggingfaceRunner(BenchmarkRunner):
 
     @classmethod
     def _generate_inputs_for_model(
-        container, model_cls, model, model_name, bs, device, include_loss_args=False
+        cls, model_cls, model, model_name, bs, device, include_loss_args=False
     ):
         if hasattr(model, "_get_random_inputs"):
             return model._get_random_inputs(device)
@@ -306,7 +304,7 @@ class HuggingfaceRunner(BenchmarkRunner):
 
         num_choices = 3
         num_visual_features = 42
-        seq_length = container._get_sequence_length(model_cls, model_name)
+        seq_length = cls._get_sequence_length(model_cls, model_name)
         vocab_size = model.config.vocab_size
 
         if model_name.startswith("Wav2Vec2"):
@@ -406,7 +404,7 @@ class HuggingfaceRunner(BenchmarkRunner):
                 input_dict["labels"] = _rand_int_tensor(
                     device, 0, vocab_size - 1, (bs, seq_length)
                 )
-            elif model_name in container.EXTRA_MODELS:
+            elif model_name in cls.EXTRA_MODELS:
                 input_dict["labels"] = _rand_int_tensor(
                     device, 0, vocab_size, (bs, seq_length)
                 )
@@ -532,7 +530,7 @@ class HuggingfaceRunner(BenchmarkRunner):
             model_name,
             batch_size,
             self.device,
-            include_loss_args=True,
+            include_loss_args=False,  # TODO: training is not supported
         )
 
         for attr in dir(config):

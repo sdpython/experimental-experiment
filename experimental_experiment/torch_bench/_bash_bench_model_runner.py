@@ -423,6 +423,34 @@ class ModelRunner:
             )
             return onx, stats
 
+        if exporter == "torch-onnx-fallback":
+            # torch-onnx with torch.onnx.export fallback enabled
+            assert ModelRunner._patched in (
+                None,
+                "torch-onnx",
+            ), f"A new patch should not be applied on {ModelRunner._patched!r}."
+            import torch_onnx
+
+            if ModelRunner._patched is None:
+                torch_onnx.patch_torch(
+                    profile=False,
+                    report=False,
+                    verify=False,
+                    dump_exported_program=False,
+                    fallback=True,
+                )
+                ModelRunner._patched = "torch-onnx"
+            onx, stats = self._to_onnx_script(
+                name,
+                dynamic=dynamic,
+                fake_tensor=fake_tensor,
+                no_grad=no_grad,
+                optimization=optimization,
+                verbose=verbose,
+                target_opset=target_opset,
+            )
+            return onx, stats
+
         if exporter == "torch-onnx-detailed":
             # Detailed run for torch-onnx that enables all analysis and logging
             assert ModelRunner._patched in (
