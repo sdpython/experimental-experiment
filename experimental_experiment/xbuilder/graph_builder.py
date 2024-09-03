@@ -924,6 +924,7 @@ class GraphBuilder:
         self,
         old_shape: Tuple[Any, ...],
         shape: Tuple[Any, ...],
+        register_int: bool = True,
         name: Optional[str] = None,
     ):
         """
@@ -953,9 +954,8 @@ class GraphBuilder:
             if isinstance(d1, (int, str)) and isinstance(d2, (int, str)):
                 if d1 == d2:
                     continue
-                if isinstance(d1, str):
+                if isinstance(d1, str) and isinstance(d2, str):
                     self.register_constraint_dimension(d1, d2)
-                if isinstance(d2, str):
                     self.register_constraint_dimension(d2, d1)
                 continue
 
@@ -1018,7 +1018,7 @@ class GraphBuilder:
                         )
                     else:
                         self._check_two_shapes_are_compatible(
-                            old_shape, shape, name=name
+                            old_shape, shape, name=name, register_int=False
                         )
 
             elif shape != old_shape:

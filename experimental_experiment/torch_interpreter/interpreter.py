@@ -125,7 +125,10 @@ class DynamoInterpreter:
             if self.builder.has_shape(name):
                 shape = self.builder.get_shape(name)
                 self.builder._check_two_shapes_are_compatible(
-                    tuple(exp_shape), shape, name=name
+                    tuple(exp_shape),
+                    shape,
+                    name=name,
+                    register_int=False,
                 )
         return res
 
@@ -1059,7 +1062,9 @@ class DynamoInterpreter:
                     shape = tuple(v.shape)
                     if self.builder.is_dynamic_shape(shape):
                         # sets shape coming from the original model
-                        self.builder.set_shape(r, shape, set_if_more_precise=True)
+                        # we must not set the existing shape is dynamic,
+                        # the new one is purely static
+                        self.builder.set_shape(r, shape, set_if_more_precise=False)
                     elif self.builder.has_rank(r):
                         assert len(shape) == self.builder.get_rank(r), (
                             f"Rank already set for {r!r}, "
@@ -1092,7 +1097,7 @@ class DynamoInterpreter:
                             shape = tuple(v_.shape)
                             if self.builder.is_dynamic_shape(shape):
                                 self.builder.set_shape(
-                                    r_, shape, set_if_more_precise=True
+                                    r_, shape, set_if_more_precise=False
                                 )
                             elif self.builder.has_rank(r_):
                                 assert len(shape) == self.builder.get_rank(r_), (
