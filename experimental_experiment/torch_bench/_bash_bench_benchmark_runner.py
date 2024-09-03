@@ -1144,7 +1144,7 @@ class BenchmarkRunner:
                 print("[benchmarkrunner.benchmark] do shape inference again")
             onx_with_shapes = onnx.shape_inference.infer_shapes(onx_with_shapes)
             if self.verbose > 1:
-                print("[benchmarkrunner.benchmark] saves {filename!r}")
+                print(f"[benchmarkrunner.benchmark] saves {filename!r}")
             onnx.save(onx_with_shapes, filename, save_as_external_data=False)
             if self.verbose:
                 print(f"[benchmarkrunner.benchmark] done shapes again {filename!r}")
