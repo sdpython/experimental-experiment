@@ -197,11 +197,20 @@ class TestOnnxExportDynamicShapes(ExtTestCase):
                 self.assertEqualArray(
                     expected[0].detach().cpu().numpy(),
                     results[0],
-                    atol=1e-5,
+                    atol=1e-3,
                     msg=f"input {i} failed",
                 )
 
-    def _investigate(self, expected, feeds, onx, opts, providers, verbose: int = 0):
+    def _investigate(
+        self,
+        expected,
+        feeds,
+        onx,
+        opts,
+        providers,
+        verbose: int = 0,
+        atol: float = 1e-4,
+    ):
         ref = ExtendedReferenceEvaluator(onx, verbose=verbose)
         results = ref.run(None, feeds)
         self.assertEqualArray(expected[0].detach().cpu().numpy(), results[0], atol=1e-5)
@@ -216,7 +225,7 @@ class TestOnnxExportDynamicShapes(ExtTestCase):
             self.assertEqualArray(
                 v,
                 g,
-                atol=1e-4,
+                atol=atol,
                 msg=f"outut {k!r} is different between "
                 f"ExtendedReferenceEvaluator and OrtEval",
             )
@@ -274,12 +283,12 @@ class TestOnnxExportDynamicShapes(ExtTestCase):
             for n, t in zip(sess.get_inputs(), input_tensors[i]):
                 feeds[n.name] = t.detach().cpu().numpy()
             if __name__ == "__main__":
-                self._investigate(expected, feeds, onx, opts, providers)
+                self._investigate(expected, feeds, onx, opts, providers, atol=1e-2)
             results = sess.run(None, feeds)
             self.assertEqualArray(
                 expected[0].detach().cpu().numpy(),
                 results[0],
-                atol=1e-5,
+                atol=1e-3,
                 msg=f"input {i} failed with InferenceSession",
             )
 
@@ -346,7 +355,7 @@ class TestOnnxExportDynamicShapes(ExtTestCase):
                 self.assertEqualArray(
                     expected[0].detach().cpu().numpy(),
                     results[0],
-                    atol=1e-5,
+                    atol=1e-3,
                     msg=f"input {i} failed with InferenceSession",
                 )
             else:

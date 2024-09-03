@@ -124,9 +124,8 @@ class DynamoInterpreter:
                 )
             if self.builder.has_shape(name):
                 shape = self.builder.get_shape(name)
-                assert tuple(exp_shape) == shape, (
-                    f"Shape mismatch for {name!r}, onnx {shape} != expected torch "
-                    f"{exp_shape} (tuple: {tuple(exp_shape)}){self.builder.get_debug_msg()}"
+                self.builder._check_two_shapes_are_compatible(
+                    tuple(exp_shape), shape, name=name
                 )
         return res
 
