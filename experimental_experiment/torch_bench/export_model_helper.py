@@ -517,7 +517,7 @@ class WrapInferenceSessionForTorch:
         ort_vector_outputs = bind.get_outputs()
         # The function returns OrtValue, the code computing the discrepancies will
         # have to convert (so the necessary copy is not included here).
-		# DlPack mechanism should be implemented in onnxruntime
+        # DlPack mechanism should be implemented in onnxruntime
         # (not only in onnxruntime-training).
         ort_outputs = [ort_vector_outputs[i] for i in range(len(ort_vector_outputs))]
         return ort_outputs

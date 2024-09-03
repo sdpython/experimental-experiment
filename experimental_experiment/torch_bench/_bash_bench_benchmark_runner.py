@@ -4,7 +4,6 @@ import pickle
 import sys
 import time
 from datetime import datetime
-from importlib import metadata
 from typing import Any, Dict, Iterator, List, Optional, Set, Tuple, Union
 
 import numpy as np
