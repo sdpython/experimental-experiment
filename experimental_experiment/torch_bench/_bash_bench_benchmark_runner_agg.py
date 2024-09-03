@@ -1124,11 +1124,6 @@ def merge_benchmark_reports(
             df = df.copy()
             df[m] = ""
 
-    # avoid nan value for all version columns
-    for c in keys:
-        if c.startswith("version") and c in df.columns:
-            df[c] = df[c].fillna("")
-
     if filter_in or filter_out:
         if verbose:
             print("[merge_benchmark_reports] filtering data")
@@ -1155,14 +1150,30 @@ def merge_benchmark_reports(
         if c in set_columns:
             df[c] = df[c].fillna("-")
 
+    # unique values
+    unique = {}
+    for c in df.columns:
+        u = df[c].dropna().unique()
+        if len(u) == 1:
+            unique[c] = u.tolist()[0]
+    if "exporter" in unique:
+        del unique["exporter"]
+
     # replace nan values in key columns
     # groupby do not like nan values
     for c in keys:
         if c in set_columns:
+            if verbose and c in df.columns:
+                print(
+                    f"[merge_benchmark_reports] KEY {len(set(df[c].dropna()))} "
+                    f"unique values for {c!r} : {set(df[c].dropna())}"
+                )
             if c.startswith("flag"):
                 df[c] = df[c].astype(bool).fillna(False)
             elif c in {"dynamic"}:
                 df[c] = df[c].fillna(0)
+            elif c.startswith("version"):
+                df[c] = df[c].fillna("")
             else:
                 df[c] = df[c].fillna("-")
 
@@ -1183,14 +1194,6 @@ def merge_benchmark_reports(
 
     if verbose:
         print(f"[merge_benchmark_reports] report_on {len(report_on)} metrics")
-
-    unique = {}
-    for c in df.columns:
-        u = df[c].unique()
-        if len(u) == 1:
-            unique[c] = u.tolist()[0]
-    if "exporter" in unique:
-        del unique["exporter"]
 
     main = [dict(column="dates", value=", ".join(sorted(df["DATE"].unique().tolist())))]
     for k, v in unique.items():
