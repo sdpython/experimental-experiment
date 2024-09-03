@@ -4,6 +4,7 @@ import pickle
 import sys
 import time
 from datetime import datetime
+from importlib import metadata
 from typing import Any, Dict, Iterator, List, Optional, Set, Tuple, Union
 
 import numpy as np
@@ -21,6 +22,7 @@ from .export_model_helper import (
     str_shape,
 )
 from ..memory_peak import flatten, start_spying_on
+from ..ext_test_case import has_onnxruntime_training
 
 
 class BenchmarkRunner:
@@ -95,9 +97,6 @@ class BenchmarkRunner:
         self.dump_ort = dump_ort
         assert no_grad, "no_grad false not implemented yet"
         assert not fake_tensor, "fake_tensor true not implemented yet"
-
-        from ..ext_test_case import has_onnxruntime_training
-
         self.dlpack = has_onnxruntime_training(push_back_batch=True)
 
     def forward_pass(self, mod, inputs, collect_outputs=True):

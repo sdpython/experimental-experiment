@@ -150,6 +150,7 @@ class TorchBenchRunner(BenchmarkRunner):
             - phi_1_5
             - phi_2
             - stable_diffusion_xl
+            - llama_v31_8b
 
         detectron2_models: &DETECTRON2_MODELS
             - detectron2_fasterrcnn_r_101_c4

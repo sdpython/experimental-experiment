@@ -3,13 +3,13 @@ import textwrap
 from typing import Any, Optional, Set, Tuple
 import torch
 from torch._dynamo.testing import reset_rng_state
-from ._bash_bench_model_runner import (
-    download_retry_decorator,
-    _rand_int_tensor,
-    ModelRunner,
-)
 from ._bash_bench_benchmark_runner import BenchmarkRunner
-from ._bash_bench_set_dummies import Neuron, Neuron16, NeuronTuple, Neuron2Outputs
+from ._bash_bench_model_runner import (
+    ModelRunner,
+    _rand_int_tensor,
+    download_retry_decorator,
+)
+from ._bash_bench_set_dummies import Neuron, Neuron2Outputs, Neuron16, NeuronTuple
 
 
 class HuggingfaceRunner(BenchmarkRunner):

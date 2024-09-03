@@ -6,6 +6,8 @@ from collections import Counter
 from typing import Dict, List, Optional, Sequence, Set, Union
 
 import numpy as np
+import pandas
+from pandas.errors import PerformanceWarning
 
 BUCKET_SCALES = [-np.inf, -20, -10, -5, -2, 0, 2, 5, 10, 20, np.inf]
 BUCKETS = [
@@ -493,8 +495,6 @@ def _key(v):
 
 
 def sort_index_key(index):
-    import pandas
-
     return pandas.Index(_key(v) for v in index)
 
 
@@ -529,8 +529,8 @@ def _column_name(ci: int) -> str:
 
 
 def _apply_excel_style(
-    res: Dict[str, "pandas.DataFrame"],  # noqa: F821
-    writer: "ExcelWriter",  # noqa: F821
+    res: Dict[str, pandas.DataFrame],
+    writer: pandas.ExcelWriter,
     verbose: int = 0,
 ):
     from openpyxl.styles import Alignment, Font, PatternFill, numbers
@@ -899,7 +899,7 @@ def _apply_excel_style(
 
 
 def merge_benchmark_reports(
-    data: Union["pandas.DataFrame", List[str], str],  # noqa: F821
+    data: Union[pandas.DataFrame, List[str], str],
     model=("suite", "model_name"),
     keys=(
         "architecture",
@@ -963,8 +963,8 @@ def merge_benchmark_reports(
     filter_out: Optional[str] = None,
     verbose: int = 0,
     output_clean_raw_data: Optional[str] = None,
-    baseline: Optional["pandas.DataFrame"] = None,  # noqa: F821
-) -> Dict[str, "pandas.DataFrame"]:  # noqa: F821
+    baseline: Optional[pandas.DataFrame] = None,
+) -> Dict[str, pandas.DataFrame]:
     """
     Merges multiple files produced by bash_benchmark...
 
@@ -1021,8 +1021,6 @@ def merge_benchmark_reports(
 
     * a value or a set of values separated by ``;``
     """
-    import pandas
-
     if baseline:
         base_dfs = merge_benchmark_reports(
             baseline,
@@ -1939,10 +1937,10 @@ def merge_benchmark_reports(
 
 
 def _reorder_columns_level(
-    df: "pandas.DataFrame",  # noqa: F821
+    df: pandas.DataFrame,
     first_level: List[str],
     prefix: Optional[str] = None,
-) -> "pandas.DataFrame":  # noqa: F821
+) -> pandas.DataFrame:
     assert (
         None not in df.columns.names
     ), f"None in df.index.names={df.columns.names}, prefix={prefix!r}"
@@ -1967,9 +1965,9 @@ def _reorder_columns_level(
 
 
 def _sort_index_level(
-    df: "pandas.DataFrame",  # noqa: F821
+    df: pandas.DataFrame,
     debug: Optional[str] = None,
-) -> "pandas.DataFrame":  # noqa: F821
+) -> pandas.DataFrame:
     assert (
         None not in df.index.names
     ), f"None in df.index.names={df.index.names}, debug={debug!r}"
@@ -1996,10 +1994,10 @@ def _sort_index_level(
 
 
 def _reorder_index_level(
-    df: "pandas.DataFrame",  # noqa: F821
+    df: pandas.DataFrame,
     first_level: List[str],
     prefix: Optional[str] = None,
-) -> "pandas.DataFrame":  # noqa: F821
+) -> pandas.DataFrame:
     assert (
         None not in df.index.names
     ), f"None in df.index.names={df.index.names}, prefix={prefix!r}"
@@ -2028,12 +2026,10 @@ def _reorder_index_level(
 
 
 def _add_level(
-    index: "pandas.MultiIndex",  # noqa: F821
+    index: pandas.MultiIndex,
     name: str,
     value: str,
-) -> "pandas.MultiIndex":  # noqa: F821
-    import pandas
-
+) -> pandas.MultiIndex:
     if len(index.names) == 1:
         v = index.tolist()
         nv = [[value, _] for _ in v]
@@ -2051,15 +2047,12 @@ def _add_level(
 
 
 def _create_aggregation_figures(
-    final_res: Dict[str, "pandas.DataFrame"],  # noqa: F821
+    final_res: Dict[str, pandas.DataFrame],
     model: List[str],
     skip: Optional[Set[str]] = None,
     key: str = "suite",
     exc: bool = True,
-) -> Dict[str, "pandas.DataFrame"]:  # noqa: F821
-    import pandas
-    from pandas.errors import PerformanceWarning
-
+) -> Dict[str, pandas.DataFrame]:
     assert key in model, f"Key {key!r} missing in model={model!r}"
     model_not_key = [c for c in model if c != key]
 
@@ -2274,9 +2267,9 @@ def _create_aggregation_figures(
 
 
 def _reverse_column_names_order(
-    df: "pandas.DataFrame",  # noqa:F821:
+    df: pandas.DataFrame,  # :
     name: Optional[str] = None,
-) -> "pandas.DataFrame":  # noqa:F821:
+) -> pandas.DataFrame:  # :
     if len(df.columns.names) <= 1:
         return df
     col_names = df.columns.names
@@ -2285,10 +2278,10 @@ def _reverse_column_names_order(
 
 
 def _select_metrics(
-    df: "pandas.DataFrame",  # noqa: F821
+    df: pandas.DataFrame,
     select: List[Dict[str, str]],
     prefix: Optional[str] = None,
-) -> "pandas.DataFrame":  # noqa: F821
+) -> pandas.DataFrame:
     suites = set(df.columns)
     rows = []
     names = list(df.index.names)
@@ -2369,10 +2362,10 @@ def _select_metrics(
 
 
 def _filter_data(
-    df: "pandas.DataFrame",  # noqa: F821
+    df: pandas.DataFrame,
     filter_in: Optional[str] = None,
     filter_out: Optional[str] = None,
-) -> "pandas.DataFrame":  # noqa: F821
+) -> pandas.DataFrame:
     """
     Argument `filter` follows the syntax
     ``<column1>:<fmt1>/<column2>:<fmt2>``.
@@ -2419,12 +2412,11 @@ def _filter_data(
 
 
 def _select_model_metrics(
-    res: Dict[str, "pandas.DataFrame"],  # noqa: F821
+    res: Dict[str, pandas.DataFrame],
     select: List[Dict[str, str]],
     stack_levels: Sequence[str],
-) -> "pandas.DataFrame":  # noqa: F821
+) -> pandas.DataFrame:
     import pandas
-    from pandas.errors import PerformanceWarning
 
     concat = []
     for i, metric in enumerate(select):

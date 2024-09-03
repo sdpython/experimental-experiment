@@ -386,6 +386,7 @@ class ModelRunner:
                 verbose=verbose,
                 target_opset=target_opset,
             )
+
         if exporter == "torch_script":
             return self._to_onnx_script(
                 name,
@@ -398,6 +399,7 @@ class ModelRunner:
             )
 
         if exporter == "torch-onnx":
+            # Fast path for torch-onnx that disables all analysis and logging
             assert ModelRunner._patched in (
                 None,
                 "torch-onnx",

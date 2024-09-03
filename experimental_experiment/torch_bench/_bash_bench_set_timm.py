@@ -1,15 +1,3 @@
-"""
-crossvit_9_240	aten.upsample_bicubic2d
-dm_nfnet_f0	Not implementation when training=True
-eca_halonext26ts	aten.unfold
-levit_128	A constant ....
-nfnet_l0	Not implementation when training=True
-swin_base_patch4_window7_224	aten.roll
-tnt_s_patch16_224	aten.im2col
-volo_d1_224	aten.im2col
-xcit_large_24_p8_224	aten.div'_ overload='Tensor_mode')
-"""
-
 import importlib
 import io
 import pprint

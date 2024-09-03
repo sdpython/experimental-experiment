@@ -12,6 +12,7 @@ class TorchBenchAdoRunner(TorchBenchRunner):
         hf_mixtral
         hf_Yi
         llama_v2_7b_16h
+        llama_v31_8b
         moondream
         llava
         mistral_7b_instruct
