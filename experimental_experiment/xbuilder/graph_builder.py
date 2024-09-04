@@ -901,6 +901,73 @@ class GraphBuilder:
             name = name.name
         self._known_torch_value[name] = (where, value)
 
+    @classmethod
+    def _torch_sym_int_to_str(
+        cls, value: "torch:SymInt"  #  noqa: F722
+    ) -> Union[int, str]:
+        try:
+            val_int = int(value)
+            return val_int
+        except (TypeError, ValueError):
+            pass
+
+        if isinstance(value.node, str):
+            return f"{value.node}"
+
+        from torch.fx.experimental.sym_node import SymNode
+
+        if isinstance(value.node, SymNode):
+            return str(value.node._expr)
+        raise AssertionError(f"Unable to convert {value!r} into string")
+
+    def _check_two_shapes_are_compatible(
+        self,
+        old_shape: Tuple[Any, ...],
+        shape: Tuple[Any, ...],
+        register_int: bool = True,
+        name: Optional[str] = None,
+    ):
+        """
+        Raises an exception if two shapes are not compatabible.
+        """
+        import torch
+
+        assert len(old_shape) == len(shape), (
+            f"Rank mismatch between {old_shape} and {shape} (name={name!r}"
+            f"{self.get_debug_msg()}"
+        )
+        for d1, d2 in zip(old_shape, shape):
+            if isinstance(d1, int) and isinstance(d2, int):
+                assert d1 == d2, (
+                    f"Shape {name!r} already exists and one dimension "
+                    f"is not compatible existing {old_shape} != {shape} "
+                    f"(new) {self.get_debug_msg()}"
+                )
+                continue
+
+            d1_, d2_ = d1, d2
+            if isinstance(d1, torch.SymInt):
+                d1 = self._torch_sym_int_to_str(d1)
+            if isinstance(d2, torch.SymInt):
+                d2 = self._torch_sym_int_to_str(d2)
+
+            if isinstance(d1, (int, str)) and isinstance(d2, (int, str)):
+                if d1 == d2:
+                    continue
+                if isinstance(d1, str) and isinstance(d2, str):
+                    self.register_constraint_dimension(d1, d2)
+                    self.register_constraint_dimension(d2, d1)
+                continue
+
+            raise RuntimeError(
+                f"Shape {name!r} already exists "
+                f"and it is not compatible "
+                f"existing {old_shape} != {shape} (new) "
+                f"d1={d1_!r}, d2={d2_!r}, dim types="
+                f"({type(d1_)}, {type(d2_)})"
+                f"{self.get_debug_msg()}"
+            )
+
     def set_shape(
         self,
         name: str,
@@ -950,24 +1017,9 @@ class GraphBuilder:
                             f"existing {old_shape} != {shape} (new)"
                         )
                     else:
-                        for d1, d2 in zip(old_shape, shape):
-                            if isinstance(d1, int) and isinstance(d2, int):
-                                assert d1 == d2, (
-                                    f"Shape {name!r} already exists and one dimension "
-                                    f"is not compatible existing {old_shape} != {shape} "
-                                    f"(new) {self.get_debug_msg()}"
-                                )
-                            elif isinstance(d1, str) and isinstance(d2, str):
-                                if d1 == d2:
-                                    continue
-                                self.register_constraint_dimension(d1, d2)
-                            else:
-                                raise RuntimeError(
-                                    f"Shape {name!r} already exists "
-                                    f"and it is not compatible "
-                                    f"existing {old_shape} != {shape} (new) "
-                                    f"{self.get_debug_msg()}"
-                                )
+                        self._check_two_shapes_are_compatible(
+                            old_shape, shape, name=name, register_int=False
+                        )
 
             elif shape != old_shape:
                 if exc:
@@ -1779,7 +1831,7 @@ class GraphBuilder:
             name = v
         return name
 
-    def _torch_sym_int(self, d, add: bool = False):
+    def _torch_sym_int(self, d, add: bool = False) -> Optional[int]:
         assert isinstance(
             d, (self.torch.SymInt, str, self.torch.SymFloat)
         ), f"unexpected type for d={d}, type={type(d)}"
@@ -1841,8 +1893,7 @@ class GraphBuilder:
             f"value={value!r}, unable to find dimension {d!r} ({type(d)}) "
             f"(str(d)={str(d)!r}) in {self.dynamic_objects_rev} "
             f"or {self._dynamic_alias} or {self._known_value_shape}"
-            f"{dir(d)}"
-            f"{self.get_debug_msg()}"
+            f"{dir(d)}{self.get_debug_msg()}"
         )
         assert not isinstance(
             value, self.torch.SymInt
@@ -4944,7 +4995,7 @@ class GraphBuilder:
 
     def register_constraint_dimension(self, dim_name: str, value: Any):
         """
-        Register a constraint on a dimension.
+        Registers a constraint on a dimension.
 
         :param dim_name: dimension name
         :param value: value to register

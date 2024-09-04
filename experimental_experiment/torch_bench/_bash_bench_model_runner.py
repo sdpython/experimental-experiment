@@ -386,6 +386,7 @@ class ModelRunner:
                 verbose=verbose,
                 target_opset=target_opset,
             )
+
         if exporter == "torch_script":
             return self._to_onnx_script(
                 name,
@@ -398,6 +399,7 @@ class ModelRunner:
             )
 
         if exporter == "torch-onnx":
+            # Fast path for torch-onnx that disables all analysis and logging
             assert ModelRunner._patched in (
                 None,
                 "torch-onnx",
@@ -410,6 +412,34 @@ class ModelRunner:
                     report=False,
                     verify=False,
                     dump_exported_program=False,
+                )
+                ModelRunner._patched = "torch-onnx"
+            onx, stats = self._to_onnx_script(
+                name,
+                dynamic=dynamic,
+                fake_tensor=fake_tensor,
+                no_grad=no_grad,
+                optimization=optimization,
+                verbose=verbose,
+                target_opset=target_opset,
+            )
+            return onx, stats
+
+        if exporter == "torch-onnx-fallback":
+            # torch-onnx with torch.onnx.export fallback enabled
+            assert ModelRunner._patched in (
+                None,
+                "torch-onnx",
+            ), f"A new patch should not be applied on {ModelRunner._patched!r}."
+            import torch_onnx
+
+            if ModelRunner._patched is None:
+                torch_onnx.patch_torch(
+                    profile=False,
+                    report=False,
+                    verify=False,
+                    dump_exported_program=False,
+                    fallback=True,
                 )
                 ModelRunner._patched = "torch-onnx"
             onx, stats = self._to_onnx_script(
@@ -1030,7 +1060,7 @@ class ModelRunner:
         else:
             new_inputs = inputs
         assert len(names) == len(new_inputs), (
-            f"Mismatch number of outputs, {len(inputs)} ({len(new_inputs)}) "
+            f"Mismatch number of inputs, {len(inputs)} ({len(new_inputs)}) "
             f"inputs, there are {len(new_inputs)} flattened inputs.\n----\n"
             f"names={names}\n----\ninput types={[type(i) for i in inputs]}\n----\n"
             f"named parameters={sorted(p[0] for p in self.model.named_parameters())}"

@@ -21,6 +21,7 @@ from .export_model_helper import (
     str_shape,
 )
 from ..memory_peak import flatten, start_spying_on
+from ..ext_test_case import has_onnxruntime_training
 
 
 class BenchmarkRunner:
@@ -95,6 +96,7 @@ class BenchmarkRunner:
         self.dump_ort = dump_ort
         assert no_grad, "no_grad false not implemented yet"
         assert not fake_tensor, "fake_tensor true not implemented yet"
+        self.dlpack = has_onnxruntime_training(push_back_batch=True)
 
     def forward_pass(self, mod, inputs, collect_outputs=True):
         return mod(**inputs)
@@ -228,6 +230,10 @@ class BenchmarkRunner:
             return None
         if hasattr(obj, "to"):
             return obj.to(device)
+        # if isinstance(obj, onnxruntime.capi.onnxruntime_pybind11_state.OrtValue):
+        if hasattr(obj, "numpy"):
+            # Implicit copy to torch.Tensor
+            return torch.Tensor(obj.numpy()).to(device)
         if "SquashedNormal" in obj.__class__.__name__ and device == "cpu":
             return obj
         raise AssertionError(f"move_to not implemented for type {type(obj)}")
@@ -240,11 +246,15 @@ class BenchmarkRunner:
         return obj_size(obj)
 
     def ort_run(
-        self, sess: WrapInferenceSessionForTorch, feeds: List[torch.Tensor]
+        self,
+        sess: WrapInferenceSessionForTorch,
+        feeds: List[torch.Tensor],
     ) -> List[torch.Tensor]:
         """Runs with onnxruntme."""
         list_feeds = [feeds[k] for k in sess.input_names]
-        return sess.run_dlpack(*list_feeds)
+        if self.dlpack:
+            return sess.run_dlpack(*list_feeds)
+        return sess.run_ort_inference(*list_feeds)
 
     @classmethod
     def _post_process_optimization_statistics(
@@ -313,7 +323,10 @@ class BenchmarkRunner:
     @classmethod
     def _post_process_onnx_statistics(cls, model: onnx.ModelProto) -> Dict[str, Any]:
         stats = {}
-        stats["onnx_n_nodes"] = len(model.graph.node)
+        nodes = list(model.graph.node)
+        for f in model.functions:
+            nodes.extend(f.node)
+        stats["onnx_n_nodes"] = len(nodes)
         stats["onnx_n_initializer"] = len(model.graph.initializer)
         stats["onnx_n_sparse_initializer"] = len(model.graph.sparse_initializer)
         stats["onnx_n_functions"] = len(model.functions)
@@ -326,7 +339,7 @@ class BenchmarkRunner:
         stats["onnx_output_names"] = "|".join(i.name for i in model.graph.output)
         stats["op_onnx_initializer"] = len(model.graph.initializer)
         stats["op_onnx_sparse_initializer"] = len(model.graph.sparse_initializer)
-        for node in model.graph.node:
+        for node in nodes:
             if node.domain == "":
                 key = f"op_onnx_{node.op_type}"
             else:
@@ -795,7 +808,7 @@ class BenchmarkRunner:
                 "-" if timm is None else getattr(timm, "__version__", "dev")
             ),
             "version_torch_onnx": (
-                "-" if torch_onnx is None else getattr(timm, "__version__", "dev")
+                "-" if torch_onnx is None else getattr(torch_onnx, "__version__", "dev")
             ),
         }
         stats.update(machine_specs)
@@ -1131,7 +1144,7 @@ class BenchmarkRunner:
                 print("[benchmarkrunner.benchmark] do shape inference again")
             onx_with_shapes = onnx.shape_inference.infer_shapes(onx_with_shapes)
             if self.verbose > 1:
-                print("[benchmarkrunner.benchmark] saves {filename!r}")
+                print(f"[benchmarkrunner.benchmark] saves {filename!r}")
             onnx.save(onx_with_shapes, filename, save_as_external_data=False)
             if self.verbose:
                 print(f"[benchmarkrunner.benchmark] done shapes again {filename!r}")

@@ -72,14 +72,14 @@ def bash_bench_main(script_name: str, doc: str, args: Optional[List[str]] = None
     for k, v in sorted(args.__dict__.items()):
         print(f"{k}={v}")
 
+    from experimental_experiment.torch_bench._bash_bench_benchmark_runner_agg import (
+        merge_benchmark_reports,
+    )
     from experimental_experiment.bench_run import (
         make_configs,
         make_dataframe_from_benchmark_data,
         multi_run,
         run_benchmark,
-    )
-    from experimental_experiment.torch_bench._bash_bench_benchmark_runner_agg import (
-        merge_benchmark_reports,
     )
 
     if script_name == "bash_bench_huggingface":

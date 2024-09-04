@@ -7,7 +7,10 @@ import numpy as np
 from onnx import TensorProto
 from ..xbuilder._shape_helper import all_int
 from ..xbuilder._helper import make_hash
-from ..xbuilder._dtype_helper import torch_dtype_to_onnx_dtype
+from ..xbuilder._dtype_helper import (
+    torch_dtype_to_onnx_dtype,
+    onnx_dtype_to_torch_dtype,
+)
 from ..xbuilder.model_container import _get_type
 from ._exceptions import FunctionNotFoundError
 from .aten_functions import find_function
@@ -94,19 +97,40 @@ class DynamoInterpreter:
         self.builder.set_shapes_types(node.name, "run_node", (exa, val))
 
         if node.op == "placeholder":
-            return self.placeholder(node)
-        if node.op == "call_function":
-            return self.call_function(node)
-        if node.op == "output":
-            return self.output(node)
-        if node.op == "call_module":
-            return self.call_module(node)
-        if node.op == "get_attr":
-            return self.get_attr(node)
-        if node.op == "call_method":
-            return self.call_method(node)
+            res = self.placeholder(node)
+        elif node.op == "call_function":
+            res = self.call_function(node)
+        elif node.op == "output":
+            res = self.output(node)
+        elif node.op == "call_module":
+            res = self.call_module(node)
+        elif node.op == "get_attr":
+            res = self.get_attr(node)
+        elif node.op == "call_method":
+            res = self.call_method(node)
+        else:
+            raise ValueError(f"Unable to process node kind {node.op!r} ({node}).")
 
-        raise ValueError(f"Unable to process node kind {node.op!r} ({node}).")
+        # Checks consistency of shapes and types
+        name = node.name
+        if val and len(val) == 3:
+            exp_dtype, exp_shape = val[1:]
+            if self.builder.has_type(name):
+                itype = self.builder.get_type(name)
+                ttype = onnx_dtype_to_torch_dtype(itype)
+                assert ttype == exp_dtype, (
+                    f"Type mismatch for {name!r}, onnx {ttype} != expected torch "
+                    f"{exp_dtype}{self.builder.get_debug_msg()}"
+                )
+            if self.builder.has_shape(name):
+                shape = self.builder.get_shape(name)
+                self.builder._check_two_shapes_are_compatible(
+                    tuple(exp_shape),
+                    shape,
+                    name=name,
+                    register_int=False,
+                )
+        return res
 
     def get_attr(self, node: "torch.fx.Node"):  # noqa: F821
         """
@@ -163,7 +187,9 @@ class DynamoInterpreter:
                 # The input is not defined.
                 # We return.
                 return
-            if isinstance(example_value, self.builder.torch.SymInt):
+            if isinstance(
+                example_value, (self.builder.torch.SymInt, self.builder.torch.SymFloat)
+            ):
                 # torch.SymInt
                 self.builder.make_dynamic_object(node.name, example_value)
                 return self.builder.make_tensor_input(
@@ -1036,7 +1062,9 @@ class DynamoInterpreter:
                     shape = tuple(v.shape)
                     if self.builder.is_dynamic_shape(shape):
                         # sets shape coming from the original model
-                        self.builder.set_shape(r, shape, set_if_more_precise=True)
+                        # we must not set the existing shape is dynamic,
+                        # the new one is purely static
+                        self.builder.set_shape(r, shape, set_if_more_precise=False)
                     elif self.builder.has_rank(r):
                         assert len(shape) == self.builder.get_rank(r), (
                             f"Rank already set for {r!r}, "
@@ -1069,7 +1097,7 @@ class DynamoInterpreter:
                             shape = tuple(v_.shape)
                             if self.builder.is_dynamic_shape(shape):
                                 self.builder.set_shape(
-                                    r_, shape, set_if_more_precise=True
+                                    r_, shape, set_if_more_precise=False
                                 )
                             elif self.builder.has_rank(r_):
                                 assert len(shape) == self.builder.get_rank(r_), (

@@ -1,7 +1,7 @@
 from typing import Any, Callable, Dict, Optional, Set, Tuple
 from torch._dynamo.testing import reset_rng_state
-from ._bash_bench_model_runner import ModelRunner
 from ._bash_bench_benchmark_runner import BenchmarkRunner
+from ._bash_bench_model_runner import ModelRunner
 from ._bash_bench_models_helper import (
     get_dummy_model,
     get_speech2text2_causal_ml_not_trained_model,
@@ -13,11 +13,9 @@ class ExplicitRunner(BenchmarkRunner):
     MODELS: Dict[str, Callable] = {}
 
     @classmethod
-    def initialize(container):
-        """
-        Steps to run before running the benchmark.
-        """
-        container.MODELS.update(
+    def initialize(cls):
+        """Steps to run before running the benchmark."""
+        cls.MODELS.update(
             {
                 "101Dummy": get_dummy_model,
                 "Speech2Text2ForCausalLMNotTrained": get_speech2text2_causal_ml_not_trained_model,  # noqa: E501

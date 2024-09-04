@@ -565,6 +565,19 @@ def requires_torch(version: str, msg: str = "") -> Callable:
     return lambda x: x
 
 
+def requires_numpy(version: str, msg: str = "") -> Callable:
+    """
+    Skips a unit test if :epkg:`numpy` is not recent enough.
+    """
+    import packaging.version as pv
+    import numpy
+
+    if pv.Version(".".join(numpy.__version__.split(".")[:2])) < pv.Version(version):
+        msg = f"numpy version {numpy.__version__} < {version}: {msg}"
+        return unittest.skip(msg)
+    return lambda x: x
+
+
 def requires_transformers(
     version: str, msg: str = "", or_older_than: Optional[str] = None
 ) -> Callable:
@@ -634,9 +647,12 @@ def has_onnxruntime_training(push_back_batch: bool = False):
         return False
 
     if push_back_batch:
-        from onnxruntime.capi.onnxruntime_pybind11_state import OrtValue
+        try:
+            from onnxruntime.capi.onnxruntime_pybind11_state import OrtValueVector
+        except ImportError:
+            return False
 
-        if not hasattr(OrtValue, "push_back_batch"):
+        if not hasattr(OrtValueVector, "push_back_batch"):
             return False
     return True
 
@@ -657,9 +673,13 @@ def requires_onnxruntime_training(
         return unittest.skip(msg)
 
     if push_back_batch:
-        from onnxruntime.capi.onnxruntime_pybind11_state import OrtValue
+        try:
+            from onnxruntime.capi.onnxruntime_pybind11_state import OrtValueVector
+        except ImportError:
+            msg = msg or "OrtValue has no method push_back_batch"
+            return unittest.skip(msg)
 
-        if not hasattr(OrtValue, "push_back_batch"):
+        if not hasattr(OrtValueVector, "push_back_batch"):
             msg = msg or "OrtValue has no method push_back_batch"
             return unittest.skip(msg)
     return lambda x: x

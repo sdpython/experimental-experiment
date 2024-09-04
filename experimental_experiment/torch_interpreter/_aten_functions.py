@@ -880,6 +880,31 @@ def aten_clamp_min(
     return res
 
 
+def aten_clamp_Tensor(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    min_t: Optional[T],
+    max_t: Optional[T],
+    name: str = "clamp",
+) -> T:
+    """clip"""
+    assert (
+        min_t is not None or max_t is not None
+    ), f"Not implemented yet when min_t or max_t is None{g.get_debug_msg()}"
+
+    if max_t is None:
+        res = g.op.Clip(x, max_t, outputs=outputs, name=name)
+    elif min is None:
+        res = g.op.Clip(x, None, min_t, outputs=outputs, name=name)
+    else:
+        res = g.op.Clip(x, min_t, max_t, outputs=outputs, name=name)
+    if not sts:
+        set_type_shape_unary_op(g, res, x)
+    return res
+
+
 def aten_clone(
     g: GraphBuilder,
     sts: Optional[Dict[str, Any]],
@@ -6941,7 +6966,7 @@ def aten_where(
     name: str = "where",
 ) -> T:
     """where"""
-    res = g.op.Where(condition, x, other, name=name)
+    res = g.op.Where(condition, x, other, name=name, outputs=outputs)
     if not sts:
         set_type_shape_binary_op(g, res, condition, x, other, begin=1)
     return res
@@ -6957,9 +6982,32 @@ def aten_where_Scalar(
     name: str = "where_Scalar",
 ) -> T:
     """where"""
-    assert isinstance(x, str) or isinstance(
-        other, str
-    ), f"aten_where not implemented when both constants are float{g.get_debug_msg()}"
+    if (
+        isinstance(x, float)
+        and isinstance(other, float)
+        and g.get_type_known(outputs[0])
+    ):
+        itype = g.get_type_known(outputs[0])
+        dtype = tensor_dtype_to_np_dtype(itype)
+        res = g.op.Where(
+            condition,
+            np.array(x, dtype=dtype),
+            np.array(other, dtype=dtype),
+            name=name,
+            outputs=outputs,
+        )
+        if not sts:
+            g.set_type(res, itype)
+            if g.has_shape(condition):
+                g.set_shape(res, g.get_shape(condition))
+            elif g.has_rank(condition):
+                g.set_rank(res, g.get_rank(condition))
+        return res
+
+    assert isinstance(x, str) or isinstance(other, str), (
+        f"aten_where not implemented when both constants are float, "
+        f"x={x}, other={other}{g.get_debug_msg()}"
+    )
     return aten_where(g, sts, outputs, condition, x, other, name=name)
 
 
@@ -7049,5 +7097,35 @@ def aten_zeros(
         device=device,
         pin_memory=pin_memory,
         requires_grad=requires_grad,
+        name=name,
+    )
+
+
+def aten_zeros_like(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    dtype: Optional["torch.dtype"] = None,  # noqa: F821
+    layout=None,
+    device: Optional["torch.device"] = None,  # noqa: F821
+    pin_memory=None,
+    memory_format: Optional[str] = None,
+    name: str = "zeros_like",
+) -> T:
+    "constantofshape"
+    assert (
+        memory_format is None
+    ), f"unexpected value for memory_format={memory_format}{g.get_debug_msg()}"
+    return aten_full_like(
+        g,
+        sts,
+        outputs,
+        x,
+        fill_value=None,
+        dtype=dtype,
+        layout=layout,
+        device=device,
+        pin_memory=pin_memory,
         name=name,
     )

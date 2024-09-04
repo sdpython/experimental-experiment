@@ -150,6 +150,7 @@ class TorchBenchRunner(BenchmarkRunner):
             - phi_1_5
             - phi_2
             - stable_diffusion_xl
+            - llama_v31_8b
 
         detectron2_models: &DETECTRON2_MODELS
             - detectron2_fasterrcnn_r_101_c4
@@ -448,29 +449,23 @@ class TorchBenchRunner(BenchmarkRunner):
         return config
 
     @classmethod
-    def initialize(container):
+    def initialize(cls):
         """Steps to run before running the benchmark."""
         try:
             import torch
 
-            torch.ops.fbgemm.asynchronous_complete_cumsum  # noqa: B018
+            _ = torch.ops.fbgemm.asynchronous_complete_cumsum
         except (AttributeError, ImportError) as e:
             warnings.warn(
                 f"Something wrong in the installation because of {e}.", stacklevel=1
             )
-        container._config = container.load_yaml_file()
-        assert "batch_size" in container._config, f"config wrong {container._config}"
-        assert (
-            container._config["batch_size"] is not None
-        ), f"config wrong {container._config}"
-        assert (
-            "inference" in container._config["batch_size"]
-        ), f"config wrong {container._config}"
-        lines = container.MODELS_FILENAME.split("\n")
+        cls._config = cls.load_yaml_file()
+        assert "batch_size" in cls._config, f"config wrong {cls._config}"
+        assert cls._config["batch_size"] is not None, f"config wrong {cls._config}"
+        assert "inference" in cls._config["batch_size"], f"config wrong {cls._config}"
+        lines = cls.MODELS_FILENAME.split("\n")
         lines = [line.rstrip() for line in lines]
-        expected_models = set(
-            _.strip() for _ in container.EXPECTED_MODELS.split("\n") if _
-        )
+        expected_models = {_.strip() for _ in cls.EXPECTED_MODELS.split("\n") if _}
         for line in lines:
             if not line or len(line) < 2:
                 continue
@@ -478,34 +473,31 @@ class TorchBenchRunner(BenchmarkRunner):
             if model_name not in expected_models:
                 continue
             batch_size = int(batch_size)
+            if "batch_size" not in cls._config or cls._config["batch_size"] is None:
+                cls._config["batch_size"] = {}
             if (
-                "batch_size" not in container._config
-                or container._config["batch_size"] is None
+                "inference" not in cls._config["batch_size"]
+                or cls._config["batch_size"]["inference"] is None
             ):
-                container._config["batch_size"] = {}
-            if (
-                "inference" not in container._config["batch_size"]
-                or container._config["batch_size"]["inference"] is None
-            ):
-                container._config["batch_size"]["inference"] = {}
-            assert "inference" in container._config["batch_size"]
-            container._config["batch_size"]["inference"][model_name] = batch_size
+                cls._config["batch_size"]["inference"] = {}
+            assert "inference" in cls._config["batch_size"]
+            cls._config["batch_size"]["inference"][model_name] = batch_size
         for o in expected_models:
             model_name = o.strip()
             if len(model_name) < 3:
                 continue
-            if model_name not in container._config["batch_size"]["inference"]:
-                container._config["batch_size"]["inference"][model_name] = 1
+            if model_name not in cls._config["batch_size"]["inference"]:
+                cls._config["batch_size"]["inference"][model_name] = 1
 
     @classmethod
-    def _get_module_cls_by_model_name(container, model_cls_name):
+    def _get_module_cls_by_model_name(cls, model_cls_name):
         _module_by_model_name = {}
         module_name = _module_by_model_name.get(model_cls_name, "torchbenchmark")
         module = importlib.import_module(module_name)
         return getattr(module, model_cls_name)
 
     @classmethod
-    def _get_sequence_length(container, model_cls, model_name):
+    def _get_sequence_length(cls, model_cls, model_name):
         if model_name.startswith(("Blenderbot",)):
             seq_length = 128
         elif model_name.startswith(("GPT2", "Bart", "T5", "PLBart", "MBart")):
@@ -546,7 +538,7 @@ class TorchBenchRunner(BenchmarkRunner):
 
     @classmethod
     def _generate_inputs_for_model(
-        container, model_cls, model, model_name, bs, device, include_loss_args=False
+        cls, model_cls, model, model_name, bs, device, include_loss_args=False
     ):
         if hasattr(model, "_get_random_inputs"):
             return model._get_random_inputs(device)
@@ -555,7 +547,7 @@ class TorchBenchRunner(BenchmarkRunner):
 
         num_choices = 3
         num_visual_features = 42
-        seq_length = container._get_sequence_length(model_cls, model_name)
+        seq_length = cls._get_sequence_length(model_cls, model_name)
         vocab_size = model.config.vocab_size
 
         if model_name.startswith("Wav2Vec2"):
@@ -655,7 +647,7 @@ class TorchBenchRunner(BenchmarkRunner):
                 input_dict["labels"] = _rand_int_tensor(
                     device, 0, vocab_size - 1, (bs, seq_length)
                 )
-            elif model_name in container.EXTRA_MODELS:
+            elif model_name in cls.EXTRA_MODELS:
                 input_dict["labels"] = _rand_int_tensor(
                     device, 0, vocab_size, (bs, seq_length)
                 )
@@ -786,6 +778,7 @@ class TorchBenchRunner(BenchmarkRunner):
             models=[model_name],
             verbose=self.verbose,
             continue_on_fail=False,
+            allow_canary=False,  # TODO: should we allow canary models?
         )
         assert status, f"Could not setup model {model_name!r}, status={status!r}"
 
@@ -874,7 +867,7 @@ class TorchBenchRunner(BenchmarkRunner):
                 raise AssertionError(
                     f"Unable to create class {benchmark_cls}, "
                     f"device={self.device}, batch_size={batch_size}, "
-                    f"signature={list(p for p in inspect.signature(benchmark_cls).parameters)}, "  # noqa: E501,C400
+                    f"signature={inspect.signature(benchmark_cls).parameters}, "
                     f"DEFAULT_EVAL_BSIZE="
                     f"{getattr(benchmark_cls, 'DEFAULT_EVAL_BSIZE', '?')}, "
                     f"ALLOW_CUSTOMIZE_BSIZE="

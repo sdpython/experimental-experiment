@@ -1,15 +1,3 @@
-"""
-crossvit_9_240	aten.upsample_bicubic2d
-dm_nfnet_f0	Not implementation when training=True
-eca_halonext26ts	aten.unfold
-levit_128	A constant ....
-nfnet_l0	Not implementation when training=True
-swin_base_patch4_window7_224	aten.roll
-tnt_s_patch16_224	aten.im2col
-volo_d1_224	aten.im2col
-xcit_large_24_p8_224	aten.div'_ overload='Tensor_mode')
-"""
-
 import importlib
 import io
 import pprint
@@ -279,20 +267,20 @@ class TimmRunner(BenchmarkRunner):
         return [c.split(".")[0] for c in chosen_models]
 
     @classmethod
-    def initialize(container):
+    def initialize(cls):
         """Steps to run before running the benchmark."""
         import timm
 
         models = set(timm.list_models(pretrained=True, exclude_filters=["*in21k"]))
         models = {_.split(".")[0] for _ in models}
-        expected = [_ for _ in container.EXPECTED.split("\n") if len(_) > 2]
-        expected = set(_ for _ in container.EXPECTED.split("\n") if len(_) > 2)
-        missing = expected - set(container.TIMM_MODELS)
+        expected = [_ for _ in cls.EXPECTED.split("\n") if len(_) > 2]
+        expected = {_ for _ in cls.EXPECTED.split("\n") if len(_) > 2}
+        missing = expected - set(cls.TIMM_MODELS)
         # These models seems to be missing.
         models |= missing
 
-        container._config = {"done": True}
-        with io.StringIO(container.MODELS_FILENAME) as fh:
+        cls._config = {"done": True}
+        with io.StringIO(cls.MODELS_FILENAME) as fh:
             lines = fh.readlines()
             lines = [line.rstrip() for line in lines]
             for line in lines:
@@ -301,22 +289,22 @@ class TimmRunner(BenchmarkRunner):
                 model_name, batch_size = line.split(" ")
                 if model_name not in models:
                     continue
-                container.TIMM_MODELS[model_name] = int(batch_size)
+                cls.TIMM_MODELS[model_name] = int(batch_size)
         for c in ["convit_base"]:
             assert c in expected, f"Unable to find {c!r} in {pprint.pformat(expected)}"
             assert (
-                c in container.TIMM_MODELS
-            ), f"Unable to find {c!r} in {pprint.pformat(container.TIMM_MODELS)}"
+                c in cls.TIMM_MODELS
+            ), f"Unable to find {c!r} in {pprint.pformat(cls.TIMM_MODELS)}"
 
     @classmethod
-    def _get_module_cls_by_model_name(container, model_cls_name):
+    def _get_module_cls_by_model_name(cls, model_cls_name):
         _module_by_model_name = {}
         module_name = _module_by_model_name.get(model_cls_name, "torchbenchmark")
         module = importlib.import_module(module_name)
         return getattr(module, model_cls_name)
 
     @classmethod
-    def _get_sequence_length(container, model_cls, model_name):
+    def _get_sequence_length(cls, model_cls, model_name):
         if model_name.startswith(("Blenderbot",)):
             seq_length = 128
         elif model_name.startswith(("GPT2", "Bart", "T5", "PLBart", "MBart")):
@@ -357,7 +345,7 @@ class TimmRunner(BenchmarkRunner):
 
     @classmethod
     def _generate_inputs_for_model(
-        container, model_cls, model, model_name, bs, device, include_loss_args=False
+        cls, model_cls, model, model_name, bs, device, include_loss_args=False
     ):
         if hasattr(model, "_get_random_inputs"):
             return model._get_random_inputs(device)
@@ -366,7 +354,7 @@ class TimmRunner(BenchmarkRunner):
 
         num_choices = 3
         num_visual_features = 42
-        seq_length = container._get_sequence_length(model_cls, model_name)
+        seq_length = cls._get_sequence_length(model_cls, model_name)
         vocab_size = model.config.vocab_size
 
         if model_name.startswith("Wav2Vec2"):
@@ -466,7 +454,7 @@ class TimmRunner(BenchmarkRunner):
                 input_dict["labels"] = _rand_int_tensor(
                     device, 0, vocab_size - 1, (bs, seq_length)
                 )
-            elif model_name in container.EXTRA_MODELS:
+            elif model_name in cls.EXTRA_MODELS:
                 input_dict["labels"] = _rand_int_tensor(
                     device, 0, vocab_size, (bs, seq_length)
                 )
