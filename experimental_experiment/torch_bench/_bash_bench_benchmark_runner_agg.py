@@ -1859,8 +1859,8 @@ def merge_benchmark_reports(
     for v in final_res.values():
         v.dropna(axis=1, how="all", inplace=True)
 
-    if export_simple:
-        df["SIMPLE"].to_csv(export_simple, index=False)
+    if export_simple and "SIMPLE" in final_res:
+        final_res["SIMPLE"].to_csv(export_simple, index=False)
 
     if excel_output:
         if verbose:
