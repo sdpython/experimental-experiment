@@ -565,6 +565,19 @@ def requires_torch(version: str, msg: str = "") -> Callable:
     return lambda x: x
 
 
+def requires_numpy(version: str, msg: str = "") -> Callable:
+    """
+    Skips a unit test if :epkg:`numpy` is not recent enough.
+    """
+    import packaging.version as pv
+    import numpy
+
+    if pv.Version(".".join(numpy.__version__.split(".")[:2])) < pv.Version(version):
+        msg = f"numpy version {numpy.__version__} < {version}: {msg}"
+        return unittest.skip(msg)
+    return lambda x: x
+
+
 def requires_transformers(
     version: str, msg: str = "", or_older_than: Optional[str] = None
 ) -> Callable:
