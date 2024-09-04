@@ -137,6 +137,7 @@ def _SELECTED_FEATURES():
             "The outputs may be right or wrong. Unit test ensures every aten functions "
             "is correctly converted but the combination may produce outputs "
             "with higher discrepancies than expected.",
+            simple=True,
         ),
         dict(
             cat="time",
@@ -352,38 +353,21 @@ def _SELECTED_FEATURES():
         dict(
             cat="memory",
             agg="MEAN",
-            stat="peak_cpu_pp",
-            new_name="average CPU peak",
-            unit="Mb",
-            help="Average CPU peak while warming up onnxruntime"
-            "(measured in a secondary process)",
-        ),
-        dict(
-            cat="memory",
-            agg="MEAN",
             stat="delta_peak_cpu_pp",
             new_name="average CPU peak",
             unit="Mb",
-            help="Average CPU peak of allocated memory while warming "
-            "up onnxruntime (measured in a secondary process)",
-        ),
-        dict(
-            cat="memory",
-            agg="MEAN",
-            stat="peak_gpu_pp",
-            new_name="average GPU peak",
-            unit="Mb",
-            help="Average GPU peak while converting the model "
-            "(measured in a secondary process)",
+            help="Average CPU peak of allocated memory while converting "
+            "the model (measured in a secondary process)",
         ),
         dict(
             cat="memory",
             agg="MEAN",
             stat="delta_peak_gpu_pp",
             new_name="average GPU peak",
-            unit="Mb",
-            help="Average GPU peak of allocated emory while "
+            unit="bytes",
+            help="Average GPU peak of allocated memory while "
             "converting the model (measured in a secondary process)",
+            simple=True,
         ),
         dict(
             cat="memory",
@@ -401,6 +385,7 @@ def _SELECTED_FEATURES():
             unit="bytes",
             help="Average GPU peak of allocated memory "
             "while converting the model (torch metric)",
+            simple=True,
         ),
         dict(
             cat="speedup",
@@ -964,6 +949,7 @@ def merge_benchmark_reports(
     verbose: int = 0,
     output_clean_raw_data: Optional[str] = None,
     baseline: Optional[pandas.DataFrame] = None,
+    export_simple: Optional[str] = None,
 ) -> Dict[str, pandas.DataFrame]:
     """
     Merges multiple files produced by bash_benchmark...
@@ -989,6 +975,7 @@ def merge_benchmark_reports(
     :param output_clean_raw_data: output the concatenated raw data so that it can
         be used later to make a comparison
     :param baseline: to compute difference
+    :param export_simple: if not None, export simple in this file.
     :return: dictionary of dataframes
 
     Every key with a unique value is removed.
@@ -1261,9 +1248,12 @@ def merge_benchmark_reports(
                     break
             if delta_gpu is not None:
                 df["memory_peak_gpu_pp"] = m_gpu
-                df["memory_delta_peak_gpu_pp"] = delta_gpu
+                df["memory_delta_peak_gpu_pp"] = delta_gpu * 2**20
                 report_on.append("memory_peak_gpu_pp")
                 report_on.append("memory_delta_peak_gpu_pp")
+            if "memory_peak_cpu_pp" in df.columns:
+                df["memory_delta_peak_cpu_pp"] = df["memory_peak_cpu_pp"] * 2**20
+                report_on.append("memory_delta_peak_cpu_pp")
 
         if expr == "memory_peak":
             if (
@@ -1868,6 +1858,9 @@ def merge_benchmark_reports(
     # cleaning empty columns
     for v in final_res.values():
         v.dropna(axis=1, how="all", inplace=True)
+
+    if export_simple:
+        df["SIMPLE"].to_csv(export_simple, index=False)
 
     if excel_output:
         if verbose:

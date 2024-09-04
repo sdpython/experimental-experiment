@@ -54,6 +54,11 @@ def main(args=None):
         default=0,
         help="avoid raising an exception if it fails",
     )
+    parser.add_argument(
+        "--export_simple",
+        default="",
+        help="if not empty, export main figures into a csv file",
+    )
     parser.add_argument("--verbose", default=0, help="verbosity level")
     res = parser.parse_args(args=args)
 
@@ -83,6 +88,7 @@ def main(args=None):
         output_clean_raw_data=res.save_raw,
         baseline=res.baseline,
         exc=res.quiet not in (1, "1", True, "True"),
+        export_simple=res.export_simple,
         **kwargs,
     )
 

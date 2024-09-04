@@ -17,7 +17,11 @@ class TestBashBenchMergeStats(ExtTestCase):
     def test_merge_stats0(self):
         ddata = os.path.join(os.path.dirname(__file__), "data")
         data = [os.path.join(ddata, "keep.csv"), os.path.join(ddata, "keep2.csv")]
-        df = merge_benchmark_reports(data, excel_output="test_merge_stats0.xlsx")
+        df = merge_benchmark_reports(
+            data,
+            excel_output="test_merge_stats0.xlsx",
+            export_simple="test_merge_stats0_simple.csv",
+        )
         self.assertIsInstance(df, dict)
         self.assertIn("status", set(df))
 
