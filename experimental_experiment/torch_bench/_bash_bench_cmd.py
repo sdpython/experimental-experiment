@@ -47,6 +47,10 @@ def bash_bench_parse_args(name: str, doc: str, new_args: Optional[List[str]] = N
             "it starts another process to monitor the memory",
         ),
         nvtx=("0", "add events to profile"),
+        profile=(
+            "0",
+            "run a profiling to see which python function is taking the most time",
+        ),
         dump_ort=("0", "dump the onnxruntime optimized graph"),
         split_process=("0", "run exporter and the inference in two separate processes"),
         part=("", "which part to run, 0, or 1"),
@@ -57,6 +61,24 @@ def bash_bench_parse_args(name: str, doc: str, new_args: Optional[List[str]] = N
         expose="repeat,warmup",
     )
     return args
+
+
+def _clean_text(text):
+    import onnx
+    import onnxruntime
+    import torch
+    import experimental_experiment
+
+    pathes = [
+        os.path.abspath(
+            os.path.normpath(os.path.join(os.path.dirname(m.__file__), ".."))
+        )
+        for m in [onnx, onnxruntime, np, torch, experimental_experiment]
+    ]
+    for p in pathes:
+        text = text.replace(p, "")
+    text = text.replace("experimental_experiment", "experimental_experiment".upper())
+    return text
 
 
 def bash_bench_main(script_name: str, doc: str, args: Optional[List[str]] = None):
@@ -223,6 +245,8 @@ def bash_bench_main(script_name: str, doc: str, args: Optional[List[str]] = None
             if args.verbose:
                 print(f"Running model {name!r}")
 
+            do_profile = args.profile in (1, "1", "True", True)
+
             runner = runner.__class__(
                 include_model_names={name},
                 verbose=args.verbose,
@@ -234,6 +258,12 @@ def bash_bench_main(script_name: str, doc: str, args: Optional[List[str]] = None
                 nvtx=args.nvtx in (1, "1", "True", "true"),
                 dump_ort=args.dump_ort in (1, "1", "True", "true"),
             )
+
+            if do_profile:
+                import cProfile
+
+                pr = cProfile.Profile()
+                pr.enable()
 
             split_process = args.split_process in (1, "1", True, "True")
             begin = time.perf_counter()
@@ -252,6 +282,25 @@ def bash_bench_main(script_name: str, doc: str, args: Optional[List[str]] = None
                 )
             )
             duration = time.perf_counter() - begin
+
+            if do_profile:
+                import io
+                import pstats
+                from onnx_array_api.profiling import profile2graph
+
+                pr.disable()
+                s = io.StringIO()
+                sortby = pstats.SortKey.CUMULATIVE
+                ps = pstats.Stats(pr, stream=s).sort_stats(sortby)
+                root, nodes = profile2graph(ps, clean_text=_clean_text)
+                text = root.to_text(fct_width=100)
+                filename = (
+                    f"{args.output_data}.profile.txt"
+                    if args.output_data
+                    else "profile.txt"
+                )
+                with open(filename, "w", encoding="utf-8") as f:
+                    f.write(text)
 
             if args.tag:
                 for d in data:

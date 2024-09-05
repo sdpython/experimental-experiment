@@ -291,18 +291,21 @@ class BenchmarkRunner:
             n_applied = 0
             by_pattern = {}
             by_pattern_n = {}
+            by_iter = {}
             for obs in opt_stats["optimization"]:
                 pattern = obs["pattern"]
                 if pattern not in by_pattern:
                     by_pattern[pattern] = 0
-                if pattern not in by_pattern_n:
                     by_pattern_n[pattern] = 0
+                    by_iter[pattern] = 0
                 time_in += obs.get("time_in", 0)
                 added += obs.get("added", 0)
                 removed += obs.get("removed", 0)
                 max_iter = max(max_iter, obs.get("iteration", 0))
                 by_pattern[pattern] += obs.get("time_in", 0)
                 by_pattern_n[pattern] += obs.get("added", 0) - obs.get("removed", 0)
+                if not pattern.startswith("match"):
+                    by_iter[pattern] = max(by_iter[pattern], obs.get("iteration", 0))
                 p = obs["pattern"]
                 if p.startswith("match_"):
                     matched.add(p)
@@ -341,6 +344,17 @@ class BenchmarkRunner:
                         {
                             f"onnx_opt_topn{i}": sorted_n[i][0],
                             f"onnx_opt_topnname{i}": sorted_n[i][1],
+                        }
+                    )
+            sorted_iter = list(
+                sorted([(v, k) for k, v in by_iter.items()], reverse=True)
+            )
+            if sorted_iter:
+                for i in range(min(10, len(sorted_iter))):
+                    new_stat.update(
+                        {
+                            f"onnx_opt_topiter{i}": sorted_iter[i][0],
+                            f"onnx_opt_topitername{i}": sorted_iter[i][1],
                         }
                     )
 

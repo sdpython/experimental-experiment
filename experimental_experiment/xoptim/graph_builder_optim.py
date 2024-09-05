@@ -186,11 +186,11 @@ class GraphBuilderPatternOptimization:
         Tells if a result is used or not,
         including as an output of the graph.
         """
+        if name in self.used_:
+            return True
         if name in self.successors_:
             return True
-        if name in name in self.set_output_names_:
-            return True
-        if name in self.used_:
+        if name in self.set_output_names_:
             return True
         return False
 
@@ -896,6 +896,60 @@ class GraphBuilderPatternOptimization:
                 f"saved {fullname!r}"
             )
 
+    def _chech_graph_verifies(self, node: NodeProto):
+        if (
+            node.op_type in {"MatMul", "Gemm", "FusedMatMul"}
+            and self.builder.has_shape(node.input[0])
+            and self.builder.has_shape(node.input[1])
+        ):
+            sh1 = self.builder.get_shape(node.input[0])[-2:]
+            sh2 = self.builder.get_shape(node.input[1])[-2:]
+            tA = self.builder.get_attribute(node, "transA", exc=False)
+            tB = self.builder.get_attribute(node, "transB", exc=False)
+            tA = 0 if tA is None or tA.i == 0 else 1
+            tB = 0 if tB is None or tB.i == 0 else 1
+            if tA:
+                sh1 = (sh1[1], sh1[0])
+            if tB:
+                sh2 = (sh2[1], sh2[0])
+            assert type(sh1[-1]) != type(sh2[0]) or sh1[-1] == sh2[0], (  # noqa: E721
+                f"Node {node.op_type!r}, inputs={node.input}, "
+                f"shape1={self.builder.get_shape(node.input[0])}, "
+                f"shape2={self.builder.get_shape(node.input[1])}, "
+                f"tA={tA}, tB={tB}."
+            )
+
+    def _check_graph_verifies_whole(self):
+        onx = self.builder.to_onnx(optimize=False)
+        new_shapes = infer_shapes(onx)
+        for val in new_shapes.graph.value_info:
+            itype = val.type.tensor_type.elem_type
+            shape = tuple(
+                d.dim_param if d.dim_param else d.dim_value
+                for d in val.type.tensor_type.shape.dim
+            )
+            assert self.builder.has_name(val.name), f"name {val.name!r} is missing"
+            assert (
+                not self.builder.has_type(val.name)
+                or self.builder.get_type(val.name) == itype
+            ), (
+                f"Result {val.name!r} has type {itype} but the builder "
+                f"assumes it is {self.builder.get_type(val.name)}"
+            )
+            assert (
+                not self.builder.has_shape(val.name)
+                or self.builder.get_shape(val.name) == shape
+            ), (
+                f"Result {val.name!r} has shape {shape} but the builder "
+                f"assumes it is {self.builder.get_shape(val.name)}"
+            )
+
+        # from onnxruntime import InferenceSession
+        # InferenceSession(
+        #     onx.SerializeToString(),
+        #     providers=["CPUExecutionProvider"],
+        # )
+
     def _check_graph(
         self,
         statistics: List[Dict[str, Any]],
@@ -930,62 +984,14 @@ class GraphBuilderPatternOptimization:
             known |= set(node.output)
 
             if verifies:
-                if (
-                    node.op_type in {"MatMul", "Gemm", "FusedMatMul"}
-                    and self.builder.has_shape(node.input[0])
-                    and self.builder.has_shape(node.input[1])
-                ):
-                    sh1 = self.builder.get_shape(node.input[0])[-2:]
-                    sh2 = self.builder.get_shape(node.input[1])[-2:]
-                    tA = self.builder.get_attribute(node, "transA", exc=False)
-                    tB = self.builder.get_attribute(node, "transB", exc=False)
-                    tA = 0 if tA is None or tA.i == 0 else 1
-                    tB = 0 if tB is None or tB.i == 0 else 1
-                    if tA:
-                        sh1 = (sh1[1], sh1[0])
-                    if tB:
-                        sh2 = (sh2[1], sh2[0])
-                    assert (
-                        type(sh1[-1]) != type(sh2[0]) or sh1[-1] == sh2[0]  # noqa: E721
-                    ), (
-                        f"Node {node.op_type!r}, inputs={node.input}, "
-                        f"shape1={self.builder.get_shape(node.input[0])}, "
-                        f"shape2={self.builder.get_shape(node.input[1])}, "
-                        f"tA={tA}, tB={tB}."
-                    )
+                self._check_graph_verifies(node)
 
         for o in self.builder.outputs:
             assert o.name in known, f"Unknown output {o.name!r}, step {step!r}"
-        if verifies:
-            onx = self.builder.to_onnx(optimize=False)
-            new_shapes = infer_shapes(onx)
-            for val in new_shapes.graph.value_info:
-                itype = val.type.tensor_type.elem_type
-                shape = tuple(
-                    d.dim_param if d.dim_param else d.dim_value
-                    for d in val.type.tensor_type.shape.dim
-                )
-                assert self.builder.has_name(val.name), f"name {val.name!r} is missing"
-                assert (
-                    not self.builder.has_type(val.name)
-                    or self.builder.get_type(val.name) == itype
-                ), (
-                    f"Result {val.name!r} has type {itype} but the builder "
-                    f"assumes it is {self.builder.get_type(val.name)}"
-                )
-                assert (
-                    not self.builder.has_shape(val.name)
-                    or self.builder.get_shape(val.name) == shape
-                ), (
-                    f"Result {val.name!r} has shape {shape} but the builder "
-                    f"assumes it is {self.builder.get_shape(val.name)}"
-                )
 
-            # from onnxruntime import InferenceSession
-            # InferenceSession(
-            #     onx.SerializeToString(),
-            #     providers=["CPUExecutionProvider"],
-            # )
+        if verifies:
+            self._chech_graph_verifies_whole()
+
         statistics.append(
             dict(
                 pattern=f"check_pattern_{code}{1 if verifies else 0}",
