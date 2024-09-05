@@ -3,6 +3,10 @@ import torch
 
 
 def get_dummy_model() -> Tuple[Callable, Tuple[Any, ...]]:
+    """
+    Returns a dummy model used to validate the command line.
+    """
+
     class Neuron(torch.nn.Module):
         def __init__(self, n_dims: int = 5, n_targets: int = 3):
             super().__init__()
@@ -12,6 +16,51 @@ def get_dummy_model() -> Tuple[Callable, Tuple[Any, ...]]:
             return torch.sigmoid(self.linear(x))
 
     return Neuron, (torch.randn(1, 5),)
+
+
+def get_llama_model_layer(
+    num_hidden_layers: int = 1,
+) -> Tuple[Callable, Tuple[Any, ...]]:
+    """
+    Returns a llama model with a specific number of layers.
+    """
+    import torch
+    from transformers import LlamaConfig
+    from transformers.models.llama.modeling_llama import LlamaModel
+    from ..torch_models.llama_helper import ids_tensor
+
+    vocab_size = 32000
+    config = LlamaConfig(
+        num_hidden_layers=num_hidden_layers,
+        hidden_size=4096,
+        vocab_size=vocab_size,
+        intermediate_size=11008,
+        max_position_embeddings=2048,
+        num_attention_heads=32,
+    )
+    config._attn_implementation = "eager"
+
+    class LlamaModelWrapper(torch.nn.Module):
+        def __init__(self, config):
+            super().__init__()
+            self.model = LlamaModel(config)
+
+        def forward(self, input_ids, attention_mask):
+            model_output = self.model(
+                input_ids, attention_mask=attention_mask, use_cache=False
+            )
+            return model_output.to_tuple()
+
+    def generate_example_inputs(batch: int, seq: int, vocab_size: int):
+        input_ids = ids_tensor([batch, seq], vocab_size)
+        input_mask = torch.tril(torch.ones(batch, seq, dtype=torch.float32))
+        assert input_mask.dtype == torch.float32
+        return input_ids, input_mask
+
+    shape = (2, 1024)
+    return (lambda: LlamaModelWrapper(config)), generate_example_inputs(
+        shape[0], shape[1], vocab_size
+    )
 
 
 def get_speech2text2_causal_ml_not_trained_model() -> Tuple[Callable, Tuple[Any, ...]]:

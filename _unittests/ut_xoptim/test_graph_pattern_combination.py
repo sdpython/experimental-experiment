@@ -569,11 +569,14 @@ class TestGraphPatternCombination(ExtTestCase):
 
     @skipif_ci_windows("crash")
     def test_study(self):
-        model = "em_llama_custom_static_fp32_cuda_large_h6_58fa9.onnx.2.onnx"
+        """
+        clear&&python _unittests/ut_xoptim/test_graph_pattern_combination.py -k study
+        """
+        model = "llama_layer_norm.onnx"
         enabled = {
-            "RotaryConcatPartPattern",
+            "SimplifiedLayerNormalizationPattern",
         }
-        enabled = {}
+        # enabled = {}
         disabled = {}
         options = OptimizationOptions(
             patterns="default+onnxruntime+experimental",
@@ -592,6 +595,7 @@ class TestGraphPatternCombination(ExtTestCase):
         assert options.patterns, "Pattern is empty."
         if __name__ == "__main__":
             options.verbose = 1 if len(options.patterns) > 3 else 10
+            print(f"### __name__={__name__!r}")
             print(f"-- patterns={[c.__class__.__name__ for c in options.patterns]}")
             print(f"-- verbose={options.verbose}")
         for p in options.patterns:

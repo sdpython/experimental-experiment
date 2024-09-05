@@ -5,6 +5,7 @@ from ._bash_bench_model_runner import ModelRunner
 from ._bash_bench_models_helper import (
     get_dummy_model,
     get_speech2text2_causal_ml_not_trained_model,
+    get_llama_model_layer,
 )
 
 
@@ -19,6 +20,7 @@ class ExplicitRunner(BenchmarkRunner):
             {
                 "101Dummy": get_dummy_model,
                 "Speech2Text2ForCausalLMNotTrained": get_speech2text2_causal_ml_not_trained_model,  # noqa: E501
+                "Llama2Layer": lambda: get_llama_model_layer(num_hidden_layers=2),
             }
         )
 
