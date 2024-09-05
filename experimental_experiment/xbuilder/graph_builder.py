@@ -1510,9 +1510,15 @@ class GraphBuilder:
             value = np.array(value, dtype=np.float32)
         elif hasattr(value, "data"):
             # torch.nn.parameter.Parameter -> np.array
-            pass
+            assert "FakeTensor" not in str(type(value)), (
+                f"FakeTensor {name!r} cannot be an initializer {type(value)}"
+                f"{self.get_debug_msg()}"
+            )
         elif isinstance(value, TensorProto):
-            pass
+            assert "FakeTensor" not in str(type(value)), (
+                f"FakeTensor {name!r} cannot be an initializer {type(value)}"
+                f"{self.get_debug_msg()}"
+            )
         elif isinstance(value, np.ndarray):
             pass
         else:
@@ -2695,6 +2701,11 @@ class GraphBuilder:
             renaming[init] = name
             if isinstance(value, TensorProto):
                 value.name = name
+            else:
+                assert "FakeTensor" not in str(type(value)), (
+                    f"FakeTensor {name!r} cannot be an initializer {type(value)}"
+                    f"{self.get_debug_msg()}"
+                )
             self.initializers_dict[name] = value
 
             self.update_node_constant(name, None)
@@ -2846,6 +2857,9 @@ class GraphBuilder:
                     assert isinstance(
                         v, self.torch.Tensor
                     ), f"tensor {k!r} has un unexpected type {type(v)}"
+                    assert "FakeTensor" not in str(
+                        type(v)
+                    ), f"tensor {k!r} cannot be a FakeTensor: {type(v)}"
                     from_np = False
                     itype = dtype_to_tensor_dtype(v.dtype)
 
@@ -3770,6 +3784,10 @@ class GraphBuilder:
             itype = dtype_to_tensor_dtype(x.dtype)
             ttype = onnx_dtype_to_torch_dtype(itype)
             x = self.torch.Tensor(x).to(ttype)
+            assert "FakeTensor" not in str(type(x)), (
+                f"FakeTensor {node.output[0]!r} cannot be a constant {type(x)}, "
+                f"node.op_type={node.op_type!r}{self.get_debug_msg()}"
+            )
         ttype = onnx_dtype_to_torch_dtype(to)
         return [x.to(ttype)]
 
@@ -3879,7 +3897,12 @@ class GraphBuilder:
         # It should not be None but a node as it is not an initializer.
         assert isinstance(v, NodeProto), f"Unexpected type {type(v)} for name={name!r}"
         feeds = {i: self.get_constant(i, exc=exc, computed_value=True) for i in v.input}
-        for val in feeds.values():
+        for kval, val in feeds.items():
+            assert "FakeTensor" not in str(type(val)), (
+                f"FakeTensor {kval!r} cannot be an initializer {type(val)}, "
+                f"v.op_type={v.op_type!r}"
+                f"{self.get_debug_msg()}"
+            )
             if val is None:
                 return None, None
 
@@ -3948,6 +3971,10 @@ class GraphBuilder:
             assert not isinstance(
                 val, tuple
             ), f"Unexpected type {type(val)} for n={n!r}"
+            assert "FakeTensor" not in str(type(val)), (
+                f"FakeTensor detected {type(val)} in constant {name!r}, "
+                f"v.op_type={v.op_type!r}{self.get_debug_msg()}"
+            )
             if self.has_type(n):
                 # numpy changes the expected type sometimes
                 # (like transpose(x: float36) --> float32)
@@ -4011,6 +4038,12 @@ class GraphBuilder:
                 for name, value in zip(v.output, output):
                     updates[name] = None
                     if convert_into_initializer:
+                        assert "FakeTensor" not in str(type(value)), (
+                            f"FakeTensor {name!r} cannot be an initializer {type(value)}, "
+                            f"v.op_type={v.op_type!r} (input types: "
+                            f"{[type(i) for i in feeds.values()]})"
+                            f"{self.get_debug_msg()}"
+                        )
                         self.initializers_dict[name] = value
                     else:
                         updates[name] = v
@@ -4221,6 +4254,10 @@ class GraphBuilder:
                         f"[GraphBuilder.remove_identity_nodes] "
                         f"rename initializer {k!r} by {v!r}"
                     )
+                assert "FakeTensor" not in str(type(self.initializers_dict[k])), (
+                    f"FakeTensor {k!r} cannot be an initializer "
+                    f"{type(self.initializers_dict[k])}{self.get_debug_msg()}"
+                )
                 self.initializers_dict[v] = self.initializers_dict[k]
                 del self.initializers_dict[k]
                 assert self.constants_[v]
