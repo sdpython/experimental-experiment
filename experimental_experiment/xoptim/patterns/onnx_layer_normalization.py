@@ -268,3 +268,71 @@ class LayerNormalizationScalePattern(PatternOptimization):
             **kwargs,
         )
         return [*new_nodes, new_node]
+
+
+class CastLayerNormalizationCastPattern(PatternOptimization):
+    """
+    Checks that a Cast is really needed around LayerNormalization
+    """
+
+    def match(
+        self,
+        g: "GraphBuilderPatternOptimization",  # noqa: F821
+        node: NodeProto,
+        matched: List[MatchResult],
+    ) -> Optional[MatchResult]:
+
+        if node.op_type != "LayerNormalization" or node.domain != "":
+            return self.none()
+
+        if len(node.output) != 1:
+            # No need for the scale.
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        stash_type = g.get_attribute(node, "stash_type")
+
+        cast_before = g.node_before(node.input[0])
+        if (
+            cast_before is None
+            or cast_before.op_type != "Cast"
+            or cast_before.domain != ""
+        ):
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        to = g.get_attribute(cast_before, "to")
+        if to.i != stash_type.i:
+            return self.none(node, inspect.currentframe().f_lineno)
+        if g.is_used_more_than_once(node.input[0]):
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        cast_afters = g.next_nodes(node.output[0])
+        if len(cast_afters) != 1:
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        cast_after = cast_afters[0]
+        if cast_after.op_type != "Cast" or cast_after.domain != "":
+            return self.none(node, inspect.currentframe().f_lineno)
+        to = g.get_attribute(cast_after, "to")
+        itype = g.get_type(cast_before.input[0])
+        if to.i != itype:
+            return self.none(node, inspect.currentframe().f_lineno)
+        return MatchResult(
+            self, [cast_before, node, cast_after], self.apply, insert_at=node
+        )
+
+    def apply(
+        self,
+        g: "GraphBuilder",  # noqa: F821
+        cast_before: NodeProto,
+        node: NodeProto,
+        cast_after: NodeProto,
+    ) -> List[NodeProto]:
+        new_node = g.make_node(
+            "LayerNormalization",
+            [cast_before.input[0], *node.input[1:]],
+            [cast_after.output[0], *node.output[1:]],
+            name=f"{self.__class__.__name__}--{node.name}",
+            doc_string=node.doc_string,
+        )
+        new_node.attribute.extend(node.attribute)
+        return [new_node]
