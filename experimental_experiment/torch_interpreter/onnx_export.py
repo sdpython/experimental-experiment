@@ -514,7 +514,7 @@ def to_onnx(
         return_optimize_report=True,
     )
     all_stats = dict(builder=builder.statistics_)
-    if stats is not None:
+    if stats:
         all_stats["optimization"] = stats
     if verbose:
         t = time.perf_counter()

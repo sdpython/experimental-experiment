@@ -3355,7 +3355,9 @@ class GraphBuilder:
                 )
             )
             _check(statistics, "C")
+
         if self.optimization_options.constant_folding:
+            # First constant removal
             begin = time.perf_counter()
             n = self.constant_folding()
             statistics.append(
@@ -3363,9 +3365,10 @@ class GraphBuilder:
                     pattern="constant_folding",
                     removed=n,
                     time_in=time.perf_counter() - begin,
+                    iteration=0,
                 )
             )
-            _check(statistics, "D")
+            _check(statistics, "Da")
             if self.optimization_options.remove_unused:
                 begin = time.perf_counter()
                 n = self.remove_unused()
@@ -3376,7 +3379,7 @@ class GraphBuilder:
                         time_in=time.perf_counter() - begin,
                     )
                 )
-                _check(statistics, "E")
+                _check(statistics, "Ea")
 
         if self.optimization_options.patterns:
             assert (
@@ -3404,6 +3407,31 @@ class GraphBuilder:
                 )
             )
             _check(statistics, "G")
+
+        if self.optimization_options.constant_folding:
+            # Second constant removal
+            begin = time.perf_counter()
+            n = self.constant_folding()
+            statistics.append(
+                dict(
+                    pattern="constant_folding",
+                    removed=n,
+                    time_in=time.perf_counter() - begin,
+                    iteration=1,
+                )
+            )
+            _check(statistics, "Db")
+            if self.optimization_options.remove_unused:
+                begin = time.perf_counter()
+                n = self.remove_unused()
+                statistics.append(
+                    dict(
+                        pattern="remove_unused",
+                        removed=n,
+                        time_in=time.perf_counter() - begin,
+                    )
+                )
+                _check(statistics, "Eb")
 
         if self.optimization_options.order:
             res = self.optimize_order()

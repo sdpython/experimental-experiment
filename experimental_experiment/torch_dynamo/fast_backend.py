@@ -445,6 +445,7 @@ def _default_export(
     processor,
     order_algorithm=None,
     dump_patterns=None,
+    options=None,
 ):
     input_names = input_names = (
         create_input_names(graph_module, args) if rename_inputs else None
@@ -454,22 +455,25 @@ def _default_export(
         verbose if isinstance(verbose, tuple) else (verbose, verbose)
     )
 
-    patterns = get_pattern_list(enable_pattern, disable_pattern, verbose=verbose_onnx)
+    if options is None:
+        patterns = get_pattern_list(
+            enable_pattern, disable_pattern, verbose=verbose_onnx
+        )
 
-    if order_algorithm is not None:
-        from ..xoptim import OrderAlgorithm
+        if order_algorithm is not None:
+            from ..xoptim import OrderAlgorithm
 
-        order_algorithm = getattr(OrderAlgorithm, order_algorithm.upper())
+            order_algorithm = getattr(OrderAlgorithm, order_algorithm.upper())
 
-    options = OptimizationOptions(
-        remove_unused=True,
-        constant_folding=False,
-        patterns=patterns,
-        verbose=verbose_onnx,
-        processor=processor,
-        order=order_algorithm,
-        dump_applied_patterns=dump_patterns,
-    )
+        options = OptimizationOptions(
+            remove_unused=True,
+            constant_folding=False,
+            patterns=patterns,
+            verbose=verbose_onnx,
+            processor=processor,
+            order=order_algorithm,
+            dump_applied_patterns=dump_patterns,
+        )
 
     onx, builder = to_onnx(
         graph_module,
@@ -519,6 +523,7 @@ def onnx_custom_backend(
     exporter: Optional[str] = None,
     processor: str = "CPU",
     order_algorithm: Optional[str] = None,
+    options: Optional[OptimizationOptions] = None,
 ) -> Callable:
     """
     Custom backend to export torch models into onnx
@@ -550,6 +555,8 @@ def onnx_custom_backend(
         or this list of processors (comma separated value)
     :param order_algorithm: algorithm optimizing the order the onnx node,
         none by default
+    :param options: to define custom Optimization options, in that case,
+        any other optimization parameter is ignored
     :return: Callable
 
     See :ref:`l-plot-onnxrt-diff` or :ref:`l-plot-custom-backend` for examples.
@@ -639,6 +646,7 @@ def onnx_custom_backend(
             processor,
             order_algorithm=order_algorithm,
             dump_patterns=dump_patterns,
+            options=options,
         )
     elif exporter == "dynamo":
         from ._dynamo_exporter import _dynamo_export

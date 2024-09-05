@@ -3368,6 +3368,60 @@ class TestGraphPatternOptimization(ExtTestCase):
         got = opt_ref.run(None, feeds)[0]
         self.assertEqualArray(expected, got, atol=1e-5)
 
+    def test_cast_layer_normalization_cast(self):
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("Cast", ["X"], ["xc"], to=TensorProto.FLOAT),
+                    oh.make_node(
+                        "LayerNormalization",
+                        ["xc", "scale", "bias"],
+                        ["norm"],
+                        stash_type=1,
+                    ),
+                    oh.make_node("Cast", ["norm"], ["Y"], to=TensorProto.FLOAT16),
+                ],
+                "dummy",
+                [oh.make_tensor_value_info("X", TFLOAT16, [3, 3])],
+                [oh.make_tensor_value_info("Y", TFLOAT16, [3, 3])],
+                [
+                    onh.from_array(
+                        np.array([0.5, 0.6, 0.7], dtype=np.float32), name="scale"
+                    ),
+                    onh.from_array(
+                        np.array([-0.5, -0.6, -0.7], dtype=np.float32), name="bias"
+                    ),
+                ],
+            ),
+            opset_imports=[oh.make_opsetid("", 18)],
+            ir_version=10,
+        )
+        check_model(model)
+        feeds = {"X": self._range(3, 3).astype(np.float16)}
+        ref = ExtendedReferenceEvaluator(model)
+        expected = ref.run(None, feeds)[0]
+
+        gr = GraphBuilder(
+            model,
+            infer_shapes=True,
+            optimization_options=OptimizationOptions(
+                patterns=["CastLayerNormalizationCast"],
+                verbose=0,
+            ),
+            verbose=0,
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+        self.assertEqual(
+            ["Cast", "Cast", "LayerNormalization"],
+            [n.op_type for n in opt_onx.graph.node],
+        )
+        self.assertEqual(2, len(opt_onx.graph.initializer))
+
+        opt_ref = ExtendedReferenceEvaluator(opt_onx)
+        got = opt_ref.run(None, feeds)[0]
+        self.assertEqualArray(expected, got, atol=1e-2)
+        self._check_with_ort(opt_onx)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

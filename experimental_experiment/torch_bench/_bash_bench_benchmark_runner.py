@@ -282,18 +282,34 @@ class BenchmarkRunner:
             return dict(onnx_optimized=0)
         new_stat = {}
         if "optimization" in opt_stats:
-            time_in = 0.0
-            added = 0
-            removed = 0
+            added, removed, time_in = 0, 0, 0.0
             max_iter = 0
             applied = set()
             matched = set()
             n_applied = 0
+            by_pattern = {}
+            by_pattern_n = {}
+            by_iter = {}
+            cst_added, cst_removed, cst_time_in = 0, 0, 0.0
+
             for obs in opt_stats["optimization"]:
+                pattern = obs["pattern"]
+                if pattern == "constant_folding":
+                    cst_added += obs.get("added", 0)
+                    cst_removed += obs.get("removed", 0)
+                    cst_time_in += obs.get("time_in", 0)
+                if pattern not in by_pattern:
+                    by_pattern[pattern] = 0
+                    by_pattern_n[pattern] = 0
+                    by_iter[pattern] = 0
                 time_in += obs.get("time_in", 0)
                 added += obs.get("added", 0)
                 removed += obs.get("removed", 0)
                 max_iter = max(max_iter, obs.get("iteration", 0))
+                by_pattern[pattern] += obs.get("time_in", 0)
+                by_pattern_n[pattern] += obs.get("added", 0) - obs.get("removed", 0)
+                if not pattern.startswith("match"):
+                    by_iter[pattern] = max(by_iter[pattern], obs.get("iteration", 0))
                 p = obs["pattern"]
                 if p.startswith("match_"):
                     matched.add(p)
@@ -302,16 +318,53 @@ class BenchmarkRunner:
                     n_applied += 1
             new_stat.update(
                 dict(
-                    onnx_optimized=1,
-                    onnx_opt_time_in=time_in,
-                    onnx_opt_added=added,
-                    onnx_opt_removed=removed,
+                    onnx_opt_optimized=1,
+                    onnx_opt_all_time_in=time_in,
+                    onnx_opt_all_added=added,
+                    onnx_opt_all_removed=removed,
                     onnx_opt_max_iter=max_iter,
                     onnx_opt_unique_matched=len(matched),
                     onnx_opt_unique_applied=len(applied),
                     onnx_opt_n_applied=n_applied,
+                    time_optimization=time_in,
+                    onnx_opt_cst_time_in=cst_time_in,
+                    onnx_opt_cst_added=cst_added,
+                    onnx_opt_cst_removed=cst_removed,
                 )
             )
+            sorted_time = list(
+                sorted([(v, k) for k, v in by_pattern.items()], reverse=True)
+            )
+            if sorted_time:
+                for i in range(min(10, len(sorted_time))):
+                    new_stat.update(
+                        {
+                            f"onnx_opt_toptime{i}": sorted_time[i][0],
+                            f"onnx_opt_toptimename{i}": sorted_time[i][1],
+                            f"time_opt_toptime{i}": sorted_time[i][0],
+                        }
+                    )
+            sorted_n = list(sorted((v, k) for k, v in by_pattern_n.items()))
+            if sorted_n:
+                for i in range(min(10, len(sorted_n))):
+                    new_stat.update(
+                        {
+                            f"onnx_opt_topn{i}": sorted_n[i][0],
+                            f"onnx_opt_topnname{i}": sorted_n[i][1],
+                        }
+                    )
+            sorted_iter = list(
+                sorted([(v, k) for k, v in by_iter.items()], reverse=True)
+            )
+            if sorted_iter:
+                for i in range(min(10, len(sorted_iter))):
+                    new_stat.update(
+                        {
+                            f"onnx_opt_topiter{i}": sorted_iter[i][0],
+                            f"onnx_opt_topitername{i}": sorted_iter[i][1],
+                        }
+                    )
+
         if "builder" in opt_stats:
             builder = opt_stats["builder"]
             if "aten" in builder:
