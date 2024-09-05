@@ -1,9 +1,21 @@
+import contextlib
 import pprint
 import time
 import os
 import sys
 from collections import Counter
-from typing import Any, Dict, Iterator, List, Optional, Sequence, Set, Tuple, Union
+from typing import (
+    Any,
+    Dict,
+    Generator,
+    Iterator,
+    List,
+    Optional,
+    Sequence,
+    Set,
+    Tuple,
+    Union,
+)
 import numpy as np
 from onnx import (
     AttributeProto,
@@ -49,6 +61,18 @@ from ._helper import make_hash
 from .optimization_options import OptimizationOptions
 from .expression_dimension import Expression, parse_expression
 from .graph_builder_opset import Opset
+
+
+@contextlib.contextmanager
+def _unset_fake_temporarily() -> Generator:
+    import torch
+
+    old = torch._C._unset_dispatch_mode(torch._C._TorchDispatchModeKey.FAKE)
+    try:
+        yield old
+    finally:
+        if old is not None:
+            torch._C._set_dispatch_mode(old)
 
 
 class GraphBuilder:
@@ -147,6 +171,7 @@ class GraphBuilder:
         import torch
 
         self.torch = torch
+        self.maybe_disable_fake_tensor_mode = _unset_fake_temporarily
         self.optimization_options = optimization_options or OptimizationOptions(
             verbose=verbose
         )
@@ -2871,7 +2896,8 @@ class GraphBuilder:
                     tensor.data_type = itype
                     tensor.raw_data = v.tobytes()
                 else:
-                    tensor = proto_from_array(v, name=k, verbose=self.verbose)
+                    with self.maybe_disable_fake_tensor_mode():
+                        tensor = proto_from_array(v, name=k, verbose=self.verbose)
 
                 initializer.append(tensor)
 
@@ -3786,7 +3812,8 @@ class GraphBuilder:
             x = self.torch.Tensor(x).to(ttype)
             assert "FakeTensor" not in str(type(x)), (
                 f"FakeTensor {node.output[0]!r} cannot be a constant {type(x)}, "
-                f"node.op_type={node.op_type!r}{self.get_debug_msg()}"
+                f"node.op_type={node.op_type!r}, type={self.torch.Tensor}"
+                f"{self.get_debug_msg()}"
             )
         ttype = onnx_dtype_to_torch_dtype(to)
         return [x.to(ttype)]
@@ -3906,86 +3933,87 @@ class GraphBuilder:
             if val is None:
                 return None, None
 
-        if v.op_type == "Identity":
-            # much faster this way
-            output = [feeds[v.input[0]]]
-        elif v.op_type == "Transpose":
-            # bypassing onnx.numpy_helper.from_array, too slow
-            output = self._apply_transpose(v, feeds)
-        elif v.op_type == "Trilu":
-            # bypassing onnx.numpy_helper.from_array, too slow
-            output = self._apply_trilu(v, feeds)
-        elif v.op_type == "Cast":
-            # bypassing onnx.numpy_helper.from_array, too slow
-            output = self._apply_cast(v, feeds)
-        elif v.op_type == "Expand":
-            # bypassing onnx.numpy_helper.from_array, too slow
-            output = self._apply_expand(v, feeds)
-        elif v.op_type == "Unsqueeze":
-            # bypassing onnx.numpy_helper.from_array, too slow
-            output = self._apply_unsqueeze(v, feeds)
-        elif v.op_type == "Squeeze":
-            # bypassing onnx.numpy_helper.from_array, too slow
-            output = self._apply_squeeze(v, feeds)
-        elif v.op_type in {"Mul", "Add", "Sub", "Div"}:
-            # bypassing onnx.numpy_helper.from_array, too slow
-            output = self._apply_binary_op(v, feeds)
-        elif v.op_type in {"Sqrt"}:
-            # bypassing onnx.numpy_helper.from_array, too slow
-            output = self._apply_unary_function(v, feeds)
-        elif all(isinstance(v, np.ndarray) for v in feeds.values()):
-            # Let's avoid big computation on CPU.
-            max_dim = 0
-            for _v in feeds.values():
-                max_dim = max(max_dim, np.prod(_v.shape))
-            if max_dim >= 2**22:
-                if self.verbose > 1:
-                    print(
-                        f"[GraphBuilder.compute_constant] stop computing a "
-                        f"constant as it may be too big, shapes are "
-                        f"{[_.shape for _ in feeds.values()]}"
+        with self.maybe_disable_fake_tensor_mode():
+            if v.op_type == "Identity":
+                # much faster this way
+                output = [feeds[v.input[0]]]
+            elif v.op_type == "Transpose":
+                # bypassing onnx.numpy_helper.from_array, too slow
+                output = self._apply_transpose(v, feeds)
+            elif v.op_type == "Trilu":
+                # bypassing onnx.numpy_helper.from_array, too slow
+                output = self._apply_trilu(v, feeds)
+            elif v.op_type == "Cast":
+                # bypassing onnx.numpy_helper.from_array, too slow
+                output = self._apply_cast(v, feeds)
+            elif v.op_type == "Expand":
+                # bypassing onnx.numpy_helper.from_array, too slow
+                output = self._apply_expand(v, feeds)
+            elif v.op_type == "Unsqueeze":
+                # bypassing onnx.numpy_helper.from_array, too slow
+                output = self._apply_unsqueeze(v, feeds)
+            elif v.op_type == "Squeeze":
+                # bypassing onnx.numpy_helper.from_array, too slow
+                output = self._apply_squeeze(v, feeds)
+            elif v.op_type in {"Mul", "Add", "Sub", "Div"}:
+                # bypassing onnx.numpy_helper.from_array, too slow
+                output = self._apply_binary_op(v, feeds)
+            elif v.op_type in {"Sqrt"}:
+                # bypassing onnx.numpy_helper.from_array, too slow
+                output = self._apply_unary_function(v, feeds)
+            elif all(isinstance(v, np.ndarray) for v in feeds.values()):
+                # Let's avoid big computation on CPU.
+                max_dim = 0
+                for _v in feeds.values():
+                    max_dim = max(max_dim, np.prod(_v.shape))
+                if max_dim >= 2**22:
+                    if self.verbose > 1:
+                        print(
+                            f"[GraphBuilder.compute_constant] stop computing a "
+                            f"constant as it may be too big, shapes are "
+                            f"{[_.shape for _ in feeds.values()]}"
+                        )
+                    return None, None
+
+                begin = time.perf_counter()
+                ref = ExtendedReferenceEvaluator(v)
+                try:
+                    output = ref.run(None, feeds)
+                except (ValueError, TypeError) as e:
+                    sf = ", ".join(f"{k}:{v.dtype}:{v.shape}" for k, v in feeds.items())
+                    if "warnings" not in self._debug_msg:
+                        self._debug_msg["warnings"] = []
+                    sv = str(v).replace("\n", " ")
+                    self._debug_msg["warnings"].append(
+                        f"Issue with v={sv}, feeds={sf}, e={e}"
                     )
-                return None, None
+                    self.time_evaluation_constants_ += time.perf_counter() - begin
+                    return None, None
 
-            begin = time.perf_counter()
-            ref = ExtendedReferenceEvaluator(v)
-            try:
-                output = ref.run(None, feeds)
-            except (ValueError, TypeError) as e:
-                sf = ", ".join(f"{k}:{v.dtype}:{v.shape}" for k, v in feeds.items())
-                if "warnings" not in self._debug_msg:
-                    self._debug_msg["warnings"] = []
-                sv = str(v).replace("\n", " ")
-                self._debug_msg["warnings"].append(
-                    f"Issue with v={sv}, feeds={sf}, e={e}"
-                )
                 self.time_evaluation_constants_ += time.perf_counter() - begin
+            else:
                 return None, None
 
-            self.time_evaluation_constants_ += time.perf_counter() - begin
-        else:
-            return None, None
-
-        cst = None
-        for n, val in zip(v.output, output):
-            assert not isinstance(
-                val, tuple
-            ), f"Unexpected type {type(val)} for n={n!r}"
-            assert "FakeTensor" not in str(type(val)), (
-                f"FakeTensor detected {type(val)} in constant {name!r}, "
-                f"v.op_type={v.op_type!r}{self.get_debug_msg()}"
-            )
-            if self.has_type(n):
-                # numpy changes the expected type sometimes
-                # (like transpose(x: float36) --> float32)
-                itype = self.get_type(n)
-                if hasattr(val, "detach"):
-                    val = val.to(onnx_dtype_to_torch_dtype(itype))
-                else:
-                    val = val.astype(oh.tensor_dtype_to_np_dtype(itype))
-            self.constants_computed_[n] = val
-            if name == n:
-                cst = val
+            cst = None
+            for n, val in zip(v.output, output):
+                assert not isinstance(
+                    val, tuple
+                ), f"Unexpected type {type(val)} for n={n!r}"
+                assert "FakeTensor" not in str(type(val)), (
+                    f"FakeTensor detected {type(val)} in constant {name!r}, "
+                    f"v.op_type={v.op_type!r}{self.get_debug_msg()}"
+                )
+                if self.has_type(n):
+                    # numpy changes the expected type sometimes
+                    # (like transpose(x: float36) --> float32)
+                    itype = self.get_type(n)
+                    if hasattr(val, "detach"):
+                        val = val.to(onnx_dtype_to_torch_dtype(itype))
+                    else:
+                        val = val.astype(oh.tensor_dtype_to_np_dtype(itype))
+                self.constants_computed_[n] = val
+                if name == n:
+                    cst = val
 
         assert cst is not None, f"Constant {name!r} was not found in {v.output}"
         return cst, feeds
