@@ -152,7 +152,7 @@ class TestBashBenchRunnerCmd(ExtTestCase):
     @requires_torch("2.4")
     def test_huggingface_export_bench_custom_cpu2_timeout(self):
         self._huggingface_export_bench_cpu(
-            "custom", "101Dummy,101Dummy16", timeout=1, verbose=10, debug=True
+            "custom", "101Dummy,101Dummy16", timeout=1, verbose=0, debug=True
         )
 
     @skipif_ci_windows("exporter does not work on Windows")

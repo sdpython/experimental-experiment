@@ -299,7 +299,8 @@ class CastLayerNormalizationCastPattern(PatternOptimization):
             # No need for the scale.
             return self.none(node, inspect.currentframe().f_lineno)
 
-        stash_type = g.get_attribute(node, "stash_type")
+        stash_type = g.get_attribute(node, "stash_type", exc=False)
+        stash_itype = 1 if stash_type is None else stash_type.i
 
         cast_before = g.node_before(node.input[0])
         if (
@@ -310,7 +311,7 @@ class CastLayerNormalizationCastPattern(PatternOptimization):
             return self.none(node, inspect.currentframe().f_lineno)
 
         to = g.get_attribute(cast_before, "to")
-        if to.i != stash_type.i:
+        if to.i != stash_itype:
             return self.none(node, inspect.currentframe().f_lineno)
         if g.is_used_more_than_once(node.input[0]):
             return self.none(node, inspect.currentframe().f_lineno)
