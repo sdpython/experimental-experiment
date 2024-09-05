@@ -3392,7 +3392,9 @@ class TestGraphPatternOptimization(ExtTestCase):
                         np.array([-0.5, -0.6, -0.7], dtype=np.float32), name="bias"
                     ),
                 ],
-            )
+            ),
+            opset_imports=[oh.make_opsetid("", 18)],
+            ir_version=10,
         )
         check_model(model)
         feeds = {"X": self._range(3, 3).astype(np.float16)}
@@ -3410,7 +3412,7 @@ class TestGraphPatternOptimization(ExtTestCase):
         )
         opt_onx = gr.to_onnx(optimize=True)
         self.assertEqual(
-            ["LayerNormalization"],
+            ["Cast", "Cast", "LayerNormalization"],
             [n.op_type for n in opt_onx.graph.node],
         )
         self.assertEqual(2, len(opt_onx.graph.initializer))
@@ -3418,6 +3420,7 @@ class TestGraphPatternOptimization(ExtTestCase):
         opt_ref = ExtendedReferenceEvaluator(opt_onx)
         got = opt_ref.run(None, feeds)[0]
         self.assertEqualArray(expected, got, atol=1e-2)
+        self._check_with_ort(opt_onx)
 
 
 if __name__ == "__main__":

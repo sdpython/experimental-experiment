@@ -282,9 +282,7 @@ class BenchmarkRunner:
             return dict(onnx_optimized=0)
         new_stat = {}
         if "optimization" in opt_stats:
-            time_in = 0.0
-            added = 0
-            removed = 0
+            added, removed, time_in = 0, 0, 0.0
             max_iter = 0
             applied = set()
             matched = set()
@@ -292,8 +290,14 @@ class BenchmarkRunner:
             by_pattern = {}
             by_pattern_n = {}
             by_iter = {}
+            cst_added, cst_removed, cst_time_in = 0, 0, 0.0
+
             for obs in opt_stats["optimization"]:
                 pattern = obs["pattern"]
+                if pattern == "constant_folding":
+                    cst_added += obs.get("added", 0)
+                    cst_removed += obs.get("removed", 0)
+                    cst_time_in += obs.get("time_in", 0)
                 if pattern not in by_pattern:
                     by_pattern[pattern] = 0
                     by_pattern_n[pattern] = 0
@@ -315,14 +319,17 @@ class BenchmarkRunner:
             new_stat.update(
                 dict(
                     onnx_opt_optimized=1,
-                    onnx_opt_time_in=time_in,
-                    onnx_opt_added=added,
-                    onnx_opt_removed=removed,
+                    onnx_opt_all_time_in=time_in,
+                    onnx_opt_all_added=added,
+                    onnx_opt_all_removed=removed,
                     onnx_opt_max_iter=max_iter,
                     onnx_opt_unique_matched=len(matched),
                     onnx_opt_unique_applied=len(applied),
                     onnx_opt_n_applied=n_applied,
                     time_optimization=time_in,
+                    onnx_opt_cst_time_in=cst_time_in,
+                    onnx_opt_cst_added=cst_added,
+                    onnx_opt_cst_removed=cst_removed,
                 )
             )
             sorted_time = list(

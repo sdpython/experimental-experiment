@@ -327,12 +327,28 @@ class CastLayerNormalizationCastPattern(PatternOptimization):
         node: NodeProto,
         cast_after: NodeProto,
     ) -> List[NodeProto]:
+        itype = g.get_type(cast_before.input[0])
+        other = []
+        nodes = []
+        for i in node.input[1:]:
+            name = g.unique_name(f"{self.__class__.__name__}_{i}")
+            other.append(name)
+            nodes.append(
+                g.make_node(
+                    "Cast",
+                    [i],
+                    [name],
+                    to=itype,
+                    name=f"{self.__class__.__name__}--cast--{node.name}",
+                )
+            )
+
         new_node = g.make_node(
             "LayerNormalization",
-            [cast_before.input[0], *node.input[1:]],
+            [cast_before.input[0], *other],
             [cast_after.output[0], *node.output[1:]],
             name=f"{self.__class__.__name__}--{node.name}",
             doc_string=node.doc_string,
         )
         new_node.attribute.extend(node.attribute)
-        return [new_node]
+        return [*nodes, new_node]
