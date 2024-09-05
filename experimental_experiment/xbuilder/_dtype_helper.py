@@ -14,11 +14,11 @@ def onnx_dtype_to_torch_dtype(itype: int) -> "torch.dtype":  # noqa: F821
     if itype == TensorProto.DOUBLE:
         return torch.float64
     if itype == TensorProto.INT32:
-        return torch.int64
+        return torch.int32
     if itype == TensorProto.INT64:
         return torch.int64
     if itype == TensorProto.UINT32:
-        return torch.uint64
+        return torch.uint32
     if itype == TensorProto.UINT64:
         return torch.uint64
     if itype == TensorProto.BOOL:

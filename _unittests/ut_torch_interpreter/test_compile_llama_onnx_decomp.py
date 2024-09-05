@@ -18,6 +18,12 @@ from experimental_experiment.torch_dynamo import (
 
 
 class TestDynamoLlama(ExtTestCase):
+    @classmethod
+    def setUp(cls):
+        import torch
+
+        torch._dynamo.reset()
+
     @ignore_warnings((UserWarning, DeprecationWarning))
     def test_aaaa(self):
         from transformers import LlamaConfig
