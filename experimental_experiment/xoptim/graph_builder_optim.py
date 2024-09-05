@@ -956,13 +956,6 @@ class GraphBuilderPatternOptimization:
 
         for o in self.builder.outputs:
             assert o.name in known, f"Unknown output {o.name!r}, step {step!r}"
-        statistics.append(
-            dict(
-                pattern=f"check_pattern_{code}",
-                time_in=time.perf_counter() - begin,
-                iteration=iteration,
-            )
-        )
         if verifies:
             onx = self.builder.to_onnx(optimize=False)
             new_shapes = infer_shapes(onx)
@@ -993,6 +986,13 @@ class GraphBuilderPatternOptimization:
             #     onx.SerializeToString(),
             #     providers=["CPUExecutionProvider"],
             # )
+        statistics.append(
+            dict(
+                pattern=f"check_pattern_{code}{1 if verifies else 0}",
+                time_in=time.perf_counter() - begin,
+                iteration=iteration,
+            )
+        )
 
     def do_not_remove(self, node: NodeProto) -> bool:
         """Tells if a node can be removed."""
