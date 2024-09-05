@@ -1598,7 +1598,7 @@ def aten_embedding(
                 f"{g.get_debug_msg()}"
             )
     assert g.get_type(indices) == 7, (
-        f"indices must be integer not {g.get_type(indices)}, "
+        f"indices ({indices!r}) must be integer not {g.get_type(indices)}, "
         f"weight is {g.get_type(weight)}"
         f"{g.get_debug_msg()}"
     )
@@ -4470,7 +4470,7 @@ def aten_ones(
     assert layout is None, f"ones not implemented for layout={layout!r} is not None"
     assert not pin_memory, "ones not implemented for pin_memory=True"
     new_shape = None
-    if isinstance(size, list):
+    if isinstance(size, (tuple, list)):
         isize = np.array(size, dtype=np.int64)
         new_shape = tuple(size)
     elif isinstance(size, int):
