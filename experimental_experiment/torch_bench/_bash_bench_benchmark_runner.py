@@ -925,6 +925,7 @@ class BenchmarkRunner:
         stats["rtopt"] = rtopt
 
         if self.device.startswith("cuda"):
+            is_cuda = True
             stats["mema_gpu_1_after_loading"] = torch.cuda.max_memory_allocated(
                 device_id
             )
@@ -936,6 +937,8 @@ class BenchmarkRunner:
                     f"reserved={torch.cuda.memory_reserved(device_id)} "
                     f"after loading"
                 )
+        else:
+            is_cuda = False
 
         if self.verbose > 1:
             print(
@@ -1046,10 +1049,14 @@ class BenchmarkRunner:
             # training mode consumes too much memory
             lats = []
             for _ in range(repeat):
+                if is_cuda:
+                    torch.cuda.synchronize()
                 if self.nvtx:
                     torch.cuda.nvtx.range_push("EAGER-ITER")
                 begin = time.perf_counter()
                 model_runner.run()
+                if is_cuda:
+                    torch.cuda.synchronize()
                 lats.append(time.perf_counter() - begin)
                 if self.nvtx:
                     torch.cuda.nvtx.range_pop()
@@ -1284,6 +1291,7 @@ class BenchmarkRunner:
         from experimental_experiment.bench_run import _clean_string
 
         if self.device.startswith("cuda"):
+            is_cuda = True
             torch.cuda.reset_peak_memory_stats()
             device_id = 0 if ":" not in self.device else int(self.device.split(":")[1])
             stats["device_id2"] = device_id
@@ -1297,6 +1305,8 @@ class BenchmarkRunner:
                     f"reserved={torch.cuda.memory_reserved(device_id)} "
                     f"before creating a session"
                 )
+        else:
+            is_cuda = False
 
         #########
         # session
@@ -1492,10 +1502,14 @@ class BenchmarkRunner:
             if "ERR_warmup" not in stats:
                 lats = []
                 for _ in range(repeat):
+                    if is_cuda:
+                        torch.cuda.synchronize()
                     if self.nvtx:
                         torch.cuda.nvtx.range_push("ORT-ITER")
                     begin = time.perf_counter()
                     self.ort_run(sess, feeds)
+                    if is_cuda:
+                        torch.cuda.synchronize()
                     lats.append(time.perf_counter() - begin)
                     if self.nvtx:
                         torch.cuda.nvtx.range_pop()
@@ -1601,10 +1615,14 @@ class BenchmarkRunner:
             if "ERR_warmup" not in stats:
                 lats = []
                 for _ in range(repeat):
+                    if is_cuda:
+                        torch.cuda.synchronize()
                     if self.nvtx:
                         torch.cuda.nvtx.range_push("CPL-ITER")
                     begin = time.perf_counter()
                     sess.run(feeds)
+                    if is_cuda:
+                        torch.cuda.synchronize()
                     lats.append(time.perf_counter() - begin)
                     if self.nvtx:
                         torch.cuda.nvtx.range_pop()

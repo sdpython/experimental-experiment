@@ -516,6 +516,28 @@ class ModelRunner:
                 verbose=verbose,
                 target_opset=target_opset,
             )
+        if exporter == "onnx_dynamo-detailed":
+            return self._to_onnx_dynamo(
+                name,
+                dynamic=dynamic,
+                fake_tensor=fake_tensor,
+                no_grad=no_grad,
+                optimization=optimization,
+                verbose=verbose,
+                target_opset=target_opset,
+                detailed=True,
+            )
+        if exporter == "onnx_dynamo-fallback":
+            return self._to_onnx_dynamo(
+                name,
+                dynamic=dynamic,
+                fake_tensor=fake_tensor,
+                no_grad=no_grad,
+                optimization=optimization,
+                verbose=verbose,
+                target_opset=target_opset,
+                fallback=True,
+            )
         if exporter == "dynamo_export":
             return self._to_onnx_dynamo2(
                 name,
@@ -719,6 +741,9 @@ class ModelRunner:
         assert not fake_tensor, "fake_tensor not implemented."
         assert not dynamic, "dynamic true not implemented yet"
         assert no_grad, "no_grad false not implemented yet"
+        assert (
+            not optimization
+        ), f"optimization {optimization!r} not compatible with torch_script"
 
         if (
             isinstance(self.inputs, tuple)
@@ -784,9 +809,7 @@ class ModelRunner:
             stats["time_export_optimization"] = time.perf_counter() - begin
             return model_proto, stats
 
-        assert (
-            not optimization
-        ), f"optimization {optimization!r} not compatible with torch_script"
+        return onnx.load(name, load_external_data=False), None
 
     def _to_onnx_dynamo(
         self,
@@ -797,64 +820,57 @@ class ModelRunner:
         optimization: str,
         verbose: int,
         target_opset: int,
+        detailed: bool = False,
+        fallback: bool = False,
     ):
         assert not fake_tensor, "fake_tensor not implemented."
         assert not dynamic, "dynamic true not implemented yet"
         assert no_grad, "no_grad false not implemented yet"
-        from ..xbuilder.model_container import proto_from_array
 
         assert (
             not optimization
         ), f"optimization {optimization!r} not compatible with dynamo"
 
-        def _clean(s):
-            return s.replace(".", "_")
+        additional_kwargs = {}
+        if detailed:
+            additional_kwargs.update(
+                dict(
+                    profile=True,
+                    report=True,
+                    verify=True,
+                    dump_exported_program=True,
+                    artifacts_dir=os.path.dirname(name),
+                )
+            )
+        if fallback:
+            additional_kwargs.update(dict(fallback=True))
 
         if self.autocast:
             with torch.autocast(
                 device_type=self.device, dtype=self.dtype
             ), torch.no_grad():
-                torch.onnx.export(
+                onnx_program = torch.onnx.export(
                     self.model,
                     self.inputs,
                     name,
-                    do_constant_folding=False,
                     opset_version=target_opset,
                     dynamo=True,
+                    external_data=True,
+                    **additional_kwargs,
                 )
         else:
             with torch.no_grad():
-                torch.onnx.export(
+                onnx_program = torch.onnx.export(
                     self.model,
                     self.inputs,
                     name,
-                    do_constant_folding=False,
                     opset_version=target_opset,
                     dynamo=True,
+                    external_data=True,
+                    **additional_kwargs,
                 )
-        sarif = "report_dynamo_export.sarif"
-        if os.path.exists(sarif):
-            folder = os.path.split(name)[0]
-            with open(sarif, "r", encoding="utf-8") as f:
-                self.error_report = f.read()
-            os.remove(sarif)
-            with open(os.path.join(folder, sarif), "w", encoding="utf-8") as f:
-                f.write(self.error_report)
-        onx = onnx.load(name, load_external_data=False)
-        inits = {i.name for i in onx.graph.initializer}
-        inputs = {i.name for i in onx.graph.input}
-        add_inits = []
-        for pn, value in self.model.named_parameters():
-            new_name = f"p_{_clean(pn)}"
-            if new_name in inputs and new_name not in inits:
-                init = proto_from_array(value, name=new_name)
-                add_inits.append(init)
-        if add_inits:
-            shutil.copy(name, f"{name}.0.onnx")
-            onx.graph.initializer.extend(add_inits)
-            onnx.save(onx, name, save_as_external_data=True)
-            onx = onnx.load(name, load_external_data=False)
-        return onx, None
+
+        return onnx_program.model_proto, None
 
     def _to_onnx_dynamo2(
         self,
