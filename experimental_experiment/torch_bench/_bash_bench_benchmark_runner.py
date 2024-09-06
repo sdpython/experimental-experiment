@@ -1462,7 +1462,7 @@ class BenchmarkRunner:
                     else:
                         self.ort_run(sess, feeds)
                     if self.nvtx:
-                        torch.cuda.range_pop()
+                        torch.cuda.nvtx.range_pop()
             stats["time_warmup"] = (time.perf_counter() - begin) / warmup
             if self.device.startswith("cuda"):
                 stats["mema_gpu_8_after_export_warmup"] = (
