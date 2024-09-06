@@ -741,6 +741,9 @@ class ModelRunner:
         assert not fake_tensor, "fake_tensor not implemented."
         assert not dynamic, "dynamic true not implemented yet"
         assert no_grad, "no_grad false not implemented yet"
+        assert (
+            not optimization
+        ), f"optimization {optimization!r} not compatible with torch_script"
 
         if (
             isinstance(self.inputs, tuple)
@@ -806,9 +809,6 @@ class ModelRunner:
             stats["time_export_optimization"] = time.perf_counter() - begin
             return model_proto, stats
 
-        warnings.warn(
-            f"optimization {optimization!r} not compatible with torch_script", stacklevel=2
-        )
         return onnx.load(name, load_external_data=False), None
 
     def _to_onnx_dynamo(
@@ -826,7 +826,6 @@ class ModelRunner:
         assert not fake_tensor, "fake_tensor not implemented."
         assert not dynamic, "dynamic true not implemented yet"
         assert no_grad, "no_grad false not implemented yet"
-        from ..xbuilder.model_container import proto_from_array
 
         assert (
             not optimization
@@ -847,7 +846,9 @@ class ModelRunner:
             additional_kwargs.update(dict(fallback=True))
 
         if self.autocast:
-            with torch.autocast(device_type=self.device, dtype=self.dtype), torch.no_grad():
+            with torch.autocast(
+                device_type=self.device, dtype=self.dtype
+            ), torch.no_grad():
                 onnx_program = torch.onnx.export(
                     self.model,
                     self.inputs,
