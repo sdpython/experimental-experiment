@@ -1368,7 +1368,7 @@ class BenchmarkRunner:
                 )
             if self.verbose > 1:
                 print("[BenchmarkRunner.benchmark] WrapInferenceSessionForTorch")
-            sess = WrapInferenceSessionForTorch(ort_sess)
+            sess = WrapInferenceSessionForTorch(ort_sess, nvtx=self.nvtx)
             stats.update(self._post_process_onnx_statistics(exported_model))
 
             if self.dump_ort and os.path.exists(

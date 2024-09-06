@@ -103,15 +103,15 @@ class TestBashBenchRunnerCmd(ExtTestCase):
     @requires_torch("2.4")
     @requires_onnxruntime_training()
     def test_huggingface_export_bench_cort_cpu(self):
-        self._huggingface_export_bench_cpu(
-            "torch-onnx", "101Dummy", process=True, verbose=20
-        )
+        self._huggingface_export_bench_cpu("cort", "101Dummy", process=True, verbose=20)
 
     @skipif_ci_windows("exporter does not work on Windows")
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.4")
     def test_huggingface_export_bench_torch_onnx_cpu(self):
-        self._huggingface_export_bench_cpu("cort", "101Dummy", process=True, verbose=20)
+        self._huggingface_export_bench_cpu(
+            "torch-onnx", "101Dummy", process=True, verbose=20
+        )
 
     @skipif_ci_windows("exporter does not work on Windows")
     @ignore_warnings((DeprecationWarning, UserWarning))

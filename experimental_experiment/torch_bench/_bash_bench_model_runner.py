@@ -155,6 +155,7 @@ class ModelRunner:
     :param wrap_kind: to wrap the model and tuple as much as possible,
         None is default behavior,
         'nowrap' to explicit avoid wrapping
+    :param nvtx: enable nvtx events
     """
 
     _patched = None
@@ -235,6 +236,7 @@ class ModelRunner:
         suite: str,
         autocast: bool = False,
         wrap_kind: Optional[None] = None,
+        nvtx: bool = False,
     ):
         if dtype is None:
             cvt = lambda o: self._to_type_or_device(o, device)  # noqa: E731
@@ -317,13 +319,24 @@ class ModelRunner:
         self.warmup = warmup
         self.suite = suite
         self.autocast = autocast
+        self.nvtx = nvtx
         assert self.autocast is not None
 
     def run(self) -> Any:
         if self.autocast:
+            if self.nvtx:
+                torch.cuda.nvtx.range_push("ModelRunner.Eager.AutoCast")
             with torch.autocast(device_type=self.device, dtype=self.dtype):
-                return self.model(*self.inputs)
-        return self.model(*self.inputs)
+                res = self.model(*self.inputs)
+            if self.nvtx:
+                torch.cuda.nvtx.range_pop()
+            return res
+        if self.nvtx:
+            torch.cuda.nvtx.range_push("ModelRunner.Eager")
+        res = self.model(*self.inputs)
+        if self.nvtx:
+            torch.cuda.nvtx.range_pop()
+        return res
 
     def compute_weight_size(self) -> int:
         """Returns the weight size."""
