@@ -82,12 +82,19 @@ class LayerNormalizationPattern(PatternOptimization):
             return self.none(node, inspect.currentframe().f_lineno)
         sqrt = sqrt[0]
         div = g.next_nodes(sqrt.output[0])
-        if len(div) != 1 or div[0].op_type != "Div":
+        if len(div) != 1:
             return self.none(node, inspect.currentframe().f_lineno)
+
         div = div[0]
-        if len(g.next_nodes(div.input[1])) != 1:
-            return self.none(node, inspect.currentframe().f_lineno)
-        if div.input[0] != sub.output[0]:
+        if div.op_type == "Div":
+            if len(g.next_nodes(div.input[1])) != 1:
+                return self.none(node, inspect.currentframe().f_lineno)
+            if div.input[0] != sub.output[0]:
+                return self.none(node, inspect.currentframe().f_lineno)
+        elif div.op_type == "Reciprocal":
+            if div.input[0] != sub.output[0]:
+                return self.none(node, inspect.currentframe().f_lineno)
+        else:
             return self.none(node, inspect.currentframe().f_lineno)
 
         return MatchResult(
@@ -282,14 +289,18 @@ class CastLayerNormalizationCastPattern(PatternOptimization):
         matched: List[MatchResult],
     ) -> Optional[MatchResult]:
 
-        if node.op_type != "LayerNormalization" or node.domain != "":
+        if node.op_type not in (
+            "LayerNormalization",
+            "SimplifiedLayerNormalization",
+        ) or node.domain not in ("", "com.microsoft"):
             return self.none()
 
-        if len(node.output) != 1:
+        if len(node.output) > 1 and g.is_used(node.output[1]):
             # No need for the scale.
             return self.none(node, inspect.currentframe().f_lineno)
 
-        stash_type = g.get_attribute(node, "stash_type")
+        stash_type = g.get_attribute(node, "stash_type", exc=False)
+        stash_itype = 1 if stash_type is None else stash_type.i
 
         cast_before = g.node_before(node.input[0])
         if (
@@ -300,7 +311,7 @@ class CastLayerNormalizationCastPattern(PatternOptimization):
             return self.none(node, inspect.currentframe().f_lineno)
 
         to = g.get_attribute(cast_before, "to")
-        if to.i != stash_type.i:
+        if to.i != stash_itype:
             return self.none(node, inspect.currentframe().f_lineno)
         if g.is_used_more_than_once(node.input[0]):
             return self.none(node, inspect.currentframe().f_lineno)
@@ -344,11 +355,12 @@ class CastLayerNormalizationCastPattern(PatternOptimization):
             )
 
         new_node = g.make_node(
-            "LayerNormalization",
+            node.op_type,
             [cast_before.input[0], *other],
             [cast_after.output[0], *node.output[1:]],
             name=f"{self.__class__.__name__}--{node.name}",
             doc_string=node.doc_string,
+            domain=node.domain,
         )
         new_node.attribute.extend(node.attribute)
         return [*nodes, new_node]

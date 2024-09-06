@@ -6,6 +6,7 @@ from experimental_experiment.ext_test_case import (
     ExtTestCase,
     ignore_warnings,
     requires_torch,
+    requires_onnxruntime_training,
     skipif_ci_windows,
 )
 
@@ -100,9 +101,25 @@ class TestBashBenchRunnerCmd(ExtTestCase):
     @skipif_ci_windows("exporter does not work on Windows")
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.4")
+    @requires_onnxruntime_training()
+    def test_huggingface_export_bench_cort_cpu(self):
+        self._huggingface_export_bench_cpu("cort", "101Dummy", process=True, verbose=20)
+
+    @skipif_ci_windows("exporter does not work on Windows")
+    @ignore_warnings((DeprecationWarning, UserWarning))
+    @requires_torch("2.4")
     def test_huggingface_export_bench_torch_onnx_cpu(self):
         self._huggingface_export_bench_cpu(
             "torch-onnx", "101Dummy", process=True, verbose=20
+        )
+
+    @skipif_ci_windows("exporter does not work on Windows")
+    @ignore_warnings((DeprecationWarning, UserWarning))
+    @requires_torch("2.4")
+    @requires_onnxruntime_training()
+    def test_huggingface_export_bench_cortgrad_cpu(self):
+        self._huggingface_export_bench_cpu(
+            "cortgrad", "101Dummy", process=True, verbose=20
         )
 
     @skipif_ci_windows("exporter does not work on Windows")
@@ -138,7 +155,7 @@ class TestBashBenchRunnerCmd(ExtTestCase):
     @requires_torch("2.4")
     def test_huggingface_export_bench_custom_cpu2_timeout(self):
         self._huggingface_export_bench_cpu(
-            "custom", "101Dummy,101Dummy16", timeout=1, verbose=10, debug=True
+            "custom", "101Dummy,101Dummy16", timeout=1, verbose=0, debug=True
         )
 
     @skipif_ci_windows("exporter does not work on Windows")

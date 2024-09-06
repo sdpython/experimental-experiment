@@ -155,6 +155,7 @@ class ModelRunner:
     :param wrap_kind: to wrap the model and tuple as much as possible,
         None is default behavior,
         'nowrap' to explicit avoid wrapping
+    :param nvtx: enable nvtx events
     """
 
     _patched = None
@@ -235,6 +236,7 @@ class ModelRunner:
         suite: str,
         autocast: bool = False,
         wrap_kind: Optional[None] = None,
+        nvtx: bool = False,
     ):
         if dtype is None:
             cvt = lambda o: self._to_type_or_device(o, device)  # noqa: E731
@@ -317,13 +319,24 @@ class ModelRunner:
         self.warmup = warmup
         self.suite = suite
         self.autocast = autocast
+        self.nvtx = nvtx
         assert self.autocast is not None
 
     def run(self) -> Any:
         if self.autocast:
+            if self.nvtx:
+                torch.cuda.nvtx.range_push("ModelRunner.Eager.AutoCast")
             with torch.autocast(device_type=self.device, dtype=self.dtype):
-                return self.model(*self.inputs)
-        return self.model(*self.inputs)
+                res = self.model(*self.inputs)
+            if self.nvtx:
+                torch.cuda.nvtx.range_pop()
+            return res
+        if self.nvtx:
+            torch.cuda.nvtx.range_push("ModelRunner.Eager")
+        res = self.model(*self.inputs)
+        if self.nvtx:
+            torch.cuda.nvtx.range_pop()
+        return res
 
     def compute_weight_size(self) -> int:
         """Returns the weight size."""
@@ -387,7 +400,7 @@ class ModelRunner:
                 target_opset=target_opset,
             )
 
-        if exporter == "cort":
+        if exporter in ("cort", "cortgrad"):
             return self._to_cort(
                 name,
                 dynamic=dynamic,
@@ -396,6 +409,7 @@ class ModelRunner:
                 optimization=optimization,
                 verbose=verbose,
                 target_opset=target_opset,
+                autograd=exporter == "cortgrad",
             )
 
         if exporter == "torch_script":
@@ -641,15 +655,13 @@ class ModelRunner:
         optimization: str,
         verbose: int,
         target_opset: int,
+        autograd: bool = False,
     ):
         assert not fake_tensor, "fake_tensor not implemented."
         assert not dynamic, "dynamic true not implemented yet"
         assert no_grad, "no_grad true not implemented yet"
-        assert (
-            not optimization
-        ), f"optimization {optimization!r} not compatible with dort"
         from ..xbuilder import OptimizationOptions
-        from ..torch_dynamo import onnx_custom_backend
+        from ..torch_dynamo import onnx_custom_backend, get_decomposition_table
 
         if optimization:
             # cuda = any(m.is_cuda for m in self.model.parameters())
@@ -662,7 +674,7 @@ class ModelRunner:
         else:
             options = None
 
-        cbf = lambda *args, **kwargs: onnx_custom_backend(  # noqa: E731
+        cbff = lambda *args, **kwargs: onnx_custom_backend(  # noqa: E731
             *args,
             target_opset=target_opset,
             verbose=verbose,
@@ -671,14 +683,27 @@ class ModelRunner:
             **kwargs,
         )
 
-        if self.autocast:
-            with torch.autocast(
-                device_type=self.device, dtype=self.dtype
-            ), torch.no_grad():
+        if autograd:
+            from torch._dynamo.backends.common import aot_autograd
+
+            cbf = aot_autograd(
+                fw_compiler=cbff, decompositions=get_decomposition_table()
+            )
+
+            if self.autocast:
+                with torch.autocast(device_type=self.device, dtype=self.dtype):
+                    res = torch.compile(self.model, backend=cbf, fullgraph=True)
+            else:
                 res = torch.compile(self.model, backend=cbf, fullgraph=True)
         else:
-            with torch.no_grad():
-                res = torch.compile(self.model, backend=cbf, fullgraph=True)
+            if self.autocast:
+                with torch.autocast(
+                    device_type=self.device, dtype=self.dtype
+                ), torch.no_grad():
+                    res = torch.compile(self.model, backend=cbff, fullgraph=True)
+            else:
+                with torch.no_grad():
+                    res = torch.compile(self.model, backend=cbff, fullgraph=True)
         return res, None
 
     def _to_onnx_script(
@@ -1089,7 +1114,15 @@ class ModelRunner:
 
     def make_feeds(self, exporter: str, filename: Optional[str] = None):
         """Creates feed inputs."""
-        if exporter in {"eager", "export", "compile", "inductor", "dort", "cort"}:
+        if exporter in {
+            "eager",
+            "export",
+            "compile",
+            "inductor",
+            "dort",
+            "cort",
+            "cortgrad",
+        }:
             return self.inputs
         onx = onnx.load(filename, load_external_data=False)
         initializer_names = {i.name for i in onx.graph.initializer}

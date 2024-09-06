@@ -1368,7 +1368,7 @@ class BenchmarkRunner:
                 )
             if self.verbose > 1:
                 print("[BenchmarkRunner.benchmark] WrapInferenceSessionForTorch")
-            sess = WrapInferenceSessionForTorch(ort_sess)
+            sess = WrapInferenceSessionForTorch(ort_sess, nvtx=self.nvtx)
             stats.update(self._post_process_onnx_statistics(exported_model))
 
             if self.dump_ort and os.path.exists(
@@ -1462,7 +1462,7 @@ class BenchmarkRunner:
                     else:
                         self.ort_run(sess, feeds)
                     if self.nvtx:
-                        torch.cuda.range_pop()
+                        torch.cuda.nvtx.range_pop()
             stats["time_warmup"] = (time.perf_counter() - begin) / warmup
             if self.device.startswith("cuda"):
                 stats["mema_gpu_8_after_export_warmup"] = (

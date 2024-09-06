@@ -334,7 +334,16 @@ class ExtTestCase(unittest.TestCase):
         for tof in tofind:
             if tof in text:
                 return
-        raise AssertionError(f"Unable to find the list of strings {tofind} in\n{text}")
+        raise AssertionError(
+            f"Unable to find one string in the list {tofind} in\n--\n{text}"
+        )
+
+    def assertIn(self, tofind: str, text: str):
+        if tofind in text:
+            return
+        raise AssertionError(
+            f"Unable to find the list of strings {tofind} in\n--\n{text}"
+        )
 
     def assertEqualArrays(
         self,

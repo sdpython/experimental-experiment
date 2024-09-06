@@ -376,7 +376,7 @@ class WrapForTorch:
 
 
 class WrapInferenceSessionForTorch:
-    def __init__(self, sess: Any):
+    def __init__(self, sess: Any, nvtx: bool = False):
         # onnxruntime is importing when needed as it takes a
         # couple of seconds if it contains CUDA EP.
         import onnxruntime
@@ -389,6 +389,7 @@ class WrapInferenceSessionForTorch:
         self.OrtValue = ORTC.OrtValue
         self.ORTC = ORTC
         self.torch = torch
+        self.nvtx = nvtx
         self.run_options = onnxruntime.RunOptions()
 
         self.TORCH_DTYPE_TO_NUMPY_DTYPE = {
@@ -428,6 +429,8 @@ class WrapInferenceSessionForTorch:
         data_ptrs = []
         devices = []
 
+        if self.nvtx:
+            self.torch.cuda.nvtx.range_push("_get_ortvalues_from_torch_tensors.1")
         max_device = -1
         new_tensors = []
         for tensor in tensors:
@@ -442,6 +445,10 @@ class WrapInferenceSessionForTorch:
             new_tensors.append(tensor)
             max_device = max(max_device, d)
 
+        if self.nvtx:
+            self.torch.cuda.nvtx.range_pop()
+            self.torch.cuda.nvtx.range_push("_get_ortvalues_from_torch_tensors.2")
+
         assert isinstance(max_device, int), f"unexpected type for device={max_device!r}"
         ortvalues.push_back_batch(new_tensors, data_ptrs, dtypes, shapes, devices)
         output_devices = []
@@ -449,6 +456,8 @@ class WrapInferenceSessionForTorch:
             dev = self.DEVICES[max_device]
             output_devices.append(dev)
 
+        if self.nvtx:
+            self.torch.cuda.nvtx.range_pop()
         return ortvalues, output_devices
 
     def _ortvalues_to_torch_tensor(
@@ -461,8 +470,14 @@ class WrapInferenceSessionForTorch:
         from torch._C import _from_dlpack
 
         if all(ortvalues[i].has_value() for i in range(len(ortvalues))):
+            if self.nvtx:
+                self.torch.cuda.nvtx.range_push("_ortvalues_to_torch_tensor.1")
             res = ortvalues.to_dlpacks(_from_dlpack)
+            if self.nvtx:
+                self.torch.cuda.nvtx.range_pop()
         else:
+            if self.nvtx:
+                self.torch.cuda.nvtx.range_push("_ortvalues_to_torch_tensor.2")
             res = []
             for i in range(len(ortvalues)):
                 res.append(
@@ -470,6 +485,8 @@ class WrapInferenceSessionForTorch:
                     if ortvalues[i].has_value()
                     else None
                 )
+            if self.nvtx:
+                self.torch.cuda.nvtx.range_pop()
         return tuple(res)
 
     def run(self, output_names, feeds):
@@ -512,7 +529,16 @@ class WrapInferenceSessionForTorch:
     def run_ort_inference(self, *inputs, output_names=None):
         if output_names is None:
             output_names = self.output_names
+
+        if self.nvtx:
+            self.torch.cuda.nvtx.range_push("_bind_torch_tensors")
+
         bind = self._bind_torch_tensors(inputs, output_names=output_names)
+
+        if self.nvtx:
+            self.torch.cuda.nvtx.range_pop()
+            self.torch.cuda.nvtx.range_push("run_with_iobinding")
+
         self.sess._sess.run_with_iobinding(bind, self.run_options)
         ort_vector_outputs = bind.get_outputs()
         # The function returns OrtValue, the code computing the discrepancies will
@@ -520,6 +546,9 @@ class WrapInferenceSessionForTorch:
         # DlPack mechanism should be implemented in onnxruntime
         # (not only in onnxruntime-training).
         ort_outputs = [ort_vector_outputs[i] for i in range(len(ort_vector_outputs))]
+
+        if self.nvtx:
+            self.torch.cuda.nvtx.range_pop()
         return ort_outputs
 
     def run_dlpack(self, *inputs, output_names=None):
@@ -528,6 +557,9 @@ class WrapInferenceSessionForTorch:
         ortvalues, output_devices = self._get_ortvalues_from_torch_tensors(
             inputs, len(output_names)
         )
+
+        if self.nvtx:
+            self.torch.cuda.nvtx.range_push("run_with_ortvaluevector")
 
         ort_outputs = self.ORTC.OrtValueVector()
         self.sess.run_with_ortvaluevector(
@@ -538,6 +570,10 @@ class WrapInferenceSessionForTorch:
             ort_outputs,
             output_devices,
         )
+
+        if self.nvtx:
+            self.torch.cuda.nvtx.range_pop()
+
         pth_outputs = self._ortvalues_to_torch_tensor(ort_outputs)
         return pth_outputs
 
