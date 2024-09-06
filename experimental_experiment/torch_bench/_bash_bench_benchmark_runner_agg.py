@@ -1821,11 +1821,14 @@ def merge_benchmark_reports(
         v.dropna(axis=1, how="all", inplace=True)
 
     if export_simple and "SIMPLE" in final_res:
-        if len(set(final_res["SIMPLE"]["rtopt"].dropna())) <= 1:
+        if (
+            "rtopt" in final_res["SIMPLE"].columns
+            and len(set(final_res["SIMPLE"]["rtopt"].dropna())) <= 1
+        ):
             if verbose:
                 print("[merge_benchmark_reports] drops 'rtopt' in SIMPLE")
             final_res["SIMPLE"] = final_res["SIMPLE"].drop("rtopt", axis=1)
-        elif verbose:
+        elif verbose and "rtopt" in final_res["SIMPLE"].columns:
             print(
                 f"[merge_benchmark_reports] keeps 'rtopt' in SIMPLE: "
                 f"{set(final_res['SIMPLE'].dropna())}"
