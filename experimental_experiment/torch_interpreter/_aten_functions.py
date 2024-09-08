@@ -3869,6 +3869,18 @@ def aten_mul_Tensor(
     return aten_mul(g, sts, outputs, x, y, name="mul_Tensor")
 
 
+def aten_multiply_Tensor(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    y: T,
+    name="multiply_Tensor",
+) -> T:
+    "mul"
+    return aten_mul(g, sts, outputs, x, y, name=name)
+
+
 def aten_native_dropout(
     g: GraphBuilder,
     sts: Optional[Dict[str, Any]],
@@ -4901,6 +4913,65 @@ def aten_repeat(
         else:
             g.set_rank(res, len(repeats))
     return res
+
+
+def aten_repeat_interleave(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    repeats: List[int],
+    dim: Optional[int] = None,
+    output_size: Optional[Tuple[int, ...]] = None,
+    name: str = "repeat_interleave",
+) -> T:
+    "repeat_interleave"
+    assert isinstance(dim, int), f"dim={dim} is not an integer{g.get_debug_msg()}"
+    assert output_size is None, (
+        f"Not implemented when output_size={output_size} "
+        f"is not None{g.get_debug_msg()}"
+    )
+    rkx = g.get_rank(x)
+
+    if dim < 0:
+        dim += rkx
+
+    if isinstance(dim, int) and isinstance(repeats, int):
+        assert g.has_rank(x), f"Rank for x={x!r} is needed{g.get_debug_msg()}"
+
+        unsqueezed = g.op.UnsqueezeAnyOpset(
+            x, np.array([dim + 1], dtype=np.int64), name=name
+        )
+        onehot = np.ones((rkx + 1,), dtype=np.int64)
+        onehot[dim + 1] = repeats
+        tiled = g.op("Tile", unsqueezed, onehot, name=name)
+
+        res = aten_flatten(g, sts, outputs, tiled, dim, dim + 1, name=name)
+        if not sts:
+            g.set_type(res, g.get_type(x))
+            g.set_rank(res, rkx)
+        return res
+
+    raise NotImplementedError(
+        f"Not Implemented for x={x!r}, repeats={repeats!r}, dim={dim!r}, "
+        f"output_size={output_size!r}{g.get_debug_msg()}"
+    )
+
+
+def aten_repeat_interleave_self_int(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    repeats: List[int],
+    dim: Optional[int] = None,
+    output_size: Optional[Tuple[int, ...]] = None,
+    name: str = "repeat_interleave_self_int",
+) -> T:
+    "repeat_interleave_self_int"
+    return aten_repeat_interleave(
+        g, sts, outputs, x, repeats, dim, output_size, name=name
+    )
 
 
 def aten_roll(
