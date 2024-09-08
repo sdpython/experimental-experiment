@@ -2126,23 +2126,22 @@ def aten_flatten(
     x: T,
     start_dim: int = 1,
     end_dim: int = -1,
+    name: str = "flatten",
 ) -> T:
     "flatten"
     if start_dim != 0:
         if start_dim == 1 and end_dim == -1:
-            shape = g.op.Shape(x, name="flatten")
+            shape = g.op.Shape(x, name=name)
             take = g.op.GatherElements(
-                shape, np.array([0], dtype=np.int64), axis=0, name="flatten"
+                shape, np.array([0], dtype=np.int64), axis=0, name=name
             )
-            resh = g.op.Concat(
-                take, np.array([-1], dtype=np.int64), axis=0, name="flatten"
-            )
-            return g.op.Reshape(x, resh, outputs=outputs, name="flatten")
+            resh = g.op.Concat(take, np.array([-1], dtype=np.int64), axis=0, name=name)
+            return g.op.Reshape(x, resh, outputs=outputs, name=name)
         raise NotImplementedError(
-            f"start_dim={start_dim}, end_dim={end_dim} not supported."
+            f"start_dim={start_dim}, end_dim={end_dim} not supported{g.get_debug_msg()}"
         )
     if end_dim == -1:
-        return g.make_node("Flatten", [x], outputs, name="flatten")
+        return g.make_node("Flatten", [x], outputs, name=name)
     res = g.make_node("Flatten", [x], outputs, to=end_dim)
     if not sts:
         g.set_type(res, g.get_type(x))
@@ -4933,9 +4932,6 @@ def aten_repeat_interleave(
     )
     rkx = g.get_rank(x)
 
-    if dim < 0:
-        dim += rkx
-
     if isinstance(dim, int) and isinstance(repeats, int):
         assert g.has_rank(x), f"Rank for x={x!r} is needed{g.get_debug_msg()}"
 
@@ -4944,9 +4940,19 @@ def aten_repeat_interleave(
         )
         onehot = np.ones((rkx + 1,), dtype=np.int64)
         onehot[dim + 1] = repeats
-        tiled = g.op("Tile", unsqueezed, onehot, name=name)
+        tiled = g.op.Tile(unsqueezed, onehot, name=name)
 
-        res = aten_flatten(g, sts, outputs, tiled, dim, dim + 1, name=name)
+        if dim < -1:
+            dim += rkx
+        res = aten_flatten(
+            g,
+            sts,
+            outputs,
+            tiled,
+            -2 if dim == -1 else dim,
+            -1 if dim == -1 else (dim + 1),
+            name=name,
+        )
         if not sts:
             g.set_type(res, g.get_type(x))
             g.set_rank(res, rkx)
