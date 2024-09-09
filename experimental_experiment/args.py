@@ -9,6 +9,12 @@ def check_cuda_availability():
     Calls `nvidia-smi`.
     """
     try:
+        import torch
+
+        return torch.cuda.is_available()
+    except ImportError:
+        pass
+    try:
         result = subprocess.run(["nvidia-smi"], capture_output=True, text=True)
         if result.returncode == 0:
             return True
