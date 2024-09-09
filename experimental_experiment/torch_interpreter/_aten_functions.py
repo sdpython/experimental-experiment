@@ -198,8 +198,17 @@ def aten_any(
         if shape in (tuple(), (1,)):
             return g.op.Cast(x, to=TensorProto.BOOL, name=name, outputs=outputs)
 
-    self_bool = g.op.Cast(x, to=TensorProto.BOOL, name=name)
-    res = g.op.ReduceMax(self_bool, keepdims=0, name=name, outputs=outputs)
+    if g.main_opset >= 20:
+        self_bool = g.op.Cast(x, to=TensorProto.BOOL, name=name)
+        res = g.op.ReduceMax(self_bool, keepdims=0, name=name, outputs=outputs)
+    else:
+        self_int = g.op.Cast(x, to=TensorProto.INT32, name=name)
+        res = g.op.Cast(
+            g.op.ReduceMax(self_int, keepdims=0, name=name),
+            to=TensorProto.BOOL,
+            outputs=outputs,
+        )
+
     if not sts:
         g.set_type(res, TensorProto.BOOL)
         g.set_shape(res, tuple())
@@ -887,18 +896,26 @@ def aten_clamp_Tensor(
     x: T,
     min_t: Optional[T],
     max_t: Optional[T],
-    name: str = "clamp",
+    name: str = "clamp_Tensor",
 ) -> T:
     """clip"""
     assert (
         min_t is not None or max_t is not None
     ), f"Not implemented yet when min_t or max_t is None{g.get_debug_msg()}"
 
-    if max_t is None:
+    if min_t is None:
+        if g.get_type(max_t) != g.get_type(x):
+            max_t = g.op.Cast(max_t, to=g.get_type(x), name=name)
         res = g.op.Clip(x, max_t, outputs=outputs, name=name)
-    elif min is None:
+    elif max_t is None:
+        if g.get_type(min_t) != g.get_type(x):
+            min_t = g.op.Cast(min_t, to=g.get_type(x), name=name)
         res = g.op.Clip(x, None, min_t, outputs=outputs, name=name)
     else:
+        if g.get_type(min_t) != g.get_type(x):
+            min_t = g.op.Cast(min_t, to=g.get_type(x), name=name)
+        if g.get_type(max_t) != g.get_type(x):
+            max_t = g.op.Cast(max_t, to=g.get_type(x), name=name)
         res = g.op.Clip(x, min_t, max_t, outputs=outputs, name=name)
     if not sts:
         set_type_shape_unary_op(g, res, x)
@@ -3033,7 +3050,13 @@ def aten_isinf(
     name: str = "isinf",
 ) -> T:
     "isinf"
-    res = g.op.IsInf(x, outputs=outputs, name=name)
+    if g.main_opset >= 20 or g.get_type(x) in {TensorProto.FLOAT, TensorProto.DOUBLE}:
+        res = g.op.IsInf(x, outputs=outputs, name=name)
+    else:
+        # opset < 20, IsInf only supports float32, float64.
+        res = g.op.IsInf(
+            g.op.Cast(x, to=TensorProto.FLOAT, name=name), outputs=outputs, name=name
+        )
     if not sts:
         set_type_shape_unary_op(g, res, x, itype=TensorProto.BOOL)
     return res
@@ -7069,7 +7092,12 @@ def aten_where_Scalar(
     other: T,
     name: str = "where_Scalar",
 ) -> T:
-    """where"""
+    """
+    where
+
+    This function may introduce some type issues when 'x' and 'other' are both floats.
+    Implicit cast may be done by torch. Checks what happens after this node.
+    """
     if (
         isinstance(x, float)
         and isinstance(other, float)
