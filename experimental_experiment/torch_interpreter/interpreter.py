@@ -54,7 +54,8 @@ class DynamoInterpreter:
             example_inputs, tuple
         ), f"Unexpected type for example_inputs {type(example_inputs)}"
         assert example_inputs is None or all(
-            (t is None or isinstance(t, torch.Tensor)) for t in example_inputs
+            (t is None or isinstance(t, (torch.SymInt, torch.SymFloat, torch.Tensor)))
+            for t in example_inputs
         ), (
             f"Unexpected type for one input in example_inputs "
             f"{[type(t) for t in example_inputs]}"
