@@ -924,7 +924,8 @@ class TestGraphPatternBuilder(ExtTestCase):
 
                 ref2 = ExtendedReferenceEvaluator(opt_onx)
                 got = ref2.run(None, feeds)
-                np.testing.assert_allclose(expected[0], got[0], atol=1e-5)
+                # desired is the second input
+                np.testing.assert_allclose(got[0], expected[0], atol=1e-5)
 
     def test_simple_rotary_left(self):
         self._simple_rotary("left")
@@ -1090,7 +1091,8 @@ class TestGraphPatternBuilder(ExtTestCase):
                 expected = ref1.run(None, feeds)
                 ref2 = ExtendedReferenceEvaluator(opt_onx)
                 got = ref2.run(None, feeds)
-                np.testing.assert_allclose(expected[0], got[0])
+                # desired is the second input
+                np.testing.assert_allclose(got[0], expected[0])
 
 
 if __name__ == "__main__":

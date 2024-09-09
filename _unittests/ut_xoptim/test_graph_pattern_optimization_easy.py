@@ -77,7 +77,8 @@ class TestGraphPatternOptimizationEasy(ExtTestCase):
         got = opt.run(None, feeds)
         self.assertEqual(len(expected), len(got))
         for a, b in zip(expected, got):
-            np.testing.assert_allclose(a, b, atol=atol, rtol=rtol)
+            # desired is the second input
+            np.testing.assert_allclose(b, a, atol=atol, rtol=rtol)
 
     def test_softmax_cross_entropy_loss_cast(self):
         models = [

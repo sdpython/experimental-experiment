@@ -198,8 +198,17 @@ def aten_any(
         if shape in (tuple(), (1,)):
             return g.op.Cast(x, to=TensorProto.BOOL, name=name, outputs=outputs)
 
-    self_bool = g.op.Cast(x, to=TensorProto.BOOL, name=name)
-    res = g.op.ReduceMax(self_bool, keepdims=0, name=name, outputs=outputs)
+    if g.main_opset >= 20:
+        self_bool = g.op.Cast(x, to=TensorProto.BOOL, name=name)
+        res = g.op.ReduceMax(self_bool, keepdims=0, name=name, outputs=outputs)
+    else:
+        self_int = g.op.Cast(x, to=TensorProto.INT32, name=name)
+        res = g.op.Cast(
+            g.op.ReduceMax(self_int, keepdims=0, name=name),
+            to=TensorProto.BOOL,
+            outputs=outputs,
+        )
+
     if not sts:
         g.set_type(res, TensorProto.BOOL)
         g.set_shape(res, tuple())
@@ -887,18 +896,26 @@ def aten_clamp_Tensor(
     x: T,
     min_t: Optional[T],
     max_t: Optional[T],
-    name: str = "clamp",
+    name: str = "clamp_Tensor",
 ) -> T:
     """clip"""
     assert (
         min_t is not None or max_t is not None
     ), f"Not implemented yet when min_t or max_t is None{g.get_debug_msg()}"
 
-    if max_t is None:
+    if min_t is None:
+        if g.get_type(max_t) != g.get_type(x):
+            max_t = g.op.Cast(max_t, to=g.get_type(x), name=name)
         res = g.op.Clip(x, max_t, outputs=outputs, name=name)
-    elif min is None:
+    elif max_t is None:
+        if g.get_type(min_t) != g.get_type(x):
+            min_t = g.op.Cast(min_t, to=g.get_type(x), name=name)
         res = g.op.Clip(x, None, min_t, outputs=outputs, name=name)
     else:
+        if g.get_type(min_t) != g.get_type(x):
+            min_t = g.op.Cast(min_t, to=g.get_type(x), name=name)
+        if g.get_type(max_t) != g.get_type(x):
+            max_t = g.op.Cast(max_t, to=g.get_type(x), name=name)
         res = g.op.Clip(x, min_t, max_t, outputs=outputs, name=name)
     if not sts:
         set_type_shape_unary_op(g, res, x)
@@ -2126,23 +2143,33 @@ def aten_flatten(
     x: T,
     start_dim: int = 1,
     end_dim: int = -1,
+    name: str = "flatten",
 ) -> T:
     "flatten"
+    if start_dim < 0:
+        assert g.has_rank(
+            x
+        ), f"Current implementation requires rank of {x!r}{g.get_debug_msg()}"
+        rk = g.get_rank(x)
+        start_dim += rk
     if start_dim != 0:
+        if g.has_rank(x):
+            rk = g.get_rank(x)
+            if end_dim == rk - 1:
+                end_dim = -1
         if start_dim == 1 and end_dim == -1:
-            shape = g.op.Shape(x, name="flatten")
+            shape = g.op.Shape(x, name=name)
             take = g.op.GatherElements(
-                shape, np.array([0], dtype=np.int64), axis=0, name="flatten"
+                shape, np.array([0], dtype=np.int64), axis=0, name=name
             )
-            resh = g.op.Concat(
-                take, np.array([-1], dtype=np.int64), axis=0, name="flatten"
-            )
-            return g.op.Reshape(x, resh, outputs=outputs, name="flatten")
+            resh = g.op.Concat(take, np.array([-1], dtype=np.int64), axis=0, name=name)
+            return g.op.Reshape(x, resh, outputs=outputs, name=name)
         raise NotImplementedError(
-            f"start_dim={start_dim}, end_dim={end_dim} not supported."
+            f"x={x!r}, start_dim={start_dim}, end_dim={end_dim} "
+            f"not supported{g.get_debug_msg()}"
         )
     if end_dim == -1:
-        return g.make_node("Flatten", [x], outputs, name="flatten")
+        return g.make_node("Flatten", [x], outputs, name=name)
     res = g.make_node("Flatten", [x], outputs, to=end_dim)
     if not sts:
         g.set_type(res, g.get_type(x))
@@ -3023,7 +3050,13 @@ def aten_isinf(
     name: str = "isinf",
 ) -> T:
     "isinf"
-    res = g.op.IsInf(x, outputs=outputs, name=name)
+    if g.main_opset >= 20 or g.get_type(x) in {TensorProto.FLOAT, TensorProto.DOUBLE}:
+        res = g.op.IsInf(x, outputs=outputs, name=name)
+    else:
+        # opset < 20, IsInf only supports float32, float64.
+        res = g.op.IsInf(
+            g.op.Cast(x, to=TensorProto.FLOAT, name=name), outputs=outputs, name=name
+        )
     if not sts:
         set_type_shape_unary_op(g, res, x, itype=TensorProto.BOOL)
     return res
@@ -3867,6 +3900,18 @@ def aten_mul_Tensor(
 ) -> T:
     "mul"
     return aten_mul(g, sts, outputs, x, y, name="mul_Tensor")
+
+
+def aten_multiply_Tensor(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    y: T,
+    name="multiply_Tensor",
+) -> T:
+    "mul"
+    return aten_mul(g, sts, outputs, x, y, name=name)
 
 
 def aten_native_dropout(
@@ -4901,6 +4946,72 @@ def aten_repeat(
         else:
             g.set_rank(res, len(repeats))
     return res
+
+
+def aten_repeat_interleave(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    repeats: List[int],
+    dim: Optional[int] = None,
+    output_size: Optional[Tuple[int, ...]] = None,
+    name: str = "repeat_interleave",
+) -> T:
+    "repeat_interleave"
+    assert isinstance(dim, int), f"dim={dim} is not an integer{g.get_debug_msg()}"
+    assert output_size is None, (
+        f"Not implemented when output_size={output_size} "
+        f"is not None{g.get_debug_msg()}"
+    )
+    assert g.has_rank(x), f"Rank for x={x!r} is needed{g.get_debug_msg()}"
+    rkx = g.get_rank(x)
+
+    if isinstance(dim, int) and isinstance(repeats, int):
+        pos_dim = (dim + rkx) % rkx
+        unsqueezed = g.op.UnsqueezeAnyOpset(
+            x, np.array([pos_dim + 1], dtype=np.int64), name=name
+        )
+        onehot = np.ones((rkx + 1,), dtype=np.int64)
+        onehot[pos_dim + 1] = repeats
+        tiled = g.op.Tile(unsqueezed, onehot, name=name)
+
+        if dim < -1:
+            dim += rkx
+        res = aten_flatten(
+            g,
+            sts,
+            outputs,
+            tiled,
+            -2 if dim == -1 else dim,
+            -1 if dim == -1 else (dim + 1),
+            name=name,
+        )
+        if not sts:
+            g.set_type(res, g.get_type(x))
+            g.set_rank(res, rkx)
+        return res
+
+    raise NotImplementedError(
+        f"Not Implemented for x={x!r}, repeats={repeats!r}, dim={dim!r}, "
+        f"output_size={output_size!r}{g.get_debug_msg()}"
+    )
+
+
+def aten_repeat_interleave_self_int(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    repeats: List[int],
+    dim: Optional[int] = None,
+    output_size: Optional[Tuple[int, ...]] = None,
+    name: str = "repeat_interleave_self_int",
+) -> T:
+    "repeat_interleave_self_int"
+    return aten_repeat_interleave(
+        g, sts, outputs, x, repeats, dim, output_size, name=name
+    )
 
 
 def aten_roll(
@@ -6981,7 +7092,12 @@ def aten_where_Scalar(
     other: T,
     name: str = "where_Scalar",
 ) -> T:
-    """where"""
+    """
+    where
+
+    This function may introduce some type issues when 'x' and 'other' are both floats.
+    Implicit cast may be done by torch. Checks what happens after this node.
+    """
     if (
         isinstance(x, float)
         and isinstance(other, float)

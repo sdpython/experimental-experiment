@@ -1520,6 +1520,26 @@ class TestOperatorsCort(ExtTestCase):
             onnx_export=inspect.currentframe().f_code.co_name,
         )
 
+    def test_repeat_interleave_int_1(self):
+        x = torch.tensor([[1, 2], [3, 4]])
+        self.assertONNX(
+            lambda x: torch.repeat_interleave(x, 3, dim=1),
+            x,
+            onnx_export=inspect.currentframe().f_code.co_name,
+            atol=1e-4,
+            test_backward=False,
+        )
+
+    def test_repeat_interleave_int_last(self):
+        x = torch.tensor([[1, 2], [3, 4]])
+        self.assertONNX(
+            lambda x: torch.repeat_interleave(x, 3, dim=-1),
+            x,
+            onnx_export=inspect.currentframe().f_code.co_name,
+            atol=1e-4,
+            test_backward=False,
+        )
+
     def test_norm_p1(self):
         x = torch.randn(1, 2, 3, 4, requires_grad=True)
         self.assertONNX(

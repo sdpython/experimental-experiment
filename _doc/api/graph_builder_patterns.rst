@@ -7,108 +7,95 @@ Optimization Patterns
 Onnx (default) Patterns
 =======================
 
-.. autoclass:: experimental_experiment.xoptim.patterns.CastPattern
+.. automodule:: experimental_experiment.xoptim.patterns.onnx_any
+    :members:
 
-.. autoclass:: experimental_experiment.xoptim.patterns.CastCastBinaryPattern
+.. automodule:: experimental_experiment.xoptim.patterns.onnx_cast
+    :members:
 
-.. autoclass:: experimental_experiment.xoptim.patterns.CastOpCastPattern
+.. automodule:: experimental_experiment.xoptim.patterns.onnx_dropout
+    :members:
 
-.. autoclass:: experimental_experiment.xoptim.patterns.ComputationCastOpCastPattern
+.. automodule:: experimental_experiment.xoptim.patterns.onnx_equal
+    :members:
 
-.. autoclass:: experimental_experiment.xoptim.patterns.ExpandPattern
+.. automodule:: experimental_experiment.xoptim.patterns.onnx_expand
+    :members:
 
-.. autoclass:: experimental_experiment.xoptim.patterns.ExpandBroadcastPattern
+.. automodule:: experimental_experiment.xoptim.patterns.onnx_functions
+    :members:
 
-.. autoclass:: experimental_experiment.xoptim.patterns.ExpandSwapPattern
+.. automodule:: experimental_experiment.xoptim.patterns.onnx_functions
+    :members:
 
-.. autoclass:: experimental_experiment.xoptim.patterns.IdentityPattern
+.. automodule:: experimental_experiment.xoptim.patterns.onnx_layer_normalization
+    :members:
 
-.. autoclass:: experimental_experiment.xoptim.patterns.MatMulReshape2Of3Pattern
+.. automodule:: experimental_experiment.xoptim.patterns.onnx_matmul
+    :members:
 
-.. autoclass:: experimental_experiment.xoptim.patterns.MulMulMulScalarPattern
+.. automodule:: experimental_experiment.xoptim.patterns.onnx_mul
+    :members:
 
-.. autoclass:: experimental_experiment.xoptim.patterns.ReduceReshapePattern
+.. automodule:: experimental_experiment.xoptim.patterns.onnx_reduce
+    :members:
 
-.. autoclass:: experimental_experiment.xoptim.patterns.ReduceSumNormalizePattern
+.. automodule:: experimental_experiment.xoptim.patterns.onnx_reshape
+    :members:
 
-.. autoclass:: experimental_experiment.xoptim.patterns.ReshapeMatMulReshapePattern
+.. automodule:: experimental_experiment.xoptim.patterns.onnx_rotary
+    :members:
 
-.. autoclass:: experimental_experiment.xoptim.patterns.Reshape2Of3Pattern
+.. automodule:: experimental_experiment.xoptim.patterns.onnx_split
+    :members:
 
-.. autoclass:: experimental_experiment.xoptim.patterns.ReshapeReshapeBinaryPattern
+.. automodule:: experimental_experiment.xoptim.patterns.onnx_sub
+    :members:
 
-.. autoclass:: experimental_experiment.xoptim.patterns.ReshapeReshapePattern
+.. automodule:: experimental_experiment.xoptim.patterns.onnx_transpose
+    :members:
 
-.. autoclass:: experimental_experiment.xoptim.patterns.RotaryConcatPartPattern
-
-.. autoclass:: experimental_experiment.xoptim.patterns.SameChildrenPattern
-
-.. autoclass:: experimental_experiment.xoptim.patterns.SlicesSplitPattern
-
-.. autoclass:: experimental_experiment.xoptim.patterns.Sub1MulPattern
-
-.. autoclass:: experimental_experiment.xoptim.patterns.SwitchOrderBinaryPattern
-
-.. autoclass:: experimental_experiment.xoptim.patterns.TransposeMatMulPattern
-
-.. autoclass:: experimental_experiment.xoptim.patterns.TransposeReshapeMatMulPattern
-
-.. autoclass:: experimental_experiment.xoptim.patterns.TransposeTransposePattern
-
-.. autoclass:: experimental_experiment.xoptim.patterns.UnsqueezeEqualPattern
-
-.. autoclass:: experimental_experiment.xoptim.patterns.UnsqueezeUnsqueezePattern
+.. automodule:: experimental_experiment.xoptim.patterns.onnx_unsqueeze
+    :members:
 
 Custom Op Patterns
 ==================
 
-.. autoclass:: experimental_experiment.xoptim.patterns_fix.add_reduction_scatter_nd.AddReductionScatterND
+.. automodule:: experimental_experiment.xoptim.patterns_exp.binary_operators
+    :members:
 
-.. autoclass:: experimental_experiment.xoptim.patterns_exp.binary_operators.AddAddMulMulPattern
+.. automodule:: experimental_experiment.xoptim.patterns_exp.constant_of_shape_scatter_nd
+    :members:
 
-.. autoclass:: experimental_experiment.xoptim.patterns_exp.binary_operators.AddMulPattern
+.. automodule:: experimental_experiment.xoptim.patterns_exp.constants
+    :members:
 
-.. autoclass:: experimental_experiment.xoptim.patterns_exp.binary_operators.AddMulBroadcastPattern
+.. automodule:: experimental_experiment.xoptim.patterns_exp.simple_rotary
+    :members:
 
-.. autoclass:: experimental_experiment.xoptim.patterns_exp.binary_operators.AddMulSharedInputPattern
+.. automodule:: experimental_experiment.xoptim.patterns_exp.unary_operators
+    :members:
 
-.. autoclass:: experimental_experiment.xoptim.patterns_exp.binary_operators.AddMulSharedInputBroadcastPattern
-
-.. autoclass:: experimental_experiment.xoptim.patterns_exp.binary_operators.AddMulTransposePattern
-
-.. autoclass:: experimental_experiment.xoptim.patterns_exp.constant_of_shape_scatter_nd.ConstantOfShapeScatterNDPattern
-
-.. autoclass:: experimental_experiment.xoptim.patterns_exp.constant_of_shape_scatter_nd.MaskedShapeScatterNDPattern
-
-.. autoclass:: experimental_experiment.xoptim.patterns_exp.binary_operators.MulSigmoidPattern
-
-.. autoclass:: experimental_experiment.xoptim.patterns_exp.binary_operators.NegXplus1Pattern
-
-.. autoclass:: experimental_experiment.xoptim.patterns_exp.where_replace.ReplaceZeroPattern
-
-.. autoclass:: experimental_experiment.xoptim.patterns_exp.simple_rotary.SimpleRotaryPattern
-
-.. autoclass:: experimental_experiment.xoptim.patterns_exp.binary_operators.SubMulPattern
-
-.. autoclass:: experimental_experiment.xoptim.patterns_exp.binary_operators.SubMulBroadcastPattern
-
-.. autoclass:: experimental_experiment.xoptim.patterns_exp.unary_operators.TransposeCastPattern
-
-.. autoclass:: experimental_experiment.xoptim.patterns_exp.constants.TriMatrixPattern
+.. automodule:: experimental_experiment.xoptim.patterns_exp.where_replace
+    :members:
 
 .. _l-pattern-optimization-ort:
 
 Ort Patterns
 ============
 
-.. autoclass:: experimental_experiment.xoptim.patterns_ort.fused_matmul.FusedMatMulPattern
+.. automodule:: experimental_experiment.xoptim.patterns_ort.activation_grad
+    :members:
 
-.. autoclass:: experimental_experiment.xoptim.patterns_ort.fused_matmul.FusedMatMulx2Pattern
+.. automodule:: experimental_experiment.xoptim.patterns_ort.activations
+    :members:
 
-.. autoclass:: experimental_experiment.xoptim.patterns_ort.fused_matmul.FusedMatMulTransposePattern
+.. automodule:: experimental_experiment.xoptim.patterns_ort.fused_matmul
+    :members:
 
-.. autoclass:: experimental_experiment.xoptim.patterns_ort.gather_grad.GatherGradPattern
+.. automodule:: experimental_experiment.xoptim.patterns_ort.gather_grad
+    :members:
 
-.. autoclass:: experimental_experiment.xoptim.patterns_ort.simplified_layer_normalization.SimplifiedLayerNormalizationPattern
+.. automodule:: experimental_experiment.xoptim.patterns_ort.simplified_layer_normalization
+    :members:
 
-.. autoclass:: experimental_experiment.xoptim.patterns_ort.activation_grad.SoftmaxGradPattern

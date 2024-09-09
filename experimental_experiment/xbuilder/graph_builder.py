@@ -8,6 +8,7 @@ from typing import (
     Any,
     Dict,
     Generator,
+    Iterable,
     Iterator,
     List,
     Optional,
@@ -216,6 +217,8 @@ class GraphBuilder:
         self.time_evaluation_constants_ = 0
         self.statistics_ = {}
         self.constraints_ = {}
+        self._registered_users = {}
+        self.was_inputs_renamed = input_names is not None and input_names
 
         if self.dynamic_shapes:
             for input_name, v in self.dynamic_shapes.items():
@@ -1998,8 +2001,18 @@ class GraphBuilder:
             ), f"Unexpected type {type(d)} in shape={shape}{self.get_debug_msg()}"
         return tuple(new_shape)
 
+    def register_users(self, name: str, users: Iterable[str]):
+        """
+        Registers users. This is not used except to check the conversion
+        is valid.
+        """
+        assert (
+            name not in self._registered_users
+        ), f"{name!r} is already registered{self.get_debug_msg()}"
+        self._registered_users[name] = set(users)
+
     def make_tensor_input(
-        self, name: str, elem_type: Any, shape: STATIC_SHAPE, is_dimension: bool
+        self, name: str, elem_type: Any, shape: DYNAMIC_SHAPE, is_dimension: bool
     ) -> str:
         """
         Adds a tensor input to the onnx graph.
@@ -3064,6 +3077,11 @@ class GraphBuilder:
             k: v for k, v in self._known_ranks.items() if k not in self._known_shapes
         }
         rows.append(f"_known_ranks={pprint.pformat(reminaing_ranks )[:10000]}")
+
+        rows.append("--TORCH-USERS--")
+        for k, v in sorted(self._registered_users.items()):
+            rows.append(f"{k} -> {v}")
+
         rows.append("--TORCH-SHAPES--")
         for kk, vv in self._known_torch_value.items():
             rows.append(
