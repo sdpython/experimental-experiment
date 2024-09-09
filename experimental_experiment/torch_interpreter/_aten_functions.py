@@ -2129,7 +2129,17 @@ def aten_flatten(
     name: str = "flatten",
 ) -> T:
     "flatten"
+    if start_dim < 0:
+        assert g.has_rank(
+            x
+        ), f"Current implementation requires rank of {x!r}{g.get_debug_msg()}"
+        rk = g.get_rank(x)
+        start_dim += rk
     if start_dim != 0:
+        if g.has_rank(x):
+            rk = g.get_rank(x)
+            if end_dim == rk - 1:
+                end_dim = -1
         if start_dim == 1 and end_dim == -1:
             shape = g.op.Shape(x, name=name)
             take = g.op.GatherElements(
@@ -2138,7 +2148,8 @@ def aten_flatten(
             resh = g.op.Concat(take, np.array([-1], dtype=np.int64), axis=0, name=name)
             return g.op.Reshape(x, resh, outputs=outputs, name=name)
         raise NotImplementedError(
-            f"start_dim={start_dim}, end_dim={end_dim} not supported{g.get_debug_msg()}"
+            f"x={x!r}, start_dim={start_dim}, end_dim={end_dim} "
+            f"not supported{g.get_debug_msg()}"
         )
     if end_dim == -1:
         return g.make_node("Flatten", [x], outputs, name=name)
@@ -4930,16 +4941,16 @@ def aten_repeat_interleave(
         f"Not implemented when output_size={output_size} "
         f"is not None{g.get_debug_msg()}"
     )
+    assert g.has_rank(x), f"Rank for x={x!r} is needed{g.get_debug_msg()}"
     rkx = g.get_rank(x)
 
     if isinstance(dim, int) and isinstance(repeats, int):
-        assert g.has_rank(x), f"Rank for x={x!r} is needed{g.get_debug_msg()}"
-
+        pos_dim = (dim + rkx) % rkx
         unsqueezed = g.op.UnsqueezeAnyOpset(
-            x, np.array([dim + 1], dtype=np.int64), name=name
+            x, np.array([pos_dim + 1], dtype=np.int64), name=name
         )
         onehot = np.ones((rkx + 1,), dtype=np.int64)
-        onehot[dim + 1] = repeats
+        onehot[pos_dim + 1] = repeats
         tiled = g.op.Tile(unsqueezed, onehot, name=name)
 
         if dim < -1:
