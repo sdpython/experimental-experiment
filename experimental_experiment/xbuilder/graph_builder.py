@@ -218,6 +218,7 @@ class GraphBuilder:
         self.statistics_ = {}
         self.constraints_ = {}
         self._registered_users = {}
+        self.was_inputs_renamed = input_names is not None and input_names
 
         if self.dynamic_shapes:
             for input_name, v in self.dynamic_shapes.items():

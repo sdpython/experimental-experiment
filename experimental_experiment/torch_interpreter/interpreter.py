@@ -185,9 +185,10 @@ class DynamoInterpreter:
         is_dimension: bool,
         users: Iterable[str],
     ) -> str:
-        if self.example_inputs_ is not None:
+        if self.example_inputs_ is not None and not self.builder.was_inputs_renamed:
             assert len(self.builder.input_names) < len(self.example_inputs_), (
                 f"Too many inputs already ({len(self.builder.input_names)}), "
+                f"self.current_input_={self.current_input_}, "
                 f"unexpected {name!r} "
                 f"after {self.builder.input_names}"
                 f"{self.builder.get_debug_msg()}"
