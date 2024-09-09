@@ -3914,6 +3914,30 @@ class GraphBuilder:
             return [a / b]
         raise AssertionError(f"{node.op_type!r} not implemented")
 
+    def _apply_where(
+        self,
+        node: NodeProto,
+        feeds: Dict[str, "torch.Tensor"],  # noqa: F821
+    ) -> "torch.Tensor":  # noqa: F821
+        x = feeds[node.input[0]]
+        new_feeds = {}
+        for k, v in feeds.items():
+            if isinstance(v, np.ndarray):
+                # Type conversion between numpy and torch is not robust.
+                itype = dtype_to_tensor_dtype(v.dtype)
+                ttype = onnx_dtype_to_torch_dtype(itype)
+                x = self.torch.Tensor(v).to(ttype)
+                assert "FakeTensor" not in str(type(x)), (
+                    f"FakeTensor {node.output[0]!r} cannot be a constant {type(x)}, "
+                    f"node.op_type={node.op_type!r}, type={self.torch.Tensor}"
+                    f"{self.get_debug_msg()}"
+                )
+                new_feeds[k] = x
+            else:
+                new_feeds[k] = v
+        y = self.torch.where(*[new_feeds[k] for k in node.input])
+        return [y]
+
     def compute_constant(
         self, name: str, exc: bool = True, only_array: bool = False
     ) -> Tuple[np.ndarray, Optional[Dict[str, np.ndarray]]]:
@@ -3979,6 +4003,9 @@ class GraphBuilder:
             elif v.op_type in {"Sqrt"}:
                 # bypassing onnx.numpy_helper.from_array, too slow
                 output = self._apply_unary_function(v, feeds)
+            elif v.op_type in {"Where"}:
+                # bypassing onnx.numpy_helper.from_array, too slow
+                output = self._apply_where(v, feeds)
             elif all(isinstance(v, np.ndarray) for v in feeds.values()):
                 # Let's avoid big computation on CPU.
                 max_dim = 0
