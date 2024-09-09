@@ -25,9 +25,6 @@ Onnx (default) Patterns
 .. automodule:: experimental_experiment.xoptim.patterns.onnx_functions
     :members:
 
-.. automodule:: experimental_experiment.xoptim.patterns.onnx_functions
-    :members:
-
 .. automodule:: experimental_experiment.xoptim.patterns.onnx_layer_normalization
     :members:
 
@@ -87,7 +84,7 @@ Ort Patterns
 .. automodule:: experimental_experiment.xoptim.patterns_ort.activation_grad
     :members:
 
-.. automodule:: experimental_experiment.xoptim.patterns_ort.activations
+.. automodule:: experimental_experiment.xoptim.patterns_ort.activation
     :members:
 
 .. automodule:: experimental_experiment.xoptim.patterns_ort.fused_matmul

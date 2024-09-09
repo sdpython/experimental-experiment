@@ -65,7 +65,7 @@ parsed_args = get_parsed_args(
     check=(0, "just check the script is working, ignores all other parameters"),
     config=("medium", "configuration to use, default or medium"),
     patterns=(
-        "none,default,default+onnxruntime, default+onnxruntime+experimental",
+        "none,default,default+onnxruntime,default+onnxruntime+experimental",
         "optimization patterns to use",
     ),
     implementation=("eager", "eager or sdpa or both values comma separated value"),
@@ -98,7 +98,7 @@ from experimental_experiment.ext_test_case import unit_test_going
 from experimental_experiment.bench_run import run_benchmark, get_machine, BenchmarkError
 
 script_name = "experimental_experiment.torch_bench.dort_bench"
-machine = {} if unit_test_going() else get_machine()
+machine = {} if unit_test_going() else get_machine(False)
 
 
 repeat = parsed_args.repeat

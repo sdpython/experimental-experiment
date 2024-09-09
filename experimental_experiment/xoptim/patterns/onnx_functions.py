@@ -82,7 +82,7 @@ class GeluPattern(EasyPatternOptimization):
 
 class SoftmaxCrossEntropyLossCastPattern(EasyPatternOptimization):
     """
-    Detects one decomposed version of SoftmaxCrossEntropyLoss
+    Detects one decomposed version of SoftmaxCrossEntropyLoss.
     """
 
     def __init__(

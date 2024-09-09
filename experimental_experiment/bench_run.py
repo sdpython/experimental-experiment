@@ -44,7 +44,9 @@ def get_processor_name():
     raise AssertionError("get_process_name not implemented on this platform.")
 
 
-def get_machine() -> Dict[str, Union[str, int, float, Tuple[int, int]]]:
+def get_machine(
+    capability_as_str: bool = True,
+) -> Dict[str, Union[str, int, float, Tuple[int, int]]]:
     """Returns the machine specifications."""
     arch = platform.architecture()
     config: Dict[str, Union[str, int, float, Tuple[int, int]]] = dict(
@@ -68,7 +70,11 @@ def get_machine() -> Dict[str, Union[str, int, float, Tuple[int, int]]]:
 
     config["has_cuda"] = bool(torch.cuda.is_available())
     if config["has_cuda"]:
-        config["capability"] = ".".join(map(str, torch.cuda.get_device_capability(0)))
+        config["capability"] = (
+            ".".join(map(str, torch.cuda.get_device_capability(0)))
+            if capability_as_str
+            else torch.cuda.get_device_capability(0)
+        )
         config["device_name"] = str(torch.cuda.get_device_name(0))
     return config
 
