@@ -383,7 +383,11 @@ def _make_builder_interpreter(
     from .interpreter import DynamoInterpreter
 
     interpreter = DynamoInterpreter(
-        builder, retrieve, dispatcher=dispatcher, use_dynamo=use_dynamo
+        builder,
+        retrieve,
+        dispatcher=dispatcher,
+        use_dynamo=use_dynamo,
+        example_inputs=args,
     )
     return graph_module, builder, interpreter
 

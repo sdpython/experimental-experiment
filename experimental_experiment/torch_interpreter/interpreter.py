@@ -2,10 +2,10 @@ import inspect
 import operator
 import pprint
 import types
-from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple, Union
 import numpy as np
 from onnx import TensorProto
-from ..xbuilder._shape_helper import all_int
+from ..xbuilder._shape_helper import all_int, DYNAMIC_SHAPE
 from ..xbuilder._helper import make_hash
 from ..xbuilder._dtype_helper import (
     torch_dtype_to_onnx_dtype,
@@ -40,6 +40,7 @@ class DynamoInterpreter:
         retriever: Callable,
         dispatcher: Optional["Dispatcher"] = None,  # noqa: F821
         use_dynamo: bool = False,
+        example_inputs: Optional[Tuple["torch.Tensor", ...]] = None,  # noqa: F821
     ):
         import torch
 
@@ -49,6 +50,17 @@ class DynamoInterpreter:
         self.dispatcher = dispatcher
         self.use_dynamo = (use_dynamo,)
         self.example_values_ = {}
+        assert example_inputs is None or isinstance(
+            example_inputs, tuple
+        ), f"Unexpected type for example_inputs {type(example_inputs)}"
+        assert example_inputs is None or all(
+            (t is None or isinstance(t, torch.Tensor)) for t in example_inputs
+        ), (
+            f"Unexpected type for one input in example_inputs "
+            f"{[type(t) for t in example_inputs]}"
+        )
+        self.example_inputs_ = example_inputs
+        self.current_input_ = 0
 
     def run_node(self, node: "torch.fx.Node"):  # noqa: F821
         """
@@ -95,6 +107,7 @@ class DynamoInterpreter:
         v = node.meta.get("val", None) if hasattr(node, "meta") else None
         val = ("val", v.dtype, v.shape) if hasattr(v, "dtype") else ""
         self.builder.set_shapes_types(node.name, "run_node", (exa, val))
+        self.builder.register_users(node.name, node.users)
 
         if node.op == "placeholder":
             res = self.placeholder(node)
@@ -164,6 +177,48 @@ class DynamoInterpreter:
         self.builder.make_initializer(node.name, init)
         return node.name
 
+    def _make_tensor_input(
+        self,
+        name: str,
+        elem_type: Any,
+        shape: DYNAMIC_SHAPE,
+        is_dimension: bool,
+        users: Iterable[str],
+    ) -> str:
+        if self.example_inputs_ is not None:
+            assert len(self.builder.input_names) < len(self.example_inputs_), (
+                f"Too many inputs already ({len(self.builder.input_names)}), "
+                f"unexpected {name!r} "
+                f"after {self.builder.input_names}"
+                f"{self.builder.get_debug_msg()}"
+            )
+            if self.example_inputs_[self.current_input_] is None:
+                # We skip it.
+                assert len(users) == 0, (
+                    f"Input {name!r} (index {self.current_input_}"
+                    f"/{len(self.example_inputs_)}) "
+                    f"is None but it is used by {users}. "
+                    f"Existing inputs {self.builder.input_names}. Example inputs: "
+                    f"{['-' if t is None else t.shape for t in self.example_inputs_]}"
+                    f"{self.builder.get_debug_msg()}"
+                )
+                self.current_input_ += 1
+                return ""
+
+            # second check
+            not_none = tuple(t for t in self.example_inputs_ if t is not None)
+            assert len(self.builder.input_names) < len(not_none), (
+                f"Too many inputs already ({len(self.builder.input_names)}), "
+                f"unexpected {name!r} "
+                f"after {self.builder.input_names}"
+                f"{self.builder.get_debug_msg()}"
+            )
+
+        self.current_input_ += 1
+        return self.builder.make_tensor_input(
+            name, elem_type, shape, is_dimension=is_dimension
+        )
+
     def placeholder(self, node: "torch.fx.Node"):  # noqa: F821
         """
         placeholder for an input. The interpreter adds an Identity node
@@ -185,30 +240,33 @@ class DynamoInterpreter:
                 example_value = self.builder.input_args[index_input]
 
             if self.builder.as_function and example_value is None:
-                return self.builder.make_tensor_input(
-                    node.name, None, None, is_dimension=False
+                return self._make_tensor_input(
+                    node.name, None, None, is_dimension=False, users=node.users
                 )
             if example_value is None:
                 # The input is not defined.
                 # We return.
+                self.current_input_ += 1
                 return
             if isinstance(
                 example_value, (self.builder.torch.SymInt, self.builder.torch.SymFloat)
             ):
                 # torch.SymInt
                 self.builder.make_dynamic_object(node.name, example_value)
-                return self.builder.make_tensor_input(
+                return self._make_tensor_input(
                     node.name,
                     elem_type=self.builder.torch.int64,
                     shape=(1,),
                     is_dimension=True,
+                    users=node.users,
                 )
 
-            return self.builder.make_tensor_input(
+            return self._make_tensor_input(
                 node.name,
                 elem_type=example_value.dtype,
                 shape=example_value.shape,
                 is_dimension=False,
+                users=node.users,
             )
 
         if isinstance(
@@ -223,21 +281,23 @@ class DynamoInterpreter:
                     node.target, val, debug={"node": node}, exc=False
                 )
                 if value is None:
-                    return self.builder.make_tensor_input(
+                    return self._make_tensor_input(
                         node.name,
                         elem_type=val.dtype,
                         shape=val.shape,
                         is_dimension=False,
+                        users=node.users,
                     )
             if value is None:
                 if "nn_module_stack" not in node.meta:
                     value = self.retriever(node.target, val, debug={"node": node})
                     if value is None:
-                        return self.builder.make_tensor_input(
+                        return self._make_tensor_input(
                             node.name,
                             elem_type=val.dtype,
                             shape=val.shape,
                             is_dimension=False,
+                            users=node.users,
                         )
                 else:
                     value = self.retriever(node.target, val, debug={"node": node})
@@ -245,8 +305,8 @@ class DynamoInterpreter:
                 if ".FakeTensor" in str(type(val)):
                     dtype = val.dtype
                     shape = val.shape
-                    return self.builder.make_tensor_input(
-                        node.name, dtype, shape, False
+                    return self._make_tensor_input(
+                        node.name, dtype, shape, False, users=node.users
                     )
                 raise RuntimeError(
                     f"value is None, unable to retrieve target {node.target!r}"
