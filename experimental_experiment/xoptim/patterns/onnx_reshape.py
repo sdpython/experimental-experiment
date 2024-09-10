@@ -2,7 +2,56 @@ import inspect
 from typing import List, Optional
 from onnx import NodeProto
 from ...xbuilder._onnx_helper import element_wise_binary_op_types
+from ...xbuilder._shape_helper import all_int
 from ..patterns_api import MatchResult, PatternOptimization
+
+
+class ReshapePattern(PatternOptimization):
+    """
+    Checks that a Reshape is really needed.
+    """
+
+    def __init__(self, verbose: int = 0, priority: int = 0):
+        super().__init__(verbose, priority)
+
+    def match(
+        self,
+        g: "GraphBuilderPatternOptimization",  # noqa: F821
+        node: NodeProto,
+        matched: List[MatchResult],
+    ) -> Optional[MatchResult]:
+        if node.op_type != "Reshape" or node.domain != "":
+            return self.none()
+        if not g.has_shape(node.input[0]):
+            return self.none(node, inspect.currentframe().f_lineno)
+        shape = g.get_shape(node.input[0])
+        if not all_int(shape):
+            return self.none(node, inspect.currentframe().f_lineno)
+        if not g.is_constant(node.input[1]):
+            # It may be a symbolic shape.
+            return self.none(node, inspect.currentframe().f_lineno)
+        value = g.get_computed_constant(node.input[1])
+        if value is None:
+            return self.none(node, inspect.currentframe().f_lineno)
+        new_shape = tuple(int(i) for i in value)
+        if shape != new_shape:
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        return MatchResult(self, [node], self.apply, insert_at=node)
+
+    def apply(
+        self,
+        g: "GraphBuilder",  # noqa: F821
+        node: NodeProto,
+    ) -> List[NodeProto]:
+        new_node = g.make_node(
+            "Identity",
+            node.input,
+            node.output,
+            name=f"{self.__class__.__name__}--{node.name}",
+            doc_string=node.doc_string,
+        )
+        return [new_node]
 
 
 class ReduceReshapePattern(PatternOptimization):
