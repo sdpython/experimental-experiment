@@ -3804,7 +3804,10 @@ class GraphBuilder:
             axis = [int(axis)] if axis.shape == tuple() else axis.tolist()
         if len(axis) == 1:
             return [x.unsqueeze(int(axis[0]))]
-        raise AssertionError(f"Not implemented for axis={axis}")
+        assert len(axis) > 0, f"axis={axis} is null"
+        for a in axis:
+            x = x.unsqueeze(int(a))
+        return [x]
 
     def _apply_cast(
         self,
@@ -3926,7 +3929,7 @@ class GraphBuilder:
                 # Type conversion between numpy and torch is not robust.
                 itype = dtype_to_tensor_dtype(v.dtype)
                 ttype = onnx_dtype_to_torch_dtype(itype)
-                x = self.torch.Tensor(v).to(ttype)
+                x = self.torch.Tensor(v.copy()).to(ttype)
                 assert "FakeTensor" not in str(type(x)), (
                     f"FakeTensor {node.output[0]!r} cannot be a constant {type(x)}, "
                     f"node.op_type={node.op_type!r}, type={self.torch.Tensor}"

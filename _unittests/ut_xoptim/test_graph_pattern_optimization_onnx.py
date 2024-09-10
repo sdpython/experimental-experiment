@@ -1764,6 +1764,7 @@ class TestGraphPatternOptimization(ExtTestCase):
                 ],
             ),
             opset_imports=[oh.make_opsetid("", 10)],
+            ir_version=10,
         )
         check_model(model)
         feeds = {"X": self._range(3, 2)}
@@ -2980,6 +2981,7 @@ class TestGraphPatternOptimization(ExtTestCase):
                 ],
             ),
             opset_imports=[oh.make_opsetid("", 20)],
+            ir_version=10,
         )
 
     def test_layer_normalization_scale_bias(self):
@@ -3073,6 +3075,7 @@ class TestGraphPatternOptimization(ExtTestCase):
                 ],
             ),
             opset_imports=[oh.make_opsetid("", 20)],
+            ir_version=10,
         )
 
     def test_layer_normalization_scale_no_bias(self):
@@ -3170,6 +3173,7 @@ class TestGraphPatternOptimization(ExtTestCase):
                 ],
             ),
             opset_imports=[oh.make_opsetid("", 20)],
+            ir_version=10,
         )
 
     def test_layer_normalization_simple(self):
