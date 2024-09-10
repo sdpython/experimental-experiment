@@ -22,6 +22,7 @@ from experimental_experiment.xbuilder.graph_builder import (
 )
 from experimental_experiment.xoptim import get_pattern_list
 from experimental_experiment.xoptim.patterns_ort.gather_grad import GatherGradPattern
+from experimental_experiment.xoptim.patterns_ort.activation import GeluErfPattern
 from experimental_experiment.xbuilder._onnx_helper import (
     choose_consistent_domain_opset,
     compatible_opsets,
@@ -946,6 +947,63 @@ class TestGraphPatternOptimizationOrt(ExtTestCase):
         self.assertEqualArray(expected[0], got[0], atol=1e-4)
         node = opt_onx.graph.node[0]
         self.assertEqual(node.op_type, "BiasGelu")
+
+    def test_gelu_erf(self):
+        from onnxruntime import InferenceSession
+
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("Div", ["X", "sq2"], ["xd"]),
+                    oh.make_node("Erf", ["xd"], ["exd"]),
+                    oh.make_node("Add", ["exd", "one"], ["aexd"]),
+                    oh.make_node("Mul", ["X", "aexd"], ["y2"]),
+                    oh.make_node("Mul", ["half", "y2"], ["Y"]),
+                ],
+                "dummy",
+                [oh.make_tensor_value_info("X", TFLOAT, [2, 2, 4, 8])],
+                [oh.make_tensor_value_info("Y", TFLOAT, [2, 2, 4, 8])],
+                [
+                    onh.from_array(np.array([1.4140625], dtype=np.float32), name="sq2"),
+                    onh.from_array(np.array([1], dtype=np.float32), name="one"),
+                    onh.from_array(np.array([0.5], dtype=np.float32), name="half"),
+                ],
+            ),
+            opset_imports=[
+                oh.make_opsetid("", 18),
+                oh.make_opsetid("com.microsoft", 1),
+            ],
+            ir_version=9,
+        )
+        check_model(model)
+        feeds = {"X": self._range(2, 2, 4, 8)}
+        ref = InferenceSession(
+            model.SerializeToString(), providers=["CPUExecutionProvider"]
+        )
+        expected = ref.run(None, feeds)
+
+        gr = GraphBuilder(
+            model,
+            infer_shapes=True,
+            optimization_options=OptimizationOptions(
+                patterns=[GeluErfPattern(verbose=0)],
+                verbose=0,
+            ),
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+        self.assertEqual(
+            ["Gelu"],
+            [n.op_type for n in opt_onx.graph.node],
+        )
+        self.assertEqual(0, len(opt_onx.graph.initializer))
+
+        opt_ref = InferenceSession(
+            opt_onx.SerializeToString(), providers=["CPUExecutionProvider"]
+        )
+        got = opt_ref.run(None, feeds)
+        self.assertEqualArray(expected[0], got[0], atol=1e-4)
+        node = opt_onx.graph.node[0]
+        self.assertEqual(node.op_type, "Gelu")
 
 
 if __name__ == "__main__":

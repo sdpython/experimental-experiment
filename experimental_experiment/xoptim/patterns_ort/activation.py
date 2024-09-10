@@ -1,7 +1,7 @@
 import inspect
 from typing import List, Optional
 from onnx import NodeProto
-from ..patterns_api import MatchResult, PatternOptimization
+from ..patterns_api import MatchResult, PatternOptimization, EasyPatternOptimization
 from ..patterns.onnx_functions import GeluPattern
 
 
@@ -119,6 +119,52 @@ class GeluOrtPattern(GeluPattern):
     ):
         super().__init__(verbose, priority, min_opset=min_opset)
         self.domain = domain
+
+
+class GeluErfPattern(EasyPatternOptimization):
+    """
+    Detects the decomposed version of Gelu with Erf.
+    """
+
+    def __init__(self, verbose: int = 0, priority: int = 0, min_opset: int = 1):
+        super().__init__(verbose, priority, min_opset=min_opset)
+
+    def match_pattern(self, g: "GraphBuilder", x, cst2, one, c05):  # noqa: F821
+        xd = g.op.Div(x, cst2)  # 1.4140625
+        exd = g.op.Erf(xd)
+        aexd = g.op.Add(exd, one)  # 1
+        mul = g.op.Mul(x, aexd)
+        return g.op.Mul(c05, mul)  # 0.5
+
+    def apply_pattern(
+        self, g: "GraphBuilderPatternOptimization", x, cst2, one, c05  # noqa: F821
+    ):
+        return g.anyop.Gelu(x, domain="com.microsoft")
+
+    def validate_mapping(
+        self,
+        g: "GraphBuilderPatternOptimization",  # noqa: F821
+        deleted_nodes: List[NodeProto],
+        pattern_nodes: Optional[List[NodeProto]] = None,
+    ) -> bool:
+        assert (
+            len(deleted_nodes) == 5
+        ), f"Unexpected pattern length {len(deleted_nodes)}"
+        assert deleted_nodes[0].op_type == "Div", f"-- {deleted_nodes[0]}"
+        cst2 = deleted_nodes[0].input[1]
+        assert deleted_nodes[2].op_type == "Add", f"-- {deleted_nodes[2]}"
+        one = deleted_nodes[2].input[1]
+        assert deleted_nodes[4].op_type == "Mul", f"-- {deleted_nodes[4]}"
+        c05 = deleted_nodes[4].input[0]
+
+        node = deleted_nodes[1]
+        if not g.is_constant_scalar(cst2) or g.get_constant_scalar(cst2) != 1.4140625:
+            return self.none(node, inspect.currentframe().f_lineno)
+        if not g.is_constant_scalar(one) or g.get_constant_scalar(one) != 1:
+            return self.none(node, inspect.currentframe().f_lineno)
+        if not g.is_constant_scalar(c05) or g.get_constant_scalar(c05) != 0.5:
+            return self.none(node, inspect.currentframe().f_lineno)
+        return True
 
 
 class FastGeluPattern(PatternOptimization):
