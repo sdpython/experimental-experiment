@@ -4054,6 +4054,9 @@ class GraphBuilder(_GraphBuilderRuntime):
                     node_attributes = node.attribute
                 new_node.attribute.extend(node_attributes)
                 self.nodes.append(new_node)
+                if all(self.is_constant(i) for i in new_node.input):
+                    for o in new_node.output:
+                        self.update_node_constant(o, new_node)
             else:
                 self.nodes.append(node)
 
@@ -4202,6 +4205,10 @@ class GraphBuilder(_GraphBuilderRuntime):
                 n
             ), f"Node {n.name!r} marked as 'DONOTREMOVE' cannot be removed."
             memo.append(n)
+            # We need to remove the constant.
+            for o in n.output:
+                if o in self.constants_:
+                    del self.constants_[o]
             self.nodes[i] = None
 
         n_existing = []
