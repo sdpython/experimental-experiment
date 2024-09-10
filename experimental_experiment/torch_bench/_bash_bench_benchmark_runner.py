@@ -326,7 +326,7 @@ class BenchmarkRunner:
                     onnx_opt_unique_matched=len(matched),
                     onnx_opt_unique_applied=len(applied),
                     onnx_opt_n_applied=n_applied,
-                    time_optimization=time_in,
+                    time_export_optimization=time_in,
                     onnx_opt_cst_time_in=cst_time_in,
                     onnx_opt_cst_added=cst_added,
                     onnx_opt_cst_removed=cst_removed,
@@ -371,6 +371,10 @@ class BenchmarkRunner:
                 new_stat.update(
                     {f"op_torch_{k}": v for k, v in builder["aten"].items()}
                 )
+
+        for k, v in opt_stats.items():
+            if k.startswith("time_"):
+                new_stat[k] = v
         return new_stat
 
     @classmethod

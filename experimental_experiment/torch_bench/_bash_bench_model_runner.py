@@ -666,6 +666,9 @@ class ModelRunner:
         begin = time.perf_counter()
         onx.save(name, all_tensors_to_one_file=True)
         stats["time_export_save"] = time.perf_counter() - begin
+        for k, v in onx._stats.items():
+            if v > 0:
+                stats[k] = v
         return onx.model_proto, stats
 
     def _to_cort(

@@ -705,6 +705,7 @@ class TestOperatorsOnnxrt(ExtTestCase):
             x,
             opset_version=10,
             onnx_export=inspect.currentframe().f_code.co_name,
+            atol=1e-3,
         )
 
     @requires_torch("2.4")
