@@ -36,7 +36,6 @@ class ReshapePattern(PatternOptimization):
         new_shape = tuple(int(i) for i in value)
         if shape != new_shape:
             return self.none(node, inspect.currentframe().f_lineno)
-
         return MatchResult(self, [node], self.apply, insert_at=node)
 
     def apply(

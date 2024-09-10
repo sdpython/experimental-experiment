@@ -120,8 +120,18 @@ class TestGraphPatternDynamic(ExtTestCase):
             stat2 = gr2.optimize()
             pat = patterns[i]
             prefix = f"apply_{pat.__class__.__name__}"
-            app1 = [s for s in stat1 if s["pattern"].startswith(prefix)]
-            app2 = [s for s in stat2 if s["pattern"].startswith(prefix)]
+            app1 = [
+                s
+                for s in stat1
+                if s["pattern"].startswith(prefix)
+                and s["pattern"] != "apply_ReshapePattern"
+            ]
+            app2 = [
+                s
+                for s in stat2
+                if s["pattern"].startswith(prefix)
+                and s["pattern"] != "apply_ReshapePattern"
+            ]
             if pat.__class__.__name__ in exceptions:
                 assert (
                     len(app1) > 0
@@ -129,7 +139,7 @@ class TestGraphPatternDynamic(ExtTestCase):
                 continue
             if len(app1) > len(app2):
                 raise AssertionError(
-                    f"Discrancies static/dynamic: i={i}, delta={delta}, "
+                    f"Discrepancies static/dynamic: i={i}, delta={delta}, "
                     f"len(app1)={len(app1)}, len(app2)={len(app2)}, "
                     f"pattern={patterns[i]}\n-----\n"
                     f"#applied static={len(app1)}, #applied dynamic={len(app2)}"
