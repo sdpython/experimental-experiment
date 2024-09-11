@@ -33,6 +33,7 @@ from .onnx_matmul import (
 )
 from .onnx_reduce import ReduceSumNormalizePattern
 from .onnx_reshape import (
+    ReshapePattern,
     ReduceReshapePattern,
     Reshape2Of3Pattern,
     ReshapeReshapeBinaryPattern,
@@ -112,6 +113,7 @@ def get_default_patterns(verbose: int = 0) -> List[PatternOptimization]:
         MulMulMulScalarPattern(verbose=verbose),
         ReduceReshapePattern(verbose=verbose),
         ReduceSumNormalizePattern(verbose=verbose),
+        ReshapePattern(verbose=verbose),
         ReshapeMatMulReshapePattern(verbose=verbose),
         Reshape2Of3Pattern(verbose=verbose),
         ReshapeReshapeBinaryPattern(verbose=verbose),

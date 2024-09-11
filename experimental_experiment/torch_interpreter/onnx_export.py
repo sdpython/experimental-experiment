@@ -497,19 +497,21 @@ def to_onnx(
         strict=strict,
     )
 
+    t = time.perf_counter()
+    add_stats = {"time_export_graph_module": t - begin}
     if verbose:
-        t = time.perf_counter()
         print(f"[to_onnx] graph module done in {t - begin} s")
         print("[to_onnx] start creating the onnx nodes")
-        begin = t
+    begin = t
 
     builder.process(graph_module, interpreter)
 
+    t = time.perf_counter()
+    add_stats["time_export_builder_process"] = t - begin
     if verbose:
-        t = time.perf_counter()
         print(f"[to_onnx] {len(builder.nodes)} onnx nodes done in {t - begin} s")
         print("[to_onnx] start conversion to onnx (before optimization)")
-        begin = t
+    begin = t
 
     onx, stats = builder.to_onnx(
         optimize=optimize,
@@ -520,8 +522,9 @@ def to_onnx(
     all_stats = dict(builder=builder.statistics_)
     if stats:
         all_stats["optimization"] = stats
+    t = time.perf_counter()
+    add_stats["time_export_to_onnx"] = t - begin
     if verbose:
-        t = time.perf_counter()
         proto = onx if isinstance(onx, ModelProto) else onx.model_proto
         print(
             f"[to_onnx] to_onnx done in {t - begin}s "
@@ -533,6 +536,7 @@ def to_onnx(
         if verbose >= 10:
             print(builder.get_debug_msg())
 
+    all_stats.update(add_stats)
     if return_builder:
         return (onx, builder, all_stats) if return_optimize_report else (onx, builder)
     return (onx, all_stats) if return_optimize_report else onx

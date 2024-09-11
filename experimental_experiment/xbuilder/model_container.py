@@ -1,4 +1,5 @@
 import os
+import time
 import sys
 from typing import Any, Optional
 import numpy as np
@@ -62,8 +63,11 @@ def proto_from_array(
             f"Sparse tensor is not supported yet but initializer {name!r} is."
         )
 
-    arr_cont = arr.contiguous() if not arr.is_contiguous() else arr
-    arr_cpu = arr_cont.cpu()
+    # arr.contiguous() is slow after a transpose, maybe there is a way to optimize this.
+    if arr.is_contiguous():
+        arr_cpu = arr.cpu()
+    else:
+        arr_cpu = arr.contiguous().cpu()
     if arr_cpu.data_ptr() == arr.data_ptr():
         copy = arr_cpu.clone().detach().requires_grad_(False)
         assert arr_cpu.data_ptr() != copy.data_ptr()
@@ -100,8 +104,20 @@ class TorchModelContainer(ModelContainer):
     to support torch tensors.
     """
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._stats = {
+            "time_export_write_model": 0,
+            "time_export_byteswap_tobytes": 0,
+            "time_export_tobytes": 0,
+            "time_export_proto_from_array": 0,
+            "time_export_write_tensor_bytes": 0,
+        }
+
     def _save_external(
-        self, file_path: str, all_tensors_to_one_file: bool
+        self,
+        file_path: str,
+        all_tensors_to_one_file: bool,
     ) -> ModelProto:
         """Save the large model into a main onnx file and one file
         per tensor. Follows the same format as :func:`write_external_data_tensors
@@ -112,6 +128,7 @@ class TorchModelContainer(ModelContainer):
         Arguments:
             file_path: model file
             all_tensors_to_one_file: all tensors in one file
+            stats: saves time if not Nones
 
         Returns:
             modified main model proto
@@ -167,9 +184,15 @@ class TorchModelContainer(ModelContainer):
 
             if sys.byteorder == "big":
                 # Convert endian from little to big
+                begin = time.perf_counter()
                 tensor_bytes = np_tensor.byteswap().tobytes()
+                self._stats["time_export_byteswap_tobytes"] += (
+                    time.perf_counter() - begin
+                )
             elif isinstance(np_tensor, np.ndarray):
+                begin = time.perf_counter()
                 tensor_bytes = np_tensor.tobytes()
+                self._stats["time_export_tobytes"] += time.perf_counter() - begin
             elif isinstance(np_tensor, TensorProto):
                 tensor_bytes = np_tensor.raw_data
                 assert (
@@ -188,7 +211,11 @@ class TorchModelContainer(ModelContainer):
                         f"is not implemented yet."
                     )
 
+                begin = time.perf_counter()
                 proto = proto_from_array(pt, name="dummy")
+                self._stats["time_export_proto_from_array"] += (
+                    time.perf_counter() - begin
+                )
                 tensor_bytes = proto.raw_data
                 assert (
                     pt.dtype != torch.float32
@@ -199,6 +226,7 @@ class TorchModelContainer(ModelContainer):
                     f"shape={pt.shape}, dtype={pt.dtype}"
                 )
 
+            begin = time.perf_counter()
             if all_tensors_to_one_file:
                 _set_external_data(
                     tensor,
@@ -216,7 +244,10 @@ class TorchModelContainer(ModelContainer):
                 prop.value = name
                 with open(full_name, "wb") as f:
                     f.write(tensor_bytes)
+            self._stats["time_export_write_tensor_bytes"] += time.perf_counter() - begin
 
+        begin = time.perf_counter()
         with open(file_path, "wb") as f:
             f.write(copy.SerializeToString())
+        self._stats["time_export_write_model"] += time.perf_counter() - begin
         return copy

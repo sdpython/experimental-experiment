@@ -1146,6 +1146,7 @@ class GraphBuilderPatternOptimization:
                             )
                         break
 
+                # matches contains all the matchs
                 d = time.perf_counter() - begin
                 statistics.append(
                     dict(
@@ -1192,6 +1193,8 @@ class GraphBuilderPatternOptimization:
             added_types = set()
             n_added = 0
             n_removed = 0
+
+            # loop over patterns
             for im, (pattern, match) in enumerate(matches):
                 if self.verbose > 3:
                     print(
@@ -1295,6 +1298,7 @@ class GraphBuilderPatternOptimization:
                 current_priority_index += 1
                 if current_priority_index >= len(priorities):
                     # There is priority left to explore.
+                    continue_optimization = len(matches) > 0
                     break
                 if self.verbose > 0:
                     print(
