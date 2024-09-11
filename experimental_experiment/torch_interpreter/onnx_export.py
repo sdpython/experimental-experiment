@@ -5,7 +5,7 @@ import pprint
 import time
 import warnings
 from typing import Any, Callable, Dict, Optional, Sequence, Set, Tuple, Union
-from onnx import ModelProto
+from onnx import ModelProto, save_model
 from onnx.defs import onnx_opset_version
 from onnx.model_container import ModelContainer
 from ..xbuilder.graph_builder import GraphBuilder, OptimizationOptions
@@ -420,6 +420,7 @@ def to_onnx(
     api_two: bool = False,
     return_optimize_report: bool = False,
     strict: bool = True,
+    filename: Optional[str] = None,
 ) -> Union[
     Union[ModelProto, ModelContainer],
     Tuple[Union[ModelProto, ModelContainer], GraphBuilder],
@@ -450,6 +451,7 @@ def to_onnx(
     :param api_two: use ``torch._dynamo.export`` instead of ``torch.export.export``
     :param return_optimize_report: returns statistics on the optimization as well
     :param strict: given to ``torch.export.export``
+    :param filename: if specified, stores the model into that file
     :return: onnx model
 
     If environment variable ``PRINT_GRAPH_MODULE`` is set to one,
@@ -536,6 +538,11 @@ def to_onnx(
         if verbose >= 10:
             print(builder.get_debug_msg())
 
+    if filename:
+        if isinstance(onx, ModelProto):
+            save_model(onx, filename)
+        else:
+            onx.save(filename, all_tensors_to_one_file=True)
     all_stats.update(add_stats)
     if return_builder:
         return (onx, builder, all_stats) if return_optimize_report else (onx, builder)

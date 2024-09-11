@@ -5214,7 +5214,7 @@ def aten_scaled_dot_product_attention(
     attn_mask: Optional[T] = None,
     dropout_p: float = 0.0,
     is_causal: bool = False,
-    scale: Optional[T] = None,
+    scale: Optional[float] = None,
     enable_gqa: bool = False,
     name: str = "aten_scaled_dot_product_attention",
 ):
@@ -5226,6 +5226,13 @@ def aten_scaled_dot_product_attention(
 
     if scale is None:
         scale = _attention_scale(g, query)
+    else:
+        itype = g.get_type(query)
+        dtype = tensor_dtype_to_np_dtype(itype)
+        assert isinstance(
+            scale, float
+        ), f"Unexpected type {type(scale)} for scale{g.get_debug_msg()}"
+        scale = np.array([scale], dtype=dtype)
 
     if is_causal:
         attn_mask = _causal_attention_mask(g, query, key)
