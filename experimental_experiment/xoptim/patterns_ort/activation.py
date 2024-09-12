@@ -147,9 +147,7 @@ class GeluErfPattern(EasyPatternOptimization):
         deleted_nodes: List[NodeProto],
         pattern_nodes: Optional[List[NodeProto]] = None,
     ) -> bool:
-        assert (
-            len(deleted_nodes) == 5
-        ), f"Unexpected pattern length {len(deleted_nodes)}"
+        assert len(deleted_nodes) == 5, f"Unexpected pattern length {len(deleted_nodes)}"
         assert deleted_nodes[0].op_type == "Div", f"-- {deleted_nodes[0]}"
         cst2 = deleted_nodes[0].input[1]
         assert deleted_nodes[2].op_type == "Add", f"-- {deleted_nodes[2]}"

@@ -123,9 +123,7 @@ def get_fused_aten_ops_dispatcher():
         t_scale = g.make_initializer("", np.array(scale or 1.0, dtype=np.float32))
         t_dropout_p = g.make_initializer("", np.array(dropout_p, dtype=np.float32))
         t_is_causal = g.make_initializer("", np.array(is_causal, dtype=np.bool_))
-        t_grad_input_mask = g.make_initializer(
-            "", np.array(grad_input_mask, dtype=np.int64)
-        )
+        t_grad_input_mask = g.make_initializer("", np.array(grad_input_mask, dtype=np.int64))
         # onnxruntime fails with type inference failed
         # Let's add some Cast even if not needed.
         dt = g.get_type(grad)
@@ -317,9 +315,7 @@ def create_compiled_model(
                         print("[create_compiled_model] run torch.export.export")
                     exp_program = torch.export.export(self.model, args)
                     if self.verbose:
-                        print(
-                            "[create_compiled_model] run torch_tensorrt.dynamo.compile"
-                        )
+                        print("[create_compiled_model] run torch_tensorrt.dynamo.compile")
                     self.trt = torch_tensorrt.dynamo.compile(exp_program, args)
                     if self.verbose:
                         print("[create_compiled_model] done")
@@ -356,9 +352,7 @@ def create_compiled_model(
             ),
             decompositions=get_decomposition_table(),
         )
-        cc = torch.compile(
-            model, backend=aot_compiler, fullgraph=True, dynamic=use_dynamic
-        )
+        cc = torch.compile(model, backend=aot_compiler, fullgraph=True, dynamic=use_dynamic)
         if return_storage:
             return cc, storage
         return cc
@@ -387,9 +381,7 @@ def create_compiled_model(
             ),
             decompositions=get_decomposition_table_dynamo(),
         )
-        cc = torch.compile(
-            model, backend=aot_compiler, fullgraph=True, dynamic=use_dynamic
-        )
+        cc = torch.compile(model, backend=aot_compiler, fullgraph=True, dynamic=use_dynamic)
         if return_storage:
             return cc, storage
         return cc
@@ -418,9 +410,7 @@ def create_compiled_model(
             ),
             decompositions=get_decomposition_table(),
         )
-        cc = torch.compile(
-            model, backend=aot_compiler, fullgraph=True, dynamic=use_dynamic
-        )
+        cc = torch.compile(model, backend=aot_compiler, fullgraph=True, dynamic=use_dynamic)
         if return_storage:
             return cc, storage
         return cc
@@ -432,9 +422,7 @@ def create_compiled_model(
             ),
             decompositions=get_decomposition_table(),
         )
-        cc = torch.compile(
-            model, backend=aot_compiler, fullgraph=True, dynamic=use_dynamic
-        )
+        cc = torch.compile(model, backend=aot_compiler, fullgraph=True, dynamic=use_dynamic)
         if return_storage:
             return cc, None
         return cc
@@ -616,9 +604,7 @@ def create_model(
         return (
             res[0].to(torch_dtype),
             [
-                tuple(
-                    (i.to(torch_dtype) if i.dtype == torch.float32 else i) for i in obs
-                )
+                tuple((i.to(torch_dtype) if i.dtype == torch.float32 else i) for i in obs)
                 for obs in res[1]
             ],
             *res[2:],

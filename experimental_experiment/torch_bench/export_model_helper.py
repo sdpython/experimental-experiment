@@ -257,9 +257,7 @@ def common_export(
 
     if verbose:
         print(f"[common_export] exporter done in {time.perf_counter() - begin}s")
-        print(
-            f"[common_export] size of the export: {os.stat(filename).st_size / 2**20} Mb"
-        )
+        print(f"[common_export] size of the export: {os.stat(filename).st_size / 2**20} Mb")
 
     with open(filename, "rb") as f:
         onx = onnx.load(f)
@@ -434,9 +432,7 @@ class WrapInferenceSessionForTorch:
         max_device = -1
         new_tensors = []
         for tensor in tensors:
-            assert isinstance(
-                tensor, self.torch.Tensor
-            ), f"Unexpected type {type(tensor)}"
+            assert isinstance(tensor, self.torch.Tensor), f"Unexpected type {type(tensor)}"
             dtypes.append(self.TORCH_DTYPE_TO_NUMPY_DTYPE[tensor.dtype])
             shapes.append(tensor.size())
             data_ptrs.append(tensor.data_ptr())
@@ -508,9 +504,7 @@ class WrapInferenceSessionForTorch:
         bind = self.ORTC.SessionIOBinding(self.sess._sess)
         max_device = -1
         for name, tensor in zip(self.input_names, tensors):
-            assert isinstance(
-                tensor, self.torch.Tensor
-            ), f"Unexpected type {type(tensor)}"
+            assert isinstance(tensor, self.torch.Tensor), f"Unexpected type {type(tensor)}"
             d = tensor.get_device()
             max_device = max(d, max_device)
             bind.bind_input(

@@ -49,9 +49,7 @@ def _get_session(
         opts = onnxruntime.SessionOptions()
         if ort_optimization_level is not None:
             if ort_optimization_level is not None:
-                assert hasattr(
-                    onnxruntime.GraphOptimizationLevel, ort_optimization_level
-                ), (
+                assert hasattr(onnxruntime.GraphOptimizationLevel, ort_optimization_level), (
                     f"Unexpected value {ort_optimization_level!r} "
                     f"for GraphOptimizationLevel, "
                     f"expecting one of the values in "

@@ -249,9 +249,7 @@ class GraphBuilderPatternOptimization:
             return all(cst == value)
         return cst == value
 
-    def get_constant_shape(
-        self, name: str, exc: bool = True
-    ) -> Optional[Tuple[int, ...]]:
+    def get_constant_shape(self, name: str, exc: bool = True) -> Optional[Tuple[int, ...]]:
         """
         Returns the shape of a constant.
 
@@ -536,9 +534,7 @@ class GraphBuilderPatternOptimization:
             f"known_types={pprint.pformat(self.builder._known_types)}"
         )
         node = self.node_before(name)
-        input_types = [
-            (self.get_type(i) if self.has_type(i) else 0) for i in node.input
-        ]
+        input_types = [(self.get_type(i) if self.has_type(i) else 0) for i in node.input]
         output_type = infer_types(node, input_types, name, exc=exc)
         if output_type > 0:
             return output_type
@@ -582,9 +578,7 @@ class GraphBuilderPatternOptimization:
     def make_initializer(
         self, name: str, value: Any, external: bool = False, msg: str = ""
     ) -> str:
-        new_name = self.builder.make_initializer(
-            name, value, external=external, msg=msg
-        )
+        new_name = self.builder.make_initializer(name, value, external=external, msg=msg)
         return new_name
 
     def unique_name(self, prefix: str) -> str:
@@ -717,18 +711,14 @@ class GraphBuilderPatternOptimization:
         """
         idn = [id(n) for n in match.nodes if n is not None]
 
-        assert all(
-            i in self.nodes_ for i in idn
-        ), f"One node in {idn} is not referenced"
+        assert all(i in self.nodes_ for i in idn), f"One node in {idn} is not referenced"
 
         positions = {id(n): i for i, n in enumerate(self.builder.nodes)}
 
         assert all(i in positions for i in idn), f"One node in {idn} is not referenced"
 
         removed = [positions[i] for i in idn]
-        position_insert = (
-            None if match.insert_at is None else positions[id(match.insert_at)]
-        )
+        position_insert = None if match.insert_at is None else positions[id(match.insert_at)]
         new_nodes = match.apply(self, *match.nodes)
 
         if self.verbose >= 10:
@@ -820,12 +810,8 @@ class GraphBuilderPatternOptimization:
                 if i in self.builder.initializers_dict:
                     old_initializers[i] = self.builder.initializers_dict[i]
 
-        new_init_nodes = [
-            self._to_cstop(v, name=k) for k, v in new_initializers.items()
-        ]
-        old_init_nodes = [
-            self._to_cstop(v, name=k) for k, v in old_initializers.items()
-        ]
+        new_init_nodes = [self._to_cstop(v, name=k) for k, v in new_initializers.items()]
+        old_init_nodes = [self._to_cstop(v, name=k) for k, v in old_initializers.items()]
 
         fproto = oh.make_function(
             domain="pattern",
@@ -833,9 +819,7 @@ class GraphBuilderPatternOptimization:
             inputs=list(input_names),
             outputs=list(output_names),
             nodes=old_init_nodes + [n for n in match.nodes if n is not None],
-            opset_imports=[
-                oh.make_opsetid(k, v) for k, v in self.builder.opsets.items()
-            ],
+            opset_imports=[oh.make_opsetid(k, v) for k, v in self.builder.opsets.items()],
         )
 
         fproto_apply = oh.make_function(
@@ -844,9 +828,7 @@ class GraphBuilderPatternOptimization:
             list(input_names),
             list(output_names),
             new_init_nodes + [n for n in new_nodes if n is not None],
-            opset_imports=[
-                oh.make_opsetid(k, v) for k, v in self.builder.opsets.items()
-            ],
+            opset_imports=[oh.make_opsetid(k, v) for k, v in self.builder.opsets.items()],
         )
 
         def _sh(n):
@@ -959,9 +941,7 @@ class GraphBuilderPatternOptimization:
         verifies: bool,
     ):
         begin = time.perf_counter()
-        assert (
-            len(self.builder.nodes) > 0
-        ), f"The onnx model is empty (step {step}, no node)"
+        assert len(self.builder.nodes) > 0, f"The onnx model is empty (step {step}, no node)"
         known = set(n.name for n in self.builder.inputs)
         known |= set(self.builder.initializers_dict)
         for p, node in enumerate(self.builder.nodes):
@@ -1130,10 +1110,7 @@ class GraphBuilderPatternOptimization:
                         marked.add(id(n))
                     found = True
                     if self.verbose > 2:
-                        print(
-                            f"[GraphBuilderPatternOptimization.optimize] "
-                            f"match={match}"
-                        )
+                        print(f"[GraphBuilderPatternOptimization.optimize] match={match}")
                     matches.append((pattern, match))
                     if stop_after > 0 and len(matches) + n_applied >= stop_after:
                         continue_optimization = False

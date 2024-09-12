@@ -87,9 +87,7 @@ def scatter_elements(data, indices, updates, axis=0, reduction=None):  # type: i
                             )
             return scattered
 
-    raise RuntimeError(
-        f"Not implemented for indices.shape={indices.shape} and axis={axis}"
-    )
+    raise RuntimeError(f"Not implemented for indices.shape={indices.shape} and axis={axis}")
 
 
 class ScatterElements(OpRun):

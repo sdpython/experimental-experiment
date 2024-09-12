@@ -146,8 +146,6 @@ def get_mistral_model(
 
     example_args_collection = []
     for b, s in input_dims:
-        example_args_collection.append(
-            generate_example_inputs(b, s, vocab_size, with_mask)
-        )
+        example_args_collection.append(generate_example_inputs(b, s, vocab_size, with_mask))
 
     return MistralModelWrapper(config), example_args_collection

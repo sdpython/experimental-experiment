@@ -81,9 +81,7 @@ class SameChildrenPattern(PatternOptimization):
 
         for i in range(0, len(nodes), 2):
             n1, n2 = nodes[i : i + 2]
-            assert (
-                len(n1.output) > 0
-            ), "A node should not have no output in this pattern."
+            assert len(n1.output) > 0, "A node should not have no output in this pattern."
             assert (
                 not g.has_type(n1.output[0])
                 or not g.has_type(n2.output[0])

@@ -70,9 +70,7 @@ def _clean_text(text):
     import experimental_experiment
 
     pathes = [
-        os.path.abspath(
-            os.path.normpath(os.path.join(os.path.dirname(m.__file__), ".."))
-        )
+        os.path.abspath(os.path.normpath(os.path.join(os.path.dirname(m.__file__), "..")))
         for m in [onnx, onnxruntime, np, torch, experimental_experiment]
     ]
     for p in pathes:
@@ -175,9 +173,7 @@ def bash_bench_main(script_name: str, doc: str, args: Optional[List[str]] = None
         if (
             multi_run(args)
             or args.process in ("1", 1, "True", True)
-            or (
-                args.split_process in ("1", 1, "True", True) and args.part in (None, "")
-            )
+            or (args.split_process in ("1", 1, "True", True) and args.part in (None, ""))
         ):
             assert args.part == "", f"part={args.part} must be empty"
             args_output_data = args.output_data
@@ -295,9 +291,7 @@ def bash_bench_main(script_name: str, doc: str, args: Optional[List[str]] = None
                 root, nodes = profile2graph(ps, clean_text=_clean_text)
                 text = root.to_text(fct_width=100)
                 filename = (
-                    f"{args.output_data}.profile.txt"
-                    if args.output_data
-                    else "profile.txt"
+                    f"{args.output_data}.profile.txt" if args.output_data else "profile.txt"
                 )
                 with open(filename, "w", encoding="utf-8") as f:
                     f.write(text)

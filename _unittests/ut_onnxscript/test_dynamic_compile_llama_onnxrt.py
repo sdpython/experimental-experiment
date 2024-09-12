@@ -56,17 +56,15 @@ class TestDynamoLlamaDynamic(ExtTestCase):
             compiled_model = torch.compile(copy.deepcopy(model), backend=local_ort)
         else:
             if impl == "fast":
-                backend_debug = (  # noqa: E731
-                    lambda *args, **kwargs: onnx_custom_backend(
-                        *args,
-                        backend="ort",
-                        target_opset=18,
-                        storage=storage,
-                        verbose=verbose,
-                        dump_prefix=dump_prefix,
-                        disable_pattern=disable_pattern,
-                        **kwargs,
-                    )
+                backend_debug = lambda *args, **kwargs: onnx_custom_backend(  # noqa: E731
+                    *args,
+                    backend="ort",
+                    target_opset=18,
+                    storage=storage,
+                    verbose=verbose,
+                    dump_prefix=dump_prefix,
+                    disable_pattern=disable_pattern,
+                    **kwargs,
                 )
             else:
                 backend_debug = lambda *args, **kwargs: onnx_debug_backend(  # noqa: E731

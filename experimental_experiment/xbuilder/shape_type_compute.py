@@ -141,10 +141,9 @@ def set_type_shape_binary_op(
                 break
         if not dtype and g.as_function:
             return
-        assert dtype, (
-            f"Unable to guess type for {name!r} from "
-            f"{input_names}{g.get_debug_msg()}"
-        )
+        assert (
+            dtype
+        ), f"Unable to guess type for {name!r} from {input_names}{g.get_debug_msg()}"
         g.set_type(name, dtype)
 
     # shape
@@ -358,9 +357,7 @@ def prepare_inputs_homogeneous_operator(
     if not dtypes_list_not_none:
         # the type cannot be guessed from the input as it is only python types,
         # let's include them
-        dtypes_list_not_none = [
-            _get_input_type(g, a, python_default=True) for a in args
-        ]
+        dtypes_list_not_none = [_get_input_type(g, a, python_default=True) for a in args]
     dtypes = set(dtypes_list_not_none)
     if len(dtypes) == 1:
         only = list(dtypes)[0]  # noqa: RUF015
@@ -537,9 +534,7 @@ def _set_shape_type_op_any_cast(self: "GraphBuilder", node: NodeProto):  # noqa:
 
 
 def _set_shape_type_op_any_sign(self: "GraphBuilder", node: NodeProto):  # noqa: F821
-    set_type_shape_unary_op(
-        self, node.output[0], node.input[0], itype=TensorProto.INT64
-    )
+    set_type_shape_unary_op(self, node.output[0], node.input[0], itype=TensorProto.INT64)
 
 
 def _set_shape_type_op_any_castlike(

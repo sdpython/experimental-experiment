@@ -10,9 +10,7 @@ class TestUnitTest(ExtTestCase):
         self.assertIn("time to", out)
 
     def test_measure_time(self):
-        res = measure_time(
-            lambda: math.cos(5) + 1, repeat=10, number=10, div_by_number=True
-        )
+        res = measure_time(lambda: math.cos(5) + 1, repeat=10, number=10, div_by_number=True)
         self.assertIsInstance(res, dict)
 
 

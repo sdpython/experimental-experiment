@@ -397,9 +397,7 @@ def _model_signature(
 ) -> inspect.Signature:
     import torch
 
-    return inspect.signature(
-        model.forward if isinstance(model, torch.nn.Module) else model
-    )
+    return inspect.signature(model.forward if isinstance(model, torch.nn.Module) else model)
 
 
 def to_onnx(

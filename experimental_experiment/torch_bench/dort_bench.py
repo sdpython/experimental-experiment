@@ -272,9 +272,7 @@ def main(args=None):
         loss = torch.nn.MSELoss()
         for i in range(args.warmup):
             example_inputs = example_args_collection[i]
-            inputs = (
-                [t.to("cuda") for t in example_inputs] if is_cuda else example_inputs
-            )
+            inputs = [t.to("cuda") for t in example_inputs] if is_cuda else example_inputs
             if is_cuda:
                 torch.cuda.synchronize()
             start_time = time.perf_counter()
@@ -330,9 +328,7 @@ def main(args=None):
         print("measures")
         times = []
         for example_inputs in example_args_collection[args.warmup :]:
-            inputs = (
-                [t.to("cuda") for t in example_inputs] if is_cuda else example_inputs
-            )
+            inputs = [t.to("cuda") for t in example_inputs] if is_cuda else example_inputs
             start_time = time.perf_counter()
             loop_iteration(is_cuda, inputs, compiled_model, loss)
             times.append(time.perf_counter() - start_time)

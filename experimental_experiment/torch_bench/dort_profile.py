@@ -18,9 +18,7 @@ Example, run llama model with onnxrt backend on cuda.
 
 from experimental_experiment.torch_bench._dort_cmd_common import dort_args
 
-args = dort_args(
-    "experimental_experiment.torch_bench.dort_profile", description=__doc__
-)
+args = dort_args("experimental_experiment.torch_bench.dort_profile", description=__doc__)
 
 import os
 import time

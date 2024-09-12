@@ -4,9 +4,7 @@ from onnx import ModelProto
 
 def get_dimensions(
     onx: ModelProto,
-) -> Tuple[
-    List[Tuple[bool, int, str, int]], List[Tuple[bool, int, Optional[str], int]]
-]:
+) -> Tuple[List[Tuple[bool, int, str, int]], List[Tuple[bool, int, Optional[str], int]]]:
     is_dimension_in = []
     for o in onx.graph.input:
         b = "_dim_" in o.name

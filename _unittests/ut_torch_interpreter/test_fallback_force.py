@@ -159,14 +159,12 @@ if has_cuda():
                 philox_offset,
             ]
 
-            res = (
-                torch.ops.aten._scaled_dot_product_efficient_attention_backward.default(
-                    *cudat,
-                    dropout_p,
-                    [bool(r) for r in grad_input_mask],
-                    is_causal,
-                    scale=scale,
-                )
+            res = torch.ops.aten._scaled_dot_product_efficient_attention_backward.default(
+                *cudat,
+                dropout_p,
+                [bool(r) for r in grad_input_mask],
+                is_causal,
+                scale=scale,
             )
 
             cpu_res = []
@@ -225,8 +223,7 @@ if has_cuda():
             if isinstance(res, torch.Tensor):
                 return (res.numpy(),)
             return tuple(
-                (np.array([0], dtype=np.float32) if r is None else r.numpy())
-                for r in res
+                (np.array([0], dtype=np.float32) if r is None else r.numpy()) for r in res
             )
 
 
@@ -294,9 +291,7 @@ class TestFallbackForce(ExtTestCase):
             raise unittest.SkipTest("sdpa does not work")
         self.assertEqual(len(dot), 1)
         dot = dot[0]
-        self.assertEqual(
-            dot.op_type, "_scaled_dot_product_flash_attention_for_cpu_default"
-        )
+        self.assertEqual(dot.op_type, "_scaled_dot_product_flash_attention_for_cpu_default")
         self.assertEqual(len(dot.attribute), 2)
         att = dot.attribute[0]
         self.assertEqual(att.name, "dropout_p")

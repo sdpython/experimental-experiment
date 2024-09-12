@@ -38,9 +38,7 @@ class TestGraphPatternOptimizationExp(ExtTestCase):
         self.assertEqual(choose_consistent_domain_opset("", {"": 10}), 10)
         self.assertEqual(choose_consistent_domain_opset("ai.onnx.ml", {"": 18}), 3)
         self.assertEqual(choose_consistent_domain_opset("com.microsoft", {"": 18}), 1)
-        self.assertIsInstance(
-            choose_consistent_domain_opset("", {"com.microsoft": 1}), int
-        )
+        self.assertIsInstance(choose_consistent_domain_opset("", {"com.microsoft": 1}), int)
         self.assertRaise(
             lambda: choose_consistent_domain_opset("", {"ai.onnx.ml": 10}),
             AssertionError,
@@ -76,9 +74,7 @@ class TestGraphPatternOptimizationExp(ExtTestCase):
                 "dummy",
                 [
                     oh.make_tensor_value_info("shape", TensorProto.INT64, [None]),
-                    oh.make_tensor_value_info(
-                        "indices", TensorProto.INT64, [None, None]
-                    ),
+                    oh.make_tensor_value_info("indices", TensorProto.INT64, [None, None]),
                     oh.make_tensor_value_info("updates", TFLOAT, [None, None, None]),
                 ],
                 [oh.make_tensor_value_info("Z", TFLOAT, [None, None, None])],
@@ -132,9 +128,7 @@ class TestGraphPatternOptimizationExp(ExtTestCase):
         model = oh.make_model(
             oh.make_graph(
                 [
-                    oh.make_node(
-                        op_type, ["Y", "X"] if negative else ["X", "Y"], ["xy"]
-                    ),
+                    oh.make_node(op_type, ["Y", "X"] if negative else ["X", "Y"], ["xy"]),
                     oh.make_node(
                         other_type,
                         (
@@ -453,9 +447,7 @@ class TestGraphPatternOptimizationExp(ExtTestCase):
                     onh.from_array(np.array([1024], dtype=np.int64), name="dim"),
                     onh.from_array(np.array([0], dtype=np.float32), name="zerof"),
                     onh.from_array(np.array([1024, 1], dtype=np.int64), name="shape1"),
-                    onh.from_array(
-                        np.array([1024, 1024], dtype=np.int64), name="shape"
-                    ),
+                    onh.from_array(np.array([1024, 1024], dtype=np.int64), name="shape"),
                 ],
             ),
             opset_imports=[
@@ -750,9 +742,7 @@ class TestGraphPatternOptimizationExp(ExtTestCase):
                 "nd",
                 [
                     oh.make_tensor_value_info("shape", TensorProto.INT64, [None]),
-                    oh.make_tensor_value_info(
-                        "indices", TensorProto.INT64, [None, None, 1]
-                    ),
+                    oh.make_tensor_value_info("indices", TensorProto.INT64, [None, None, 1]),
                     oh.make_tensor_value_info("updates", itype, [None, None, None]),
                 ],
                 [oh.make_tensor_value_info("y", itype, [None, None])],
@@ -776,9 +766,7 @@ class TestGraphPatternOptimizationExp(ExtTestCase):
         )
         opt_onx = gr.to_onnx(optimize=True)
         # self.print_model(opt_onx)
-        self.assertEqual(
-            ["MaskedScatterNDOfShape"], [n.op_type for n in opt_onx.graph.node]
-        )
+        self.assertEqual(["MaskedScatterNDOfShape"], [n.op_type for n in opt_onx.graph.node])
 
         data = np.zeros((32, 16), dtype=dtype)
         indices = np.array(

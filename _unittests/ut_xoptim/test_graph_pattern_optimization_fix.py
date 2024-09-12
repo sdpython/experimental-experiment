@@ -62,9 +62,7 @@ class TestGraphPatternOptimizationFix(ExtTestCase):
         gr = GraphBuilder(
             model,
             infer_shapes=True,
-            optimization_options=OptimizationOptions(
-                patterns=["AddReductionScatterND"]
-            ),
+            optimization_options=OptimizationOptions(patterns=["AddReductionScatterND"]),
         )
         opt_onx = gr.to_onnx(optimize=True)
         self.assertEqual(

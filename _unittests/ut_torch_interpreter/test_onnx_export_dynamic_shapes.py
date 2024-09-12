@@ -407,9 +407,7 @@ class TestOnnxExportDynamicShapes(ExtTestCase):
                 )
             else:
                 # last dimension is not a dynamic shape after export
-                self.assertRaise(
-                    lambda sess=sess, feeds=feeds: sess.run(None, feeds), Fail
-                )
+                self.assertRaise(lambda sess=sess, feeds=feeds: sess.run(None, feeds), Fail)
 
 
 if __name__ == "__main__":

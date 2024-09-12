@@ -24,9 +24,7 @@ class ExtendedReferenceEvaluatorBackendRep(onnx.backend.base.BackendRep):
             else:
                 feeds = {}
                 pos_inputs = 0
-                for inp, tshape in zip(
-                    self._session.input_names, self._session.input_types
-                ):
+                for inp, tshape in zip(self._session.input_names, self._session.input_types):
                     shape = tuple(d.dim_value for d in tshape.tensor_type.shape.dim)
                     if shape == inputs[pos_inputs].shape:
                         feeds[inp] = inputs[pos_inputs]
@@ -76,9 +74,7 @@ class ExtendedReferenceEvaluatorBackend(onnx.backend.base.Backend):
         raise NotImplementedError("Unable to run the model node by node.")
 
 
-backend_test = onnx.backend.test.BackendTest(
-    ExtendedReferenceEvaluatorBackend, __name__
-)
+backend_test = onnx.backend.test.BackendTest(ExtendedReferenceEvaluatorBackend, __name__)
 
 # The following tests are too slow with the reference implementation (Conv).
 backend_test.exclude(

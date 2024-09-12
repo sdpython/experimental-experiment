@@ -101,9 +101,7 @@ def get_dynamo_stats() -> Dict[str, float]:
             "autograd_compiles": torch._dynamo.utils.counters["compiled_autograd"][
                 "compiles"
             ],
-            "cudagraph_skips": torch._dynamo.utils.counters["inductor"][
-                "cudagraph_skips"
-            ],
+            "cudagraph_skips": torch._dynamo.utils.counters["inductor"]["cudagraph_skips"],
         }
     )
 
@@ -167,11 +165,7 @@ class ModelRunner:
 
     @classmethod
     def _to_type_or_device(cls, o, dtype_or_device):
-        if (
-            dtype_or_device is None
-            or o is None
-            or isinstance(o, (str, bool, int, float))
-        ):
+        if dtype_or_device is None or o is None or isinstance(o, (str, bool, int, float)):
             return o
         if isinstance(o, list):
             return [cls._to_type_or_device(v, dtype_or_device) for v in o]
@@ -208,9 +202,7 @@ class ModelRunner:
                 offset_per_key=o.offset_per_key_or_none(),
                 inverse_indices=o.inverse_indices_or_none(),
             )
-            ext = {
-                k: cls._to_type_or_device(v, dtype_or_device) for k, v in ext.items()
-            }
+            ext = {k: cls._to_type_or_device(v, dtype_or_device) for k, v in ext.items()}
             return o.__class__(**ext)
 
         if isinstance(o, dict):
@@ -355,9 +347,7 @@ class ModelRunner:
     def parameters_dtype(self) -> str:
         """Returns the unique dtypes of all parameters."""
         return ",".join(
-            sorted(
-                {str(p.dtype).replace("torch.", "") for p in self.model.parameters()}
-            )
+            sorted({str(p.dtype).replace("torch.", "") for p in self.model.parameters()})
         )
 
     def export_as(
@@ -648,9 +638,7 @@ class ModelRunner:
             options = None
 
         if self.autocast:
-            with torch.autocast(
-                device_type=self.device, dtype=self.dtype
-            ), torch.no_grad():
+            with torch.autocast(device_type=self.device, dtype=self.dtype), torch.no_grad():
                 onx, builder, stats = to_onnx(
                     self.model,
                     self.inputs,
@@ -728,9 +716,7 @@ class ModelRunner:
         if autograd:
             from torch._dynamo.backends.common import aot_autograd
 
-            cbf = aot_autograd(
-                fw_compiler=cbff, decompositions=get_decomposition_table()
-            )
+            cbf = aot_autograd(fw_compiler=cbff, decompositions=get_decomposition_table())
 
             if self.autocast:
                 with torch.autocast(device_type=self.device, dtype=self.dtype):
@@ -780,9 +766,7 @@ class ModelRunner:
             inputs = self.inputs
 
         if self.autocast:
-            with torch.autocast(
-                device_type=self.device, dtype=self.dtype
-            ), torch.no_grad():
+            with torch.autocast(device_type=self.device, dtype=self.dtype), torch.no_grad():
                 torch.onnx.export(
                     self.model,
                     inputs,
@@ -847,9 +831,7 @@ class ModelRunner:
         assert not dynamic, "dynamic true not implemented yet"
         assert no_grad, "no_grad false not implemented yet"
 
-        assert (
-            not optimization
-        ), f"optimization {optimization!r} not compatible with dynamo"
+        assert not optimization, f"optimization {optimization!r} not compatible with dynamo"
 
         additional_kwargs = {}
         if detailed:
@@ -866,9 +848,7 @@ class ModelRunner:
             additional_kwargs.update(dict(fallback=True))
 
         if self.autocast:
-            with torch.autocast(
-                device_type=self.device, dtype=self.dtype
-            ), torch.no_grad():
+            with torch.autocast(device_type=self.device, dtype=self.dtype), torch.no_grad():
                 onnx_program = torch.onnx.export(
                     self.model,
                     self.inputs,
@@ -908,9 +888,7 @@ class ModelRunner:
         stats = {}
 
         if self.autocast:
-            with torch.autocast(
-                device_type=self.device, dtype=self.dtype
-            ), torch.no_grad():
+            with torch.autocast(device_type=self.device, dtype=self.dtype), torch.no_grad():
                 exported = torch.onnx.dynamo_export(
                     self.model,
                     *self.inputs,
@@ -1008,9 +986,7 @@ class ModelRunner:
         assert not fake_tensor, "fake_tensor not implemented."
         assert not dynamic, "dynamic true not implemented yet"
         assert no_grad, "no_grad false not implemented yet"
-        assert (
-            not optimization
-        ), f"optimization {optimization!r} not compatible with export"
+        assert not optimization, f"optimization {optimization!r} not compatible with export"
         from torch.export import export
 
         with torch.no_grad():
@@ -1030,9 +1006,7 @@ class ModelRunner:
         assert not fake_tensor, "fake_tensor not implemented."
         assert not dynamic, "dynamic true not implemented yet"
         assert no_grad, "no_grad false not implemented yet"
-        assert (
-            not optimization
-        ), f"optimization {optimization!r} not compatible with eager"
+        assert not optimization, f"optimization {optimization!r} not compatible with eager"
 
         return self.model, None
 
@@ -1049,9 +1023,7 @@ class ModelRunner:
         assert not fake_tensor, "fake_tensor not implemented."
         assert not dynamic, "dynamic true not implemented yet"
         assert no_grad, "no_grad false not implemented yet"
-        assert (
-            not optimization
-        ), f"optimization {optimization!r} not compatible with eager"
+        assert not optimization, f"optimization {optimization!r} not compatible with eager"
         from onnxruntime.training.ortmodule import ORTModule
 
         return ORTModule(self.model), None
@@ -1069,13 +1041,9 @@ class ModelRunner:
         assert not fake_tensor, "fake_tensor not implemented."
         assert not dynamic, "dynamic true not implemented yet"
         assert no_grad, "no_grad true not implemented yet"
-        assert (
-            not optimization
-        ), f"optimization {optimization!r} not compatible with compile"
+        assert not optimization, f"optimization {optimization!r} not compatible with compile"
 
-        def custom_backend(
-            gm: torch.fx.GraphModule, example_inputs: List[torch.Tensor]
-        ):
+        def custom_backend(gm: torch.fx.GraphModule, example_inputs: List[torch.Tensor]):
             if verbose:
                 print("[compile: fx_graph]")
                 print(gm)
@@ -1084,9 +1052,7 @@ class ModelRunner:
             return gm.forward
 
         if self.autocast:
-            with torch.autocast(
-                device_type=self.device, dtype=self.dtype
-            ), torch.no_grad():
+            with torch.autocast(device_type=self.device, dtype=self.dtype), torch.no_grad():
                 res = torch.compile(
                     self.model,
                     fullgraph=True,
@@ -1115,9 +1081,7 @@ class ModelRunner:
         ), f"optimization {optimization!r} not compatible with inductor"
 
         if self.autocast:
-            with torch.autocast(
-                device_type=self.device, dtype=self.dtype
-            ), torch.no_grad():
+            with torch.autocast(device_type=self.device, dtype=self.dtype), torch.no_grad():
                 res = torch.compile(self.model, backend="inductor", fullgraph=True)
         else:
             with torch.no_grad():
@@ -1137,14 +1101,10 @@ class ModelRunner:
         assert not fake_tensor, "fake_tensor not implemented."
         assert not dynamic, "dynamic true not implemented yet"
         assert no_grad, "no_grad true not implemented yet"
-        assert (
-            not optimization
-        ), f"optimization {optimization!r} not compatible with dort"
+        assert not optimization, f"optimization {optimization!r} not compatible with dort"
 
         if self.autocast:
-            with torch.autocast(
-                device_type=self.device, dtype=self.dtype
-            ), torch.no_grad():
+            with torch.autocast(device_type=self.device, dtype=self.dtype), torch.no_grad():
                 res = torch.compile(self.model, backend="onnxrt", fullgraph=True)
         else:
             with torch.no_grad():

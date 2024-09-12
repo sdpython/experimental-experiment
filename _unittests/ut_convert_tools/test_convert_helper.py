@@ -112,9 +112,7 @@ class TestConvertHelper(ExtTestCase):
         model(*example_args_collection[0])
         model = to_onnx(model, example_args_collection[0])
         model_proto = model.model_proto
-        ort_optimize(
-            model_proto, providers="cuda", output="test_ort_optimize_cuda.onnx"
-        )
+        ort_optimize(model_proto, providers="cuda", output="test_ort_optimize_cuda.onnx")
 
 
 if __name__ == "__main__":

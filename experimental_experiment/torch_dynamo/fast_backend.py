@@ -51,9 +51,7 @@ def _get_session(
     append_custom_libraries(onx, opts)
 
     return (
-        onnxruntime.InferenceSession(
-            onx.SerializeToString(), opts, providers=providers
-        ),
+        onnxruntime.InferenceSession(onx.SerializeToString(), opts, providers=providers),
         run_options,
     )
 
@@ -154,9 +152,7 @@ class OrtBackend:
 
         if self.devices is None:
             DEVICES = {
-                -1: ORTC.OrtDevice(
-                    ORTC.OrtDevice.cpu(), ORTC.OrtDevice.default_memory(), 0
-                )
+                -1: ORTC.OrtDevice(ORTC.OrtDevice.cpu(), ORTC.OrtDevice.default_memory(), 0)
             }
 
             if torch.cuda.is_available():
@@ -199,19 +195,16 @@ class OrtBackend:
             name = self.dump_first_inputs
             self.dump_first_inputs = None
             with open(name + ".pkl", "wb") as f:
-                pickle.dump(
-                    [self.input_names, _serialize(inputs), self.output_names], f
-                )
+                pickle.dump([self.input_names, _serialize(inputs), self.output_names], f)
 
         res, dimensions = self._run_onnx_session_with_ortvaluevector(inputs)
         for x, name in zip(res, self.output_names):
             if isinstance(x, (torch.SymInt, int, float, torch.SymFloat)):
                 if x == 0:
                     self.dump_for_debug("debug_data", *inputs)
-                assert x != 0, (
-                    f"Dimension is null for name={name!r}, "
-                    f"input dimensions={dimensions}"
-                )
+                assert (
+                    x != 0
+                ), f"Dimension is null for name={name!r}, input dimensions={dimensions}"
 
         if self.stor:
             self.stor["inputs"].append(inputs)
@@ -363,9 +356,7 @@ class OrtBackend:
         case = os.path.join(folder, f"test_case_{test_case}")
         if case and not os.path.exists(case):
             os.makedirs(case)
-        assert (
-            len(inputs) > 0
-        ), f"Empty sequence of inputs, cannot save into {folder!r}."
+        assert len(inputs) > 0, f"Empty sequence of inputs, cannot save into {folder!r}."
         for i, inp in enumerate(inputs):
             name = os.path.join(case, f"input_{i}.pb")
             pb = self.to_tensor_proto(inp)
@@ -456,9 +447,7 @@ def _default_export(
     )
 
     if options is None:
-        patterns = get_pattern_list(
-            enable_pattern, disable_pattern, verbose=verbose_onnx
-        )
+        patterns = get_pattern_list(enable_pattern, disable_pattern, verbose=verbose_onnx)
 
         if order_algorithm is not None:
             from ..xoptim import OrderAlgorithm
@@ -609,9 +598,7 @@ def onnx_custom_backend(
 
     # determines the devices
 
-    DEVICES = {
-        -1: ORTC.OrtDevice(ORTC.OrtDevice.cpu(), ORTC.OrtDevice.default_memory(), 0)
-    }
+    DEVICES = {-1: ORTC.OrtDevice(ORTC.OrtDevice.cpu(), ORTC.OrtDevice.default_memory(), 0)}
 
     providers = ["CPUExecutionProvider"]
     if torch.cuda.is_available():

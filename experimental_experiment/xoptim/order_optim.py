@@ -60,9 +60,7 @@ class OrderOptimization:
             stats = self.random_order()
             if self.verbose:
                 print(f"[OrderOptimization.optimize] done in {duration}")
-            stats.append(
-                dict(pattern="order", algo=str(self.algorithm), time_in=duration)
-            )
+            stats.append(dict(pattern="order", algo=str(self.algorithm), time_in=duration))
             return stats
 
         raise AssertionError(f"Unsupported algorithm {self.algorithm}.")
@@ -111,15 +109,11 @@ class OrderOptimization:
                 for i in node.input:
                     if i == "":
                         continue
-                    assert (
-                        i in known
-                    ), f"Unknown input {i!r}, step {step!r}  in node {node}"
+                    assert i in known, f"Unknown input {i!r}, step {step!r}  in node {node}"
                 known |= set(node.output)
             for o in self.builder.outputs:
                 assert o.name in known, f"Unknown output {o.name!r}, step {step!r} "
-            stats.append(
-                dict(pattern=f"check_{step}", time_in=time.perf_counter() - begin)
-            )
+            stats.append(dict(pattern=f"check_{step}", time_in=time.perf_counter() - begin))
 
         if self.verbose:
             begin = time.perf_counter()

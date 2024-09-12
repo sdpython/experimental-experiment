@@ -44,9 +44,7 @@ class AveragePoolGrad(OpRun):
                 for channel in range(grad.shape[1]):
                     for i in range(out.shape[2]):
                         t = max(i * strides[0] - pads[0], 0)
-                        b = min(
-                            i * strides[0] - pads[0] + kernel_shape[0], grad.shape[2]
-                        )
+                        b = min(i * strides[0] - pads[0] + kernel_shape[0], grad.shape[2])
                         for j in range(out.shape[3]):
                             le = max(j * strides[1] - pads[2], 0)
                             ri = min(

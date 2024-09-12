@@ -118,9 +118,7 @@ class RotaryConcatPartPattern(PatternOptimization):
             return self.none(node, inspect.currentframe().f_lineno)
 
         cst_left = next(n for n in concat_left_before if n.op_type == "ConstantOfShape")
-        cst_right = next(
-            n for n in concat_right_before if n.op_type == "ConstantOfShape"
-        )
+        cst_right = next(n for n in concat_right_before if n.op_type == "ConstantOfShape")
 
         tl = [n for n in concat_right_before if n.op_type == "Neg"]
         tr = [n for n in concat_left_before if n.op_type == "Neg"]
@@ -173,17 +171,13 @@ class RotaryConcatPartPattern(PatternOptimization):
                 return self.none(node, inspect.currentframe().f_lineno)
 
             slice_left_def = [g.get_computed_constant(i) for i in slice_left.input[1:]]
-            slice_right_def = [
-                g.get_computed_constant(i) for i in slice_right.input[1:]
-            ]
+            slice_right_def = [g.get_computed_constant(i) for i in slice_right.input[1:]]
             if len(slice_left_def) != 3 or len(slice_right_def) != 3:
                 return self.none(node, inspect.currentframe().f_lineno)
             if slice_left_def[2].tolist() != slice_right_def[2].tolist():
                 # axis are different
                 return self.none(node, inspect.currentframe().f_lineno)
-            lengths = {len(v) for v in slice_left_def} | {
-                len(v) for v in slice_right_def
-            }
+            lengths = {len(v) for v in slice_left_def} | {len(v) for v in slice_right_def}
             if lengths != {1}:
                 # more than one axis
                 return self.none(node, inspect.currentframe().f_lineno)
@@ -328,10 +322,7 @@ class RotaryConcatPartPattern(PatternOptimization):
             g.node_before(node.input[0]),
             g.node_before(node.input[1]),
         )
-        if (
-            transpose_left.op_type != "Transpose"
-            or transpose_right.op_type != "Transpose"
-        ):
+        if transpose_left.op_type != "Transpose" or transpose_right.op_type != "Transpose":
             return self.none(node, inspect.currentframe().f_lineno)
 
         perm_left = list(g.get_attribute(transpose_left, "perm").ints)
@@ -397,10 +388,7 @@ class RotaryConcatPartPattern(PatternOptimization):
 
         cst_left = g.node_before(tr_data_left.input[0])
         cst_right = g.node_before(tr_data_right.input[0])
-        if (
-            cst_left.op_type != "ConstantOfShape"
-            or cst_right.op_type != "ConstantOfShape"
-        ):
+        if cst_left.op_type != "ConstantOfShape" or cst_right.op_type != "ConstantOfShape":
             return self.none(node, inspect.currentframe().f_lineno)
 
         slice_left = g.node_before(tr_update_left.input[0])
@@ -462,9 +450,7 @@ class RotaryConcatPartPattern(PatternOptimization):
             use_split = True
 
         # Checking shapes and indices
-        if not g.has_shape(scatter_left.input[0]) or not g.has_shape(
-            scatter_right.input[0]
-        ):
+        if not g.has_shape(scatter_left.input[0]) or not g.has_shape(scatter_right.input[0]):
             return self.none(node, inspect.currentframe().f_lineno)
         shape_left = g.get_shape(scatter_left.input[0])
         shape_right = g.get_shape(scatter_right.input[0])
@@ -497,18 +483,14 @@ class RotaryConcatPartPattern(PatternOptimization):
                 return self.none(node, inspect.currentframe().f_lineno)
 
             slice_left_def = [g.get_computed_constant(i) for i in slice_left.input[1:]]
-            slice_right_def = [
-                g.get_computed_constant(i) for i in slice_right.input[1:]
-            ]
+            slice_right_def = [g.get_computed_constant(i) for i in slice_right.input[1:]]
             if len(slice_left_def) != 4 or len(slice_right_def) != 4:
                 return self.none(node, inspect.currentframe().f_lineno)
             if slice_left_def[2].tolist() != slice_right_def[2].tolist():
                 return self.none(node, inspect.currentframe().f_lineno)
             if slice_left_def[3].tolist() != [1] or slice_right_def[3].tolist() != [1]:
                 return self.none(node, inspect.currentframe().f_lineno)
-            lengths = {len(v) for v in slice_left_def} | {
-                len(v) for v in slice_right_def
-            }
+            lengths = {len(v) for v in slice_left_def} | {len(v) for v in slice_right_def}
             if lengths != {1}:
                 # more than one axis
                 return self.none(node, inspect.currentframe().f_lineno)
@@ -585,16 +567,12 @@ class RotaryConcatPartPattern(PatternOptimization):
             axis = g.get_attribute(split, "axis").i
         else:
             slice_left_def = [g.get_computed_constant(i) for i in slice_left.input[1:]]
-            slice_right_def = [
-                g.get_computed_constant(i) for i in slice_right.input[1:]
-            ]
+            slice_right_def = [g.get_computed_constant(i) for i in slice_right.input[1:]]
             axis = slice_left_def[2][0]
             dim_left = slice_left_def[1][0] - slice_left_def[0][0]
             dim_right = slice_right_def[1][0] - slice_right_def[0][0]
 
-            splits = g.make_initializer(
-                "", np.array([dim_left, dim_right], dtype=np.int64)
-            )
+            splits = g.make_initializer("", np.array([dim_left, dim_right], dtype=np.int64))
 
             split = g.make_node(
                 "Split",
@@ -640,9 +618,7 @@ class RotaryConcatPartPattern(PatternOptimization):
                 other_nodes.append(tr_data_left)
             if cst_left is not None:
                 other_nodes.append(cst_left)
-        if scatter_right is not None and g.is_used_more_than_once(
-            scatter_right.input[0]
-        ):
+        if scatter_right is not None and g.is_used_more_than_once(scatter_right.input[0]):
             if tr_data_right is not None and id(tr_data_right) != id(tr_data_left):
                 other_nodes.append(tr_data_right)
             if cst_right is not None and id(cst_right) != id(cst_left):

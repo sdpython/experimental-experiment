@@ -179,9 +179,7 @@ class TransposeReshapeTransposePattern(PatternOptimization):
                     ii.append(i)
                 else:
                     j += 1
-                    assert j < len(
-                        new_shape
-                    ), f"Unxpected index i={j}, shape={new_shape}"
+                    assert j < len(new_shape), f"Unxpected index i={j}, shape={new_shape}"
                     s2 *= new_shape[j]
                     jj.append(j)
 
@@ -259,9 +257,7 @@ class TransposeReshapeTransposePattern(PatternOptimization):
         reshape_node: NodeProto,
         t2_node: NodeProto,
     ) -> List[NodeProto]:
-        new_perm, new_shape, after = self._new_shape_perm(
-            g, t1_node, reshape_node, t2_node
-        )
+        new_perm, new_shape, after = self._new_shape_perm(g, t1_node, reshape_node, t2_node)
         new_name = g.unique_name(f"{self.__class__.__name__}_{t1_node.output[0]}")
         new_shape_name = g.make_initializer("", np.array(new_shape, dtype=np.int64))
         if after:

@@ -579,11 +579,7 @@ class TestGraphPatternBuilder(ExtTestCase):
                     oh.make_tensor_value_info("X", TensorProto.FLOAT, [1, "b", "c"]),
                     oh.make_tensor_value_info("Y", TensorProto.FLOAT, ["a", "b", "c"]),
                 ],
-                [
-                    oh.make_tensor_value_info(
-                        "final", TensorProto.FLOAT, ["a", "b", "c"]
-                    )
-                ],
+                [oh.make_tensor_value_info("final", TensorProto.FLOAT, ["a", "b", "c"])],
             ),
             opset_imports=[oh.make_opsetid("", 18)],
             ir_version=9,
@@ -594,9 +590,7 @@ class TestGraphPatternBuilder(ExtTestCase):
                 return g.op.Mul(X, g.op.Mul(Y, g.op.Sigmoid(Y)))
 
             def apply_pattern(self, g: GraphBuilder, X, Y):
-                return g.anyop.MulMulSigmoid(
-                    X, Y, domain="onnx_extended.ortops.optim.cuda"
-                )
+                return g.anyop.MulMulSigmoid(X, Y, domain="onnx_extended.ortops.optim.cuda")
 
             def validate_mapping(
                 self,
@@ -762,9 +756,7 @@ class TestGraphPatternBuilder(ExtTestCase):
             oh.make_model(
                 oh.make_graph(
                     [
-                        oh.make_node(
-                            "Split", ["X"], ["s1", "s2"], axis=-1, num_outputs=2
-                        ),
+                        oh.make_node("Split", ["X"], ["s1", "s2"], axis=-1, num_outputs=2),
                         (
                             oh.make_node("Neg", ["s1"], ["ns1"])
                             if side == "left"
@@ -818,9 +810,7 @@ class TestGraphPatternBuilder(ExtTestCase):
                 return g.op.Concat(g.op.Neg(x2), x1, axis=-1)
 
             def apply_pattern(self, g: GraphBuilder, x):
-                return g.op.Rotary(
-                    x, side="right", domain="onnx_extended.ortops.optim.cuda"
-                )
+                return g.op.Rotary(x, side="right", domain="onnx_extended.ortops.optim.cuda")
 
             def validate_mapping(
                 self,
@@ -843,9 +833,7 @@ class TestGraphPatternBuilder(ExtTestCase):
                 return g.op.Concat(x2, g.op.Neg(x1), axis=-1)
 
             def apply_pattern(self, g: GraphBuilder, x):
-                return g.op.Rotary(
-                    x, side="left", domain="onnx_extended.ortops.optim.cuda"
-                )
+                return g.op.Rotary(x, side="left", domain="onnx_extended.ortops.optim.cuda")
 
         class Rotary3(EasyPatternOptimization):
             def match_pattern(self, g: GraphBuilder, x, splits):
@@ -999,9 +987,7 @@ class TestGraphPatternBuilder(ExtTestCase):
                 assert (
                     len(deleted_nodes) == 2
                 ), f"Unexpected number of nodes in {deleted_nodes}"
-                x, y, z = set(
-                    list(deleted_nodes[0].input) + list(deleted_nodes[1].input)
-                )
+                x, y, z = set(list(deleted_nodes[0].input) + list(deleted_nodes[1].input))
                 if not g.has_shape(x) or not g.has_shape(y) or not g.has_shape(z):
                     return False
                 x_shape, y_shape, z_shape = (

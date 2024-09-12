@@ -90,9 +90,7 @@ class TestGraphPatternOptimizationEasy(ExtTestCase):
                         oh.make_node("Where", ["neq1", "I", "zeroi"], ["ind"]),
                         oh.make_node("Unsqueeze", ["ind", "one"], ["flat_ind"]),
                         oh.make_node("LogSoftmax", ["X"], ["logX"], axis=1),
-                        oh.make_node(
-                            "GatherElements", ["logX", "flat_ind"], ["gx"], axis=1
-                        ),
+                        oh.make_node("GatherElements", ["logX", "flat_ind"], ["gx"], axis=1),
                         oh.make_node("Squeeze", ["gx", "one"], ["flat_gx"]),
                         oh.make_node("Neg", ["flat_gx"], ["neg_gx"]),
                         oh.make_node("Where", ["neq1", "neg_gx", "zerof"], ["w2"]),

@@ -48,9 +48,7 @@ class GeluPattern(EasyPatternOptimization):
         deleted_nodes: List[NodeProto],
         pattern_nodes: Optional[List[NodeProto]] = None,
     ) -> bool:
-        assert (
-            len(deleted_nodes) == 8
-        ), f"Unexpected pattern length {len(deleted_nodes)}"
+        assert len(deleted_nodes) == 8, f"Unexpected pattern length {len(deleted_nodes)}"
         assert deleted_nodes[0].op_type == "Pow", f"-- {deleted_nodes[0]}"
         c3 = deleted_nodes[0].input[1]
         assert deleted_nodes[1].op_type == "Mul", f"-- {deleted_nodes[1]}"
@@ -133,9 +131,7 @@ class SoftmaxCrossEntropyLossCastPattern(EasyPatternOptimization):
         zeroi,
         b,
     ):
-        return g.op.SoftmaxCrossEntropyLoss(
-            X, indices, ignore_index=-100, reduction="mean"
-        )
+        return g.op.SoftmaxCrossEntropyLoss(X, indices, ignore_index=-100, reduction="mean")
 
     def validate_mapping(
         self,
@@ -143,9 +139,7 @@ class SoftmaxCrossEntropyLossCastPattern(EasyPatternOptimization):
         deleted_nodes: List[NodeProto],
         pattern_nodes: Optional[List[NodeProto]] = None,
     ) -> bool:
-        assert (
-            len(deleted_nodes) == 16
-        ), f"Unexpected pattern length {len(deleted_nodes)}"
+        assert len(deleted_nodes) == 16, f"Unexpected pattern length {len(deleted_nodes)}"
         node = deleted_nodes[-1]
 
         for n in deleted_nodes:

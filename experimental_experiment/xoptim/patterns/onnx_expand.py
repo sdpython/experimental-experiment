@@ -89,9 +89,7 @@ class ExpandBroadcastPattern(PatternOptimization):
             return self.none(node, inspect.currentframe().f_lineno)
 
         next_nodes = g.next_nodes(node.output[0])
-        assert (
-            len(next_nodes) == 1
-        ), "The previous test should have cleared out this case."
+        assert len(next_nodes) == 1, "The previous test should have cleared out this case."
         next_node = next_nodes[0]
 
         if next_node.op_type not in self._op_types or next_node.domain != "":
@@ -170,9 +168,7 @@ class ExpandSwapPattern(PatternOptimization):
             return self.none(node, inspect.currentframe().f_lineno)
 
         next_nodes = g.next_nodes(node.output[0])
-        assert (
-            len(next_nodes) == 1
-        ), "The previous test should have cleared out this case."
+        assert len(next_nodes) == 1, "The previous test should have cleared out this case."
         next_node = next_nodes[0]
 
         if next_node.op_type not in self._other_types and (
