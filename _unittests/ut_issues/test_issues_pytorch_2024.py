@@ -266,60 +266,49 @@ class TestIssuesOnnxExporter(ExtTestCase):
     def _flash_attn(self, exporter):
         # https://github.com/pytorch/pytorch/issues/135645
 
-        import torch 
-        import torch.nn as nn 
+        import torch
+
         try:
             from flash_attn.flash_attn_interface import flash_attn_func
-        except ImportError:
-            raise unittest.skipIf("flash_attn not installed")
+        except ImportError as e:
+            raise unittest.SkipTest(f"flash_attn not installed {e}")
 
-        class FlashAttention(nn.Module):
+        class FlashAttention(torch.nn.Module):
             def __init__(self, softmax_scale=None):
                 super().__init__()
                 self.softmax_scale = softmax_scale
+
             def forward(self, qkv):
-                q=qkv[:,:,0,...] #torch.Size([9, 1025, 16, 64])
-                k=qkv[:,:,1,...]
-                v=qkv[:,:,2,...]
+                q = qkv[:, :, 0, ...]  # torch.Size([9, 1025, 16, 64])
+                k = qkv[:, :, 1, ...]
+                v = qkv[:, :, 2, ...]
 
-                output =flash_attn_func(q, k, v, softmax_scale=self.softmax_scale)
-                return output 
-            
-            
-        # qkv=torch.load("/home/qkv.pth") 
-        qkv=torch.ones((9, 1025, 3, 16, 64)).to(torch.float16).cuda()
-        print(qkv.shape)
-        softmax_scale = qkv.shape[-1] ** (-0.5)
-        flash =FlashAttention(softmax_scale ).cuda().eval()
-        output= flash(qkv)
+                output = flash_attn_func(q, k, v, softmax_scale=self.softmax_scale)
+                return output
 
-        with torch.no_grad():
-            torch.onnx.export(
-                    flash, 
-                    (qkv),
-                    "/home/qkv.onnx",
-                    input_names   = ["input0"],
-                    output_names  = ["qkv_out"],
-                    opset_version = 11
-                    )
-        onnx_file_path = f"test__in_projection_packed_{exporter}.onnx"
+        example_input = torch.ones((9, 1025, 3, 16, 64)).to(torch.float16).cuda()
+        softmax_scale = example_input.shape[-1] ** (-0.5)
+        model = FlashAttention(softmax_scale).cuda().eval()
+        model(example_input)
+        onnx_file_path = f"test_flash_attn_{exporter}.onnx"
 
+        # with torch.no_grad():
         if exporter == "script":
             torch.onnx.export(
                 model,
                 (example_input,),
                 onnx_file_path,
-                input_names=["input"],
-                output_names=["output"],
-                opset=18,
+                input_names=["input0"],
+                output_names=["qkv_out"],
+                opset=11,
             )
         elif exporter == "dynamo":
             torch.onnx.export(
                 model,
                 (example_input,),
                 onnx_file_path,
-                input_names=["input"],
-                output_names=["output"],
+                input_names=["input0"],
+                output_names=["qkv_out"],
                 dynamo=True,
             )
         else:
@@ -338,6 +327,16 @@ class TestIssuesOnnxExporter(ExtTestCase):
         expected_output = model(example_input)
         self.assertEqual(expected_output.shape, output[0].shape)
         self.assertEqualArray(expected_output, output[0], atol=1e-4)
+
+    def test__flash_attn_script(self):
+        self._flash_attn("script")
+
+    def test__flash_attn_dynamo(self):
+        self._flash_attn("dynamo")
+
+    def test__flash_attn_custom(self):
+        self._flash_attn("custom")
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
