@@ -52,9 +52,7 @@ def get_machine(
     config: Dict[str, Union[str, int, float, Tuple[int, int]]] = dict(
         machine=str(platform.machine()),
         architecture=(
-            "/".join(str(_) for _ in arch)
-            if isinstance(arch, (list, tuple))
-            else str(arch)
+            "/".join(str(_) for _ in arch) if isinstance(arch, (list, tuple)) else str(arch)
         ),
         processor=str(platform.processor()),
         version=str(sys.version).split()[0],
@@ -79,9 +77,7 @@ def get_machine(
     return config
 
 
-def _cmd_line(
-    script_name: str, **kwargs: Dict[str, Union[str, int, float]]
-) -> List[str]:
+def _cmd_line(script_name: str, **kwargs: Dict[str, Union[str, int, float]]) -> List[str]:
     args = [sys.executable, "-m", script_name]
     for k, v in kwargs.items():
         if v is None:
@@ -205,9 +201,7 @@ def run_benchmark(
         else:
             os.environ["ONNXRT_DUMP_PATH"] = ""
         if verbose > 3:
-            print(
-                f"[run_benchmark] cmd={cmd if isinstance(cmd, str) else ' '.join(cmd)}"
-            )
+            print(f"[run_benchmark] cmd={cmd if isinstance(cmd, str) else ' '.join(cmd)}")
         p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         timeout_error = ""
         try:
@@ -440,6 +434,4 @@ def measure_discrepancies(
             rel_err = float((diff.abs() / torch_tensor).max())
             abs_errs.append(abs_err)
             rel_errs.append(rel_err)
-    return dict(
-        abs=max(abs_errs), rel=max(rel_errs), sum=sum(rel_errs), n=len(abs_errs)
-    )
+    return dict(abs=max(abs_errs), rel=max(rel_errs), sum=sum(rel_errs), n=len(abs_errs))

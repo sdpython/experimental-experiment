@@ -36,10 +36,9 @@ def aten_meth_clone(
     g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T
 ) -> T:
     "identity"
-    assert x != outputs[0], (
-        f"Input and output are the same x={x!r}, "
-        f"outputs={outputs!r}{g.get_debug_msg()}"
-    )
+    assert (
+        x != outputs[0]
+    ), f"Input and output are the same x={x!r}, outputs={outputs!r}{g.get_debug_msg()}"
     return g.make_node("Identity", [x], outputs, name=".clone")
 
 
@@ -170,9 +169,7 @@ def aten_meth_pow(
     exponent: T,
 ) -> T:
     "pow"
-    assert isinstance(
-        x, str
-    ), f"Unexpected type {type(x)} (x={x!r}, exponent={exponent!r})"
+    assert isinstance(x, str), f"Unexpected type {type(x)} (x={x!r}, exponent={exponent!r})"
     if isinstance(exponent, (int, float)):
         cst = g.make_initializer(
             "", np.array(exponent, dtype=tensor_dtype_to_np_dtype(g.get_type(x)))
@@ -282,15 +279,11 @@ def aten_meth_to(
     device = kwargs.get("device", None)
     for a in args:
         if isinstance(a, torch.dtype):
-            assert (
-                dtype is None
-            ), f"dtype is specified in args and kwargs {args}, {kwargs}"
+            assert dtype is None, f"dtype is specified in args and kwargs {args}, {kwargs}"
             dtype = a
             continue
         if isinstance(a, torch.device):
-            assert (
-                device is None
-            ), f"device is specified in args and kwargs {args}, {kwargs}"
+            assert device is None, f"device is specified in args and kwargs {args}, {kwargs}"
             device = a
             continue
         raise NotImplementedError(f"Unexpected type for argument {type(a)}")
@@ -328,9 +321,7 @@ def aten_meth_transpose(
         f"{g.get_debug_msg()}"
     )
     perm[dim0], perm[dim1] = perm[dim1], perm[dim0]
-    res = g.make_node(
-        "Transpose", [input_name], outputs, perm=perm, name="meth_transpose"
-    )
+    res = g.make_node("Transpose", [input_name], outputs, perm=perm, name="meth_transpose")
     if not sts:
         g.set_type(outputs[0], g.get_type(input_name))
         if g.has_shape(input_name):
@@ -352,9 +343,7 @@ def aten_meth_unsqueeze(
     "unsqueeze"
     new_name = g.unique_name(f"{input_name}_axes")
     g.make_initializer(new_name, np.array([dim], dtype=np.int64))
-    res = g.make_node(
-        "Unsqueeze", [input_name, new_name], outputs, name="meth_unsqueeze"
-    )
+    res = g.make_node("Unsqueeze", [input_name, new_name], outputs, name="meth_unsqueeze")
     if not sts:
         dtype = g.get_type(input_name)
         g.set_type(outputs[0], dtype)
@@ -379,9 +368,7 @@ def aten_meth_view(
         # static shape
         new_shape_name = g.unique_name(f"{input_name}_view_shape")
         g.make_initializer(new_shape_name, np.array(args, dtype=np.int64))
-        res = g.make_node(
-            "Reshape", [input_name, new_shape_name], outputs, name=".view"
-        )
+        res = g.make_node("Reshape", [input_name, new_shape_name], outputs, name=".view")
         if not sts:
             set_type_shape_reshape(g, res, input_name, args)
         return res
@@ -392,7 +379,5 @@ def aten_meth_view(
         g.set_type(new_shape_name, TensorProto.INT64)
         g.set_shape(new_shape_name, (len(args),))
         set_type_shape_reshape(g, res, input_name, new_shape_name)
-        assert g.get_rank(res) == len(
-            args
-        ), f"error in set_type_shape_reshape args={args!r}"
+        assert g.get_rank(res) == len(args), f"error in set_type_shape_reshape args={args!r}"
     return res

@@ -201,9 +201,7 @@ class LayerNormalizationScalePattern(PatternOptimization):
         mul_node = nodes[0]
         nodes = g.next_nodes(mul_node.output[0])
         if len(nodes) == 0:
-            return MatchResult(
-                self, [node, mul_node, None], self.apply, insert_at=mul_node
-            )
+            return MatchResult(self, [node, mul_node, None], self.apply, insert_at=mul_node)
         if len(nodes) == 1 and nodes[0].op_type == "Add":
             if len(node.input) != 2:
                 return self.none(node, inspect.currentframe().f_lineno)
@@ -303,11 +301,7 @@ class CastLayerNormalizationCastPattern(PatternOptimization):
         stash_itype = 1 if stash_type is None else stash_type.i
 
         cast_before = g.node_before(node.input[0])
-        if (
-            cast_before is None
-            or cast_before.op_type != "Cast"
-            or cast_before.domain != ""
-        ):
+        if cast_before is None or cast_before.op_type != "Cast" or cast_before.domain != "":
             return self.none(node, inspect.currentframe().f_lineno)
 
         to = g.get_attribute(cast_before, "to")
@@ -327,9 +321,7 @@ class CastLayerNormalizationCastPattern(PatternOptimization):
         itype = g.get_type(cast_before.input[0])
         if to.i != itype:
             return self.none(node, inspect.currentframe().f_lineno)
-        return MatchResult(
-            self, [cast_before, node, cast_after], self.apply, insert_at=node
-        )
+        return MatchResult(self, [cast_before, node, cast_after], self.apply, insert_at=node)
 
     def apply(
         self,

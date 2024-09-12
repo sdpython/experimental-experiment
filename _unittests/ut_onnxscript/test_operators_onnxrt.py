@@ -130,9 +130,7 @@ class TestOperatorsOnnxrt(ExtTestCase):
             params = ()
         if isinstance(f, nn.Module):
             model = (
-                FuncModuleModuleSimple(f)
-                if input_index == "simple"
-                else FuncModuleModule(f)
+                FuncModuleModuleSimple(f) if input_index == "simple" else FuncModuleModule(f)
             )
         elif input_index == "simple":
             model = FuncModuleSimple(f, params)
@@ -349,9 +347,7 @@ class TestOperatorsOnnxrt(ExtTestCase):
     @hide_stdout()
     def test_xt_index(self):
         x = torch.tensor([[0.0]], requires_grad=True)
-        self.assertONNX(
-            lambda x: x[0], x, onnx_export=inspect.currentframe().f_code.co_name
-        )
+        self.assertONNX(lambda x: x[0], x, onnx_export=inspect.currentframe().f_code.co_name)
 
     @unittest.skip(
         reason="Please convert all Tensors to FakeTensors first or instantiate "
@@ -452,9 +448,7 @@ class TestOperatorsOnnxrt(ExtTestCase):
             lambda x: 1 - x, (x,), onnx_export=inspect.currentframe().f_code.co_name
         )
 
-    @unittest.skipIf(
-        not OP_BOOL_SUPPORTED, reason="multiplication of boolean not supported"
-    )
+    @unittest.skipIf(not OP_BOOL_SUPPORTED, reason="multiplication of boolean not supported")
     @hide_stdout()
     def test_xt_mul_bool(self):
         x = torch.tensor([True, False, True, False])
@@ -465,9 +459,7 @@ class TestOperatorsOnnxrt(ExtTestCase):
             onnx_export=inspect.currentframe().f_code.co_name,
         )
 
-    @unittest.skipIf(
-        not OP_BOOL_SUPPORTED, reason="multiplication of boolean not supported"
-    )
+    @unittest.skipIf(not OP_BOOL_SUPPORTED, reason="multiplication of boolean not supported")
     @hide_stdout()
     def test_xt_mul_fp_bool(self):
         x = torch.tensor([9.4, 1.7, 3.6])
@@ -502,9 +494,7 @@ class TestOperatorsOnnxrt(ExtTestCase):
     @hide_stdout()
     @requires_torch("2.5")  # getitem
     def test_xt_split(self):
-        x = torch.tensor(
-            [[0.0, 1.0, 1.0, 0.0, 2.0, 2.0], [2.0, 3.0, 3.0, 2.0, 1.0, 1.0]]
-        )
+        x = torch.tensor([[0.0, 1.0, 1.0, 0.0, 2.0, 2.0], [2.0, 3.0, 3.0, 2.0, 1.0, 1.0]])
         self.assertONNX(
             lambda x: torch.split(x, 2, 1),
             x,
@@ -516,9 +506,7 @@ class TestOperatorsOnnxrt(ExtTestCase):
     @hide_stdout()
     @requires_torch("2.5")  # getitem
     def test_xt_split_with_sizes(self):
-        x = torch.tensor(
-            [[0.0, 1.0, 1.0, 0.0, 2.0, 2.0], [2.0, 3.0, 3.0, 2.0, 1.0, 1.0]]
-        )
+        x = torch.tensor([[0.0, 1.0, 1.0, 0.0, 2.0, 2.0], [2.0, 3.0, 3.0, 2.0, 1.0, 1.0]])
         self.assertONNX(
             lambda x: torch.split(x, [2, 1, 3], 1),
             x,
@@ -680,9 +668,7 @@ class TestOperatorsOnnxrt(ExtTestCase):
     def test_xt_convtranspose(self):
         x = torch.ones(2, 3, 4, 5, requires_grad=True)
         self.assertONNX(
-            nn.ConvTranspose2d(
-                3, 3, 3, stride=3, bias=False, padding=1, output_padding=2
-            ),
+            nn.ConvTranspose2d(3, 3, 3, stride=3, bias=False, padding=1, output_padding=2),
             x,
             keep_initializers_as_inputs=True,
             onnx_export=inspect.currentframe().f_code.co_name,
@@ -852,8 +838,7 @@ class TestOperatorsOnnxrt(ExtTestCase):
         )
 
     @unittest.skip(
-        "Cannot find any perfect/nearest match "
-        "of symbolic function for aten::mean.dim"
+        "Cannot find any perfect/nearest match of symbolic function for aten::mean.dim"
     )
     @hide_stdout()
     def test_xt_reduced_mean(self):
@@ -1168,9 +1153,7 @@ class TestOperatorsOnnxrt(ExtTestCase):
             test_backward=False,
         )
 
-    @unittest.skipIf(
-        True, reason="data_ptr was false. Pointer to data memory is not valid"
-    )
+    @unittest.skipIf(True, reason="data_ptr was false. Pointer to data memory is not valid")
     @requires_torch("2.4")
     @hide_stdout()
     def test_xt_slice_dynamic_backward(self):
@@ -1964,9 +1947,7 @@ class TestOperatorsOnnxrt(ExtTestCase):
             onnx_export=inspect.currentframe().f_code.co_name,
         )
 
-    @unittest.skipIf(
-        True, reason="TorchDynamo purposely graph breaks on RNN, GRU, LSTMs"
-    )
+    @unittest.skipIf(True, reason="TorchDynamo purposely graph breaks on RNN, GRU, LSTMs")
     @hide_stdout()
     def test_xt_lstm_none_sequence_lens(self):
         """Test symbolic shape inference for LSTM when the input sequence_lens = None."""

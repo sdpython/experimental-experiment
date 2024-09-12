@@ -109,9 +109,7 @@ TORCH_DTYPE_TO_NUMPY_DTYPE = {
 
 DEVICES = {-1: ORTC.OrtDevice(ORTC.OrtDevice.cpu(), ORTC.OrtDevice.default_memory(), 0)}
 for i in range(torch.cuda.device_count()):
-    DEVICES[i] = ORTC.OrtDevice(
-        ORTC.OrtDevice.cuda(), ORTC.OrtDevice.default_memory(), i
-    )
+    DEVICES[i] = ORTC.OrtDevice(ORTC.OrtDevice.cuda(), ORTC.OrtDevice.default_memory(), i)
 
 input_names, output_names = inputs[0], inputs[2]
 inputs = inputs[1]
@@ -232,9 +230,7 @@ if args.profile in (1, "1"):
         vs = "after" if v == 0 else "warmup"
         fig, ax = plt.subplots(1, 2, figsize=(10, max(5, n_unique_nodes // 12)))
 
-        plot_ort_profile(
-            dfv, ax[0], ax[1], f"profiling {vs} {n_nodes} nodes\n{model_model}"
-        )
+        plot_ort_profile(dfv, ax[0], ax[1], f"profiling {vs} {n_nodes} nodes\n{model_model}")
         fig.tight_layout()
         fig.savefig(f"{model_model}_{vs}.png")
 

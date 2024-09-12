@@ -78,10 +78,7 @@ class CastCastBinaryPattern(PatternOptimization):
             return self.none(node, inspect.currentframe().f_lineno)
 
         dtype_left, dtype_right = g.get_type(node.input[0]), g.get_type(node.input[1])
-        if (
-            dtype_left not in self._dtypes_allowed
-            or dtype_right not in self._dtypes_allowed
-        ):
+        if dtype_left not in self._dtypes_allowed or dtype_right not in self._dtypes_allowed:
             return self.none(node, inspect.currentframe().f_lineno)
 
         left, right = g.node_before(node.input[0]), g.node_before(node.input[1])
@@ -91,10 +88,7 @@ class CastCastBinaryPattern(PatternOptimization):
             return self.none(node, inspect.currentframe().f_lineno)
 
         dtype_left, dtype_right = g.get_type(left.input[0]), g.get_type(right.input[0])
-        if (
-            dtype_left not in self._dtypes_allowed
-            or dtype_right not in self._dtypes_allowed
-        ):
+        if dtype_left not in self._dtypes_allowed or dtype_right not in self._dtypes_allowed:
             return self.none(node, inspect.currentframe().f_lineno)
 
         return MatchResult(self, [left, right, node], self.apply, insert_at=node)
@@ -331,9 +325,7 @@ class ComputationCastOpCastPattern(PatternOptimization):
 
         # At this stage, we know the computation type is float and one input
         # has a lower type precision. Let's change it.
-        return MatchResult(
-            self, [node_left, node_right, node], self.apply, insert_at=node
-        )
+        return MatchResult(self, [node_left, node_right, node], self.apply, insert_at=node)
 
     def apply(
         self,

@@ -13,9 +13,7 @@ class TestOnnxScriptOptimizer(ExtTestCase):
         if isinstance(name, str):
             InferenceSession(name, providers=["CPUExecutionProvider"])
         else:
-            InferenceSession(
-                name.SerializeToString(), providers=["CPUExecutionProvider"]
-            )
+            InferenceSession(name.SerializeToString(), providers=["CPUExecutionProvider"])
 
     @hide_stdout()
     def test_optimizer(self):

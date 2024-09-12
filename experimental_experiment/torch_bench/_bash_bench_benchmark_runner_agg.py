@@ -96,6 +96,7 @@ def _SELECTED_FEATURES():
             "The outputs may be right or wrong. Unit test ensures every aten functions "
             "is correctly converted but the combination may produce outputs "
             "with higher discrepancies than expected.",
+            simple=True,
         ),
         dict(
             cat="status",
@@ -422,6 +423,10 @@ FILTERS = {
 }
 
 
+def _nonone_(index):
+    return None not in index.names
+
+
 def _key(v):
     if isinstance(v, (int, float)):
         return v, ""
@@ -501,9 +506,7 @@ def _apply_excel_style(
             continue
 
         n_cols = (
-            1
-            if isinstance(v.index[0], (str, int, np.int64, np.int32))
-            else len(v.index[0])
+            1 if isinstance(v.index[0], (str, int, np.int64, np.int32)) else len(v.index[0])
         )
         n_rows = (
             1
@@ -541,9 +544,7 @@ def _apply_excel_style(
                         or (_isinf(cell.value) and _isinf(look))
                     ):
                         first_row = cell.row
-                        first_col = (
-                            cell.col_idx if hasattr(cell, "col_idx") else first_col
-                        )
+                        first_col = cell.col_idx if hasattr(cell, "col_idx") else first_col
                         break
                     values.append(cell.value)
                 if first_row is not None:
@@ -744,9 +745,7 @@ def _apply_excel_style(
                 for cell in row:
                     if cell.value in fmt:
                         start, end = (
-                            (0, cell.col_idx)
-                            if "SUMMARY" in k
-                            else (cell.col_idx, last_col)
+                            (0, cell.col_idx) if "SUMMARY" in k else (cell.col_idx, last_col)
                         )
                         for idx in range(start, end):
                             fcell = row[idx]
@@ -765,7 +764,7 @@ def _apply_excel_style(
                                         f = "0.00"
                                     elif fcell.value >= 1:
                                         f = "0.000"
-                                elif cell.value == "date":
+                                elif cell.value == "date" and "SIMPLE" not in k:
                                     ts = time.gmtime(fcell.value)
                                     sval = time.strftime("%Y-%m-%d", ts)
                                     fcell.value = sval
@@ -999,9 +998,7 @@ def merge_benchmark_reports(
             elif isinstance(filename, pandas.DataFrame):
                 df = filename
             else:
-                raise TypeError(
-                    f"Unexpected type {type(filename)} for one element of data"
-                )
+                raise TypeError(f"Unexpected type {type(filename)} for one element of data")
             dfs.append(df)
         df = pandas.concat(dfs, axis=0)
     elif isinstance(data, pandas.DataFrame):
@@ -1029,9 +1026,7 @@ def merge_benchmark_reports(
                     df = df[(df["STEP"] == "last")]
             elif "ERR_export" in df.columns:
                 df = df[
-                    (df["STEP"].isna())
-                    | (df["STEP"] != "export")
-                    | ~df["ERR_export"].isna()
+                    (df["STEP"].isna()) | (df["STEP"] != "export") | ~df["ERR_export"].isna()
                 ]
             else:
                 df = df[(df["STEP"].isna()) | (df["STEP"] != "export")]
@@ -1237,8 +1232,7 @@ def merge_benchmark_reports(
 
                 col_name = "memory_delta_peak_gpu_warmup"
                 df[col_name] = (
-                    df["mema_gpu_8_after_export_warmup"]
-                    - df["mema_gpu_6_before_session"]
+                    df["mema_gpu_8_after_export_warmup"] - df["mema_gpu_6_before_session"]
                 )
                 report_on.append(col_name)
 
@@ -1266,8 +1260,7 @@ def merge_benchmark_reports(
         if expr == "date":
             if "date_start" in set_columns:
                 df["status_date"] = (
-                    pandas.to_datetime(df["date_start"]).astype("int64").astype(float)
-                    / 1e9
+                    pandas.to_datetime(df["date_start"]).astype("int64").astype(float) / 1e9
                 )
                 set_columns = set(df.columns)
                 report_on.append("status_date")
@@ -1375,7 +1368,7 @@ def merge_benchmark_reports(
                 df = joined.copy()
                 df["speedup_increase_script"] = (
                     df["speedup"] / df["speedup_script"] - 1
-                ).fillna(np.inf)
+                ).fillna(-np.inf)
                 for c in column_keys:
                     cc = f"{c}_x"
                     if cc in df.columns:
@@ -1404,9 +1397,7 @@ def merge_benchmark_reports(
                     val = (df[c] >= scale[i - 1] / 100) & (df[c] < scale[i] / 100)
                     v1 = f"{scale[i-1]}%" if not np.isinf(scale[i - 1]) else ""
                     v2 = f"{scale[i]}%" if not np.isinf(scale[i]) else ""
-                    suf = (
-                        f"[{v1},{v2}[" if v1 and v2 else (f"<{v2}" if v2 else f">={v1}")
-                    )
+                    suf = f"[{v1},{v2}[" if v1 and v2 else (f"<{v2}" if v2 else f">={v1}")
                     if c == "speedup_increase_script":
                         d = f"bucket_script {suf}"
                     else:
@@ -1517,9 +1508,7 @@ def merge_benchmark_reports(
             m0 = m
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore", category=FutureWarning)
-                m = m.T.stack(level=list(range(len(m.index.names)))).reset_index(
-                    drop=False
-                )
+                m = m.T.stack(level=list(range(len(m.index.names)))).reset_index(drop=False)
             cols = m.columns
             assert len(cols) >= 4, (
                 f"Unexpected number of columns in {cols}, "
@@ -1527,9 +1516,7 @@ def merge_benchmark_reports(
                 f"m0.index.names={m0.index.names}, "
                 f"m0.columns.names={m0.columns.names}\n---\n{m0}"
             )
-            exporter_column = [
-                c for c in cols if c in ("exporter", "opt_patterns", "rtopt")
-            ]
+            exporter_column = [c for c in cols if c in ("exporter", "opt_patterns", "rtopt")]
             assert "stat" in cols, (
                 f"Unexpected columns {cols}, expecting 'stat', "
                 f"{exporter_column!r}, {model!r}, reverse={reverse}, "
@@ -1625,9 +1612,7 @@ def merge_benchmark_reports(
             None not in sheet.columns.names
         ), f"None in sheet.columns.names={sheet.columns.names}, prefix={prefix!r}"
         if verbose:
-            print(
-                f"[merge_benchmark_reports] done, shape of {prefix!r} is {sheet.shape}"
-            )
+            print(f"[merge_benchmark_reports] done, shape of {prefix!r} is {sheet.shape}")
 
         res[prefix[:-1]] = sheet
         res = {k: v for k, v in res.items() if k not in set(merge)}
@@ -1650,9 +1635,7 @@ def merge_benchmark_reports(
                     v[c] = dd
                 except (ValueError, TypeError):
                     types = [
-                        type(_)
-                        for _ in cc
-                        if not isinstance(_, float) or not np.isnan(_)
+                        type(_) for _ in cc if not isinstance(_, float) or not np.isnan(_)
                     ]
                     if set(types) == {str}:
                         continue
@@ -1712,9 +1695,7 @@ def merge_benchmark_reports(
         print("[merge_benchmark_reports] reorder")
 
     res["AGG"] = _reorder_index_level(res["AGG"], new_names + last_names, prefix="AGG")
-    res["AGG2"] = _reorder_index_level(
-        res["AGG2"], new_names + last_names, prefix="AGG2"
-    )
+    res["AGG2"] = _reorder_index_level(res["AGG2"], new_names + last_names, prefix="AGG2")
 
     if verbose:
         print("[merge_benchmark_reports] done")
@@ -1754,19 +1735,16 @@ def merge_benchmark_reports(
     if verbose:
         print(f"[merge_benchmark_reports] add dates with columns={date_col}")
     date_col2 = [c for c in date_col if c != "DATE"]
-    assert len(date_col2) != len(
-        date_col
-    ), f"No date found in {list(sorted(df0.columns))}"
+    assert len(date_col2) != len(date_col), f"No date found in {list(sorted(df0.columns))}"
     final_res["dates"] = df0[date_col].groupby(date_col2).max().reset_index(drop=False)
     date_col2 = [c for c in date_col2 if c in final_res["SIMPLE"]]
     assert "suite" in date_col2, f"Unable to find 'suite' in {date_col2}"
     simple = final_res["SIMPLE"].merge(
         final_res["dates"], left_on=date_col2, right_on=date_col2, how="left"
     )
-    assert simple.shape[0] == final_res["SIMPLE"].shape[0], (
-        f"Some rows were added or deleted {final_res['SIMPLE'].shape} -> "
-        f"{simple.shape}"
-    )
+    assert (
+        simple.shape[0] == final_res["SIMPLE"].shape[0]
+    ), f"Some rows were added or deleted {final_res['SIMPLE'].shape} -> {simple.shape}"
     final_res["SIMPLE"] = simple
 
     if verbose:
@@ -1777,44 +1755,73 @@ def merge_benchmark_reports(
         )
 
     if base_dfs:
+
+        def _float_(x):
+            if isinstance(x, (int, float)):
+                return x
+            try:
+                return float(x)
+            except (ValueError, TypeError):
+                return np.nan
+
         for name in {"0main", "0raw", "SUMMARY", "SUMMARY2", "MODELS", "SIMPLE"}:
             if name in base_dfs:
                 final_res[f"{name}_base"] = base_dfs[name]
 
         for name in {"SUMMARY", "SUMMARY2", "MODELS", "SIMPLE"}:
-            if name in base_dfs and name in final_res:
-                drop = []
-                df_str = final_res[name].select_dtypes("object")
-                if df_str.shape[1] > 0:
-                    stacked = list(df_str.columns)
-                    order_name = [c for c in final_res[name].columns if "#order" in c]
-                    if len(order_name) == 1:
-                        stacked.extend(order_name)
-                        drop.extend(order_name)
-                    assert all(
-                        (c in final_res[name] and c in base_dfs[name])
-                        for c in df_str.columns
-                    ), (
-                        f"Columns mismatch, df_str.columns={df_str.columns}, "
-                        f"{final_res[name].columns} != {base_dfs[name].columns}"
-                    )
-                    df_this = final_res[name].set_index(stacked)
-                    df_base = base_dfs[name].set_index(stacked)
-                else:
-                    df_this = final_res[name]
-                    df_base = base_dfs[name]
-                    stacked = None
+            if name not in base_dfs or name not in final_res:
+                continue
+            drop = []
+            df_str = final_res[name].select_dtypes("object")
+            if df_str.shape[1] > 0:
+                # The date may set the type of object just for one value
+                # Let cast every columns to see if it can improved.
+                df_base = base_dfs[name].copy()
+                for c in df_base.columns:
+                    cc = df_base[c].apply(_float_).astype(float)
+                    if cc.isna().sum() <= 2:
+                        df_base[c] = cc
+                df_this = final_res[name].copy()
+                for c in df_this.columns:
+                    cc = df_this[c].apply(_float_).astype(float, errors="ignore")
+                    if cc.isna().sum() <= 2:
+                        df_this[c] = cc
+                df_str = df_this.select_dtypes("object")
+            else:
+                df_this = final_res[name]
+                df_base = base_dfs[name]
 
-                df_this = df_this.select_dtypes("number")
-                df_base = df_base.select_dtypes("number")
-                df_num = df_this - df_base
-                if stacked:
-                    df_num = df_num.reset_index(drop=False)
-                    order_name = [c for c in df_num.columns if "#order" in c]
-                    if len(order_name) == 1:
-                        df_num = df_num.sort_values(order_name)
+            if df_str.shape[1] > 0:
+                stacked = list(df_str.columns)
+                order_name = [c for c in df_this.columns if "#order" in c]
+                if len(order_name) == 1:
+                    stacked.extend(order_name)
+                    drop.extend(order_name)
+                assert all((c in df_this and c in df_base) for c in df_str.columns), (
+                    f"Columns mismatch in sheet {name!r}, "
+                    f"columns={list(df_str.columns)},\n"
+                    f"[{[int(c in df_this) for c in df_str.columns]}], "
+                    f"[{[int(c in df_base) for c in df_str.columns]}], "
+                    f"\n{list(df_this.columns)}\n!=\n{list(df_base.columns)}"
+                )
+                df_this = df_this.set_index(stacked)
+                df_base = df_base.set_index(stacked)
+            else:
+                stacked = None
 
-                final_res[f"{name}_diff"] = df_num.sort_index(axis=1)
+            df_this = df_this.select_dtypes("number")
+            df_base = df_base.select_dtypes("number")
+            set_columns = list(sorted(set(df_this.columns) & set(df_base.columns)))
+            df_base = df_base[set_columns].sort_index(axis=0).sort_index(axis=1)
+            df_this = df_this[set_columns].sort_index(axis=0).sort_index(axis=1)
+            df_num = df_this.sub(df_base)
+            if stacked:
+                df_num = df_num.reset_index(drop=False)
+                order_name = [c for c in df_num.columns if "#order" in c]
+                if len(order_name) == 1:
+                    df_num = df_num.sort_values(order_name)
+
+            final_res[f"{name}_diff"] = df_num.sort_index(axis=1)
 
     # cleaning empty columns
     for v in final_res.values():
@@ -1841,12 +1848,8 @@ def merge_benchmark_reports(
         piv = (
             final_res["SIMPLE"]
             .pivot(
-                index=tuple(
-                    c for c in ("dtype", "suite", "#order", "METRIC") if c in _set_
-                ),
-                columns=(
-                    c for c in ("exporter", "opt_patterns", "rtopt") if c in _set_
-                ),
+                index=tuple(c for c in ("dtype", "suite", "#order", "METRIC") if c in _set_),
+                columns=(c for c in ("exporter", "opt_patterns", "rtopt") if c in _set_),
                 values="value",
             )
             .sort_index()
@@ -1888,15 +1891,11 @@ def merge_benchmark_reports(
             for k in order:
                 v = final_res[k]
                 ev = _reverse_column_names_order(v, name=k)
-                frow = (
-                    len(ev.columns.names) if isinstance(ev.columns.names, list) else 1
-                )
+                frow = len(ev.columns.names) if isinstance(ev.columns.names, list) else 1
                 if k.startswith("SUMMARY"):
                     fcol = len(v.columns.names)
                 else:
-                    fcol = (
-                        len(ev.index.names) if isinstance(ev.index.names, list) else 1
-                    )
+                    fcol = len(ev.index.names) if isinstance(ev.index.names, list) else 1
 
                 if (
                     k in {"AGG2", "SUMMARY2", "SUMMARY2_base", "SUMMARY2_diff"}
@@ -1931,9 +1930,7 @@ def _reorder_columns_level(
     first_level: List[str],
     prefix: Optional[str] = None,
 ) -> pandas.DataFrame:
-    assert (
-        None not in df.columns.names
-    ), f"None in df.index.names={df.columns.names}, prefix={prefix!r}"
+    assert _nonone_(df.columns), f"None in {df.columns.names}, prefix={prefix!r}"
     assert set(df.columns.names) & set(first_level), (
         f"Nothing to sort, prefix={prefix!r} "
         f"df.columns={df.columns}, first_level={first_level}\n--\n{df}"
@@ -1950,7 +1947,7 @@ def _reorder_columns_level(
     assert (
         list(df.columns.names) == levels
     ), f"Issue levels={levels}, df.columns.names={df.columns.names}"
-    assert None not in df.columns.names, f"None in df.index.names={df.columns.names}"
+    assert _nonone_(df.columns), f"None in {df.columns.names}"
     return df.sort_index(axis=1)
 
 
@@ -1958,12 +1955,10 @@ def _sort_index_level(
     df: pandas.DataFrame,
     debug: Optional[str] = None,
 ) -> pandas.DataFrame:
-    assert (
-        None not in df.index.names
-    ), f"None in df.index.names={df.index.names}, debug={debug!r}"
-    assert (
-        df.columns.names == [None] or None not in df.columns.names
-    ), f"None in df.columns.names={df.columns.names}, debug={debug!r}"
+    assert _nonone_(df.index), f"None in {df.index.names}, debug={debug!r}"
+    assert df.columns.names == [None] or _nonone_(
+        df.columns
+    ), f"None in {df.columns.names}, debug={debug!r}"
     levels = list(df.index.names)
     levels.sort()
     for i in range(len(levels)):
@@ -1974,12 +1969,10 @@ def _sort_index_level(
     assert (
         list(df.index.names) == levels
     ), f"Issue levels={levels}, df.index.names={df.index.names}, debug={debug!r}"
-    assert (
-        None not in df.index.names
-    ), f"None in df.index.names={df.index.names}, debug={debug!r}"
-    assert (
-        df.columns.names == [None] or None not in df.columns.names
-    ), f"None in df.columns.names={df.columns.names}, debug={debug!r}"
+    assert _nonone_(df.index), f"None in {df.index.names}, debug={debug!r}"
+    assert df.columns.names == [None] or _nonone_(
+        df.columns
+    ), f"None in {df.columns.names}, debug={debug!r}"
     return df.sort_index(axis=0)
 
 
@@ -1988,12 +1981,8 @@ def _reorder_index_level(
     first_level: List[str],
     prefix: Optional[str] = None,
 ) -> pandas.DataFrame:
-    assert (
-        None not in df.index.names
-    ), f"None in df.index.names={df.index.names}, prefix={prefix!r}"
-    assert (
-        None not in df.columns.names
-    ), f"None in df.index.names={df.columns.names}, prefix={prefix!r}"
+    assert _nonone_(df.index), f"None in {df.index.names}, prefix={prefix!r}"
+    assert _nonone_(df.columns), f"None in {df.columns.names}, prefix={prefix!r}"
     assert set(df.index.names) & set(first_level), (
         f"Nothing to sort, prefix={prefix!r} "
         f"df.columns={df.index}, first_level={first_level}"
@@ -2010,8 +1999,8 @@ def _reorder_index_level(
     assert (
         list(df.index.names) == levels
     ), f"Issue levels={levels}, df.columns.names={df.index.names}"
-    assert None not in df.index.names, f"None in df.index.names={df.index.names}"
-    assert None not in df.columns.names, f"None in df.index.names={df.columns.names}"
+    assert _nonone_(df.index), f"None in {df.index.names}"
+    assert _nonone_(df.columns), f"None in {df.columns.names}"
     return df.sort_index(axis=0)
 
 
@@ -2053,9 +2042,7 @@ def _create_aggregation_figures(
         assert (
             v.select_dtypes(include=np.number).shape[1] > 0
         ), f"No numeric column for k={k!r}, dtypes=\n{v.dtypes}"
-        assert (
-            None not in v.index.names
-        ), f"None in v.index.names={v.index.names}, k={k!r}"
+        assert None not in v.index.names, f"None in v.index.names={v.index.names}, k={k!r}"
         assert (
             None not in v.columns.names
         ), f"None in v.columns.names={v.columns.names}, k={k!r}"
@@ -2081,9 +2068,7 @@ def _create_aggregation_figures(
 
         v = v.sort_index(axis=1)
 
-        assert (
-            None not in v.index.names
-        ), f"None in v.index.names={v.index.names}, k={k!r}"
+        assert None not in v.index.names, f"None in v.index.names={v.index.names}, k={k!r}"
         assert (
             None not in v.columns.names
         ), f"None in v.columns.names={v.columns.names}, k={k!r}"
@@ -2109,13 +2094,10 @@ def _create_aggregation_figures(
 
         gr_no_nan = v.fillna(0).groupby(key)
         with warnings.catch_warnings():
-            warnings.simplefilter(
-                "ignore", category=(FutureWarning, PerformanceWarning)
-            )
+            warnings.simplefilter("ignore", category=(FutureWarning, PerformanceWarning))
             total = gr_no_nan.count()
             is_nan = gr_no_nan.count() - gr.count() == total
         stats = [
-            ("NAN", _propnan(is_nan.astype(int), is_nan)),
             ("MEAN", gr.mean()),
             ("MEDIAN", gr.median()),
             ("SUM", _propnan(gr.sum(), is_nan)),
@@ -2124,6 +2106,7 @@ def _create_aggregation_figures(
             ("COUNT", _propnan(gr.count(), is_nan)),
             ("COUNT%", _propnan(gr.count() / total, is_nan)),
             ("TOTAL", _propnan(total, is_nan)),
+            ("NAN", _propnan(is_nan.astype(int), is_nan)),
         ]
 
         if k.startswith("speedup"):
@@ -2140,40 +2123,58 @@ def _create_aggregation_figures(
 
         dfs = []
         for name, df in stats:
+
+            # avoid date to be numbers
+            updates = {}
+            drops = []
+            for col in df.columns:
+                if (isinstance(col, tuple) and "date" in col) or col == "date":
+                    if name in {"SUM", "MEDIAN"}:
+                        drops.append(col)
+                    elif name in {"MIN", "MAX", "MEAN", "MEDIAM"}:
+                        # maybe this code will fail someday but it seems that the cycle
+                        # date -> int64 -> float64 -> int64 -> date
+                        # keeps the date unchanged
+                        vvv = df[col]
+                        if vvv.dtype not in {object, np.object_, str, np.str_}:
+                            updates[col] = vvv.apply(
+                                lambda d: (
+                                    np.nan
+                                    if np.isnan(d)
+                                    else time.strftime("%Y-%m-%d", time.gmtime(d))
+                                )
+                            )
+            if drops:
+                df.drop(drops, axis=1, inplace=True)
+            if updates:
+                for kc, vc in updates.items():
+                    df[kc] = vc
+
+            # then continue
             assert isinstance(
                 df, pandas.DataFrame
             ), f"Unexpected type {type(df)} for k={k!r} and name={name!r}"
             df.index = _add_level(df.index, "agg", name)
             df.index = _add_level(df.index, "cat", k)
-            assert (
-                None not in df.index.names
-            ), f"None in df.index.names={df.index.names}, k={k!r}, name={name!r}"
-            assert (
-                None not in df.columns.names
-            ), f"None in df.columns.names={df.columns.names}, k={k!r}, name={name!r}"
+            assert _nonone_(df.index), f"None in {df.index.names}, k={k!r}, name={name!r}"
+            assert _nonone_(
+                df.columns
+            ), f"None in {df.columns.names}, k={k!r}, name={name!r}"
             dfs.append(df)
 
         if len(dfs) == 0:
             continue
         df = pandas.concat(dfs, axis=0)
+
         assert df.shape[0] > 0, f"Empty set for k={k!r}"
         assert df.shape[1] > 0, f"Empty columns for k={k!r}"
-
-        assert (
-            None not in df.index.names
-        ), f"None in df.index.names={df.index.names}, k={k!r}"
-        assert (
-            None not in df.columns.names
-        ), f"None in df.columns.names={df.columns.names}, k={k!r}"
-        assert isinstance(
-            df, pandas.DataFrame
-        ), f"Unexpected type {type(df)} for k={k!r}"
+        assert _nonone_(df.index), f"None in {df.index.names}, k={k!r}"
+        assert _nonone_(df.columns), f"None in {df.columns.names}, k={k!r}"
+        assert isinstance(df, pandas.DataFrame), f"Unexpected type {type(df)} for k={k!r}"
 
         if "stat" in df.columns.names:
             with warnings.catch_warnings():
-                warnings.simplefilter(
-                    "ignore", category=(FutureWarning, PerformanceWarning)
-                )
+                warnings.simplefilter("ignore", category=(FutureWarning, PerformanceWarning))
                 df = df.stack("stat")
             if not isinstance(df, pandas.DataFrame):
                 assert (
@@ -2187,27 +2188,17 @@ def _create_aggregation_figures(
                     df.columns = pandas.MultiIndex.from_arrays(
                         [("_dummy_",)], names=["_dummy_"]
                     )
-                    assert (
-                        None not in df.columns.names
-                    ), f"None in df.columns.names={df.columns.names}, k={k!r}, df={df}"
+                    assert _nonone_(
+                        df.columns
+                    ), f"None in {df.columns.names}, k={k!r}, df={df}"
             assert isinstance(
                 df, pandas.DataFrame
             ), f"Unexpected type {type(df)} for k={k!r}"
-            assert (
-                None not in df.index.names
-            ), f"None in df.index.names={df.index.names}, k={k!r}"
-            assert (
-                None not in df.columns.names
-            ), f"None in df.columns.names={df.columns.names}, k={k!r}, df={df}"
-        assert isinstance(
-            df, pandas.DataFrame
-        ), f"Unexpected type {type(df)} for k={k!r}"
-        assert (
-            None not in df.index.names
-        ), f"None in df.index.names={df.index.names}, k={k!r}"
-        assert (
-            None not in df.columns.names
-        ), f"None in df.columns.names={df.columns.names}, k={k!r}"
+            assert _nonone_(df.index), f"None in {df.index.names}, k={k!r}"
+            assert _nonone_(df.columns), f"None in {df.columns.names}, k={k!r}, df={df}"
+        assert isinstance(df, pandas.DataFrame), f"Unexpected type {type(df)} for k={k!r}"
+        assert _nonone_(df.index), f"None in {df.index.names}, k={k!r}"
+        assert _nonone_(df.columns), f"None in {df.columns.names}, k={k!r}"
         aggs[f"agg_{k}"] = df
 
     # check stat is part of the column otherwise the concatenation fails
@@ -2217,12 +2208,8 @@ def _create_aggregation_figures(
         set_names |= set(df.index.names)
 
     for k, df in aggs.items():
-        assert (
-            None not in df.index.names
-        ), f"None in df.index.names={df.index.names}, k={k!r}"
-        assert (
-            None not in df.columns.names
-        ), f"None in df.columns.names={df.columns.names}, k={k!r}"
+        assert _nonone_(df.index), f"None in {df.index.names}, k={k!r}"
+        assert _nonone_(df.columns), f"None in {df.columns.names}, k={k!r}"
         if len(df.index.names) == len(set_names):
             continue
         missing = set_names - set(df.index.names)
@@ -2234,9 +2221,7 @@ def _create_aggregation_figures(
     # concatenation
     dfs = pandas.concat(list(aggs.values()), axis=0)
     assert None not in dfs.index.names, f"None in dfs.index.names={dfs.index.names}"
-    assert (
-        None not in dfs.columns.names
-    ), f"None in dfs.columns.names={dfs.columns.names}"
+    assert None not in dfs.columns.names, f"None in dfs.columns.names={dfs.columns.names}"
     names = list(dfs.columns.names)
     dfs = dfs.unstack(key)
     keep_columns = dfs
@@ -2381,9 +2366,7 @@ def _filter_data(
 
     if filter_in:
         cond = _f(filter_in)
-        assert isinstance(
-            cond, dict
-        ), f"Unexpected type {type(cond)} for fmt={filter_in!r}"
+        assert isinstance(cond, dict), f"Unexpected type {type(cond)} for fmt={filter_in!r}"
         for k, v in cond.items():
             if k not in df.columns:
                 continue
@@ -2391,9 +2374,7 @@ def _filter_data(
 
     if filter_out:
         cond = _f(filter_out)
-        assert isinstance(
-            cond, dict
-        ), f"Unexpected type {type(cond)} for fmt={filter_out!r}"
+        assert isinstance(cond, dict), f"Unexpected type {type(cond)} for fmt={filter_out!r}"
         for k, v in cond.items():
             if k not in df.columns:
                 continue

@@ -136,9 +136,7 @@ class TestEdMistral(ExtTestCase):
 
         if __name__ == "__main__":
             for i, inst in enumerate(instances):
-                self.dump_onnx(
-                    f"test_mistral_cort_static_{i}_norename.onnx", inst["onnx"]
-                )
+                self.dump_onnx(f"test_mistral_cort_static_{i}_norename.onnx", inst["onnx"])
 
     @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
     @ignore_warnings((DeprecationWarning, UserWarning))
@@ -173,9 +171,7 @@ class TestEdMistral(ExtTestCase):
 
         if __name__ == "__main__":
             for i, inst in enumerate(instances):
-                self.dump_onnx(
-                    f"test_mistral_cort_dynamic_{i}_simple.onnx", inst["onnx"]
-                )
+                self.dump_onnx(f"test_mistral_cort_dynamic_{i}_simple.onnx", inst["onnx"])
 
     @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
     @ignore_warnings((DeprecationWarning, UserWarning))
@@ -210,9 +206,7 @@ class TestEdMistral(ExtTestCase):
 
         if __name__ == "__main__":
             for i, inst in enumerate(instances):
-                self.dump_onnx(
-                    f"test_mistral_cort_dynamic_{i}_norename.onnx", inst["onnx"]
-                )
+                self.dump_onnx(f"test_mistral_cort_dynamic_{i}_norename.onnx", inst["onnx"])
 
     @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
     @ignore_warnings((DeprecationWarning, UserWarning))

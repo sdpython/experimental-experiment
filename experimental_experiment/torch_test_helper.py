@@ -59,8 +59,7 @@ def check_model_ort(
             save(onx, dump_file)
 
         raise AssertionError(  # noqa: B904
-            f"onnxruntime cannot load the model"
-            f"due to {e}\n{onnx_simple_text_plot(onx)}"
+            f"onnxruntime cannot load the modeldue to {e}\n{onnx_simple_text_plot(onx)}"
         )
 
 

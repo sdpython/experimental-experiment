@@ -115,9 +115,7 @@ def compatible_dimensions(*dims: Sequence[Union[int, str]]) -> bool:
         print(compatible_dimensions(1, "D"))  # True
         print(compatible_dimensions(1, "D", "DD"))  # True
     """
-    assert all_int_or_str(
-        dims
-    ), f"unexpected types in {dims} ({[type(i) for i in dims]})"
+    assert all_int_or_str(dims), f"unexpected types in {dims} ({[type(i) for i in dims]})"
     unique = set(dims)
     ints = [i for i in unique if isinstance(i, int)]
     if len(ints) > 1:
@@ -125,9 +123,7 @@ def compatible_dimensions(*dims: Sequence[Union[int, str]]) -> bool:
     return True
 
 
-def _reshape_shape(
-    shape: Tuple[int, ...], new_shape: Tuple[int, ...]
-) -> Tuple[int, ...]:
+def _reshape_shape(shape: Tuple[int, ...], new_shape: Tuple[int, ...]) -> Tuple[int, ...]:
     """
     Computes the shape of the reshaped shape.
     """

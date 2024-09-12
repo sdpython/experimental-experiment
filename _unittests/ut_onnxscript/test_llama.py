@@ -35,8 +35,7 @@ class TestLlama(ExtTestCase):
 
         model = model.to(device)
         example_args_collection = [
-            tuple(t.to(device) for t in examples)
-            for examples in example_args_collection_cpu
+            tuple(t.to(device) for t in examples) for examples in example_args_collection_cpu
         ]
 
         compiled_model = torch.compile(
@@ -252,9 +251,7 @@ class TestLlama(ExtTestCase):
             get_llama_model,
         )
 
-        model, model_inputs = get_llama_model(
-            _attn_implementation="sdpa", with_mask=True
-        )
+        model, model_inputs = get_llama_model(_attn_implementation="sdpa", with_mask=True)
         self.assertEqual(len(model_inputs[0]), 2)
         expected = model(*model_inputs[0])
         self.assertNotEmpty(expected)
@@ -264,9 +261,7 @@ class TestLlama(ExtTestCase):
             get_llama_model,
         )
 
-        model, model_inputs = get_llama_model(
-            _attn_implementation="sdpa", with_mask=False
-        )
+        model, model_inputs = get_llama_model(_attn_implementation="sdpa", with_mask=False)
         self.assertEqual(len(model_inputs[0]), 1)
         expected = model(*model_inputs[0])
         self.assertNotEmpty(expected)

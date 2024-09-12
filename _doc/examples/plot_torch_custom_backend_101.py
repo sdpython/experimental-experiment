@@ -61,9 +61,7 @@ print(mlp(x))
 
 compiled_model = torch.compile(
     copy.deepcopy(mlp),
-    backend=lambda *args, **kwargs: onnx_custom_backend(
-        *args, target_opset=18, **kwargs
-    ),
+    backend=lambda *args, **kwargs: onnx_custom_backend(*args, target_opset=18, **kwargs),
     dynamic=False,
     fullgraph=True,
 )

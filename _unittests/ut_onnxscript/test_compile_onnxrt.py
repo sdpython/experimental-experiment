@@ -55,15 +55,11 @@ class TestDynamoOnnxRtBackend(ExtTestCase):
         got = optimized_mod(input_tensor)
         self.assertEqual(expected.shape, got.shape)
         self.assertEqual(expected.dtype, got.dtype)
-        self.assertEqualArray(
-            expected.detach().numpy(), got.detach().numpy(), atol=1e-5
-        )
+        self.assertEqualArray(expected.detach().numpy(), got.detach().numpy(), atol=1e-5)
 
         export = torch.onnx.dynamo_export(model, input_tensor)
         onx = export.model_proto
-        sess = InferenceSession(
-            onx.SerializeToString(), providers=["CPUExecutionProvider"]
-        )
+        sess = InferenceSession(onx.SerializeToString(), providers=["CPUExecutionProvider"])
         with open("dummy_baseline_a.onnx", "wb") as f:
             f.write(onx.SerializeToString())
         name = onx.graph.input[0].name
@@ -96,15 +92,11 @@ class TestDynamoOnnxRtBackend(ExtTestCase):
         got = optimized_mod(input_tensor)
         self.assertEqual(expected.shape, got.shape)
         self.assertEqual(expected.dtype, got.dtype)
-        self.assertEqualArray(
-            expected.detach().numpy(), got.detach().numpy(), atol=1e-5
-        )
+        self.assertEqualArray(expected.detach().numpy(), got.detach().numpy(), atol=1e-5)
 
         export = torch.onnx.dynamo_export(f, input_tensor)
         onx = export.model_proto
-        sess = InferenceSession(
-            onx.SerializeToString(), providers=["CPUExecutionProvider"]
-        )
+        sess = InferenceSession(onx.SerializeToString(), providers=["CPUExecutionProvider"])
         with open("dummy_baseline_b.onnx", "wb") as f:
             f.write(onx.SerializeToString())
         name = onx.graph.input[0].name

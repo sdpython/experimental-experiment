@@ -41,9 +41,7 @@ class TestBashBenchRunner(ExtTestCase):
     @requires_torch("2.3")
     @hide_stdout()
     def test_run_model(self):
-        runner = HuggingfaceRunner(
-            device="cpu", include_model_names={"101Dummy"}, verbose=2
-        )
+        runner = HuggingfaceRunner(device="cpu", include_model_names={"101Dummy"}, verbose=2)
         data = list(runner.enumerate_run_models())
         self.assertEqual(len(data), 1)
 
@@ -51,9 +49,7 @@ class TestBashBenchRunner(ExtTestCase):
     @requires_torch("2.5")
     @hide_stdout()
     def test_test_model_32(self):
-        runner = HuggingfaceRunner(
-            device="cpu", include_model_names={"101Dummy"}, verbose=2
-        )
+        runner = HuggingfaceRunner(device="cpu", include_model_names={"101Dummy"}, verbose=2)
         data = list(runner.enumerate_test_models(process=False, exporter="custom"))
         # print(data)
         self.assertEqual(1, len(data))

@@ -135,11 +135,7 @@ class TestDocumentationExamples(ExtTestCase):
                 # too long
                 reason = "not working yet or too long"
 
-            if (
-                not reason
-                and is_apple()
-                and name in {"plot_convolutation_matmul_102.py"}
-            ):
+            if not reason and is_apple() and name in {"plot_convolutation_matmul_102.py"}:
                 reason = "dot is missing"
 
             if not reason and is_apple():

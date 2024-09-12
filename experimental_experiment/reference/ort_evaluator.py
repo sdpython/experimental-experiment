@@ -239,8 +239,7 @@ class OrtEval:
             )
         except onnxruntime.capi.onnxruntime_pybind11_state.Fail as e:
             raise AssertionError(
-                f"Cannot create a session for node\n-----\n"
-                f"{node}\n----------\n{onx}"
+                f"Cannot create a session for node\n-----\n{node}\n----------\n{onx}"
             ) from e
         return onx, sess
 
@@ -279,14 +278,11 @@ class OrtEval:
             from onnx_array_api.plotting.text_plot import onnx_simple_text_plot
 
             raise RuntimeError(
-                f"Unable to infer a session due to {e}\n"
-                f"{onnx_simple_text_plot(onx)}"
+                f"Unable to infer a session due to {e}\n{onnx_simple_text_plot(onx)}"
             ) from e
         return onx, sess
 
-    def _run(
-        self, node: NodeProto, inputs: List[Any], results: Dict[str, Any]
-    ) -> List[Any]:
+    def _run(self, node: NodeProto, inputs: List[Any], results: Dict[str, Any]) -> List[Any]:
         """
         Runs a node.
         """
@@ -461,9 +457,7 @@ class OrtEval:
             d = tensor.get_device()
             if self.verbose > 10:
                 if log_set is None:
-                    print(
-                        f"     < p={pos} d={d} dtype={dtypes[-1]} shape={tensor.shape}"
-                    )
+                    print(f"     < p={pos} d={d} dtype={dtypes[-1]} shape={tensor.shape}")
             devices.append(DEVICES[d])
             new_tensors.append(tensor)
             max_device = max(max_device, tensor.get_device())

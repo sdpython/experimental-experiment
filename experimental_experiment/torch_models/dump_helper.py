@@ -111,9 +111,7 @@ def assert_all_close(
         assert isinstance(v2, type(v1)), f"v2 is not a {type(v1)} but {type(v2)}"
         v1 = tuple(_ for _ in v1 if _ is not None)
         v2 = tuple(_ for _ in v2 if _ is not None)
-        assert len(v1) == len(
-            v2
-        ), f"tuple have different lengths {len(v1)} != {len(v2)}"
+        assert len(v1) == len(v2), f"tuple have different lengths {len(v1)} != {len(v2)}"
         for a, b in zip(v1, v2):
             assert_all_close(a, b, atol=aatol, rtol=rtol)
     elif isinstance(v1, int):
@@ -250,9 +248,7 @@ def results_to_string(results: Any, indent: str = "") -> str:
     import torch
 
     if isinstance(results, torch.Tensor):
-        return (
-            f"{indent}{results.dtype} {tuple(results.shape)} [sum={results.sum():1.3g}]"
-        )
+        return f"{indent}{results.dtype} {tuple(results.shape)} [sum={results.sum():1.3g}]"
     if isinstance(results, tuple):
         return f"{indent}{len(results)} results\n" + "\n".join(
             results_to_string(r, indent=indent + "  ") for r in results

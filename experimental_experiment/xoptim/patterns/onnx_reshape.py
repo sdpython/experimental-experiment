@@ -84,9 +84,7 @@ class ReduceReshapePattern(PatternOptimization):
         else:
             att = g.get_attribute(node, "axes", exc=False)
             axes = (
-                tuple(range(g.get_rank(node.input[0])))
-                if att is None
-                else tuple(att.ints)
+                tuple(range(g.get_rank(node.input[0]))) if att is None else tuple(att.ints)
             )
 
         next_nodes = g.next_nodes(node.output[0])
@@ -231,9 +229,7 @@ class Reshape2Of3Pattern(PatternOptimization):
             return self.none(node, inspect.currentframe().f_lineno)
 
         next_nodes = g.next_nodes(node.output[0])
-        if len(next_nodes) > 1 or (
-            len(next_nodes) == 0 and not g.is_output(node.output[0])
-        ):
+        if len(next_nodes) > 1 or (len(next_nodes) == 0 and not g.is_output(node.output[0])):
             return self.none(node, inspect.currentframe().f_lineno)
         next_node = None if len(next_nodes) == 0 else next_nodes[0]
         type_out = None if next_node is None else next_node.op_type
@@ -292,9 +288,7 @@ class Reshape2Of3Pattern(PatternOptimization):
         compute_shape_name = (
             node_left.input[1] if node_right is None else node_right.input[1]
         )
-        final_shape_name = (
-            compute_shape_name if next_node is None else next_node.input[1]
-        )
+        final_shape_name = compute_shape_name if next_node is None else next_node.input[1]
 
         res = []
 

@@ -735,8 +735,7 @@ for compute in ["CPU", "CUDA"]:
     ax = memory_peak_plot(
         dfmem[dfmem.compute == compute],
         ("export", "aot"),
-        suptitle=f"Memory Consumption of onnxruntime loading time"
-        f"\nrunning on {compute}",
+        suptitle=f"Memory Consumption of onnxruntime loading time\nrunning on {compute}",
         bars=[model_size * i / 2**20 for i in range(1, 3)],
         figsize=(18, 6),
     )
@@ -769,8 +768,7 @@ for compute in ["CPU", "CUDA"]:
     ax = memory_peak_plot(
         dfmemr[dfmemr.compute == compute],
         ("export", "aot"),
-        suptitle=f"Memory Consumption of onnxruntime running time"
-        f"\nrunning on {compute}",
+        suptitle=f"Memory Consumption of onnxruntime running time\nrunning on {compute}",
         bars=[model_size * i / 2**20 for i in range(1, 3)],
         figsize=(18, 6),
     )

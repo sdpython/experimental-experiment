@@ -101,6 +101,4 @@ class OptimizationOptions:
             f"order={self.order}, "
             f"patterns={pats}{opts})"
         )
-        return "\n".join(
-            textwrap.wrap(code, width=80, tabsize=4, subsequent_indent="    ")
-        )
+        return "\n".join(textwrap.wrap(code, width=80, tabsize=4, subsequent_indent="    "))

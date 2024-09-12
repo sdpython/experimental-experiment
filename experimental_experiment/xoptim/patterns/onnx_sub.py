@@ -35,16 +35,12 @@ class Sub1MulPattern(PatternOptimization):
         cst_left, cst_right = None, None
 
         if op_left == "Sub" and g.is_constant(node_left.input[0]):
-            cst_min, cst_max = g.get_computed_constant(
-                node_left.input[0], ["min", "max"]
-            )
+            cst_min, cst_max = g.get_computed_constant(node_left.input[0], ["min", "max"])
             if cst_min == cst_max == 1:
                 cst_left = cst_min
 
         if op_right == "Sub" and g.is_constant(node_right.input[0]):
-            cst_min, cst_max = g.get_computed_constant(
-                node_right.input[0], ["min", "max"]
-            )
+            cst_min, cst_max = g.get_computed_constant(node_right.input[0], ["min", "max"])
             if cst_min == cst_max == 1:
                 cst_right = cst_min
 

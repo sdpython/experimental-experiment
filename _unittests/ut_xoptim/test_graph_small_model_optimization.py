@@ -46,9 +46,7 @@ class TestGraphSmallModelOptimization(ExtTestCase):
 
         gr = GraphBuilder(
             model,
-            optimization_options=OptimizationOptions(
-                constant_folding=True, patterns=None
-            ),
+            optimization_options=OptimizationOptions(constant_folding=True, patterns=None),
             infer_shapes=True,
             verbose=0,
         )

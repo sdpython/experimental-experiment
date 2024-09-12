@@ -69,9 +69,7 @@ class Dispatcher:
         """
         if name not in self.registered_functions:
             if self.verbose > 3:
-                print(
-                    f"[Dispatcher.find_method] could not find a method for name={name!r}"
-                )
+                print(f"[Dispatcher.find_method] could not find a method for name={name!r}")
             return None
 
         return self.registered_functions[name]

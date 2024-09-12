@@ -50,9 +50,7 @@ class TestGraphPatternOptimizationOrt(ExtTestCase):
         self.assertEqual(choose_consistent_domain_opset("", {"": 10}), 10)
         self.assertEqual(choose_consistent_domain_opset("ai.onnx.ml", {"": 18}), 3)
         self.assertEqual(choose_consistent_domain_opset("com.microsoft", {"": 18}), 1)
-        self.assertIsInstance(
-            choose_consistent_domain_opset("", {"com.microsoft": 1}), int
-        )
+        self.assertIsInstance(choose_consistent_domain_opset("", {"com.microsoft": 1}), int)
         self.assertRaise(
             lambda: choose_consistent_domain_opset("", {"ai.onnx.ml": 10}),
             AssertionError,
@@ -150,9 +148,7 @@ class TestGraphPatternOptimizationOrt(ExtTestCase):
             assert feeds["X"][0, 0].T @ feeds["Y"][0, 0] is not None
         else:
             assert feeds["Y"][0, 0] @ feeds["X"][0, 0].T is not None
-        ref = InferenceSession(
-            model.SerializeToString(), providers=["CPUExecutionProvider"]
-        )
+        ref = InferenceSession(model.SerializeToString(), providers=["CPUExecutionProvider"])
         expected = ref.run(None, feeds)
 
         gr = GraphBuilder(
@@ -209,9 +205,7 @@ class TestGraphPatternOptimizationOrt(ExtTestCase):
         check_model(model)
         feeds = {"X": self._range(2, 2, 128, 32), "Y": self._range(2, 2, 64, 128)}
         assert feeds["X"][0, 0].T @ feeds["Y"][0, 0].T is not None
-        ref = InferenceSession(
-            model.SerializeToString(), providers=["CPUExecutionProvider"]
-        )
+        ref = InferenceSession(model.SerializeToString(), providers=["CPUExecutionProvider"])
         expected = ref.run(None, feeds)
 
         gr = GraphBuilder(
@@ -268,9 +262,7 @@ class TestGraphPatternOptimizationOrt(ExtTestCase):
         check_model(model)
         feeds = {"X": self._range(2, 2, 128, 32), "Y": self._range(2, 2, 64, 128)}
         assert feeds["X"][0, 0].T @ feeds["Y"][0, 0].T is not None
-        ref = InferenceSession(
-            model.SerializeToString(), providers=["CPUExecutionProvider"]
-        )
+        ref = InferenceSession(model.SerializeToString(), providers=["CPUExecutionProvider"])
         expected = ref.run(None, feeds)
 
         gr = GraphBuilder(
@@ -333,17 +325,13 @@ class TestGraphPatternOptimizationOrt(ExtTestCase):
         check_model(model)
         feeds = {"X": self._range(2, 2, 32, 128), "Y": self._range(2, 2, 128, 64)}
         assert feeds["X"][0, 0] @ feeds["Y"][0, 0] is not None
-        ref = InferenceSession(
-            model.SerializeToString(), providers=["CPUExecutionProvider"]
-        )
+        ref = InferenceSession(model.SerializeToString(), providers=["CPUExecutionProvider"])
         expected = ref.run(None, feeds)
 
         gr = GraphBuilder(
             model,
             infer_shapes=True,
-            optimization_options=OptimizationOptions(
-                patterns=["FusedMatMulDiv"], verbose=0
-            ),
+            optimization_options=OptimizationOptions(patterns=["FusedMatMulDiv"], verbose=0),
         )
         opt_onx = gr.to_onnx(optimize=True)
         self.assertEqual(
@@ -572,9 +560,7 @@ class TestGraphPatternOptimizationOrt(ExtTestCase):
         )
         check_model(model)
         feeds = {"dY": self._range(2, 3), "Y": self._range(2, 3)}
-        ref = InferenceSession(
-            model.SerializeToString(), providers=["CPUExecutionProvider"]
-        )
+        ref = InferenceSession(model.SerializeToString(), providers=["CPUExecutionProvider"])
         expected = ref.run(None, feeds)
 
         gr = GraphBuilder(
@@ -618,9 +604,7 @@ class TestGraphPatternOptimizationOrt(ExtTestCase):
                 "dummy",
                 [
                     oh.make_tensor_value_info("shape", TensorProto.INT64, [None]),
-                    oh.make_tensor_value_info(
-                        "indices", TensorProto.INT64, [None, None]
-                    ),
+                    oh.make_tensor_value_info("indices", TensorProto.INT64, [None, None]),
                     oh.make_tensor_value_info("updates", TFLOAT, [None, None, None]),
                 ],
                 [oh.make_tensor_value_info("Z", TFLOAT, [None, None, None])],
@@ -701,9 +685,7 @@ class TestGraphPatternOptimizationOrt(ExtTestCase):
             ir_version=9,
         )
         feeds = {"X": self._range(2, 2, 4, 4), "Y": self._range(2, 2, 4, 4)}
-        ref = InferenceSession(
-            model.SerializeToString(), providers=["CPUExecutionProvider"]
-        )
+        ref = InferenceSession(model.SerializeToString(), providers=["CPUExecutionProvider"])
         expected = ref.run(None, feeds)
 
         gr = GraphBuilder(
@@ -756,9 +738,7 @@ class TestGraphPatternOptimizationOrt(ExtTestCase):
             ir_version=9,
         )
         feeds = {"X": self._range(2, 2, 6, 3), "Y": self._range(2, 2, 5, 6)}
-        ref = InferenceSession(
-            model.SerializeToString(), providers=["CPUExecutionProvider"]
-        )
+        ref = InferenceSession(model.SerializeToString(), providers=["CPUExecutionProvider"])
         expected = ref.run(None, feeds)
 
         gr = GraphBuilder(
@@ -859,9 +839,7 @@ class TestGraphPatternOptimizationOrt(ExtTestCase):
         )
         check_model(model)
         feeds = {"X": self._range(2, 2, 4, 8)}
-        ref = InferenceSession(
-            model.SerializeToString(), providers=["CPUExecutionProvider"]
-        )
+        ref = InferenceSession(model.SerializeToString(), providers=["CPUExecutionProvider"])
         expected = ref.run(None, feeds)
 
         gr = GraphBuilder(
@@ -920,9 +898,7 @@ class TestGraphPatternOptimizationOrt(ExtTestCase):
         )
         check_model(model)
         feeds = {"X": self._range(2, 2, 4, 8)}
-        ref = InferenceSession(
-            model.SerializeToString(), providers=["CPUExecutionProvider"]
-        )
+        ref = InferenceSession(model.SerializeToString(), providers=["CPUExecutionProvider"])
         expected = ref.run(None, feeds)
 
         gr = GraphBuilder(
@@ -977,9 +953,7 @@ class TestGraphPatternOptimizationOrt(ExtTestCase):
         )
         check_model(model)
         feeds = {"X": self._range(2, 2, 4, 8)}
-        ref = InferenceSession(
-            model.SerializeToString(), providers=["CPUExecutionProvider"]
-        )
+        ref = InferenceSession(model.SerializeToString(), providers=["CPUExecutionProvider"])
         expected = ref.run(None, feeds)
 
         gr = GraphBuilder(

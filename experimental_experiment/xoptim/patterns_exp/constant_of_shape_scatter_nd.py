@@ -129,9 +129,7 @@ class MaskedShapeScatterNDPattern(PatternOptimization):
         if shape_shape != (2,):
             self.none(node, inspect.currentframe().f_lineno)
 
-        return MatchResult(
-            self, [node, where_node, equal_node], self.apply, insert_at=node
-        )
+        return MatchResult(self, [node, where_node, equal_node], self.apply, insert_at=node)
 
     def apply(
         self,

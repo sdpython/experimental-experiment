@@ -72,9 +72,7 @@ class TestGraphOrderOptimization(ExtTestCase):
         for i in onx.graph.input:
             assert s(i.type.tensor_type.elem_type != 0), f"Input {i.name!r} has no type"
         for i in onx.graph.output:
-            assert s(
-                i.type.tensor_type.elem_type != 0
-            ), f"Output {i.name!r} has no type"
+            assert s(i.type.tensor_type.elem_type != 0), f"Output {i.name!r} has no type"
 
         skip_names = set()
         for node in onx.graph.node:
@@ -84,9 +82,7 @@ class TestGraphOrderOptimization(ExtTestCase):
         for sh in onx.graph.value_info:
             if sh.name in skip_names:
                 continue
-            assert s(
-                sh.type.tensor_type.elem_type != 0
-            ), f"Result {sh.name!r} has no type"
+            assert s(sh.type.tensor_type.elem_type != 0), f"Result {sh.name!r} has no type"
 
         import onnxruntime
         from onnxruntime.capi.onnxruntime_pybind11_state import Fail, InvalidArgument

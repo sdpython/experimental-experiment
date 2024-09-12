@@ -63,9 +63,7 @@ def _nice_shape(shape: TensorShapeProto) -> str:
     return "x".join(els)
 
 
-def compatible_opsets(
-    domain: str, op_type: str, current: int, new_version: int
-) -> bool:
+def compatible_opsets(domain: str, op_type: str, current: int, new_version: int) -> bool:
     """
     Tells if two opset version for a particular operator type
     means the same version of it.

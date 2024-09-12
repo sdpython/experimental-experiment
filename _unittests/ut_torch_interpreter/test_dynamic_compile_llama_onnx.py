@@ -34,9 +34,7 @@ class TestDynamoLlamaDynamic(ExtTestCase):
         import torch
 
         if hasattr(torch._dynamo.variables.misc, "LoggingLoggerVariable"):
-            cls._old_value = (
-                torch._dynamo.variables.misc.LoggingLoggerVariable.call_method
-            )
+            cls._old_value = torch._dynamo.variables.misc.LoggingLoggerVariable.call_method
             torch._dynamo.variables.misc.LoggingLoggerVariable.call_method = (
                 lambda *_, **__: None
             )
@@ -46,9 +44,7 @@ class TestDynamoLlamaDynamic(ExtTestCase):
         import torch
 
         if hasattr(torch._dynamo.variables.misc, "LoggingLoggerVariable"):
-            torch._dynamo.variables.misc.LoggingLoggerVariable.call_method = (
-                cls._old_value
-            )
+            torch._dynamo.variables.misc.LoggingLoggerVariable.call_method = cls._old_value
 
     @classmethod
     def get_input_dims(cls, dynamic: bool):
@@ -102,17 +98,15 @@ class TestDynamoLlamaDynamic(ExtTestCase):
             compiled_model = torch.compile(copy.deepcopy(model), backend=local_ort)
         else:
             if impl == "fast":
-                backend_debug = (  # noqa: E731
-                    lambda *args, **kwargs: onnx_custom_backend(
-                        *args,
-                        backend="ort",
-                        target_opset=18,
-                        storage=storage,
-                        verbose=verbose,
-                        dump_prefix=dump_prefix,
-                        disable_pattern=disable_pattern,
-                        **kwargs,
-                    )
+                backend_debug = lambda *args, **kwargs: onnx_custom_backend(  # noqa: E731
+                    *args,
+                    backend="ort",
+                    target_opset=18,
+                    storage=storage,
+                    verbose=verbose,
+                    dump_prefix=dump_prefix,
+                    disable_pattern=disable_pattern,
+                    **kwargs,
                 )
             else:
                 backend_debug = lambda *args, **kwargs: onnx_debug_backend(  # noqa: E731
