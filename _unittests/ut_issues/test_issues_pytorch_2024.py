@@ -160,9 +160,7 @@ class TestIssuesOnnxExporter(ExtTestCase):
                 dynamo=True,
             )
         else:
-            to_onnx(
-                model, (query_states, key_states, value_states), filename=onnx_file_path
-            )
+            to_onnx(model, (query_states, key_states, value_states), filename=onnx_file_path)
 
         import onnxruntime
 
