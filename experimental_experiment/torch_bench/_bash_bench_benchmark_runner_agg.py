@@ -1755,44 +1755,73 @@ def merge_benchmark_reports(
         )
 
     if base_dfs:
+
+        def _float_(x):
+            if isinstance(x, (int, float)):
+                return x
+            try:
+                return float(x)
+            except (ValueError, TypeError):
+                return np.nan
+
         for name in {"0main", "0raw", "SUMMARY", "SUMMARY2", "MODELS", "SIMPLE"}:
             if name in base_dfs:
                 final_res[f"{name}_base"] = base_dfs[name]
 
         for name in {"SUMMARY", "SUMMARY2", "MODELS", "SIMPLE"}:
-            if name in base_dfs and name in final_res:
-                drop = []
-                df_str = final_res[name].select_dtypes("object")
-                if df_str.shape[1] > 0:
-                    stacked = list(df_str.columns)
-                    order_name = [c for c in final_res[name].columns if "#order" in c]
-                    if len(order_name) == 1:
-                        stacked.extend(order_name)
-                        drop.extend(order_name)
-                    assert all(
-                        (c in final_res[name] and c in base_dfs[name])
-                        for c in df_str.columns
-                    ), (
-                        f"Columns mismatch, df_str.columns={df_str.columns}, "
-                        f"{final_res[name].columns} != {base_dfs[name].columns}"
-                    )
-                    df_this = final_res[name].set_index(stacked)
-                    df_base = base_dfs[name].set_index(stacked)
-                else:
-                    df_this = final_res[name]
-                    df_base = base_dfs[name]
-                    stacked = None
+            if name not in base_dfs or name not in final_res:
+                continue
+            drop = []
+            df_str = final_res[name].select_dtypes("object")
+            if df_str.shape[1] > 0:
+                # The date may set the type of object just for one value
+                # Let cast every columns to see if it can improved.
+                df_base = base_dfs[name].copy()
+                for c in df_base.columns:
+                    cc = df_base[c].apply(_float_).astype(float)
+                    if cc.isna().sum() <= 2:
+                        df_base[c] = cc
+                df_this = final_res[name].copy()
+                for c in df_this.columns:
+                    cc = df_this[c].apply(_float_).astype(float, errors="ignore")
+                    if cc.isna().sum() <= 2:
+                        df_this[c] = cc
+                df_str = df_this.select_dtypes("object")
+            else:
+                df_this = final_res[name]
+                df_base = base_dfs[name]
 
-                df_this = df_this.select_dtypes("number")
-                df_base = df_base.select_dtypes("number")
-                df_num = df_this - df_base
-                if stacked:
-                    df_num = df_num.reset_index(drop=False)
-                    order_name = [c for c in df_num.columns if "#order" in c]
-                    if len(order_name) == 1:
-                        df_num = df_num.sort_values(order_name)
+            if df_str.shape[1] > 0:
+                stacked = list(df_str.columns)
+                order_name = [c for c in df_this.columns if "#order" in c]
+                if len(order_name) == 1:
+                    stacked.extend(order_name)
+                    drop.extend(order_name)
+                assert all((c in df_this and c in df_base) for c in df_str.columns), (
+                    f"Columns mismatch in sheet {name!r}, "
+                    f"columns={list(df_str.columns)},\n"
+                    f"[{[int(c in df_this) for c in df_str.columns]}], "
+                    f"[{[int(c in df_base) for c in df_str.columns]}], "
+                    f"\n{list(df_this.columns)}\n!=\n{list(df_base.columns)}"
+                )
+                df_this = df_this.set_index(stacked)
+                df_base = df_base.set_index(stacked)
+            else:
+                stacked = None
 
-                final_res[f"{name}_diff"] = df_num.sort_index(axis=1)
+            df_this = df_this.select_dtypes("number")
+            df_base = df_base.select_dtypes("number")
+            set_columns = list(sorted(set(df_this.columns) & set(df_base.columns)))
+            df_base = df_base[set_columns].sort_index(axis=0).sort_index(axis=1)
+            df_this = df_this[set_columns].sort_index(axis=0).sort_index(axis=1)
+            df_num = df_this.sub(df_base)
+            if stacked:
+                df_num = df_num.reset_index(drop=False)
+                order_name = [c for c in df_num.columns if "#order" in c]
+                if len(order_name) == 1:
+                    df_num = df_num.sort_values(order_name)
+
+            final_res[f"{name}_diff"] = df_num.sort_index(axis=1)
 
     # cleaning empty columns
     for v in final_res.values():
@@ -2109,7 +2138,11 @@ def _create_aggregation_figures(
                         vvv = df[col]
                         if vvv.dtype not in {object, np.object_, str, np.str_}:
                             updates[col] = vvv.apply(
-                                lambda d: time.strftime("%Y-%m-%d", time.gmtime(d))
+                                lambda d: (
+                                    np.nan
+                                    if np.isnan(d)
+                                    else time.strftime("%Y-%m-%d", time.gmtime(d))
+                                )
                             )
             if drops:
                 df.drop(drops, axis=1, inplace=True)

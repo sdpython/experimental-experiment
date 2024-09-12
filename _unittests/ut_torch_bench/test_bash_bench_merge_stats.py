@@ -161,7 +161,9 @@ class TestBashBenchMergeStats(ExtTestCase):
         agg = df["AGG"].reset_index(drop=False)
         sp = agg[(agg["cat"] == "speedup") & (agg["agg"] == "GEO-MEAN")]
         values = sp["HuggingFace"].values
-        self.assertEqualArray(np.array([0.952044, 0.000001, 1.020653]), values, atol=1e-5)
+        self.assertEqualArray(
+            np.array([0.952044, 0.000001, 1.020653]), values.astype(float), atol=1e-5
+        )
         summary = df["SUMMARY"]
         self.assertNotIn("_dummy_", summary.columns)
         values = summary.values
