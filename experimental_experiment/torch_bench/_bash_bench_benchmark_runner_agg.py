@@ -96,6 +96,7 @@ def _SELECTED_FEATURES():
             "The outputs may be right or wrong. Unit test ensures every aten functions "
             "is correctly converted but the combination may produce outputs "
             "with higher discrepancies than expected.",
+            simple=True,
         ),
         dict(
             cat="status",
@@ -1375,7 +1376,7 @@ def merge_benchmark_reports(
                 df = joined.copy()
                 df["speedup_increase_script"] = (
                     df["speedup"] / df["speedup_script"] - 1
-                ).fillna(np.inf)
+                ).fillna(-np.inf)
                 for c in column_keys:
                     cc = f"{c}_x"
                     if cc in df.columns:

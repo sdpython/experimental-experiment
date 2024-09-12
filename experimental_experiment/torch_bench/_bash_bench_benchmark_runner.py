@@ -693,7 +693,24 @@ class BenchmarkRunner:
         rtopt: bool = True,
         shape_again: bool = False,
     ) -> Iterator[Dict[Any, Any]]:
-        """Runs the benchmarks, run, export, run in onnx, measure the speedup."""
+        """
+        Runs the benchmarks, run, export, run in onnx, measure the speedup.
+
+        :param exporter: exporter to run
+        :param process: unused
+        :param folder: where to dump the models
+        :param dynamic: unused now
+        :param optimization: optimization string to run
+        :param quiet: True to catch exception
+        :param memory_peak: True to measure the memory peak in a secondary process
+        :param part: None to run both path, 1 to run the first part
+            (load the model + eager mode + export),
+            2 to run the run the inference
+        :param pickled_name: name used to store everything on disk if *part* is True
+        :param rtopt: disable onnxruntime optimization
+        :param shape_again: run shape inference after the export,
+            erases whatever the model already contains
+        """
         assert not process, "process=True not implemented."
         assert not dynamic, "dynamic=True not implemented."
 
@@ -1118,7 +1135,8 @@ class BenchmarkRunner:
         )
         if pfilename and not os.path.exists(pfilename):
             os.makedirs(pfilename)
-        filename = os.path.join(pfilename, "model.onnx")
+        cleaned_name = model_name.replace(".", "_").replace("/", "_")
+        filename = os.path.join(pfilename, f"model_{cleaned_name}.onnx")
 
         memory_session = (
             start_spying_on(cuda=self.device.startswith("cuda"))
@@ -1152,6 +1170,7 @@ class BenchmarkRunner:
                     stats.update(memory_stats)
                 if self.verbose:
                     print("[BenchmarkRunner.benchmark] stop_spying_on")
+                model_runner.dump_std(f"{filename}.log.txt")
                 return stats, context
 
             stats["time_export"] = time.perf_counter() - begin
@@ -1169,6 +1188,7 @@ class BenchmarkRunner:
             )
             stats["time_export"] = time.perf_counter() - begin
             stats["time_export_success"] = time.perf_counter() - begin
+        model_runner.dump_std(f"{filename}.log.txt")
 
         if memory_session is not None:
             memory_results = memory_session.stop()
@@ -1393,7 +1413,8 @@ class BenchmarkRunner:
                     os.path.split(session_options.optimized_model_filepath)[0],
                     "ort_optimized",
                 )
-                new_filename = os.path.join(fold, "model_ort_optimized.onnx")
+                cleaned_name = model_name.replace(".", "_").replace("/", "_")
+                new_filename = os.path.join(fold, f"model_rtopt_{cleaned_name}.onnx")
                 if self.verbose > 1:
                     print(
                         f"[BenchmarkRunner.benchmark] load and saves with "

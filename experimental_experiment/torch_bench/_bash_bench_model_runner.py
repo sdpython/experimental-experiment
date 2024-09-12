@@ -1,6 +1,7 @@
 import collections
 import inspect
 import os
+import pprint
 import shutil
 import time
 from typing import Any, Callable, Dict, List, Optional, Tuple
@@ -321,6 +322,15 @@ class ModelRunner:
         self.autocast = autocast
         self.nvtx = nvtx
         assert self.autocast is not None
+        self.std_to_dump = []
+
+    def dump_std(self, filename: str):
+        """
+        Dumps some information in the given filename.
+        """
+        if self.std_to_dump:
+            with open(filename, "w", encoding="utf-8") as f:
+                f.write("\n".join(map(str, self.std_to_dump)))
 
     def run(self) -> Any:
         if self.autocast:
@@ -641,7 +651,7 @@ class ModelRunner:
             with torch.autocast(
                 device_type=self.device, dtype=self.dtype
             ), torch.no_grad():
-                onx, stats = to_onnx(
+                onx, builder, stats = to_onnx(
                     self.model,
                     self.inputs,
                     optimize=bool(optimization),
@@ -650,10 +660,11 @@ class ModelRunner:
                     target_opset=target_opset,
                     return_optimize_report=True,
                     options=options,
+                    return_builder=True,
                 )
         else:
             with torch.no_grad():
-                onx, stats = to_onnx(
+                onx, builder, stats = to_onnx(
                     self.model,
                     self.inputs,
                     optimize=bool(optimization),
@@ -662,7 +673,13 @@ class ModelRunner:
                     target_opset=target_opset,
                     return_optimize_report=True,
                     options=options,
+                    return_builder=True,
                 )
+        begin = time.perf_counter()
+        self.std_to_dump.append(pprint.pformat(stats))
+        self.std_to_dump.append("----------------------------")
+        self.std_to_dump.append(builder.get_debug_msg())
+        stats["time_export_debuginfo"] = time.perf_counter() - begin
         begin = time.perf_counter()
         onx.save(name, all_tensors_to_one_file=True)
         stats["time_export_save"] = time.perf_counter() - begin
@@ -1059,6 +1076,11 @@ class ModelRunner:
         def custom_backend(
             gm: torch.fx.GraphModule, example_inputs: List[torch.Tensor]
         ):
+            if verbose:
+                print("[compile: fx_graph]")
+                print(gm)
+                self.std_to_dump.append(str(gm))
+
             return gm.forward
 
         if self.autocast:
@@ -1068,13 +1090,11 @@ class ModelRunner:
                 res = torch.compile(
                     self.model,
                     fullgraph=True,
-                    backend=lambda gm, inputs: gm.forward,
+                    backend=custom_backend,
                 )
         else:
             with torch.no_grad():
-                res = torch.compile(
-                    self.model, fullgraph=True, backend=lambda gm, inputs: gm.forward
-                )
+                res = torch.compile(self.model, fullgraph=True, backend=custom_backend)
         return res, None
 
     def _to_inductor(
