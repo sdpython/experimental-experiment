@@ -48,9 +48,7 @@ def _random_input(typ, shape, batch):
     return np.random.randn(*new_shape).astype(dtype)
 
 
-def random_feed(
-    inputs, batch: int = 10, empty_dimension: int = 1
-) -> Dict[str, np.array]:
+def random_feed(inputs, batch: int = 10, empty_dimension: int = 1) -> Dict[str, np.array]:
     """
     Creates a dictionary of random inputs.
 
@@ -289,9 +287,7 @@ def _onnx_derivative_fw(
     )
 
     if verbose > 0:
-        print(
-            f"[_onnx_derivative_fw] weights={weights} inputs={inputs} options={options}"
-        )
+        print(f"[_onnx_derivative_fw] weights={weights} inputs={inputs} options={options}")
     if weights is None:
         inits = get_train_initializer(onx)
         weights = list(inits)

@@ -26,9 +26,7 @@ class TestDynamoLlama(ExtTestCase):
         import torch
 
         if hasattr(torch._dynamo.variables.misc, "LoggingLoggerVariable"):
-            cls._old_value = (
-                torch._dynamo.variables.misc.LoggingLoggerVariable.call_method
-            )
+            cls._old_value = torch._dynamo.variables.misc.LoggingLoggerVariable.call_method
             torch._dynamo.variables.misc.LoggingLoggerVariable.call_method = (
                 lambda *_, **__: None
             )
@@ -38,9 +36,7 @@ class TestDynamoLlama(ExtTestCase):
         import torch
 
         if hasattr(torch._dynamo.variables.misc, "LoggingLoggerVariable"):
-            torch._dynamo.variables.misc.LoggingLoggerVariable.call_method = (
-                cls._old_value
-            )
+            torch._dynamo.variables.misc.LoggingLoggerVariable.call_method = cls._old_value
 
     @ignore_warnings((UserWarning, DeprecationWarning))
     def test_aaaa(self):
@@ -255,8 +251,7 @@ class TestDynamoLlama(ExtTestCase):
         batch_sizes = [3, 3, 3, 3, 3]
 
         example_args_collection = [
-            (torch.randn(batch, 2, dtype=torch.float32).cuda(),)
-            for batch in batch_sizes
+            (torch.randn(batch, 2, dtype=torch.float32).cuda(),) for batch in batch_sizes
         ]
 
         model = MLP().eval().cuda()

@@ -88,9 +88,7 @@ class TransposeCastPattern(PatternOptimization):
         elif out_type == TensorProto.FLOAT16:
             suffix = "16"
         else:
-            raise AssertionError(
-                f"out_type={out_type} must be in {self._allowed_types}"
-            )
+            raise AssertionError(f"out_type={out_type} must be in {self._allowed_types}")
 
         new_node = g.make_node(
             f"Transpose2DCastFP{suffix}",

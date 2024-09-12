@@ -46,15 +46,9 @@ class TestOrtEval(ExtTestCase):
                 [
                     onh.from_array(np.array([0], dtype=np.int64), name="zero"),
                     onh.from_array(np.array([1], dtype=np.int64), name="un"),
-                    onh.from_array(
-                        np.array([1, 32, 128], dtype=np.int64), name="shape1"
-                    ),
-                    onh.from_array(
-                        np.array([15, 128, 64], dtype=np.int64), name="shape2"
-                    ),
-                    onh.from_array(
-                        np.array([3, 5, 32, 64], dtype=np.int64), name="shape3"
-                    ),
+                    onh.from_array(np.array([1, 32, 128], dtype=np.int64), name="shape1"),
+                    onh.from_array(np.array([15, 128, 64], dtype=np.int64), name="shape2"),
+                    onh.from_array(np.array([3, 5, 32, 64], dtype=np.int64), name="shape3"),
                 ],
             ),
             ir_version=9,

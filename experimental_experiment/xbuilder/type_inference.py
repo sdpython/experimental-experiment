@@ -72,16 +72,14 @@ def infer_types(
     if not all_types:
         if exc:
             raise RuntimeError(
-                f"Unable to infer type for node type {node.op_type!r}, "
-                f"node is {node}."
+                f"Unable to infer type for node type {node.op_type!r}, node is {node}."
             )
         return 0
 
     if output_name:
-        assert len(node.output) == 1, (
-            f"Unexpected number of outputs {node.output} "
-            f"for node type {node.op_type!r}"
-        )
+        assert (
+            len(node.output) == 1
+        ), f"Unexpected number of outputs {node.output} for node type {node.op_type!r}"
         assert (
             node.output[0] == output_name
         ), f"Output {output_name!r} not in node.output {node.output}"
@@ -149,9 +147,7 @@ def _infer_type_cast_like(node: NodeProto, input_types: Sequence[int]) -> Tuple[
     return (input_types[1],)
 
 
-def _infer_type_constant_of_shape(
-    node: NodeProto, input_types: Sequence[int]
-) -> Tuple[int]:
+def _infer_type_constant_of_shape(node: NodeProto, input_types: Sequence[int]) -> Tuple[int]:
     """
     Returns the output type for a node Cast.
     """

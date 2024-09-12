@@ -28,9 +28,7 @@ class _GraphBuilderRuntime:
         axes: List[int],
         expand_axes: List[int],
     ) -> STATIC_SHAPE:
-        assert isinstance(
-            shape, tuple
-        ), f"Unexpected type {type(shape)} for shape: {shape}"
+        assert isinstance(shape, tuple), f"Unexpected type {type(shape)} for shape: {shape}"
         assert isinstance(
             indices, list
         ), f"Unexpected type {type(indices)} for index: {indices}"

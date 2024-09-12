@@ -1,11 +1,10 @@
+import random
 from typing import Any, Callable, Tuple
 import torch
 
 
 def get_dummy_model() -> Tuple[Callable, Tuple[Any, ...]]:
-    """
-    Returns a dummy model used to validate the command line.
-    """
+    """Returns a dummy model used to validate the command line."""
 
     class Neuron(torch.nn.Module):
         def __init__(self, n_dims: int = 5, n_targets: int = 3):
@@ -18,16 +17,29 @@ def get_dummy_model() -> Tuple[Callable, Tuple[Any, ...]]:
     return Neuron, (torch.randn(1, 5),)
 
 
+def ids_tensor(shape, vocab_size, rng=None, name=None):
+    """Creates a random int32 tensor of the shape within the vocab size."""
+    if rng is None:
+        rng = random.Random()
+
+    total_dims = 1
+    for dim in shape:
+        total_dims *= dim
+
+    values = []
+    for _ in range(total_dims):
+        values.append(rng.randint(0, vocab_size - 1))
+
+    return torch.tensor(data=values, dtype=torch.long).view(shape).contiguous()
+
+
 def get_llama_model_layer(
     num_hidden_layers: int = 1,
 ) -> Tuple[Callable, Tuple[Any, ...]]:
-    """
-    Returns a llama model with a specific number of layers.
-    """
+    """Returns a llama model with a specific number of layers."""
     import torch
     from transformers import LlamaConfig
     from transformers.models.llama.modeling_llama import LlamaModel
-    from ..torch_models.llama_helper import ids_tensor
 
     vocab_size = 32000
     config = LlamaConfig(

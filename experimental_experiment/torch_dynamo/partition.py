@@ -31,9 +31,7 @@ class CustomOperatorSupport(OperatorSupport):
 
         if target in self._unsupport_dict:
             if self.verbose:
-                print(
-                    f"[CustomOperatorSupport.is_node_support] rejected target [{target}]"
-                )
+                print(f"[CustomOperatorSupport.is_node_support] rejected target [{target}]")
 
             return False
 

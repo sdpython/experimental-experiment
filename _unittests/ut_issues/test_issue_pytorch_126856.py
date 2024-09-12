@@ -33,9 +33,7 @@ class TestIssuePytorch_126856(ExtTestCase):
             onnx_program.model_proto.SerializeToString(),
             providers=["CPUExecutionProvider"],
         )
-        feeds = {
-            onnx_program.model_proto.graph.input[0].name: input_tensor.cpu().numpy()
-        }
+        feeds = {onnx_program.model_proto.graph.input[0].name: input_tensor.cpu().numpy()}
         try:
             results = session.run(None, feeds)
         except ValueError as e:

@@ -34,9 +34,7 @@ class TestZooLlama3(ExtTestCase):
             print(f"output type: {type(expected)}")
             print(f"logits: {expected.logits.shape}, {expected.logits.dtype}")
 
-            print(
-                "start conversion... with input_ids", input_ids.dtype, input_ids.shape
-            )
+            print("start conversion... with input_ids", input_ids.dtype, input_ids.shape)
             begin = time.perf_counter()
             large_onx = to_onnx(
                 model,
@@ -68,9 +66,7 @@ class TestZooLlama3(ExtTestCase):
 
         print(f"loading model {filename!r} with onnxruntime.")
         begin = time.perf_counter()
-        sess = onnxruntime.InferenceSession(
-            filename, providers=["CPUExecutionProvider"]
-        )
+        sess = onnxruntime.InferenceSession(filename, providers=["CPUExecutionProvider"])
         print(f"done in {time.perf_counter() - begin}s")
 
         print("running the first iteration")

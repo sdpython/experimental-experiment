@@ -18,9 +18,7 @@ class TestPhi(ExtTestCase):
         model, model_inputs = get_phi_model()
         expected = model(*model_inputs[0])
         filename = self.get_dump_file("test_get_phi_model_export.onnx")
-        torch.onnx.export(
-            model, model_inputs[0], filename, input_names=["input0", "input1"]
-        )
+        torch.onnx.export(model, model_inputs[0], filename, input_names=["input0", "input1"])
         ref = ExtendedReferenceEvaluator(filename)
         feeds = dict(
             zip(["input0", "input1"], [t.detach().numpy() for t in model_inputs[0]])
@@ -33,9 +31,7 @@ class TestPhi(ExtTestCase):
             get_phi_model,
         )
 
-        model, model_inputs = get_phi_model(
-            _attn_implementation="eager", with_mask=True
-        )
+        model, model_inputs = get_phi_model(_attn_implementation="eager", with_mask=True)
         self.assertEqual(len(model_inputs[0]), 2)
         expected = model(*model_inputs[0])
         self.assertNotEmpty(expected)
@@ -45,9 +41,7 @@ class TestPhi(ExtTestCase):
             get_phi_model,
         )
 
-        model, model_inputs = get_phi_model(
-            _attn_implementation="eager", with_mask=True
-        )
+        model, model_inputs = get_phi_model(_attn_implementation="eager", with_mask=True)
         self.assertEqual(len(model_inputs[0]), 2)
         expected = model(*model_inputs[0])
         self.assertNotEmpty(expected)
@@ -61,18 +55,12 @@ class TestPhi(ExtTestCase):
             get_phi_model,
         )
 
-        model, model_inputs = get_phi_model(
-            _attn_implementation="eager", with_mask=True
-        )
+        model, model_inputs = get_phi_model(_attn_implementation="eager", with_mask=True)
         self.assertEqual(len(model_inputs[0]), 2)
         try:
             omodel = ORTModule(model)
-        except (
-            onnxruntime.training.ortmodule._fallback_exceptions.ORTModuleInitException
-        ):
-            raise unittest.SkipTest(
-                "ORTModule extensions are not installed."
-            )  # noqa: B904
+        except onnxruntime.training.ortmodule._fallback_exceptions.ORTModuleInitException:
+            raise unittest.SkipTest("ORTModule extensions are not installed.")  # noqa: B904
         expected = omodel(*model_inputs[0])
         self.assertNotEmpty(expected)
 
@@ -88,18 +76,12 @@ class TestPhi(ExtTestCase):
             onnx_prefix="test_get_phi_model_mask_eager_ortmodule_backward",
         )
 
-        model, model_inputs = get_phi_model(
-            _attn_implementation="eager", with_mask=True
-        )
+        model, model_inputs = get_phi_model(_attn_implementation="eager", with_mask=True)
         self.assertEqual(len(model_inputs[0]), 2)
         try:
             omodel = ORTModule(model, opts)
-        except (
-            onnxruntime.training.ortmodule._fallback_exceptions.ORTModuleInitException
-        ):
-            raise unittest.SkipTest(
-                "ORTModule extensions are not installed."
-            )  # noqa: B904
+        except onnxruntime.training.ortmodule._fallback_exceptions.ORTModuleInitException:
+            raise unittest.SkipTest("ORTModule extensions are not installed.")  # noqa: B904
         expected = omodel(*model_inputs[0])
         self.assertNotEmpty(expected)
         back = expected[0].sum().backward()
@@ -118,9 +100,7 @@ class TestPhi(ExtTestCase):
             onnx_prefix="test_get_phi_model_mask_eager_ortmodule_backward",
         )
 
-        model, model_inputs = get_phi_model(
-            _attn_implementation="eager", with_mask=True
-        )
+        model, model_inputs = get_phi_model(_attn_implementation="eager", with_mask=True)
         model = model.to("cuda")
         model_inputs = [[t.to("cuda") for t in ts] for ts in model_inputs]
         self.assertEqual(len(model_inputs[0]), 2)
@@ -135,9 +115,7 @@ class TestPhi(ExtTestCase):
             get_phi_model,
         )
 
-        model, model_inputs = get_phi_model(
-            _attn_implementation="eager", with_mask=False
-        )
+        model, model_inputs = get_phi_model(_attn_implementation="eager", with_mask=False)
         self.assertEqual(len(model_inputs[0]), 1)
         expected = model(*model_inputs[0])
         self.assertNotEmpty(expected)

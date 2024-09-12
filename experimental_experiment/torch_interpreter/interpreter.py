@@ -279,9 +279,7 @@ class DynamoInterpreter:
             if stack_trace is None and "from_node" not in node.meta:
                 # torch 2.1.0 and 2.2.0 behave differently.
                 # torch 2.4.0, stack_trace is None but from_node is in node.meta
-                value = self.retriever(
-                    node.target, val, debug={"node": node}, exc=False
-                )
+                value = self.retriever(node.target, val, debug={"node": node}, exc=False)
                 if value is None:
                     return self._make_tensor_input(
                         node.name,
@@ -463,9 +461,7 @@ class DynamoInterpreter:
         if isinstance(node.target, self.torch._ops.OpOverloadPacket):
             if node.target != self.torch.ops.aten.sym_size:
                 raise RuntimeError(f"Unsupported function {node!r}.")
-            raise NotImplementedError(
-                f"Unsupported function {node!r} (not implemented)."
-            )
+            raise NotImplementedError(f"Unsupported function {node!r} (not implemented).")
 
         if isinstance(node.target, types.BuiltinFunctionType):
             return node.target
@@ -517,9 +513,7 @@ class DynamoInterpreter:
                 steps.append(1)
                 continue
 
-            assert isinstance(
-                aslice, slice
-            ), f"Unexpected type {aslice} in {index_slice}"
+            assert isinstance(aslice, slice), f"Unexpected type {aslice} in {index_slice}"
 
             starts.append(aslice.start or 0)
 
@@ -545,9 +539,7 @@ class DynamoInterpreter:
                 ends.append(end_name)
                 concat = True
             else:
-                vstop = (
-                    aslice.stop.name if hasattr(aslice.stop, "name") else aslice.stop
-                )
+                vstop = aslice.stop.name if hasattr(aslice.stop, "name") else aslice.stop
                 concat |= isinstance(vstop, str)
                 ends.append(vstop)
 
@@ -571,10 +563,9 @@ class DynamoInterpreter:
                         )
                         iends.append(i)
                 else:
-                    assert isinstance(i, int), (
-                        f"Unexpected value for end={i!r}"
-                        f"{self.builder.get_debug_msg()}"
-                    )
+                    assert isinstance(
+                        i, int
+                    ), f"Unexpected value for end={i!r}{self.builder.get_debug_msg()}"
                     iends.append(np.array([i], dtype=np.int64))
             if len(iends) > 1:
                 conc_ends = self.builder.op.Concat(*iends, axis=0, name=f"{name}D")
@@ -585,9 +576,7 @@ class DynamoInterpreter:
                 f"Unexpected value for ends={ends}: {[type(_) for _ in ends]}"
                 f"{self.builder.get_debug_msg()}"
             )
-            conc_ends = self.builder.make_initializer(
-                "", np.array(ends, dtype=np.int64)
-            )
+            conc_ends = self.builder.make_initializer("", np.array(ends, dtype=np.int64))
 
         assert all_int(steps), (
             f"Not implemented for steps={steps} (types are "
@@ -616,10 +605,9 @@ class DynamoInterpreter:
                         )
                         istarts.append(si)
                 else:
-                    assert isinstance(si, int), (
-                        f"Unexpected value for end={si!r}"
-                        f"{self.builder.get_debug_msg()}"
-                    )
+                    assert isinstance(
+                        si, int
+                    ), f"Unexpected value for end={si!r}{self.builder.get_debug_msg()}"
                     istarts.append(np.array([si], dtype=np.int64))
             if len(istarts) > 1:
                 conc_starts = self.builder.op.Concat(*istarts, axis=0, name=f"{name}SD")
@@ -717,9 +705,7 @@ class DynamoInterpreter:
                 self.builder.set_type(node.name, dtype)
                 sts = {"dtype": val.dtype}
             else:
-                raise TypeError(
-                    f"Unexpected type in node {node!r}, type(val)={type(val)}."
-                )
+                raise TypeError(f"Unexpected type in node {node!r}, type(val)={type(val)}.")
 
         if hasattr(index, "name"):
             # A dynamic index (torch.fx.Node)
@@ -746,9 +732,7 @@ class DynamoInterpreter:
             # The user mean to access the first element of a tensor or a sequence
             if self.builder.is_sequence(result_name):
                 # A sequence
-                tpos = self.builder.make_initializer(
-                    "", np.array(index, dtype=np.int64)
-                )
+                tpos = self.builder.make_initializer("", np.array(index, dtype=np.int64))
                 res = self.builder.make_node(
                     "SequenceAt",
                     [result_name, tpos],
@@ -832,9 +816,7 @@ class DynamoInterpreter:
                         ), f"An axis cannot be inserted after (...) in index={index}"
                         expand_axes.append(i)
                         continue
-                    axes.append(
-                        ((i - len(index)) if ellipsis else i) - len(expand_axes)
-                    )
+                    axes.append(((i - len(index)) if ellipsis else i) - len(expand_axes))
                     if (
                         not isinstance(ind, slice)
                         or ind.start is not None
@@ -1158,14 +1140,10 @@ class DynamoInterpreter:
                     if len(v) == len(r) and r[0].endswith("#0"):
                         # Operator Split was used instead of SplitToSequence.
                         for r_, v_ in zip(r, v):
-                            self.builder.set_type(
-                                r_, torch_dtype_to_onnx_dtype(v_.dtype)
-                            )
+                            self.builder.set_type(r_, torch_dtype_to_onnx_dtype(v_.dtype))
                             shape = tuple(v_.shape)
                             if self.builder.is_dynamic_shape(shape):
-                                self.builder.set_shape(
-                                    r_, shape, set_if_more_precise=False
-                                )
+                                self.builder.set_shape(r_, shape, set_if_more_precise=False)
                             elif self.builder.has_rank(r_):
                                 assert len(shape) == self.builder.get_rank(r_), (
                                     f"Rank already set for {r_!r}, "

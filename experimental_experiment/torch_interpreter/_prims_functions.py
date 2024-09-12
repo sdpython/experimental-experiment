@@ -143,9 +143,7 @@ def prims_clone(
     "identity"
     from ._aten_functions import aten_clone
 
-    return aten_clone(
-        g, sts, outputs, x, memory_format=memory_format, name="prims_clone"
-    )
+    return aten_clone(g, sts, outputs, x, memory_format=memory_format, name="prims_clone")
 
 
 def prims_convert_element_type(
@@ -328,12 +326,8 @@ def prims_iota(
     assert isinstance(
         length, int
     ), f"not implemented when length={length!r}{g.get_debug_msg()}"
-    assert isinstance(
-        start, int
-    ), f"not implemented when start={start!r}{g.get_debug_msg()}"
-    assert isinstance(
-        step, int
-    ), f"not implemented when step={step!r}{g.get_debug_msg()}"
+    assert isinstance(start, int), f"not implemented when start={start!r}{g.get_debug_msg()}"
+    assert isinstance(step, int), f"not implemented when step={step!r}{g.get_debug_msg()}"
     end = start + length * step
     from ._aten_functions import aten_arange
 
@@ -443,9 +437,7 @@ def prims_split_dim(
     name: str = "prims_split_dim",
 ):
     "split"
-    assert (
-        len(outputs) == 1
-    ), f"Expecting 1 outputs but got {outputs}{g.get_debug_msg()}"
+    assert len(outputs) == 1, f"Expecting 1 outputs but got {outputs}{g.get_debug_msg()}"
     assert g.has_shape(
         x
     ), f"Not implemented when shape of {x!r} is unknown{g.get_debug_msg()}"

@@ -195,9 +195,7 @@ def measure_time(
     *number* times the execution of the main statement.
     """
     if not callable(stmt) and not isinstance(stmt, str):
-        raise TypeError(
-            f"stmt is not callable or a string but is of type {type(stmt)!r}."
-        )
+        raise TypeError(f"stmt is not callable or a string but is of type {type(stmt)!r}.")
     if context is None:
         context = {}
 
@@ -213,9 +211,7 @@ def measure_time(
 
     if max_time is not None:
         if not div_by_number:
-            raise ValueError(
-                "div_by_number must be set to True of max_time is defined."
-            )
+            raise ValueError("div_by_number must be set to True of max_time is defined.")
         i = 1
         total_time = 0.0
         results = []
@@ -326,9 +322,7 @@ class ExtTestCase(unittest.TestCase):
     def assertGreaterOrEqual(self, a, b, msg=None):
         "in the name"
         if a < b:
-            return AssertionError(
-                f"{a} < {b}, a not greater or equal than b\n{msg or ''}"
-            )
+            return AssertionError(f"{a} < {b}, a not greater or equal than b\n{msg or ''}")
 
     def assertInOr(self, tofind: Tuple[str, ...], text: str):
         for tof in tofind:
@@ -341,9 +335,7 @@ class ExtTestCase(unittest.TestCase):
     def assertIn(self, tofind: str, text: str):
         if tofind in text:
             return
-        raise AssertionError(
-            f"Unable to find the list of strings {tofind} in\n--\n{text}"
-        )
+        raise AssertionError(f"Unable to find the list of strings {tofind} in\n--\n{text}")
 
     def assertEqualArrays(
         self,
@@ -620,9 +612,7 @@ def requires_onnxscript(version: str, msg: str = "") -> Callable:
         # development version
         return lambda x: x
 
-    if pv.Version(".".join(onnxscript.__version__.split(".")[:2])) < pv.Version(
-        version
-    ):
+    if pv.Version(".".join(onnxscript.__version__.split(".")[:2])) < pv.Version(version):
         msg = f"onnxscript version {onnxscript.__version__} < {version}: {msg}"
         return unittest.skip(msg)
     return lambda x: x
@@ -635,9 +625,7 @@ def requires_onnxruntime(version: str, msg: str = "") -> Callable:
     import packaging.version as pv
     import onnxruntime
 
-    if pv.Version(".".join(onnxruntime.__version__.split(".")[:2])) < pv.Version(
-        version
-    ):
+    if pv.Version(".".join(onnxruntime.__version__.split(".")[:2])) < pv.Version(version):
         msg = f"onnxruntime version {onnxruntime.__version__} < {version}: {msg}"
         return unittest.skip(msg)
     return lambda x: x
@@ -666,9 +654,7 @@ def has_onnxruntime_training(push_back_batch: bool = False):
     return True
 
 
-def requires_onnxruntime_training(
-    push_back_batch: bool = False, msg: str = ""
-) -> Callable:
+def requires_onnxruntime_training(push_back_batch: bool = False, msg: str = "") -> Callable:
     """
     Skips a unit test if :epkg:`onnxruntime` is not onnxruntime_training.
     """

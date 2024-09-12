@@ -141,9 +141,7 @@ class TestOnnxExport(ExtTestCase):
                 )
             return
         try:
-            InferenceSession(
-                name.SerializeToString(), providers=["CPUExecutionProvider"]
-            )
+            InferenceSession(name.SerializeToString(), providers=["CPUExecutionProvider"])
         except Exception as e:
             from onnx_array_api.plotting.text_plot import onnx_simple_text_plot
 
@@ -322,12 +320,8 @@ class TestOnnxExport(ExtTestCase):
 
         p1 = [n for n in onx1.graph.node if n.op_type == "Transpose"]
         p2 = [n for n in onx2.graph.node if n.op_type == "Transpose"]
-        self.assertEqual(
-            len(p1), 3, f"Mismatch Transpose\n{onnx_simple_text_plot(onx1)}"
-        )
-        self.assertEqual(
-            len(p2), 0, f"Mismatch Transpose\n{onnx_simple_text_plot(onx2)}"
-        )
+        self.assertEqual(len(p1), 3, f"Mismatch Transpose\n{onnx_simple_text_plot(onx1)}")
+        self.assertEqual(len(p2), 0, f"Mismatch Transpose\n{onnx_simple_text_plot(onx2)}")
         self.check_model_ort(onx2)
 
     @skipif_ci_windows("torch dynamo not supported on windows")

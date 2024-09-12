@@ -469,9 +469,7 @@ def clean_text(text):
     return text
 
 
-def profile_function(
-    name, export_function, with_args=True, verbose=False, suffix="export"
-):
+def profile_function(name, export_function, with_args=True, verbose=False, suffix="export"):
     if verbose:
         print(f"profile {name}: {export_function}")
     if with_args:
@@ -684,8 +682,7 @@ for compute in ["CPU", "CUDA"]:
     ax = memory_peak_plot(
         dfmemr[dfmemr.compute == compute],
         ("export",),
-        suptitle=f"Memory Consumption of backens, running time"
-        f"\nrunning on {compute}",
+        suptitle=f"Memory Consumption of backens, running time\nrunning on {compute}",
         bars=[model_size * i / 2**20 for i in range(1, 3)],
         figsize=(18, 6),
     )

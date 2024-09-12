@@ -53,10 +53,7 @@ def get_pattern(
     }
     for fct in _pattern.values():
         mapping.update(
-            {
-                v.__class__.__name__.replace("Pattern", ""): v
-                for v in fct(verbose=verbose)
-            }
+            {v.__class__.__name__.replace("Pattern", ""): v for v in fct(verbose=verbose)}
         )
     if isinstance(obj, list):
         assert as_list, f"obj={obj!r} is already a list"

@@ -65,9 +65,7 @@ def get_parsed_args(
         to_publish = set(expose.split(",")) if expose else set()
         if scenarios is not None:
             rows = ", ".join(f"{k}: {v}" for k, v in scenarios.items())
-            parser.add_argument(
-                "-s", "--scenario", help=f"Available scenarios: {rows}."
-            )
+            parser.add_argument("-s", "--scenario", help=f"Available scenarios: {rows}.")
         if not to_publish or "number" in to_publish:
             parser.add_argument(
                 "-n",

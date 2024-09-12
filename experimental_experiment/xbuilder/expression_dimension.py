@@ -44,9 +44,7 @@ def parse_expression(
     st = ast.parse(expr, mode="eval")
     for node in ast.walk(st):
         if isinstance(node, ast.Name):
-            assert node.id in context or node.id in set(
-                str(d) for d in context.values()
-            ), (
+            assert node.id in context or node.id in set(str(d) for d in context.values()), (
                 f"Unable to find name {node.id!r} in expression {expr!r}, "
                 f"context is {context}"
             )

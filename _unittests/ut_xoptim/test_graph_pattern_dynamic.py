@@ -123,19 +123,15 @@ class TestGraphPatternDynamic(ExtTestCase):
             app1 = [
                 s
                 for s in stat1
-                if s["pattern"].startswith(prefix)
-                and s["pattern"] != "apply_ReshapePattern"
+                if s["pattern"].startswith(prefix) and s["pattern"] != "apply_ReshapePattern"
             ]
             app2 = [
                 s
                 for s in stat2
-                if s["pattern"].startswith(prefix)
-                and s["pattern"] != "apply_ReshapePattern"
+                if s["pattern"].startswith(prefix) and s["pattern"] != "apply_ReshapePattern"
             ]
             if pat.__class__.__name__ in exceptions:
-                assert (
-                    len(app1) > 0
-                ), f"Issue with pattern {patterns[i]} and app1={app1}"
+                assert len(app1) > 0, f"Issue with pattern {patterns[i]} and app1={app1}"
                 continue
             if len(app1) > len(app2):
                 raise AssertionError(

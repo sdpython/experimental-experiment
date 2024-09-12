@@ -95,9 +95,7 @@ class TestOnnxExportLlama(ExtTestCase):
                 )
             return
         try:
-            InferenceSession(
-                onx.SerializeToString(), providers=["CPUExecutionProvider"]
-            )
+            InferenceSession(onx.SerializeToString(), providers=["CPUExecutionProvider"])
         except Exception as e:
             from onnx_array_api.plotting.text_plot import onnx_simple_text_plot
 

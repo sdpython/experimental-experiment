@@ -34,12 +34,8 @@ class TestOnnxTools(ExtTestCase):
                     ),
                     onh.from_array(np.array([0], dtype=np.int64), name="zero"),
                     onh.from_array(np.array([1], dtype=np.int64), name="un"),
-                    onh.from_array(
-                        np.array([1, 320, 1280], dtype=np.int64), name="shape1"
-                    ),
-                    onh.from_array(
-                        np.array([15, 1280, 640], dtype=np.int64), name="shape2"
-                    ),
+                    onh.from_array(np.array([1, 320, 1280], dtype=np.int64), name="shape1"),
+                    onh.from_array(np.array([15, 1280, 640], dtype=np.int64), name="shape2"),
                     onh.from_array(
                         np.array([3, 5, 320, 640], dtype=np.int64), name="shape3"
                     ),

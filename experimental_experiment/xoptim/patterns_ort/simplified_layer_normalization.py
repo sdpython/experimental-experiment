@@ -95,9 +95,7 @@ class SimplifiedLayerNormalizationPattern(PatternOptimization):
         nodes = []
         epsilon = g.get_computed_constant(node_add.input[1])
         shape = (
-            g.get_shape(node_reduce.input[0])
-            if g.has_shape(node_reduce.input[0])
-            else None
+            g.get_shape(node_reduce.input[0]) if g.has_shape(node_reduce.input[0]) else None
         )
         axis = g.get_constant_or_attribute(node_reduce, "axes", input_index=1)[0]
         assert axis < len(

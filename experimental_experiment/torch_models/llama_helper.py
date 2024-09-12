@@ -44,9 +44,7 @@ def get_llama_decoder(
             self.decoder = LlamaDecoderLayer(config, layer_idx=0)
 
         def forward(self, hidden_states, attention_mask, position_ids):
-            (decoder_output,) = self.decoder(
-                hidden_states, attention_mask, position_ids
-            )
+            (decoder_output,) = self.decoder(hidden_states, attention_mask, position_ids)
             return decoder_output
 
     def generate_example_inputs(batch: int, seq: int, hidden_size: int):
@@ -99,9 +97,7 @@ def get_llama_attention(
             self.attention = LlamaAttention(config, layer_idx=0)
 
         def forward(self, hidden_states, attention_mask, position_ids):
-            attn_output, _, _ = self.attention(
-                hidden_states, attention_mask, position_ids
-            )
+            attn_output, _, _ = self.attention(hidden_states, attention_mask, position_ids)
             return attn_output
 
     def generate_example_inputs(batch: int, seq: int, hidden_size: int):

@@ -127,9 +127,7 @@ class PatternOptimization:
                 # This expression seems awkard but it saves 10% just by looking into
                 # the first item of the list and then, if necessary, walking through the
                 # rest of the outputs.
-                if g.is_used(node.output[0]) or any(
-                    g.is_used(o) for o in node.output[1:]
-                ):
+                if g.is_used(node.output[0]) or any(g.is_used(o) for o in node.output[1:]):
                     # We avoid processing a node which is not used.
                     res = self.match(g, node, matched)
                     if res:
@@ -236,8 +234,7 @@ class PatternOptimization:
         :return: nodes to add to graph.
         """
         raise NotImplementedError(
-            f"This function must be overloaded in class "
-            f"{self.__class__.__name__!r}."
+            f"This function must be overloaded in class {self.__class__.__name__!r}."
         )
 
 
@@ -493,9 +490,7 @@ class EasyPatternOptimization(PatternOptimization):
         elif isinstance(n, str) and isinstance(pn, str):
             matched_results = [(n, pn)]
         else:
-            raise AssertionError(
-                f"Unexpected types for n: {type(n)} and pn: {type(pn)}."
-            )
+            raise AssertionError(f"Unexpected types for n: {type(n)} and pn: {type(pn)}.")
 
         for o, op in matched_results:
             ns = g.next_nodes(o)
@@ -526,9 +521,7 @@ class EasyPatternOptimization(PatternOptimization):
 
             if len(ns) == len(pns) == 1:
                 # Let's deal with the simple case
-                if ns[0].op_type != pns[0].op_type or len(ns[0].input) != len(
-                    pns[0].input
-                ):
+                if ns[0].op_type != pns[0].op_type or len(ns[0].input) != len(pns[0].input):
                     self._hint(
                         "FORWARD: distinct types or distinct number of inputs",
                         "-- pred",
@@ -576,9 +569,9 @@ class EasyPatternOptimization(PatternOptimization):
                 return self.none(node, inspect.currentframe().f_lineno)
             if len(p_marked) == len(free) == 1:
                 # Only one option again.
-                if p_marked[0].op_type != free[0].op_type or len(
-                    p_marked[0].input
-                ) != len(free[0].input):
+                if p_marked[0].op_type != free[0].op_type or len(p_marked[0].input) != len(
+                    free[0].input
+                ):
                     self._hint(
                         "FORWARD: distinct types or distinct number of inputs",
                         "-- pred",
@@ -831,9 +824,7 @@ class EasyPatternOptimization(PatternOptimization):
             )
             if self.verbose >= 10:
                 print("[EasyPatternOptimization.match] match pattern")
-                print(
-                    textwrap.indent(self.display_pattern(g, self.match_pattern), "    ")
-                )
+                print(textwrap.indent(self.display_pattern(g, self.match_pattern), "    "))
 
         pair_results_names = {}
         self._update_ambiguities(pair_results_names, node, p_node)

@@ -163,9 +163,7 @@ class Opset:
         elif isinstance(axes, int):
             iaxes = [axes]
         else:
-            raise RuntimeError(
-                f"Unable to call {op_type} on a dynamic input axis={axes}"
-            )
+            raise RuntimeError(f"Unable to call {op_type} on a dynamic input axis={axes}")
         return iaxes
 
     def ReduceMaxAnyOpset(self, *args, **kwargs):
@@ -182,9 +180,7 @@ class Opset:
         assert len(args) == 2, f"ReduceMeanAnyOpset expects 2 arguments not {len(args)}"
         if self.builder.main_opset >= 18:
             return self.ReduceMean(*args, **kwargs)
-        return self.ReduceMean(
-            args[0], axes=self._iaxes("ReduceMean", args[1]), **kwargs
-        )
+        return self.ReduceMean(args[0], axes=self._iaxes("ReduceMean", args[1]), **kwargs)
 
     def ReduceSumAnyOpset(self, *args, **kwargs):
         if len(args) == 1:

@@ -33,9 +33,7 @@ class TestBenchScript(ExtTestCase):
         try:
             res = run_benchmark(script_name, configs)
         except BenchmarkError as e:
-            raise unittest.SkipTest(  # noqa: B904
-                f"Probably no metric collected due to {e}"
-            )
+            raise unittest.SkipTest(f"Probably no metric collected due to {e}")  # noqa: B904
         self.assertEqual(len(res), 1)
         expected = {"metric1": 0.5, "metric2": 5, "metric3": "dummy", "m": 6}
         got = res[0]

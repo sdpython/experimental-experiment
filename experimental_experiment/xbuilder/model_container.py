@@ -171,9 +171,7 @@ class TorchModelContainer(ModelContainer):
                 if ext.key == "location":  # type: ignore[attr-defined]
                     prop = ext  # type: ignore[assignment]
             if prop is None:
-                raise RuntimeError(
-                    f"No location found for tensor name {tensor.name!r}."
-                )
+                raise RuntimeError(f"No location found for tensor name {tensor.name!r}.")
             if prop.value not in self.large_initializers:
                 raise RuntimeError(
                     f"Unable to find large tensor named {tensor.name!r} "
@@ -186,18 +184,14 @@ class TorchModelContainer(ModelContainer):
                 # Convert endian from little to big
                 begin = time.perf_counter()
                 tensor_bytes = np_tensor.byteswap().tobytes()
-                self._stats["time_export_byteswap_tobytes"] += (
-                    time.perf_counter() - begin
-                )
+                self._stats["time_export_byteswap_tobytes"] += time.perf_counter() - begin
             elif isinstance(np_tensor, np.ndarray):
                 begin = time.perf_counter()
                 tensor_bytes = np_tensor.tobytes()
                 self._stats["time_export_tobytes"] += time.perf_counter() - begin
             elif isinstance(np_tensor, TensorProto):
                 tensor_bytes = np_tensor.raw_data
-                assert (
-                    len(tensor_bytes) > 0
-                ), f"One tensor is null, np_tensor={np_tensor}."
+                assert len(tensor_bytes) > 0, f"One tensor is null, np_tensor={np_tensor}."
             else:
                 import torch
 
@@ -213,13 +207,10 @@ class TorchModelContainer(ModelContainer):
 
                 begin = time.perf_counter()
                 proto = proto_from_array(pt, name="dummy")
-                self._stats["time_export_proto_from_array"] += (
-                    time.perf_counter() - begin
-                )
+                self._stats["time_export_proto_from_array"] += time.perf_counter() - begin
                 tensor_bytes = proto.raw_data
                 assert (
-                    pt.dtype != torch.float32
-                    or len(tensor_bytes) == np.prod(pt.shape) * 4
+                    pt.dtype != torch.float32 or len(tensor_bytes) == np.prod(pt.shape) * 4
                 ), (
                     f"Unexpected size mismatch, buffer size is {len(tensor_bytes)}, "
                     f"but tensor size={np.prod(pt.shape) * 4}, "

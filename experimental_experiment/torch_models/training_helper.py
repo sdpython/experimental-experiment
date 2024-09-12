@@ -116,9 +116,7 @@ def make_aot_ort(
     else:
         if verbose:
             print(f"[make_aot_ort] enable {onnx_registry!r}")
-        export_options = ExportOptions(
-            dynamic_shapes=dynamic, onnx_registry=onnx_registry
-        )
+        export_options = ExportOptions(dynamic_shapes=dynamic, onnx_registry=onnx_registry)
 
     from torch.onnx._internal import onnxruntime
 
@@ -148,9 +146,7 @@ def make_aot_ort(
             #     *args, verbose=verbose, onnx_shape_inference=False, **kwargs
             # )
 
-            patterns = get_pattern_list(
-                enable_pattern, disable_pattern, verbose=verbose
-            )
+            patterns = get_pattern_list(enable_pattern, disable_pattern, verbose=verbose)
             if order_algorithm is not None:
                 from ..xoptim import OrderAlgorithm
 

@@ -118,9 +118,7 @@ class TestBashBenchRunnerCmd(ExtTestCase):
     @requires_torch("2.4")
     @requires_onnxruntime_training()
     def test_huggingface_export_bench_cortgrad_cpu(self):
-        self._huggingface_export_bench_cpu(
-            "cortgrad", "101Dummy", process=True, verbose=20
-        )
+        self._huggingface_export_bench_cpu("cortgrad", "101Dummy", process=True, verbose=20)
 
     @skipif_ci_windows("exporter does not work on Windows")
     @ignore_warnings((DeprecationWarning, UserWarning))

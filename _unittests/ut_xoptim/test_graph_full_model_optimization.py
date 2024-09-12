@@ -43,9 +43,7 @@ class TestGraphFullModelPatternOptimization(ExtTestCase):
         before = [n.op_type for n in origin.graph.node if n.op_type == "FusedMatMul"]
         gr = GraphBuilder(
             origin,
-            optimization_options=OptimizationOptions(
-                patterns=["FusedMatMul"], verbose=0
-            ),
+            optimization_options=OptimizationOptions(patterns=["FusedMatMul"], verbose=0),
             infer_shapes=True,
         )
         onx = gr.to_onnx(optimize=True)
@@ -55,9 +53,7 @@ class TestGraphFullModelPatternOptimization(ExtTestCase):
 
     def test_scatter_constant_of_shape(self):
         origin = self._get_model("opt-llama-custom-backward.onnx")
-        before = [
-            n.op_type for n in origin.graph.node if n.op_type == "ScatterNDOfShape"
-        ]
+        before = [n.op_type for n in origin.graph.node if n.op_type == "ScatterNDOfShape"]
         gr = GraphBuilder(
             origin,
             optimization_options=OptimizationOptions(

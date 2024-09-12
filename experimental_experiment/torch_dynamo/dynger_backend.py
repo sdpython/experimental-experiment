@@ -84,9 +84,7 @@ def dynger_backend(
                     v = ",".join(map(str, res.ravel().detach().cpu().numpy().tolist()))
                 else:
                     v = (
-                        ",".join(
-                            map(str, res.ravel().detach().cpu().numpy().tolist()[:5])
-                        )
+                        ",".join(map(str, res.ravel().detach().cpu().numpy().tolist()[:5]))
                         + "..."
                     )
                 print(f"  + {name}: {res.dtype}:{res.shape}:{v}")
@@ -111,21 +109,15 @@ def dynger_backend(
                 ), f"One name is expexted for one result but name={name!r}"
 
             def __call__(self, *args, **kwargs):
-                print(
-                    f"{self._graph.__class__.__name__}({self._inputs}) -> {self._name}"
-                )
+                print(f"{self._graph.__class__.__name__}({self._inputs}) -> {self._name}")
                 res = self._f(*args, **kwargs)
                 if isinstance(res, torch.Tensor):
                     if np.prod(res.shape) <= 8:
-                        v = ",".join(
-                            map(str, res.ravel().detach().cpu().numpy().tolist())
-                        )
+                        v = ",".join(map(str, res.ravel().detach().cpu().numpy().tolist()))
                     else:
                         v = (
                             ",".join(
-                                map(
-                                    str, res.ravel().detach().cpu().numpy().tolist()[:5]
-                                )
+                                map(str, res.ravel().detach().cpu().numpy().tolist()[:5])
                             )
                             + "..."
                         )

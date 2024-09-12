@@ -67,9 +67,7 @@ class TestDynamoCompileOnnx(ExtTestCase):
         got = optimized_mod(input_tensor)
         self.assertEqual(expected.shape, got.shape)
         self.assertEqual(expected.dtype, got.dtype)
-        self.assertEqualArray(
-            expected.detach().numpy(), got.detach().numpy(), atol=1e-5
-        )
+        self.assertEqualArray(expected.detach().numpy(), got.detach().numpy(), atol=1e-5)
 
     @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
     @unittest.skipIf(True, reason="export fails")

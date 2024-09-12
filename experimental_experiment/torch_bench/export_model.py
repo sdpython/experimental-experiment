@@ -189,9 +189,7 @@ def main(args=None):
                 large_model=large_model,
                 order=order,
             )
-            print(
-                f"[export_model] export to onnx done in {time.perf_counter() - begin}"
-            )
+            print(f"[export_model] export to onnx done in {time.perf_counter() - begin}")
             if memory_session is not None:
                 memory_results = memory_session.stop()
                 print(f"[export_model] ends memory monitoring {memory_results}")

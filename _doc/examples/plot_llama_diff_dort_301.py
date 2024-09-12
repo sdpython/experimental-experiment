@@ -176,9 +176,7 @@ else:
 
 if hasattr(torch._dynamo.variables.misc, "LoggingLoggerVariable"):
     # A tweak to make torch.export.export work.
-    torch._dynamo.variables.misc.LoggingLoggerVariable.call_method = (
-        lambda *_, **__: None
-    )
+    torch._dynamo.variables.misc.LoggingLoggerVariable.call_method = lambda *_, **__: None
 
 
 folder = "dump_models"

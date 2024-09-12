@@ -315,9 +315,7 @@ class TestOperatorsCort(ExtTestCase):
                             folder = "dump_test_operators_forward"
                             if not os.path.exists(folder):
                                 os.mkdir(folder)
-                            grad_name = os.path.join(
-                                folder, f"{onnx_export}_forward.onnx"
-                            )
+                            grad_name = os.path.join(folder, f"{onnx_export}_forward.onnx")
                             with open(grad_name, "wb") as f:
                                 f.write(forward_onnx.SerializeToString())
                             # gradient from onnxruntime
@@ -332,9 +330,7 @@ class TestOperatorsCort(ExtTestCase):
                                 verbose=1,
                             )
                             with open(
-                                os.path.join(
-                                    folder, f"{onnx_export}_ort_yield_grad.onnx"
-                                ),
+                                os.path.join(folder, f"{onnx_export}_ort_yield_grad.onnx"),
                                 "wb",
                             ) as f:
                                 f.write(grad.SerializeToString())
@@ -360,9 +356,7 @@ class TestOperatorsCort(ExtTestCase):
                     base_grads = tuple(_.grad for _ in model.parameters())
                     grads = tuple(_.grad for _ in compiled_model.parameters())
                     self.assertEqual(len(base_grads), len(grads))
-                    assert_all_close(
-                        base_grads, grads, atol=atol, rtol=rtol, msg="BACKWARD"
-                    )
+                    assert_all_close(base_grads, grads, atol=atol, rtol=rtol, msg="BACKWARD")
                     assert len(grads) > 0, "No gradient was checked"
                 else:
                     if save_onnx:
@@ -400,15 +394,11 @@ class TestOperatorsCort(ExtTestCase):
                     base_grads = tuple(_.grad for _ in model.parameters())
                     grads = tuple(_.grad for _ in compiled_model.parameters())
                     self.assertEqual(len(base_grads), len(grads))
-                    assert_all_close(
-                        base_grads, grads, atol=atol, rtol=rtol, msg="BACKWARD"
-                    )
+                    assert_all_close(base_grads, grads, atol=atol, rtol=rtol, msg="BACKWARD")
                     assert len(grads) > 0, "No gradient was checked"
 
             else:
-                assert (
-                    not use_decomposition
-                ), "not implemented for use_decomposition=True"
+                assert not use_decomposition, "not implemented for use_decomposition=True"
                 # forward only
                 compiled_model = torch.compile(
                     copy.deepcopy(model),
@@ -476,9 +466,7 @@ class TestOperatorsCort(ExtTestCase):
 
     def test_index_i(self):
         x = torch.tensor([[0.0]], requires_grad=True)
-        self.assertONNX(
-            lambda x: x[0], x, onnx_export=inspect.currentframe().f_code.co_name
-        )
+        self.assertONNX(lambda x: x[0], x, onnx_export=inspect.currentframe().f_code.co_name)
 
     def test_index_tensor1(self):
         x = torch.arange(12, requires_grad=True, dtype=torch.float32).reshape((-1, 4))
@@ -595,9 +583,7 @@ class TestOperatorsCort(ExtTestCase):
             lambda x: 1 - x, (x,), onnx_export=inspect.currentframe().f_code.co_name
         )
 
-    @unittest.skipIf(
-        not OP_BOOL_SUPPORTED, reason="multiplication of boolean not supported"
-    )
+    @unittest.skipIf(not OP_BOOL_SUPPORTED, reason="multiplication of boolean not supported")
     def test_mul_bool(self):
         x = torch.tensor([True, False, True, False])
         y = torch.tensor([True, True, False, False])
@@ -607,9 +593,7 @@ class TestOperatorsCort(ExtTestCase):
             onnx_export=inspect.currentframe().f_code.co_name,
         )
 
-    @unittest.skipIf(
-        not OP_BOOL_SUPPORTED, reason="multiplication of boolean not supported"
-    )
+    @unittest.skipIf(not OP_BOOL_SUPPORTED, reason="multiplication of boolean not supported")
     def test_mul_fp_bool(self):
         x = torch.tensor([9.4, 1.7, 3.6])
         y = torch.tensor([True, True, False])
@@ -637,9 +621,7 @@ class TestOperatorsCort(ExtTestCase):
         )
 
     def test_split(self):
-        x = torch.tensor(
-            [[0.0, 1.0, 1.0, 0.0, 2.0, 2.0], [2.0, 3.0, 3.0, 2.0, 1.0, 1.0]]
-        )
+        x = torch.tensor([[0.0, 1.0, 1.0, 0.0, 2.0, 2.0], [2.0, 3.0, 3.0, 2.0, 1.0, 1.0]])
         self.assertONNX(
             lambda x: torch.split(x, 2, 1),
             x,
@@ -648,9 +630,7 @@ class TestOperatorsCort(ExtTestCase):
         )
 
     def test_split_with_sizes(self):
-        x = torch.tensor(
-            [[0.0, 1.0, 1.0, 0.0, 2.0, 2.0], [2.0, 3.0, 3.0, 2.0, 1.0, 1.0]]
-        )
+        x = torch.tensor([[0.0, 1.0, 1.0, 0.0, 2.0, 2.0], [2.0, 3.0, 3.0, 2.0, 1.0, 1.0]])
         self.assertONNX(
             lambda x: torch.split(x, [2, 1, 3], 1),
             x,
@@ -718,9 +698,7 @@ class TestOperatorsCort(ExtTestCase):
         )
 
     def test_pad_1(self):
-        x = torch.tensor(
-            [[0.0, 1.0, 1.0, 1.0], [2.0, 3.0, 7.0, 7.0]], requires_grad=True
-        )
+        x = torch.tensor([[0.0, 1.0, 1.0, 1.0], [2.0, 3.0, 7.0, 7.0]], requires_grad=True)
         self.assertONNX(
             lambda x: nn.functional.pad(x, (1, 2, 3, 4)),
             x,
@@ -728,9 +706,7 @@ class TestOperatorsCort(ExtTestCase):
         )
 
     def test_pad_2(self):
-        x = torch.tensor(
-            [[0.0, 1.0, 1.0, 1.0], [2.0, 3.0, 7.0, 7.0]], requires_grad=True
-        )
+        x = torch.tensor([[0.0, 1.0, 1.0, 1.0], [2.0, 3.0, 7.0, 7.0]], requires_grad=True)
         self.assertONNX(
             lambda x: nn.functional.pad(
                 x,
@@ -744,9 +720,7 @@ class TestOperatorsCort(ExtTestCase):
         )
 
     def test_pad_3(self):
-        x = torch.tensor(
-            [[[0.0, 1.0, 1.0, 1.0], [2.0, 3.0, 7.0, 7.0]]], requires_grad=True
-        )
+        x = torch.tensor([[[0.0, 1.0, 1.0, 1.0], [2.0, 3.0, 7.0, 7.0]]], requires_grad=True)
         self.assertONNX(
             lambda x: nn.functional.pad(x, (1, 2, 3, 4, 5, 6)),
             x,
@@ -847,9 +821,7 @@ class TestOperatorsCort(ExtTestCase):
     def test_convtranspose(self):
         x = torch.ones(2, 3, 4, 5, requires_grad=True)
         self.assertONNX(
-            nn.ConvTranspose2d(
-                3, 3, 3, stride=3, bias=False, padding=1, output_padding=2
-            ),
+            nn.ConvTranspose2d(3, 3, 3, stride=3, bias=False, padding=1, output_padding=2),
             x,
             keep_initializers_as_inputs=True,
             onnx_export=inspect.currentframe().f_code.co_name,
@@ -1166,11 +1138,7 @@ class TestOperatorsCort(ExtTestCase):
             .to(torch.int32)
             .to(torch.float32)
         )
-        y = (
-            torch.randn(1, 2, 1, 1, requires_grad=False)
-            .to(torch.int32)
-            .to(torch.float32)
-        )
+        y = torch.randn(1, 2, 1, 1, requires_grad=False).to(torch.int32).to(torch.float32)
         self.assertONNX(
             lambda x, y: x == y,
             (x, y),
@@ -1678,9 +1646,7 @@ class TestOperatorsCort(ExtTestCase):
 
     def test_sigmoid(self):
         with self.subTest(dim=2, impl="ref"):
-            x = torch.arange(12, dtype=torch.float32, requires_grad=True).reshape(
-                (3, 4)
-            )
+            x = torch.arange(12, dtype=torch.float32, requires_grad=True).reshape((3, 4))
             self.assertONNX(
                 lambda x: torch.sigmoid(x),
                 x,
@@ -1690,9 +1656,7 @@ class TestOperatorsCort(ExtTestCase):
             )
 
         with self.subTest(dim=2):
-            x = torch.arange(12, dtype=torch.float32, requires_grad=True).reshape(
-                (3, 4)
-            )
+            x = torch.arange(12, dtype=torch.float32, requires_grad=True).reshape((3, 4))
             self.assertONNX(
                 lambda x: torch.sigmoid(x),
                 x,
@@ -2233,9 +2197,7 @@ class TestOperatorsCort(ExtTestCase):
             onnx_export=inspect.currentframe().f_code.co_name,
         )
 
-    @unittest.skipIf(
-        True, reason="TorchDynamo purposely graph breaks on RNN, GRU, LSTMs"
-    )
+    @unittest.skipIf(True, reason="TorchDynamo purposely graph breaks on RNN, GRU, LSTMs")
     def test_lstm_none_sequence_lens(self):
         """Test symbolic shape inference for LSTM when the input sequence_lens = None."""
         input = torch.randn(RNN_SEQUENCE_LENGTH, BATCH_SIZE, RNN_INPUT_SIZE)
@@ -2316,9 +2278,7 @@ class TestOperatorsCort(ExtTestCase):
 
     @unittest.skipIf(not DYNAMIC_SHAPE_SUPPORTED, reason="dynamic axes not supported")
     def test_dynamic_axes_reduce_mean_12(self):
-        m1 = torch.arange(24, dtype=torch.float32, requires_grad=True).reshape(
-            (2, 3, 4)
-        )
+        m1 = torch.arange(24, dtype=torch.float32, requires_grad=True).reshape((2, 3, 4))
         self.assertONNX(
             lambda x: torch.mean(x, dim=1),
             (m1,),
@@ -2331,9 +2291,7 @@ class TestOperatorsCort(ExtTestCase):
 
     @unittest.skipIf(not DYNAMIC_SHAPE_SUPPORTED, reason="dynamic axes not supported")
     def test_dynamic_axes_reduce_mean_18(self):
-        m1 = torch.arange(24, dtype=torch.float32, requires_grad=True).reshape(
-            (2, 3, 4)
-        )
+        m1 = torch.arange(24, dtype=torch.float32, requires_grad=True).reshape((2, 3, 4))
         self.assertONNX(
             lambda x: torch.mean(x, dim=1),
             (m1,),
@@ -2438,9 +2396,9 @@ class TestOperatorsCort(ExtTestCase):
                 new_table[k] = v
 
         shape = (9, 2, 15, 4)
-        x = torch.arange(
-            np.prod(shape), requires_grad=True, dtype=torch.float32
-        ).reshape(shape)
+        x = torch.arange(np.prod(shape), requires_grad=True, dtype=torch.float32).reshape(
+            shape
+        )
         self.assertONNX(
             lambda x: x[:, :, 4:, :],
             x,
@@ -2450,9 +2408,9 @@ class TestOperatorsCort(ExtTestCase):
 
     def test_embedding_simple(self):
         ix = torch.tensor([[1, 2, 4, 5], [4, 3, 2, 9]], dtype=torch.int64)
-        embedding_matrix = torch.arange(
-            30, dtype=torch.float32, requires_grad=True
-        ).reshape((-1, 3))
+        embedding_matrix = torch.arange(30, dtype=torch.float32, requires_grad=True).reshape(
+            (-1, 3)
+        )
         torch.embedding(embedding_matrix, ix)
         self.assertONNX(
             lambda ix, mat: torch.embedding(mat, ix),
@@ -2465,9 +2423,7 @@ class TestOperatorsCort(ExtTestCase):
         )
 
     def test_unbind(self):
-        x = torch.tensor(
-            [[0.0, 1.0, 1.0, 1.0], [2.0, 3.0, 7.0, 7.0]], requires_grad=True
-        )
+        x = torch.tensor([[0.0, 1.0, 1.0, 1.0], [2.0, 3.0, 7.0, 7.0]], requires_grad=True)
         self.assertONNX(
             lambda x: torch.unbind(x, dim=0),
             x,
