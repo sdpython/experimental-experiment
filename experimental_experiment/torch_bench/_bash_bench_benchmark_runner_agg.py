@@ -764,7 +764,7 @@ def _apply_excel_style(
                                         f = "0.00"
                                     elif fcell.value >= 1:
                                         f = "0.000"
-                                elif cell.value == "date":
+                                elif cell.value == "date" and "SIMPLE" not in k:
                                     ts = time.gmtime(fcell.value)
                                     sval = time.strftime("%Y-%m-%d", ts)
                                     fcell.value = sval
@@ -1901,9 +1901,7 @@ def _reorder_columns_level(
     first_level: List[str],
     prefix: Optional[str] = None,
 ) -> pandas.DataFrame:
-    assert _nonone_(
-        df.columns
-    ), f"None in df.index.names={df.columns.names}, prefix={prefix!r}"
+    assert _nonone_(df.columns), f"None in {df.columns.names}, prefix={prefix!r}"
     assert set(df.columns.names) & set(first_level), (
         f"Nothing to sort, prefix={prefix!r} "
         f"df.columns={df.columns}, first_level={first_level}\n--\n{df}"
@@ -1920,7 +1918,7 @@ def _reorder_columns_level(
     assert (
         list(df.columns.names) == levels
     ), f"Issue levels={levels}, df.columns.names={df.columns.names}"
-    assert _nonone_(df.columns), f"None in df.index.names={df.columns.names}"
+    assert _nonone_(df.columns), f"None in {df.columns.names}"
     return df.sort_index(axis=1)
 
 
@@ -1928,10 +1926,10 @@ def _sort_index_level(
     df: pandas.DataFrame,
     debug: Optional[str] = None,
 ) -> pandas.DataFrame:
-    assert _nonone_(df.index), f"None in df.index.names={df.index.names}, debug={debug!r}"
+    assert _nonone_(df.index), f"None in {df.index.names}, debug={debug!r}"
     assert df.columns.names == [None] or _nonone_(
         df.columns
-    ), f"None in df.columns.names={df.columns.names}, debug={debug!r}"
+    ), f"None in {df.columns.names}, debug={debug!r}"
     levels = list(df.index.names)
     levels.sort()
     for i in range(len(levels)):
@@ -1942,10 +1940,10 @@ def _sort_index_level(
     assert (
         list(df.index.names) == levels
     ), f"Issue levels={levels}, df.index.names={df.index.names}, debug={debug!r}"
-    assert _nonone_(df.index), f"None in df.index.names={df.index.names}, debug={debug!r}"
+    assert _nonone_(df.index), f"None in {df.index.names}, debug={debug!r}"
     assert df.columns.names == [None] or _nonone_(
         df.columns
-    ), f"None in df.columns.names={df.columns.names}, debug={debug!r}"
+    ), f"None in {df.columns.names}, debug={debug!r}"
     return df.sort_index(axis=0)
 
 
@@ -1954,10 +1952,8 @@ def _reorder_index_level(
     first_level: List[str],
     prefix: Optional[str] = None,
 ) -> pandas.DataFrame:
-    assert _nonone_(df.index), f"None in df.index.names={df.index.names}, prefix={prefix!r}"
-    assert _nonone_(
-        df.columns
-    ), f"None in df.index.names={df.columns.names}, prefix={prefix!r}"
+    assert _nonone_(df.index), f"None in {df.index.names}, prefix={prefix!r}"
+    assert _nonone_(df.columns), f"None in {df.columns.names}, prefix={prefix!r}"
     assert set(df.index.names) & set(first_level), (
         f"Nothing to sort, prefix={prefix!r} "
         f"df.columns={df.index}, first_level={first_level}"
@@ -1974,8 +1970,8 @@ def _reorder_index_level(
     assert (
         list(df.index.names) == levels
     ), f"Issue levels={levels}, df.columns.names={df.index.names}"
-    assert _nonone_(df.index), f"None in df.index.names={df.index.names}"
-    assert _nonone_(df.columns), f"None in df.index.names={df.columns.names}"
+    assert _nonone_(df.index), f"None in {df.index.names}"
+    assert _nonone_(df.columns), f"None in {df.columns.names}"
     return df.sort_index(axis=0)
 
 
@@ -2073,7 +2069,6 @@ def _create_aggregation_figures(
             total = gr_no_nan.count()
             is_nan = gr_no_nan.count() - gr.count() == total
         stats = [
-            ("NAN", _propnan(is_nan.astype(int), is_nan)),
             ("MEAN", gr.mean()),
             ("MEDIAN", gr.median()),
             ("SUM", _propnan(gr.sum(), is_nan)),
@@ -2082,6 +2077,7 @@ def _create_aggregation_figures(
             ("COUNT", _propnan(gr.count(), is_nan)),
             ("COUNT%", _propnan(gr.count() / total, is_nan)),
             ("TOTAL", _propnan(total, is_nan)),
+            ("NAN", _propnan(is_nan.astype(int), is_nan)),
         ]
 
         if k.startswith("speedup"):
@@ -2098,27 +2094,49 @@ def _create_aggregation_figures(
 
         dfs = []
         for name, df in stats:
+
+            # avoid date to be numbers
+            updates = {}
+            drops = []
+            for col in df.columns:
+                if (isinstance(col, tuple) and "date" in col) or col == "date":
+                    if name in {"SUM", "MEDIAN"}:
+                        drops.append(col)
+                    elif name in {"MIN", "MAX", "MEAN", "MEDIAM"}:
+                        # maybe this code will fail someday but it seems that the cycle
+                        # date -> int64 -> float64 -> int64 -> date
+                        # keeps the date unchanged
+                        vvv = df[col]
+                        if vvv.dtype not in {object, np.object_, str, np.str_}:
+                            updates[col] = vvv.apply(
+                                lambda d: time.strftime("%Y-%m-%d", time.gmtime(d))
+                            )
+            if drops:
+                df.drop(drops, axis=1, inplace=True)
+            if updates:
+                for kc, vc in updates.items():
+                    df[kc] = vc
+
+            # then continue
             assert isinstance(
                 df, pandas.DataFrame
             ), f"Unexpected type {type(df)} for k={k!r} and name={name!r}"
             df.index = _add_level(df.index, "agg", name)
             df.index = _add_level(df.index, "cat", k)
-            assert _nonone_(
-                df.index
-            ), f"None in df.index.names={df.index.names}, k={k!r}, name={name!r}"
+            assert _nonone_(df.index), f"None in {df.index.names}, k={k!r}, name={name!r}"
             assert _nonone_(
                 df.columns
-            ), f"None in df.columns.names={df.columns.names}, k={k!r}, name={name!r}"
+            ), f"None in {df.columns.names}, k={k!r}, name={name!r}"
             dfs.append(df)
 
         if len(dfs) == 0:
             continue
         df = pandas.concat(dfs, axis=0)
+
         assert df.shape[0] > 0, f"Empty set for k={k!r}"
         assert df.shape[1] > 0, f"Empty columns for k={k!r}"
-
-        assert _nonone_(df.index), f"None in df.index.names={df.index.names}, k={k!r}"
-        assert _nonone_(df.columns), f"None in df.columns.names={df.columns.names}, k={k!r}"
+        assert _nonone_(df.index), f"None in {df.index.names}, k={k!r}"
+        assert _nonone_(df.columns), f"None in {df.columns.names}, k={k!r}"
         assert isinstance(df, pandas.DataFrame), f"Unexpected type {type(df)} for k={k!r}"
 
         if "stat" in df.columns.names:
@@ -2139,17 +2157,15 @@ def _create_aggregation_figures(
                     )
                     assert _nonone_(
                         df.columns
-                    ), f"None in df.columns.names={df.columns.names}, k={k!r}, df={df}"
+                    ), f"None in {df.columns.names}, k={k!r}, df={df}"
             assert isinstance(
                 df, pandas.DataFrame
             ), f"Unexpected type {type(df)} for k={k!r}"
-            assert _nonone_(df.index), f"None in df.index.names={df.index.names}, k={k!r}"
-            assert _nonone_(
-                df.columns
-            ), f"None in df.columns.names={df.columns.names}, k={k!r}, df={df}"
+            assert _nonone_(df.index), f"None in {df.index.names}, k={k!r}"
+            assert _nonone_(df.columns), f"None in {df.columns.names}, k={k!r}, df={df}"
         assert isinstance(df, pandas.DataFrame), f"Unexpected type {type(df)} for k={k!r}"
-        assert _nonone_(df.index), f"None in df.index.names={df.index.names}, k={k!r}"
-        assert _nonone_(df.columns), f"None in df.columns.names={df.columns.names}, k={k!r}"
+        assert _nonone_(df.index), f"None in {df.index.names}, k={k!r}"
+        assert _nonone_(df.columns), f"None in {df.columns.names}, k={k!r}"
         aggs[f"agg_{k}"] = df
 
     # check stat is part of the column otherwise the concatenation fails
@@ -2159,8 +2175,8 @@ def _create_aggregation_figures(
         set_names |= set(df.index.names)
 
     for k, df in aggs.items():
-        assert _nonone_(df.index), f"None in df.index.names={df.index.names}, k={k!r}"
-        assert _nonone_(df.columns), f"None in df.columns.names={df.columns.names}, k={k!r}"
+        assert _nonone_(df.index), f"None in {df.index.names}, k={k!r}"
+        assert _nonone_(df.columns), f"None in {df.columns.names}, k={k!r}"
         if len(df.index.names) == len(set_names):
             continue
         missing = set_names - set(df.index.names)
