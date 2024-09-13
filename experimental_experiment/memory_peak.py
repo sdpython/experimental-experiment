@@ -88,10 +88,10 @@ def _process_memory_spy(conn):
 
     if cuda:
         from pynvml import (
-            nvmlInit,
             nvmlDeviceGetCount,
             nvmlDeviceGetHandleByIndex,
             nvmlDeviceGetMemoryInfo,
+            nvmlInit,
             nvmlShutdown,
         )
 
@@ -156,9 +156,7 @@ class MemorySpy:
         self.start()
 
     def start(self) -> "MemorySpy":
-        """
-        Starts another process and tells it to spy.
-        """
+        """Starts another process and tells it to spy."""
         self.parent_conn, self.child_conn = multiprocessing.Pipe()
         self.child_process = multiprocessing.Process(
             target=_process_memory_spy, args=(self.child_conn,)
@@ -178,16 +176,14 @@ class MemorySpy:
         return self
 
     def stop(self):
-        """
-        Stops spying on.
-        """
+        """Stops spying on."""
         self.parent_conn.send(-3)
 
         cpu = Monitor.recv(self.parent_conn)
 
         n_gpus = self.parent_conn.recv()
         gpus = []
-        for _ in range(n_gpus):
+        for _i in range(n_gpus):
             gpus.append(Monitor.recv(self.parent_conn))
 
         self.parent_conn.close()

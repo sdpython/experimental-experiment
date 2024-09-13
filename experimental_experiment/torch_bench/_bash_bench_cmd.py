@@ -66,12 +66,13 @@ def bash_bench_parse_args(name: str, doc: str, new_args: Optional[List[str]] = N
 def _clean_text(text):
     import onnx
     import onnxruntime
+    import onnxscript
     import torch
     import experimental_experiment
 
     pathes = [
         os.path.abspath(os.path.normpath(os.path.join(os.path.dirname(m.__file__), "..")))
-        for m in [onnx, onnxruntime, np, torch, experimental_experiment]
+        for m in [onnx, onnxruntime, onnxscript, np, torch, experimental_experiment]
     ]
     for p in pathes:
         text = text.replace(p, "")
@@ -95,6 +96,7 @@ def bash_bench_main(script_name: str, doc: str, args: Optional[List[str]] = None
     from experimental_experiment.torch_bench._bash_bench_benchmark_runner_agg import (
         merge_benchmark_reports,
     )
+    from experimental_experiment.torch_bench._bash_bench_model_runner import ModelRunner
     from experimental_experiment.bench_run import (
         make_configs,
         make_dataframe_from_benchmark_data,
@@ -192,6 +194,10 @@ def bash_bench_main(script_name: str, doc: str, args: Optional[List[str]] = None
                 drop={"process"},
                 replace={"output_data": ""},
                 last={"part"} if split_process else None,
+                filter_function=lambda kwargs: ModelRunner.allowed_configuration(
+                    exporter=kwargs["exporter"],
+                    optimization=kwargs.get("opt_patterns", None),
+                ),
             )
             assert configs, f"No configuration configs={configs} for args={args}"
             data = run_benchmark(
@@ -288,7 +294,7 @@ def bash_bench_main(script_name: str, doc: str, args: Optional[List[str]] = None
                 s = io.StringIO()
                 sortby = pstats.SortKey.CUMULATIVE
                 ps = pstats.Stats(pr, stream=s).sort_stats(sortby)
-                root, nodes = profile2graph(ps, clean_text=_clean_text)
+                root, _ = profile2graph(ps, clean_text=_clean_text)
                 text = root.to_text(fct_width=100)
                 filename = (
                     f"{args.output_data}.profile.txt" if args.output_data else "profile.txt"

@@ -2,13 +2,13 @@ import os
 import unittest
 import numpy as np
 from pandas.errors import PerformanceWarning
+from experimental_experiment.torch_bench._bash_bench_benchmark_runner_agg import (
+    merge_benchmark_reports,
+)
 from experimental_experiment.ext_test_case import (
     ExtTestCase,
     ignore_warnings,
     skipif_ci_windows,
-)
-from experimental_experiment.torch_bench._bash_bench_benchmark_runner_agg import (
-    merge_benchmark_reports,
 )
 
 
