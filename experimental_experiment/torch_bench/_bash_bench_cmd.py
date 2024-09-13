@@ -66,6 +66,7 @@ def bash_bench_parse_args(name: str, doc: str, new_args: Optional[List[str]] = N
 def _clean_text(text):
     import onnx
     import onnxruntime
+    import onnxscript
     import torch
     import experimental_experiment
 

@@ -12,7 +12,6 @@ from experimental_experiment.ext_test_case import (
 )
 
 
-
 class TestBashBenchMergeStats(ExtTestCase):
     @ignore_warnings((PerformanceWarning, FutureWarning))
     def test_merge_stats0(self):
