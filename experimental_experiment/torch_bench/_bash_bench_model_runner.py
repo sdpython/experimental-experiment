@@ -160,7 +160,9 @@ class ModelRunner:
     _patched = None
 
     @classmethod
-    def allowed_configuration(exporter: str, optimization: Optional[str] = None) -> bool:
+    def allowed_configuration(
+        cls, exporter: str, optimization: Optional[str] = None
+    ) -> bool:
         """
         Defines the allowed configurations.
         """

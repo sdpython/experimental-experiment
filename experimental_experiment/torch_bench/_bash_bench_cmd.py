@@ -195,7 +195,7 @@ def bash_bench_main(script_name: str, doc: str, args: Optional[List[str]] = None
                 last={"part"} if split_process else None,
                 filter_function=lambda kwargs: ModelRunner.allowed_configuration(
                     exporter=kwargs["exporter"],
-                    optimization=kwargs.get("optimization", None),
+                    optimization=kwargs.get("opt_patterns", None),
                 ),
             )
             assert configs, f"No configuration configs={configs} for args={args}"
