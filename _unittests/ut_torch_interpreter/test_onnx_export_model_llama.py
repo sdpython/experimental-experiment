@@ -106,7 +106,7 @@ class TestOnnxExportLlama(ExtTestCase):
 
     @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
     @ignore_warnings(DeprecationWarning)
-    @requires_torch("2.6", "dynamic_shapes are not well carries")
+    @requires_torch("2.7", "dynamic_shapes are not well carries")
     def test_llama_attention(self):
         model, input_tensors = get_llama_attention(input_dims=[(2, 1024)])
         input_tensors = input_tensors[0]
@@ -143,7 +143,7 @@ class TestOnnxExportLlama(ExtTestCase):
 
     @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
     @ignore_warnings(DeprecationWarning)
-    @requires_torch("2.6", "dynamic_shapes are not well carries")
+    @requires_torch("2.7", "dynamic_shapes are not well carries")
     def test_llama_decoder(self):
         import torch
 
