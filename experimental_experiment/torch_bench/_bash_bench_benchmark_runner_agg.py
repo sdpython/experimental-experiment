@@ -330,7 +330,7 @@ def _SELECTED_FEATURES():
             agg="MEAN",
             stat="delta_peak_cpu_pp",
             new_name="average CPU delta peak (export)",
-            unit="Mb",
+            unit="bytes",
             help="Average CPU peak of new allocated memory while converting "
             "the model (measured in a secondary process)",
         ),
