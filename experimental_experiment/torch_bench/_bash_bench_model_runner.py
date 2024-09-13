@@ -160,6 +160,20 @@ class ModelRunner:
     _patched = None
 
     @classmethod
+    def allowed_configuration(exporter: str, optimization: Optional[str] = None) -> bool:
+        """
+        Defines the allowed configurations.
+        """
+        if not optimization:
+            # always possible
+            return True
+        if exporter in {"custom"}:
+            return True
+        if exporter.startswith("torch-onnx"):
+            return True
+        return False
+
+    @classmethod
     def isinstance_namedtuple(cls, x):
         return isinstance(x, tuple) and getattr(x, "_fields", None) is not None
 

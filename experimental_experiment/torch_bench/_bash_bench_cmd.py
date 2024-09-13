@@ -101,6 +101,7 @@ def bash_bench_main(script_name: str, doc: str, args: Optional[List[str]] = None
         multi_run,
         run_benchmark,
     )
+    from experimental_experiment.torch_bench._bash_bench_model_runner import ModelRunner
 
     if script_name == "bash_bench_huggingface":
         from ._bash_bench_set_huggingface import HuggingfaceRunner
@@ -192,6 +193,10 @@ def bash_bench_main(script_name: str, doc: str, args: Optional[List[str]] = None
                 drop={"process"},
                 replace={"output_data": ""},
                 last={"part"} if split_process else None,
+                filter_function=lambda kwargs: ModelRunner.allowed_configuration(
+                    exporter=kwargs["exporter"],
+                    optimization=kwargs.get("optimization", None),
+                ),
             )
             assert configs, f"No configuration configs={configs} for args={args}"
             data = run_benchmark(

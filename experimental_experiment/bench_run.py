@@ -318,15 +318,33 @@ def multi_run(kwargs: Namespace) -> bool:
 
 
 def make_configs(
-    kwargs: Namespace,
+    kwargs: Union[Namespace, Dict[str, Any]],
     drop: Optional[Set[str]] = None,
     replace: Optional[Dict[str, str]] = None,
     last: Optional[List[str]] = None,
+    filter_function: Optional[Callable[Dict[str, Any], bool]] = None,
 ) -> List[Dict[str, Any]]:
-    """Creates all the configurations based on the command line arguments."""
+    """
+    Creates all the configurations based on the command line arguments.
+
+    :param kwargs: parameters the command line,
+        every value having a comma means multiple values,
+        it multiplies the number of configurations to try by the number of comma
+        separated values
+    :param drop: keys to drop in kwargs if specified
+    :param replace: values to replace for a particular key
+    :param last: to change the order of the loop created the configuration,
+        if ``last == ["part"]`` and ``kwargs[part] == "0,1"``,
+        then configuration where ``part==0`` is always followed by a configuration
+        having ``part==1``
+    :param filter_function: function taking a configuration and returning True
+        if it is must be kept
+    :return: list of configurations
+    """
+    kwargs_ = kwargs if isinstance(kwargs, dict) else kwargs.__dict__
     args = []
     slast = set(last) if last else set()
-    for k, v in kwargs.__dict__.items():
+    for k, v in kwargs_.items():
         if (drop and k in drop) or k in slast:
             continue
         if replace and k in replace:
@@ -337,15 +355,19 @@ def make_configs(
             args.append([(k, v)])
     if last:
         for k in last:
-            if k not in kwargs.__dict__:
+            if k not in kwargs_:
                 continue
+            v = kwargs[k]
             if isinstance(v, str):
                 args.append([(k, s) for s in v.split(",")])
             else:
                 args.append([(k, v)])
 
     configs = list(itertools.product(*args))
-    return [dict(c) for c in configs]
+    confs = [dict(c) for c in configs]
+    if filter_function:
+        confs = [c for c in confs if filter_function(c)]
+    return confs
 
 
 def make_dataframe_from_benchmark_data(
