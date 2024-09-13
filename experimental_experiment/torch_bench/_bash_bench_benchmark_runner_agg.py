@@ -1,5 +1,6 @@
 import glob
 import itertools
+import pprint
 import time
 import warnings
 from collections import Counter
@@ -1030,6 +1031,36 @@ def merge_benchmark_reports(
                 df = filename
             else:
                 raise TypeError(f"Unexpected type {type(filename)} for one element of data")
+            if df.columns[0] == "#order":
+                # probably a status report
+                continue
+            updates = {}
+            for c in df.columns:
+                values = set(df[c])
+                if values & {True, False, np.nan} == values:
+                    updates[c] = (
+                        df[c]
+                        .apply(lambda x: x if np.isnan(x) else (1 if x else 0))
+                        .astype(float)
+                    )
+                if (
+                    df[c].dtype not in {float, np.float64, np.float32}
+                    and "_qu" not in c
+                    and c.startswith(("time_", "discrepancies_", "memory"))
+                ):
+                    try:
+                        val = df[c].astype(float)
+                    except (ValueError, TypeError) as e:
+                        raise AssertionError(
+                            f"Unable to convert to float column {c!r} from file "
+                            f"{filename!r}, values\n---\n"
+                            f"{pprint.pformat(list(enumerate(zip(df['_index'], df[c]))))}"
+                        ) from e
+                    updates[c] = val
+
+            if updates:
+                for k, v in updates.items():
+                    df[k] = v
             dfs.append(df)
         df = pandas.concat(dfs, axis=0)
     elif isinstance(data, pandas.DataFrame):
@@ -1888,11 +1919,21 @@ def merge_benchmark_reports(
         _set_ = set(final_res["SIMPLE"])
 
         # first pivot
+        piv_index = tuple(c for c in ("dtype", "suite", "#order", "METRIC") if c in _set_)
+        piv_columns = tuple(c for c in ("exporter", "opt_patterns", "rtopt") if c in _set_)
+        ccc = [*piv_index, *piv_columns]
+        gr = final_res["SIMPLE"][[*ccc, "value"]].groupby(ccc).count()
+        assert gr.values.max() <= 1, (
+            f"Unexpected duplicated, piv_index={piv_index}, "
+            f"piv_columns={piv_columns}, columns={final_res['SIMPLE'].columns}, "
+            f"issue=\n{gr[gr['value'] > 1]}"
+        )
+
         piv = (
             final_res["SIMPLE"]
             .pivot(
-                index=tuple(c for c in ("dtype", "suite", "#order", "METRIC") if c in _set_),
-                columns=(c for c in ("exporter", "opt_patterns", "rtopt") if c in _set_),
+                index=piv_index,
+                columns=piv_columns,
                 values="value",
             )
             .sort_index()
@@ -1903,10 +1944,12 @@ def merge_benchmark_reports(
         piv.to_excel(export_simple_x)
 
         # total
+        piv_index = tuple(c for c in ("#order", "METRIC") if c in _set_)
+        piv_columns = (c for c in ("exporter", "opt_patterns", "rtopt") if c in _set_)
         piv = pandas.pivot_table(
             final_res["SIMPLE"],
-            index=tuple(c for c in ("#order", "METRIC") if c in _set_),
-            columns=(c for c in ("exporter", "opt_patterns", "rtopt") if c in _set_),
+            index=piv_index,
+            columns=piv_columns,
             values="value",
             aggfunc="sum",
         ).sort_index()

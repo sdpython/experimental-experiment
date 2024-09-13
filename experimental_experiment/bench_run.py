@@ -11,7 +11,6 @@ from argparse import Namespace
 from datetime import datetime
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
 
-ILLEGAL_CHARACTERS_RE = re.compile(r"([\000-\010]|[\013-\014]|[\016-\037])")
 _DEFAULT_STRING_LIMIT = 2000
 
 
@@ -20,10 +19,8 @@ class BenchmarkError(RuntimeError):
 
 
 def _clean_string(s: str) -> str:
-    if next(ILLEGAL_CHARACTERS_RE.finditer(s), None):
-        ns = ILLEGAL_CHARACTERS_RE.sub("", s)
-        return ns.replace("\n", " ")
-    return s.replace("\n", " ")
+    cleaned = [c for c in s if 32 <= ord(c) < 127 and c not in {","}]
+    return "".join(cleaned)
 
 
 def get_processor_name():
