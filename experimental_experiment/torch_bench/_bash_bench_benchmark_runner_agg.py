@@ -1776,7 +1776,7 @@ def merge_benchmark_reports(
     if verbose:
         print(f"[merge_benchmark_reports] add dates with columns={date_col}")
     date_col2 = [c for c in date_col if c != "DATE"]
-    assert len(date_col2) != len(date_col), f"No date found in {list(sorted(df0.columns))}"
+    assert len(date_col2) != len(date_col), f"No date found in {sorted(df0.columns)}"
     final_res["dates"] = df0[date_col].groupby(date_col2).max().reset_index(drop=False)
     date_col2 = [c for c in date_col2 if c in final_res["SIMPLE"]]
     assert "suite" in date_col2, f"Unable to find 'suite' in {date_col2}"
@@ -1852,7 +1852,7 @@ def merge_benchmark_reports(
 
             df_this = df_this.select_dtypes("number")
             df_base = df_base.select_dtypes("number")
-            set_columns = list(sorted(set(df_this.columns) & set(df_base.columns)))
+            set_columns = sorted(set(df_this.columns) & set(df_base.columns))
             df_base = df_base[set_columns].sort_index(axis=0).sort_index(axis=1)
             df_this = df_this[set_columns].sort_index(axis=0).sort_index(axis=1)
             df_num = df_this.sub(df_base)
@@ -2179,7 +2179,6 @@ def _create_aggregation_figures(
 
         dfs = []
         for name, df in stats:
-
             # avoid date to be numbers
             updates = {}
             drops = []
