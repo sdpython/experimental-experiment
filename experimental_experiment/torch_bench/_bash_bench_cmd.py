@@ -71,7 +71,7 @@ def _clean_text(text):
 
     pathes = [
         os.path.abspath(os.path.normpath(os.path.join(os.path.dirname(m.__file__), "..")))
-        for m in [onnx, onnxruntime, np, torch, experimental_experiment]
+        for m in [onnx, onnxruntime, onnxscript, np, torch, experimental_experiment]
     ]
     for p in pathes:
         text = text.replace(p, "")
@@ -95,13 +95,13 @@ def bash_bench_main(script_name: str, doc: str, args: Optional[List[str]] = None
     from experimental_experiment.torch_bench._bash_bench_benchmark_runner_agg import (
         merge_benchmark_reports,
     )
+    from experimental_experiment.torch_bench._bash_bench_model_runner import ModelRunner
     from experimental_experiment.bench_run import (
         make_configs,
         make_dataframe_from_benchmark_data,
         multi_run,
         run_benchmark,
     )
-    from experimental_experiment.torch_bench._bash_bench_model_runner import ModelRunner
 
     if script_name == "bash_bench_huggingface":
         from ._bash_bench_set_huggingface import HuggingfaceRunner
@@ -293,7 +293,7 @@ def bash_bench_main(script_name: str, doc: str, args: Optional[List[str]] = None
                 s = io.StringIO()
                 sortby = pstats.SortKey.CUMULATIVE
                 ps = pstats.Stats(pr, stream=s).sort_stats(sortby)
-                root, nodes = profile2graph(ps, clean_text=_clean_text)
+                root, _ = profile2graph(ps, clean_text=_clean_text)
                 text = root.to_text(fct_width=100)
                 filename = (
                     f"{args.output_data}.profile.txt" if args.output_data else "profile.txt"

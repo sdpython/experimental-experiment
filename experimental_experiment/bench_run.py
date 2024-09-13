@@ -12,6 +12,7 @@ from datetime import datetime
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
 
 ILLEGAL_CHARACTERS_RE = re.compile(r"([\000-\010]|[\013-\014]|[\016-\037])")
+_DEFAULT_STRING_LIMIT = 2000
 
 
 class BenchmarkError(RuntimeError):
@@ -34,7 +35,7 @@ def get_processor_name():
         all_info = subprocess.check_output(command, shell=True).decode().strip()
         for line in all_info.split("\n"):
             if "model name" in line:
-                return re.sub(".*model name.*:", "", line, 1).strip()  # noqa: B034
+                return re.sub(".*model name.*:", "", line, count=1, flags=0).strip()
     # fails
     # if platform.system() == "Darwin":
     #     os.environ["PATH"] = os.environ["PATH"] + os.pathsep + "/usr/sbin"
@@ -371,7 +372,7 @@ def make_configs(
 
 
 def make_dataframe_from_benchmark_data(
-    data: List[Dict], detailed: bool = True, string_limit: int = 2000
+    data: List[Dict], detailed: bool = True, string_limit: int = _DEFAULT_STRING_LIMIT
 ) -> Any:
     """
     Creates a dataframe from the received data.
@@ -399,7 +400,7 @@ def make_dataframe_from_benchmark_data(
             g[k] = v
         new_data.append(g)
     df = pandas.DataFrame(new_data)
-    sorted_columns = list(sorted(df.columns))
+    sorted_columns = sorted(df.columns)
     if "_index" in sorted_columns:
         set_cols = set(df.columns)
         addition = {"_index", "CMD", "OUTPUT", "ERROR"} & set_cols

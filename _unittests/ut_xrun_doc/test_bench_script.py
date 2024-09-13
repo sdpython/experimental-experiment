@@ -1,13 +1,13 @@
 import unittest
-from experimental_experiment.ext_test_case import ExtTestCase
 from experimental_experiment.bench_run import (
-    _extract_metrics,
+    BenchmarkError,
     _cmd_line,
-    run_benchmark,
+    _extract_metrics,
     get_machine,
     make_configs,
+    run_benchmark,
 )
-from experimental_experiment.bench_run import BenchmarkError
+from experimental_experiment.ext_test_case import ExtTestCase
 
 
 class TestBenchScript(ExtTestCase):

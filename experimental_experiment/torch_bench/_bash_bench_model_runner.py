@@ -163,9 +163,7 @@ class ModelRunner:
     def allowed_configuration(
         cls, exporter: str, optimization: Optional[str] = None
     ) -> bool:
-        """
-        Defines the allowed configurations.
-        """
+        """Defines the allowed configurations."""
         if not optimization:
             # always possible
             return True
@@ -281,7 +279,7 @@ class ModelRunner:
                     use_default.append(True)
                 new_names.append(n)
             assert added == len(inputs), (
-                f"Unexpected input name in {list(sorted(inputs))} and "
+                f"Unexpected input name in {sorted(inputs)} and "
                 f"parameters={list(sig.parameters)}"
             )
             inputs = tuple(new_inputs)
@@ -333,9 +331,7 @@ class ModelRunner:
         self.std_to_dump = []
 
     def dump_std(self, filename: str):
-        """
-        Dumps some information in the given filename.
-        """
+        """Dumps some information in the given filename."""
         if self.std_to_dump:
             with open(filename, "w", encoding="utf-8") as f:
                 f.write("\n".join(map(str, self.std_to_dump)))
