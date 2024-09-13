@@ -746,6 +746,60 @@ class ModelRunner:
                     res = torch.compile(self.model, backend=cbff, fullgraph=True)
         return res, None
 
+    def _optimize_rewrite(
+        self, name: str, optimization: str
+    ) -> Tuple[onnx.ModelProto, Dict[str, Any]]:
+        stats = {}
+        begin = time.perf_counter()
+        shutil.copy(name, name + ".raw.onnx")
+        model_proto = onnx.load(name, load_external_data=True)
+        rule_sets = []
+
+        opts = optimization.split("+")
+        for opt in opts:
+            if opt == "default":
+                # from onnx.inliner import inline_local_functions
+                from onnxscript.optimizer import optimize
+                from onnxscript.rewriter import rewrite
+
+                first_model_proto = model_proto
+                model_proto = optimize(
+                    model_proto,
+                    num_iterations=2,
+                    onnx_shape_inference=False,
+                )
+                model_proto = rewrite(model_proto)
+                # On MegatronBertForQuestionAnswering, this step hurts the latency by 10%.
+                # model_proto = inline_local_functions(model_proto)
+                del first_model_proto.graph.node[:]
+                del first_model_proto.functions[:]
+                first_model_proto.graph.node.extend(model_proto.graph.node)
+                first_model_proto.functions.extend(model_proto.functions)
+                continue
+
+            if opt == "llm":
+                from onnxscript.rewriter.llama_rule_sets import llama_p0_rule_set
+
+                rule_sets.append(llama_p0_rule_set)
+                continue
+
+            raise AssertionError(f"Unexpected value for optimization={optimization!r}.")
+
+        if rule_sets:
+            from onnxscript import ir
+
+            begin_pat = time.perf_counter()
+            ir_model = ir.serde.deserialize_model(model_proto)
+            for rs in rule_sets:
+                rs().apply_to_model(ir_model)
+            model_proto = ir.serde.serialize_model(ir_model)
+            stats["time_export_optimization_pattern"] = time.perf_counter() - begin_pat
+
+        onnx.save(model_proto, name, save_as_external_data=True)
+        model_proto = onnx.load(name, load_external_data=False)
+        stats["time_export_optimization"] = time.perf_counter() - begin
+        return model_proto, stats
+
     def _to_onnx_script(
         self,
         name: str,
@@ -759,9 +813,6 @@ class ModelRunner:
         assert not fake_tensor, "fake_tensor not implemented."
         assert not dynamic, "dynamic true not implemented yet"
         assert no_grad, "no_grad false not implemented yet"
-        assert (
-            not optimization
-        ), f"optimization {optimization!r} not compatible with torch_script"
 
         if (
             isinstance(self.inputs, tuple)
@@ -798,33 +849,8 @@ class ModelRunner:
                     verbose=max(verbose - 1, 0),
                 )
 
-        if not optimization:
-            return onnx.load(name, load_external_data=False), None
-
-        if ModelRunner._patched == "torch-onnx":
-            stats = {}
-            begin = time.perf_counter()
-            shutil.copy(name, name + ".raw.onnx")
-            model_proto = onnx.load(name, load_external_data=True)
-
-            opts = optimization.split("+")
-            for opt in opts:
-                if opt == "default":
-                    from onnxscript.optimizer import optimize
-                    from onnxscript.rewriter import rewrite
-
-                    model_proto = optimize(
-                        model_proto,
-                        num_iterations=2,
-                        onnx_shape_inference=False,
-                    )
-                    model_proto = rewrite(model_proto)
-
-            onnx.save(model_proto, name, save_as_external_data=True)
-            model_proto = onnx.load(name, load_external_data=False)
-            stats["time_export_optimization"] = time.perf_counter() - begin
-            return model_proto, stats
-
+        if optimization:
+            return self._optimize_rewrite(name, optimization)
         return onnx.load(name, load_external_data=False), None
 
     def _to_onnx_dynamo(
@@ -842,8 +868,6 @@ class ModelRunner:
         assert not fake_tensor, "fake_tensor not implemented."
         assert not dynamic, "dynamic true not implemented yet"
         assert no_grad, "no_grad false not implemented yet"
-
-        assert not optimization, f"optimization {optimization!r} not compatible with dynamo"
 
         additional_kwargs = {}
         if detailed:
@@ -882,6 +906,8 @@ class ModelRunner:
                     **additional_kwargs,
                 )
 
+        if optimization:
+            return self._optimize_rewrite(name, optimization)
         return onnx_program.model_proto, None
 
     def _to_onnx_dynamo2(
@@ -927,63 +953,9 @@ class ModelRunner:
         onx = onnx.load(name, load_external_data=True)
         onnx.save(onx, name, save_as_external_data=True)
 
-        if not optimization:
-            return onnx.load(name, load_external_data=False), stats
-
-        begin = time.perf_counter()
-        shutil.copy(name, name + ".raw.onnx")
-        model_proto = onnx.load(name, load_external_data=True)
-        rule_sets = []
-
-        opts = optimization.split("+")
-        for opt in opts:
-            if opt == "default":
-                from onnx.inliner import inline_local_functions
-                from onnxscript.optimizer import optimize
-                from onnxscript.rewriter import rewrite
-
-                first_model_proto = model_proto
-                model_proto = optimize(
-                    model_proto,
-                    num_iterations=2,
-                    onnx_shape_inference=False,
-                )
-                model_proto = rewrite(model_proto)
-                model_proto = inline_local_functions(model_proto)
-                del first_model_proto.graph.node[:]
-                del first_model_proto.functions[:]
-                first_model_proto.graph.node.extend(model_proto.graph.node)
-                first_model_proto.functions.extend(model_proto.functions)
-                continue
-
-            if opt == "llm":
-                from onnxscript.rewriter.llama_rule_sets import llama_p0_rule_set
-
-                rule_sets.append(llama_p0_rule_set)
-                continue
-
-            if opt == "fusion":
-                from onnxscript.rewriter.onnx_fusion_rule_sets import (
-                    onnx_fusion_rule_set,
-                )
-
-                rule_sets.append(onnx_fusion_rule_set)
-                continue
-
-            raise AssertionError(f"Unexpected value for optimization={optimization!r}.")
-
-        if rule_sets:
-            from onnxscript import ir
-
-            ir_model = ir.serde.deserialize_model(model_proto)
-            for rs in rule_sets:
-                rs().apply_to_model(ir_model)
-            model_proto = ir.serde.serialize_model(ir_model)
-
-        onnx.save(model_proto, name, save_as_external_data=True)
-        model_proto = onnx.load(name, load_external_data=False)
-        stats["time_export_optimization"] = time.perf_counter() - begin
-        return model_proto, stats
+        if optimization:
+            return self._optimize_rewrite(name, optimization)
+        return onnx.load(name, load_external_data=False), stats
 
     def _to_export(
         self,
