@@ -169,8 +169,12 @@ class ModelRunner:
             return True
         if exporter in {"custom"}:
             return True
-        if exporter.startswith("torch-onnx"):
-            return True
+        if exporter.startswith("torch-onnx") or exporter in {
+            "torch_script",
+            "dynamo_export",
+            "onnx_dynamo",
+        }:
+            return optimization in {"default"}
         return False
 
     @classmethod
