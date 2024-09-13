@@ -120,22 +120,31 @@ def _SELECTED_FEATURES():
         ),
         dict(
             cat="time",
-            agg="MEAN",
+            agg="SUM",
             stat="export_success",
-            new_name="average export time",
+            new_name="total export time",
             unit="s",
-            help="Average export time when the export succeeds. "
+            help="Total export time when the export succeeds. "
             "The model may not run through onnxruntime and the model "
             "may produce higher discrepancies than expected (lower is better).",
             simple=True,
         ),
         dict(
-            cat="speedup",
-            agg="GEO-MEAN",
-            stat="1speedup",
-            new_name="average speedup (geo)",
+            cat="time",
+            agg="SUM",
+            stat="latency",
+            new_name="total time ORT",
             unit="x",
-            help="Geometric mean of all speedup for all model converted and runnning.",
+            help="Total latency time with onnxruntime",
+            simple=True,
+        ),
+        dict(
+            cat="time",
+            agg="SUM",
+            stat="latency_eager_if_ort",
+            new_name="total time eager / ORT",
+            unit="x",
+            help="Total latency of eager mode knowing that onnxruntime is running",
             simple=True,
         ),
         dict(
@@ -156,6 +165,27 @@ def _SELECTED_FEATURES():
             new_name="number of models equal or faster than eager",
             unit="N",
             help="Number of models as fast or faster than torch eager mode.",
+            simple=True,
+        ),
+        # average
+        dict(
+            cat="time",
+            agg="MEAN",
+            stat="export_success",
+            new_name="average export time",
+            unit="s",
+            help="Average export time when the export succeeds. "
+            "The model may not run through onnxruntime and the model "
+            "may produce higher discrepancies than expected (lower is better).",
+            simple=True,
+        ),
+        dict(
+            cat="speedup",
+            agg="GEO-MEAN",
+            stat="1speedup",
+            new_name="average speedup (geo)",
+            unit="x",
+            help="Geometric mean of all speedup for all model converted and runnning.",
             simple=True,
         ),
         # e-1
@@ -893,6 +923,7 @@ def merge_benchmark_reports(
         "pass_rate",
         "accuracy_rate",
         "date",
+        "correction",
     ),
     excel_output: Optional[str] = None,
     exc: bool = True,
@@ -1112,6 +1143,9 @@ def merge_benchmark_reports(
             else:
                 df[c] = df[c].fillna("-")
 
+    #######################
+    # preprocessing is done
+    #######################
     res = {"0raw": df}
 
     # uniques keys
@@ -1247,6 +1281,13 @@ def merge_benchmark_reports(
                 df["status_pass_rate"] = col.astype(int)
                 df.loc[df["discrepancies_abs"].isna(), "status_pass_rate"] = np.nan
                 report_on.append("status_pass_rate")
+            continue
+
+        if expr == "correction":
+            if "time_latency_eager" in df.columns:
+                weights = df["time_latency"].apply(lambda x: np.nan if np.isnan(x) else 1.0)
+                df["time_latency_eager_if_ort"] = df["time_latency_eager"] * weights
+                report_on.append("time_latency_eager_if_ort")
             continue
 
         if expr == "accuracy_rate":
@@ -1845,6 +1886,8 @@ def merge_benchmark_reports(
 
         final_res["SIMPLE"].to_csv(export_simple, index=False)
         _set_ = set(final_res["SIMPLE"])
+
+        # first pivot
         piv = (
             final_res["SIMPLE"]
             .pivot(
@@ -1855,6 +1898,19 @@ def merge_benchmark_reports(
             .sort_index()
         )
         export_simple_x = f"{export_simple}.xlsx"
+        if verbose:
+            print(f"[merge_benchmark_reports] writes {export_simple_x!r}")
+        piv.to_excel(export_simple_x)
+
+        # total
+        piv = pandas.pivot_table(
+            final_res["SIMPLE"],
+            index=tuple(c for c in ("#order", "METRIC") if c in _set_),
+            columns=(c for c in ("exporter", "opt_patterns", "rtopt") if c in _set_),
+            values="value",
+            aggfunc="sum",
+        ).sort_index()
+        export_simple_x = f"{export_simple}_total.xlsx"
         if verbose:
             print(f"[merge_benchmark_reports] writes {export_simple_x!r}")
         piv.to_excel(export_simple_x)
