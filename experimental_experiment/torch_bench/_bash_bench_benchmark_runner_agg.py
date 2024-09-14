@@ -1,5 +1,6 @@
 import glob
 import itertools
+import pprint
 import time
 import warnings
 from collections import Counter
@@ -120,22 +121,31 @@ def _SELECTED_FEATURES():
         ),
         dict(
             cat="time",
-            agg="MEAN",
+            agg="SUM",
             stat="export_success",
-            new_name="average export time",
+            new_name="total export time",
             unit="s",
-            help="Average export time when the export succeeds. "
+            help="Total export time when the export succeeds. "
             "The model may not run through onnxruntime and the model "
             "may produce higher discrepancies than expected (lower is better).",
             simple=True,
         ),
         dict(
-            cat="speedup",
-            agg="GEO-MEAN",
-            stat="1speedup",
-            new_name="average speedup (geo)",
+            cat="time",
+            agg="SUM",
+            stat="latency",
+            new_name="total time ORT",
             unit="x",
-            help="Geometric mean of all speedup for all model converted and runnning.",
+            help="Total latency time with onnxruntime",
+            simple=True,
+        ),
+        dict(
+            cat="time",
+            agg="SUM",
+            stat="latency_eager_if_ort",
+            new_name="total time eager / ORT",
+            unit="x",
+            help="Total latency of eager mode knowing that onnxruntime is running",
             simple=True,
         ),
         dict(
@@ -156,6 +166,27 @@ def _SELECTED_FEATURES():
             new_name="number of models equal or faster than eager",
             unit="N",
             help="Number of models as fast or faster than torch eager mode.",
+            simple=True,
+        ),
+        # average
+        dict(
+            cat="time",
+            agg="MEAN",
+            stat="export_success",
+            new_name="average export time",
+            unit="s",
+            help="Average export time when the export succeeds. "
+            "The model may not run through onnxruntime and the model "
+            "may produce higher discrepancies than expected (lower is better).",
+            simple=True,
+        ),
+        dict(
+            cat="speedup",
+            agg="GEO-MEAN",
+            stat="1speedup",
+            new_name="average speedup (geo)",
+            unit="x",
+            help="Geometric mean of all speedup for all model converted and runnning.",
             simple=True,
         ),
         # e-1
@@ -299,7 +330,7 @@ def _SELECTED_FEATURES():
             agg="MEAN",
             stat="delta_peak_cpu_pp",
             new_name="average CPU delta peak (export)",
-            unit="Mb",
+            unit="bytes",
             help="Average CPU peak of new allocated memory while converting "
             "the model (measured in a secondary process)",
         ),
@@ -893,6 +924,7 @@ def merge_benchmark_reports(
         "pass_rate",
         "accuracy_rate",
         "date",
+        "correction",
     ),
     excel_output: Optional[str] = None,
     exc: bool = True,
@@ -999,6 +1031,36 @@ def merge_benchmark_reports(
                 df = filename
             else:
                 raise TypeError(f"Unexpected type {type(filename)} for one element of data")
+            if df.columns[0] == "#order":
+                # probably a status report
+                continue
+            updates = {}
+            for c in df.columns:
+                values = set(df[c])
+                if values & {True, False, np.nan} == values:
+                    updates[c] = (
+                        df[c]
+                        .apply(lambda x: x if np.isnan(x) else (1 if x else 0))
+                        .astype(float)
+                    )
+                if (
+                    df[c].dtype not in {float, np.float64, np.float32}
+                    and "_qu" not in c
+                    and c.startswith(("time_", "discrepancies_", "memory"))
+                ):
+                    try:
+                        val = df[c].astype(float)
+                    except (ValueError, TypeError) as e:
+                        raise AssertionError(
+                            f"Unable to convert to float column {c!r} from file "
+                            f"{filename!r}, values\n---\n"
+                            f"{pprint.pformat(list(enumerate(zip(df['_index'], df[c]))))}"
+                        ) from e
+                    updates[c] = val
+
+            if updates:
+                for k, v in updates.items():
+                    df[k] = v
             dfs.append(df)
         df = pandas.concat(dfs, axis=0)
     elif isinstance(data, pandas.DataFrame):
@@ -1112,6 +1174,9 @@ def merge_benchmark_reports(
             else:
                 df[c] = df[c].fillna("-")
 
+    #######################
+    # preprocessing is done
+    #######################
     res = {"0raw": df}
 
     # uniques keys
@@ -1247,6 +1312,13 @@ def merge_benchmark_reports(
                 df["status_pass_rate"] = col.astype(int)
                 df.loc[df["discrepancies_abs"].isna(), "status_pass_rate"] = np.nan
                 report_on.append("status_pass_rate")
+            continue
+
+        if expr == "correction":
+            if "time_latency_eager" in df.columns:
+                weights = df["time_latency"].apply(lambda x: np.nan if np.isnan(x) else 1.0)
+                df["time_latency_eager_if_ort"] = df["time_latency_eager"] * weights
+                report_on.append("time_latency_eager_if_ort")
             continue
 
         if expr == "accuracy_rate":
@@ -1735,7 +1807,7 @@ def merge_benchmark_reports(
     if verbose:
         print(f"[merge_benchmark_reports] add dates with columns={date_col}")
     date_col2 = [c for c in date_col if c != "DATE"]
-    assert len(date_col2) != len(date_col), f"No date found in {list(sorted(df0.columns))}"
+    assert len(date_col2) != len(date_col), f"No date found in {sorted(df0.columns)}"
     final_res["dates"] = df0[date_col].groupby(date_col2).max().reset_index(drop=False)
     date_col2 = [c for c in date_col2 if c in final_res["SIMPLE"]]
     assert "suite" in date_col2, f"Unable to find 'suite' in {date_col2}"
@@ -1811,7 +1883,7 @@ def merge_benchmark_reports(
 
             df_this = df_this.select_dtypes("number")
             df_base = df_base.select_dtypes("number")
-            set_columns = list(sorted(set(df_this.columns) & set(df_base.columns)))
+            set_columns = sorted(set(df_this.columns) & set(df_base.columns))
             df_base = df_base[set_columns].sort_index(axis=0).sort_index(axis=1)
             df_this = df_this[set_columns].sort_index(axis=0).sort_index(axis=1)
             df_num = df_this.sub(df_base)
@@ -1845,16 +1917,43 @@ def merge_benchmark_reports(
 
         final_res["SIMPLE"].to_csv(export_simple, index=False)
         _set_ = set(final_res["SIMPLE"])
+
+        # first pivot
+        piv_index = tuple(c for c in ("dtype", "suite", "#order", "METRIC") if c in _set_)
+        piv_columns = tuple(c for c in ("exporter", "opt_patterns", "rtopt") if c in _set_)
+        ccc = [*piv_index, *piv_columns]
+        gr = final_res["SIMPLE"][[*ccc, "value"]].groupby(ccc).count()
+        assert gr.values.max() <= 1, (
+            f"Unexpected duplicated, piv_index={piv_index}, "
+            f"piv_columns={piv_columns}, columns={final_res['SIMPLE'].columns}, "
+            f"issue=\n{gr[gr['value'] > 1]}"
+        )
+
         piv = (
             final_res["SIMPLE"]
             .pivot(
-                index=tuple(c for c in ("dtype", "suite", "#order", "METRIC") if c in _set_),
-                columns=(c for c in ("exporter", "opt_patterns", "rtopt") if c in _set_),
+                index=piv_index,
+                columns=piv_columns,
                 values="value",
             )
             .sort_index()
         )
         export_simple_x = f"{export_simple}.xlsx"
+        if verbose:
+            print(f"[merge_benchmark_reports] writes {export_simple_x!r}")
+        piv.to_excel(export_simple_x)
+
+        # total
+        piv_index = tuple(c for c in ("#order", "METRIC") if c in _set_)
+        piv_columns = (c for c in ("exporter", "opt_patterns", "rtopt") if c in _set_)
+        piv = pandas.pivot_table(
+            final_res["SIMPLE"],
+            index=piv_index,
+            columns=piv_columns,
+            values="value",
+            aggfunc="sum",
+        ).sort_index()
+        export_simple_x = f"{export_simple}_total.xlsx"
         if verbose:
             print(f"[merge_benchmark_reports] writes {export_simple_x!r}")
         piv.to_excel(export_simple_x)
@@ -2123,7 +2222,6 @@ def _create_aggregation_figures(
 
         dfs = []
         for name, df in stats:
-
             # avoid date to be numbers
             updates = {}
             drops = []

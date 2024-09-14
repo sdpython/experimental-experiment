@@ -11,7 +11,7 @@ from argparse import Namespace
 from datetime import datetime
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
 
-ILLEGAL_CHARACTERS_RE = re.compile(r"([\000-\010]|[\013-\014]|[\016-\037])")
+_DEFAULT_STRING_LIMIT = 2000
 
 
 class BenchmarkError(RuntimeError):
@@ -19,10 +19,8 @@ class BenchmarkError(RuntimeError):
 
 
 def _clean_string(s: str) -> str:
-    if next(ILLEGAL_CHARACTERS_RE.finditer(s), None):
-        ns = ILLEGAL_CHARACTERS_RE.sub("", s)
-        return ns.replace("\n", " ")
-    return s.replace("\n", " ")
+    cleaned = [c for c in s if 32 <= ord(c) < 127 and c not in {","}]
+    return "".join(cleaned)
 
 
 def get_processor_name():
@@ -34,7 +32,7 @@ def get_processor_name():
         all_info = subprocess.check_output(command, shell=True).decode().strip()
         for line in all_info.split("\n"):
             if "model name" in line:
-                return re.sub(".*model name.*:", "", line, 1).strip()  # noqa: B034
+                return re.sub(".*model name.*:", "", line, count=1, flags=0).strip()
     # fails
     # if platform.system() == "Darwin":
     #     os.environ["PATH"] = os.environ["PATH"] + os.pathsep + "/usr/sbin"
@@ -318,15 +316,33 @@ def multi_run(kwargs: Namespace) -> bool:
 
 
 def make_configs(
-    kwargs: Namespace,
+    kwargs: Union[Namespace, Dict[str, Any]],
     drop: Optional[Set[str]] = None,
     replace: Optional[Dict[str, str]] = None,
     last: Optional[List[str]] = None,
+    filter_function: Optional[Callable[Dict[str, Any], bool]] = None,
 ) -> List[Dict[str, Any]]:
-    """Creates all the configurations based on the command line arguments."""
+    """
+    Creates all the configurations based on the command line arguments.
+
+    :param kwargs: parameters the command line,
+        every value having a comma means multiple values,
+        it multiplies the number of configurations to try by the number of comma
+        separated values
+    :param drop: keys to drop in kwargs if specified
+    :param replace: values to replace for a particular key
+    :param last: to change the order of the loop created the configuration,
+        if ``last == ["part"]`` and ``kwargs[part] == "0,1"``,
+        then configuration where ``part==0`` is always followed by a configuration
+        having ``part==1``
+    :param filter_function: function taking a configuration and returning True
+        if it is must be kept
+    :return: list of configurations
+    """
+    kwargs_ = kwargs if isinstance(kwargs, dict) else kwargs.__dict__
     args = []
     slast = set(last) if last else set()
-    for k, v in kwargs.__dict__.items():
+    for k, v in kwargs_.items():
         if (drop and k in drop) or k in slast:
             continue
         if replace and k in replace:
@@ -337,19 +353,23 @@ def make_configs(
             args.append([(k, v)])
     if last:
         for k in last:
-            if k not in kwargs.__dict__:
+            if k not in kwargs_:
                 continue
+            v = kwargs[k]
             if isinstance(v, str):
                 args.append([(k, s) for s in v.split(",")])
             else:
                 args.append([(k, v)])
 
     configs = list(itertools.product(*args))
-    return [dict(c) for c in configs]
+    confs = [dict(c) for c in configs]
+    if filter_function:
+        confs = [c for c in confs if filter_function(c)]
+    return confs
 
 
 def make_dataframe_from_benchmark_data(
-    data: List[Dict], detailed: bool = True, string_limit: int = 2000
+    data: List[Dict], detailed: bool = True, string_limit: int = _DEFAULT_STRING_LIMIT
 ) -> Any:
     """
     Creates a dataframe from the received data.
@@ -377,7 +397,7 @@ def make_dataframe_from_benchmark_data(
             g[k] = v
         new_data.append(g)
     df = pandas.DataFrame(new_data)
-    sorted_columns = list(sorted(df.columns))
+    sorted_columns = sorted(df.columns)
     if "_index" in sorted_columns:
         set_cols = set(df.columns)
         addition = {"_index", "CMD", "OUTPUT", "ERROR"} & set_cols

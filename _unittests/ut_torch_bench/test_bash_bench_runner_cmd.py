@@ -128,13 +128,13 @@ class TestBashBenchRunnerCmd(ExtTestCase):
 
     @skipif_ci_windows("exporter does not work on Windows")
     @ignore_warnings((DeprecationWarning, UserWarning))
-    @requires_torch("2.6")
+    @requires_torch("2.7")
     def test_huggingface_export_bench_export_cpu(self):
         self._huggingface_export_bench_cpu("export", "101Dummy")
 
     @skipif_ci_windows("exporter does not work on Windows")
     @ignore_warnings((DeprecationWarning, UserWarning))
-    @requires_torch("2.6")
+    @requires_torch("2.7")
     def test_huggingface_export_bench_export_cpu_optimize(self):
         self._huggingface_export_bench_cpu("export", "101Dummy", optimization="default")
 
@@ -171,7 +171,7 @@ class TestBashBenchRunnerCmd(ExtTestCase):
         self._huggingface_export_bench_cpu("torch_script", "101Dummy", tag="taggy")
 
     @ignore_warnings((DeprecationWarning, UserWarning))
-    @requires_torch("2.6")
+    @requires_torch("2.7")
     def test_huggingface_export_bench_onnx_dynamo_cpu(self):
         self._huggingface_export_bench_cpu("onnx_dynamo", "101Dummy")
 
