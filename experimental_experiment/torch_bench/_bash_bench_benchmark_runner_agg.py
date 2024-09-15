@@ -1411,6 +1411,9 @@ def merge_benchmark_reports(
             continue
 
         if expr == "buckets":
+            if "rtopt" not in df.columns:
+                # We assume onnxruntime optimization were enabled (default settings).
+                df["rtopt"] = 1
             if (
                 "exporter" in set_columns
                 and "opt_patterns" in set_columns
