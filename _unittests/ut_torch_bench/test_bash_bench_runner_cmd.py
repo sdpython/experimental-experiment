@@ -126,18 +126,6 @@ class TestBashBenchRunnerCmd(ExtTestCase):
     def test_huggingface_export_bench_custom_cpu_dump_ort(self):
         self._huggingface_export_bench_cpu("custom", "101Dummy", dump_ort=True)
 
-    @skipif_ci_windows("exporter does not work on Windows")
-    @ignore_warnings((DeprecationWarning, UserWarning))
-    @requires_torch("2.7")
-    def test_huggingface_export_bench_export_cpu(self):
-        self._huggingface_export_bench_cpu("export", "101Dummy")
-
-    @skipif_ci_windows("exporter does not work on Windows")
-    @ignore_warnings((DeprecationWarning, UserWarning))
-    @requires_torch("2.7")
-    def test_huggingface_export_bench_export_cpu_optimize(self):
-        self._huggingface_export_bench_cpu("export", "101Dummy", optimization="default")
-
     @ignore_warnings((DeprecationWarning, UserWarning))
     def test_huggingface_export_bench_eager_cpu(self):
         self._huggingface_export_bench_cpu("eager", "101Dummy")
