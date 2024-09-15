@@ -706,6 +706,12 @@ class BenchmarkRunner:
 
         from experimental_experiment.bench_run import get_machine
 
+        if "-" in optimization:
+            # Removes value "-" as empty strings are sometimes not allowed.
+            spl = optimization.split(",") if "," in optimization else [optimization]
+            spl = [("" if _ == "-" else _) for _ in spl]
+            optimization = ",".join(spl)
+
         def _end():
             # restore the initial state
             torch.set_grad_enabled(initial_no_grad)
