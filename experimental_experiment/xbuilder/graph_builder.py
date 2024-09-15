@@ -4721,3 +4721,27 @@ class GraphBuilder(_GraphBuilderRuntime):
         if dim_name not in self.constraints_:
             self.constraints_[dim_name] = set()
         self.constraints_[dim_name].add(value)
+
+    def _to_torch_tensor(self, a: Any) -> "torch.Tensor":  # noqa: F821
+        """
+        Torch does not convert numpy dtype very well.
+        """
+        if isinstance(a, self.torch.Tensor):
+            return a
+        if isinstance(a, np.ndarray):
+            if len(a.shape) == 0:
+                # Then torch may consider this as a the creation of empty array.
+                tt = self.torch.Tensor(a.reshape((1,)))
+                tt = tt[0]
+            else:
+                tt = self.torch.Tensor(a)
+            ttype = onnx_dtype_to_torch_dtype(dtype_to_tensor_dtype(a.dtype))
+            res = tt.to(ttype)
+            assert a.shape == tuple(res.shape), (
+                f"Unexpected shape {res.shape}, expecting shape={a.shape}, "
+                f"dtype={res.dtype}, expected dtype={a.dtype}"
+            )
+            return res
+        raise AssertionError(
+            f"Unsupported type {type(a)}, unable to convert to a torch.Tensor."
+        )
