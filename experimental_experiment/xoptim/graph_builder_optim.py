@@ -220,18 +220,26 @@ class GraphBuilderPatternOptimization:
         """
         return self.builder.is_constant(name)
 
-    def is_constant_scalar(self, name: str, value: Optional[Any] = None) -> bool:
+    def is_constant_scalar(
+        self, name: str, value: Optional[Any] = None, broadcast: bool = False
+    ) -> bool:
         """
         Tells if a constant is a scalar
 
         :param name: name
+        :param broadcast: if True, consider 1, [1], [[1]], [[[1]]], ... as scalar as well
         :param value: value to compare to if specified
         :return: boolean
         """
         if not self.is_constant(name):
             return False
         cst_shape = self.get_constant_shape(name, exc=False)
-        if cst_shape is None or cst_shape not in (tuple(), (1,)):
+        if cst_shape is None:
+            return False
+        if broadcast:
+            if cst_shape != tuple() and set(cst_shape) != {1}:
+                return False
+        elif cst_shape not in (tuple(), (1,)):
             return False
         cst = self.get_computed_constant(name)
         if hasattr(cst, "numpy"):
@@ -241,13 +249,19 @@ class GraphBuilderPatternOptimization:
             cst, np.ndarray
         ), f"Unexpected type for constant {name}!r, type is {type(cst)}"
         shape = cst.shape
-        if shape not in (tuple(), (1,)):
+        if broadcast:
+            if shape != tuple() and set(shape) != {1}:
+                return False
+        elif shape not in (tuple(), (1,)):
             return False
         if value is None:
             return True
-        if cst.shape == (1,):
+        if shape == (1,):
             return all(cst == value)
-        return cst == value
+        if shape == tuple():
+            return cst == value
+        assert broadcast, f"Broadcast should be true at this stage, name={name!r}, cst={cst}"
+        return all(cst.reshape((1,)) == value)
 
     def get_constant_shape(self, name: str, exc: bool = True) -> Optional[Tuple[int, ...]]:
         """
@@ -320,11 +334,12 @@ class GraphBuilderPatternOptimization:
             )
         return None
 
-    def get_constant_scalar(self, name: str) -> Union[int, float]:
+    def get_constant_scalar(self, name: str, broadcast: bool = False) -> Union[int, float]:
         """
         Returns a scalar as a constant.
 
         :param name: name
+        :param broadcast: consider [1], [[1]], [[[1]]] as constant as well
         :return: int or float
         """
         cst = self.get_computed_constant(name)
@@ -334,12 +349,14 @@ class GraphBuilderPatternOptimization:
         assert isinstance(
             cst, np.ndarray
         ), f"Unexpected type for constant {name}!r, type is {type(cst)}"
-        assert cst.shape in (
-            tuple(),
-            (1,),
+        assert cst.shape == tuple() or (
+            (broadcast and set(cst.shape) == {1}) or (not broadcast and cst.shape == (1,))
         ), f"Unexpected shape {cst.shape} for constant {name!r}"
         shape = cst.shape
-        value = cst[0] if shape == (1,) else cst
+        if broadcast:
+            value = cst.reshape((1,))[0]
+        else:
+            value = cst[0] if shape == (1,) else cst
         if value.dtype in {
             np.float32,
             np.float16,

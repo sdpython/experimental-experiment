@@ -40,8 +40,8 @@ class LayerNormalizationPattern(PatternOptimization):
         if pow.op_type != "Pow" or len(g.next_nodes(pow.output[0])) != 1:
             return self.none(node, inspect.currentframe().f_lineno)
         if (
-            not g.is_constant_scalar(pow.input[1])
-            or g.get_constant_scalar(pow.input[1]) != 2
+            not g.is_constant_scalar(pow.input[1], broadcast=True)
+            or g.get_constant_scalar(pow.input[1], broadcast=True) != 2
         ):
             return self.none(node, inspect.currentframe().f_lineno)
         sub = g.node_before(pow.input[0])
@@ -71,7 +71,7 @@ class LayerNormalizationPattern(PatternOptimization):
             return self.none(node, inspect.currentframe().f_lineno)
         if add[0].op_type == "Add":
             add = add[0]
-            if not g.is_constant_scalar(add.input[1]):
+            if not g.is_constant_scalar(add.input[1], broadcast=True):
                 return self.none(node, inspect.currentframe().f_lineno)
             sqrt = g.next_nodes(add.output[0])
         else:
@@ -160,7 +160,11 @@ class LayerNormalizationPattern(PatternOptimization):
                 )
             )
 
-        eps = g.get_constant_scalar(add.input[1]) if add else 9.999999960041972e-13
+        eps = (
+            g.get_constant_scalar(add.input[1], broadcast=True)
+            if add
+            else 9.999999960041972e-13
+        )
 
         new_nodes.append(
             g.make_node(
@@ -224,8 +228,8 @@ class LayerNormalizationScalePattern(PatternOptimization):
             else mul_node.input[0]
         )
         new_scale = None
-        if g.is_constant_scalar(ln_node.input[1]):
-            fscale = g.get_constant_scalar(ln_node.input[1])
+        if g.is_constant_scalar(ln_node.input[1], broadcast=True):
+            fscale = g.get_constant_scalar(ln_node.input[1], broadcast=True)
             if fscale == 1:
                 new_scale = scale
         new_nodes = []
