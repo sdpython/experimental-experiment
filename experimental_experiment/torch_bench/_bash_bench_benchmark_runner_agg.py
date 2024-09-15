@@ -1411,54 +1411,77 @@ def merge_benchmark_reports(
             continue
 
         if expr == "buckets":
+            if "rtopt" not in df.columns:
+                # We assume onnxruntime optimization were enabled (default settings).
+                df["rtopt"] = 1
             if (
                 "exporter" in set_columns
+                and "opt_patterns" in set_columns
                 and "speedup" in set_columns
                 and "torch_script" in set(df.exporter)
                 and len(set(df.exporter)) > 1
             ):
                 # Do the same with the exporter as a baseline.
                 keep = [*model, *new_keys, "speedup"]
-                gr = df[df.exporter == "torch_script"][keep].copy()
+                gr = df[
+                    (df.exporter == "torch_script")
+                    & (df.opt_patterns.isin(["", "-"]))
+                    & (df.rtopt == 1)
+                ][keep].copy()
                 gr = gr[~gr["speedup"].isna()]
-                gr["speedup_script"] = gr["speedup"]
-                gr = gr.drop("speedup", axis=1)
 
-                if "opt_patterns" in gr.columns and len(set(gr.opt_patterns)) == 1:
+                if gr.shape[0] == 0:
+                    # No figures for torch_script
+                    if verbose:
+                        print(
+                            f"[merge_benchmark_reports] gr.shape={gr.shape}, "
+                            f"unable to compute speedup_script, "
+                            f"exporters={set(df.exporter)}, "
+                            f"opt_patterns={set(df.opt_patterns)}, rtopt={set(df.rt_opt)}"
+                        )
+                else:
+                    if verbose:
+                        print(
+                            f"[merge_benchmark_reports] compute setup_script: "
+                            f"gr.shape={gr.shape}"
+                        )
+                    gr["speedup_script"] = gr["speedup"]
+                    gr = gr.drop("speedup", axis=1)
+
                     on = [
                         k
                         for k in keep[:-1]
                         if k not in ("exporter", "opt_patterns", "rtopt")
                     ]
-                else:
-                    on = [k for k in keep[:-1] if k != "exporter"]
-                joined = pandas.merge(df, gr, left_on=on, right_on=on, how="left")
+                    joined = pandas.merge(df, gr, left_on=on, right_on=on, how="left")
 
-                assert (
-                    df.shape[0] == joined.shape[0]
-                ), f"Shape mismatch after join {df.shape} -> {joined.shape}"
-                df = joined.copy()
-                df["speedup_increase_script"] = (
-                    df["speedup"] / df["speedup_script"] - 1
-                ).fillna(-np.inf)
-                for c in column_keys:
-                    cc = f"{c}_x"
-                    if cc in df.columns:
-                        df[c] = df[cc]
-                drop = [
-                    c
-                    for c in [
-                        *[f"{c}_x" for c in column_keys],
-                        *[f"{c}_y" for c in column_keys],
+                    assert df.shape[0] == joined.shape[0], (
+                        f"Shape mismatch after join {df.shape} -> {joined.shape}, "
+                        f"gr.shape={gr.shape}, on={on}"
+                    )
+                    df = joined.copy()
+                    df["speedup_increase_script"] = (
+                        df["speedup"] / df["speedup_script"] - 1
+                    ).fillna(-np.inf)
+                    report_on.extend(["speedup_script", "speedup_increase_script"])
+                    for c in column_keys:
+                        cc = f"{c}_x"
+                        if cc in df.columns:
+                            df[c] = df[cc]
+                    drop = [
+                        c
+                        for c in [
+                            *[f"{c}_x" for c in column_keys],
+                            *[f"{c}_y" for c in column_keys],
+                        ]
+                        if c in df.columns
                     ]
-                    if c in df.columns
-                ]
-                df = df.drop(drop, axis=1)
-                set_columns = set(df.columns)
-                df["status_lat<=script+2%"] = (
-                    df["speedup_increase_script"] >= (1 / 1.02 - 1)
-                ).astype(int)
-                report_on.append("status_lat<=script+2%")
+                    df = df.drop(drop, axis=1)
+                    set_columns = set(df.columns)
+                    df["status_lat<=script+2%"] = (
+                        df["speedup_increase_script"] >= (1 / 1.02 - 1)
+                    ).astype(int)
+                    report_on.append("status_lat<=script+2%")
 
             for c in ["speedup_increase", "speedup_increase_script"]:
                 if c not in set_columns:
@@ -1936,7 +1959,8 @@ def merge_benchmark_reports(
                 columns=piv_columns,
                 values="value",
             )
-            .sort_index()
+            .sort_index(axis=0)
+            .sort_index(axis=1)
         )
         export_simple_x = f"{export_simple}.xlsx"
         if verbose:
@@ -1946,13 +1970,17 @@ def merge_benchmark_reports(
         # total
         piv_index = tuple(c for c in ("#order", "METRIC") if c in _set_)
         piv_columns = (c for c in ("exporter", "opt_patterns", "rtopt") if c in _set_)
-        piv = pandas.pivot_table(
-            final_res["SIMPLE"],
-            index=piv_index,
-            columns=piv_columns,
-            values="value",
-            aggfunc="sum",
-        ).sort_index()
+        piv = (
+            pandas.pivot_table(
+                final_res["SIMPLE"],
+                index=piv_index,
+                columns=piv_columns,
+                values="value",
+                aggfunc="sum",
+            )
+            .sort_index(axis=0)
+            .sort_index(axis=1)
+        )
         export_simple_x = f"{export_simple}_total.xlsx"
         if verbose:
             print(f"[merge_benchmark_reports] writes {export_simple_x!r}")
