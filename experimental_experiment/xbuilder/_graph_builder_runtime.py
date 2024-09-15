@@ -212,6 +212,15 @@ class _GraphBuilderRuntime:
         node: NodeProto,
         feeds: Dict[str, "torch.Tensor"],  # noqa: F821
     ) -> "torch.Tensor":  # noqa: F821
+        x = feeds[node.input[0]]
+        if not isinstance(x, (np.ndarray, self.torch.Tensor)):
+            # Maybe a float, then we process it as a float, tensor.to only works
+            # on tensors.
+            assert isinstance(
+                x, (float, int, np.float32, np.float64, np.float16, np.int32, np.int64)
+            ), f"Unexpected type {type(x)} for {node.input[0]!r} (node.name={node.name!r})"
+            res = self._apply_cast(node, {node.input[0]: np.array([x])})
+            return [res[0]]
         to, saturate = None, 1
         for att in node.attribute:
             if att.name == "to":
@@ -223,7 +232,6 @@ class _GraphBuilderRuntime:
         assert to, f"to not here in node {node}"
         assert to <= 11, f"Cast not implemented for to={to}"
         del saturate
-        x = feeds[node.input[0]]
         if isinstance(x, np.ndarray):
             # Type conversion between numpy and torch is not robust.
             itype = dtype_to_tensor_dtype(x.dtype)
@@ -234,6 +242,10 @@ class _GraphBuilderRuntime:
                 f"node.op_type={node.op_type!r}, type={self.torch.Tensor}"
                 f"{self.get_debug_msg()}"
             )
+        assert isinstance(x, self.torch.Tensor), (
+            f"Unexpected type {type(x)} for x for node type {node.op_type}, "
+            f"name={node.name}, inputs={node.input}, outputs={node.output}"
+        )
         ttype = onnx_dtype_to_torch_dtype(to)
         return [x.to(ttype)]
 
@@ -303,17 +315,24 @@ class _GraphBuilderRuntime:
     ) -> "torch.Tensor":  # noqa: F821
         a, b = feeds[node.input[0]], feeds[node.input[1]]
         if a.dtype != b.dtype:
-            a = self.torch.Tensor(a)
-            b = self.torch.Tensor(b)
-        if node.op_type == "Add":
-            return [a + b]
-        if node.op_type == "Mul":
-            return [a * b]
-        if node.op_type == "Sub":
-            return [a - b]
-        if node.op_type == "Div":
-            return [a / b]
-        raise AssertionError(f"{node.op_type!r} not implemented")
+            a = self._to_torch_tensor(a)
+            b = self._to_torch_tensor(b)
+        try:
+            if node.op_type == "Add":
+                return [a + b]
+            if node.op_type == "Mul":
+                return [a * b]
+            if node.op_type == "Sub":
+                return [a - b]
+            if node.op_type == "Div":
+                return [a / b]
+            raise AssertionError(f"{node.op_type!r} not implemented")
+        except RuntimeError as e:
+            raise AssertionError(
+                f"Unable to multiply two objects of dtype {a.dtype}, {b.dtype} and "
+                f"shapes {a.shape}, {b.shape}, node.op_type={node.op_type!r}, "
+                f"node.name={node.name!r}, inputs={node.input}, outputs={node.output}"
+            ) from e
 
     def _apply_where(
         self,

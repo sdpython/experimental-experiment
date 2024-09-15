@@ -761,6 +761,8 @@ class ModelRunner:
 
         opts = optimization.split("+")
         for opt in opts:
+            if opt in ("", "-"):
+                continue
             if opt == "default":
                 # from onnx.inliner import inline_local_functions
                 from onnxscript.optimizer import optimize
