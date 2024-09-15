@@ -3563,7 +3563,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         :param only_array: do not return TensorProto
         :return: constant
         """
-        assert self.is_constant(name), f"Name {name!r} is not a constant."
+        assert self.is_constant(name), f"Name {name!r} is not a constant"
         if name in self.initializers_dict:
             value = self.initializers_dict[name]
             assert not isinstance(

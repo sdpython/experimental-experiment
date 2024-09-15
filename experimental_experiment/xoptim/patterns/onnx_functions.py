@@ -32,7 +32,7 @@ class GeluPattern(EasyPatternOptimization):
 
     def apply_pattern(
         self,
-        g: "GraphBuilderPatternOptimization",  # noqa: F821
+        g: "GraphBuilder",  # noqa: F821
         x,
         c3,
         c04,
@@ -75,6 +75,51 @@ class GeluPattern(EasyPatternOptimization):
             return self.none(node, inspect.currentframe().f_lineno)
         if not g.is_constant_scalar(c2) or g.get_constant_scalar(c2) != 0.5:
             return self.none(node, inspect.currentframe().f_lineno)
+        return True
+
+
+class LeakyReluPattern(EasyPatternOptimization):
+    """
+    Detects the decomposed version of LeakyRelu.
+    """
+
+    def __init__(self, verbose: int = 0, priority: int = 0, min_opset: int = 6):
+        super().__init__(verbose, priority, min_opset=min_opset)
+
+    def match_pattern(self, g: "GraphBuilder", x, zero, slope):  # noqa: F821
+        return g.op.Where(g.op.Greater(x, zero), x, g.op.Mul(x, slope))
+
+    def apply_pattern(
+        self,
+        g: "GraphBuilder",  # noqa: F821
+        x,
+        zero,
+        slope,
+    ):
+        # g is not the GraphBuilder for the main graph.
+        return g.op.LeakyRelu(x, alpha=self.get_validate_param("slope"))
+
+    def validate_mapping(
+        self,
+        g: "GraphBuilderPatternOptimization",  # noqa: F821
+        deleted_nodes: List[NodeProto],
+        pattern_nodes: Optional[List[NodeProto]] = None,
+    ) -> bool:
+        assert len(deleted_nodes) == 3, f"Unexpected pattern length {len(deleted_nodes)}"
+        assert deleted_nodes[2].op_type == "Where", f"-- {deleted_nodes[0]}"
+        greater, mul = (
+            (deleted_nodes[0], deleted_nodes[1])
+            if deleted_nodes[0].op_type == "Greater"
+            else (deleted_nodes[1], deleted_nodes[0])
+        )
+        zero = greater.input[1]
+        slope = mul.input[1]
+
+        if not g.is_constant_scalar(zero) or g.get_constant_scalar(zero) != 0:
+            return self.none(greater, inspect.currentframe().f_lineno)
+        if not g.is_constant_scalar(slope):
+            return self.none(mul, inspect.currentframe().f_lineno)
+        self.add_validate_param("slope", g.get_constant_scalar(slope))
         return True
 
 
@@ -123,7 +168,7 @@ class SoftmaxCrossEntropyLossCastPattern(EasyPatternOptimization):
     @classmethod
     def apply_pattern(
         cls,
-        g: "GraphBuilderPatternOptimization",  # noqa: F821
+        g: "GraphBuilder",  # noqa: F821
         X,
         indices,
         axis,
