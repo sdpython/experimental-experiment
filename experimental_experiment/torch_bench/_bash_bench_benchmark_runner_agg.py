@@ -1315,7 +1315,7 @@ def merge_benchmark_reports(
             continue
 
         if expr == "correction":
-            if "time_latency_eager" in df.columns:
+            if "time_latency_eager" in df.columns and "time_latency" in df.columns:
                 weights = df["time_latency"].apply(lambda x: np.nan if np.isnan(x) else 1.0)
                 df["time_latency_eager_if_ort"] = df["time_latency_eager"] * weights
                 report_on.append("time_latency_eager_if_ort")
