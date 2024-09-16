@@ -1019,12 +1019,15 @@ def merge_benchmark_reports(
             if isinstance(filename, str):
                 try:
                     df = pandas.read_csv(filename)
-                except FileNotFoundError as e:
+                except (FileNotFoundError, pandas.errors.ParserError) as e:
                     found = glob.glob(filename)
                     if not found:
                         raise AssertionError(f"Unable to find {filename!r}") from e
                     for f in found:
-                        df = pandas.read_csv(f)
+                        try:
+                            df = pandas.read_csv(f)
+                        except pandas.errors.ParserError as ee:
+                            raise AssertionError(f"Unable to read {f!r}") from ee
                         dfs.append(df)
                     continue
             elif isinstance(filename, pandas.DataFrame):
@@ -1315,7 +1318,7 @@ def merge_benchmark_reports(
             continue
 
         if expr == "correction":
-            if "time_latency_eager" in df.columns:
+            if "time_latency_eager" in df.columns and "time_latency" in df.columns:
                 weights = df["time_latency"].apply(lambda x: np.nan if np.isnan(x) else 1.0)
                 df["time_latency_eager_if_ort"] = df["time_latency_eager"] * weights
                 report_on.append("time_latency_eager_if_ort")

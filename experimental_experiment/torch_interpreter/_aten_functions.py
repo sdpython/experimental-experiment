@@ -4646,6 +4646,15 @@ def aten_prelu(
     name: str = "prelu",
 ) -> T:
     "prelu"
+    if g.has_rank(a) and g.is_constant(slope):
+        cst = g.get_constant(slope, computed_value=True)
+        if cst.size == 1:
+            rc = g.get_rank(slope)
+            r = g.get_rank(a)
+            if r != rc:
+                # onnxruntime is faster when the rank of the slope is the same
+                # as the rank of the input even if it contains only one element
+                slope = g.op.Reshape(slope, np.array((1,) * r, dtype=np.int64), name=name)
     res = g.op.PRelu(a, slope, name=name, outputs=outputs)
     if not sts:
         set_type_shape_unary_op(g, res, a)
