@@ -65,6 +65,15 @@ def _SELECTED_FEATURES():
             simple=True,
         ),
         dict(
+            cat="time",
+            stat="latency_eager",
+            agg="COUNT",
+            new_name="number of models eager mode",
+            unit="N",
+            help="Number of models running with eager mode",
+            simple=True,
+        ),
+        dict(
             cat="status",
             stat="control_flow",
             agg="SUM",
@@ -1994,13 +2003,26 @@ def merge_benchmark_reports(
     if export_correlations:
         models = [c for c in model if c in df.columns]
         exporter = [c for c in column_keys if c in df.columns]
-        subset = [c for c in ["time_latency", "time_latency_eager"] if c in df.columns]
+        subset = [
+            c
+            for c in [
+                "time_latency",
+                "time_latency_eager",
+                "time_export_success",
+                "discrepancies_abs",
+            ]
+            if c in df.columns
+        ]
         if verbose:
             print(f"[merge_benchmark_reports] compute correlations models={models}")
             print(f"[merge_benchmark_reports] compute correlations exporter={exporter}")
             print(f"[merge_benchmark_reports] compute correlations subset={subset}")
         corrs = _compute_correlations(
-            df, model_column=models, exporter_column=exporter, columns=subset
+            df,
+            model_column=models,
+            exporter_column=exporter,
+            columns=subset,
+            verbose=verbose,
         )
         with pandas.ExcelWriter(export_correlations) as writer:
             for k, ev in corrs.items():
@@ -2585,6 +2607,7 @@ def _compute_correlations(
     model_column: List[str],
     exporter_column: List[str],
     columns: List[str],
+    verbose: int = 0,
 ) -> Dict[str, pandas.DataFrame]:
     """
     Computes correlations metrics.
@@ -2593,6 +2616,7 @@ def _compute_correlations(
     :param model_column: what defines a model
     :param exporter_column: what defines an exporter
     :param columns: columns to look into
+    :param verbose: verbosity
     :return: dictionary of dataframes
     """
     df = df.copy()
@@ -2607,15 +2631,16 @@ def _compute_correlations(
     n_runs = (
         unique_exporter.groupby(exporter_column, as_index=False).sum().reset_index(drop=True)
     )
-    res = {"RUNS": n_runs}
 
+    res = {"RUNS": n_runs}
     name_i = [f"{c}_i" for c in exporter_column]
     name_j = [f"{c}_j" for c in exporter_column]
+    nonans = {}
 
     for c in columns:
-        keep = [*model_column, *exporter_column, c]
-        sub = df[keep]
-        piv = sub.pivot(index=model_column, columns=exporter_column, values=[c])
+        if verbose:
+            print(f"[_compute_correlations] process {c!r}")
+        piv = df.pivot(index=model_column, columns=exporter_column, values=[c])
 
         obs = []
         for i in range(piv.shape[1]):
@@ -2624,8 +2649,9 @@ def _compute_correlations(
                 cj = piv.columns[j]
                 ni = ~piv[ci].isna()
                 nj = ~piv[cj].isna()
-                nonan = (ni & nj).apply(lambda x: 1 if x else 0).sum()
-                sumij = (piv[ci].fillna(0) * nonan).sum()
+                nonan_ = (ni & nj).apply(lambda x: 1 if x else 0)
+                nonan = nonan_.sum()
+                sumij = (piv[ci].fillna(0) * nonan_).sum()
                 obs.append(
                     dict(
                         zip(
@@ -2634,16 +2660,54 @@ def _compute_correlations(
                         )
                     )
                 )
+                key = ci[1:], cj[1:]
+                if key not in nonans:
+                    nonans[key] = nonan_
+                else:
+                    nonans[key] &= nonan_
         res[f"c_{c}"] = pandas.DataFrame(obs)
 
-    index_columns = [*name_i, *name_j]
-    joined = None
+    obs = []
+    for i in range(piv.shape[1]):
+        for j in range(piv.shape[1]):
+            ci = piv.columns[i][1:]
+            cj = piv.columns[j][1:]
+            obs.append(
+                dict(
+                    zip(
+                        [*name_i, *name_j, "nonan"],
+                        [*ci, *cj, nonans[ci, cj].sum()],
+                    )
+                )
+            )
+    res_join = {"nonan": pandas.DataFrame(obs)}
+
     for c in columns:
-        if joined is None:
-            joined = res[f"c_{c}"].set_index(index_columns)
-            continue
-        joined = joined.join(
-            res[f"c_{c}"].set_index(index_columns), how="outer"
-        ).reset_index(drop=False)
-    res["JOINED"] = joined
+        if verbose:
+            print(f"[_compute_correlations] process 2 {c!r}")
+        piv = df.pivot(index=model_column, columns=exporter_column, values=[c])
+
+        obs = []
+        for i in range(piv.shape[1]):
+            for j in range(piv.shape[1]):
+                ci = piv.columns[i]
+                cj = piv.columns[j]
+                sumij = (piv[ci].fillna(0) * nonans[ci[1:], cj[1:]]).sum()
+                obs.append(
+                    dict(
+                        zip(
+                            [*name_i, *name_j, f"sum_{c}"],
+                            [*ci[1:], *cj[1:], sumij],
+                        )
+                    )
+                )
+        res_join[f"c_{c}"] = pandas.DataFrame(obs)
+
+    index_columns = [*name_i, *name_j]
+    joined = res_join["nonan"].set_index(index_columns)
+    for c in columns:
+        if verbose:
+            print(f"[_compute_correlations] joins {c!r}")
+        joined = joined.join(res_join[f"c_{c}"].set_index(index_columns), how="outer")
+    res["JOINED"] = joined.reset_index(drop=False)
     return res

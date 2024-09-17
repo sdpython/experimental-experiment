@@ -642,7 +642,7 @@ class ModelRunner:
         from ..torch_interpreter import to_onnx
         from ..xbuilder import OptimizationOptions
 
-        if optimization:
+        if optimization and optimization != "none":
             # cuda = any(m.is_cuda for m in self.model.parameters())
             options = OptimizationOptions(
                 constant_folding=True,
