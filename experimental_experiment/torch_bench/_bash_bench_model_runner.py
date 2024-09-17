@@ -761,7 +761,7 @@ class ModelRunner:
 
         opts = optimization.split("+")
         for opt in opts:
-            if opt in ("", "-"):
+            if opt in ("", "-", "none"):
                 continue
             if opt == "default":
                 # from onnx.inliner import inline_local_functions
@@ -855,7 +855,7 @@ class ModelRunner:
                     verbose=max(verbose - 1, 0),
                 )
 
-        if optimization:
+        if optimization and optimization != "none":
             return self._optimize_rewrite(name, optimization)
         return onnx.load(name, load_external_data=False), None
 
