@@ -1451,7 +1451,7 @@ def merge_benchmark_reports(
                             f"[merge_benchmark_reports] gr.shape={gr.shape}, "
                             f"unable to compute speedup_script, "
                             f"exporters={set(df.exporter)}, "
-                            f"opt_patterns={set(df.opt_patterns)}, rtopt={set(df.rt_opt)}"
+                            f"opt_patterns={set(df.opt_patterns)}, rtopt={set(df.rtopt)}"
                         )
                 else:
                     if verbose:
@@ -2721,7 +2721,6 @@ def _compute_correlations(
                         int
                     ) * nonans[ci[1:], cj[1:]]
                     o["win_disc_abs"] = winners.sum()
-                print("***", c, o)
                 obs.append(o)
         res_join[f"c_{c}"] = pandas.DataFrame(obs)
 
