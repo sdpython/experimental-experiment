@@ -164,7 +164,7 @@ class ModelRunner:
         cls, exporter: str, optimization: Optional[str] = None
     ) -> bool:
         """Defines the allowed configurations."""
-        if not optimization:
+        if not optimization or optimization == "none":
             # always possible
             return True
         if exporter in {"custom"}:
@@ -976,7 +976,9 @@ class ModelRunner:
         assert not fake_tensor, "fake_tensor not implemented."
         assert not dynamic, "dynamic true not implemented yet"
         assert no_grad, "no_grad false not implemented yet"
-        assert not optimization, f"optimization {optimization!r} not compatible with export"
+        assert (
+            not optimization or optimization == "none"
+        ), f"optimization {optimization!r} not compatible with export"
         from torch.export import export
 
         with torch.no_grad():
@@ -996,7 +998,9 @@ class ModelRunner:
         assert not fake_tensor, "fake_tensor not implemented."
         assert not dynamic, "dynamic true not implemented yet"
         assert no_grad, "no_grad false not implemented yet"
-        assert not optimization, f"optimization {optimization!r} not compatible with eager"
+        assert (
+            not optimization or optimization == "none"
+        ), f"optimization {optimization!r} not compatible with eager"
 
         return self.model, None
 
@@ -1013,7 +1017,9 @@ class ModelRunner:
         assert not fake_tensor, "fake_tensor not implemented."
         assert not dynamic, "dynamic true not implemented yet"
         assert no_grad, "no_grad false not implemented yet"
-        assert not optimization, f"optimization {optimization!r} not compatible with eager"
+        assert (
+            not optimization or optimization == "none"
+        ), f"optimization {optimization!r} not compatible with eager"
         from onnxruntime.training.ortmodule import ORTModule
 
         return ORTModule(self.model), None
@@ -1031,7 +1037,9 @@ class ModelRunner:
         assert not fake_tensor, "fake_tensor not implemented."
         assert not dynamic, "dynamic true not implemented yet"
         assert no_grad, "no_grad true not implemented yet"
-        assert not optimization, f"optimization {optimization!r} not compatible with compile"
+        assert (
+            not optimization or optimization == "none"
+        ), f"optimization {optimization!r} not compatible with compile"
 
         def custom_backend(gm: torch.fx.GraphModule, example_inputs: List[torch.Tensor]):
             if verbose:
@@ -1067,7 +1075,7 @@ class ModelRunner:
         assert not dynamic, "dynamic true not implemented yet"
         assert no_grad, "no_grad true not implemented yet"
         assert (
-            not optimization
+            not optimization or optimization == "none"
         ), f"optimization {optimization!r} not compatible with inductor"
 
         if self.autocast:
@@ -1091,7 +1099,9 @@ class ModelRunner:
         assert not fake_tensor, "fake_tensor not implemented."
         assert not dynamic, "dynamic true not implemented yet"
         assert no_grad, "no_grad true not implemented yet"
-        assert not optimization, f"optimization {optimization!r} not compatible with dort"
+        assert (
+            not optimization or optimization == "none"
+        ), f"optimization {optimization!r} not compatible with dort"
 
         if self.autocast:
             with torch.autocast(device_type=self.device, dtype=self.dtype), torch.no_grad():
