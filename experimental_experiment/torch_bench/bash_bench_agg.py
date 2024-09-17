@@ -58,6 +58,11 @@ def main(args=None):
         default="",
         help="if not empty, export main figures into a csv file",
     )
+    parser.add_argument(
+        "--export_correlations",
+        default="",
+        help="if not empty, gives insights on model running for two exporters",
+    )
     parser.add_argument("--verbose", default=0, help="verbosity level")
     res = parser.parse_args(args=args)
 
@@ -86,6 +91,7 @@ def main(args=None):
         baseline=res.baseline,
         exc=res.quiet not in (1, "1", True, "True"),
         export_simple=res.export_simple,
+        export_correlations=res.export_correlations,
         **kwargs,
     )
 

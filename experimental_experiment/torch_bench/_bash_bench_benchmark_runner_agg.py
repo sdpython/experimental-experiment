@@ -2597,9 +2597,11 @@ def _compute_correlations(
     """
     df = df.copy()
     df["_runs_"] = 1
-    assert "_runs_" not in set(
-        [*model_column, *exporter_column, *columns]
-    ), f"Name '_runs_' is already taken in {sorted(df.columns)}"
+    assert "_runs_" not in [
+        *model_column,
+        *exporter_column,
+        *columns,
+    ], f"Name '_runs_' is already taken in {sorted(df.columns)}"
 
     unique_exporter = df[[*exporter_column, "_runs_"]]
     n_runs = (
@@ -2625,7 +2627,23 @@ def _compute_correlations(
                 nonan = (ni & nj).apply(lambda x: 1 if x else 0).sum()
                 sumij = (piv[ci].fillna(0) * nonan).sum()
                 obs.append(
-                    dict(zip([*name_i, *name_j, "nonan", "sum"], [*ci[1:], *cj[1:], nonan, sumij]))
+                    dict(
+                        zip(
+                            [*name_i, *name_j, f"nonan_{c}", f"sum_{c}"],
+                            [*ci[1:], *cj[1:], nonan, sumij],
+                        )
+                    )
                 )
-        res[f"{c}"] = pandas.DataFrame(obs)
+        res[f"c_{c}"] = pandas.DataFrame(obs)
+
+    index_columns = [*name_i, *name_j]
+    joined = None
+    for c in columns:
+        if joined is None:
+            joined = res[f"c_{c}"].set_index(index_columns)
+            continue
+        joined = joined.join(
+            res[f"c_{c}"].set_index(index_columns), how="outer"
+        ).reset_index(drop=False)
+    res["JOINED"] = joined
     return res
