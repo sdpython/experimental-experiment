@@ -29,7 +29,6 @@ jobs:
     displayName: 'Install Requirements'
   - script: |
       pip install -r requirements-dev.txt
-      pip install torch-onnx --no-deps
     displayName: 'Install Requirements dev'
   - script: |
       python -c "import torch;print('torch', torch.__version__)"
@@ -112,7 +111,6 @@ jobs:
     displayName: 'Install specific version of transformers'
   - script: |
       pip install -r requirements-dev.txt
-      pip install torch-onnx --no-deps
     displayName: 'Install Requirements dev'
   - script: |
       python -c "import torch;print('torch', torch.__version__)"
@@ -194,7 +192,6 @@ jobs:
   #  displayName: 'Install onnxscript'
   - script: |
       pip install -r requirements-dev.txt
-      pip install torch-onnx --no-deps
     displayName: 'Install Requirements dev'
   - script: |
       python -c "import torch;print('torch', torch.__version__)"
@@ -269,7 +266,6 @@ jobs:
   #  displayName: 'Install onnxscript'
   - script: |
       pip install -r requirements-dev.txt
-      pip install torch-onnx --no-deps
     displayName: 'Install Requirements dev'
   - script: pip install onnxmltools --no-deps
     displayName: 'Install onnxmltools'
@@ -337,7 +333,6 @@ jobs:
   #  displayName: 'Install onnxscript'
   - script: |
       pip install -r requirements-dev.txt
-      pip install torch-onnx --no-deps
     displayName: 'Install Requirements dev'
   - script: pip install onnxmltools --no-deps
     displayName: 'Install onnxmltools'

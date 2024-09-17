@@ -2652,14 +2652,25 @@ def _compute_correlations(
                 nonan_ = (ni & nj).apply(lambda x: 1 if x else 0)
                 nonan = nonan_.sum()
                 sumij = (piv[ci].fillna(0) * nonan_).sum()
-                obs.append(
-                    dict(
-                        zip(
-                            [*name_i, *name_j, f"nonan_{c}", f"sum_{c}"],
-                            [*ci[1:], *cj[1:], nonan, sumij],
-                        )
+                o = dict(
+                    zip(
+                        [*name_i, *name_j, f"nonan_{c}", f"sum_{c}"],
+                        [*ci[1:], *cj[1:], nonan, sumij],
                     )
                 )
+                if c == "time_latency":
+                    # Measuring the best
+                    winners = (piv[ci].fillna(0) < (piv[cj].fillna(0) * 0.98)).astype(
+                        int
+                    ) * nonan_
+                    o["win_latency"] = winners.sum()
+                elif c == "discrepancies_abs":
+                    # Measuring the best
+                    winners = (piv[ci].fillna(0) < (piv[cj].fillna(0) * 0.75)).astype(
+                        int
+                    ) * nonan_
+                    o["win_disc_abs"] = winners.sum()
+                obs.append(o)
                 key = ci[1:], cj[1:]
                 if key not in nonans:
                     nonans[key] = nonan_
@@ -2672,14 +2683,13 @@ def _compute_correlations(
         for j in range(piv.shape[1]):
             ci = piv.columns[i][1:]
             cj = piv.columns[j][1:]
-            obs.append(
-                dict(
-                    zip(
-                        [*name_i, *name_j, "nonan"],
-                        [*ci, *cj, nonans[ci, cj].sum()],
-                    )
+            o = dict(
+                zip(
+                    [*name_i, *name_j, "nonan"],
+                    [*ci, *cj, nonans[ci, cj].sum()],
                 )
             )
+            obs.append(o)
     res_join = {"nonan": pandas.DataFrame(obs)}
 
     for c in columns:
@@ -2693,14 +2703,26 @@ def _compute_correlations(
                 ci = piv.columns[i]
                 cj = piv.columns[j]
                 sumij = (piv[ci].fillna(0) * nonans[ci[1:], cj[1:]]).sum()
-                obs.append(
-                    dict(
-                        zip(
-                            [*name_i, *name_j, f"sum_{c}"],
-                            [*ci[1:], *cj[1:], sumij],
-                        )
+                o = dict(
+                    zip(
+                        [*name_i, *name_j, f"sum_{c}"],
+                        [*ci[1:], *cj[1:], sumij],
                     )
                 )
+                if c == "time_latency":
+                    # Measuring the best
+                    winners = (piv[ci].fillna(0) < (piv[cj].fillna(0) * 0.98)).astype(
+                        int
+                    ) * nonans[ci[1:], cj[1:]]
+                    o["win_latency"] = winners.sum()
+                elif c == "discrepancies_abs":
+                    # Measuring the best
+                    winners = (piv[ci].fillna(0) < (piv[cj].fillna(0) * 0.75)).astype(
+                        int
+                    ) * nonans[ci[1:], cj[1:]]
+                    o["win_disc_abs"] = winners.sum()
+                print("***", c, o)
+                obs.append(o)
         res_join[f"c_{c}"] = pandas.DataFrame(obs)
 
     index_columns = [*name_i, *name_j]

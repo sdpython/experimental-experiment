@@ -169,11 +169,7 @@ class ModelRunner:
             return True
         if exporter in {"custom"}:
             return True
-        if exporter.startswith("torch-onnx") or exporter in {
-            "torch_script",
-            "dynamo_export",
-            "onnx_dynamo",
-        }:
+        if exporter in {"torch_script", "dynamo_export", "onnx_dynamo"}:
             return optimization in {"default"}
         return False
 
@@ -392,19 +388,6 @@ class ModelRunner:
         """
         assert not fake_tensor, "fake_tensor not implemented."
 
-        if ModelRunner._patched == "torch-onnx":
-            try:
-                import torch_onnx
-
-                torch_onnx.unpatch_torch()
-                ModelRunner._patched = "unpatched"
-            except ImportError:
-                pass
-
-        assert ModelRunner._patched in (None, "unpatched") or (
-            ModelRunner._patched == "torch-onnx" and exporter == "torch-onnx"
-        ), f"Unable to continue as ModelRunner is patched with {ModelRunner._patched!r}."
-
         if exporter == "custom":
             return self._to_onnx_custom(
                 name,
@@ -438,89 +421,6 @@ class ModelRunner:
                 verbose=verbose,
                 target_opset=target_opset,
             )
-
-        if exporter == "torch-onnx":
-            # Fast path for torch-onnx that disables all analysis and logging
-            assert ModelRunner._patched in (
-                None,
-                "torch-onnx",
-            ), f"A new patch should not be applied on {ModelRunner._patched!r}."
-            import torch_onnx
-
-            if ModelRunner._patched is None:
-                torch_onnx.patch_torch(
-                    profile=False,
-                    report=False,
-                    verify=False,
-                    dump_exported_program=False,
-                )
-                ModelRunner._patched = "torch-onnx"
-            onx, stats = self._to_onnx_script(
-                name,
-                dynamic=dynamic,
-                fake_tensor=fake_tensor,
-                no_grad=no_grad,
-                optimization=optimization,
-                verbose=verbose,
-                target_opset=target_opset,
-            )
-            return onx, stats
-
-        if exporter == "torch-onnx-fallback":
-            # torch-onnx with torch.onnx.export fallback enabled
-            assert ModelRunner._patched in (
-                None,
-                "torch-onnx",
-            ), f"A new patch should not be applied on {ModelRunner._patched!r}."
-            import torch_onnx
-
-            if ModelRunner._patched is None:
-                torch_onnx.patch_torch(
-                    profile=False,
-                    report=False,
-                    verify=False,
-                    dump_exported_program=False,
-                    fallback=True,
-                )
-                ModelRunner._patched = "torch-onnx"
-            onx, stats = self._to_onnx_script(
-                name,
-                dynamic=dynamic,
-                fake_tensor=fake_tensor,
-                no_grad=no_grad,
-                optimization=optimization,
-                verbose=verbose,
-                target_opset=target_opset,
-            )
-            return onx, stats
-
-        if exporter == "torch-onnx-detailed":
-            # Detailed run for torch-onnx that enables all analysis and logging
-            assert ModelRunner._patched in (
-                None,
-                "torch-onnx",
-            ), f"A new patch should not be applied on {ModelRunner._patched!r}."
-            import torch_onnx
-
-            if ModelRunner._patched is None:
-                torch_onnx.patch_torch(
-                    profile=True,
-                    report=True,
-                    verify=True,
-                    dump_exported_program=True,
-                    artifacts_dir=os.path.dirname(name),
-                )
-                ModelRunner._patched = "torch-onnx"
-            onx, stats = self._to_onnx_script(
-                name,
-                dynamic=dynamic,
-                fake_tensor=fake_tensor,
-                no_grad=no_grad,
-                optimization=optimization,
-                verbose=verbose,
-                target_opset=target_opset,
-            )
-            return onx, stats
 
         if exporter == "onnx_dynamo":
             return self._to_onnx_dynamo(
