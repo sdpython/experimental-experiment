@@ -157,7 +157,7 @@ def _export(
                 args,
                 dynamic_shapes=dynamic_shapes,
                 pre_dispatch=False,
-                strict=False,  # strict,
+                strict=strict,
             )
         return exported_mod
 
