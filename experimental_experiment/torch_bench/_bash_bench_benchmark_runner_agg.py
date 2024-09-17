@@ -934,6 +934,7 @@ def merge_benchmark_reports(
     output_clean_raw_data: Optional[str] = None,
     baseline: Optional[pandas.DataFrame] = None,
     export_simple: Optional[str] = None,
+    export_correlations: Optional[str] = None,
 ) -> Dict[str, pandas.DataFrame]:
     """
     Merges multiple files produced by bash_benchmark...
@@ -960,6 +961,7 @@ def merge_benchmark_reports(
         be used later to make a comparison
     :param baseline: to compute difference
     :param export_simple: if not None, export simple in this file.
+    :param export_correlations: if not None, export correlations between exporters
     :return: dictionary of dataframes
 
     Every key with a unique value is removed.
@@ -1989,6 +1991,24 @@ def merge_benchmark_reports(
             print(f"[merge_benchmark_reports] writes {export_simple_x!r}")
         piv.to_excel(export_simple_x)
 
+    if export_correlations:
+        models = [c for c in model if c in df.columns]
+        exporter = [c for c in column_keys if c in df.columns]
+        subset = [c for c in ["time_latency", "time_latency_eager"] if c in df.columns]
+        if verbose:
+            print(f"[merge_benchmark_reports] compute correlations models={models}")
+            print(f"[merge_benchmark_reports] compute correlations exporter={exporter}")
+            print(f"[merge_benchmark_reports] compute correlations subset={subset}")
+        corrs = _compute_correlations(
+            df, model_column=models, exporter_column=exporter, columns=subset
+        )
+        with pandas.ExcelWriter(export_correlations) as writer:
+            for k, ev in corrs.items():
+                ev.to_excel(
+                    writer,
+                    sheet_name=k,
+                )
+
     if excel_output:
         if verbose:
             print(f"[merge_benchmark_reports] apply Excel style with {excel_output!r}")
@@ -2558,3 +2578,54 @@ def _select_model_metrics(
                     df = df.stack(c, dropna=np.nan)
     df = df.sort_index(axis=1)
     return df
+
+
+def _compute_correlations(
+    df: pandas.DataFrame,
+    model_column: List[str],
+    exporter_column: List[str],
+    columns: List[str],
+) -> Dict[str, pandas.DataFrame]:
+    """
+    Computes correlations metrics.
+
+    :param df: raw data
+    :param model_column: what defines a model
+    :param exporter_column: what defines an exporter
+    :param columns: columns to look into
+    :return: dictionary of dataframes
+    """
+    df = df.copy()
+    df["_runs_"] = 1
+    assert "_runs_" not in set(
+        [*model_column, *exporter_column, *columns]
+    ), f"Name '_runs_' is already taken in {sorted(df.columns)}"
+
+    unique_exporter = df[[*exporter_column, "_runs_"]]
+    n_runs = (
+        unique_exporter.groupby(exporter_column, as_index=False).sum().reset_index(drop=True)
+    )
+    res = {"RUNS": n_runs}
+
+    name_i = [f"{c}_i" for c in exporter_column]
+    name_j = [f"{c}_j" for c in exporter_column]
+
+    for c in columns:
+        keep = [*model_column, *exporter_column, c]
+        sub = df[keep]
+        piv = sub.pivot(index=model_column, columns=exporter_column, values=[c])
+
+        obs = []
+        for i in range(piv.shape[1]):
+            for j in range(piv.shape[1]):
+                ci = piv.columns[i]
+                cj = piv.columns[j]
+                ni = ~piv[ci].isna()
+                nj = ~piv[cj].isna()
+                nonan = (ni & nj).apply(lambda x: 1 if x else 0).sum()
+                sumij = (piv[ci].fillna(0) * nonan).sum()
+                obs.append(
+                    dict(zip([*name_i, *name_j, "nonan", "sum"], [*ci[1:], *cj[1:], nonan, sumij]))
+                )
+        res[f"{c}"] = pandas.DataFrame(obs)
+    return res

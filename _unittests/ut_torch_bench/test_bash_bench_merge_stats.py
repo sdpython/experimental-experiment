@@ -21,6 +21,7 @@ class TestBashBenchMergeStats(ExtTestCase):
             data,
             excel_output="test_merge_stats0.xlsx",
             export_simple="test_merge_stats0_simple.csv",
+            export_correlations="test_merge_stats0_corrs.xlsx",
         )
         self.assertIsInstance(df, dict)
         self.assertIn("status", set(df))
