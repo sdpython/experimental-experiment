@@ -807,15 +807,19 @@ def set_shape_type_op_any(self: "GraphBuilder", node: NodeProto):  # noqa: F821
         set_type_shape_binary_op(self, node.output[0], *node.input, cmp_op=True)
     elif node.op_type in self._op_type_element_wise_types:
         set_type_shape_binary_op(self, node.output[0], *node.input)
-    elif node.op_type in {"CastLike", "DequantizeLinear", "DynamicQuantizeLinear"}:
+    elif node.op_type in {"DequantizeLinear", "DynamicQuantizeLinear"}:
         raise AssertionError(
             f"set_shape_type_op_any not implemented for "
             f"{node.op_type!r}{self.get_debug_msg()}"
         )
-    elif node.op_type in self._op_type_unary_like:
-        set_type_shape_unary_op(self, node.output[0], node.input[0])
+    elif node.op_type in {"CastLike"}:
+        set_type_shape_binary_op(
+            self, node.output[0], node.input[0], itype=self.get_type(node.input[1])
+        )
     elif node.op_type in {"Pow"}:
         set_type_shape_binary_op(self, node.output[0], *node.input)
+    elif node.op_type in self._op_type_unary_like:
+        set_type_shape_unary_op(self, node.output[0], node.input[0])
 
 
 def set_type_shape_fused_matmul(self: "GraphBuilder", node: NodeProto):  # noqa: F821
