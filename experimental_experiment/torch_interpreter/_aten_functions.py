@@ -1553,7 +1553,7 @@ def aten_embedding(
     norm_type: float = 2.0,
     scale_grad_by_freq: bool = False,
     sparse: bool = False,
-    name:str="embedding"
+    name: str = "embedding",
 ) -> T:
     """
     embedding
@@ -3816,6 +3816,7 @@ def aten_mul(
         set_type_shape_binary_op(g, res, x, y)
     return res
 
+
 def aten_imul(
     g: GraphBuilder,
     sts: Optional[Dict[str, Any]],
@@ -3825,7 +3826,7 @@ def aten_imul(
     name="imul",
 ) -> T:
     "imul"
-    return aten_mul(g,sts,outputs,x,g.op.CastLike(y,x,name=name),name=name)
+    return aten_mul(g, sts, outputs, x, g.op.CastLike(y, x, name=name), name=name)
 
 
 def aten_mul_Scalar(
@@ -5084,7 +5085,9 @@ def _causal_attention_mask(
         g.set_type(dkey, g.get_type(shape_key))
         size = g.op.Concat(dquery, dkey, axis=0)
         g.set_type(size, g.get_type(dkey))
-        attn_mask = g.op.ConstantOfShape(size, value=from_array(np.array([1], dtype=dtype)), name=name)
+        attn_mask = g.op.ConstantOfShape(
+            size, value=from_array(np.array([1], dtype=dtype)), name=name
+        )
         g.set_type(attn_mask, itype)
 
     tri_attn_mask = g.op.Trilu(attn_mask, upper=0, name=name)
@@ -5187,7 +5190,7 @@ def aten_scaled_dot_product_attention(
             name=name,
         )
         set_type_shape_unary_op(g, _attn_mask, attn_mask, itype=itype)
-        attn_mask=_attn_mask
+        attn_mask = _attn_mask
         mul_qk_add = g.op.Add(mul_qk, attn_mask, name=name)
         set_type_shape_binary_op(g, mul_qk_add, mul_qk, attn_mask)
     else:
@@ -5198,12 +5201,11 @@ def aten_scaled_dot_product_attention(
     set_type_shape_unary_op(g, attn_weight, mul_qk_add)
 
     if dropout_p != 0:
-        _attn_weight = g.op.Dropout(attn_weight, np.array(dropout_p, dtype=dtype), name=name)[
-            0
-        ]
+        _attn_weight = g.op.Dropout(
+            attn_weight, np.array(dropout_p, dtype=dtype), name=name
+        )[0]
         set_type_shape_unary_op(g, _attn_weight, attn_weight)
         attn_weight = _attn_weight
-
 
     res = g.op.MatMul(attn_weight, value, name=name, outputs=outputs)
     if not sts:
