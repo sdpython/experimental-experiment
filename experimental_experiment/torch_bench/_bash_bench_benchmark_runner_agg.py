@@ -2730,5 +2730,13 @@ def _compute_correlations(
         if verbose:
             print(f"[_compute_correlations] joins {c!r}")
         joined = joined.join(res_join[f"c_{c}"].set_index(index_columns), how="outer")
+    if "win_latency" in joined.columns:
+        res["LATENCY"] = pandas.pivot_table(
+            joined, index=name_i, columns=name_j, values="win_latency"
+        )
+    if "win_disc_abs" in joined.columns:
+        res["DISC_ABS"] = pandas.pivot_table(
+            joined, index=name_i, columns=name_j, values="win_disc_abs"
+        )
     res["JOINED"] = joined.reset_index(drop=False)
     return res
