@@ -1924,7 +1924,7 @@ def aten__enter_autocast(
         f"The function should not take any tensors as input but types are "
         f"{[type(_) for _ in args]}: {args}{g.get_debug_msg()}"
     )
-    return g.make_node("Constant", [], value_floats=[0], name="_enter_autocast")
+    return g.make_node("Constant", [], value_ints=[0], name="_enter_autocast")
 
 
 def aten_eq(

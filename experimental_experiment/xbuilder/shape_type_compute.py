@@ -553,6 +553,28 @@ def _set_shape_type_op_any_maxpool(self: "GraphBuilder", node: NodeProto):  # no
         self.set_type(node.output[1], TensorProto.INT64)
 
 
+def _set_shape_type_op_any_gather(
+    self: "GraphBuilder",  # noqa: F821
+    node: NodeProto,
+):
+    if self.has_type(node.input[0]):
+        self.set_type(node.output[0], self.get_type(node.input[0]))
+    if self.has_shape(node.input[0]) and self.has_shape(node.input[1]):
+        sh1 = self.get_shape(node.input[0])
+        sh2 = self.get_shape(node.input[1])
+        att = self.get_attribute(node, "axis", exc=False)
+        axis = 0 if att is None else att.i
+        if len(sh1) == len(sh2) == 2 and axis == 0:
+            new_shape = (*sh2, sh1[-1])
+            self.set_shape(node.output[0], new_shape)
+        else:
+            self.set_rank(node.output[0], len(sh1) + len(sh2) - 1)
+    elif self.has_rank(node.input[0]) and self.has_rank(node.input[1]):
+        rk1 = self.get_rank(node.input[0])
+        rk2 = self.get_rank(node.input[1])
+        self.set_rank(node.output[0], rk1 + rk2 - 1)
+
+
 def _set_shape_type_op_any_gather_elements(
     self: "GraphBuilder",  # noqa: F821
     node: NodeProto,
@@ -780,6 +802,7 @@ _set_shape_type_op_any_known = {
     "Cast": _set_shape_type_op_any_cast,
     "Concat": _set_shape_type_op_any_concat,
     "Expand": _set_shape_type_op_any_reshape,
+    "Gather": _set_shape_type_op_any_gather,
     "GatherElements": _set_shape_type_op_any_gather_elements,
     "Gemm": _set_shape_type_op_any_gemm,
     "IsInf": lambda *args: _set_shape_type_op_any_unary(*args, itype=TensorProto.BOOL),
