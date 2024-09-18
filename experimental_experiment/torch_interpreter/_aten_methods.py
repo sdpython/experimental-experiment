@@ -314,6 +314,7 @@ def aten_meth_transpose(
     dim1: int,
 ) -> T:
     "transpose"
+    assert g.has_rank(input_name), f"{input_name!r} must have a rank{g.get_debug_msg}"
     perm = list(range(g.rank(input_name)))
     assert max(dim0, dim1) < len(perm), (
         f"aten_meth_transpose: unexpected perm={perm}, dim0={dim0}, dim1={dim1}, "

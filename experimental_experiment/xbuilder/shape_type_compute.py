@@ -547,7 +547,8 @@ def _set_shape_type_op_any_castlike(
 
 
 def _set_shape_type_op_any_maxpool(self: "GraphBuilder", node: NodeProto):  # noqa: F821
-    self.set_type(node.output[0], self.get_type(node.input[0]))
+    if self.has_type(node.input[0]):
+        self.set_type(node.output[0], self.get_type(node.input[0]))
     if len(node.output) > 1:
         self.set_type(node.output[1], TensorProto.INT64)
 
@@ -556,7 +557,8 @@ def _set_shape_type_op_any_gather_elements(
     self: "GraphBuilder",  # noqa: F821
     node: NodeProto,
 ):
-    self.set_type(node.output[0], self.get_type(node.input[0]))
+    if self.has_type(node.input[0]):
+        self.set_type(node.output[0], self.get_type(node.input[0]))
     if self.has_shape(node.input[0]) and self.has_shape(node.input[1]):
         shape = self.get_shape(node.input[0])
         att_axis = self.get_attribute(node, "axis", exc=False)
@@ -570,7 +572,8 @@ def _set_shape_type_op_any_gather_elements(
 
 
 def _set_shape_type_op_any_concat(self: "GraphBuilder", node: NodeProto):  # noqa: F821
-    self.set_type(node.output[0], self.get_type(node.input[0]))
+    if self.has_type(node.input[0]):
+        self.set_type(node.output[0], self.get_type(node.input[0]))
     if all(self.has_shape(s) for s in node.input):
         axis = self.get_attribute(node, "axis").i
         shapes = [self.get_shape(i) for i in node.input]

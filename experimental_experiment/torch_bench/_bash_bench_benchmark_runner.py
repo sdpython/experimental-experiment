@@ -920,7 +920,7 @@ class BenchmarkRunner:
         stats["flag_training"] = self.training
         stats["exporter"] = exporter
         stats["input_size"] = self.obj_size(model_runner.inputs)
-        stats["_index"] = f"{model_name}-{exporter}"
+        stats["_index"] = f"{model_name}-{exporter}-{optimization}-{rtopt}"
         stats["date_start"] = f"{datetime.now():%Y-%m-%d}"
         stats["opt_patterns"] = optimization
         stats["rtopt"] = rtopt
@@ -1102,7 +1102,7 @@ class BenchmarkRunner:
             folder,
             (
                 f"{model_name}-{exporter}-{self.device.replace(':', '')}"
-                f"-{self.dtype or ''}{sopt}"
+                f"-{self.dtype or ''}{sopt}-{1 if rtopt in (1, True, '1', 'True') else 0}"
             ),
         )
         if pfilename and not os.path.exists(pfilename):

@@ -112,7 +112,7 @@ def export_dynamo(filename, model, *args):
     with contextlib.redirect_stdout(io.StringIO()):
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            export_output = torch.onnx.dynamo_export(model, *args)
+            export_output = torch.onnx.export(model, *args, dynamo=True)
             model = export_output.model_proto
     try:
         new_model = optimize_model_proto_oxs(model)
