@@ -63,6 +63,41 @@ def main(args=None):
         default="",
         help="if not empty, gives insights on model running for two exporters",
     )
+    parser.add_argument(
+        "--broken",
+        default=0,
+        help="if true, creates a secondary file per exporter with all broken models",
+    )
+    parser.add_argument(
+        "--disc",
+        default=1e9,
+        help="if < 10, creates a secondary file per exporter with all "
+        "models and wrong discrepancy",
+    )
+    parser.add_argument(
+        "--slow",
+        default=1e9,
+        help="if < 10, creates a secondary file per exporter with all "
+        "models whose speedup is lower than this",
+    )
+    parser.add_argument(
+        "--fast",
+        default=1e9,
+        help="if < 10, creates a secondary file per exporter with all "
+        "models whose speedup is higher than this",
+    )
+    parser.add_argument(
+        "--slow_script",
+        default=1e9,
+        help="if < 10, creates a secondary file per exporter with all "
+        "models whose speedup is lower than torch_script",
+    )
+    parser.add_argument(
+        "--fast_script",
+        default=1e9,
+        help="if < 10, creates a secondary file per exporter with all "
+        "models whose speedup is higher than torch_script",
+    )
     parser.add_argument("--verbose", default=0, help="verbosity level")
     res = parser.parse_args(args=args)
 
@@ -92,6 +127,12 @@ def main(args=None):
         exc=res.quiet not in (1, "1", True, "True"),
         export_simple=res.export_simple,
         export_correlations=res.export_correlations,
+        broken=res.broken in (1, "1", True, "True"),
+        disc=float(res.disc),
+        slow=float(res.slow),
+        fast=float(res.fast),
+        slow_script=float(res.slow_script),
+        fast_script=float(res.fast_script),
         **kwargs,
     )
 

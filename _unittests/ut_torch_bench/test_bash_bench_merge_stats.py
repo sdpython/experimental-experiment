@@ -253,6 +253,46 @@ class TestBashBenchMergeStats(ExtTestCase):
         self.assertIn("MODELS_diff", dfs)
         self.assertIn("SUMMARY_diff", dfs)
 
+    @ignore_warnings((FutureWarning,))
+    def test_merge_stats_broken(self):
+        data = os.path.join(
+            os.path.dirname(__file__), "data", "huggingface_benchmark_v100_custom.csv"
+        )
+        dfs = merge_benchmark_reports(
+            data,
+            excel_output="test_merge_stats_broken.xlsx",
+            broken=True,
+        )
+        self.assertNotEmpty(dfs)
+
+    @ignore_warnings((FutureWarning,))
+    def test_merge_stats_slow(self):
+        data = os.path.join(
+            os.path.dirname(__file__), "data", "huggingface_benchmark_v100_custom.csv"
+        )
+        dfs = merge_benchmark_reports(
+            data,
+            excel_output="test_merge_stats_low.xlsx",
+            slow=0.9,
+        )
+        self.assertNotEmpty(dfs)
+
+    @ignore_warnings((FutureWarning,))
+    def test_merge_stats_subset(self):
+        data = os.path.join(
+            os.path.dirname(__file__), "data", "huggingface_benchmark_v100_custom.csv"
+        )
+        dfs = merge_benchmark_reports(
+            data,
+            excel_output="test_merge_stats_subset.xlsx",
+            slow=0.9,
+            fast=1.1,
+            slow_script=0.9,
+            fast_script=1.1,
+            disc=0.1,
+        )
+        self.assertNotEmpty(dfs)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
