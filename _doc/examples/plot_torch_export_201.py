@@ -248,7 +248,7 @@ def export_dynamo(filename, model, *args):
     with contextlib.redirect_stdout(io.StringIO()):
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            export_output = torch.onnx.export(model, *args, dynamo=True)
+            export_output = torch.onnx.export(model, args, dynamo=True)
             export_output.save(filename)
 
 
@@ -256,7 +256,7 @@ def export_dynopt(filename, model, *args):
     with contextlib.redirect_stdout(io.StringIO()):
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            export_output = torch.onnx.export(model, *args, dynamo=True)
+            export_output = torch.onnx.export(model, args, dynamo=True)
             model_onnx = export_output.model_proto
 
             from experimental_experiment.convert.convert_helper import (
