@@ -20,22 +20,23 @@ from experimental_experiment.args import get_parsed_args
 
 script_args = get_parsed_args(
     "plot_custom_backend_llama",
-    config=("medium", "large or medium depending, large means closer to the real model"),
-    num_hidden_layers=(1, "number of hidden layers"),
     with_mask=(0, "tries with a mask as a secondary input"),
-    optim=("", "Optimization to apply, empty string for all"),
+    optim=("default", "Optimization to apply, empty string for all"),
     description=__doc__,
     expose="config,num_hidden_layers,with_mask,optim",
 )
 
-print(f"config={script_args.config!r}")
-print(f"num_hidden_layers={script_args.num_hidden_layers!r}")
+assert script_args.optim, "optim must be specified."
+assert script_args.with_mask in (0, "0"), "with_mask is not implemented."
+
+
 print(f"with_mask={script_args.with_mask!r}")
 print(f"optim={script_args.optim!r}")
 
 #################################
 # Imports.
 
+import os
 import time
 import numpy as np
 import pandas
@@ -57,67 +58,73 @@ print(f"device: {machine.get('device_name', '?')}")
 # The dummy model
 # ===============
 
-
-def ids_tensor(shape, vocab_size):
-    total_dims = 1
-    for dim in shape:
-        total_dims *= dim
-
-    values = []
-    for _ in range(total_dims):
-        values.append(np.random.randint(0, vocab_size - 1))
-
-    return torch.tensor(data=values, dtype=torch.long).view(shape).contiguous()
-
-
-################################
-# The size of the input.
-if script_args.config == "large":
-    batch, seq, vocab_size = 2, 1024, 32000
-    intermediate_size = 11008
-else:
-    batch, seq, vocab_size = 2, 1024, 1024
-    intermediate_size = 1024
-
-################################
-# The configuration of the model.
-
-config = LlamaConfig(
-    hidden_size=4096,
-    num_hidden_layers=int(script_args.num_hidden_layers),
-    vocab_size=vocab_size,
-    intermediate_size=intermediate_size,
-    max_position_embeddings=2048,
-    num_attention_heads=32,
-)
-config._attn_implementation = "eager"
-
 ######################################
 # The number of time we run the model to measure
 # the inference.
-warmup = 10 if script_args.config == "medium" else 5
-N = 50 if script_args.config == "medium" else 25
+warmup = 3
+N = 10
 
 ###########################################
-# Let's create the model with dummy inputs.
-print("creates the model")
-model = LlamaModel(config)
+# Let's create the model.
 
-inputs = (ids_tensor([batch, seq], vocab_size),)
-if script_args.with_mask in (1, "1"):
-    input_mask = torch.tril(torch.ones(batch, seq, dtype=torch.float32))
-    inputs = (*inputs, input_mask)
+# see https://huggingface.co/docs/transformers/en/model_doc/code_llama
+if os.path.exists("CodeLlama-7b-model"):
+    print("load the model")
+    from transformers import AutoTokenizer, AutoModelForCausalLM
+
+    tokenizer = AutoTokenizer.from_pretrained("./CodeLlama-7b-tokenizer")
+    model = AutoModelForCausalLM.from_pretrained("./CodeLlama-7b-model")
+else:
+    print("retrieve the model")
+    from transformers import AutoTokenizer, AutoModelForCausalLM
+
+    tokenizer = AutoTokenizer.from_pretrained("codellama/CodeLlama-7b-hf")
+    tokenizer.save_pretrained("CodeLlama-7b-tokenizer")
+    model = AutoModelForCausalLM.from_pretrained("codellama/CodeLlama-7b-hf")
+    model.save_pretrained("CodeLlama-7b-model")
+
+
+##########################################
+# Small example on how to generate an answer.
 
 processor = "cuda" if has_cuda else "cpu"
+
+PROMPT = '''def remove_non_ascii(s: str) -> str:
+    """ <FILL_ME> """
+    return result
+'''
+
+with torch.no_grad():
+    print("tokenize the input")
+    input_ids = tokenizer(PROMPT, return_tensors="pt")["input_ids"]
+    input_ids = input_ids.to(processor)
+    print("run the model")
+    model = model.to(processor)
+    generated_ids = model.generate(input_ids, max_new_tokens=128).to(processor)
+    print("interpret the answer")
+    filling = tokenizer.batch_decode(
+        generated_ids[:, input_ids.shape[1] :], skip_special_tokens=True
+    )[0]
+    print("---")
+    print(PROMPT.replace("<FILL_ME>", filling))
+    print("done")
+
+
+# We use those inputs to benchmark the models.
+inputs = (input_ids,)
+
+# Just to make sure everything is ok.
+
 print(f"moving model and inputs to processor={processor!r}")
 model = model.to(processor)
 inputs = tuple(i.to(processor) for i in inputs)
-
 
 ##########################################
 # Measure of eager mode
 # =====================
 
+
+print("------------------------------------")
 times = []
 
 with torch.no_grad():
@@ -170,11 +177,7 @@ with torch.no_grad():
 # should be handled in the same process.
 # Results may be very different with a different chip.
 
-optimization = (
-    [script_args.optim]
-    if script_args.optim
-    else ["default", "default+onnxruntime", "default+onnxruntime+experimental"]
-)
+optimization = [script_args.optim]
 
 with torch.no_grad():
 
