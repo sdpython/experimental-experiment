@@ -595,6 +595,9 @@ def onnx_custom_backend(
     assert dump_patterns is None or isinstance(
         dump_patterns, str
     ), f"Unexpected type {type(dump_patterns)} for dump_patterns."
+    assert storage is None or isinstance(
+        storage, dict
+    ), f"Unexpected type {type(storage)} for storage"
 
     # determines the devices
 

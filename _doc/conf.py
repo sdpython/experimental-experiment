@@ -140,6 +140,7 @@ epkg_dictionary = {
     "timm": "https://github.com/huggingface/pytorch-image-models",
     "torch": "https://pytorch.org/docs/stable/torch.html",
     "torchbench": "https://github.com/pytorch/benchmark",
+    "torch.compile": "https://pytorch.org/tutorials/intermediate/torch_compile_tutorial.html",
     "torch.compiler": "https://pytorch.org/docs/stable/torch.compiler.html",
     "torch.export.export": "https://pytorch.org/docs/stable/export.html#torch.export.export",
     "torch.onnx": "https://pytorch.org/docs/stable/onnx.html",

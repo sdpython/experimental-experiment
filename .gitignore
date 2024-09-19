@@ -22,6 +22,8 @@ _tools/bin**
 nohup.out
 coverage.html/*
 temp*.txt*
+dump*.txt*
+dump*.onnx*
 tt_*.txt
 tt_*.py
 tt.py

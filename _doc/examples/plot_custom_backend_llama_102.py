@@ -27,8 +27,9 @@ script_args = get_parsed_args(
     expose="config,num_hidden_layers,with_mask",
 )
 
-print("config={script_args.config!r}")
-print("num_hidden_layers={script_args.num_hidden_layers!r}")
+print(f"config={script_args.config!r}")
+print(f"num_hidden_layers={script_args.num_hidden_layers!r}")
+print(f"with_mask={script_args.with_mask!r}")
 
 #################################
 # Imports.
@@ -36,6 +37,7 @@ print("num_hidden_layers={script_args.num_hidden_layers!r}")
 import time
 import numpy as np
 import pandas
+from tqdm import tqdm
 import torch
 from transformers import LlamaConfig
 from transformers.models.llama.modeling_llama import LlamaModel
@@ -45,6 +47,8 @@ from experimental_experiment.torch_dynamo import onnx_custom_backend
 ########################################
 # The dummy model
 # ===============
+
+has_cuda = torch.cuda.is_available()
 
 
 def ids_tensor(shape, vocab_size):
@@ -84,17 +88,22 @@ config._attn_implementation = "eager"
 ######################################
 # The number of time we run the model to measure
 # the inference.
-N = 10
+warmup = 10 if config == "medium" else 5
+N = 50 if config == "medium" else 25
 
 ###########################################
 # Let's create the model with dummy inputs.
 model = LlamaModel(config)
 
-input_ids = ids_tensor([batch, seq], vocab_size)
-inputs = (input_ids,)
+inputs = (ids_tensor([batch, seq], vocab_size),)
 if script_args.with_mask in (1, "1"):
     input_mask = torch.tril(torch.ones(batch, seq, dtype=torch.float32))
-    inputs = (input_ids, input_mask)
+    inputs = (*inputs, input_mask)
+
+processor = "cuda" if has_cuda else "cpu"
+print(f"moving model and inputs to processor={processor!r}")
+model = model.to(processor)
+inputs = tuple(i.to(processor) for i in inputs)
 
 
 ##########################################
@@ -107,18 +116,20 @@ with torch.no_grad():
 
     # warmup
     print("warmup eager")
-    for _ in range(3):
+    for _ in tqdm(range(warmup)):
         # model(input_ids, input_mask)
-        model(input_ids)
+        model(*inputs)
+        torch.cuda.synchronize()
 
     # repeat
     print("repeat eager")
     begin = time.perf_counter()
-    for _ in range(N):
-        # model(input_ids, input_mask)
-        model(input_ids)
+    for _ in tqdm(range(N)):
+        model(*inputs)
+        torch.cuda.synchronize()
     d = (time.perf_counter() - begin) / N
-    times.append(dict(optium="eager", avg_time=d, N=N))
+    baseline = d
+    times.append(dict(optium="eager", processor=processor, avg_time=d, warmup=warmup, N=N))
     print("avg time eager", d)
 
 ############################################
@@ -131,30 +142,43 @@ with torch.no_grad():
 # - **default+onnxruntime**: the onnx model is optimized with fused kernels
 #   implemented by onnxruntime
 # - **default+onnxruntime+experimental**: the onnx model is optimized with fused kernels
-#   implemented by onnxruntime and also custom kernels
+#   implemented by onnxruntime and also custom kernels, this does not work on
+#   CPU.
+#
+#   Some links:
+#
+#   * :class:`experimental_experiment.xbuilder.OptimizationOptions`:
+#     that class defines the optimizations to apply after the model
+#     is converted to onnx,
+#   * :func:`experimental_experiment.torch_dynamo.onnx_custom_backend`:
+#     that function implements the custom backend based on :epkg:`onnxruntime`,
+#     it converts the model into ONNX, optimizes and runs it,
+#     it does not support :epkg:`graph break`,
+#     it does not work well with dynamic shapes yet.
 
 with torch.no_grad():
 
     for optim in ["default", "default+onnxruntime", "default+onnxruntime+experimental"]:
         print("----------------------")
         print(f"optim={optim}")
+        storage = {}
+
         options = OptimizationOptions(
             constant_folding=True,
             patterns=None if optim == "" else optim,
             verbose=0,
-            processor="CUDA",
+            processor=processor.upper(),
         )
 
-        custom_custom_backend = (  # noqa: E731
-            lambda *args, optim=optim, options=options, **kwargs: onnx_custom_backend(
-                *args,
-                target_opset=18,
-                verbose=0,
-                options=options,
-                optimize=optim != "",
-                dump_prefix=f"dump_onx_llama_{optim.replace('+', '_')}",
-                **kwargs,
-            )
+        custom_custom_backend = lambda *args, optim=optim, options=options, storage=storage, **kwargs: onnx_custom_backend(  # noqa: E731, E501
+            *args,
+            target_opset=18,
+            verbose=0,
+            options=options,
+            optimize=optim != "",
+            storage=storage,
+            dump_prefix=f"dump_onx_llama_{optim.replace('+', '_')}",
+            **kwargs,
         )
 
         compiled_model = torch.compile(
@@ -163,23 +187,43 @@ with torch.no_grad():
 
         # warmup
         print("warmup compiled model")
-        for _ in range(3):
-            # compiled_model(input_ids, input_mask)
-            compiled_model(input_ids)
+        for _ in tqdm(range(warmup)):
+            compiled_model(*inputs)
+            torch.cuda.synchronize()
 
         # repeat
         print("repeat compiled_model")
         begin = time.perf_counter()
-        for _ in range(N):
-            # compiled_model(input_ids, input_mask)
-            compiled_model(input_ids)
+        for _ in tqdm(range(N)):
+            compiled_model(*inputs)
+            torch.cuda.synchronize()
         d = (time.perf_counter() - begin) / N
-        times.append(dict(optium=optim, avg_time=d, N=N))
+
+        # let's measure the number of custom ops
+        n_custom_ops = None
+        if storage is not None:
+            onnx_model = storage["instance"][0]["onnx"]
+            n_custom_ops = len([node for node in onnx_model.graph.node if node.domain != ""])
+
+        times.append(
+            dict(
+                optium=optim,
+                processor=processor,
+                avg_time=d,
+                warmup=warmup,
+                N=N,
+                n_custom_ops=n_custom_ops,
+                speedup=baseline / d,
+            )
+        )
         print(f"avg time custom backend with optimization={optim!r}", d)
 
 ###############################################
 # Final results
 # =============
+#
+# avg_time, lower is better,
+# speedup compare to eager mode, higher is better.
 
 df = pandas.DataFrame(times)
 print(df)
