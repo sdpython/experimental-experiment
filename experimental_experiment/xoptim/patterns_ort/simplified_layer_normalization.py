@@ -98,7 +98,7 @@ class SimplifiedLayerNormalizationPattern(PatternOptimization):
             g.get_shape(node_reduce.input[0]) if g.has_shape(node_reduce.input[0]) else None
         )
         axis = g.get_constant_or_attribute(node_reduce, "axes", input_index=1)[0]
-        assert axis < len(
+        assert shape is None or axis < len(
             shape
         ), f"axis={axis} and shape={shape} don't match for {node_reduce.input[0]!r}"
         stash_type = g.get_type(node_reduce.input[0])

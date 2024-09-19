@@ -21,6 +21,7 @@ class TestBashBenchMergeStats(ExtTestCase):
             data,
             excel_output="test_merge_stats0.xlsx",
             export_simple="test_merge_stats0_simple.csv",
+            export_correlations="test_merge_stats0_corrs.xlsx",
         )
         self.assertIsInstance(df, dict)
         self.assertIn("status", set(df))
@@ -167,8 +168,8 @@ class TestBashBenchMergeStats(ExtTestCase):
         summary = df["SUMMARY"]
         self.assertNotIn("_dummy_", summary.columns)
         values = summary.values
-        self.assertEqual(0.9520435772282563, values[12, 1])
-        self.assertEqual("x", values[12, 4])
+        self.assertEqual(0.9520435772282563, values[13, 1])
+        self.assertEqual("x", values[13, 4])
         metrics = set(summary["METRIC"])
         self.assertIn("number of running models", metrics)
         self.assertIn("export number", metrics)
@@ -251,6 +252,46 @@ class TestBashBenchMergeStats(ExtTestCase):
         self.assertIn("SUMMARY2_diff", dfs)
         self.assertIn("MODELS_diff", dfs)
         self.assertIn("SUMMARY_diff", dfs)
+
+    @ignore_warnings((FutureWarning,))
+    def test_merge_stats_broken(self):
+        data = os.path.join(
+            os.path.dirname(__file__), "data", "huggingface_benchmark_v100_custom.csv"
+        )
+        dfs = merge_benchmark_reports(
+            data,
+            excel_output="test_merge_stats_broken.xlsx",
+            broken=True,
+        )
+        self.assertNotEmpty(dfs)
+
+    @ignore_warnings((FutureWarning,))
+    def test_merge_stats_slow(self):
+        data = os.path.join(
+            os.path.dirname(__file__), "data", "huggingface_benchmark_v100_custom.csv"
+        )
+        dfs = merge_benchmark_reports(
+            data,
+            excel_output="test_merge_stats_low.xlsx",
+            slow=0.9,
+        )
+        self.assertNotEmpty(dfs)
+
+    @ignore_warnings((FutureWarning,))
+    def test_merge_stats_subset(self):
+        data = os.path.join(
+            os.path.dirname(__file__), "data", "huggingface_benchmark_v100_custom.csv"
+        )
+        dfs = merge_benchmark_reports(
+            data,
+            excel_output="test_merge_stats_subset.xlsx",
+            slow=0.9,
+            fast=1.1,
+            slow_script=0.9,
+            fast_script=1.1,
+            disc=0.1,
+        )
+        self.assertNotEmpty(dfs)
 
 
 if __name__ == "__main__":

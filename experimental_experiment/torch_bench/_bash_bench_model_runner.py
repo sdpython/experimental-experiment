@@ -164,16 +164,12 @@ class ModelRunner:
         cls, exporter: str, optimization: Optional[str] = None
     ) -> bool:
         """Defines the allowed configurations."""
-        if not optimization:
+        if not optimization or optimization == "none":
             # always possible
             return True
         if exporter in {"custom"}:
             return True
-        if exporter.startswith("torch-onnx") or exporter in {
-            "torch_script",
-            "dynamo_export",
-            "onnx_dynamo",
-        }:
+        if exporter in {"torch_script", "dynamo_export", "onnx_dynamo"}:
             return optimization in {"default"}
         return False
 
@@ -392,19 +388,6 @@ class ModelRunner:
         """
         assert not fake_tensor, "fake_tensor not implemented."
 
-        if ModelRunner._patched == "torch-onnx":
-            try:
-                import torch_onnx
-
-                torch_onnx.unpatch_torch()
-                ModelRunner._patched = "unpatched"
-            except ImportError:
-                pass
-
-        assert ModelRunner._patched in (None, "unpatched") or (
-            ModelRunner._patched == "torch-onnx" and exporter == "torch-onnx"
-        ), f"Unable to continue as ModelRunner is patched with {ModelRunner._patched!r}."
-
         if exporter == "custom":
             return self._to_onnx_custom(
                 name,
@@ -438,89 +421,6 @@ class ModelRunner:
                 verbose=verbose,
                 target_opset=target_opset,
             )
-
-        if exporter == "torch-onnx":
-            # Fast path for torch-onnx that disables all analysis and logging
-            assert ModelRunner._patched in (
-                None,
-                "torch-onnx",
-            ), f"A new patch should not be applied on {ModelRunner._patched!r}."
-            import torch_onnx
-
-            if ModelRunner._patched is None:
-                torch_onnx.patch_torch(
-                    profile=False,
-                    report=False,
-                    verify=False,
-                    dump_exported_program=False,
-                )
-                ModelRunner._patched = "torch-onnx"
-            onx, stats = self._to_onnx_script(
-                name,
-                dynamic=dynamic,
-                fake_tensor=fake_tensor,
-                no_grad=no_grad,
-                optimization=optimization,
-                verbose=verbose,
-                target_opset=target_opset,
-            )
-            return onx, stats
-
-        if exporter == "torch-onnx-fallback":
-            # torch-onnx with torch.onnx.export fallback enabled
-            assert ModelRunner._patched in (
-                None,
-                "torch-onnx",
-            ), f"A new patch should not be applied on {ModelRunner._patched!r}."
-            import torch_onnx
-
-            if ModelRunner._patched is None:
-                torch_onnx.patch_torch(
-                    profile=False,
-                    report=False,
-                    verify=False,
-                    dump_exported_program=False,
-                    fallback=True,
-                )
-                ModelRunner._patched = "torch-onnx"
-            onx, stats = self._to_onnx_script(
-                name,
-                dynamic=dynamic,
-                fake_tensor=fake_tensor,
-                no_grad=no_grad,
-                optimization=optimization,
-                verbose=verbose,
-                target_opset=target_opset,
-            )
-            return onx, stats
-
-        if exporter == "torch-onnx-detailed":
-            # Detailed run for torch-onnx that enables all analysis and logging
-            assert ModelRunner._patched in (
-                None,
-                "torch-onnx",
-            ), f"A new patch should not be applied on {ModelRunner._patched!r}."
-            import torch_onnx
-
-            if ModelRunner._patched is None:
-                torch_onnx.patch_torch(
-                    profile=True,
-                    report=True,
-                    verify=True,
-                    dump_exported_program=True,
-                    artifacts_dir=os.path.dirname(name),
-                )
-                ModelRunner._patched = "torch-onnx"
-            onx, stats = self._to_onnx_script(
-                name,
-                dynamic=dynamic,
-                fake_tensor=fake_tensor,
-                no_grad=no_grad,
-                optimization=optimization,
-                verbose=verbose,
-                target_opset=target_opset,
-            )
-            return onx, stats
 
         if exporter == "onnx_dynamo":
             return self._to_onnx_dynamo(
@@ -642,7 +542,7 @@ class ModelRunner:
         from ..torch_interpreter import to_onnx
         from ..xbuilder import OptimizationOptions
 
-        if optimization:
+        if optimization and optimization != "none":
             # cuda = any(m.is_cuda for m in self.model.parameters())
             options = OptimizationOptions(
                 constant_folding=True,
@@ -761,7 +661,7 @@ class ModelRunner:
 
         opts = optimization.split("+")
         for opt in opts:
-            if opt in ("", "-"):
+            if opt in ("", "-", "none"):
                 continue
             if opt == "default":
                 # from onnx.inliner import inline_local_functions
@@ -855,7 +755,7 @@ class ModelRunner:
                     verbose=max(verbose - 1, 0),
                 )
 
-        if optimization:
+        if optimization and optimization != "none":
             return self._optimize_rewrite(name, optimization)
         return onnx.load(name, load_external_data=False), None
 
@@ -976,7 +876,9 @@ class ModelRunner:
         assert not fake_tensor, "fake_tensor not implemented."
         assert not dynamic, "dynamic true not implemented yet"
         assert no_grad, "no_grad false not implemented yet"
-        assert not optimization, f"optimization {optimization!r} not compatible with export"
+        assert (
+            not optimization or optimization == "none"
+        ), f"optimization {optimization!r} not compatible with export"
         from torch.export import export
 
         with torch.no_grad():
@@ -996,7 +898,9 @@ class ModelRunner:
         assert not fake_tensor, "fake_tensor not implemented."
         assert not dynamic, "dynamic true not implemented yet"
         assert no_grad, "no_grad false not implemented yet"
-        assert not optimization, f"optimization {optimization!r} not compatible with eager"
+        assert (
+            not optimization or optimization == "none"
+        ), f"optimization {optimization!r} not compatible with eager"
 
         return self.model, None
 
@@ -1013,7 +917,9 @@ class ModelRunner:
         assert not fake_tensor, "fake_tensor not implemented."
         assert not dynamic, "dynamic true not implemented yet"
         assert no_grad, "no_grad false not implemented yet"
-        assert not optimization, f"optimization {optimization!r} not compatible with eager"
+        assert (
+            not optimization or optimization == "none"
+        ), f"optimization {optimization!r} not compatible with eager"
         from onnxruntime.training.ortmodule import ORTModule
 
         return ORTModule(self.model), None
@@ -1031,7 +937,9 @@ class ModelRunner:
         assert not fake_tensor, "fake_tensor not implemented."
         assert not dynamic, "dynamic true not implemented yet"
         assert no_grad, "no_grad true not implemented yet"
-        assert not optimization, f"optimization {optimization!r} not compatible with compile"
+        assert (
+            not optimization or optimization == "none"
+        ), f"optimization {optimization!r} not compatible with compile"
 
         def custom_backend(gm: torch.fx.GraphModule, example_inputs: List[torch.Tensor]):
             if verbose:
@@ -1067,7 +975,7 @@ class ModelRunner:
         assert not dynamic, "dynamic true not implemented yet"
         assert no_grad, "no_grad true not implemented yet"
         assert (
-            not optimization
+            not optimization or optimization == "none"
         ), f"optimization {optimization!r} not compatible with inductor"
 
         if self.autocast:
@@ -1091,7 +999,9 @@ class ModelRunner:
         assert not fake_tensor, "fake_tensor not implemented."
         assert not dynamic, "dynamic true not implemented yet"
         assert no_grad, "no_grad true not implemented yet"
-        assert not optimization, f"optimization {optimization!r} not compatible with dort"
+        assert (
+            not optimization or optimization == "none"
+        ), f"optimization {optimization!r} not compatible with dort"
 
         if self.autocast:
             with torch.autocast(device_type=self.device, dtype=self.dtype), torch.no_grad():

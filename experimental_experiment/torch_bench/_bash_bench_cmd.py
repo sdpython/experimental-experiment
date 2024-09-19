@@ -275,7 +275,7 @@ def bash_bench_main(script_name: str, doc: str, args: Optional[List[str]] = None
                     exporter=args.exporter,
                     quiet=args.quiet in ("1", 1, "True", True),
                     folder=args.dump_folder,
-                    optimization=args.opt_patterns,
+                    optimization=args.opt_patterns if args.opt_patterns != "none" else "",
                     memory_peak=args.memory_peak in ("1", 1, "True", True),
                     part=int(args.part) if split_process else None,
                     pickled_name="temp_pickled_file.pkl" if split_process else None,

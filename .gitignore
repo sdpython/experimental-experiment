@@ -14,6 +14,7 @@
 *.sqlitest
 *.svg
 *.onnx.stats
+CodeLlama*
 _tools/benchenv**
 _tools/repos**
 _tools/mamba**
@@ -22,6 +23,8 @@ _tools/bin**
 nohup.out
 coverage.html/*
 temp*.txt*
+dump*.txt*
+dump*.onnx*
 tt_*.txt
 tt_*.py
 tt.py

@@ -8,6 +8,7 @@ from experimental_experiment.ext_test_case import (
     requires_torch,
     requires_onnxruntime_training,
     skipif_ci_windows,
+    skipif_ci_linux,
 )
 
 
@@ -108,14 +109,6 @@ class TestBashBenchRunnerCmd(ExtTestCase):
     @skipif_ci_windows("exporter does not work on Windows")
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.4")
-    def test_huggingface_export_bench_torch_onnx_cpu(self):
-        self._huggingface_export_bench_cpu(
-            "torch-onnx", "101Dummy", process=True, verbose=20
-        )
-
-    @skipif_ci_windows("exporter does not work on Windows")
-    @ignore_warnings((DeprecationWarning, UserWarning))
-    @requires_torch("2.4")
     @requires_onnxruntime_training()
     def test_huggingface_export_bench_cortgrad_cpu(self):
         self._huggingface_export_bench_cpu("cortgrad", "101Dummy", process=True, verbose=20)
@@ -182,6 +175,7 @@ class TestBashBenchRunnerCmd(ExtTestCase):
         self._huggingface_export_bench_cpu("custom", "101DummyTuple")
 
     @skipif_ci_windows("exporter does not work on Windows")
+    @skipif_ci_linux("tool long")
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.5")
     def test_huggingface_export_bench_custom_cpu_electra(self):

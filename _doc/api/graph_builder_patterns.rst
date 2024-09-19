@@ -71,6 +71,8 @@ Onnx (default) Patterns
     :members:
     :no-undoc-members:
 
+.. _l-custom-op-patterns:
+
 Custom Op Patterns
 ==================
 

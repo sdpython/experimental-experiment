@@ -57,7 +57,7 @@ class TestDynamoOnnxRtBackend(ExtTestCase):
         self.assertEqual(expected.dtype, got.dtype)
         self.assertEqualArray(expected.detach().numpy(), got.detach().numpy(), atol=1e-5)
 
-        export = torch.onnx.dynamo_export(model, input_tensor)
+        export = torch.onnx.export(model, input_tensor, dynamo=True)
         onx = export.model_proto
         sess = InferenceSession(onx.SerializeToString(), providers=["CPUExecutionProvider"])
         with open("dummy_baseline_a.onnx", "wb") as f:
@@ -94,7 +94,7 @@ class TestDynamoOnnxRtBackend(ExtTestCase):
         self.assertEqual(expected.dtype, got.dtype)
         self.assertEqualArray(expected.detach().numpy(), got.detach().numpy(), atol=1e-5)
 
-        export = torch.onnx.dynamo_export(f, input_tensor)
+        export = torch.onnx.export(f, input_tensor, dynamo=True)
         onx = export.model_proto
         sess = InferenceSession(onx.SerializeToString(), providers=["CPUExecutionProvider"])
         with open("dummy_baseline_b.onnx", "wb") as f:

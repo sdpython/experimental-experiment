@@ -68,6 +68,7 @@ class TestDynamoLlama(ExtTestCase):
         decompositions=False,
         mixed=False,
         raise_list=None,
+        enable_pattern="default",
     ):
         import torch
 
@@ -83,6 +84,8 @@ class TestDynamoLlama(ExtTestCase):
             verbose=verbose,
             dump_prefix=onnx_export,
             raise_list=raise_list,
+            enable_pattern=enable_pattern,
+            optimize=bool(enable_pattern),
             **kwargs,
         )
 
@@ -168,6 +171,7 @@ class TestDynamoLlama(ExtTestCase):
         rtol: float = 1e-4,
         mixed=False,
         raise_list=None,
+        enable_pattern="default",
     ):
         storage = self._assert_model_numerically(
             model,
@@ -182,6 +186,7 @@ class TestDynamoLlama(ExtTestCase):
             rtol=rtol,
             mixed=mixed,
             raise_list=raise_list,
+            enable_pattern=enable_pattern,
         )
         self.assertIsInstance(storage, dict)
 
@@ -338,6 +343,23 @@ class TestDynamoLlama(ExtTestCase):
         else:
             input_dims = ((9, 15), (9, 15), (9, 15))
         return input_dims
+
+    @ignore_warnings((UserWarning, DeprecationWarning))
+    @skipif_ci_windows("torch.compile not supported on Windows")
+    @requires_torch("2.3", "unexpected behaviour")
+    def test_llama_decoder_forward_not_optimized(self):
+        from experimental_experiment.torch_models.llama_helper import get_llama_decoder
+
+        input_dims = self.get_input_dims(False)
+        model, example_args_collection = get_llama_decoder(input_dims=input_dims)
+        self.common_test_model(
+            model,
+            example_args_collection,
+            test_backward=False,
+            dynamic=False,
+            onnx_export="test_llama_decoder_forward_not_optimized",
+            enable_pattern=None,
+        )
 
     @ignore_warnings((UserWarning, DeprecationWarning))
     @skipif_ci_windows("torch.compile not supported on Windows")

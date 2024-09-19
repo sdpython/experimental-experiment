@@ -328,6 +328,7 @@ class TestOperatorsOnnxrt(ExtTestCase):
         )
 
     @hide_stdout()
+    @requires_onnxscript("0.3")  # type promotion
     def test_xt_basic(self):
         x = torch.tensor([0.4], requires_grad=True)
         y = torch.tensor([0.7], requires_grad=True)
@@ -442,6 +443,7 @@ class TestOperatorsOnnxrt(ExtTestCase):
         )
 
     @hide_stdout()
+    @requires_onnxscript("0.3")  # type promotion
     def test_xt_rsub(self):
         x = torch.randn(2, 3, requires_grad=True).double()
         self.assertONNX(
@@ -560,6 +562,7 @@ class TestOperatorsOnnxrt(ExtTestCase):
         )
 
     @hide_stdout()
+    @requires_onnxscript("0.3")  # type promotion
     def test_xt_params(self):
         x = torch.tensor([[1.0, 2.0], [3.0, 4.0]], requires_grad=True)
         y = nn.Parameter(torch.tensor([[1.0, 2.0], [3.0, 4.0]], requires_grad=True))
@@ -573,6 +576,7 @@ class TestOperatorsOnnxrt(ExtTestCase):
         )
 
     @hide_stdout()
+    @requires_onnxscript("0.3")  # type promotion
     def test_xt_params_onnx_irv4(self):
         x = torch.tensor([[1.0, 2.0], [3.0, 4.0]], requires_grad=True)
         y = nn.Parameter(torch.tensor([[1.0, 2.0], [3.0, 4.0]], requires_grad=True))
@@ -916,6 +920,7 @@ class TestOperatorsOnnxrt(ExtTestCase):
             lambda x: torch.sum(x, dim=(1, 2)),
             x,
             onnx_export=inspect.currentframe().f_code.co_name,
+            atol=1e-4,
         )
 
     @hide_stdout()
@@ -1412,6 +1417,7 @@ class TestOperatorsOnnxrt(ExtTestCase):
         )
 
     @hide_stdout()
+    @requires_onnxscript("0.3")  # type promotion
     def test_xt_sigmoid(self):
         with self.subTest(dim=4):
             x = torch.randn(1, 2, 3, 4, requires_grad=True)

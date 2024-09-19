@@ -83,8 +83,12 @@ class TestDocumentationExamples(ExtTestCase):
             if not reason and name in {
                 "plot_llama_bench_102.py",
                 "plot_torch_custom_backend_101.py",
+                "plot_custom_backend_llama_102.py",
             }:
-                if sys.platform in {"win32", "darwin"}:
+                if sys.platform in {"win32"}:
+                    # dynamo not supported on windows
+                    reason = "dynamo not supported on windows"
+                if sys.platform in {"darwin"}:
                     # dynamo not supported on windows
                     reason = "onnxruntime-training not available"
 
