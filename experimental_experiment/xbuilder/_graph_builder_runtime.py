@@ -40,7 +40,8 @@ class _GraphBuilderRuntime:
 
         if all(isinstance(i, slice) for i in indices):
             new_shape = []
-            for index, axis in zip(indices, axes):
+            for index, axis_ in zip(indices, axes):
+                axis = axis_ if axis_ >= 0 else (axis_ + len(shape)) % len(shape)
                 while len(new_shape) < axis:
                     assert shape[len(new_shape)] >= 0, (
                         f"Negative value in shape {shape}, indices={indices}, "

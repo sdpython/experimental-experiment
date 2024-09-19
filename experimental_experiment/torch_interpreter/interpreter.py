@@ -502,8 +502,6 @@ class DynamoInterpreter:
         shape_value = None
         if self.builder.has_shape(input_name):
             shape_value = self.builder.get_shape(input_name)
-            if not all_int(shape_value):
-                shape_value = None
 
         starts = []
         ends = []
@@ -511,7 +509,8 @@ class DynamoInterpreter:
         shape_name = None
         end_name = None
         concat = False
-        for axis, aslice in zip(axes, index_slice):
+        for axis_, aslice in zip(axes, index_slice):
+            axis = axis_
             if isinstance(aslice, int):
                 # integer
                 starts.append(aslice)
@@ -524,7 +523,7 @@ class DynamoInterpreter:
             starts.append(aslice.start or 0)
 
             if aslice.stop is None:
-                if shape_value is None:
+                if shape_value is None or not isinstance(shape_value[axis], int):
                     if shape_name is None:
                         shape_name = self.builder.unique_name(f"{node.name}_shape")
                         self.builder.make_node(

@@ -644,7 +644,7 @@ def onnx_custom_backend(
             verbose,
             target_opset,
             dispatcher,
-            False,  # optimize,
+            optimize,
             enable_pattern,
             disable_pattern,
             rename_inputs,
@@ -654,17 +654,6 @@ def onnx_custom_backend(
         )
     else:
         raise NotImplementedError(f"Unknown exporter {exporter!r}")
-
-    # new optimization
-    # if False :
-    #    from ..xbuilder import GraphBuilder
-    #    del onx.graph.value_info[:]
-    #    gr = GraphBuilder(
-    #        onx,
-    #        infer_shapes=True,
-    #        optimization_options=options,
-    #    )
-    #    onx = gr.to_onnx(optimize=True)
 
     if verbose:
         print(

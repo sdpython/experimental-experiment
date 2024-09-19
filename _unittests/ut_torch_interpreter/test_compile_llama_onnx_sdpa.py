@@ -198,7 +198,7 @@ class TestDynamoLlamaSdpa(ExtTestCase):
         True, reason="_scaled_dot_product_flash_attention_for_cpu_default missing"
     )
     @requires_torch("2.3", "unexpected behaviour")
-    def test_llama_decoder_forward(self):
+    def test_llama_decoder_forward_sdpa(self):
         from experimental_experiment.torch_models.llama_helper import get_llama_decoder
 
         input_dims = self.get_input_dims(False)
