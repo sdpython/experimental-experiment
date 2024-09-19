@@ -42,7 +42,10 @@ def broadcast_shape(
             elif a == 1:
                 d = b
             else:
-                d = None
+                # We have two indications, let's take the most strict one.
+                d = a
+                if graph_builder:
+                    graph_builder.register_constraint_dimension(b, a)
         elif isinstance(b, int):
             # a is str
             if b == 1:
@@ -52,8 +55,6 @@ def broadcast_shape(
                 d = b
                 if graph_builder:
                     graph_builder.register_constraint_dimension(a, b)
-            else:
-                d = None
         else:
             # both str
             d = a if a == b else None
