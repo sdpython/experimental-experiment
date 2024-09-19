@@ -32,6 +32,10 @@ def is_apple() -> bool:
     return sys.platform == "darwin"
 
 
+def is_linux() -> bool:
+    return sys.platform == "linux"
+
+
 def skipif_transformers(version_to_skip: Union[str, Set[str]], msg: str) -> Callable:
     """Skips a unit test if transformers has a specific version."""
     if isinstance(version_to_skip, str):
@@ -58,6 +62,14 @@ def skipif_ci_windows(msg) -> Callable:
     """Skips a unit test if it runs on :epkg:`azure pipeline` on :epkg:`Windows`."""
     if is_windows() and is_azure():
         msg = f"Test does not work on azure pipeline (Windows). {msg}"
+        return unittest.skip(msg)
+    return lambda x: x
+
+
+def skipif_ci_linux(msg) -> Callable:
+    """Skips a unit test if it runs on :epkg:`azure pipeline` on :epkg:`Linux`."""
+    if is_linux() and is_azure():
+        msg = f"Takes too long (Linux). {msg}"
         return unittest.skip(msg)
     return lambda x: x
 
