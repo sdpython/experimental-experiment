@@ -412,7 +412,7 @@ if data_collected:
 ###############################
 # Plot increase.
 
-if data_collected:
+if data_collected and "increase" in df.columns:
     fig, ax = plt.subplots(1, 1, figsize=(12, df.shape[0] // 3 + 1))
 
     df[["increase"]].plot.barh(ax=ax, title=f"comparison to eager %\n{title_prefix}")
