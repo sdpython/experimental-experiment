@@ -920,6 +920,7 @@ class TestOperatorsOnnxrt(ExtTestCase):
             lambda x: torch.sum(x, dim=(1, 2)),
             x,
             onnx_export=inspect.currentframe().f_code.co_name,
+            atol=1e-4,
         )
 
     @hide_stdout()

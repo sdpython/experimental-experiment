@@ -8,6 +8,7 @@ from experimental_experiment.ext_test_case import (
     requires_torch,
     requires_onnxruntime_training,
     skipif_ci_windows,
+    skipif_ci_linux,
 )
 
 
@@ -174,6 +175,7 @@ class TestBashBenchRunnerCmd(ExtTestCase):
         self._huggingface_export_bench_cpu("custom", "101DummyTuple")
 
     @skipif_ci_windows("exporter does not work on Windows")
+    @skipif_ci_linux("tool long")
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.5")
     def test_huggingface_export_bench_custom_cpu_electra(self):

@@ -22,6 +22,7 @@ script_args = get_parsed_args(
     "plot_custom_backend_llama",
     with_mask=(0, "tries with a mask as a secondary input"),
     optim=("default", "Optimization to apply, empty string for all"),
+    tokenizer=("1", "loads the tokenizer or not to reduce the memory foot print"),
     description=__doc__,
     expose="config,num_hidden_layers,with_mask,optim",
 )
@@ -32,12 +33,16 @@ assert script_args.with_mask in (0, "0"), "with_mask is not implemented."
 
 print(f"with_mask={script_args.with_mask!r}")
 print(f"optim={script_args.optim!r}")
+print(f"tokenizer={script_args.tokenizer!r}")
+
+load_tokenizer = script_args in ("1", 1)
 
 #################################
 # Imports.
 
 import os
 import time
+import numpy as np
 import pandas
 from tqdm import tqdm
 import torch
@@ -58,8 +63,8 @@ print(f"device: {machine.get('device_name', '?')}")
 ######################################
 # The number of time we run the model to measure
 # the inference.
-warmup = 10
-N = 50
+warmup = 8
+N = 10
 
 ###########################################
 # Let's create the model.
@@ -69,16 +74,33 @@ if os.path.exists("CodeLlama-7b-model"):
     print("load the model")
     from transformers import AutoTokenizer, AutoModelForCausalLM
 
-    tokenizer = AutoTokenizer.from_pretrained("./CodeLlama-7b-tokenizer")
+    tokenizer = (
+        AutoTokenizer.from_pretrained("./CodeLlama-7b-tokenizer") if load_tokenizer else None
+    )
     model = AutoModelForCausalLM.from_pretrained("./CodeLlama-7b-model")
 else:
     print("retrieve the model")
     from transformers import AutoTokenizer, AutoModelForCausalLM
 
-    tokenizer = AutoTokenizer.from_pretrained("codellama/CodeLlama-7b-hf")
-    tokenizer.save_pretrained("CodeLlama-7b-tokenizer")
+    if load_tokenizer:
+        tokenizer = AutoTokenizer.from_pretrained("codellama/CodeLlama-7b-hf")
+        tokenizer.save_pretrained("CodeLlama-7b-tokenizer")
+    else:
+        tokenizer = None
     model = AutoModelForCausalLM.from_pretrained("codellama/CodeLlama-7b-hf")
     model.save_pretrained("CodeLlama-7b-model")
+
+
+def ids_tensor(shape, vocab_size):
+    total_dims = 1
+    for dim in shape:
+        total_dims *= dim
+
+    values = []
+    for _ in range(total_dims):
+        values.append(np.random.randint(0, vocab_size - 1))
+
+    return torch.tensor(data=values, dtype=torch.long).view(shape).contiguous()
 
 
 ##########################################
@@ -86,26 +108,37 @@ else:
 
 processor = "cuda" if has_cuda else "cpu"
 
-PROMPT = '''def remove_non_ascii(s: str) -> str:
-    """ <FILL_ME> """
-    return result
-'''
+if load_tokenizer:
+    PROMPT = '''
+    def optimize_model_by_fusing_kernel(
+        model_or_filename,
+        fused_patterns: Union[str, List[str]] = "default",
+        validate_performance: bool = False,
+        filename: Optional[str] = None,
+    ) -> str:
+        """ <FILL_ME> """
+        return optimized_model
+    '''
 
-with torch.no_grad():
-    print("tokenize the input")
-    input_ids = tokenizer(PROMPT, return_tensors="pt")["input_ids"]
-    input_ids = input_ids.to(processor)
-    print("run the model")
-    model = model.to(processor)
-    generated_ids = model.generate(input_ids, max_new_tokens=128).to(processor)
-    print("interpret the answer")
-    filling = tokenizer.batch_decode(
-        generated_ids[:, input_ids.shape[1] :], skip_special_tokens=True
-    )[0]
-    print("---")
-    print(PROMPT.replace("<FILL_ME>", filling))
-    print("done")
+    with torch.no_grad():
+        print("tokenize the input")
+        input_ids = tokenizer(PROMPT, return_tensors="pt")["input_ids"]
+        input_ids = input_ids.to(processor)
+        print("run the model")
+        model = model.to(processor)
+        generated_ids = model.generate(input_ids, max_new_tokens=128).to(processor)
+        print("interpret the answer")
+        filling = tokenizer.batch_decode(
+            generated_ids[:, input_ids.shape[1] :], skip_special_tokens=True
+        )[0]
+        print("---")
+        print(PROMPT.replace("<FILL_ME>", filling))
+        print("done")
+else:
+    input_ids = ids_tensor((1, 512), 32016)
 
+# Input dimension
+print(f"Input shape: {input_ids.shape}")
 
 # We use those inputs to benchmark the models.
 inputs = (input_ids,)
@@ -129,8 +162,7 @@ with torch.no_grad():
     # warmup
     print("warmup eager")
     for _ in tqdm(range(warmup)):
-        # model(input_ids, input_mask)
-        model(*inputs)
+        model(*inputs, use_cache=False)
         if has_cuda:
             torch.cuda.synchronize()
 
@@ -138,7 +170,7 @@ with torch.no_grad():
     print("repeat eager")
     begin = time.perf_counter()
     for _ in tqdm(range(N)):
-        model(*inputs)
+        model(*inputs, use_cache=False)
         if has_cuda:
             torch.cuda.synchronize()
     d = (time.perf_counter() - begin) / N
@@ -182,11 +214,6 @@ with torch.no_grad():
         print("----------------------")
         print(f"optim={optim}")
 
-        # This variable is used to retrieve the onnx models created by the backend.
-        # It can be set to None if it is not needed.
-        # Graph are usually small as they do not contain weights.
-        storage = {}
-
         options = OptimizationOptions(
             constant_folding=True,
             patterns=None if optim == "" else optim,
@@ -196,13 +223,12 @@ with torch.no_grad():
 
         # The backend used here overwrite some of the parameters provided by
         # function onnx_custom_backend.
-        custom_custom_backend = lambda *args, optim=optim, options=options, storage=storage, **kwargs: onnx_custom_backend(  # noqa: E731, E501
+        custom_custom_backend = lambda *args, optim=optim, options=options, **kwargs: onnx_custom_backend(  # noqa: E731, E501
             *args,
             target_opset=18,
             verbose=0,
             options=options,
             optimize=optim != "",
-            storage=storage,
             dump_prefix=f"dump_onx_llama_{optim.replace('+', '_')}",
             **kwargs,
         )
@@ -215,7 +241,7 @@ with torch.no_grad():
         # warmup
         print("warmup compiled model")
         for _ in tqdm(range(warmup)):
-            compiled_model(*inputs)
+            compiled_model(*inputs, use_cache=False)
             if has_cuda:
                 torch.cuda.synchronize()
 
@@ -223,16 +249,10 @@ with torch.no_grad():
         print("repeat compiled_model")
         begin = time.perf_counter()
         for _ in tqdm(range(N)):
-            compiled_model(*inputs)
+            compiled_model(*inputs, use_cache=False)
             if has_cuda:
                 torch.cuda.synchronize()
         d = (time.perf_counter() - begin) / N
-
-        # let's measure the number of custom ops
-        n_custom_ops = None
-        if storage is not None:
-            onnx_model = storage["instance"][0]["onnx"]
-            n_custom_ops = len([node for node in onnx_model.graph.node if node.domain != ""])
 
         times.append(
             dict(
@@ -241,7 +261,6 @@ with torch.no_grad():
                 avg_time=d,
                 warmup=warmup,
                 N=N,
-                n_custom_ops=n_custom_ops,
                 speedup=baseline / d,
             )
         )

@@ -4,8 +4,8 @@
 ========================================
 
 This example leverages the function :epkg:`torch.compile` and the ability
-to use a custom backend to test the optimization of a model by fusing
-simple element-wise kernels.
+to use a custom backend (see :epkg:`Custom Backends`)
+to test the optimization of a model by fusing simple element-wise kernels.
 
 It takes a small Llama model and uses a backend based on :epkg:`onnxruntime`.
 The model is converted into ONNX and then optimized by fusing element-wise
@@ -14,6 +14,10 @@ kernels.
 ::
 
     python plot_custom_backend_llama --config large
+
+The script requires the following packages beside pytorch,
+:epkg:`onnxruntime-training` (for GPU), :epkg:`onnx-extended`
+(compiled for GPU) and :epkg:`transformers`.
 """
 
 from experimental_experiment.args import get_parsed_args
@@ -165,6 +169,12 @@ with torch.no_grad():
 #   it converts the model into ONNX, optimizes and runs it,
 #   it does not support :epkg:`graph break`,
 #   it does not work well with dynamic shapes yet.
+# * The CUDA kernels are implemented at
+#   `onnx_extended/ortops/optim/cuda
+#   <https://github.com/sdpython/onnx-extended/tree/main/onnx_extended/ortops/optim/cuda>`_
+# * Section :ref:`l-custom-op-patterns` covers the implemented patterns fusing nodes
+#   in onnx models. See :ref:`l-design-pattern-optimizer` to understand how
+#   these are applied to modify an onnx model.
 #
 # The GPU memory is not fully freed before two iterations. Only one scenario
 # should be handled in the same process.

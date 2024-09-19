@@ -442,7 +442,14 @@ class DynamoInterpreter:
 
         if inspect.isbuiltin(node.target) or not node_schema:
             complete_args = list(node.args)
-            complete_kwargs = node.kwargs
+            complete_kwargs = {}
+            for k, v in node.kwargs.items():
+                if hasattr(v, "name"):
+                    complete_kwargs[k] = v.name
+                elif isinstance(v, (int, float, str)):
+                    complete_kwargs[k] = v
+                else:
+                    raise AssertionError(f"Unexpected type {type(v)} for k={k!r} (v={v!r})")
         else:
             for i, expected_arg in enumerate(node_schema.arguments):
                 if i < len(node.args):
