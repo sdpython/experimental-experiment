@@ -143,7 +143,7 @@ with torch.no_grad():
             torch.cuda.synchronize()
     d = (time.perf_counter() - begin) / N
     baseline = d
-    times.append(dict(optium="eager", processor=processor, avg_time=d, warmup=warmup, N=N))
+    times.append(dict(optim="eager", processor=processor, avg_time=d, warmup=warmup, N=N))
     print("avg time eager", d)
 
 ############################################
@@ -246,7 +246,7 @@ with torch.no_grad():
 
         times.append(
             dict(
-                optium=optim,
+                optim=optim,
                 processor=processor,
                 avg_time=d,
                 warmup=warmup,
