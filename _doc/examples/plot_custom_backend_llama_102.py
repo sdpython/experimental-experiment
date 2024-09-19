@@ -119,14 +119,16 @@ with torch.no_grad():
     for _ in tqdm(range(warmup)):
         # model(input_ids, input_mask)
         model(*inputs)
-        torch.cuda.synchronize()
+        if has_cuda:
+            torch.cuda.synchronize()
 
     # repeat
     print("repeat eager")
     begin = time.perf_counter()
     for _ in tqdm(range(N)):
         model(*inputs)
-        torch.cuda.synchronize()
+        if has_cuda:
+            torch.cuda.synchronize()
     d = (time.perf_counter() - begin) / N
     baseline = d
     times.append(dict(optium="eager", processor=processor, avg_time=d, warmup=warmup, N=N))
@@ -145,22 +147,26 @@ with torch.no_grad():
 #   implemented by onnxruntime and also custom kernels, this does not work on
 #   CPU.
 #
-#   Some links:
+# Some links:
 #
-#   * :class:`experimental_experiment.xbuilder.OptimizationOptions`:
-#     that class defines the optimizations to apply after the model
-#     is converted to onnx,
-#   * :func:`experimental_experiment.torch_dynamo.onnx_custom_backend`:
-#     that function implements the custom backend based on :epkg:`onnxruntime`,
-#     it converts the model into ONNX, optimizes and runs it,
-#     it does not support :epkg:`graph break`,
-#     it does not work well with dynamic shapes yet.
+# * :class:`experimental_experiment.xbuilder.OptimizationOptions`:
+#   that class defines the optimizations to apply after the model
+#   is converted to onnx,
+# * :func:`experimental_experiment.torch_dynamo.onnx_custom_backend`:
+#   that function implements the custom backend based on :epkg:`onnxruntime`,
+#   it converts the model into ONNX, optimizes and runs it,
+#   it does not support :epkg:`graph break`,
+#   it does not work well with dynamic shapes yet.
 
 with torch.no_grad():
 
     for optim in ["default", "default+onnxruntime", "default+onnxruntime+experimental"]:
         print("----------------------")
         print(f"optim={optim}")
+
+        # This variable is used to retrieve the onnx models created by the backend.
+        # It can be set to None if it is not needed.
+        # Graph are usually small as they do not contain weights.
         storage = {}
 
         options = OptimizationOptions(
@@ -170,6 +176,8 @@ with torch.no_grad():
             processor=processor.upper(),
         )
 
+        # The backend used here overwrite some of the parameters provided by
+        # function onnx_custom_backend.
         custom_custom_backend = lambda *args, optim=optim, options=options, storage=storage, **kwargs: onnx_custom_backend(  # noqa: E731, E501
             *args,
             target_opset=18,
@@ -181,6 +189,7 @@ with torch.no_grad():
             **kwargs,
         )
 
+        # The function setting the backend.
         compiled_model = torch.compile(
             model, backend=custom_custom_backend, fullgraph=True, dynamic=False
         )
@@ -189,14 +198,16 @@ with torch.no_grad():
         print("warmup compiled model")
         for _ in tqdm(range(warmup)):
             compiled_model(*inputs)
-            torch.cuda.synchronize()
+            if has_cuda:
+                torch.cuda.synchronize()
 
         # repeat
         print("repeat compiled_model")
         begin = time.perf_counter()
         for _ in tqdm(range(N)):
             compiled_model(*inputs)
-            torch.cuda.synchronize()
+            if has_cuda:
+                torch.cuda.synchronize()
         d = (time.perf_counter() - begin) / N
 
         # let's measure the number of custom ops
