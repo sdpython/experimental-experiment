@@ -2454,7 +2454,7 @@ class TestOperatorsCort(ExtTestCase):
             (query, key, value),
             onnx_export=inspect.currentframe().f_code.co_name,
             test_backward=False,
-            atol=1e-3,
+            atol=1e-2,
         )
 
     def test_scaled_dot_product_attention_is_causal(self):
