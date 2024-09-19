@@ -256,3 +256,10 @@ with torch.no_grad():
 
 df = pandas.DataFrame(times)
 print(df)
+
+######################################
+# Plot
+
+df.set_index("optim")[["speedup"]].plot.bar(
+    title="Speedup for different optimization scenario"
+)
