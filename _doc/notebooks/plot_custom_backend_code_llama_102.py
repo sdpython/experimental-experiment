@@ -13,7 +13,11 @@ kernels.
 
 ::
 
-    python plot_custom_backend_llama --config large
+    python plot_custom_backend_llama --optim default
+
+The script requires the following packages beside pytorch,
+:epkg:`onnxruntime-training` (for GPU), :epkg:`onnx-extended`
+(compiled for GPU) and :epkg:`transformers`==4.37.2.
 """
 
 from experimental_experiment.args import get_parsed_args
@@ -135,7 +139,7 @@ if load_tokenizer:
         print(PROMPT.replace("<FILL_ME>", filling))
         print("done")
 else:
-    input_ids = ids_tensor((1, 512), 32016)
+    input_ids = ids_tensor((1, 128), 32016)
 
 # Input dimension
 print(f"Input shape: {input_ids.shape}")

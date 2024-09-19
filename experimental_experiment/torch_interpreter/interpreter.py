@@ -444,9 +444,13 @@ class DynamoInterpreter:
             complete_args = list(node.args)
             complete_kwargs = {}
             for k, v in node.kwargs.items():
-                if hasattr(v, "name"):
+                if isinstance(v, self.builder.torch.fx.Node):
                     complete_kwargs[k] = v.name
-                elif isinstance(v, (int, float, str)):
+                elif v is None:
+                    complete_kwargs[k] = None
+                elif isinstance(
+                    v, (int, float, str, self.builder.torch.device, self.builder.torch.dtype)
+                ):
                     complete_kwargs[k] = v
                 else:
                     raise AssertionError(f"Unexpected type {type(v)} for k={k!r} (v={v!r})")
