@@ -38,12 +38,9 @@ print(f"optim={script_args.optim!r}")
 
 import os
 import time
-import numpy as np
 import pandas
 from tqdm import tqdm
 import torch
-from transformers import LlamaConfig
-from transformers.models.llama.modeling_llama import LlamaModel
 from experimental_experiment.xbuilder import OptimizationOptions
 from experimental_experiment.torch_dynamo import onnx_custom_backend
 from experimental_experiment.bench_run import get_machine
@@ -61,8 +58,8 @@ print(f"device: {machine.get('device_name', '?')}")
 ######################################
 # The number of time we run the model to measure
 # the inference.
-warmup = 3
-N = 10
+warmup = 10
+N = 50
 
 ###########################################
 # Let's create the model.
