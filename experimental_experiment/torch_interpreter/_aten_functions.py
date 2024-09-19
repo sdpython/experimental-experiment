@@ -3945,7 +3945,7 @@ def aten__native_batch_norm_legit_no_training(
     eps: float = 1e-05,
     name: str = "_native_batch_norm_legit_no_training",
 ) -> Tuple[T, T, T]:
-    """batch normalization"""
+    """batch normalization = aten__native_batch_norm with training=False"""
     return aten__native_batch_norm(
         g,
         sts,
@@ -3975,7 +3975,7 @@ def aten__native_batch_norm_legit_no_stats(
     eps: float = 1e-05,
     name: str = "_native_batch_norm_legit_no_stats",
 ) -> Tuple[T, T, T]:
-    """batch normalization"""
+    """batch normalization = aten__native_batch_norm"""
     return aten__native_batch_norm(
         g,
         sts,
