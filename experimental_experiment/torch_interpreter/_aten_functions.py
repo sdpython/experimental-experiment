@@ -5158,7 +5158,14 @@ def aten_scaled_dot_product_attention(
     ), f"is_causal and attn_mask cannot be set at the same time{g.get_debug_msg()}"
 
     if scale is None:
-        scale = _attention_scale(g, query)
+        tscale = _attention_scale(g, query)
+    elif isinstance(scale, (float, int)):
+        assert g.has_type(query), f"Input {query!r} must have a type{g.get_debug_msg()}"
+        itype = g.get_type(query)
+        dtype = tensor_dtype_to_np_dtype(itype)
+        tscale = np.array([scale], dtype=dtype)
+    else:
+        raise AssertionError(f"Unexpected type {type(scale)} for scale{g.get_debug_msg()}")
 
     if is_causal:
         attn_mask = _causal_attention_mask(g, query, key)
@@ -5170,9 +5177,9 @@ def aten_scaled_dot_product_attention(
     )
     key_transposed = g.op.Transpose(key, perm=key_transposed_axes, name=name)
 
-    sc = g.op.Sqrt(scale, name=name)
+    sc = g.op.Sqrt(tscale, name=name)
     if isinstance(scale, str):
-        set_type_shape_unary_op(g, sc, scale)
+        set_type_shape_unary_op(g, sc, tscale)
 
     query_scaled = g.op.Mul(query, sc, name=name)
     key_transposed_scaled = g.op.Mul(key_transposed, sc)
@@ -5724,7 +5731,7 @@ def _aten_slice_scatter_dynamic(
     ), f"slice_scatter not implemented for end={end}{g.get_debug_msg()}"
     assert step is None or is_static_dimension(
         step
-    ), f"slice_scatter not implemented for end={step}{g.get_debug_msg()}"
+    ), f"slice_scatter not implemented for step={step}{g.get_debug_msg()}"
 
     shape = g.op.Shape(x, name=name)
     dim_shape = g.op.Gather(shape, np.array([dim], dtype=np.int64), name=name)
@@ -7057,7 +7064,6 @@ def aten_wrap_with_autocast(
 ) -> T:
     "identity"
     assert dtype is None, f"Not implemented with dtype={enabled}{g.get_debug_msg()}"
-    assert not enabled, f"Not implemented with dtype={enabled}{g.get_debug_msg()}"
     assert not enabled, f"Not implemented with dtype={enabled}{g.get_debug_msg()}"
     assert (
         cache_enabled is None

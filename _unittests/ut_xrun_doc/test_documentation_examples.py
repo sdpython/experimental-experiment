@@ -64,6 +64,8 @@ class TestDocumentationExamples(ExtTestCase):
 
     @classmethod
     def add_test_methods(cls):
+        import torch
+
         this = os.path.abspath(os.path.dirname(__file__))
         fold = os.path.normpath(os.path.join(this, "..", "..", "_doc", "examples"))
         found = os.listdir(fold)
@@ -72,8 +74,8 @@ class TestDocumentationExamples(ExtTestCase):
                 continue
             reason = None
 
-            if sys.version_info >= (3, 12, 0):
-                reason = "too long"
+            if pv.Version(".".join(torch.__version__.split(".")[:2])) < pv.Version("2.5"):
+                reason = "too long, pytorch < 2.5"
 
             if name in {"plot_torch_export_201.py"}:
                 if sys.platform in {"win32"}:
