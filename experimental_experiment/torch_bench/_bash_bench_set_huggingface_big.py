@@ -11,6 +11,7 @@ from .big_models.try_stable_diffusion_3 import (
 class HuggingfaceBigRunner(BenchmarkRunner):
     SUITE = "HuggingFace"
     MODELS: Dict[str, Callable] = {}
+    CACHE = "~/.cache/exporter_benchmark"
 
     @classmethod
     def initialize(cls):
@@ -73,7 +74,12 @@ class HuggingfaceBigRunner(BenchmarkRunner):
         is_training = self.training
         use_eval_mode = self.use_eval_mode
         reset_rng_state()
-        model_cls, example_inputs = self._get_model_cls_and_config(model_name)()
+        model_cls, example_inputs = self._get_model_cls_and_config(model_name)(
+            dtype=str(self.dtype).replace("torch.", ""),
+            device=self.device,
+            verbose=verbose,
+            cache=self.CACHE,
+        )
 
         model = model_cls()
 
