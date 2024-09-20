@@ -406,7 +406,8 @@ if data_collected and "time" in df.columns:
     df[["time"]].plot.barh(ax=ax, title=f"computation time\n{title_prefix}")
     mi, ma = df["time"].min(), df["time"].max()
     mi = mi - (ma - mi) / 10
-    ax.set_xlim(left=mi)
+    if not np.isnan(mi):
+        ax.set_xlim(left=mi)
     ax.grid(True)
 
     fig.tight_layout()
