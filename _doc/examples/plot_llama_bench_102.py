@@ -319,15 +319,16 @@ if data_collected:
 
     df = pandas.DataFrame(data)
     df = df.drop(["OUTPUT", "ERROR"], axis=1)
-    df["legend"] = df.apply(make_legend, axis=1)
-    df["time"] = df["time"].astype(float)
-    df_eager = df[(df["implementation"] == "eager") & (df["backend"] == "eager")][
-        "time"
-    ].dropna()
-    if df_eager.shape[0] > 0:
-        min_eager = df_eager.min()
-        df["increase"] = df["time"] / min_eager - 1
-        # df["ERROR"] = df["ERROR"].apply(lambda s: s.replace("\n", " "))
+    if "implementation" in df.columns:
+        df["legend"] = df.apply(make_legend, axis=1)
+        df["time"] = df["time"].astype(float)
+        df_eager = df[(df["implementation"] == "eager") & (df["backend"] == "eager")][
+            "time"
+        ].dropna()
+        if df_eager.shape[0] > 0:
+            min_eager = df_eager.min()
+            df["increase"] = df["time"] / min_eager - 1
+            # df["ERROR"] = df["ERROR"].apply(lambda s: s.replace("\n", " "))
     filename = f"plot_{prefix}_bench_with_cmd.csv"
     df.to_csv(filename, index=False)
     filename = f"plot_{prefix}_bench_with_cmd.xlsx"
@@ -367,16 +368,18 @@ for c in ["time", "warmup_time"]:
 ########################################
 # Simplified data
 
-print(df.sort_values("legend"))
+print(df.sort_values("legend") if "legend" in df.columns else df)
 
 ###############################
 # Plot warmup time.
 
-torch_version = list(set(df["torch"].dropna()))
-transformers_version = list(set(df["transformers"].dropna()))
+torch_version = list(set(df["torch"].dropna())) if "torch" in df.columns else (0, 0)
+transformers_version = (
+    list(set(df["transformers"].dropna())) if "transformers" in df.columns else (0, 0)
+)
 ver = f"{torch_version[0]} - {transformers_version[0]}"
 model = parsed_args.model
-modeldf = list(set(df[model].dropna()))[0]  # noqa: RUF015
+modeldf = list(set(df[model].dropna()))[0] if model in df.columns else "?"  # noqa: RUF015
 title_prefix = (
     f"lower better\n"
     f"{parsed_args.model} - {ver} - mask{parsed_args.with_mask}"
@@ -384,7 +387,7 @@ title_prefix = (
 )
 
 
-if data_collected:
+if data_collected and "legend" in df.columns:
     fig, ax = plt.subplots(1, 1, figsize=(12, df.shape[0] // 3 + 1))
 
     df = df.sort_values("time").set_index("legend")
@@ -397,13 +400,14 @@ if data_collected:
 ###############################
 # Plot time.
 
-if data_collected:
+if data_collected and "time" in df.columns:
     fig, ax = plt.subplots(1, 1, figsize=(12, df.shape[0] // 3 + 1))
 
     df[["time"]].plot.barh(ax=ax, title=f"computation time\n{title_prefix}")
     mi, ma = df["time"].min(), df["time"].max()
     mi = mi - (ma - mi) / 10
-    ax.set_xlim(left=mi)
+    if not np.isnan(mi):
+        ax.set_xlim(left=mi)
     ax.grid(True)
 
     fig.tight_layout()
@@ -412,7 +416,7 @@ if data_collected:
 ###############################
 # Plot increase.
 
-if data_collected:
+if data_collected and "increase" in df.columns:
     fig, ax = plt.subplots(1, 1, figsize=(12, df.shape[0] // 3 + 1))
 
     df[["increase"]].plot.barh(ax=ax, title=f"comparison to eager %\n{title_prefix}")
