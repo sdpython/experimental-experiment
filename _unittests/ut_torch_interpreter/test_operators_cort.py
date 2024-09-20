@@ -2431,6 +2431,74 @@ class TestOperatorsCort(ExtTestCase):
             input_index="simple",
         )
 
+    def test_scaled_dot_product_attention(self):
+        query = torch.rand(32, 8, 128, 64, dtype=torch.float16, device="cpu")
+        key = torch.rand(32, 8, 128, 64, dtype=torch.float16, device="cpu")
+        value = torch.rand(32, 8, 128, 64, dtype=torch.float16, device="cpu")
+        self.assertONNX(
+            lambda q, k, v: torch.nn.functional.scaled_dot_product_attention(q, k, v),
+            (query, key, value),
+            onnx_export=inspect.currentframe().f_code.co_name,
+            test_backward=False,
+            atol=1e-3,
+        )
+
+    def test_scaled_dot_product_attention_scale(self):
+        query = torch.rand(32, 8, 128, 64, dtype=torch.float16, device="cpu")
+        key = torch.rand(32, 8, 128, 64, dtype=torch.float16, device="cpu")
+        value = torch.rand(32, 8, 128, 64, dtype=torch.float16, device="cpu")
+        self.assertONNX(
+            lambda q, k, v: torch.nn.functional.scaled_dot_product_attention(
+                q, k, v, scale=2.2
+            ),
+            (query, key, value),
+            onnx_export=inspect.currentframe().f_code.co_name,
+            test_backward=False,
+            atol=1e-2,
+        )
+
+    def test_scaled_dot_product_attention_is_causal(self):
+        query = torch.rand(32, 8, 128, 64, dtype=torch.float16, device="cpu")
+        key = torch.rand(32, 8, 128, 64, dtype=torch.float16, device="cpu")
+        value = torch.rand(32, 8, 128, 64, dtype=torch.float16, device="cpu")
+        self.assertONNX(
+            lambda q, k, v: torch.nn.functional.scaled_dot_product_attention(
+                q, k, v, is_causal=True
+            ),
+            (query, key, value),
+            onnx_export=inspect.currentframe().f_code.co_name,
+            test_backward=False,
+            atol=1e-3,
+        )
+
+    def test_scaled_dot_product_attention_mask_a(self):
+        query = torch.rand(32, 8, 128, 64, dtype=torch.float16, device="cpu")
+        key = torch.rand(32, 8, 128, 64, dtype=torch.float16, device="cpu")
+        value = torch.rand(32, 8, 128, 64, dtype=torch.float16, device="cpu")
+        mask = torch.rand(32, 8, 128, 128, dtype=torch.float16, device="cpu").to(torch.bool)
+        self.assertONNX(
+            lambda q, k, v, m: torch.nn.functional.scaled_dot_product_attention(q, k, v, m),
+            (query, key, value, mask),
+            onnx_export=inspect.currentframe().f_code.co_name,
+            test_backward=False,
+            atol=1e-3,
+        )
+
+    def test_scaled_dot_product_attention_mask_kw(self):
+        query = torch.rand(32, 8, 128, 64, dtype=torch.float16, device="cpu")
+        key = torch.rand(32, 8, 128, 64, dtype=torch.float16, device="cpu")
+        value = torch.rand(32, 8, 128, 64, dtype=torch.float16, device="cpu")
+        mask = torch.rand(32, 8, 128, 128, dtype=torch.float16, device="cpu").to(torch.bool)
+        self.assertONNX(
+            lambda q, k, v, m: torch.nn.functional.scaled_dot_product_attention(
+                q, k, v, attn_mask=m
+            ),
+            (query, key, value, mask),
+            onnx_export=inspect.currentframe().f_code.co_name,
+            test_backward=False,
+            atol=1e-3,
+        )
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
