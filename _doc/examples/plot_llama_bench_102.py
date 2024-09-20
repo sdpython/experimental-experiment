@@ -368,7 +368,7 @@ for c in ["time", "warmup_time"]:
 ########################################
 # Simplified data
 
-print(df.sort_values("legend"))
+print(df.sort_values("legend") if "legend" in df.columns else df)
 
 ###############################
 # Plot warmup time.
@@ -385,7 +385,7 @@ title_prefix = (
 )
 
 
-if data_collected:
+if data_collected and "legend" in df.columns:
     fig, ax = plt.subplots(1, 1, figsize=(12, df.shape[0] // 3 + 1))
 
     df = df.sort_values("time").set_index("legend")
@@ -398,7 +398,7 @@ if data_collected:
 ###############################
 # Plot time.
 
-if data_collected:
+if data_collected and "time" in df.columns:
     fig, ax = plt.subplots(1, 1, figsize=(12, df.shape[0] // 3 + 1))
 
     df[["time"]].plot.barh(ax=ax, title=f"computation time\n{title_prefix}")
