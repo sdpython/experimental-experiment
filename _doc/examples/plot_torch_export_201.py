@@ -93,6 +93,7 @@ from experimental_experiment.xbuilder import OptimizationOptions
 from experimental_experiment.plotting.memory import memory_peak_plot
 from experimental_experiment.ext_test_case import measure_time, get_figure
 from experimental_experiment.memory_peak import start_spying_on
+from experimental_experiment.ext_test_case import unit_test_going
 from tqdm import tqdm
 
 has_cuda = has_cuda and torch.cuda.is_available()
@@ -122,6 +123,12 @@ pprint.pprint(system_info())
 
 if script_args.scenario in (None, "small"):
     script_args.maxtime = 0.1
+
+if unit_test_going():
+    script_args.warmup = 1
+    script_args.repeat = 1
+    script_args.maxtime = 0.1
+    script_args.scenario = "small"
 
 print(f"scenario={script_args.scenario or 'small'}")
 print(f"warmup={script_args.warmup}")
@@ -248,7 +255,7 @@ def export_dynamo(filename, model, *args):
     with contextlib.redirect_stdout(io.StringIO()):
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            export_output = torch.onnx.dynamo_export(model, *args)
+            export_output = torch.onnx.export(model, args, dynamo=True)
             export_output.save(filename)
 
 
@@ -256,7 +263,7 @@ def export_dynopt(filename, model, *args):
     with contextlib.redirect_stdout(io.StringIO()):
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            export_output = torch.onnx.dynamo_export(model, *args)
+            export_output = torch.onnx.export(model, args, dynamo=True)
             model_onnx = export_output.model_proto
 
             from experimental_experiment.convert.convert_helper import (

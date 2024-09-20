@@ -248,6 +248,19 @@ class EasyPatternOptimization(PatternOptimization):
     def __init__(self, verbose: int = 0, priority: int = 0, min_opset: int = 1):
         super().__init__(verbose=verbose, priority=priority, min_opset=min_opset)
         self._cache = {}
+        self._validate_parameters = {}
+
+    def add_validate_param(self, key: str, value: Any):
+        """
+        Stores a value to retrieve when apply_pattern is called.
+        """
+        self._validate_parameters[key] = value
+
+    def get_validate_param(self, key: str) -> Any:
+        assert (
+            key in self._validate_parameters
+        ), f"Unable to find key {key!r} in {sorted(self._validate_parameters)}"
+        return self._validate_parameters[key]
 
     def match_pattern(
         self,
@@ -390,7 +403,7 @@ class EasyPatternOptimization(PatternOptimization):
             return self.none(node, inspect.currentframe().f_lineno)
 
         for nr, pnr in zip(n.input, pn.input):
-            if len(g.next_nodes(nr)) != len(pat.next_nodes(pnr)):
+            if not g.is_constant(nr) and len(g.next_nodes(nr)) != len(pat.next_nodes(pnr)):
                 self._hint(
                     "BACKWARD: one input is used outside the pattern",
                     "-- pattern input and pattern node",
@@ -402,9 +415,11 @@ class EasyPatternOptimization(PatternOptimization):
                     "-- len(pat.next_nodes(pnr))",
                     len(pat.next_nodes(pnr)),
                     *pat.next_nodes(pnr),
+                    type(pn),
                     "-- len(g.next_nodes(nr)))",
                     len(g.next_nodes(nr)),
                     *g.next_nodes(nr),
+                    type(n),
                 )
                 return self.none(node, inspect.currentframe().f_lineno)
 

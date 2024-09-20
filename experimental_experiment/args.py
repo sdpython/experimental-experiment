@@ -16,9 +16,7 @@ def check_cuda_availability():
         pass
     try:
         result = subprocess.run(["nvidia-smi"], capture_output=True, text=True)
-        if result.returncode == 0:
-            return True
-        return False
+        return result.returncode == 0
     except FileNotFoundError:
         return False
 

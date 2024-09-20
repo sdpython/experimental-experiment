@@ -42,7 +42,10 @@ def broadcast_shape(
             elif a == 1:
                 d = b
             else:
-                d = None
+                # We have two indications, let's take the most strict one.
+                d = a
+                if graph_builder:
+                    graph_builder.register_constraint_dimension(b, a)
         elif isinstance(b, int):
             # a is str
             if b == 1:
@@ -52,8 +55,6 @@ def broadcast_shape(
                 d = b
                 if graph_builder:
                     graph_builder.register_constraint_dimension(a, b)
-            else:
-                d = None
         else:
             # both str
             d = a if a == b else None
@@ -547,16 +548,40 @@ def _set_shape_type_op_any_castlike(
 
 
 def _set_shape_type_op_any_maxpool(self: "GraphBuilder", node: NodeProto):  # noqa: F821
-    self.set_type(node.output[0], self.get_type(node.input[0]))
+    if self.has_type(node.input[0]):
+        self.set_type(node.output[0], self.get_type(node.input[0]))
     if len(node.output) > 1:
         self.set_type(node.output[1], TensorProto.INT64)
+
+
+def _set_shape_type_op_any_gather(
+    self: "GraphBuilder",  # noqa: F821
+    node: NodeProto,
+):
+    if self.has_type(node.input[0]):
+        self.set_type(node.output[0], self.get_type(node.input[0]))
+    if self.has_shape(node.input[0]) and self.has_shape(node.input[1]):
+        sh1 = self.get_shape(node.input[0])
+        sh2 = self.get_shape(node.input[1])
+        att = self.get_attribute(node, "axis", exc=False)
+        axis = 0 if att is None else att.i
+        if len(sh1) == len(sh2) == 2 and axis == 0:
+            new_shape = (*sh2, sh1[-1])
+            self.set_shape(node.output[0], new_shape)
+        else:
+            self.set_rank(node.output[0], len(sh1) + len(sh2) - 1)
+    elif self.has_rank(node.input[0]) and self.has_rank(node.input[1]):
+        rk1 = self.get_rank(node.input[0])
+        rk2 = self.get_rank(node.input[1])
+        self.set_rank(node.output[0], rk1 + rk2 - 1)
 
 
 def _set_shape_type_op_any_gather_elements(
     self: "GraphBuilder",  # noqa: F821
     node: NodeProto,
 ):
-    self.set_type(node.output[0], self.get_type(node.input[0]))
+    if self.has_type(node.input[0]):
+        self.set_type(node.output[0], self.get_type(node.input[0]))
     if self.has_shape(node.input[0]) and self.has_shape(node.input[1]):
         shape = self.get_shape(node.input[0])
         att_axis = self.get_attribute(node, "axis", exc=False)
@@ -570,7 +595,8 @@ def _set_shape_type_op_any_gather_elements(
 
 
 def _set_shape_type_op_any_concat(self: "GraphBuilder", node: NodeProto):  # noqa: F821
-    self.set_type(node.output[0], self.get_type(node.input[0]))
+    if self.has_type(node.input[0]):
+        self.set_type(node.output[0], self.get_type(node.input[0]))
     if all(self.has_shape(s) for s in node.input):
         axis = self.get_attribute(node, "axis").i
         shapes = [self.get_shape(i) for i in node.input]
@@ -777,6 +803,7 @@ _set_shape_type_op_any_known = {
     "Cast": _set_shape_type_op_any_cast,
     "Concat": _set_shape_type_op_any_concat,
     "Expand": _set_shape_type_op_any_reshape,
+    "Gather": _set_shape_type_op_any_gather,
     "GatherElements": _set_shape_type_op_any_gather_elements,
     "Gemm": _set_shape_type_op_any_gemm,
     "IsInf": lambda *args: _set_shape_type_op_any_unary(*args, itype=TensorProto.BOOL),
@@ -807,15 +834,19 @@ def set_shape_type_op_any(self: "GraphBuilder", node: NodeProto):  # noqa: F821
         set_type_shape_binary_op(self, node.output[0], *node.input, cmp_op=True)
     elif node.op_type in self._op_type_element_wise_types:
         set_type_shape_binary_op(self, node.output[0], *node.input)
-    elif node.op_type in {"CastLike", "DequantizeLinear", "DynamicQuantizeLinear"}:
+    elif node.op_type in {"DequantizeLinear", "DynamicQuantizeLinear"}:
         raise AssertionError(
             f"set_shape_type_op_any not implemented for "
             f"{node.op_type!r}{self.get_debug_msg()}"
         )
-    elif node.op_type in self._op_type_unary_like:
-        set_type_shape_unary_op(self, node.output[0], node.input[0])
+    elif node.op_type in {"CastLike"}:
+        set_type_shape_binary_op(
+            self, node.output[0], node.input[0], itype=self.get_type(node.input[1])
+        )
     elif node.op_type in {"Pow"}:
         set_type_shape_binary_op(self, node.output[0], *node.input)
+    elif node.op_type in self._op_type_unary_like:
+        set_type_shape_unary_op(self, node.output[0], node.input[0])
 
 
 def set_type_shape_fused_matmul(self: "GraphBuilder", node: NodeProto):  # noqa: F821

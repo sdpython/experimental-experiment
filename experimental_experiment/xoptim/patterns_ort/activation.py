@@ -136,9 +136,7 @@ class GeluErfPattern(EasyPatternOptimization):
         mul = g.op.Mul(x, aexd)
         return g.op.Mul(c05, mul)  # 0.5
 
-    def apply_pattern(
-        self, g: "GraphBuilderPatternOptimization", x, cst2, one, c05  # noqa: F821
-    ):
+    def apply_pattern(self, g: "GraphBuilder", x, cst2, one, c05):  # noqa: F821
         return g.anyop.Gelu(x, domain="com.microsoft")
 
     def validate_mapping(

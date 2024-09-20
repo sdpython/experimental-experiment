@@ -6,7 +6,12 @@ import importlib.util
 import subprocess
 import time
 from experimental_experiment import __file__ as experimental_experiment_file
-from experimental_experiment.ext_test_case import ExtTestCase, is_windows, is_apple
+from experimental_experiment.ext_test_case import (
+    ExtTestCase,
+    is_windows,
+    is_apple,
+    has_onnxruntime_training,
+)
 
 VERBOSE = 0
 ROOT = os.path.realpath(
@@ -64,6 +69,8 @@ class TestDocumentationExamples(ExtTestCase):
 
     @classmethod
     def add_test_methods(cls):
+        import torch
+
         this = os.path.abspath(os.path.dirname(__file__))
         fold = os.path.normpath(os.path.join(this, "..", "..", "_doc", "examples"))
         found = os.listdir(fold)
@@ -72,8 +79,8 @@ class TestDocumentationExamples(ExtTestCase):
                 continue
             reason = None
 
-            if sys.version_info >= (3, 12, 0):
-                reason = "too long"
+            if pv.Version(".".join(torch.__version__.split(".")[:2])) < pv.Version("2.5"):
+                reason = "too long, pytorch < 2.5"
 
             if name in {"plot_torch_export_201.py"}:
                 if sys.platform in {"win32"}:
@@ -83,8 +90,12 @@ class TestDocumentationExamples(ExtTestCase):
             if not reason and name in {
                 "plot_llama_bench_102.py",
                 "plot_torch_custom_backend_101.py",
+                "plot_custom_backend_llama_102.py",
             }:
-                if sys.platform in {"win32", "darwin"}:
+                if sys.platform in {"win32"}:
+                    # dynamo not supported on windows
+                    reason = "dynamo not supported on windows"
+                if sys.platform in {"darwin"}:
                     # dynamo not supported on windows
                     reason = "onnxruntime-training not available"
 
@@ -123,6 +134,18 @@ class TestDocumentationExamples(ExtTestCase):
             if name in {"plot_llama_bench_102.py"}:
                 if sys.platform in {"darwin"}:
                     reason = "apple not supported"
+
+            if name in {
+                "plot_torch_custom_backend_101.py",
+                "lot_llama_bench_102.py",
+                "plot_custom_backend_llama_102.py",
+            }:
+                if not has_onnxruntime_training(True):
+                    reason = "OrtValueVector.push_back_batch is missing (onnxruntime)"
+
+            if name in {"plot_convolutation_matmul_102.py"}:
+                if not has_onnxruntime_training(True):
+                    reason = "OrtModuleGraphBuilder is missing (onnxruntime)"
 
             if not reason and name in {
                 # "plot_convolutation_matmul.py",

@@ -14,7 +14,7 @@ from .onnx_cast import (
 from .onnx_dropout import DropoutPattern
 from .onnx_equal import UnsqueezeEqualPattern
 from .onnx_expand import ExpandPattern, ExpandBroadcastPattern, ExpandSwapPattern
-from .onnx_functions import GeluPattern, SoftmaxCrossEntropyLossCastPattern
+from .onnx_functions import GeluPattern, LeakyReluPattern, SoftmaxCrossEntropyLossCastPattern
 from .onnx_layer_normalization import (
     CastLayerNormalizationCastPattern,
     LayerNormalizationPattern,
@@ -110,6 +110,7 @@ def get_default_patterns(verbose: int = 0) -> List[PatternOptimization]:
         IdentityPattern(verbose=verbose),
         LayerNormalizationPattern(verbose=verbose),
         LayerNormalizationScalePattern(verbose=verbose),
+        LeakyReluPattern(verbose=verbose),
         MulMulMulScalarPattern(verbose=verbose),
         ReduceReshapePattern(verbose=verbose),
         ReduceSumNormalizePattern(verbose=verbose),

@@ -77,6 +77,8 @@ class CastCastBinaryPattern(PatternOptimization):
         ):
             return self.none(node, inspect.currentframe().f_lineno)
 
+        if not g.has_type(node.input[0]) or not g.has_type(node.input[1]):
+            return self.none(node, inspect.currentframe().f_lineno)
         dtype_left, dtype_right = g.get_type(node.input[0]), g.get_type(node.input[1])
         if dtype_left not in self._dtypes_allowed or dtype_right not in self._dtypes_allowed:
             return self.none(node, inspect.currentframe().f_lineno)

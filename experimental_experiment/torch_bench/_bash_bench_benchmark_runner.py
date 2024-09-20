@@ -330,7 +330,7 @@ class BenchmarkRunner:
                     onnx_opt_cst_removed=cst_removed,
                 )
             )
-            sorted_time = list(sorted([(v, k) for k, v in by_pattern.items()], reverse=True))
+            sorted_time = sorted([(v, k) for k, v in by_pattern.items()], reverse=True)
             if sorted_time:
                 for i in range(min(10, len(sorted_time))):
                     new_stat.update(
@@ -340,7 +340,7 @@ class BenchmarkRunner:
                             f"time_opt_toptime{i}": sorted_time[i][0],
                         }
                     )
-            sorted_n = list(sorted((v, k) for k, v in by_pattern_n.items()))
+            sorted_n = sorted((v, k) for k, v in by_pattern_n.items())
             if sorted_n:
                 for i in range(min(10, len(sorted_n))):
                     new_stat.update(
@@ -349,7 +349,7 @@ class BenchmarkRunner:
                             f"onnx_opt_topnname{i}": sorted_n[i][1],
                         }
                     )
-            sorted_iter = list(sorted([(v, k) for k, v in by_iter.items()], reverse=True))
+            sorted_iter = sorted([(v, k) for k, v in by_iter.items()], reverse=True)
             if sorted_iter:
                 for i in range(min(10, len(sorted_iter))):
                     new_stat.update(
@@ -364,9 +364,7 @@ class BenchmarkRunner:
             if "aten" in builder:
                 new_stat.update({f"op_torch_{k}": v for k, v in builder["aten"].items()})
 
-        for k, v in opt_stats.items():
-            if k.startswith("time_"):
-                new_stat[k] = v
+        new_stat.update({k: v for k, v in opt_stats.items() if k.startswith("time_")})
         return new_stat
 
     @classmethod
@@ -706,6 +704,12 @@ class BenchmarkRunner:
 
         from experimental_experiment.bench_run import get_machine
 
+        if "-" in optimization:
+            # Removes value "-" as empty strings are sometimes not allowed.
+            spl = optimization.split(",") if "," in optimization else [optimization]
+            spl = [("" if _ == "-" else _) for _ in spl]
+            optimization = ",".join(spl)
+
         def _end():
             # restore the initial state
             torch.set_grad_enabled(initial_no_grad)
@@ -916,7 +920,7 @@ class BenchmarkRunner:
         stats["flag_training"] = self.training
         stats["exporter"] = exporter
         stats["input_size"] = self.obj_size(model_runner.inputs)
-        stats["_index"] = f"{model_name}-{exporter}"
+        stats["_index"] = f"{model_name}-{exporter}-{optimization}-{rtopt}"
         stats["date_start"] = f"{datetime.now():%Y-%m-%d}"
         stats["opt_patterns"] = optimization
         stats["rtopt"] = rtopt
@@ -1098,7 +1102,7 @@ class BenchmarkRunner:
             folder,
             (
                 f"{model_name}-{exporter}-{self.device.replace(':', '')}"
-                f"-{self.dtype or ''}{sopt}"
+                f"-{self.dtype or ''}{sopt}-{1 if rtopt in (1, True, '1', 'True') else 0}"
             ),
         )
         if pfilename and not os.path.exists(pfilename):

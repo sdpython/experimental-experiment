@@ -44,6 +44,7 @@ select = [
 [tool.ruff.lint.extend-per-file-ignores]
 "**" = ["C401", "C408", "C413", "RUF012", "RUF100", "RUF010", "SIM108", "SIM102", "SIM114", "SIM103", "UP015", "UP027", "UP031", "UP034", "UP032"]
 "_doc/examples/plot_*.py" = ["E402", "B018", "PIE808", "SIM105", "SIM117"]
+"_doc/notebooks/plot_*.py" = ["E402", "B018", "PIE808", "SIM105", "SIM117"]
 "_doc/examples/plot_first_example.py" = ["F811"]
 "experimental_experiment/checks.py" = ["F401"]
 "experimental_experiment/torch_bench/check_model.py" = ["E402"]

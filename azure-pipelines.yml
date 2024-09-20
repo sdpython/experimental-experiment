@@ -29,7 +29,6 @@ jobs:
     displayName: 'Install Requirements'
   - script: |
       pip install -r requirements-dev.txt
-      pip install torch-onnx --no-deps
     displayName: 'Install Requirements dev'
   - script: |
       python -c "import torch;print('torch', torch.__version__)"
@@ -59,7 +58,7 @@ jobs:
       python -m pip install . -v -v -v
     displayName: 'install wheel'
   - script: |
-      UNITTEST_ONNXRT=1 python -m pytest _unittests --durations=10
+      UNITTEST_ONNXRT=1 UNITTEST_GOING=1 python -m pytest _unittests --durations=10
     displayName: 'Runs Unit Tests'
   - task: PublishPipelineArtifact@0
     inputs:
@@ -112,7 +111,6 @@ jobs:
     displayName: 'Install specific version of transformers'
   - script: |
       pip install -r requirements-dev.txt
-      pip install torch-onnx --no-deps
     displayName: 'Install Requirements dev'
   - script: |
       python -c "import torch;print('torch', torch.__version__)"
@@ -139,7 +137,7 @@ jobs:
       python -m pip freeze
     displayName: 'pip freeze'
   - script: |
-      UNITTEST_ONNXRT=1 python -m pytest _unittests --durations=10
+      UNITTEST_ONNXRT=1 UNITTEST_GOING=1 python -m pytest _unittests --durations=10
     displayName: 'Runs Unit Tests'
   - task: PublishPipelineArtifact@0
     inputs:
@@ -194,7 +192,6 @@ jobs:
   #  displayName: 'Install onnxscript'
   - script: |
       pip install -r requirements-dev.txt
-      pip install torch-onnx --no-deps
     displayName: 'Install Requirements dev'
   - script: |
       python -c "import torch;print('torch', torch.__version__)"
@@ -216,7 +213,7 @@ jobs:
       python -m pip freeze
     displayName: 'pip freeze'
   - script: |
-      python -m pytest --cov _unittests --durations=10
+      UNITTEST_GOING=1 python -m pytest --cov _unittests --durations=10
     displayName: 'Runs Unit Tests'
   - script: |
       python -u setup.py bdist_wheel
@@ -269,7 +266,6 @@ jobs:
   #  displayName: 'Install onnxscript'
   - script: |
       pip install -r requirements-dev.txt
-      pip install torch-onnx --no-deps
     displayName: 'Install Requirements dev'
   - script: pip install onnxmltools --no-deps
     displayName: 'Install onnxmltools'
@@ -337,7 +333,6 @@ jobs:
   #  displayName: 'Install onnxscript'
   - script: |
       pip install -r requirements-dev.txt
-      pip install torch-onnx --no-deps
     displayName: 'Install Requirements dev'
   - script: pip install onnxmltools --no-deps
     displayName: 'Install onnxmltools'
@@ -345,7 +340,7 @@ jobs:
       python -m pip freeze
     displayName: 'pip freeze'
   - script: |
-      UNITTEST_ONNXRT=1 python -m pytest _unittests --durations=10
+      UNITTEST_ONNXRT=1 UNITTEST_GOING=1 python -m pytest _unittests --durations=10
     displayName: 'Runs Unit Tests'
   - script: |
       python -u setup.py bdist_wheel

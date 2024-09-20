@@ -20,7 +20,7 @@ from numpy.testing import assert_allclose
 
 
 def is_azure() -> bool:
-    "Tells if the job is running on Azure DevOps."
+    """Tells if the job is running on Azure DevOps."""
     return os.environ.get("AZURE_HTTP_USER_AGENT", "undefined") != "undefined"
 
 
@@ -32,10 +32,12 @@ def is_apple() -> bool:
     return sys.platform == "darwin"
 
 
+def is_linux() -> bool:
+    return sys.platform == "linux"
+
+
 def skipif_transformers(version_to_skip: Union[str, Set[str]], msg: str) -> Callable:
-    """
-    Skips a unit test if transformers has a specific version.
-    """
+    """Skips a unit test if transformers has a specific version."""
     if isinstance(version_to_skip, str):
         version_to_skip = {version_to_skip}
     import transformers
@@ -47,9 +49,7 @@ def skipif_transformers(version_to_skip: Union[str, Set[str]], msg: str) -> Call
 
 
 def skipif_not_onnxrt(msg) -> Callable:
-    """
-    Skips a unit test if it runs on :epkg:`azure pipeline` on :epkg:`Windows`.
-    """
+    """Skips a unit test if it runs on :epkg:`azure pipeline` on :epkg:`Windows`."""
     UNITTEST_ONNXRT = os.environ.get("UNITTEST_ONNXRT", "0")
     value = int(UNITTEST_ONNXRT)
     if not value:
@@ -59,19 +59,23 @@ def skipif_not_onnxrt(msg) -> Callable:
 
 
 def skipif_ci_windows(msg) -> Callable:
-    """
-    Skips a unit test if it runs on :epkg:`azure pipeline` on :epkg:`Windows`.
-    """
+    """Skips a unit test if it runs on :epkg:`azure pipeline` on :epkg:`Windows`."""
     if is_windows() and is_azure():
         msg = f"Test does not work on azure pipeline (Windows). {msg}"
         return unittest.skip(msg)
     return lambda x: x
 
 
+def skipif_ci_linux(msg) -> Callable:
+    """Skips a unit test if it runs on :epkg:`azure pipeline` on :epkg:`Linux`."""
+    if is_linux() and is_azure():
+        msg = f"Takes too long (Linux). {msg}"
+        return unittest.skip(msg)
+    return lambda x: x
+
+
 def skipif_ci_apple(msg) -> Callable:
-    """
-    Skips a unit test if it runs on :epkg:`azure pipeline` on :epkg:`Windows`.
-    """
+    """Skips a unit test if it runs on :epkg:`azure pipeline` on :epkg:`Windows`."""
     if is_apple() and is_azure():
         msg = f"Test does not work on azure pipeline (Apple). {msg}"
         return unittest.skip(msg)
@@ -79,9 +83,7 @@ def skipif_ci_apple(msg) -> Callable:
 
 
 def with_path_append(path_to_add: Union[str, List[str]]) -> Callable:
-    """
-    Adds a path to sys.path to check.
-    """
+    """Adds a path to sys.path to check."""
 
     def wraps(f, path_to_add=path_to_add):
         def wrapped(self, path_to_add=path_to_add):
@@ -293,9 +295,7 @@ class ExtTestCase(unittest.TestCase):
         print(onnx_simple_text_plot(model))
 
     def get_dump_file(self, name: str, folder: Optional[str] = None) -> str:
-        """
-        Returns a filename to dump a model.
-        """
+        """Returns a filename to dump a model."""
         if folder is None:
             folder = "dump_test"
         if folder and not os.path.exists(folder):
@@ -308,19 +308,19 @@ class ExtTestCase(unittest.TestCase):
         proto: Any,
         folder: Optional[str] = None,
     ) -> str:
-        "Dumps an onnx file."
+        """Dumps an onnx file."""
         fullname = self.get_dump_file(name, folder=folder)
         with open(fullname, "wb") as f:
             f.write(proto.SerializeToString())
         return fullname
 
     def assertExists(self, name):
-        "Checks the existing of a file."
+        """Checks the existing of a file."""
         if not os.path.exists(name):
             raise AssertionError(f"File or folder {name!r} does not exists.")
 
     def assertGreaterOrEqual(self, a, b, msg=None):
-        "in the name"
+        """In the name"""
         if a < b:
             return AssertionError(f"{a} < {b}, a not greater or equal than b\n{msg or ''}")
 
@@ -345,7 +345,7 @@ class ExtTestCase(unittest.TestCase):
         rtol: float = 0,
         msg: Optional[str] = None,
     ):
-        "in the name"
+        """In the name"""
         self.assertEqual(len(expected), len(value))
         for a, b in zip(expected, value):
             self.assertEqualArray(a, b, atol=atol, rtol=rtol)
@@ -358,7 +358,7 @@ class ExtTestCase(unittest.TestCase):
         rtol: float = 0,
         msg: Optional[str] = None,
     ):
-        "in the name"
+        """In the name"""
         if hasattr(expected, "detach"):
             expected = expected.detach().cpu().numpy()
         if hasattr(value, "detach"):
@@ -390,7 +390,7 @@ class ExtTestCase(unittest.TestCase):
         atol: float = 0,
         rtol: float = 0,
     ):
-        "in the name"
+        """In the name"""
         if not isinstance(expected, numpy.ndarray):
             expected = numpy.array(expected)
         if not isinstance(value, numpy.ndarray):
@@ -398,7 +398,7 @@ class ExtTestCase(unittest.TestCase):
         self.assertEqualArray(expected, value, atol=atol, rtol=rtol)
 
     def assertRaise(self, fct: Callable, exc_type: type[Exception]):
-        "in the name"
+        """In the name"""
         try:
             fct()
         except exc_type as e:
@@ -408,7 +408,7 @@ class ExtTestCase(unittest.TestCase):
         raise AssertionError("No exception was raised.")  # noqa: B904
 
     def assertEmpty(self, value: Any):
-        "in the name"
+        """In the name"""
         if value is None:
             return
         if not value:
@@ -416,7 +416,7 @@ class ExtTestCase(unittest.TestCase):
         raise AssertionError(f"value is not empty: {value!r}.")
 
     def assertNotEmpty(self, value: Any):
-        "in the name"
+        """In the name"""
         if value is None:
             raise AssertionError(f"value is empty: {value!r}.")
         if isinstance(value, (list, dict, tuple, set)):
@@ -424,14 +424,14 @@ class ExtTestCase(unittest.TestCase):
                 raise AssertionError(f"value is empty: {value!r}.")
 
     def assertStartsWith(self, prefix: str, full: str):
-        "in the name"
+        """In the name"""
         if not full.startswith(prefix):
             raise AssertionError(f"prefix={prefix!r} does not start string  {full!r}.")
 
     @classmethod
     def tearDownClass(cls):
         for name, line, w in cls._warns:
-            warnings.warn(f"\n{name}:{line}: {type(w)}\n  {str(w)}", stacklevel=1)
+            warnings.warn(f"\n{name}:{line}: {type(w)}\n  {w!s}", stacklevel=2)
 
     def capture(self, fct: Callable):
         """
@@ -469,14 +469,12 @@ class ExtTestCase(unittest.TestCase):
             if none_if is not None and none_if in str(e):
                 return None
             if msg is None:
-                raise e
+                raise
             raise AssertionError(msg) from e
 
 
 def get_figure(ax):
-    """
-    Returns the figure of a matplotlib figure.
-    """
+    """Returns the figure of a matplotlib figure."""
     if hasattr(ax, "get_figure"):
         return ax.get_figure()
     if len(ax.shape) == 0:
@@ -489,9 +487,7 @@ def get_figure(ax):
 
 
 def dump_dort_onnx(fn):
-    """
-    Context manager to dump onnx model created by dort.
-    """
+    """Context manager to dump onnx model created by dort."""
     prefix = fn.__name__
     folder = "tests_dump"
     if not os.path.exists(folder):
@@ -508,9 +504,7 @@ def dump_dort_onnx(fn):
 
 
 def has_cuda() -> bool:
-    """
-    Returns  ``torch.cuda.is_available()``.
-    """
+    """Returns ``torch.cuda.is_available()``."""
     import torch
 
     return torch.cuda.is_available()
@@ -532,9 +526,7 @@ def requires_cuda(msg: str = "", version: str = ""):
 
 
 def requires_zoo(msg: str = "") -> Callable:
-    """
-    Skips a unit test if environment variable ZOO is not equal to 1.
-    """
+    """Skips a unit test if environment variable ZOO is not equal to 1."""
     var = os.environ.get("ZOO", "0") in (1, "1", "TRUE", "true", "True")
 
     if not var:
@@ -554,9 +546,7 @@ def requires_sklearn(version: str, msg: str = "") -> Callable:
 
 
 def requires_torch(version: str, msg: str = "") -> Callable:
-    """
-    Skips a unit test if :epkg:`pytorch` is not recent enough.
-    """
+    """Skips a unit test if :epkg:`pytorch` is not recent enough."""
     import packaging.version as pv
     import torch
 
@@ -567,9 +557,7 @@ def requires_torch(version: str, msg: str = "") -> Callable:
 
 
 def requires_numpy(version: str, msg: str = "") -> Callable:
-    """
-    Skips a unit test if :epkg:`numpy` is not recent enough.
-    """
+    """Skips a unit test if :epkg:`numpy` is not recent enough."""
     import packaging.version as pv
     import numpy
 
@@ -582,9 +570,7 @@ def requires_numpy(version: str, msg: str = "") -> Callable:
 def requires_transformers(
     version: str, msg: str = "", or_older_than: Optional[str] = None
 ) -> Callable:
-    """
-    Skips a unit test if :epkg:`transformers` is not recent enough.
-    """
+    """Skips a unit test if :epkg:`transformers` is not recent enough."""
     import packaging.version as pv
     import transformers
 
@@ -602,9 +588,7 @@ def requires_transformers(
 
 
 def requires_onnxscript(version: str, msg: str = "") -> Callable:
-    """
-    Skips a unit test if :epkg:`onnxscript` is not recent enough.
-    """
+    """Skips a unit test if :epkg:`onnxscript` is not recent enough."""
     import packaging.version as pv
     import onnxscript
 
@@ -619,9 +603,7 @@ def requires_onnxscript(version: str, msg: str = "") -> Callable:
 
 
 def requires_onnxruntime(version: str, msg: str = "") -> Callable:
-    """
-    Skips a unit test if :epkg:`onnxruntime` is not recent enough.
-    """
+    """Skips a unit test if :epkg:`onnxruntime` is not recent enough."""
     import packaging.version as pv
     import onnxruntime
 
@@ -632,9 +614,7 @@ def requires_onnxruntime(version: str, msg: str = "") -> Callable:
 
 
 def has_onnxruntime_training(push_back_batch: bool = False):
-    """
-    Tells if onnxruntime_training is installed.
-    """
+    """Tells if onnxruntime_training is installed."""
     try:
         from onnxruntime import training
     except ImportError:
@@ -655,9 +635,7 @@ def has_onnxruntime_training(push_back_batch: bool = False):
 
 
 def requires_onnxruntime_training(push_back_batch: bool = False, msg: str = "") -> Callable:
-    """
-    Skips a unit test if :epkg:`onnxruntime` is not onnxruntime_training.
-    """
+    """Skips a unit test if :epkg:`onnxruntime` is not onnxruntime_training."""
     try:
         from onnxruntime import training
     except ImportError:
@@ -681,9 +659,7 @@ def requires_onnxruntime_training(push_back_batch: bool = False, msg: str = "") 
 
 
 def requires_onnx(version: str, msg: str = "") -> Callable:
-    """
-    Skips a unit test if :epkg:`onnx` is not recent enough.
-    """
+    """Skips a unit test if :epkg:`onnx` is not recent enough."""
     import packaging.version as pv
     import onnx
 

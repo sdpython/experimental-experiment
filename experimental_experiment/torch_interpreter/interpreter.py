@@ -442,7 +442,18 @@ class DynamoInterpreter:
 
         if inspect.isbuiltin(node.target) or not node_schema:
             complete_args = list(node.args)
-            complete_kwargs = node.kwargs
+            complete_kwargs = {}
+            for k, v in node.kwargs.items():
+                if isinstance(v, self.builder.torch.fx.Node):
+                    complete_kwargs[k] = v.name
+                elif v is None:
+                    complete_kwargs[k] = None
+                elif isinstance(
+                    v, (int, float, str, self.builder.torch.device, self.builder.torch.dtype)
+                ):
+                    complete_kwargs[k] = v
+                else:
+                    raise AssertionError(f"Unexpected type {type(v)} for k={k!r} (v={v!r})")
         else:
             for i, expected_arg in enumerate(node_schema.arguments):
                 if i < len(node.args):
@@ -499,13 +510,18 @@ class DynamoInterpreter:
         axes_name = self.builder.unique_name(f"{node.name}_axis")
         self.builder.make_initializer(axes_name, aaxes)
 
+        shape_value = None
+        if self.builder.has_shape(input_name):
+            shape_value = self.builder.get_shape(input_name)
+
         starts = []
         ends = []
         steps = []
         shape_name = None
         end_name = None
         concat = False
-        for axis, aslice in zip(axes, index_slice):
+        for axis_, aslice in zip(axes, index_slice):
+            axis = axis_
             if isinstance(aslice, int):
                 # integer
                 starts.append(aslice)
@@ -518,26 +534,29 @@ class DynamoInterpreter:
             starts.append(aslice.start or 0)
 
             if aslice.stop is None:
-                if shape_name is None:
-                    shape_name = self.builder.unique_name(f"{node.name}_shape")
+                if shape_value is None or not isinstance(shape_value[axis], int):
+                    if shape_name is None:
+                        shape_name = self.builder.unique_name(f"{node.name}_shape")
+                        self.builder.make_node(
+                            "Shape", [input_name], [shape_name], name=f"{name}A"
+                        )
+
+                    aaxis = np.array([axis], dtype=np.int64)
+                    axis_name = self.builder.unique_name(f"{node.name}_axis_{axis}")
+                    self.builder.make_initializer(axis_name, aaxis)
+
+                    end_name = self.builder.unique_name(f"{node.name}_end")
                     self.builder.make_node(
-                        "Shape", [input_name], [shape_name], name=f"{name}A"
+                        "GatherElements",
+                        [shape_name, axis_name],
+                        [end_name],
+                        name=f"{name}B",
+                        sts=None,
                     )
-
-                aaxis = np.array([axis], dtype=np.int64)
-                axis_name = self.builder.unique_name(f"{node.name}_axis_{axis}")
-                self.builder.make_initializer(axis_name, aaxis)
-
-                end_name = self.builder.unique_name(f"{node.name}_end")
-                self.builder.make_node(
-                    "GatherElements",
-                    [shape_name, axis_name],
-                    [end_name],
-                    name=f"{name}B",
-                    sts=None,
-                )
-                ends.append(end_name)
-                concat = True
+                    ends.append(end_name)
+                    concat = True
+                else:
+                    ends.append(shape_value[axis])
             else:
                 vstop = aslice.stop.name if hasattr(aslice.stop, "name") else aslice.stop
                 concat |= isinstance(vstop, str)

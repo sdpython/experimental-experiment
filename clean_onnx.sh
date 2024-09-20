@@ -33,6 +33,7 @@ rm _doc/examples/*.opt.onnx
 rm _doc/examples/*.dynamo.onnx
 rm _doc/examples/*.script.onnx
 rm _doc/examples/dump_models -rf
+rm _doc/examples/dump_onx_*
 
 rm _tools/bin -rf
 rm _tools/mambaroot -rf

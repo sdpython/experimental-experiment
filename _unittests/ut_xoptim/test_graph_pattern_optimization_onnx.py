@@ -3308,6 +3308,100 @@ class TestGraphPatternOptimization(ExtTestCase):
         self.assertEqualArray(expected, got, atol=1e-2)
         self._check_with_ort(opt_onx)
 
+    def test_leaky_relu(self):
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("Greater", ["X", "zero"], ["xpos"]),
+                    oh.make_node("Mul", ["X", "slope"], ["xmul"]),
+                    oh.make_node("Where", ["xpos", "X", "xmul"], ["Y"]),
+                ],
+                "dummy",
+                [oh.make_tensor_value_info("X", TFLOAT, [3, 3])],
+                [oh.make_tensor_value_info("Y", TFLOAT, [3, 3])],
+                [
+                    onh.from_array(np.array([0], dtype=np.float32), name="zero"),
+                    onh.from_array(np.array([0.76], dtype=np.float32), name="slope"),
+                ],
+            ),
+            opset_imports=[oh.make_opsetid("", 18)],
+            ir_version=10,
+        )
+        check_model(model)
+        feeds = {"X": self._range(3, 3).astype(np.float32)}
+        ref = ExtendedReferenceEvaluator(model)
+        expected = ref.run(None, feeds)[0]
+
+        gr = GraphBuilder(
+            model,
+            infer_shapes=True,
+            optimization_options=OptimizationOptions(
+                patterns=["LeakyRelu"],
+                verbose=0,
+            ),
+            verbose=0,
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+        self.assertEqual(
+            ["LeakyRelu"],
+            [n.op_type for n in opt_onx.graph.node],
+        )
+        self.assertEqual(0, len(opt_onx.graph.initializer))
+
+        opt_ref = ExtendedReferenceEvaluator(opt_onx)
+        got = opt_ref.run(None, feeds)[0]
+        self.assertEqualArray(expected, got, atol=1e-2)
+        # self._check_with_ort(opt_onx)
+
+    def test_leaky_relu_2(self):
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("Greater", ["X", "zero"], ["xpos"]),
+                    oh.make_node("Mul", ["X", "slope"], ["xmul"]),
+                    oh.make_node("Where", ["xpos", "X", "xmul"], ["X1"]),
+                    oh.make_node("Greater", ["X1", "zero"], ["xpos2"]),
+                    oh.make_node("Mul", ["X1", "slope2"], ["xmul2"]),
+                    oh.make_node("Where", ["xpos2", "X1", "xmul2"], ["Y"]),
+                ],
+                "dummy",
+                [oh.make_tensor_value_info("X", TFLOAT, [3, 3])],
+                [oh.make_tensor_value_info("Y", TFLOAT, [3, 3])],
+                [
+                    onh.from_array(np.array([0], dtype=np.float32), name="zero"),
+                    onh.from_array(np.array([0.76], dtype=np.float32), name="slope"),
+                    onh.from_array(np.array([-0.33], dtype=np.float32), name="slope2"),
+                ],
+            ),
+            opset_imports=[oh.make_opsetid("", 18)],
+            ir_version=10,
+        )
+        check_model(model)
+        feeds = {"X": self._range(3, 3).astype(np.float32)}
+        ref = ExtendedReferenceEvaluator(model)
+        expected = ref.run(None, feeds)[0]
+
+        gr = GraphBuilder(
+            model,
+            infer_shapes=True,
+            optimization_options=OptimizationOptions(
+                patterns=["LeakyRelu"],
+                verbose=0,
+            ),
+            verbose=0,
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+        self.assertEqual(
+            ["LeakyRelu", "LeakyRelu"],
+            [n.op_type for n in opt_onx.graph.node],
+        )
+        self.assertEqual(0, len(opt_onx.graph.initializer))
+
+        opt_ref = ExtendedReferenceEvaluator(opt_onx)
+        got = opt_ref.run(None, feeds)[0]
+        self.assertEqualArray(expected, got, atol=1e-2)
+        # self._check_with_ort(opt_onx)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

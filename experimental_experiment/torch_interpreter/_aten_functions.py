@@ -1553,6 +1553,7 @@ def aten_embedding(
     norm_type: float = 2.0,
     scale_grad_by_freq: bool = False,
     sparse: bool = False,
+    name: str = "embedding",
 ) -> T:
     """
     embedding
@@ -1579,13 +1580,22 @@ def aten_embedding(
                 f"indices: {g.get_shape(indices) if g.has_shape(indices) else '?'}"
                 f"{g.get_debug_msg()}"
             )
-    assert g.get_type(indices) == 7, (
-        f"indices ({indices!r}) must be integer not {g.get_type(indices)}, "
-        f"weight is {g.get_type(weight)}"
-        f"{g.get_debug_msg()}"
-    )
+    if g.get_type(weight) == 7:
+        # Sometimes it is switched
+        indices, weight = weight, indices
+        assert g.get_type(indices) == 7, (
+            f"indices ({indices!r}) must be integer not {g.get_type(indices)}, "
+            f"weight ({weight!r}) is {g.get_type(weight)} (switched)"
+            f"{g.get_debug_msg()}"
+        )
+    else:
+        assert g.get_type(indices) == 7, (
+            f"indices ({indices!r}) must be integer not {g.get_type(indices)}, "
+            f"weight ({weight!r}) is {g.get_type(weight)}"
+            f"{g.get_debug_msg()}"
+        )
 
-    res = g.op.Gather(weight, indices, outputs=outputs, name="embedding")
+    res = g.op.Gather(weight, indices, outputs=outputs, name=name)
     if not sts:
         g.set_type(res, g.get_type(weight))
         g.set_rank(res, g.get_rank(weight) + g.get_rank(indices) - 1)
@@ -1914,7 +1924,7 @@ def aten__enter_autocast(
         f"The function should not take any tensors as input but types are "
         f"{[type(_) for _ in args]}: {args}{g.get_debug_msg()}"
     )
-    return g.make_node("Constant", [], value_floats=[0], name="_enter_autocast")
+    return g.make_node("Constant", [], value_ints=[1], name="_enter_autocast")
 
 
 def aten_eq(
@@ -2115,6 +2125,7 @@ def aten_flatten(
             )
             resh = g.op.Concat(take, np.array([-1], dtype=np.int64), axis=0, name=name)
             return g.op.Reshape(x, resh, outputs=outputs, name=name)
+        # x='_onx_tile03', start_dim=3, end_dim=-1 not supported, GPTJForCausalLM
         raise NotImplementedError(
             f"x={x!r}, start_dim={start_dim}, end_dim={end_dim} "
             f"not supported{g.get_debug_msg()}"
@@ -3790,20 +3801,32 @@ def aten_mul(
 ) -> T:
     "mul"
     if g.get_type(x) == TensorProto.BOOL and g.get_type(y) == TensorProto.BOOL:
-        res = g.op.And(x, y, name="mul_and", outputs=outputs)
+        res = g.op.And(x, y, name=f"{name}_and", outputs=outputs)
     else:
         res, x, y = prepare_inputs_homogeneous_operator(
             g,
             x,
             y,
             f=g.op.Mul,
-            name="mul",
+            name=name,
             outputs=outputs,
             sts=sts,
         )
     if not sts:
         set_type_shape_binary_op(g, res, x, y)
     return res
+
+
+def aten_imul(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    y: T,
+    name="imul",
+) -> T:
+    "imul"
+    return aten_mul(g, sts, outputs, x, g.op.CastLike(y, x, name=name), name=name)
 
 
 def aten_mul_Scalar(
@@ -3922,7 +3945,7 @@ def aten__native_batch_norm_legit_no_training(
     eps: float = 1e-05,
     name: str = "_native_batch_norm_legit_no_training",
 ) -> Tuple[T, T, T]:
-    """batch normalization"""
+    """batch normalization = aten__native_batch_norm with training=False"""
     return aten__native_batch_norm(
         g,
         sts,
@@ -3952,7 +3975,7 @@ def aten__native_batch_norm_legit_no_stats(
     eps: float = 1e-05,
     name: str = "_native_batch_norm_legit_no_stats",
 ) -> Tuple[T, T, T]:
-    """batch normalization"""
+    """batch normalization = aten__native_batch_norm"""
     return aten__native_batch_norm(
         g,
         sts,
@@ -4646,6 +4669,15 @@ def aten_prelu(
     name: str = "prelu",
 ) -> T:
     "prelu"
+    if g.has_rank(a) and g.is_constant(slope):
+        cst = g.get_constant(slope, computed_value=True)
+        if cst.size == 1:
+            rc = g.get_rank(slope)
+            r = g.get_rank(a)
+            if r != rc:
+                # onnxruntime is faster when the rank of the slope is the same
+                # as the rank of the input even if it contains only one element
+                slope = g.op.Reshape(slope, np.array((1,) * r, dtype=np.int64), name=name)
     res = g.op.PRelu(a, slope, name=name, outputs=outputs)
     if not sts:
         set_type_shape_unary_op(g, res, a)
@@ -5048,11 +5080,18 @@ def _causal_attention_mask(
         shape_query = g.op.Shape(query, name=name)
         shape_key = g.op.Shape(key, name=name)
         dquery = g.op.Gather(shape_query, np.array([-2], dtype=np.int64), name=name)
+        g.set_type(dquery, g.get_type(shape_query))
         dkey = g.op.Gather(shape_key, np.array([-2], dtype=np.int64), name=name)
+        g.set_type(dkey, g.get_type(shape_key))
         size = g.op.Concat(dquery, dkey, axis=0)
-        attn_mask = g.op.ConstantOfShape(size, value=from_array([1], dtype=dtype), name=name)
+        g.set_type(size, g.get_type(dkey))
+        attn_mask = g.op.ConstantOfShape(
+            size, value=from_array(np.array([1], dtype=dtype)), name=name
+        )
+        g.set_type(attn_mask, itype)
 
     tri_attn_mask = g.op.Trilu(attn_mask, upper=0, name=name)
+    set_type_shape_unary_op(g, tri_attn_mask, attn_mask)
 
     new_attn_mask = g.op.Where(
         g.op.Equal(tri_attn_mask, np.array([0], dtype=dtype), name=name),
@@ -5060,6 +5099,7 @@ def _causal_attention_mask(
         np.array([0], dtype=dtype),
         name=name,
     )
+    set_type_shape_unary_op(g, new_attn_mask, tri_attn_mask, itype=itype)
     return new_attn_mask
 
 
@@ -5118,14 +5158,14 @@ def aten_scaled_dot_product_attention(
     ), f"is_causal and attn_mask cannot be set at the same time{g.get_debug_msg()}"
 
     if scale is None:
-        scale = _attention_scale(g, query)
-    else:
+        tscale = _attention_scale(g, query)
+    elif isinstance(scale, (float, int)):
+        assert g.has_type(query), f"Input {query!r} must have a type{g.get_debug_msg()}"
         itype = g.get_type(query)
         dtype = tensor_dtype_to_np_dtype(itype)
-        assert isinstance(
-            scale, float
-        ), f"Unexpected type {type(scale)} for scale{g.get_debug_msg()}"
-        scale = np.array([scale], dtype=dtype)
+        tscale = np.array([scale], dtype=dtype)
+    else:
+        raise AssertionError(f"Unexpected type {type(scale)} for scale{g.get_debug_msg()}")
 
     if is_causal:
         attn_mask = _causal_attention_mask(g, query, key)
@@ -5137,7 +5177,10 @@ def aten_scaled_dot_product_attention(
     )
     key_transposed = g.op.Transpose(key, perm=key_transposed_axes, name=name)
 
-    sc = g.op.Sqrt(scale, name=name)
+    sc = g.op.Sqrt(tscale, name=name)
+    if isinstance(scale, str):
+        set_type_shape_unary_op(g, sc, tscale)
+
     query_scaled = g.op.Mul(query, sc, name=name)
     key_transposed_scaled = g.op.Mul(key_transposed, sc)
     mul_qk = g.op.MatMul(query_scaled, key_transposed_scaled, name=name)
@@ -5148,24 +5191,38 @@ def aten_scaled_dot_product_attention(
     if attn_mask is None:
         mul_qk_add = mul_qk
     elif g.get_type(attn_mask) == TensorProto.BOOL:
-        attn_mask = g.op.Where(
+        _attn_mask = g.op.Where(
             attn_mask,
             np.array([0.0], dtype=dtype),
             np.array([-float("inf")], dtype=dtype),
             name=name,
         )
+        set_type_shape_unary_op(g, _attn_mask, attn_mask, itype=itype)
+        attn_mask = _attn_mask
         mul_qk_add = g.op.Add(mul_qk, attn_mask, name=name)
+        set_type_shape_binary_op(g, mul_qk_add, mul_qk, attn_mask)
     else:
         mul_qk_add = g.op.Add(mul_qk, attn_mask, name=name)
+        set_type_shape_binary_op(g, mul_qk_add, mul_qk, attn_mask)
 
     attn_weight = g.op.Softmax(mul_qk_add, axis=-1)
+    set_type_shape_unary_op(g, attn_weight, mul_qk_add)
 
     if dropout_p != 0:
-        attn_weight = g.op.Dropout(attn_weight, np.array(dropout_p, dtype=dtype), name=name)[
-            0
-        ]
+        _attn_weight = g.op.Dropout(
+            attn_weight, np.array(dropout_p, dtype=dtype), name=name
+        )[0]
+        set_type_shape_unary_op(g, _attn_weight, attn_weight)
+        attn_weight = _attn_weight
 
-    return g.op.MatMul(attn_weight, value, name=name, outputs=outputs)
+    res = g.op.MatMul(attn_weight, value, name=name, outputs=outputs)
+    if not sts:
+        g.set_type(res, g.get_type(attn_weight))
+        if g.has_rank(query):
+            g.set_rank(res, g.get_rank(query))
+        elif g.has_rank(value):
+            g.set_rank(res, g.get_rank(value))
+    return res
 
 
 def _aten__scaled_dot_product_flash_attention_fillin_empty_outputs(
@@ -5352,7 +5409,7 @@ def aten__set_grad_enabled(
     assert isinstance(
         enable, bool
     ), f"Unexpected type for enable={enable!r}{g.get_debug_msg()}"
-    return g.make_node("Constant", [], value_floats=[0], name="_set_grad_enabled")
+    return g.make_node("Constant", [], value_ints=[1], name="_set_grad_enabled")
 
 
 def aten_setitem(
@@ -5674,7 +5731,7 @@ def _aten_slice_scatter_dynamic(
     ), f"slice_scatter not implemented for end={end}{g.get_debug_msg()}"
     assert step is None or is_static_dimension(
         step
-    ), f"slice_scatter not implemented for end={step}{g.get_debug_msg()}"
+    ), f"slice_scatter not implemented for step={step}{g.get_debug_msg()}"
 
     shape = g.op.Shape(x, name=name)
     dim_shape = g.op.Gather(shape, np.array([dim], dtype=np.int64), name=name)
@@ -7007,7 +7064,6 @@ def aten_wrap_with_autocast(
 ) -> T:
     "identity"
     assert dtype is None, f"Not implemented with dtype={enabled}{g.get_debug_msg()}"
-    assert not enabled, f"Not implemented with dtype={enabled}{g.get_debug_msg()}"
     assert not enabled, f"Not implemented with dtype={enabled}{g.get_debug_msg()}"
     assert (
         cache_enabled is None

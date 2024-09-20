@@ -8,6 +8,7 @@ from experimental_experiment.ext_test_case import (
     skipif_ci_windows,
     requires_torch,
     requires_cuda,
+    requires_onnxscript,
     hide_stdout,
 )
 from experimental_experiment.torch_models.dump_helper import assert_all_close
@@ -117,6 +118,7 @@ class TestLlama(ExtTestCase):
     @ignore_warnings((UserWarning, DeprecationWarning))
     @skipif_ci_windows("torch.compile not supported on Windows")
     @requires_torch("2.4")
+    @requires_onnxscript("0.3")  # type promotion
     @hide_stdout()
     def test_ort_mlp_backward(self):
         import torch

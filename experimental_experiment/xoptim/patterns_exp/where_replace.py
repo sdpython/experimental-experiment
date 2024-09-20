@@ -25,10 +25,10 @@ class ReplaceZeroPattern(PatternOptimization):
         if not g.is_constant_scalar(node.input[1]):
             return self.none(node, inspect.currentframe().f_lineno)
 
-        cast_node = g.node_before(node.input[0])
         if g.is_used_more_than_once(node.input[0]):
             return self.none(node, inspect.currentframe().f_lineno)
-        if cast_node.op_type != "Cast" or node.domain != "":
+        cast_node = g.node_before(node.input[0])
+        if cast_node is None or cast_node.op_type != "Cast" or node.domain != "":
             return self.none(node, inspect.currentframe().f_lineno)
         to = g.get_attribute(cast_node, "to").i
         if to != TensorProto.BOOL:
