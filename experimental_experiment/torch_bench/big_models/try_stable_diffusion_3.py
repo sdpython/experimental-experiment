@@ -11,7 +11,7 @@ def load_model(
     verbose: int = 0,
     cache: str = CACHE,
     device: str = "cuda",
-    dtype: Optional["torch.dtype"] = None,
+    dtype: Optional[str] = None,
 ) -> Optional["model"]:  # noqa: F821
     """
     Loads `stable-diffusion-3-medium
@@ -24,9 +24,10 @@ def load_model(
     """
     from diffusers import StableDiffusion3Pipeline
 
+    assert isinstance(dtype, str), f"Unexpected type for dtype={dtype!r}"
     stype = str_dtype(dtype) if dtype is not None else ""
 
-    if os.path.exists(os.path.join(cache, "StableDiffusion3Medium")):
+    if os.path.exists(os.path.join(cache, f"StableDiffusion3Medium{stype}")):
         if verbose:
             print("[load_model] loads cached codellama model")
         model = StableDiffusion3Pipeline.from_pretrained(
@@ -49,7 +50,7 @@ def load_model(
     # if dtype:
     #     model = model.to(dtype)
     if verbose:
-        print("[load_model] done codellama")
+        print("[load_model] done-stable-diffusion-3-medium")
     return model
 
 

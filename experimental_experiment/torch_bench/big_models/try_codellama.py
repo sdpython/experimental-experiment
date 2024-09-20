@@ -12,7 +12,7 @@ def load_model(
     load_tokenizer: bool = False,
     cache: str = CACHE,
     device: str = "cuda",
-    dtype: Optional["torch.dtype"] = None,
+    dtype: Optional[str] = None,
 ) -> Tuple[Optional["tokenizer"], "model"]:  # noqa: F821
     """
     Loads `code_llama
@@ -21,9 +21,12 @@ def load_model(
     :param verbose: verbosity
     :param load_tokenizer: loads the tokenizer as well
     :param device: where to put the model
-    :param dtype: which type to use
+    :param dtype: which type to use, it should be a string such as 'float16'
+        to avoid the following error
+        ``TypeError: Object of type dtype is not JSON serializable``
     :return: tokenizer, model
     """
+    assert isinstance(dtype, str), f"Unexpected type for dtype={dtype!r}"
     stype = str_dtype(dtype) if dtype is not None else ""
 
     if load_tokenizer:
@@ -51,7 +54,7 @@ def load_model(
 
     from transformers import AutoModelForCausalLM
 
-    if os.path.exists(os.path.join(cache, "CodeLlama-7b-model")):
+    if os.path.exists(os.path.join(cache, f"CodeLlama-7b-model{stype}")):
         if verbose:
             print("[load_model] loads cached codellama model")
         model = AutoModelForCausalLM.from_pretrained(
@@ -70,10 +73,6 @@ def load_model(
     if verbose:
         print(f"[load_model] converts to {device!r} and dtype={dtype!r}")
 
-    if tokenizer:
-        tokenizer = tokenizer.to(device)
-        # if dtype:
-        #     tokenizer = tokenizer.to(dtype)
     model = model.to(device)
     # if dtype:
     #    model = model.to(dtype)
@@ -141,9 +140,18 @@ def ids_tensor(shape, vocab_size):
     return torch.tensor(data=values, dtype=torch.long).view(shape).contiguous()
 
 
-def get_model_inputs() -> Tuple[Callable, Tuple[Any, ...]]:
+def get_model_inputs(
+    verbose: int = 0,
+    cache: str = CACHE,
+    device: str = "cuda",
+    dtype: Optional[str] = None,
+) -> Tuple[Callable, Tuple[Any, ...]]:
     """Returns a codellama model and its inputs."""
 
-    input_ids = ids_tensor((1, 128), 32016)
+    input_ids = ids_tensor((1, 128), 32016).to(device)
 
-    return (lambda: load_model(load_tokenizer=False)[1]), (input_ids,)
+    return (
+        lambda: load_model(
+            load_tokenizer=False, verbose=verbose, device=device, dtype=dtype, cache=cache
+        )[1]
+    ), (input_ids,)
