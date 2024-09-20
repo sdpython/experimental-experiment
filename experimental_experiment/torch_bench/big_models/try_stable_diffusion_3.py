@@ -58,7 +58,6 @@ def demo_model(
     model: "model",  # noqa: F821
     inputs: Optional[Any] = None,
     verbose: int = 0,
-    device: str = "cuda",
     num_inference_steps: int = 28,
     guidance_scale: float = 0.7,
 ) -> Any:
@@ -109,9 +108,16 @@ def ids_tensor(shape, vocab_size):
     return torch.tensor(data=values, dtype=torch.long).view(shape).contiguous()
 
 
-def get_model_inputs() -> Tuple[Callable, Tuple[Any, ...]]:
+def get_model_inputs(
+    verbose: int = 0,
+    cache: str = CACHE,
+    device: str = "cuda",
+    dtype: Optional[str] = None,
+) -> Tuple[Callable, Tuple[Any, ...]]:
     """Returns a codellama model and its inputs."""
 
-    input_ids = ids_tensor((1, 128), 32016)
+    input_ids = ids_tensor((1, 128), 32016).to(device)
 
-    return (lambda: load_model(load_tokenizer=False)), (input_ids,)
+    return (lambda: load_model(verbose=verbose, device=device, dtype=dtype, cache=cache)), (
+        input_ids,
+    )
