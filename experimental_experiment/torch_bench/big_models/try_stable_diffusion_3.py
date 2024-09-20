@@ -108,7 +108,7 @@ def ids_tensor(shape, vocab_size):
     return torch.tensor(data=values, dtype=torch.long).view(shape).contiguous()
 
 
-def get_model() -> Tuple[Callable, Tuple[Any, ...]]:
+def get_model_inputs() -> Tuple[Callable, Tuple[Any, ...]]:
     """Returns a codellama model and its inputs."""
 
     input_ids = ids_tensor((1, 128), 32016)

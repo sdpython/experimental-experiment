@@ -510,7 +510,14 @@ def has_cuda() -> bool:
     return torch.cuda.is_available()
 
 
-def requires_cuda(msg: str = "", version: str = ""):
+def requires_cuda(msg: str = "", version: str = "", memory: int = 0):
+    """
+    Skips a test if cuda is not available.
+
+    :param msg: to overwrite the message
+    :param version: minimum version
+    :param memory: minimun number of Gb to run the test
+    """
     import torch
 
     if not torch.cuda.is_available():
@@ -522,6 +529,13 @@ def requires_cuda(msg: str = "", version: str = ""):
         if pv.Version(torch.version.cuda) < pv.Version(version):
             msg = msg or f"CUDA older than {version}"
             return unittest.skip(msg)
+
+    if memory:
+        m = torch.cuda.get_device_properties(0).total_memory / 2**30
+        if m < memory:
+            msg = msg or f"available memory is not enough {m} < {memory} (Gb)"
+            return unittest.skip(msg)
+
     return lambda x: x
 
 
