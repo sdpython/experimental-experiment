@@ -1,9 +1,9 @@
 import os
-from typing import Any, Tuple, Optional
+from typing import Any, Callable, Tuple, Optional
 import numpy as np
 import torch
 
-CACHE = "_bigcache"
+CACHE = os.environ.get("BASH_BENCH_CACHE", "_bigcache")
 
 
 def load_model(
@@ -133,6 +133,9 @@ def ids_tensor(shape, vocab_size):
     return torch.tensor(data=values, dtype=torch.long).view(shape).contiguous()
 
 
-# model(*inputs, use_cache=False)
+def get_model() -> Tuple[Callable, Tuple[Any, ...]]:
+    """Returns a codellama model and its inputs."""
 
-# input_ids = ids_tensor((1, 128), 32016)
+    input_ids = ids_tensor((1, 128), 32016)
+
+    return (lambda: load_model(load_tokenizer=False)), (input_ids,)

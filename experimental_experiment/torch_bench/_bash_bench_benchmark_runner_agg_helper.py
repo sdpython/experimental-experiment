@@ -708,15 +708,16 @@ def _apply_excel_style(
                         cell.number_format = fmt
             continue
 
-        if k in ("bucket", "status", "op_onnx", "op_torch"):
+        if k in ("bucket", "status", "op_onnx", "op_torch") and v.shape[1] > 3:
             has_convert = [("convert" in str(c)) for c in v.columns]
             has_20 = [("-20%" in str(c)) for c in v.columns]
-            assert k != "status" or any(
-                has_convert
-            ), f"has_convert={has_convert} but df.columns={[str(c) for c in v.columns]}"
+            assert k != "status" or any(has_convert), (
+                f"has_convert={has_convert} but k={k!r}, "
+                f"v.columns={[str(c) for c in v.columns]}"
+            )
             assert not k.startswith("bucket") or any(
                 has_20
-            ), f"has_20={has_20} but df.columns={[str(c) for c in v.columns]}"
+            ), f"has_20={has_20} but k={k!r}, v.columns={[str(c) for c in v.columns]}"
             for row in sheet.iter_rows(
                 min_row=first_row,
                 max_row=last_row,
