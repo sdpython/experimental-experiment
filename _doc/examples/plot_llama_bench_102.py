@@ -319,15 +319,16 @@ if data_collected:
 
     df = pandas.DataFrame(data)
     df = df.drop(["OUTPUT", "ERROR"], axis=1)
-    df["legend"] = df.apply(make_legend, axis=1)
-    df["time"] = df["time"].astype(float)
-    df_eager = df[(df["implementation"] == "eager") & (df["backend"] == "eager")][
-        "time"
-    ].dropna()
-    if df_eager.shape[0] > 0:
-        min_eager = df_eager.min()
-        df["increase"] = df["time"] / min_eager - 1
-        # df["ERROR"] = df["ERROR"].apply(lambda s: s.replace("\n", " "))
+    if "implementation" in df.columns:
+        df["legend"] = df.apply(make_legend, axis=1)
+        df["time"] = df["time"].astype(float)
+        df_eager = df[(df["implementation"] == "eager") & (df["backend"] == "eager")][
+            "time"
+        ].dropna()
+        if df_eager.shape[0] > 0:
+            min_eager = df_eager.min()
+            df["increase"] = df["time"] / min_eager - 1
+            # df["ERROR"] = df["ERROR"].apply(lambda s: s.replace("\n", " "))
     filename = f"plot_{prefix}_bench_with_cmd.csv"
     df.to_csv(filename, index=False)
     filename = f"plot_{prefix}_bench_with_cmd.xlsx"
