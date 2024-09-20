@@ -3,6 +3,7 @@ from torch._dynamo.testing import reset_rng_state
 from ._bash_bench_benchmark_runner import BenchmarkRunner
 from ._bash_bench_model_runner import ModelRunner
 from .big_models.try_codellama import get_model_inputs as get_model_inputs_codellama
+from .big_models.try_stable_diffusion_3 import get_model_inputs as get_model_inputs_stable_diffusion_3
 
 
 class HuggingfaceBigRunner(BenchmarkRunner):
@@ -15,6 +16,7 @@ class HuggingfaceBigRunner(BenchmarkRunner):
         cls.MODELS.update(
             {
                 "code_llama": get_model_inputs_codellama,
+                "stable_diffusion_3": get_model_inputs_stable_diffusion_3,
             }
         )
 

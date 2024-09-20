@@ -2,6 +2,7 @@ import os
 from typing import Any, Callable, Tuple, Optional
 import numpy as np
 import torch
+from . import str_dtype
 
 CACHE = os.environ.get("BASH_BENCH_CACHE", "_bigcache")
 
@@ -19,27 +20,32 @@ def load_model(
 
     :param verbose: verbosity
     :param load_tokenizer: loads the tokenizer as well
+    :param device: where to put the model
+    :param dtype: which type to use
     :return: tokenizer, model
     """
+    stype = str_dtype(dtype) if dtype is not None else ""
 
     if load_tokenizer:
         from transformers import AutoTokenizer
 
-        if os.path.exists(os.path.join(cache, "CodeLlama-7b-tokenizer")):
+        if os.path.exists(os.path.join(cache, f"CodeLlama-7b-tokenizer{stype}")):
             if verbose:
                 print("[load_model] loads cached codellama tokenizer")
             from transformers import AutoTokenizer, AutoModelForCausalLM
 
             tokenizer = AutoTokenizer.from_pretrained(
-                os.path.join(cache, "CodeLlama-7b-tokenizer")
+                os.path.join(cache, f"CodeLlama-7b-tokenizer{stype}")
             )
         else:
             if verbose:
                 print("[load_model] retrieves codellama tokenizer")
-            tokenizer = AutoTokenizer.from_pretrained("codellama/CodeLlama-7b-hf")
+            tokenizer = AutoTokenizer.from_pretrained(
+                "codellama/CodeLlama-7b-hf", torch_dtype=dtype
+            )
             if verbose:
                 print("[load_model] cache codellama tokenizer")
-            tokenizer.save_pretrained(os.path.join(cache, "CodeLlama-7b-tokenizer"))
+            tokenizer.save_pretrained(os.path.join(cache, f"CodeLlama-7b-tokenizer{stype}"))
     else:
         tokenizer = None
 
@@ -49,26 +55,28 @@ def load_model(
         if verbose:
             print("[load_model] loads cached codellama model")
         model = AutoModelForCausalLM.from_pretrained(
-            os.path.join(cache, "CodeLlama-7b-model")
+            os.path.join(cache, f"CodeLlama-7b-model{stype}")
         )
     else:
         if verbose:
             print("[load_model] retrieves codellama model")
-        model = AutoModelForCausalLM.from_pretrained("codellama/CodeLlama-7b-hf")
+        model = AutoModelForCausalLM.from_pretrained(
+            "codellama/CodeLlama-7b-hf", torch_dtype=dtype
+        )
         if verbose:
             print("[load_model] cache codellama model")
-        model.save_pretrained(os.path.join(cache, "CodeLlama-7b-model"))
+        model.save_pretrained(os.path.join(cache, f"CodeLlama-7b-model{stype}"))
 
     if verbose:
         print(f"[load_model] converts to {device!r} and dtype={dtype!r}")
 
     if tokenizer:
         tokenizer = tokenizer.to(device)
-        if dtype:
-            tokenizer = tokenizer.to(dtype)
+        # if dtype:
+        #     tokenizer = tokenizer.to(dtype)
     model = model.to(device)
-    if dtype:
-        model = model.to(dtype)
+    # if dtype:
+    #    model = model.to(dtype)
     if verbose:
         print("[load_model] done codellama")
     return tokenizer, model
@@ -138,4 +146,4 @@ def get_model() -> Tuple[Callable, Tuple[Any, ...]]:
 
     input_ids = ids_tensor((1, 128), 32016)
 
-    return (lambda: load_model(load_tokenizer=False)), (input_ids,)
+    return (lambda: load_model(load_tokenizer=False)[1]), (input_ids,)
