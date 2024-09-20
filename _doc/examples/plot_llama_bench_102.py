@@ -373,11 +373,13 @@ print(df.sort_values("legend") if "legend" in df.columns else df)
 ###############################
 # Plot warmup time.
 
-torch_version = list(set(df["torch"].dropna()))
-transformers_version = list(set(df["transformers"].dropna()))
+torch_version = list(set(df["torch"].dropna())) if "torch" in df.columns else (0, 0)
+transformers_version = (
+    list(set(df["transformers"].dropna())) if "transformers" in df.columns else (0, 0)
+)
 ver = f"{torch_version[0]} - {transformers_version[0]}"
 model = parsed_args.model
-modeldf = list(set(df[model].dropna()))[0]  # noqa: RUF015
+modeldf = list(set(df[model].dropna()))[0] if model in df.columns else "?"  # noqa: RUF015
 title_prefix = (
     f"lower better\n"
     f"{parsed_args.model} - {ver} - mask{parsed_args.with_mask}"
