@@ -63,7 +63,7 @@ class HuggingfaceBigRunner(BenchmarkRunner):
     def _get_model_cls_and_config(self, model_name: str) -> Tuple[Callable, Any]:
         assert (
             model_name in self.MODELS
-        ), f"Unable to find {model_name!r} in {list(sorted(self.MODELS))}"
+        ), f"Unable to find {model_name!r} in {sorted(self.MODELS)}"
         return self.MODELS[model_name]
 
     def load_model(

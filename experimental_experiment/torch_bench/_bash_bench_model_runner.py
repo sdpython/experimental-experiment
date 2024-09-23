@@ -171,6 +171,8 @@ class ModelRunner:
             return True
         if exporter in {"torch_script", "dynamo_export", "onnx_dynamo"}:
             return optimization in {"default"}
+        if exporter == "onnx_dynamo":
+            return optimization in {"default", "ir"}
         return False
 
     @classmethod
@@ -389,7 +391,8 @@ class ModelRunner:
         assert not fake_tensor, "fake_tensor not implemented."
 
         if name == "1001Fail":
-            raise RuntimeError(f"Model {name!r} is meant to fail for unit test purpose.")
+		    raise RuntimeError(f"Model {name!r} is meant to fail for unit test purpose.")
+            
 
         if exporter == "custom":
             return self._to_onnx_custom(
@@ -777,6 +780,17 @@ class ModelRunner:
         assert not fake_tensor, "fake_tensor not implemented."
         assert not dynamic, "dynamic true not implemented yet"
         assert no_grad, "no_grad false not implemented yet"
+
+        if optimization:
+            opts = optimization.split("+")
+            if "ir" in opts:
+                os.environ["TORCH_ONNX_ENABLE_OPTIMIZATION"] = "1"
+                opts.pop(opts.index("ir"))
+                optimization = "+".join(opts)
+            else:
+                os.environ["TORCH_ONNX_ENABLE_OPTIMIZATION"] = "0"
+        else:
+            os.environ["TORCH_ONNX_ENABLE_OPTIMIZATION"] = "0"
 
         additional_kwargs = {}
         if detailed:
