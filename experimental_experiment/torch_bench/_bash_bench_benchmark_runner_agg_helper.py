@@ -838,9 +838,13 @@ def _apply_excel_style(
                         cell.alignment = alignment
                     done.add(c)
                     continue
-                if k in {"exporter", "opt_patterns", "rtopt", "suite"} or k.startswith(
-                    "version"
-                ):
+                if k in {
+                    "exporter",
+                    "opt_patterns",
+                    "dynamic",
+                    "rtopt",
+                    "suite",
+                } or k.startswith("version"):
                     sheet.column_dimensions[c].width = 15
                     for cell in sheet[c]:
                         cell.alignment = alignment
@@ -1127,9 +1131,8 @@ def _create_aggregation_figures(
             if not isinstance(df, pandas.DataFrame):
                 assert (
                     "opt_patterns" not in df.index.names
-                ), f"Unexpected names for df.index.names={df.index.names} (k={k!r})"
-                assert (
-                    "rtopt" not in df.index.names
+                    and "rtopt" not in df.index.names
+                    and "dynamic" not in df.index.names
                 ), f"Unexpected names for df.index.names={df.index.names} (k={k!r})"
                 df = df.to_frame()
                 if df.columns.names == [None]:

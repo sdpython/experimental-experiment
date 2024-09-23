@@ -671,7 +671,7 @@ class GraphBuilder(_GraphBuilderRuntime):
             value = self._known_torch_value[name]
             if value[0] == "run_node":
                 val1 = value[1]
-                exa, val = val1
+                _exa, val = val1
                 if val is not None and len(val) == 3:
                     el_type, size = val[1:]
                     if el_type in (
@@ -679,6 +679,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                         self.torch.float64,
                         self.torch.float16,
                         self.torch.bfloat16,
+                        self.torch.bool,
                     ):
                         return False
                     if len(size) >= 2:
@@ -696,6 +697,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                         self.torch.float64,
                         self.torch.float16,
                         self.torch.bfloat16,
+                        self.torch.bool,
                     ):
                         return False
                     if shape is not None and len(shape) >= 2:
@@ -706,6 +708,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                         TensorProto.FLOAT,
                         TensorProto.DOUBLE,
                         TensorProto.BFLOAT16,
+                        TensorProto.BOOL,
                     }:
                         return False
                     if self.has_shape(name):
@@ -748,6 +751,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                 TensorProto.FLOAT,
                 TensorProto.DOUBLE,
                 TensorProto.BFLOAT16,
+                TensorProto.BOOL,
             }:
                 return False
             raise RuntimeError(

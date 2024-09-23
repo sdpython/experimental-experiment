@@ -57,6 +57,7 @@ def merge_benchmark_reports(
         "stat",
         "exporter",
         "opt_patterns",
+        "dynamic",
         "rtopt",
     ),
     report_on=(
@@ -319,7 +320,7 @@ def merge_benchmark_reports(
     # replace nan values
     # groupby do not like nan values
     set_columns = set(df.columns)
-    for c in ["opt_patterns", "rtopt", "ERR_export", "ERR_warmup"]:
+    for c in ["opt_patterns", "dynamic", "rtopt", "ERR_export", "ERR_warmup"]:
         if c in set_columns:
             df[c] = df[c].fillna("-")
 
@@ -345,10 +346,19 @@ def merge_benchmark_reports(
                 df[c] = df[c].astype(bool).fillna(False)
             elif c in {"dynamic"}:
                 df[c] = df[c].fillna(0)
+            elif c in {"rtopt"}:
+                df[c] = df[c].fillna(1)
             elif c.startswith("version"):
                 df[c] = df[c].fillna("")
             else:
                 df[c] = df[c].fillna("-")
+
+    for k, v in {"rtopt": 1, "dynamic": 0}.items():
+        if k not in df.columns:
+            df[k] = v
+    assert (
+        "rtopt" in df.columns
+    ), f"rtopt is missing, keys={keys!r}, df.columns={sorted(df.columns)}"
 
     #######################
     # preprocessing is done
@@ -558,7 +568,7 @@ def merge_benchmark_reports(
                     on = [
                         k
                         for k in keep[:-1]
-                        if k not in ("exporter", "opt_patterns", "rtopt")
+                        if k not in {"exporter", "opt_patterns", "rtopt"}
                     ]
                 else:
                     on = [k for k in keep[:-1] if k != "exporter"]
@@ -585,11 +595,9 @@ def merge_benchmark_reports(
             continue
 
         if expr == "buckets":
-            if "rtopt" not in df.columns:
-                # We assume onnxruntime optimization were enabled (default settings).
-                df["rtopt"] = 1
             if (
                 "exporter" in set_columns
+                and "dynamic" in set_columns
                 and "opt_patterns" in set_columns
                 and "speedup" in set_columns
                 and "torch_script" in set(df.exporter)
@@ -611,7 +619,8 @@ def merge_benchmark_reports(
                             f"[merge_benchmark_reports] gr.shape={gr.shape}, "
                             f"unable to compute speedup_script, "
                             f"exporters={set(df.exporter)}, "
-                            f"opt_patterns={set(df.opt_patterns)}, rtopt={set(df.rtopt)}"
+                            f"opt_patterns={set(df.opt_patterns)}, "
+                            f"dynamic={set(df.dynamic)}, rtopt={set(df.rtopt)}"
                         )
                 else:
                     if verbose:
@@ -955,7 +964,9 @@ def _build_aggregated_document(
                 f"m0.index.names={m0.index.names}, "
                 f"m0.columns.names={m0.columns.names}\n---\n{m0}"
             )
-            exporter_column = [c for c in cols if c in ("exporter", "opt_patterns", "rtopt")]
+            exporter_column = [
+                c for c in cols if c in ("exporter", "opt_patterns", "dynamic", "rtopt")
+            ]
             assert "stat" in cols, (
                 f"Unexpected columns {cols}, expecting 'stat', "
                 f"{exporter_column!r}, {model!r}, reverse={reverse}, "
@@ -1168,7 +1179,7 @@ def _build_aggregated_document(
     df0 = final_res["0raw"]
     date_col = [
         c
-        for c in ["DATE", "suite", "exporter", "opt_patterns", "dtype", "rtopt"]
+        for c in ["DATE", "suite", "exporter", "opt_patterns", "dtype", "dynamic", "rtopt"]
         if c in df0.columns
     ]
     if verbose:
@@ -1267,18 +1278,20 @@ def _build_aggregated_document(
         v.dropna(axis=1, how="all", inplace=True)
 
     if export_simple and "SIMPLE" in final_res:
-        if (
-            "rtopt" in final_res["SIMPLE"].columns
-            and len(set(final_res["SIMPLE"]["rtopt"].dropna())) <= 1
-        ):
-            if verbose:
-                print("[merge_benchmark_reports] drops 'rtopt' in SIMPLE")
-            final_res["SIMPLE"] = final_res["SIMPLE"].drop("rtopt", axis=1)
-        elif verbose and "rtopt" in final_res["SIMPLE"].columns:
-            print(
-                f"[merge_benchmark_reports] keeps 'rtopt' in SIMPLE: "
-                f"{set(final_res['SIMPLE'].dropna())}"
-            )
+        for c in ("rtopt",):
+            if (
+                c in final_res["SIMPLE"].columns
+                and len(set(final_res["SIMPLE"][c].dropna())) <= 1
+            ):
+                if verbose:
+                    print(f"[merge_benchmark_reports] drops {c!r} in SIMPLE")
+                final_res["SIMPLE"] = final_res["SIMPLE"].drop(c, axis=1)
+            elif verbose and c in final_res["SIMPLE"].columns:
+                print(
+                    f"[merge_benchmark_reports] keeps {c!r} in SIMPLE: "
+                    f"{set(final_res['SIMPLE'].dropna())}"
+                )
+
         if verbose:
             print(f"[merge_benchmark_reports] writes {export_simple!r}")
 
@@ -1287,7 +1300,9 @@ def _build_aggregated_document(
 
         # first pivot
         piv_index = tuple(c for c in ("dtype", "suite", "#order", "METRIC") if c in _set_)
-        piv_columns = tuple(c for c in ("exporter", "opt_patterns", "rtopt") if c in _set_)
+        piv_columns = tuple(
+            c for c in ("exporter", "opt_patterns", "dynamic", "rtopt") if c in _set_
+        )
         ccc = [*piv_index, *piv_columns]
         gr = final_res["SIMPLE"][[*ccc, "value"]].groupby(ccc).count()
         assert gr.values.max() <= 1, (
@@ -1313,7 +1328,9 @@ def _build_aggregated_document(
 
         # total
         piv_index = tuple(c for c in ("#order", "METRIC") if c in _set_)
-        piv_columns = (c for c in ("exporter", "opt_patterns", "rtopt") if c in _set_)
+        piv_columns = (
+            c for c in ("exporter", "opt_patterns", "dynamic", "rtopt") if c in _set_
+        )
         piv = (
             pandas.pivot_table(
                 final_res["SIMPLE"],
