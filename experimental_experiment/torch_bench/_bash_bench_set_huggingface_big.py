@@ -1,3 +1,4 @@
+import os
 from typing import Any, Callable, Dict, Optional, Set, Tuple
 from torch._dynamo.testing import reset_rng_state
 from ._bash_bench_benchmark_runner import BenchmarkRunner
@@ -11,7 +12,7 @@ from .big_models.try_stable_diffusion_3 import (
 class HuggingfaceBigRunner(BenchmarkRunner):
     SUITE = "HuggingFace"
     MODELS: Dict[str, Callable] = {}
-    CACHE = "~/.cache/exporter_benchmark"
+    CACHE = f"{os.environ.get('HOME', 'HOME')}/.cache/exporter_benchmark"
 
     @classmethod
     def initialize(cls):
