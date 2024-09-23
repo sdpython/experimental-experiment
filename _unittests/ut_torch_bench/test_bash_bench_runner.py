@@ -6,7 +6,6 @@ from experimental_experiment.torch_bench._bash_bench_set_huggingface import (
 from experimental_experiment.ext_test_case import (
     ExtTestCase,
     hide_stdout,
-    # ignore_warnings,
     requires_torch,
     skipif_ci_windows,
 )

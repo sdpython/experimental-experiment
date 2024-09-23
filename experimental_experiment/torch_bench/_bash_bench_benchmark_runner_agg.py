@@ -13,12 +13,12 @@ from ._bash_bench_benchmark_runner_agg_helper import (
     BUCKET_SCALES,
     SELECTED_FEATURES,
     _apply_excel_style,
+    _compute_correlations,
     _create_aggregation_figures,
     _filter_data,
     _reorder_columns_level,
     _reorder_index_level,
     _reverse_column_names_order,
-    _compute_correlations,
     _select_metrics,
     _select_model_metrics,
 )
@@ -847,7 +847,6 @@ def _build_aggregated_document(
     exc: bool = True,
     apply_style: bool = True,
 ) -> Dict[str, pandas.DataFrame]:
-
     # values
     res = {"0raw": df, "0main": main}
     for c in report_on:
