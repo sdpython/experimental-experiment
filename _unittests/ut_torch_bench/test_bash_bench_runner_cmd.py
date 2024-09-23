@@ -2,6 +2,7 @@ import contextlib
 import io
 import logging
 import unittest
+import onnx
 from experimental_experiment.ext_test_case import (
     ExtTestCase,
     ignore_warnings,
@@ -39,6 +40,7 @@ class TestBashBenchRunnerCmd(ExtTestCase):
         process=False,
         tag=None,
         timeout=600,
+        dynamic=False,
     ):
         from experimental_experiment.torch_bench.bash_bench_huggingface import main
 
@@ -64,6 +66,8 @@ class TestBashBenchRunnerCmd(ExtTestCase):
             "--timeout",
             str(timeout),
         ]
+        if dynamic:
+            args.extend(["--dynamic", "1"])
         if process:
             args.extend(["--process", "1"])
         if optimization:
@@ -86,6 +90,21 @@ class TestBashBenchRunnerCmd(ExtTestCase):
         self.assertNotIn(":discrepancies_abs,inf;", out)
         if tag:
             self.assertIn(f":version_tag,{tag};", out)
+        filename = None
+        for line in out.split("\n"):
+            if line.startswith(":filename,"):
+                filename = line.replace(":filename,", "").strip(";")
+        self.assertExists(filename)
+        if dynamic:
+            onx = onnx.load(filename)
+            for i in onx.graph.input:
+                shape = i.type.tensor_type.shape
+                value = tuple(d.dim_param or d.dim_value for d in shape.dim)
+                self.assertEqual(value[0], "s0")
+            for i in onx.graph.output:
+                shape = i.type.tensor_type.shape
+                value = tuple(d.dim_param or d.dim_value for d in shape.dim)
+                self.assertEqual(value[0], "s0")
 
     def _explicit_export_bench_cpu(
         self,
