@@ -87,11 +87,70 @@ class TestBashBenchRunnerCmd(ExtTestCase):
         if tag:
             self.assertIn(f":version_tag,{tag};", out)
 
+    def _explicit_export_bench_cpu(
+        self,
+        exporter,
+        models,
+        verbose=0,
+        debug=False,
+        optimization=None,
+        tag=None,
+        timeout=600,
+    ):
+        from experimental_experiment.torch_bench.bash_bench_explicit import main
+
+        args = [
+            "--model",
+            models,
+            "--device",
+            "cpu",
+            "--exporter",
+            exporter,
+            "--verbose",
+            str(verbose),
+            "--quiet",
+            "1",
+            "-w",
+            "1",
+            "-r",
+            "1",
+            "--dump_folder",
+            "dump_test_bash_bench",
+            "--timeout",
+            str(timeout),
+        ]
+        if optimization:
+            args.extend(["--opt_patterns", optimization])
+        if tag:
+            args.extend(["--tag", tag])
+        if debug:
+            print("CMD")
+            print(" ".join(args))
+        st = io.StringIO()
+        with contextlib.redirect_stderr(st), contextlib.redirect_stdout(st):
+            main(args=args)
+        out = st.getvalue()
+        if debug:
+            print(out)
+        if "," in models:
+            self.assertIn("Prints", out)
+        else:
+            self.assertIn(":model_name,", out)
+        self.assertNotIn(":discrepancies_abs,inf;", out)
+        if tag:
+            self.assertIn(f":version_tag,{tag};", out)
+
     @skipif_ci_windows("exporter does not work on Windows")
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.4")
     def test_huggingface_export_bench_custom_cpu(self):
         self._huggingface_export_bench_cpu("custom", "101Dummy")
+
+    @skipif_ci_windows("exporter does not work on Windows")
+    @ignore_warnings((DeprecationWarning, UserWarning))
+    @requires_torch("2.4")
+    def test_huggingface_export_bench_custom_cpu_fail(self):
+        self._explicit_export_bench_cpu("custom", "1001Fail,1001Fail2")
 
     @skipif_ci_windows("exporter does not work on Windows")
     @ignore_warnings((DeprecationWarning, UserWarning))

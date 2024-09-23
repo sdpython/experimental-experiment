@@ -388,6 +388,9 @@ class ModelRunner:
         """
         assert not fake_tensor, "fake_tensor not implemented."
 
+        if name == "1001Fail":
+            raise RuntimeError(f"Model {name!r} is meant to fail for unit test purpose.")
+
         if exporter == "custom":
             return self._to_onnx_custom(
                 name,
