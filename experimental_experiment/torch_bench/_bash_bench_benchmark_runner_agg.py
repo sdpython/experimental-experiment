@@ -649,7 +649,7 @@ def merge_benchmark_reports(
                     on = [
                         k
                         for k in keep[:-1]
-                        if k not in ("exporter", "opt_patterns", "rtopt")
+                        if k not in {"exporter", "opt_patterns", "rtopt"}
                     ]
                     joined = pandas.merge(df, gr, left_on=on, right_on=on, how="left")
 
