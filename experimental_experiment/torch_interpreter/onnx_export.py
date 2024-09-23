@@ -479,6 +479,7 @@ def to_onnx(
     if dynamic_shapes is not None and input_names:
         # Let's rewrite the dynamic shapes with the true name.
         new_dynamic_shapes = {}
+        new_dynamic_shapes_list = []
         sig = _model_signature(mod)
         true_input_names = [
             name
@@ -489,11 +490,20 @@ def to_onnx(
 
         for k, v in dynamic_shapes.items():
             new_dynamic_shapes[replacements.get(k, k)] = v
-        dynamic_shapes = new_dynamic_shapes
+            new_dynamic_shapes_list.append(v)
+        dynamic_shapes = (
+            (tuple(new_dynamic_shapes_list),)
+            if isinstance(args, tuple)
+            else new_dynamic_shapes
+        )
 
     if verbose and dynamic_shapes:
         print(f"[to_onnx] dynamic_shapes={dynamic_shapes}")
 
+    assert dynamic_shapes is None or isinstance(dynamic_shapes, type(args)), (
+        f"type(dynamic_shapes)={type(dynamic_shapes)} should have the "
+        f"same type as args: {type(args)}, dynamic_shapes={dynamic_shapes}"
+    )
     graph_module, builder, interpreter = _make_builder_interpreter(
         mod=mod,
         args=args,

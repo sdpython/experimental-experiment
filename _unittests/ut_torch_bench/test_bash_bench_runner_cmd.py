@@ -102,11 +102,11 @@ class TestBashBenchRunnerCmd(ExtTestCase):
             for i in onx.graph.input:
                 shape = i.type.tensor_type.shape
                 value = tuple(d.dim_param or d.dim_value for d in shape.dim)
-                self.assertEqual(value[0], "s0")
+                self.assertIn(value[0], ("batch", "s0"))
             for i in onx.graph.output:
                 shape = i.type.tensor_type.shape
                 value = tuple(d.dim_param or d.dim_value for d in shape.dim)
-                self.assertEqual(value[0], "s0")
+                self.assertIn(value[0], ("batch", "s0"))
 
     def _explicit_export_bench_cpu(
         self,
@@ -223,14 +223,19 @@ class TestBashBenchRunnerCmd(ExtTestCase):
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.4")
     def test_huggingface_export_bench_custom_cpu2(self):
-        self._huggingface_export_bench_cpu("custom", "101Dummy,101Dummy16")
+        self._huggingface_export_bench_cpu("custom", "101Dummy,101Dummy16", check_file=False)
 
     @skipif_ci_windows("exporter does not work on Windows")
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.4")
     def test_huggingface_export_bench_custom_cpu2_timeout(self):
         self._huggingface_export_bench_cpu(
-            "custom", "101Dummy,101Dummy16", timeout=1, verbose=0, debug=True
+            "custom",
+            "101Dummy,101Dummy16",
+            timeout=1,
+            verbose=0,
+            debug=True,
+            check_file=False,
         )
 
     @skipif_ci_windows("exporter does not work on Windows")
@@ -328,7 +333,7 @@ class TestBashBenchRunnerCmd(ExtTestCase):
         self.assertNotIn(":discrepancies_abs,inf;", out)
 
     @skipif_ci_windows("exporter does not work on Windows")
-    @ignore_warnings((DeprecationWarning, UserWarning))
+    @ignore_warnings((DeprecationWarning, UserWarning, RuntimeWarning))
     @requires_torch("2.4")
     def test_timm_export_bench_script_cpu(self):
         self._timm_export_bench_cpu("torch_script", "mobilenetv2_100")

@@ -149,6 +149,13 @@ class GraphBuilder(_GraphBuilderRuntime):
     of a variable is set. Example: ``ONNXSTOP=attn_output python ...
     """
 
+    class WrapSym:
+        def __init__(self, sym: Union["torch.SymInt", "torch.SymFloat"]):  # noqa: F821
+            self.sym = sym
+
+        def __repr__(self) -> str:
+            return f"WrapSym({self.sym!r})"
+
     # Size of a tensor kept in the onnx file and not stored as exrternal weight.
     SMALL_TENSOR = 1024
 
@@ -223,10 +230,20 @@ class GraphBuilder(_GraphBuilderRuntime):
         self._registered_users = {}
         self.was_inputs_renamed = input_names is not None and input_names
 
-        assert dynamic_shapes is None or isinstance(dynamic_shapes, dict), (
+        assert dynamic_shapes is None or isinstance(dynamic_shapes, (dict, tuple)), (
             f"dynamic_shapes is expected to be empty or a dictionary "
             f"not {type(dynamic_shapes)}, dynamic_shapes={dynamic_shapes}"
         )
+
+        if isinstance(dynamic_shapes, tuple):
+            assert (
+                input_names
+            ), f"Input names should not be empty for dynamic_shapes={dynamic_shapes!r}"
+            assert (
+                len(dynamic_shapes) == 1
+            ), f"dynamic_shapes={dynamic_shapes} but it should be a tuple of 1 element."
+            dynamic_shapes = dict(zip(input_names, dynamic_shapes[0]))
+            self.dynamic_shapes = dynamic_shapes
 
         if self.dynamic_shapes:
             for input_name, v in self.dynamic_shapes.items():
@@ -1215,7 +1232,7 @@ class GraphBuilder(_GraphBuilderRuntime):
             else:
                 self.dynamic_dimensions_source[name] = [source]
 
-        self.dynamic_objects[name] = value
+        self.add_dynamic_object(name, value)
         if name not in self._known_value_shape:
             self._known_value_shape[name] = name
 
@@ -1706,6 +1723,12 @@ class GraphBuilder(_GraphBuilderRuntime):
             name = v
         return name
 
+    def add_dynamic_object(self, key, value):
+        if isinstance(value, (self.torch.SymInt, self.torch.SymFloat)):
+            self.dynamic_objects[key] = self.WrapSym(value)
+        else:
+            self.dynamic_objects[key] = value
+
     def _add_dynamic_example(self, name: str, value: Union[int, float]):
         if name not in self._dynamic_examples:
             self._dynamic_examples[name] = set()
@@ -1765,7 +1788,7 @@ class GraphBuilder(_GraphBuilderRuntime):
             and value not in self._known_value_shape
             and add
         ):
-            self.dynamic_objects[value] = value
+            self.add_dynamic_object(value, value)
             self.dynamic_objects_rev[value] = [value]
 
         assert value in self.dynamic_objects_rev or value in self._known_value_shape, (
@@ -1924,13 +1947,13 @@ class GraphBuilder(_GraphBuilderRuntime):
                 if a == b:
                     sa = str(a)
                     if sa not in self.dynamic_objects:
-                        self.dynamic_objects[sa] = sa
+                        self.add_dynamic_object(sa, sa)
                     continue
                 sa = str(a)
                 sb = str(b)
                 if sa == sb:
                     if sa not in self.dynamic_objects:
-                        self.dynamic_objects[sa] = sa
+                        self.add_dynamic_object(sa, sa)
                     continue
                 self._dynamic_alias[sa] = sb
 
