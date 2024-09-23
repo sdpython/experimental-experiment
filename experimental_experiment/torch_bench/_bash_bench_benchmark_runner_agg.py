@@ -317,10 +317,32 @@ def merge_benchmark_reports(
     if verbose:
         print(f"[merge_benchmark_reports] new shape={df.shape}")
 
+    # replace nan values by numerical values for some columns
+    for k, v in {"rtopt": 1, "dynamic": 0}.items():
+        if k not in df.columns:
+            df[k] = v
+        else:
+            df[k] = df[k].astype(float).fillna(v)
+    for c in ("rtopt", "dynamic"):
+        assert c in df.columns and df[c].dtype in {
+            np.float64,
+            np.int64,
+            np.int32,
+            np.float32,
+            np.dtype("float64"),
+            np.dtype("float32"),
+            np.dtype("int32"),
+            np.dtype("int64"),
+        }, (
+            f"Column {c!r} is missing or with a wrong type, "
+            f"keys={keys!r}, df.columns={sorted(df.columns)}, "
+            f"df.dtypes={sorted(zip(df.columns,df.dtypes))}"
+        )
+
     # replace nan values
     # groupby do not like nan values
     set_columns = set(df.columns)
-    for c in ["opt_patterns", "dynamic", "rtopt", "ERR_export", "ERR_warmup"]:
+    for c in ["opt_patterns", "ERR_export", "ERR_warmup"]:
         if c in set_columns:
             df[c] = df[c].fillna("-")
 
@@ -352,13 +374,6 @@ def merge_benchmark_reports(
                 df[c] = df[c].fillna("")
             else:
                 df[c] = df[c].fillna("-")
-
-    for k, v in {"rtopt": 1, "dynamic": 0}.items():
-        if k not in df.columns:
-            df[k] = v
-    assert (
-        "rtopt" in df.columns
-    ), f"rtopt is missing, keys={keys!r}, df.columns={sorted(df.columns)}"
 
     #######################
     # preprocessing is done

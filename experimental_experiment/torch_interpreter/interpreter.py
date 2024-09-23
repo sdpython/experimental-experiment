@@ -348,7 +348,7 @@ class DynamoInterpreter:
                     o = f"{output_name}_{i}"
                 else:
                     a_name = a if isinstance(a, str) else a.name
-                    if self.builder.get_is_dimension(a_name):
+                    if self.builder.get_is_dimension(a_name, n_outputs=len(output)):
                         o = f"{output_name}_dim_{i}"
                     else:
                         o = f"{output_name}_{i}"
@@ -406,7 +406,7 @@ class DynamoInterpreter:
                     ns.append(d)
                 shape = tuple(ns)
                 is_dimension = self.builder.get_is_dimension(
-                    a or o, elem_type=elem_type, shape=shape
+                    a or o, elem_type=elem_type, shape=shape, n_outputs=len(outputs)
                 )
 
                 self.builder.make_tensor_output(

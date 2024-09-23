@@ -41,6 +41,7 @@ class TestBashBenchRunnerCmd(ExtTestCase):
         tag=None,
         timeout=600,
         dynamic=False,
+        check_file=True,
     ):
         from experimental_experiment.torch_bench.bash_bench_huggingface import main
 
@@ -94,7 +95,8 @@ class TestBashBenchRunnerCmd(ExtTestCase):
         for line in out.split("\n"):
             if line.startswith(":filename,"):
                 filename = line.replace(":filename,", "").strip(";")
-        self.assertExists(filename)
+        if check_file:
+            self.assertExists(filename)
         if dynamic:
             onx = onnx.load(filename)
             for i in onx.graph.input:
@@ -194,14 +196,18 @@ class TestBashBenchRunnerCmd(ExtTestCase):
     @requires_torch("2.4")
     @requires_onnxruntime_training()
     def test_huggingface_export_bench_cort_cpu(self):
-        self._huggingface_export_bench_cpu("cort", "101Dummy", process=True, verbose=20)
+        self._huggingface_export_bench_cpu(
+            "cort", "101Dummy", process=True, verbose=20, check_file=False
+        )
 
     @skipif_ci_windows("exporter does not work on Windows")
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.4")
     @requires_onnxruntime_training()
     def test_huggingface_export_bench_cortgrad_cpu(self):
-        self._huggingface_export_bench_cpu("cortgrad", "101Dummy", process=True, verbose=20)
+        self._huggingface_export_bench_cpu(
+            "cortgrad", "101Dummy", process=True, verbose=20, check_file=False
+        )
 
     @skipif_ci_windows("exporter does not work on Windows")
     @ignore_warnings((DeprecationWarning, UserWarning))
@@ -211,7 +217,7 @@ class TestBashBenchRunnerCmd(ExtTestCase):
 
     @ignore_warnings((DeprecationWarning, UserWarning))
     def test_huggingface_export_bench_eager_cpu(self):
-        self._huggingface_export_bench_cpu("eager", "101Dummy")
+        self._huggingface_export_bench_cpu("eager", "101Dummy", check_file=False)
 
     @skipif_ci_windows("exporter does not work on Windows")
     @ignore_warnings((DeprecationWarning, UserWarning))

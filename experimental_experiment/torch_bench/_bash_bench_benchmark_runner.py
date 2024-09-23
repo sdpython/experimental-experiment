@@ -923,7 +923,7 @@ class BenchmarkRunner:
         stats["_index"] = f"{model_name}-{exporter}-{optimization}-{rtopt}"
         stats["date_start"] = f"{datetime.now():%Y-%m-%d}"
         stats["opt_patterns"] = optimization
-        stats["rtopt"] = rtopt
+        stats["rtopt"] = 1 if rtopt else 0
 
         if self.device.startswith("cuda"):
             is_cuda = True

@@ -661,6 +661,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         name: str,
         elem_type: Optional[int] = None,
         shape: Optional[STATIC_SHAPE] = None,
+        n_outputs: Optional[int] = None,
     ) -> bool:
         """
         Tells if a result is a dynamic dimension or not.
@@ -741,9 +742,13 @@ class GraphBuilder(_GraphBuilderRuntime):
                         return False
                     if len(size) >= 2:
                         return False
+            if n_outputs == 1:
+                # We may assume a model would not output just one dimension.
+                return False
             raise RuntimeError(
                 f"Not implemented for name={name!r}, value={value!r} ({type(value)}), "
-                f"elem_type={elem_type}, shape={shape}{self.get_debug_msg()}"
+                f"elem_type={elem_type}, shape={shape}, n_outputs={n_outputs}"
+                f"{self.get_debug_msg()}"
             )
         else:
             if elem_type in {
