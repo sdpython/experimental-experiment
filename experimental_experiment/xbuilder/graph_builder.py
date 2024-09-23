@@ -124,6 +124,7 @@ class GraphBuilder(_GraphBuilderRuntime):
       (for example the output of operator Shape)
     - `_known_ranks: Dict[str, int]`: declared ranks
     - `_known_sequences: Dict[str, Dict[str, Any]]`: known sequences
+    - `_dynamic_examples: Dict[str, Set[Union[int,float]]]`: example of dynamic dimensions
     - `constants_node_: Dict[bytes, NodeProto]`: constant node
     - `constants_alias_: Dict[str, str]`: alias for constant
     - `constants_: Dict[str, Any]`: constant values
@@ -211,6 +212,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         self._unique_names = set()
         self._unique_node_names = set()
         self._known_value_shape = {}
+        self._dynamic_examples = {}
         self.constants_ = {}
         self.op = Opset(self)
         self.anyop = Opset(self, allow_unknown=True)
@@ -220,6 +222,11 @@ class GraphBuilder(_GraphBuilderRuntime):
         self.constraints_ = {}
         self._registered_users = {}
         self.was_inputs_renamed = input_names is not None and input_names
+
+        assert dynamic_shapes is None or isinstance(dynamic_shapes, dict), (
+            f"dynamic_shapes is expected to be empty or a dictionary "
+            f"not {type(dynamic_shapes)}, dynamic_shapes={dynamic_shapes}"
+        )
 
         if self.dynamic_shapes:
             for input_name, v in self.dynamic_shapes.items():
@@ -778,7 +785,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         self._known_torch_value[name] = (where, value)
 
     @classmethod
-    def _torch_sym_int_to_str(cls, value: "torch:SymInt") -> Union[int, str]:  #  noqa: F722
+    def _torch_sym_int_to_str(cls, value: "torch.SymInt") -> Union[int, str]:  #  noqa: F821
         try:
             val_int = int(value)
             return val_int
@@ -1212,18 +1219,9 @@ class GraphBuilder(_GraphBuilderRuntime):
                     key = f"{value.node}"
                 elif isinstance(value.node, SymNode):
                     key = f"{value.node}"
-                    key2 = str(value.node._expr)
-                    if key != key2:
-                        assert (
-                            key2 not in self.dynamic_objects
-                            or value == self.dynamic_objects[key2]
-                        ), (
-                            f"Key {key!r} (key2={key2!r}) already registered, "
-                            f"existing value={self.dynamic_objects.get(key2, '?')!r}, "
-                            f"name={name!r}{self.get_debug_msg()}"
-                        )
-                        if key2 not in self.dynamic_objects:
-                            self.dynamic_objects[key2] = value
+                    key2 = value.node.maybe_as_int()
+                    if key2 is not None:
+                        self._add_dynamic_example(key, key2)
                 else:
                     raise AssertionError(
                         f"Unexpected type {type(value.node)} for value.node={value.node}"
@@ -1699,6 +1697,11 @@ class GraphBuilder(_GraphBuilderRuntime):
             name = v
         return name
 
+    def _add_dynamic_example(self, name: str, value: Union[int, float]):
+        if name not in self._dynamic_examples:
+            self._dynamic_examples[name] = set()
+        self._dynamic_examples[name].add(value)
+
     def _torch_sym_int(self, d, add: bool = False) -> Optional[int]:
         assert isinstance(
             d, (self.torch.SymInt, str, self.torch.SymFloat)
@@ -1710,18 +1713,16 @@ class GraphBuilder(_GraphBuilderRuntime):
         except AttributeError:
             pass
 
+        if isinstance(d, (str, int, float)):
+            return d
+
         if value is None:
             # Is it an integer?
-            try:
-                val_int = int(d)
-                value = val_int
-            except (TypeError, ValueError):
-                pass
+            value = d.node.maybe_as_int()
         else:
             # maybe an expression which is a single integer
             try:
-                val_int = int(value)
-                value = val_int
+                return int(value)
             except (TypeError, ValueError):
                 pass
 
@@ -1739,8 +1740,9 @@ class GraphBuilder(_GraphBuilderRuntime):
             # The dynamic dimension does not seem to be registered.
             # Maybe it is constant.
             try:
-                val_int = int(d)
-                value = val_int
+                val_int = d.node.maybe_as_int()
+                if val_int is not None:
+                    self._add_dynamic_example(value, val_int)
                 return value
             except (TypeError, ValueError):
                 pass
@@ -1911,10 +1913,15 @@ class GraphBuilder(_GraphBuilderRuntime):
             ), f"mismatch between shape={shape}, dynamic_shape={dyn_shape}"
             for a, b in zip(tuple_shape, dyn_shape):
                 if a == b:
+                    sa = str(a)
+                    if sa not in self.dynamic_objects:
+                        self.dynamic_objects[sa] = sa
                     continue
                 sa = str(a)
                 sb = str(b)
                 if sa == sb:
+                    if sa not in self.dynamic_objects:
+                        self.dynamic_objects[sa] = sa
                     continue
                 self._dynamic_alias[sa] = sb
 
@@ -2830,6 +2837,14 @@ class GraphBuilder(_GraphBuilderRuntime):
             for a, b in sorted(self.constraints_.items()):
                 rows.append(f"{a} = {b}")
         rows.append("--SHAPE--")
+        rows.append("dynamic_examples=")
+        for i, (k, v) in enumerate(sorted(self._dynamic_examples.items())):
+            try:
+                rows.append(f"   {k} = {v!r}")
+            except AttributeError:
+                rows.append(f"   {k} = ERR: {type(v)!r}:{getattr(v, 'node', 'node=?')!r}")
+            if i >= 10000:
+                break
         rows.append("dynamic_objects=")
         for i, (k, v) in enumerate(sorted(self.dynamic_objects.items())):
             try:

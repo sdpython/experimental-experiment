@@ -700,7 +700,6 @@ class BenchmarkRunner:
             erases whatever the model already contains
         """
         assert not process, "process=True not implemented."
-        assert not dynamic, "dynamic=True not implemented."
 
         from experimental_experiment.bench_run import get_machine
 
@@ -915,6 +914,7 @@ class BenchmarkRunner:
         stats["params_dtype"] = model_runner.parameters_dtype()
         stats["warmup"] = warmup
         stats["repeat"] = repeat
+        stats["dynamic"] = 1 if dynamic else 0
         stats["flag_no_grad"] = self.no_grad
         stats["flag_fake_tensor"] = self.fake_tensor
         stats["flag_training"] = self.training
@@ -1115,6 +1115,12 @@ class BenchmarkRunner:
         )
         if memory_session is not None and self.verbose:
             print("[BenchmarkRunner.benchmark] start_spying_on")
+
+        if self.verbose:
+            print(
+                f"[BenchmarkRunner.benchmark] dynamic_shapes="
+                f"{model_runner.get_dynamic_shapes(dynamic,wrapped=True)}"
+            )
 
         begin = time.perf_counter()
         if quiet:

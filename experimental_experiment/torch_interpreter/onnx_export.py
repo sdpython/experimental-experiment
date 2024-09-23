@@ -462,6 +462,20 @@ def to_onnx(
     if verbose:
         print(f"[to_onnx] build the graph module with input_names={input_names}")
 
+    if isinstance(dynamic_shapes, tuple):
+        if len(dynamic_shapes) == 1 and isinstance(dynamic_shapes[0], tuple):
+            # Model is wrapped
+            dyn_shapes = dynamic_shapes[0]
+        else:
+            dyn_shapes = dynamic_shapes
+        if not input_names:
+            input_names = [f"input{i}" for i in range(len(dyn_shapes))]
+        assert len(input_names) == len(dyn_shapes), (
+            f"Mismatch number of inputs, input_names={input_names!r}, "
+            f"dyn_shapes={dyn_shapes!r}"
+        )
+        dynamic_shapes = dict(zip(input_names, dyn_shapes))
+
     if dynamic_shapes is not None and input_names:
         # Let's rewrite the dynamic shapes with the true name.
         new_dynamic_shapes = {}

@@ -4,7 +4,7 @@ import os
 import pprint
 import shutil
 import time
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 import onnx
 import torch
 from .export_model_helper import compute_weight_size
@@ -332,6 +332,43 @@ class ModelRunner:
         assert self.autocast is not None
         self.std_to_dump = []
 
+    @property
+    def input_names(self):
+        return self.raw_input_names
+
+    def get_dynamic_shapes(
+        self,
+        dynamic: bool = False,
+        wrapped: bool = False,
+        input_names: Optional[List[str]] = None,
+    ) -> Optional[Union[Dict[str, Any], Tuple[Any], List[Any]]]:
+        """
+        Returns dynamic shapes specifying the first dimension as dynamic.
+
+        :param dynamic: make it dynamic or not
+        :param wrapped: the model is wrapped into a class defining forward method
+            as ``forward(self, *args, **kargs)``
+        :param input_names: to overwrite the input names,
+            (not used)
+        """
+        if not dynamic:
+            return None
+        assert (
+            input_names is None
+        ), f"This method is not implemented if input_names={input_names!r}"
+        assert input_names is None or len(input_names) == len(self.inputs), (
+            f"Unexpected number of input_names {len(input_names)} != "
+            f"{len(self.inputs)} (expected), input_names={input_names!r}"
+        )
+        dim = torch.export.Dim("batch", min=1, max=1024)
+        res = []
+        for x in self.inputs:
+            res.append({0: dim} if len(x.shape) > 1 else None)
+        final = tuple(res)
+        if wrapped:
+            return (final,)
+        return final
+
     def dump_std(self, filename: str):
         """Dumps some information in the given filename."""
         if self.std_to_dump:
@@ -542,7 +579,6 @@ class ModelRunner:
         target_opset: int,
     ):
         assert not fake_tensor, "fake_tensor not implemented."
-        assert not dynamic, "dynamic true not implemented yet"
         assert no_grad, "no_grad false not implemented yet"
         from ..torch_interpreter import to_onnx
         from ..xbuilder import OptimizationOptions
@@ -570,6 +606,7 @@ class ModelRunner:
                     return_optimize_report=True,
                     options=options,
                     return_builder=True,
+                    dynamic_shapes=self.get_dynamic_shapes(dynamic, wrapped=True),
                 )
         else:
             with torch.no_grad():
@@ -583,6 +620,7 @@ class ModelRunner:
                     return_optimize_report=True,
                     options=options,
                     return_builder=True,
+                    dynamic_shapes=self.get_dynamic_shapes(dynamic, wrapped=True),
                 )
         begin = time.perf_counter()
         self.std_to_dump.append(pprint.pformat(stats))
@@ -722,7 +760,6 @@ class ModelRunner:
         target_opset: int,
     ):
         assert not fake_tensor, "fake_tensor not implemented."
-        assert not dynamic, "dynamic true not implemented yet"
         assert no_grad, "no_grad false not implemented yet"
 
         if (
@@ -748,6 +785,7 @@ class ModelRunner:
                     do_constant_folding=False,
                     opset_version=target_opset,
                     verbose=max(verbose - 1, 0),
+                    dynamic_shapes=self.get_dynamic_shapes(dynamic, wrapped=True),
                 )
         else:
             with torch.no_grad():
@@ -758,6 +796,7 @@ class ModelRunner:
                     do_constant_folding=False,
                     opset_version=target_opset,
                     verbose=max(verbose - 1, 0),
+                    dynamic_shapes=self.get_dynamic_shapes(dynamic, wrapped=True),
                 )
 
         if optimization and optimization != "none":
@@ -777,7 +816,6 @@ class ModelRunner:
         fallback: bool = False,
     ):
         assert not fake_tensor, "fake_tensor not implemented."
-        assert not dynamic, "dynamic true not implemented yet"
         assert no_grad, "no_grad false not implemented yet"
 
         if optimization:
@@ -814,6 +852,7 @@ class ModelRunner:
                     opset_version=target_opset,
                     dynamo=True,
                     external_data=True,
+                    dynamic_shapes=self.get_dynamic_shapes(dynamic, wrapped=True),
                     **additional_kwargs,
                 )
         else:
@@ -825,6 +864,7 @@ class ModelRunner:
                     opset_version=target_opset,
                     dynamo=True,
                     external_data=True,
+                    dynamic_shapes=self.get_dynamic_shapes(dynamic, wrapped=True),
                     **additional_kwargs,
                 )
 
@@ -843,7 +883,6 @@ class ModelRunner:
         target_opset: int,
     ):
         assert not fake_tensor, "fake_tensor not implemented."
-        assert not dynamic, "dynamic true not implemented yet"
         assert no_grad, "no_grad false not implemented yet"
         stats = {}
 
@@ -890,7 +929,6 @@ class ModelRunner:
         target_opset: int,
     ):
         assert not fake_tensor, "fake_tensor not implemented."
-        assert not dynamic, "dynamic true not implemented yet"
         assert no_grad, "no_grad false not implemented yet"
         assert (
             not optimization or optimization == "none"
@@ -898,7 +936,11 @@ class ModelRunner:
         from torch.export import export
 
         with torch.no_grad():
-            res = export(self.model, self.inputs)
+            res = export(
+                self.model,
+                self.inputs,
+                dynamic_shapes=self.get_dynamic_shapes(dynamic, wrapped=True),
+            )
         return res, None
 
     def _to_eager(
@@ -912,7 +954,6 @@ class ModelRunner:
         target_opset: int,
     ):
         assert not fake_tensor, "fake_tensor not implemented."
-        assert not dynamic, "dynamic true not implemented yet"
         assert no_grad, "no_grad false not implemented yet"
         assert (
             not optimization or optimization == "none"
@@ -951,7 +992,6 @@ class ModelRunner:
         target_opset: int,
     ):
         assert not fake_tensor, "fake_tensor not implemented."
-        assert not dynamic, "dynamic true not implemented yet"
         assert no_grad, "no_grad true not implemented yet"
         assert (
             not optimization or optimization == "none"
@@ -988,7 +1028,6 @@ class ModelRunner:
         target_opset: int,
     ):
         assert not fake_tensor, "fake_tensor not implemented."
-        assert not dynamic, "dynamic true not implemented yet"
         assert no_grad, "no_grad true not implemented yet"
         assert (
             not optimization or optimization == "none"
@@ -1021,10 +1060,14 @@ class ModelRunner:
 
         if self.autocast:
             with torch.autocast(device_type=self.device, dtype=self.dtype), torch.no_grad():
-                res = torch.compile(self.model, backend="onnxrt", fullgraph=True)
+                res = torch.compile(
+                    self.model, backend="onnxrt", fullgraph=True, dynamic=dynamic
+                )
         else:
             with torch.no_grad():
-                res = torch.compile(self.model, backend="onnxrt", fullgraph=True)
+                res = torch.compile(
+                    self.model, backend="onnxrt", fullgraph=True, dynamic=dynamic
+                )
         return res, None
 
     def make_feeds(self, exporter: str, filename: Optional[str] = None):

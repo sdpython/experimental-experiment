@@ -278,6 +278,7 @@ def bash_bench_main(script_name: str, doc: str, args: Optional[List[str]] = None
                     process=args.process in ("1", 1, "True", True),
                     exporter=args.exporter,
                     quiet=args.quiet in ("1", 1, "True", True),
+                    dynamic=args.dynamic in ("1", 1, "True", True),
                     folder=args.dump_folder,
                     optimization=args.opt_patterns if args.opt_patterns != "none" else "",
                     memory_peak=args.memory_peak in ("1", 1, "True", True),

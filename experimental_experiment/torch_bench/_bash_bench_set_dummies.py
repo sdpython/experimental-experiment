@@ -11,7 +11,7 @@ class Neuron(torch.nn.Module):
         return torch.sigmoid(self.linear(x))
 
     def _get_random_inputs(self, device: str):
-        return (torch.randn(1, 5).to(device),)
+        return (torch.randn(2, 5).to(device),)
 
     config = MakeConfig(download=False, to_tuple=False)
 

@@ -343,6 +343,11 @@ def aten_arange(
         itype = torch_dtype_to_onnx_dtype(dtype)
 
     def _may_cast(a, it):
+        assert g.has_rank(a), f"Missing rank for {a!r}{g.get_debug_msg()}"
+        rk = g.get_rank(a)
+        if rk == 1:
+            # It must be a scalar.
+            a = g.op.Reshape(a, np.array([], dtype=np.int64), name=name)
         gi = g.get_type(a)
         if gi == it:
             return a
