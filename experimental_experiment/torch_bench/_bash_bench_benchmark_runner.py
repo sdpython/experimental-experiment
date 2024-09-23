@@ -920,7 +920,7 @@ class BenchmarkRunner:
         stats["flag_training"] = self.training
         stats["exporter"] = exporter
         stats["input_size"] = self.obj_size(model_runner.inputs)
-        stats["_index"] = f"{model_name}-{exporter}-{optimization}-{dynamic}-{rtopt}"
+        stats["_index"] = f"{model_name}-{exporter}-{optimization}-d{dynamic}-rt{rtopt}"
         stats["date_start"] = f"{datetime.now():%Y-%m-%d}"
         stats["opt_patterns"] = optimization
         stats["rtopt"] = 1 if rtopt else 0
