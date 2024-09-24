@@ -234,6 +234,7 @@ class TestBashBenchRunnerCmd(ExtTestCase):
         self._huggingface_export_bench_cpu("dynamo_export", "101Dummy", dump_ort=True)
 
     @ignore_warnings((DeprecationWarning, UserWarning))
+    @requires_torch("2.5")
     def test_huggingface_export_bench_eager_cpu(self):
         self._huggingface_export_bench_cpu("eager", "101Dummy", check_file=False)
 
@@ -282,10 +283,12 @@ class TestBashBenchRunnerCmd(ExtTestCase):
         self._huggingface_export_bench_cpu("custom", "0")
 
     @ignore_warnings((DeprecationWarning, UserWarning))
+    @requires_torch("2.5")
     def test_huggingface_export_bench_script_cpu(self):
         self._huggingface_export_bench_cpu("torch_script", "101Dummy")
 
     @ignore_warnings((DeprecationWarning, UserWarning))
+    @requires_torch("2.5")
     def test_huggingface_export_bench_script_cpu_tag(self):
         self._huggingface_export_bench_cpu("torch_script", "101Dummy", tag="taggy")
 
@@ -295,7 +298,7 @@ class TestBashBenchRunnerCmd(ExtTestCase):
         self._huggingface_export_bench_cpu("onnx_dynamo", "101Dummy")
 
     @ignore_warnings((DeprecationWarning, UserWarning))
-    @requires_torch("2.4")
+    @requires_torch("2.5")
     def test_huggingface_export_bench_dynamo_cpu(self):
         self._huggingface_export_bench_cpu("dynamo_export", "101Dummy")
 
