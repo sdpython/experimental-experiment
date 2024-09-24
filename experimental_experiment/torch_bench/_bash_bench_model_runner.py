@@ -1120,7 +1120,7 @@ class ModelRunner:
 
             new_shape = tuple(new_shape)
             zeros = torch.zeros(new_shape, dtype=inp.dtype, device=inp.device)
-            slices = tuple([slice(0, s) for s in inp.shape])
+            slices = tuple(slice(0, s) for s in inp.shape)
             zeros[slices] = inp[slices]
             dyn_inputs.append(zeros)
         return dyn_inputs
