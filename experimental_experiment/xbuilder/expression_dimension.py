@@ -45,7 +45,9 @@ def parse_expression(
     for node in ast.walk(st):
         if isinstance(node, ast.Name):
             sds = []
-            for d in context.values():
+            for d_ in context.values():
+                # WrapSym
+                d = d_.sym if hasattr(d_, "sym") else d_
                 try:
                     sd = str(d)
                 except AttributeError as e:
