@@ -1219,7 +1219,17 @@ class BenchmarkRunner:
 
         else:
             feeds = model_runner.make_feeds(exporter, filename)
-            feeds_dynamic = model_runner.make_feeds(exporter, filename, dynamic=dynamic)
+            feeds_dynamic = (
+                model_runner.make_feeds(exporter, filename, dynamic=True)
+                if dynamic
+                else None
+            )
+            assert (dynamic and feeds_dynamic is not None) or (
+                not dynamic and feeds_dynamic is None
+            ), (
+                f"dynamic={dynamic}, feeds_dynamic is "
+                f"{'' if feeds_dynamic is None else 'not'} None"
+            )
 
         context["feeds"] = feeds
         context["feeds_dynamic"] = feeds_dynamic
@@ -1228,9 +1238,11 @@ class BenchmarkRunner:
         # dynamic
         #########
 
-        expected_dynamic = model_runner.run_dynamic() if dynamic else None
-        if expected_dynamic is not None:
+        if dynamic:
+            expected_dynamic = model_runner.run_dynamic()
             expected_dynamic = self.move_to("cpu", expected_dynamic)
+        else:
+            expected_dynamic = None
 
         del model_runner
         gc.collect()
@@ -1301,6 +1313,12 @@ class BenchmarkRunner:
         assert filename is not None
         assert part1 is not None
         assert part1, "Part 1 was not sucessful"
+        assert (feeds_dynamic and expected_dynamic) or (
+            not feeds_dynamic and not expected_dynamic
+        ), (
+            f"feeds_dynamic is {'' if feeds_dynamic is None else 'not'} None, "
+            f"expected_dynamic is {'' if expected_dynamic is None else 'not'} None"
+        )
 
         import onnxruntime
 
@@ -1700,6 +1718,9 @@ class BenchmarkRunner:
             stats["discrepancies_avg"] = d["sum"] / max(d["n"], 1)
 
         if got_dynamic is not None:
+            assert (
+                expected_dynamic is not None
+            ), "expected_dynamic is None and got_dynamic is not."
             d = self.max_diff(
                 expected_dynamic, got_dynamic, verbose=self.verbose, flatten=is_onnx
             )
