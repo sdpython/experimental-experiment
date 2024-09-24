@@ -169,9 +169,9 @@ class ModelRunner:
             return True
         if exporter in {"custom"}:
             return True
-        if exporter in {"torch_script", "dynamo_export", "onnx_dynamo"}:
+        if exporter in {"torch_script", "dynamo_export"}:
             return optimization in {"default"}
-        if exporter == "onnx_dynamo":
+        if exporter in  {"onnx_dynamo", "onnx_dynamo-fallback", "onnx_dynamo-detailed"}:
             return optimization in {"default", "ir"}
         return False
 
