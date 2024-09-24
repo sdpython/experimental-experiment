@@ -1214,7 +1214,7 @@ class GraphBuilder(_GraphBuilderRuntime):
             f"Dynamic object {name!r}, value={value!r} "
             f"is already there{self.get_debug_msg()}"
         )
-        if isinstance(value, self.builder.WrapSym):
+        if isinstance(value, self.WrapSym):
             value = value.sym
         assert isinstance(
             value, (self.torch.SymInt, self.torch.SymFloat)
