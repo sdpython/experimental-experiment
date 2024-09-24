@@ -793,6 +793,11 @@ class ModelRunner:
         else:
             inputs = self.inputs
 
+        dynamic_shapes_for_export = self.get_dynamic_shapes(dynamic, wrapped=True)
+        kwargs_export = {}
+        if dynamic_shapes_for_export is not None:
+            kwargs_export["dynamic_shapes"] = dynamic_shapes_for_export
+
         if self.autocast:
             with torch.autocast(device_type=self.device, dtype=self.dtype), torch.no_grad():
                 torch.onnx.export(
@@ -802,7 +807,7 @@ class ModelRunner:
                     do_constant_folding=False,
                     opset_version=target_opset,
                     verbose=max(verbose - 1, 0),
-                    dynamic_shapes=self.get_dynamic_shapes(dynamic, wrapped=True),
+                    **kwargs_export,
                 )
         else:
             with torch.no_grad():
@@ -813,7 +818,7 @@ class ModelRunner:
                     do_constant_folding=False,
                     opset_version=target_opset,
                     verbose=max(verbose - 1, 0),
-                    dynamic_shapes=self.get_dynamic_shapes(dynamic, wrapped=True),
+                    **kwargs_export,
                 )
 
         if optimization and optimization != "none":
