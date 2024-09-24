@@ -1210,6 +1210,7 @@ class BenchmarkRunner:
         if quiet:
             try:
                 feeds = model_runner.make_feeds(exporter, filename)
+                feeds_dynamic = model_runner.make_feeds(exporter, filename, dynamic=dynamic)
             except AssertionError as e:
                 stats["ERR_feeds"] = _clean_string(str(e)).replace("\n", "_ ")
                 if self.verbose:
@@ -1218,7 +1219,18 @@ class BenchmarkRunner:
 
         else:
             feeds = model_runner.make_feeds(exporter, filename)
-            context["feeds"] = feeds
+            feeds_dynamic = model_runner.make_feeds(exporter, filename, dynamic=dynamic)
+
+        context["feeds"] = feeds
+        context["feeds_dynamic"] = feeds_dynamic
+
+        #########
+        # dynamic
+        #########
+
+        expected_dynamic = model_runner.run_dynamic() if dynamic else None
+        if expected_dynamic is not None:
+            expected_dynamic = self.move_to("cpu", expected_dynamic)
 
         del model_runner
         gc.collect()
@@ -1231,6 +1243,12 @@ class BenchmarkRunner:
             )
             stats["onnx_input_shapes"] = "/".join(
                 str_shape(getattr(_, "shape", "?")) for _ in feeds_values
+            )
+        if isinstance(feeds_dynamic, dict):
+            # This is the type for onnx inputs
+            feeds_dynamic_values = list(feeds_dynamic.values())
+            stats["onnx_input_dynamic_shapes"] = "/".join(
+                str_shape(getattr(_, "shape", "?")) for _ in feeds_dynamic_values
             )
 
         if self.device.startswith("cuda"):
@@ -1250,7 +1268,7 @@ class BenchmarkRunner:
         context["exporter"] = exporter
         context["quiet"] = quiet
         context["expected"] = expected
-        context["feeds"] = feeds
+        context["expected_dynamic"] = expected_dynamic
         context["warmup"] = warmup
         context["repeat"] = repeat
         context["rtopt"] = rtopt
@@ -1265,7 +1283,9 @@ class BenchmarkRunner:
         exporter=None,
         quiet=None,
         expected=None,
+        expected_dynamic=None,
         feeds=None,
+        feeds_dynamic=None,
         warmup=None,
         repeat=None,
         part1=None,
@@ -1419,6 +1439,21 @@ class BenchmarkRunner:
 
         torch.set_grad_enabled(not self.no_grad)
 
+        #########
+        # dynamic
+        #########
+
+        if feeds_dynamic is None:
+            got_dynamic = None
+        else:
+            if self.verbose:
+                print("[benchmarkrunner.benchmark] check dynamic")
+            if self.nvtx:
+                torch.cuda.nvtx.range_push("ORT-DYNAMIC")
+            got_dynamic = self.ort_run(sess, feeds_dynamic)
+            if self.nvtx:
+                torch.cuda.nvtx.range_pop()
+
         ################
         # warmup session
         ################
@@ -1478,6 +1513,8 @@ class BenchmarkRunner:
                     f"{torch.is_grad_enabled()} after warmup"
                 )
             got = self.move_to("cpu", got)
+            if got_dynamic is not None:
+                got_dynamic = self.move_to("cpu", got_dynamic)
 
             if self.verbose > 1:
                 print(f"[BenchmarkRunner.benchmark] repeat ort {model_name!r}")
@@ -1591,6 +1628,8 @@ class BenchmarkRunner:
                     f"{torch.is_grad_enabled()} after warmup"
                 )
             got = self.move_to("cpu", got)
+            if got_dynamic:
+                got_dynamic = self.move_to("cpu", got_dynamic)
 
             if self.verbose > 1:
                 print(f"[BenchmarkRunner.benchmark] repeat torch {model_name!r}")
@@ -1659,18 +1698,13 @@ class BenchmarkRunner:
             stats["discrepancies_abs"] = d["abs"]
             stats["discrepancies_rel"] = d["rel"]
             stats["discrepancies_avg"] = d["sum"] / max(d["n"], 1)
+
+        if got_dynamic is not None:
             d = self.max_diff(
-                expected, got, verbose=self.verbose, flatten=is_onnx, begin=0, end=1
+                expected_dynamic, got_dynamic, verbose=self.verbose, flatten=is_onnx
             )
-            stats["discrepancies_abs_0"] = d["abs"]
-            stats["discrepancies_rel_0"] = d["rel"]
-            stats["discrepancies_avg_0"] = d["sum"] / max(d["n"], 1)
-            d = self.max_diff(expected, got, verbose=self.verbose, flatten=is_onnx, begin=1)
-            if d["n"] > 0:
-                stats["discrepancies_abs_1+"] = d["abs"]
-                stats["discrepancies_rel_1+"] = d["rel"]
-                stats["discrepancies_avg_1+"] = d["sum"] / max(d["n"], 1)
-            if self.verbose:
-                print(f"[BenchmarkRunner.benchmark] done model with {len(stats)} metrics")
+            stats["discrepancies_dynamic_abs"] = d["abs"]
+            stats["discrepancies_dynamic_rel"] = d["rel"]
+            stats["discrepancies_dynamic_avg"] = d["sum"] / max(d["n"], 1)
 
         return stats

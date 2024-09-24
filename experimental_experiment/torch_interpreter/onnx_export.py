@@ -142,6 +142,7 @@ def _export(
     decomposition_table,
     use_dynamo,
     strict,
+    input_names=None,
 ):
     import torch
 
@@ -159,6 +160,14 @@ def _export(
                 pre_dispatch=False,
                 strict=strict,
             )
+        except torch._dynamo.exc.UserError as e:
+            raise RuntimeError(
+                f"Unable to convert model {type(mod)}, "
+                f"type(args)={type(args)}, type(args[0])="
+                f"{type(args[0]) if isinstance(args, tuple) and args else '?'}, "
+                f"strict={strict}, dynamic_shapes={dynamic_shapes}, "
+                f"input_names={input_names}"
+            ) from e
         return exported_mod
 
     # other issues
@@ -278,6 +287,7 @@ def _make_builder_interpreter(
                 decomposition_table=decomposition_table,
                 use_dynamo=use_dynamo,
                 strict=strict,
+                input_names=input_names,
             )
 
         if verbose > 0:

@@ -508,6 +508,11 @@ def merge_benchmark_reports(
         if expr == "pass_rate":
             if "discrepancies_abs" in set_columns and "speedup" in set_columns:
                 col = (df["discrepancies_abs"] <= 0.1) & (df["speedup"] >= 0.98)
+                if "discrepancies_dynamic_abs" in set_columns and "dynamic" in set_columns:
+                    col &= (df["dynamic"] == 0) | (
+                        (~df["discrepancies_dynamic_abs"].isna())
+                        & (df["discrepancies_dynamic_abs"] <= 0.1)
+                    )
                 df["status_pass_rate"] = col.astype(int)
                 df.loc[df["discrepancies_abs"].isna(), "status_pass_rate"] = np.nan
                 report_on.append("status_pass_rate")
@@ -541,6 +546,12 @@ def merge_benchmark_reports(
             if "time_export_success" in set_columns:
                 df["status_convert"] = (~df["time_export_success"].isna()).astype(int)
                 report_on.append("status_convert")
+            if "discrepancies_dynamic_abs" in set_columns:
+                df["status_dynamic"] = (
+                    (~df["discrepancies_dynamic_abs"].isna())
+                    & (df["discrepancies_dynamic_abs"] <= 0.1)
+                ).astype(int)
+                report_on.append("status_dynamic")
             if "discrepancies_abs" in set_columns:
                 df["status_convert_ort"] = (~df["discrepancies_abs"].isna()).astype(int)
                 mets = []

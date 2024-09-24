@@ -391,6 +391,23 @@ class ModelRunner:
             torch.cuda.nvtx.range_pop()
         return res
 
+    def run_dynamic(self) -> Any:
+        dynamic_inputs = self.make_dynamic_inputs()
+        if self.autocast:
+            if self.nvtx:
+                torch.cuda.nvtx.range_push("ModelRunner.Eager.AutoCast.dynamic")
+            with torch.autocast(device_type=self.device, dtype=self.dtype):
+                res = self.model(*dynamic_inputs)
+            if self.nvtx:
+                torch.cuda.nvtx.range_pop()
+            return res
+        if self.nvtx:
+            torch.cuda.nvtx.range_push("ModelRunner.Eager.Dynamic")
+        res = self.model(*dynamic_inputs)
+        if self.nvtx:
+            torch.cuda.nvtx.range_pop()
+        return res
+
     def compute_weight_size(self) -> int:
         """Returns the weight size."""
         return compute_weight_size(self.model)
@@ -1070,7 +1087,47 @@ class ModelRunner:
                 )
         return res, None
 
-    def make_feeds(self, exporter: str, filename: Optional[str] = None):
+    def make_dynamic_inputs(self):
+        """
+        Creates dynamic inputs based on the static ones by changing the dynamic
+        according to the definition of the dynamic_shapes.
+        """
+        assert isinstance(
+            self.inputs, tuple
+        ), f"Not implemented for type(self.inputs)={type(self.inputs)}"
+        dynamic_shapes = self.get_dynamic_shapes(True, wrapped=False)
+        dyn_inputs = []
+        dyn_values = {}
+        for i in range(len(self.inputs)):
+            inp = self.inputs[i]
+            if i >= len(dynamic_shapes):
+                dyn_inputs.append(inp)
+                continue
+            new_shape = []
+            dyn_shape = dynamic_shapes[i]
+            for j in range(len(inp.shape)):
+                if j not in dyn_shape:
+                    new_shape.append(inp.shape[j])
+                    continue
+                name = dyn_shape[j]
+                if name in dyn_values:
+                    new_shape.append(dyn_values[name])
+                    continue
+                d = inp.shape[j]
+                d += 1
+                dyn_values[name] = d
+                new_shape.append(d)
+
+            new_shape = tuple(new_shape)
+            zeros = torch.zeros(new_shape, dtype=inp.dtype, device=inp.device)
+            slices = tuple([slice(0, s) for s in inp.shape])
+            zeros[slices] = inp[slices]
+            dyn_inputs.append(zeros)
+        return dyn_inputs
+
+    def make_feeds(
+        self, exporter: str, filename: Optional[str] = None, dynamic: bool = False
+    ):
         """Creates feed inputs."""
         if exporter in {
             "eager",
@@ -1082,15 +1139,19 @@ class ModelRunner:
             "cortgrad",
         }:
             return self.inputs
+
+        use_inputs = self.inputs if not dynamic else self.make_dynamic_inputs()
+
+        # for onnx
         onx = onnx.load(filename, load_external_data=False)
         initializer_names = {i.name for i in onx.graph.initializer}
         names = [_.name for _ in onx.graph.input if _.name not in initializer_names]
-        if isinstance(self.inputs, dict):
+        if isinstance(use_inputs, dict):
             assert set(names) == set(
                 self.inputs
-            ), f"Input names mismatch, got {set(self.inputs)}, expecting {set(names)}."
+            ), f"Input names mismatch, got {set(use_inputs)}, expecting {set(names)}."
             return self.inputs
-        inputs = [i for i, d in zip(self.inputs, self.raw_use_defaults) if not d]
+        inputs = [i for i, d in zip(use_inputs, self.raw_use_defaults) if not d]
         if len(names) > len(inputs) and any(isinstance(i, list) for i in inputs):
             # We need to flatten the inputs.
             new_inputs = []
