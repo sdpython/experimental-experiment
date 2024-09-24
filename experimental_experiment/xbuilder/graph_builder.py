@@ -1983,6 +1983,15 @@ class GraphBuilder(_GraphBuilderRuntime):
                         f"dyn_shape={dyn_shape}{self.get_debug_msg()}"
                     )
                     continue
+                if isinstance(a, str) and isinstance(b, str):
+                    assert a == b, (
+                        f"Unexpected shape mismatch shape={shape}, "
+                        f"dyn_shape={dyn_shape}{self.get_debug_msg()}"
+                    )
+                    sb = b
+                    if sb not in self.dynamic_objects:
+                        self.add_dynamic_object(sb, sb)
+                    continue
                 if isinstance(a, self.torch.SymInt) and isinstance(b, str):
                     sb = b
                     if sb not in self.dynamic_objects:
@@ -1996,7 +2005,7 @@ class GraphBuilder(_GraphBuilderRuntime):
 
                 raise AssertionError(
                     f"Not implemented for type(a)={type(a)}, "
-                    f"type(b)={type(b)}, a={a}, b={b}{self.get_debug_msg()}"
+                    f"type(b)={type(b)}, a={a!r}, b={b!r}{self.get_debug_msg()}"
                 )
 
         self.inputs.append(oh.make_tensor_value_info(input_name, elem_type, dyn_shape))
