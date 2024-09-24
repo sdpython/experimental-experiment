@@ -1313,8 +1313,8 @@ class BenchmarkRunner:
         assert filename is not None
         assert part1 is not None
         assert part1, "Part 1 was not sucessful"
-        assert (feeds_dynamic and expected_dynamic) or (
-            not feeds_dynamic and not expected_dynamic
+        assert (feeds_dynamic is not None and expected_dynamic is not None) or (
+            feeds_dynamic is None and expected_dynamic is None
         ), (
             f"feeds_dynamic is {'' if feeds_dynamic is None else 'not'} None, "
             f"expected_dynamic is {'' if expected_dynamic is None else 'not'} None"
