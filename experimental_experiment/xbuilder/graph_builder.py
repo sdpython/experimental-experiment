@@ -144,7 +144,7 @@ class GraphBuilder(_GraphBuilderRuntime):
     - `_raise_list: Set[str]`: the builder stop if a result falls in that list
       (debugging tool)
 
-    You can setup environment variable ``ONNXSTOP``
+    You can setup environment variable ``ONNXSTOP``, ``ONNXSTOPSHAPE``, ``ONNXSTOPTYPE``
     to raise an exception when the type or shape
     of a variable is set. Example: ``ONNXSTOP=attn_output python ...
     """
@@ -154,7 +154,10 @@ class GraphBuilder(_GraphBuilderRuntime):
             self.sym = sym
 
         def __repr__(self) -> str:
-            return f"WrapSym({self.sym!r})"
+            try:
+                return f"WrapSym({self.sym!r})"
+            except AttributeError:
+                return "WrapSym(...)"
 
     # Size of a tensor kept in the onnx file and not stored as exrternal weight.
     SMALL_TENSOR = 1024
@@ -224,26 +227,18 @@ class GraphBuilder(_GraphBuilderRuntime):
         self.op = Opset(self)
         self.anyop = Opset(self, allow_unknown=True)
         self._debug_stop = os.environ.get("ONNXSTOP", "#?#")
+        self._debug_stop_shape = os.environ.get("ONNXSTOPSHAPE", "#?#")
+        self._debug_stop_type = os.environ.get("ONNXSTOPTYPE", "#?#")
         self.time_evaluation_constants_ = 0
         self.statistics_ = {}
         self.constraints_ = {}
         self._registered_users = {}
         self.was_inputs_renamed = input_names is not None and input_names
 
-        assert dynamic_shapes is None or isinstance(dynamic_shapes, (dict, tuple)), (
+        assert dynamic_shapes is None or isinstance(dynamic_shapes, dict), (
             f"dynamic_shapes is expected to be empty or a dictionary "
             f"not {type(dynamic_shapes)}, dynamic_shapes={dynamic_shapes}"
         )
-
-        if isinstance(dynamic_shapes, tuple):
-            assert (
-                input_names
-            ), f"Input names should not be empty for dynamic_shapes={dynamic_shapes!r}"
-            assert (
-                len(dynamic_shapes) == 1
-            ), f"dynamic_shapes={dynamic_shapes} but it should be a tuple of 1 element."
-            dynamic_shapes = dict(zip(input_names, dynamic_shapes[0]))
-            self.dynamic_shapes = dynamic_shapes
 
         if self.dynamic_shapes:
             for input_name, v in self.dynamic_shapes.items():
@@ -640,6 +635,9 @@ class GraphBuilder(_GraphBuilderRuntime):
         :param name: result name
         :param value: rank
         """
+        if name == self._debug_stop or name == self._debug_stop_shape:
+            # Set ONNXSTOP or ONNXSTOPSHAPE to stop here.
+            raise AssertionError(f"Requested stop, name={name!r}, rank={value}")
         assert isinstance(value, int), f"Unexpected rank type {type(value)} for {name!r}"
         assert not isinstance(
             value, bool
@@ -893,8 +891,8 @@ class GraphBuilder(_GraphBuilderRuntime):
         :param set_if_more_precise: change the shape if it is more precise
         :param exc: raise an exception if inconsistency
         """
-        if name == self._debug_stop:
-            # Set ONNXSTOP to stop here.
+        if name == self._debug_stop or name == self._debug_stop_shape:
+            # Set ONNXSTOP or ONNXSTOPSHAPE to stop here.
             raise AssertionError(f"Requested stop, name={name!r}, shape={shape}")
         assert isinstance(name, str), f"Unexpected type {type(name)} for name."
         assert "torch.Size" not in str(
@@ -938,6 +936,9 @@ class GraphBuilder(_GraphBuilderRuntime):
                 return
         if self.verbose > 5:
             print(f"[GraphBuilder-{self._hash()}.set_shape] {name}:{shape}")
+        for s in shape:
+            if isinstance(s, str) and s not in self.dynamic_objects:
+                self.add_dynamic_object(s, s)
         self._known_shapes[name] = shape
         if set_rank and not self.has_rank(name):
             self.set_rank(name, len(shape))
@@ -962,7 +963,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         :param dtype: element type (an integer, ONNX)
         :param exc: raises an exception
         """
-        if name == self._debug_stop:
+        if name == self._debug_stop or name == self._debug_stop_type:
             raise AssertionError(f"Requested stop, name={name!r}, dtype={dtype}")
         assert isinstance(name, str), f"Unexpected type {type(name)} for name."
         if isinstance(dtype, int):
@@ -1334,7 +1335,39 @@ class GraphBuilder(_GraphBuilderRuntime):
         for d in shape:
             if isinstance(d, int):
                 conc.append(self.make_initializer("", np.array([d], dtype=np.int64)))
-            elif isinstance(d, (str, self.torch.SymInt)):
+            elif isinstance(d, str):
+                value = d
+                if value in self.dynamic_objects_rev:
+                    assert len(self.dynamic_objects_rev[value]) >= 1
+                    name = self.dynamic_objects_rev[value][0][0]
+                    assert not isinstance(name, tuple), (
+                        f"Unexpected type {type(name)}, name={name!r}, value={value!r}"
+                        f"{self.get_debug_msg()}"
+                    )
+                    name = self.get_dimension_as_result(name)
+                else:
+                    name = value
+                assert name in self.dynamic_objects or self.has_name(
+                    name
+                ), f"Unknown dynamic object {d!r}  (or {name!r}){self.get_debug_msg()}"
+                if self.has_rank(name):
+                    assert self.get_rank(name) <= 1, (
+                        f"Unexpected rank={self.get_rank(name)} "
+                        "for a shape{self.get_debug_msg()}"
+                    )
+                    if self.get_rank(name) == 0:
+                        r = self.op.UnsqueezeAnyOpset(
+                            name, np.array([0], dtype=np.int64), name=f"_mkshape_{name}"
+                        )
+                        self.set_type(r, self.get_type(name))
+                        self.set_shape(r, (1,))
+                        conc.append(r)
+                    else:
+                        conc.append(name)
+                else:
+                    conc.append(name)
+
+            elif isinstance(d, self.torch.SymInt):
                 value = self._torch_sym_int(d)
                 if value in self.dynamic_objects_rev:
                     assert len(self.dynamic_objects_rev[value]) >= 1
@@ -1944,18 +1977,27 @@ class GraphBuilder(_GraphBuilderRuntime):
                 dyn_shape
             ), f"mismatch between shape={shape}, dynamic_shape={dyn_shape}"
             for a, b in zip(tuple_shape, dyn_shape):
-                if a == b:
-                    sa = str(a)
-                    if sa not in self.dynamic_objects:
-                        self.add_dynamic_object(sa, sa)
+                if isinstance(a, int) and isinstance(b, int):
+                    assert a == b, (
+                        f"Unexpected shape mismatch shape={shape}, "
+                        f"dyn_shape={dyn_shape}{self.get_debug_msg()}"
+                    )
                     continue
-                sa = str(a)
-                sb = str(b)
-                if sa == sb:
-                    if sa not in self.dynamic_objects:
-                        self.add_dynamic_object(sa, sa)
+                if isinstance(a, self.torch.SymInt) and isinstance(b, str):
+                    sb = b
+                    if sb not in self.dynamic_objects:
+                        self.add_dynamic_object(sb, sb)
+                    i = a.node.maybe_as_int()
+                    if i is None:
+                        sa = str(a)
+                        if sa not in self.dynamic_objects:
+                            self.add_dynamic_object(sa, sa)
                     continue
-                self._dynamic_alias[sa] = sb
+
+                raise AssertionError(
+                    f"Not implemented for type(a)={type(a)}, "
+                    f"type(b)={type(b)}, a={a}, b={b}{self.get_debug_msg()}"
+                )
 
         self.inputs.append(oh.make_tensor_value_info(input_name, elem_type, dyn_shape))
         if self.verbose:
@@ -2264,7 +2306,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                     continue
                 assert self.has_name(i), (
                     f"Input {i!r} does not exist for operator {op_type!r}, "
-                    f"inputs={inputs}, name={name!r} "
+                    f"inputs={inputs}, outputs={outputs}, name={name!r} "
                     f"({self._hash()}){self.get_debug_msg()}"
                 )
             for i in output_names:

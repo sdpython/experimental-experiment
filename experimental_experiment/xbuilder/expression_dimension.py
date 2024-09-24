@@ -59,7 +59,7 @@ def parse_expression(
                         ) from e
                 sds.append(sd)
             assert node.id in context or node.id in set(sds), (
-                f"Unable to find name {node.id!r} in expression {expr!r}"
+                f"Unable to find name {node.id!r} in expression {expr!r} "
                 f"in context {sorted(context)}"
             )
     return Expression(expr, parsed=st)

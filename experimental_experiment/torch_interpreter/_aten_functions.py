@@ -2023,13 +2023,25 @@ def aten_expand(
         ), f"Unable to expand x with shape={shape} because sizes={sizes}{g.get_debug_msg()}"
         new_shape = []
         is_static = True
-        for a, b in zip(shape, sizes):
+        shape_x = None
+        for di, (a, b) in enumerate(zip(shape, sizes)):
             if b == -1:
                 assert isinstance(b, int), (
                     f"Not implemented when the shape is not fully known, "
                     f"shape={shape} for x as sizes={sizes}{g.get_debug_msg()}"
                 )
-                new_shape.append(a)
+                if isinstance(a, int):
+                    new_shape.append(a)
+                else:
+                    if a in g.dynamic_objects and g.has_name(g.dynamic_objects[a]):
+                        new_shape.append(g.dynamic_objects[a])
+                    else:
+                        if shape_x is None:
+                            shape_x = g.op.Shape(x, name=name)
+                        ds = g.op.Gather(shape_x, np.array([di], dtype=np.int64), name=name)
+                        new_shape.append(ds)
+                        g.add_dynamic_object(a, ds)
+                    is_static = False
             else:
                 new_shape.append(b)
                 is_static = False

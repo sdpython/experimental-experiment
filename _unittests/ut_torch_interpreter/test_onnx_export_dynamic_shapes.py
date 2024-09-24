@@ -306,6 +306,11 @@ class TestOnnxExportDynamicShapes(ExtTestCase):
                 return_builder=True,
             )
             self.assertNotEmpty(builder)
+            if __name__ == "__main__":
+                with open(
+                    "test_export_llama_model_dynamic_shapes_x2_cpu_tuple.onnx", "wb"
+                ) as f:
+                    f.write(onx.SerializeToString())
 
             for i in onx.graph.input:
                 shape = i.type.tensor_type.shape
@@ -314,9 +319,9 @@ class TestOnnxExportDynamicShapes(ExtTestCase):
             for i in onx.graph.output:
                 shape = i.type.tensor_type.shape
                 value = tuple(d.dim_param or d.dim_value for d in shape.dim)
-                if value != ("s1", "s2", 16):
+                if value != ("batch", "length", 16):
                     raise AssertionError(f"value={value!r}\n{builder.get_debug_msg()}")
-                self.assertEqual(("s1", "s2", 16), value)
+                self.assertEqual(("batch", "length", 16), value)
 
             for i in range(0, len(input_tensors)):
                 expected = model(*input_tensors[i])
