@@ -1210,7 +1210,11 @@ class BenchmarkRunner:
         if quiet:
             try:
                 feeds = model_runner.make_feeds(exporter, filename)
-                feeds_dynamic = model_runner.make_feeds(exporter, filename, dynamic=dynamic)
+                feeds_dynamic = (
+                    model_runner.make_feeds(exporter, filename, dynamic=True)
+                    if dynamic
+                    else None
+                )
             except AssertionError as e:
                 stats["ERR_feeds"] = _clean_string(str(e)).replace("\n", "_ ")
                 if self.verbose:
@@ -1284,6 +1288,15 @@ class BenchmarkRunner:
         context["warmup"] = warmup
         context["repeat"] = repeat
         context["rtopt"] = rtopt
+
+        assert (feeds_dynamic is not None and expected_dynamic is not None) or (
+            feeds_dynamic is None and expected_dynamic is None
+        ), (
+            f"feeds_dynamic is {'' if feeds_dynamic is None else 'not'} None, "
+            f"expected_dynamic is {'' if expected_dynamic is None else 'not'} None, "
+            f"dynamic={dynamic}"
+        )
+
         return stats, context
 
     def _test_model_part_2(
