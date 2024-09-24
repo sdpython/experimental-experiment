@@ -57,3 +57,18 @@ class NeuronTuple(torch.nn.Module):
         return (torch.randn(1, 5).to(device),)
 
     config = MakeConfig(download=False, to_tuple=False)
+
+
+class Neuron2Inputs(torch.nn.Module):
+    def __init__(self, n_dims: int = 5, n_targets: int = 3):
+        super().__init__()
+        self.linear = torch.nn.Linear(n_dims, n_targets)
+
+    def forward(self, x, y):
+        z = self.linear(x) + y
+        return torch.sigmoid(z)
+
+    def _get_random_inputs(self, device: str):
+        return (torch.randn(1, 5).to(device), torch.randn(1, 5).to(device))
+
+    config = MakeConfig(download=False, to_tuple=False)

@@ -9,7 +9,13 @@ from ._bash_bench_model_runner import (
     _rand_int_tensor,
     download_retry_decorator,
 )
-from ._bash_bench_set_dummies import Neuron, Neuron2Outputs, Neuron16, NeuronTuple
+from ._bash_bench_set_dummies import (
+    Neuron,
+    Neuron2Outputs,
+    Neuron16,
+    NeuronTuple,
+    Neuron2Inputs,
+)
 
 
 class HuggingfaceRunner(BenchmarkRunner):
@@ -198,6 +204,10 @@ class HuggingfaceRunner(BenchmarkRunner):
                 ),
                 "101Dummy2": (
                     lambda: Neuron.config,
+                    Neuron,
+                ),
+                "101Dummy2Inputs": (
+                    lambda: Neuron2Inputs.config,
                     Neuron,
                 ),
                 "AllenaiLongformerBase": (

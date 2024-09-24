@@ -161,12 +161,17 @@ def _export(
                 strict=strict,
             )
         except torch._dynamo.exc.UserError as e:
+            try:
+                exported_mod = torch.export.export(mod, args, strict=strict).graph
+            except torch._export.verifier.SpecViolationError:
+                exported_mod = None
             raise RuntimeError(
                 f"Unable to convert model {type(mod)}, "
                 f"type(args)={type(args)}, type(args[0])="
                 f"{type(args[0]) if isinstance(args, tuple) and args else '?'}, "
                 f"strict={strict}, dynamic_shapes={dynamic_shapes}, "
-                f"input_names={input_names}"
+                f"input_names={input_names}\n---exported-program---"
+                f"no-dynamic-shape---\n{exported_mod}"
             ) from e
         return exported_mod
 
@@ -412,21 +417,39 @@ def _model_signature(
 
 def _replacements_dynamic_shapes(
     mod: Any,
-    _args: Tuple[Any, ...],
+    args: Tuple[Any, ...],
     dict_dynamic_shapes: Dict[str, Any],
     input_names: Optional[List[str]] = None,
 ):
     new_dynamic_shapes = {}
     sig = _model_signature(mod)
-    true_input_names = [
-        name
-        for name, p in sig.parameters.items()
-        if p.default in (None, inspect.Parameter.empty)
-    ]
-    replacements = {} if input_names is None else dict(zip(input_names, true_input_names))
+    true_input_names = []
+    has_args = False
+    for name, p in sig.parameters.items():
+        if p.kind == p.VAR_POSITIONAL:
+            assert input_names or None or len(input_names) == len(args), (
+                f"Mimsatch number between len(args)={len(args)}, "
+                f"input_names={input_names}"
+            )
+            true_input_names.append(p.name)
+            has_args = (p.name, len(args) - len(true_input_names))
+        elif p.default in (None, inspect.Parameter.empty):
+            true_input_names.append(name)
+    if input_names is None:
+        replacements = {}
+    else:
+        replacements = dict(zip(input_names, true_input_names))
 
     for k, v in dict_dynamic_shapes.items():
-        new_dynamic_shapes[replacements.get(k, k)] = v
+        r = replacements.get(k, k)
+        new_dynamic_shapes[r] = v if not has_args or has_args[0] != r else (v,)
+    if has_args:
+        assert isinstance(new_dynamic_shapes[has_args[0]], tuple), (
+            f"Unexpected type in {new_dynamic_shapes}, input_names={input_names}, "
+            f"has_args={has_args}, replacements={replacements}, "
+            f"dict_dynamic_shapes={dict_dynamic_shapes}"
+        )
+        return new_dynamic_shapes
     return new_dynamic_shapes
 
 

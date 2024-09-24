@@ -79,8 +79,11 @@ class TestBashBenchRunnerCmd(ExtTestCase):
             print("CMD")
             print(" ".join(args))
         st = io.StringIO()
-        with contextlib.redirect_stderr(st), contextlib.redirect_stdout(st):
+        if debug:
             main(args=args)
+        else:
+            with contextlib.redirect_stderr(st), contextlib.redirect_stdout(st):
+                main(args=args)
         out = st.getvalue()
         if debug:
             print(out)
@@ -171,7 +174,15 @@ class TestBashBenchRunnerCmd(ExtTestCase):
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.4")
     def test_huggingface_export_bench_custom_cpu_dynamic(self):
-        self._huggingface_export_bench_cpu("custom", "101Dummy", dynamic=True)
+        self._huggingface_export_bench_cpu("custom", "101Dummy", dynamic=True, debug=True)
+
+    @skipif_ci_windows("exporter does not work on Windows")
+    @ignore_warnings((DeprecationWarning, UserWarning))
+    @requires_torch("2.4")
+    def test_huggingface_export_bench_custom_cpu_2_inputs_dynamic(self):
+        self._huggingface_export_bench_cpu(
+            "custom", "101Dummy2Inputs", dynamic=True, debug=True
+        )
 
     @skipif_ci_windows("exporter does not work on Windows")
     @ignore_warnings((DeprecationWarning, UserWarning))
@@ -261,7 +272,6 @@ class TestBashBenchRunnerCmd(ExtTestCase):
             "101Dummy,101Dummy16",
             timeout=1,
             verbose=0,
-            debug=True,
             check_file=False,
         )
 
@@ -274,7 +284,6 @@ class TestBashBenchRunnerCmd(ExtTestCase):
             "101Dummy,101Dummy16",
             timeout=1,
             verbose=0,
-            debug=True,
             check_file=False,
         )
 
