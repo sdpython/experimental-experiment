@@ -306,13 +306,13 @@ class TestBashBenchRunnerCmd(ExtTestCase):
         self._huggingface_export_bench_cpu("custom", "101DummyTuple")
 
     @skipif_ci_windows("exporter does not work on Windows")
-	@ignore_warnings((DeprecationWarning, UserWarning))
+    @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.4")
     def test_huggingface_export_bench_dynamo_cpu_optimize(self):
         self._huggingface_export_bench_cpu(
             "dynamo_export", "101Dummy", optimization="default"
         )
-		
+
     @skipif_ci_windows("exporter does not work on Windows")
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.4")
