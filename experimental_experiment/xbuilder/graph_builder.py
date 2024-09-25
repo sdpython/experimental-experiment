@@ -241,32 +241,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         )
 
         if self.dynamic_shapes:
-            for input_name, v in self.dynamic_shapes.items():
-                if isinstance(v, dict):
-                    pos_vv = list(v.items())
-                elif isinstance(v, tuple):
-                    pos_vv = [(f"{input_name}_{i}", v[i]) for i in range(len(v))]
-                else:
-                    raise AssertionError(
-                        f"Unexpected value for input_name={input_name!r} and "
-                        f"v={v}, dynamic_shapes={self.dynamic_shapes}"
-                    )
-                for pos, vv in pos_vv:
-                    if "_Dim" in str(type(vv)):
-                        name = vv.__name__
-                    else:
-                        name = vv
-                    assert isinstance(name, str), (
-                        f"Unexpected type {type(vv)}:{vv} for dynamic "
-                        f"dimension is {pos!r}, name is {name!r}"
-                    )
-                    if not self.has_dynamic_object(name):
-                        self.make_dynamic_object(
-                            name,
-                            self.torch.SymInt(name),
-                            axis=pos,
-                            input_name=input_name,
-                        )
+            self._register_dynamic_object_from_dynamic_shapes()
 
         if isinstance(target_opset_or_existing_proto, (int, dict)):
             # starts a model from nothing
@@ -295,6 +270,59 @@ class GraphBuilder(_GraphBuilderRuntime):
             raise NotImplementedError(
                 f"{type(target_opset_or_existing_proto)} is not supported."
             )
+
+    def _register_dynamic_object_from_dynamic_shapes(self):
+        assert (
+            self.dynamic_shapes is not None
+        ), "Call this method if self.dynamic_shapes is not None"
+        for input_name, v in self.dynamic_shapes.items():
+            if isinstance(v, dict):
+                pos_vv = list(v.items())
+            elif isinstance(v, tuple):
+                pos_vv = [(f"{input_name}_{i}", v[i]) for i in range(len(v))]
+            else:
+                raise AssertionError(
+                    f"Unexpected value for input_name={input_name!r} and "
+                    f"v={v}, dynamic_shapes={self.dynamic_shapes}"
+                )
+            for pos, vv in pos_vv:
+                if isinstance(vv, dict):
+                    # example:
+                    # args_0 {0: <class '._bash_bench_model_runner.batch'>}
+                    for _k, _v in vv.items():
+                        if isinstance(_v, self.torch.SymInt):
+                            if not self.has_dynamic_object(_v.__name__):
+                                self.make_dynamic_object(
+                                    _v.__name__,
+                                    _v,
+                                    axis=_k,
+                                    input_name=pos,
+                                )
+                        elif isinstance(_v, self.torch.export.dynamic_shapes._Dim):
+                            if not self.has_dynamic_object(_v.__name__):
+                                self.make_dynamic_object(
+                                    _v.__name__,
+                                    self.torch.SymInt(_v.__name__),
+                                    axis=_k,
+                                    input_name=pos,
+                                )
+                        else:
+                            raise AssertionError(
+                                f"Unexpected type {type(_v)} in {vv} for dynamic "
+                                f"dimension {pos!r}, pos_vv={pos_vv!r}, "
+                                f"self.dynamic_shapes={self.dynamic_shapes}"
+                            )
+                elif isinstance(vv, self.torch.SymInt):
+                    if not self.has_dynamic_object(vv.__name__):
+                        self.make_dynamic_object(
+                            vv.__name__, vv, axis=pos, input_name=input_name
+                        )
+                else:
+                    raise AssertionError(
+                        f"Unexpected type {type(vv)}, vv={vv} for dynamic "
+                        f"dimension {pos!r}, pos_vv={pos_vv!r}, "
+                        f"self.dynamic_shapes={self.dynamic_shapes}"
+                    )
 
     def add_stat(self, kind: str, name: str):
         """

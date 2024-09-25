@@ -1071,9 +1071,10 @@ class BenchmarkRunner:
             stats["time_latency_eager_t_delta"] = (
                 stats["time_latency_eager_t_max"] - stats["time_latency_eager_t_min"]
             ) / (stats["time_latency_eager_t_med"])
-            stats["time_latency_eager_t_corrt"] = np.corrcoef(lats, list(range(len(lats))))[
-                0, 1
-            ]
+            if len(lats) > 1:
+                stats["time_latency_eager_t_corrt"] = np.corrcoef(
+                    lats, list(range(len(lats)))
+                )[0, 1]
 
         if self.device.startswith("cuda"):
             stats["mema_gpu_4_after_repeat"] = torch.cuda.max_memory_allocated(device_id)

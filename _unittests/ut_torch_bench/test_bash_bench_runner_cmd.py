@@ -173,15 +173,15 @@ class TestBashBenchRunnerCmd(ExtTestCase):
     @skipif_ci_windows("exporter does not work on Windows")
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.4")
-    def test_huggingface_export_bench_custom_cpu_dynamic(self):
-        self._huggingface_export_bench_cpu("custom", "101Dummy", dynamic=True, debug=True)
+    def test_export_bench_custom_cpu_dynamic_1_input(self):
+        self._huggingface_export_bench_cpu("custom", "101Dummy", dynamic=True, debug=False)
 
     @skipif_ci_windows("exporter does not work on Windows")
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.4")
-    def test_huggingface_export_bench_custom_cpu_2_inputs_dynamic(self):
+    def test_export_bench_custom_cpu_dynamic_2_inputs(self):
         self._huggingface_export_bench_cpu(
-            "custom", "101Dummy2Inputs", dynamic=True, debug=True
+            "custom", "101Dummy2Inputs", dynamic=True, debug=False
         )
 
     @skipif_ci_windows("exporter does not work on Windows")
