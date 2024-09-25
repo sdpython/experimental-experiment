@@ -317,6 +317,14 @@ class GraphBuilder(_GraphBuilderRuntime):
                         self.make_dynamic_object(
                             vv.__name__, vv, axis=pos, input_name=input_name
                         )
+                elif isinstance(vv, self.torch.export.dynamic_shapes._Dim):
+                    if not self.has_dynamic_object(vv.__name__):
+                        self.make_dynamic_object(
+                            vv.__name__,
+                            self.torch.SymInt(vv.__name__),
+                            axis=pos,
+                            input_name=input_name,
+                        )
                 else:
                     raise AssertionError(
                         f"Unexpected type {type(vv)}, vv={vv} for dynamic "

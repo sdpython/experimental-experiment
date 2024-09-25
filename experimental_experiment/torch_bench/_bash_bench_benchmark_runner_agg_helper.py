@@ -139,7 +139,7 @@ def _SELECTED_FEATURES():
             cat="time",
             agg="SUM",
             stat="latency",
-            new_name="total time export model",
+            new_name="total time exported model",
             unit="x",
             help="Total latency time with the exported model "
             "(onnxruntime, inductor, ...)",
