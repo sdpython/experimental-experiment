@@ -175,6 +175,15 @@ def _SELECTED_FEATURES():
             help="Number of models as fast or faster than torch eager mode.",
             simple=True,
         ),
+        dict(
+            cat="status",
+            agg="SUM",
+            stat="lat<=inductor+2%",
+            new_name="number of models equal or faster than inductor",
+            unit="N",
+            help="Number of models equal or faster than inductor (fullgraph=True)",
+            simple=True,
+        ),
         # average
         dict(
             cat="time",

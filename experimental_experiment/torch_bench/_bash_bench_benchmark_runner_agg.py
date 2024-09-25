@@ -651,7 +651,7 @@ def merge_benchmark_reports(
                 else:
                     if verbose:
                         print(
-                            f"[merge_benchmark_reports] compute setup_script: "
+                            f"[merge_benchmark_reports] compute speedup_script: "
                             f"gr.shape={gr.shape}"
                         )
                     gr["speedup_script"] = gr["speedup"]
@@ -709,6 +709,79 @@ def merge_benchmark_reports(
                     df[d] = val.astype(int)
                     df.loc[ind, d] = np.nan
                     report_on.append(d)
+
+            # for inductor
+            if (
+                "exporter" in set_columns
+                and "dynamic" in set_columns
+                and "opt_patterns" in set_columns
+                and "speedup" in set_columns
+                and "inductor" in set(df.exporter)
+                and len(set(df.exporter)) > 1
+            ):
+                # Do the same with the exporter as a baseline.
+                keep = [*model, *new_keys, "speedup"]
+                gr = df[
+                    (df.exporter == "inductor")
+                    & (df.opt_patterns.isin({"", "-", "none"}))
+                    & (df.rtopt == 1)
+                ][keep].copy()
+                gr = gr[~gr["speedup"].isna()]
+
+                if gr.shape[0] == 0:
+                    # No figures for inductor
+                    if verbose:
+                        print(
+                            f"[merge_benchmark_reports] gr.shape={gr.shape}, "
+                            f"unable to compute speedup_inductor, "
+                            f"exporters={set(df.exporter)}, "
+                            f"opt_patterns={set(df.opt_patterns)}, "
+                            f"dynamic={set(df.dynamic)}, rtopt={set(df.rtopt)}"
+                        )
+                else:
+                    if verbose:
+                        print(
+                            f"[merge_benchmark_reports] compute speedup_inductor: "
+                            f"gr.shape={gr.shape}"
+                        )
+                    gr["speedup_inductor"] = gr["speedup"]
+                    gr = gr.drop("speedup", axis=1)
+
+                    on = [
+                        k
+                        for k in keep[:-1]
+                        if k not in {"exporter", "opt_patterns", "rtopt"}
+                    ]
+                    joined = pandas.merge(df, gr, left_on=on, right_on=on, how="left")
+
+                    assert df.shape[0] == joined.shape[0], (
+                        f"Shape mismatch after join {df.shape} -> {joined.shape}, "
+                        f"gr.shape={gr.shape}, on={on}"
+                    )
+                    df = joined.copy()
+                    df["speedup_increase_inductor"] = (
+                        df["speedup"] / df["speedup_inductor"] - 1
+                    ).fillna(-np.inf)
+                    report_on.extend(["speedup_inductor", "speedup_increase_inductor"])
+                    for c in column_keys:
+                        cc = f"{c}_x"
+                        if cc in df.columns:
+                            df[c] = df[cc]
+                    drop = [
+                        c
+                        for c in [
+                            *[f"{c}_x" for c in column_keys],
+                            *[f"{c}_y" for c in column_keys],
+                        ]
+                        if c in df.columns
+                    ]
+                    df = df.drop(drop, axis=1)
+                    set_columns = set(df.columns)
+                    df["status_lat<=inductor+2%"] = (
+                        df["speedup_increase_inductor"] >= (1 / 1.02 - 1)
+                    ).astype(int)
+                    report_on.append("status_lat<=inductor+2%")
+
             continue
 
     if verbose:
