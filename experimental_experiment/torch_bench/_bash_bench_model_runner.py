@@ -562,6 +562,18 @@ class ModelRunner:
                 optimization=optimization,
                 verbose=verbose,
                 target_opset=target_opset,
+                fullgraph=True,
+            )
+        if exporter == "inductor-partial":
+            return self._to_inductor(
+                name,
+                dynamic=dynamic,
+                fake_tensor=fake_tensor,
+                no_grad=no_grad,
+                optimization=optimization,
+                verbose=verbose,
+                target_opset=target_opset,
+                fullgraph=False,
             )
         if exporter == "dort":
             return self._to_dort(
@@ -1048,6 +1060,7 @@ class ModelRunner:
         optimization: str,
         verbose: int,
         target_opset: int,
+        fullgraph: bool
     ):
         assert not fake_tensor, "fake_tensor not implemented."
         assert no_grad, "no_grad true not implemented yet"
@@ -1057,10 +1070,10 @@ class ModelRunner:
 
         if self.autocast:
             with torch.autocast(device_type=self.device, dtype=self.dtype), torch.no_grad():
-                res = torch.compile(self.model, backend="inductor", fullgraph=True)
+                res = torch.compile(self.model, backend="inductor", fullgraph=fullgraph)
         else:
             with torch.no_grad():
-                res = torch.compile(self.model, backend="inductor", fullgraph=True)
+                res = torch.compile(self.model, backend="inductor", fullgraph=fullgraph)
         return res, None
 
     def _to_dort(
@@ -1139,6 +1152,7 @@ class ModelRunner:
             "export",
             "compile",
             "inductor",
+			"inductor-partial",
             "dort",
             "cort",
             "cortgrad",

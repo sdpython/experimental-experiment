@@ -179,6 +179,20 @@ class TestBashBenchRunnerCmd(ExtTestCase):
     @skipif_ci_windows("exporter does not work on Windows")
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.4")
+    def test_export_bench_onnx_dynamo_cpu_dynamic_1_input(self):
+        self._huggingface_export_bench_cpu("onnx_dynamo", "101Dummy", dynamic=True, debug=False)
+
+    @skipif_ci_windows("exporter does not work on Windows")
+    @ignore_warnings((DeprecationWarning, UserWarning))
+    @requires_torch("2.4")
+    def test_export_bench_onnx_dynamo_cpu_dynamic_2_inputs(self):
+        self._huggingface_export_bench_cpu(
+            "onnx_dynamo", "101Dummy2Inputs", dynamic=True, debug=False
+        )
+
+    @skipif_ci_windows("exporter does not work on Windows")
+    @ignore_warnings((DeprecationWarning, UserWarning))
+    @requires_torch("2.4")
     def test_export_bench_custom_cpu_dynamic_1_input(self):
         self._huggingface_export_bench_cpu("custom", "101Dummy", dynamic=True, debug=False)
 
@@ -192,15 +206,15 @@ class TestBashBenchRunnerCmd(ExtTestCase):
 
     @skipif_ci_windows("exporter does not work on Windows")
     @ignore_warnings((DeprecationWarning, UserWarning))
-    @requires_torch("2.5")
-    def test_huggingface_export_bench_onnx_dynamo_cpu_dynamic(self):
-        self._huggingface_export_bench_cpu("onnx_dynamo", "101Dummy", dynamic=True)
-
-    @skipif_ci_windows("exporter does not work on Windows")
-    @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.4")
     def test_huggingface_export_bench_custom_cpu_fail(self):
         self._explicit_export_bench_cpu("custom", "1001Fail,1001Fail2")
+
+    @skipif_ci_windows("exporter does not work on Windows")
+    @ignore_warnings((DeprecationWarning, UserWarning))
+    @requires_torch("2.5")
+    def test_huggingface_export_bench_onnx_dynamo_cpu_dynamic(self):
+        self._huggingface_export_bench_cpu("onnx_dynamo", "101Dummy", dynamic=True)
 
     @skipif_ci_windows("exporter does not work on Windows")
     @ignore_warnings((DeprecationWarning, UserWarning))
