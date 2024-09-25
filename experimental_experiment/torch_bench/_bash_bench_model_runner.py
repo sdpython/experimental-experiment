@@ -1060,7 +1060,7 @@ class ModelRunner:
         optimization: str,
         verbose: int,
         target_opset: int,
-        fullgraph: bool
+        fullgraph: bool,
     ):
         assert not fake_tensor, "fake_tensor not implemented."
         assert no_grad, "no_grad true not implemented yet"
@@ -1152,7 +1152,7 @@ class ModelRunner:
             "export",
             "compile",
             "inductor",
-			"inductor-partial",
+            "inductor-partial",
             "dort",
             "cort",
             "cortgrad",

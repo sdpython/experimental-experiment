@@ -1583,10 +1583,10 @@ class BenchmarkRunner:
                     stats["time_latency_t_delta"] = (
                         stats["time_latency_t_max"] - stats["time_latency_t_min"]
                     ) / (stats["time_latency_t_med"])
-					if len(lats) > 1:
-	                    stats["time_latency_t_corrt"] = np.corrcoef(lats, list(range(len(lats))))[
-    	                    0, 1
-        	            ]
+                    if len(lats) > 1:
+                        stats["time_latency_t_corrt"] = np.corrcoef(
+                            lats, list(range(len(lats)))
+                        )[0, 1]
 
             if self.device.startswith("cuda"):
                 stats["mema_gpu_9_after_export_repeat"] = torch.cuda.max_memory_allocated(
@@ -1699,10 +1699,10 @@ class BenchmarkRunner:
                     stats["time_latency_t_delta"] = (
                         stats["time_latency_t_max"] - stats["time_latency_t_min"]
                     ) / (stats["time_latency_t_med"])
-					if len(lats) > 1:
-	                    stats["time_latency_t_corrt"] = np.corrcoef(
-	                        lats, list(range(len(lats)))
-	                    )[0, 1]
+                    if len(lats) > 1:
+                        stats["time_latency_t_corrt"] = np.corrcoef(
+                            lats, list(range(len(lats)))
+                        )[0, 1]
 
             if self.device.startswith("cuda"):
                 stats["mema_gpu_9_after_export_repeat"] = torch.cuda.max_memory_allocated(
