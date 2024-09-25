@@ -102,14 +102,20 @@ class TestBashBenchRunnerCmd(ExtTestCase):
             self.assertExists(filename)
         if dynamic:
             onx = onnx.load(filename)
+            input_values = []
             for i in onx.graph.input:
                 shape = i.type.tensor_type.shape
                 value = tuple(d.dim_param or d.dim_value for d in shape.dim)
                 self.assertIn(value[0], ("batch", "s0"))
+                input_values.append(value[0])
+            assert (
+                len(set(input_values)) == 1
+            ), f"no unique value: input_values={input_values}"
             for i in onx.graph.output:
                 shape = i.type.tensor_type.shape
                 value = tuple(d.dim_param or d.dim_value for d in shape.dim)
                 self.assertIn(value[0], ("batch", "s0"))
+                self.assertEqual(input_values[0], value[0])
 
     def _explicit_export_bench_cpu(
         self,
