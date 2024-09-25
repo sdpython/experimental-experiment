@@ -139,18 +139,20 @@ def _SELECTED_FEATURES():
             cat="time",
             agg="SUM",
             stat="latency",
-            new_name="total time ORT",
+            new_name="total time export model",
             unit="x",
-            help="Total latency time with onnxruntime",
+            help="Total latency time with the exported model "
+            "(onnxruntime, inductor, ...)",
             simple=True,
         ),
         dict(
             cat="time",
             agg="SUM",
-            stat="latency_eager_if_ort",
-            new_name="total time eager / ORT",
+            stat="latency_eager_if_exported_run",
+            new_name="total time eager / exported model",
             unit="x",
-            help="Total latency of eager mode knowing that onnxruntime is running",
+            help="Total latency of eager mode knowing when the "
+            "exported model (onnxruntime, inductor, ...) runs",
             simple=True,
         ),
         dict(
