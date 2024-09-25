@@ -284,7 +284,7 @@ class TestOnnxExportDynamicShapes(ExtTestCase):
                 )
 
     @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
-    @requires_torch("2.4", "bug")
+    @requires_torch("2.5", "bug")
     @requires_transformers("4.41.0", "dynamic shapes issue")
     @requires_onnxruntime("1.18")
     @ignore_warnings(DeprecationWarning)
