@@ -295,6 +295,7 @@ class TestBashBenchMergeStats(ExtTestCase):
         self.assertNotEmpty(dfs)
 
     @ignore_warnings((FutureWarning,))
+    @skipif_ci_windows("OSError: [Errno 22] Invalid argument, gmtime or strftime")
     def test_merge_stats_bug_merge_gr(self):
         data = os.path.join(
             os.path.dirname(__file__),
