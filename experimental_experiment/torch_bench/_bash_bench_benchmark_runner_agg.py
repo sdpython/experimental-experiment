@@ -1422,17 +1422,13 @@ def _build_aggregated_document(
             .sort_index(axis=0)
             .sort_index(axis=1)
         )
-        export_simple_x = f"{export_simple}.xlsx"
-        if verbose:
-            print(f"[merge_benchmark_reports] writes {export_simple_x!r}")
-        piv.to_excel(export_simple_x)
 
         # total
         piv_index = tuple(c for c in ("#order", "METRIC") if c in _set_)
         piv_columns = (
             c for c in ("exporter", "opt_patterns", "dynamic", "rtopt") if c in _set_
         )
-        piv = (
+        piv_total = (
             pandas.pivot_table(
                 final_res["SIMPLE"],
                 index=piv_index,
@@ -1443,10 +1439,14 @@ def _build_aggregated_document(
             .sort_index(axis=0)
             .sort_index(axis=1)
         )
-        export_simple_x = f"{export_simple}_total.xlsx"
+        piv_total = piv_total[piv_total.index != (15, "average export time")]
+        piv_total = piv_total[piv_total.index != (16, "average speedup (geo)")]
+        export_simple_x = f"{export_simple}.xlsx"
         if verbose:
             print(f"[merge_benchmark_reports] writes {export_simple_x!r}")
-        piv.to_excel(export_simple_x)
+        with pandas.ExcelWriter(export_simple_x) as writer:
+            piv.to_excel(writer, sheet_name="by_suite")
+            piv_total.to_excel(writer, sheet_name="all_suites")
 
     if export_correlations:
         models = [c for c in model if c in df.columns]
