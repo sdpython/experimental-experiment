@@ -18,6 +18,7 @@ from experimental_experiment.torch_models.llama_helper import get_llama_model
 class TestOnnxExportDynamicShapes(ExtTestCase):
     @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
     @ignore_warnings((UserWarning, DeprecationWarning))
+    @requires_torch("2.5")
     def test_linear_regression_dynamic_batch(self):
         import torch
 
@@ -90,6 +91,7 @@ class TestOnnxExportDynamicShapes(ExtTestCase):
 
     @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
     @ignore_warnings((UserWarning, DeprecationWarning))
+    @requires_torch("2.5")
     def test_linear_regression_dynamic_batch_as_tuple(self):
         import torch
 
@@ -162,6 +164,7 @@ class TestOnnxExportDynamicShapes(ExtTestCase):
 
     @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
     @ignore_warnings((UserWarning, DeprecationWarning))
+    @requires_torch("2.5")
     def test_linear_regression_dynamic_batch_only_dynamic(self):
         import torch
 
