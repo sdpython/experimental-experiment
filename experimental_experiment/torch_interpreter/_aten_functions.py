@@ -7080,7 +7080,7 @@ def aten_wrap_with_autocast(
     **kwargs,
 ) -> T:
     "identity"
-    assert dtype is None, f"Not implemented with dtype={enabled}{g.get_debug_msg()}"
+    assert dtype is None, f"Not implemented with dtype={dtype}{g.get_debug_msg()}"
     assert not enabled, f"Not implemented with dtype={enabled}{g.get_debug_msg()}"
     assert (
         cache_enabled is None
@@ -7110,6 +7110,48 @@ def aten_wrap_with_autocast(
         args,
         new_outputs,
         name="wrap_with_autocast",
+        domain="aten_local_function",
+    )
+
+
+def aten_wrap_with_set_grad_enabled(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    enable_grad: bool,
+    wrapped_func,
+    *args: Sequence[T],
+    **kwargs,
+) -> T:
+    "identity"
+    assert (
+        not enable_grad
+    ), f"Not implemented with enable_grad={enable_grad}{g.get_debug_msg()}"
+    assert g.has_local_function(
+        wrapped_func, domain="aten_local_function"
+    ), f"No local function {wrapped_func!r}{g.get_debug_msg()}"
+    assert all(
+        isinstance(_, str) for _ in args
+    ), f"Unexpected input types args={args}{g.get_debug_msg()}"
+    local_outputs = g.get_local_function_outputs(wrapped_func, domain="aten_local_function")
+    if len(outputs) == len(local_outputs):
+        return g.make_node(
+            wrapped_func,
+            args,
+            outputs,
+            name="wrap_with_set_grad_enabled",
+            domain="aten_local_function",
+        )
+    assert len(outputs) == 1, (
+        f"Unexpected outputs={outputs} but local_outputs={local_outputs} "
+        f"for function {wrapped_func!r}{g.get_debug_msg()}"
+    )
+    new_outputs = [f"{outputs[0]}#{i}" for i in range(len(local_outputs))]
+    return g.make_node(
+        wrapped_func,
+        args,
+        new_outputs,
+        name="wrap_with_set_grad_enabled",
         domain="aten_local_function",
     )
 

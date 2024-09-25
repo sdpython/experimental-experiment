@@ -3187,6 +3187,12 @@ class GraphBuilder(_GraphBuilderRuntime):
         opsets = [oh.make_opsetid(*o) for o in self.opsets.items()]
         if as_function:
             assert function_name, "Function name cannot be empty."
+            assert not self.functions, (
+                f"function_name={function_name!r}, local functions "
+                f"[{', '.join(f.name for f in self.functions.values())}] "
+                f"are not supported yet when exporting a local function "
+                f"{self.get_debug_msg()}"
+            )
             return oh.make_function(
                 function_domain,
                 function_name,
@@ -4840,6 +4846,11 @@ class GraphBuilder(_GraphBuilderRuntime):
         assert isinstance(
             onx, FunctionProto
         ), f"Unexpected type {type(onx)}, name={name!r}, domain={domain!r}"
+        assert all(node.op_type != name or node.domain != domain for node in onx.node), (
+            f"Recursivity is not allowed in function {name!r}, domain={domain!r}"
+            f"\n------ONNX----\n{onx}"
+            f"{self.get_debug_msg()}"
+        )
         self.functions[domain, name] = onx
         if domain not in self.opsets:
             self.opsets[domain] = 1

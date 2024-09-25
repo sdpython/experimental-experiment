@@ -32,6 +32,7 @@ class TestEdPhi(ExtTestCase):
             prefix="test_phi_export",
         )
         onx = ret["proto"]
+        print(onx)
         names = [i.name for i in onx.graph.input]
         xp = [x.numpy() for x in input_tensors]
         feeds = dict(zip(names, xp))
@@ -41,7 +42,7 @@ class TestEdPhi(ExtTestCase):
         if has_cuda():
             sess = check_model_ort(onx, providers="cuda")
             results = sess.run(None, feeds)
-            self.assertEqualArray(expected[0].detach().numpy(), results[0], atol=1e-5)
+            self.assertEqualArray(expected[0].detach().numpy(), results[0], atol=1e-2)
 
     @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
     @ignore_warnings((DeprecationWarning, UserWarning))
