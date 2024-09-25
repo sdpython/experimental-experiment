@@ -1334,6 +1334,8 @@ def _build_aggregated_document(
         assert gr.values.max() <= 1, (
             f"Unexpected duplicated, piv_index={piv_index}, "
             f"piv_columns={piv_columns}, columns={final_res['SIMPLE'].columns}, "
+            f"set of columns you may want to skip to pass this test: "
+            f"{dict((k,set(df[k])) for k in new_keys if k in df.columns)}, "  # noqa: C402
             f"issue=\n{gr[gr['value'] > 1]}"
         )
 
