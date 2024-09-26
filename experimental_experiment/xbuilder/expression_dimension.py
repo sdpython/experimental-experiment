@@ -44,8 +44,22 @@ def parse_expression(
     st = ast.parse(expr, mode="eval")
     for node in ast.walk(st):
         if isinstance(node, ast.Name):
-            assert node.id in context or node.id in set(str(d) for d in context.values()), (
-                f"Unable to find name {node.id!r} in expression {expr!r}, "
-                f"context is {context}"
+            sds = []
+            for d_ in context.values():
+                # WrapSym
+                d = d_.sym if hasattr(d_, "sym") else d_
+                try:
+                    sd = str(d)
+                except AttributeError as e:
+                    if hasattr(d, "node") and isinstance(d.node, str):
+                        sd = d.node
+                    else:
+                        raise AssertionError(
+                            f"Unable to convert type {type(d)} into string"
+                        ) from e
+                sds.append(sd)
+            assert node.id in context or node.id in set(sds), (
+                f"Unable to find name {node.id!r} in expression {expr!r} "
+                f"in context {sorted(context)}"
             )
     return Expression(expr, parsed=st)

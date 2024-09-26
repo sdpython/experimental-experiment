@@ -57,7 +57,12 @@ def broadcast_shape(
                     graph_builder.register_constraint_dimension(a, b)
         else:
             # both str
-            d = a if a == b else None
+            if a == b:
+                d = a
+            else:
+                d = a
+                if graph_builder:
+                    graph_builder.register_constraint_dimension(a, b)
         if d is None:
             raise RuntimeError(
                 f"Not implemented for sh1={sh1}, sh2={sh2}, a={a}, b={b}, "
@@ -258,10 +263,10 @@ def set_type_shape_reduce_op(
         keepdim = 1
     g.set_type(name, g.get_type(x))
     if axes is None:
-        g.set_rank(name, int(keepdim))
+        g.set_shape(name, ((1,) * g.get_rank(x)) if keepdim else tuple())
     elif not g.has_shape(x):
         if g.has_rank(x):
-            g.set_rank(name, g.get_rank(x) - int(keepdim) * len(axes))
+            g.set_rank(name, g.get_rank(x) - (1 - int(keepdim)) * len(axes))
     else:
         shape = list(g.get_shape(x))
         for d in axes:

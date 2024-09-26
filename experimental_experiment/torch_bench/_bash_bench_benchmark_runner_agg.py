@@ -57,6 +57,7 @@ def merge_benchmark_reports(
         "stat",
         "exporter",
         "opt_patterns",
+        "dynamic",
         "rtopt",
     ),
     report_on=(
@@ -316,10 +317,32 @@ def merge_benchmark_reports(
     if verbose:
         print(f"[merge_benchmark_reports] new shape={df.shape}")
 
+    # replace nan values by numerical values for some columns
+    for k, v in {"rtopt": 1, "dynamic": 0}.items():
+        if k not in df.columns:
+            df[k] = v
+        else:
+            df[k] = df[k].astype(float).fillna(v)
+    for c in ("rtopt", "dynamic"):
+        assert c in df.columns and df[c].dtype in {
+            np.float64,
+            np.int64,
+            np.int32,
+            np.float32,
+            np.dtype("float64"),
+            np.dtype("float32"),
+            np.dtype("int32"),
+            np.dtype("int64"),
+        }, (
+            f"Column {c!r} is missing or with a wrong type, "
+            f"keys={keys!r}, df.columns={sorted(df.columns)}, "
+            f"df.dtypes={sorted(zip(df.columns,df.dtypes))}"
+        )
+
     # replace nan values
     # groupby do not like nan values
     set_columns = set(df.columns)
-    for c in ["opt_patterns", "rtopt", "ERR_export", "ERR_warmup"]:
+    for c in ["opt_patterns", "ERR_export", "ERR_warmup"]:
         if c in set_columns:
             df[c] = df[c].fillna("-")
 
@@ -345,6 +368,8 @@ def merge_benchmark_reports(
                 df[c] = df[c].astype(bool).fillna(False)
             elif c in {"dynamic"}:
                 df[c] = df[c].fillna(0)
+            elif c in {"rtopt"}:
+                df[c] = df[c].fillna(1)
             elif c.startswith("version"):
                 df[c] = df[c].fillna("")
             else:
@@ -483,6 +508,11 @@ def merge_benchmark_reports(
         if expr == "pass_rate":
             if "discrepancies_abs" in set_columns and "speedup" in set_columns:
                 col = (df["discrepancies_abs"] <= 0.1) & (df["speedup"] >= 0.98)
+                if "discrepancies_dynamic_abs" in set_columns and "dynamic" in set_columns:
+                    col &= (df["dynamic"] == 0) | (
+                        (~df["discrepancies_dynamic_abs"].isna())
+                        & (df["discrepancies_dynamic_abs"] <= 0.1)
+                    )
                 df["status_pass_rate"] = col.astype(int)
                 df.loc[df["discrepancies_abs"].isna(), "status_pass_rate"] = np.nan
                 report_on.append("status_pass_rate")
@@ -491,8 +521,8 @@ def merge_benchmark_reports(
         if expr == "correction":
             if "time_latency_eager" in df.columns and "time_latency" in df.columns:
                 weights = df["time_latency"].apply(lambda x: np.nan if np.isnan(x) else 1.0)
-                df["time_latency_eager_if_ort"] = df["time_latency_eager"] * weights
-                report_on.append("time_latency_eager_if_ort")
+                df["time_latency_eager_if_exported_run"] = df["time_latency_eager"] * weights
+                report_on.append("time_latency_eager_if_exported_run")
             continue
 
         if expr == "accuracy_rate":
@@ -516,6 +546,12 @@ def merge_benchmark_reports(
             if "time_export_success" in set_columns:
                 df["status_convert"] = (~df["time_export_success"].isna()).astype(int)
                 report_on.append("status_convert")
+            if "discrepancies_dynamic_abs" in set_columns:
+                df["status_dynamic"] = (
+                    (~df["discrepancies_dynamic_abs"].isna())
+                    & (df["discrepancies_dynamic_abs"] <= 0.1)
+                ).astype(int)
+                report_on.append("status_dynamic")
             if "discrepancies_abs" in set_columns:
                 df["status_convert_ort"] = (~df["discrepancies_abs"].isna()).astype(int)
                 mets = []
@@ -558,7 +594,7 @@ def merge_benchmark_reports(
                     on = [
                         k
                         for k in keep[:-1]
-                        if k not in ("exporter", "opt_patterns", "rtopt")
+                        if k not in {"exporter", "opt_patterns", "rtopt"}
                     ]
                 else:
                     on = [k for k in keep[:-1] if k != "exporter"]
@@ -585,11 +621,9 @@ def merge_benchmark_reports(
             continue
 
         if expr == "buckets":
-            if "rtopt" not in df.columns:
-                # We assume onnxruntime optimization were enabled (default settings).
-                df["rtopt"] = 1
             if (
                 "exporter" in set_columns
+                and "dynamic" in set_columns
                 and "opt_patterns" in set_columns
                 and "speedup" in set_columns
                 and "torch_script" in set(df.exporter)
@@ -611,12 +645,13 @@ def merge_benchmark_reports(
                             f"[merge_benchmark_reports] gr.shape={gr.shape}, "
                             f"unable to compute speedup_script, "
                             f"exporters={set(df.exporter)}, "
-                            f"opt_patterns={set(df.opt_patterns)}, rtopt={set(df.rtopt)}"
+                            f"opt_patterns={set(df.opt_patterns)}, "
+                            f"dynamic={set(df.dynamic)}, rtopt={set(df.rtopt)}"
                         )
                 else:
                     if verbose:
                         print(
-                            f"[merge_benchmark_reports] compute setup_script: "
+                            f"[merge_benchmark_reports] compute speedup_script: "
                             f"gr.shape={gr.shape}"
                         )
                     gr["speedup_script"] = gr["speedup"]
@@ -625,7 +660,7 @@ def merge_benchmark_reports(
                     on = [
                         k
                         for k in keep[:-1]
-                        if k not in ("exporter", "opt_patterns", "rtopt")
+                        if k not in {"exporter", "opt_patterns", "rtopt"}
                     ]
                     joined = pandas.merge(df, gr, left_on=on, right_on=on, how="left")
 
@@ -674,6 +709,79 @@ def merge_benchmark_reports(
                     df[d] = val.astype(int)
                     df.loc[ind, d] = np.nan
                     report_on.append(d)
+
+            # for inductor
+            if (
+                "exporter" in set_columns
+                and "dynamic" in set_columns
+                and "opt_patterns" in set_columns
+                and "speedup" in set_columns
+                and "inductor" in set(df.exporter)
+                and len(set(df.exporter)) > 1
+            ):
+                # Do the same with the exporter as a baseline.
+                keep = [*model, *new_keys, "speedup"]
+                gr = df[
+                    (df.exporter == "inductor")
+                    & (df.opt_patterns.isin({"", "-", "none"}))
+                    & (df.rtopt == 1)
+                ][keep].copy()
+                gr = gr[~gr["speedup"].isna()]
+
+                if gr.shape[0] == 0:
+                    # No figures for inductor
+                    if verbose:
+                        print(
+                            f"[merge_benchmark_reports] gr.shape={gr.shape}, "
+                            f"unable to compute speedup_inductor, "
+                            f"exporters={set(df.exporter)}, "
+                            f"opt_patterns={set(df.opt_patterns)}, "
+                            f"dynamic={set(df.dynamic)}, rtopt={set(df.rtopt)}"
+                        )
+                else:
+                    if verbose:
+                        print(
+                            f"[merge_benchmark_reports] compute speedup_inductor: "
+                            f"gr.shape={gr.shape}"
+                        )
+                    gr["speedup_inductor"] = gr["speedup"]
+                    gr = gr.drop("speedup", axis=1)
+
+                    on = [
+                        k
+                        for k in keep[:-1]
+                        if k not in {"exporter", "opt_patterns", "rtopt"}
+                    ]
+                    joined = pandas.merge(df, gr, left_on=on, right_on=on, how="left")
+
+                    assert df.shape[0] == joined.shape[0], (
+                        f"Shape mismatch after join {df.shape} -> {joined.shape}, "
+                        f"gr.shape={gr.shape}, on={on}"
+                    )
+                    df = joined.copy()
+                    df["speedup_increase_inductor"] = (
+                        df["speedup"] / df["speedup_inductor"] - 1
+                    ).fillna(-np.inf)
+                    report_on.extend(["speedup_inductor", "speedup_increase_inductor"])
+                    for c in column_keys:
+                        cc = f"{c}_x"
+                        if cc in df.columns:
+                            df[c] = df[cc]
+                    drop = [
+                        c
+                        for c in [
+                            *[f"{c}_x" for c in column_keys],
+                            *[f"{c}_y" for c in column_keys],
+                        ]
+                        if c in df.columns
+                    ]
+                    df = df.drop(drop, axis=1)
+                    set_columns = set(df.columns)
+                    df["status_lat<=inductor+2%"] = (
+                        df["speedup_increase_inductor"] >= (1 / 1.02 - 1)
+                    ).astype(int)
+                    report_on.append("status_lat<=inductor+2%")
+
             continue
 
     if verbose:
@@ -955,7 +1063,9 @@ def _build_aggregated_document(
                 f"m0.index.names={m0.index.names}, "
                 f"m0.columns.names={m0.columns.names}\n---\n{m0}"
             )
-            exporter_column = [c for c in cols if c in ("exporter", "opt_patterns", "rtopt")]
+            exporter_column = [
+                c for c in cols if c in ("exporter", "opt_patterns", "dynamic", "rtopt")
+            ]
             assert "stat" in cols, (
                 f"Unexpected columns {cols}, expecting 'stat', "
                 f"{exporter_column!r}, {model!r}, reverse={reverse}, "
@@ -1168,7 +1278,7 @@ def _build_aggregated_document(
     df0 = final_res["0raw"]
     date_col = [
         c
-        for c in ["DATE", "suite", "exporter", "opt_patterns", "dtype", "rtopt"]
+        for c in ["DATE", "suite", "exporter", "opt_patterns", "dtype", "dynamic", "rtopt"]
         if c in df0.columns
     ]
     if verbose:
@@ -1267,18 +1377,20 @@ def _build_aggregated_document(
         v.dropna(axis=1, how="all", inplace=True)
 
     if export_simple and "SIMPLE" in final_res:
-        if (
-            "rtopt" in final_res["SIMPLE"].columns
-            and len(set(final_res["SIMPLE"]["rtopt"].dropna())) <= 1
-        ):
-            if verbose:
-                print("[merge_benchmark_reports] drops 'rtopt' in SIMPLE")
-            final_res["SIMPLE"] = final_res["SIMPLE"].drop("rtopt", axis=1)
-        elif verbose and "rtopt" in final_res["SIMPLE"].columns:
-            print(
-                f"[merge_benchmark_reports] keeps 'rtopt' in SIMPLE: "
-                f"{set(final_res['SIMPLE'].dropna())}"
-            )
+        for c in ("rtopt",):
+            if (
+                c in final_res["SIMPLE"].columns
+                and len(set(final_res["SIMPLE"][c].dropna())) <= 1
+            ):
+                if verbose:
+                    print(f"[merge_benchmark_reports] drops {c!r} in SIMPLE")
+                final_res["SIMPLE"] = final_res["SIMPLE"].drop(c, axis=1)
+            elif verbose and c in final_res["SIMPLE"].columns:
+                print(
+                    f"[merge_benchmark_reports] keeps {c!r} in SIMPLE: "
+                    f"{set(final_res['SIMPLE'].dropna())}"
+                )
+
         if verbose:
             print(f"[merge_benchmark_reports] writes {export_simple!r}")
 
@@ -1287,12 +1399,16 @@ def _build_aggregated_document(
 
         # first pivot
         piv_index = tuple(c for c in ("dtype", "suite", "#order", "METRIC") if c in _set_)
-        piv_columns = tuple(c for c in ("exporter", "opt_patterns", "rtopt") if c in _set_)
+        piv_columns = tuple(
+            c for c in ("exporter", "opt_patterns", "dynamic", "rtopt") if c in _set_
+        )
         ccc = [*piv_index, *piv_columns]
         gr = final_res["SIMPLE"][[*ccc, "value"]].groupby(ccc).count()
         assert gr.values.max() <= 1, (
             f"Unexpected duplicated, piv_index={piv_index}, "
             f"piv_columns={piv_columns}, columns={final_res['SIMPLE'].columns}, "
+            f"set of columns you may want to skip to pass this test: "
+            f"{dict((k,set(df[k])) for k in new_keys if k in df.columns)}, "  # noqa: C402
             f"issue=\n{gr[gr['value'] > 1]}"
         )
 
@@ -1306,15 +1422,13 @@ def _build_aggregated_document(
             .sort_index(axis=0)
             .sort_index(axis=1)
         )
-        export_simple_x = f"{export_simple}.xlsx"
-        if verbose:
-            print(f"[merge_benchmark_reports] writes {export_simple_x!r}")
-        piv.to_excel(export_simple_x)
 
         # total
         piv_index = tuple(c for c in ("#order", "METRIC") if c in _set_)
-        piv_columns = (c for c in ("exporter", "opt_patterns", "rtopt") if c in _set_)
-        piv = (
+        piv_columns = (
+            c for c in ("exporter", "opt_patterns", "dynamic", "rtopt") if c in _set_
+        )
+        piv_total = (
             pandas.pivot_table(
                 final_res["SIMPLE"],
                 index=piv_index,
@@ -1325,10 +1439,14 @@ def _build_aggregated_document(
             .sort_index(axis=0)
             .sort_index(axis=1)
         )
-        export_simple_x = f"{export_simple}_total.xlsx"
+        piv_total = piv_total[piv_total.index != (15, "average export time")]
+        piv_total = piv_total[piv_total.index != (16, "average speedup (geo)")]
+        export_simple_x = f"{export_simple}.xlsx"
         if verbose:
             print(f"[merge_benchmark_reports] writes {export_simple_x!r}")
-        piv.to_excel(export_simple_x)
+        with pandas.ExcelWriter(export_simple_x) as writer:
+            piv.to_excel(writer, sheet_name="by_suite")
+            piv_total.to_excel(writer, sheet_name="all_suites")
 
     if export_correlations:
         models = [c for c in model if c in df.columns]

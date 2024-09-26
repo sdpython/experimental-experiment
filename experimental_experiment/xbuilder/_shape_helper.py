@@ -34,19 +34,9 @@ def is_static_dimension(d: int) -> bool:
         return True
     import torch
 
-    if isinstance(d, torch.SymInt):
-        try:
-            int(str(d))
-            return True
-        except ValueError:
-            return False
-
-    if isinstance(d, torch.SymFloat):
-        try:
-            int(float(str(d)))
-            return True
-        except ValueError:
-            return False
+    assert isinstance(
+        d, (torch.SymInt, torch.SymFloat, str)
+    ), f"Unexpected type {type(d)} for a dimension {d!r}"
     return False
 
 

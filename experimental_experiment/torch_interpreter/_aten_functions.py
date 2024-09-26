@@ -343,6 +343,11 @@ def aten_arange(
         itype = torch_dtype_to_onnx_dtype(dtype)
 
     def _may_cast(a, it):
+        assert g.has_rank(a), f"Missing rank for {a!r}{g.get_debug_msg()}"
+        rk = g.get_rank(a)
+        if rk == 1:
+            # It must be a scalar.
+            a = g.op.Reshape(a, np.array([], dtype=np.int64), name=name)
         gi = g.get_type(a)
         if gi == it:
             return a
@@ -2018,13 +2023,25 @@ def aten_expand(
         ), f"Unable to expand x with shape={shape} because sizes={sizes}{g.get_debug_msg()}"
         new_shape = []
         is_static = True
-        for a, b in zip(shape, sizes):
+        shape_x = None
+        for di, (a, b) in enumerate(zip(shape, sizes)):
             if b == -1:
                 assert isinstance(b, int), (
                     f"Not implemented when the shape is not fully known, "
                     f"shape={shape} for x as sizes={sizes}{g.get_debug_msg()}"
                 )
-                new_shape.append(a)
+                if isinstance(a, int):
+                    new_shape.append(a)
+                else:
+                    if a in g.dynamic_objects and g.has_name(g.dynamic_objects[a]):
+                        new_shape.append(g.dynamic_objects[a])
+                    else:
+                        if shape_x is None:
+                            shape_x = g.op.Shape(x, name=name)
+                        ds = g.op.Gather(shape_x, np.array([di], dtype=np.int64), name=name)
+                        new_shape.append(ds)
+                        g.add_dynamic_object(a, ds)
+                    is_static = False
             else:
                 new_shape.append(b)
                 is_static = False
@@ -7063,7 +7080,7 @@ def aten_wrap_with_autocast(
     **kwargs,
 ) -> T:
     "identity"
-    assert dtype is None, f"Not implemented with dtype={enabled}{g.get_debug_msg()}"
+    assert dtype is None, f"Not implemented with dtype={dtype}{g.get_debug_msg()}"
     assert not enabled, f"Not implemented with dtype={enabled}{g.get_debug_msg()}"
     assert (
         cache_enabled is None
@@ -7093,6 +7110,48 @@ def aten_wrap_with_autocast(
         args,
         new_outputs,
         name="wrap_with_autocast",
+        domain="aten_local_function",
+    )
+
+
+def aten_wrap_with_set_grad_enabled(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    enable_grad: bool,
+    wrapped_func,
+    *args: Sequence[T],
+    **kwargs,
+) -> T:
+    "identity"
+    assert (
+        not enable_grad
+    ), f"Not implemented with enable_grad={enable_grad}{g.get_debug_msg()}"
+    assert g.has_local_function(
+        wrapped_func, domain="aten_local_function"
+    ), f"No local function {wrapped_func!r}{g.get_debug_msg()}"
+    assert all(
+        isinstance(_, str) for _ in args
+    ), f"Unexpected input types args={args}{g.get_debug_msg()}"
+    local_outputs = g.get_local_function_outputs(wrapped_func, domain="aten_local_function")
+    if len(outputs) == len(local_outputs):
+        return g.make_node(
+            wrapped_func,
+            args,
+            outputs,
+            name="wrap_with_set_grad_enabled",
+            domain="aten_local_function",
+        )
+    assert len(outputs) == 1, (
+        f"Unexpected outputs={outputs} but local_outputs={local_outputs} "
+        f"for function {wrapped_func!r}{g.get_debug_msg()}"
+    )
+    new_outputs = [f"{outputs[0]}#{i}" for i in range(len(local_outputs))]
+    return g.make_node(
+        wrapped_func,
+        args,
+        new_outputs,
+        name="wrap_with_set_grad_enabled",
         domain="aten_local_function",
     )
 

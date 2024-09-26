@@ -14,7 +14,7 @@ def get_dummy_model() -> Tuple[Callable, Tuple[Any, ...]]:
         def forward(self, x):
             return torch.sigmoid(self.linear(x))
 
-    return Neuron, (torch.randn(1, 5),)
+    return Neuron, (torch.randn(2, 5),)
 
 
 def get_dummy_model_fail() -> Tuple[Callable, Tuple[Any, ...]]:

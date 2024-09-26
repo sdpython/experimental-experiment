@@ -700,7 +700,6 @@ class BenchmarkRunner:
             erases whatever the model already contains
         """
         assert not process, "process=True not implemented."
-        assert not dynamic, "dynamic=True not implemented."
 
         from experimental_experiment.bench_run import get_machine
 
@@ -915,15 +914,16 @@ class BenchmarkRunner:
         stats["params_dtype"] = model_runner.parameters_dtype()
         stats["warmup"] = warmup
         stats["repeat"] = repeat
+        stats["dynamic"] = 1 if dynamic else 0
         stats["flag_no_grad"] = self.no_grad
         stats["flag_fake_tensor"] = self.fake_tensor
         stats["flag_training"] = self.training
         stats["exporter"] = exporter
         stats["input_size"] = self.obj_size(model_runner.inputs)
-        stats["_index"] = f"{model_name}-{exporter}-{optimization}-{rtopt}"
+        stats["_index"] = f"{model_name}-{exporter}-{optimization}-d{dynamic}-rt{rtopt}"
         stats["date_start"] = f"{datetime.now():%Y-%m-%d}"
         stats["opt_patterns"] = optimization
-        stats["rtopt"] = rtopt
+        stats["rtopt"] = 1 if rtopt else 0
 
         if self.device.startswith("cuda"):
             is_cuda = True
@@ -1071,9 +1071,10 @@ class BenchmarkRunner:
             stats["time_latency_eager_t_delta"] = (
                 stats["time_latency_eager_t_max"] - stats["time_latency_eager_t_min"]
             ) / (stats["time_latency_eager_t_med"])
-            stats["time_latency_eager_t_corrt"] = np.corrcoef(lats, list(range(len(lats))))[
-                0, 1
-            ]
+            if len(lats) > 1:
+                stats["time_latency_eager_t_corrt"] = np.corrcoef(
+                    lats, list(range(len(lats)))
+                )[0, 1]
 
         if self.device.startswith("cuda"):
             stats["mema_gpu_4_after_repeat"] = torch.cuda.max_memory_allocated(device_id)
@@ -1115,6 +1116,12 @@ class BenchmarkRunner:
         )
         if memory_session is not None and self.verbose:
             print("[BenchmarkRunner.benchmark] start_spying_on")
+
+        if self.verbose:
+            print(
+                f"[BenchmarkRunner.benchmark] dynamic_shapes="
+                f"{model_runner.get_dynamic_shapes(dynamic,wrapped=True)}"
+            )
 
         begin = time.perf_counter()
         if quiet:
@@ -1204,6 +1211,11 @@ class BenchmarkRunner:
         if quiet:
             try:
                 feeds = model_runner.make_feeds(exporter, filename)
+                feeds_dynamic = (
+                    model_runner.make_feeds(exporter, filename, dynamic=True)
+                    if dynamic
+                    else None
+                )
             except AssertionError as e:
                 stats["ERR_feeds"] = _clean_string(str(e)).replace("\n", "_ ")
                 if self.verbose:
@@ -1212,7 +1224,30 @@ class BenchmarkRunner:
 
         else:
             feeds = model_runner.make_feeds(exporter, filename)
-            context["feeds"] = feeds
+            feeds_dynamic = (
+                model_runner.make_feeds(exporter, filename, dynamic=True)
+                if dynamic
+                else None
+            )
+            assert (dynamic and feeds_dynamic is not None) or (
+                not dynamic and feeds_dynamic is None
+            ), (
+                f"dynamic={dynamic}, feeds_dynamic is "
+                f"{'' if feeds_dynamic is None else 'not'} None"
+            )
+
+        context["feeds"] = feeds
+        context["feeds_dynamic"] = feeds_dynamic
+
+        #########
+        # dynamic
+        #########
+
+        if dynamic:
+            expected_dynamic = model_runner.run_dynamic()
+            expected_dynamic = self.move_to("cpu", expected_dynamic)
+        else:
+            expected_dynamic = None
 
         del model_runner
         gc.collect()
@@ -1225,6 +1260,12 @@ class BenchmarkRunner:
             )
             stats["onnx_input_shapes"] = "/".join(
                 str_shape(getattr(_, "shape", "?")) for _ in feeds_values
+            )
+        if isinstance(feeds_dynamic, dict):
+            # This is the type for onnx inputs
+            feeds_dynamic_values = list(feeds_dynamic.values())
+            stats["onnx_input_dynamic_shapes"] = "/".join(
+                str_shape(getattr(_, "shape", "?")) for _ in feeds_dynamic_values
             )
 
         if self.device.startswith("cuda"):
@@ -1244,10 +1285,19 @@ class BenchmarkRunner:
         context["exporter"] = exporter
         context["quiet"] = quiet
         context["expected"] = expected
-        context["feeds"] = feeds
+        context["expected_dynamic"] = expected_dynamic
         context["warmup"] = warmup
         context["repeat"] = repeat
         context["rtopt"] = rtopt
+
+        assert (feeds_dynamic is not None and expected_dynamic is not None) or (
+            feeds_dynamic is None and expected_dynamic is None
+        ), (
+            f"feeds_dynamic is {'' if feeds_dynamic is None else 'not'} None, "
+            f"expected_dynamic is {'' if expected_dynamic is None else 'not'} None, "
+            f"dynamic={dynamic}"
+        )
+
         return stats, context
 
     def _test_model_part_2(
@@ -1259,7 +1309,9 @@ class BenchmarkRunner:
         exporter=None,
         quiet=None,
         expected=None,
+        expected_dynamic=None,
         feeds=None,
+        feeds_dynamic=None,
         warmup=None,
         repeat=None,
         part1=None,
@@ -1275,6 +1327,12 @@ class BenchmarkRunner:
         assert filename is not None
         assert part1 is not None
         assert part1, "Part 1 was not sucessful"
+        assert (feeds_dynamic is not None and expected_dynamic is not None) or (
+            feeds_dynamic is None and expected_dynamic is None
+        ), (
+            f"feeds_dynamic is {'' if feeds_dynamic is None else 'not'} None, "
+            f"expected_dynamic is {'' if expected_dynamic is None else 'not'} None"
+        )
 
         import onnxruntime
 
@@ -1413,6 +1471,21 @@ class BenchmarkRunner:
 
         torch.set_grad_enabled(not self.no_grad)
 
+        #########
+        # dynamic
+        #########
+
+        if feeds_dynamic is None:
+            got_dynamic = None
+        else:
+            if self.verbose:
+                print("[benchmarkrunner.benchmark] check dynamic")
+            if self.nvtx:
+                torch.cuda.nvtx.range_push("ORT-DYNAMIC")
+            got_dynamic = self.ort_run(sess, feeds_dynamic)
+            if self.nvtx:
+                torch.cuda.nvtx.range_pop()
+
         ################
         # warmup session
         ################
@@ -1472,6 +1545,8 @@ class BenchmarkRunner:
                     f"{torch.is_grad_enabled()} after warmup"
                 )
             got = self.move_to("cpu", got)
+            if got_dynamic is not None:
+                got_dynamic = self.move_to("cpu", got_dynamic)
 
             if self.verbose > 1:
                 print(f"[BenchmarkRunner.benchmark] repeat ort {model_name!r}")
@@ -1508,9 +1583,10 @@ class BenchmarkRunner:
                     stats["time_latency_t_delta"] = (
                         stats["time_latency_t_max"] - stats["time_latency_t_min"]
                     ) / (stats["time_latency_t_med"])
-                    stats["time_latency_t_corrt"] = np.corrcoef(
-                        lats, list(range(len(lats)))
-                    )[0, 1]
+                    if len(lats) > 1:
+                        stats["time_latency_t_corrt"] = np.corrcoef(
+                            lats, list(range(len(lats)))
+                        )[0, 1]
 
             if self.device.startswith("cuda"):
                 stats["mema_gpu_9_after_export_repeat"] = torch.cuda.max_memory_allocated(
@@ -1585,6 +1661,8 @@ class BenchmarkRunner:
                     f"{torch.is_grad_enabled()} after warmup"
                 )
             got = self.move_to("cpu", got)
+            if got_dynamic:
+                got_dynamic = self.move_to("cpu", got_dynamic)
 
             if self.verbose > 1:
                 print(f"[BenchmarkRunner.benchmark] repeat torch {model_name!r}")
@@ -1621,9 +1699,10 @@ class BenchmarkRunner:
                     stats["time_latency_t_delta"] = (
                         stats["time_latency_t_max"] - stats["time_latency_t_min"]
                     ) / (stats["time_latency_t_med"])
-                    stats["time_latency_t_corrt"] = np.corrcoef(
-                        lats, list(range(len(lats)))
-                    )[0, 1]
+                    if len(lats) > 1:
+                        stats["time_latency_t_corrt"] = np.corrcoef(
+                            lats, list(range(len(lats)))
+                        )[0, 1]
 
             if self.device.startswith("cuda"):
                 stats["mema_gpu_9_after_export_repeat"] = torch.cuda.max_memory_allocated(
@@ -1653,18 +1732,16 @@ class BenchmarkRunner:
             stats["discrepancies_abs"] = d["abs"]
             stats["discrepancies_rel"] = d["rel"]
             stats["discrepancies_avg"] = d["sum"] / max(d["n"], 1)
+
+        if got_dynamic is not None:
+            assert (
+                expected_dynamic is not None
+            ), "expected_dynamic is None and got_dynamic is not."
             d = self.max_diff(
-                expected, got, verbose=self.verbose, flatten=is_onnx, begin=0, end=1
+                expected_dynamic, got_dynamic, verbose=self.verbose, flatten=is_onnx
             )
-            stats["discrepancies_abs_0"] = d["abs"]
-            stats["discrepancies_rel_0"] = d["rel"]
-            stats["discrepancies_avg_0"] = d["sum"] / max(d["n"], 1)
-            d = self.max_diff(expected, got, verbose=self.verbose, flatten=is_onnx, begin=1)
-            if d["n"] > 0:
-                stats["discrepancies_abs_1+"] = d["abs"]
-                stats["discrepancies_rel_1+"] = d["rel"]
-                stats["discrepancies_avg_1+"] = d["sum"] / max(d["n"], 1)
-            if self.verbose:
-                print(f"[BenchmarkRunner.benchmark] done model with {len(stats)} metrics")
+            stats["discrepancies_dynamic_abs"] = d["abs"]
+            stats["discrepancies_dynamic_rel"] = d["rel"]
+            stats["discrepancies_dynamic_avg"] = d["sum"] / max(d["n"], 1)
 
         return stats

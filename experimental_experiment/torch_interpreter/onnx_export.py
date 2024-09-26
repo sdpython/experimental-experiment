@@ -4,7 +4,7 @@ import os
 import pprint
 import time
 import warnings
-from typing import Any, Callable, Dict, Optional, Sequence, Set, Tuple, Union
+from typing import Any, Callable, Dict, List, Optional, Sequence, Set, Tuple, Union
 from onnx import ModelProto
 from onnx.defs import onnx_opset_version
 from onnx.model_container import ModelContainer
@@ -142,6 +142,7 @@ def _export(
     decomposition_table,
     use_dynamo,
     strict,
+    input_names=None,
 ):
     import torch
 
@@ -159,6 +160,19 @@ def _export(
                 pre_dispatch=False,
                 strict=strict,
             )
+        except torch._dynamo.exc.UserError as e:
+            try:
+                exported_mod = torch.export.export(mod, args, strict=strict).graph
+            except torch._export.verifier.SpecViolationError:
+                exported_mod = None
+            raise RuntimeError(
+                f"Unable to convert model {type(mod)}, "
+                f"type(args)={type(args)}, type(args[0])="
+                f"{type(args[0]) if isinstance(args, tuple) and args else '?'}, "
+                f"strict={strict}, dynamic_shapes={dynamic_shapes}, "
+                f"input_names={input_names}\n---exported-program---"
+                f"no-dynamic-shape---\n{exported_mod}"
+            ) from e
         return exported_mod
 
     # other issues
@@ -278,6 +292,7 @@ def _make_builder_interpreter(
                 decomposition_table=decomposition_table,
                 use_dynamo=use_dynamo,
                 strict=strict,
+                input_names=input_names,
             )
 
         if verbose > 0:
@@ -400,6 +415,44 @@ def _model_signature(
     return inspect.signature(model.forward if isinstance(model, torch.nn.Module) else model)
 
 
+def _replacements_dynamic_shapes(
+    mod: Any,
+    args: Tuple[Any, ...],
+    dict_dynamic_shapes: Dict[str, Any],
+    input_names: Optional[List[str]] = None,
+):
+    new_dynamic_shapes = {}
+    sig = _model_signature(mod)
+    true_input_names = []
+    has_args = False
+    for name, p in sig.parameters.items():
+        if p.kind == p.VAR_POSITIONAL:
+            assert input_names or None or len(input_names) == len(args), (
+                f"Mimsatch number between len(args)={len(args)}, "
+                f"input_names={input_names}"
+            )
+            true_input_names.append(p.name)
+            has_args = (p.name, len(args) - len(true_input_names))
+        elif p.default in (None, inspect.Parameter.empty):
+            true_input_names.append(name)
+    if input_names is None:
+        replacements = {}
+    else:
+        replacements = dict(zip(input_names, true_input_names))
+
+    for k, v in dict_dynamic_shapes.items():
+        r = replacements.get(k, k)
+        new_dynamic_shapes[r] = v if not has_args or has_args[0] != r else (v,)
+    if has_args:
+        assert isinstance(new_dynamic_shapes[has_args[0]], tuple), (
+            f"Unexpected type in {new_dynamic_shapes}, input_names={input_names}, "
+            f"has_args={has_args}, replacements={replacements}, "
+            f"dict_dynamic_shapes={dict_dynamic_shapes}"
+        )
+        return new_dynamic_shapes
+    return new_dynamic_shapes
+
+
 def to_onnx(
     mod: Union["torch.nn.Module", "torch.fx.GraphModule"],  # noqa: F821
     args: Sequence["torch.Tensor"],  # noqa: F821
@@ -462,24 +515,62 @@ def to_onnx(
     if verbose:
         print(f"[to_onnx] build the graph module with input_names={input_names}")
 
-    if dynamic_shapes is not None and input_names:
-        # Let's rewrite the dynamic shapes with the true name.
-        new_dynamic_shapes = {}
-        sig = _model_signature(mod)
-        true_input_names = [
-            name
-            for name, p in sig.parameters.items()
-            if p.default in (None, inspect.Parameter.empty)
-        ]
-        replacements = dict(zip(input_names, true_input_names))
+    if isinstance(dynamic_shapes, tuple):
+        if len(dynamic_shapes) == 1 and isinstance(dynamic_shapes[0], tuple):
+            # Model is wrapped
+            dyn_shapes = dynamic_shapes[0]
+        else:
+            dyn_shapes = dynamic_shapes
+        if not input_names:
+            input_names = [f"input{i}" for i in range(len(dyn_shapes))]
+        assert len(input_names) == len(dyn_shapes), (
+            f"Mismatch number of inputs, input_names={input_names!r}, "
+            f"dyn_shapes={dyn_shapes!r}"
+        )
+        dict_dynamic_shapes = dict(zip(input_names, dyn_shapes))
+    elif dynamic_shapes is not None:
+        assert isinstance(
+            dynamic_shapes, dict
+        ), f"Unexpected type {type(dynamic_shapes)} for dynamic_shapes={dynamic_shapes}"
+        dict_dynamic_shapes = dynamic_shapes
+    else:
+        dict_dynamic_shapes = None
 
-        for k, v in dynamic_shapes.items():
-            new_dynamic_shapes[replacements.get(k, k)] = v
-        dynamic_shapes = new_dynamic_shapes
+    if dynamic_shapes is None:
+        use_dynamic_shapes = None
+    elif input_names:
+        # Let's rewrite the dynamic shapes with the true name
+        use_dynamic_shapes = _replacements_dynamic_shapes(
+            mod,
+            args,
+            dynamic_shapes if isinstance(dynamic_shapes, dict) else dict_dynamic_shapes,
+            input_names,
+        )
+    else:
+        use_dynamic_shapes = (
+            dynamic_shapes
+            if isinstance(dynamic_shapes, tuple)
+            else _replacements_dynamic_shapes(
+                mod,
+                args,
+                dynamic_shapes if isinstance(dynamic_shapes, tuple) else dict_dynamic_shapes,
+            )
+        )
 
     if verbose and dynamic_shapes:
-        print(f"[to_onnx] dynamic_shapes={dynamic_shapes}")
+        print(
+            f"[to_onnx] dynamic_shapes={dynamic_shapes}, "
+            f"use_dynamic_shapes={use_dynamic_shapes}"
+        )
 
+    assert use_dynamic_shapes is None or isinstance(
+        use_dynamic_shapes, (dict, type(args))
+    ), (
+        f"type(use_dynamic_shapes)={type(use_dynamic_shapes)} should have the "
+        f"same type as args or a dictionary: {type(args)}, "
+        f"dynamic_shapes={dynamic_shapes}, dict_dynamic_shapes={dict_dynamic_shapes}, "
+        f"use_dynamic_shapes={use_dynamic_shapes}"
+    )
     graph_module, builder, interpreter = _make_builder_interpreter(
         mod=mod,
         args=args,
@@ -489,7 +580,7 @@ def to_onnx(
         optimization_options=options,
         verbose=verbose,
         raise_list=raise_list,
-        dynamic_shapes=dynamic_shapes,
+        dynamic_shapes=use_dynamic_shapes,
         dispatcher=dispatcher,
         use_dynamo=api_two,
         strict=strict,
