@@ -3155,6 +3155,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         return_optimize_report: bool = False,
         function_name: str = "",
         function_domain: str = "",
+        inline: bool = False,
     ) -> Union[FunctionProto, ModelProto, TorchModelContainer]:
         """
         Conversion to onnx. Only then the initializer are converted into
@@ -3187,6 +3188,12 @@ class GraphBuilder(_GraphBuilderRuntime):
         opsets = [oh.make_opsetid(*o) for o in self.opsets.items()]
         if as_function:
             assert function_name, "Function name cannot be empty."
+            assert function_domain, "Function domain cannot be empty."
+            assert not self.initializers_dict, (
+                f"function_name={function_name!r}, initializers "
+                f"are not supported when exporting a local function "
+                f"{self.get_debug_msg()}"
+            )
             assert not self.functions, (
                 f"function_name={function_name!r}, local functions "
                 f"[{', '.join(f.name for f in self.functions.values())}] "
@@ -3305,38 +3312,37 @@ class GraphBuilder(_GraphBuilderRuntime):
         rows.append("")
         return "\n".join(rows)
 
+    def _check(self, stats: List, step: str):
+        begin = time.perf_counter()
+        assert (
+            len(self.nodes) > 0
+        ), f"The onnx model is empty (step {step}, no node){self.get_debug_msg()}"
+        known = set(n.name for n in self.inputs)
+        known |= set(self.initializers_dict)
+        for node in self.nodes:
+            assert (
+                node.domain in self.opsets
+            ), f"Domain {node.domain!r} is not registered in {self.opsets}"
+            for i in node.input:
+                assert not i or self.has_name(i), (
+                    f"Name {i!r} not registered, node type is "
+                    f"{node.op_type!r}, node name is {node.name!r}, "
+                    f"input are {node.input}{self.get_debug_msg()}"
+                )
+                if i == "":
+                    continue
+                assert i in known, f"Unknown input {i!r}, step {step!r} in node {node}"
+            known |= set(node.output)
+        for o in self.outputs:
+            assert o.name in known, f"Unknown output {o.name!r}, step {step!r}"
+        stats.append(dict(pattern=f"check_{step}", time_in=time.perf_counter() - begin))
+
     def optimize(self) -> List[Dict[str, Any]]:
         """
         Optimizes a graph.
         Returns the list of applied processes.
         """
         self._clean_values_cache()
-
-        def _check(stats, step):
-            begin = time.perf_counter()
-            assert len(self.nodes) > 0, (
-                f"The onnx model is empty (step {step}, no node)."
-                f"\n{self.get_debug_msg()}"
-            )
-            known = set(n.name for n in self.inputs)
-            known |= set(self.initializers_dict)
-            for node in self.nodes:
-                assert (
-                    node.domain in self.opsets
-                ), f"Domain {node.domain!r} is not registered in {self.opsets}"
-                for i in node.input:
-                    assert not i or self.has_name(i), (
-                        f"Name {i!r} not registered, node type is "
-                        f"{node.op_type!r}, node name is {node.name!r}, "
-                        f"input are {node.input}{self.get_debug_msg()}"
-                    )
-                    if i == "":
-                        continue
-                    assert i in known, f"Unknown input {i!r}, step {step!r}  in node {node}"
-                known |= set(node.output)
-            for o in self.outputs:
-                assert o.name in known, f"Unknown output {o.name!r}, step {step!r} "
-            stats.append(dict(pattern=f"check_{step}", time_in=time.perf_counter() - begin))
 
         statistics = []
         main_begin = time.perf_counter()
@@ -3345,7 +3351,7 @@ class GraphBuilder(_GraphBuilderRuntime):
             print(f"[GraphBuilder.optimize] start with {len(self.nodes)} nodes")
             print(f"[GraphBuilder.optimize] options={self.optimization_options!r}")
 
-        _check(statistics, "A")
+        self._check(statistics, "A")
         if self.optimization_options.remove_identity:
             begin = time.perf_counter()
             nr, na = self.remove_identity_nodes()
@@ -3357,7 +3363,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                     time_in=time.perf_counter() - begin,
                 )
             )
-            _check(statistics, "B")
+            self._check(statistics, "B")
         if self.optimization_options.remove_unused:
             begin = time.perf_counter()
             n = self.remove_unused()
@@ -3368,7 +3374,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                     time_in=time.perf_counter() - begin,
                 )
             )
-            _check(statistics, "C")
+            self._check(statistics, "C")
 
         if self.optimization_options.constant_folding:
             # First constant removal
@@ -3382,7 +3388,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                     iteration=0,
                 )
             )
-            _check(statistics, "Da")
+            self._check(statistics, "Da")
             if self.optimization_options.remove_unused:
                 begin = time.perf_counter()
                 n = self.remove_unused()
@@ -3393,7 +3399,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                         time_in=time.perf_counter() - begin,
                     )
                 )
-                _check(statistics, "Ea")
+                self._check(statistics, "Ea")
 
         if self.optimization_options.patterns:
             assert (
@@ -3410,7 +3416,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                     time_in=time.perf_counter() - begin,
                 )
             )
-            _check(statistics, "F")
+            self._check(statistics, "F")
             begin = time.perf_counter()
             n = self.remove_unused()
             statistics.append(
@@ -3420,7 +3426,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                     time_in=time.perf_counter() - begin,
                 )
             )
-            _check(statistics, "G")
+            self._check(statistics, "G")
 
         if self.optimization_options.constant_folding:
             # Second constant removal
@@ -3434,7 +3440,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                     iteration=1,
                 )
             )
-            _check(statistics, "Db")
+            self._check(statistics, "Db")
             if self.optimization_options.remove_unused:
                 begin = time.perf_counter()
                 n = self.remove_unused()
@@ -3445,12 +3451,12 @@ class GraphBuilder(_GraphBuilderRuntime):
                         time_in=time.perf_counter() - begin,
                     )
                 )
-                _check(statistics, "Eb")
+                self._check(statistics, "Eb")
 
         if self.optimization_options.order:
             res = self.optimize_order()
             statistics.extend(res)
-            _check(statistics, "order")
+            self._check(statistics, "order")
 
         if self.verbose or self.optimization_options.verbose:
             duration = time.perf_counter() - main_begin
@@ -4318,7 +4324,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                         opsets=self.opsets,
                     )
 
-        assert n_existing, "Any output of the new node is conncted to existing names."
+        assert n_existing, "Any output of the new node is connected to existing names."
         if insert_at is not None:
             for i, n in enumerate(new_nodes):
                 assert isinstance(n, NodeProto), f"Unexpected type {type(n)} for a node"
@@ -4838,11 +4844,18 @@ class GraphBuilder(_GraphBuilderRuntime):
         :param name: local function name
         :param builder: builder
         :domain: domain name
+
+        Method :meth:`GraphBuilder.inline_functions` is called on
+        the builder. It modifies the builder inplace.
         """
         assert not self.has_local_function(
             name=name, domain=domain
         ), f"Function {name!r}, domain={domain!r} already exists"
-        onx = builder.to_onnx(as_function=True, function_name=name, function_domain=domain)
+        builder.inline_functions(verbose=max(0, self.verbose - 1))
+        builder.move_initializers_to_constant(verbose=max(0, self.verbose - 1))
+        onx = builder.to_onnx(
+            as_function=True, function_name=name, function_domain=domain, optimize=False
+        )
         assert isinstance(
             onx, FunctionProto
         ), f"Unexpected type {type(onx)}, name={name!r}, domain={domain!r}"
@@ -4901,3 +4914,143 @@ class GraphBuilder(_GraphBuilderRuntime):
         raise AssertionError(
             f"Unsupported type {type(a)}, unable to convert to a torch.Tensor."
         )
+
+    def inline_functions(self, verbose: int = 0):
+        """
+        Inlines local functions.
+        """
+        if not self.functions:
+            # Nothing to do
+            return
+
+        # Checks opsets
+        for v in self.functions.values():
+            for op in v.opset_import:
+                if op.domain in self.opsets:
+                    assert op.version == self.opsets[op.domain], (
+                        f"Opset version mismatch for domain {op.domain!r}, "
+                        f"existing version is {self.opsets[op.domain]}, "
+                        f"version for function {v.name!r} is {op.version}"
+                    )
+                else:
+                    self.opsets[op.domain] = op.version
+
+        stat = []
+        self._check(stat, step="before inline")
+        inlined = self._inline_functions_iterations(verbose=verbose)
+        self._check(stat, step="after inline iteration 0")
+        it = 0
+        while inlined:
+            it += 1
+            inlined = self._inline_functions_iterations(verbose=verbose)
+            self._check(stat, step=f"after inline iteration {it}")
+
+        # We can remove the local functions now.
+        self.functions = {}
+
+    def _inline_functions_iterations(self, verbose: int = 0) -> int:
+        replacements = []
+        for pos, node in enumerate(self.nodes):
+            for att in node.attribute:
+                assert att.type != AttributeProto.GRAPHS, (
+                    f"node.op_type={node.op_type!r}, node.name={node.name!r}, "
+                    f"att.name={att.name!r}, not implemented with att.type={att.type} "
+                    f"(AttributeProto.GRAPHS)"
+                )
+                assert att.type != AttributeProto.GRAPH or not self.local_functions_found(
+                    att.g
+                ), (
+                    f"Not implemented when a local function is found in a subgraph "
+                    f"node.op_type={node.op_type!r}, node.name={node.name!r}, "
+                    f"att.name={att.name!r}, not implemented with att.type={att.type} "
+                )
+            key = node.domain, node.op_type
+            if key not in self.functions:
+                continue
+
+            if verbose:
+                print(
+                    f"[_inline_functions_iterations] inline function "
+                    f"{self.functions[key].name!r} domain {self.functions[key].domain!r}"
+                )
+            new_nodes = self._convert_function(node.input, node.output, self.functions[key])
+            if verbose:
+                print(
+                    f"[_inline_functions_iterations] {len(new_nodes)} new nodes "
+                    f"for {self.functions[key].name!r}, {self.functions[key].domain!r}"
+                )
+            replacements.append((pos, node, new_nodes))
+
+        stat = []
+        for pos, node, new_nodes in reversed(replacements):
+            self.insert_and_remove_nodes(pos, new_nodes, removed=[pos])
+            self._check(stat, step=f"after inlining function {node.op_type!r}")
+
+        return len(replacements)
+
+    def _convert_function(
+        self, inputs: List[str], outputs: List[str], proto: FunctionProto
+    ) -> List[NodeProto]:
+        """
+        Converts a function into a list of nodes.
+
+        :param inputs: inputs in the calling nodes
+        :param outputs: outputs in the calling nodes
+        :param proto: function proto
+        :return: list of nodes
+        """
+        renamed = dict(zip(proto.input, inputs))
+        renamed.update(dict(zip(proto.output, outputs)))
+        new_nodes = []
+        for node in proto.node:
+            new_inputs = []
+            for name in node.input:
+                assert name in renamed, f"Unable to find {name!r} in renamed={renamed}"
+                new_inputs.append(renamed[name])
+            new_outputs = []
+            for name in node.output:
+                if name in renamed:
+                    new_outputs.append(renamed[name])
+                else:
+                    new_name = self.unique_name(name)
+                    renamed[name] = new_name
+                    new_outputs.append(new_name)
+
+            new_node = oh.make_node(
+                node.op_type,
+                new_inputs,
+                new_outputs,
+                name=self.unique_node_name(node.name),
+                domain=node.domain,
+            )
+            new_node.attribute.extend(node.attribute)
+            new_nodes.append(new_node)
+
+        return new_nodes
+
+    def move_initializers_to_constant(self, verbose: int = 0):
+        """
+        Moves initializers as constant nodes.
+        """
+        if not self.initializers_dict:
+            return
+
+        initializers, _ = self._build_initializers(
+            switch_low_high=sys.byteorder != "big",
+            large_model=False,
+            external_threshold=False,
+        )
+
+        cst_nodes = []
+        for proto in initializers:
+            if self.verbose:
+                print(
+                    f"[move_initializers_to_constant] convert "
+                    f"{proto.name!r} into a node 'Constant'"
+                )
+            cst = oh.make_node("Constant", [], [proto.name], value=proto)
+            cst_nodes.append(cst)
+            self.constants_node_[proto.name] = cst
+
+        self.initializers_dict = {}
+        self.nodes = [*cst_nodes, *self.nodes]

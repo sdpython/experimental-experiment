@@ -30,9 +30,11 @@ class TestEdPhi(ExtTestCase):
             rename_inputs=False,
             optimize=True,
             prefix="test_phi_export",
+            verbose=0,
         )
         onx = ret["proto"]
-        print(onx)
+        # with open("test_ed.onnx", "wb") as f:
+        #    f.write(onx.SerializeToString())
         names = [i.name for i in onx.graph.input]
         xp = [x.numpy() for x in input_tensors]
         feeds = dict(zip(names, xp))
