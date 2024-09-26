@@ -839,7 +839,8 @@ class BenchmarkRunner:
         context = {"part1": False}
 
         if self.device.startswith("cuda"):
-            torch.cuda.reset_peak_memory_stats()
+            device_id = 0 if ":" not in self.device else int(self.device.split(":")[1])
+            torch.cuda.reset_peak_memory_stats(device_id)
         torch.set_grad_enabled(initial_no_grad)
         if self.verbose:
             print(
@@ -868,7 +869,6 @@ class BenchmarkRunner:
         }
         stats.update(machine_specs)
         if self.device.startswith("cuda"):
-            device_id = 0 if ":" not in self.device else int(self.device.split(":")[1])
             stats["device_id"] = device_id
             stats["mema_gpu_0_before_loading"] = torch.cuda.max_memory_allocated(device_id)
             if self.verbose > 1:
@@ -1093,7 +1093,7 @@ class BenchmarkRunner:
         ########
 
         if self.device.startswith("cuda"):
-            torch.cuda.reset_peak_memory_stats()
+            torch.cuda.reset_peak_memory_stats(device_id)
             stats["mema_gpu_4_reset"] = torch.cuda.max_memory_allocated(device_id)
 
         sopt = (
@@ -1269,7 +1269,7 @@ class BenchmarkRunner:
             )
 
         if self.device.startswith("cuda"):
-            torch.cuda.reset_peak_memory_stats()
+            torch.cuda.reset_peak_memory_stats(device_id)
             stats["mema_gpu_6_after_gcollect"] = torch.cuda.max_memory_allocated(device_id)
             if self.verbose > 1:
                 print(
@@ -1340,8 +1340,8 @@ class BenchmarkRunner:
 
         if self.device.startswith("cuda"):
             is_cuda = True
-            torch.cuda.reset_peak_memory_stats()
             device_id = 0 if ":" not in self.device else int(self.device.split(":")[1])
+            torch.cuda.reset_peak_memory_stats(device_id)
             stats["device_id2"] = device_id
             stats["mema_gpu_6_before_session"] = torch.cuda.max_memory_allocated(device_id)
             if self.verbose > 1:
