@@ -322,7 +322,7 @@ class TestDynamoLlamaDynamic(ExtTestCase):
             dynamic=True,
             fullgraph=True,
             onnx_export="tt_test_llama_attention_backward_forward_dynamic",
-            impl="ref",
+            impl="ort",
             verbose=0,
             dump_prefix="tt_temp_llama_attention_backward_forward_dynamic",
             atol=0.2,

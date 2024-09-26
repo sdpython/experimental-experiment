@@ -93,6 +93,14 @@ while [ $# -gt 0 ]; do
         esac
 done
 
+if [[ $ARGS == () ]];
+then
+    # Let's add dummy parameters.
+    ARGS=("-c")
+    ARGS+=("import sys;print(sys.executable)") 
+fi
+
+
 # Options
 echo "[$0] TRANSFORMERS_VERSION=${TRANSFORMERS_VERSION}"
 echo "[$0] ONNXSCRIPT_VERSION=${ONNXSCRIPT_VERSION}"
