@@ -354,6 +354,7 @@ def prepare_inputs_homogeneous_operator(
     outputs: Optional[List[str]] = None,
     name: Optional[str] = None,
     sts: Optional[Any] = None,
+    check_shape: bool = True,
 ) -> Tuple[str, ...]:
     """
     Cast any inputs to ensure all inputs share the same type.
@@ -375,6 +376,27 @@ def prepare_inputs_homogeneous_operator(
             inputs.append(a)
             continue
         inputs.append(_cast_inputs(g, a, only, name=name))
+
+    if check_shape:
+        # Checks that one input is not a scalar without no dimension.
+        shapes = []
+        new_inputs = []
+        for i in inputs:
+            if g.has_shape(i):
+                shape = g.get_shape(i)
+                shapes.append(shape)
+                if len(shape) == 0:
+                    new_inputs.append(
+                        g.op.Reshape(i, np.array([1], dtype=np.int64), name=name)
+                    )
+                    continue
+            elif g.has_rank(i) and g.get_rank(i) == 0:
+                new_inputs.append(g.op.Reshape(i, np.array([1], dtype=np.int64), name=name))
+                continue
+            new_inputs.append(i)
+        if set(shapes) != {tuple()}:
+            inputs = new_inputs
+
     if f is None:
         return tuple(inputs)
     if tuple(inputs) == tuple(args):

@@ -2033,7 +2033,11 @@ def aten_expand(
                 if isinstance(a, int):
                     new_shape.append(a)
                 else:
-                    if a in g.dynamic_objects and g.has_name(g.dynamic_objects[a]):
+                    if (
+                        a in g.dynamic_objects
+                        and isinstance(g.dynamic_objects[a], str)
+                        and g.has_name(g.dynamic_objects[a])
+                    ):
                         new_shape.append(g.dynamic_objects[a])
                     else:
                         if shape_x is None:
@@ -2091,10 +2095,16 @@ def aten_fill_Scalar(
             g.get_shape(x),
             v,
             dtype=g.get_type(x),
-            name=name,
+            name=f"{name}_static",
         )
-    raise RuntimeError(
-        f"fill is not implemented when shape is not fully known{g.get_debug_msg()}"
+    return aten_full(
+        g,
+        sts,
+        outputs,
+        x,  # full like
+        v,
+        dtype=g.get_type(x),
+        name=f"{name}_dynamic",
     )
 
 
@@ -2261,12 +2271,12 @@ def aten_full(
             tsize = np.array(size, dtype=np.int64)
             new_shape = size
         else:
-            tsize = g.make_shape_from_results(size, name=name)
+            tsize = g.make_shape_from_results(size, name=f"{name}_make_shape")
     elif isinstance(size, str):
         if g.has_shape(size) and is_static_shape(size):
             tsize = np.array(g.get_shape(size), dtype=np.int64)
         else:
-            tsize = g.op.Shape(size, name=name)
+            tsize = g.op.Shape(size, name=f"{name}_shape")
     else:
         raise RuntimeError(f"Unexpected type {type(size)} for size.")
 
@@ -2286,7 +2296,7 @@ def aten_full(
         ntype = tensor_dtype_to_np_dtype(itype)
         value = np.array(fill_value or 0, dtype=ntype).reshape((1,))
 
-    res = g.op.ConstantOfShape(tsize, value=from_array(value), outputs=outputs, name="name")
+    res = g.op.ConstantOfShape(tsize, value=from_array(value), outputs=outputs, name=name)
     if not sts:
         g.set_type(res, itype)
         if new_shape:
@@ -5759,6 +5769,8 @@ def _aten_slice_scatter_dynamic(
         np.array([1], dtype=np.int64),
         name=name,
     )
+    g.set_type(index_1, TensorProto.INT64)
+    g.set_rank(index_1, 1)
     index_2 = g.op.Slice(
         index_1,
         g.get_dynamic_dimension(start),

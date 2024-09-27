@@ -1,5 +1,4 @@
 import copy
-import sys
 import unittest
 from typing import Optional
 import onnxruntime  # noqa: F401
@@ -271,9 +270,6 @@ class TestDynamoLlamaDynamic(ExtTestCase):
     @ignore_warnings((UserWarning, DeprecationWarning))
     @skipif_ci_windows("torch.compile not supported on Windows")
     @requires_torch("2.5", "missing kernel")
-    @unittest.skipIf(
-        sys.version_info[:2] == (3, 12), reason="not working yet python python 3.12"
-    )
     def test_llama_attention_forward_dynamic(self):
         from experimental_experiment.torch_models.llama_helper import (
             get_llama_attention,
@@ -322,7 +318,7 @@ class TestDynamoLlamaDynamic(ExtTestCase):
             dynamic=True,
             fullgraph=True,
             onnx_export="tt_test_llama_attention_backward_forward_dynamic",
-            impl="ref",
+            impl="ort",
             verbose=0,
             dump_prefix="tt_temp_llama_attention_backward_forward_dynamic",
             atol=0.2,

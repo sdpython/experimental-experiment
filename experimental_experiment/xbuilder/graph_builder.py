@@ -867,6 +867,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         from torch.fx.experimental.sym_node import SymNode
 
         if isinstance(value.node, SymNode):
+            # '_expr' is safer than expr
             return str(value.node._expr)
         raise AssertionError(f"Unable to convert {value!r} into string")
 
@@ -1232,10 +1233,6 @@ class GraphBuilder(_GraphBuilderRuntime):
             return 1
         raise AssertionError(f"elem_size not implemented for elem_type={elem_type}.")
 
-    def has_dynamic_object(self, name: str) -> bool:
-        """Tells if a result is a dynamic object, `torch.SymInt` for torch."""
-        return name in self.dynamic_objects
-
     def make_dynamic_object(
         self,
         name: str,
@@ -1281,6 +1278,13 @@ class GraphBuilder(_GraphBuilderRuntime):
                 self.dynamic_dimensions_source[name] = [source]
 
         self.add_dynamic_object(name, value)
+        if (
+            shape_as_input
+            and isinstance(value, self.torch.SymInt)
+            and value.node.maybe_as_int() is None
+        ):
+            # Then an input is a shape.
+            self.add_dynamic_object(str(value), value)
         if name not in self._known_value_shape:
             self._known_value_shape[name] = name
 
@@ -1304,9 +1308,8 @@ class GraphBuilder(_GraphBuilderRuntime):
         if key is None:
             key = str(value)
 
-        if key not in self.dynamic_objects_rev:
-            self.dynamic_objects_rev[key] = []
-        self.dynamic_objects_rev[key].append((name, value))
+        self.add_dynamic_objects_rev(key, (name, value))
+
         if shape_as_input:
             assert isinstance(value, (self.torch.SymInt, self.torch.SymFloat)), (
                 f"shape_as_input={shape_as_input}, unexpected type "
@@ -1809,6 +1812,15 @@ class GraphBuilder(_GraphBuilderRuntime):
         else:
             self.dynamic_objects[key] = value
 
+    def has_dynamic_object(self, name: str) -> bool:
+        """Tells if a result is a dynamic object, `torch.SymInt` for torch."""
+        return name in self.dynamic_objects
+
+    def add_dynamic_objects_rev(self, key, name_value):
+        if key not in self.dynamic_objects_rev:
+            self.dynamic_objects_rev[key] = []
+        self.dynamic_objects_rev[key].append(name_value)
+
     def _add_dynamic_example(self, name: str, value: Union[int, float]):
         if name not in self._dynamic_examples:
             self._dynamic_examples[name] = set()
@@ -1820,6 +1832,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         ), f"unexpected type for d={d}, type={type(d)}"
         value = None
         try:
+            # don't use 'expr'
             dyn_val = str(d.node._expr)
             value = dyn_val
         except AttributeError:
@@ -1869,7 +1882,7 @@ class GraphBuilder(_GraphBuilderRuntime):
             and add
         ):
             self.add_dynamic_object(value, value)
-            self.dynamic_objects_rev[value] = [value]
+            self.add_dynamic_object_rev(value, value)
 
         assert value in self.dynamic_objects_rev or value in self._known_value_shape, (
             f"value={value!r}, unable to find dimension {d!r} ({type(d)}) "
@@ -4778,7 +4791,8 @@ class GraphBuilder(_GraphBuilderRuntime):
             return parse_expression(expr, exc=exc, context=self.dynamic_objects)
         except AssertionError as e:
             raise AssertionError(
-                f"Unable to parse an expression due to {e}{self.get_debug_msg()}"
+                f"Unable to parse an expression expr={expr!r} "
+                f"due to {e}{self.get_debug_msg()}"
             ) from e
 
     def _constant_key(self, node: NodeProto) -> Optional[bytes]:

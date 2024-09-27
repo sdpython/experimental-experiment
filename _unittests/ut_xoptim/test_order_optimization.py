@@ -1,4 +1,3 @@
-import sys
 import os
 import unittest
 from typing import Optional
@@ -183,7 +182,6 @@ class TestGraphOrderOptimization(ExtTestCase):
         self.assertEqualArray(expected, got)
 
     @requires_onnxruntime_training()
-    @unittest.skipIf(sys.version_info >= (3, 12, 0), reason="too long")
     def test_order_bigger_model(self):
         for model in [
             # "noopt-phi-custom__1.onnx",

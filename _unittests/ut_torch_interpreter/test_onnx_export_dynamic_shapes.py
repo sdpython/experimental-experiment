@@ -481,7 +481,6 @@ class TestOnnxExportDynamicShapes(ExtTestCase):
     def test_export_llama_model_dynamic_shapes_x2_fused_cuda(self):
         import torch
         import onnxruntime
-        from onnxruntime.capi.onnxruntime_pybind11_state import Fail
         from experimental_experiment.convert.ort_helper import append_custom_libraries
 
         try:
@@ -531,17 +530,13 @@ class TestOnnxExportDynamicShapes(ExtTestCase):
                 feeds[n.name] = t.detach().cpu().numpy()
             # if __name__ == "__main__":
             #    self._investigate(expected, feeds, onx, opts, providers, verbose=0)
-            if input_tensors[i][0].shape[-1] == 1024:
-                results = sess.run(None, feeds)
-                self.assertEqualArray(
-                    expected[0].detach().cpu().numpy(),
-                    results[0],
-                    atol=1e-3,
-                    msg=f"input {i} failed with InferenceSession",
-                )
-            else:
-                # last dimension is not a dynamic shape after export
-                self.assertRaise(lambda sess=sess, feeds=feeds: sess.run(None, feeds), Fail)
+            results = sess.run(None, feeds)
+            self.assertEqualArray(
+                expected[0].detach().cpu().numpy(),
+                results[0],
+                atol=1e-3,
+                msg=f"input {i} failed with InferenceSession",
+            )
 
 
 if __name__ == "__main__":

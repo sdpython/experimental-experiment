@@ -1128,10 +1128,18 @@ class DynamoInterpreter:
                     else:
                         self.builder.set_type(r, dtype)
                     shape = tuple(v.shape)
+
+                    for t in shape:
+                        if isinstance(t, self.builder.torch.SymInt):
+                            expr = str(t.node._expr)
+                            if expr not in self.builder.dynamic_objects:
+                                # A new shape may be given to a result.
+                                self.builder.add_dynamic_object(expr, t)
+
                     if self.builder.is_dynamic_shape(shape):
                         # sets shape coming from the original model
-                        # we must not set the existing shape is dynamic,
-                        # the new one is purely static
+                        # we must not set the existing shape as static,
+                        # if it was dynamic before
                         self.builder.set_shape(r, shape, set_if_more_precise=False)
                     elif self.builder.has_rank(r):
                         assert len(shape) == self.builder.get_rank(r), (
