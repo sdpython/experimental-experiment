@@ -93,7 +93,7 @@ while [ $# -gt 0 ]; do
         esac
 done
 
-if [[ $ARGS == () ]];
+if [[ ${#ARGS[@]} ]];
 then
     # Let's add dummy parameters.
     ARGS=("-c")

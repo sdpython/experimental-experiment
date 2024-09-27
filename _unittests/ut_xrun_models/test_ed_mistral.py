@@ -5,6 +5,7 @@ from experimental_experiment.ext_test_case import (
     ExtTestCase,
     ignore_warnings,
     requires_torch,
+    requires_onnxruntime_training,
     has_cuda,
 )
 from experimental_experiment.torch_models.llama_helper import get_llama_model
@@ -190,6 +191,7 @@ class TestEdMistral(ExtTestCase):
     @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.5", "AssertionError: original output #6 is None")
+    @requires_onnxruntime_training(True)
     def test_mistral_cort_dynamic_norename_custom(self):
         model, input_tensors = get_llama_model()
         input_tensors = input_tensors[0]
