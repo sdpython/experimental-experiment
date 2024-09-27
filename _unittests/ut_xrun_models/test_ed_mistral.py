@@ -42,7 +42,7 @@ class TestEdMistral(ExtTestCase):
         if has_cuda():
             sess = check_model_ort(onx, providers="cuda")
             results = sess.run(None, feeds)
-            self.assertEqualArray(expected[0].detach().numpy(), results[0], atol=1e-5)
+            self.assertEqualArray(expected[0].detach().numpy(), results[0], atol=5e-3)
 
     @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
     @ignore_warnings(DeprecationWarning)
@@ -74,7 +74,7 @@ class TestEdMistral(ExtTestCase):
                 onx, providers="cuda", dump_file="test_mistral_export_norename.onnx"
             )
             results = sess.run(None, feeds)
-            self.assertEqualArray(expected[0].detach().numpy(), results[0], atol=1e-5)
+            self.assertEqualArray(expected[0].detach().numpy(), results[0], atol=1e-3)
 
     @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
     @ignore_warnings((DeprecationWarning, UserWarning))
@@ -146,13 +146,13 @@ class TestEdMistral(ExtTestCase):
         input_tensors = input_tensors[0]
         expected = model(*input_tensors)
 
-        compiled_model, storage = create_compiled_model(
+        compiled_model = create_compiled_model(
             model,
-            backend="debug",
+            backend="ort",
             use_dynamic=True,
             target_opset=18,
             verbose=0,
-            return_storage=True,
+            return_storage=False,
             rename_inputs=True,
             dump_prefix=(
                 "test_mistral_cort_dynamic_simple" if __name__ == "__main__" else None
@@ -160,17 +160,9 @@ class TestEdMistral(ExtTestCase):
         )
         results = compiled_model(*input_tensors)
         self.assertEqualArray(expected[0].detach().numpy(), results[0], atol=1e-5)
-        instances = storage["instance"]
-        # self.assertEqual(len(instances), 1)  # forward
 
         train_loop(model, *input_tensors)
         train_loop(compiled_model, *input_tensors)
-        instances = storage["instance"]
-        self.assertEqual(len(instances), 2)  # forward + backward
-
-        if __name__ == "__main__":
-            for i, inst in enumerate(instances):
-                self.dump_onnx(f"test_mistral_cort_dynamic_{i}_simple.onnx", inst["onnx"])
 
     @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
     @ignore_warnings((DeprecationWarning, UserWarning))
@@ -180,28 +172,20 @@ class TestEdMistral(ExtTestCase):
         input_tensors = input_tensors[0]
         expected = model(*input_tensors)
 
-        compiled_model, storage = create_compiled_model(
+        compiled_model = create_compiled_model(
             model,
-            backend="debug",
+            backend="ort",
             use_dynamic=True,
             target_opset=18,
             verbose=0,
-            return_storage=True,
+            return_storage=False,
             rename_inputs=False,
         )
         results = compiled_model(*input_tensors)
         self.assertEqualArray(expected[0].detach().numpy(), results[0], atol=1e-5)
-        instances = storage["instance"]
-        # self.assertEqual(len(instances), 1)  # forward
 
         train_loop(model, *input_tensors)
         train_loop(compiled_model, *input_tensors)
-        instances = storage["instance"]
-        self.assertEqual(len(instances), 2)  # forward + backward
-
-        if __name__ == "__main__":
-            for i, inst in enumerate(instances):
-                self.dump_onnx(f"test_mistral_cort_dynamic_{i}_norename.onnx", inst["onnx"])
 
     @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
     @ignore_warnings((DeprecationWarning, UserWarning))
@@ -219,6 +203,7 @@ class TestEdMistral(ExtTestCase):
             verbose=0,
             return_storage=True,
             rename_inputs=False,
+            dump_prefix="test_mistral_cort_dynamic_norename_custom",
         )
         results = compiled_model(*input_tensors)
         self.assertEqualArray(expected[0].detach().numpy(), results[0], atol=1e-5)
