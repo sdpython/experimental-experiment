@@ -69,10 +69,10 @@ def main(args=None):
         )
 
         verbose = int(args.verbose)
-        use_dynamic = args.dynamic in (1, "1", True, "True")
-        with_mask = args.with_mask in (True, 1, "1", "True")
-        order = args.order in (True, 1, "1", "True")
-        large_model = args.large_model in (True, 1, "1", "True")
+        use_dynamic = args.dynamic in (1, "1", "True", "true", True)
+        with_mask = args.with_mask in (1, "1", "True", "true", True)
+        order = args.order in (1, "1", "True", "true", True)
+        large_model = args.large_model in (1, "1", "True", "true", True)
         disable_pattern = [_ for _ in args.disable_pattern.split("+") if _]
         enable_pattern = [_ for _ in args.enable_pattern.split("+") if _]
 
@@ -180,8 +180,8 @@ def main(args=None):
                 folder=args.dump_folder,
                 filename=filename,
                 dynamic_shapes=dynamic_shapes if args.dynamic else None,
-                ort_optimize=args.ort in ("1", 1, "True", True),
-                optimize_oxs=args.optimize in ("1", 1, "True", True),
+                ort_optimize=args.ort in ("1", 1, "True", "true", True),
+                optimize_oxs=args.optimize in ("1", 1, "True", "true", True),
                 enable_pattern=args.enable_pattern,
                 disable_pattern=args.disable_pattern,
                 verbose=args.verbose,

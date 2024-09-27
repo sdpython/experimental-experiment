@@ -178,8 +178,11 @@ def bash_bench_main(script_name: str, doc: str, args: Optional[List[str]] = None
         ), f"Parameter tag={args.tag!r} does not support multiple values."
         if (
             multi_run(args)
-            or args.process in ("1", 1, "True", True)
-            or (args.split_process in ("1", 1, "True", True) and args.part in (None, ""))
+            or args.process in ("1", 1, "True", "true", True)
+            or (
+                args.split_process in ("1", 1, "True", "true", True)
+                and args.part in (None, "")
+            )
         ):
             assert args.part == "", f"part={args.part} must be empty"
             args_output_data = args.output_data
@@ -188,7 +191,7 @@ def bash_bench_main(script_name: str, doc: str, args: Optional[List[str]] = None
                 temp_output_data = f"{name}.temp{ext}"
             else:
                 temp_output_data = None
-            split_process = args.split_process in (1, "1", "True", True)
+            split_process = args.split_process in (1, "1", "True", "true", True)
             if split_process and args.part == "":
                 args.part = "0,1"
                 if args.verbose:
@@ -251,7 +254,7 @@ def bash_bench_main(script_name: str, doc: str, args: Optional[List[str]] = None
             if args.verbose:
                 print(f"Running model {name!r}")
 
-            do_profile = args.profile in (1, "1", "True", True)
+            do_profile = args.profile in (1, "1", "True", "true", True)
 
             runner = runner.__class__(
                 include_model_names={name},
@@ -271,17 +274,17 @@ def bash_bench_main(script_name: str, doc: str, args: Optional[List[str]] = None
                 pr = cProfile.Profile()
                 pr.enable()
 
-            split_process = args.split_process in (1, "1", True, "True")
+            split_process = args.split_process in (1, "1", "True", "true", True)
             begin = time.perf_counter()
             data = list(
                 runner.enumerate_test_models(
-                    process=args.process in ("1", 1, "True", True),
+                    process=args.process in ("1", 1, "True", "true", True),
                     exporter=args.exporter,
-                    quiet=args.quiet in ("1", 1, "True", True),
-                    dynamic=args.dynamic in ("1", 1, "True", True),
+                    quiet=args.quiet in ("1", 1, "True", "true", True),
+                    dynamic=args.dynamic in ("1", 1, "True", "true", True),
                     folder=args.dump_folder,
                     optimization=args.opt_patterns if args.opt_patterns != "none" else "",
-                    memory_peak=args.memory_peak in ("1", 1, "True", True),
+                    memory_peak=args.memory_peak in ("1", 1, "True", "true", True),
                     part=int(args.part) if split_process else None,
                     pickled_name="temp_pickled_file.pkl" if split_process else None,
                     rtopt=args.rtopt in (1, "1", "True", "true"),

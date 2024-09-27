@@ -1106,7 +1106,8 @@ class BenchmarkRunner:
             folder,
             (
                 f"{model_name}-{exporter}-{self.device.replace(':', '')}"
-                f"-{self.dtype or ''}{sopt}-{1 if rtopt in (1, True, '1', 'True') else 0}"
+                f"-{self.dtype or ''}{sopt}-"
+                f"{1 if rtopt in (1, True, '1', 'True', 'true') else 0}"
             ),
         )
         if pfilename and not os.path.exists(pfilename):

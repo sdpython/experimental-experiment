@@ -115,9 +115,9 @@ def main(args=None):
         )
 
         verbose = int(args.verbose)
-        optimize = args.optimize in (True, 1, "1", "True")
-        ort_optimize = args.ort_optimize in (True, 1, "1", "True")
-        with_mask = args.with_mask in (True, 1, "1", "True")
+        optimize = args.optimize in (1, "1", "True", "true", True)
+        ort_optimize = args.ort_optimize in (1, "1", "True", "true", True)
+        with_mask = args.with_mask in (1, "1", "True", "true", True)
         disable_pattern = [_ for _ in args.disable_pattern.split("+") if _]
         enable_pattern = [_ for _ in args.enable_pattern.split("+") if _]
         print(f"model={args.model}")
@@ -162,7 +162,7 @@ def main(args=None):
             )
 
         print(f"Build the compile model with backend={args.backend}")
-        use_dynamic = args.dynamic in (1, "1", True, "True")
+        use_dynamic = args.dynamic in (1, "1", "True", "true", True)
         print(f"dynamic={use_dynamic}")
         if verbose:
             print(f"-- debug backend, opset={args.target_opset}")
@@ -221,7 +221,7 @@ def main(args=None):
         def loop_iteration(is_cuda, inputs, compiled_model, loss):
             torch.set_grad_enabled(True)
 
-            mixed = args.mixed in (1, "1", True, "True")
+            mixed = args.mixed in (1, "1", "True", "true", True)
             if mixed and is_cuda:
                 with torch.autocast(device_type="cuda", dtype=torch.float16):
                     torch.cuda.nvtx.range_push("DORT-FORWARD-MIXED")

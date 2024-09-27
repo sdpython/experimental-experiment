@@ -78,7 +78,7 @@ if is_cuda:
     )
 
 print(f"Build the compile model with backend={args.backend}")
-use_dynamic = args.dynamic in (1, "1", True, "True")
+use_dynamic = args.dynamic in (1, "1", "True", "true", True)
 print(f"dynamic={use_dynamic}")
 if verbose:
     print(f"-- debug backend, opset={args.target_opset}")
@@ -98,7 +98,7 @@ compiled_model = create_compiled_model(
 
 
 def loop_iteration(is_cuda, inputs, compiled_model, loss):
-    if args.mixed in (1, "1", True, "True") and is_cuda:
+    if args.mixed in (1, "1", "True", "true", True) and is_cuda:
         with torch.autocast(device_type="cuda", dtype=torch.float16):
             result = compiled_model(*inputs)
     else:
