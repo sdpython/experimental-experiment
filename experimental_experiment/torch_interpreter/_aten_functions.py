@@ -2033,7 +2033,11 @@ def aten_expand(
                 if isinstance(a, int):
                     new_shape.append(a)
                 else:
-                    if a in g.dynamic_objects and g.has_name(g.dynamic_objects[a]):
+                    if (
+                        a in g.dynamic_objects
+                        and isinstance(g.dynamic_objects[a], str)
+                        and g.has_name(g.dynamic_objects[a])
+                    ):
                         new_shape.append(g.dynamic_objects[a])
                     else:
                         if shape_x is None:
