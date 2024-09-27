@@ -428,7 +428,7 @@ class ModelRunner:
         optimization: str,
         verbose: int,
         target_opset: int,
-        decomposition_table: str,
+        decomposition_table: Optional[str],
     ) -> Tuple[onnx.ModelProto, Optional[Dict[str, Any]]]:
         """
         Converts a model into onnx.
@@ -610,7 +610,7 @@ class ModelRunner:
         optimization: str,
         verbose: int,
         target_opset: int,
-        decomposition_table: str,
+        decomposition_table: Optional[str],
     ):
         assert not fake_tensor, "fake_tensor not implemented."
         assert no_grad, "no_grad false not implemented yet"
@@ -681,7 +681,7 @@ class ModelRunner:
         verbose: int,
         target_opset: int,
         autograd: bool = False,
-        decomposition_table: str = "default",
+        decomposition_table: Optional[str] = None,
     ):
         assert not fake_tensor, "fake_tensor not implemented."
         assert not dynamic, "dynamic true not implemented yet"

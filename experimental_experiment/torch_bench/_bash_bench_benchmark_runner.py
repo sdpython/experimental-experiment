@@ -710,7 +710,7 @@ class BenchmarkRunner:
         rtopt: bool = True,
         shape_again: bool = False,
         enumerate_test_models: str = "default",
-        decomposition_table: str = "default",
+        decomposition_table: Optional[str] = "none",
     ) -> Iterator[Dict[Any, Any]]:
         """
         Runs the benchmarks, run, export, run in onnx, measure the speedup.

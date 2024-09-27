@@ -174,19 +174,10 @@ def _export(
                 f"no-dynamic-shape---\n{exported_mod}"
             ) from e
         if isinstance(decomposition_table, str):
-            if decomposition_table == "default":
-                from ..torch_dynamo import get_decomposition_table
+            from ..torch_dynamo import get_decomposition_table_by_name
 
-                decomposition_table = get_decomposition_table()
-            elif decomposition_table == "onnxscript":
-                from ..torch_dynamo import get_decomposition_table_onnxscript
-
-                decomposition_table = get_decomposition_table_onnxscript()
-            else:
-                raise AssertionError(
-                    f"Unknown option for decomposition_table={decomposition_table!r}"
-                )
-        if decomposition_table:
+            decomposition_table = get_decomposition_table_by_name(decomposition_table)
+        if decomposition_table is not None:
             exported_mod = exported_mod.run_decompositions(decomposition_table)
         return exported_mod
 

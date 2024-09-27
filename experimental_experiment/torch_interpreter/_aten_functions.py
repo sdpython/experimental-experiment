@@ -5110,7 +5110,7 @@ def _causal_attention_mask(
         g.set_type(dquery, g.get_type(shape_query))
         dkey = g.op.Gather(shape_key, np.array([-2], dtype=np.int64), name=name)
         g.set_type(dkey, g.get_type(shape_key))
-        size = g.op.Concat(dquery, dkey, axis=0)
+        size = g.op.Concat(dquery, dkey, axis=0, name=name)
         g.set_type(size, g.get_type(dkey))
         attn_mask = g.op.ConstantOfShape(
             size, value=from_array(np.array([1], dtype=dtype)), name=name
@@ -5185,7 +5185,7 @@ def aten_scaled_dot_product_attention(
     ), f"is_causal and attn_mask cannot be set at the same time{g.get_debug_msg()}"
 
     if scale is None:
-        tscale = _attention_scale(g, query)
+        tscale = _attention_scale(g, query, name=name)
     elif isinstance(scale, (float, int)):
         assert g.has_type(query), f"Input {query!r} must have a type{g.get_debug_msg()}"
         itype = g.get_type(query)
@@ -5195,7 +5195,7 @@ def aten_scaled_dot_product_attention(
         raise AssertionError(f"Unexpected type {type(scale)} for scale{g.get_debug_msg()}")
 
     if is_causal:
-        attn_mask = _causal_attention_mask(g, query, key)
+        attn_mask = _causal_attention_mask(g, query, key, name=name)
 
     key_transposed_axes = list(range(g.get_rank(key)))
     key_transposed_axes[-1], key_transposed_axes[-2] = (
@@ -5209,7 +5209,7 @@ def aten_scaled_dot_product_attention(
         set_type_shape_unary_op(g, sc, tscale)
 
     query_scaled = g.op.Mul(query, sc, name=name)
-    key_transposed_scaled = g.op.Mul(key_transposed, sc)
+    key_transposed_scaled = g.op.Mul(key_transposed, sc, name=name)
     mul_qk = g.op.MatMul(query_scaled, key_transposed_scaled, name=name)
 
     itype = g.get_type(query)
@@ -5232,7 +5232,7 @@ def aten_scaled_dot_product_attention(
         mul_qk_add = g.op.Add(mul_qk, attn_mask, name=name)
         set_type_shape_binary_op(g, mul_qk_add, mul_qk, attn_mask)
 
-    attn_weight = g.op.Softmax(mul_qk_add, axis=-1)
+    attn_weight = g.op.Softmax(mul_qk_add, axis=-1, name=name)
     set_type_shape_unary_op(g, attn_weight, mul_qk_add)
 
     if dropout_p != 0:

@@ -515,7 +515,7 @@ def onnx_custom_backend(
     processor: str = "CPU",
     order_algorithm: Optional[str] = None,
     options: Optional[OptimizationOptions] = None,
-    decomposition_table: str = "default",
+    decomposition_table: Optional[str] = None,
 ) -> Callable:
     """
     Custom backend to export torch models into onnx

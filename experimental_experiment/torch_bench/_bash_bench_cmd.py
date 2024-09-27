@@ -57,7 +57,7 @@ def bash_bench_parse_args(name: str, doc: str, new_args: Optional[List[str]] = N
         tag=("", "add a version tag when everything else did not change"),
         timeout=("600", "timeout for subprocesses"),
         shape2=("0", "redo the shape inference"),
-        decomposition_table=("default", "decomposition table configuration"),
+        decomposition_table=("none", "decomposition table configuration"),
         new_args=new_args,
         expose="repeat,warmup",
     )
