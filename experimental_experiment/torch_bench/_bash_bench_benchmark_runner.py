@@ -234,7 +234,36 @@ class BenchmarkRunner:
             return torch.Tensor(obj.numpy()).to(device)
         if "SquashedNormal" in obj.__class__.__name__ and device == "cpu":
             return obj
-        raise AssertionError(f"move_to not implemented for type {type(obj)}")
+        if hasattr(obj, "conv_states") and obj.__class__.__name__ == "MambaCache":
+            # class MambaCache
+            # see https://github.com/huggingface/transformers/blob/main/src/transformers/cache_utils.py
+            if ("cuda" in device and obj.conv_states.get_device() < 0) or (
+                "cpu" in device and obj.conv_states.get_device() >= 0
+            ):
+                from transformers.configuration_utils import PretrainedConfig
+
+                config = PretrainedConfig(
+                    num_hidden_layers=obj.conv_states.shape[0],
+                    intermediate_size=obj.intermediate_size,
+                    state_size=obj.ssm_state_size,
+                    conv_kernel=obj.conv_kernel_size,
+                )
+                new_cache = obj.__class__(
+                    config,
+                    batch_size=obj.batch_size,
+                    dtype=obj.conv_states.dtype,
+                    device=device,
+                )
+                new_cache.conv_states[:, :, :, :] = obj.conv_states.to(device)[:, :, :, :]
+                new_cache.ssm_states[:, :, :, :] = obj.ssm_states.to(device)[:, :, :, :]
+                # AssertionError(
+                #    f"Moving class {obj.__class__.__name__!r} from device "
+                #    f"{obj.conv_states.get_device()} to {device!r} is not implemented yet,
+                #    f"dir(obj)={dir(obj)}"
+                # )
+                return new_cache
+            return obj
+        raise AssertionError(f"move_to not implemented for type {type(obj)}, dir={dir(obj)}")
 
     @classmethod
     def size_type(cls, dtype) -> int:
