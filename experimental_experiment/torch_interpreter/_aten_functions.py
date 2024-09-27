@@ -5763,6 +5763,8 @@ def _aten_slice_scatter_dynamic(
         np.array([1], dtype=np.int64),
         name=name,
     )
+    g.set_type(index_1, TensorProto.INT64)
+    g.set_rank(index_1, 1)
     index_2 = g.op.Slice(
         index_1,
         g.get_dynamic_dimension(start),

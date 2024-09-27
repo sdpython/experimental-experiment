@@ -81,7 +81,7 @@ class TestEdPhi(ExtTestCase):
                 self.dump_onnx(f"test_phi_cort_static_{i}.onnx", inst["onnx"])
 
     @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
-    @ignore_warnings((DeprecationWarning, UserWarning))
+    @ignore_warnings((DeprecationWarning, UserWarning, RuntimeWarning))
     @requires_torch("2.4")
     @unittest.skipIf(not has_cuda(), reason="requires cuda")
     def test_phi_cort_static_mixed_debug(self):
@@ -171,7 +171,6 @@ class TestEdPhi(ExtTestCase):
     @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.5", "AssertionError: original output #6 is None")
-    @unittest.skipIf(sys.version_info >= (3, 12, 0), reason="too long")
     def test_phi_cort_dynamic(self):
         model, input_tensors = get_phi_model()
         input_tensors = input_tensors[0]
@@ -270,7 +269,6 @@ class TestEdPhi(ExtTestCase):
     @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.3", "AssertionError: original output #6 is None")
-    @unittest.skipIf(sys.version_info >= (3, 12, 0), reason="too long")
     def test_phi_cort_dynamic(self):
         model, input_tensors = get_phi_model()
         input_tensors = input_tensors[0]
