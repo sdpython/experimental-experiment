@@ -33,6 +33,11 @@ get_decomposition_table_dynamo
 
 .. autofunction:: experimental_experiment.torch_dynamo.get_decomposition_table_dynamo
 
+get_decomposition_table_onnxscript
+==================================
+
+.. autofunction:: experimental_experiment.torch_dynamo.get_decomposition_table_onnxscript
+
 OrtBackend
 ==========
 

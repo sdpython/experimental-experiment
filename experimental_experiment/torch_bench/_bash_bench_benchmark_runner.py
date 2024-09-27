@@ -709,6 +709,8 @@ class BenchmarkRunner:
         pickled_name: Optional[str] = None,
         rtopt: bool = True,
         shape_again: bool = False,
+        enumerate_test_models: str = "default",
+        decomposition_table: str = "default",
     ) -> Iterator[Dict[Any, Any]]:
         """
         Runs the benchmarks, run, export, run in onnx, measure the speedup.
@@ -727,6 +729,8 @@ class BenchmarkRunner:
         :param rtopt: disable onnxruntime optimization
         :param shape_again: run shape inference after the export,
             erases whatever the model already contains
+        :param decomposition_table: decomposition table to apply, not all
+            exporter supports this
         """
         assert not process, "process=True not implemented."
 
@@ -768,6 +772,7 @@ class BenchmarkRunner:
                     initial_no_grad=initial_no_grad,
                     rtopt=rtopt,
                     shape_again=shape_again,
+                    decomposition_table=decomposition_table,
                 )
                 if part == 0:
                     stats["STEP"] = "export"
@@ -828,6 +833,7 @@ class BenchmarkRunner:
         autocast=None,
         rtopt=None,
         shape_again=None,
+        decomposition_table=None,
     ):
         assert quiet is not None
         assert exporter is not None
@@ -838,6 +844,7 @@ class BenchmarkRunner:
         assert machine_specs is not None
         assert initial_no_grad is not None
         assert shape_again is not None
+        assert decomposition_table is not None
 
         import onnxruntime
         import onnxscript
@@ -944,6 +951,7 @@ class BenchmarkRunner:
         stats["warmup"] = warmup
         stats["repeat"] = repeat
         stats["dynamic"] = 1 if dynamic else 0
+        stats["decomposition_table"] = decomposition_table
         stats["flag_no_grad"] = self.no_grad
         stats["flag_fake_tensor"] = self.fake_tensor
         stats["flag_training"] = self.training
@@ -1167,6 +1175,7 @@ class BenchmarkRunner:
                     fake_tensor=self.fake_tensor,
                     no_grad=self.no_grad,
                     target_opset=self.target_opset,
+                    decomposition_table=decomposition_table,
                 )
             except Exception as e:
                 stats["time_export"] = time.perf_counter() - begin
@@ -1194,6 +1203,7 @@ class BenchmarkRunner:
                 fake_tensor=self.fake_tensor,
                 no_grad=self.no_grad,
                 target_opset=self.target_opset,
+                decomposition_table=decomposition_table,
             )
             stats["time_export"] = time.perf_counter() - begin
             stats["time_export_success"] = time.perf_counter() - begin

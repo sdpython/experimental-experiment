@@ -52,6 +52,32 @@ def get_decomposition_table():
     return new_table
 
 
+def get_decomposition_table_onnxscript():
+    """
+    Returns the decomposition table used by :func:`torch.onnx.export`.
+
+    The value is:
+
+    .. runpython::
+        :showcode:
+
+        import pprint
+        from experimental_experiment.torch_dynamo import get_decomposition_table_onnxscript
+
+        pprint.pprint(get_decomposition_table_onnxscript())
+    """
+    from torch.onnx._internal.exporter._registration import ONNXRegistry
+    from torch.onnx._internal.exporter._decomp import (
+        get_onnx_implemented_overloads,
+        create_onnx_friendly_decomposition_table,
+    )
+
+    registry = ONNXRegistry.from_torchlib()
+    onnx_registered_ops = set(get_onnx_implemented_overloads(registry))
+    decomposition_table = create_onnx_friendly_decomposition_table(onnx_registered_ops)
+    return decomposition_table
+
+
 def get_decomposition_table_dynamo(onnx_registry=None):
     """
     Returns the decomposition table needed for the dynamo exporter.
