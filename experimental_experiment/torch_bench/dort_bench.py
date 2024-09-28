@@ -92,6 +92,7 @@ def main(args=None):
         import torch
         import torch._dynamo.backends.registry
         import transformers
+        from experimental_experiment.torch_bench import BOOLEAN_VALUES
         from experimental_experiment.convert.convert_helper import (
             ort_optimize as run_ort_optimize,
         )
@@ -115,9 +116,9 @@ def main(args=None):
         )
 
         verbose = int(args.verbose)
-        optimize = args.optimize in (1, "1", "True", "true", True)
-        ort_optimize = args.ort_optimize in (1, "1", "True", "true", True)
-        with_mask = args.with_mask in (1, "1", "True", "true", True)
+        optimize = args.optimize in BOOLEAN_VALUES
+        ort_optimize = args.ort_optimize in BOOLEAN_VALUES
+        with_mask = args.with_mask in BOOLEAN_VALUES
         disable_pattern = [_ for _ in args.disable_pattern.split("+") if _]
         enable_pattern = [_ for _ in args.enable_pattern.split("+") if _]
         print(f"model={args.model}")
@@ -131,7 +132,7 @@ def main(args=None):
         print(f"implementation={args.implementation}")
         print(f"mixed={args.mixed}")
         print(f"shape_scenario={args.shape_scenario}")
-        dump_patterns = args.dump_patterns in ("1", 1, "True", "true", True)
+        dump_patterns = args.dump_patterns in BOOLEAN_VALUES
 
         if args.backend == "custom":
             print(f"disable_pattern={disable_pattern!r}")
@@ -162,7 +163,7 @@ def main(args=None):
             )
 
         print(f"Build the compile model with backend={args.backend}")
-        use_dynamic = args.dynamic in (1, "1", "True", "true", True)
+        use_dynamic = args.dynamic in BOOLEAN_VALUES
         print(f"dynamic={use_dynamic}")
         if verbose:
             print(f"-- debug backend, opset={args.target_opset}")
@@ -221,7 +222,7 @@ def main(args=None):
         def loop_iteration(is_cuda, inputs, compiled_model, loss):
             torch.set_grad_enabled(True)
 
-            mixed = args.mixed in (1, "1", "True", "true", True)
+            mixed = args.mixed in BOOLEAN_VALUES
             if mixed and is_cuda:
                 with torch.autocast(device_type="cuda", dtype=torch.float16):
                     torch.cuda.nvtx.range_push("DORT-FORWARD-MIXED")

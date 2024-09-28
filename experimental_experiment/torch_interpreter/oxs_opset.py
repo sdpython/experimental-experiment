@@ -186,6 +186,10 @@ class OxsOpset:
             f"Reduce operator {op_type!r} is not tested for opset < 18"
             f"{self.builder.get_debug_msg()}"
         )
+        assert name is not None, (
+            f"A name should be given to the node {op_type!r} "
+            f"inputs={inputs}, outputs={outputs}{self.builder.get_debug_msg()}"
+        )
 
         if outputs is None:
             outputs = self._implemented[op_type]

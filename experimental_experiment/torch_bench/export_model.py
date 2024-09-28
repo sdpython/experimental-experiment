@@ -57,6 +57,7 @@ def main(args=None):
         import time
         import torch
         import torch._dynamo.backends.registry
+        from experimental_experiment.torch_bench import BOOLEAN_VALUES
         from experimental_experiment.torch_bench._dort_cmd_common import (
             create_configuration_for_benchmark,
             create_model,
@@ -69,10 +70,10 @@ def main(args=None):
         )
 
         verbose = int(args.verbose)
-        use_dynamic = args.dynamic in (1, "1", "True", "true", True)
-        with_mask = args.with_mask in (1, "1", "True", "true", True)
-        order = args.order in (1, "1", "True", "true", True)
-        large_model = args.large_model in (1, "1", "True", "true", True)
+        use_dynamic = args.dynamic in BOOLEAN_VALUES
+        with_mask = args.with_mask in BOOLEAN_VALUES
+        order = args.order in BOOLEAN_VALUES
+        large_model = args.large_model in BOOLEAN_VALUES
         disable_pattern = [_ for _ in args.disable_pattern.split("+") if _]
         enable_pattern = [_ for _ in args.enable_pattern.split("+") if _]
 
@@ -180,8 +181,8 @@ def main(args=None):
                 folder=args.dump_folder,
                 filename=filename,
                 dynamic_shapes=dynamic_shapes if args.dynamic else None,
-                ort_optimize=args.ort in ("1", 1, "True", "true", True),
-                optimize_oxs=args.optimize in ("1", 1, "True", "true", True),
+                ort_optimize=args.ort in BOOLEAN_VALUES,
+                optimize_oxs=args.optimize in BOOLEAN_VALUES,
                 enable_pattern=args.enable_pattern,
                 disable_pattern=args.disable_pattern,
                 verbose=args.verbose,
