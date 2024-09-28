@@ -18,6 +18,8 @@ from typing import Any, Callable, Dict, List, Optional, Sequence, Set, Tuple, Un
 import numpy
 from numpy.testing import assert_allclose
 
+BOOLEAN_VALUES = (1, "1", True, "True", "true", "TRUE")
+
 
 def is_azure() -> bool:
     """Tells if the job is running on Azure DevOps."""
@@ -541,7 +543,7 @@ def requires_cuda(msg: str = "", version: str = "", memory: int = 0):
 
 def requires_zoo(msg: str = "") -> Callable:
     """Skips a unit test if environment variable ZOO is not equal to 1."""
-    var = os.environ.get("ZOO", "0") in (1, "1", "TRUE", "true", "True")
+    var = os.environ.get("ZOO", "0") in BOOLEAN_VALUES
 
     if not var:
         msg = f"ZOO not set up or != 1. {msg}"
