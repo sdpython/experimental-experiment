@@ -843,7 +843,6 @@ class BenchmarkRunner:
         assert machine_specs is not None
         assert initial_no_grad is not None
         assert shape_again is not None
-        assert decomposition_table is not None
 
         import onnxruntime
         import onnxscript
