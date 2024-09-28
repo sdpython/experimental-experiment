@@ -101,6 +101,7 @@ def main(args=None):
     parser.add_argument("--verbose", default=0, help="verbosity level")
     res = parser.parse_args(args=args)
 
+    from experimental_experiment.torch_bench import BOOLEAN_VALUES
     from experimental_experiment.torch_bench._bash_bench_benchmark_runner_agg import (
         merge_benchmark_reports,
     )
@@ -124,10 +125,10 @@ def main(args=None):
         verbose=int(res.verbose),
         output_clean_raw_data=res.save_raw,
         baseline=res.baseline,
-        exc=res.quiet not in (1, "1", True, "True"),
+        exc=res.quiet not in BOOLEAN_VALUES,
         export_simple=res.export_simple,
         export_correlations=res.export_correlations,
-        broken=res.broken in (1, "1", True, "True"),
+        broken=res.broken in BOOLEAN_VALUES,
         disc=float(res.disc),
         slow=float(res.slow),
         fast=float(res.fast),

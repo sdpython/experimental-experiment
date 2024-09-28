@@ -94,6 +94,7 @@ def bash_bench_main(script_name: str, doc: str, args: Optional[List[str]] = None
     for k, v in sorted(args.__dict__.items()):
         print(f"{k}={v}")
 
+    from experimental_experiment.torch_bench import BOOLEAN_VALUES
     from experimental_experiment.torch_bench._bash_bench_benchmark_runner_agg import (
         merge_benchmark_reports,
     )
@@ -179,8 +180,8 @@ def bash_bench_main(script_name: str, doc: str, args: Optional[List[str]] = None
         ), f"Parameter tag={args.tag!r} does not support multiple values."
         if (
             multi_run(args)
-            or args.process in ("1", 1, "True", True)
-            or (args.split_process in ("1", 1, "True", True) and args.part in (None, ""))
+            or args.process in BOOLEAN_VALUES
+            or (args.split_process in BOOLEAN_VALUES and args.part in (None, ""))
         ):
             assert args.part == "", f"part={args.part} must be empty"
             args_output_data = args.output_data
@@ -189,7 +190,7 @@ def bash_bench_main(script_name: str, doc: str, args: Optional[List[str]] = None
                 temp_output_data = f"{name}.temp{ext}"
             else:
                 temp_output_data = None
-            split_process = args.split_process in (1, "1", "True", True)
+            split_process = args.split_process in BOOLEAN_VALUES
             if split_process and args.part == "":
                 args.part = "0,1"
                 if args.verbose:
@@ -252,7 +253,7 @@ def bash_bench_main(script_name: str, doc: str, args: Optional[List[str]] = None
             if args.verbose:
                 print(f"Running model {name!r}")
 
-            do_profile = args.profile in (1, "1", "True", True)
+            do_profile = args.profile in BOOLEAN_VALUES
 
             runner = runner.__class__(
                 include_model_names={name},
@@ -262,8 +263,8 @@ def bash_bench_main(script_name: str, doc: str, args: Optional[List[str]] = None
                 repeat=args.repeat,
                 warmup=args.warmup,
                 dtype=args.dtype,
-                nvtx=args.nvtx in (1, "1", "True", "true"),
-                dump_ort=args.dump_ort in (1, "1", "True", "true"),
+                nvtx=args.nvtx in BOOLEAN_VALUES,
+                dump_ort=args.dump_ort in BOOLEAN_VALUES,
             )
 
             if do_profile:
@@ -272,21 +273,21 @@ def bash_bench_main(script_name: str, doc: str, args: Optional[List[str]] = None
                 pr = cProfile.Profile()
                 pr.enable()
 
-            split_process = args.split_process in (1, "1", True, "True")
+            split_process = args.split_process in BOOLEAN_VALUES
             begin = time.perf_counter()
             data = list(
                 runner.enumerate_test_models(
-                    process=args.process in ("1", 1, "True", True),
+                    process=args.process in BOOLEAN_VALUES,
                     exporter=args.exporter,
-                    quiet=args.quiet in ("1", 1, "True", True),
-                    dynamic=args.dynamic in ("1", 1, "True", True),
+                    quiet=args.quiet in BOOLEAN_VALUES,
+                    dynamic=args.dynamic in BOOLEAN_VALUES,
                     folder=args.dump_folder,
                     optimization=args.opt_patterns if args.opt_patterns != "none" else "",
-                    memory_peak=args.memory_peak in ("1", 1, "True", True),
+                    memory_peak=args.memory_peak in BOOLEAN_VALUES,
                     part=int(args.part) if split_process else None,
                     pickled_name="temp_pickled_file.pkl" if split_process else None,
-                    rtopt=args.rtopt in (1, "1", "True", "true"),
-                    shape_again=args.shape2 in (1, "1", "True", "true"),
+                    rtopt=args.rtopt in BOOLEAN_VALUES,
+                    shape_again=args.shape2 in BOOLEAN_VALUES,
                     decomposition_table=args.decomposition_table,
                 )
             )
