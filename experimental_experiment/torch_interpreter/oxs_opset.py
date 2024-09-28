@@ -186,10 +186,9 @@ class OxsOpset:
             f"Reduce operator {op_type!r} is not tested for opset < 18"
             f"{self.builder.get_debug_msg()}"
         )
-        assert name is not None, (
-            f"A name should be given to the node {op_type!r} "
-            f"inputs={inputs}, outputs={outputs}{self.builder.get_debug_msg()}"
-        )
+        if name is None:
+            # This node is created by an externel converting library.
+            name = f"{self.__class__.__name__}"
 
         if outputs is None:
             outputs = self._implemented[op_type]
@@ -212,12 +211,7 @@ class OxsOpset:
                 new_inputs.append(cst_name)
 
         outputs = self.builder.make_node(
-            op_type,
-            new_inputs,
-            outputs=outputs,
-            domain=domain,
-            name=name or f"{self.__class__.__name__}",
-            **kwargs,
+            op_type, new_inputs, outputs=outputs, domain=domain, name=name, **kwargs
         )
         if isinstance(outputs, tuple):
             return tuple(Var(o, self.builder) for o in outputs)

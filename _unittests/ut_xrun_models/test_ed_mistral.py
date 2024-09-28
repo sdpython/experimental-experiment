@@ -149,7 +149,8 @@ class TestEdMistral(ExtTestCase):
 
         compiled_model = create_compiled_model(
             model,
-            backend="ort",
+            # with backend="ort", it fails in onnxscript
+            backend="custom",
             use_dynamic=True,
             target_opset=18,
             verbose=0,
@@ -175,7 +176,7 @@ class TestEdMistral(ExtTestCase):
 
         compiled_model = create_compiled_model(
             model,
-            backend="ort",
+            backend="custom",
             use_dynamic=True,
             target_opset=18,
             verbose=0,
