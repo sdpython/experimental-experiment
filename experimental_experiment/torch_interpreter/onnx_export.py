@@ -522,6 +522,7 @@ def to_onnx(
     :param decomposition_table: decomposition_table, a string as well such as default
         to use the default decomposition table returned by
         :func:`get_decomposition_table
+        <experimental_experiment.torch_dynamo.get_decomposition_table>`
     :return: onnx model
 
     If environment variable ``PRINT_GRAPH_MODULE`` is set to one,

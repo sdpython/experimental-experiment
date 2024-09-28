@@ -189,7 +189,6 @@ def filter_decomposition_table(
     for k, v in existing_table:
         if filter_fct:
             if not filter_fct(k):
-                print("++++++ remove", k)
                 continue
         elif k.name() in {
             "aten::slice_backward",

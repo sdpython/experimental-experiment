@@ -729,7 +729,7 @@ class BenchmarkRunner:
         :param shape_again: run shape inference after the export,
             erases whatever the model already contains
         :param decomposition_table: decomposition table to apply, not all
-            exporter supports this
+            exporters support this
         """
         assert not process, "process=True not implemented."
 
