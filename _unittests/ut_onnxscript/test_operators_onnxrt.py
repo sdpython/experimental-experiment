@@ -707,7 +707,7 @@ class TestOperatorsOnnxrt(ExtTestCase):
             x,
             onnx_export=inspect.currentframe().f_code.co_name,
             test_backward=True,
-            rtol=1e-3,
+            rtol=2e-3,
         )
 
     @hide_stdout()

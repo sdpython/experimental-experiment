@@ -363,6 +363,9 @@ class ModelRunner:
         dim = torch.export.Dim("batch", min=1, max=1024)
         res = []
         for x in self.inputs:
+            if x is None:
+                res.append(None)
+                continue
             res.append({0: dim} if len(x.shape) > 1 else None)
         final = tuple(res)
         if wrapped:
