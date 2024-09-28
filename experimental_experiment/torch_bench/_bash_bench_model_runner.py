@@ -713,7 +713,10 @@ class ModelRunner:
         if autograd:
             from torch._dynamo.backends.common import aot_autograd
 
-            assert decomposition_table is None or decomposition_table == "default", (
+            assert decomposition_table is None or decomposition_table in (
+                "none",
+                "default",
+            ), (
                 f"No other option than 'default' for decomposition_table="
                 f"{decomposition_table!r} is supported"
             )
