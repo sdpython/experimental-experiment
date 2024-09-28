@@ -142,6 +142,7 @@ class TestEdMistral(ExtTestCase):
     @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.5", "AssertionError: original output #6 is None")
+    @requires_onnxruntime_training(True)
     def test_mistral_cort_dynamic_simple(self):
         model, input_tensors = get_mistral_model()
         input_tensors = input_tensors[0]
@@ -169,6 +170,7 @@ class TestEdMistral(ExtTestCase):
     @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.5", "AssertionError: original output #6 is None")
+    @requires_onnxruntime_training(True)
     def test_mistral_cort_dynamic_norename(self):
         model, input_tensors = get_mistral_model()
         input_tensors = input_tensors[0]
