@@ -830,6 +830,7 @@ class BenchmarkRunner:
         except ImportError:
             torch_onnx = None
 
+        from experimental_experiment.ext_test_case import BOOLEAN_VALUES
         from experimental_experiment.bench_run import _clean_string
 
         #######
@@ -1107,7 +1108,7 @@ class BenchmarkRunner:
             (
                 f"{model_name}-{exporter}-{self.device.replace(':', '')}"
                 f"-{self.dtype or ''}{sopt}-"
-                f"{1 if rtopt in (1, True, '1', 'True', 'true') else 0}"
+                f"{1 if rtopt in BOOLEAN_VALUES else 0}"
             ),
         )
         if pfilename and not os.path.exists(pfilename):
