@@ -197,7 +197,6 @@ def filter_decomposition_table(
             "aten::slice.Tensor",
         }:
             continue
-        print("+", k.name())
         new_table[k] = v
     return new_table
 
