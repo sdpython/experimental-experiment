@@ -74,7 +74,6 @@ class HuggingfaceBigRunner(BenchmarkRunner):
         self,
         model_name: str,
         batch_size: Optional[int] = None,
-        verbose: int = 0,
     ) -> ModelRunner:
         is_training = self.training
         use_eval_mode = self.use_eval_mode
@@ -82,7 +81,7 @@ class HuggingfaceBigRunner(BenchmarkRunner):
         model_cls, example_inputs = self._get_model_cls_and_config(model_name)(
             dtype=str(self.dtype).replace("torch.", ""),
             device=self.device,
-            verbose=verbose,
+            verbose=self.verbose,
             cache=self.CACHE,
         )
 

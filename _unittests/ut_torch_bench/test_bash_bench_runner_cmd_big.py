@@ -119,7 +119,9 @@ class TestBashBenchRunnerCmdBig(ExtTestCase):
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.5")
     def test_huggingface_export_bench_custom_cpu(self):
-        self._huggingface_export_bench_big_cpu("custom", "all_MiniLM_L6_v1")
+        self._huggingface_export_bench_big_cpu(
+            "custom", "all_MiniLM_L6_v1", verbose=0, debug=False
+        )
 
 
 if __name__ == "__main__":

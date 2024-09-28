@@ -37,21 +37,26 @@ def load_llm_model(
     :return: tokenizer, model
     """
     assert isinstance(dtype, str), f"Unexpected type for dtype={dtype!r}"
+    if dtype in (None, "None"):
+        dtype = "auto"
     stype = str_dtype(dtype) if dtype is not None else ""
 
     if load_tokenizer:
         if os.path.exists(os.path.join(cache, f"{model_name}-tokenizer{stype}")):
             if verbose:
-                print(f"[load_model] loads cached tokenizer for {model_name}")
+                print(
+                    f"[load_model] loads cached tokenizer "
+                    f"for {model_name}, dtype={dtype}"
+                )
             tokenizer = cls_tokenizer.from_pretrained(
                 os.path.join(cache, f"{model_name}-tokenizer{stype}")
             )
         else:
             if verbose:
-                print(f"[load_model] retrieves tokenizer for {model_name}")
+                print(f"[load_model] retrieves tokenizer for {model_name}, dtype={dtype}")
             tokenizer = cls_tokenizer.from_pretrained(model_id, torch_dtype=dtype)
             if verbose:
-                print(f"[load_model] cache tokenizer for {model_name}")
+                print(f"[load_model] cache tokenizer for {model_name}, dtype={dtype}")
             tokenizer.save_pretrained(os.path.join(cache, f"{model_name}-tokenizer{stype}"))
     else:
         tokenizer = None
@@ -62,10 +67,10 @@ def load_llm_model(
         model = cls_model.from_pretrained(os.path.join(cache, f"{model_name}-model{stype}"))
     else:
         if verbose:
-            print(f"[load_model] retrieves model {model_name}")
+            print(f"[load_model] retrieves model {model_name}, dtype={dtype}")
         model = cls_model.from_pretrained(model_id, torch_dtype=dtype)
         if verbose:
-            print(f"[load_model] cache model {model_name}")
+            print(f"[load_model] cache model {model_name}, dtype={dtype}")
         model.save_pretrained(os.path.join(cache, f"{model_name}-model{stype}"))
 
     if verbose:
