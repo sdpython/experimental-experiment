@@ -51,6 +51,13 @@ class Reduction(Enum):
     SUM = 2
 
 
+def aten__log_api_usage_once(
+    g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], module_name: str
+) -> T:
+    "_log_api_usage_once: creates a dummy result."
+    return g.make_node("Constant", [], value_ints=[1], name="_log_api_usage_once")
+
+
 def aten_abs(g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T) -> T:
     "abs"
     res = g.make_node("Abs", [x], outputs, name="abs")
