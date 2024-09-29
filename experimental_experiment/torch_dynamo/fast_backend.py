@@ -437,6 +437,7 @@ def _default_export(
     order_algorithm=None,
     dump_patterns=None,
     options=None,
+    onnx_custom_backend=None,
 ):
     input_names = input_names = (
         create_input_names(graph_module, args) if rename_inputs else None
@@ -474,6 +475,7 @@ def _default_export(
         return_builder=True,
         dispatcher=dispatcher,
         optimize=optimize,
+        decomposition_table=onnx_custom_backend,
     )
 
     return onx, builder
@@ -513,6 +515,7 @@ def onnx_custom_backend(
     processor: str = "CPU",
     order_algorithm: Optional[str] = None,
     options: Optional[OptimizationOptions] = None,
+    decomposition_table: Optional[str] = None,
 ) -> Callable:
     """
     Custom backend to export torch models into onnx
@@ -546,6 +549,7 @@ def onnx_custom_backend(
         none by default
     :param options: to define custom Optimization options, in that case,
         any other optimization parameter is ignored
+    :param decomposition_table: decomposition table to apply
     :return: Callable
 
     See :ref:`l-plot-onnxrt-diff` or :ref:`l-plot-custom-backend` for examples.
@@ -637,6 +641,7 @@ def onnx_custom_backend(
             order_algorithm=order_algorithm,
             dump_patterns=dump_patterns,
             options=options,
+            onnx_custom_backend=onnx_custom_backend,
         )
     elif exporter == "dynamo":
         from ._dynamo_exporter import _dynamo_export

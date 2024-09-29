@@ -234,7 +234,36 @@ class BenchmarkRunner:
             return torch.Tensor(obj.numpy()).to(device)
         if "SquashedNormal" in obj.__class__.__name__ and device == "cpu":
             return obj
-        raise AssertionError(f"move_to not implemented for type {type(obj)}")
+        if hasattr(obj, "conv_states") and obj.__class__.__name__ == "MambaCache":
+            # class MambaCache
+            # see https://github.com/huggingface/transformers/blob/main/src/transformers/cache_utils.py
+            if ("cuda" in device and obj.conv_states.get_device() < 0) or (
+                "cpu" in device and obj.conv_states.get_device() >= 0
+            ):
+                from transformers.configuration_utils import PretrainedConfig
+
+                config = PretrainedConfig(
+                    num_hidden_layers=obj.conv_states.shape[0],
+                    intermediate_size=obj.intermediate_size,
+                    state_size=obj.ssm_state_size,
+                    conv_kernel=obj.conv_kernel_size,
+                )
+                new_cache = obj.__class__(
+                    config,
+                    batch_size=obj.batch_size,
+                    dtype=obj.conv_states.dtype,
+                    device=device,
+                )
+                new_cache.conv_states[:, :, :, :] = obj.conv_states.to(device)[:, :, :, :]
+                new_cache.ssm_states[:, :, :, :] = obj.ssm_states.to(device)[:, :, :, :]
+                # AssertionError(
+                #    f"Moving class {obj.__class__.__name__!r} from device "
+                #    f"{obj.conv_states.get_device()} to {device!r} is not implemented yet,
+                #    f"dir(obj)={dir(obj)}"
+                # )
+                return new_cache
+            return obj
+        raise AssertionError(f"move_to not implemented for type {type(obj)}, dir={dir(obj)}")
 
     @classmethod
     def size_type(cls, dtype) -> int:
@@ -680,6 +709,7 @@ class BenchmarkRunner:
         pickled_name: Optional[str] = None,
         rtopt: bool = True,
         shape_again: bool = False,
+        decomposition_table: Optional[str] = None,
     ) -> Iterator[Dict[Any, Any]]:
         """
         Runs the benchmarks, run, export, run in onnx, measure the speedup.
@@ -698,6 +728,8 @@ class BenchmarkRunner:
         :param rtopt: disable onnxruntime optimization
         :param shape_again: run shape inference after the export,
             erases whatever the model already contains
+        :param decomposition_table: decomposition table to apply, not all
+            exporters support this
         """
         assert not process, "process=True not implemented."
 
@@ -739,6 +771,7 @@ class BenchmarkRunner:
                     initial_no_grad=initial_no_grad,
                     rtopt=rtopt,
                     shape_again=shape_again,
+                    decomposition_table=decomposition_table,
                 )
                 if part == 0:
                     stats["STEP"] = "export"
@@ -799,6 +832,7 @@ class BenchmarkRunner:
         autocast=None,
         rtopt=None,
         shape_again=None,
+        decomposition_table=None,
     ):
         assert quiet is not None
         assert exporter is not None
@@ -916,6 +950,7 @@ class BenchmarkRunner:
         stats["warmup"] = warmup
         stats["repeat"] = repeat
         stats["dynamic"] = 1 if dynamic else 0
+        stats["decomposition_table"] = decomposition_table
         stats["flag_no_grad"] = self.no_grad
         stats["flag_fake_tensor"] = self.fake_tensor
         stats["flag_training"] = self.training
@@ -1140,6 +1175,7 @@ class BenchmarkRunner:
                     fake_tensor=self.fake_tensor,
                     no_grad=self.no_grad,
                     target_opset=self.target_opset,
+                    decomposition_table=decomposition_table,
                 )
             except Exception as e:
                 stats["time_export"] = time.perf_counter() - begin
@@ -1167,6 +1203,7 @@ class BenchmarkRunner:
                 fake_tensor=self.fake_tensor,
                 no_grad=self.no_grad,
                 target_opset=self.target_opset,
+                decomposition_table=decomposition_table,
             )
             stats["time_export"] = time.perf_counter() - begin
             stats["time_export_success"] = time.perf_counter() - begin

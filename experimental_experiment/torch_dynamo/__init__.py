@@ -1,9 +1,39 @@
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Callable, Dict, List, Optional, Union
 import numpy as np
 from onnx import ModelProto
 from .debug_backend import onnx_debug_backend
 from .fast_backend import onnx_custom_backend
 from .dynger_backend import dynger_backend
+
+
+def get_decomposition_table_by_name(name: str):
+    """
+    Returns a predefined decomposition table.
+
+    :param name: name see below
+    :return: decomposition table
+
+    * 'none': do not decompose
+    * 'default': :func:`get_decomposition_table`
+    * 'onnxscript': :func:`get_decomposition_table_onnxscript`
+    * 'dynamo': :func:`get_decomposition_table_dynamo`
+    """
+    if name is None or isinstance(name, dict):
+        return name
+    if name == "none":
+        return None
+    if name == "default":
+        return get_decomposition_table()
+    if name == "onnxscript":
+        return get_decomposition_table_onnxscript()
+    if name == "dynamo":
+        return get_decomposition_table_dynamo()
+    if name == "onnxscript2":
+        table = get_decomposition_table_onnxscript()
+        return filter_decomposition_table(
+            table, lambda op: "view" not in op.name() or "copy" in op.name()
+        )
+    raise AssertionError(f"Unknown decomposition table name={name!r}")
 
 
 def get_decomposition_table():
@@ -52,6 +82,32 @@ def get_decomposition_table():
     return new_table
 
 
+def get_decomposition_table_onnxscript():
+    """
+    Returns the decomposition table used by :func:`torch.onnx.export`.
+
+    The value is:
+
+    .. runpython::
+        :showcode:
+
+        import pprint
+        from experimental_experiment.torch_dynamo import get_decomposition_table_onnxscript
+
+        pprint.pprint(get_decomposition_table_onnxscript())
+    """
+    from torch.onnx._internal.exporter._registration import ONNXRegistry
+    from torch.onnx._internal.exporter._decomp import (
+        get_onnx_implemented_overloads,
+        create_onnx_friendly_decomposition_table,
+    )
+
+    registry = ONNXRegistry.from_torchlib()
+    onnx_registered_ops = set(get_onnx_implemented_overloads(registry))
+    decomposition_table = create_onnx_friendly_decomposition_table(onnx_registered_ops)
+    return decomposition_table
+
+
 def get_decomposition_table_dynamo(onnx_registry=None):
     """
     Returns the decomposition table needed for the dynamo exporter.
@@ -81,13 +137,17 @@ def get_decomposition_table_dynamo(onnx_registry=None):
     return create_onnx_friendly_decomposition_table(onnx_registry or OnnxRegistry())
 
 
-def filter_decomposition_table(existing_table: Optional[Dict] = None) -> Dict:
+def filter_decomposition_table(
+    existing_table: Optional[Dict] = None, filter_fct: Optional[Callable[Any, bool]] = None
+) -> Dict:
     """
     Returns the decomposition table when some conversions because
     their translation in ONNX is less efficient.
 
     :param existing_table: dictionary of decompositions, by default,
         it is ``torch._decomp.decomposition_table``.
+    :param filter_fct: if specified, a decomposition function is remove
+        if the function returns false
     :return: new table
 
     ::
@@ -122,10 +182,15 @@ def filter_decomposition_table(existing_table: Optional[Dict] = None) -> Dict:
         import torch
 
         existing_table = torch._decomp.decomposition_table.items()
+    elif isinstance(existing_table, dict):
+        existing_table = existing_table.items()
 
     new_table = {}
     for k, v in existing_table:
-        if k.name() in {
+        if filter_fct:
+            if not filter_fct(k):
+                continue
+        elif k.name() in {
             "aten::slice_backward",
             "aten::select_backward.out",
             "aten::slice.Tensor",

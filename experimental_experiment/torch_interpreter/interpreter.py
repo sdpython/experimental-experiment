@@ -41,6 +41,9 @@ class DynamoInterpreter:
         dispatcher: Optional["Dispatcher"] = None,  # noqa: F821
         use_dynamo: bool = False,
         example_inputs: Optional[Tuple["torch.Tensor", ...]] = None,  # noqa: F821
+        decomposition_table: Optional[
+            Dict["torch._ops.OpOverload", Callable[..., Any]]  # noqa: F821
+        ] = None,
     ):
         import torch
 
@@ -50,6 +53,7 @@ class DynamoInterpreter:
         self.dispatcher = dispatcher
         self.use_dynamo = (use_dynamo,)
         self.example_values_ = {}
+        self.decomposition_table = decomposition_table
         assert example_inputs is None or isinstance(
             example_inputs, tuple
         ), f"Unexpected type for example_inputs {type(example_inputs)}"
@@ -1229,6 +1233,7 @@ class DynamoInterpreter:
             raise_list=self.builder.raise_list,
             dynamic_shapes=self.builder.dynamic_shapes,
             use_dynamo=self.use_dynamo,
+            decomposition_table=self.decomposition_table,
         )
         builder.process(graph_module, interpreter)
         assert builder.outputs, f"No output detected for node={source_node}, graph={gm}"

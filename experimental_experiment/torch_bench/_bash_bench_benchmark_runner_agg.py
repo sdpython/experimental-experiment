@@ -52,6 +52,7 @@ def merge_benchmark_reports(
         "version_monai",
         "version_timm",
         "version_torch_onnx",
+        "decomposition_table",
     ),
     column_keys=(
         "stat",

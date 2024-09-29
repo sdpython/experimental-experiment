@@ -318,7 +318,9 @@ class TestOnnxExportDynamicShapes(ExtTestCase):
             for i in onx.graph.input:
                 shape = i.type.tensor_type.shape
                 value = tuple(d.dim_param or d.dim_value for d in shape.dim)
-                self.assertEqual(("s1", "s2"), value)
+                # The value changed from ("s1", "s2") to ("s0", "s1") between
+                # 9/25/24 and 9/28/24.
+                self.assertIn(value, (("s0", "s1"), ("s1", "s2")))
             for i in onx.graph.output:
                 shape = i.type.tensor_type.shape
                 value = tuple(d.dim_param or d.dim_value for d in shape.dim)

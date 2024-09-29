@@ -1,9 +1,11 @@
-import os
 from typing import Any, Callable, Dict, Optional, Set, Tuple
 from torch._dynamo.testing import reset_rng_state
 from ._bash_bench_benchmark_runner import BenchmarkRunner
 from ._bash_bench_model_runner import ModelRunner
+from .big_models import CACHE as CACHE_DEFAULT
 from .big_models.try_codellama import get_model_inputs as get_model_inputs_codellama
+from .big_models.try_falcon_mamba import get_model_inputs as get_model_inputs_falcon_mamba
+from .big_models.try_minilm import get_model_inputs as get_model_inputs_minilm
 from .big_models.try_stable_diffusion_3 import (
     get_model_inputs as get_model_inputs_stable_diffusion_3,
 )
@@ -12,15 +14,17 @@ from .big_models.try_stable_diffusion_3 import (
 class HuggingfaceBigRunner(BenchmarkRunner):
     SUITE = "HuggingFace"
     MODELS: Dict[str, Callable] = {}
-    CACHE = f"{os.environ.get('HOME', 'HOME')}/.cache/exporter_benchmark"
+    CACHE = CACHE_DEFAULT
 
     @classmethod
     def initialize(cls):
         """Steps to run before running the benchmark."""
         cls.MODELS.update(
             {
+                "all_MiniLM_L6_v1": get_model_inputs_minilm,
                 "code_llama": get_model_inputs_codellama,
                 "stable_diffusion_3": get_model_inputs_stable_diffusion_3,
+                "falcon_mamba_7b": get_model_inputs_falcon_mamba,
             }
         )
 
@@ -70,7 +74,6 @@ class HuggingfaceBigRunner(BenchmarkRunner):
         self,
         model_name: str,
         batch_size: Optional[int] = None,
-        verbose: int = 0,
     ) -> ModelRunner:
         is_training = self.training
         use_eval_mode = self.use_eval_mode
@@ -78,7 +81,7 @@ class HuggingfaceBigRunner(BenchmarkRunner):
         model_cls, example_inputs = self._get_model_cls_and_config(model_name)(
             dtype=str(self.dtype).replace("torch.", ""),
             device=self.device,
-            verbose=verbose,
+            verbose=self.verbose,
             cache=self.CACHE,
         )
 

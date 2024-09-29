@@ -363,6 +363,9 @@ class ModelRunner:
         dim = torch.export.Dim("batch", min=1, max=1024)
         res = []
         for x in self.inputs:
+            if x is None:
+                res.append(None)
+                continue
             res.append({0: dim} if len(x.shape) > 1 else None)
         final = tuple(res)
         if wrapped:
@@ -428,6 +431,7 @@ class ModelRunner:
         optimization: str,
         verbose: int,
         target_opset: int,
+        decomposition_table: Optional[str],
     ) -> Tuple[onnx.ModelProto, Optional[Dict[str, Any]]]:
         """
         Converts a model into onnx.
@@ -440,6 +444,7 @@ class ModelRunner:
         :param optimization: defines the optimizations
         :param verbose: verbosity
         :param target_opset: target opset
+        :param decomposition_table: decomposition table to apply
         :return: the model proto with or without weights, statistics
         """
         assert not fake_tensor, "fake_tensor not implemented."
@@ -456,6 +461,7 @@ class ModelRunner:
                 optimization=optimization,
                 verbose=verbose,
                 target_opset=target_opset,
+                decomposition_table=decomposition_table,
             )
 
         if exporter in ("cort", "cortgrad"):
@@ -468,6 +474,7 @@ class ModelRunner:
                 verbose=verbose,
                 target_opset=target_opset,
                 autograd=exporter == "cortgrad",
+                decomposition_table=decomposition_table,
             )
 
         if exporter == "torch_script":
@@ -606,6 +613,7 @@ class ModelRunner:
         optimization: str,
         verbose: int,
         target_opset: int,
+        decomposition_table: Optional[str],
     ):
         assert not fake_tensor, "fake_tensor not implemented."
         assert no_grad, "no_grad false not implemented yet"
@@ -636,6 +644,7 @@ class ModelRunner:
                     options=options,
                     return_builder=True,
                     dynamic_shapes=self.get_dynamic_shapes(dynamic, wrapped=True),
+                    decomposition_table=decomposition_table,
                 )
         else:
             with torch.no_grad():
@@ -650,6 +659,7 @@ class ModelRunner:
                     options=options,
                     return_builder=True,
                     dynamic_shapes=self.get_dynamic_shapes(dynamic, wrapped=True),
+                    decomposition_table=decomposition_table,
                 )
         begin = time.perf_counter()
         self.std_to_dump.append(pprint.pformat(stats))
@@ -674,6 +684,7 @@ class ModelRunner:
         verbose: int,
         target_opset: int,
         autograd: bool = False,
+        decomposition_table: Optional[str] = None,
     ):
         assert not fake_tensor, "fake_tensor not implemented."
         assert not dynamic, "dynamic true not implemented yet"
@@ -698,11 +709,20 @@ class ModelRunner:
             verbose=verbose,
             options=options,
             optimize=bool(optimization),
+            decomposition_table=decomposition_table,
             **kwargs,
         )
 
         if autograd:
             from torch._dynamo.backends.common import aot_autograd
+
+            assert decomposition_table is None or decomposition_table in (
+                "none",
+                "default",
+            ), (
+                f"No other option than 'default' for decomposition_table="
+                f"{decomposition_table!r} is supported"
+            )
 
             cbf = aot_autograd(fw_compiler=cbff, decompositions=get_decomposition_table())
 

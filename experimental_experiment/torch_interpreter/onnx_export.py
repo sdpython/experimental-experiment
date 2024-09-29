@@ -173,6 +173,12 @@ def _export(
                 f"input_names={input_names}\n---exported-program---"
                 f"no-dynamic-shape---\n{exported_mod}"
             ) from e
+        if isinstance(decomposition_table, str):
+            from ..torch_dynamo import get_decomposition_table_by_name
+
+            decomposition_table = get_decomposition_table_by_name(decomposition_table)
+        if decomposition_table is not None:
+            exported_mod = exported_mod.run_decompositions(decomposition_table)
         return exported_mod
 
     # other issues
@@ -224,7 +230,7 @@ def _make_builder_interpreter(
     tracing_mode: str = "symbolic",
     same_signature: bool = True,
     decomposition_table: Optional[
-        Dict["torch._ops.OpOverload", Callable[..., Any]]  # noqa: F821
+        Union[str, Dict["torch._ops.OpOverload", Callable[..., Any]]]  # noqa: F821
     ] = None,
     dispatcher: Optional["Dispatcher"] = None,  # noqa: F821
     use_dynamo: bool = True,
@@ -247,7 +253,10 @@ def _make_builder_interpreter(
     :param dynamic_shapes: see :epkg:`torch.export.export` or ``torch._dynamo.export``
     :param same_signature: same signature
     :param tracing_mode: tracing model
-    :param decomposition_table: decomposition table
+    :param decomposition_table: decomposition table, it can a string as well,
+        'default' means :func:`get_decomposition_table
+        <experimental_experiment.torch_dynamo.get_decomposition_table>`
+        is used
     :param dispatcher: see :class:`experimental_experiment.torch_interpreter.Dispatcher`
     :param use_dynamo: use ``torch.export.export`` or ``torch._dynamo.export``
     :param strict: given to ``torch.export.export``
@@ -282,6 +291,11 @@ def _make_builder_interpreter(
             print("-- GIVEN GRAPH MODULE")
             print(graph_module.graph)
     else:
+        if verbose > 0:
+            print(
+                f"[_make_builder_interpreter] use decomposition_table="
+                f"{decomposition_table!r}"
+            )
         with bypass_export_some_errors():
             exported_mod = _export(
                 mod,
@@ -403,6 +417,7 @@ def _make_builder_interpreter(
         dispatcher=dispatcher,
         use_dynamo=use_dynamo,
         example_inputs=args,
+        decomposition_table=decomposition_table,
     )
     return graph_module, builder, interpreter
 
@@ -471,6 +486,9 @@ def to_onnx(
     api_two: bool = False,
     return_optimize_report: bool = False,
     strict: bool = True,
+    decomposition_table: Optional[
+        Union[str, Dict["torch._ops.OpOverload", Callable[..., Any]]]  # noqa: F821
+    ] = None,
 ) -> Union[
     Union[ModelProto, ModelContainer],
     Tuple[Union[ModelProto, ModelContainer], GraphBuilder],
@@ -501,6 +519,10 @@ def to_onnx(
     :param api_two: use ``torch._dynamo.export`` instead of ``torch.export.export``
     :param return_optimize_report: returns statistics on the optimization as well
     :param strict: given to ``torch.export.export``
+    :param decomposition_table: decomposition_table, a string as well such as default
+        to use the default decomposition table returned by
+        :func:`get_decomposition_table
+        <experimental_experiment.torch_dynamo.get_decomposition_table>`
     :return: onnx model
 
     If environment variable ``PRINT_GRAPH_MODULE`` is set to one,
@@ -584,6 +606,7 @@ def to_onnx(
         dispatcher=dispatcher,
         use_dynamo=api_two,
         strict=strict,
+        decomposition_table=decomposition_table,
     )
 
     t = time.perf_counter()

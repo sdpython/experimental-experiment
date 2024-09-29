@@ -57,6 +57,7 @@ def bash_bench_parse_args(name: str, doc: str, new_args: Optional[List[str]] = N
         tag=("", "add a version tag when everything else did not change"),
         timeout=("600", "timeout for subprocesses"),
         shape2=("0", "redo the shape inference"),
+        decomposition_table=("none", "decomposition table configuration"),
         new_args=new_args,
         expose="repeat,warmup",
     )
@@ -108,27 +109,27 @@ def bash_bench_main(script_name: str, doc: str, args: Optional[List[str]] = None
     if script_name == "bash_bench_huggingface":
         from ._bash_bench_set_huggingface import HuggingfaceRunner
 
-        runner = HuggingfaceRunner(device=args.device)
+        runner = HuggingfaceRunner(device=args.device, verbose=int(args.verbose))
     elif script_name == "bash_bench_huggingface_big":
         from ._bash_bench_set_huggingface_big import HuggingfaceBigRunner
 
-        runner = HuggingfaceBigRunner(device=args.device)
+        runner = HuggingfaceBigRunner(device=args.device, verbose=int(args.verbose))
     elif script_name == "bash_bench_torchbench":
         from ._bash_bench_set_torchbench import TorchBenchRunner
 
-        runner = TorchBenchRunner(device=args.device)
+        runner = TorchBenchRunner(device=args.device, verbose=int(args.verbose))
     elif script_name == "bash_bench_torchbench_ado":
         from ._bash_bench_set_torchbench_ado import TorchBenchAdoRunner
 
-        runner = TorchBenchAdoRunner(device=args.device)
+        runner = TorchBenchAdoRunner(device=args.device, verbose=int(args.verbose))
     elif script_name == "bash_bench_timm":
         from ._bash_bench_set_timm import TimmRunner
 
-        runner = TimmRunner(device=args.device)
+        runner = TimmRunner(device=args.device, verbose=int(args.verbose))
     elif script_name == "bash_bench_explicit":
         from ._bash_bench_set_explicit import ExplicitRunner
 
-        runner = ExplicitRunner(device=args.device)
+        runner = ExplicitRunner(device=args.device, verbose=int(args.verbose))
     else:
         raise AssertionError(f"Unexpected bash_bench name {script_name!r}.")
     names = runner.get_model_name_list()
@@ -287,6 +288,7 @@ def bash_bench_main(script_name: str, doc: str, args: Optional[List[str]] = None
                     pickled_name="temp_pickled_file.pkl" if split_process else None,
                     rtopt=args.rtopt in BOOLEAN_VALUES,
                     shape_again=args.shape2 in BOOLEAN_VALUES,
+                    decomposition_table=args.decomposition_table,
                 )
             )
             duration = time.perf_counter() - begin

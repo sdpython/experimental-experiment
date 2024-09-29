@@ -98,7 +98,10 @@ class TestDocumentationExamples(ExtTestCase):
                 if sys.platform in {"darwin"}:
                     # dynamo not supported on windows
                     reason = "onnxruntime-training not available"
-                if sys.platform == "linux" and name == "plot_llama_bench_102.py":
+                if sys.platform == "linux" and name in {
+                    "plot_llama_bench_102.py",
+                    "plot_custom_backend_llama_102.py",
+                }:
                     reason = "too long"
             if not reason and name in {
                 "plot_convolutation_matmul_102.py",

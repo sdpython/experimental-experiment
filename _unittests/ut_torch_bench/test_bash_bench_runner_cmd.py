@@ -418,6 +418,27 @@ class TestBashBenchRunnerCmd(ExtTestCase):
     def test_timm_export_bench_script_cpu(self):
         self._timm_export_bench_cpu("torch_script", "mobilenetv2_100")
 
+    def test_model_list_explicit(self):
+        from experimental_experiment.torch_bench.bash_bench_explicit import main
+
+        args = ["--model", ""]
+        st = io.StringIO()
+        with contextlib.redirect_stderr(st), contextlib.redirect_stdout(st):
+            main(args=args)
+        out = st.getvalue()
+        self.assertIn("Llama2Layer", out)
+
+    def test_model_helper(self):
+        from experimental_experiment.torch_bench._bash_bench_models_helper import (
+            get_dummy_model,
+            get_llama_model_layer,
+            get_speech2text2_causal_ml_not_trained_model,
+        )
+
+        get_dummy_model()
+        get_llama_model_layer()
+        get_speech2text2_causal_ml_not_trained_model()
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

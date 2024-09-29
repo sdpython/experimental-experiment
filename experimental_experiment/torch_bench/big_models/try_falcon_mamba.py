@@ -12,8 +12,8 @@ def load_model(
     dtype: Optional[str] = None,
 ) -> Tuple[Optional["tokenizer"], "model"]:  # noqa: F821
     """
-    Loads `code_llama
-    <https://huggingface.co/docs/transformers/en/model_doc/code_llama>`_.
+    Loads `Falcon Mamba 7b
+    <https://huggingface.co/tiiuae/falcon-mamba-7b>`_.
 
     :param verbose: verbosity
     :param load_tokenizer: loads the tokenizer as well
@@ -22,12 +22,16 @@ def load_model(
         to avoid the following error
         ``TypeError: Object of type dtype is not JSON serializable``
     :return: tokenizer, model
+
+    There are several paths for the implementation.
+    One faster one requires `causal_conv1d
+    <https://github.com/Dao-AILab/causal-conv1d>`_ to be installed.
     """
     from transformers import AutoTokenizer, AutoModelForCausalLM
 
     return load_llm_model(
-        "CodeLlama-7b",
-        "codellama/CodeLlama-7b-hf",
+        "FalconMamba-7b",
+        "tiiuae/falcon-mamba-7b",
         AutoTokenizer,
         AutoModelForCausalLM,
         cache=cache,
@@ -46,6 +50,7 @@ def demo_model(
     device: str = "cuda",
     max_new_tokens: int = 128,
     skip_special_tokens: bool = True,
+    model_name: str = "FalconMamba-7b",
 ) -> Any:
     """
     Demonstrates the models.
@@ -55,31 +60,26 @@ def demo_model(
     :param model: model
     :param inputs: a string in this case
     :param verbose: verbosity
+    :param model_name: only used for verbosity
     :return: results (a string in this case)
     """
-    prompt = (
-        inputs
-        or '''
-    def remove_non_ascii_characters_in_a_file(
-        filename:str,
-    ) -> str:
-        """ <FILL_ME> """
-    '''
-    )
+    prompt = inputs or "Question: How many hours in one day? Answer: "
     with torch.no_grad():
         if verbose:
-            print("[demo_model] tokenize the input for codellama")
-        input_ids = tokenizer(prompt, return_tensors="pt")["input_ids"]
+            print(f"[demo_model] tokenize the input for {model_name}")
+            print(prompt)
+            print("--")
+        input_ids = tokenizer(prompt, return_tensors="pt").input_ids
         input_ids = input_ids.to(device)
         if verbose:
-            print("[demo_model] generates the token (codellama)")
+            print(
+                f"[demo_model] input_ids: shape={input_ids.shape}, "
+                f"dtype={input_ids.dtype}, min={input_ids.min()}, max={input_ids.max()}, "
+                f"avg={input_ids.to(float).mean()}"
+            )
+            print(f"[demo_model] generates the token for {model_name}")
         generated_ids = model.generate(input_ids, max_new_tokens=max_new_tokens)
-        if verbose:
-            print("[demo_model] interpret the answer")
-        filling = tokenizer.batch_decode(
-            generated_ids[:, input_ids.shape[1] :], skip_special_tokens=skip_special_tokens
-        )[0]
-        output = prompt.replace("<FILL_ME>", filling)
+        output = tokenizer.decode(generated_ids[0])
         if verbose:
             print(output)
             print("[demo_model] done")
@@ -104,9 +104,9 @@ def get_model_inputs(
     device: str = "cuda",
     dtype: Optional[str] = None,
 ) -> Tuple[Callable, Tuple[Any, ...]]:
-    """Returns a codellama model and its inputs."""
+    """Returns a model and its inputs."""
 
-    input_ids = ids_tensor((1, 128), 32016).to(device)
+    input_ids = ids_tensor((1, 12), 23688).to(device)
 
     return (
         lambda: load_model(
