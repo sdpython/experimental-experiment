@@ -7,6 +7,16 @@ get_default_patterns
 
 .. autofunction:: experimental_experiment.xoptim.patterns.get_default_patterns
 
+get_ml_patterns
+===============
+
+.. autofunction:: experimental_experiment.xoptim.patterns_ml.get_ml_patterns
+
+get_experimental_patterns
+=========================
+
+.. autofunction:: experimental_experiment.xoptim.patterns_exp.get_experimental_patterns
+
 get_onnxruntime_patterns
 ========================
 
