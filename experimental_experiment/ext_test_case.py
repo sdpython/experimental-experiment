@@ -379,7 +379,7 @@ class ExtTestCase(unittest.TestCase):
             self.assertEqual(expected.shape, value.shape)
 
         try:
-            assert_allclose(expected, value, atol=atol, rtol=rtol)
+            assert_allclose(desired=expected, actual=value, atol=atol, rtol=rtol)
         except AssertionError as e:
             if msg:
                 raise AssertionError(msg) from e

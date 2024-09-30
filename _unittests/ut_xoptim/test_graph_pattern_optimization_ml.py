@@ -13,7 +13,7 @@ TARGET_OPSET = 18
 
 
 class TestGraphPatternOptimizationMl(ExtTestCase):
-    def test_tree_ensemble_regressio_ml(self):
+    def test_tree_ensemble_regressor_mul(self):
         rule = "BRANCH_LEQ"
 
         targets = [1.0, 2.0, 4.0, 8.0, 16.0, 32.0]
@@ -96,7 +96,7 @@ class TestGraphPatternOptimizationMl(ExtTestCase):
         got = sess.run(None, feeds)[0]
         self.assertEqualArray(expected, got)
 
-    def test_tree_ensemble_regressio_ml_as_tensor(self):
+    def test_tree_ensemble_regressor_mul_as_tensor(self):
         from onnxruntime import InferenceSession
 
         rule = "BRANCH_LEQ"

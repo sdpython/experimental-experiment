@@ -7,7 +7,7 @@ from ..patterns_api import MatchResult, PatternOptimization
 
 class TreeEnsembleRegressorMulPattern(PatternOptimization):
     """
-    Replaces ConstantOfShape + ScatterND with ScatterNDOfShape (com.domain).
+    Replaces TreeEnsembleRegressor + Mul(., scalar) with TreeEnsembleRegressor.
     """
 
     def match(

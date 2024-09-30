@@ -167,7 +167,10 @@ def get_parser_optimize() -> ArgumentParser:
         - default+ml+onnxruntime+experimental
         - default+ml+onnxruntime+experimental-ReshapeReshapePattern
 
-        The last one applies all patterns but one.
+        The last one applies all patterns but one. The list of patterns can be
+        obtained by running:
+
+            python -m experimental_experiment optimize --patterns=list -i '' -o ''
         """
         ),
     )
@@ -190,6 +193,7 @@ def get_parser_optimize() -> ArgumentParser:
         "--verbose",
         default=0,
         required=False,
+        type=int,
         help="verbosity",
     )
     parser.add_argument(
@@ -227,6 +231,7 @@ def get_parser_optimize() -> ArgumentParser:
     parser.add_argument(
         "--max_iter",
         default=-1,
+        type=int,
         help="number of iterations for pattern optimization, -1 for many",
     )
     parser.add_argument(
@@ -247,8 +252,8 @@ def _cmd_optimize(argv: List[Any]):
         if args.verbose:
             print("prints out the list of available patterns")
 
-        print()
         for s in ["default", "ml", "onnxruntime", "experimental"]:
+            print()
             print(f"-- {s} patterns")
             pats = get_pattern_list(s)
             for p in pats:
@@ -289,7 +294,7 @@ def _cmd_optimize(argv: List[Any]):
     if args.verbose:
         print(f"save file {args.output}")
     with open(args.output, "wb") as f:
-        f.write(opt_onx.SerializeToStrign())
+        f.write(opt_onx.SerializePartialToString())
     if args.verbose:
         print("done")
 
