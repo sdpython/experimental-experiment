@@ -721,6 +721,33 @@ def _set_shape_type_op_any_tile(self: "GraphBuilder", node: NodeProto):  # noqa:
         self.set_rank(node.output[0], self.get_rank(node.input[0]))
 
 
+def _set_shape_type_op_any_topk(self: "GraphBuilder", node: NodeProto):  # noqa: F821
+    is_scalar = self.is_constant(node.input[1])
+    if is_scalar and self.has_shape(node.input[0]):
+        att = self.get_attribute(node, "axis", exc=False)
+        axis = att.i if att is not None else -1
+        shape = list(self.get_shape(node.input[0]))
+        k = self.get_constant(node.input[1], computed_value=True)
+        ki = int(k) if k.shape == tuple() else int(k[0])
+        shape[axis] = ki
+        shape = tuple(shape)
+    else:
+        shape = None
+
+    if node.output[0]:
+        self.set_type(node.output[0], self.get_type(node.input[0]))
+        if shape is not None:
+            self.set_shape(node.output[0], shape)
+        elif self.has_rank(node.input[0]):
+            self.set_rank(node.output[0], self.get_rank(node.input[0]))
+    if node.output[1]:
+        self.set_type(node.output[1], TensorProto.INT64)
+        if shape is not None:
+            self.set_shape(node.output[1], shape)
+        elif self.has_rank(node.input[0]):
+            self.set_rank(node.output[1], self.get_rank(node.input[0]))
+
+
 def _set_shape_type_op_any_unsqueeze(
     self: "GraphBuilder",  # noqa: F821
     node: NodeProto,
@@ -843,6 +870,7 @@ _set_shape_type_op_any_known = {
     "Split": _set_shape_type_op_any_split,
     "Squeeze": _set_shape_type_op_any_squeeze,
     "Tile": _set_shape_type_op_any_tile,
+    "TopK": _set_shape_type_op_any_topk,
     "Transpose": _set_shape_type_op_any_transpose,
     "Unsqueeze": _set_shape_type_op_any_unsqueeze,
     "Where": _set_shape_type_op_any_where,
@@ -911,10 +939,28 @@ _set_shape_type_op_any_custom = {
 }
 
 
+def set_type_shape_tree_ensemble(self: "GraphBuilder", node: NodeProto):  # noqa: F821
+    self.set_type(node.output[0], self.get_type(node.input[0]))
+    n_targets = self.get_attribute(node, "n_targets", exc=False)
+    assert n_targets is not None, (
+        f"Unable to extract the dimension of the output for node type "
+        f"{node.op_type!r} and name={node.name!r}"
+    )
+    if self.has_shape(node.input[0]):
+        shape = self.get_shape(node.input[0])
+        self.set_shape(node.output[0], (shape[0], n_targets.i))
+    else:
+        self.set_rank(node.output[0], 2)
+
+
 def set_shape_type_custom(self: "GraphBuilder", node: NodeProto):  # noqa: F821
     """
     Sets the shape and type if it can.
     """
+    if node.domain == "ai.onnx.ml":
+        if node.op_type == "TreeEnsembleRegressor":
+            set_type_shape_tree_ensemble(self, node)
+        return
     if node.op_type in {"ReplaceZero", "NegXplus1"}:
         set_type_shape_unary_op(self, node.output[0], node.input[0])
     if node.op_type in _set_shape_type_op_any_custom:

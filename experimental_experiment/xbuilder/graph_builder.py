@@ -4472,6 +4472,17 @@ class GraphBuilder(_GraphBuilderRuntime):
             d.dim_param if d.dim_param else d.dim_value
             for d in val.type.tensor_type.shape.dim
         )
+        if all(isinstance(s, int) for s in shape) and -1 in shape:
+            # Some converters uses -1 to specify a dynamic dimension.
+            # We replace the value with a string
+            new_shape = []
+            for index, s in enumerate(shape):
+                if s >= 0:
+                    new_shape.append(s)
+                    continue
+                dyn_name = f"{val.name}_{index}"
+                new_shape.append(dyn_name)
+            shape = tuple(new_shape)
         for i, sh in enumerate(shape):
             if isinstance(sh, int):
                 continue
@@ -4590,6 +4601,17 @@ class GraphBuilder(_GraphBuilderRuntime):
                     d.dim_param if d.dim_param else d.dim_value
                     for d in i.type.tensor_type.shape.dim
                 )
+                if all(isinstance(s, int) for s in shape) and -1 in shape:
+                    # Some converters uses -1 to specify a dynamic dimension.
+                    # We replace the value with a string
+                    new_shape = []
+                    for index, s in enumerate(shape):
+                        if s >= 0:
+                            new_shape.append(s)
+                            continue
+                        dyn_name = f"{i.name}_{index}"
+                        new_shape.append(dyn_name)
+                    shape = tuple(new_shape)
                 for axis, sh in enumerate(shape):
                     if isinstance(sh, int):
                         continue

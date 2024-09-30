@@ -50,6 +50,7 @@ from transformers.models.llama.modeling_llama import LlamaModel
 from experimental_experiment.xbuilder import OptimizationOptions
 from experimental_experiment.torch_dynamo import onnx_custom_backend
 from experimental_experiment.bench_run import get_machine
+from experimental_experiment.ext_test_case import unit_test_going
 
 has_cuda = torch.cuda.is_available()
 machine = get_machine()
@@ -79,20 +80,24 @@ def ids_tensor(shape, vocab_size):
 if script_args.config == "large":
     batch, seq, vocab_size = 2, 1024, 32000
     intermediate_size = 11008
+    hidden_size = 4096
+    num_attention_heads = 32
 else:
     batch, seq, vocab_size = 2, 1024, 1024
     intermediate_size = 1024
+    hidden_size = 512
+    num_attention_heads = 8
 
 ################################
 # The configuration of the model.
 
 config = LlamaConfig(
-    hidden_size=4096,
+    hidden_size=hidden_size,
     num_hidden_layers=int(script_args.num_hidden_layers),
     vocab_size=vocab_size,
     intermediate_size=intermediate_size,
     max_position_embeddings=2048,
-    num_attention_heads=32,
+    num_attention_heads=num_attention_heads,
 )
 config._attn_implementation = "eager"
 
@@ -186,6 +191,12 @@ optimization = (
     else ["default", "default+onnxruntime", "default+onnxruntime+experimental"]
 )
 
+if unit_test_going():
+    # It is too long.
+    optimization = []
+    times = []
+
+
 with torch.no_grad():
 
     for optim in optimization:
@@ -195,7 +206,7 @@ with torch.no_grad():
         # This variable is used to retrieve the onnx models created by the backend.
         # It can be set to None if it is not needed.
         # Graph are usually small as they do not contain weights.
-        storage = {}
+        storage = None  # {}
 
         options = OptimizationOptions(
             constant_folding=True,
@@ -264,12 +275,14 @@ with torch.no_grad():
 # avg_time, lower is better,
 # speedup compare to eager mode, higher is better.
 
-df = pandas.DataFrame(times)
-print(df)
+if times:
+    df = pandas.DataFrame(times)
+    print(df)
 
 ######################################
 # Plot
 
-df.set_index("optim")[["speedup"]].plot.bar(
-    title="Speedup for different optimization scenario"
-)
+if times:
+    df.set_index("optim")[["speedup"]].plot.bar(
+        title="Speedup for different optimization scenario"
+    )

@@ -20,7 +20,9 @@ class LayerNormalizationPattern(PatternOptimization):
     ) -> Optional[MatchResult]:
         if node.op_type != "ReduceMean" or node.domain != "":
             return self.none()
-
+        if len(node.input) != 2:
+            # Not defined for older opset than 18.
+            return self.none(node, inspect.currentframe().f_lineno)
         if not g.is_constant(node.input[1]):
             return self.none(node, inspect.currentframe().f_lineno)
         axis = g.get_computed_constant(node.input[1])

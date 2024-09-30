@@ -71,6 +71,13 @@ Onnx (default) Patterns
     :members:
     :no-undoc-members:
 
+ML Patterns
+==================
+
+.. automodule:: experimental_experiment.xoptim.patterns_ml.tree_ensemble
+    :members:
+    :no-undoc-members:
+
 .. _l-custom-op-patterns:
 
 Custom Op Patterns
