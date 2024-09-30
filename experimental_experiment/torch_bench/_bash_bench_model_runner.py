@@ -395,8 +395,8 @@ class ModelRunner:
             torch.cuda.nvtx.range_pop()
         return res
 
-    def run_dynamic(self) -> Any:
-        dynamic_inputs = self.make_dynamic_inputs()
+    def run_dynamic(self, wrapped: bool = False) -> Any:
+        dynamic_inputs = self.make_dynamic_inputs(wrapped=wrapped)
         if self.autocast:
             if self.nvtx:
                 torch.cuda.nvtx.range_push("ModelRunner.Eager.AutoCast.dynamic")
@@ -636,7 +636,7 @@ class ModelRunner:
             with torch.autocast(device_type=self.device, dtype=self.dtype), torch.no_grad():
                 onx, builder, stats = to_onnx(
                     self.model,
-                    self.inputs,
+                    self.make_export_inputs(dynamic, wrapped=True),
                     optimize=bool(optimization),
                     large_model=True,
                     verbose=10 if verbose >= 100 else (1 if verbose > 1 else 0),
@@ -651,7 +651,7 @@ class ModelRunner:
             with torch.no_grad():
                 onx, builder, stats = to_onnx(
                     self.model,
-                    self.inputs,
+                    self.make_export_inputs(dynamic, wrapped=True),
                     optimize=bool(optimization),
                     large_model=True,
                     verbose=10 if verbose >= 100 else (1 if verbose > 1 else 0),
@@ -827,6 +827,7 @@ class ModelRunner:
             inputs = self.inputs
 
         dynamic_shapes_for_export = self.get_dynamic_shapes(dynamic, wrapped=True)
+        inputs = self.make_export_inputs(dynamic, wrapped=True, inputs=inputs)
         kwargs_export = {}
         if dynamic_shapes_for_export is not None:
             kwargs_export["dynamic_shapes"] = dynamic_shapes_for_export
@@ -902,7 +903,7 @@ class ModelRunner:
             with torch.autocast(device_type=self.device, dtype=self.dtype), torch.no_grad():
                 onnx_program = torch.onnx.export(
                     self.model,
-                    self.inputs,
+                    self.make_export_inputs(dynamic, wrapped=True),
                     name,
                     opset_version=target_opset,
                     dynamo=True,
@@ -914,7 +915,7 @@ class ModelRunner:
             with torch.no_grad():
                 onnx_program = torch.onnx.export(
                     self.model,
-                    self.inputs,
+                    self.make_export_inputs(dynamic, wrapped=True),
                     name,
                     opset_version=target_opset,
                     dynamo=True,
@@ -993,7 +994,7 @@ class ModelRunner:
         with torch.no_grad():
             res = export(
                 self.model,
-                self.inputs,
+                self.make_export_inputs(dynamic, wrapped=True),
                 dynamic_shapes=self.get_dynamic_shapes(dynamic, wrapped=True),
             )
         return res, None
@@ -1126,7 +1127,143 @@ class ModelRunner:
                 )
         return res, None
 
-    def make_dynamic_inputs(self):
+    def make_export_inputs(
+        self, dynamic: bool = False, wrapped: bool = False, inputs: Optional[Any] = None
+    ) -> Any:
+        """
+        Creates the new inputs for the benchmarks.
+        :func:`torch.export.export` fails when a dimension is dynamic
+        and the value for this dimension is 1. This function
+        expands the input on that dimension to make it 2
+        if it is 1. These inputs should only be used at export time.
+
+        :param dynamic: dynamic, yes or no?
+        :param wrapped: wrapped model
+        :param inputs: existing inputs or None to use `self.inputs`
+        :return: new inputs
+        """
+        if not dynamic:
+            # easy case
+            return self.inputs if inputs is None else inputs
+
+        if inputs is None:
+            inputs = self.inputs
+        assert isinstance(
+            inputs, tuple
+        ), f"Not implemented for type(self.inputs)={type(inputs)}"
+        dynamic_shapes = self.get_dynamic_shapes(dynamic, wrapped=wrapped)
+        if wrapped:
+            assert isinstance(dynamic_shapes, tuple), (
+                f"Unexpected type {type(dynamic_shapes)} for dynamic_shapes, "
+                f"wrapped={wrapped}, input type is {type(self.inputs)}"
+            )
+            assert len(dynamic_shapes) == 1, (
+                f"Unexpected number of dynamic_shapes {len(dynamic_shapes)}, "
+                f"input type is {type(self.inputs)}"
+            )
+            dynamic_shapes = dynamic_shapes[0]
+
+        dyn_inputs = []
+        dyn_values = {}
+        for i in range(len(self.inputs)):
+            inp = inputs[i]
+            if i >= len(dynamic_shapes):
+                dyn_inputs.append(inp)
+                continue
+            new_shape = []
+            dyn_shape = dynamic_shapes[i]
+            assert isinstance(dyn_shape, dict), (
+                f"Unexpected type for input {i}, dyn_shape={dyn_shape}, "
+                f"shape of input[{i}]={inp.shape}, "
+                f"dynamic_shapes={dynamic_shapes}, "
+            )
+            for j in range(len(inp.shape)):
+                if inp.shape[j] != 1 or j not in dyn_shape:
+                    new_shape.append(inp.shape[j])
+                    continue
+                name = dyn_shape[j]
+                if name in dyn_values:
+                    new_shape.append(dyn_values[name])
+                    continue
+                d = inp.shape[j]
+                d += 1
+                dyn_values[name] = d
+                new_shape.append(d)
+
+            new_shape = tuple(new_shape)
+            if new_shape == inp.shape:
+                dyn_inputs.append(inp)
+                continue
+            dyn_inputs.append(inp.expand(new_shape))
+        return tuple(dyn_inputs)
+
+    def get_input_shapes(
+        self,
+        dynamic: bool = False,
+        wrapped: bool = False,
+        export: bool = False,
+        inputs: Optional[Any] = None,
+    ) -> Any:
+        """
+        Returns the input shapes.
+
+        :param dynamic: dynamic, yes or no?
+        :param wrapped: wrapped model
+        :param inputs: existing inputs or None to use `self.inputs`
+        :param export: returns the shapes for the inputs used for export
+        :return: new inputs
+        """
+        if inputs is None:
+            return self.get_input_shapes(
+                dynamic=dynamic, export=export, wrapped=wrapped, inputs=self.inputs
+            )
+
+        assert isinstance(
+            inputs, tuple
+        ), f"Not implemented for type(self.inputs)={type(inputs)}"
+        dynamic_shapes = self.get_dynamic_shapes(True, wrapped=wrapped)
+        if wrapped:
+            assert isinstance(dynamic_shapes, tuple), (
+                f"Unexpected type {type(dynamic_shapes)} for dynamic_shapes, "
+                f"wrapped={wrapped}, input type is {type(self.inputs)}"
+            )
+            assert len(dynamic_shapes) == 1, (
+                f"Unexpected number of dynamic_shapes {len(dynamic_shapes)}, "
+                f"input type is {type(self.inputs)}"
+            )
+            dynamic_shapes = dynamic_shapes[0]
+        dyn_input_shapes = []
+        dyn_values = {}
+        for i in range(len(self.inputs)):
+            inp = self.inputs[i]
+            if i >= len(dynamic_shapes):
+                dyn_input_shapes.append(inp.shape)
+                continue
+            new_shape = []
+            dyn_shape = dynamic_shapes[i]
+            assert isinstance(dyn_shape, dict), (
+                f"Unexpected type for input {i}, wrapped={wrapped}, "
+                f"dyn_shape{dyn_shape}, shape of input[{i}]={inp.shape}, "
+                f"dynamic_shapes={dynamic_shapes}, "
+            )
+            for j in range(len(inp.shape)):
+                if not export or j not in dyn_shape or inp.shape[j] != 1:
+                    new_shape.append(inp.shape[j])
+                    continue
+                name = dyn_shape[j]
+                if name in dyn_values:
+                    new_shape.append(dyn_values[name])
+                    continue
+                d = inp.shape[j]
+                d += 1
+                dyn_values[name] = d
+                new_shape.append(d)
+
+            new_shape = tuple(new_shape)
+            dyn_input_shapes.append(new_shape)
+        return tuple(dyn_input_shapes)
+
+    def make_dynamic_inputs(self, wrapped: bool = False):
         """
         Creates dynamic inputs based on the static ones by changing the dynamic
         according to the definition of the dynamic_shapes.
@@ -1134,7 +1271,17 @@ class ModelRunner:
         assert isinstance(
             self.inputs, tuple
         ), f"Not implemented for type(self.inputs)={type(self.inputs)}"
-        dynamic_shapes = self.get_dynamic_shapes(True, wrapped=False)
+        dynamic_shapes = self.get_dynamic_shapes(True, wrapped=wrapped)
+        if wrapped:
+            assert isinstance(dynamic_shapes, tuple), (
+                f"Unexpected type {type(dynamic_shapes)} for dynamic_shapes, "
+                f"wrapped={wrapped}, input type is {type(self.inputs)}"
+            )
+            assert len(dynamic_shapes) == 1, (
+                f"Unexpected number of dynamic_shapes {len(dynamic_shapes)}, "
+                f"input type is {type(self.inputs)}"
+            )
+            dynamic_shapes = dynamic_shapes[0]
         dyn_inputs = []
         dyn_values = {}
         for i in range(len(self.inputs)):
@@ -1144,6 +1291,11 @@ class ModelRunner:
                 continue
             new_shape = []
             dyn_shape = dynamic_shapes[i]
+            assert isinstance(dyn_shape, dict), (
+                f"Unexpected type for input {i}, dyn_shape{dyn_shape}, "
+                f"shape of input[{i}]={inp.shape}, "
+                f"dynamic_shapes={dynamic_shapes}, "
+            )
             for j in range(len(inp.shape)):
                 if j not in dyn_shape:
                     new_shape.append(inp.shape[j])
@@ -1162,7 +1314,7 @@ class ModelRunner:
             slices = tuple(slice(0, s) for s in inp.shape)
             zeros[slices] = inp[slices]
             dyn_inputs.append(zeros)
-        return dyn_inputs
+        return tuple(dyn_inputs)
 
     def make_feeds(
         self, exporter: str, filename: Optional[str] = None, dynamic: bool = False
@@ -1180,7 +1332,7 @@ class ModelRunner:
         }:
             return self.inputs
 
-        use_inputs = self.inputs if not dynamic else self.make_dynamic_inputs()
+        use_inputs = self.inputs if not dynamic else self.make_dynamic_inputs(wrapped=True)
 
         # for onnx
         onx = onnx.load(filename, load_external_data=False)

@@ -187,6 +187,20 @@ class TestBashBenchRunnerCmd(ExtTestCase):
     @skipif_ci_windows("exporter does not work on Windows")
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.5")
+    def test_export_bench_custom_cpu_dynamic_1_input_dummy16(self):
+        self._huggingface_export_bench_cpu("custom", "101Dummy16", dynamic=True, debug=False)
+
+    @skipif_ci_windows("exporter does not work on Windows")
+    @ignore_warnings((DeprecationWarning, UserWarning))
+    @requires_torch("2.5")
+    def test_export_bench_onnx_dynamo_cpu_dynamic_1_input_dummy16(self):
+        self._huggingface_export_bench_cpu(
+            "onnx_dynamo", "101Dummy16", dynamic=True, debug=False
+        )
+
+    @skipif_ci_windows("exporter does not work on Windows")
+    @ignore_warnings((DeprecationWarning, UserWarning))
+    @requires_torch("2.5")
     def test_export_bench_onnx_dynamo_cpu_dynamic_2_inputs(self):
         self._huggingface_export_bench_cpu(
             "onnx_dynamo", "101Dummy2Inputs", dynamic=True, debug=False
@@ -438,6 +452,82 @@ class TestBashBenchRunnerCmd(ExtTestCase):
         get_dummy_model()
         get_llama_model_layer()
         get_speech2text2_causal_ml_not_trained_model()
+
+    # static
+
+    @skipif_ci_windows("exporter does not work on Windows")
+    @ignore_warnings((DeprecationWarning, UserWarning))
+    @requires_torch("2.5")
+    def test_huggingface_export_bench_custom_cpu_dummy_name1(self):
+        self._huggingface_export_bench_cpu("custom", "101DummyNamed1")
+
+    @skipif_ci_windows("exporter does not work on Windows")
+    @ignore_warnings((DeprecationWarning, UserWarning))
+    @requires_torch("2.5")
+    def test_huggingface_export_bench_custom_cpu_dummy_name2(self):
+        self._huggingface_export_bench_cpu("custom", "101DummyNamed2")
+
+    @skipif_ci_windows("exporter does not work on Windows")
+    @ignore_warnings((DeprecationWarning, UserWarning))
+    @requires_torch("2.5")
+    def test_huggingface_export_bench_custom_cpu_dummy_name_dict(self):
+        self._huggingface_export_bench_cpu("custom", "101DummyNamedDict")
+
+    @skipif_ci_windows("exporter does not work on Windows")
+    @ignore_warnings((DeprecationWarning, UserWarning))
+    @requires_torch("2.5")
+    def test_huggingface_export_bench_onnx_dynamo_cpu_dummy_name1(self):
+        self._huggingface_export_bench_cpu("onnx_dynamo", "101DummyNamed1")
+
+    @skipif_ci_windows("exporter does not work on Windows")
+    @ignore_warnings((DeprecationWarning, UserWarning))
+    @requires_torch("2.5")
+    def test_huggingface_export_bench_onnx_dynamo_cpu_dummy_name2(self):
+        self._huggingface_export_bench_cpu("onnx_dynamo", "101DummyNamed2")
+
+    @skipif_ci_windows("exporter does not work on Windows")
+    @ignore_warnings((DeprecationWarning, UserWarning))
+    @requires_torch("2.5")
+    def test_huggingface_export_bench_onnx_dynamo_cpu_dummy_name_dict(self):
+        self._huggingface_export_bench_cpu("onnx_dynamo", "101DummyNamedDict")
+
+    # dynamic
+
+    @skipif_ci_windows("exporter does not work on Windows")
+    @ignore_warnings((DeprecationWarning, UserWarning))
+    @requires_torch("2.5")
+    def test_huggingface_export_bench_custom_cpu_dummy_name1_dynamic(self):
+        self._huggingface_export_bench_cpu("custom", "101DummyNamed1", dynamic=True)
+
+    @skipif_ci_windows("exporter does not work on Windows")
+    @ignore_warnings((DeprecationWarning, UserWarning))
+    @requires_torch("2.5")
+    def test_huggingface_export_bench_custom_cpu_dummy_name2_dynamic(self):
+        self._huggingface_export_bench_cpu("custom", "101DummyNamed2", dynamic=True)
+
+    @skipif_ci_windows("exporter does not work on Windows")
+    @ignore_warnings((DeprecationWarning, UserWarning))
+    @requires_torch("2.5")
+    def test_huggingface_export_bench_custom_cpu_dummy_name_dict_dynamic(self):
+        self._huggingface_export_bench_cpu("custom", "101DummyNamedDict", dynamic=True)
+
+    @skipif_ci_windows("exporter does not work on Windows")
+    @ignore_warnings((DeprecationWarning, UserWarning))
+    @requires_torch("2.5")
+    def test_huggingface_export_bench_onnx_dynamo_cpu_dummy_name1_dynamic(self):
+        self._huggingface_export_bench_cpu("onnx_dynamo", "101DummyNamed1", dynamic=True)
+
+    @skipif_ci_windows("exporter does not work on Windows")
+    @ignore_warnings((DeprecationWarning, UserWarning))
+    @requires_torch("2.5")
+    def test_huggingface_export_bench_onnx_dynamo_cpu_dummy_name2_dynamic(self):
+        self._huggingface_export_bench_cpu("onnx_dynamo", "101DummyNamed2", dynamic=True)
+
+    @skipif_ci_windows("exporter does not work on Windows")
+    @ignore_warnings((DeprecationWarning, UserWarning))
+    @requires_torch("2.5")
+    def test_huggingface_export_bench_onnx_dynamo_cpu_dummy_name_dict_dynamic(self):
+        self._huggingface_export_bench_cpu("onnx_dynamo", "101DummyNamedDict", dynamic=True)
 
 
 if __name__ == "__main__":

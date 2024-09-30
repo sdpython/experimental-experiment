@@ -20,10 +20,13 @@ class TestMemoryPeak(ExtTestCase):
         for _i in range(10):
             time.sleep(0.005)
             value = np.empty(2**23, dtype=np.int64)
+            time.sleep(0.005)
             value += 1
+            time.sleep(0.005)
             n_elements = max(value.shape[0], n_elements)
         time.sleep(0.02)
         pres = p.stop()
+        self.assertGreater(n_elements, 0)
         self.assertIsInstance(pres, dict)
         self.assertLessEqual(pres["cpu"].end, pres["cpu"].max_peak)
         self.assertLessEqual(pres["cpu"].begin, pres["cpu"].max_peak)
