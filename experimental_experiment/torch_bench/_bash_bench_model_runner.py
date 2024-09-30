@@ -1167,6 +1167,9 @@ class ModelRunner:
         dyn_values = {}
         for i in range(len(self.inputs)):
             inp = inputs[i]
+            if inp is None:
+                dyn_inputs.append(None)
+                continue
             if i >= len(dynamic_shapes):
                 dyn_inputs.append(inp)
                 continue
@@ -1236,6 +1239,9 @@ class ModelRunner:
         dyn_values = {}
         for i in range(len(self.inputs)):
             inp = self.inputs[i]
+            if inp is None:
+                dyn_input_shapes.append(None)
+                continue
             if i >= len(dynamic_shapes):
                 dyn_input_shapes.append(inp.shape)
                 continue
@@ -1291,6 +1297,9 @@ class ModelRunner:
                 continue
             new_shape = []
             dyn_shape = dynamic_shapes[i]
+            if inp is None:
+                dyn_inputs.append(None)
+                continue
             assert isinstance(dyn_shape, dict), (
                 f"Unexpected type for input {i}, dyn_shape{dyn_shape}, "
                 f"shape of input[{i}]={inp.shape}, "
