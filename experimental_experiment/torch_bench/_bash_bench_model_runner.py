@@ -367,6 +367,7 @@ class ModelRunner:
                 res.append(None)
                 continue
             res.append({0: dim} if len(x.shape) > 1 else None)
+
         final = tuple(res)
         if wrapped:
             return (final,)
