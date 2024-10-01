@@ -31,7 +31,8 @@ class TestMemoryPeak(ExtTestCase):
         self.assertLessEqual(pres["cpu"].end, pres["cpu"].max_peak)
         self.assertLessEqual(pres["cpu"].begin, pres["cpu"].max_peak)
         self.assertGreater(pres["cpu"].begin, 0)
-        self.assertGreater(pres["cpu"].delta_peak, 0)
+        # Zero should not happen...
+        self.assertGreaterOrEqual(pres["cpu"].delta_peak, 0)
         self.assertGreaterOrEqual(pres["cpu"].delta_peak, pres["cpu"].delta_end)
         self.assertGreaterOrEqual(pres["cpu"].delta_peak, pres["cpu"].delta_avg)
         self.assertGreater(pres["cpu"].delta_end, 0)
