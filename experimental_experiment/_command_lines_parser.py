@@ -240,6 +240,12 @@ def get_parser_optimize() -> ArgumentParser:
         default="",
         help="dumps applied patterns in this folder if specified",
     )
+    parser.add_argument(
+        "--remove_shape_info",
+        default=True,
+        action=BooleanOptionalAction,
+        help="remove shape information before outputting the model",
+    )
     return parser
 
 
@@ -291,6 +297,12 @@ def _cmd_optimize(argv: List[Any]):
         ),
     )
     opt_onx = gr.to_onnx(optimize=True)
+    if args.remove_shape_info:
+        if args.verbose:
+            print(f"remove shape information {len(opt_onx.graph.value_info)}")
+        del opt_onx.graph.value_info[:]
+        if args.verbose:
+            print("done")
 
     if args.verbose:
         print(f"save file {args.output}")
