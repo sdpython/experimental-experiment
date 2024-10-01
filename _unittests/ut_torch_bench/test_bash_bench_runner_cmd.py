@@ -520,6 +520,12 @@ class TestBashBenchRunnerCmd(ExtTestCase):
     @skipif_ci_windows("exporter does not work on Windows")
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.5")
+    def test_huggingface_export_bench_torch_script_cpu_dummy_name1_dynamic(self):
+        self._huggingface_export_bench_cpu("torch_script", "101DummyNamed1", dynamic=True)
+
+    @skipif_ci_windows("exporter does not work on Windows")
+    @ignore_warnings((DeprecationWarning, UserWarning))
+    @requires_torch("2.5")
     def test_huggingface_export_bench_onnx_dynamo_cpu_dummy_name2_dynamic(self):
         self._huggingface_export_bench_cpu("onnx_dynamo", "101DummyNamed2", dynamic=True)
 

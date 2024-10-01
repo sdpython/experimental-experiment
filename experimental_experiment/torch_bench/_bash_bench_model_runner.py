@@ -830,7 +830,39 @@ class ModelRunner:
         inputs = self.make_export_inputs(dynamic, wrapped=True, inputs=inputs)
         kwargs_export = {}
         if dynamic_shapes_for_export is not None:
-            kwargs_export["dynamic_shapes"] = dynamic_shapes_for_export
+            # torch_script only supports a dictionary
+            assert isinstance(
+                dynamic_shapes_for_export, tuple
+            ), f"dynamic_axes not supported when it is {dynamic_shapes_for_export}"
+            input_names = []
+            dynamic_axes = {}
+            for i, dyn in enumerate(dynamic_shapes_for_export):
+                if dyn is None:
+                    continue
+                assert isinstance(dyn, tuple), (
+                    f"Model is wrapped, unexpected type {type(dyn)} for input {i}, "
+                    f"dynamic_shapes_for_export={dynamic_shapes_for_export}"
+                )
+                for inp in dyn:
+                    if inp is None:
+                        continue
+                    dname = f"input{len(input_names)}"
+                    assert isinstance(inp, dict), (
+                        f"Unexpected for input {dname!r}, {type(inp)}, i={i}, dyn={dyn}, "
+                        f"dynamic_shapes_for_export={dynamic_shapes_for_export}"
+                    )
+                    daxes = {}
+                    for k, v in inp.items():
+                        daxes[k] = v.__name__
+                    dynamic_axes[dname] = daxes
+                    input_names.append(dname)
+
+            if verbose:
+                print(f"[ModelRunner._to_onnx_script] dynamic_axes={dynamic_axes}")
+                print(f"[ModelRunner._to_onnx_script] input_names={input_names}")
+                print(f"[ModelRunner._to_onnx_script] n_inputs={len(inputs)}")
+            kwargs_export["dynamic_axes"] = dynamic_axes
+            kwargs_export["input_names"] = input_names
 
         if self.autocast:
             with torch.autocast(device_type=self.device, dtype=self.dtype), torch.no_grad():
@@ -854,6 +886,9 @@ class ModelRunner:
                     verbose=max(verbose - 1, 0),
                     **kwargs_export,
                 )
+
+        if verbose:
+            print(f"[ModelRunner._to_onnx_script] done saved into {name}")
 
         if optimization and optimization != "none":
             return self._optimize_rewrite(name, optimization)
