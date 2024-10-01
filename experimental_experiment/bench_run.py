@@ -228,12 +228,16 @@ def run_benchmark(
                 os.makedirs(dump_std)
             root = os.path.split(script_name)[-1]
             filename = os.path.join(dump_std, f"{root}.{iter_loop}")
+            filename_out = f"{filename}.stdout"
+            filename_err = f"{filename}.stderr"
             if out.strip(b"\n \r\t"):
-                with open(f"{filename}.stdout", "w") as f:
+                with open(filename_out, "w") as f:
                     f.write(sout)
             if err.strip(b"\n \r\t"):
-                with open(f"{filename}.stderr", "w") as f:
+                with open(filename_err, "w") as f:
                     f.write(serr)
+        else:
+            filename_out, filename_err = None, None
 
         if "ONNXRuntimeError" in serr or "ONNXRuntimeError" in sout:
             if stop_if_exception:
@@ -253,6 +257,10 @@ def run_benchmark(
             else:
                 metrics = {}
         metrics.update(config)
+        if filename_out:
+            metrics["file.stdout"] = filename_out
+        if filename_err:
+            metrics["file.stderr"] = filename_err
         metrics["DATE"] = f"{datetime.now():%Y-%m-%d}"
         metrics["ITER"] = iter_loop
         metrics["TIME_ITER"] = time.perf_counter() - begin
