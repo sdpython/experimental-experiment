@@ -10,6 +10,7 @@ import warnings
 from argparse import Namespace
 from datetime import datetime
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
+import numpy as np
 
 _DEFAULT_STRING_LIMIT = 2000
 
@@ -450,8 +451,12 @@ def measure_discrepancies(
                 torch_tensor.shape == onnx_tensor.shape
             ), f"Type mismatch {torch_tensor.shape} != {onnx_tensor.shape}"
             diff = torch_tensor.astype(float) - onnx_tensor.astype(float)
-            abs_err = float(diff.abs().max())
-            rel_err = float((diff.abs() / torch_tensor).max())
+            if hasattr(diff, "abs"):
+                abs_err = float(diff.abs().max())
+                rel_err = float((diff.abs() / torch_tensor).max())
+            else:
+                abs_err = float(np.abs(diff).max())
+                rel_err = float((np.abs(diff) / torch_tensor).max())
             abs_errs.append(abs_err)
             rel_errs.append(rel_err)
     return dict(abs=max(abs_errs), rel=max(rel_errs), sum=sum(rel_errs), n=len(abs_errs))

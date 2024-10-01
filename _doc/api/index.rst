@@ -5,24 +5,33 @@ API
 
 .. toctree::
     :maxdepth: 1
+    :caption: Builder and Optimizer
 
-    gradient
-    reference
+    onnx_export
     graph_builder
-    torch_model_container
     graph_builder_pattern
     graph_builder_patterns
     order_optimization
     interpreter
-    onnx_export
     aten_function
     aten_method
     prims_function
-    convert
     torch_dynamo
-    torch_helper
     dimension
+
+.. toctree::
+    :maxdepth: 1
+    :caption: Tools
+
+    args
+    bench_run
+    model_run
+    gradient
+    reference
+    torch_model_container
+    torch_helper
     torch_test
+    convert
     misc
 
 **Versions**
