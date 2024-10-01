@@ -85,6 +85,8 @@ def obj_size(obj: Any) -> int:
         return obj_size(obj.tensor)
     if "SquashedNormal" in obj.__class__.__name__:
         return sys.getsizeof(obj)
+    if obj.__class__.__name__ == "MambaCache":
+        return obj_size(obj.conv_states) + obj_size(obj.ssm_states)
     raise AssertionError(f"input_size not implemented for type {type(obj)}")
 
 
@@ -230,9 +232,9 @@ def common_export(
             prog = torch.onnx.dynamo_export(model, *inputs)
         onnx.save(prog.model_proto, filename)
     elif exporter == "custom":
-        from ..xoptim import get_pattern_list
-        from ..xbuilder import OptimizationOptions
         from ..torch_interpreter import to_onnx
+        from ..xbuilder import OptimizationOptions
+        from ..xoptim import get_pattern_list
 
         patterns = get_pattern_list(enable_pattern, disable_pattern, verbose=verbose)
         onx = to_onnx(

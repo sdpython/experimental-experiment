@@ -29,6 +29,7 @@ import torch
 import torch._dynamo.backends.registry
 import transformers
 from experimental_experiment.convert.convert_helper import ort_optimize
+from experimental_experiment.torch_bench import BOOLEAN_VALUES
 from experimental_experiment.torch_models.llama_helper import get_llama_model
 from experimental_experiment.torch_models.dump_helper import dump_onnx
 from experimental_experiment.torch_bench._dort_cmd_common import (
@@ -78,7 +79,7 @@ if is_cuda:
     )
 
 print(f"Build the compile model with backend={args.backend}")
-use_dynamic = args.dynamic in (1, "1", True, "True")
+use_dynamic = args.dynamic in BOOLEAN_VALUES
 print(f"dynamic={use_dynamic}")
 if verbose:
     print(f"-- debug backend, opset={args.target_opset}")
@@ -98,15 +99,12 @@ compiled_model = create_compiled_model(
 
 
 def loop_iteration(is_cuda, inputs, compiled_model, loss):
-    if args.mixed in (1, "1", True, "True") and is_cuda:
+    if args.mixed in BOOLEAN_VALUES and is_cuda:
         with torch.autocast(device_type="cuda", dtype=torch.float16):
             result = compiled_model(*inputs)
     else:
-        assert args.mixed not in (
-            1,
-            "1",
-            True,
-            "True",
+        assert (
+            args.mixed not in BOOLEAN_VALUES
         ), f"not implemented with is_cuda={is_cuda}, mixed={args.mixed}"
         result = compiled_model(*inputs)
 

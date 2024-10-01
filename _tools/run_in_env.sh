@@ -2,7 +2,7 @@
 
 # Initialization
 VENV="benchenv"
-TRANSFORMERS_VERSION="4.41.2"
+TRANSFORMERS_VERSION="4.45.0"
 PYTORCH_VERSION="nightly"
 ONNXSCRIPT_VERSION="source"
 ORT_VERSION="nightly"
@@ -93,6 +93,14 @@ while [ $# -gt 0 ]; do
         esac
 done
 
+if [[ ${#ARGS[@]} ]];
+then
+    # Let's add dummy parameters.
+    ARGS=("-c")
+    ARGS+=("import sys;print(sys.executable)") 
+fi
+
+
 # Options
 echo "[$0] TRANSFORMERS_VERSION=${TRANSFORMERS_VERSION}"
 echo "[$0] ONNXSCRIPT_VERSION=${ONNXSCRIPT_VERSION}"
@@ -175,7 +183,7 @@ then
 
     if [[ $PYTORCH_VERSION == "nightly" ]];
     then
-        if [[ $DEVICE == "cuda" ] | [ $DEVICE == "cuda:1" ] | [ $DEVICE == "cuda:2" ]];
+        if [ $DEVICE == "cuda" ] || [ $DEVICE == "cuda:1" ] || [ $DEVICE == "cuda:2" ];
         then
             echo "[$0] Install nightly pytorch + cuda"
             pip install --upgrade --pre torch torchvision torchaudio --index-url https://download.pytorch.org/whl/nightly/cu${CUDA_VERSION_NO_DOT}
@@ -184,7 +192,7 @@ then
             pip install --upgrade --pre torch torchvision torchaudio --index-url https://download.pytorch.org/whl/nightly/cpu
         fi
     else
-        if [[ $DEVICE == "cuda" ] | [ $DEVICE == "cuda:1" ] | [ $DEVICE == "cuda:2" ]];
+        if [ $DEVICE == "cuda" ] || [ $DEVICE == "cuda:1" ] || [ $DEVICE == "cuda:2" ];
         then
             echo "[$0] Install pytorch==${PYTORCH_VERSION} + cuda"
             pip install --upgrade --pre torch==${PYTORCH_VERSION} torchvision torchaudio --index-url https://download.pytorch.org/whl/nightly/cu${CUDA_VERSION_NO_DOT}
@@ -201,7 +209,7 @@ then
 
     if [[ $ORT_VERSION == "nightly" ]];
     then
-        if [[ $DEVICE == "cuda" ] | [ $DEVICE == "cuda:1" ] | [ $DEVICE == "cuda:2" ]];
+        if [ $DEVICE == "cuda" ] | [ $DEVICE == "cuda:1" ] | [ $DEVICE == "cuda:2" ];
         then
             echo "[$0] Install nightly onnxruntime + cuda"
             pip install --upgrade -i https://aiinfra.pkgs.visualstudio.com/PublicPackages/_packaging/ORT-Nightly/pypi/simple/ onnxruntime-training
@@ -210,7 +218,7 @@ then
             pip install --upgrade -i https://aiinfra.pkgs.visualstudio.com/PublicPackages/_packaging/ORT-Nightly/pypi/simple/ onnxruntime-training
         fi
     else
-        if [[ $DEVICE == "cuda" ] | [ $DEVICE == "cuda:1" ] | [ $DEVICE == "cuda:2" ]];
+        if [ $DEVICE == "cuda" ] | [ $DEVICE == "cuda:1" ] | [ $DEVICE == "cuda:2" ];
         then
             echo "[$0] Install onnxruntime==${ORT_VERSION} + cuda"
             pip install "onnxruntime-training-gpu==${ORT_VERSION}"

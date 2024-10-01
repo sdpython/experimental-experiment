@@ -57,6 +57,7 @@ def bash_bench_parse_args(name: str, doc: str, new_args: Optional[List[str]] = N
         tag=("", "add a version tag when everything else did not change"),
         timeout=("600", "timeout for subprocesses"),
         shape2=("0", "redo the shape inference"),
+        decomposition_table=("none", "decomposition table configuration"),
         new_args=new_args,
         expose="repeat,warmup",
     )
@@ -93,6 +94,7 @@ def bash_bench_main(script_name: str, doc: str, args: Optional[List[str]] = None
     for k, v in sorted(args.__dict__.items()):
         print(f"{k}={v}")
 
+    from experimental_experiment.torch_bench import BOOLEAN_VALUES
     from experimental_experiment.torch_bench._bash_bench_benchmark_runner_agg import (
         merge_benchmark_reports,
     )
@@ -107,27 +109,27 @@ def bash_bench_main(script_name: str, doc: str, args: Optional[List[str]] = None
     if script_name == "bash_bench_huggingface":
         from ._bash_bench_set_huggingface import HuggingfaceRunner
 
-        runner = HuggingfaceRunner(device=args.device)
+        runner = HuggingfaceRunner(device=args.device, verbose=int(args.verbose))
     elif script_name == "bash_bench_huggingface_big":
         from ._bash_bench_set_huggingface_big import HuggingfaceBigRunner
 
-        runner = HuggingfaceBigRunner(device=args.device)
+        runner = HuggingfaceBigRunner(device=args.device, verbose=int(args.verbose))
     elif script_name == "bash_bench_torchbench":
         from ._bash_bench_set_torchbench import TorchBenchRunner
 
-        runner = TorchBenchRunner(device=args.device)
+        runner = TorchBenchRunner(device=args.device, verbose=int(args.verbose))
     elif script_name == "bash_bench_torchbench_ado":
         from ._bash_bench_set_torchbench_ado import TorchBenchAdoRunner
 
-        runner = TorchBenchAdoRunner(device=args.device)
+        runner = TorchBenchAdoRunner(device=args.device, verbose=int(args.verbose))
     elif script_name == "bash_bench_timm":
         from ._bash_bench_set_timm import TimmRunner
 
-        runner = TimmRunner(device=args.device)
+        runner = TimmRunner(device=args.device, verbose=int(args.verbose))
     elif script_name == "bash_bench_explicit":
         from ._bash_bench_set_explicit import ExplicitRunner
 
-        runner = ExplicitRunner(device=args.device)
+        runner = ExplicitRunner(device=args.device, verbose=int(args.verbose))
     else:
         raise AssertionError(f"Unexpected bash_bench name {script_name!r}.")
     names = runner.get_model_name_list()
@@ -178,8 +180,8 @@ def bash_bench_main(script_name: str, doc: str, args: Optional[List[str]] = None
         ), f"Parameter tag={args.tag!r} does not support multiple values."
         if (
             multi_run(args)
-            or args.process in ("1", 1, "True", True)
-            or (args.split_process in ("1", 1, "True", True) and args.part in (None, ""))
+            or args.process in BOOLEAN_VALUES
+            or (args.split_process in BOOLEAN_VALUES and args.part in (None, ""))
         ):
             assert args.part == "", f"part={args.part} must be empty"
             args_output_data = args.output_data
@@ -188,7 +190,7 @@ def bash_bench_main(script_name: str, doc: str, args: Optional[List[str]] = None
                 temp_output_data = f"{name}.temp{ext}"
             else:
                 temp_output_data = None
-            split_process = args.split_process in (1, "1", "True", True)
+            split_process = args.split_process in BOOLEAN_VALUES
             if split_process and args.part == "":
                 args.part = "0,1"
                 if args.verbose:
@@ -251,7 +253,7 @@ def bash_bench_main(script_name: str, doc: str, args: Optional[List[str]] = None
             if args.verbose:
                 print(f"Running model {name!r}")
 
-            do_profile = args.profile in (1, "1", "True", True)
+            do_profile = args.profile in BOOLEAN_VALUES
 
             runner = runner.__class__(
                 include_model_names={name},
@@ -261,8 +263,8 @@ def bash_bench_main(script_name: str, doc: str, args: Optional[List[str]] = None
                 repeat=args.repeat,
                 warmup=args.warmup,
                 dtype=args.dtype,
-                nvtx=args.nvtx in (1, "1", "True", "true"),
-                dump_ort=args.dump_ort in (1, "1", "True", "true"),
+                nvtx=args.nvtx in BOOLEAN_VALUES,
+                dump_ort=args.dump_ort in BOOLEAN_VALUES,
             )
 
             if do_profile:
@@ -271,20 +273,22 @@ def bash_bench_main(script_name: str, doc: str, args: Optional[List[str]] = None
                 pr = cProfile.Profile()
                 pr.enable()
 
-            split_process = args.split_process in (1, "1", True, "True")
+            split_process = args.split_process in BOOLEAN_VALUES
             begin = time.perf_counter()
             data = list(
                 runner.enumerate_test_models(
-                    process=args.process in ("1", 1, "True", True),
+                    process=args.process in BOOLEAN_VALUES,
                     exporter=args.exporter,
-                    quiet=args.quiet in ("1", 1, "True", True),
+                    quiet=args.quiet in BOOLEAN_VALUES,
+                    dynamic=args.dynamic in BOOLEAN_VALUES,
                     folder=args.dump_folder,
                     optimization=args.opt_patterns if args.opt_patterns != "none" else "",
-                    memory_peak=args.memory_peak in ("1", 1, "True", True),
+                    memory_peak=args.memory_peak in BOOLEAN_VALUES,
                     part=int(args.part) if split_process else None,
                     pickled_name="temp_pickled_file.pkl" if split_process else None,
-                    rtopt=args.rtopt in (1, "1", "True", "true"),
-                    shape_again=args.shape2 in (1, "1", "True", "true"),
+                    rtopt=args.rtopt in BOOLEAN_VALUES,
+                    shape_again=args.shape2 in BOOLEAN_VALUES,
+                    decomposition_table=args.decomposition_table,
                 )
             )
             duration = time.perf_counter() - begin

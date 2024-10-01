@@ -14,7 +14,35 @@ def get_dummy_model() -> Tuple[Callable, Tuple[Any, ...]]:
         def forward(self, x):
             return torch.sigmoid(self.linear(x))
 
-    return Neuron, (torch.randn(1, 5),)
+    return Neuron, (torch.randn(2, 5),)
+
+
+def get_dummy_model_fail() -> Tuple[Callable, Tuple[Any, ...]]:
+    """Returns a dummy model failing."""
+
+    class NeuronFail(torch.nn.Module):
+        def __init__(self, n_dims: int = 5, n_targets: int = 3):
+            super().__init__()
+            self.linear = torch.nn.Linear(n_dims, n_targets)
+
+        def forward(self, x):
+            return torch.sigmoid(self.linear(x) * torch.Tensor([0, 1]))
+
+    return NeuronFail, (torch.randn(1, 5),)
+
+
+def get_dummy_model_fail_convert() -> Tuple[Callable, Tuple[Any, ...]]:
+    """Returns a dummy model."""
+
+    class NeuronF(torch.nn.Module):
+        def __init__(self, n_dims: int = 5, n_targets: int = 3):
+            super().__init__()
+            self.linear = torch.nn.Linear(n_dims, n_targets)
+
+        def forward(self, x):
+            return torch.sigmoid(self.linear(x))
+
+    return NeuronF, (torch.randn(1, 5),)
 
 
 def ids_tensor(shape, vocab_size, rng=None, name=None):

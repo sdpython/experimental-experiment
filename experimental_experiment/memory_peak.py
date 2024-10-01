@@ -37,10 +37,24 @@ class Monitor:
             end=self.end / funit,
         )
 
+    @property
+    def delta_peak(self):
+        return self.max_peak - self.begin
+
+    @property
+    def delta_end(self):
+        return self.end - self.begin
+
+    @property
+    def delta_avg(self):
+        return self.average / self.n_measures - self.begin
+
     def __repr__(self):
         return (
-            f"{self.__class__.__name__}(peak={self.max_peak}, "
-            f"average={self.average}, n={self.n_measures})"
+            f"{self.__class__.__name__}(begin={self.begin}, end={self.end}, "
+            f"peak={self.max_peak}, average={self.average}, n={self.n_measures}, "
+            f"d_end={self.delta_end}, d_peak={self.delta_peak}, d_avg={self.delta_avg}"
+            f")"
         )
 
     def update(self, mem):

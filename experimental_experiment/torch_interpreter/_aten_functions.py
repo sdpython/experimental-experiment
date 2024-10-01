@@ -51,6 +51,13 @@ class Reduction(Enum):
     SUM = 2
 
 
+def aten__log_api_usage_once(
+    g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], module_name: str
+) -> T:
+    "_log_api_usage_once: creates a dummy result."
+    return g.make_node("Constant", [], value_ints=[1], name="_log_api_usage_once")
+
+
 def aten_abs(g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T) -> T:
     "abs"
     res = g.make_node("Abs", [x], outputs, name="abs")
@@ -343,6 +350,11 @@ def aten_arange(
         itype = torch_dtype_to_onnx_dtype(dtype)
 
     def _may_cast(a, it):
+        assert g.has_rank(a), f"Missing rank for {a!r}{g.get_debug_msg()}"
+        rk = g.get_rank(a)
+        if rk == 1:
+            # It must be a scalar.
+            a = g.op.Reshape(a, np.array([], dtype=np.int64), name=name)
         gi = g.get_type(a)
         if gi == it:
             return a
@@ -2018,13 +2030,29 @@ def aten_expand(
         ), f"Unable to expand x with shape={shape} because sizes={sizes}{g.get_debug_msg()}"
         new_shape = []
         is_static = True
-        for a, b in zip(shape, sizes):
+        shape_x = None
+        for di, (a, b) in enumerate(zip(shape, sizes)):
             if b == -1:
                 assert isinstance(b, int), (
                     f"Not implemented when the shape is not fully known, "
                     f"shape={shape} for x as sizes={sizes}{g.get_debug_msg()}"
                 )
-                new_shape.append(a)
+                if isinstance(a, int):
+                    new_shape.append(a)
+                else:
+                    if (
+                        a in g.dynamic_objects
+                        and isinstance(g.dynamic_objects[a], str)
+                        and g.has_name(g.dynamic_objects[a])
+                    ):
+                        new_shape.append(g.dynamic_objects[a])
+                    else:
+                        if shape_x is None:
+                            shape_x = g.op.Shape(x, name=name)
+                        ds = g.op.Gather(shape_x, np.array([di], dtype=np.int64), name=name)
+                        new_shape.append(ds)
+                        g.add_dynamic_object(a, ds)
+                    is_static = False
             else:
                 new_shape.append(b)
                 is_static = False
@@ -2074,10 +2102,16 @@ def aten_fill_Scalar(
             g.get_shape(x),
             v,
             dtype=g.get_type(x),
-            name=name,
+            name=f"{name}_static",
         )
-    raise RuntimeError(
-        f"fill is not implemented when shape is not fully known{g.get_debug_msg()}"
+    return aten_full(
+        g,
+        sts,
+        outputs,
+        x,  # full like
+        v,
+        dtype=g.get_type(x),
+        name=f"{name}_dynamic",
     )
 
 
@@ -2244,12 +2278,12 @@ def aten_full(
             tsize = np.array(size, dtype=np.int64)
             new_shape = size
         else:
-            tsize = g.make_shape_from_results(size, name=name)
+            tsize = g.make_shape_from_results(size, name=f"{name}_make_shape")
     elif isinstance(size, str):
         if g.has_shape(size) and is_static_shape(size):
             tsize = np.array(g.get_shape(size), dtype=np.int64)
         else:
-            tsize = g.op.Shape(size, name=name)
+            tsize = g.op.Shape(size, name=f"{name}_shape")
     else:
         raise RuntimeError(f"Unexpected type {type(size)} for size.")
 
@@ -2269,7 +2303,7 @@ def aten_full(
         ntype = tensor_dtype_to_np_dtype(itype)
         value = np.array(fill_value or 0, dtype=ntype).reshape((1,))
 
-    res = g.op.ConstantOfShape(tsize, value=from_array(value), outputs=outputs, name="name")
+    res = g.op.ConstantOfShape(tsize, value=from_array(value), outputs=outputs, name=name)
     if not sts:
         g.set_type(res, itype)
         if new_shape:
@@ -4447,8 +4481,12 @@ def aten_ones(
     assert not pin_memory, "ones not implemented for pin_memory=True"
     new_shape = None
     if isinstance(size, (tuple, list)):
-        isize = np.array(size, dtype=np.int64)
-        new_shape = tuple(size)
+        if all_int(size) and min(size) > 0:
+            isize = np.array(size, dtype=np.int64)
+            new_shape = tuple(size)
+        else:
+            isize = g.make_shape_from_results(list(size), name=f"{name}_dyn")
+            new_shape = tuple(size)
     elif isinstance(size, int):
         isize = np.array([size], dtype=np.int64)
         new_shape = (size,)
@@ -5083,7 +5121,7 @@ def _causal_attention_mask(
         g.set_type(dquery, g.get_type(shape_query))
         dkey = g.op.Gather(shape_key, np.array([-2], dtype=np.int64), name=name)
         g.set_type(dkey, g.get_type(shape_key))
-        size = g.op.Concat(dquery, dkey, axis=0)
+        size = g.op.Concat(dquery, dkey, axis=0, name=name)
         g.set_type(size, g.get_type(dkey))
         attn_mask = g.op.ConstantOfShape(
             size, value=from_array(np.array([1], dtype=dtype)), name=name
@@ -5158,7 +5196,7 @@ def aten_scaled_dot_product_attention(
     ), f"is_causal and attn_mask cannot be set at the same time{g.get_debug_msg()}"
 
     if scale is None:
-        tscale = _attention_scale(g, query)
+        tscale = _attention_scale(g, query, name=name)
     elif isinstance(scale, (float, int)):
         assert g.has_type(query), f"Input {query!r} must have a type{g.get_debug_msg()}"
         itype = g.get_type(query)
@@ -5168,7 +5206,7 @@ def aten_scaled_dot_product_attention(
         raise AssertionError(f"Unexpected type {type(scale)} for scale{g.get_debug_msg()}")
 
     if is_causal:
-        attn_mask = _causal_attention_mask(g, query, key)
+        attn_mask = _causal_attention_mask(g, query, key, name=name)
 
     key_transposed_axes = list(range(g.get_rank(key)))
     key_transposed_axes[-1], key_transposed_axes[-2] = (
@@ -5182,7 +5220,7 @@ def aten_scaled_dot_product_attention(
         set_type_shape_unary_op(g, sc, tscale)
 
     query_scaled = g.op.Mul(query, sc, name=name)
-    key_transposed_scaled = g.op.Mul(key_transposed, sc)
+    key_transposed_scaled = g.op.Mul(key_transposed, sc, name=name)
     mul_qk = g.op.MatMul(query_scaled, key_transposed_scaled, name=name)
 
     itype = g.get_type(query)
@@ -5205,7 +5243,7 @@ def aten_scaled_dot_product_attention(
         mul_qk_add = g.op.Add(mul_qk, attn_mask, name=name)
         set_type_shape_binary_op(g, mul_qk_add, mul_qk, attn_mask)
 
-    attn_weight = g.op.Softmax(mul_qk_add, axis=-1)
+    attn_weight = g.op.Softmax(mul_qk_add, axis=-1, name=name)
     set_type_shape_unary_op(g, attn_weight, mul_qk_add)
 
     if dropout_p != 0:
@@ -5742,6 +5780,8 @@ def _aten_slice_scatter_dynamic(
         np.array([1], dtype=np.int64),
         name=name,
     )
+    g.set_type(index_1, TensorProto.INT64)
+    g.set_rank(index_1, 1)
     index_2 = g.op.Slice(
         index_1,
         g.get_dynamic_dimension(start),
@@ -7063,7 +7103,7 @@ def aten_wrap_with_autocast(
     **kwargs,
 ) -> T:
     "identity"
-    assert dtype is None, f"Not implemented with dtype={enabled}{g.get_debug_msg()}"
+    assert dtype is None, f"Not implemented with dtype={dtype}{g.get_debug_msg()}"
     assert not enabled, f"Not implemented with dtype={enabled}{g.get_debug_msg()}"
     assert (
         cache_enabled is None
@@ -7093,6 +7133,48 @@ def aten_wrap_with_autocast(
         args,
         new_outputs,
         name="wrap_with_autocast",
+        domain="aten_local_function",
+    )
+
+
+def aten_wrap_with_set_grad_enabled(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    enable_grad: bool,
+    wrapped_func,
+    *args: Sequence[T],
+    **kwargs,
+) -> T:
+    "identity"
+    assert (
+        not enable_grad
+    ), f"Not implemented with enable_grad={enable_grad}{g.get_debug_msg()}"
+    assert g.has_local_function(
+        wrapped_func, domain="aten_local_function"
+    ), f"No local function {wrapped_func!r}{g.get_debug_msg()}"
+    assert all(
+        isinstance(_, str) for _ in args
+    ), f"Unexpected input types args={args}{g.get_debug_msg()}"
+    local_outputs = g.get_local_function_outputs(wrapped_func, domain="aten_local_function")
+    if len(outputs) == len(local_outputs):
+        return g.make_node(
+            wrapped_func,
+            args,
+            outputs,
+            name="wrap_with_set_grad_enabled",
+            domain="aten_local_function",
+        )
+    assert len(outputs) == 1, (
+        f"Unexpected outputs={outputs} but local_outputs={local_outputs} "
+        f"for function {wrapped_func!r}{g.get_debug_msg()}"
+    )
+    new_outputs = [f"{outputs[0]}#{i}" for i in range(len(local_outputs))]
+    return g.make_node(
+        wrapped_func,
+        args,
+        new_outputs,
+        name="wrap_with_set_grad_enabled",
         domain="aten_local_function",
     )
 

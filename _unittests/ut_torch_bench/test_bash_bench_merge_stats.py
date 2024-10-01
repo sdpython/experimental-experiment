@@ -1,3 +1,4 @@
+import inspect
 import os
 import unittest
 import numpy as np
@@ -290,6 +291,27 @@ class TestBashBenchMergeStats(ExtTestCase):
             slow_script=0.9,
             fast_script=1.1,
             disc=0.1,
+        )
+        self.assertNotEmpty(dfs)
+
+    @ignore_warnings((FutureWarning,))
+    @skipif_ci_windows("OSError: [Errno 22] Invalid argument, gmtime or strftime")
+    def test_merge_stats_bug_merge_gr(self):
+        data = os.path.join(
+            os.path.dirname(__file__),
+            "data",
+            "inductor_torchbench_float16_inference_cuda.csv",
+        )
+        sig = inspect.signature(merge_benchmark_reports)
+        keys = None
+        for p in sig.parameters:
+            if p == "keys":
+                keys = sig.parameters[p].default
+        dfs = merge_benchmark_reports(
+            data,
+            excel_output="test_merge_stats_bug_merge_gr.xlsx",
+            export_simple="test_merge_stats_bug_merge_gr_simple.csv",
+            keys=tuple(c for c in keys if c not in {"version_python"}),
         )
         self.assertNotEmpty(dfs)
 

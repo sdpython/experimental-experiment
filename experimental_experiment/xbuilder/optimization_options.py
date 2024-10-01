@@ -25,7 +25,7 @@ class OptimizationOptions:
     :param stop_after: for investigation, stop_after this number of applies patterns,
         -1 to never stop
     :param verbose: verbosity level (for pattern optimization)
-    :param verifiers: run verifications to ensure the model is
+    :param verifies: run verifications to ensure the model is
         correct everytime it is modifies, it is mostly to find bugs,
         it is very slow
     :param dump_applied_patterns: dump applied patterns in a folder,

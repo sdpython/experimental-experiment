@@ -139,18 +139,20 @@ def _SELECTED_FEATURES():
             cat="time",
             agg="SUM",
             stat="latency",
-            new_name="total time ORT",
+            new_name="total time exported model",
             unit="x",
-            help="Total latency time with onnxruntime",
+            help="Total latency time with the exported model "
+            "(onnxruntime, inductor, ...)",
             simple=True,
         ),
         dict(
             cat="time",
             agg="SUM",
-            stat="latency_eager_if_ort",
-            new_name="total time eager / ORT",
+            stat="latency_eager_if_exported_run",
+            new_name="total time eager / exported model",
             unit="x",
-            help="Total latency of eager mode knowing that onnxruntime is running",
+            help="Total latency of eager mode knowing when the "
+            "exported model (onnxruntime, inductor, ...) runs",
             simple=True,
         ),
         dict(
@@ -171,6 +173,15 @@ def _SELECTED_FEATURES():
             new_name="number of models equal or faster than eager",
             unit="N",
             help="Number of models as fast or faster than torch eager mode.",
+            simple=True,
+        ),
+        dict(
+            cat="status",
+            agg="SUM",
+            stat="lat<=inductor+2%",
+            new_name="number of models equal or faster than inductor",
+            unit="N",
+            help="Number of models equal or faster than inductor (fullgraph=True)",
             simple=True,
         ),
         # average
@@ -838,9 +849,13 @@ def _apply_excel_style(
                         cell.alignment = alignment
                     done.add(c)
                     continue
-                if k in {"exporter", "opt_patterns", "rtopt", "suite"} or k.startswith(
-                    "version"
-                ):
+                if k in {
+                    "exporter",
+                    "opt_patterns",
+                    "dynamic",
+                    "rtopt",
+                    "suite",
+                } or k.startswith("version"):
                     sheet.column_dimensions[c].width = 15
                     for cell in sheet[c]:
                         cell.alignment = alignment
@@ -1127,9 +1142,8 @@ def _create_aggregation_figures(
             if not isinstance(df, pandas.DataFrame):
                 assert (
                     "opt_patterns" not in df.index.names
-                ), f"Unexpected names for df.index.names={df.index.names} (k={k!r})"
-                assert (
-                    "rtopt" not in df.index.names
+                    and "rtopt" not in df.index.names
+                    and "dynamic" not in df.index.names
                 ), f"Unexpected names for df.index.names={df.index.names} (k={k!r})"
                 df = df.to_frame()
                 if df.columns.names == [None]:

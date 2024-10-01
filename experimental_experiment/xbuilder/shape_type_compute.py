@@ -57,7 +57,12 @@ def broadcast_shape(
                     graph_builder.register_constraint_dimension(a, b)
         else:
             # both str
-            d = a if a == b else None
+            if a == b:
+                d = a
+            else:
+                d = a
+                if graph_builder:
+                    graph_builder.register_constraint_dimension(a, b)
         if d is None:
             raise RuntimeError(
                 f"Not implemented for sh1={sh1}, sh2={sh2}, a={a}, b={b}, "
@@ -258,10 +263,10 @@ def set_type_shape_reduce_op(
         keepdim = 1
     g.set_type(name, g.get_type(x))
     if axes is None:
-        g.set_rank(name, int(keepdim))
+        g.set_shape(name, ((1,) * g.get_rank(x)) if keepdim else tuple())
     elif not g.has_shape(x):
         if g.has_rank(x):
-            g.set_rank(name, g.get_rank(x) - int(keepdim) * len(axes))
+            g.set_rank(name, g.get_rank(x) - (1 - int(keepdim)) * len(axes))
     else:
         shape = list(g.get_shape(x))
         for d in axes:
@@ -349,6 +354,7 @@ def prepare_inputs_homogeneous_operator(
     outputs: Optional[List[str]] = None,
     name: Optional[str] = None,
     sts: Optional[Any] = None,
+    check_shape: bool = True,
 ) -> Tuple[str, ...]:
     """
     Cast any inputs to ensure all inputs share the same type.
@@ -370,6 +376,27 @@ def prepare_inputs_homogeneous_operator(
             inputs.append(a)
             continue
         inputs.append(_cast_inputs(g, a, only, name=name))
+
+    if check_shape:
+        # Checks that one input is not a scalar without no dimension.
+        shapes = []
+        new_inputs = []
+        for i in inputs:
+            if g.has_shape(i):
+                shape = g.get_shape(i)
+                shapes.append(shape)
+                if len(shape) == 0:
+                    new_inputs.append(
+                        g.op.Reshape(i, np.array([1], dtype=np.int64), name=name)
+                    )
+                    continue
+            elif g.has_rank(i) and g.get_rank(i) == 0:
+                new_inputs.append(g.op.Reshape(i, np.array([1], dtype=np.int64), name=name))
+                continue
+            new_inputs.append(i)
+        if set(shapes) != {tuple()}:
+            inputs = new_inputs
+
     if f is None:
         return tuple(inputs)
     if tuple(inputs) == tuple(args):
@@ -694,6 +721,33 @@ def _set_shape_type_op_any_tile(self: "GraphBuilder", node: NodeProto):  # noqa:
         self.set_rank(node.output[0], self.get_rank(node.input[0]))
 
 
+def _set_shape_type_op_any_topk(self: "GraphBuilder", node: NodeProto):  # noqa: F821
+    is_scalar = self.is_constant(node.input[1])
+    if is_scalar and self.has_shape(node.input[0]):
+        att = self.get_attribute(node, "axis", exc=False)
+        axis = att.i if att is not None else -1
+        shape = list(self.get_shape(node.input[0]))
+        k = self.get_constant(node.input[1], computed_value=True)
+        ki = int(k) if k.shape == tuple() else int(k[0])
+        shape[axis] = ki
+        shape = tuple(shape)
+    else:
+        shape = None
+
+    if node.output[0]:
+        self.set_type(node.output[0], self.get_type(node.input[0]))
+        if shape is not None:
+            self.set_shape(node.output[0], shape)
+        elif self.has_rank(node.input[0]):
+            self.set_rank(node.output[0], self.get_rank(node.input[0]))
+    if node.output[1]:
+        self.set_type(node.output[1], TensorProto.INT64)
+        if shape is not None:
+            self.set_shape(node.output[1], shape)
+        elif self.has_rank(node.input[0]):
+            self.set_rank(node.output[1], self.get_rank(node.input[0]))
+
+
 def _set_shape_type_op_any_unsqueeze(
     self: "GraphBuilder",  # noqa: F821
     node: NodeProto,
@@ -816,6 +870,7 @@ _set_shape_type_op_any_known = {
     "Split": _set_shape_type_op_any_split,
     "Squeeze": _set_shape_type_op_any_squeeze,
     "Tile": _set_shape_type_op_any_tile,
+    "TopK": _set_shape_type_op_any_topk,
     "Transpose": _set_shape_type_op_any_transpose,
     "Unsqueeze": _set_shape_type_op_any_unsqueeze,
     "Where": _set_shape_type_op_any_where,
@@ -884,10 +939,28 @@ _set_shape_type_op_any_custom = {
 }
 
 
+def set_type_shape_tree_ensemble(self: "GraphBuilder", node: NodeProto):  # noqa: F821
+    self.set_type(node.output[0], self.get_type(node.input[0]))
+    n_targets = self.get_attribute(node, "n_targets", exc=False)
+    assert n_targets is not None, (
+        f"Unable to extract the dimension of the output for node type "
+        f"{node.op_type!r} and name={node.name!r}"
+    )
+    if self.has_shape(node.input[0]):
+        shape = self.get_shape(node.input[0])
+        self.set_shape(node.output[0], (shape[0], n_targets.i))
+    else:
+        self.set_rank(node.output[0], 2)
+
+
 def set_shape_type_custom(self: "GraphBuilder", node: NodeProto):  # noqa: F821
     """
     Sets the shape and type if it can.
     """
+    if node.domain == "ai.onnx.ml":
+        if node.op_type == "TreeEnsembleRegressor":
+            set_type_shape_tree_ensemble(self, node)
+        return
     if node.op_type in {"ReplaceZero", "NegXplus1"}:
         set_type_shape_unary_op(self, node.output[0], node.input[0])
     if node.op_type in _set_shape_type_op_any_custom:

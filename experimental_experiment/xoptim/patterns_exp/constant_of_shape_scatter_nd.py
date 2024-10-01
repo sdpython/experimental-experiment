@@ -82,7 +82,7 @@ class MaskedShapeScatterNDPattern(PatternOptimization):
             return self.none()
 
         reduction = g.get_attribute(node, "reduction", exc=False)
-        if reduction is None or reduction.s != "add":
+        if reduction is None or reduction.s != b"add":
             self.none(node, inspect.currentframe().f_lineno)
 
         if g.is_used_more_than_once(node.input[1]):

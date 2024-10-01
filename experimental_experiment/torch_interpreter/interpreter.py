@@ -41,6 +41,9 @@ class DynamoInterpreter:
         dispatcher: Optional["Dispatcher"] = None,  # noqa: F821
         use_dynamo: bool = False,
         example_inputs: Optional[Tuple["torch.Tensor", ...]] = None,  # noqa: F821
+        decomposition_table: Optional[
+            Dict["torch._ops.OpOverload", Callable[..., Any]]  # noqa: F821
+        ] = None,
     ):
         import torch
 
@@ -50,6 +53,7 @@ class DynamoInterpreter:
         self.dispatcher = dispatcher
         self.use_dynamo = (use_dynamo,)
         self.example_values_ = {}
+        self.decomposition_table = decomposition_table
         assert example_inputs is None or isinstance(
             example_inputs, tuple
         ), f"Unexpected type for example_inputs {type(example_inputs)}"
@@ -348,7 +352,7 @@ class DynamoInterpreter:
                     o = f"{output_name}_{i}"
                 else:
                     a_name = a if isinstance(a, str) else a.name
-                    if self.builder.get_is_dimension(a_name):
+                    if self.builder.get_is_dimension(a_name, n_outputs=len(output)):
                         o = f"{output_name}_dim_{i}"
                     else:
                         o = f"{output_name}_{i}"
@@ -406,7 +410,7 @@ class DynamoInterpreter:
                     ns.append(d)
                 shape = tuple(ns)
                 is_dimension = self.builder.get_is_dimension(
-                    a or o, elem_type=elem_type, shape=shape
+                    a or o, elem_type=elem_type, shape=shape, n_outputs=len(outputs)
                 )
 
                 self.builder.make_tensor_output(
@@ -1128,10 +1132,18 @@ class DynamoInterpreter:
                     else:
                         self.builder.set_type(r, dtype)
                     shape = tuple(v.shape)
+
+                    for t in shape:
+                        if isinstance(t, self.builder.torch.SymInt):
+                            expr = str(t.node._expr)
+                            if expr not in self.builder.dynamic_objects:
+                                # A new shape may be given to a result.
+                                self.builder.add_dynamic_object(expr, t)
+
                     if self.builder.is_dynamic_shape(shape):
                         # sets shape coming from the original model
-                        # we must not set the existing shape is dynamic,
-                        # the new one is purely static
+                        # we must not set the existing shape as static,
+                        # if it was dynamic before
                         self.builder.set_shape(r, shape, set_if_more_precise=False)
                     elif self.builder.has_rank(r):
                         assert len(shape) == self.builder.get_rank(r), (
@@ -1221,6 +1233,7 @@ class DynamoInterpreter:
             raise_list=self.builder.raise_list,
             dynamic_shapes=self.builder.dynamic_shapes,
             use_dynamo=self.use_dynamo,
+            decomposition_table=self.decomposition_table,
         )
         builder.process(graph_module, interpreter)
         assert builder.outputs, f"No output detected for node={source_node}, graph={gm}"

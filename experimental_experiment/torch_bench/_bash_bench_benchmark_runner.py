@@ -234,7 +234,36 @@ class BenchmarkRunner:
             return torch.Tensor(obj.numpy()).to(device)
         if "SquashedNormal" in obj.__class__.__name__ and device == "cpu":
             return obj
-        raise AssertionError(f"move_to not implemented for type {type(obj)}")
+        if hasattr(obj, "conv_states") and obj.__class__.__name__ == "MambaCache":
+            # class MambaCache
+            # see https://github.com/huggingface/transformers/blob/main/src/transformers/cache_utils.py
+            if ("cuda" in device and obj.conv_states.get_device() < 0) or (
+                "cpu" in device and obj.conv_states.get_device() >= 0
+            ):
+                from transformers.configuration_utils import PretrainedConfig
+
+                config = PretrainedConfig(
+                    num_hidden_layers=obj.conv_states.shape[0],
+                    intermediate_size=obj.intermediate_size,
+                    state_size=obj.ssm_state_size,
+                    conv_kernel=obj.conv_kernel_size,
+                )
+                new_cache = obj.__class__(
+                    config,
+                    batch_size=obj.batch_size,
+                    dtype=obj.conv_states.dtype,
+                    device=device,
+                )
+                new_cache.conv_states[:, :, :, :] = obj.conv_states.to(device)[:, :, :, :]
+                new_cache.ssm_states[:, :, :, :] = obj.ssm_states.to(device)[:, :, :, :]
+                # AssertionError(
+                #    f"Moving class {obj.__class__.__name__!r} from device "
+                #    f"{obj.conv_states.get_device()} to {device!r} is not implemented yet,
+                #    f"dir(obj)={dir(obj)}"
+                # )
+                return new_cache
+            return obj
+        raise AssertionError(f"move_to not implemented for type {type(obj)}, dir={dir(obj)}")
 
     @classmethod
     def size_type(cls, dtype) -> int:
@@ -680,6 +709,7 @@ class BenchmarkRunner:
         pickled_name: Optional[str] = None,
         rtopt: bool = True,
         shape_again: bool = False,
+        decomposition_table: Optional[str] = None,
     ) -> Iterator[Dict[Any, Any]]:
         """
         Runs the benchmarks, run, export, run in onnx, measure the speedup.
@@ -698,9 +728,10 @@ class BenchmarkRunner:
         :param rtopt: disable onnxruntime optimization
         :param shape_again: run shape inference after the export,
             erases whatever the model already contains
+        :param decomposition_table: decomposition table to apply, not all
+            exporters support this
         """
         assert not process, "process=True not implemented."
-        assert not dynamic, "dynamic=True not implemented."
 
         from experimental_experiment.bench_run import get_machine
 
@@ -740,6 +771,7 @@ class BenchmarkRunner:
                     initial_no_grad=initial_no_grad,
                     rtopt=rtopt,
                     shape_again=shape_again,
+                    decomposition_table=decomposition_table,
                 )
                 if part == 0:
                     stats["STEP"] = "export"
@@ -800,6 +832,7 @@ class BenchmarkRunner:
         autocast=None,
         rtopt=None,
         shape_again=None,
+        decomposition_table=None,
     ):
         assert quiet is not None
         assert exporter is not None
@@ -831,6 +864,7 @@ class BenchmarkRunner:
         except ImportError:
             torch_onnx = None
 
+        from experimental_experiment.ext_test_case import BOOLEAN_VALUES
         from experimental_experiment.bench_run import _clean_string
 
         #######
@@ -840,7 +874,8 @@ class BenchmarkRunner:
         context = {"part1": False}
 
         if self.device.startswith("cuda"):
-            torch.cuda.reset_peak_memory_stats()
+            device_id = 0 if ":" not in self.device else int(self.device.split(":")[1])
+            torch.cuda.reset_peak_memory_stats(device_id)
         torch.set_grad_enabled(initial_no_grad)
         if self.verbose:
             print(
@@ -869,7 +904,6 @@ class BenchmarkRunner:
         }
         stats.update(machine_specs)
         if self.device.startswith("cuda"):
-            device_id = 0 if ":" not in self.device else int(self.device.split(":")[1])
             stats["device_id"] = device_id
             stats["mema_gpu_0_before_loading"] = torch.cuda.max_memory_allocated(device_id)
             if self.verbose > 1:
@@ -915,15 +949,20 @@ class BenchmarkRunner:
         stats["params_dtype"] = model_runner.parameters_dtype()
         stats["warmup"] = warmup
         stats["repeat"] = repeat
+        stats["dynamic"] = 1 if dynamic else 0
+        stats["decomposition_table"] = decomposition_table
         stats["flag_no_grad"] = self.no_grad
         stats["flag_fake_tensor"] = self.fake_tensor
         stats["flag_training"] = self.training
         stats["exporter"] = exporter
         stats["input_size"] = self.obj_size(model_runner.inputs)
-        stats["_index"] = f"{model_name}-{exporter}-{optimization}-{rtopt}"
+        stats["_index"] = (
+            f"{model_name}-{exporter}-{optimization}-"
+            f"d{1 if dynamic else 0}-rt{1 if rtopt else 0}"
+        )
         stats["date_start"] = f"{datetime.now():%Y-%m-%d}"
         stats["opt_patterns"] = optimization
-        stats["rtopt"] = rtopt
+        stats["rtopt"] = 1 if rtopt else 0
 
         if self.device.startswith("cuda"):
             is_cuda = True
@@ -1071,9 +1110,14 @@ class BenchmarkRunner:
             stats["time_latency_eager_t_delta"] = (
                 stats["time_latency_eager_t_max"] - stats["time_latency_eager_t_min"]
             ) / (stats["time_latency_eager_t_med"])
-            stats["time_latency_eager_t_corrt"] = np.corrcoef(lats, list(range(len(lats))))[
-                0, 1
-            ]
+            if len(lats) > 1:
+                stats["time_latency_eager_t_corrt"] = np.corrcoef(
+                    lats, list(range(len(lats)))
+                )[0, 1]
+                if len(lats) > 2:
+                    stats["time_latency_eager_t_corrp"] = np.corrcoef(lats[1:], lats[:-1])[
+                        0, 1
+                    ]
 
         if self.device.startswith("cuda"):
             stats["mema_gpu_4_after_repeat"] = torch.cuda.max_memory_allocated(device_id)
@@ -1092,29 +1136,46 @@ class BenchmarkRunner:
         ########
 
         if self.device.startswith("cuda"):
-            torch.cuda.reset_peak_memory_stats()
+            torch.cuda.reset_peak_memory_stats(device_id)
             stats["mema_gpu_4_reset"] = torch.cuda.max_memory_allocated(device_id)
 
         sopt = (
             ("-" + optimization.replace("+", "_").replace("/", "_")) if optimization else ""
         )
+        sdtype = str(self.dtype).lower().split(".")[-1]
         pfilename = os.path.join(
             folder,
             (
                 f"{model_name}-{exporter}-{self.device.replace(':', '')}"
-                f"-{self.dtype or ''}{sopt}-{1 if rtopt in (1, True, '1', 'True') else 0}"
+                f"-{sdtype}{sopt}-"
+                f"d{1 if dynamic in BOOLEAN_VALUES else 0}"
+                f"rt{1 if rtopt in BOOLEAN_VALUES else 0}"
             ),
         )
         if pfilename and not os.path.exists(pfilename):
             os.makedirs(pfilename)
         cleaned_name = model_name.replace(".", "_").replace("/", "_")
-        filename = os.path.join(pfilename, f"model_{cleaned_name}.onnx")
+        filename = os.path.join(pfilename, f"model_{cleaned_name}-{exporter}.onnx")
 
         memory_session = (
             start_spying_on(cuda=self.device.startswith("cuda")) if memory_peak else None
         )
         if memory_session is not None and self.verbose:
             print("[BenchmarkRunner.benchmark] start_spying_on")
+
+        if self.verbose:
+            print(
+                f"[BenchmarkRunner.benchmark] dynamic_shapes="
+                f"{model_runner.get_dynamic_shapes(dynamic,wrapped=True)}"
+            )
+            print(
+                f"[BenchmarkRunner.benchmark] input shapes="
+                f"{model_runner.get_input_shapes(dynamic=dynamic, wrapped=True)}"
+            )
+            _ishapes = model_runner.get_input_shapes(
+                dynamic=dynamic, wrapped=True, export=True
+            )
+            print(f"[BenchmarkRunner.benchmark] export input shapes={_ishapes}")
 
         begin = time.perf_counter()
         if quiet:
@@ -1128,6 +1189,7 @@ class BenchmarkRunner:
                     fake_tensor=self.fake_tensor,
                     no_grad=self.no_grad,
                     target_opset=self.target_opset,
+                    decomposition_table=decomposition_table,
                 )
             except Exception as e:
                 stats["time_export"] = time.perf_counter() - begin
@@ -1155,6 +1217,7 @@ class BenchmarkRunner:
                 fake_tensor=self.fake_tensor,
                 no_grad=self.no_grad,
                 target_opset=self.target_opset,
+                decomposition_table=decomposition_table,
             )
             stats["time_export"] = time.perf_counter() - begin
             stats["time_export_success"] = time.perf_counter() - begin
@@ -1204,6 +1267,11 @@ class BenchmarkRunner:
         if quiet:
             try:
                 feeds = model_runner.make_feeds(exporter, filename)
+                feeds_dynamic = (
+                    model_runner.make_feeds(exporter, filename, dynamic=True)
+                    if dynamic
+                    else None
+                )
             except AssertionError as e:
                 stats["ERR_feeds"] = _clean_string(str(e)).replace("\n", "_ ")
                 if self.verbose:
@@ -1212,7 +1280,30 @@ class BenchmarkRunner:
 
         else:
             feeds = model_runner.make_feeds(exporter, filename)
-            context["feeds"] = feeds
+            feeds_dynamic = (
+                model_runner.make_feeds(exporter, filename, dynamic=True)
+                if dynamic
+                else None
+            )
+            assert (dynamic and feeds_dynamic is not None) or (
+                not dynamic and feeds_dynamic is None
+            ), (
+                f"dynamic={dynamic}, feeds_dynamic is "
+                f"{'' if feeds_dynamic is None else 'not'} None"
+            )
+
+        context["feeds"] = feeds
+        context["feeds_dynamic"] = feeds_dynamic
+
+        #########
+        # dynamic
+        #########
+
+        if dynamic:
+            expected_dynamic = model_runner.run_dynamic(wrapped=True)
+            expected_dynamic = self.move_to("cpu", expected_dynamic)
+        else:
+            expected_dynamic = None
 
         del model_runner
         gc.collect()
@@ -1226,9 +1317,15 @@ class BenchmarkRunner:
             stats["onnx_input_shapes"] = "/".join(
                 str_shape(getattr(_, "shape", "?")) for _ in feeds_values
             )
+        if isinstance(feeds_dynamic, dict):
+            # This is the type for onnx inputs
+            feeds_dynamic_values = list(feeds_dynamic.values())
+            stats["onnx_input_dynamic_shapes"] = "/".join(
+                str_shape(getattr(_, "shape", "?")) for _ in feeds_dynamic_values
+            )
 
         if self.device.startswith("cuda"):
-            torch.cuda.reset_peak_memory_stats()
+            torch.cuda.reset_peak_memory_stats(device_id)
             stats["mema_gpu_6_after_gcollect"] = torch.cuda.max_memory_allocated(device_id)
             if self.verbose > 1:
                 print(
@@ -1244,10 +1341,19 @@ class BenchmarkRunner:
         context["exporter"] = exporter
         context["quiet"] = quiet
         context["expected"] = expected
-        context["feeds"] = feeds
+        context["expected_dynamic"] = expected_dynamic
         context["warmup"] = warmup
         context["repeat"] = repeat
         context["rtopt"] = rtopt
+
+        assert (feeds_dynamic is not None and expected_dynamic is not None) or (
+            feeds_dynamic is None and expected_dynamic is None
+        ), (
+            f"feeds_dynamic is {'' if feeds_dynamic is None else 'not'} None, "
+            f"expected_dynamic is {'' if expected_dynamic is None else 'not'} None, "
+            f"dynamic={dynamic}"
+        )
+
         return stats, context
 
     def _test_model_part_2(
@@ -1259,7 +1365,9 @@ class BenchmarkRunner:
         exporter=None,
         quiet=None,
         expected=None,
+        expected_dynamic=None,
         feeds=None,
+        feeds_dynamic=None,
         warmup=None,
         repeat=None,
         part1=None,
@@ -1275,6 +1383,12 @@ class BenchmarkRunner:
         assert filename is not None
         assert part1 is not None
         assert part1, "Part 1 was not sucessful"
+        assert (feeds_dynamic is not None and expected_dynamic is not None) or (
+            feeds_dynamic is None and expected_dynamic is None
+        ), (
+            f"feeds_dynamic is {'' if feeds_dynamic is None else 'not'} None, "
+            f"expected_dynamic is {'' if expected_dynamic is None else 'not'} None"
+        )
 
         import onnxruntime
 
@@ -1282,8 +1396,8 @@ class BenchmarkRunner:
 
         if self.device.startswith("cuda"):
             is_cuda = True
-            torch.cuda.reset_peak_memory_stats()
             device_id = 0 if ":" not in self.device else int(self.device.split(":")[1])
+            torch.cuda.reset_peak_memory_stats(device_id)
             stats["device_id2"] = device_id
             stats["mema_gpu_6_before_session"] = torch.cuda.max_memory_allocated(device_id)
             if self.verbose > 1:
@@ -1413,6 +1527,21 @@ class BenchmarkRunner:
 
         torch.set_grad_enabled(not self.no_grad)
 
+        #########
+        # dynamic
+        #########
+
+        if feeds_dynamic is None:
+            got_dynamic = None
+        else:
+            if self.verbose:
+                print("[benchmarkrunner.benchmark] check dynamic")
+            if self.nvtx:
+                torch.cuda.nvtx.range_push("ORT-DYNAMIC")
+            got_dynamic = self.ort_run(sess, feeds_dynamic)
+            if self.nvtx:
+                torch.cuda.nvtx.range_pop()
+
         ################
         # warmup session
         ################
@@ -1472,6 +1601,8 @@ class BenchmarkRunner:
                     f"{torch.is_grad_enabled()} after warmup"
                 )
             got = self.move_to("cpu", got)
+            if got_dynamic is not None:
+                got_dynamic = self.move_to("cpu", got_dynamic)
 
             if self.verbose > 1:
                 print(f"[BenchmarkRunner.benchmark] repeat ort {model_name!r}")
@@ -1508,9 +1639,14 @@ class BenchmarkRunner:
                     stats["time_latency_t_delta"] = (
                         stats["time_latency_t_max"] - stats["time_latency_t_min"]
                     ) / (stats["time_latency_t_med"])
-                    stats["time_latency_t_corrt"] = np.corrcoef(
-                        lats, list(range(len(lats)))
-                    )[0, 1]
+                    if len(lats) > 1:
+                        stats["time_latency_t_corrt"] = np.corrcoef(
+                            lats, list(range(len(lats)))
+                        )[0, 1]
+                    if len(lats) > 2:
+                        stats["time_latency_t_corrp"] = np.corrcoef(lats[1:], lats[:-1])[
+                            0, 1
+                        ]
 
             if self.device.startswith("cuda"):
                 stats["mema_gpu_9_after_export_repeat"] = torch.cuda.max_memory_allocated(
@@ -1585,6 +1721,8 @@ class BenchmarkRunner:
                     f"{torch.is_grad_enabled()} after warmup"
                 )
             got = self.move_to("cpu", got)
+            if got_dynamic:
+                got_dynamic = self.move_to("cpu", got_dynamic)
 
             if self.verbose > 1:
                 print(f"[BenchmarkRunner.benchmark] repeat torch {model_name!r}")
@@ -1621,9 +1759,14 @@ class BenchmarkRunner:
                     stats["time_latency_t_delta"] = (
                         stats["time_latency_t_max"] - stats["time_latency_t_min"]
                     ) / (stats["time_latency_t_med"])
-                    stats["time_latency_t_corrt"] = np.corrcoef(
-                        lats, list(range(len(lats)))
-                    )[0, 1]
+                    if len(lats) > 1:
+                        stats["time_latency_t_corrt"] = np.corrcoef(
+                            lats, list(range(len(lats)))
+                        )[0, 1]
+                    if len(lats) > 2:
+                        stats["time_latency_t_corrp"] = np.corrcoef(lats[1:], lats[:-1])[
+                            0, 1
+                        ]
 
             if self.device.startswith("cuda"):
                 stats["mema_gpu_9_after_export_repeat"] = torch.cuda.max_memory_allocated(
@@ -1653,18 +1796,16 @@ class BenchmarkRunner:
             stats["discrepancies_abs"] = d["abs"]
             stats["discrepancies_rel"] = d["rel"]
             stats["discrepancies_avg"] = d["sum"] / max(d["n"], 1)
+
+        if got_dynamic is not None:
+            assert (
+                expected_dynamic is not None
+            ), "expected_dynamic is None and got_dynamic is not."
             d = self.max_diff(
-                expected, got, verbose=self.verbose, flatten=is_onnx, begin=0, end=1
+                expected_dynamic, got_dynamic, verbose=self.verbose, flatten=is_onnx
             )
-            stats["discrepancies_abs_0"] = d["abs"]
-            stats["discrepancies_rel_0"] = d["rel"]
-            stats["discrepancies_avg_0"] = d["sum"] / max(d["n"], 1)
-            d = self.max_diff(expected, got, verbose=self.verbose, flatten=is_onnx, begin=1)
-            if d["n"] > 0:
-                stats["discrepancies_abs_1+"] = d["abs"]
-                stats["discrepancies_rel_1+"] = d["rel"]
-                stats["discrepancies_avg_1+"] = d["sum"] / max(d["n"], 1)
-            if self.verbose:
-                print(f"[BenchmarkRunner.benchmark] done model with {len(stats)} metrics")
+            stats["discrepancies_dynamic_abs"] = d["abs"]
+            stats["discrepancies_dynamic_rel"] = d["rel"]
+            stats["discrepancies_dynamic_avg"] = d["sum"] / max(d["n"], 1)
 
         return stats

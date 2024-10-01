@@ -18,6 +18,8 @@ from typing import Any, Callable, Dict, List, Optional, Sequence, Set, Tuple, Un
 import numpy
 from numpy.testing import assert_allclose
 
+BOOLEAN_VALUES = (1, "1", True, "True", "true", "TRUE")
+
 
 def is_azure() -> bool:
     """Tells if the job is running on Azure DevOps."""
@@ -329,13 +331,13 @@ class ExtTestCase(unittest.TestCase):
             if tof in text:
                 return
         raise AssertionError(
-            f"Unable to find one string in the list {tofind} in\n--\n{text}"
+            f"Unable to find one string in the list {tofind!r} in\n--\n{text}"
         )
 
     def assertIn(self, tofind: str, text: str):
         if tofind in text:
             return
-        raise AssertionError(f"Unable to find the list of strings {tofind} in\n--\n{text}")
+        raise AssertionError(f"Unable to find the list of strings {tofind!r} in\n--\n{text}")
 
     def assertEqualArrays(
         self,
@@ -377,7 +379,7 @@ class ExtTestCase(unittest.TestCase):
             self.assertEqual(expected.shape, value.shape)
 
         try:
-            assert_allclose(expected, value, atol=atol, rtol=rtol)
+            assert_allclose(desired=expected, actual=value, atol=atol, rtol=rtol)
         except AssertionError as e:
             if msg:
                 raise AssertionError(msg) from e
@@ -541,7 +543,7 @@ def requires_cuda(msg: str = "", version: str = "", memory: int = 0):
 
 def requires_zoo(msg: str = "") -> Callable:
     """Skips a unit test if environment variable ZOO is not equal to 1."""
-    var = os.environ.get("ZOO", "0") in (1, "1", "TRUE", "true", "True")
+    var = os.environ.get("ZOO", "0") in BOOLEAN_VALUES
 
     if not var:
         msg = f"ZOO not set up or != 1. {msg}"

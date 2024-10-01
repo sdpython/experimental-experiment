@@ -10,6 +10,7 @@ import warnings
 from argparse import Namespace
 from datetime import datetime
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
+import numpy as np
 
 _DEFAULT_STRING_LIMIT = 2000
 
@@ -226,14 +227,18 @@ def run_benchmark(
         if dump_std:
             if dump_std and not os.path.exists(dump_std):
                 os.makedirs(dump_std)
-            root = os.path.split(script_name)[-1]
+            root = os.path.split(script_name)[-1].split(".")[-1]
             filename = os.path.join(dump_std, f"{root}.{iter_loop}")
+            filename_out = f"{filename}.stdout"
+            filename_err = f"{filename}.stderr"
             if out.strip(b"\n \r\t"):
-                with open(f"{filename}.stdout", "w") as f:
+                with open(filename_out, "w") as f:
                     f.write(sout)
             if err.strip(b"\n \r\t"):
-                with open(f"{filename}.stderr", "w") as f:
+                with open(filename_err, "w") as f:
                     f.write(serr)
+        else:
+            filename_out, filename_err = None, None
 
         if "ONNXRuntimeError" in serr or "ONNXRuntimeError" in sout:
             if stop_if_exception:
@@ -253,6 +258,18 @@ def run_benchmark(
             else:
                 metrics = {}
         metrics.update(config)
+        if filename_out and os.path.exists(filename_out):
+            if "model_name" in metrics:
+                new_name = f"{filename_out}.{_clean_string(metrics['model_name'])}"
+                os.rename(filename_out, new_name)
+                filename_out = new_name
+            metrics["file.stdout"] = filename_out
+        if filename_err and os.path.exists(filename_err):
+            if "model_name" in metrics:
+                new_name = f"{filename_err}.{_clean_string(metrics['model_name'])}"
+                os.rename(filename_err, new_name)
+                filename_err = new_name
+            metrics["file.stderr"] = filename_err
         metrics["DATE"] = f"{datetime.now():%Y-%m-%d}"
         metrics["ITER"] = iter_loop
         metrics["TIME_ITER"] = time.perf_counter() - begin
@@ -450,8 +467,12 @@ def measure_discrepancies(
                 torch_tensor.shape == onnx_tensor.shape
             ), f"Type mismatch {torch_tensor.shape} != {onnx_tensor.shape}"
             diff = torch_tensor.astype(float) - onnx_tensor.astype(float)
-            abs_err = float(diff.abs().max())
-            rel_err = float((diff.abs() / torch_tensor).max())
+            if hasattr(diff, "abs"):
+                abs_err = float(diff.abs().max())
+                rel_err = float((diff.abs() / torch_tensor).max())
+            else:
+                abs_err = float(np.abs(diff).max())
+                rel_err = float((np.abs(diff) / torch_tensor).max())
             abs_errs.append(abs_err)
             rel_errs.append(rel_err)
     return dict(abs=max(abs_errs), rel=max(rel_errs), sum=sum(rel_errs), n=len(abs_errs))

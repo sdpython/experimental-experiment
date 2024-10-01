@@ -24,6 +24,7 @@ def get_pattern(
     from .patterns_exp import get_experimental_patterns
     from .patterns_fix import get_fix_patterns
     from .patterns_investigation import get_investigation_patterns
+    from .patterns_ml import get_ml_patterns
 
     _pattern = dict(
         default=get_default_patterns,
@@ -31,6 +32,7 @@ def get_pattern(
         experimental=get_experimental_patterns,
         fix=get_fix_patterns,
         investigation=get_investigation_patterns,
+        ml=get_ml_patterns,
     )
 
     if isinstance(obj, str):

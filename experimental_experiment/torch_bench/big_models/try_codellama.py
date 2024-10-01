@@ -1,10 +1,7 @@
-import os
 from typing import Any, Callable, Tuple, Optional
 import numpy as np
 import torch
-from . import str_dtype
-
-CACHE = os.environ.get("BASH_BENCH_CACHE", "_bigcache")
+from . import CACHE, load_llm_model
 
 
 def load_model(
@@ -26,59 +23,19 @@ def load_model(
         ``TypeError: Object of type dtype is not JSON serializable``
     :return: tokenizer, model
     """
-    assert isinstance(dtype, str), f"Unexpected type for dtype={dtype!r}"
-    stype = str_dtype(dtype) if dtype is not None else ""
+    from transformers import AutoTokenizer, AutoModelForCausalLM
 
-    if load_tokenizer:
-        from transformers import AutoTokenizer
-
-        if os.path.exists(os.path.join(cache, f"CodeLlama-7b-tokenizer{stype}")):
-            if verbose:
-                print("[load_model] loads cached codellama tokenizer")
-            from transformers import AutoTokenizer, AutoModelForCausalLM
-
-            tokenizer = AutoTokenizer.from_pretrained(
-                os.path.join(cache, f"CodeLlama-7b-tokenizer{stype}")
-            )
-        else:
-            if verbose:
-                print("[load_model] retrieves codellama tokenizer")
-            tokenizer = AutoTokenizer.from_pretrained(
-                "codellama/CodeLlama-7b-hf", torch_dtype=dtype
-            )
-            if verbose:
-                print("[load_model] cache codellama tokenizer")
-            tokenizer.save_pretrained(os.path.join(cache, f"CodeLlama-7b-tokenizer{stype}"))
-    else:
-        tokenizer = None
-
-    from transformers import AutoModelForCausalLM
-
-    if os.path.exists(os.path.join(cache, f"CodeLlama-7b-model{stype}")):
-        if verbose:
-            print("[load_model] loads cached codellama model")
-        model = AutoModelForCausalLM.from_pretrained(
-            os.path.join(cache, f"CodeLlama-7b-model{stype}")
-        )
-    else:
-        if verbose:
-            print("[load_model] retrieves codellama model")
-        model = AutoModelForCausalLM.from_pretrained(
-            "codellama/CodeLlama-7b-hf", torch_dtype=dtype
-        )
-        if verbose:
-            print("[load_model] cache codellama model")
-        model.save_pretrained(os.path.join(cache, f"CodeLlama-7b-model{stype}"))
-
-    if verbose:
-        print(f"[load_model] converts to {device!r} and dtype={dtype!r}")
-
-    model = model.to(device)
-    # if dtype:
-    #    model = model.to(dtype)
-    if verbose:
-        print("[load_model] done codellama")
-    return tokenizer, model
+    return load_llm_model(
+        "CodeLlama-7b",
+        "codellama/CodeLlama-7b-hf",
+        AutoTokenizer,
+        AutoModelForCausalLM,
+        cache=cache,
+        verbose=verbose,
+        device=device,
+        dtype=dtype,
+        load_tokenizer=load_tokenizer,
+    )
 
 
 def demo_model(
@@ -122,10 +79,11 @@ def demo_model(
         filling = tokenizer.batch_decode(
             generated_ids[:, input_ids.shape[1] :], skip_special_tokens=skip_special_tokens
         )[0]
+        output = prompt.replace("<FILL_ME>", filling)
         if verbose:
-            print(prompt.replace("<FILL_ME>", filling))
+            print(output)
             print("[demo_model] done")
-        return prompt
+        return output
 
 
 def ids_tensor(shape, vocab_size):

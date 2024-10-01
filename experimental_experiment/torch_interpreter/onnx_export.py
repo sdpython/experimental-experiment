@@ -4,7 +4,7 @@ import os
 import pprint
 import time
 import warnings
-from typing import Any, Callable, Dict, Optional, Sequence, Set, Tuple, Union
+from typing import Any, Callable, Dict, List, Optional, Sequence, Set, Tuple, Union
 from onnx import ModelProto, save_model
 from onnx.defs import onnx_opset_version
 from onnx.model_container import ModelContainer
@@ -142,6 +142,7 @@ def _export(
     decomposition_table,
     use_dynamo,
     strict,
+    input_names=None,
 ):
     import torch
 
@@ -159,6 +160,27 @@ def _export(
                 pre_dispatch=False,
                 strict=strict,
             )
+        except torch._dynamo.exc.UserError as e:
+            eee = None
+            try:
+                exported_mod = torch.export.export(mod, args, strict=strict).graph
+            except torch._export.verifier.SpecViolationError as ee:
+                exported_mod = None
+                eee = ee
+            raise RuntimeError(
+                f"Unable to convert model {type(mod)}, "
+                f"type(args)={type(args)}, type(args[0])="
+                f"{type(args[0]) if isinstance(args, tuple) and args else '?'}, "
+                f"strict={strict}, input_names={input_names}\n--\n"
+                f"dynamic_shapes={dynamic_shapes}\n--\ne={e}\n--\neee={eee}"
+                f"\n---exported-program---\n{exported_mod}"
+            ) from e
+        if isinstance(decomposition_table, str):
+            from ..torch_dynamo import get_decomposition_table_by_name
+
+            decomposition_table = get_decomposition_table_by_name(decomposition_table)
+        if decomposition_table is not None:
+            exported_mod = exported_mod.run_decompositions(decomposition_table)
         return exported_mod
 
     # other issues
@@ -210,7 +232,7 @@ def _make_builder_interpreter(
     tracing_mode: str = "symbolic",
     same_signature: bool = True,
     decomposition_table: Optional[
-        Dict["torch._ops.OpOverload", Callable[..., Any]]  # noqa: F821
+        Union[str, Dict["torch._ops.OpOverload", Callable[..., Any]]]  # noqa: F821
     ] = None,
     dispatcher: Optional["Dispatcher"] = None,  # noqa: F821
     use_dynamo: bool = True,
@@ -233,7 +255,10 @@ def _make_builder_interpreter(
     :param dynamic_shapes: see :epkg:`torch.export.export` or ``torch._dynamo.export``
     :param same_signature: same signature
     :param tracing_mode: tracing model
-    :param decomposition_table: decomposition table
+    :param decomposition_table: decomposition table, it can a string as well,
+        'default' means :func:`get_decomposition_table
+        <experimental_experiment.torch_dynamo.get_decomposition_table>`
+        is used
     :param dispatcher: see :class:`experimental_experiment.torch_interpreter.Dispatcher`
     :param use_dynamo: use ``torch.export.export`` or ``torch._dynamo.export``
     :param strict: given to ``torch.export.export``
@@ -268,6 +293,11 @@ def _make_builder_interpreter(
             print("-- GIVEN GRAPH MODULE")
             print(graph_module.graph)
     else:
+        if verbose > 0:
+            print(
+                f"[_make_builder_interpreter] use decomposition_table="
+                f"{decomposition_table!r}"
+            )
         with bypass_export_some_errors():
             exported_mod = _export(
                 mod,
@@ -278,6 +308,7 @@ def _make_builder_interpreter(
                 decomposition_table=decomposition_table,
                 use_dynamo=use_dynamo,
                 strict=strict,
+                input_names=input_names,
             )
 
         if verbose > 0:
@@ -388,6 +419,7 @@ def _make_builder_interpreter(
         dispatcher=dispatcher,
         use_dynamo=use_dynamo,
         example_inputs=args,
+        decomposition_table=decomposition_table,
     )
     return graph_module, builder, interpreter
 
@@ -398,6 +430,61 @@ def _model_signature(
     import torch
 
     return inspect.signature(model.forward if isinstance(model, torch.nn.Module) else model)
+
+
+def _replacements_dynamic_shapes(
+    mod: Any,
+    args: Tuple[Any, ...],
+    dict_dynamic_shapes: Dict[str, Any],
+    input_names: Optional[List[str]] = None,
+):
+    new_dynamic_shapes = {}
+    sig = _model_signature(mod)
+    true_input_names = []
+    has_args = None
+    n_args = None if input_names is None else len(input_names)
+    for name, p in sig.parameters.items():
+        if n_args is not None and n_args <= 0:
+            break
+        if p.kind == p.VAR_POSITIONAL or p.kind == p.VAR_KEYWORD:
+            assert not has_args, (
+                f"has_args={has_args} is already specified, "
+                f"input_names={input_names}, dynamic_shapes="
+                f"{dict_dynamic_shapes}"
+            )
+            assert input_names or None or len(input_names) == len(args), (
+                f"Mimsatch number between len(args)={len(args)}, "
+                f"input_names={input_names}"
+            )
+            true_input_names.append(p.name)
+            has_args = (p.name, len(args), len(true_input_names))
+            n_args -= len(args)
+        elif p.default in (None, inspect.Parameter.empty):
+            true_input_names.append(name)
+
+    if has_args is None:
+        replacements = (
+            {} if input_names is None else dict(zip(input_names, true_input_names))
+        )
+        for k, v in dict_dynamic_shapes.items():
+            r = replacements.get(k, k)
+            new_dynamic_shapes[r] = v if not has_args or has_args[0] != r else (v,)
+        return new_dynamic_shapes
+
+    if has_args:
+        assert input_names is not None, (
+            f"Not implemented for has_args={has_args}, dynamic_shapes={dict_dynamic_shapes}"
+            f", input_names={input_names}"
+        )
+        assert len(dict_dynamic_shapes) == len(input_names) == has_args[1], (
+            f"Mismatch for has_args={has_args}, dynamic_shapes={dict_dynamic_shapes}"
+            f", input_names={input_names}"
+        )
+        new_dynamic_shapes = {
+            has_args[0]: tuple(dict_dynamic_shapes[n] for n in input_names)
+        }
+        return new_dynamic_shapes
+    return new_dynamic_shapes
 
 
 def to_onnx(
@@ -419,6 +506,9 @@ def to_onnx(
     return_optimize_report: bool = False,
     strict: bool = True,
     filename: Optional[str] = None,
+    decomposition_table: Optional[
+        Union[str, Dict["torch._ops.OpOverload", Callable[..., Any]]]  # noqa: F821
+    ] = None,
 ) -> Union[
     Union[ModelProto, ModelContainer],
     Tuple[Union[ModelProto, ModelContainer], GraphBuilder],
@@ -450,6 +540,10 @@ def to_onnx(
     :param return_optimize_report: returns statistics on the optimization as well
     :param strict: given to ``torch.export.export``
     :param filename: if specified, stores the model into that file
+    :param decomposition_table: decomposition_table, a string as well such as default
+        to use the default decomposition table returned by
+        :func:`get_decomposition_table
+        <experimental_experiment.torch_dynamo.get_decomposition_table>`
     :return: onnx model
 
     If environment variable ``PRINT_GRAPH_MODULE`` is set to one,
@@ -464,24 +558,62 @@ def to_onnx(
     if verbose:
         print(f"[to_onnx] build the graph module with input_names={input_names}")
 
-    if dynamic_shapes is not None and input_names:
-        # Let's rewrite the dynamic shapes with the true name.
-        new_dynamic_shapes = {}
-        sig = _model_signature(mod)
-        true_input_names = [
-            name
-            for name, p in sig.parameters.items()
-            if p.default in (None, inspect.Parameter.empty)
-        ]
-        replacements = dict(zip(input_names, true_input_names))
+    if isinstance(dynamic_shapes, tuple):
+        if len(dynamic_shapes) == 1 and isinstance(dynamic_shapes[0], tuple):
+            # Model is wrapped
+            dyn_shapes = dynamic_shapes[0]
+        else:
+            dyn_shapes = dynamic_shapes
+        if not input_names:
+            input_names = [f"input{i}" for i in range(len(dyn_shapes))]
+        assert len(input_names) == len(dyn_shapes), (
+            f"Mismatch number of inputs, input_names={input_names!r}, "
+            f"dyn_shapes={dyn_shapes!r}"
+        )
+        dict_dynamic_shapes = dict(zip(input_names, dyn_shapes))
+    elif dynamic_shapes is not None:
+        assert isinstance(
+            dynamic_shapes, dict
+        ), f"Unexpected type {type(dynamic_shapes)} for dynamic_shapes={dynamic_shapes}"
+        dict_dynamic_shapes = dynamic_shapes
+    else:
+        dict_dynamic_shapes = None
 
-        for k, v in dynamic_shapes.items():
-            new_dynamic_shapes[replacements.get(k, k)] = v
-        dynamic_shapes = new_dynamic_shapes
+    if dynamic_shapes is None:
+        use_dynamic_shapes = None
+    elif input_names:
+        # Let's rewrite the dynamic shapes with the true name
+        use_dynamic_shapes = _replacements_dynamic_shapes(
+            mod,
+            args,
+            dynamic_shapes if isinstance(dynamic_shapes, dict) else dict_dynamic_shapes,
+            input_names,
+        )
+    else:
+        use_dynamic_shapes = (
+            dynamic_shapes
+            if isinstance(dynamic_shapes, tuple)
+            else _replacements_dynamic_shapes(
+                mod,
+                args,
+                dynamic_shapes if isinstance(dynamic_shapes, tuple) else dict_dynamic_shapes,
+            )
+        )
 
     if verbose and dynamic_shapes:
-        print(f"[to_onnx] dynamic_shapes={dynamic_shapes}")
+        print(
+            f"[to_onnx] dynamic_shapes={dynamic_shapes}, "
+            f"use_dynamic_shapes={use_dynamic_shapes}"
+        )
 
+    assert use_dynamic_shapes is None or isinstance(
+        use_dynamic_shapes, (dict, type(args))
+    ), (
+        f"type(use_dynamic_shapes)={type(use_dynamic_shapes)} should have the "
+        f"same type as args or a dictionary: {type(args)}, "
+        f"dynamic_shapes={dynamic_shapes}, dict_dynamic_shapes={dict_dynamic_shapes}, "
+        f"use_dynamic_shapes={use_dynamic_shapes}"
+    )
     graph_module, builder, interpreter = _make_builder_interpreter(
         mod=mod,
         args=args,
@@ -491,10 +623,11 @@ def to_onnx(
         optimization_options=options,
         verbose=verbose,
         raise_list=raise_list,
-        dynamic_shapes=dynamic_shapes,
+        dynamic_shapes=use_dynamic_shapes,
         dispatcher=dispatcher,
         use_dynamo=api_two,
         strict=strict,
+        decomposition_table=decomposition_table,
     )
 
     t = time.perf_counter()
