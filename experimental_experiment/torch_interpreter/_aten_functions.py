@@ -4481,8 +4481,12 @@ def aten_ones(
     assert not pin_memory, "ones not implemented for pin_memory=True"
     new_shape = None
     if isinstance(size, (tuple, list)):
-        isize = np.array(size, dtype=np.int64)
-        new_shape = tuple(size)
+        if all_int(size) and min(size) > 0:
+            isize = np.array(size, dtype=np.int64)
+            new_shape = tuple(size)
+        else:
+            isize = g.make_shape_from_results(list(size), name=f"{name}_dyn")
+            new_shape = tuple(size)
     elif isinstance(size, int):
         isize = np.array([size], dtype=np.int64)
         new_shape = (size,)

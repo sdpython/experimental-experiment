@@ -1142,18 +1142,20 @@ class BenchmarkRunner:
         sopt = (
             ("-" + optimization.replace("+", "_").replace("/", "_")) if optimization else ""
         )
+        sdtype = str(self.dtype).lower().split(".")[-1]
         pfilename = os.path.join(
             folder,
             (
                 f"{model_name}-{exporter}-{self.device.replace(':', '')}"
-                f"-{self.dtype or ''}{sopt}-"
-                f"{1 if rtopt in BOOLEAN_VALUES else 0}"
+                f"-{sdtype}{sopt}-"
+                f"d{1 if dynamic in BOOLEAN_VALUES else 0}"
+                f"rt{1 if rtopt in BOOLEAN_VALUES else 0}"
             ),
         )
         if pfilename and not os.path.exists(pfilename):
             os.makedirs(pfilename)
         cleaned_name = model_name.replace(".", "_").replace("/", "_")
-        filename = os.path.join(pfilename, f"model_{cleaned_name}.onnx")
+        filename = os.path.join(pfilename, f"model_{cleaned_name}-{exporter}.onnx")
 
         memory_session = (
             start_spying_on(cuda=self.device.startswith("cuda")) if memory_peak else None
