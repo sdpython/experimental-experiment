@@ -302,7 +302,7 @@ def _cmd_optimize(argv: List[Any]):
             print(f"remove shape information {len(opt_onx.graph.value_info)}")
         del opt_onx.graph.value_info[:]
         if args.verbose:
-            print(f"done")
+            print("done")
 
     if args.verbose:
         print(f"save file {args.output}")
