@@ -226,7 +226,7 @@ def run_benchmark(
         if dump_std:
             if dump_std and not os.path.exists(dump_std):
                 os.makedirs(dump_std)
-            root = os.path.split(script_name)[-1]
+            root = os.path.split(script_name)[-1].split(".")[-1]
             filename = os.path.join(dump_std, f"{root}.{iter_loop}")
             filename_out = f"{filename}.stdout"
             filename_err = f"{filename}.stderr"
