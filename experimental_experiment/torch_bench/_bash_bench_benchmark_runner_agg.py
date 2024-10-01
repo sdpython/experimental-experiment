@@ -9,6 +9,7 @@ from typing import Dict, List, Optional, Tuple, Union
 import numpy as np
 import pandas
 
+from . import BOOLEAN_VALUES
 from ._bash_bench_benchmark_runner_agg_helper import (
     BUCKET_SCALES,
     SELECTED_FEATURES,
@@ -323,7 +324,8 @@ def merge_benchmark_reports(
         if k not in df.columns:
             df[k] = v
         else:
-            df[k] = df[k].astype(float).fillna(v)
+            df[k] = df[k].apply(lambda x: x in BOOLEAN_VALUES).astype(float).fillna(v)
+
     for c in ("rtopt", "dynamic"):
         assert c in df.columns and df[c].dtype in {
             np.float64,

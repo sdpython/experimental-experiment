@@ -286,6 +286,8 @@ class GraphBuilder(_GraphBuilderRuntime):
                     f"v={v}, dynamic_shapes={self.dynamic_shapes}"
                 )
             for pos, vv in pos_vv:
+                if vv is None:
+                    continue
                 if isinstance(vv, dict):
                     # example:
                     # args_0 {0: <class '._bash_bench_model_runner.batch'>}
