@@ -20,11 +20,12 @@ def get_main_parser() -> ArgumentParser:
         lighten    - makes an onnx model lighter by removing the weights,
         unlighten  - restores an onnx model produces by the previous experiment
         optimize   - optimizes an onnx model by fusing nodes
+        run        - run a model and measure the inference time
         """
         ),
     )
     parser.add_argument(
-        "cmd", choices=["lighten", "unlighten", "optimize"], help="Selects a command."
+        "cmd", choices=["lighten", "unlighten", "optimize", "run"], help="Selects a command."
     )
     return parser
 
@@ -299,8 +300,100 @@ def _cmd_optimize(argv: List[Any]):
         print("done")
 
 
+def get_parser_run() -> ArgumentParser:
+    parser = ArgumentParser(
+        prog="run",
+        formatter_class=RawTextHelpFormatter,
+        description=dedent(
+            """
+        Runs a model with dummy inputs and measures the inference time.
+        """
+        ),
+        epilog=textwrap.dedent(
+            """
+        It checks a model runs and the inference time on the same inputs.
+        """
+        ),
+    )
+    parser.add_argument(
+        "-m",
+        "--model",
+        type=str,
+        required=True,
+        help="onnx model to optimize",
+    )
+    parser.add_argument(
+        "-v",
+        "--verbose",
+        default=0,
+        required=False,
+        type=int,
+        help="verbosity",
+    )
+    parser.add_argument(
+        "-b",
+        "--batch",
+        default=1,
+        required=False,
+        type=int,
+        help="batch size, if it can be changed",
+    )
+    parser.add_argument(
+        "-r",
+        "--repeat",
+        default=10,
+        required=False,
+        type=int,
+        help="number of time to repeat the measure",
+    )
+    parser.add_argument(
+        "-w",
+        "--warmup",
+        default=5,
+        required=False,
+        type=int,
+        help="number of time to warmup the model",
+    )
+    parser.add_argument(
+        "-p",
+        "--processor",
+        default="CPU",
+        help=textwrap.dedent(
+            """
+            providers to launch, CPU, CUDA, CUDA,CPU.
+            """
+        ).strip("\n"),
+    )
+    parser.add_argument(
+        "--validate", default="", help="validate the output with another model"
+    )
+    return parser
+
+
+def _cmd_run(argv: List[Any]):
+    parser = get_parser_run()
+    args = parser.parse_args(argv[1:])
+
+    from .model_run import model_run
+
+    stats = model_run(
+        model=args.model,
+        repeat=args.repeat,
+        warmup=args.warmup,
+        verbose=args.verbose,
+        batch_size=args.batch,
+        processor=args.processor,
+        validate=args.validate,
+    )
+
+    for k, v in sorted(stats.items()):
+        print(f":{k},{v};")
+
+
 def main(argv: Optional[List[Any]] = None):
-    fcts = dict(lighten=_cmd_lighten, unlighten=_cmd_unlighten, optimize=_cmd_optimize)
+    fcts = dict(
+        lighten=_cmd_lighten, unlighten=_cmd_unlighten, optimize=_cmd_optimize, run=_cmd_run
+    )
 
     if argv is None:
         argv = sys.argv[1:]
@@ -313,6 +406,7 @@ def main(argv: Optional[List[Any]] = None):
                 lighten=get_parser_lighten,
                 unlighten=get_parser_unlighten,
                 optimize=get_parser_optimize,
+                run=get_parser_run,
             )
             cmd = argv[0]
             if cmd not in parsers:

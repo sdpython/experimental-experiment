@@ -13,3 +13,4 @@ Tools from the command line
 
     lighten
     optimize
+    run
