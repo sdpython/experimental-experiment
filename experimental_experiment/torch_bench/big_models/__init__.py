@@ -80,5 +80,5 @@ def load_llm_model(
     # if dtype:
     #    model = model.to(dtype)
     if verbose:
-        print("[load_model] done {model_name}")
+        print(f"[load_model] done {model_name}")
     return tokenizer, model
