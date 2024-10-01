@@ -1162,6 +1162,14 @@ class BenchmarkRunner:
                 f"[BenchmarkRunner.benchmark] dynamic_shapes="
                 f"{model_runner.get_dynamic_shapes(dynamic,wrapped=True)}"
             )
+            print(
+                f"[BenchmarkRunner.benchmark] input shapes="
+                f"{model_runner.get_input_shapes(dynamic=dynamic, wrapped=True)}"
+            )
+            _ishapes = model_runner.get_input_shapes(
+                dynamic=dynamic, wrapped=True, export=True
+            )
+            print(f"[BenchmarkRunner.benchmark] export input shapes={_ishapes}")
 
         begin = time.perf_counter()
         if quiet:
@@ -1286,7 +1294,7 @@ class BenchmarkRunner:
         #########
 
         if dynamic:
-            expected_dynamic = model_runner.run_dynamic()
+            expected_dynamic = model_runner.run_dynamic(wrapped=True)
             expected_dynamic = self.move_to("cpu", expected_dynamic)
         else:
             expected_dynamic = None

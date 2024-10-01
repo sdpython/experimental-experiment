@@ -72,3 +72,54 @@ class Neuron2Inputs(torch.nn.Module):
         return (torch.randn(1, 5).to(device), torch.randn(1, 5).to(device))
 
     config = MakeConfig(download=False, to_tuple=False)
+
+
+class NeuronNamed1(torch.nn.Module):
+    def __init__(self, n_dims: int = 5, n_targets: int = 3):
+        super().__init__()
+        self.linear = torch.nn.Linear(n_dims, n_targets)
+
+    def forward(self, input_x=None, input_y=None):
+        if input_x is None:
+            return torch.sigmoid(self.linear(input_y))
+        return torch.sigmoid(self.linear(input_x))
+
+    def _get_random_inputs(self, device: str):
+        return (torch.randn(1, 5).to(device),)
+
+    config = MakeConfig(download=False, to_tuple=False)
+
+
+class NeuronNamed2(torch.nn.Module):
+    def __init__(self, n_dims: int = 5, n_targets: int = 3):
+        super().__init__()
+        self.linear = torch.nn.Linear(n_dims, n_targets)
+
+    def forward(self, input_x=None, input_y=None):
+        if input_x is None:
+            return torch.sigmoid(self.linear(input_y))
+        return torch.sigmoid(self.linear(input_x))
+
+    def _get_random_inputs(self, device: str):
+        return (
+            None,
+            torch.randn(1, 5).to(device),
+        )
+
+    config = MakeConfig(download=False, to_tuple=False)
+
+
+class NeuronNamedDict(torch.nn.Module):
+    def __init__(self, n_dims: int = 5, n_targets: int = 3):
+        super().__init__()
+        self.linear = torch.nn.Linear(n_dims, n_targets)
+
+    def forward(self, input_x=None, input_y=None):
+        if input_x is None:
+            return torch.sigmoid(self.linear(input_y))
+        return torch.sigmoid(self.linear(input_x))
+
+    def _get_random_inputs(self, device: str):
+        return {"input_y": torch.randn(1, 5).to(device)}
+
+    config = MakeConfig(download=False, to_tuple=False)

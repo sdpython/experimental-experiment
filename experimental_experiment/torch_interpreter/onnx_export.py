@@ -161,17 +161,19 @@ def _export(
                 strict=strict,
             )
         except torch._dynamo.exc.UserError as e:
+            eee = None
             try:
                 exported_mod = torch.export.export(mod, args, strict=strict).graph
-            except torch._export.verifier.SpecViolationError:
+            except torch._export.verifier.SpecViolationError as ee:
                 exported_mod = None
+                eee = ee
             raise RuntimeError(
                 f"Unable to convert model {type(mod)}, "
                 f"type(args)={type(args)}, type(args[0])="
                 f"{type(args[0]) if isinstance(args, tuple) and args else '?'}, "
-                f"strict={strict}, dynamic_shapes={dynamic_shapes}, "
-                f"input_names={input_names}\n---exported-program---"
-                f"no-dynamic-shape---\n{exported_mod}"
+                f"strict={strict}, input_names={input_names}\n--\n"
+                f"dynamic_shapes={dynamic_shapes}\n--\ne={e}\n--\neee={eee}"
+                f"\n---exported-program---\n{exported_mod}"
             ) from e
         if isinstance(decomposition_table, str):
             from ..torch_dynamo import get_decomposition_table_by_name
@@ -439,31 +441,48 @@ def _replacements_dynamic_shapes(
     new_dynamic_shapes = {}
     sig = _model_signature(mod)
     true_input_names = []
-    has_args = False
+    has_args = None
+    n_args = None if input_names is None else len(input_names)
     for name, p in sig.parameters.items():
-        if p.kind == p.VAR_POSITIONAL:
+        if n_args is not None and n_args <= 0:
+            break
+        if p.kind == p.VAR_POSITIONAL or p.kind == p.VAR_KEYWORD:
+            assert not has_args, (
+                f"has_args={has_args} is already specified, "
+                f"input_names={input_names}, dynamic_shapes="
+                f"{dict_dynamic_shapes}"
+            )
             assert input_names or None or len(input_names) == len(args), (
                 f"Mimsatch number between len(args)={len(args)}, "
                 f"input_names={input_names}"
             )
             true_input_names.append(p.name)
-            has_args = (p.name, len(args) - len(true_input_names))
+            has_args = (p.name, len(args), len(true_input_names))
+            n_args -= len(args)
         elif p.default in (None, inspect.Parameter.empty):
             true_input_names.append(name)
-    if input_names is None:
-        replacements = {}
-    else:
-        replacements = dict(zip(input_names, true_input_names))
 
-    for k, v in dict_dynamic_shapes.items():
-        r = replacements.get(k, k)
-        new_dynamic_shapes[r] = v if not has_args or has_args[0] != r else (v,)
-    if has_args:
-        assert isinstance(new_dynamic_shapes[has_args[0]], tuple), (
-            f"Unexpected type in {new_dynamic_shapes}, input_names={input_names}, "
-            f"has_args={has_args}, replacements={replacements}, "
-            f"dict_dynamic_shapes={dict_dynamic_shapes}"
+    if has_args is None:
+        replacements = (
+            {} if input_names is None else dict(zip(input_names, true_input_names))
         )
+        for k, v in dict_dynamic_shapes.items():
+            r = replacements.get(k, k)
+            new_dynamic_shapes[r] = v if not has_args or has_args[0] != r else (v,)
+        return new_dynamic_shapes
+
+    if has_args:
+        assert input_names is not None, (
+            f"Not implemented for has_args={has_args}, dynamic_shapes={dict_dynamic_shapes}"
+            f", input_names={input_names}"
+        )
+        assert len(dict_dynamic_shapes) == len(input_names) == has_args[1], (
+            f"Mismatch for has_args={has_args}, dynamic_shapes={dict_dynamic_shapes}"
+            f", input_names={input_names}"
+        )
+        new_dynamic_shapes = {
+            has_args[0]: tuple(dict_dynamic_shapes[n] for n in input_names)
+        }
         return new_dynamic_shapes
     return new_dynamic_shapes
 

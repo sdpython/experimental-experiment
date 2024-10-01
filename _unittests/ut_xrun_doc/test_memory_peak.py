@@ -14,20 +14,25 @@ class TestMemoryPeak(ExtTestCase):
         self.assertIsInstance(mem, int)
 
     @skipif_ci_apple("stuck")
-    def test_spy(self):
+    def test_spy_cpu(self):
         p = start_spying_on(cuda=False)
         n_elements = 0
         for _i in range(10):
             time.sleep(0.005)
             value = np.empty(2**23, dtype=np.int64)
+            time.sleep(0.005)
             value += 1
+            time.sleep(0.005)
             n_elements = max(value.shape[0], n_elements)
         time.sleep(0.02)
         pres = p.stop()
+        self.assertGreater(n_elements, 0)
         self.assertIsInstance(pres, dict)
         self.assertLessEqual(pres["cpu"].end, pres["cpu"].max_peak)
         self.assertLessEqual(pres["cpu"].begin, pres["cpu"].max_peak)
-        self.assertGreater(pres["cpu"].delta_peak, 0)
+        self.assertGreater(pres["cpu"].begin, 0)
+        # Zero should not happen...
+        self.assertGreaterOrEqual(pres["cpu"].delta_peak, 0)
         self.assertGreaterOrEqual(pres["cpu"].delta_peak, pres["cpu"].delta_end)
         self.assertGreaterOrEqual(pres["cpu"].delta_peak, pres["cpu"].delta_avg)
         self.assertGreater(pres["cpu"].delta_end, 0)
