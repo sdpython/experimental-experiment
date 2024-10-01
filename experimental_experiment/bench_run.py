@@ -260,13 +260,13 @@ def run_benchmark(
         metrics.update(config)
         if filename_out and os.path.exists(filename_out):
             if "model_name" in metrics:
-                new_name = f"{filename_out}.{metrics['model_name']}"
+                new_name = f"{filename_out}.{_clean_string(metrics['model_name'])}"
                 os.rename(filename_out, new_name)
                 filename_out = new_name
             metrics["file.stdout"] = filename_out
         if filename_err and os.path.exists(filename_err):
             if "model_name" in metrics:
-                new_name = f"{filename_err}.{metrics['model_name']}"
+                new_name = f"{filename_err}.{_clean_string(metrics['model_name'])}"
                 os.rename(filename_err, new_name)
                 filename_err = new_name
             metrics["file.stderr"] = filename_err
