@@ -1116,7 +1116,7 @@ class DynamoInterpreter:
                 val = (val,)
                 res = (res,)
             assert isinstance(
-                res, tuple
+                res, (list, tuple)
             ), f"Unexpected type {type(res)}{self.builder.get_debug_msg()}"
             if len(val) != len(res):
                 raise RuntimeError(
