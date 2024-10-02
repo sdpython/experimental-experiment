@@ -3157,7 +3157,7 @@ class GraphBuilder(_GraphBuilderRuntime):
 
         for i, node in enumerate(graph_module.graph.nodes):
             self._debug_msg["process.progress"] = (
-                f"node {i}/{len(graph_module.graph.nodes)} "
+                f"node {i}/{len(graph_module.graph.nodes)} target={node.target}"
             )
             interpreter.run_node(node)
 
