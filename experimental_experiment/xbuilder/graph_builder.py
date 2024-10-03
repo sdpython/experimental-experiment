@@ -3187,14 +3187,23 @@ class GraphBuilder(_GraphBuilderRuntime):
         :param return_optimize_report: return statistics about the optimization as well
         :param function_name: only used if as_function is True
         :param function_domain: only used if as_function is True
+        :param inline: inline local functions, this is done before
+            any optimization takes place
         :return: the proto
         """
         if len(self.nodes) == 0:
             raise RuntimeError(f"The onnx model is empty (no node).\n{self.get_debug_msg()}")
-        if optimize:
-            stats = self.optimize()
+
+        if inline:
+            stats = self.inline_functions(verbose=self.verbose)
         else:
             stats = None
+
+        if optimize:
+            statso = self.optimize()
+            if statso:
+                stats.extend(statso)
+
         assert len(self.nodes) > 0, (
             f"The onnx model is empty after optimization (no node)."
             f"\n{self.get_debug_msg()}"
@@ -4953,13 +4962,16 @@ class GraphBuilder(_GraphBuilderRuntime):
             f"Unsupported type {type(a)}, unable to convert to a torch.Tensor."
         )
 
-    def inline_functions(self, verbose: int = 0):
+    def inline_functions(self, verbose: int = 0) -> int:
         """
         Inlines local functions.
+        Returns the number of inlined nodes.
         """
         if not self.functions:
             # Nothing to do
             return
+
+        begin0 = time.perf_counter()
 
         # Checks opsets
         for v in self.functions.values():
@@ -4973,20 +4985,67 @@ class GraphBuilder(_GraphBuilderRuntime):
                 else:
                     self.opsets[op.domain] = op.version
 
-        stat = []
-        self._check(stat, step="before inline")
-        inlined = self._inline_functions_iterations(verbose=verbose)
-        self._check(stat, step="after inline iteration 0")
+        if verbose:
+            print(f"[inline_functions] begin graph {id(self)}")
+        stats = []
+        self._check(stats, step="before inline")
+        begin = time.perf_counter()
+        inlined = self._inline_functions_iteration(verbose=verbose)
+        stats.append(
+            dict(
+                pattern="inline",
+                time_inline=time.perf_counter() - begin,
+                iteration=0,
+                inlined=inlined,
+            )
+        )
+        self._check(stats, step="after inline iteration 0")
         it = 0
         while inlined:
             it += 1
-            inlined = self._inline_functions_iterations(verbose=verbose)
-            self._check(stat, step=f"after inline iteration {it}")
+            begin = time.perf_counter()
+            inlined = self._inline_functions_iteration(verbose=verbose)
+            stats.append(
+                dict(
+                    pattern="inline",
+                    time_inline=time.perf_counter() - begin,
+                    iteration=0,
+                    inlined=inlined,
+                )
+            )
+            self._check(stats, step=f"after inline iteration {it}")
 
         # We can remove the local functions now.
         self.functions = {}
+        if verbose:
+            print(
+                f"[inline_functions] done graph {id(self)} in {time.perf_counter()-begin0}"
+            )
+        return stats
 
-    def _inline_functions_iterations(self, verbose: int = 0) -> int:
+    def local_functions_found(self, g: GraphProto) -> bool:
+        for node in g.node:
+            if node.domain == "":
+                continue
+            key = node.domain, node.op_type
+            if key in self.functions:
+                return True
+            for att in node.attribute:
+                assert att.type != AttributeProto.GRAPHS, (
+                    f"node.op_type={node.op_type!r}, node.name={node.name!r}, "
+                    f"att.name={att.name!r}, not implemented with att.type={att.type} "
+                    f"(AttributeProto.GRAPHS)"
+                )
+                if att.type == AttributeProto.GRAPH:
+                    if self.has_local_function(att.g):
+                        return True
+        return False
+
+    def _inline_functions_iteration(self, verbose: int = 0) -> int:
+        """
+        Inlines local functions. Returns the number of replacements.
+        """
+        n_replacements = 0
         replacements = []
         for pos, node in enumerate(self.nodes):
             for att in node.attribute:
@@ -4995,17 +5054,20 @@ class GraphBuilder(_GraphBuilderRuntime):
                     f"att.name={att.name!r}, not implemented with att.type={att.type} "
                     f"(AttributeProto.GRAPHS)"
                 )
-                assert att.type != AttributeProto.GRAPH or not self.local_functions_found(
-                    att.g
-                ), (
-                    f"Not implemented when a local function is found in a subgraph "
-                    f"node.op_type={node.op_type!r}, node.name={node.name!r}, "
-                    f"att.name={att.name!r}, not implemented with att.type={att.type} "
-                )
+                if self.local_functions_found(att.g):
+                    # A function was detected in a subgraphs.
+                    if verbose:
+                        print(
+                            f"[_inline_functions_iterations] replace local "
+                            f"functions in node {node.op_type!r}, name={node.name!r}"
+                        )
+                    n_replacements += self._inline_functions_subgraph(att.g, verbose)
+
             key = node.domain, node.op_type
             if key not in self.functions:
                 continue
 
+            n_replacements += 1
             if verbose:
                 print(
                     f"[_inline_functions_iterations] inline function "
@@ -5019,12 +5081,179 @@ class GraphBuilder(_GraphBuilderRuntime):
                 )
             replacements.append((pos, node, new_nodes))
 
+        if n_replacements == 0:
+            # No replacements to do.
+            return n_replacements
+
         stat = []
         for pos, node, new_nodes in reversed(replacements):
             self.insert_and_remove_nodes(pos, new_nodes, removed=[pos])
             self._check(stat, step=f"after inlining function {node.op_type!r}")
 
-        return len(replacements)
+        return n_replacements
+
+    def _inline_functions_subgraph(self, g: GraphProto, verbose: int = 0) -> int:
+        """
+        Inlines local functions in subgraph (inplace).
+        Returns the number of replacements.
+        """
+        stat = []
+        self._check(stat, step="before inline")
+        inlined = self._inline_functions_subgraph_iteration(g, verbose=verbose)
+        self._check(stat, step="after inline iteration 0")
+        total = inlined
+        it = 0
+        while inlined:
+            it += 1
+            inlined = self._inline_functions_subgraph_iteration(g, verbose=verbose)
+            total += inlined
+            it += 1
+            self._check(stat, step=f"after inline iteration {it}")
+        return total
+
+    def _inline_functions_subgraph_iteration(self, g: GraphProto, verbose: int = 0) -> int:
+        new_nodes = []
+        print(f"[_inline_functions_subgraph_iteration] begin with {id(g)}")
+        n_replacements = 0
+        for node in g.node:
+            for att in node.attribute:
+                assert att.type != AttributeProto.GRAPHS, (
+                    f"node.op_type={node.op_type!r}, node.name={node.name!r}, "
+                    f"att.name={att.name!r}, not implemented with att.type={att.type} "
+                    f"(AttributeProto.GRAPHS)"
+                )
+                if self.local_functions_found(att.g):
+                    # A function was detected in a subgraphs.
+                    if verbose:
+                        print(
+                            f"[_inline_functions_subgraph_iteration] replace local "
+                            f"functions in node {node.op_type!r}, name={node.name!r}"
+                        )
+                    n_replacements += self._inline_functions_subgraph(att.g, verbose)
+
+            key = node.domain, node.op_type
+            if key not in self.functions:
+                new_nodes.append(node)
+                continue
+
+            n_replacements += 1
+            if verbose:
+                print(
+                    f"[_inline_functions_subgraph_iteration] inline function "
+                    f"{self.functions[key].name!r} domain {self.functions[key].domain!r}"
+                )
+            functions_nodes = self._rename_results(
+                self._convert_function(node.input, node.output, self.functions[key]),
+                replacements={n: n for n in (set(node.input) | set(node.output))},
+            )
+            new_nodes.extend(functions_nodes)
+            if verbose:
+                print(
+                    f"[_inline_functions_subgraph_iteration] {len(new_nodes)} new nodes "
+                    f"for {self.functions[key].name!r}, {self.functions[key].domain!r}"
+                )
+
+        if n_replacements > 0:
+            del g.node[:]
+            g.node.extend(new_nodes)
+        print(
+            f"[_inline_functions_subgraph_iteration] done with "
+            f"{id(g)} and {n_replacements} replacements"
+        )
+        return n_replacements
+
+    def _rename_results(
+        self, nodes: List[NodeProto], replacements: Dict[str, str]
+    ) -> List[NodeProto]:
+        new_nodes = []
+        for node in nodes:
+            assert all(i in replacements for i in node.input), (
+                f"An input from {node.input} is inkonwn input in node "
+                f"{node.op_type!r}, name={node.name!r}"
+            )
+            new_outputs = []
+            for o in node.output:
+                if o in replacements:
+                    assert (
+                        replacements[o] == o
+                    ), f"o={o!r} must be an output in {sorted(replacements)!r}"
+                    new_outputs.append(o)
+                    continue
+                new_name = self.unique_name(o)
+                replacements[o] = new_name
+                new_outputs.append(new_name)
+
+            new_node = oh.make_node(
+                node.op_type,
+                [replacements[i] for i in node.input],
+                new_outputs,
+                name=self.unique_node_name(node.name),
+                domain=node.domain,
+            )
+            new_atts = []
+            for att in node.attribute:
+                assert att.type != AttributeProto.GRAPHS, (
+                    f"node.op_type={node.op_type!r}, node.name={node.name!r}, "
+                    f"att.name={att.name!r}, not implemented with att.type={att.type} "
+                    f"(AttributeProto.GRAPHS)"
+                )
+                new_atts.append(
+                    oh.make_attribute(
+                        att.name,
+                        self._rename_results_in_subgraph(
+                            att.g, replacements=replacements.copy()
+                        ),
+                    )
+                    if att.type == AttributeProto.GRAPH
+                    else att
+                )
+            new_node.attribute.extend(new_atts)
+            new_nodes.append(new_node)
+        return new_nodes
+
+    def _rename_results_in_subgraph(
+        self, g: GraphProto, replacements: Dict[str, str]
+    ) -> GraphProto:
+        set_rep = set(replacements)
+        new_nodes = []
+        do = False
+        for node in g:
+            diff = bool(set(node.input) & set_rep)
+            new_inputs = [replacements.get(i, i) for i in node.input]
+            new_atts = []
+            for att in node.attribute:
+                assert att.type != AttributeProto.GRAPHS, (
+                    f"node.op_type={node.op_type!r}, node.name={node.name!r}, "
+                    f"att.name={att.name!r}, not implemented with att.type={att.type} "
+                    f"(AttributeProto.GRAPHS)"
+                )
+                new_g = self._rename_results_in_subgraph(
+                    att.g, replacements=replacements.copy()
+                )
+                if id(new_g) != id(g):
+                    diff = True
+                    new_atts.append(
+                        oh.make_attribute(att.name, new_g)
+                        if att.type == AttributeProto.GRAPH
+                        else att
+                    )
+                else:
+                    new_atts.append(att)
+            if diff:
+                do = True
+                new_node = oh.make_node(
+                    node.op_type, new_inputs, node.output, domain=node.domain, name=node.name
+                )
+                new_node.attribute.extend(new_atts)
+                new_nodes.append(new_node)
+            else:
+                new_nodes.append(node)
+        if not do:
+            return g
+        g2 = oh.make_graph(
+            new_nodes, g.name, g.input, g.output, g.initializer, g.sparse_initializer
+        )
+        return g2
 
     def _convert_function(
         self, inputs: List[str], outputs: List[str], proto: FunctionProto

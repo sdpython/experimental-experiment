@@ -125,6 +125,23 @@ class TestControlFlow(ExtTestCase):
             for e, g in zip(expected, got):
                 self.assertEqualArray(e, g, atol=1e-5)
 
+    @skipif_ci_windows("not yet supported on Windows")
+    @requires_torch("2.4")
+    def test_controlflow_custom_if_inline(self):
+        cls, x = self.get_custom_model()
+        model = cls()
+        onx = to_onnx(model, (x,), inline=True, verbose=2)
+        self.assertEqual(len(onx.functions), 0)
+        co = Counter([n.op_type for n in onx.graph.node])
+        self.assertEqual(co, {"ReduceSum": 1, "Greater": 1, "If": 1})
+        self.assertEqual(len(onx.functions), 0)
+
+        for _x in (x, -x):
+            expected = model(_x)
+            ref = ExtendedReferenceEvaluator(onx)
+            got = ref.run(None, {"x": _x.detach().numpy()})[0]
+            self.assertEqualArray(expected, got, atol=1e-5)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
