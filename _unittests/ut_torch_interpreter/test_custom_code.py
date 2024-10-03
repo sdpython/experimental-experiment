@@ -14,7 +14,7 @@ from experimental_experiment.torch_interpreter import to_onnx, Dispatcher
 class TestCustomCode(ExtTestCase):
 
     @classmethod
-    def get_custom_model(cls):
+    def get_custom_model_autograd(cls):
         import torch
 
         class Twice(torch.autograd.Function):
@@ -39,7 +39,7 @@ class TestCustomCode(ExtTestCase):
     def test_custom_code_script(self):
         import torch
 
-        cls, x = self.get_custom_model()
+        cls, x = self.get_custom_model_autograd()
         model = cls()
         expected = model(x)
         self.assertNotEmpty(expected)
@@ -59,7 +59,7 @@ class TestCustomCode(ExtTestCase):
     def test_custom_code_export_1(self):
         import torch
 
-        cls, x = self.get_custom_model()
+        cls, x = self.get_custom_model_autograd()
         model = cls()
         exported_program = torch.export.export(model, (x,))
         graph = exported_program.graph
@@ -75,7 +75,7 @@ class TestCustomCode(ExtTestCase):
     def test_custom_code_dynamo(self):
         import torch
 
-        cls, x = self.get_custom_model()
+        cls, x = self.get_custom_model_autograd()
         model = cls()
         expected = model(x)
         self.assertNotEmpty(expected)
