@@ -4,6 +4,7 @@ from typing import Any, Dict, List
 import onnx
 from experimental_experiment.ext_test_case import (
     ExtTestCase,
+    requires_torch,
     skipif_ci_windows,
 )
 from experimental_experiment.reference import ExtendedReferenceEvaluator
@@ -157,6 +158,7 @@ class TestCustomCode(ExtTestCase):
         return DummyModel, torch.rand(5, 3)
 
     @skipif_ci_windows("dynamo not working on Windows")
+    @requires_torch("2.5", "module 'torch.library' has no attribute 'infer_schema'")
     def test_custom_code_export_2_fn(self):
         import torch
 
@@ -262,6 +264,7 @@ class TestCustomCode(ExtTestCase):
         expected = (x + x + x) * x
         self.assertEqualArray(expected, got)
 
+    @requires_torch("2.5", "module 'torch.library' has no attribute 'infer_schema'")
     def test_custom_code_custom(self):
         cls, x = self.get_custom_model_export_fn()
         model = cls()
