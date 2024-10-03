@@ -3873,7 +3873,12 @@ def aten_mul(
     name="mul",
 ) -> T:
     "mul"
-    if g.get_type(x) == TensorProto.BOOL and g.get_type(y) == TensorProto.BOOL:
+    if (
+        isinstance(x, str)
+        and isinstance(y, str)
+        and g.get_type(x) == TensorProto.BOOL
+        and g.get_type(y) == TensorProto.BOOL
+    ):
         res = g.op.And(x, y, name=f"{name}_and", outputs=outputs)
     else:
         res, x, y = prepare_inputs_homogeneous_operator(
