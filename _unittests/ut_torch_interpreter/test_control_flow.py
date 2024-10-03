@@ -3,6 +3,7 @@ from collections import Counter
 import onnx
 from experimental_experiment.ext_test_case import (
     ExtTestCase,
+    requires_torch,
     skipif_ci_windows,
 )
 from experimental_experiment.reference import ExtendedReferenceEvaluator
@@ -75,6 +76,7 @@ class TestControlFlow(ExtTestCase):
             self.assertEqualArray(expected, got)
 
     @skipif_ci_windows("not yet supported on Windows")
+    @requires_torch("2.4")
     def test_controlflow_custom_if_1(self):
         cls, x = self.get_custom_model()
         model = cls()
@@ -106,6 +108,7 @@ class TestControlFlow(ExtTestCase):
         return Bad2Fixed, torch.rand(5, 3)
 
     @skipif_ci_windows("not yet supported on Windows")
+    @requires_torch("2.4")
     def test_controlflow_custom_if_2(self):
         cls, x = self.get_custom_model_2()
         model = cls()

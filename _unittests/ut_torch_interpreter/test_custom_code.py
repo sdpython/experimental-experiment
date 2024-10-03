@@ -55,6 +55,7 @@ class TestCustomCode(ExtTestCase):
         self.assertEqualArray(expected, got)
 
     @skipif_ci_windows("dynamo not working on Windows")
+    @requires_torch("2.4")
     def test_custom_code_export_1(self):
         import torch
 
@@ -119,6 +120,7 @@ class TestCustomCode(ExtTestCase):
         return DummyModel, torch.rand(5, 3)
 
     @skipif_ci_windows("dynamo not working on Windows")
+    @requires_torch("2.4")
     def test_custom_code_export_2(self):
         import torch
 
@@ -238,13 +240,13 @@ class TestCustomCode(ExtTestCase):
         cls, x, onnxscript_twice = self.get_custom_model_export_fn_onnxscript()
         model = cls()
         expected = model(x)
-        self.assertNotEmpty(expected)
-        filename = "test_custom_code_dynamo_2_fn_registry.onnx"
         registry = torch.onnx.OnnxRegistry()
         registry.register_op(
             function=onnxscript_twice, namespace="testlib", op_name="twice_onnx"
         )
 
+        self.assertNotEmpty(expected)
+        filename = "test_custom_code_dynamo_2_fn_registry.onnx"
         torch.onnx.export(
             model,
             (x,),
