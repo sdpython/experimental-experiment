@@ -1052,7 +1052,7 @@ class ModelRunner:
                 self.make_export_inputs(dynamic, wrapped=True),
                 dynamic_shapes=self.get_dynamic_shapes(dynamic, wrapped=True),
             )
-        return res, None
+        return res.module(), None
 
     def _to_eager(
         self,
