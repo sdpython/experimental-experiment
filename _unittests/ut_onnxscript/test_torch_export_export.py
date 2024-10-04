@@ -1,10 +1,16 @@
 import unittest
 import torch
-from experimental_experiment.ext_test_case import ExtTestCase
+from experimental_experiment.ext_test_case import (
+    ExtTestCase,
+    skipif_ci_windows,
+    skipif_ci_apple,
+)
 
 
 class TestTorchExportExport(ExtTestCase):
 
+    @skipif_ci_windows("not available on Windows")
+    @skipif_ci_apple("not able to fix it")
     def test_scaled_dot_product_attention_export_issue(self):
 
         class DummyModel(torch.nn.Module):
