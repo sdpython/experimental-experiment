@@ -166,7 +166,7 @@ class TestCustomCode(ExtTestCase):
         graph = exported_program.graph
 
         # This graph does not keep the node "same" added to the graph.
-        # But maybe it can be used to propagate the information.
+        # But it should possible to modify the graph and recompile it.
         targets = [node.target for node in graph.nodes]
         names = [(t if isinstance(t, str) else t.name()) for t in targets]
         self.assertEqual(names, ["x", "aten::add.Tensor", "aten::mul.Tensor", "output"])
