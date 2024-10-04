@@ -101,7 +101,7 @@ class TestDynamoOnnxRtBackend(ExtTestCase):
             f.write(onx.SerializeToString())
         name = onx.graph.input[0].name
         got = sess.run(None, {name: input_tensor.detach().numpy()})[0]
-        self.assertEqualArray(expected.detach().numpy(), got, atol=1e-5) 
+        self.assertEqualArray(expected.detach().numpy(), got, atol=1e-5)
 
     @skipif_ci_apple("crash on apple")
     @skipif_ci_windows("not supported yet on Windows")
