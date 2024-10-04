@@ -1,3 +1,4 @@
+import contextlib
 import collections
 import inspect
 import os
@@ -8,6 +9,23 @@ from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 import onnx
 import torch
 from .export_model_helper import compute_weight_size
+
+
+@contextlib.contextmanager
+def bypass_export_some_errors():
+    """
+    Tries to bypass some functions torch.export.export does not
+    support such as ``torch.jit.isinstance``.
+    """
+    import torch.jit
+
+    f = torch.jit.isinstance
+    torch.jit.isinstance = isinstance
+
+    try:
+        yield
+    finally:
+        torch.jit.isinstance = f
 
 
 class MakeConfig:
@@ -935,7 +953,9 @@ class ModelRunner:
             additional_kwargs.update(dict(fallback=True))
 
         if self.autocast:
-            with torch.autocast(device_type=self.device, dtype=self.dtype), torch.no_grad():
+            with torch.autocast(
+                device_type=self.device, dtype=self.dtype
+            ), torch.no_grad(), bypass_export_some_errors():
                 onnx_program = torch.onnx.export(
                     self.model,
                     self.make_export_inputs(dynamic, wrapped=True),
@@ -947,7 +967,7 @@ class ModelRunner:
                     **additional_kwargs,
                 )
         else:
-            with torch.no_grad():
+            with torch.no_grad(), bypass_export_some_errors():
                 onnx_program = torch.onnx.export(
                     self.model,
                     self.make_export_inputs(dynamic, wrapped=True),
@@ -1032,7 +1052,7 @@ class ModelRunner:
                 self.make_export_inputs(dynamic, wrapped=True),
                 dynamic_shapes=self.get_dynamic_shapes(dynamic, wrapped=True),
             )
-        return res, None
+        return res.module(), None
 
     def _to_eager(
         self,

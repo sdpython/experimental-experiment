@@ -99,8 +99,9 @@ class Dispatcher:
 
 class ForceDispatcher(Dispatcher):
     """
-    Implements a dispatcher which as an onnx as it is
-    when no converting function is found.
+    Implements a dispatcher which fails whenever there is no converting
+    for a node in the fx graph. There is no fallback to the existing functions.
+    When no function is found, an onnx node is added with a non standard domain.
 
     :param signatures: function used only for their signature mapping
         a name to a function in order to have parameter names

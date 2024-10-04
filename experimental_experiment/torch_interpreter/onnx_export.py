@@ -508,6 +508,7 @@ def to_onnx(
     decomposition_table: Optional[
         Union[str, Dict["torch._ops.OpOverload", Callable[..., Any]]]  # noqa: F821
     ] = None,
+    inline: bool = False,
 ) -> Union[
     Union[ModelProto, ModelContainer],
     Tuple[Union[ModelProto, ModelContainer], GraphBuilder],
@@ -542,6 +543,8 @@ def to_onnx(
         to use the default decomposition table returned by
         :func:`get_decomposition_table
         <experimental_experiment.torch_dynamo.get_decomposition_table>`
+    :param inline: inline the model before converting to onnx, this is done before
+            any optimization takes place
     :return: onnx model
 
     If environment variable ``PRINT_GRAPH_MODULE`` is set to one,
@@ -649,6 +652,7 @@ def to_onnx(
         large_model=large_model,
         external_threshold=external_threshold,
         return_optimize_report=True,
+        inline=inline,
     )
     all_stats = dict(builder=builder.statistics_)
     if stats:

@@ -39,6 +39,7 @@ from ..xbuilder.shape_type_compute import (
     set_type_shape_matmul,
     prepare_inputs_homogeneous_operator,
 )
+from . import LOCAL_DOMAIN
 from ._exceptions import FunctionNotFoundError
 
 
@@ -926,6 +927,44 @@ def aten_clone(
         or memory_format == torch.preserve_format
     ), f"Unexpected value for memory_format={memory_format!r}{g.get_debug_msg()}"
     return g.make_node("Identity", [x], outputs, name=name)
+
+
+def aten_cond(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    cond: T,
+    true_graph: str,
+    false_graph: str,
+    inputs: List[T],
+    name="aten_cond",
+) -> T:
+    "cond"
+    assert g.has_local_function(
+        true_graph, LOCAL_DOMAIN
+    ), f"Unable to find local function {true_graph!r}{g.get_debug_msg()}"
+    assert g.has_local_function(
+        false_graph, LOCAL_DOMAIN
+    ), f"Unable to find local function {false_graph!r}{g.get_debug_msg()}"
+    res = g.make_node(
+        "If",
+        [cond],
+        outputs,
+        name=name,
+        then_branch=make_graph(
+            [make_node(true_graph, inputs, outputs, domain=LOCAL_DOMAIN)],
+            true_graph,
+            [],
+            [make_tensor_value_info(o, 0, None) for o in outputs],
+        ),
+        else_branch=make_graph(
+            [make_node(false_graph, inputs, outputs, domain=LOCAL_DOMAIN)],
+            false_graph,
+            [],
+            [make_tensor_value_info(o, 0, None) for o in outputs],
+        ),
+    )
+    return res
 
 
 def aten_convolution(
@@ -3834,7 +3873,12 @@ def aten_mul(
     name="mul",
 ) -> T:
     "mul"
-    if g.get_type(x) == TensorProto.BOOL and g.get_type(y) == TensorProto.BOOL:
+    if (
+        isinstance(x, str)
+        and isinstance(y, str)
+        and g.get_type(x) == TensorProto.BOOL
+        and g.get_type(y) == TensorProto.BOOL
+    ):
         res = g.op.And(x, y, name=f"{name}_and", outputs=outputs)
     else:
         res, x, y = prepare_inputs_homogeneous_operator(
@@ -7109,19 +7153,19 @@ def aten_wrap_with_autocast(
         cache_enabled is None
     ), f"Not implemented with cache_enabled={cache_enabled}{g.get_debug_msg()}"
     assert g.has_local_function(
-        wrapped_func, domain="aten_local_function"
+        wrapped_func, domain=LOCAL_DOMAIN
     ), f"No local function {wrapped_func!r}{g.get_debug_msg()}"
     assert all(
         isinstance(_, str) for _ in args
     ), f"Unexpected input types args={args}{g.get_debug_msg()}"
-    local_outputs = g.get_local_function_outputs(wrapped_func, domain="aten_local_function")
+    local_outputs = g.get_local_function_outputs(wrapped_func, domain=LOCAL_DOMAIN)
     if len(outputs) == len(local_outputs):
         return g.make_node(
             wrapped_func,
             args,
             outputs,
             name="wrap_with_autocast",
-            domain="aten_local_function",
+            domain=LOCAL_DOMAIN,
         )
     assert len(outputs) == 1, (
         f"Unexpected outputs={outputs} but local_outputs={local_outputs} "
@@ -7133,7 +7177,7 @@ def aten_wrap_with_autocast(
         args,
         new_outputs,
         name="wrap_with_autocast",
-        domain="aten_local_function",
+        domain=LOCAL_DOMAIN,
     )
 
 
@@ -7151,19 +7195,19 @@ def aten_wrap_with_set_grad_enabled(
         not enable_grad
     ), f"Not implemented with enable_grad={enable_grad}{g.get_debug_msg()}"
     assert g.has_local_function(
-        wrapped_func, domain="aten_local_function"
+        wrapped_func, domain=LOCAL_DOMAIN
     ), f"No local function {wrapped_func!r}{g.get_debug_msg()}"
     assert all(
         isinstance(_, str) for _ in args
     ), f"Unexpected input types args={args}{g.get_debug_msg()}"
-    local_outputs = g.get_local_function_outputs(wrapped_func, domain="aten_local_function")
+    local_outputs = g.get_local_function_outputs(wrapped_func, domain=LOCAL_DOMAIN)
     if len(outputs) == len(local_outputs):
         return g.make_node(
             wrapped_func,
             args,
             outputs,
             name="wrap_with_set_grad_enabled",
-            domain="aten_local_function",
+            domain=LOCAL_DOMAIN,
         )
     assert len(outputs) == 1, (
         f"Unexpected outputs={outputs} but local_outputs={local_outputs} "
@@ -7175,7 +7219,7 @@ def aten_wrap_with_set_grad_enabled(
         args,
         new_outputs,
         name="wrap_with_set_grad_enabled",
-        domain="aten_local_function",
+        domain=LOCAL_DOMAIN,
     )
 
 
