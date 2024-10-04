@@ -20,6 +20,9 @@ class TestCustomCode(ExtTestCase):
         class Twice(torch.autograd.Function):
             @staticmethod
             def forward(ctx, x):
+                # pytorch is doing symbolic tracing. It can't know
+                # that this operator is coming from an autograd.function
+                # defined this way.
                 return x + x
 
             @staticmethod
@@ -32,7 +35,8 @@ class TestCustomCode(ExtTestCase):
                 super().__init__()
 
             def forward(self, x):
-                return Twice.apply(x) * x
+                y = Twice.apply(x)
+                return y * x
 
         return DummyModel, torch.rand(5, 3)
 
@@ -54,21 +58,121 @@ class TestCustomCode(ExtTestCase):
         expected = (x + x + x) * x
         self.assertEqualArray(expected, got)
 
+    @classmethod
+    def get_custom_model_autograd_marked(cls):
+        import torch
+
+        class mark(torch.nn.Module):
+            def __init__(self, name: str, out: bool):
+                super().__init__()
+                self.name = name
+                self.out = out
+
+            def forward(self, x):
+                return x
+
+        class Twice(torch.autograd.Function):
+            @staticmethod
+            def forward(ctx, x):
+                # pytorch is doing symbolic tracing. It can't know
+                # that this operator is coming from an autograd.function
+                # defined this way.
+                x = mark("twice", False)(x)
+                y = x + x
+                return mark("twice", True)(y)
+
+            @staticmethod
+            def symbolic(g: torch.Graph, x):
+                # The conversion is wrong on purpose, to check, this function was used.
+                return g.op("Add", x, g.op("Add", x, x))
+
+        class DummyModel(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+
+            def forward(self, x):
+                y = Twice.apply(x)
+                return y * x
+
+        return mark, DummyModel, torch.rand(5, 3)
+
     @skipif_ci_windows("dynamo not working on Windows")
-    @requires_torch("2.4")
+    @requires_torch("2.5")
     def test_custom_code_export_1(self):
         import torch
 
-        cls, x = self.get_custom_model_autograd()
+        mark, cls, x = self.get_custom_model_autograd_marked()
         model = cls()
+
+        class MyTracer(torch.fx.Tracer):
+
+            @staticmethod
+            def same(x, **kwargs):
+                return x
+
+            def call_module(self, m, forward, args, kwargs):
+                if isinstance(m, mark):
+                    return self.create_proxy(
+                        "call_function",
+                        MyTracer.same,
+                        args,
+                        kwargs=dict(name=m.name, out=m.out),
+                        name=None,
+                        type_expr=None,
+                    )
+                return super().call_module(m, forward, (args), kwargs)
+
+            def path_of_module(self, mod: torch.nn.Module) -> str:
+                return ""
+
+        tr = MyTracer()
+        res = tr.trace(model)
+        res_str = str(res)
+        self.assertIn("target=__main__.same", res_str)
+        self.assertIn("{name: twice, out: True}", res_str)
+        targets = [node.target for node in res.nodes]
+        names = [
+            (t if isinstance(t, str) else str(t)).split(".")[-1].split(" at ")[0]
+            for t in targets
+        ]
+        self.assertEqual(
+            names,
+            [
+                "x",
+                "same",
+                "<built-in function add>",
+                "same",
+                "<built-in function mul>",
+                "output",
+            ],
+        )
+
+        # This is what it should produce.
+        """
+        graph():
+            %x : [num_users=2] = placeholder[target=x]
+            %same : [num_users=1] = call_function[target=__main__.same]
+                (args = (%x,), kwargs = {name: twice, out: False})
+            %add : [num_users=1] = call_function[target=operator.add]
+                (args = (%same, %same), kwargs = {})
+            %same_1 : [num_users=1] = call_function[target=__main__.same]
+                (args = (%add,), kwargs = {name: twice, out: True})
+            %mul : [num_users=1] = call_function[target=operator.mul]
+                (args = (%same_1, %x), kwargs = {})
+            return mul
+        """
+
         exported_program = torch.export.export(model, (x,))
         graph = exported_program.graph
+
+        # This graph does not keep the node "same" added to the graph.
+        # But maybe it can be used to propagate the information.
         targets = [node.target for node in graph.nodes]
         names = [(t if isinstance(t, str) else t.name()) for t in targets]
         self.assertEqual(names, ["x", "aten::add.Tensor", "aten::mul.Tensor", "output"])
 
-        # exported_program = torch.export.export(model, (x,),
-        # preserve_module_call_signature=("DummyModel",))
+        filename = "test_custom_code_export_1.onnx"
+        torch.onnx.export(model, (x,), filename, input_names=["x"], opset_version=18)
 
     @skipif_ci_windows("dynamo not working on Windows")
     @unittest.skip("autograd.function not working with dynamo")

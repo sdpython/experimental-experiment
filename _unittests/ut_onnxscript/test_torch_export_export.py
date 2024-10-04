@@ -4,7 +4,7 @@ from experimental_experiment.ext_test_case import (
     ExtTestCase,
     skipif_ci_windows,
     skipif_ci_apple,
-    requires_torch
+    requires_torch,
 )
 
 
