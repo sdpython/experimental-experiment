@@ -3201,8 +3201,10 @@ class GraphBuilder(_GraphBuilderRuntime):
 
         if optimize:
             statso = self.optimize()
-            if statso:
+            if stats:
                 stats.extend(statso)
+            else:
+                stats = statso
 
         assert len(self.nodes) > 0, (
             f"The onnx model is empty after optimization (no node)."
