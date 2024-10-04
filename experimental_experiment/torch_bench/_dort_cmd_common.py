@@ -224,7 +224,14 @@ def create_compiled_model(
     ), f"Unexpected type={type(ort_optimize)} for ort_optimize={ort_optimize}"
     ort_optimization_level = "ORT_ENABLE_ALL" if ort_optimize else "ORT_DISABLE_ALL"
 
-    if use_fused_aten_ops and backend in {"ort", "custom", "backort", "plug", "ort+"}:
+    if use_fused_aten_ops and backend in {
+        "ort",
+        "custom",
+        "custom-fallback",
+        "backort",
+        "plug",
+        "ort+",
+    }:
         from onnxruntime.training.ortmodule.torch_cpp_extensions import aten_op_executor
         from onnxruntime.capi import _pybind_state as _C
 

@@ -5115,7 +5115,8 @@ class GraphBuilder(_GraphBuilderRuntime):
 
     def _inline_functions_subgraph_iteration(self, g: GraphProto, verbose: int = 0) -> int:
         new_nodes = []
-        print(f"[_inline_functions_subgraph_iteration] begin with {id(g)}")
+        if verbose:
+            print(f"[_inline_functions_subgraph_iteration] begin with {id(g)}")
         n_replacements = 0
         for node in g.node:
             for att in node.attribute:
@@ -5158,10 +5159,11 @@ class GraphBuilder(_GraphBuilderRuntime):
         if n_replacements > 0:
             del g.node[:]
             g.node.extend(new_nodes)
-        print(
-            f"[_inline_functions_subgraph_iteration] done with "
-            f"{id(g)} and {n_replacements} replacements"
-        )
+        if verbose:
+            print(
+                f"[_inline_functions_subgraph_iteration] done with "
+                f"{id(g)} and {n_replacements} replacements"
+            )
         return n_replacements
 
     def _rename_results(

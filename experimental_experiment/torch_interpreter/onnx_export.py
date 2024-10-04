@@ -179,6 +179,21 @@ def _retrieve(
     return None
 
 
+def _apply_decompositions(
+    exported_mod: "torch.export.ExportedProgram", decomposition_table  # noqa: F821
+) -> "torch.export.ExportedProgram":  # noqa: F821
+    if isinstance(decomposition_table, str):
+        from ..torch_dynamo import get_decomposition_table_by_name
+
+        decomposition_table = get_decomposition_table_by_name(decomposition_table)
+
+    if decomposition_table is not None:
+        exported_mod = _insert_flatten_between_transpose_and_view(exported_mod)
+        exported_mod = exported_mod.run_decompositions(decomposition_table)
+
+    return exported_mod
+
+
 def _export(
     mod,
     args,
@@ -186,13 +201,13 @@ def _export(
     dynamic_shapes,
     same_signature,
     decomposition_table,
-    use_dynamo,
+    strategy,
     strict,
     input_names=None,
 ):
     import torch
 
-    if not use_dynamo:
+    if strategy is None or strategy == "fallback":
         try:
             exported_mod = torch.export.export(
                 mod, args, dynamic_shapes=dynamic_shapes, strict=strict
@@ -207,46 +222,52 @@ def _export(
                 strict=strict,
             )
         except torch._dynamo.exc.UserError as e:
-            eee = None
-            try:
-                exported_mod = torch.export.export(mod, args, strict=strict).graph
-            except torch._export.verifier.SpecViolationError as ee:
-                exported_mod = None
-                eee = ee
-            raise RuntimeError(
-                f"Unable to convert model {type(mod)}, "
-                f"type(args)={type(args)}, type(args[0])="
-                f"{type(args[0]) if isinstance(args, tuple) and args else '?'}, "
-                f"strict={strict}, input_names={input_names}\n--\n"
-                f"dynamic_shapes={dynamic_shapes}\n--\ne={e}\n--\neee={eee}"
-                f"\n---exported-program---\n{exported_mod}"
-            ) from e
-        if isinstance(decomposition_table, str):
-            from ..torch_dynamo import get_decomposition_table_by_name
+            if strategy != "fallback":
+                eee = None
+                try:
+                    exported_mod = torch.export.export(mod, args, strict=strict).graph
+                except torch._export.verifier.SpecViolationError as ee:
+                    exported_mod = None
+                    eee = ee
+                raise RuntimeError(
+                    f"Unable to convert model {type(mod)}, "
+                    f"type(args)={type(args)}, type(args[0])="
+                    f"{type(args[0]) if isinstance(args, tuple) and args else '?'}, "
+                    f"strict={strict}, input_names={input_names}\n--\n"
+                    f"dynamic_shapes={dynamic_shapes}\n--\ne={e}\n--\neee={eee}"
+                    f"\n---exported-program---\n{exported_mod}"
+                ) from e
+            exported_mod = None
 
-            decomposition_table = get_decomposition_table_by_name(decomposition_table)
-        if decomposition_table is not None:
-            exported_mod = _insert_flatten_between_transpose_and_view(exported_mod)
-            exported_mod = exported_mod.run_decompositions(decomposition_table)
-        return exported_mod
+        if exported_mod is not None:
+            return _apply_decompositions(exported_mod, decomposition_table)
 
-    # other issues
-    # https://github.com/pytorch/pytorch/issues/127571
+    if strategy == "dynamo":
+        # import torch.utils._pytree as pytree
+        # flat_args, orig_in_spec = pytree.tree_flatten((args, ))
+        # print("+++++", orig_in_spec, type(flat_args), len(flat_args))
+        res = torch._dynamo.export(
+            mod,
+            aten_graph=True,
+            tracing_mode=tracing_mode,
+            dynamic_shapes=dynamic_shapes,
+            same_signature=same_signature,
+            decomposition_table=decomposition_table,
+            assume_static_by_default=dynamic_shapes is None,
+        )(*args)
 
-    # import torch.utils._pytree as pytree
-    # flat_args, orig_in_spec = pytree.tree_flatten((args, ))
-    # print("+++++", orig_in_spec, type(flat_args), len(flat_args))
-    res = torch._dynamo.export(
-        mod,
-        aten_graph=True,
-        tracing_mode=tracing_mode,
-        dynamic_shapes=dynamic_shapes,
-        same_signature=same_signature,
-        decomposition_table=decomposition_table,
-        assume_static_by_default=dynamic_shapes is None,
-    )(*args)
+        return _apply_decompositions(res, decomposition_table)
 
-    return res
+    if strategy == "jit" or strategy == "fallback":
+        from torch._export.converter import TS2EPConverter
+
+        jit_model = torch.jit.trace(
+            mod, example_inputs=args, check_trace=False, strict=False
+        )
+        res = TS2EPConverter(jit_model, args).convert()
+        return _apply_decompositions(res, decomposition_table)
+
+    raise ValueError(f"Unable to convert, unknown strategy={strategy!r}")
 
 
 @contextlib.contextmanager
@@ -282,7 +303,7 @@ def _make_builder_interpreter(
         Union[str, Dict["torch._ops.OpOverload", Callable[..., Any]]]  # noqa: F821
     ] = None,
     dispatcher: Optional["Dispatcher"] = None,  # noqa: F821
-    use_dynamo: bool = True,
+    strategy: Optional[str] = None,
     strict: bool = True,
 ) -> Tuple["torch.fx.GraphModule", GraphBuilder, "DynamoInterpreter"]:  # noqa: F821
     """
@@ -307,7 +328,8 @@ def _make_builder_interpreter(
         <experimental_experiment.torch_dynamo.get_decomposition_table>`
         is used
     :param dispatcher: see :class:`experimental_experiment.torch_interpreter.Dispatcher`
-    :param use_dynamo: use ``torch.export.export`` or ``torch._dynamo.export``
+    :param strategy: use ``torch.export.export`` (None) or ``torch._dynamo.export``,
+        stratregy=="dynamo"
     :param strict: given to ``torch.export.export``
     :return: onnx model
     """
@@ -353,7 +375,7 @@ def _make_builder_interpreter(
                 dynamic_shapes=dynamic_shapes,
                 same_signature=same_signature,
                 decomposition_table=decomposition_table,
-                use_dynamo=use_dynamo,
+                strategy=strategy,
                 strict=strict,
                 input_names=input_names,
             )
@@ -464,7 +486,7 @@ def _make_builder_interpreter(
         builder,
         retrieve,
         dispatcher=dispatcher,
-        use_dynamo=use_dynamo,
+        strategy=strategy,
         example_inputs=args,
         decomposition_table=decomposition_table,
     )
@@ -549,7 +571,7 @@ def to_onnx(
     dispatcher: Optional["Dispatcher"] = None,  # noqa: F821
     large_model: bool = False,
     external_threshold: int = 1024,
-    api_two: bool = False,
+    strategy: Optional[str] = None,
     return_optimize_report: bool = False,
     strict: bool = True,
     decomposition_table: Optional[
@@ -583,7 +605,8 @@ def to_onnx(
         or saved as external weights
     :param external_threshold: if large_model is True, every tensor above this limit
         is stored as external
-    :param api_two: use ``torch._dynamo.export`` instead of ``torch.export.export``
+    :param strategy: use ``torch._dynamo.export`` (strategy="dynamo")
+        instead of ``torch.export.export`` (None)
     :param return_optimize_report: returns statistics on the optimization as well
     :param strict: given to ``torch.export.export``
     :param decomposition_table: decomposition_table, a string as well such as default
@@ -673,7 +696,7 @@ def to_onnx(
         raise_list=raise_list,
         dynamic_shapes=use_dynamic_shapes,
         dispatcher=dispatcher,
-        use_dynamo=api_two,
+        strategy=strategy,
         strict=strict,
         decomposition_table=decomposition_table,
     )

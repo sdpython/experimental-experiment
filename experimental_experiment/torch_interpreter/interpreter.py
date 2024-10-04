@@ -28,7 +28,7 @@ class DynamoInterpreter:
         see function `_retrieve
         <experimental_experiment.torch_interpreter.onnx_export._retrieve>`.
     :param dispatcher: see :class:`experimental_experiment.torch_interpreter.Dispatcher`
-    :param use_dynamo: see
+    :param strtegy: see
         :func:`to_onnx <experimental_experiment.torch_interpreter.to_onnx>`
     """
 
@@ -40,7 +40,7 @@ class DynamoInterpreter:
         graph_builder: "GraphBuilder",  # noqa: F821
         retriever: Callable,
         dispatcher: Optional["Dispatcher"] = None,  # noqa: F821
-        use_dynamo: bool = False,
+        strategy: Optional[str] = None,
         example_inputs: Optional[Tuple["torch.Tensor", ...]] = None,  # noqa: F821
         decomposition_table: Optional[
             Dict["torch._ops.OpOverload", Callable[..., Any]]  # noqa: F821
@@ -52,7 +52,7 @@ class DynamoInterpreter:
         self.builder = graph_builder
         self.retriever = retriever
         self.dispatcher = dispatcher
-        self.use_dynamo = (use_dynamo,)
+        self.strategy = (strategy,)
         self.example_values_ = {}
         self.decomposition_table = decomposition_table
         assert example_inputs is None or isinstance(
@@ -1239,7 +1239,7 @@ class DynamoInterpreter:
             dispatcher=self.dispatcher,
             raise_list=self.builder.raise_list,
             dynamic_shapes=self.builder.dynamic_shapes,
-            use_dynamo=self.use_dynamo,
+            strategy=self.strategy,
             decomposition_table=self.decomposition_table,
         )
         builder.process(graph_module, interpreter)

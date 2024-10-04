@@ -185,7 +185,7 @@ class ModelRunner:
         if not optimization or optimization == "none":
             # always possible
             return True
-        if exporter in {"custom"}:
+        if exporter in {"custom", "custom-ballback"}:
             return True
         if exporter in {"torch_script", "dynamo_export"}:
             return optimization in {"default"}
@@ -483,6 +483,19 @@ class ModelRunner:
                 decomposition_table=decomposition_table,
             )
 
+        if exporter == "custom-fallback":
+            return self._to_onnx_custom(
+                name,
+                dynamic=dynamic,
+                fake_tensor=fake_tensor,
+                no_grad=no_grad,
+                optimization=optimization,
+                verbose=verbose,
+                target_opset=target_opset,
+                decomposition_table=decomposition_table,
+                strategy="fallback",
+            )
+
         if exporter in ("cort", "cortgrad"):
             return self._to_cort(
                 name,
@@ -633,6 +646,7 @@ class ModelRunner:
         verbose: int,
         target_opset: int,
         decomposition_table: Optional[str],
+        strategy: Optional[str] = None,
     ):
         assert not fake_tensor, "fake_tensor not implemented."
         assert no_grad, "no_grad false not implemented yet"
@@ -664,6 +678,7 @@ class ModelRunner:
                     return_builder=True,
                     dynamic_shapes=self.get_dynamic_shapes(dynamic, wrapped=True),
                     decomposition_table=decomposition_table,
+                    strategy=strategy,
                 )
         else:
             with torch.no_grad():
