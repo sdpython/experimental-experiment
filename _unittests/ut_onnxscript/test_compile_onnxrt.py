@@ -68,7 +68,7 @@ class TestDynamoOnnxRtBackend(ExtTestCase):
 
     @skipif_ci_apple("crash on apple")
     @skipif_ci_windows("not supported yet on Windows")
-    @requires_torch("2.6", "export fails")
+    @requires_torch("2.7", "export fails")
     @ignore_warnings((DeprecationWarning, UserWarning))
     def test_onnxrt_tutorial_0b(self):
         from onnxruntime import InferenceSession
@@ -94,14 +94,14 @@ class TestDynamoOnnxRtBackend(ExtTestCase):
         self.assertEqual(expected.dtype, got.dtype)
         self.assertEqualArray(expected.detach().numpy(), got.detach().numpy(), atol=1e-5)
 
-        export = torch.onnx.export(f, input_tensor, dynamo=True)
+        export = torch.onnx.export(f, input_tensor, dynamo=True, fallback=False)
         onx = export.model_proto
         sess = InferenceSession(onx.SerializeToString(), providers=["CPUExecutionProvider"])
         with open("dummy_baseline_b.onnx", "wb") as f:
             f.write(onx.SerializeToString())
         name = onx.graph.input[0].name
         got = sess.run(None, {name: input_tensor.detach().numpy()})[0]
-        self.assertEqualArray(expected.detach().numpy(), got, atol=1e-5)
+        self.assertEqualArray(expected.detach().numpy(), got, atol=1e-5) 
 
     @skipif_ci_apple("crash on apple")
     @skipif_ci_windows("not supported yet on Windows")

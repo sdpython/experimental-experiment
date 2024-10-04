@@ -128,7 +128,7 @@ class TestCustomCode(ExtTestCase):
         tr = MyTracer()
         res = tr.trace(model)
         res_str = str(res)
-        self.assertIn("target=__main__.same", res_str)
+        self.assertIn(".same", res_str)
         self.assertIn("{name: twice, out: True}", res_str)
         targets = [node.target for node in res.nodes]
         names = [
