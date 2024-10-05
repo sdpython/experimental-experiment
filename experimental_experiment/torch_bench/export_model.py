@@ -99,7 +99,7 @@ def main(args=None):
         print(f"order={args.order}")
         print(f"dump_folder={args.dump_folder}")
 
-        if args.exporter == "custom":
+        if args.exporter in ("custom", "custom-fallback"):
             print(f"disable_pattern={disable_pattern!r}")
             print(f"enable_pattern={enable_pattern!r}")
 

@@ -49,7 +49,7 @@ def export_utils(
     verbose=0,
     return_builder=False,
     dynamo=True,
-    use_dynamo=True,
+    strategy="dynamo",
 ):
     export_script(f"{prefix}.onnx", model, *args)
     if dynamo:
@@ -66,7 +66,7 @@ def export_utils(
         ),
         verbose=verbose,
         return_builder=return_builder,
-        api_two=use_dynamo,
+        strategy=strategy,
     )
     with open(f"{prefix}.custom.onnx", "wb") as f:
         f.write((onx[0] if return_builder else onx).SerializeToString())
@@ -175,7 +175,7 @@ class TestOnnxExportLlama(ExtTestCase):
                 model,
                 *input_tensors,
                 dynamo=False,
-                use_dynamo=True,
+                strategy="dynamo",
                 remove_unused=True,
                 verbose=0,
             )
@@ -203,7 +203,7 @@ class TestOnnxExportLlama(ExtTestCase):
                 model,
                 *input_tensors,
                 dynamo=False,
-                use_dynamo=False,
+                strategy=None,
                 remove_unused=True,
                 verbose=0,
             )
@@ -239,7 +239,7 @@ class TestOnnxExportLlama(ExtTestCase):
                 model,
                 *input_tensors,
                 dynamo=False,
-                use_dynamo=True,
+                strategy="dynamo",
                 remove_unused=True,
                 verbose=0,
             )
@@ -275,7 +275,7 @@ class TestOnnxExportLlama(ExtTestCase):
                 model,
                 *input_tensors,
                 dynamo=False,
-                use_dynamo=False,
+                strategy=None,
                 remove_unused=True,
                 verbose=0,
             )

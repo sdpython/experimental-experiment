@@ -1,4 +1,5 @@
 import unittest
+import warnings
 from collections import Counter
 import onnx
 from experimental_experiment.ext_test_case import (
@@ -141,6 +142,139 @@ class TestControlFlow(ExtTestCase):
             ref = ExtendedReferenceEvaluator(onx)
             got = ref.run(None, {"x": _x.detach().numpy()})[0]
             self.assertEqualArray(expected, got, atol=1e-5)
+
+    @skipif_ci_windows("not yet supported on Windows")
+    @requires_torch("2.4")
+    def test_controlflow_custom_if_two_inputs(self):
+        import torch
+
+        class TwoInputs(torch.nn.Module):
+            def forward(self, x, y):
+                def true_fn(x, y):
+                    return torch.sin(x), torch.cos(x) + y
+
+                def false_fn(x, y):
+                    return torch.cos(x), torch.sin(x) + y
+
+                return torch.cond(x.sum() > 0, true_fn, false_fn, [x, y])
+
+        x, y = torch.rand(5, 3), torch.rand(5, 3)
+        model = TwoInputs()
+        onx = to_onnx(model, (x, y))
+        co = Counter([n.op_type for n in onx.graph.node])
+        self.assertEqual(co, {"ReduceSum": 1, "Greater": 1, "If": 1})
+        self.assertEqual(len(onx.functions), 2)
+
+        for _x in (x, -x):
+            expected = model(_x, y)
+            ref = ExtendedReferenceEvaluator(onx)
+            got = ref.run(None, {"x": _x.detach().numpy(), "y": y.detach().numpy()})
+            self.assertEqual(len(expected), len(got))
+            for e, g in zip(expected, got):
+                self.assertEqualArray(e, g, atol=1e-5)
+
+    @skipif_ci_windows("not yet supported on Windows")
+    @requires_torch("2.4")
+    def test_controlflow_custom_if_two_cond(self):
+        import torch
+
+        class TwoConds(torch.nn.Module):
+            def forward(self, x):
+                def true_fn2(x):
+                    def true_fn1(x):
+                        return torch.sin(x)
+
+                    def false_fn1(x):
+                        return torch.cos(x)
+
+                    return torch.cond(x.sum() < 0, true_fn1, false_fn1, [x])
+
+                def false_fn2(x):
+                    return -x
+
+                return torch.cond(x.sum() > 0, true_fn2, false_fn2, [x])
+
+        x = torch.rand(5, 3)
+        model = TwoConds()
+        model(x)
+        model(-x)
+        torch.export.export(model, (x,))
+        onx = to_onnx(model, (x,))
+        co = Counter([n.op_type for n in onx.graph.node])
+        self.assertEqual(co, {"ReduceSum": 1, "Greater": 1, "If": 1})
+        self.assertEqual(len(onx.functions), 2)
+
+        for _x in (x, -x):
+            expected = model(_x)
+            ref = ExtendedReferenceEvaluator(onx)
+            got = ref.run(None, {"x": _x.detach().numpy()})
+            self.assertEqualArray(expected, got[0], atol=1e-5)
+
+    @skipif_ci_windows("not yet supported on Windows")
+    @requires_torch("2.4")
+    def test_controlflow_custom_raw_test(self):
+        import torch
+
+        class RawTest(torch.nn.Module):
+            def forward(self, x):
+                def true_fn(x):
+                    return torch.sin(x)
+
+                def false_fn(x):
+                    return torch.cos(x)
+
+                if x.sum() > 0:
+                    return true_fn(x)
+                return false_fn(x)
+
+        x = torch.rand(5, 3)
+        model = RawTest()
+        filename = "test_controlflow_custom_raw_test.onnx"
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            torch.onnx.export(model, (x,), filename, input_names=["x"], opset_version=18)
+            onx = to_onnx(model, (x,), strategy="jit")
+        co = Counter([n.op_type for n in onx.graph.node])
+        self.assertEqual(co, {"Sin": 1})
+        self.assertEqual(len(onx.functions), 0)
+
+        for _x in (x,):
+            expected = model(_x)
+            ref = ExtendedReferenceEvaluator(onx)
+            got = ref.run(None, {"x": _x.detach().numpy()})
+            self.assertEqualArray(expected, got[0], atol=1e-5)
+
+    @skipif_ci_windows("not yet supported on Windows")
+    @requires_torch("2.4")
+    def test_controlflow_custom_fallback(self):
+        import torch
+
+        class RawTest(torch.nn.Module):
+            def forward(self, x):
+                def true_fn(x):
+                    return torch.sin(x)
+
+                def false_fn(x):
+                    return torch.cos(x)
+
+                if x.sum() > 0:
+                    return true_fn(x)
+                return false_fn(x)
+
+        x = torch.rand(5, 3)
+        model = RawTest()
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            onx = to_onnx(model, (x,), strategy="fallback")
+        co = Counter([n.op_type for n in onx.graph.node])
+        self.assertEqual(co, {"Sin": 1})
+        self.assertEqual(len(onx.functions), 0)
+
+        for _x in (x,):
+            expected = model(_x)
+            ref = ExtendedReferenceEvaluator(onx)
+            got = ref.run(None, {"x": _x.detach().numpy()})
+            self.assertEqualArray(expected, got[0], atol=1e-5)
 
 
 if __name__ == "__main__":

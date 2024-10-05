@@ -231,7 +231,7 @@ def common_export(
         with torch.no_grad():
             prog = torch.onnx.dynamo_export(model, *inputs)
         onnx.save(prog.model_proto, filename)
-    elif exporter == "custom":
+    elif exporter in ("custom", "custom-fallback"):
         from ..torch_interpreter import to_onnx
         from ..xbuilder import OptimizationOptions
         from ..xoptim import get_pattern_list
