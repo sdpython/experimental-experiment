@@ -11,11 +11,11 @@ from onnx.model_container import ModelContainer
 from ..xbuilder.graph_builder import GraphBuilder, OptimizationOptions
 
 
-def _insert_flatten_between_transpose_and_view(
+def _insert_contiguous_between_transpose_and_view(
     exported_program: "torch.export.ExportedProgram",  # noqa: F821
 ) -> "torch.export.ExportedProgram":  # noqa: F821
     """
-    Modifies the module inplace to insert a node 'flatten' between a node
+    Modifies the module inplace to insert a node 'contiguous' between a node
     'transpose' followed by a node 'view'.
     The modification takes place inplace.
     See issue https://github.com/pytorch/pytorch/issues/136543.
@@ -43,7 +43,7 @@ def _insert_flatten_between_transpose_and_view(
 
         modified = True
         with graph.inserting_after(node):
-            new_node = graph.call_method("flatten", args=(node,))
+            new_node = graph.call_method("contiguous", args=(node,))
             node.replace_all_uses_with(new_node)
             # new_node is replaced as well so we manually revert the replacement
             new_node.update_arg(0, node)
@@ -188,7 +188,7 @@ def _apply_decompositions(
         decomposition_table = get_decomposition_table_by_name(decomposition_table)
 
     if decomposition_table is not None:
-        exported_mod = _insert_flatten_between_transpose_and_view(exported_mod)
+        exported_mod = _insert_contiguous_between_transpose_and_view(exported_mod)
         exported_mod = exported_mod.run_decompositions(decomposition_table)
 
     return exported_mod
