@@ -1,3 +1,4 @@
+import contextlib
 import collections
 import inspect
 import os
@@ -8,6 +9,23 @@ from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 import onnx
 import torch
 from .export_model_helper import compute_weight_size
+
+
+@contextlib.contextmanager
+def bypass_export_some_errors():
+    """
+    Tries to bypass some functions torch.export.export does not
+    support such as ``torch.jit.isinstance``.
+    """
+    import torch.jit
+
+    f = torch.jit.isinstance
+    torch.jit.isinstance = isinstance
+
+    try:
+        yield
+    finally:
+        torch.jit.isinstance = f
 
 
 class MakeConfig:
@@ -167,7 +185,7 @@ class ModelRunner:
         if not optimization or optimization == "none":
             # always possible
             return True
-        if exporter in {"custom"}:
+        if exporter in {"custom", "custom-ballback"}:
             return True
         if exporter in {"torch_script", "dynamo_export"}:
             return optimization in {"default"}
@@ -465,6 +483,19 @@ class ModelRunner:
                 decomposition_table=decomposition_table,
             )
 
+        if exporter == "custom-fallback":
+            return self._to_onnx_custom(
+                name,
+                dynamic=dynamic,
+                fake_tensor=fake_tensor,
+                no_grad=no_grad,
+                optimization=optimization,
+                verbose=verbose,
+                target_opset=target_opset,
+                decomposition_table=decomposition_table,
+                strategy="fallback",
+            )
+
         if exporter in ("cort", "cortgrad"):
             return self._to_cort(
                 name,
@@ -615,6 +646,7 @@ class ModelRunner:
         verbose: int,
         target_opset: int,
         decomposition_table: Optional[str],
+        strategy: Optional[str] = None,
     ):
         assert not fake_tensor, "fake_tensor not implemented."
         assert no_grad, "no_grad false not implemented yet"
@@ -646,6 +678,7 @@ class ModelRunner:
                     return_builder=True,
                     dynamic_shapes=self.get_dynamic_shapes(dynamic, wrapped=True),
                     decomposition_table=decomposition_table,
+                    strategy=strategy,
                 )
         else:
             with torch.no_grad():
@@ -935,7 +968,9 @@ class ModelRunner:
             additional_kwargs.update(dict(fallback=True))
 
         if self.autocast:
-            with torch.autocast(device_type=self.device, dtype=self.dtype), torch.no_grad():
+            with torch.autocast(
+                device_type=self.device, dtype=self.dtype
+            ), torch.no_grad(), bypass_export_some_errors():
                 onnx_program = torch.onnx.export(
                     self.model,
                     self.make_export_inputs(dynamic, wrapped=True),
@@ -947,7 +982,7 @@ class ModelRunner:
                     **additional_kwargs,
                 )
         else:
-            with torch.no_grad():
+            with torch.no_grad(), bypass_export_some_errors():
                 onnx_program = torch.onnx.export(
                     self.model,
                     self.make_export_inputs(dynamic, wrapped=True),
@@ -1032,7 +1067,7 @@ class ModelRunner:
                 self.make_export_inputs(dynamic, wrapped=True),
                 dynamic_shapes=self.get_dynamic_shapes(dynamic, wrapped=True),
             )
-        return res, None
+        return res.module(), None
 
     def _to_eager(
         self,

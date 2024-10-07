@@ -12,6 +12,7 @@ from ..xbuilder._dtype_helper import (
     onnx_dtype_to_torch_dtype,
 )
 from ..xbuilder.model_container import _get_type
+from . import LOCAL_DOMAIN
 from ._exceptions import FunctionNotFoundError
 from .aten_functions import find_function
 from .aten_methods import find_method
@@ -27,7 +28,7 @@ class DynamoInterpreter:
         see function `_retrieve
         <experimental_experiment.torch_interpreter.onnx_export._retrieve>`.
     :param dispatcher: see :class:`experimental_experiment.torch_interpreter.Dispatcher`
-    :param use_dynamo: see
+    :param strtegy: see
         :func:`to_onnx <experimental_experiment.torch_interpreter.to_onnx>`
     """
 
@@ -39,7 +40,7 @@ class DynamoInterpreter:
         graph_builder: "GraphBuilder",  # noqa: F821
         retriever: Callable,
         dispatcher: Optional["Dispatcher"] = None,  # noqa: F821
-        use_dynamo: bool = False,
+        strategy: Optional[str] = None,
         example_inputs: Optional[Tuple["torch.Tensor", ...]] = None,  # noqa: F821
         decomposition_table: Optional[
             Dict["torch._ops.OpOverload", Callable[..., Any]]  # noqa: F821
@@ -51,7 +52,7 @@ class DynamoInterpreter:
         self.builder = graph_builder
         self.retriever = retriever
         self.dispatcher = dispatcher
-        self.use_dynamo = (use_dynamo,)
+        self.strategy = (strategy,)
         self.example_values_ = {}
         self.decomposition_table = decomposition_table
         assert example_inputs is None or isinstance(
@@ -174,9 +175,7 @@ class DynamoInterpreter:
             builder, args, output_names = self._interpret_sub_module(
                 init, None, source_node=node
             )
-            self.builder.make_local_function(
-                node.name, builder, domain="aten_local_function"
-            )
+            self.builder.make_local_function(node.name, builder, domain=LOCAL_DOMAIN)
             return None
 
         self.builder.make_initializer(node.name, init)
@@ -957,7 +956,7 @@ class DynamoInterpreter:
                 f"for node={node}{self.builder.get_debug_msg()}"
             )
 
-        self._set_shape_and_type(node, res)
+        self._set_shape_and_type(node, res, fct_name=aten_name)
         res = self._check_output_name(node, res, output_names)
         return res
 
@@ -999,7 +998,7 @@ class DynamoInterpreter:
 
         res = fct(self.builder, can_set, output_names, *args, **kwargs)
 
-        self._set_shape_and_type(node, res)
+        self._set_shape_and_type(node, res, fct_name=method_name)
         res = self._check_output_name(node, res, output_names)
         return res
 
@@ -1095,6 +1094,7 @@ class DynamoInterpreter:
         self,
         node: "torch.fx.Node",  # noqa: F821
         res: Union[str, List[str]],
+        fct_name: Optional[str] = None,
     ):
         val = node.meta.get("val", None)
         exa = node.meta.get("example_value", None)
@@ -1108,15 +1108,22 @@ class DynamoInterpreter:
                 f"{val.shape} != {exa.shape}{self.builder.get_debug_msg()}"
             )
 
-        description = []
         last_node = self.builder.last_added_node
-        if val is not None:
+        description = []
+        if val is not None and fct_name not in {"aten_cond"}:
             # extracting shape and types
             if not isinstance(val, tuple):
                 val = (val,)
                 res = (res,)
+            assert isinstance(
+                res, (list, tuple)
+            ), f"Unexpected type {type(res)}{self.builder.get_debug_msg()}"
             if len(val) != len(res):
-                raise RuntimeError(f"Length mismatch between {val} and {res}.")
+                raise RuntimeError(
+                    f"Length mismatch {len(val)} != {len(res)} "
+                    f"between {val} and {res}"
+                    f"{self.builder.get_debug_msg()}"
+                )
             output_sets = set(last_node.output) if last_node is not None else {}
 
             for i, (v, r) in enumerate(zip(val, res)):
@@ -1232,7 +1239,7 @@ class DynamoInterpreter:
             dispatcher=self.dispatcher,
             raise_list=self.builder.raise_list,
             dynamic_shapes=self.builder.dynamic_shapes,
-            use_dynamo=self.use_dynamo,
+            strategy=self.strategy,
             decomposition_table=self.decomposition_table,
         )
         builder.process(graph_module, interpreter)

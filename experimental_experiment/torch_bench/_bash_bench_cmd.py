@@ -20,7 +20,7 @@ def bash_bench_parse_args(name: str, doc: str, new_args: Optional[List[str]] = N
         ),
         exporter=(
             "custom",
-            "export, custom, onnx_dynamo, dynamo_export, torch_script",
+            "export, custom, custom-fallback, onnx_dynamo, dynamo_export, torch_script",
         ),
         process=("0", "run every run in a separate process"),
         device=("cpu", "'cpu' or 'cuda'"),
