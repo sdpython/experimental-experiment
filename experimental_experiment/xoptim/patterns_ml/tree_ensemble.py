@@ -60,3 +60,49 @@ class TreeEnsembleRegressorMulPattern(PatternOptimization):
         )
         new_tree.attribute.extend(atts)
         return [new_tree]
+
+
+class TreeEnsembleRegressorConcatPattern(PatternOptimization):
+    """
+    Replaces multiple TreeEnsembleRegressor + Concat(., axis=1)
+    with one TreeEnsembleRegressor.
+    """
+
+    def match(
+        self,
+        g: "GraphBuilderPatternOptimization",  # noqa: F821
+        node: NodeProto,
+        matched: List[MatchResult],
+    ) -> Optional[MatchResult]:
+        if node.op_type != "TreeEnsembleRegressor" or node.domain != "ai.onnx.ml":
+            return self.none()
+
+        next_nodes = g.next_nodes(node.output[0])
+        if len(next_nodes) != 1:
+            return self.none(node, inspect.currentframe().f_lineno)
+        concat_node = next_nodes[0]
+        if concat_node.op_type != "Concat" or concat_node.domain != "":
+            return self.none(node, inspect.currentframe().f_lineno)
+        axis = g.get_attribute(concat_node, "axis", exc=False)
+        if axis is None or axis.i != 1:
+            return self.none(node, inspect.currentframe().f_lineno)
+        trees = []
+        for treeo in concat_node.input:
+            t = g.node_before(treeo)
+            if t.op_type != "TreeEnsembleRegressor" or t.domain != "ai.onnx.ml":
+                return self.none(node, inspect.currentframe().f_lineno)
+            n_targets = g.get_attribute(t, "n_targets", exc=False)
+            if n_targets is None or n_targets.i != 1:
+                # It could be implemented in that case as well.
+                return self.none(node, inspect.currentframe().f_lineno)
+            trees.append(t)
+
+        return MatchResult(self, [concat_node, *trees], self.apply, insert_at=concat_node)
+
+    def apply(
+        self,
+        g: "GraphBuilder",  # noqa: F821
+        concat_node: NodeProto,
+        *trees: NodeProto,
+    ) -> List[NodeProto]:
+        assert False, "Not implemented error"
