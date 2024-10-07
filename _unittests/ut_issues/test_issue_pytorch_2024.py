@@ -1,5 +1,6 @@
 import unittest
 import numpy as np
+from onnx.checker import check_model
 from experimental_experiment.ext_test_case import ExtTestCase
 from experimental_experiment.torch_interpreter import to_onnx
 
@@ -58,6 +59,8 @@ class TestIssuesOnnxExporter(ExtTestCase):
         else:
             to_onnx(model, (update, kv_index), filename=model_path)
 
+        check_model(model_path)
+
         import onnxruntime
 
         sess_options = onnxruntime.SessionOptions()
@@ -68,15 +71,15 @@ class TestIssuesOnnxExporter(ExtTestCase):
         def gen_numpy_inputs(n: int, idx: int):
             return {
                 "update": 5 * np.ones((n, 1), dtype=np.float32),
-                "kv_index": np.array([idx], dtype=np.int64),
+                "index": np.array([idx], dtype=np.int64),
             }
 
         input_n = gen_numpy_inputs(n, 0)
-        e1 = session.run(["updated"], input_n)
+        e1 = session.run(None, input_n)[0]
         self.assertEqual(e1[0].shape, model.params.shape)
 
         input_2 = gen_numpy_inputs(2, 0)
-        e2 = session.run(["updated"], input_2)
+        e2 = session.run(None, input_2)[0]
         self.assertEqual(e2[0].shape, model.params.shape)
 
     def test_update_parameter_script(self):

@@ -2915,47 +2915,77 @@ def aten_index_put(
     accumulate: bool = False,
     name="aten_index_put",
 ) -> T:
-    "[...,:, ...]"
+    "[..., :, ...]"
     assert isinstance(indices, list), f"Unexpected type {type(indices)}{g.get_debug_msg()}"
-    assert len(indices) == 1, f"Not implementeded for indices={indices}{g.get_debug_msg()}"
     assert g.has_shape(x), f"Missing shape for {x!r}{g.get_debug_msg()}"
 
-    index = indices[0]  # tensor
-    index_dtype = g.get_type(index)
-    if index_dtype == TensorProto.BOOL:
-        assert not accumulate, (
-            f"accumulate is True but it does not make sense in that case"
-            f"{g.get_debug_msg()}"
-        )
-        res = g.op.Where(index, values, x, outputs=outputs)
+    if len(indices) == 1:
+        name = f"{name}1"
+        index = indices[0]  # tensor
+        index_dtype = g.get_type(index)
+        if index_dtype == TensorProto.BOOL:
+            assert not accumulate, (
+                f"accumulate is True but it does not make sense in that case"
+                f"{g.get_debug_msg()}"
+            )
+            res = g.op.Where(index, values, x, outputs=outputs)
+            if not sts:
+                g.set_type(res, g.get_type(x))
+                g.set_shape(res, g.get_shape(x))
+            return res
+
+        new_index = g.op.UnsqueezeAnyOpset(index, np.array([-1], dtype=np.int64), name=name)
+        g.set_type(new_index, index_dtype)
+        if g.has_shape(index):
+            g.set_shape(new_index, (*g.get_shape(index), 1))
+        else:
+            g.set_rank(new_index, g.get_rank(index) + 1)
+
+        if accumulate:
+            assert g.main_opset >= 13, (
+                f"index_put cannot be implemented for opset < 13 "
+                f"because ScatterND does not support reduction"
+                f"{g.get_debug_msg()}"
+            )
+            res = g.op.ScatterND(
+                x, new_index, values, name=name, reduction="add", outputs=outputs
+            )
+        else:
+            res = g.op.ScatterND(x, new_index, values, name=name, outputs=outputs)
+
         if not sts:
             g.set_type(res, g.get_type(x))
             g.set_shape(res, g.get_shape(x))
         return res
 
-    new_index = g.op.UnsqueezeAnyOpset(index, np.array([-1], dtype=np.int64), name=name)
-    g.set_type(new_index, index_dtype)
-    if g.has_shape(index):
-        g.set_shape(new_index, (*g.get_shape(index), 1))
-    else:
-        g.set_rank(new_index, g.get_rank(index) + 1)
+    if len(indices) == 3:
+        name = f"{name}3"
+        last = indices[-1]
+        if (
+            g.has_type(last)
+            and g.get_type(last) in {TensorProto.INT64, TensorProto.INT32}
+            and g.has_rank(last)
+            and g.get_rank(last) == 1
+            and g.has_rank(indices[0])
+            and g.get_rank(indices[0]) == 1
+            and g.has_shape(indices[0])
+            and g.has_shape(indices[1])
+            and g.get_shape(indices[0]) == g.get_shape(indices[1])
+            and g.is_constant(last)
+        ):
+            cst = g.get_constant(last, computed_value=True, exc=False)
+            # shape = g.get_shape(last)
+            if cst is not None:
+                # i, j, a:b = indices
+                # x[i, j, a:b] = values
+                pass
 
-    if accumulate:
-        assert g.main_opset >= 13, (
-            f"index_put cannot be implemented for opset < 13 "
-            f"because ScatterND does not support reduction"
-            f"{g.get_debug_msg()}"
-        )
-        res = g.op.ScatterND(
-            x, new_index, values, name=name, reduction="add", outputs=outputs
-        )
-    else:
-        res = g.op.ScatterND(x, new_index, values, name=name, outputs=outputs)
+            if not sts:
+                g.set_type(res, g.get_type(x))
+                g.set_shape(res, g.get_shape(x))
+            return res
 
-    if not sts:
-        g.set_type(res, g.get_type(x))
-        g.set_shape(res, g.get_shape(x))
-    return res
+    raise AssertionError(f"No implementation when indices={indices}{g.get_debug_msg()}")
 
 
 def aten_instance_norm(
