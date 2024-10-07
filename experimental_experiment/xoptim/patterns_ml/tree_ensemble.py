@@ -105,4 +105,4 @@ class TreeEnsembleRegressorConcatPattern(PatternOptimization):
         concat_node: NodeProto,
         *trees: NodeProto,
     ) -> List[NodeProto]:
-        assert False, "Not implemented error"
+        raise NotImplementedError("Not implemented error")
