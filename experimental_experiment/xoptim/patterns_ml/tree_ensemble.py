@@ -249,6 +249,32 @@ class TreeEnsembleRegressorConcatPattern(PatternOptimization):
         merged = np.hstack(collected)
         return onh.from_array(merged, name=as_tensor)
 
+    def _opset_process(
+        cls, g: "GraphBuilder", atts: Dict[str, Any]  # noqa: F821
+    ) -> Dict[str, Any]:
+        """
+        as_tensor not supported in opset ai.onnx.ml < 3.
+        """
+        if g.opsets["ai.onnx.ml"] >= 3:
+            new_atts = {}
+            for k, v in atts.items():
+                if v is None:
+                    continue
+                new_atts[k] = v
+            return new_atts
+
+        new_atts = {}
+        for k, v in atts.items():
+            if v is None:
+                continue
+            if not k.endswith("_as_tensor"):
+                new_atts[k] = v
+                continue
+            nv = onh.to_array(v)
+            nk = k[: -len("_as_tensor")]
+            new_atts[nk] = [float(x) for x in nv.tolist()]
+        return new_atts
+
     def apply(
         self,
         g: "GraphBuilder",  # noqa: F821
@@ -264,9 +290,6 @@ class TreeEnsembleRegressorConcatPattern(PatternOptimization):
 
         new_atts = dict(
             aggregate_function="SUM",
-            base_values_as_tensor=self._merge(
-                g, trees, "base_values", "base_values_as_tensor"
-            ),
             n_targets=len(trees),
             nodes_falsenodeids=self._merge(g, trees, "nodes_falsenodeids"),
             nodes_featureids=self._merge(g, trees, "nodes_featureids"),
@@ -282,7 +305,9 @@ class TreeEnsembleRegressorConcatPattern(PatternOptimization):
                 g, trees, "nodes_treeids", increment=True, first_tree_id=first_tree_id
             ),
             nodes_truenodeids=self._merge(g, trees, "nodes_truenodeids"),
-            nodes_values=self._merge(g, trees, "nodes_values", "nodes_values_as_tensor"),
+            nodes_values_as_tensor=self._merge(
+                g, trees, "nodes_values", "nodes_values_as_tensor"
+            ),
             post_transform=self._merge(g, trees, "post_transform", unique=True),
             target_ids=self._merge(
                 g,
@@ -295,10 +320,14 @@ class TreeEnsembleRegressorConcatPattern(PatternOptimization):
             target_treeids=self._merge(
                 g, trees, "target_treeids", increment=True, first_tree_id=first_tree_id
             ),
-            target_weights=self._merge(
+            target_weights_as_tensor=self._merge(
                 g, trees, "target_weights", "target_weights_as_tensor"
             ),
         )
+
+        bv = self._merge(g, trees, "base_values", "base_values_as_tensor")
+        if bv is not None:
+            new_atts["base_values_as_tensor"] = bv
 
         outputs = (
             concat_node.output
@@ -312,7 +341,7 @@ class TreeEnsembleRegressorConcatPattern(PatternOptimization):
             outputs,
             name=f"{self.__class__.__name__}--{trees[0].name}",
             domain=trees[0].domain,
-            **new_atts,
+            **self._opset_process(g, new_atts),
         )
         if axis == 1:
             if len(sigmoid) == 0:
