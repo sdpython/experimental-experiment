@@ -87,7 +87,7 @@ class TreeEnsembleRegressorConcatPattern(PatternOptimization):
         if concat_node.op_type != "Concat" or concat_node.domain != "":
             return self.none(node, inspect.currentframe().f_lineno)
         axis = g.get_attribute(concat_node, "axis", exc=False)
-        if axis is None or axis.i != 1:
+        if axis is None or axis.i not in (0, 1):
             return self.none(node, inspect.currentframe().f_lineno)
 
         trees = []
@@ -140,63 +140,6 @@ class TreeEnsembleRegressorConcatPattern(PatternOptimization):
             trees.append(t)
 
         return MatchResult(self, [concat_node, *trees], self.apply, insert_at=concat_node)
-
-    def apply(
-        self,
-        g: "GraphBuilder",  # noqa: F821
-        concat_node: NodeProto,
-        *trees: NodeProto,
-    ) -> List[NodeProto]:
-
-        first_tree_id = self._first_tree_id(g, trees)
-
-        new_atts = dict(
-            aggregate_function="SUM",
-            base_values_as_tensor=self._merge(
-                g, trees, "base_values", "base_values_as_tensor"
-            ),
-            n_targets=len(trees),
-            nodes_falsenodeids=self._merge(g, trees, "nodes_falsenodeids"),
-            nodes_featureids=self._merge(g, trees, "nodes_featureids"),
-            nodes_hitrates_as_tensor=self._merge(
-                g, trees, "nodes_hitrates", "nodes_hitrates_as_tensor"
-            ),
-            nodes_missing_value_tracks_true=self._merge(
-                g, trees, "nodes_missing_value_tracks_true"
-            ),
-            nodes_modes=self._merge(g, trees, "nodes_modes"),
-            nodes_nodeids=self._merge(g, trees, "nodes_nodeids"),
-            nodes_treeids=self._merge(
-                g, trees, "nodes_treeids", increment=True, first_tree_id=first_tree_id
-            ),
-            nodes_truenodeids=self._merge(g, trees, "nodes_truenodeids"),
-            nodes_values=self._merge(g, trees, "nodes_values", "nodes_values_as_tensor"),
-            post_transform=self._merge(g, trees, "post_transform", unique=True),
-            target_ids=self._merge(
-                g,
-                trees,
-                "target_ids",
-                increment=True,
-                first_tree_id=dict(enumerate(range(len(trees)))),
-            ),
-            target_nodeids=self._merge(g, trees, "target_nodeids"),
-            target_treeids=self._merge(
-                g, trees, "target_treeids", increment=True, first_tree_id=first_tree_id
-            ),
-            target_weights=self._merge(
-                g, trees, "target_weights", "target_weights_as_tensor"
-            ),
-        )
-
-        new_tree = g.make_node(
-            trees[0].op_type,
-            trees[0].input,
-            concat_node.output,
-            name=f"{self.__class__.__name__}--{trees[0].name}",
-            domain=trees[0].domain,
-            **new_atts,
-        )
-        return [new_tree]
 
     @classmethod
     def get_attribute_value(
@@ -282,3 +225,87 @@ class TreeEnsembleRegressorConcatPattern(PatternOptimization):
             return None
         merged = np.hstack(collected)
         return onh.from_array(merged, name=as_tensor)
+
+    def apply(
+        self,
+        g: "GraphBuilder",  # noqa: F821
+        concat_node: NodeProto,
+        *trees: NodeProto,
+    ) -> List[NodeProto]:
+
+        first_tree_id = self._first_tree_id(g, trees)
+        axis = g.get_attribute(concat_node, "axis").i
+
+        new_atts = dict(
+            aggregate_function="SUM",
+            base_values_as_tensor=self._merge(
+                g, trees, "base_values", "base_values_as_tensor"
+            ),
+            n_targets=len(trees),
+            nodes_falsenodeids=self._merge(g, trees, "nodes_falsenodeids"),
+            nodes_featureids=self._merge(g, trees, "nodes_featureids"),
+            nodes_hitrates_as_tensor=self._merge(
+                g, trees, "nodes_hitrates", "nodes_hitrates_as_tensor"
+            ),
+            nodes_missing_value_tracks_true=self._merge(
+                g, trees, "nodes_missing_value_tracks_true"
+            ),
+            nodes_modes=self._merge(g, trees, "nodes_modes"),
+            nodes_nodeids=self._merge(g, trees, "nodes_nodeids"),
+            nodes_treeids=self._merge(
+                g, trees, "nodes_treeids", increment=True, first_tree_id=first_tree_id
+            ),
+            nodes_truenodeids=self._merge(g, trees, "nodes_truenodeids"),
+            nodes_values=self._merge(g, trees, "nodes_values", "nodes_values_as_tensor"),
+            post_transform=self._merge(g, trees, "post_transform", unique=True),
+            target_ids=self._merge(
+                g,
+                trees,
+                "target_ids",
+                increment=True,
+                first_tree_id=dict(enumerate(range(len(trees)))),
+            ),
+            target_nodeids=self._merge(g, trees, "target_nodeids"),
+            target_treeids=self._merge(
+                g, trees, "target_treeids", increment=True, first_tree_id=first_tree_id
+            ),
+            target_weights=self._merge(
+                g, trees, "target_weights", "target_weights_as_tensor"
+            ),
+        )
+
+        outputs = (
+            concat_node.output
+            if axis == 1
+            else [g.unique_name(f"{self.__class__.__name__}_{concat_node.output[0]}")]
+        )
+
+        new_tree = g.make_node(
+            trees[0].op_type,
+            trees[0].input,
+            outputs,
+            name=f"{self.__class__.__name__}--{trees[0].name}",
+            domain=trees[0].domain,
+            **new_atts,
+        )
+        if axis == 1:
+            return [new_tree]
+
+        transpose_output = g.unique_name(
+            f"{self.__class__.__name__}_{concat_node.output[0]}T"
+        )
+        transpose = g.make_node(
+            "Transpose",
+            outputs,
+            [transpose_output],
+            perm=[1, 0],
+            name=f"{self.__class__.__name__}--{trees[0].name}",
+        )
+        new_shape = g.make_initializer("", np.array([-1, 1], dtype=np.int64))
+        reshape = g.make_node(
+            "Reshape",
+            [transpose_output, new_shape],
+            concat_node.output,
+            name=f"{self.__class__.__name__}--{trees[0].name}",
+        )
+        return [new_tree, transpose, reshape]
