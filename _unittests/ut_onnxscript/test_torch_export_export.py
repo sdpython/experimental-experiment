@@ -6,6 +6,8 @@ from experimental_experiment.ext_test_case import (
     skipif_ci_windows,
     skipif_ci_apple,
     requires_torch,
+    ignore_warnings,
+    hide_stdout,
 )
 
 
@@ -140,6 +142,30 @@ class TestTorchExportExport(ExtTestCase):
             export = torch.export.export(model, (a, b))
         module = export.module()
         got = module(a, b)
+        self.assertEqualArray(expected, got)
+
+    @skipif_ci_windows("not available on Windows")
+    @skipif_ci_apple("not able to fix it")
+    @requires_torch("2.5")
+    @ignore_warnings(DeprecationWarning)
+    @hide_stdout()
+    def test_basic_unet(self):
+        from monai.networks.nets import BasicUNet
+
+        model = BasicUNet(
+            spatial_dims=3,
+            in_channels=3,
+            out_channels=1,
+            features=[32, 64, 128, 256, 512, 32],
+            act=("LeakyReLU", {"negative_slope": 0.1, "inplace": False}),
+        )
+        x = torch.randn(1, 3, 128, 128, 128)
+        expected = model(x)
+
+        with bypass_export_some_errors():
+            export = torch.export.export(model, (x,))
+        module = export.module()
+        got = module(x)
         self.assertEqualArray(expected, got)
 
 
