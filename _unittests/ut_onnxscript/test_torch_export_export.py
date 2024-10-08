@@ -5,6 +5,7 @@ from experimental_experiment.ext_test_case import (
     ExtTestCase,
     skipif_ci_windows,
     skipif_ci_apple,
+    requires_monai,
     requires_torch,
     ignore_warnings,
     hide_stdout,
@@ -147,6 +148,7 @@ class TestTorchExportExport(ExtTestCase):
     @skipif_ci_windows("not available on Windows")
     @skipif_ci_apple("not able to fix it")
     @requires_torch("2.5")
+    @requires_monai()
     @ignore_warnings(DeprecationWarning)
     @hide_stdout()
     def test_basic_unet(self):
