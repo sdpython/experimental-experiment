@@ -572,7 +572,7 @@ def requires_torch(version: str, msg: str = "") -> Callable:
     return lambda x: x
 
 
-def requires_monai(version: str, msg: str = "") -> Callable:
+def requires_monai(version: str = "", msg: str = "") -> Callable:
     """Skips a unit test if :epkg:`pytorch` is not recent enough."""
     import packaging.version as pv
 
@@ -581,7 +581,9 @@ def requires_monai(version: str, msg: str = "") -> Callable:
     except ImportError:
         return unittest.skip(msg)
 
-    if pv.Version(".".join(monai.__version__.split(".")[:2])) < pv.Version(version):
+    if version and pv.Version(".".join(monai.__version__.split(".")[:2])) < pv.Version(
+        version
+    ):
         msg = f"torch version {monai.__version__} < {version}: {msg}"
         return unittest.skip(msg)
     return lambda x: x
