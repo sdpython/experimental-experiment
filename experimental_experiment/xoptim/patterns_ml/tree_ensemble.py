@@ -84,19 +84,34 @@ class TreeEnsembleRegressorConcatPattern(PatternOptimization):
         if len(next_nodes) != 1:
             return self.none(node, inspect.currentframe().f_lineno)
         concat_node = next_nodes[0]
-        if concat_node.op_type != "Concat" or concat_node.domain != "":
+        if concat_node.op_type not in ("Sigmoid", "Concat") or concat_node.domain != "":
             return self.none(node, inspect.currentframe().f_lineno)
+        if concat_node.op_type == "Sigmoid":
+            next_nodes = g.next_nodes(concat_node.output[0])
+            if len(next_nodes) != 1:
+                return self.none(node, inspect.currentframe().f_lineno)
+            concat_node = next_nodes[0]
+
         axis = g.get_attribute(concat_node, "axis", exc=False)
         if axis is None or axis.i not in (0, 1):
             return self.none(node, inspect.currentframe().f_lineno)
 
+        sigmoid = []
         trees = []
         post_transform = None
         inputs = None
         base_values_none = None
 
-        for treeo in concat_node.input:
-            t = g.node_before(treeo)
+        for treeo_or_sigmoid in concat_node.input:
+            if g.is_used_more_than_once(treeo_or_sigmoid):
+                return self.none(node, inspect.currentframe().f_lineno)
+            t = g.node_before(treeo_or_sigmoid)
+            if t.op_type == "Sigmoid":
+                if g.is_used_more_than_once(t.input[0]):
+                    return self.none(node, inspect.currentframe().f_lineno)
+                sigmoid.append(t)
+                t = g.node_before(t.input[0])
+
             if t.op_type != "TreeEnsembleRegressor" or t.domain != "ai.onnx.ml":
                 return self.none(node, inspect.currentframe().f_lineno)
 
@@ -127,6 +142,9 @@ class TreeEnsembleRegressorConcatPattern(PatternOptimization):
             elif post_transform != post.s:
                 return self.none(node, inspect.currentframe().f_lineno)
 
+            if len(sigmoid) > 0 and post_transform != b"NONE":
+                return self.none(node, inspect.currentframe().f_lineno)
+
             # specific rule for base_values: all none or all filled
             bb = (
                 g.get_attribute(t, "base_values", exc=False) is not None
@@ -139,7 +157,12 @@ class TreeEnsembleRegressorConcatPattern(PatternOptimization):
 
             trees.append(t)
 
-        return MatchResult(self, [concat_node, *trees], self.apply, insert_at=concat_node)
+            if len(sigmoid) != 0 and len(sigmoid) != len(trees):
+                return self.none(node, inspect.currentframe().f_lineno)
+
+        return MatchResult(
+            self, [concat_node, *sigmoid, *trees], self.apply, insert_at=concat_node
+        )
 
     @classmethod
     def get_attribute_value(
@@ -230,8 +253,11 @@ class TreeEnsembleRegressorConcatPattern(PatternOptimization):
         self,
         g: "GraphBuilder",  # noqa: F821
         concat_node: NodeProto,
-        *trees: NodeProto,
+        *trees_or_sigmoid: NodeProto,
     ) -> List[NodeProto]:
+
+        sigmoid = [t for t in trees_or_sigmoid if t.op_type == "Sigmoid"]
+        trees = [t for t in trees_or_sigmoid if t.op_type != "Sigmoid"]
 
         first_tree_id = self._first_tree_id(g, trees)
         axis = g.get_attribute(concat_node, "axis").i
@@ -276,7 +302,7 @@ class TreeEnsembleRegressorConcatPattern(PatternOptimization):
 
         outputs = (
             concat_node.output
-            if axis == 1
+            if axis == 1 and len(sigmoid) == 0
             else [g.unique_name(f"{self.__class__.__name__}_{concat_node.output[0]}")]
         )
 
@@ -289,7 +315,28 @@ class TreeEnsembleRegressorConcatPattern(PatternOptimization):
             **new_atts,
         )
         if axis == 1:
-            return [new_tree]
+            if len(sigmoid) == 0:
+                return [new_tree]
+            sigmoid = g.make_node(
+                "Sigmoid",
+                outputs,
+                concat_node.output,
+                name=f"{self.__class__.__name__}--{trees[0].name}",
+            )
+            return [new_tree, sigmoid]
+
+        sig_node = []
+        if len(sigmoid) > 0:
+            sig_outs = g.unique_name(f"{self.__class__.__name__}_{concat_node.output[0]}Sig")
+            sig_node.append(
+                g.make_node(
+                    "Sigmoid",
+                    outputs,
+                    [sig_outs],
+                    name=f"{self.__class__.__name__}--{trees[0].name}",
+                )
+            )
+            outputs = [sig_outs]
 
         transpose_output = g.unique_name(
             f"{self.__class__.__name__}_{concat_node.output[0]}T"
@@ -308,4 +355,4 @@ class TreeEnsembleRegressorConcatPattern(PatternOptimization):
             concat_node.output,
             name=f"{self.__class__.__name__}--{trees[0].name}",
         )
-        return [new_tree, transpose, reshape]
+        return [new_tree, *sig_node, transpose, reshape]
