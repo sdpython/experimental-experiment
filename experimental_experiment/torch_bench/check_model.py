@@ -4,14 +4,15 @@ Check Model
 
 ::
 
-    python -m experimental_experiment.torch_bench.check_model --test optimizer --model dump3bug.onnx
+    python -m experimental_experiment.torch_bench.check_model \\
+           --test optimizer --model dump3bug.onnx
 """
 
 from experimental_experiment.args import get_parsed_args
 
 script_args = get_parsed_args(
     "experimental_experiment.torch_bench.check_model",
-    test=("optimizer", "the scenario to test"),
+    test=("optimizer", "the scenario to test, optimizer runs onnxscript optimizations"),
     model=("", "needs to be specified"),
     suffix=(".check", "suffix added to the model"),
     verbose=(0, "verbosity"),

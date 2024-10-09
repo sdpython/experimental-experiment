@@ -78,7 +78,7 @@ sess.run(None, feeds)
 
 sess = create_session(script_args.filename, profiling=True)
 
-for i in range(script_args.repeat):
+for _ in range(script_args.repeat):
     sess.run(None, feeds)
 
 prof = sess.end_profiling()

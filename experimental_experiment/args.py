@@ -9,10 +9,14 @@ def check_cuda_availability():
     Calls `nvidia-smi`.
     """
     try:
+        import torch
+
+        return torch.cuda.is_available()
+    except ImportError:
+        pass
+    try:
         result = subprocess.run(["nvidia-smi"], capture_output=True, text=True)
-        if result.returncode == 0:
-            return True
-        return False
+        return result.returncode == 0
     except FileNotFoundError:
         return False
 
@@ -59,9 +63,7 @@ def get_parsed_args(
         to_publish = set(expose.split(",")) if expose else set()
         if scenarios is not None:
             rows = ", ".join(f"{k}: {v}" for k, v in scenarios.items())
-            parser.add_argument(
-                "-s", "--scenario", help=f"Available scenarios: {rows}."
-            )
+            parser.add_argument("-s", "--scenario", help=f"Available scenarios: {rows}.")
         if not to_publish or "number" in to_publish:
             parser.add_argument(
                 "-n",
@@ -110,4 +112,21 @@ def get_parsed_args(
             default=v[0],
         )
 
-    return parser.parse_args(args=new_args)
+    res = parser.parse_args(args=new_args)
+    update = {}
+    for k, v in res.__dict__.items():
+        try:
+            vi = int(v)
+            update[k] = vi
+            continue
+        except (ValueError, TypeError):
+            pass
+        try:
+            vf = float(v)
+            update[k] = vf
+            continue
+        except (ValueError, TypeError):
+            pass
+    if update:
+        res.__dict__.update(update)
+    return res

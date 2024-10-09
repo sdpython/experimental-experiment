@@ -4,7 +4,7 @@ from torch._dynamo.backends.common import aot_autograd
 from experimental_experiment.ext_test_case import (
     ExtTestCase,
     skipif_ci_windows,
-    skipif_ci_apple,
+    requires_onnxruntime_training,
 )
 from experimental_experiment.torch_dynamo import (
     onnx_debug_backend,
@@ -18,11 +18,9 @@ from experimental_experiment.torch_dynamo.partition import (
 
 
 class TestPartition(ExtTestCase):
-
-    @skipif_ci_apple("no onnxruntime-training")
     @skipif_ci_windows("no torch dynamo")
+    @requires_onnxruntime_training()
     def test_nopartition_debug(self):
-
         class MLP(torch.nn.Module):
             def __init__(self):
                 super().__init__()
@@ -59,11 +57,10 @@ class TestPartition(ExtTestCase):
         got = compiled_model(x)
         self.assertEqualArray(expected, got, atol=1e-5)
 
-    @skipif_ci_apple("no onnxruntime-training")
     @skipif_ci_windows("no torch dynamo")
+    @requires_onnxruntime_training()
     @unittest.skipIf(True, reason="not implemented yet")
     def test_1_partition_sigmoid_debug(self):
-
         class MLP(torch.nn.Module):
             def __init__(self):
                 super().__init__()
@@ -110,11 +107,10 @@ class TestPartition(ExtTestCase):
         got = compiled_model(x)
         self.assertEqualArray(expected, got, atol=1e-5)
 
-    @skipif_ci_apple("no onnxruntime-training")
     @skipif_ci_windows("no torch dynamo")
+    @requires_onnxruntime_training()
     @unittest.skipIf(True, reason="not implemented yet")
     def test_partition_sigmoid_debug(self):
-
         class MLP(torch.nn.Module):
             def __init__(self):
                 super().__init__()

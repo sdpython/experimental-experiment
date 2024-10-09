@@ -12,6 +12,7 @@ from experimental_experiment.reference import ExtendedReferenceEvaluator
 class TestGraphSimplification(ExtTestCase):
     def call_optimizer(self, onx):
         gr = GraphBuilder(onx, infer_shapes=True)
+        assert hasattr(gr, "_debug_stop")
         gr.remove_unused()
         return gr.to_onnx()
 
@@ -66,9 +67,7 @@ class TestGraphSimplification(ExtTestCase):
         initializers = []
         sparse_initializers = []
         functions = []
-        inputs.append(
-            oh.make_tensor_value_info("input", TensorProto.FLOAT, shape=(2, 3))
-        )
+        inputs.append(oh.make_tensor_value_info("input", TensorProto.FLOAT, shape=(2, 3)))
         nodes.append(oh.make_node("Softmax", ["input"], ["output_0"], axis=0))
         nodes.append(oh.make_node("Identity", ["output_0"], ["output_1"]))
         outputs.append(
@@ -99,9 +98,7 @@ class TestGraphSimplification(ExtTestCase):
     def test_builder(self):
         gr = GraphBuilder(18, ir_version=9)
         gr.make_tensor_input("X", TensorProto.FLOAT, ("a", "b"), is_dimension=False)
-        weight = gr.make_initializer(
-            "", np.array([[0.4, 0.5, 0.6]], dtype=np.float32).T
-        )
+        weight = gr.make_initializer("", np.array([[0.4, 0.5, 0.6]], dtype=np.float32).T)
         bias = gr.make_initializer("", np.array([[0.4, 0.5, 0.6]], dtype=np.float32))
         mm = gr.make_node("MatMul", ["X", weight], name="ut")
         out = gr.make_node("Add", [mm, bias], ["Y"], name="ut")

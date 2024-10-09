@@ -81,7 +81,9 @@ class Opset:
     }
 
     def __init__(
-        self, builder: "GraphBuilder", allow_unknown: bool = False  # noqa: F821
+        self,
+        builder: "GraphBuilder",  # noqa: F821
+        allow_unknown: bool = False,
     ):
         self.builder = builder
         self.allow_unknown = allow_unknown
@@ -97,6 +99,12 @@ class Opset:
         if outputs is None:
             if op_type in self._implemented:
                 outputs = self._implemented[op_type]
+            elif op_type == "Split" and kwargs.get("domain", "") == "":
+                assert "num_outputs" in kwargs, (
+                    "Number of outputs is not implemented yet for operator "
+                    f"{op_type!r} and kwargs={kwargs}"
+                )
+                outputs = kwargs["num_outputs"]
             else:
                 # We assume there is only one outputs.
                 outputs = 1
@@ -111,6 +119,9 @@ class Opset:
         name: Optional[str] = None,
         **kwargs,
     ):
+        assert (
+            op_type != "Split" or outputs != 1
+        ), f"Operator Split is useless with one output, inputs={inputs}, outputs={outputs}"
         if outputs is None:
             outputs = self._implemented[op_type]
         if inputs is None:
@@ -126,6 +137,9 @@ class Opset:
                 # torch.fx.Node
                 assert i.name is not None, f"Unexpected name for type {type(i)}"
                 new_inputs.append(i.name)
+            elif i is None:
+                # Optional input
+                new_inputs.append("")
             else:
                 cst_name = self.builder.make_initializer(
                     "", i, msg=f"input {i} of op_type={op_type!r}"
@@ -149,9 +163,7 @@ class Opset:
         elif isinstance(axes, int):
             iaxes = [axes]
         else:
-            raise RuntimeError(
-                f"Unable to call {op_type} on a dynamic input axis={axes}"
-            )
+            raise RuntimeError(f"Unable to call {op_type} on a dynamic input axis={axes}")
         return iaxes
 
     def ReduceMaxAnyOpset(self, *args, **kwargs):
@@ -168,9 +180,7 @@ class Opset:
         assert len(args) == 2, f"ReduceMeanAnyOpset expects 2 arguments not {len(args)}"
         if self.builder.main_opset >= 18:
             return self.ReduceMean(*args, **kwargs)
-        return self.ReduceMean(
-            args[0], axes=self._iaxes("ReduceMean", args[1]), **kwargs
-        )
+        return self.ReduceMean(args[0], axes=self._iaxes("ReduceMean", args[1]), **kwargs)
 
     def ReduceSumAnyOpset(self, *args, **kwargs):
         if len(args) == 1:

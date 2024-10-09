@@ -63,7 +63,7 @@ from experimental_experiment.ext_test_case import unit_test_going
 from experimental_experiment.torch_interpreter import to_onnx
 from experimental_experiment.xbuilder import OptimizationOptions
 from experimental_experiment.convert.convert_helper import (
-    optimize_model_proto,
+    optimize_model_proto_oxs,
     ort_optimize,
 )
 from experimental_experiment.torch_models.llama_helper import (
@@ -112,10 +112,10 @@ def export_dynamo(filename, model, *args):
     with contextlib.redirect_stdout(io.StringIO()):
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            export_output = torch.onnx.dynamo_export(model, *args)
+            export_output = torch.onnx.export(model, args, dynamo=True)
             model = export_output.model_proto
     try:
-        new_model = optimize_model_proto(model)
+        new_model = optimize_model_proto_oxs(model)
     except ImportError as e:
         print("skipping optimization, missing package or failure:", e)
         new_model = model
@@ -286,9 +286,8 @@ if sess2 is not None:
         text = dc.to_str(res1, res2, align, column_size=90)
         print(text)
     except AssertionError as e:
-        if (
-            "Unexpected type <class 'list'> for value, it must be a numpy array."
-            not in str(e)
+        if "Unexpected type <class 'list'> for value, it must be a numpy array." not in str(
+            e
         ):
             raise
         print(e)

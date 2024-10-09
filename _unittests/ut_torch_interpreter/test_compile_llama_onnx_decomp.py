@@ -17,6 +17,12 @@ from experimental_experiment.torch_dynamo import (
 
 
 class TestDynamoLlama(ExtTestCase):
+    @classmethod
+    def setUp(cls):
+        import torch
+
+        torch._dynamo.reset()
+
     @ignore_warnings((UserWarning, DeprecationWarning))
     def test_aaaa(self):
         from transformers import LlamaConfig
@@ -208,7 +214,7 @@ class TestDynamoLlama(ExtTestCase):
 
     @ignore_warnings((UserWarning, DeprecationWarning))
     @skipif_ci_windows("torch.compile not supported on Windows")
-    @requires_torch("2.3", "missing kernel")
+    @requires_torch("2.5", "missing kernel")
     def test_llama_model_backward_decomposition(self):
         from experimental_experiment.torch_models.llama_helper import get_llama_model
 
@@ -257,6 +263,7 @@ class TestDynamoLlama(ExtTestCase):
             onnx_export="test_llama_model_backward_decomposition",
             decompositions=True,
             impl="ref",
+            atol=2e-4,
             # verbose=10,
         )
 

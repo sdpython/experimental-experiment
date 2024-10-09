@@ -7,25 +7,33 @@ import io
 import os
 import warnings
 from typing import Any, Dict, List, Optional, Union
-from onnx import ModelProto
+from onnx import ModelProto, save
 
 
 def check_model_ort(
-    onx: ModelProto, providers: Optional[Union[str, List[str]]] = None
+    onx: ModelProto,
+    providers: Optional[Union[str, List[str]]] = None,
+    dump_file: Optional[str] = None,
 ) -> "onnxruntime.InferenceSession":  # noqa: F821
     """
     Loads a model with onnxruntime.
 
     :param onx: ModelProto
     :param providers: list of providers, None fur CPU, cpu for CPU, cuda for CUDA
+    :param dump_file: if not empty, dumps the model into this file if
+        an error happened
     :return: InferenceSession
     """
     from onnxruntime import InferenceSession
 
     if providers is None or providers == "cpu":
         providers = ["CPUExecutionProvider"]
-    elif providers == "cuda":
-        providers = ["CUDAExecutionProvider", "CPUExecutionProvider"]
+    elif not isinstance(providers, list) and providers.startswith("cuda"):
+        device_id = 0 if ":" not in providers else int(providers.split(":")[1])
+        providers = [
+            ("CUDAExecutionProvider", {"device_id": device_id}),
+            ("CPUExecutionProvider", {}),
+        ]
 
     if isinstance(onx, str):
         try:
@@ -34,7 +42,10 @@ def check_model_ort(
             import onnx
             from onnx_array_api.plotting.text_plot import onnx_simple_text_plot
 
-            raise AssertionError(
+            if dump_file:
+                save(onx, dump_file)
+
+            raise AssertionError(  # noqa: B904
                 f"onnxruntime cannot load the model "
                 f"due to {e}\n{onnx_simple_text_plot(onnx.load(onx))}"
             )
@@ -44,9 +55,11 @@ def check_model_ort(
     except Exception as e:
         from onnx_array_api.plotting.text_plot import onnx_simple_text_plot
 
-        raise AssertionError(
-            f"onnxruntime cannot load the model"
-            f"due to {e}\n{onnx_simple_text_plot(onx)}"
+        if dump_file:
+            save(onx, dump_file)
+
+        raise AssertionError(  # noqa: B904
+            f"onnxruntime cannot load the modeldue to {e}\n{onnx_simple_text_plot(onx)}"
         )
 
 
@@ -61,6 +74,7 @@ def export_to_onnx(
     rename_inputs: bool = False,
     optimize: Union[str, bool] = True,
     folder: Optional[str] = "dump_test",
+    strict: bool = True,
 ) -> Dict[str, Union[str, ModelProto, "GraphBuilder"]]:  # noqa: F821
     """
     Exports a model to ONNX.
@@ -75,6 +89,7 @@ def export_to_onnx(
     :param rename_inputs: rename the inputs into ``input_{i}``
     :param optimize: enable, disable optimizations of pattern to test
     :param folder: where to dump the model, creates it if it does not exist
+    :param strict: given to ``torch.export.export``
     :return: dictionary with ModelProto, builder, filenames
     """
     from .xbuilder import OptimizationOptions
@@ -85,11 +100,10 @@ def export_to_onnx(
         import torch
 
         filename = f"{prefix}.onnx"
-        with contextlib.redirect_stdout(io.StringIO()):
-            with warnings.catch_warnings():
-                warnings.simplefilter("ignore")
-                torch.onnx.export(model, args, filename, input_names=["input"])
-                ret["torch.script"] = filename
+        with contextlib.redirect_stdout(io.StringIO()), warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            torch.onnx.export(model, args, filename, input_names=["input"])
+            ret["torch.script"] = filename
 
     if isinstance(optimize, str):
         options = OptimizationOptions(verbose=verbose, patterns=optimize)
@@ -103,13 +117,14 @@ def export_to_onnx(
         verbose=verbose,
         return_builder=return_builder,
         optimize=optimize,
+        strict=strict,
     )
     ret["proto"] = onx
     if prefix is not None:
         filename = f"{prefix}.custom.onnx"
-        if folder is not None:
+        if folder:
             if not os.path.exists(folder):
-                os.mkdir(folder)
+                os.makedirs(folder)
             filename = os.path.join(folder, filename)
         with open(filename, "wb") as f:
             f.write((onx[0] if return_builder else onx).SerializeToString())

@@ -128,7 +128,9 @@ def get_mistral_model(
                 self.model = MistralModel(config)
 
             def forward(self, input_ids, attention_mask):
-                model_output = self.model(input_ids, attention_mask=attention_mask)
+                model_output = self.model(
+                    input_ids, attention_mask=attention_mask, use_cache=False
+                )
                 return model_output.to_tuple()
 
     else:
@@ -139,13 +141,11 @@ def get_mistral_model(
                 self.model = MistralModel(config)
 
             def forward(self, input_ids):
-                model_output = self.model(input_ids)
+                model_output = self.model(input_ids, use_cache=False)
                 return model_output.to_tuple()
 
     example_args_collection = []
     for b, s in input_dims:
-        example_args_collection.append(
-            generate_example_inputs(b, s, vocab_size, with_mask)
-        )
+        example_args_collection.append(generate_example_inputs(b, s, vocab_size, with_mask))
 
     return MistralModelWrapper(config), example_args_collection

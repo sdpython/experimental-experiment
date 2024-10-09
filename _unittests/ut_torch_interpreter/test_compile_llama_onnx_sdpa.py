@@ -6,6 +6,7 @@ from experimental_experiment.ext_test_case import (
     ExtTestCase,
     ignore_warnings,
     skipif_ci_windows,
+    skipif_ci_apple,
     requires_torch,
     requires_cuda,
 )
@@ -18,6 +19,22 @@ from experimental_experiment.torch_dynamo import (
 
 
 class TestDynamoLlamaSdpa(ExtTestCase):
+    @classmethod
+    def setUp(cls):
+        import torch
+
+        if hasattr(torch._dynamo.variables.misc, "LoggingLoggerVariable"):
+            cls._old_value = torch._dynamo.variables.misc.LoggingLoggerVariable.call_method
+            torch._dynamo.variables.misc.LoggingLoggerVariable.call_method = (
+                lambda *_, **__: None
+            )
+
+    @classmethod
+    def tearDown(cls):
+        import torch
+
+        if hasattr(torch._dynamo.variables.misc, "LoggingLoggerVariable"):
+            torch._dynamo.variables.misc.LoggingLoggerVariable.call_method = cls._old_value
 
     @classmethod
     def get_input_dims(cls, dynamic: bool):
@@ -181,7 +198,7 @@ class TestDynamoLlamaSdpa(ExtTestCase):
         True, reason="_scaled_dot_product_flash_attention_for_cpu_default missing"
     )
     @requires_torch("2.3", "unexpected behaviour")
-    def test_llama_decoder_forward(self):
+    def test_llama_decoder_forward_sdpa(self):
         from experimental_experiment.torch_models.llama_helper import get_llama_decoder
 
         input_dims = self.get_input_dims(False)
@@ -219,6 +236,7 @@ class TestDynamoLlamaSdpa(ExtTestCase):
 
     @ignore_warnings((UserWarning, DeprecationWarning))
     @skipif_ci_windows("torch.compile not supported on Windows")
+    @skipif_ci_apple("torch.compile fails")
     def test_llama_attention_backward(self):
         from experimental_experiment.torch_models.llama_helper import (
             get_llama_attention,

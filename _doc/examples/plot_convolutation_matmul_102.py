@@ -389,7 +389,8 @@ np.convolve(v, k, mode="same")
 #
 # .. math::
 #
-#   \frac{d(E)}{d(v)} = \frac{d(E)}{d(conv(v, k))}\frac{d(conv(v, k))}{d(v)} = \frac{d(E)}{d(conv(v, k))} \; k \; im2col(v \neq 0, shape(k))
+#   \frac{d(E)}{d(v)} = \frac{d(E)}{d(conv(v, k))}\frac{d(conv(v, k))}{d(v)} =
+#   \frac{d(E)}{d(conv(v, k))} \; k \; im2col(v \neq 0, shape(k))
 #
 # Now, :math:`im2col(v \neq 0, shape(k))` is a very simple matrix with only ones or zeros.
 # Is there a way we can avoid doing the matrix multiplication but simply
@@ -397,4 +398,5 @@ np.convolve(v, k, mode="same")
 #
 # .. math::
 #
-#   \frac{d(E)}{d(v)} = \frac{d(E)}{d(conv(v, k))} \; k \; im2col(v \neq 0, shape(k)) = col2im\left(\frac{d(E)}{d(conv(v, k))} \; k, shape(k) \right)
+#   \frac{d(E)}{d(v)} = \frac{d(E)}{d(conv(v, k))} \; k \; i
+#   m2col(v \neq 0, shape(k)) = col2im\left(\frac{d(E)}{d(conv(v, k))} \; k, shape(k) \right)

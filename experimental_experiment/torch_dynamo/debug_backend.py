@@ -1,7 +1,8 @@
 import os
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
 import numpy as np
-from onnx import ModelProto
+from onnx import ModelProto, TensorProto
+from onnx.helper import tensor_dtype_to_np_dtype
 import torch
 from ..xbuilder import OptimizationOptions
 from ..torch_interpreter._torch_helper import create_input_names
@@ -30,13 +31,14 @@ def _get_session(
         except Exception as e:
             from onnx_array_api.plotting.text_plot import onnx_simple_text_plot
 
+            with open("dump_debug_get_session.onnx", "wb") as f:
+                f.write(onx.SerializeToString())
             raise AssertionError(
                 f"Unable to build session ({str(e)})\n{onnx_simple_text_plot(onx)}"
             ) from e
     if callable(impl):
         return impl(onx, verbose=verbose)
     if impl == "ref":
-
         from ..reference import ExtendedReferenceEvaluator
 
         return ExtendedReferenceEvaluator(onx, verbose=verbose)
@@ -47,11 +49,11 @@ def _get_session(
         opts = onnxruntime.SessionOptions()
         if ort_optimization_level is not None:
             if ort_optimization_level is not None:
-                assert hasattr(
-                    onnxruntime.GraphOptimizationLevel, ort_optimization_level
-                ), (
-                    f"Unexpected value {ort_optimization_level!r} for GraphOptimizationLevel, "
-                    f"expecting one of the values in {dir(onnxruntime.GraphOptimizationLevel)}"
+                assert hasattr(onnxruntime.GraphOptimizationLevel, ort_optimization_level), (
+                    f"Unexpected value {ort_optimization_level!r} "
+                    f"for GraphOptimizationLevel, "
+                    f"expecting one of the values in "
+                    f"{dir(onnxruntime.GraphOptimizationLevel)}"
                 )
                 opts.graph_optimization_level = getattr(
                     onnxruntime.GraphOptimizationLevel, ort_optimization_level
@@ -64,7 +66,7 @@ def _get_session(
 
 def onnx_debug_backend(
     graph_module: "torch.fx.GraphModule",  # noqa: F821
-    args: List[Union["torch.Tensor", "torch.SymInt"]],  # noqa: F821
+    args: List[Union["torch.Tensor", "torch.SymInt", "torch.SymFloat"]],  # noqa: F821
     target_opset: Optional[int] = None,
     backend: Union[str, Callable[[ModelProto, Optional[bool]], Any]] = "ort",
     verbose: Union[int, Tuple[int, int]] = 0,
@@ -296,23 +298,28 @@ def onnx_debug_backend(
         max_device = max(x.get_device() for x in inputs if isinstance(x, torch.Tensor))
 
         xnp = []
-        for x, (dim, rk, name) in zip(inputs, is_dimension_in):
+        for x, (dim, rk, name, dt) in zip(inputs, is_dimension_in):
             if isinstance(x, torch.Tensor):
                 assert not dim, (
                     f"Input {name!r} is declared as a dimension but is not, "
                     f"dim={dim}, rk={rk}, dtype={x.dtype}, shape={x.shape}"
                 )
                 nx = x.detach().cpu().numpy()
-            elif isinstance(x, (torch.SymInt, int)):
+            elif isinstance(x, (torch.SymInt, torch.SymFloat, int, float)):
                 assert dim and rk <= 1, (
                     f"Input {name!r} is not declared as a dimension but is, "
-                    f"dim={dim}, rk={rk}, x={x}, type={type(x)}, names={names}"
+                    f"dim={dim}, rk={rk}, x={x}, dt={dt}, type={type(x)}, names={names}"
                 )
-                if isinstance(x, int):
-                    vi = x
+                if dt in {
+                    TensorProto.INT64,
+                    TensorProto.UINT64,
+                    TensorProto.INT32,
+                    TensorProto.UINT32,
+                }:
+                    vi = x if isinstance(x, int) else int(x)
                 else:
-                    vi = int(x)
-                nx = np.array(vi, dtype=np.int64)
+                    vi = x if isinstance(x, float) else float(x)
+                nx = np.array(vi, dtype=tensor_dtype_to_np_dtype(dt))
                 if rk == 1:
                     nx = nx.reshape((-1,))
             else:
@@ -326,7 +333,7 @@ def onnx_debug_backend(
         feeds = dict(zip(names, xnp))
         results = sess.run(None, feeds)
         res = []
-        for y, (dim, rk, name) in zip(results, is_dimension_out):
+        for y, (dim, rk, name, dt) in zip(results, is_dimension_out):
             if name is None:
                 res.append(None)
                 continue
@@ -335,10 +342,25 @@ def onnx_debug_backend(
                     f"Unexpected shape {y.shape} ({y}) for a dimension {name!r} "
                     f"(rk={rk})"
                 )
-                if y.shape == (1,):
-                    yi = int(y[0])
+                assert y.shape in (tuple(), (1,)), (
+                    f"Unxpected shape {y.shape} for dim={dim!r}, "
+                    f"name={name!r}, dt={dt}, rk={rk}, y={y}"
+                )
+                if dt in {
+                    TensorProto.INT64,
+                    TensorProto.UINT64,
+                    TensorProto.INT32,
+                    TensorProto.UINT32,
+                }:
+                    if y.shape == (1,):
+                        yi = int(y[0])
+                    else:
+                        yi = int(y)
                 else:
-                    yi = int(y)
+                    if y.shape == (1,):
+                        yi = float(y[0])
+                    else:
+                        yi = float(y)
                 res.append(yi)
                 continue
             if max_device >= 0:

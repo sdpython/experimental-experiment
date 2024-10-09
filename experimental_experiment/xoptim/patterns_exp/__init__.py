@@ -12,7 +12,9 @@ def get_experimental_patterns(
         :showcode:
 
         import pprint
-        from experimental_experiment.xoptim.patterns_exp import get_experimental_patterns
+        from experimental_experiment.xoptim.patterns_exp import (
+            get_experimental_patterns,
+        )
         pprint.pprint(get_experimental_patterns())
     """
     from .binary_operators import (

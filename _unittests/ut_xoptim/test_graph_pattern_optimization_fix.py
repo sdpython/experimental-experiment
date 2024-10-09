@@ -1,4 +1,5 @@
 import unittest
+from typing import Optional
 import numpy as np
 from onnx import TensorProto, helper as oh, numpy_helper as onh
 from onnx.checker import check_model
@@ -15,7 +16,7 @@ TINT64 = TensorProto.INT64
 
 
 class TestGraphPatternOptimizationFix(ExtTestCase):
-    def _range(self, *shape, bias: float = None):
+    def _range(self, *shape, bias: Optional[float] = None):
         n = np.prod(shape)
         x = np.arange(n).astype(np.float32) / n
         if bias:
@@ -61,9 +62,7 @@ class TestGraphPatternOptimizationFix(ExtTestCase):
         gr = GraphBuilder(
             model,
             infer_shapes=True,
-            optimization_options=OptimizationOptions(
-                patterns=["AddReductionScatterND"]
-            ),
+            optimization_options=OptimizationOptions(patterns=["AddReductionScatterND"]),
         )
         opt_onx = gr.to_onnx(optimize=True)
         self.assertEqual(

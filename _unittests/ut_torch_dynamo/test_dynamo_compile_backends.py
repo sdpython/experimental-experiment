@@ -10,6 +10,7 @@ from experimental_experiment.ext_test_case import (
     ignore_warnings,
     requires_torch,
     requires_cuda,
+    requires_onnxruntime_training,
 )
 from experimental_experiment.torch_models.dump_helper import assert_all_close
 from experimental_experiment.torch_dynamo import onnx_debug_backend, onnx_custom_backend
@@ -41,7 +42,7 @@ class FuncModule0(torch.nn.Module):
         self.params = torch.nn.ParameterList(list(params))
 
     def forward(self, *args):
-        args = tuple([args[0] + self.ppp, *args[1:]])
+        args = (args[0] + self.ppp, *args[1:])
         res = self.f(*args)
         return res
 
@@ -60,7 +61,6 @@ class FuncModuleModule(torch.nn.Module):
 
 
 class TestDynamoCompileBackend(ExtTestCase):
-
     def setUp(self):
         import torch
 
@@ -224,6 +224,7 @@ class TestDynamoCompileBackend(ExtTestCase):
 
     @requires_torch("2.2.1", "onnxrt not fully implemented")
     @ignore_warnings((UserWarning, RuntimeWarning, DeprecationWarning))
+    @requires_onnxruntime_training()
     def test_aaaa_forward_cpu(self):
         x = torch.rand(3, 4, requires_grad=True)
 
@@ -237,6 +238,7 @@ class TestDynamoCompileBackend(ExtTestCase):
 
     @requires_torch("2.2.1", "onnxrt not fully implemented")
     @ignore_warnings((UserWarning, RuntimeWarning, DeprecationWarning))
+    @requires_onnxruntime_training()
     def test_aaaa_backward_cpu(self):
         x = torch.rand(3, 4, requires_grad=True)
 

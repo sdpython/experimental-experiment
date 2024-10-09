@@ -1,23 +1,26 @@
 from typing import Any, Sequence, Tuple, Union
+import numpy as np
 
 STATIC_SHAPE = Tuple[int, ...]
-DYNAMIC_SHAPE = Tuple[Union[int, "torch.SymInt", str], ...]  # noqa: F821
+DYNAMIC_SHAPE = Tuple[
+    Union[int, "torch.SymInt", "torch.SymFloat", float, str], ...  # noqa: F821
+]
 
 
 def all_int(seq: Sequence[Any]) -> bool:
-    return all(map(lambda i: isinstance(i, int), seq))
+    return all(isinstance(i, int) for i in seq)
 
 
 def all_float(seq: Sequence[Any]) -> bool:
-    return all(map(lambda i: isinstance(i, float), seq))
+    return all(isinstance(i, float) for i in seq)
 
 
 def all_int_or_float(seq: Sequence[Any]) -> bool:
-    return all(map(lambda i: isinstance(i, (int, float)), seq))
+    return all(isinstance(i, (int, float)) for i in seq)
 
 
 def all_int_or_str(seq: Sequence[Any]) -> bool:
-    return all(map(lambda i: isinstance(i, (int, str)), seq))
+    return all(isinstance(i, (int, str)) for i in seq)
 
 
 def is_static_shape(shape: DYNAMIC_SHAPE) -> bool:
@@ -31,12 +34,9 @@ def is_static_dimension(d: int) -> bool:
         return True
     import torch
 
-    if isinstance(d, torch.SymInt):
-        try:
-            int(str(d))
-            return True
-        except ValueError:
-            return False
+    assert isinstance(
+        d, (torch.SymInt, torch.SymFloat, str)
+    ), f"Unexpected type {type(d)} for a dimension {d!r}"
     return False
 
 
@@ -52,7 +52,7 @@ def compatible_shapes(sh1: DYNAMIC_SHAPE, sh2: DYNAMIC_SHAPE) -> bool:
     .. runpython::
         :showcode:
 
-        from experimental_experiment.xbuilder.shape_helper import compatible_shapes
+        from experimental_experiment.xbuilder._shape_helper import compatible_shapes
 
         print(compatible_shapes((1, 2), (1, 2)))  # True
         print(compatible_shapes((1, 2), (1, "D2")))  # True
@@ -74,7 +74,7 @@ def compatible_shapes(sh1: DYNAMIC_SHAPE, sh2: DYNAMIC_SHAPE) -> bool:
     for a, b in zip(sh1, sh2):
         if a == b:
             continue
-        if type(a) == type(b):
+        if type(a) == type(b):  # noqa: E721
             # The same name should be used for the same value.
             if a != b:
                 return False
@@ -98,18 +98,43 @@ def compatible_dimensions(*dims: Sequence[Union[int, str]]) -> bool:
     .. runpython::
         :showcode:
 
-        from experimental_experiment.xbuilder.shape_helper import compatible_dimensions
+        from experimental_experiment.xbuilder._shape_helper import compatible_dimensions
 
         print(compatible_dimensions(1, 1))  # True
         print(compatible_dimensions(1, 2))  # False
         print(compatible_dimensions(1, "D"))  # True
         print(compatible_dimensions(1, "D", "DD"))  # True
     """
-    assert all_int_or_str(
-        dims
-    ), f"unexpected types in {dims} ({[type(i) for i in dims]})"
+    assert all_int_or_str(dims), f"unexpected types in {dims} ({[type(i) for i in dims]})"
     unique = set(dims)
     ints = [i for i in unique if isinstance(i, int)]
     if len(ints) > 1:
         return False
     return True
+
+
+def _reshape_shape(shape: Tuple[int, ...], new_shape: Tuple[int, ...]) -> Tuple[int, ...]:
+    """
+    Computes the shape of the reshaped shape.
+    """
+    assert all_int(new_shape), f"Unexpected new_shape={new_shape}"
+    if -1 not in new_shape:
+        return new_shape
+    pos = [i for i in new_shape if i > 0]
+    if not pos:
+        assert new_shape == (
+            -1,
+        ), f"Unexpected new_shape={new_shape}, input shape is {shape}"
+        return (int(np.prod(shape)),)
+    res = []
+    for i in new_shape:
+        if i >= 0:
+            res.append(i)
+        else:
+            p = np.prod(pos)
+            s = np.prod(shape)
+            assert (
+                s % p == 0
+            ), f"Incompatible shapes shape={shape}, reshaped into {new_shape}"
+            res.append(int(s // p))
+    return tuple(res)

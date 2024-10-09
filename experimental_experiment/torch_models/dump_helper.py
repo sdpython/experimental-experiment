@@ -82,7 +82,8 @@ def assert_all_close(
     elif isinstance(v1, np.ndarray):
         assert isinstance(v2, np.ndarray), f"v2 is not an array but {type(v2)}"
         try:
-            np.testing.assert_allclose(v1, v2, atol=atol, rtol=rtol)
+            # desired is the second input
+            np.testing.assert_allclose(v2, v1, atol=atol, rtol=rtol)
         except AssertionError as e:
             if quantile is None:
                 if v1.size <= 10:
@@ -110,10 +111,8 @@ def assert_all_close(
         assert isinstance(v2, type(v1)), f"v2 is not a {type(v1)} but {type(v2)}"
         v1 = tuple(_ for _ in v1 if _ is not None)
         v2 = tuple(_ for _ in v2 if _ is not None)
-        assert len(v1) == len(
-            v2
-        ), f"tuple have different lengths {len(v1)} != {len(v2)}"
-        for i, (a, b) in enumerate(zip(v1, v2)):
+        assert len(v1) == len(v2), f"tuple have different lengths {len(v1)} != {len(v2)}"
+        for a, b in zip(v1, v2):
             assert_all_close(a, b, atol=aatol, rtol=rtol)
     elif isinstance(v1, int):
         assert isinstance(v2, type(v1)), f"v2 is not a {type(v1)} but {type(v2)}"
@@ -229,7 +228,7 @@ def build_matching_inputs(
     # inputs2
     inputs = inputs_from_onnx_model(model2)
     feeds2 = {}
-    for kind, name, dt, shape in inputs:
+    for _kind, name, dt, shape in inputs:
         dt = tensor_dtype_to_np_dtype(dt)
         key = dt, shape
         if key in feeds_rev:
@@ -249,11 +248,9 @@ def results_to_string(results: Any, indent: str = "") -> str:
     import torch
 
     if isinstance(results, torch.Tensor):
-        return (
-            f"{indent}{results.dtype} {tuple(results.shape)} [sum={results.sum():1.3g}]"
-        )
+        return f"{indent}{results.dtype} {tuple(results.shape)} [sum={results.sum():1.3g}]"
     if isinstance(results, tuple):
         return f"{indent}{len(results)} results\n" + "\n".join(
-            map(lambda r: results_to_string(r, indent=indent + "  "), results)
+            results_to_string(r, indent=indent + "  ") for r in results
         )
     raise RuntimeError(f"Unexpected type {type(results)} for results")

@@ -43,9 +43,7 @@ class TestGradHelper(ExtTestCase):
                 n += 1
         if n == 0:
             raise AssertionError(f"No input with more than 5 rows: {feeds!r}.")
-        sess = InferenceSession(
-            onx.SerializeToString(), providers=["CPUExecutionProvider"]
-        )
+        sess = InferenceSession(onx.SerializeToString(), providers=["CPUExecutionProvider"])
         try:
             got = sess.run(None, feeds)
         except OrtFail as e:
@@ -58,7 +56,7 @@ class TestGradHelper(ExtTestCase):
         pygot = oinf.run(None, feeds)
         output_names = [o.name for o in onx.graph.output]
         self.assertGreater(len(output_names), 0)
-        for i, o in enumerate(output_names):
+        for i, _o in enumerate(output_names):
             self.assertEqualArray(got[i], pygot[i], atol=atol)
         if verbose:
             print(
@@ -198,9 +196,7 @@ class TestGradHelper(ExtTestCase):
             target_opset=opv,
         )
         self.assertRaise(
-            lambda: onnx_derivative(
-                onx, weights=[], options=DerivativeOptions.FillGrad
-            ),
+            lambda: onnx_derivative(onx, weights=[], options=DerivativeOptions.FillGrad),
             AssertionError,
         )
         onx.ir_version = 9
@@ -227,9 +223,7 @@ class TestGradHelper(ExtTestCase):
             {"Y": FloatTensorType([None, 10])},
             target_opset=opv,
         )
-        self.assertRaise(
-            lambda: onnx_derivative(onx, weights=[], options=1), AssertionError
-        )
+        self.assertRaise(lambda: onnx_derivative(onx, weights=[], options=1), AssertionError)
 
     @requires_onnxruntime_training()
     @unittest.skipIf(GradientGraphBuilder is None, reason="not recent")

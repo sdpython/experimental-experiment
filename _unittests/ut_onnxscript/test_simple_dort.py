@@ -157,10 +157,10 @@ class TestSimpleDort(ExtTestCase):
             result = compiled_model(*args)
         except torch._dynamo.exc.BackendCompilerFailed as e:
             if "FunctionNotFoundError" in str(e):
-                raise unittest.SkipTest(f"MISSING FOR FORWARD {e}")
+                raise unittest.SkipTest(f"MISSING FOR FORWARD {e}")  # noqa: B904
             raise
         except InferenceError as e:
-            raise unittest.SkipTest(f"Failing due to {e}")
+            raise unittest.SkipTest(f"Failing due to {e}")  # noqa: B904
 
         if isinstance(baseline_result, tuple):
             baseline_result = baseline_result[0]
@@ -174,8 +174,9 @@ class TestSimpleDort(ExtTestCase):
                 msg=f"expected\n{baseline_result}\n--got--\n{result}",
             )
             try:
+                # desired is the second input
                 torch.testing.assert_close(
-                    baseline_result, result, atol=atol, rtol=rtol, equal_nan=True
+                    result, baseline_result, atol=atol, rtol=rtol, equal_nan=True
                 )
             except AssertionError as e:
                 if "nan" not in str(e):
@@ -197,9 +198,10 @@ class TestSimpleDort(ExtTestCase):
                     atol=atol,
                     rtol=rtol,
                 )
+                # desired is the second input
                 torch.testing.assert_close(
-                    baseline_param.grad,
                     param.grad,
+                    baseline_param.grad,
                     atol=atol,
                     rtol=rtol,
                     equal_nan=True,

@@ -11,10 +11,10 @@ inline_model_proto
 
 .. autofunction:: experimental_experiment.convert.convert_helper.inline_model_proto
 
-optimize_model_proto
-++++++++++++++++++++
+optimize_model_proto_oxs
+++++++++++++++++++++++++
 
-.. autofunction:: experimental_experiment.convert.convert_helper.optimize_model_proto
+.. autofunction:: experimental_experiment.convert.convert_helper.optimize_model_proto_oxs
 
 ort_optimize
 ++++++++++++

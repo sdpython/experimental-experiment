@@ -10,7 +10,7 @@ class CastPattern(PatternOptimization):
     """
 
     def __init__(self, verbose: int = 0, priority: int = 0):
-        super(CastPattern, self).__init__(verbose, priority)
+        super().__init__(verbose, priority)
 
     def match(
         self,
@@ -36,7 +36,9 @@ class CastPattern(PatternOptimization):
         return MatchResult(self, [node], self.apply, insert_at=node)
 
     def apply(
-        self, g: "GraphBuilder", node: NodeProto  # noqa: F821
+        self,
+        g: "GraphBuilder",  # noqa: F821
+        node: NodeProto,
     ) -> List[NodeProto]:
         new_node = g.make_node(
             "Identity",
@@ -75,11 +77,10 @@ class CastCastBinaryPattern(PatternOptimization):
         ):
             return self.none(node, inspect.currentframe().f_lineno)
 
+        if not g.has_type(node.input[0]) or not g.has_type(node.input[1]):
+            return self.none(node, inspect.currentframe().f_lineno)
         dtype_left, dtype_right = g.get_type(node.input[0]), g.get_type(node.input[1])
-        if (
-            dtype_left not in self._dtypes_allowed
-            or dtype_right not in self._dtypes_allowed
-        ):
+        if dtype_left not in self._dtypes_allowed or dtype_right not in self._dtypes_allowed:
             return self.none(node, inspect.currentframe().f_lineno)
 
         left, right = g.node_before(node.input[0]), g.node_before(node.input[1])
@@ -89,10 +90,7 @@ class CastCastBinaryPattern(PatternOptimization):
             return self.none(node, inspect.currentframe().f_lineno)
 
         dtype_left, dtype_right = g.get_type(left.input[0]), g.get_type(right.input[0])
-        if (
-            dtype_left not in self._dtypes_allowed
-            or dtype_right not in self._dtypes_allowed
-        ):
+        if dtype_left not in self._dtypes_allowed or dtype_right not in self._dtypes_allowed:
             return self.none(node, inspect.currentframe().f_lineno)
 
         return MatchResult(self, [left, right, node], self.apply, insert_at=node)
@@ -104,7 +102,6 @@ class CastCastBinaryPattern(PatternOptimization):
         right: NodeProto,
         node: NodeProto,
     ) -> List[NodeProto]:
-
         to = g.get_attribute(left, "to")
 
         new_node = g.make_node(
@@ -330,9 +327,7 @@ class ComputationCastOpCastPattern(PatternOptimization):
 
         # At this stage, we know the computation type is float and one input
         # has a lower type precision. Let's change it.
-        return MatchResult(
-            self, [node_left, node_right, node], self.apply, insert_at=node
-        )
+        return MatchResult(self, [node_left, node_right, node], self.apply, insert_at=node)
 
     def apply(
         self,
@@ -341,7 +336,6 @@ class ComputationCastOpCastPattern(PatternOptimization):
         node_right: Optional[NodeProto],
         node: NodeProto,
     ) -> List[NodeProto]:
-
         to_type = g.get_type(node.output[0])
 
         inputs = []

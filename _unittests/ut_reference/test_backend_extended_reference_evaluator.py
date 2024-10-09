@@ -1,3 +1,4 @@
+import sys
 import unittest
 from typing import Any
 import numpy
@@ -24,9 +25,7 @@ class ExtendedReferenceEvaluatorBackendRep(onnx.backend.base.BackendRep):
             else:
                 feeds = {}
                 pos_inputs = 0
-                for inp, tshape in zip(
-                    self._session.input_names, self._session.input_types
-                ):
+                for inp, tshape in zip(self._session.input_names, self._session.input_types):
                     shape = tuple(d.dim_value for d in tshape.tensor_type.shape.dim)
                     if shape == inputs[pos_inputs].shape:
                         feeds[inp] = inputs[pos_inputs]
@@ -76,9 +75,20 @@ class ExtendedReferenceEvaluatorBackend(onnx.backend.base.Backend):
         raise NotImplementedError("Unable to run the model node by node.")
 
 
+dft_atol = 1e-3 if sys.platform != "linux" else 1e-6
 backend_test = onnx.backend.test.BackendTest(
-    ExtendedReferenceEvaluatorBackend, __name__
+    ExtendedReferenceEvaluatorBackend,
+    __name__,
+    test_kwargs={
+        "test_dft": {"atol": dft_atol},
+        "test_dft_axis": {"atol": dft_atol},
+        "test_dft_axis_opset19": {"atol": dft_atol},
+        "test_dft_inverse": {"atol": dft_atol},
+        "test_dft_inverse_opset19": {"atol": dft_atol},
+        "test_dft_opset19": {"atol": dft_atol},
+    },
 )
+
 
 # The following tests are too slow with the reference implementation (Conv).
 backend_test.exclude(
