@@ -22,6 +22,7 @@ from onnx.onnx_cpp2py_export.shape_inference import InferenceError
 from experimental_experiment.reference import ExtendedReferenceEvaluator
 from experimental_experiment.ext_test_case import (
     ExtTestCase,
+    skipif_ci_windows,
     requires_onnxruntime_training,
     has_onnxruntime_training,
 )
@@ -558,6 +559,7 @@ class TestGraphPatternCombination(ExtTestCase):
         )
         gr.to_onnx(optimize=True)
 
+    @skipif_ci_windows("crash")
     def test_study(self):
         """
         clear&&python _unittests/ut_xoptim/test_graph_pattern_combination.py -k study
