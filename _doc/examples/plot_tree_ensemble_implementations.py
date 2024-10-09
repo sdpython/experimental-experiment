@@ -6,6 +6,7 @@ Evaluate different implementation of TreeEnsemble
 Sparse Data
 +++++++++++
 """
+
 import logging
 import os
 from typing import Any, Iterator, Tuple
@@ -141,9 +142,7 @@ def transform_model(model, use_sparse=False, **kwargs):
     onx = ModelProto()
     onx.ParseFromString(model.SerializeToString())
     att = get_node_attribute(onx.graph.node[0], "nodes_modes")
-    modes = ",".join(map(lambda s: s.decode("ascii"), att.strings)).replace(
-        "BRANCH_", ""
-    )
+    modes = ",".join(s.decode("ascii") for s in att.strings).replace("BRANCH_", "")
     if use_sparse and "new_op_type" not in kwargs:
         kwargs["new_op_type"] = "TreeEnsembleRegressorSparse"
     if use_sparse:
@@ -162,9 +161,7 @@ def transform_model(model, use_sparse=False, **kwargs):
     )
     if use_sparse:
         del new_onx.graph.input[:]
-        new_onx.graph.input.append(
-            make_tensor_value_info("X", TensorProto.FLOAT, (None,))
-        )
+        new_onx.graph.input.append(make_tensor_value_info("X", TensorProto.FLOAT, (None,)))
     return new_onx
 
 
@@ -242,7 +239,7 @@ for name, sess, tensor in sessions:
     print(f"run {name!r}")
     feeds = {"X": tensor}
     obs = measure_time(
-        lambda: sess.run(None, feeds),
+        lambda sess=sess, feeds=feeds: sess.run(None, feeds),
         repeat=script_args.repeat,
         number=script_args.number,
         warmup=script_args.warmup,
