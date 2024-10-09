@@ -36,14 +36,35 @@ def get_pattern(
     )
 
     if isinstance(obj, str):
-        sep = "," if "," in obj else ("+" if "+" in obj else None)
-        if sep:
+        if obj and ("," in obj or "+" in obj or "-" in obj):
             assert as_list, f"Returns a list for obj={obj!r}, as_list must be True."
-            objs = obj.split(sep)
-            res = []
-            for o in objs:
-                res.extend(get_pattern(o, as_list=True, verbose=verbose))
-            return res
+            positive = []
+            negative = []
+            last = "+"
+            lastp = 0
+            p = 0
+            while p < len(obj):
+                if obj[p] in {",", "+", "-"}:
+                    if p > lastp:
+                        sub = obj[lastp:p]
+                        if sub:
+                            if last == "-":
+                                negative.append(sub)
+                            else:
+                                positive.append(sub)
+                    lastp = p + 1
+                    last = obj[p]
+                p += 1
+
+            if p > lastp:
+                sub = obj[lastp:p]
+                if sub:
+                    if last == "-":
+                        negative.append(sub)
+                    else:
+                        positive.append(sub)
+
+            return get_pattern_list(positive, negative, verbose=verbose)
 
         if obj in _pattern:
             assert as_list, f"Returns a list for obj={obj!r}, as_list must be True."
