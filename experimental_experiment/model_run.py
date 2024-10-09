@@ -92,7 +92,13 @@ def model_run(
         "batch_size": batch_size,
     }
 
+    begin = time.perf_counter()
     from onnxruntime import InferenceSession
+
+    stats["time_import_ort"] = time.perf_counter() - begin
+
+    if verbose:
+        print(f"[model_run] import ort {stats['time_import_ort']!r}")
 
     feeds = None
 
@@ -121,13 +127,18 @@ def model_run(
         stats["time_latency_validation_one"] = time.perf_counter() - begin
 
     begin = time.perf_counter()
-    sess = InferenceSession(
-        model.SerializeToString() if isinstance(model, ModelProto) else model,
-        providers=providers,
-    )
+    model_bytes = model.SerializeToString() if isinstance(model, ModelProto) else model
+    stats["time_model_bytes"] = time.perf_counter() - begin
+
+    if verbose:
+        print(f"[model_run] time model bytes {stats['time_model_bytes']!r}")
+
+    begin = time.perf_counter()
+    sess = InferenceSession(model_bytes, providers=providers)
     stats["time_ort_load"] = time.perf_counter() - begin
 
     if verbose:
+        print(f"[model_run] time ort load {stats['time_ort_load']!r}")
         print("[model_run] create inputs")
 
     if feeds is None:

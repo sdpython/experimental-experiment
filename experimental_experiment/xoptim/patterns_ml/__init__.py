@@ -17,6 +17,12 @@ def get_ml_patterns(
         )
         pprint.pprint(get_ml_patterns())
     """
-    from .tree_ensemble import TreeEnsembleRegressorMulPattern
+    from .tree_ensemble import (
+        TreeEnsembleRegressorConcatPattern,
+        TreeEnsembleRegressorMulPattern,
+    )
 
-    return [TreeEnsembleRegressorMulPattern(verbose=verbose)]
+    return [
+        TreeEnsembleRegressorConcatPattern(verbose=verbose),
+        TreeEnsembleRegressorMulPattern(verbose=verbose),
+    ]

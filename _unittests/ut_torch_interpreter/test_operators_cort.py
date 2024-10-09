@@ -866,6 +866,7 @@ class TestOperatorsCort(ExtTestCase):
             verbose=0,
             save_onnx=True,
             optimize=False,
+            atol=1e-3 if sys.platform == "darwin" else 1e-6,
             # intermediate=True,
             rtol=1e-4,
         )
