@@ -49,7 +49,10 @@ class ConstantOfShapeScatterNDPattern(PatternOptimization):
         return MatchResult(self, [node_before, node], self.apply, insert_at=node)
 
     def apply(
-        self, g: "GraphBuilder", node_before: NodeProto, node: NodeProto  # noqa: F821
+        self,
+        g: "GraphBuilder",  # noqa: F821
+        node_before: NodeProto,
+        node: NodeProto,
     ) -> List[NodeProto]:
         reduction = g.get_attribute(node, "reduction")
         new_node = g.make_node(
@@ -79,7 +82,7 @@ class MaskedShapeScatterNDPattern(PatternOptimization):
             return self.none()
 
         reduction = g.get_attribute(node, "reduction", exc=False)
-        if reduction is None or reduction.s != "add":
+        if reduction is None or reduction.s != b"add":
             self.none(node, inspect.currentframe().f_lineno)
 
         if g.is_used_more_than_once(node.input[1]):
@@ -126,9 +129,7 @@ class MaskedShapeScatterNDPattern(PatternOptimization):
         if shape_shape != (2,):
             self.none(node, inspect.currentframe().f_lineno)
 
-        return MatchResult(
-            self, [node, where_node, equal_node], self.apply, insert_at=node
-        )
+        return MatchResult(self, [node, where_node, equal_node], self.apply, insert_at=node)
 
     def apply(
         self,

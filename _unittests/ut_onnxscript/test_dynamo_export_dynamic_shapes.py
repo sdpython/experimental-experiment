@@ -11,7 +11,6 @@ from experimental_experiment.torch_models.llama_helper import get_llama_model
 
 
 class TestDynamoExportDynamicShapes(ExtTestCase):
-
     @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
     @requires_onnxscript("0.2", "issue in rewriter")
     @requires_torch("2.6", "bug")
@@ -21,7 +20,11 @@ class TestDynamoExportDynamicShapes(ExtTestCase):
     def test_export_llama_model_dynamic_shapes(self):
         import torch
         import onnxruntime
-        from torch.onnx._internal import exporter
+
+        try:
+            from torch.onnx._internal import _exporter_legacy as exporter
+        except ImportError:
+            from torch.onnx._internal import exporter
 
         with torch.no_grad():
             input_dims = [(2, 1024), (3, 1024)]
@@ -49,7 +52,8 @@ class TestDynamoExportDynamicShapes(ExtTestCase):
                 export_options, model=exported_program
             )
             params = dict(exported_program.named_parameters())
-            # model.layers.0.self_attn.q_proj.weight --> p_model_layers_0_self_attn_q_proj_weight (in onnx model)
+            # model.layers.0.self_attn.q_proj.weight -->
+            # p_model_layers_0_self_attn_q_proj_weight (in onnx model)
             onnx_program = torch.onnx.dynamo_export(
                 exported_program,
                 *input_tensors,

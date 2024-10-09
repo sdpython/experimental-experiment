@@ -122,7 +122,7 @@ print(f"maxtime={script_args.maxtime}")
 
 class MyModelClass(nn.Module):
     def __init__(self, scenario=script_args.scenario):
-        super(MyModelClass, self).__init__()
+        super().__init__()
         if scenario == "middle":
             self.large = False
             self.conv1 = nn.Conv2d(1, 32, 5)
@@ -367,7 +367,7 @@ data = []
 for k, v in supported_exporters.items():
     print(f"run dort cpu {k}: {script_args.repeat1}")
     times = []
-    for i in range(int(script_args.repeat1)):
+    for _ in range(int(script_args.repeat1)):
         model, input_tensor = create_model_and_input()
         torch._dynamo.reset()
         begin = time.perf_counter()
@@ -399,7 +399,7 @@ for k, v in supported_exporters.items():
         continue
     print(f"run dort cuda {k}: {script_args.repeat1}")
     times = []
-    for i in range(int(script_args.repeat1)):
+    for _ in range(int(script_args.repeat1)):
         model, input_tensor = create_model_and_input()
         model = model.cuda()
         input_tensor = input_tensor.cuda()
@@ -464,22 +464,20 @@ def clean_text(text):
     return text
 
 
-def profile_function(
-    name, export_function, with_args=True, verbose=False, suffix="export"
-):
+def profile_function(name, export_function, with_args=True, verbose=False, suffix="export"):
     if verbose:
         print(f"profile {name}: {export_function}")
     if with_args:
         model, input_tensor = create_model_and_input()
         pr = cProfile.Profile()
         pr.enable()
-        for i in range(int(script_args.repeat1)):
+        for _ in range(int(script_args.repeat1)):
             export_function(model, input_tensor)
         pr.disable()
     else:
         pr = cProfile.Profile()
         pr.enable()
-        for i in range(int(script_args.repeat1)):
+        for _ in range(int(script_args.repeat1)):
             export_function()
         pr.disable()
     s = io.StringIO()
@@ -547,7 +545,8 @@ def benchmark(shape):
         try:
             exported_model = export_fct(model, input_tensor)
         except torch._dynamo.exc.BackendCompilerFailed as e:
-            # Triton only supports devices of CUDA Capability >= 7.0, but your device is of CUDA capability 6.1
+            # Triton only supports devices of CUDA Capability >= 7.0,
+            # but your device is of CUDA capability 6.1
             obs["error"] = str(e)
             data.append(obs)
             continue
@@ -575,7 +574,7 @@ def benchmark(shape):
 
         # memory consumption
         stat = start_spying_on(cuda=1 if has_cuda else 0)
-        for i in range(0, script_args.warmup):
+        for _ in range(0, script_args.warmup):
             call_model()
         memobs = flatten(stat.stop())
         memobs.update(obs)
@@ -679,8 +678,7 @@ for compute in ["CPU", "CUDA"]:
     ax = memory_peak_plot(
         dfmemr[dfmemr.compute == compute],
         ("export",),
-        suptitle=f"Memory Consumption of backens, running time"
-        f"\nrunning on {compute}",
+        suptitle=f"Memory Consumption of backens, running time\nrunning on {compute}",
         bars=[model_size * i / 2**20 for i in range(1, 3)],
         figsize=(18, 6),
     )

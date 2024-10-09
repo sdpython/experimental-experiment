@@ -20,7 +20,6 @@ class CustomOperatorSupport(OperatorSupport):
     def is_node_supported(
         self, submodules: Mapping[str, "torch.nn.Module"], node: "torch.fx.Node"
     ) -> bool:
-
         if node.op not in CALLABLE_NODE_OPS:
             if self.verbose > 1:
                 print(
@@ -32,9 +31,7 @@ class CustomOperatorSupport(OperatorSupport):
 
         if target in self._unsupport_dict:
             if self.verbose:
-                print(
-                    f"[CustomOperatorSupport.is_node_support] rejected target [{target}]"
-                )
+                print(f"[CustomOperatorSupport.is_node_support] rejected target [{target}]")
 
             return False
 
@@ -112,7 +109,7 @@ def backend_partition_compile(
     args: List[torch.Tensor],
     support: Optional[OperatorSupport] = None,
     allows_single_node_partition: bool = True,
-    backend_function: Callable = None,
+    backend_function: Optional[Callable] = None,
     use_aot_autograd: bool = True,
     decompositions=None,
     partition_fn=None,
@@ -149,7 +146,8 @@ def backend_partition_compile(
             fused_module = getattr(partitioned_prim_graph_module.wrapped, node.name)
             if verbose:
                 print(
-                    f"[backend_partition_compile] fused_node={node.name!r}, id={id(fused_module)}"
+                    f"[backend_partition_compile] fused_node={node.name!r}, "
+                    f"id={id(fused_module)}"
                 )
             fused_module._wrapped_call = PartionedBackend(
                 fused_module,

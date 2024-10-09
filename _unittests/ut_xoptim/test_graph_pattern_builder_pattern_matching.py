@@ -26,8 +26,7 @@ TFLOAT = TensorProto.FLOAT
 
 
 class TestGraphPatternBuilder(ExtTestCase):
-
-    def _range(self, *shape, bias: float = None):
+    def _range(self, *shape, bias: Optional[float] = None):
         n = np.prod(shape)
         x = np.arange(n).astype(np.float32) / n
         if bias:
@@ -35,7 +34,6 @@ class TestGraphPatternBuilder(ExtTestCase):
         return x.reshape(tuple(shape)).astype(np.float32)
 
     def test_graph_pattern_builder(self):
-
         class AddAddPattern(EasyPatternOptimization):
             """
             Replaces ConstantOfShape + ScatterND with ScatterNDOfShape (com.domain).
@@ -111,7 +109,6 @@ class TestGraphPatternBuilder(ExtTestCase):
         self.assertEqualArray(expected[0], got[0])
 
     def test_graph_pattern_builder_multi_outputs(self):
-
         class AddAddAddAddPattern(EasyPatternOptimization):
             """
             Replaces ConstantOfShape + ScatterND with ScatterNDOfShape (com.domain).
@@ -204,7 +201,11 @@ class TestGraphPatternBuilder(ExtTestCase):
             """
 
             def match_pattern(
-                self, g, x: "INT64", pos_ids: "FLOAT", axis: "INT64"  # noqa: F821
+                self,
+                g,
+                x: "INT64",  # noqa: F821
+                pos_ids: "FLOAT",  # noqa: F821
+                axis: "INT64",  # noqa: F821
             ):
                 # original code: the code does verifies the constant yet
                 # unsqueeze = op.Unsqueeze(x, [1])
@@ -238,7 +239,11 @@ class TestGraphPatternBuilder(ExtTestCase):
                 return True
 
             def apply_pattern(
-                self, g, x: "INT64", pos_ids: "FLOAT", axis: "INT64"  # noqa: F821
+                self,
+                g,
+                x: "INT64",  # noqa: F821
+                pos_ids: "FLOAT",  # noqa: F821
+                axis: "INT64",  # noqa: F821
             ):
                 op = g.op
                 cos_cache = op.Constant(
@@ -291,7 +296,11 @@ class TestGraphPatternBuilder(ExtTestCase):
             """
 
             def match_pattern(
-                self, g, x: "INT64", pos_ids: "FLOAT", axis: "INT64"  # noqa: F821
+                self,
+                g,
+                x: "INT64",  # noqa: F821
+                pos_ids: "FLOAT",  # noqa: F821
+                axis: "INT64",  # noqa: F821
             ):
                 # original code: the code does verifies the constant yet
                 # unsqueeze = op.Unsqueeze(x, [1])
@@ -327,7 +336,11 @@ class TestGraphPatternBuilder(ExtTestCase):
                 return True
 
             def apply_pattern(
-                self, g, x: "INT64", pos_ids: "FLOAT", axis: "INT64"  # noqa: F821
+                self,
+                g,
+                x: "INT64",  # noqa: F821
+                pos_ids: "FLOAT",  # noqa: F821
+                axis: "INT64",  # noqa: F821
             ):
                 op = g.op
                 cos_cache = op.Constant(
@@ -462,7 +475,6 @@ class TestGraphPatternBuilder(ExtTestCase):
         self.assertIn("RotaryEmbedding", op_types)
 
     def test_graph_pattern_builder_onnx(self):
-
         class AddAdd(OpRun):
             op_domain = "ZZZ"
 
@@ -555,7 +567,6 @@ class TestGraphPatternBuilder(ExtTestCase):
         self.assertEqualArray(expected[0], got[0])
 
     def test_validate_mapping(self):
-
         proto = oh.make_model(
             oh.make_graph(
                 [
@@ -568,25 +579,18 @@ class TestGraphPatternBuilder(ExtTestCase):
                     oh.make_tensor_value_info("X", TensorProto.FLOAT, [1, "b", "c"]),
                     oh.make_tensor_value_info("Y", TensorProto.FLOAT, ["a", "b", "c"]),
                 ],
-                [
-                    oh.make_tensor_value_info(
-                        "final", TensorProto.FLOAT, ["a", "b", "c"]
-                    )
-                ],
+                [oh.make_tensor_value_info("final", TensorProto.FLOAT, ["a", "b", "c"])],
             ),
             opset_imports=[oh.make_opsetid("", 18)],
             ir_version=9,
         )
 
         class MulMulSigmoidPattern(EasyPatternOptimization):
-
             def match_pattern(self, g: GraphBuilder, X, Y):
                 return g.op.Mul(X, g.op.Mul(Y, g.op.Sigmoid(Y)))
 
             def apply_pattern(self, g: GraphBuilder, X, Y):
-                return g.anyop.MulMulSigmoid(
-                    X, Y, domain="onnx_extended.ortops.optim.cuda"
-                )
+                return g.anyop.MulMulSigmoid(X, Y, domain="onnx_extended.ortops.optim.cuda")
 
             def validate_mapping(
                 self,
@@ -619,9 +623,7 @@ class TestGraphPatternBuilder(ExtTestCase):
         self.assertEqual(len(new_proto.graph.node), len(proto.graph.node))
 
     def test_graph_pattern_builder_multi_outputs_slice(self):
-
         class SliceSplitPattern(EasyPatternOptimization):
-
             def match_pattern(
                 self,
                 g: GraphBuilder,
@@ -754,9 +756,7 @@ class TestGraphPatternBuilder(ExtTestCase):
             oh.make_model(
                 oh.make_graph(
                     [
-                        oh.make_node(
-                            "Split", ["X"], ["s1", "s2"], axis=-1, num_outputs=2
-                        ),
+                        oh.make_node("Split", ["X"], ["s1", "s2"], axis=-1, num_outputs=2),
                         (
                             oh.make_node("Neg", ["s1"], ["ns1"])
                             if side == "left"
@@ -810,9 +810,7 @@ class TestGraphPatternBuilder(ExtTestCase):
                 return g.op.Concat(g.op.Neg(x2), x1, axis=-1)
 
             def apply_pattern(self, g: GraphBuilder, x):
-                return g.op.Rotary(
-                    x, side="right", domain="onnx_extended.ortops.optim.cuda"
-                )
+                return g.op.Rotary(x, side="right", domain="onnx_extended.ortops.optim.cuda")
 
             def validate_mapping(
                 self,
@@ -835,9 +833,7 @@ class TestGraphPatternBuilder(ExtTestCase):
                 return g.op.Concat(x2, g.op.Neg(x1), axis=-1)
 
             def apply_pattern(self, g: GraphBuilder, x):
-                return g.op.Rotary(
-                    x, side="left", domain="onnx_extended.ortops.optim.cuda"
-                )
+                return g.op.Rotary(x, side="left", domain="onnx_extended.ortops.optim.cuda")
 
         class Rotary3(EasyPatternOptimization):
             def match_pattern(self, g: GraphBuilder, x, splits):
@@ -916,7 +912,8 @@ class TestGraphPatternBuilder(ExtTestCase):
 
                 ref2 = ExtendedReferenceEvaluator(opt_onx)
                 got = ref2.run(None, feeds)
-                np.testing.assert_allclose(expected[0], got[0], atol=1e-5)
+                # desired is the second input
+                np.testing.assert_allclose(got[0], expected[0], atol=1e-5)
 
     def test_simple_rotary_left(self):
         self._simple_rotary("left")
@@ -952,7 +949,6 @@ class TestGraphPatternBuilder(ExtTestCase):
         return model
 
     def test_add_mul_shared_input_pattern(self):
-
         class _CombineBinary(EasyPatternOptimization):
             @classmethod
             def _same_shape(
@@ -991,9 +987,7 @@ class TestGraphPatternBuilder(ExtTestCase):
                 assert (
                     len(deleted_nodes) == 2
                 ), f"Unexpected number of nodes in {deleted_nodes}"
-                x, y, z = set(
-                    list(deleted_nodes[0].input) + list(deleted_nodes[1].input)
-                )
+                x, y, z = set(list(deleted_nodes[0].input) + list(deleted_nodes[1].input))
                 if not g.has_shape(x) or not g.has_shape(y) or not g.has_shape(z):
                     return False
                 x_shape, y_shape, z_shape = (
@@ -1012,7 +1006,7 @@ class TestGraphPatternBuilder(ExtTestCase):
             def match_pattern(self, g: GraphBuilder, x, y, z):
                 return g.op.Add(x, y), g.op.Add(x, z)
 
-            def apply_pattern(self, g: GraphBuilderPatternOptimization, x, y, z):
+            def apply_pattern(self, g: GraphBuilder, x, y, z):
                 return g.op.AddSharedInput(
                     x, y, z, domain="onnx_extended.ortops.optim.cuda", outputs=2
                 )
@@ -1021,7 +1015,7 @@ class TestGraphPatternBuilder(ExtTestCase):
             def match_pattern(self, g: GraphBuilder, x, y, z):
                 return g.op.Add(x, y), g.op.Add(y, z)
 
-            def apply_pattern(self, g: GraphBuilderPatternOptimization, x, y, z):
+            def apply_pattern(self, g: GraphBuilder, x, y, z):
                 return g.op.AddSharedInput(
                     x, y, z, domain="onnx_extended.ortops.optim.cuda", outputs=2
                 )
@@ -1030,7 +1024,7 @@ class TestGraphPatternBuilder(ExtTestCase):
             def match_pattern(self, g: GraphBuilder, x, y, z):
                 return g.op.Mul(x, y), g.op.Mul(x, z)
 
-            def apply_pattern(self, g: GraphBuilderPatternOptimization, x, y, z):
+            def apply_pattern(self, g: GraphBuilder, x, y, z):
                 return g.op.MulSharedInput(
                     x, y, z, domain="onnx_extended.ortops.optim.cuda", outputs=2
                 )
@@ -1039,7 +1033,7 @@ class TestGraphPatternBuilder(ExtTestCase):
             def match_pattern(self, g: GraphBuilder, x, y, z):
                 return g.op.Mul(y, x), g.op.Mul(x, z)
 
-            def apply_pattern(self, g: GraphBuilderPatternOptimization, x, y, z):
+            def apply_pattern(self, g: GraphBuilder, x, y, z):
                 return g.op.MulSharedInput(
                     x, y, z, domain="onnx_extended.ortops.optim.cuda", outputs=2
                 )
@@ -1083,7 +1077,8 @@ class TestGraphPatternBuilder(ExtTestCase):
                 expected = ref1.run(None, feeds)
                 ref2 = ExtendedReferenceEvaluator(opt_onx)
                 got = ref2.run(None, feeds)
-                np.testing.assert_allclose(expected[0], got[0])
+                # desired is the second input
+                np.testing.assert_allclose(got[0], expected[0])
 
 
 if __name__ == "__main__":

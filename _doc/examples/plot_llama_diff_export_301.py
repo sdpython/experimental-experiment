@@ -112,7 +112,7 @@ def export_dynamo(filename, model, *args):
     with contextlib.redirect_stdout(io.StringIO()):
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            export_output = torch.onnx.dynamo_export(model, *args)
+            export_output = torch.onnx.export(model, args, dynamo=True)
             model = export_output.model_proto
     try:
         new_model = optimize_model_proto_oxs(model)
@@ -286,9 +286,8 @@ if sess2 is not None:
         text = dc.to_str(res1, res2, align, column_size=90)
         print(text)
     except AssertionError as e:
-        if (
-            "Unexpected type <class 'list'> for value, it must be a numpy array."
-            not in str(e)
+        if "Unexpected type <class 'list'> for value, it must be a numpy array." not in str(
+            e
         ):
             raise
         print(e)

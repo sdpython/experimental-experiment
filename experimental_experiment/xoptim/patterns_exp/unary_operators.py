@@ -13,7 +13,7 @@ class TransposeCastPattern(PatternOptimization):
     _allowed_types = (TensorProto.FLOAT, TensorProto.FLOAT16)
 
     def __init__(self, verbose: int = 0, priority: int = 3):
-        super(TransposeCastPattern, self).__init__(verbose, priority)
+        super().__init__(verbose, priority)
 
     def match(
         self,
@@ -88,7 +88,7 @@ class TransposeCastPattern(PatternOptimization):
         elif out_type == TensorProto.FLOAT16:
             suffix = "16"
         else:
-            assert False, "out_type={out_type} must be in {self._allowed_types}"
+            raise AssertionError(f"out_type={out_type} must be in {self._allowed_types}")
 
         new_node = g.make_node(
             f"Transpose2DCastFP{suffix}",

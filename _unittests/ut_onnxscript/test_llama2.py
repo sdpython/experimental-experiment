@@ -14,6 +14,23 @@ from experimental_experiment.torch_models.training_helper import make_aot_ort
 
 
 class TestLlama(ExtTestCase):
+    @classmethod
+    def setUp(cls):
+        import torch
+
+        if hasattr(torch._dynamo.variables.misc, "LoggingLoggerVariable"):
+            cls._old_value = torch._dynamo.variables.misc.LoggingLoggerVariable.call_method
+            torch._dynamo.variables.misc.LoggingLoggerVariable.call_method = (
+                lambda *_, **__: None
+            )
+
+    @classmethod
+    def tearDown(cls):
+        import torch
+
+        if hasattr(torch._dynamo.variables.misc, "LoggingLoggerVariable"):
+            torch._dynamo.variables.misc.LoggingLoggerVariable.call_method = cls._old_value
+
     def _assert_model_numerically(
         self,
         model,
@@ -34,8 +51,7 @@ class TestLlama(ExtTestCase):
 
         model = model.to(device)
         example_args_collection = [
-            tuple(t.to(device) for t in examples)
-            for examples in example_args_collection_cpu
+            tuple(t.to(device) for t in examples) for examples in example_args_collection_cpu
         ]
 
         compiled_model = torch.compile(

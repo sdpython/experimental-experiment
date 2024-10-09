@@ -15,7 +15,8 @@ class OptimizationOptions:
     :param patterns: list of pattern optimization to apply to the graph,
         it looks a a specific subsequence of nodes in a graph
         and do some replacements,
-        `'default'` means a default list of optimization patterns are applied
+        `'default'` means a default list of optimization patterns are applied,
+        see below for the most common values
     :param constant_fusing: similar node Constant and ConstantOfShape are used,
         this options avoids creating new nodes when they are the same
     :param max_iter: maximum number of iteration when doing pattern optimizations,
@@ -24,7 +25,7 @@ class OptimizationOptions:
     :param stop_after: for investigation, stop_after this number of applies patterns,
         -1 to never stop
     :param verbose: verbosity level (for pattern optimization)
-    :param verifiers: run verifications to ensure the model is
+    :param verifies: run verifications to ensure the model is
         correct everytime it is modifies, it is mostly to find bugs,
         it is very slow
     :param dump_applied_patterns: dump applied patterns in a folder,
@@ -32,6 +33,23 @@ class OptimizationOptions:
     :param processor: optimization should be made for this processor
         or this list of processors (comma separated value)
     :param order: order algorithm to apply
+
+    It is possible to define a precise of the pattern to apply to a model.
+    The value is interpreter by :func:`experimental_experiment.xoptim.get_pattern_list`.
+
+    * ``patterns=None``: no pattern optimization
+    * ``patterns="TransposeTranspose,TransposeMatMul"``: applies two patterns
+    * ``patterns=["FusedMatMul"]``: applies one pattern
+    * ``patterns=[RotaryEmbeddingPattern(verbose=10)]``: applies one pattern
+      with a specific verbosity value
+    * ``patterns="default``: applies all patterns modifying standard onnx
+      operators into other standard onnx operators
+    * ``patterns="default+onnxruntime``: applies all patterns modifying standard onnx
+      operators into other standard onnx operators as well as patterns fusing nodes into
+      custom operators implemented by :epkg:`onnxruntime`
+    * ``patterns="default+onnxruntime+experimental``: applies all patterns
+      modifying standard onnx operators into other standard onnx operators,
+      patterns fusing nodes into custom operators implemented by :epkg:`onnxruntime`,
     """
 
     def __init__(
@@ -101,6 +119,4 @@ class OptimizationOptions:
             f"order={self.order}, "
             f"patterns={pats}{opts})"
         )
-        return "\n".join(
-            textwrap.wrap(code, width=80, tabsize=4, subsequent_indent="    ")
-        )
+        return "\n".join(textwrap.wrap(code, width=80, tabsize=4, subsequent_indent="    "))

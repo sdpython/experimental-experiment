@@ -61,16 +61,17 @@ class GraphBuilderPatternOptimization:
             "CUDA",
             "CPU",
             "CPU,CUDA",
-        }, f"Unknown processor {processor!r}"
+        }, (
+            f"Unknown processor {processor!r}, "
+            f"if should be string with comma separated value"
+        )
         self.builder = builder
         self.verbose = max(verbose, int(os.environ.get("LOG_PATTERN_OPTIMIZE", "0")))
         self.patterns = patterns or get_default_patterns(self.verbose)
         self.recursive = recursive
         self.verifies = verifies
         self.dump_applied_patterns = dump_applied_patterns
-        self.processor = (
-            processor if "," not in processor else set(processor.split(","))
-        )
+        self.processor = processor
         self._build()
         # This assume a name is given once and
         # no constant can replace an existing one.
@@ -115,8 +116,7 @@ class GraphBuilderPatternOptimization:
 
     def iter_nodes(self) -> Iterator:
         "iterator"
-        for node in self.builder.nodes:
-            yield node
+        yield from self.builder.nodes
 
     def _build(self):
         """
@@ -186,11 +186,11 @@ class GraphBuilderPatternOptimization:
         Tells if a result is used or not,
         including as an output of the graph.
         """
+        if name in self.used_:
+            return True
         if name in self.successors_:
             return True
-        if name in name in self.set_output_names_:
-            return True
-        if name in self.used_:
+        if name in self.set_output_names_:
             return True
         return False
 
@@ -212,7 +212,7 @@ class GraphBuilderPatternOptimization:
         """
         next_nodes = self.next_nodes(name)
         allowed = set(id(n) for n in nodes)
-        return all(map(lambda n: id(n) in allowed, next_nodes))
+        return all(id(n) in allowed for n in next_nodes)
 
     def is_constant(self, name: str) -> bool:
         """
@@ -220,18 +220,26 @@ class GraphBuilderPatternOptimization:
         """
         return self.builder.is_constant(name)
 
-    def is_constant_scalar(self, name: str, value: Optional[Any] = None) -> bool:
+    def is_constant_scalar(
+        self, name: str, value: Optional[Any] = None, broadcast: bool = False
+    ) -> bool:
         """
         Tells if a constant is a scalar
 
         :param name: name
+        :param broadcast: if True, consider 1, [1], [[1]], [[[1]]], ... as scalar as well
         :param value: value to compare to if specified
         :return: boolean
         """
         if not self.is_constant(name):
             return False
         cst_shape = self.get_constant_shape(name, exc=False)
-        if cst_shape is None or cst_shape not in (tuple(), (1,)):
+        if cst_shape is None:
+            return False
+        if broadcast:
+            if cst_shape != tuple() and set(cst_shape) != {1}:
+                return False
+        elif cst_shape not in (tuple(), (1,)):
             return False
         cst = self.get_computed_constant(name)
         if hasattr(cst, "numpy"):
@@ -241,17 +249,21 @@ class GraphBuilderPatternOptimization:
             cst, np.ndarray
         ), f"Unexpected type for constant {name}!r, type is {type(cst)}"
         shape = cst.shape
-        if shape not in (tuple(), (1,)):
+        if broadcast:
+            if shape != tuple() and set(shape) != {1}:
+                return False
+        elif shape not in (tuple(), (1,)):
             return False
         if value is None:
             return True
-        if cst.shape == (1,):
+        if shape == (1,):
             return all(cst == value)
-        return cst == value
+        if shape == tuple():
+            return cst == value
+        assert broadcast, f"Broadcast should be true at this stage, name={name!r}, cst={cst}"
+        return all(cst.reshape((1,)) == value)
 
-    def get_constant_shape(
-        self, name: str, exc: bool = True
-    ) -> Optional[Tuple[int, ...]]:
+    def get_constant_shape(self, name: str, exc: bool = True) -> Optional[Tuple[int, ...]]:
         """
         Returns the shape of a constant.
 
@@ -265,10 +277,14 @@ class GraphBuilderPatternOptimization:
             proto = self.builder.initializers_dict[name]
         elif name in self.builder.constants_:
             proto = self.builder.constants_[name]
+        elif self.is_constant(name):
+            cst = self.get_computed_constant(name)
+            return cst.shape
         else:
             if exc:
                 raise AssertionError(
-                    f"Unable to retrieve initializer or constant for {name!r}"
+                    f"Unable to retrieve initializer or constant for {name!r}, "
+                    f"is_constant={self.is_constant(name)}"
                 )
             return None
 
@@ -276,26 +292,39 @@ class GraphBuilderPatternOptimization:
             return tuple(proto.dims)
         if isinstance(proto, NodeProto) and proto.domain == "":
             if proto.op_type == "Cast":
+                if self.is_constant(proto.output[0]) and not self.is_constant(
+                    proto.input[0]
+                ):
+                    if exc:
+                        raise AssertionError(
+                            f"Incompatibilities, output is constant "
+                            f"when input is not in node {proto}."
+                        )
+                    return None
                 return self.get_constant_shape(proto.input[0], exc=exc)
-            if proto.op_type != "Constant":
-                if exc:
-                    raise AssertionError(
-                        f"Unable to retrieve shape for name={name!r} and node {proto.op_type!r}."
-                    )
-                return None
-            assert (
-                len(proto.attribute) == 1
-            ), f"Unexpected number of attribute for node={proto}"
-            for att in proto.attribute:
-                if att.name == "value":
-                    return tuple(proto.value.dims)
-                if att.name in {"value_float", "value_int"}:
-                    return tuple()
-            raise AssertionError(
-                f"Unable to retrieve shape for name={name!r} (type is NodeProto), "
-                f"node.op_type={proto.op_type!r}, "
-                f"attributes={[att.name for att in proto.attribute]}."
-            )
+            if proto.op_type == "Constant":
+                assert (
+                    len(proto.attribute) == 1
+                ), f"Unexpected number of attribute for node={proto}"
+                for att in proto.attribute:
+                    if att.name == "value":
+                        return tuple(att.t.dims)
+                    if att.name in {"value_float", "value_int"}:
+                        return tuple()
+                raise AssertionError(
+                    f"Unable to retrieve shape for name={name!r} (type is NodeProto), "
+                    f"node.op_type={proto.op_type!r}, "
+                    f"attributes={[att.name for att in proto.attribute]}."
+                )
+            if self.is_constant(name):
+                cst = self.get_computed_constant(name)
+                return None if cst is None else cst.shape
+            if exc:
+                raise AssertionError(
+                    f"Unable to retrieve shape for name={name!r} "
+                    f"bash and node {proto.op_type!r}"
+                    # f"{self.builder.get_debug_msg()}"
+                )
             return None
         if hasattr(proto, "shape"):
             return proto.shape
@@ -305,11 +334,12 @@ class GraphBuilderPatternOptimization:
             )
         return None
 
-    def get_constant_scalar(self, name: str) -> Union[int, float]:
+    def get_constant_scalar(self, name: str, broadcast: bool = False) -> Union[int, float]:
         """
         Returns a scalar as a constant.
 
         :param name: name
+        :param broadcast: consider [1], [[1]], [[[1]]] as constant as well
         :return: int or float
         """
         cst = self.get_computed_constant(name)
@@ -319,12 +349,14 @@ class GraphBuilderPatternOptimization:
         assert isinstance(
             cst, np.ndarray
         ), f"Unexpected type for constant {name}!r, type is {type(cst)}"
-        assert cst.shape in (
-            tuple(),
-            (1,),
+        assert cst.shape == tuple() or (
+            (broadcast and set(cst.shape) == {1}) or (not broadcast and cst.shape == (1,))
         ), f"Unexpected shape {cst.shape} for constant {name!r}"
         shape = cst.shape
-        value = cst[0] if shape == (1,) else cst
+        if broadcast:
+            value = cst.reshape((1,))[0]
+        else:
+            value = cst[0] if shape == (1,) else cst
         if value.dtype in {
             np.float32,
             np.float16,
@@ -345,8 +377,9 @@ class GraphBuilderPatternOptimization:
         if name in self._cache_computed_constant:
             value = self._cache_computed_constant[name]
         else:
-            value = self.builder.get_constant(name, computed_value=True)
-            self._cache_computed_constant[name] = value
+            value = self.builder.get_constant(name, computed_value=True, exc=False)
+            if value is not None:
+                self._cache_computed_constant[name] = value
         if statistics is None:
             return value
         stats = []
@@ -416,9 +449,10 @@ class GraphBuilderPatternOptimization:
         for att in node.attribute:
             if att.name == attribute:
                 found = att
-        assert (
-            found is None
-        ), f"get_constant_or_attribute not implemented for attribute={attribute!r} and node={node}."
+        assert found is None, (
+            f"get_constant_or_attribute not implemented "
+            f"for attribute={attribute!r} and node={node}."
+        )
         assert input_index < len(
             node.input
         ), f"Input {input_index} does not exist in node {node}."
@@ -517,9 +551,7 @@ class GraphBuilderPatternOptimization:
             f"known_types={pprint.pformat(self.builder._known_types)}"
         )
         node = self.node_before(name)
-        input_types = [
-            (self.get_type(i) if self.has_type(i) else 0) for i in node.input
-        ]
+        input_types = [(self.get_type(i) if self.has_type(i) else 0) for i in node.input]
         output_type = infer_types(node, input_types, name, exc=exc)
         if output_type > 0:
             return output_type
@@ -563,9 +595,7 @@ class GraphBuilderPatternOptimization:
     def make_initializer(
         self, name: str, value: Any, external: bool = False, msg: str = ""
     ) -> str:
-        new_name = self.builder.make_initializer(
-            name, value, external=external, msg=msg
-        )
+        new_name = self.builder.make_initializer(name, value, external=external, msg=msg)
         return new_name
 
     def unique_name(self, prefix: str) -> str:
@@ -677,6 +707,11 @@ class GraphBuilderPatternOptimization:
             **kwargs,
         )
 
+        if all(self.is_constant(i) for i in inputs):
+            for o in outputs:
+                self.builder.update_node_constant(o, proto)
+            proto.doc_string += ":constant-5:"
+
         assert len(outputs) == len(set(outputs)) or "" in outputs, (
             f"Repeated outputs for node {op_type}({', '.join(inputs)}) -> "
             f"{', '.join(outputs)}"
@@ -693,20 +728,14 @@ class GraphBuilderPatternOptimization:
         """
         idn = [id(n) for n in match.nodes if n is not None]
 
-        assert all(
-            map(lambda i: i in self.nodes_, idn)
-        ), f"One node in {idn} is not referenced"
+        assert all(i in self.nodes_ for i in idn), f"One node in {idn} is not referenced"
 
         positions = {id(n): i for i, n in enumerate(self.builder.nodes)}
 
-        assert all(
-            map(lambda i: i in positions, idn)
-        ), f"One node in {idn} is not referenced"
+        assert all(i in positions for i in idn), f"One node in {idn} is not referenced"
 
         removed = [positions[i] for i in idn]
-        position_insert = (
-            None if match.insert_at is None else positions[id(match.insert_at)]
-        )
+        position_insert = None if match.insert_at is None else positions[id(match.insert_at)]
         new_nodes = match.apply(self, *match.nodes)
 
         if self.verbose >= 10:
@@ -720,7 +749,9 @@ class GraphBuilderPatternOptimization:
                     continue
                 print(f"  + {node.op_type}: {node.input} -> {node.output}")
 
-        self.builder.insert_and_remove_nodes(position_insert, new_nodes, removed)
+        self.builder.insert_and_remove_nodes(
+            position_insert, new_nodes, removed, debug=match
+        )
         if self.verbose >= 10:
             print(f"[GraphBuilderPatternOptimization.apply_match] {match} applied.")
         if self.dump_applied_patterns:
@@ -750,8 +781,8 @@ class GraphBuilderPatternOptimization:
         self, folder: str, match: MatchResult, new_nodes: List[NodeProto]
     ):
         assert isinstance(folder, str), f"Unexpected type {type(folder)} for folder."
-        if not os.path.exists(folder):
-            os.mkdir(folder)
+        if folder and not os.path.exists(folder):
+            os.makedirs(folder)
 
         name = f"{match.pattern.__class__.__name__}_0.onnx"
         fullname = os.path.join(folder, name)
@@ -796,12 +827,8 @@ class GraphBuilderPatternOptimization:
                 if i in self.builder.initializers_dict:
                     old_initializers[i] = self.builder.initializers_dict[i]
 
-        new_init_nodes = [
-            self._to_cstop(v, name=k) for k, v in new_initializers.items()
-        ]
-        old_init_nodes = [
-            self._to_cstop(v, name=k) for k, v in old_initializers.items()
-        ]
+        new_init_nodes = [self._to_cstop(v, name=k) for k, v in new_initializers.items()]
+        old_init_nodes = [self._to_cstop(v, name=k) for k, v in old_initializers.items()]
 
         fproto = oh.make_function(
             domain="pattern",
@@ -809,9 +836,7 @@ class GraphBuilderPatternOptimization:
             inputs=list(input_names),
             outputs=list(output_names),
             nodes=old_init_nodes + [n for n in match.nodes if n is not None],
-            opset_imports=[
-                oh.make_opsetid(k, v) for k, v in self.builder.opsets.items()
-            ],
+            opset_imports=[oh.make_opsetid(k, v) for k, v in self.builder.opsets.items()],
         )
 
         fproto_apply = oh.make_function(
@@ -820,9 +845,7 @@ class GraphBuilderPatternOptimization:
             list(input_names),
             list(output_names),
             new_init_nodes + [n for n in new_nodes if n is not None],
-            opset_imports=[
-                oh.make_opsetid(k, v) for k, v in self.builder.opsets.items()
-            ],
+            opset_imports=[oh.make_opsetid(k, v) for k, v in self.builder.opsets.items()],
         )
 
         def _sh(n):
@@ -858,7 +881,8 @@ class GraphBuilderPatternOptimization:
             f.write(model.SerializeToString())
         if self.verbose >= 10:
             print(
-                f"[GraphBuilderPatternOptimization._save_pattern_as_proto] saved {fullname!r}"
+                f"[GraphBuilderPatternOptimization._save_pattern_as_proto] "
+                f"saved {fullname!r}"
             )
 
         name = f"{match.pattern.__class__.__name__}_{n}_apply.onnx"
@@ -867,14 +891,74 @@ class GraphBuilderPatternOptimization:
             f.write(model_apply.SerializeToString())
         if self.verbose >= 10:
             print(
-                f"[GraphBuilderPatternOptimization._save_pattern_as_proto] saved {fullname!r}"
+                f"[GraphBuilderPatternOptimization._save_pattern_as_proto] "
+                f"saved {fullname!r}"
             )
 
-    def _check_graph(self, statistics, step, iteration, code, verifies):
+    def _chech_graph_verifies(self, node: NodeProto):
+        if (
+            node.op_type in {"MatMul", "Gemm", "FusedMatMul"}
+            and self.builder.has_shape(node.input[0])
+            and self.builder.has_shape(node.input[1])
+        ):
+            sh1 = self.builder.get_shape(node.input[0])[-2:]
+            sh2 = self.builder.get_shape(node.input[1])[-2:]
+            tA = self.builder.get_attribute(node, "transA", exc=False)
+            tB = self.builder.get_attribute(node, "transB", exc=False)
+            tA = 0 if tA is None or tA.i == 0 else 1
+            tB = 0 if tB is None or tB.i == 0 else 1
+            if tA:
+                sh1 = (sh1[1], sh1[0])
+            if tB:
+                sh2 = (sh2[1], sh2[0])
+            assert type(sh1[-1]) != type(sh2[0]) or sh1[-1] == sh2[0], (  # noqa: E721
+                f"Node {node.op_type!r}, inputs={node.input}, "
+                f"shape1={self.builder.get_shape(node.input[0])}, "
+                f"shape2={self.builder.get_shape(node.input[1])}, "
+                f"tA={tA}, tB={tB}."
+            )
+
+    def _check_graph_verifies_whole(self):
+        onx = self.builder.to_onnx(optimize=False)
+        new_shapes = infer_shapes(onx)
+        for val in new_shapes.graph.value_info:
+            itype = val.type.tensor_type.elem_type
+            shape = tuple(
+                d.dim_param if d.dim_param else d.dim_value
+                for d in val.type.tensor_type.shape.dim
+            )
+            assert self.builder.has_name(val.name), f"name {val.name!r} is missing"
+            assert (
+                not self.builder.has_type(val.name)
+                or self.builder.get_type(val.name) == itype
+            ), (
+                f"Result {val.name!r} has type {itype} but the builder "
+                f"assumes it is {self.builder.get_type(val.name)}"
+            )
+            assert (
+                not self.builder.has_shape(val.name)
+                or self.builder.get_shape(val.name) == shape
+            ), (
+                f"Result {val.name!r} has shape {shape} but the builder "
+                f"assumes it is {self.builder.get_shape(val.name)}"
+            )
+
+        # from onnxruntime import InferenceSession
+        # InferenceSession(
+        #     onx.SerializeToString(),
+        #     providers=["CPUExecutionProvider"],
+        # )
+
+    def _check_graph(
+        self,
+        statistics: List[Dict[str, Any]],
+        step: str,
+        iteration: int,
+        code: str,
+        verifies: bool,
+    ):
         begin = time.perf_counter()
-        assert (
-            len(self.builder.nodes) > 0
-        ), f"The onnx model is empty (step {step}, no node)"
+        assert len(self.builder.nodes) > 0, f"The onnx model is empty (step {step}, no node)"
         known = set(n.name for n in self.builder.inputs)
         known |= set(self.builder.initializers_dict)
         for p, node in enumerate(self.builder.nodes):
@@ -884,77 +968,34 @@ class GraphBuilderPatternOptimization:
             for i in node.input:
                 if i == "":
                     continue
-                assert i in known, (
-                    f"Unknown input {i!r}, step {step!r} at position {p} "
-                    f"in node {node.op_type} "
-                    f"[{node.name}]: {node.input} -> {node.output}"
-                )
+                if i not in known:
+                    after = set()
+                    for nn in self.builder.nodes[p:]:
+                        after |= set(nn.output)
+                    raise AssertionError(
+                        f"Unknown input {i!r}, step {step!r} at position {p} "
+                        f"in node {node.op_type!r} "
+                        f"[{node.name}]: {node.input} -> {node.output}, "
+                        f"found after = {i in after}"
+                    )
             known |= set(node.output)
 
             if verifies:
-                if (
-                    node.op_type in {"MatMul", "Gemm", "FusedMatMul"}
-                    and self.builder.has_shape(node.input[0])
-                    and self.builder.has_shape(node.input[1])
-                ):
-                    sh1 = self.builder.get_shape(node.input[0])[-2:]
-                    sh2 = self.builder.get_shape(node.input[1])[-2:]
-                    tA = self.builder.get_attribute(node, "transA", exc=False)
-                    tB = self.builder.get_attribute(node, "transB", exc=False)
-                    tA = 0 if tA is None or tA.i == 0 else 1
-                    tB = 0 if tB is None or tB.i == 0 else 1
-                    if tA:
-                        sh1 = (sh1[1], sh1[0])
-                    if tB:
-                        sh2 = (sh2[1], sh2[0])
-                    assert (
-                        type(sh1[-1]) != type(sh2[0]) or sh1[-1] == sh2[0]  # noqa: E721
-                    ), (
-                        f"Node {node.op_type!r}, inputs={node.input}, "
-                        f"shape1={self.builder.get_shape(node.input[0])}, "
-                        f"shape2={self.builder.get_shape(node.input[1])}, "
-                        f"tA={tA}, tB={tB}."
-                    )
+                self._check_graph_verifies(node)
 
         for o in self.builder.outputs:
             assert o.name in known, f"Unknown output {o.name!r}, step {step!r}"
+
+        if verifies:
+            self._chech_graph_verifies_whole()
+
         statistics.append(
             dict(
-                pattern=f"check_pattern_{code}",
+                pattern=f"check_pattern_{code}{1 if verifies else 0}",
                 time_in=time.perf_counter() - begin,
                 iteration=iteration,
             )
         )
-        if verifies:
-            onx = self.builder.to_onnx(optimize=False)
-            new_shapes = infer_shapes(onx)
-            for val in new_shapes.graph.value_info:
-                itype = val.type.tensor_type.elem_type
-                shape = tuple(
-                    d.dim_param if d.dim_param else d.dim_value
-                    for d in val.type.tensor_type.shape.dim
-                )
-                assert self.builder.has_name(val.name), f"name {val.name!r} is missing"
-                assert (
-                    not self.builder.has_type(val.name)
-                    or self.builder.get_type(val.name) == itype
-                ), (
-                    f"Result {val.name!r} has type {itype} but the builder "
-                    f"assumes it is {self.builder.get_type(val.name)}"
-                )
-                assert (
-                    not self.builder.has_shape(val.name)
-                    or self.builder.get_shape(val.name) == shape
-                ), (
-                    f"Result {val.name!r} has shape {shape} but the builder "
-                    f"assumes it is {self.builder.get_shape(val.name)}"
-                )
-
-            # from onnxruntime import InferenceSession
-            # InferenceSession(
-            #     onx.SerializeToString(),
-            #     providers=["CPUExecutionProvider"],
-            # )
 
     def do_not_remove(self, node: NodeProto) -> bool:
         """Tells if a node can be removed."""
@@ -1005,7 +1046,7 @@ class GraphBuilderPatternOptimization:
         continue_optimization = True
         if max_iter == -1:
             max_iter = len(self.builder.nodes)
-        priorities = list(sorted(set(p.priority for p in self.patterns)))
+        priorities = list(sorted(set(p.priority for p in self.patterns)))  # noqa: C413
         assert priorities, "list of priority is null."
         if self.verbose > 0:
             print(
@@ -1023,6 +1064,7 @@ class GraphBuilderPatternOptimization:
 
         begin_all = time.perf_counter()
         statistics = []
+        self._check_graph(statistics, "-", -1, "0", False)
 
         n_applied = 0
         last_it = 0
@@ -1054,7 +1096,6 @@ class GraphBuilderPatternOptimization:
 
                 # loop over the nodes
                 for match in pattern.enumerate_matches(self):
-
                     # bypass this node if the name contains some specific name
                     fail_match = False
                     for n in match.nodes:
@@ -1086,10 +1127,7 @@ class GraphBuilderPatternOptimization:
                         marked.add(id(n))
                     found = True
                     if self.verbose > 2:
-                        print(
-                            f"[GraphBuilderPatternOptimization.optimize] "
-                            f"match={match}"
-                        )
+                        print(f"[GraphBuilderPatternOptimization.optimize] match={match}")
                     matches.append((pattern, match))
                     if stop_after > 0 and len(matches) + n_applied >= stop_after:
                         continue_optimization = False
@@ -1102,6 +1140,7 @@ class GraphBuilderPatternOptimization:
                             )
                         break
 
+                # matches contains all the matchs
                 d = time.perf_counter() - begin
                 statistics.append(
                     dict(
@@ -1148,8 +1187,9 @@ class GraphBuilderPatternOptimization:
             added_types = set()
             n_added = 0
             n_removed = 0
-            for im, (pattern, match) in enumerate(matches):
 
+            # loop over patterns
+            for im, (pattern, match) in enumerate(matches):
                 if self.verbose > 3:
                     print(
                         f"[GraphBuilderPatternOptimization.optimize] "
@@ -1213,7 +1253,8 @@ class GraphBuilderPatternOptimization:
 
             if self.verbose > 2:
                 print(
-                    f"[GraphBuilderPatternOptimization.optimize] done all: -{n_removed} +{n_added} nodes"
+                    f"[GraphBuilderPatternOptimization.optimize] done all: "
+                    f"-{n_removed} +{n_added} nodes"
                 )
 
             if remove_identity and (it < 3 or "Identity" in added_types):
@@ -1251,6 +1292,7 @@ class GraphBuilderPatternOptimization:
                 current_priority_index += 1
                 if current_priority_index >= len(priorities):
                     # There is priority left to explore.
+                    continue_optimization = len(matches) > 0
                     break
                 if self.verbose > 0:
                     print(
@@ -1261,7 +1303,8 @@ class GraphBuilderPatternOptimization:
         if self.verbose > 0:
             duration = time.perf_counter() - begin_all
             print(
-                f"[GraphBuilderPatternOptimization.optimize] done after {last_it} iterations with "
+                f"[GraphBuilderPatternOptimization.optimize] "
+                f"done after {last_it} iterations with "
                 f"{len(self.builder.nodes)} nodes in {duration:.3f}"
             )
             if self.verbose > 1:

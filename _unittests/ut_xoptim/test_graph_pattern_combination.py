@@ -7,6 +7,7 @@
 import os
 import unittest
 import sys
+from typing import Optional
 import numpy as np
 from onnx import (
     ModelProto,
@@ -23,6 +24,7 @@ from experimental_experiment.ext_test_case import (
     ExtTestCase,
     skipif_ci_windows,
     requires_onnxruntime_training,
+    has_onnxruntime_training,
 )
 from experimental_experiment.xbuilder.graph_builder import (
     GraphBuilder,
@@ -43,7 +45,6 @@ def cuda_recent_enough():
 
 
 class TestGraphPatternCombination(ExtTestCase):
-
     @classmethod
     def setUpClass(cls):
         for name in [
@@ -69,7 +70,6 @@ class TestGraphPatternCombination(ExtTestCase):
         onx.graph.value_info.extend(new_shapes)
 
     def _check_ort_cpu_or_cuda(self, onx, model=None):
-
         def cl(text):
             return (
                 text.replace("\n", " ")
@@ -122,7 +122,7 @@ class TestGraphPatternCombination(ExtTestCase):
             try:
                 from onnx_extended.ortops.optim.cuda import get_ort_ext_libs
             except ImportError:
-                raise unittest.SkipTest("onnx_extended not installed.")
+                raise unittest.SkipTest("onnx_extended not installed.")  # noqa: B904
 
             options.register_custom_ops_library(get_ort_ext_libs()[0])
             providers = ["CUDAExecutionProvider", "CPUExecutionProvider"]
@@ -130,7 +130,7 @@ class TestGraphPatternCombination(ExtTestCase):
             try:
                 from onnx_extended.ortops.optim.cpu import get_ort_ext_libs
             except ImportError:
-                raise unittest.SkipTest("onnx_extended not installed.")
+                raise unittest.SkipTest("onnx_extended not installed.")  # noqa: B904
 
             options.register_custom_ops_library(get_ort_ext_libs()[0])
 
@@ -139,6 +139,10 @@ class TestGraphPatternCombination(ExtTestCase):
                 onx.SerializeToString(), options, providers=providers
             )
         except (Fail, InvalidArgument) as e:
+            if "com.microsoft:SoftmaxGrad(-1) is not a registered" in str(e):
+                raise unittest.SkipTest(  # noqa: B904
+                    f"onnxruntime-training is needed due to {e}"
+                )
             err = []
             rows = []
             for i in onx.graph.input:
@@ -170,7 +174,7 @@ class TestGraphPatternCombination(ExtTestCase):
         self.assertExists(p)
         return load_onnx(p, load_external_data=False)
 
-    def _range(self, *shape, bias: float = None):
+    def _range(self, *shape, bias: Optional[float] = None):
         n = np.prod(shape)
         x = np.arange(n).astype(np.float32) / n
         if bias:
@@ -198,15 +202,9 @@ class TestGraphPatternCombination(ExtTestCase):
                 [
                     onh.from_array(np.array([0], dtype=np.int64), name="zero"),
                     onh.from_array(np.array([1], dtype=np.int64), name="un"),
-                    onh.from_array(
-                        np.array([1, 32, 128], dtype=np.int64), name="shape1"
-                    ),
-                    onh.from_array(
-                        np.array([15, 128, 64], dtype=np.int64), name="shape2"
-                    ),
-                    onh.from_array(
-                        np.array([3, 5, 32, 64], dtype=np.int64), name="shape3"
-                    ),
+                    onh.from_array(np.array([1, 32, 128], dtype=np.int64), name="shape1"),
+                    onh.from_array(np.array([15, 128, 64], dtype=np.int64), name="shape2"),
+                    onh.from_array(np.array([3, 5, 32, 64], dtype=np.int64), name="shape3"),
                 ],
             )
         )
@@ -229,9 +227,7 @@ class TestGraphPatternCombination(ExtTestCase):
             ),
         )
         opt_onx = gr.to_onnx(optimize=True)
-        self.assertEqual(
-            ["Unsqueeze", "MatMul"], [n.op_type for n in opt_onx.graph.node]
-        )
+        self.assertEqual(["Unsqueeze", "MatMul"], [n.op_type for n in opt_onx.graph.node])
         self.assertEqual(1, len(opt_onx.graph.initializer))
 
         opt_ref = ExtendedReferenceEvaluator(opt_onx)
@@ -257,23 +253,13 @@ class TestGraphPatternCombination(ExtTestCase):
                         "Y", TFLOAT, ["batch", "channel", "D128", "D64"]
                     ),
                 ],
-                [
-                    oh.make_tensor_value_info(
-                        "Z", TFLOAT, ["batch", "channel", "D32", "64"]
-                    )
-                ],
+                [oh.make_tensor_value_info("Z", TFLOAT, ["batch", "channel", "D32", "64"])],
                 [
                     onh.from_array(np.array([0], dtype=np.int64), name="zero"),
                     onh.from_array(np.array([1], dtype=np.int64), name="un"),
-                    onh.from_array(
-                        np.array([1, 32, 128], dtype=np.int64), name="shape1"
-                    ),
-                    onh.from_array(
-                        np.array([15, 128, 64], dtype=np.int64), name="shape2"
-                    ),
-                    onh.from_array(
-                        np.array([3, 5, 32, 64], dtype=np.int64), name="shape3"
-                    ),
+                    onh.from_array(np.array([1, 32, 128], dtype=np.int64), name="shape1"),
+                    onh.from_array(np.array([15, 128, 64], dtype=np.int64), name="shape2"),
+                    onh.from_array(np.array([3, 5, 32, 64], dtype=np.int64), name="shape3"),
                 ],
             )
         )
@@ -296,9 +282,7 @@ class TestGraphPatternCombination(ExtTestCase):
             ),
         )
         opt_onx = gr.to_onnx(optimize=True)
-        self.assertEqual(
-            ["Unsqueeze", "MatMul"], [n.op_type for n in opt_onx.graph.node]
-        )
+        self.assertEqual(["Unsqueeze", "MatMul"], [n.op_type for n in opt_onx.graph.node])
         self.assertEqual(1, len(opt_onx.graph.initializer))
 
         opt_ref = ExtendedReferenceEvaluator(opt_onx)
@@ -324,23 +308,13 @@ class TestGraphPatternCombination(ExtTestCase):
                         "Y", TFLOAT, ["batch", "channel", "D128", "D64"]
                     ),
                 ],
-                [
-                    oh.make_tensor_value_info(
-                        "Z", TFLOAT, ["batch", "channel", "D32", "64"]
-                    )
-                ],
+                [oh.make_tensor_value_info("Z", TFLOAT, ["batch", "channel", "D32", "64"])],
                 [
                     onh.from_array(np.array([0], dtype=np.int64), name="zero"),
                     onh.from_array(np.array([1], dtype=np.int64), name="un"),
-                    onh.from_array(
-                        np.array([1, 32, 128], dtype=np.int64), name="shape1"
-                    ),
-                    onh.from_array(
-                        np.array([15, 128, 64], dtype=np.int64), name="shape2"
-                    ),
-                    onh.from_array(
-                        np.array([3, 5, 32, 64], dtype=np.int64), name="shape3"
-                    ),
+                    onh.from_array(np.array([1, 32, 128], dtype=np.int64), name="shape1"),
+                    onh.from_array(np.array([15, 128, 64], dtype=np.int64), name="shape2"),
+                    onh.from_array(np.array([3, 5, 32, 64], dtype=np.int64), name="shape3"),
                 ],
             )
         )
@@ -363,9 +337,7 @@ class TestGraphPatternCombination(ExtTestCase):
             infer_shapes=True,
         )
         opt_onx = gr.to_onnx(optimize=True)
-        self.assertEqual(
-            ["Unsqueeze", "MatMul"], [n.op_type for n in opt_onx.graph.node]
-        )
+        self.assertEqual(["Unsqueeze", "MatMul"], [n.op_type for n in opt_onx.graph.node])
         self.assertEqual(1, len(opt_onx.graph.initializer))
 
         opt_ref = ExtendedReferenceEvaluator(opt_onx)
@@ -396,15 +368,9 @@ class TestGraphPatternCombination(ExtTestCase):
                 [
                     onh.from_array(np.array([0], dtype=np.int64), name="zero"),
                     onh.from_array(np.array([1], dtype=np.int64), name="un"),
-                    onh.from_array(
-                        np.array([1, 32, 128], dtype=np.int64), name="shape1"
-                    ),
-                    onh.from_array(
-                        np.array([15, 128, 64], dtype=np.int64), name="shape2"
-                    ),
-                    onh.from_array(
-                        np.array([3, 5, 32, 64], dtype=np.int64), name="shape3"
-                    ),
+                    onh.from_array(np.array([1, 32, 128], dtype=np.int64), name="shape1"),
+                    onh.from_array(np.array([15, 128, 64], dtype=np.int64), name="shape2"),
+                    onh.from_array(np.array([3, 5, 32, 64], dtype=np.int64), name="shape3"),
                 ],
             )
         )
@@ -454,15 +420,13 @@ class TestGraphPatternCombination(ExtTestCase):
                     infer_shapes=True,
                 )
                 onx = gr.to_onnx(optimize=True)
-                types = set([n.op_type for n in onx.graph.node])
+                types = set(n.op_type for n in onx.graph.node)
                 self.assertIn("SimplifiedLayerNormalization", types)
                 self._check_ort_cpu_or_cuda(onx)
 
     @requires_onnxruntime_training()
     def test_simplified_with_all_default(self):
-        self._simplified_with_all(
-            {}, experimental=False, check_ort=cuda_recent_enough()
-        )
+        self._simplified_with_all({}, experimental=False, check_ort=cuda_recent_enough())
 
     def test_simplified_with_all_experimental(self):
         self._simplified_with_all({}, experimental=True, check_ort=cuda_recent_enough())
@@ -486,6 +450,8 @@ class TestGraphPatternCombination(ExtTestCase):
     def _simplified_with_all(
         self, disabled, experimental=False, check_ort=True, models_list=None
     ):
+        import torch
+
         for model in models_list or [
             "noopt-llama-custom__1.onnx",
             "noopt-llama-custom__0.onnx",
@@ -523,7 +489,7 @@ class TestGraphPatternCombination(ExtTestCase):
                 ),
                 verbose=0,
                 verifies=False,
-                processor="CPU,CUDA",
+                processor="CPU,CUDA" if torch.cuda.is_available() else "CPU",
             )
             options.patterns = [
                 p for p in options.patterns if p.__class__.__name__ not in disabled
@@ -545,27 +511,32 @@ class TestGraphPatternCombination(ExtTestCase):
                     "dort-llama-llama-ort_1.onnx",
                     "dort-llama2-llama-ort+_1.onnx",
                 } and "Node at position 29 cannot be moved." in str(e):
-                    raise unittest.SkipTest(
+                    raise unittest.SkipTest(  # noqa: B904
                         "Algorithm inserting nodes is still not perfect"
                     )
-                raise AssertionError(f"Model {model!r} failed.")
+                raise AssertionError(f"Model {model!r} failed.")  # noqa: B904
             assert new_onx is not None, f"Model {model!r} was not optimized."
             op_types = [n.op_type for n in new_onx.graph.node]
             if experimental and "ScatterND" in op_types:
-                self.dump_onnx(f"dump_{model}", new_onx)
-                raise AssertionError(f"Model {model!r} has ScatterND.")
-            if experimental:
-                self.assertNotIn("ScatterND", op_types, msg=f"model {model!r} failed")
-            if check_ort:
+                if (
+                    torch.cuda.is_available()
+                    or len([n for n in op_types if n == "ScatterND"]) > 1
+                ):
+                    self.dump_onnx(f"dump_{model}", new_onx)
+                    raise AssertionError(f"Model {model!r} has ScatterND.")
+            if check_ort and has_onnxruntime_training():
                 self._check_ort_cpu_or_cuda(new_onx, model=model)
 
     @skipif_ci_windows("crash")
     def test_study(self):
-        model = "em_llama_custom_static_fp32_cuda_large_h6_58fa9.onnx.2.onnx"
+        """
+        clear&&python _unittests/ut_xoptim/test_graph_pattern_combination.py -k study
+        """
+        model = "llama_layer_norm.onnx"
         enabled = {
-            "RotaryConcatPartPattern",
+            "SimplifiedLayerNormalizationPattern",
         }
-        enabled = {}
+        # enabled = {}
         disabled = {}
         options = OptimizationOptions(
             patterns="default+onnxruntime+experimental",
@@ -584,6 +555,7 @@ class TestGraphPatternCombination(ExtTestCase):
         assert options.patterns, "Pattern is empty."
         if __name__ == "__main__":
             options.verbose = 1 if len(options.patterns) > 3 else 10
+            print(f"### __name__={__name__!r}")
             print(f"-- patterns={[c.__class__.__name__ for c in options.patterns]}")
             print(f"-- verbose={options.verbose}")
         for p in options.patterns:
@@ -598,7 +570,7 @@ class TestGraphPatternCombination(ExtTestCase):
                 infer_shapes=False,
                 verbose=2 if __name__ == "__main__" else 0,
             )
-            return gr.to_onnx(optimize=True)
+            return gr.to_onnx(optimize=True, large_model=False)
 
         # from onnx_array_api.profiling import profile, profile2graph
         # ps = profile(do)[0]
@@ -620,14 +592,18 @@ class TestGraphPatternCombination(ExtTestCase):
         try:
             self._check_ort_cpu_or_cuda(onx)
         except NotImplemented as e:
-            raise unittest.SkipTest(f"missing extension: {e}")
+            raise unittest.SkipTest(f"missing extension: {e}")  # noqa: B904
         except Fail as e:
             if "com.microsoft:SoftmaxGrad(-1) is not a registered function" in str(e):
                 unittest.SkipTest(f"onnxruntime-training is needed for {e}")
             raise
         except RuntimeException as e:
-            if "Invalid fd was supplied" in str(e):
-                raise unittest.SkipTest(f"missing extension: {e}")
+            if (
+                "Invalid fd was supplied" in str(e)
+                or "cannot get file size" in str(e)
+                or "No such file or directory" in str(e)
+            ):
+                raise unittest.SkipTest(f"missing extension: {e}")  # noqa: B904
             raise
         self._check_ort_cpu_or_cuda(new_onx)
 

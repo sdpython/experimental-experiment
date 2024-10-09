@@ -54,6 +54,13 @@ class OrtEval:
             providers = ["CPUExecutionProvider"]
         elif providers in ("cuda", "CUDA"):
             providers = ["CUDAExecutionProvider"]
+        elif not isinstance(providers, list) and providers.startswith("cuda"):
+            device_id = 0 if ":" not in self.device else int(self.device.split(":")[1])
+            providers = [
+                ("CUDAExecutionProvider", {"device_id": device_id}),
+                ("CPUExecutionProvider", {}),
+            ]
+
         self.providers = providers
         self._cache = {}
         if isinstance(proto, str):
@@ -98,7 +105,7 @@ class OrtEval:
             return self.torch.float16
         if dt == np.int64:
             return self.torch.int64
-        assert False, f"Unexpected type {type(dt)}: {dt}"
+        raise AssertionError(f"Unexpected type {type(dt)}: {dt}")
 
     def _get_itype(self, dt: Any) -> int:
         if isinstance(dt, int):
@@ -205,12 +212,13 @@ class OrtEval:
         if intermediate:
             return results
         output_names = [o.name for o in self.proto.graph.output]
-        for i, name in enumerate(output_names):
+        for name in output_names:
             if name == "":
                 continue
             if name not in results:
                 raise RuntimeError(
-                    f"Unable to find output name {name!r} in {sorted(results)}, proto is\n{self.proto_}"
+                    f"Unable to find output name {name!r} "
+                    f"in {sorted(results)}, proto is\n{self.proto_}"
                 )
         return [results[name] for name in output_names if name != ""]
 
@@ -231,8 +239,7 @@ class OrtEval:
             )
         except onnxruntime.capi.onnxruntime_pybind11_state.Fail as e:
             raise AssertionError(
-                f"Cannot create a session for node\n-----\n"
-                f"{node}\n----------\n{onx}"
+                f"Cannot create a session for node\n-----\n{node}\n----------\n{onx}"
             ) from e
         return onx, sess
 
@@ -258,6 +265,7 @@ class OrtEval:
         onx = oh.make_model(
             oh.make_graph([node], "node", vinputs, voutputs),
             ir_version=self.proto.ir_version,
+            functions=self.proto.functions,
         )
         del onx.opset_import[:]
         onx.opset_import.extend(self.proto.opset_import)
@@ -270,19 +278,16 @@ class OrtEval:
             from onnx_array_api.plotting.text_plot import onnx_simple_text_plot
 
             raise RuntimeError(
-                f"Unable to infer a session due to {e}\n"
-                f"{onnx_simple_text_plot(onx)}"
+                f"Unable to infer a session due to {e}\n{onnx_simple_text_plot(onx)}"
             ) from e
         return onx, sess
 
-    def _run(
-        self, node: NodeProto, inputs: List[Any], results: Dict[str, Any]
-    ) -> List[Any]:
+    def _run(self, node: NodeProto, inputs: List[Any], results: Dict[str, Any]) -> List[Any]:
         """
         Runs a node.
         """
         types = [(None if a is None else (a.dtype, a.shape)) for a in inputs]
-        key = tuple([id(node), *types])
+        key = (id(node), *types)
         if key in self._cache:
             sess = self._cache[key][1]
         else:
@@ -405,7 +410,8 @@ class OrtEval:
         for name in output_names:
             if name not in results:
                 raise RuntimeError(
-                    f"Unable to find output name {name!r} in {sorted(results)}, proto is\n{self.proto_}"
+                    f"Unable to find output name {name!r} "
+                    f"in {sorted(results)}, proto is\n{self.proto_}"
                 )
         return [results[name] for name in output_names]
 
@@ -451,9 +457,7 @@ class OrtEval:
             d = tensor.get_device()
             if self.verbose > 10:
                 if log_set is None:
-                    print(
-                        f"     < p={pos} d={d} dtype={dtypes[-1]} shape={tensor.shape}"
-                    )
+                    print(f"     < p={pos} d={d} dtype={dtypes[-1]} shape={tensor.shape}")
             devices.append(DEVICES[d])
             new_tensors.append(tensor)
             max_device = max(max_device, tensor.get_device())
@@ -477,14 +481,15 @@ class OrtEval:
         return ortvalues, output_devices
 
     def _ortvalues_to_torch_tensor(
-        self, ortvalues: "onnxruntime.OrtValueVector"  # noqa: F821
+        self,
+        ortvalues: "onnxruntime.OrtValueVector",  # noqa: F821
     ) -> Tuple["torch.Tensor", ...]:  # noqa: F821
         if len(ortvalues) == 0:
             return tuple()
 
         from torch._C import _from_dlpack
 
-        if all(map(lambda i: ortvalues[i].has_value(), range(len(ortvalues)))):
+        if all(ortvalues[i].has_value() for i in range(len(ortvalues))):
             res = ortvalues.to_dlpacks(_from_dlpack)
         else:
             res = []
@@ -504,7 +509,7 @@ class OrtEval:
         from onnxruntime.capi import _pybind_state as ORTC
 
         types = [(None if a is None else (a.dtype, a.shape)) for a in inputs]
-        key = tuple([id(node), *types])
+        key = (id(node), *types)
         if key in self._cache:
             sess = self._cache[key][1]
         else:

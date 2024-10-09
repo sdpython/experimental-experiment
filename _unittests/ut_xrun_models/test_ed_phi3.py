@@ -18,7 +18,6 @@ from experimental_experiment.torch_models.phi3_helper import has_phi3
 
 
 class TestEdPhi3(ExtTestCase):
-
     @classmethod
     def setUp(cls):
         import torch._dynamo
@@ -49,6 +48,7 @@ class TestEdPhi3(ExtTestCase):
                 rename_inputs=False,
                 optimize=True,
                 prefix="test_phi3_export",
+                strict=True,
             )
         onx = ret["proto"]
         names = [i.name for i in onx.graph.input]
@@ -89,7 +89,7 @@ class TestEdPhi3(ExtTestCase):
             results = compiled_model(*input_tensors)
         except torch._dynamo.exc.Unsupported as e:
             if "Logger not supported for non-export cases" in str(e):
-                raise unittest.SkipTest(
+                raise unittest.SkipTest(  # noqa: B904
                     "transformers which make the torch export fail."
                 )
             raise
@@ -140,7 +140,7 @@ class TestEdPhi3(ExtTestCase):
                 results = compiled_model(*input_tensors)
             except torch._dynamo.exc.Unsupported as e:
                 if "Logger not supported for non-export cases" in str(e):
-                    raise unittest.SkipTest(
+                    raise unittest.SkipTest(  # noqa: B904
                         "transformers which make the torch export fail."
                     )
                 raise
@@ -161,8 +161,7 @@ class TestEdPhi3(ExtTestCase):
     @unittest.skipIf(not has_phi3(), reason="transformers not recent enough")
     @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
     @ignore_warnings((DeprecationWarning, UserWarning))
-    @requires_torch("2.4", "for transformers 4.41.1")
-    @unittest.skipIf(sys.version_info >= (3, 12, 0), reason="too long")
+    @requires_torch("2.5", "for transformers 4.41.1")
     def test_phi3_cort_dynamic(self):
         import torch
 
@@ -185,7 +184,7 @@ class TestEdPhi3(ExtTestCase):
             results = compiled_model(*input_tensors)
         except torch._dynamo.exc.Unsupported as e:
             if "You are not running the flash-attention implementation" in str(e):
-                raise unittest.SkipTest(
+                raise unittest.SkipTest(  # noqa: B904
                     "transformers which make the torch export fail."
                 )
             raise
@@ -226,7 +225,7 @@ class TestEdPhi3(ExtTestCase):
             results = compiled_model(*input_tensors)
         except torch._dynamo.exc.Unsupported as e:
             if "Logger not supported for non-export cases" in str(e):
-                raise unittest.SkipTest(
+                raise unittest.SkipTest(  # noqa: B904
                     "transformers which make the torch export fail."
                 )
             raise

@@ -1,6 +1,7 @@
 import itertools
 import os
 import unittest
+from typing import Optional
 import numpy as np
 from onnx import (
     ModelProto,
@@ -21,6 +22,7 @@ from experimental_experiment.xbuilder.graph_builder import (
 )
 from experimental_experiment.xoptim import get_pattern_list
 from experimental_experiment.xoptim.patterns_ort.gather_grad import GatherGradPattern
+from experimental_experiment.xoptim.patterns_ort.activation import GeluErfPattern
 from experimental_experiment.xbuilder._onnx_helper import (
     choose_consistent_domain_opset,
     compatible_opsets,
@@ -31,7 +33,7 @@ TFLOAT = TensorProto.FLOAT
 
 
 class TestGraphPatternOptimizationOrt(ExtTestCase):
-    def _range(self, *shape, bias: float = None):
+    def _range(self, *shape, bias: Optional[float] = None):
         n = np.prod(shape)
         x = np.arange(n).astype(np.float32) / n
         if bias:
@@ -48,9 +50,7 @@ class TestGraphPatternOptimizationOrt(ExtTestCase):
         self.assertEqual(choose_consistent_domain_opset("", {"": 10}), 10)
         self.assertEqual(choose_consistent_domain_opset("ai.onnx.ml", {"": 18}), 3)
         self.assertEqual(choose_consistent_domain_opset("com.microsoft", {"": 18}), 1)
-        self.assertIsInstance(
-            choose_consistent_domain_opset("", {"com.microsoft": 1}), int
-        )
+        self.assertIsInstance(choose_consistent_domain_opset("", {"com.microsoft": 1}), int)
         self.assertRaise(
             lambda: choose_consistent_domain_opset("", {"ai.onnx.ml": 10}),
             AssertionError,
@@ -148,9 +148,7 @@ class TestGraphPatternOptimizationOrt(ExtTestCase):
             assert feeds["X"][0, 0].T @ feeds["Y"][0, 0] is not None
         else:
             assert feeds["Y"][0, 0] @ feeds["X"][0, 0].T is not None
-        ref = InferenceSession(
-            model.SerializeToString(), providers=["CPUExecutionProvider"]
-        )
+        ref = InferenceSession(model.SerializeToString(), providers=["CPUExecutionProvider"])
         expected = ref.run(None, feeds)
 
         gr = GraphBuilder(
@@ -207,9 +205,7 @@ class TestGraphPatternOptimizationOrt(ExtTestCase):
         check_model(model)
         feeds = {"X": self._range(2, 2, 128, 32), "Y": self._range(2, 2, 64, 128)}
         assert feeds["X"][0, 0].T @ feeds["Y"][0, 0].T is not None
-        ref = InferenceSession(
-            model.SerializeToString(), providers=["CPUExecutionProvider"]
-        )
+        ref = InferenceSession(model.SerializeToString(), providers=["CPUExecutionProvider"])
         expected = ref.run(None, feeds)
 
         gr = GraphBuilder(
@@ -266,9 +262,7 @@ class TestGraphPatternOptimizationOrt(ExtTestCase):
         check_model(model)
         feeds = {"X": self._range(2, 2, 128, 32), "Y": self._range(2, 2, 64, 128)}
         assert feeds["X"][0, 0].T @ feeds["Y"][0, 0].T is not None
-        ref = InferenceSession(
-            model.SerializeToString(), providers=["CPUExecutionProvider"]
-        )
+        ref = InferenceSession(model.SerializeToString(), providers=["CPUExecutionProvider"])
         expected = ref.run(None, feeds)
 
         gr = GraphBuilder(
@@ -331,17 +325,13 @@ class TestGraphPatternOptimizationOrt(ExtTestCase):
         check_model(model)
         feeds = {"X": self._range(2, 2, 32, 128), "Y": self._range(2, 2, 128, 64)}
         assert feeds["X"][0, 0] @ feeds["Y"][0, 0] is not None
-        ref = InferenceSession(
-            model.SerializeToString(), providers=["CPUExecutionProvider"]
-        )
+        ref = InferenceSession(model.SerializeToString(), providers=["CPUExecutionProvider"])
         expected = ref.run(None, feeds)
 
         gr = GraphBuilder(
             model,
             infer_shapes=True,
-            optimization_options=OptimizationOptions(
-                patterns=["FusedMatMulDiv"], verbose=0
-            ),
+            optimization_options=OptimizationOptions(patterns=["FusedMatMulDiv"], verbose=0),
         )
         opt_onx = gr.to_onnx(optimize=True)
         self.assertEqual(
@@ -570,9 +560,7 @@ class TestGraphPatternOptimizationOrt(ExtTestCase):
         )
         check_model(model)
         feeds = {"dY": self._range(2, 3), "Y": self._range(2, 3)}
-        ref = InferenceSession(
-            model.SerializeToString(), providers=["CPUExecutionProvider"]
-        )
+        ref = InferenceSession(model.SerializeToString(), providers=["CPUExecutionProvider"])
         expected = ref.run(None, feeds)
 
         gr = GraphBuilder(
@@ -616,9 +604,7 @@ class TestGraphPatternOptimizationOrt(ExtTestCase):
                 "dummy",
                 [
                     oh.make_tensor_value_info("shape", TensorProto.INT64, [None]),
-                    oh.make_tensor_value_info(
-                        "indices", TensorProto.INT64, [None, None]
-                    ),
+                    oh.make_tensor_value_info("indices", TensorProto.INT64, [None, None]),
                     oh.make_tensor_value_info("updates", TFLOAT, [None, None, None]),
                 ],
                 [oh.make_tensor_value_info("Z", TFLOAT, [None, None, None])],
@@ -699,9 +685,7 @@ class TestGraphPatternOptimizationOrt(ExtTestCase):
             ir_version=9,
         )
         feeds = {"X": self._range(2, 2, 4, 4), "Y": self._range(2, 2, 4, 4)}
-        ref = InferenceSession(
-            model.SerializeToString(), providers=["CPUExecutionProvider"]
-        )
+        ref = InferenceSession(model.SerializeToString(), providers=["CPUExecutionProvider"])
         expected = ref.run(None, feeds)
 
         gr = GraphBuilder(
@@ -754,16 +738,14 @@ class TestGraphPatternOptimizationOrt(ExtTestCase):
             ir_version=9,
         )
         feeds = {"X": self._range(2, 2, 6, 3), "Y": self._range(2, 2, 5, 6)}
-        ref = InferenceSession(
-            model.SerializeToString(), providers=["CPUExecutionProvider"]
-        )
+        ref = InferenceSession(model.SerializeToString(), providers=["CPUExecutionProvider"])
         expected = ref.run(None, feeds)
 
         gr = GraphBuilder(
             model,
             infer_shapes=True,
             optimization_options=OptimizationOptions(
-                patterns=["FusedMatMulTranspose"], verbose=10
+                patterns=["FusedMatMulTranspose"], verbose=0
             ),
         )
         opt_onx = gr.to_onnx(optimize=True)
@@ -778,6 +760,224 @@ class TestGraphPatternOptimizationOrt(ExtTestCase):
         )
         got = opt_ref.run(None, feeds)
         self.assertEqualArray(expected[0], got[0])
+
+    def test_fast_gelu(self):
+        data = os.path.join(os.path.dirname(__file__), "data", "layernorm.onnx")
+        model = onnx_load(data, load_external_data=False)
+        del model.opset_import[:]
+        model.opset_import.append(oh.make_opsetid("", 20))
+        inputs = [tuple(n.input) for n in model.graph.node]
+
+        gr = GraphBuilder(
+            model,
+            infer_shapes=True,
+            optimization_options=OptimizationOptions(
+                patterns=["Cast", "Gelu", "FastGelu"], verbose=0
+            ),
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+        self.assertNotIn("Gelu", set(n.op_type for n in opt_onx.graph.node))
+        self.assertIn("FastGelu", set(n.op_type for n in opt_onx.graph.node))
+        self.assertEqual(154, len(opt_onx.graph.initializer))
+        new_inputs = [tuple(n.input) for n in opt_onx.graph.node]
+        self.assertNotEqual(inputs, new_inputs)
+
+    def test_fast_gelu18(self):
+        data = os.path.join(os.path.dirname(__file__), "data", "layernorm.onnx")
+        model = onnx_load(data, load_external_data=False)
+        del model.opset_import[:]
+        model.opset_import.append(oh.make_opsetid("", 18))
+        inputs = [tuple(n.input) for n in model.graph.node]
+
+        gr = GraphBuilder(
+            model,
+            infer_shapes=True,
+            optimization_options=OptimizationOptions(
+                patterns=["Cast", "GeluOrt", "FastGelu"], verbose=10
+            ),
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+        self.assertNotIn("Gelu", set(n.op_type for n in opt_onx.graph.node))
+        self.assertIn("FastGelu", set(n.op_type for n in opt_onx.graph.node))
+        self.assertEqual(154, len(opt_onx.graph.initializer))
+        new_inputs = [tuple(n.input) for n in opt_onx.graph.node]
+        self.assertNotEqual(inputs, new_inputs)
+
+    def test_bias_gelu(self):
+        from onnxruntime import InferenceSession
+
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("Add", ["X", "B"], ["xb"]),
+                    oh.make_node("Div", ["xb", "sq2"], ["xbinv"]),
+                    oh.make_node("Erf", ["xbinv"], ["xerf"]),
+                    oh.make_node("Add", ["xerf", "one"], ["xerf1"]),
+                    oh.make_node("Mul", ["xb", "xerf1"], ["y2"]),
+                    oh.make_node("Mul", ["y2", "half"], ["Y"]),
+                ],
+                "dummy",
+                [oh.make_tensor_value_info("X", TFLOAT, [2, 2, 4, 8])],
+                [oh.make_tensor_value_info("Y", TFLOAT, [2, 2, 4, 8])],
+                [
+                    onh.from_array(np.array([1], dtype=np.float32), name="one"),
+                    onh.from_array(np.array([0.5], dtype=np.float32), name="half"),
+                    onh.from_array(np.array([1.4140625], dtype=np.float32), name="sq2"),
+                    onh.from_array(
+                        np.array(
+                            [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, -0.4, -0.1], dtype=np.float32
+                        ),
+                        name="B",
+                    ),
+                ],
+            ),
+            opset_imports=[
+                oh.make_opsetid("", 18),
+                oh.make_opsetid("com.microsoft", 1),
+            ],
+            ir_version=9,
+        )
+        check_model(model)
+        feeds = {"X": self._range(2, 2, 4, 8)}
+        ref = InferenceSession(model.SerializeToString(), providers=["CPUExecutionProvider"])
+        expected = ref.run(None, feeds)
+
+        gr = GraphBuilder(
+            model,
+            infer_shapes=True,
+            optimization_options=OptimizationOptions(patterns=["BiasGelu"], verbose=0),
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+        self.assertEqual(
+            ["BiasGelu"],
+            [n.op_type for n in opt_onx.graph.node],
+        )
+        self.assertEqual(1, len(opt_onx.graph.initializer))
+
+        opt_ref = InferenceSession(
+            opt_onx.SerializeToString(), providers=["CPUExecutionProvider"]
+        )
+        got = opt_ref.run(None, feeds)
+        self.assertEqualArray(expected[0], got[0], atol=1e-4)
+        node = opt_onx.graph.node[0]
+        self.assertEqual(node.op_type, "BiasGelu")
+
+    def test_bias_gelu_with_conflict(self):
+        from onnxruntime import InferenceSession
+
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("Add", ["X", "B"], ["xb"]),
+                    oh.make_node("Div", ["xb", "sq2"], ["xbinv"]),
+                    oh.make_node("Erf", ["xbinv"], ["xerf"]),
+                    oh.make_node("Add", ["xerf", "one"], ["xerf1"]),
+                    oh.make_node("Mul", ["xb", "xerf1"], ["y2"]),
+                    oh.make_node("Mul", ["y2", "half"], ["Y"]),
+                ],
+                "dummy",
+                [oh.make_tensor_value_info("X", TFLOAT, [2, 2, 4, 8])],
+                [oh.make_tensor_value_info("Y", TFLOAT, [2, 2, 4, 8])],
+                [
+                    onh.from_array(np.array([1], dtype=np.float32), name="one"),
+                    onh.from_array(np.array([0.5], dtype=np.float32), name="half"),
+                    onh.from_array(np.array([1.4140625], dtype=np.float32), name="sq2"),
+                    onh.from_array(
+                        np.array(
+                            [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, -0.4, -0.1], dtype=np.float32
+                        ),
+                        name="B",
+                    ),
+                ],
+            ),
+            opset_imports=[
+                oh.make_opsetid("", 18),
+                oh.make_opsetid("com.microsoft", 1),
+            ],
+            ir_version=9,
+        )
+        check_model(model)
+        feeds = {"X": self._range(2, 2, 4, 8)}
+        ref = InferenceSession(model.SerializeToString(), providers=["CPUExecutionProvider"])
+        expected = ref.run(None, feeds)
+
+        gr = GraphBuilder(
+            model,
+            infer_shapes=True,
+            optimization_options=OptimizationOptions(
+                patterns=["AddAddMulMul", "AddAddMulMulBroadcast", "BiasGelu"],
+                verbose=0,
+            ),
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+        self.assertEqual(
+            ["BiasGelu"],
+            [n.op_type for n in opt_onx.graph.node],
+        )
+        self.assertEqual(1, len(opt_onx.graph.initializer))
+
+        opt_ref = InferenceSession(
+            opt_onx.SerializeToString(), providers=["CPUExecutionProvider"]
+        )
+        got = opt_ref.run(None, feeds)
+        self.assertEqualArray(expected[0], got[0], atol=1e-4)
+        node = opt_onx.graph.node[0]
+        self.assertEqual(node.op_type, "BiasGelu")
+
+    def test_gelu_erf(self):
+        from onnxruntime import InferenceSession
+
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("Div", ["X", "sq2"], ["xd"]),
+                    oh.make_node("Erf", ["xd"], ["exd"]),
+                    oh.make_node("Add", ["exd", "one"], ["aexd"]),
+                    oh.make_node("Mul", ["X", "aexd"], ["y2"]),
+                    oh.make_node("Mul", ["half", "y2"], ["Y"]),
+                ],
+                "dummy",
+                [oh.make_tensor_value_info("X", TFLOAT, [2, 2, 4, 8])],
+                [oh.make_tensor_value_info("Y", TFLOAT, [2, 2, 4, 8])],
+                [
+                    onh.from_array(np.array([1.4140625], dtype=np.float32), name="sq2"),
+                    onh.from_array(np.array([1], dtype=np.float32), name="one"),
+                    onh.from_array(np.array([0.5], dtype=np.float32), name="half"),
+                ],
+            ),
+            opset_imports=[
+                oh.make_opsetid("", 18),
+                oh.make_opsetid("com.microsoft", 1),
+            ],
+            ir_version=9,
+        )
+        check_model(model)
+        feeds = {"X": self._range(2, 2, 4, 8)}
+        ref = InferenceSession(model.SerializeToString(), providers=["CPUExecutionProvider"])
+        expected = ref.run(None, feeds)
+
+        gr = GraphBuilder(
+            model,
+            infer_shapes=True,
+            optimization_options=OptimizationOptions(
+                patterns=[GeluErfPattern(verbose=0)],
+                verbose=0,
+            ),
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+        self.assertEqual(
+            ["Gelu"],
+            [n.op_type for n in opt_onx.graph.node],
+        )
+        self.assertEqual(0, len(opt_onx.graph.initializer))
+
+        opt_ref = InferenceSession(
+            opt_onx.SerializeToString(), providers=["CPUExecutionProvider"]
+        )
+        got = opt_ref.run(None, feeds)
+        self.assertEqualArray(expected[0], got[0], atol=1e-4)
+        node = opt_onx.graph.node[0]
+        self.assertEqual(node.op_type, "Gelu")
 
 
 if __name__ == "__main__":

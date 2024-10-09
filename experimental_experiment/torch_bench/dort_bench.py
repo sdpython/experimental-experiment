@@ -12,32 +12,40 @@ Example, run llama model with onnxrt backend on cuda.
 
 ::
 
-    python -m experimental_experiment.torch_bench.dort_bench --backend ort --device cuda --config medium
-    
+    python -m experimental_experiment.torch_bench.dort_bench \\
+           --backend ort --device cuda --config medium
+
 To export the models:
 
 ::
 
-    python -m experimental_experiment.torch_bench.dort_bench --backend custom --device cuda --export a -w 3
+    python -m experimental_experiment.torch_bench.dort_bench \\
+           --backend custom --device cuda --export a -w 3
 
 
 Profiling:
 
 ::
 
-    nsys profile python -m experimental_experiment.torch_bench.dort_bench --device cuda -w 3 -r 5 --mixed 1 --config large --backend eager --enable_pattern=default+onnxruntime
+    nsys profile python -m experimental_experiment.torch_bench.dort_bench \\
+                        --device cuda -w 3 -r 5 --mixed 1 --config large \\
+                        --backend eager --enable_pattern=default+onnxruntime
 
 With experimental optimizers:
 
 ::
 
-    python -m experimental_experiment.torch_bench.dort_bench --backend custom --device cuda --mixed=1 --export model -w 3 --enable_pattern=default+onnxruntime+experimental
+    python -m experimental_experiment.torch_bench.dort_bench --backend custom \\
+           --device cuda --mixed=1 --export model -w 3 \\
+           --enable_pattern=default+onnxruntime+experimental
 
 Or:
 
 ::
 
-    python -m experimental_experiment.torch_bench.dort_bench --backend ort+ --device cuda --mixed=1 --export model -w 3 --enable_pattern=default+onnxruntime+experimental
+    python -m experimental_experiment.torch_bench.dort_bench --backend ort+ \\
+          --device cuda --mixed=1 --export model -w 3 \\
+          --enable_pattern=default+onnxruntime+experimental
 """
 
 import os
@@ -61,7 +69,6 @@ def main(args=None):
     )
 
     if multi_run(args):
-
         configs = make_configs(args)
         data = run_benchmark(
             "experimental_experiment.torch_bench.dort_bench",
@@ -73,7 +80,7 @@ def main(args=None):
             pprint.pprint(data if args.verbose > 3 else data[:2])
         if args.output_data:
             df = make_dataframe_from_benchmark_data(data, detailed=False)
-            df.to_csv(args.output_data, index=False)
+            df.to_csv(args.output_data, index=False, errors="ignore")
             df.to_excel(args.output_data + ".xlsx", index=False)
             if args.verbose:
                 print(df)
@@ -85,6 +92,7 @@ def main(args=None):
         import torch
         import torch._dynamo.backends.registry
         import transformers
+        from experimental_experiment.torch_bench import BOOLEAN_VALUES
         from experimental_experiment.convert.convert_helper import (
             ort_optimize as run_ort_optimize,
         )
@@ -108,9 +116,9 @@ def main(args=None):
         )
 
         verbose = int(args.verbose)
-        optimize = args.optimize in (True, 1, "1", "True")
-        ort_optimize = args.ort_optimize in (True, 1, "1", "True")
-        with_mask = args.with_mask in (True, 1, "1", "True")
+        optimize = args.optimize in BOOLEAN_VALUES
+        ort_optimize = args.ort_optimize in BOOLEAN_VALUES
+        with_mask = args.with_mask in BOOLEAN_VALUES
         disable_pattern = [_ for _ in args.disable_pattern.split("+") if _]
         enable_pattern = [_ for _ in args.enable_pattern.split("+") if _]
         print(f"model={args.model}")
@@ -124,7 +132,7 @@ def main(args=None):
         print(f"implementation={args.implementation}")
         print(f"mixed={args.mixed}")
         print(f"shape_scenario={args.shape_scenario}")
-        dump_patterns = args.dump_patterns in ("1", 1, "True", "true", True)
+        dump_patterns = args.dump_patterns in BOOLEAN_VALUES
 
         if args.backend == "custom":
             print(f"disable_pattern={disable_pattern!r}")
@@ -134,7 +142,7 @@ def main(args=None):
             f"dump_patterns={dump_patterns!r}, export={args.export}"
         )
 
-        is_cuda = args.device == "cuda"
+        is_cuda = args.device.startswith("cuda")
         if is_cuda:
             print(
                 f"CUDA no model: memory allocated={torch.cuda.memory_allocated(0)}, "
@@ -155,7 +163,7 @@ def main(args=None):
             )
 
         print(f"Build the compile model with backend={args.backend}")
-        use_dynamic = args.dynamic in (1, "1", True, "True")
+        use_dynamic = args.dynamic in BOOLEAN_VALUES
         print(f"dynamic={use_dynamic}")
         if verbose:
             print(f"-- debug backend, opset={args.target_opset}")
@@ -164,8 +172,8 @@ def main(args=None):
 
         dump_folder = args.dump_folder
 
-        if args.export and not os.path.exists(dump_folder):
-            os.mkdir(dump_folder)
+        if args.export and dump_folder and not os.path.exists(dump_folder):
+            os.makedirs(dump_folder)
 
         if dump_patterns:
             dump_patterns_folder = os.path.join(dump_folder, "patterns")
@@ -214,7 +222,7 @@ def main(args=None):
         def loop_iteration(is_cuda, inputs, compiled_model, loss):
             torch.set_grad_enabled(True)
 
-            mixed = args.mixed in (1, "1", True, "True")
+            mixed = args.mixed in BOOLEAN_VALUES
             if mixed and is_cuda:
                 with torch.autocast(device_type="cuda", dtype=torch.float16):
                     torch.cuda.nvtx.range_push("DORT-FORWARD-MIXED")
@@ -229,7 +237,8 @@ def main(args=None):
             else:
                 result = compiled_model(*inputs)
 
-            # dummy_target = torch.ones_like(result[0], memory_format=torch.contiguous_format)
+            # dummy_target = torch.ones_like(result[0],
+            # memory_format=torch.contiguous_format)
             if mixed and is_cuda:
                 with torch.autocast(device_type="cuda", dtype=torch.float16):
                     torch.cuda.nvtx.range_push("DORT-ERROR-MIXED")
@@ -264,9 +273,7 @@ def main(args=None):
         loss = torch.nn.MSELoss()
         for i in range(args.warmup):
             example_inputs = example_args_collection[i]
-            inputs = (
-                [t.to("cuda") for t in example_inputs] if is_cuda else example_inputs
-            )
+            inputs = [t.to("cuda") for t in example_inputs] if is_cuda else example_inputs
             if is_cuda:
                 torch.cuda.synchronize()
             start_time = time.perf_counter()
@@ -322,9 +329,7 @@ def main(args=None):
         print("measures")
         times = []
         for example_inputs in example_args_collection[args.warmup :]:
-            inputs = (
-                [t.to("cuda") for t in example_inputs] if is_cuda else example_inputs
-            )
+            inputs = [t.to("cuda") for t in example_inputs] if is_cuda else example_inputs
             start_time = time.perf_counter()
             loop_iteration(is_cuda, inputs, compiled_model, loss)
             times.append(time.perf_counter() - start_time)
@@ -346,7 +351,7 @@ def main(args=None):
 
         i_shapes = set(config_dict["input_dims"])
         if len(i_shapes) == 1:
-            idims = "x".join(map(str, list(i_shapes)[0]))
+            idims = "x".join(str(i) for i in i_shapes)
         else:
             idims = "|".join("x".join(map(str, shs)) for shs in list(i_shapes)[:2])
         del config_dict["input_dims"]

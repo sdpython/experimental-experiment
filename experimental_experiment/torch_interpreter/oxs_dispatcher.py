@@ -5,7 +5,7 @@ from .oxs_opset import OxsOpset, Var
 
 class OxsDispatcher(Dispatcher):
     """
-    If class :class:`DynamoInterpreter
+    If :class:`DynamoInterpreter
     <experimental_experiment.torch_interpreter.interpreter.DynamoInterpreter>`
     cannot find any converting function for a specific function,
     it tries to find an existing one in :epkg:`onnxscript`.
@@ -19,7 +19,7 @@ class OxsDispatcher(Dispatcher):
     """
 
     def __init__(self, verbose: int = 0):
-        super(OxsDispatcher, self).__init__({}, verbose=verbose)
+        super().__init__({}, verbose=verbose)
         self._submodule = None
 
     @property

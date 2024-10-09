@@ -1,7 +1,7 @@
 from typing import Any, Dict, List, Optional, Tuple, Union
 import numpy as np
 from onnx.helper import tensor_dtype_to_np_dtype
-from ..xbuilder.shape_helper import all_int
+from ..xbuilder._shape_helper import all_int
 from ..xbuilder._dtype_helper import torch_dtype_to_onnx_dtype
 from ..xbuilder.graph_builder import GraphBuilder
 from ..xbuilder.shape_type_compute import (
@@ -143,9 +143,7 @@ def prims_clone(
     "identity"
     from ._aten_functions import aten_clone
 
-    return aten_clone(
-        g, sts, outputs, x, memory_format=memory_format, name="prims_clone"
-    )
+    return aten_clone(g, sts, outputs, x, memory_format=memory_format, name="prims_clone")
 
 
 def prims_convert_element_type(
@@ -328,12 +326,8 @@ def prims_iota(
     assert isinstance(
         length, int
     ), f"not implemented when length={length!r}{g.get_debug_msg()}"
-    assert isinstance(
-        start, int
-    ), f"not implemented when start={start!r}{g.get_debug_msg()}"
-    assert isinstance(
-        step, int
-    ), f"not implemented when step={step!r}{g.get_debug_msg()}"
+    assert isinstance(start, int), f"not implemented when start={start!r}{g.get_debug_msg()}"
+    assert isinstance(step, int), f"not implemented when step={step!r}{g.get_debug_msg()}"
     end = start + length * step
     from ._aten_functions import aten_arange
 
@@ -443,9 +437,7 @@ def prims_split_dim(
     name: str = "prims_split_dim",
 ):
     "split"
-    assert (
-        len(outputs) == 1
-    ), f"Expecting 1 outputs but got {outputs}{g.get_debug_msg()}"
+    assert len(outputs) == 1, f"Expecting 1 outputs but got {outputs}{g.get_debug_msg()}"
     assert g.has_shape(
         x
     ), f"Not implemented when shape of {x!r} is unknown{g.get_debug_msg()}"
@@ -454,9 +446,10 @@ def prims_split_dim(
     assert isinstance(
         shape_dim, int
     ), f"Not implemented for a dynamic dimension {shape_dim}{g.get_debug_msg()}"
-    assert (
-        shape_dim % outer_length == 0
-    ), f"shape_dim={shape_dim} not a multiple of outer_length={outer_length}{g.get_debug_msg()}"
+    assert shape_dim % outer_length == 0, (
+        f"shape_dim={shape_dim} not a multiple of "
+        f"outer_length={outer_length}{g.get_debug_msg()}"
+    )
 
     inner_length = shape_dim // outer_length
     new_shape = shape[0:dim] + (outer_length, inner_length) + shape[dim + 1 :]
@@ -552,7 +545,9 @@ def prims_where(
     if not sts:
         g.set_type(res, g.get_type(other))
         if g.has_shape(condition) and g.has_shape(other):
-            shape = broadcast_shape(g.get_shape(condition), g.get_shape(other))
+            shape = broadcast_shape(
+                g.get_shape(condition), g.get_shape(other), graph_builder=g
+            )
             g.set_shape(res, shape)
         else:
             g.set_rank(max(g.get_rank(condition), g.get_rank(other)))

@@ -39,7 +39,7 @@ class TriMatrixPattern(PatternOptimization):
         if len(next_nodes) != 2:
             return self.none(node, inspect.currentframe().f_lineno)
 
-        types = set(n.op_type for n in next_nodes)
+        types = {n.op_type for n in next_nodes}
         if types != {"Add", "Less"}:
             return self.none(node, inspect.currentframe().f_lineno)
 

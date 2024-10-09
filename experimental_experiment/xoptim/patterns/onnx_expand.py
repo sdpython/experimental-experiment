@@ -2,7 +2,7 @@ import inspect
 from typing import List, Optional
 from onnx import NodeProto
 from ...xbuilder._onnx_helper import element_wise_binary_op_types, unary_like_op_types
-from ...xbuilder.shape_helper import all_int
+from ...xbuilder._shape_helper import all_int
 from ..patterns_api import MatchResult, PatternOptimization
 
 
@@ -12,7 +12,7 @@ class ExpandPattern(PatternOptimization):
     """
 
     def __init__(self, verbose: int = 0, priority: int = 0):
-        super(ExpandPattern, self).__init__(verbose, priority)
+        super().__init__(verbose, priority)
 
     def match(
         self,
@@ -30,14 +30,19 @@ class ExpandPattern(PatternOptimization):
         if not g.is_constant(node.input[1]):
             # It may be a symbolic shape.
             return self.none(node, inspect.currentframe().f_lineno)
-        new_shape = tuple(g.get_computed_constant(node.input[1]))
+        value = g.get_computed_constant(node.input[1])
+        if value is None:
+            return self.none(node, inspect.currentframe().f_lineno)
+        new_shape = tuple(int(i) for i in value)
         if shape != new_shape:
             return self.none(node, inspect.currentframe().f_lineno)
 
         return MatchResult(self, [node], self.apply, insert_at=node)
 
     def apply(
-        self, g: "GraphBuilder", node: NodeProto  # noqa: F821
+        self,
+        g: "GraphBuilder",  # noqa: F821
+        node: NodeProto,
     ) -> List[NodeProto]:
         new_node = g.make_node(
             "Identity",
@@ -74,16 +79,17 @@ class ExpandBroadcastPattern(PatternOptimization):
         if not g.is_constant(node.input[1]):
             # It may be a symbolic shape.
             return self.none(node, inspect.currentframe().f_lineno)
-        new_shape = tuple(g.get_computed_constant(node.input[1]))
+        value = g.get_computed_constant(node.input[1])
+        if value is None:
+            return self.none(node, inspect.currentframe().f_lineno)
+        new_shape = tuple(int(i) for i in value)
 
         if g.is_used_more_than_once(node.output[0]):
             # More than one output, not handled right now.
             return self.none(node, inspect.currentframe().f_lineno)
 
         next_nodes = g.next_nodes(node.output[0])
-        assert (
-            len(next_nodes) == 1
-        ), "The previous test should have cleared out this case."
+        assert len(next_nodes) == 1, "The previous test should have cleared out this case."
         next_node = next_nodes[0]
 
         if next_node.op_type not in self._op_types or next_node.domain != "":
@@ -112,7 +118,10 @@ class ExpandBroadcastPattern(PatternOptimization):
         return MatchResult(self, [node, next_node], self.apply, insert_at=next_node)
 
     def apply(
-        self, g: "GraphBuilder", node: NodeProto, next_node: NodeProto  # noqa: F821
+        self,
+        g: "GraphBuilder",  # noqa: F821
+        node: NodeProto,
+        next_node: NodeProto,
     ) -> List[NodeProto]:
         if next_node.input[0] == node.output[0]:
             inputs = [node.input[0], next_node.input[1]]
@@ -137,7 +146,7 @@ class ExpandSwapPattern(PatternOptimization):
     """
 
     _op_types = unary_like_op_types()
-    _other_types = {"NegXplus1", "ReplaceZero"}
+    _other_types = {"NegXplus1", "ReplaceZero", "Pow"}
 
     def match(
         self,
@@ -159,9 +168,7 @@ class ExpandSwapPattern(PatternOptimization):
             return self.none(node, inspect.currentframe().f_lineno)
 
         next_nodes = g.next_nodes(node.output[0])
-        assert (
-            len(next_nodes) == 1
-        ), "The previous test should have cleared out this case."
+        assert len(next_nodes) == 1, "The previous test should have cleared out this case."
         next_node = next_nodes[0]
 
         if next_node.op_type not in self._other_types and (
@@ -173,7 +180,10 @@ class ExpandSwapPattern(PatternOptimization):
         return MatchResult(self, [node, next_node], self.apply, insert_at=node)
 
     def apply(
-        self, g: "GraphBuilder", node: NodeProto, next_node: NodeProto  # noqa: F821
+        self,
+        g: "GraphBuilder",  # noqa: F821
+        node: NodeProto,
+        next_node: NodeProto,
     ) -> List[NodeProto]:
         # We need to create a new name for the intermediate results.
         # The optimizer cannot reuse an existing name if the new result

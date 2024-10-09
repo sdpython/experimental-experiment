@@ -4,29 +4,36 @@
 102: Measure LLAMA speed
 ========================
 
-The script is calling many times the script ``experimental_experiment.torch_bench.dort_bench.py``.
+The script is calling many times the script
+``experimental_experiment.torch_bench.dort_bench.py``.
 
 ::
 
     python _doc/examples/plot_llama_bench_102.py --help
-    
+
 For exemple, to check mixed precision on multiple backend:
 
 ::
 
-    python _doc/examples/plot_llama_bench_102.py --device=cuda --num_hidden_layers=2 --mixed=1
+    python _doc/examples/plot_llama_bench_102.py \\
+           --device=cuda --num_hidden_layers=2 --mixed=1
 
 ::
 
-    python _doc/examples/plot_llama_bench_102.py --device=cuda --num_hidden_layers=2 --mixed=1 --backend=eager,dynger,ortmodule,inductor,ort+,custom --config=large
+    python _doc/examples/plot_llama_bench_102.py --device=cuda --num_hidden_layers=2 \\
+           --mixed=1 --backend=eager,dynger,ortmodule,inductor,ort+,custom --config=large
 
 With 32Gb GPU memory, the script runs with 6 layers.
 
 ::
 
-    python _doc/examples/plot_llama_bench_102.py --device=cuda --num_hidden_layers=6 --mixed=1 --backend=eager,dynger,ortmodule,inductor,trt,ort+,custom --config=large
+    python _doc/examples/plot_llama_bench_102.py --device=cuda \\
+           --num_hidden_layers=6 --mixed=1 \\
+           --backend=eager,dynger,ortmodule,inductor,trt,ort+,custom --config=large
 
-    python _doc/examples/plot_llama_bench_102.py --device=cuda --num_hidden_layers=2 --mixed=1 --backend=eager,ort+,custom --config=large
+    python _doc/examples/plot_llama_bench_102.py --device=cuda \\
+           --num_hidden_layers=2 --mixed=1 \\
+           --backend=eager,ort+,custom --config=large
 
 Run the following command to run one experiment and get the available options:
 
@@ -46,7 +53,8 @@ parsed_args = get_parsed_args(
     model=("llama", "model to benchmark"),
     backend=(
         "eager,dynger,inductor,ort,ort+,custom,ortmodule",
-        "backend to test, among eager,dynger,inductor,ort,ort+,custom,plug,ortmodule,backort",
+        "backend to test, among eager,dynger,inductor,"
+        "ort,ort+,custom,plug,ortmodule,backort",
     ),
     device=("cuda" if check_cuda_availability() else "cpu", "device to test"),
     num_hidden_layers=("1", "hidden layers to test"),
@@ -57,7 +65,7 @@ parsed_args = get_parsed_args(
     check=(0, "just check the script is working, ignores all other parameters"),
     config=("medium", "configuration to use, default or medium"),
     patterns=(
-        "none,default,default+onnxruntime," "default+onnxruntime+experimental",
+        "none,default,default+onnxruntime,default+onnxruntime+experimental",
         "optimization patterns to use",
     ),
     implementation=("eager", "eager or sdpa or both values comma separated value"),
@@ -65,7 +73,7 @@ parsed_args = get_parsed_args(
     disable_pattern=("none", "pattern or patterns to disable"),
     ort_optimize=(
         "0,1",
-        "enable or disable onnxruntime optimization, " "by default, tries both",
+        "enable or disable onnxruntime optimization, by default, tries both",
     ),
     order=("none", "optimization order see class OrderAlgorithm, none by default"),
     shape_scenario=(
@@ -90,7 +98,7 @@ from experimental_experiment.ext_test_case import unit_test_going
 from experimental_experiment.bench_run import run_benchmark, get_machine, BenchmarkError
 
 script_name = "experimental_experiment.torch_bench.dort_bench"
-machine = {} if unit_test_going() else get_machine()
+machine = {} if unit_test_going() else get_machine(False)
 
 
 repeat = parsed_args.repeat
@@ -311,15 +319,16 @@ if data_collected:
 
     df = pandas.DataFrame(data)
     df = df.drop(["OUTPUT", "ERROR"], axis=1)
-    df["legend"] = df.apply(make_legend, axis=1)
-    df["time"] = df["time"].astype(float)
-    df_eager = df[(df["implementation"] == "eager") & (df["backend"] == "eager")][
-        "time"
-    ].dropna()
-    if df_eager.shape[0] > 0:
-        min_eager = df_eager.min()
-        df["increase"] = df["time"] / min_eager - 1
-        # df["ERROR"] = df["ERROR"].apply(lambda s: s.replace("\n", " "))
+    if "implementation" in df.columns:
+        df["legend"] = df.apply(make_legend, axis=1)
+        df["time"] = df["time"].astype(float)
+        df_eager = df[(df["implementation"] == "eager") & (df["backend"] == "eager")][
+            "time"
+        ].dropna()
+        if df_eager.shape[0] > 0:
+            min_eager = df_eager.min()
+            df["increase"] = df["time"] / min_eager - 1
+            # df["ERROR"] = df["ERROR"].apply(lambda s: s.replace("\n", " "))
     filename = f"plot_{prefix}_bench_with_cmd.csv"
     df.to_csv(filename, index=False)
     filename = f"plot_{prefix}_bench_with_cmd.xlsx"
@@ -359,16 +368,18 @@ for c in ["time", "warmup_time"]:
 ########################################
 # Simplified data
 
-print(df.sort_values("legend"))
+print(df.sort_values("legend") if "legend" in df.columns else df)
 
 ###############################
 # Plot warmup time.
 
-torch_version = list(set(df["torch"].dropna()))
-transformers_version = list(set(df["transformers"].dropna()))
+torch_version = list(set(df["torch"].dropna())) if "torch" in df.columns else (0, 0)
+transformers_version = (
+    list(set(df["transformers"].dropna())) if "transformers" in df.columns else (0, 0)
+)
 ver = f"{torch_version[0]} - {transformers_version[0]}"
 model = parsed_args.model
-modeldf = list(set(df[model].dropna()))[0]
+modeldf = list(set(df[model].dropna()))[0] if model in df.columns else "?"  # noqa: RUF015
 title_prefix = (
     f"lower better\n"
     f"{parsed_args.model} - {ver} - mask{parsed_args.with_mask}"
@@ -376,7 +387,7 @@ title_prefix = (
 )
 
 
-if data_collected:
+if data_collected and "legend" in df.columns:
     fig, ax = plt.subplots(1, 1, figsize=(12, df.shape[0] // 3 + 1))
 
     df = df.sort_values("time").set_index("legend")
@@ -389,13 +400,14 @@ if data_collected:
 ###############################
 # Plot time.
 
-if data_collected:
+if data_collected and "time" in df.columns:
     fig, ax = plt.subplots(1, 1, figsize=(12, df.shape[0] // 3 + 1))
 
     df[["time"]].plot.barh(ax=ax, title=f"computation time\n{title_prefix}")
     mi, ma = df["time"].min(), df["time"].max()
     mi = mi - (ma - mi) / 10
-    ax.set_xlim(left=mi)
+    if not np.isnan(mi):
+        ax.set_xlim(left=mi)
     ax.grid(True)
 
     fig.tight_layout()
@@ -404,7 +416,7 @@ if data_collected:
 ###############################
 # Plot increase.
 
-if data_collected:
+if data_collected and "increase" in df.columns:
     fig, ax = plt.subplots(1, 1, figsize=(12, df.shape[0] // 3 + 1))
 
     df[["increase"]].plot.barh(ax=ax, title=f"comparison to eager %\n{title_prefix}")

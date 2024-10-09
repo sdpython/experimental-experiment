@@ -81,7 +81,9 @@ class Opset:
     }
 
     def __init__(
-        self, builder: "GraphBuilder", allow_unknown: bool = False  # noqa: F821
+        self,
+        builder: "GraphBuilder",  # noqa: F821
+        allow_unknown: bool = False,
     ):
         self.builder = builder
         self.allow_unknown = allow_unknown
@@ -98,9 +100,10 @@ class Opset:
             if op_type in self._implemented:
                 outputs = self._implemented[op_type]
             elif op_type == "Split" and kwargs.get("domain", "") == "":
-                assert (
-                    "num_outputs" in kwargs
-                ), f"Number of outputs is not implemented yet for operator {op_type!r} and kwargs={kwargs}"
+                assert "num_outputs" in kwargs, (
+                    "Number of outputs is not implemented yet for operator "
+                    f"{op_type!r} and kwargs={kwargs}"
+                )
                 outputs = kwargs["num_outputs"]
             else:
                 # We assume there is only one outputs.
@@ -160,9 +163,7 @@ class Opset:
         elif isinstance(axes, int):
             iaxes = [axes]
         else:
-            raise RuntimeError(
-                f"Unable to call {op_type} on a dynamic input axis={axes}"
-            )
+            raise RuntimeError(f"Unable to call {op_type} on a dynamic input axis={axes}")
         return iaxes
 
     def ReduceMaxAnyOpset(self, *args, **kwargs):
@@ -179,9 +180,7 @@ class Opset:
         assert len(args) == 2, f"ReduceMeanAnyOpset expects 2 arguments not {len(args)}"
         if self.builder.main_opset >= 18:
             return self.ReduceMean(*args, **kwargs)
-        return self.ReduceMean(
-            args[0], axes=self._iaxes("ReduceMean", args[1]), **kwargs
-        )
+        return self.ReduceMean(args[0], axes=self._iaxes("ReduceMean", args[1]), **kwargs)
 
     def ReduceSumAnyOpset(self, *args, **kwargs):
         if len(args) == 1:

@@ -260,6 +260,7 @@ Look for substring ``TODO:``.
             for onnx_output, baseline_output in zip(
                 onnx_outputs, normalized_baseline_ouptuts
             ):
+                # desired is the second input
                 torch.testing.assert_close(onnx_output, baseline_output)
         return onnx_outputs[0] if is_single_tensor_output else onnx_outputs
 

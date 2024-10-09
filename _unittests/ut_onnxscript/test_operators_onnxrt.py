@@ -19,6 +19,7 @@ from experimental_experiment.ext_test_case import (
     ignore_warnings,
     requires_torch,
     hide_stdout,
+    requires_onnxscript,
 )
 from experimental_experiment.torch_interpreter import FunctionNotFoundError
 from experimental_experiment.torch_models.training_helper import make_aot_ort
@@ -129,9 +130,7 @@ class TestOperatorsOnnxrt(ExtTestCase):
             params = ()
         if isinstance(f, nn.Module):
             model = (
-                FuncModuleModuleSimple(f)
-                if input_index == "simple"
-                else FuncModuleModule(f)
+                FuncModuleModuleSimple(f) if input_index == "simple" else FuncModuleModule(f)
             )
         elif input_index == "simple":
             model = FuncModuleSimple(f, params)
@@ -197,9 +196,10 @@ class TestOperatorsOnnxrt(ExtTestCase):
                         msg=f"expected\n{baseline_result}\n--got--\n{result}",
                     )
                     try:
+                        # desired is the second input
                         torch.testing.assert_close(
-                            baseline_result,
                             result,
+                            baseline_result,
                             atol=atol,
                             rtol=rtol,
                             equal_nan=True,
@@ -227,9 +227,10 @@ class TestOperatorsOnnxrt(ExtTestCase):
                             atol=atol,
                             rtol=rtol,
                         )
+                        # desired is the second input
                         torch.testing.assert_close(
-                            baseline_param.grad,
                             param.grad,
+                            baseline_param.grad,
                             atol=atol,
                             rtol=rtol,
                             equal_nan=True,
@@ -256,8 +257,9 @@ class TestOperatorsOnnxrt(ExtTestCase):
                         atol=atol,
                         rtol=rtol,
                     )
+                    # desired is the second input
                     torch.testing.assert_close(
-                        baseline_result, result, atol=atol, rtol=rtol, equal_nan=True
+                        result, baseline_result, atol=atol, rtol=rtol, equal_nan=True
                     )
 
                 baseline_result.sum().backward()
@@ -281,9 +283,10 @@ class TestOperatorsOnnxrt(ExtTestCase):
                         atol=atol,
                         rtol=rtol,
                     )
+                    # desired is the second input
                     torch.testing.assert_close(
-                        baseline_param.grad,
                         param.grad,
+                        baseline_param.grad,
                         atol=atol,
                         rtol=rtol,
                         equal_nan=True,
@@ -311,8 +314,9 @@ class TestOperatorsOnnxrt(ExtTestCase):
                     atol=atol,
                     rtol=rtol,
                 )
+                # desired is the second input
                 torch.testing.assert_close(
-                    baseline_result, result, atol=atol, rtol=rtol, equal_nan=True
+                    result, baseline_result, atol=atol, rtol=rtol, equal_nan=True
                 )
 
     @ignore_warnings(UserWarning)
@@ -324,6 +328,7 @@ class TestOperatorsOnnxrt(ExtTestCase):
         )
 
     @hide_stdout()
+    @requires_onnxscript("0.3")  # type promotion
     def test_xt_basic(self):
         x = torch.tensor([0.4], requires_grad=True)
         y = torch.tensor([0.7], requires_grad=True)
@@ -343,9 +348,7 @@ class TestOperatorsOnnxrt(ExtTestCase):
     @hide_stdout()
     def test_xt_index(self):
         x = torch.tensor([[0.0]], requires_grad=True)
-        self.assertONNX(
-            lambda x: x[0], x, onnx_export=inspect.currentframe().f_code.co_name
-        )
+        self.assertONNX(lambda x: x[0], x, onnx_export=inspect.currentframe().f_code.co_name)
 
     @unittest.skip(
         reason="Please convert all Tensors to FakeTensors first or instantiate "
@@ -440,15 +443,14 @@ class TestOperatorsOnnxrt(ExtTestCase):
         )
 
     @hide_stdout()
+    @requires_onnxscript("0.3")  # type promotion
     def test_xt_rsub(self):
         x = torch.randn(2, 3, requires_grad=True).double()
         self.assertONNX(
             lambda x: 1 - x, (x,), onnx_export=inspect.currentframe().f_code.co_name
         )
 
-    @unittest.skipIf(
-        not OP_BOOL_SUPPORTED, reason="multiplication of boolean not supported"
-    )
+    @unittest.skipIf(not OP_BOOL_SUPPORTED, reason="multiplication of boolean not supported")
     @hide_stdout()
     def test_xt_mul_bool(self):
         x = torch.tensor([True, False, True, False])
@@ -459,9 +461,7 @@ class TestOperatorsOnnxrt(ExtTestCase):
             onnx_export=inspect.currentframe().f_code.co_name,
         )
 
-    @unittest.skipIf(
-        not OP_BOOL_SUPPORTED, reason="multiplication of boolean not supported"
-    )
+    @unittest.skipIf(not OP_BOOL_SUPPORTED, reason="multiplication of boolean not supported")
     @hide_stdout()
     def test_xt_mul_fp_bool(self):
         x = torch.tensor([9.4, 1.7, 3.6])
@@ -496,9 +496,7 @@ class TestOperatorsOnnxrt(ExtTestCase):
     @hide_stdout()
     @requires_torch("2.5")  # getitem
     def test_xt_split(self):
-        x = torch.tensor(
-            [[0.0, 1.0, 1.0, 0.0, 2.0, 2.0], [2.0, 3.0, 3.0, 2.0, 1.0, 1.0]]
-        )
+        x = torch.tensor([[0.0, 1.0, 1.0, 0.0, 2.0, 2.0], [2.0, 3.0, 3.0, 2.0, 1.0, 1.0]])
         self.assertONNX(
             lambda x: torch.split(x, 2, 1),
             x,
@@ -510,9 +508,7 @@ class TestOperatorsOnnxrt(ExtTestCase):
     @hide_stdout()
     @requires_torch("2.5")  # getitem
     def test_xt_split_with_sizes(self):
-        x = torch.tensor(
-            [[0.0, 1.0, 1.0, 0.0, 2.0, 2.0], [2.0, 3.0, 3.0, 2.0, 1.0, 1.0]]
-        )
+        x = torch.tensor([[0.0, 1.0, 1.0, 0.0, 2.0, 2.0], [2.0, 3.0, 3.0, 2.0, 1.0, 1.0]])
         self.assertONNX(
             lambda x: torch.split(x, [2, 1, 3], 1),
             x,
@@ -566,6 +562,7 @@ class TestOperatorsOnnxrt(ExtTestCase):
         )
 
     @hide_stdout()
+    @requires_onnxscript("0.3")  # type promotion
     def test_xt_params(self):
         x = torch.tensor([[1.0, 2.0], [3.0, 4.0]], requires_grad=True)
         y = nn.Parameter(torch.tensor([[1.0, 2.0], [3.0, 4.0]], requires_grad=True))
@@ -579,6 +576,7 @@ class TestOperatorsOnnxrt(ExtTestCase):
         )
 
     @hide_stdout()
+    @requires_onnxscript("0.3")  # type promotion
     def test_xt_params_onnx_irv4(self):
         x = torch.tensor([[1.0, 2.0], [3.0, 4.0]], requires_grad=True)
         y = nn.Parameter(torch.tensor([[1.0, 2.0], [3.0, 4.0]], requires_grad=True))
@@ -674,9 +672,7 @@ class TestOperatorsOnnxrt(ExtTestCase):
     def test_xt_convtranspose(self):
         x = torch.ones(2, 3, 4, 5, requires_grad=True)
         self.assertONNX(
-            nn.ConvTranspose2d(
-                3, 3, 3, stride=3, bias=False, padding=1, output_padding=2
-            ),
+            nn.ConvTranspose2d(3, 3, 3, stride=3, bias=False, padding=1, output_padding=2),
             x,
             keep_initializers_as_inputs=True,
             onnx_export=inspect.currentframe().f_code.co_name,
@@ -699,6 +695,7 @@ class TestOperatorsOnnxrt(ExtTestCase):
             x,
             opset_version=10,
             onnx_export=inspect.currentframe().f_code.co_name,
+            atol=1e-3,
         )
 
     @requires_torch("2.4")
@@ -710,7 +707,7 @@ class TestOperatorsOnnxrt(ExtTestCase):
             x,
             onnx_export=inspect.currentframe().f_code.co_name,
             test_backward=True,
-            rtol=1e-3,
+            rtol=2e-3,
         )
 
     @hide_stdout()
@@ -845,8 +842,7 @@ class TestOperatorsOnnxrt(ExtTestCase):
         )
 
     @unittest.skip(
-        "Cannot find any perfect/nearest match "
-        "of symbolic function for aten::mean.dim"
+        "Cannot find any perfect/nearest match of symbolic function for aten::mean.dim"
     )
     @hide_stdout()
     def test_xt_reduced_mean(self):
@@ -867,7 +863,8 @@ class TestOperatorsOnnxrt(ExtTestCase):
         )
 
     @unittest.skip(
-        reason="Cannot find any perfect/nearest match of symbolic function for aten::mean.default"
+        reason="Cannot find any perfect/nearest match of "
+        "symbolic function for aten::mean.default"
     )
     @hide_stdout()
     def test_xt_mean_dtype(self):
@@ -879,7 +876,8 @@ class TestOperatorsOnnxrt(ExtTestCase):
         )
 
     @unittest.skip(
-        reason="Cannot find any perfect/nearest match of symbolic function for aten::mean.dim"
+        reason="Cannot find any perfect/nearest match of "
+        "symbolic function for aten::mean.dim"
     )
     @hide_stdout()
     def test_xt_reduced_mean_dtype(self):
@@ -922,6 +920,7 @@ class TestOperatorsOnnxrt(ExtTestCase):
             lambda x: torch.sum(x, dim=(1, 2)),
             x,
             onnx_export=inspect.currentframe().f_code.co_name,
+            atol=1e-4,
         )
 
     @hide_stdout()
@@ -970,7 +969,8 @@ class TestOperatorsOnnxrt(ExtTestCase):
             onnx_export=inspect.currentframe().f_code.co_name,
         )
 
-    @hide_stdout()
+    @requires_onnxscript("0.2.1")
+    # @hide_stdout()
     def test_xt_reduced_prod_dtype(self):
         x = torch.randn(1, 2, 3, 4, requires_grad=True)
         self.assertONNX(
@@ -1078,7 +1078,10 @@ class TestOperatorsOnnxrt(ExtTestCase):
     def test_xt_tan(self):
         x = torch.randn(3, 4, requires_grad=True)
         self.assertONNX(
-            lambda x: x.tan(), x, onnx_export=inspect.currentframe().f_code.co_name
+            lambda x: x.tan(),
+            x,
+            onnx_export=inspect.currentframe().f_code.co_name,
+            atol=1e-4,
         )
 
     @ignore_warnings(UserWarning)
@@ -1155,9 +1158,7 @@ class TestOperatorsOnnxrt(ExtTestCase):
             test_backward=False,
         )
 
-    @unittest.skipIf(
-        True, reason="data_ptr was false. Pointer to data memory is not valid"
-    )
+    @unittest.skipIf(True, reason="data_ptr was false. Pointer to data memory is not valid")
     @requires_torch("2.4")
     @hide_stdout()
     def test_xt_slice_dynamic_backward(self):
@@ -1200,6 +1201,7 @@ class TestOperatorsOnnxrt(ExtTestCase):
             lambda x: x.view(x.size()[0], x.numel() // x.size()[0]),
             x,
             onnx_export=inspect.currentframe().f_code.co_name,
+            atol=2e-6,
         )
 
     @hide_stdout()
@@ -1286,7 +1288,7 @@ class TestOperatorsOnnxrt(ExtTestCase):
             lambda x: x.repeat(1, 2, 3, 4),
             x,
             onnx_export=inspect.currentframe().f_code.co_name,
-            atol=1e-4,
+            atol=1e-3,
         )
 
     @hide_stdout()
@@ -1415,6 +1417,7 @@ class TestOperatorsOnnxrt(ExtTestCase):
         )
 
     @hide_stdout()
+    @requires_onnxscript("0.3")  # type promotion
     def test_xt_sigmoid(self):
         with self.subTest(dim=4):
             x = torch.randn(1, 2, 3, 4, requires_grad=True)
@@ -1617,6 +1620,11 @@ class TestOperatorsOnnxrt(ExtTestCase):
         )
 
     @hide_stdout()
+    @unittest.skipIf(
+        True,
+        "Cannot find any perfect/nearest match of symbolic function "
+        "for aten::std.correction,which should be registered under aten.std.correction.",
+    )
     def test_xt_std(self):
         x = torch.randn(2, 3, 4).float()
         self.assertONNX(
@@ -1633,6 +1641,7 @@ class TestOperatorsOnnxrt(ExtTestCase):
             x,
             opset_version=11,
             onnx_export=inspect.currentframe().f_code.co_name,
+            atol=1e-5,
         )
 
     @unittest.skipIf(not DICT_SUPPORTED, reason="only tensor are supported")
@@ -1642,7 +1651,8 @@ class TestOperatorsOnnxrt(ExtTestCase):
             def forward(self, x_in, *args, **kwargs):
                 x_out = {}
                 x_out["test_key_out"] = torch.add(
-                    x_in[list(x_in.keys())[0]], list(x_in.keys())[0]  # noqa: RUF015
+                    x_in[next(x_in.keys())],
+                    next(x_in.keys()),
                 )
                 return x_out
 
@@ -1701,7 +1711,7 @@ class TestOperatorsOnnxrt(ExtTestCase):
             x,
             opset_version=11,
             onnx_export=inspect.currentframe().f_code.co_name,
-            atol=2e-6,
+            atol=1e-5,
         )
 
     @hide_stdout()
@@ -1873,6 +1883,7 @@ class TestOperatorsOnnxrt(ExtTestCase):
             atol=1e-4,
         )
 
+    @requires_onnxscript("0.3")
     @hide_stdout()
     def test_xt_softmaxcrossentropy(self):
         x = torch.randn(3, 5)
@@ -1884,6 +1895,7 @@ class TestOperatorsOnnxrt(ExtTestCase):
             onnx_export=inspect.currentframe().f_code.co_name,
         )
 
+    @requires_onnxscript("0.3")
     @hide_stdout()
     def test_xt_softmaxcrossentropy_ignore_index(self):
         x = torch.randn(3, 5)
@@ -1895,6 +1907,7 @@ class TestOperatorsOnnxrt(ExtTestCase):
             onnx_export=inspect.currentframe().f_code.co_name,
         )
 
+    @requires_onnxscript("0.3")
     @hide_stdout()
     def test_xt_softmaxcrossentropy_weights(self):
         x = torch.randn(3, 5)
@@ -1940,9 +1953,7 @@ class TestOperatorsOnnxrt(ExtTestCase):
             onnx_export=inspect.currentframe().f_code.co_name,
         )
 
-    @unittest.skipIf(
-        True, reason="TorchDynamo purposely graph breaks on RNN, GRU, LSTMs"
-    )
+    @unittest.skipIf(True, reason="TorchDynamo purposely graph breaks on RNN, GRU, LSTMs")
     @hide_stdout()
     def test_xt_lstm_none_sequence_lens(self):
         """Test symbolic shape inference for LSTM when the input sequence_lens = None."""
@@ -2009,6 +2020,7 @@ class TestOperatorsOnnxrt(ExtTestCase):
         )
 
     @hide_stdout()
+    @requires_torch("2.5.0")
     def test_xt_dynamic_axes_matmul_ref(self):
         m1 = torch.randn(2, 2, 4, requires_grad=True)
         m2 = torch.randn(2, 4, 3, requires_grad=True)

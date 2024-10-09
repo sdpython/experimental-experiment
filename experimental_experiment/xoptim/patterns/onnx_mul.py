@@ -3,45 +3,8 @@ from enum import IntEnum
 from typing import List, Optional
 import numpy as np
 from onnx import NodeProto
-from ...xbuilder.shape_helper import DYNAMIC_SHAPE
+from ...xbuilder._shape_helper import DYNAMIC_SHAPE
 from ..patterns_api import MatchResult, PatternOptimization
-
-
-class DivByMulScalarPattern(PatternOptimization):
-    """
-    Replaces Div/Scalar by Mul*Scalar.
-    """
-
-    def match(
-        self,
-        g: "GraphBuilderPatternOptimization",  # noqa: F821
-        node: NodeProto,
-        matched: List[MatchResult],
-    ) -> Optional[MatchResult]:
-        if node.op_type not in {"Div"} or node.domain != "":
-            return self.none()
-        if not g.is_constant_scalar(node.input[1]):
-            return self.none(node, inspect.currentframe().f_lineno)
-        return MatchResult(self, [node], self.apply, insert_at=node)
-
-    def apply(
-        self,
-        g: "GraphBuilder",  # noqa: F821
-        node: NodeProto,
-    ) -> List[NodeProto]:
-        csta = g.get_computed_constant(node.input[1])
-        cst = g.get_constant_scalar(node.input[1])
-        cst_name = g.make_initializer(
-            "", np.array([1 / cst], dtype=csta.dtype).reshape(csta.shape)
-        )
-        return [
-            g.make_node(
-                "Mul",
-                [node.input[0], cst_name],
-                node.output,
-                name=f"{self.__class__.__name__}--{node.name}-Cst",
-            )
-        ]
 
 
 class MulMulMulScalarPattern(PatternOptimization):
@@ -62,11 +25,7 @@ class MulMulMulScalarPattern(PatternOptimization):
         ):
             return self.none(node, inspect.currentframe().f_lineno)
         node_left = g.node_before(node.input[0])
-        if (
-            node_left is None
-            or node_left.op_type not in {"Div", "Mul"}
-            or node.domain != ""
-        ):
+        if node_left is None or node_left.op_type not in {"Div", "Mul"} or node.domain != "":
             return self.none(node, inspect.currentframe().f_lineno)
         node_right = g.node_before(node.input[1])
         if (
@@ -77,9 +36,7 @@ class MulMulMulScalarPattern(PatternOptimization):
             return self.none(node, inspect.currentframe().f_lineno)
 
         # checking for the constant (right)
-        if not g.is_constant(node_left.input[1]) or not g.is_constant(
-            node_right.input[1]
-        ):
+        if not g.is_constant(node_left.input[1]) or not g.is_constant(node_right.input[1]):
             return self.none(node, inspect.currentframe().f_lineno)
         cst_left = g.get_computed_constant(node_left.input[1])
         cst_right = g.get_computed_constant(node_right.input[1])
@@ -100,7 +57,6 @@ class MulMulMulScalarPattern(PatternOptimization):
         node_left: NodeProto,
         node_right: NodeProto,
     ) -> List[NodeProto]:
-
         new_node = g.make_node(
             node.op_type,
             [node_left.input[0], node_right.input[0]],
@@ -219,9 +175,7 @@ class SwitchOrderBinaryPattern(PatternOptimization):
         before_right = g.get_shape(other_node.input[1])
 
         if (
-            self.switch_order(
-                shape_left, shape_right, before_left, before_right, choose
-            )
+            self.switch_order(shape_left, shape_right, before_left, before_right, choose)
             == 0
         ):
             if choose < 3:
@@ -231,9 +185,7 @@ class SwitchOrderBinaryPattern(PatternOptimization):
             before_left = g.get_shape(other_node.input[0])
             before_right = g.get_shape(other_node.input[1])
             if (
-                self.switch_order(
-                    shape_left, shape_right, before_left, before_right, choose
-                )
+                self.switch_order(shape_left, shape_right, before_left, before_right, choose)
                 == 0
             ):
                 return self.none(node, inspect.currentframe().f_lineno)
@@ -343,7 +295,6 @@ class SwitchOrderBinaryPattern(PatternOptimization):
         node_left: NodeProto,
         node_right: NodeProto,
     ) -> List[NodeProto]:
-
         side = 1 if node_left is None else 0
         other_node = node_right if node_left is None else node_left
         assert (
@@ -355,9 +306,7 @@ class SwitchOrderBinaryPattern(PatternOptimization):
         before_left = g.get_shape(other_node.input[0])
         before_right = g.get_shape(other_node.input[1])
 
-        case = self.switch_order(
-            shape_left, shape_right, before_left, before_right, side
-        )
+        case = self.switch_order(shape_left, shape_right, before_left, before_right, side)
         assert case in (1, 2), (
             f"case={case}, the matching should not have happened "
             f"(side={side}) shape_left={shape_left}, "
@@ -416,9 +365,7 @@ class SwitchOrderBinaryPattern(PatternOptimization):
             return [op1, op2]
 
         # case 2
-        op1 = g.make_node(
-            op_type, [C, A], name=f"{self.__class__.__name__}--{node.name}"
-        )
+        op1 = g.make_node(op_type, [C, A], name=f"{self.__class__.__name__}--{node.name}")
         op2 = g.make_node(
             op_type,
             [op1.output[0], B],

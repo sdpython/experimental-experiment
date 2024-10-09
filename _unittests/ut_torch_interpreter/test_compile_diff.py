@@ -11,6 +11,22 @@ from experimental_experiment.ext_test_case import (
 
 
 class TestDynamoCompileDiff(ExtTestCase):
+    @classmethod
+    def setUp(cls):
+        import torch
+
+        if hasattr(torch._dynamo.variables.misc, "LoggingLoggerVariable"):
+            cls._old_value = torch._dynamo.variables.misc.LoggingLoggerVariable.call_method
+            torch._dynamo.variables.misc.LoggingLoggerVariable.call_method = (
+                lambda *_, **__: None
+            )
+
+    @classmethod
+    def tearDown(cls):
+        import torch
+
+        if hasattr(torch._dynamo.variables.misc, "LoggingLoggerVariable"):
+            torch._dynamo.variables.misc.LoggingLoggerVariable.call_method = cls._old_value
 
     def _check_ort(self, name: str):
         from onnxruntime import InferenceSession
@@ -106,9 +122,7 @@ class TestDynamoCompileDiff(ExtTestCase):
         try:
             ort_optimize(onnxrt, output=optimized)
         except Exception as e:
-            raise AssertionError(
-                f"Optimization fails on model {model_onnxrt!r}."
-            ) from e
+            raise AssertionError(f"Optimization fails on model {model_onnxrt!r}.") from e
         onnxrt = onnx.load(optimized)
 
         optimized = model_debug.replace(".onnx", ".opt.onnx")

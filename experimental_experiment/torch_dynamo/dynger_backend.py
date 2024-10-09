@@ -5,7 +5,7 @@ import torch
 
 def dynger_backend(
     graph_module: "torch.fx.GraphModule",  # noqa: F821
-    args: List[Union["torch.Tensor", "torch.SymInt"]],  # noqa: F821
+    args: List[Union["torch.Tensor", "torch.SymInt", "torch.SymFloat"]],  # noqa: F821
     dynamic_shapes: Optional[Union[Dict[str, Any], Tuple[Any]]] = None,
     optimize: bool = True,
     verbose: Union[int, Tuple[int, int]] = 0,
@@ -84,9 +84,7 @@ def dynger_backend(
                     v = ",".join(map(str, res.ravel().detach().cpu().numpy().tolist()))
                 else:
                     v = (
-                        ",".join(
-                            map(str, res.ravel().detach().cpu().numpy().tolist()[:5])
-                        )
+                        ",".join(map(str, res.ravel().detach().cpu().numpy().tolist()[:5]))
                         + "..."
                     )
                 print(f"  + {name}: {res.dtype}:{res.shape}:{v}")
@@ -95,7 +93,6 @@ def dynger_backend(
             return res
 
         class _identity_graph:
-
             def __init__(
                 self,
                 graph: "torch.fx.graph.Graph",
@@ -112,21 +109,15 @@ def dynger_backend(
                 ), f"One name is expexted for one result but name={name!r}"
 
             def __call__(self, *args, **kwargs):
-                print(
-                    f"{self._graph.__class__.__name__}({self._inputs}) -> {self._name}"
-                )
+                print(f"{self._graph.__class__.__name__}({self._inputs}) -> {self._name}")
                 res = self._f(*args, **kwargs)
                 if isinstance(res, torch.Tensor):
                     if np.prod(res.shape) <= 8:
-                        v = ",".join(
-                            map(str, res.ravel().detach().cpu().numpy().tolist())
-                        )
+                        v = ",".join(map(str, res.ravel().detach().cpu().numpy().tolist()))
                     else:
                         v = (
                             ",".join(
-                                map(
-                                    str, res.ravel().detach().cpu().numpy().tolist()[:5]
-                                )
+                                map(str, res.ravel().detach().cpu().numpy().tolist()[:5])
                             )
                             + "..."
                         )
@@ -135,9 +126,9 @@ def dynger_backend(
                     raise AssertionError(f"Not implemented when type(res)={type(res)}")
                 return res
 
-        for i, node in enumerate(exported_mod.graph.nodes):
+        for node in exported_mod.graph.nodes:
             if node.op in ("call_function", "call_method"):
-                node.target = lambda *args, __=node.target, _args=node.args, _name=node.name, **kwargs: _identity(
+                node.target = lambda *args, __=node.target, _args=node.args, _name=node.name, **kwargs: _identity(  # noqa: E501
                     __, _args, _name, *args, **kwargs
                 )
                 continue

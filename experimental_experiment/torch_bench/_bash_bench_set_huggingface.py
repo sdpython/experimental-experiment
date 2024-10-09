@@ -2,62 +2,27 @@ import importlib
 import textwrap
 from typing import Any, Optional, Set, Tuple
 import torch
-from torch._dynamo.testing import collect_results, reset_rng_state
-from torch._dynamo.utils import clone_inputs
-from experimental_experiment.torch_bench._bash_bench_common import (
-    download_retry_decorator,
-    _rand_int_tensor,
-    BenchmarkRunner,
+from torch._dynamo.testing import reset_rng_state
+from ._bash_bench_benchmark_runner import BenchmarkRunner
+from ._bash_bench_model_runner import (
     ModelRunner,
-    MakeConfig,
+    _rand_int_tensor,
+    download_retry_decorator,
+)
+from ._bash_bench_set_dummies import (
+    Neuron,
+    Neuron2Outputs,
+    Neuron16,
+    NeuronTuple,
+    Neuron2Inputs,
+    NeuronNamed1,
+    NeuronNamed2,
+    NeuronNamedDict,
 )
 
 
-class Neuron(torch.nn.Module):
-    def __init__(self, n_dims: int = 5, n_targets: int = 3):
-        super(Neuron, self).__init__()
-        self.linear = torch.nn.Linear(n_dims, n_targets)
-
-    def forward(self, x):
-        return torch.sigmoid(self.linear(x))
-
-    def _get_random_inputs(self, device: str):
-        return (torch.randn(1, 5).to(device),)
-
-    config = MakeConfig(download=False, to_tuple=False)
-
-
-class Neuron16(Neuron):
-    def __init__(self, n_dims: int = 5, n_targets: int = 3):
-        super(Neuron, self).__init__()
-        self.linear = torch.nn.Linear(n_dims, n_targets, dtype=torch.float16)
-        assert self.linear.weight.dtype == torch.float16
-        assert self.linear.bias.dtype == torch.float16
-
-    def forward(self, x):
-        return torch.sigmoid(self.linear(x))
-
-    def _get_random_inputs(self, device: str):
-        return (torch.randn(1, 5).to(torch.float16).to(device),)
-
-
-class NeuronTuple(torch.nn.Module):
-    def __init__(self, n_dims: int = 5, n_targets: int = 3):
-        super(NeuronTuple, self).__init__()
-        self.linear = torch.nn.Linear(n_dims, n_targets)
-
-    def forward(self, x):
-        y = self.linear(x)
-        return (torch.sigmoid(y), (x, y))
-
-    def _get_random_inputs(self, device: str):
-        return (torch.randn(1, 5).to(device),)
-
-    config = MakeConfig(download=False, to_tuple=False)
-
-
 class HuggingfaceRunner(BenchmarkRunner):
-
+    SUITE = "HuggingFace"
     imports = [
         "AlbertForPreTraining",
         "AutoConfig",
@@ -204,52 +169,74 @@ class HuggingfaceRunner(BenchmarkRunner):
     EXTRA_MODELS = {}
 
     @classmethod
-    def initialize(container):
-        """
-        Steps to run before running the benchmark.
-        """
+    def initialize(cls):
+        """Steps to run before running the benchmark."""
         import transformers
 
-        for cls in container.imports:
-            assert hasattr(
-                transformers, cls
-            ), f"{cls!r} not found, update transformers."
+        # for cls in container.imports:
+        #     assert hasattr(
+        #         transformers, cls
+        #     ), f"{cls!r} not found, update transformers."
 
-        lines = container.MODELS_FILENAME.split("\n")
+        lines = cls.MODELS_FILENAME.split("\n")
         lines = [line.rstrip() for line in lines]
         for line in lines:
             if not line or len(line) < 2:
                 continue
             model_name, batch_size = line.split(",")
             batch_size = int(batch_size)
-            container.BATCH_SIZE_KNOWN_MODELS[model_name] = batch_size
+            cls.BATCH_SIZE_KNOWN_MODELS[model_name] = batch_size
 
-        container.EXTRA_MODELS.update(
+        cls.EXTRA_MODELS.update(
             {
                 "101Dummy": (
-                    Neuron.config,
+                    lambda: Neuron.config,
                     Neuron,
                 ),
                 "101Dummy16": (
-                    Neuron16.config,
+                    lambda: Neuron16.config,
                     Neuron16,
                 ),
                 "101DummyTuple": (
-                    NeuronTuple.config,
+                    lambda: NeuronTuple.config,
                     NeuronTuple,
                 ),
+                "101Dummy2Outputs": (
+                    lambda: Neuron2Outputs.config,
+                    Neuron2Outputs,
+                ),
+                "101Dummy2": (
+                    lambda: Neuron.config,
+                    Neuron,
+                ),
+                "101Dummy2Inputs": (
+                    lambda: Neuron2Inputs.config,
+                    Neuron,
+                ),
+                "101DummyNamed1": (
+                    lambda: NeuronNamed1.config,
+                    NeuronNamed1,
+                ),
+                "101DummyNamed2": (
+                    lambda: NeuronNamed2.config,
+                    NeuronNamed2,
+                ),
+                "101DummyNamedDict": (
+                    lambda: NeuronNamedDict.config,
+                    NeuronNamedDict,
+                ),
                 "AllenaiLongformerBase": (
-                    transformers.AutoConfig.from_pretrained(
+                    lambda: transformers.AutoConfig.from_pretrained(
                         "allenai/longformer-base-4096"
                     ),
                     transformers.AutoModelForMaskedLM,
                 ),
                 "Reformer": (
-                    transformers.ReformerConfig(),
+                    lambda: transformers.ReformerConfig(),
                     transformers.AutoModelForMaskedLM,
                 ),
                 "T5Small": (
-                    transformers.AutoConfig.from_pretrained("t5-small"),
+                    lambda: transformers.AutoConfig.from_pretrained("t5-small"),
                     transformers.AutoModelForSeq2SeqLM,
                 ),
                 # "BigBird": (
@@ -257,28 +244,34 @@ class HuggingfaceRunner(BenchmarkRunner):
                 #     AutoModelForMaskedLM,
                 # ),
                 "DistillGPT2": (
-                    transformers.AutoConfig.from_pretrained("distilgpt2"),
+                    lambda: transformers.AutoConfig.from_pretrained("distilgpt2"),
                     transformers.AutoModelForCausalLM,
                 ),
                 "GoogleFnet": (
-                    transformers.AutoConfig.from_pretrained("google/fnet-base"),
+                    lambda: transformers.AutoConfig.from_pretrained("google/fnet-base"),
                     transformers.AutoModelForMaskedLM,
                 ),
                 "YituTechConvBert": (
-                    transformers.AutoConfig.from_pretrained("YituTech/conv-bert-base"),
+                    lambda: transformers.AutoConfig.from_pretrained(
+                        "YituTech/conv-bert-base"
+                    ),
                     transformers.AutoModelForMaskedLM,
                 ),
                 "CamemBert": (
-                    transformers.AutoConfig.from_pretrained("camembert-base"),
+                    lambda: transformers.AutoConfig.from_pretrained("camembert-base"),
                     transformers.AutoModelForMaskedLM,
+                ),
+                "Phi2": (
+                    lambda: transformers.AutoConfig.from_pretrained("microsoft/phi-2"),
+                    transformers.AutoModelForCausalLM,
                 ),
             }
         )
 
     @classmethod
-    def _get_module_cls_by_model_name(container, model_cls_name):
+    def _get_module_cls_by_model_name(cls, model_cls_name):
         _module_by_model_name = {
-            "Speech2Text2Decoder": "transformers.models.speech_to_text_2.modeling_speech_to_text_2",
+            "Speech2Text2Decoder": "transformers.models.speech_to_text_2.modeling_speech_to_text_2",  # noqa: E501
             "TrOCRDecoder": "transformers.models.trocr.modeling_trocr",
         }
         module_name = _module_by_model_name.get(model_cls_name, "transformers")
@@ -286,12 +279,12 @@ class HuggingfaceRunner(BenchmarkRunner):
         return getattr(module, model_cls_name)
 
     @classmethod
-    def _get_sequence_length(container, model_cls, model_name):
+    def _get_sequence_length(cls, model_cls, model_name):
         if model_name.startswith(("Blenderbot",)):
             seq_length = 128
         elif model_name.startswith(("GPT2", "Bart", "T5", "PLBart", "MBart")):
             seq_length = 1024
-        elif model_name in ("AllenaiLongformerBase", "BigBird"):
+        elif model_name in {"AllenaiLongformerBase", "BigBird", "Phi2"}:
             seq_length = 1024
         elif model_name.startswith("OPT"):
             seq_length = 2048
@@ -327,7 +320,7 @@ class HuggingfaceRunner(BenchmarkRunner):
 
     @classmethod
     def _generate_inputs_for_model(
-        container, model_cls, model, model_name, bs, device, include_loss_args=False
+        cls, model_cls, model, model_name, bs, device, include_loss_args=False
     ):
         if hasattr(model, "_get_random_inputs"):
             return model._get_random_inputs(device)
@@ -336,7 +329,7 @@ class HuggingfaceRunner(BenchmarkRunner):
 
         num_choices = 3
         num_visual_features = 42
-        seq_length = container._get_sequence_length(model_cls, model_name)
+        seq_length = cls._get_sequence_length(model_cls, model_name)
         vocab_size = model.config.vocab_size
 
         if model_name.startswith("Wav2Vec2"):
@@ -351,9 +344,7 @@ class HuggingfaceRunner(BenchmarkRunner):
             }
 
         if model_name.endswith("MultipleChoice"):
-            inputt = _rand_int_tensor(
-                device, 0, vocab_size, (bs, num_choices, seq_length)
-            )
+            inputt = _rand_int_tensor(device, 0, vocab_size, (bs, num_choices, seq_length))
         elif model_name.startswith("Roberta"):
             inputt = _rand_int_tensor(device, 0, 1, (bs, seq_length))
         else:
@@ -364,22 +355,16 @@ class HuggingfaceRunner(BenchmarkRunner):
 
         input_dict = {"input_ids": inputt}
 
-        if (
-            model_name.startswith("T5")
-            or model_name.startswith("M2M100")
-            or model_name.startswith("MT5")
-            or model_cls
-            in {
-                transformers.BlenderbotModel,
-                transformers.BlenderbotSmallModel,
-                transformers.BlenderbotForConditionalGeneration,
-                transformers.BlenderbotSmallForConditionalGeneration,
-                transformers.PegasusModel,
-                transformers.PegasusForConditionalGeneration,
-                transformers.MarianModel,
-                transformers.MarianMTModel,
-            }
-        ):
+        if model_name.startswith(("T5", "M2M100", "MT5")) or model_cls in {
+            transformers.BlenderbotModel,
+            transformers.BlenderbotSmallModel,
+            transformers.BlenderbotForConditionalGeneration,
+            transformers.BlenderbotSmallForConditionalGeneration,
+            transformers.PegasusModel,
+            transformers.PegasusForConditionalGeneration,
+            transformers.MarianModel,
+            transformers.MarianMTModel,
+        }:
             input_dict["decoder_input_ids"] = inputt
 
         if model_name.startswith("Lxmert"):
@@ -390,9 +375,7 @@ class HuggingfaceRunner(BenchmarkRunner):
             input_dict["visual_feats"] = torch.randn(
                 bs, num_visual_features, visual_feat_dim
             )
-            input_dict["visual_pos"] = torch.randn(
-                bs, num_visual_features, visual_pos_dim
-            )
+            input_dict["visual_pos"] = torch.randn(bs, num_visual_features, visual_pos_dim)
 
         if include_loss_args:
             if model_name.endswith("PreTraining"):
@@ -400,9 +383,7 @@ class HuggingfaceRunner(BenchmarkRunner):
                     transformers.ElectraForPreTraining,
                     transformers.LxmertForPreTraining,
                 ]:
-                    input_dict["labels"] = _rand_int_tensor(
-                        device, 0, 1, (bs, seq_length)
-                    )
+                    input_dict["labels"] = _rand_int_tensor(device, 0, 1, (bs, seq_length))
                 else:
                     label_name = (
                         "sentence_order_label"
@@ -417,14 +398,9 @@ class HuggingfaceRunner(BenchmarkRunner):
                 input_dict["start_positions"] = _rand_int_tensor(
                     device, 0, seq_length, (bs,)
                 )
-                input_dict["end_positions"] = _rand_int_tensor(
-                    device, 0, seq_length, (bs,)
-                )
-            elif (
-                model_name.endswith("MaskedLM")
-                or model_name.endswith("HeadModel")
-                or model_name.endswith("CausalLM")
-                or model_name.endswith("DoubleHeadsModel")
+                input_dict["end_positions"] = _rand_int_tensor(device, 0, seq_length, (bs,))
+            elif model_name.endswith(
+                ("MaskedLM", "HeadModel", "CausalLM", "DoubleHeadsModel")
             ):
                 input_dict["labels"] = _rand_int_tensor(
                     device, 0, vocab_size, (bs, seq_length)
@@ -445,7 +421,7 @@ class HuggingfaceRunner(BenchmarkRunner):
                 input_dict["labels"] = _rand_int_tensor(
                     device, 0, vocab_size - 1, (bs, seq_length)
                 )
-            elif model_name in container.EXTRA_MODELS:
+            elif model_name in cls.EXTRA_MODELS:
                 input_dict["labels"] = _rand_int_tensor(
                     device, 0, vocab_size, (bs, seq_length)
                 )
@@ -470,6 +446,8 @@ class HuggingfaceRunner(BenchmarkRunner):
         no_grad: bool = True,
         target_opset: int = 18,
         dtype: Optional[Any] = None,
+        nvtx: bool = False,
+        dump_ort: bool = False,
     ):
         super().__init__(
             "huggingface",
@@ -485,6 +463,8 @@ class HuggingfaceRunner(BenchmarkRunner):
             fake_tensor=fake_tensor,
             no_grad=no_grad,
             dtype=dtype,
+            nvtx=nvtx,
+            dump_ort=dump_ort,
         )
         if not self.EXTRA_MODELS:
             self.initialize()
@@ -511,7 +491,8 @@ class HuggingfaceRunner(BenchmarkRunner):
                 config.pad_token_id = 0
 
         else:
-            config, model_cls = self.EXTRA_MODELS[model_name]
+            config_fn, model_cls = self.EXTRA_MODELS[model_name]
+            config = config_fn()
 
         assert config is not None, f"Config cannot be None for model {model_name!r}."
         return model_cls, config
@@ -540,10 +521,12 @@ class HuggingfaceRunner(BenchmarkRunner):
             model = self._download_model(model_name)
         else:
             model = model_cls()
+
         if dtype is None:
             model = model.to(self.device)
         else:
             model = model.to(self.device, dtype=dtype)
+
         if self.enable_activation_checkpointing:
             model.gradient_checkpointing_enable()
         if model_name in self.BATCH_SIZE_KNOWN_MODELS:
@@ -554,9 +537,7 @@ class HuggingfaceRunner(BenchmarkRunner):
         if batch_size is None:
             batch_size = batch_size_default
             if model_name in self.BATCH_SIZE_DIVISORS:
-                batch_size = max(
-                    int(batch_size / self.BATCH_SIZE_DIVISORS[model_name]), 1
-                )
+                batch_size = max(int(batch_size / self.BATCH_SIZE_DIVISORS[model_name]), 1)
 
         example_inputs = self._generate_inputs_for_model(
             model_cls,
@@ -564,7 +545,7 @@ class HuggingfaceRunner(BenchmarkRunner):
             model_name,
             batch_size,
             self.device,
-            include_loss_args=True,
+            include_loss_args=False,  # TODO: training is not supported
         )
 
         for attr in dir(config):
@@ -583,6 +564,8 @@ class HuggingfaceRunner(BenchmarkRunner):
             dtype=self.dtype,
             warmup=self.warmup,
             repeat=self.repeat,
+            suite=self.SUITE,
+            autocast=self.autocast,
         )
 
     def iter_model_names(self):
@@ -590,31 +573,8 @@ class HuggingfaceRunner(BenchmarkRunner):
             self.EXTRA_MODELS.keys()
         )
         model_names = set(model_names)
+        assert model_names, "Empty list of models"
         model_names = sorted(model_names)
 
         start, end = self.get_benchmark_indices(len(model_names))
-        assert (
-            start < end
-        ), f"Empty partition (start={start}, end={end}, model_names={model_names!r})"
-        for index, model_name in enumerate(model_names):
-            if index < start or index >= end:
-                continue
-            if (
-                self.include_model_names and model_name not in self.include_model_names
-            ) or model_name in self.exclude_model_names:
-                continue
-            yield model_name
-
-    def forward_pass(self, mod, inputs, collect_outputs=True):
-        return mod(**inputs)
-
-    def forward_and_backward_pass(self, mod, inputs, collect_outputs=True):
-        cloned_inputs = clone_inputs(inputs)
-        self.optimizer_zero_grad(mod)
-        pred = mod(**cloned_inputs)
-        loss = self.compute_loss(pred)
-        self.grad_scaler.scale(loss).backward()
-        self.optimizer_step()
-        if collect_outputs:
-            return collect_results(mod, pred, loss, cloned_inputs)
-        return None
+        yield from self.enumerate_model_names(model_names, start=start, end=end)

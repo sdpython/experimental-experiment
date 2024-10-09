@@ -12,15 +12,15 @@ Example, run llama model with onnxrt backend on cuda.
 
 ::
 
-    python -m experimental_experiment.torch_bench.export_model --exporter script --device cuda --config medium
-    
+    python -m experimental_experiment.torch_bench.export_model \\
+           --exporter torch_script --device cuda --config medium
+
 """
 
 import pprint
 
 
 def main(args=None):
-
     from experimental_experiment.torch_bench._dort_cmd_common import export_args
 
     args = export_args(
@@ -37,7 +37,6 @@ def main(args=None):
     )
 
     if multi_run(args):
-
         configs = make_configs(args)
         data = run_benchmark(
             "experimental_experiment.torch_bench.export_model",
@@ -49,16 +48,16 @@ def main(args=None):
             pprint.pprint(data if args.verbose > 3 else data[:2])
         if args.output_data:
             df = make_dataframe_from_benchmark_data(data, detailed=False)
-            df.to_csv(args.output_data, index=False)
+            df.to_csv(args.output_data, index=False, errors="ignore")
             df.to_excel(args.output_data + ".xlsx", index=False)
             if args.verbose:
                 print(df)
     else:
-
         import os
         import time
         import torch
         import torch._dynamo.backends.registry
+        from experimental_experiment.torch_bench import BOOLEAN_VALUES
         from experimental_experiment.torch_bench._dort_cmd_common import (
             create_configuration_for_benchmark,
             create_model,
@@ -71,10 +70,10 @@ def main(args=None):
         )
 
         verbose = int(args.verbose)
-        use_dynamic = args.dynamic in (1, "1", True, "True")
-        with_mask = args.with_mask in (True, 1, "1", "True")
-        order = args.order in (True, 1, "1", "True")
-        large_model = args.large_model in (True, 1, "1", "True")
+        use_dynamic = args.dynamic in BOOLEAN_VALUES
+        with_mask = args.with_mask in BOOLEAN_VALUES
+        order = args.order in BOOLEAN_VALUES
+        large_model = args.large_model in BOOLEAN_VALUES
         disable_pattern = [_ for _ in args.disable_pattern.split("+") if _]
         enable_pattern = [_ for _ in args.enable_pattern.split("+") if _]
 
@@ -100,11 +99,11 @@ def main(args=None):
         print(f"order={args.order}")
         print(f"dump_folder={args.dump_folder}")
 
-        if args.exporter == "custom":
+        if args.exporter in ("custom", "custom-fallback"):
             print(f"disable_pattern={disable_pattern!r}")
             print(f"enable_pattern={enable_pattern!r}")
 
-        is_cuda = args.device == "cuda"
+        is_cuda = args.device.startswith("cuda")
         if is_cuda:
             print(
                 f"CUDA no model: memory allocated={torch.cuda.memory_allocated(0)}, "
@@ -133,8 +132,8 @@ def main(args=None):
         print(f"dynamic={use_dynamic}")
 
         folder = args.dump_folder
-        if not os.path.exists(folder):
-            os.mkdir(folder)
+        if folder and not os.path.exists(folder):
+            os.makedirs(folder)
 
         filename = (
             f"export_{args.model}_{args.exporter}_{'dyn' if use_dynamic else 'static'}"
@@ -150,7 +149,8 @@ def main(args=None):
         memory_stats = {}
 
         print(
-            f"Exporter model with exporter={args.exporter}, n_inputs={len(example_inputs[0])}"
+            f"Exporter model with exporter={args.exporter}, "
+            f"n_inputs={len(example_inputs[0])}"
         )
         if args.exporter == "eager":
             print("[export_model] start benchmark")
@@ -168,7 +168,7 @@ def main(args=None):
             begin = time.perf_counter()
 
             memory_session = (
-                start_spying_on(cuda=args.device == "cuda")
+                start_spying_on(cuda=args.device.startswith("cuda"))
                 if args.memory_peak
                 else None
             )
@@ -181,8 +181,8 @@ def main(args=None):
                 folder=args.dump_folder,
                 filename=filename,
                 dynamic_shapes=dynamic_shapes if args.dynamic else None,
-                ort_optimize=args.ort in ("1", 1, "True", True),
-                optimize_oxs=args.optimize in ("1", 1, "True", True),
+                ort_optimize=args.ort in BOOLEAN_VALUES,
+                optimize_oxs=args.optimize in BOOLEAN_VALUES,
                 enable_pattern=args.enable_pattern,
                 disable_pattern=args.disable_pattern,
                 verbose=args.verbose,
@@ -190,9 +190,7 @@ def main(args=None):
                 large_model=large_model,
                 order=order,
             )
-            print(
-                f"[export_model] export to onnx done in {time.perf_counter() - begin}"
-            )
+            print(f"[export_model] export to onnx done in {time.perf_counter() - begin}")
             if memory_session is not None:
                 memory_results = memory_session.stop()
                 print(f"[export_model] ends memory monitoring {memory_results}")

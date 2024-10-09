@@ -1,17 +1,158 @@
-import time
 import os
-from typing import Any, Dict, List, Optional, Union
+import sys
+import time
+from typing import Any, Dict, List, Optional, Tuple, Union
+
 import numpy as np
 import onnx
-from onnx import ModelProto
+from onnx import (
+    AttributeProto,
+    FunctionProto,
+    GraphProto,
+    ModelProto,
+    NodeProto,
+    TensorProto,
+)
 from ..convert.convert_helper import optimize_model_proto_oxs
 from ..bench_run import measure_discrepancies
+
+
+def size_type(dtype: Any) -> int:
+    if isinstance(dtype, int):
+        # It is a TensorProto.DATATYPE
+        if dtype in {TensorProto.DOUBLE, TensorProto.INT64, TensorProto.UINT64}:
+            return 8
+        if dtype in {TensorProto.FLOAT, TensorProto.INT32, TensorProto.UINT32}:
+            return 4
+        if dtype in {
+            TensorProto.FLOAT16,
+            TensorProto.BFLOAT16,
+            TensorProto.INT16,
+            TensorProto.UINT16,
+        }:
+            return 2
+        if dtype in {TensorProto.INT8, TensorProto.UINT8, TensorProto.BOOL}:
+            return 1
+        raise AssertionError(f"Unable to return the element size for type {dtype}")
+
+    import torch
+
+    if dtype in {torch.float64, torch.int64}:
+        return 8
+    if dtype in {torch.float32, torch.int32}:
+        return 4
+    if dtype in {torch.float16, torch.int16, torch.bfloat16}:
+        return 2
+    if dtype in {torch.int8, torch.uint8, torch.bool}:
+        return 1
+    if hasattr(torch, "uint64"):
+        # it fails on mac
+        if dtype in {torch.uint64}:
+            return 8
+    if hasattr(torch, "uint32"):
+        # it fails on mac
+        if dtype in {torch.uint32}:
+            return 4
+    if hasattr(torch, "uint16"):
+        # it fails on mac
+        if dtype in {torch.uint16}:
+            return 2
+    raise AssertionError(f"Unexpected dtype={dtype}")
+
+
+def obj_size(obj: Any) -> int:
+    import torch
+
+    if isinstance(obj, torch.Tensor):
+        assert not obj.is_sparse, "Sparse tensors not supported yet."
+        return int(np.prod(list(obj.shape)) * size_type(obj.dtype))
+    if isinstance(obj, (tuple, list)):
+        return sum(obj_size(o) for o in obj)
+    if isinstance(obj, dict):
+        return sum(obj_size(o) for o in obj.values())
+    if obj is None:
+        return 0
+    if obj.__class__.__name__.endswith("KeyedJaggedTensor"):
+        # Not implemented yet.
+        return 0
+    if isinstance(obj, (int, float, str, bytes)):
+        return sys.getsizeof(obj)
+    if hasattr(obj, "_fields") and isinstance(obj._fields, dict):
+        # detectron2.structures.instances.Instances
+        return obj_size(obj._fields)
+    if hasattr(obj, "tensor") and isinstance(obj.tensor, torch.Tensor):
+        # detectron2.structures.instances.Bowes
+        return obj_size(obj.tensor)
+    if "SquashedNormal" in obj.__class__.__name__:
+        return sys.getsizeof(obj)
+    if obj.__class__.__name__ == "MambaCache":
+        return obj_size(obj.conv_states) + obj_size(obj.ssm_states)
+    raise AssertionError(f"input_size not implemented for type {type(obj)}")
+
+
+def compute_weight_size(model: Any) -> int:
+    """
+    Returns the model size for a torch model or an onnx model.
+    That includes the weights.
+    """
+    if isinstance(model, ModelProto):
+        size = compute_weight_size(model.graph)
+        for f in model.functions:
+            size += compute_weight_size(f)
+        assert isinstance(size, int), f"Unexpected type {type(size)}: {size}"
+        return size
+
+    if isinstance(model, GraphProto):
+        size = 0
+        for init in model.initializer:
+            size += compute_weight_size(init)
+        for init in model.sparse_initializer:
+            size += compute_weight_size(init)
+        for node in model.node:
+            size += compute_weight_size(node)
+        assert isinstance(size, int), f"Unexpected type {type(size)}: {size}"
+        return size
+
+    if isinstance(model, FunctionProto):
+        size = 0
+        for node in model.node:
+            size += compute_weight_size(node)
+        assert isinstance(size, int), f"Unexpected type {type(size)}: {size}"
+        return size
+
+    if isinstance(model, TensorProto):
+        p = int(np.prod(model.dims))
+        size = p * size_type(model.data_type)
+        assert isinstance(size, int), f"Unexpected type {type(size)}: {size}"
+        return size
+
+    if isinstance(model, NodeProto):
+        if model.op_type == "Constant":
+            return len(model.SerializeToString())
+        size = 0
+        for att in model.attribute:
+            if att.type == AttributeProto.GRAPH:
+                size += compute_weight_size(att.g)
+        assert isinstance(size, int), f"Unexpected type {type(size)}: {size}"
+        return size
+
+    if hasattr(model, "parameters"):
+        import torch
+
+        size = 0
+        for p in model.parameters():
+            assert isinstance(p, torch.Tensor), f"Unexpected type {type(p)}"
+            size += obj_size(p)
+        assert isinstance(size, int), f"Unexpected type {type(size)}: {size}"
+        return size
+
+    raise AssertionError(f"Unexpected type {type(model)}.")
 
 
 def common_export(
     model: Any,
     inputs: List[Any],
-    exporter: str = "dynamo",
+    exporter: str = "custom",
     target_opset: int = 18,
     folder: str = "",
     filename: str = "model.onnx",
@@ -29,7 +170,7 @@ def common_export(
     Exports a model into a folder.
 
     :param model: model
-    :param exporter: script, dynamo
+    :param exporter: torchscript, onnx_dynamo, dynamo_export, custom, ...
     :param folder: folder to export into
     :param filename: onnx filename
     :param inputs: inputs
@@ -50,8 +191,8 @@ def common_export(
     import torch.onnx
 
     if folder:
-        if not os.path.exists(folder):
-            os.mkdir(folder)
+        if folder and not os.path.exists(folder):
+            os.makedirs(folder)
         filename = os.path.join(folder, filename)
 
     if verbose:
@@ -60,7 +201,7 @@ def common_export(
             f"{len(inputs)} inputs in {filename!r}"
         )
     begin = time.perf_counter()
-    if exporter == "script":
+    if exporter == "torch_script":
         assert isinstance(inputs, tuple), f"{type(inputs)}"
         assert len(inputs) == 2
         torch.onnx.export(
@@ -72,7 +213,7 @@ def common_export(
             opset_version=target_opset,
             dynamic_axes=dynamic_shapes,
         )
-    elif exporter == "dynamo":
+    elif exporter == "onnx_dynamo":
         assert (
             dynamic_shapes is None
         ), f"dynamic_shapes={dynamic_shapes} is not implemented yet"
@@ -90,10 +231,10 @@ def common_export(
         with torch.no_grad():
             prog = torch.onnx.dynamo_export(model, *inputs)
         onnx.save(prog.model_proto, filename)
-    elif exporter == "custom":
-        from ..xoptim import get_pattern_list
-        from ..xbuilder import OptimizationOptions
+    elif exporter in ("custom", "custom-fallback"):
         from ..torch_interpreter import to_onnx
+        from ..xbuilder import OptimizationOptions
+        from ..xoptim import get_pattern_list
 
         patterns = get_pattern_list(enable_pattern, disable_pattern, verbose=verbose)
         onx = to_onnx(
@@ -118,9 +259,7 @@ def common_export(
 
     if verbose:
         print(f"[common_export] exporter done in {time.perf_counter() - begin}s")
-        print(
-            f"[common_export] size of the export: {os.stat(filename).st_size / 2**20} Mb"
-        )
+        print(f"[common_export] size of the export: {os.stat(filename).st_size / 2**20} Mb")
 
     with open(filename, "rb") as f:
         onx = onnx.load(f)
@@ -149,13 +288,16 @@ def common_export(
         from ..convert.convert_helper import ort_optimize as fopt
 
         is_cuda = next(model.parameters()).is_cuda
-        providers = ["CUDAExecutionProvider", "CPUExecutionProvider"]
-        fopt(
-            onx,
-            output,
-            providers=providers if is_cuda else providers[-1:],
-            disable_aot=False,
-        )
+        if is_cuda:
+            device_id = next(model.parameters()).get_device()
+            providers = [
+                ("CUDAExecutionProvider", {"device_id": device_id}),
+                ("CPUExecutionProvider", {}),
+            ]
+        else:
+            providers = ["CPUExecutionProvider"]
+
+        fopt(onx, output, providers=providers, disable_aot=False)
         if verbose:
             print("[common_export] done")
 
@@ -219,9 +361,7 @@ def run_inference(
 
 
 class WrapForTorch:
-    """
-    Wraps  a torch model.
-    """
+    """Wraps  a torch model."""
 
     def __init__(self, torch_model: Any):
         if hasattr(torch_model, "graph_module"):
@@ -236,8 +376,9 @@ class WrapForTorch:
 
 
 class WrapInferenceSessionForTorch:
-    def __init__(self, sess: Any):
-        # onnxruntime is importing when needed as it takes a couple of seconds if it contains CUDA EP.
+    def __init__(self, sess: Any, nvtx: bool = False):
+        # onnxruntime is importing when needed as it takes a
+        # couple of seconds if it contains CUDA EP.
         import onnxruntime
         import torch
         from onnxruntime.capi import _pybind_state as ORTC  # noqa: N812
@@ -245,10 +386,10 @@ class WrapInferenceSessionForTorch:
         self.sess = sess
         self.input_names = [i.name for i in sess.get_inputs()]
         self.output_names = [i.name for i in sess.get_outputs()]
-        self.bind = onnxruntime.SessionIOBinding(sess._sess)
         self.OrtValue = ORTC.OrtValue
         self.ORTC = ORTC
         self.torch = torch
+        self.nvtx = nvtx
         self.run_options = onnxruntime.RunOptions()
 
         self.TORCH_DTYPE_TO_NUMPY_DTYPE = {
@@ -280,6 +421,7 @@ class WrapInferenceSessionForTorch:
         tensors: tuple[Any, ...],  # tuple["torch.Tensor", ...],
         n_outputs: int,
     ) -> tuple[Any, Any]:  # tuple[tuple["torch.Tensor", ...], tuple["OrtDevice", ...]]:
+        assert tensors is not None, "tensors cannot be None"
         ortvalues = self.ORTC.OrtValueVector()
         ortvalues.reserve(len(tensors))
         dtypes = []
@@ -287,28 +429,33 @@ class WrapInferenceSessionForTorch:
         data_ptrs = []
         devices = []
 
+        if self.nvtx:
+            self.torch.cuda.nvtx.range_push("_get_ortvalues_from_torch_tensors.1")
         max_device = -1
-        assert isinstance(max_device, int), f"unexpected type for device={max_device!r}"
-        assert tensors is not None, "tensors cannot be None"
         new_tensors = []
         for tensor in tensors:
-            assert isinstance(
-                tensor, self.torch.Tensor
-            ), f"Unexpected type {type(tensor)}"
+            assert isinstance(tensor, self.torch.Tensor), f"Unexpected type {type(tensor)}"
             dtypes.append(self.TORCH_DTYPE_TO_NUMPY_DTYPE[tensor.dtype])
             shapes.append(tensor.size())
             data_ptrs.append(tensor.data_ptr())
             d = tensor.get_device()
             devices.append(self.DEVICES[d])
             new_tensors.append(tensor)
-            max_device = max(max_device, tensor.get_device())
+            max_device = max(max_device, d)
 
+        if self.nvtx:
+            self.torch.cuda.nvtx.range_pop()
+            self.torch.cuda.nvtx.range_push("_get_ortvalues_from_torch_tensors.2")
+
+        assert isinstance(max_device, int), f"unexpected type for device={max_device!r}"
         ortvalues.push_back_batch(new_tensors, data_ptrs, dtypes, shapes, devices)
         output_devices = []
         for _ in range(n_outputs):
             dev = self.DEVICES[max_device]
             output_devices.append(dev)
 
+        if self.nvtx:
+            self.torch.cuda.nvtx.range_pop()
         return ortvalues, output_devices
 
     def _ortvalues_to_torch_tensor(
@@ -320,11 +467,15 @@ class WrapInferenceSessionForTorch:
 
         from torch._C import _from_dlpack
 
-        if all(
-            map(lambda i: ortvalues[i].has_value(), range(len(ortvalues)))
-        ):  # noqa: C417
+        if all(ortvalues[i].has_value() for i in range(len(ortvalues))):
+            if self.nvtx:
+                self.torch.cuda.nvtx.range_push("_ortvalues_to_torch_tensor.1")
             res = ortvalues.to_dlpacks(_from_dlpack)
+            if self.nvtx:
+                self.torch.cuda.nvtx.range_pop()
         else:
+            if self.nvtx:
+                self.torch.cuda.nvtx.range_push("_ortvalues_to_torch_tensor.2")
             res = []
             for i in range(len(ortvalues)):
                 res.append(
@@ -332,11 +483,69 @@ class WrapInferenceSessionForTorch:
                     if ortvalues[i].has_value()
                     else None
                 )
+            if self.nvtx:
+                self.torch.cuda.nvtx.range_pop()
         return tuple(res)
 
     def run(self, output_names, feeds):
         inputs = [feeds[i] for i in self.input_names]
-        return self.run_dlpack(*inputs, output_names=output_names)
+        if self.dlpack:
+            return self.run_dlpack(*inputs, output_names=output_names)
+        return self.run_ort_inference(*inputs)
+
+    def _bind_torch_tensors(
+        self,
+        tensors: tuple[Any, ...],  # tuple["torch.Tensor", ...],
+        output_names: List[str],
+    ) -> "SessionIBinding":  # noqa: F821
+        assert tensors is not None, "tensors cannot be None"
+        assert len(tensors) == len(self.input_names), (
+            f"Mismatch got {len(tensors)}, {len(self.input_names)} are expected, "
+            f"names={self.input_names}"
+        )
+        bind = self.ORTC.SessionIOBinding(self.sess._sess)
+        max_device = -1
+        for name, tensor in zip(self.input_names, tensors):
+            assert isinstance(tensor, self.torch.Tensor), f"Unexpected type {type(tensor)}"
+            d = tensor.get_device()
+            max_device = max(d, max_device)
+            bind.bind_input(
+                name,
+                self.DEVICES[d],
+                self.TORCH_DTYPE_TO_NUMPY_DTYPE[tensor.dtype],
+                tensor.shape,
+                tensor.data_ptr(),
+            )
+
+        device = self.DEVICES[max_device]
+        for o in output_names:
+            bind.bind_output(o, device)
+        return bind
+
+    def run_ort_inference(self, *inputs, output_names=None):
+        if output_names is None:
+            output_names = self.output_names
+
+        if self.nvtx:
+            self.torch.cuda.nvtx.range_push("_bind_torch_tensors")
+
+        bind = self._bind_torch_tensors(inputs, output_names=output_names)
+
+        if self.nvtx:
+            self.torch.cuda.nvtx.range_pop()
+            self.torch.cuda.nvtx.range_push("run_with_iobinding")
+
+        self.sess._sess.run_with_iobinding(bind, self.run_options)
+        ort_vector_outputs = bind.get_outputs()
+        # The function returns OrtValue, the code computing the discrepancies will
+        # have to convert (so the necessary copy is not included here).
+        # DlPack mechanism should be implemented in onnxruntime
+        # (not only in onnxruntime-training).
+        ort_outputs = [ort_vector_outputs[i] for i in range(len(ort_vector_outputs))]
+
+        if self.nvtx:
+            self.torch.cuda.nvtx.range_pop()
+        return ort_outputs
 
     def run_dlpack(self, *inputs, output_names=None):
         if output_names is None:
@@ -344,6 +553,9 @@ class WrapInferenceSessionForTorch:
         ortvalues, output_devices = self._get_ortvalues_from_torch_tensors(
             inputs, len(output_names)
         )
+
+        if self.nvtx:
+            self.torch.cuda.nvtx.range_push("run_with_ortvaluevector")
 
         ort_outputs = self.ORTC.OrtValueVector()
         self.sess.run_with_ortvaluevector(
@@ -354,6 +566,10 @@ class WrapInferenceSessionForTorch:
             ort_outputs,
             output_devices,
         )
+
+        if self.nvtx:
+            self.torch.cuda.nvtx.range_pop()
+
         pth_outputs = self._ortvalues_to_torch_tensor(ort_outputs)
         return pth_outputs
 
@@ -385,7 +601,7 @@ def run_onnx_inference(
     stats: dict[str, Any] = {}
     device = example_inputs[0][0].get_device()
     providers = (
-        ["CUDAExecutionProvider", "CPUExecutionProvider"]
+        [("CUDAExecutionProvider", {"device_id": device}), "CPUExecutionProvider"]
         if device >= 0
         else ["CPUExecutionProvider"]
     )
@@ -394,7 +610,8 @@ def run_onnx_inference(
         print(f"[run_inference] create session with providers {providers!r}")
 
     begin = time.perf_counter()
-    # onnxruntime is importing when needed as it takes a couple of seconds if it contains CUDA EP.
+    # onnxruntime is importing when needed as it
+    # takes a couple of seconds if it contains CUDA EP.
     import onnxruntime
 
     so = onnxruntime.SessionOptions()
@@ -431,9 +648,10 @@ def run_onnx_inference(
     stats["warmup_time"] = end / warmup
     stats["warmup_iter"] = iterations
     if torch_model:
-        abs_err, rel_err = measure_discrepancies(expected, got)
-        stats["discrepancies_abs"] = abs_err
-        stats["discrepancies_rel"] = rel_err
+        d = measure_discrepancies(expected, got)
+        stats["discrepancies_abs"] = d["abs"]
+        stats["discrepancies_rel"] = d["rel"]
+        stats["discrepancies_avg"] = d["avg"]
 
     if verbose:
         print(f"[run_inference] warmup done in {time.perf_counter() - begin}")
@@ -454,3 +672,13 @@ def run_onnx_inference(
         print(f"[run_inference] measure done in {time.perf_counter() - begin}")
 
     return stats
+
+
+def str_shape(shape: Tuple[Any, ...]) -> str:
+    s = "x".join(str(i) for i in shape)
+    return s
+
+
+def str_dtype(dtype: Any) -> str:
+    s = str(dtype)
+    return s.replace("torch.", "").replace("'", "").replace("<", "").replace(">", "")

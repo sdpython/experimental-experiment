@@ -72,7 +72,7 @@ class SimplifiedLayerNormalizationPattern(PatternOptimization):
             return self.none(node, inspect.currentframe().f_lineno)
 
         mul_i = set(node_mul.input)
-        cmp = set([node_pow.input[0], node_reciprocal.output[0]])
+        cmp = {node_pow.input[0], node_reciprocal.output[0]}
         if mul_i != cmp:
             # We check the multiplication node takes the output of the div node
             # and the input of the pow node.
@@ -91,17 +91,14 @@ class SimplifiedLayerNormalizationPattern(PatternOptimization):
         node_reciprocal: NodeProto,
         node_mul: NodeProto,
     ) -> List[NodeProto]:
-
         nname = node_reduce.name
         nodes = []
         epsilon = g.get_computed_constant(node_add.input[1])
         shape = (
-            g.get_shape(node_reduce.input[0])
-            if g.has_shape(node_reduce.input[0])
-            else None
+            g.get_shape(node_reduce.input[0]) if g.has_shape(node_reduce.input[0]) else None
         )
         axis = g.get_constant_or_attribute(node_reduce, "axes", input_index=1)[0]
-        assert axis < len(
+        assert shape is None or axis < len(
             shape
         ), f"axis={axis} and shape={shape} don't match for {node_reduce.input[0]!r}"
         stash_type = g.get_type(node_reduce.input[0])
@@ -120,7 +117,8 @@ class SimplifiedLayerNormalizationPattern(PatternOptimization):
                 name=f"{self.__class__.__name__}--{nname}",
             )
             # sc = g.make_node_check_opset(
-            #    "Unsqueeze", [ga.output[0]], axes=[0], name=f"{self.__class__.__name__}--{nname}"
+            #    "Unsqueeze", [ga.output[0]], axes=[0],
+            #       name=f"{self.__class__.__name__}--{nname}"
             # )
             cc = g.make_node(
                 "ConstantOfShape",

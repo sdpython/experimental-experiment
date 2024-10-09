@@ -4,12 +4,14 @@ import time
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 import numpy as np
 from onnx import ModelProto, TensorProto, load
+from onnx.helper import tensor_dtype_to_np_dtype
 from onnx.numpy_helper import from_array, to_array
 import torch
 from torch._C import _from_dlpack
 from onnxruntime.capi import _pybind_state as ORTC
 from ..convert.ort_helper import append_custom_libraries
 from ..xbuilder import OptimizationOptions
+from ..xbuilder._dtype_helper import onnx_dtype_to_torch_dtype
 from ..torch_interpreter import to_onnx
 from ..torch_interpreter._torch_helper import create_input_names
 from ..xoptim import get_pattern_list
@@ -49,9 +51,7 @@ def _get_session(
     append_custom_libraries(onx, opts)
 
     return (
-        onnxruntime.InferenceSession(
-            onx.SerializeToString(), opts, providers=providers
-        ),
+        onnxruntime.InferenceSession(onx.SerializeToString(), opts, providers=providers),
         run_options,
     )
 
@@ -76,8 +76,8 @@ def _serialize(args: Any) -> Any:
     if isinstance(args, tuple):
         return tuple(_serialize(a) for a in args)
     if isinstance(args, list):
-        return list(_serialize(a) for a in args)
-    if isinstance(args, (int, torch.SymInt)):
+        return [_serialize(a) for a in args]
+    if isinstance(args, (int, torch.SymInt, float, torch.SymFloat)):
         return args
     raise RuntimeError(f"Unable to serialize type {type(args)}.")
 
@@ -87,6 +87,19 @@ class OrtBackend:
     Wraps method ``run_with_ortvaluevector`` from ``InferenceSession``
     to implement a backend for ``torch.dynamo``.
     """
+
+    ORT_STR_TYPE_TO_TENSOR_TYPE = {
+        "tensor(int64)": TensorProto.INT64,
+        "tensor(int32)": TensorProto.INT32,
+        "tensor(int16)": TensorProto.INT16,
+        "tensor(uint64)": TensorProto.UINT64,
+        "tensor(uint32)": TensorProto.UINT32,
+        "tensor(uint16)": TensorProto.UINT16,
+        "tensor(float)": TensorProto.FLOAT,
+        "tensor(float16)": TensorProto.FLOAT16,
+        "tensor(double)": TensorProto.DOUBLE,
+        "tensor(bool)": TensorProto.BOOL,
+    }
 
     TORCH_DTYPE_TO_NUMPY_DTYPE = {
         torch.float16: np.float16,
@@ -118,8 +131,8 @@ class OrtBackend:
         devices: Optional[Dict[int, Any]] = None,
         input_names: Optional[List[str]] = None,
         output_names: Optional[List[str]] = None,
-        is_dimension_in: Optional[List[Tuple[bool, int, str]]] = None,
-        is_dimension_out: Optional[List[Tuple[bool, int, Optional[str]]]] = None,
+        is_dimension_in: Optional[List[Tuple[bool, int, str, int]]] = None,
+        is_dimension_out: Optional[List[Tuple[bool, int, Optional[str], int]]] = None,
         dump_first_inputs: Optional[str] = None,
         stor: Optional[Dict[str, Any]] = None,
         onnx_model: Optional[ModelProto] = None,
@@ -139,9 +152,7 @@ class OrtBackend:
 
         if self.devices is None:
             DEVICES = {
-                -1: ORTC.OrtDevice(
-                    ORTC.OrtDevice.cpu(), ORTC.OrtDevice.default_memory(), 0
-                )
+                -1: ORTC.OrtDevice(ORTC.OrtDevice.cpu(), ORTC.OrtDevice.default_memory(), 0)
             }
 
             if torch.cuda.is_available():
@@ -167,14 +178,16 @@ class OrtBackend:
             for o in sess.get_inputs():
                 b = "_dim_" in o.name
                 rk = len(o.shape)
-                self.is_dimension_in.append((b, rk, o.name))
+                dt = self.ORT_STR_TYPE_TO_TENSOR_TYPE[o.type]
+                self.is_dimension_in.append((b, rk, o.name, dt))
         if self.is_dimension_out is None:
             self.is_dimension_out = []
             for o in sess.get_outputs():
                 b = "_dim_" in o.name
                 rk = len(o.shape)
+                dt = self.ORT_STR_TYPE_TO_TENSOR_TYPE[o.type]
                 self.is_dimension_out.append(
-                    (b, rk, None if "_NONE_" in o.name else o.name)
+                    (b, rk, None if "_NONE_" in o.name else o.name, dt)
                 )
 
     def __call__(self, *inputs):
@@ -182,19 +195,16 @@ class OrtBackend:
             name = self.dump_first_inputs
             self.dump_first_inputs = None
             with open(name + ".pkl", "wb") as f:
-                pickle.dump(
-                    [self.input_names, _serialize(inputs), self.output_names], f
-                )
+                pickle.dump([self.input_names, _serialize(inputs), self.output_names], f)
 
         res, dimensions = self._run_onnx_session_with_ortvaluevector(inputs)
         for x, name in zip(res, self.output_names):
-            if isinstance(x, (torch.SymInt, int)):
+            if isinstance(x, (torch.SymInt, int, float, torch.SymFloat)):
                 if x == 0:
                     self.dump_for_debug("debug_data", *inputs)
-                assert x != 0, (
-                    f"Dimension is null for name={name!r}, "
-                    f"input dimensions={dimensions}"
-                )
+                assert (
+                    x != 0
+                ), f"Dimension is null for name={name!r}, input dimensions={dimensions}"
 
         if self.stor:
             self.stor["inputs"].append(inputs)
@@ -202,7 +212,8 @@ class OrtBackend:
         return res
 
     def _get_ortvalues_from_torch_tensors(
-        self, tensors: Tuple["torch.Tensor", ...]  # noqa: F821
+        self,
+        tensors: Tuple["torch.Tensor", ...],  # noqa: F821
     ) -> Tuple[Tuple["torch.Tensor", ...], Tuple["OrtDevice", ...], Any]:  # noqa: F821
         ortvalues = self.OrtValueVector()
         ortvalues.reserve(len(tensors))
@@ -216,20 +227,34 @@ class OrtBackend:
         assert isinstance(max_device, int), f"unexpected type for device={max_device!r}"
         assert tensors is not None, "tensors cannot be None"
         new_tensors = []
-        for tensor, (dim, rk, name) in zip(tensors, self.is_dimension_in):
+        for tensor, (dim, rk, name, dt) in zip(tensors, self.is_dimension_in):
             if dim:
+                dim_types = (int, torch.SymInt, float, torch.SymFloat)
                 assert isinstance(
-                    tensor, (int, torch.SymInt)
+                    tensor, dim_types
                 ), f"Unexpected type {type(tensor)} for name={name!r}."
-                dtypes.append(np.int64)
-                ti = int(tensor)
+                np_dtype = tensor_dtype_to_np_dtype(dt)
+                dtypes.append(np_dtype)
+                ti = (
+                    int(tensor)
+                    if dt
+                    in {
+                        TensorProto.INT64,
+                        TensorProto.INT32,
+                        TensorProto.UINT64,
+                        TensorProto.UINT32,
+                    }
+                    else float(tensor)
+                )
                 assert ti != 0, (
                     f"Null value for a dimension ti={ti}, "
                     f"tensor={tensor}, rk={rk}, name={name!r}, "
                     f"type(tensor)={type(tensor)}, "
-                    f"dimension={[t for t in tensors if isinstance(t, (int,torch.SymInt))]}"
+                    f"dimension={[t for t in tensors if isinstance(t, dim_types)]}"
                 )
-                t = torch.tensor([ti] if rk == 1 else ti, dtype=torch.int64)
+                t = torch.tensor(
+                    [ti] if rk == 1 else ti, dtype=onnx_dtype_to_torch_dtype(dt)
+                )
                 devices.append(self.devices[-1])
                 new_tensors.append(t)
                 dimensions.append(t)
@@ -237,8 +262,10 @@ class OrtBackend:
                 data_ptrs.append(t.data_ptr())
             else:
                 assert isinstance(tensor, torch.Tensor), (
-                    f"Unexpected type {type(tensor)}, dim={dim}, rk={rk}, name={name!r}, "
-                    f"len(tensors)={len(tensors)}, len(is_dimension_in)={len(self.is_dimension_in)}"
+                    f"Unexpected type {type(tensor)}, "
+                    f"dim={dim}, rk={rk}, name={name!r}, dt={dt}, "
+                    f"len(tensors)={len(tensors)}, "
+                    f"len(is_dimension_in)={len(self.is_dimension_in)}"
                 )
                 dtypes.append(self.TORCH_DTYPE_TO_NUMPY_DTYPE[tensor.dtype])
                 shapes.append(tensor.size())
@@ -250,17 +277,15 @@ class OrtBackend:
 
         ortvalues.push_back_batch(new_tensors, data_ptrs, dtypes, shapes, devices)
         output_devices = []
-        for dim, rk, name in self.is_dimension_out:
-            if dim:
-                dev = self.devices[-1]
-            else:
-                dev = self.devices[max_device]
+        for dim, _rk, _name, _dt in self.is_dimension_out:
+            dev = self.devices[-1] if dim else self.devices[max_device]
             output_devices.append(dev)
 
         return (ortvalues, output_devices, dimensions)
 
     def _ortvalues_to_torch_tensor(
-        self, ortvalues: "onnxruntime.OrtValueVector"  # noqa: F821
+        self,
+        ortvalues: "onnxruntime.OrtValueVector",  # noqa: F821
     ) -> Tuple["torch.Tensor", ...]:  # noqa: F821
         if len(ortvalues) == 0:
             return tuple()
@@ -271,7 +296,8 @@ class OrtBackend:
         )
 
     def _run_onnx_session_with_ortvaluevector(
-        self, inputs: Tuple["torch.Tensor", ...]  # noqa: F821
+        self,
+        inputs: Tuple["torch.Tensor", ...],  # noqa: F821
     ) -> Tuple["torch.Tensor"]:  # noqa: F821
         # _nvtx_range_push("contiguous")
         contiguous_inputs = tuple(
@@ -328,11 +354,9 @@ class OrtBackend:
         with open(os.path.join(folder, "model.onnx"), "wb") as f:
             f.write(self.onnx_model.SerializeToString())
         case = os.path.join(folder, f"test_case_{test_case}")
-        if not os.path.exists(case):
-            os.mkdir(case)
-        assert (
-            len(inputs) > 0
-        ), f"Empty sequence of inputs, cannot save into {folder!r}."
+        if case and not os.path.exists(case):
+            os.makedirs(case)
+        assert len(inputs) > 0, f"Empty sequence of inputs, cannot save into {folder!r}."
         for i, inp in enumerate(inputs):
             name = os.path.join(case, f"input_{i}.pb")
             pb = self.to_tensor_proto(inp)
@@ -412,6 +436,8 @@ def _default_export(
     processor,
     order_algorithm=None,
     dump_patterns=None,
+    options=None,
+    onnx_custom_backend=None,
 ):
     input_names = input_names = (
         create_input_names(graph_module, args) if rename_inputs else None
@@ -421,22 +447,23 @@ def _default_export(
         verbose if isinstance(verbose, tuple) else (verbose, verbose)
     )
 
-    patterns = get_pattern_list(enable_pattern, disable_pattern, verbose=verbose_onnx)
+    if options is None:
+        patterns = get_pattern_list(enable_pattern, disable_pattern, verbose=verbose_onnx)
 
-    if order_algorithm is not None:
-        from ..xoptim import OrderAlgorithm
+        if order_algorithm is not None:
+            from ..xoptim import OrderAlgorithm
 
-        order_algorithm = getattr(OrderAlgorithm, order_algorithm.upper())
+            order_algorithm = getattr(OrderAlgorithm, order_algorithm.upper())
 
-    options = OptimizationOptions(
-        remove_unused=True,
-        constant_folding=False,
-        patterns=patterns,
-        verbose=verbose_onnx,
-        processor=processor,
-        order=order_algorithm,
-        dump_applied_patterns=dump_patterns,
-    )
+        options = OptimizationOptions(
+            remove_unused=True,
+            constant_folding=False,
+            patterns=patterns,
+            verbose=verbose_onnx,
+            processor=processor,
+            order=order_algorithm,
+            dump_applied_patterns=dump_patterns,
+        )
 
     onx, builder = to_onnx(
         graph_module,
@@ -448,6 +475,7 @@ def _default_export(
         return_builder=True,
         dispatcher=dispatcher,
         optimize=optimize,
+        decomposition_table=onnx_custom_backend,
     )
 
     return onx, builder
@@ -486,6 +514,8 @@ def onnx_custom_backend(
     exporter: Optional[str] = None,
     processor: str = "CPU",
     order_algorithm: Optional[str] = None,
+    options: Optional[OptimizationOptions] = None,
+    decomposition_table: Optional[str] = None,
 ) -> Callable:
     """
     Custom backend to export torch models into onnx
@@ -517,6 +547,9 @@ def onnx_custom_backend(
         or this list of processors (comma separated value)
     :param order_algorithm: algorithm optimizing the order the onnx node,
         none by default
+    :param options: to define custom Optimization options, in that case,
+        any other optimization parameter is ignored
+    :param decomposition_table: decomposition table to apply
     :return: Callable
 
     See :ref:`l-plot-onnxrt-diff` or :ref:`l-plot-custom-backend` for examples.
@@ -566,12 +599,13 @@ def onnx_custom_backend(
     assert dump_patterns is None or isinstance(
         dump_patterns, str
     ), f"Unexpected type {type(dump_patterns)} for dump_patterns."
+    assert storage is None or isinstance(
+        storage, dict
+    ), f"Unexpected type {type(storage)} for storage"
 
     # determines the devices
 
-    DEVICES = {
-        -1: ORTC.OrtDevice(ORTC.OrtDevice.cpu(), ORTC.OrtDevice.default_memory(), 0)
-    }
+    DEVICES = {-1: ORTC.OrtDevice(ORTC.OrtDevice.cpu(), ORTC.OrtDevice.default_memory(), 0)}
 
     providers = ["CPUExecutionProvider"]
     if torch.cuda.is_available():
@@ -606,6 +640,8 @@ def onnx_custom_backend(
             processor,
             order_algorithm=order_algorithm,
             dump_patterns=dump_patterns,
+            options=options,
+            onnx_custom_backend=onnx_custom_backend,
         )
     elif exporter == "dynamo":
         from ._dynamo_exporter import _dynamo_export
@@ -637,7 +673,6 @@ def onnx_custom_backend(
     # Applies other transformation.
 
     if pre_ort_model_transforms is not None:
-
         if not isinstance(pre_ort_model_transforms, list):
             pre_ort_model_transforms = [pre_ort_model_transforms]
         for tr in pre_ort_model_transforms:

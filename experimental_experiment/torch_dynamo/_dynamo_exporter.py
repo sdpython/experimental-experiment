@@ -33,12 +33,16 @@ def _dynamo_export(
     disable_pattern,
     rename_inputs,
     device,
-    **kwargs
+    **kwargs,
 ):
     import torch
     from torch.onnx._internal.fx import fx_onnx_interpreter, onnxfunction_dispatcher
     from torch.onnx._internal.fx import diagnostics
-    from torch.onnx._internal.exporter import OnnxRegistry
+
+    try:
+        from torch.onnx._internal._exporter_legacy import OnnxRegistry
+    except ImportError:
+        from torch.onnx._internal.exporter import OnnxRegistry
     from torch.onnx._internal.diagnostics import infra
 
     context = diagnostics.DiagnosticContext(

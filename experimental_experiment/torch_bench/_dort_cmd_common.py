@@ -123,9 +123,7 @@ def get_fused_aten_ops_dispatcher():
         t_scale = g.make_initializer("", np.array(scale or 1.0, dtype=np.float32))
         t_dropout_p = g.make_initializer("", np.array(dropout_p, dtype=np.float32))
         t_is_causal = g.make_initializer("", np.array(is_causal, dtype=np.bool_))
-        t_grad_input_mask = g.make_initializer(
-            "", np.array(grad_input_mask, dtype=np.int64)
-        )
+        t_grad_input_mask = g.make_initializer("", np.array(grad_input_mask, dtype=np.int64))
         # onnxruntime fails with type inference failed
         # Let's add some Cast even if not needed.
         dt = g.get_type(grad)
@@ -158,8 +156,8 @@ def get_fused_aten_ops_dispatcher():
 
     dispatcher = Dispatcher(
         {
-            "_scaled_dot_product_efficient_attention_default": onnx_scaled_dot_product_efficient_attention,
-            "_scaled_dot_product_efficient_attention_backward_default": onnx_scaled_dot_product_attention_backward,
+            "_scaled_dot_product_efficient_attention_default": onnx_scaled_dot_product_efficient_attention,  # noqa: E501
+            "_scaled_dot_product_efficient_attention_backward_default": onnx_scaled_dot_product_attention_backward,  # noqa: E501
         }
     )
     return dispatcher
@@ -172,7 +170,7 @@ def create_compiled_model(
     use_dynamic: bool = False,
     verbose: int = 0,
     enable_pattern: Union[str, List[str]] = "default",
-    disable_pattern: Union[str, List[str]] = None,
+    disable_pattern: Optional[Union[str, List[str]]] = None,
     return_storage: bool = False,
     rename_inputs: bool = True,
     dump_prefix: Optional[str] = None,
@@ -221,12 +219,19 @@ def create_compiled_model(
     assert dump_patterns is None or isinstance(
         dump_patterns, str
     ), f"Unexpected type {type(dump_patterns)} for dump_patterns."
-    assert isinstance(ort_optimize, bool), (
-        f"Unexpected type={type(ort_optimize)} " f"for ort_optimize={ort_optimize}"
-    )
+    assert isinstance(
+        ort_optimize, bool
+    ), f"Unexpected type={type(ort_optimize)} for ort_optimize={ort_optimize}"
     ort_optimization_level = "ORT_ENABLE_ALL" if ort_optimize else "ORT_DISABLE_ALL"
 
-    if use_fused_aten_ops and backend in {"ort", "custom", "backort", "plug", "ort+"}:
+    if use_fused_aten_ops and backend in {
+        "ort",
+        "custom",
+        "custom-fallback",
+        "backort",
+        "plug",
+        "ort+",
+    }:
         from onnxruntime.training.ortmodule.torch_cpp_extensions import aten_op_executor
         from onnxruntime.capi import _pybind_state as _C
 
@@ -317,9 +322,7 @@ def create_compiled_model(
                         print("[create_compiled_model] run torch.export.export")
                     exp_program = torch.export.export(self.model, args)
                     if self.verbose:
-                        print(
-                            "[create_compiled_model] run torch_tensorrt.dynamo.compile"
-                        )
+                        print("[create_compiled_model] run torch_tensorrt.dynamo.compile")
                     self.trt = torch_tensorrt.dynamo.compile(exp_program, args)
                     if self.verbose:
                         print("[create_compiled_model] done")
@@ -356,9 +359,7 @@ def create_compiled_model(
             ),
             decompositions=get_decomposition_table(),
         )
-        cc = torch.compile(
-            model, backend=aot_compiler, fullgraph=True, dynamic=use_dynamic
-        )
+        cc = torch.compile(model, backend=aot_compiler, fullgraph=True, dynamic=use_dynamic)
         if return_storage:
             return cc, storage
         return cc
@@ -387,9 +388,7 @@ def create_compiled_model(
             ),
             decompositions=get_decomposition_table_dynamo(),
         )
-        cc = torch.compile(
-            model, backend=aot_compiler, fullgraph=True, dynamic=use_dynamic
-        )
+        cc = torch.compile(model, backend=aot_compiler, fullgraph=True, dynamic=use_dynamic)
         if return_storage:
             return cc, storage
         return cc
@@ -418,9 +417,7 @@ def create_compiled_model(
             ),
             decompositions=get_decomposition_table(),
         )
-        cc = torch.compile(
-            model, backend=aot_compiler, fullgraph=True, dynamic=use_dynamic
-        )
+        cc = torch.compile(model, backend=aot_compiler, fullgraph=True, dynamic=use_dynamic)
         if return_storage:
             return cc, storage
         return cc
@@ -432,9 +429,7 @@ def create_compiled_model(
             ),
             decompositions=get_decomposition_table(),
         )
-        cc = torch.compile(
-            model, backend=aot_compiler, fullgraph=True, dynamic=use_dynamic
-        )
+        cc = torch.compile(model, backend=aot_compiler, fullgraph=True, dynamic=use_dynamic)
         if return_storage:
             return cc, None
         return cc
@@ -537,7 +532,7 @@ def export_args(name: str, description: str, new_args: Optional[List[str]] = Non
         large_model=("0", "saves weights in a separate file"),
         output_data=(
             "output_data_multi.csv",
-            "when running multiple configuration, " "save the results in that file",
+            "when running multiple configuration, save the results in that file",
         ),
         expose="exporter,device,num_hidden_layers,ort,"
         "mixed,config,target_opset,dynamic,verbose,dump_patterns,"
@@ -613,18 +608,13 @@ def create_model(
 
         res = create_model(model, config_dict, dtype=None)
         torch_dtype = getattr(torch, dtype)
-        return tuple(
+        return (
+            res[0].to(torch_dtype),
             [
-                res[0].to(torch_dtype),
-                [
-                    tuple(
-                        (i.to(torch_dtype) if i.dtype == torch.float32 else i)
-                        for i in obs
-                    )
-                    for obs in res[1]
-                ],
-                *res[2:],
-            ]
+                tuple((i.to(torch_dtype) if i.dtype == torch.float32 else i) for i in obs)
+                for obs in res[1]
+            ],
+            *res[2:],
         )
 
     if model == "llama":

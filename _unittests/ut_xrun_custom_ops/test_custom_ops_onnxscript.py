@@ -45,7 +45,8 @@ class TestCustomOpsOnnxScript(ExtTestCase):
                             fname = att.s
                     if fname == b"_scaled_dot_product_efficient_attention_backward":
                         print(
-                            "[modify_onnx] ATen, delete last output for _scaled_dot_product_efficient_attention_backward"
+                            "[modify_onnx] ATen, delete last output for "
+                            "_scaled_dot_product_efficient_attention_backward"
                         )
                         outputs = list(node.output)
                         del node.output[:]
@@ -184,7 +185,8 @@ class TestCustomOpsOnnxScript(ExtTestCase):
                     if verbose:
                         print(f"[make_aot_ort] register {names[-1]!r}")
 
-            # from onnxruntime.training.ortmodule.torch_cpp_extensions.cuda import load_aten_op_executor_cpp_extension
+            # from onnxruntime.training.ortmodule.torch_cpp_extensions.cuda
+            # import load_aten_op_executor_cpp_extension
             from onnxruntime.training.ortmodule.torch_cpp_extensions import (
                 aten_op_executor,
             )
@@ -208,7 +210,6 @@ class TestCustomOpsOnnxScript(ExtTestCase):
                 )
 
             if rewrite:
-
                 from onnxscript.optimizer import optimize
                 from onnxscript.rewriter import rewrite
                 from onnx.inliner import inline_local_functions
@@ -291,9 +292,7 @@ class TestCustomOpsOnnxScript(ExtTestCase):
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             optimized_mod = torch.compile(model, backend=local_aot_ort, fullgraph=True)
-            with dump_onnx(
-                "dort-llama-sdpa-ort", folder="dump_sdpa_oxs_llama", clean=True
-            ):
+            with dump_onnx("dort-llama-sdpa-ort", folder="dump_sdpa_oxs_llama", clean=True):
                 output = optimized_mod(input_ids)  # , input_mask)
                 output[0].sum().backward()
 

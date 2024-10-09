@@ -1,5 +1,5 @@
 import unittest
-from typing import List
+from typing import List, Optional
 import numpy as np
 from onnx.reference.op_run import OpRun
 from experimental_experiment.ext_test_case import (
@@ -129,9 +129,9 @@ if has_cuda():
         philox_seed,
         philox_offset,
         dropout_p: float = 0.0,
-        grad_input_mask: List[bool] = None,
+        grad_input_mask: Optional[List[bool]] = None,
         is_causal: bool = False,
-        scale: float = None,
+        scale: Optional[float] = None,
     ):
         import torch
 
@@ -147,7 +147,6 @@ if has_cuda():
             ]
 
         else:
-
             cudat = [
                 grad.to("cuda"),
                 query.to("cuda"),
@@ -160,14 +159,12 @@ if has_cuda():
                 philox_offset,
             ]
 
-            res = (
-                torch.ops.aten._scaled_dot_product_efficient_attention_backward.default(
-                    *cudat,
-                    dropout_p,
-                    [bool(r) for r in grad_input_mask],
-                    is_causal,
-                    scale=scale,
-                )
+            res = torch.ops.aten._scaled_dot_product_efficient_attention_backward.default(
+                *cudat,
+                dropout_p,
+                [bool(r) for r in grad_input_mask],
+                is_causal,
+                scale=scale,
             )
 
             cpu_res = []
@@ -194,9 +191,9 @@ if has_cuda():
             philox_seed,
             philox_offset,
             dropout_p: float = 0.0,
-            grad_input_mask: List[bool] = None,
+            grad_input_mask: Optional[List[bool]] = None,
             is_causal: bool = False,
-            scale: float = None,
+            scale: Optional[float] = None,
         ):
             import torch
 
@@ -226,13 +223,11 @@ if has_cuda():
             if isinstance(res, torch.Tensor):
                 return (res.numpy(),)
             return tuple(
-                (np.array([0], dtype=np.float32) if r is None else r.numpy())
-                for r in res
+                (np.array([0], dtype=np.float32) if r is None else r.numpy()) for r in res
             )
 
 
 class TestFallbackForce(ExtTestCase):
-
     @skipif_ci_windows("dynamo not supported on Windows")
     def test_fallback_force(self):
         import torch
@@ -287,7 +282,7 @@ class TestFallbackForce(ExtTestCase):
                 input_names=["input0"],
                 dispatcher=ForceDispatcher(
                     {
-                        "_scaled_dot_product_flash_attention_for_cpu_default": _f_scaled_dot_product_flash_attention_for_cpu_default
+                        "_scaled_dot_product_flash_attention_for_cpu_default": _f_scaled_dot_product_flash_attention_for_cpu_default  # noqa: E501
                     }
                 ),
             )
@@ -296,9 +291,7 @@ class TestFallbackForce(ExtTestCase):
             raise unittest.SkipTest("sdpa does not work")
         self.assertEqual(len(dot), 1)
         dot = dot[0]
-        self.assertEqual(
-            dot.op_type, "_scaled_dot_product_flash_attention_for_cpu_default"
-        )
+        self.assertEqual(dot.op_type, "_scaled_dot_product_flash_attention_for_cpu_default")
         self.assertEqual(len(dot.attribute), 2)
         att = dot.attribute[0]
         self.assertEqual(att.name, "dropout_p")
@@ -352,7 +345,7 @@ class TestFallbackForce(ExtTestCase):
 
         dispatcher = ForceDispatcher(
             {
-                "_scaled_dot_product_efficient_attention_default": _f_scaled_dot_product_efficient_attention_cuda
+                "_scaled_dot_product_efficient_attention_default": _f_scaled_dot_product_efficient_attention_cuda  # noqa: E501
             }
         )
 
@@ -429,8 +422,8 @@ class TestFallbackForce(ExtTestCase):
 
         dispatcher = ForceDispatcher(
             {
-                "_scaled_dot_product_efficient_attention_default": _f_scaled_dot_product_efficient_attention_cuda,
-                "_scaled_dot_product_efficient_attention_backward_default": _f_scaled_dot_product_efficient_attention_backward_cuda,
+                "_scaled_dot_product_efficient_attention_default": _f_scaled_dot_product_efficient_attention_cuda,  # noqa: E501
+                "_scaled_dot_product_efficient_attention_backward_default": _f_scaled_dot_product_efficient_attention_backward_cuda,  # noqa: E501
             },
             only_registered=True,
         )

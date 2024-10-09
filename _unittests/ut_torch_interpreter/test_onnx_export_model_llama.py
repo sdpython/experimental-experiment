@@ -49,7 +49,7 @@ def export_utils(
     verbose=0,
     return_builder=False,
     dynamo=True,
-    use_dynamo=True,
+    strategy="dynamo",
 ):
     export_script(f"{prefix}.onnx", model, *args)
     if dynamo:
@@ -66,7 +66,7 @@ def export_utils(
         ),
         verbose=verbose,
         return_builder=return_builder,
-        api_two=use_dynamo,
+        strategy=strategy,
     )
     with open(f"{prefix}.custom.onnx", "wb") as f:
         f.write((onx[0] if return_builder else onx).SerializeToString())
@@ -89,26 +89,24 @@ class TestOnnxExportLlama(ExtTestCase):
                 import onnx
                 from onnx_array_api.plotting.text_plot import onnx_simple_text_plot
 
-                raise AssertionError(
+                raise AssertionError(  # noqa: B904
                     f"onnxruntime cannot load the model "
                     f"due to {e}\n{onnx_simple_text_plot(onnx.load(onx))}"
                 )
             return
         try:
-            InferenceSession(
-                onx.SerializeToString(), providers=["CPUExecutionProvider"]
-            )
+            InferenceSession(onx.SerializeToString(), providers=["CPUExecutionProvider"])
         except Exception as e:
             from onnx_array_api.plotting.text_plot import onnx_simple_text_plot
 
-            raise AssertionError(
+            raise AssertionError(  # noqa: B904
                 f"onnxruntime cannot load the model"
                 f"due to {e}\n{onnx_simple_text_plot(onx)}"
             )
 
     @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
     @ignore_warnings(DeprecationWarning)
-    @requires_torch("2.6", "dynamic_shapes are not well carries")
+    @requires_torch("2.7", "dynamic_shapes are not well carries")
     def test_llama_attention(self):
         model, input_tensors = get_llama_attention(input_dims=[(2, 1024)])
         input_tensors = input_tensors[0]
@@ -145,7 +143,7 @@ class TestOnnxExportLlama(ExtTestCase):
 
     @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
     @ignore_warnings(DeprecationWarning)
-    @requires_torch("2.6", "dynamic_shapes are not well carries")
+    @requires_torch("2.7", "dynamic_shapes are not well carries")
     def test_llama_decoder(self):
         import torch
 
@@ -177,7 +175,7 @@ class TestOnnxExportLlama(ExtTestCase):
                 model,
                 *input_tensors,
                 dynamo=False,
-                use_dynamo=True,
+                strategy="dynamo",
                 remove_unused=True,
                 verbose=0,
             )
@@ -205,7 +203,7 @@ class TestOnnxExportLlama(ExtTestCase):
                 model,
                 *input_tensors,
                 dynamo=False,
-                use_dynamo=False,
+                strategy=None,
                 remove_unused=True,
                 verbose=0,
             )
@@ -241,7 +239,7 @@ class TestOnnxExportLlama(ExtTestCase):
                 model,
                 *input_tensors,
                 dynamo=False,
-                use_dynamo=True,
+                strategy="dynamo",
                 remove_unused=True,
                 verbose=0,
             )
@@ -277,7 +275,7 @@ class TestOnnxExportLlama(ExtTestCase):
                 model,
                 *input_tensors,
                 dynamo=False,
-                use_dynamo=False,
+                strategy=None,
                 remove_unused=True,
                 verbose=0,
             )

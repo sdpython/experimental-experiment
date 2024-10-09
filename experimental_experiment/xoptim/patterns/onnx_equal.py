@@ -46,7 +46,6 @@ class UnsqueezeEqualPattern(PatternOptimization):
         node_equal: NodeProto,
         node_equal_unsqueeze: NodeProto,
     ) -> List[NodeProto]:
-
         return [
             node_unsqueeze,
             g.make_node(

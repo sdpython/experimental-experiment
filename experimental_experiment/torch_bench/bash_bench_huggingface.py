@@ -9,30 +9,32 @@ Available exporters:
 * export: :func:`torch.export.export`
 * compile: :func:`torch.compile`
 * custom: :func:`experimental_experiment.torch_interpreter.to_onnx`
-* script: :func:`torch.onnx.export`
-* dynamo: :func:`torch.onnx.export` with ``dynamo=True``
-* dynamo: :func:`torch.onnx.dynamo_export`
+* torch_script: :func:`torch.onnx.export`
+* onnx_dynamo: :func:`torch.onnx.export` with ``dynamo=True``
+* dynamo_export: :func:`torch.onnx.dynamo_export`
 
 ::
 
     python -m experimental_experiment.torch_bench.bash_bench_huggingface --help
-    
-    
+
+
 ::
 
     python -m experimental_experiment.torch_bench.bash_bench_huggingface --model ""
-    
+
 ::
 
-    python -m experimental_experiment.torch_bench.bash_bench_huggingface --model 101Dummy --exporter eager
-    
+    python -m experimental_experiment.torch_bench.bash_bench_huggingface \\
+           --model 101Dummy --exporter eager
+
 ::
 
-    python -m experimental_experiment.torch_bench.bash_bench_huggingface --model 101Dummy,101Dummy16 --verbose=1
-    
+    python -m experimental_experiment.torch_bench.bash_bench_huggingface \\
+           --model 101Dummy,101Dummy16 --verbose=1
+
 """
 
-from experimental_experiment.torch_bench._bash_bench_common_cmd import bash_bench_main
+from experimental_experiment.torch_bench._bash_bench_cmd import bash_bench_main
 
 
 def main(args=None):

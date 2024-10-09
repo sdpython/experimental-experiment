@@ -1,20 +1,17 @@
 import unittest
+from experimental_experiment.torch_bench._bash_bench_model_runner import ModelRunner
+from experimental_experiment.torch_bench._bash_bench_set_huggingface import (
+    HuggingfaceRunner,
+)
 from experimental_experiment.ext_test_case import (
     ExtTestCase,
-    skipif_ci_windows,
-    # ignore_warnings,
-    requires_torch,
-    requires_onnxruntime_training,
     hide_stdout,
-)
-from experimental_experiment.torch_bench._bash_bench_huggingface import (
-    HuggingfaceRunner,
-    ModelRunner,
+    requires_torch,
+    skipif_ci_windows,
 )
 
 
-class TestHuggingFaceRunner(ExtTestCase):
-
+class TestBashBenchRunner(ExtTestCase):
     @requires_torch("2.3")
     def test_create_runner_cpu(self):
         runner = HuggingfaceRunner(device="cpu")
@@ -43,20 +40,15 @@ class TestHuggingFaceRunner(ExtTestCase):
     @requires_torch("2.3")
     @hide_stdout()
     def test_run_model(self):
-        runner = HuggingfaceRunner(
-            device="cpu", include_model_names={"101Dummy"}, verbose=2
-        )
+        runner = HuggingfaceRunner(device="cpu", include_model_names={"101Dummy"}, verbose=2)
         data = list(runner.enumerate_run_models())
         self.assertEqual(len(data), 1)
 
     @skipif_ci_windows("not useful")
     @requires_torch("2.5")
     @hide_stdout()
-    @requires_onnxruntime_training()
     def test_test_model_32(self):
-        runner = HuggingfaceRunner(
-            device="cpu", include_model_names={"101Dummy"}, verbose=2
-        )
+        runner = HuggingfaceRunner(device="cpu", include_model_names={"101Dummy"}, verbose=2)
         data = list(runner.enumerate_test_models(process=False, exporter="custom"))
         # print(data)
         self.assertEqual(1, len(data))
@@ -64,7 +56,6 @@ class TestHuggingFaceRunner(ExtTestCase):
     @skipif_ci_windows("not useful")
     @requires_torch("2.5")
     @hide_stdout()
-    @requires_onnxruntime_training()
     def test_test_model_16(self):
         runner = HuggingfaceRunner(
             device="cpu", include_model_names={"101Dummy16"}, verbose=2

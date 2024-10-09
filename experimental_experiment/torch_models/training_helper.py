@@ -79,7 +79,7 @@ def make_aot_ort(
     if (
         enable_pattern
         and "experimental" in enable_pattern
-        or any(map(lambda s: "experimental" in s, enable_pattern))
+        or any("experimental" in s for s in enable_pattern)
     ):
         try:
             from onnx_extended.ortops.optim.cuda import get_ort_ext_libs
@@ -116,9 +116,7 @@ def make_aot_ort(
     else:
         if verbose:
             print(f"[make_aot_ort] enable {onnx_registry!r}")
-        export_options = ExportOptions(
-            dynamic_shapes=dynamic, onnx_registry=onnx_registry
-        )
+        export_options = ExportOptions(dynamic_shapes=dynamic, onnx_registry=onnx_registry)
 
     from torch.onnx._internal import onnxruntime
 
@@ -148,9 +146,7 @@ def make_aot_ort(
             #     *args, verbose=verbose, onnx_shape_inference=False, **kwargs
             # )
 
-            patterns = get_pattern_list(
-                enable_pattern, disable_pattern, verbose=verbose
-            )
+            patterns = get_pattern_list(enable_pattern, disable_pattern, verbose=verbose)
             if order_algorithm is not None:
                 from ..xoptim import OrderAlgorithm
 
@@ -259,7 +255,8 @@ def train_loop_mixed_precision(model, *args, loss_fn=None, optimizer=None):
         optimizer = torch.optim.SGD(model.parameters(), lr=1e-3)
 
     with torch.autocast(device_type="cuda", dtype=torch.float16):
-        # Set the model to training mode - important for batch normalization and dropout layers
+        # Set the model to training mode -
+        # important for batch normalization and dropout layers
         # Unnecessary in this situation but added for best practices
         model.train()
 

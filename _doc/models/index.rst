@@ -11,6 +11,7 @@ This projects was started with LLaMa.
     torchtry
     onnxrt
     example_bug
+    plot_custom_backend_code_llama_102
 
 .. toctree::
     :caption: Models
@@ -20,3 +21,4 @@ This projects was started with LLaMa.
     mistral
     phi
     phi3
+    speech2text

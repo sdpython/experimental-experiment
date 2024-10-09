@@ -29,7 +29,7 @@ class SameChildrenPattern(PatternOptimization):
         return True
 
     def __init__(self, verbose: int = 0, priority: int = 0):
-        super(SameChildrenPattern, self).__init__(verbose, priority)
+        super().__init__(verbose, priority)
 
     def match(
         self,
@@ -58,7 +58,7 @@ class SameChildrenPattern(PatternOptimization):
                 else:
                     cp[n.op_type] = [n]
             nodes = []
-            for k, v in cp.items():
+            for v in cp.values():
                 if len(v) <= 1:
                     continue
                 if len(v) == 2:
@@ -68,7 +68,7 @@ class SameChildrenPattern(PatternOptimization):
                     nodes.extend([n1, n2])
                     continue
                 enough = False
-                for i in range(0, len(v) - 1):
+                for i in range(len(v) - 1):
                     for j in range(i + 1, len(v)):
                         if self._cmp(v[i], v[j]):
                             nodes.extend([v[i], v[j]])
@@ -81,9 +81,7 @@ class SameChildrenPattern(PatternOptimization):
 
         for i in range(0, len(nodes), 2):
             n1, n2 = nodes[i : i + 2]
-            assert (
-                len(n1.output) > 0
-            ), "A node should not have no output in this pattern."
+            assert len(n1.output) > 0, "A node should not have no output in this pattern."
             assert (
                 not g.has_type(n1.output[0])
                 or not g.has_type(n2.output[0])
@@ -101,7 +99,9 @@ class SameChildrenPattern(PatternOptimization):
         return MatchResult(self, nodes, self.apply)
 
     def apply(
-        self, g: "GraphBuilder", *nodes: NodeProto  # noqa: F821
+        self,
+        g: "GraphBuilder",  # noqa: F821
+        *nodes: NodeProto,
     ) -> List[NodeProto]:
         """
         The function receives pairs of nodes. We replace every odd node
@@ -136,7 +136,7 @@ class IdentityPattern(PatternOptimization):
     """
 
     def __init__(self, verbose: int = 0, priority: int = 0):
-        super(IdentityPattern, self).__init__(verbose, priority)
+        super().__init__(verbose, priority)
 
     def match(
         self,
@@ -157,22 +157,46 @@ class IdentityPattern(PatternOptimization):
                 return self.none(node, inspect.currentframe().f_lineno)
             return MatchResult(node, [node], self.apply, insert_at=node)
 
-        if not g.is_constant_scalar(node.input[1]):
+        if not g.is_constant(node.input[1]):
             return self.none(node, inspect.currentframe().f_lineno)
-
-        cst = g.get_computed_constant(node.input[1])
-        if cst.shape not in (tuple(), (1,)):
+        shape = g.get_constant_shape(node.input[1], exc=False)
+        if shape is None:
             return self.none(node, inspect.currentframe().f_lineno)
+        if shape in (tuple(), (1,)):
+            # simple case
+            if not g.is_constant_scalar(node.input[1]):
+                return self.none(node, inspect.currentframe().f_lineno)
+            val = float(g.get_constant_scalar(node.input[1]))
+            if val == 0 and node.op_type in {"Add", "Sub"}:
+                return MatchResult(node, [node], self.apply, insert_at=node)
+            if val == 1 and node.op_type in {"Mul", "Div"}:
+                return MatchResult(node, [node], self.apply, insert_at=node)
+        elif len(shape) == 1 and node.op_type in {"Add", "Mul", "Sub", "Div"}:
+            # less simple case, the tensor is multiplied on its last dimension.
+            cst = g.get_computed_constant(node.input[1])
+            if cst is None:
+                return self.none(node, inspect.currentframe().f_lineno)
+            unique = set(cst)
+            if len(unique) != 1:
+                return self.none(node, inspect.currentframe().f_lineno)
+            unique = list(unique)
+            if not g.has_shape(node.input[0]):
+                return self.none(node, inspect.currentframe().f_lineno)
+            shape = g.get_shape(node.input[0])
+            if shape[-1] != cst.shape[0]:
+                return self.none(node, inspect.currentframe().f_lineno)
+            if node.op_type in {"Add", "Sub"} and unique[0] != 0:
+                return self.none(node, inspect.currentframe().f_lineno)
+            if node.op_type in {"Mul", "Div"} and unique[0] != 1:
+                return self.none(node, inspect.currentframe().f_lineno)
+            return MatchResult(node, [node], self.apply, insert_at=node)
 
-        val = float(cst[0] if len(cst.shape) == 1 else cst)
-        if val == 0 and node.op_type in {"Add", "Sub"}:
-            return MatchResult(node, [node], self.apply, insert_at=node)
-        if val == 1 and node.op_type in {"Mul", "Div"}:
-            return MatchResult(node, [node], self.apply, insert_at=node)
         return self.none(node, inspect.currentframe().f_lineno)
 
     def apply(
-        self, g: "GraphBuilder", node: NodeProto  # noqa: F821
+        self,
+        g: "GraphBuilder",  # noqa: F821
+        node: NodeProto,
     ) -> List[NodeProto]:
         return [
             g.make_node(
