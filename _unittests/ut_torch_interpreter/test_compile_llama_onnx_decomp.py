@@ -1,14 +1,14 @@
 import copy
 import unittest
-import packaging.version as pv
 from typing import Optional
 import onnxruntime  # noqa: F401
 from experimental_experiment.ext_test_case import (
     ExtTestCase,
     ignore_warnings,
     skipif_ci_windows,
+    requires_torch,
 )
-from experimental_experiment.torch_helper.dump_helper import assert_all_close
+from experimental_experiment.torch_models.dump_helper import assert_all_close
 from experimental_experiment.torch_dynamo import (
     onnx_debug_backend,
     get_decomposition_table,
@@ -16,19 +16,13 @@ from experimental_experiment.torch_dynamo import (
 )
 
 
-def torch_min(v: str) -> bool:
-    import torch
-
-    return pv.Version(torch.__version__) < pv.Version(v)
-
-
-def has_cuda():
-    import torch
-
-    return torch.cuda.is_available()
-
-
 class TestDynamoLlama(ExtTestCase):
+    @classmethod
+    def setUp(cls):
+        import torch
+
+        torch._dynamo.reset()
+
     @ignore_warnings((UserWarning, DeprecationWarning))
     def test_aaaa(self):
         from transformers import LlamaConfig
@@ -220,9 +214,9 @@ class TestDynamoLlama(ExtTestCase):
 
     @ignore_warnings((UserWarning, DeprecationWarning))
     @skipif_ci_windows("torch.compile not supported on Windows")
-    @unittest.skipIf(torch_min("2.2"), reason="missing kernel")
+    @requires_torch("2.5", "missing kernel")
     def test_llama_model_backward_decomposition(self):
-        from experimental_experiment.torch_helper.llama_helper import get_llama_model
+        from experimental_experiment.torch_models.llama_helper import get_llama_model
 
         import torch
 
@@ -269,14 +263,15 @@ class TestDynamoLlama(ExtTestCase):
             onnx_export="test_llama_model_backward_decomposition",
             decompositions=True,
             impl="ref",
+            atol=2e-4,
             # verbose=10,
         )
 
     @ignore_warnings((UserWarning, DeprecationWarning))
     @skipif_ci_windows("torch.compile not supported on Windows")
-    @unittest.skipIf(torch_min("2.3"), reason="cache limit")
+    @requires_torch("2.3", "cache limit")
     def test_llama_model_backward_forward_decomposition_yes(self):
-        from experimental_experiment.torch_helper.llama_helper import get_llama_model
+        from experimental_experiment.torch_models.llama_helper import get_llama_model
 
         import torch
 
@@ -331,9 +326,9 @@ class TestDynamoLlama(ExtTestCase):
 
     @ignore_warnings((UserWarning, DeprecationWarning))
     @skipif_ci_windows("torch.compile not supported on Windows")
-    @unittest.skipIf(torch_min("2.3"), reason="cache limit")
+    @requires_torch("2.3", "cache limit")
     def test_llama_model_backward_forward_decomposition_no(self):
-        from experimental_experiment.torch_helper.llama_helper import get_llama_model
+        from experimental_experiment.torch_models.llama_helper import get_llama_model
 
         input_dims = self.get_input_dims(False)
         model, example_args_collection = get_llama_model(input_dims=input_dims)

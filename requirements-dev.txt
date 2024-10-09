@@ -2,7 +2,7 @@ black
 furo
 matplotlib
 onnx-array-api
-git+https://github.com/microsoft/onnx-script.git
+onnxscript>=0.1.0.dev20240518 # git+https://github.com/microsoft/onnxscript.git
 openpyxl
 packaging
 pandas
@@ -11,12 +11,14 @@ psutil
 pytest
 pytest-coverage
 ruff
-scikit-learn
+scikit-learn>=1.4.0
 skl2onnx
 sphinx
 sphinx-gallery
 sphinx-issues
 sphinx-runpython
-transformers!=4.38.0,!=4.38.1,!=4.38.2
+timm
+# torch-ort; sys_platform == 'linux'
+transformers!=4.38.0,!=4.38.1,>=4.37.2
 tqdm
 wheel

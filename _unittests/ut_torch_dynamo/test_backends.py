@@ -1,4 +1,6 @@
+import contextlib
 import copy
+import io
 import os
 import unittest
 import onnx.helper as oh
@@ -8,25 +10,19 @@ from experimental_experiment.ext_test_case import (
     ExtTestCase,
     ignore_warnings,
     skipif_ci_windows,
-    skipif_ci_apple,
+    has_cuda,
+    requires_onnxruntime_training,
 )
 
 
-def has_cuda():
-    import torch
-
-    return torch.cuda.is_available()
-
-
 class TestBackend(ExtTestCase):
-
     @ignore_warnings(DeprecationWarning)
     @skipif_ci_windows("onnxruntime-training not available")
-    @skipif_ci_apple("onnxruntime-training not available")
+    @requires_onnxruntime_training()
     def test_onnx_custom_backend_dump(self):
         import onnxruntime
         from experimental_experiment.torch_dynamo.fast_backend import OrtBackend
-        from experimental_experiment.torch_helper.dump_helper import assert_all_close
+        from experimental_experiment.torch_models.dump_helper import assert_all_close
 
         model = oh.make_model(
             oh.make_graph(
@@ -176,8 +172,8 @@ class TestBackend(ExtTestCase):
         self.assertEqualArray(expected, got, atol=1e-5)
         self.assertNotEmpty(stored)
 
-    @skipif_ci_apple("no onnxruntime-training")
     @skipif_ci_windows("no torch dynamo")
+    @requires_onnxruntime_training()
     def test_transforms_custom(self):
         from experimental_experiment.torch_dynamo import onnx_custom_backend
 
@@ -208,6 +204,167 @@ class TestBackend(ExtTestCase):
             copy.deepcopy(mlp),
             backend=lambda *args, **kwargs: onnx_custom_backend(
                 *args, target_opset=18, pre_ort_model_transforms=store_model, **kwargs
+            ),
+            dynamic=False,
+            fullgraph=True,
+        )
+
+        got = compiled_model(x)
+        self.assertEqualArray(expected, got, atol=1e-5)
+        self.assertNotEmpty(stored)
+
+    @skipif_ci_windows("no torch dynamo")
+    def test_backend_dynger(self):
+        from experimental_experiment.torch_dynamo import dynger_backend
+
+        class MLP(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.layers = torch.nn.Sequential(
+                    torch.nn.Linear(10, 32),
+                    torch.nn.Sigmoid(),
+                    torch.nn.Linear(32, 1),
+                )
+
+            def forward(self, x):
+                return self.layers(x)
+
+        x = torch.randn(3, 10, dtype=torch.float32)
+
+        mlp = MLP()
+        expected = mlp(x)
+
+        compiled_model = torch.compile(
+            copy.deepcopy(mlp),
+            backend=lambda *args, **kwargs: dynger_backend(*args, **kwargs),
+            dynamic=False,
+            fullgraph=True,
+        )
+
+        got = compiled_model(x)
+        self.assertEqualArray(expected, got, atol=1e-5)
+
+    @skipif_ci_windows("no torch dynamo")
+    def test_backend_dynger_verbose(self):
+        from experimental_experiment.torch_dynamo import dynger_backend
+
+        class MLP(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.layers = torch.nn.Sequential(
+                    torch.nn.Linear(10, 32),
+                    torch.nn.Sigmoid(),
+                    torch.nn.Linear(32, 1),
+                )
+
+            def forward(self, x):
+                return self.layers(x)
+
+        x = torch.randn(3, 10, dtype=torch.float32)
+
+        mlp = MLP()
+        expected = mlp(x)
+
+        compiled_model = torch.compile(
+            copy.deepcopy(mlp),
+            backend=lambda *args, **kwargs: dynger_backend(*args, verbose=10, **kwargs),
+            dynamic=False,
+            fullgraph=True,
+        )
+
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            got = compiled_model(x)
+        self.assertEqualArray(expected, got, atol=1e-5)
+        out = buf.getvalue()
+        self.assertIn("[dynger_backend] done", out)
+        self.assertInOr(("Linear((l_x_,))", "built-in function linear"), out)
+
+    @skipif_ci_windows("no torch dynamo")
+    @requires_onnxruntime_training()
+    def test_ort_graph_no_optimization(self):
+        from experimental_experiment.torch_dynamo import onnx_custom_backend
+
+        stored = []
+
+        def store_model(m):
+            stored.append(m)
+            return m
+
+        class MLP(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.layers = torch.nn.Sequential(
+                    torch.nn.Linear(10, 32),
+                    torch.nn.Sigmoid(),
+                    torch.nn.Linear(32, 1),
+                )
+
+            def forward(self, x):
+                return self.layers(x)
+
+        x = torch.randn(3, 10, dtype=torch.float32)
+
+        mlp = MLP()
+        expected = mlp(x)
+
+        compiled_model = torch.compile(
+            copy.deepcopy(mlp),
+            backend=lambda *args, **kwargs: onnx_custom_backend(
+                *args,
+                target_opset=18,
+                pre_ort_model_transforms=store_model,
+                ort_optimization_level="ORT_DISABLE_ALL",
+                **kwargs,
+            ),
+            dynamic=False,
+            fullgraph=True,
+        )
+
+        got = compiled_model(x)
+        self.assertEqualArray(expected, got, atol=1e-5)
+        self.assertNotEmpty(stored)
+
+    @skipif_ci_windows("no torch dynamo")
+    @requires_onnxruntime_training()
+    @unittest.skipIf(
+        True,
+        "TypeError: linear(): argument 'input' (position 1) must be Tensor, not NoneType",
+    )
+    def test_backend_backort(self):
+        from experimental_experiment.torch_dynamo import onnx_custom_backend
+
+        stored = []
+
+        def store_model(m):
+            stored.append(m)
+            return m
+
+        class MLP(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.layers = torch.nn.Sequential(
+                    torch.nn.Linear(10, 32),
+                    torch.nn.Sigmoid(),
+                    torch.nn.Linear(32, 1),
+                )
+
+            def forward(self, x):
+                return self.layers(x)
+
+        x = torch.randn(3, 10, dtype=torch.float32)
+
+        mlp = MLP()
+        expected = mlp(x)
+
+        compiled_model = torch.compile(
+            copy.deepcopy(mlp),
+            backend=lambda *args, **kwargs: onnx_custom_backend(
+                *args,
+                target_opset=18,
+                pre_ort_model_transforms=store_model,
+                exporter="dynamo",
+                **kwargs,
             ),
             dynamic=False,
             fullgraph=True,

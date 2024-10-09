@@ -1,3 +1,5 @@
+.. _l-design:
+
 ======
 Design
 ======
@@ -5,4 +7,6 @@ Design
 .. toctree::
     :maxdepth: 1
     
+    exporter
     optimizer
+    backends

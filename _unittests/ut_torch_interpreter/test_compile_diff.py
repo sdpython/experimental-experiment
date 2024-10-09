@@ -1,25 +1,40 @@
+import contextlib
+import io
 import os
 import unittest
-import packaging.version as pv
 from experimental_experiment.ext_test_case import (
     ExtTestCase,
     skipif_ci_windows,
     ignore_warnings,
+    requires_torch,
 )
 
 
-def torch_version():
-    import torch
-
-    return ".".join(torch.__version__.split(".")[:2])
-
-
 class TestDynamoCompileDiff(ExtTestCase):
+    @classmethod
+    def setUp(cls):
+        import torch
+
+        if hasattr(torch._dynamo.variables.misc, "LoggingLoggerVariable"):
+            cls._old_value = torch._dynamo.variables.misc.LoggingLoggerVariable.call_method
+            torch._dynamo.variables.misc.LoggingLoggerVariable.call_method = (
+                lambda *_, **__: None
+            )
+
+    @classmethod
+    def tearDown(cls):
+        import torch
+
+        if hasattr(torch._dynamo.variables.misc, "LoggingLoggerVariable"):
+            torch._dynamo.variables.misc.LoggingLoggerVariable.call_method = cls._old_value
+
+    def _check_ort(self, name: str):
+        from onnxruntime import InferenceSession
+
+        InferenceSession(name, providers=["CPUExecutionProvider"])
+
     @skipif_ci_windows("dynamo does not work on windows")
-    @unittest.skipIf(
-        pv.Version(torch_version()) < pv.Version("2.2.1"),
-        reason="onnxrt not fully implemented",
-    )
+    @requires_torch("2.4", "onnxrt not fully implemented")
     @ignore_warnings((UserWarning, RuntimeWarning, DeprecationWarning))
     def test_standalone(self):
         import onnxruntime  # noqa: F401
@@ -31,15 +46,15 @@ class TestDynamoCompileDiff(ExtTestCase):
         )
         import torch
         from experimental_experiment.convert.convert_helper import (
-            optimize_model_proto,
+            optimize_model_proto_oxs,
             ort_optimize,
         )
-        from experimental_experiment.torch_helper.llama_helper import (
+        from experimental_experiment.torch_models.llama_helper import (
             get_llama_model,  # noqa: F401
             get_llama_attention,
             get_llama_decoder,  # noqa: F401
         )
-        from experimental_experiment.torch_helper.dump_helper import (
+        from experimental_experiment.torch_models.dump_helper import (
             assert_all_close,
             dump_onnx,
             reorder_functions_in_proto,
@@ -47,7 +62,7 @@ class TestDynamoCompileDiff(ExtTestCase):
             build_matching_inputs,
         )
         from experimental_experiment.torch_dynamo import onnx_debug_backend
-        from experimental_experiment.torch_helper.training_helper import make_aot_ort
+        from experimental_experiment.torch_models.training_helper import make_aot_ort
 
         logging.disable(logging.ERROR)
 
@@ -63,11 +78,12 @@ class TestDynamoCompileDiff(ExtTestCase):
         folder = "temp_dump_models"
         storage = {}
 
-        local_aot_ort, _ = make_aot_ort(dynamic=True, rewrite=True)
-        optimized_mod = torch.compile(model, backend=local_aot_ort, fullgraph=True)
-        with dump_onnx("llama_onnxrt", folder=folder, clean=True):
-            expected_onnxrt = optimized_mod(*inputs[0])
-        assert_all_close(expected, expected_onnxrt)
+        with contextlib.redirect_stdout(io.StringIO()):
+            local_aot_ort, _ = make_aot_ort(dynamic=True)
+            optimized_mod = torch.compile(model, backend=local_aot_ort, fullgraph=True)
+            with dump_onnx("llama_onnxrt", folder=folder, clean=True):
+                expected_onnxrt = optimized_mod(*inputs[0])
+            assert_all_close(expected, expected_onnxrt)
 
         # debugging backend
         onnx_mod = torch.compile(
@@ -92,16 +108,21 @@ class TestDynamoCompileDiff(ExtTestCase):
         onnx_models = list(sorted([m for m in models if m.endswith(".onnx")]))
         assert len(onnx_models) == 2, f"unexpected value {onnx_models}"
         model_onnxrt = os.path.join(folder, onnx_models[1])
+        self._check_ort(model_onnxrt)
         model_debug = os.path.join(folder, onnx_models[0])
+        self._check_ort(model_debug)
         assert inputs_from_onnx_model(model_debug)
 
         reorder_functions_in_proto(model_onnxrt)
         feedsrt = build_matching_inputs(model_debug, feeds, model_onnxrt)
-        onnxrt = optimize_model_proto(onnx.load(model_onnxrt))
+        onnxrt = optimize_model_proto_oxs(onnx.load(model_onnxrt))
         debug = onnx.load(model_debug)
 
         optimized = model_onnxrt.replace(".onnx", ".opt.onnx")
-        ort_optimize(onnxrt, output=optimized)
+        try:
+            ort_optimize(onnxrt, output=optimized)
+        except Exception as e:
+            raise AssertionError(f"Optimization fails on model {model_onnxrt!r}.") from e
         onnxrt = onnx.load(optimized)
 
         optimized = model_debug.replace(".onnx", ".opt.onnx")

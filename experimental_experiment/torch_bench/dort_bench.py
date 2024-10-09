@@ -6,259 +6,378 @@ The script runs a few iterations of a dummy llama model.
 
 ::
 
-    python -m experimental_experiment.llama.dort_bench --help
+    python -m experimental_experiment.torch_bench.dort_bench --help
 
 Example, run llama model with onnxrt backend on cuda.
 
 ::
 
-    python -m experimental_experiment.torch_bench.dort_bench --backend ort --device cuda
-    
-Other example, same script but dumps the produces models.
+    python -m experimental_experiment.torch_bench.dort_bench \\
+           --backend ort --device cuda --config medium
+
+To export the models:
 
 ::
 
-    ONNXRT_DUMP_PATH="llama_dort_" python -m experimental_experiment.torch_bench.dort_bench --backend ort --device cuda
+    python -m experimental_experiment.torch_bench.dort_bench \\
+           --backend custom --device cuda --export a -w 3
 
-Or simply this one:
+
+Profiling:
 
 ::
 
-    python -m experimental_experiment.torch_bench.dort_bench --backend custom --device cuda --export a -w 1
+    nsys profile python -m experimental_experiment.torch_bench.dort_bench \\
+                        --device cuda -w 3 -r 5 --mixed 1 --config large \\
+                        --backend eager --enable_pattern=default+onnxruntime
+
+With experimental optimizers:
+
+::
+
+    python -m experimental_experiment.torch_bench.dort_bench --backend custom \\
+           --device cuda --mixed=1 --export model -w 3 \\
+           --enable_pattern=default+onnxruntime+experimental
+
+Or:
+
+::
+
+    python -m experimental_experiment.torch_bench.dort_bench --backend ort+ \\
+          --device cuda --mixed=1 --export model -w 3 \\
+          --enable_pattern=default+onnxruntime+experimental
 """
 
-from experimental_experiment.args import get_parsed_args
-
-args = get_parsed_args(
-    "experimental_experiment.torch_bench.dort_bench",
-    description=__doc__,
-    backend=("ort", "'ort' or 'inductor' or 'eager' or 'custom'"),
-    device=("cpu", "'cpu' or 'cuda'"),
-    num_hidden_layers=(1, "number of hidden layers"),
-    warmup=5,
-    repeat=5,
-    mixed=(0, "mixed precision (based on autocast)"),
-    export=("", "export the dynamo models"),
-    dynamic=("0", "use dynamic shapes"),
-    target_opset=(18, "opset to convert into, use with backend=custom"),
-    config=("default", "default, medium, or small to test"),
-    verbose=(0, "verbosity"),
-    disable_pattern=("", "a list of optimization patterns to disable"),
-    enable_pattern=("default", "list of optimization patterns to enable"),
-    expose="backend,repeat,warmup,device,num_hidden_layers,"
-    "mixed,export,config,target_opset,dynamic,verbose,"
-    "enable_pattern,disable_pattern",
-)
-
 import os
-import time
-import onnxruntime  # noqa: F401
-import numpy as np
-import torch
-import torch._dynamo.backends.registry
-from torch._dynamo.backends.common import aot_autograd
-import transformers
-from experimental_experiment.convert.convert_helper import ort_optimize
-from experimental_experiment.torch_helper.llama_helper import get_llama_model
-from experimental_experiment.torch_helper.training_helper import make_aot_ort
-from experimental_experiment.torch_helper.dump_helper import dump_onnx
-from experimental_experiment.torch_dynamo import get_decomposition_table
-from experimental_experiment.torch_dynamo import onnx_custom_backend, onnx_debug_backend
+import pprint
 
 
-if args.config == "small":
-    config_dict = dict(
-        input_dims=[(2, 1024)] * (args.repeat + args.warmup),
-        hidden_size=16,
-        num_hidden_layers=args.num_hidden_layers,
-        vocab_size=1024,
-        intermediate_size=16,
-        max_position_embeddings=1024,
-        num_attention_heads=2,
-        _attn_implementation="eager",
-    )
-elif args.config == "medium":
-    config_dict = dict(
-        input_dims=[(2, 1024)] * (args.repeat + args.warmup),
-        hidden_size=1024,
-        num_hidden_layers=args.num_hidden_layers,
-        vocab_size=1024,
-        intermediate_size=1024,
-        max_position_embeddings=1024,
-        num_attention_heads=2,
-        _attn_implementation="eager",
-    )
-else:
-    assert args.config in ("large", "default"), f"unexpected config={args.config!r}"
-    config_dict = dict(
-        input_dims=[(2, 1024)] * (args.repeat + args.warmup),
-        hidden_size=4096,
-        num_hidden_layers=args.num_hidden_layers,
-        vocab_size=32000,
-        intermediate_size=11008,
-        max_position_embeddings=2048,
-        num_attention_heads=32,
-        _attn_implementation="eager",
+def main(args=None):
+    from experimental_experiment.torch_bench._dort_cmd_common import dort_args
+
+    args = dort_args(
+        "experimental_experiment.torch_bench.dort_bench",
+        description=__doc__,
+        new_args=args,
     )
 
-verbose = int(args.verbose)
-disabled_pattern = [_ for _ in args.disable_pattern.split(",") if _]
-enable_pattern = [_ for _ in args.enable_pattern.split(",") if _]
-print(f"llama config={config_dict}")
-print(f"backend={args.backend}")
-print(f"verbose={args.verbose}")
-print(f"mixed={args.mixed}")
-if args.backend == "custom":
-    print(f"disabled_pattern={disabled_pattern!r}")
-    print(f"enable_pattern={enable_pattern!r}")
-model, example_args_collection = get_llama_model(**config_dict)
+    from ..bench_run import (
+        multi_run,
+        make_configs,
+        make_dataframe_from_benchmark_data,
+        run_benchmark,
+    )
 
+    if multi_run(args):
+        configs = make_configs(args)
+        data = run_benchmark(
+            "experimental_experiment.torch_bench.dort_bench",
+            configs,
+            args.verbose,
+            stop_if_exception=False,
+        )
+        if args.verbose > 2:
+            pprint.pprint(data if args.verbose > 3 else data[:2])
+        if args.output_data:
+            df = make_dataframe_from_benchmark_data(data, detailed=False)
+            df.to_csv(args.output_data, index=False, errors="ignore")
+            df.to_excel(args.output_data + ".xlsx", index=False)
+            if args.verbose:
+                print(df)
+    else:
+        import logging
+        import time
+        import onnxruntime  # noqa: F401
+        import numpy as np
+        import torch
+        import torch._dynamo.backends.registry
+        import transformers
+        from experimental_experiment.torch_bench import BOOLEAN_VALUES
+        from experimental_experiment.convert.convert_helper import (
+            ort_optimize as run_ort_optimize,
+        )
+        from experimental_experiment.torch_models.dump_helper import dump_onnx
+        from experimental_experiment.torch_bench._dort_cmd_common import (
+            create_compiled_model,
+            create_configuration_for_benchmark,
+            create_model,
+        )
+        from experimental_experiment.memory_peak import start_spying_on, flatten
 
-device = args.device
-model = model.eval().to(device)
+        config_dict = create_configuration_for_benchmark(
+            model=args.model,
+            config=args.config,
+            repeat=args.repeat,
+            warmup=args.warmup,
+            num_hidden_layers=args.num_hidden_layers,
+            implementation=args.implementation,
+            with_mask=args.with_mask,
+            shape_scenario=args.shape_scenario,
+        )
 
-print(f"Build the compile model with backend={args.backend}")
-use_dynamic = args.dynamic in (1, "1", True, "True")
-print(f"dynamic={use_dynamic}")
+        verbose = int(args.verbose)
+        optimize = args.optimize in BOOLEAN_VALUES
+        ort_optimize = args.ort_optimize in BOOLEAN_VALUES
+        with_mask = args.with_mask in BOOLEAN_VALUES
+        disable_pattern = [_ for _ in args.disable_pattern.split("+") if _]
+        enable_pattern = [_ for _ in args.enable_pattern.split("+") if _]
+        print(f"model={args.model}")
+        print(f"model config={config_dict}")
+        print(f"backend={args.backend}")
+        print(f"verbose={verbose}")
+        print(f"optimize={args.optimize}")
+        print(f"ort_optimize={ort_optimize}")
+        print(f"order_algorithm={args.order}")
+        print(f"with_mask={with_mask}")
+        print(f"implementation={args.implementation}")
+        print(f"mixed={args.mixed}")
+        print(f"shape_scenario={args.shape_scenario}")
+        dump_patterns = args.dump_patterns in BOOLEAN_VALUES
 
-if args.backend == "ort":
-    local_aot_ort, local_ort = make_aot_ort(dynamic=use_dynamic, rewriter=True)
-    compiled_model = torch.compile(model, backend=local_ort)
+        if args.backend == "custom":
+            print(f"disable_pattern={disable_pattern!r}")
+            print(f"enable_pattern={enable_pattern!r}")
+        assert not dump_patterns or args.export, (
+            f"optimization patterns cannot be dumped if export is not set "
+            f"dump_patterns={dump_patterns!r}, export={args.export}"
+        )
 
-elif args.backend == "inductor":
-    compiled_model = torch.compile(model, backend="inductor", dynamic=use_dynamic)
+        is_cuda = args.device.startswith("cuda")
+        if is_cuda:
+            print(
+                f"CUDA no model: memory allocated={torch.cuda.memory_allocated(0)}, "
+                f"reserved={torch.cuda.memory_reserved(0)}"
+            )
 
-elif args.backend == "eager":
-    compiled_model = model
+        device = args.device
+        model, example_args_collection = create_model(args.model, config_dict)
 
-elif args.backend == "custom":
-    target_opset = args.target_opset
-    aot_compiler = aot_autograd(
-        fw_compiler=lambda *args, **kwargs: onnx_custom_backend(
-            *args,
-            target_opset=target_opset,
+        if args.backend != "ortmodule":
+            model = model.eval()
+        model = model.to(device)
+
+        if is_cuda:
+            print(
+                f"CUDA model loaded: memory allocated={torch.cuda.memory_allocated(0)}, "
+                f"reserved={torch.cuda.memory_reserved(0)}"
+            )
+
+        print(f"Build the compile model with backend={args.backend}")
+        use_dynamic = args.dynamic in BOOLEAN_VALUES
+        print(f"dynamic={use_dynamic}")
+        if verbose:
+            print(f"-- debug backend, opset={args.target_opset}")
+            for a in example_args_collection[0]:
+                print(f"  input: {a.dtype}:{a.shape}")
+
+        dump_folder = args.dump_folder
+
+        if args.export and dump_folder and not os.path.exists(dump_folder):
+            os.makedirs(dump_folder)
+
+        if dump_patterns:
+            dump_patterns_folder = os.path.join(dump_folder, "patterns")
+            if os.path.exists(dump_patterns_folder):
+                for _ in os.listdir(dump_patterns_folder):
+                    if _.endswith(".onnx"):
+                        os.remove(os.path.join(dump_patterns_folder, _))
+        else:
+            dump_patterns_folder = None
+        if verbose:
+            if dump_patterns:
+                print(
+                    f"dump models and patterns in {dump_folder!r} "
+                    f"and {dump_patterns_folder!r}"
+                )
+            else:
+                print(f"dump models in {dump_folder!r}")
+
+        logger = logging.getLogger("onnxscript.optimizer.constant_folding")
+        logger.setLevel(logging.ERROR)
+
+        compiled_model = create_compiled_model(
+            model,
+            backend=args.backend,
+            use_dynamic=use_dynamic,
+            target_opset=args.target_opset,
             verbose=verbose,
             enable_pattern=enable_pattern,
-            disable_pattern=disabled_pattern,
-            **kwargs,
-        ),
-        decompositions=get_decomposition_table(),
-    )
-    compiled_model = torch.compile(
-        model, backend=aot_compiler, fullgraph=True, dynamic=use_dynamic
-    )
+            disable_pattern=disable_pattern,
+            optimize=optimize,
+            ort_optimize=ort_optimize,
+            use_fused_aten_ops=args.implementation == "sdpa",
+            dump_prefix=(
+                f"{dump_folder}/{args.export}-{args.model}-{args.backend}"
+                if args.export
+                else None
+            ),
+            dump_patterns=dump_patterns_folder,
+            processor=device.upper() if device.upper() == "CPU" else "CPU,CUDA",
+            order_algorithm=args.order,
+        )
+        del model
 
-elif args.backend == "debug":
-    target_opset = args.target_opset
-    print(f"-- debug backend, opset={target_opset}")
-    for a in example_args_collection[0]:
-        print(f"  input: {a.dtype}:{a.shape}")
-    aot_compiler = aot_autograd(
-        fw_compiler=lambda *args, **kwargs: onnx_debug_backend(
-            *args,
-            target_opset=target_opset,
-            backend="ref",
-            enable_pattern=enable_pattern,
-            disable_pattern=disabled_pattern,
-            **kwargs,
-        ),
-        decompositions=get_decomposition_table(),
-    )
-    compiled_model = torch.compile(
-        model, backend=aot_compiler, fullgraph=True, dynamic=use_dynamic
-    )
+        print(f"type of compiled_model={type(compiled_model)}")
 
-else:
-    raise ValueError(f"Unexpected backend={args.backend!r}.")
+        def loop_iteration(is_cuda, inputs, compiled_model, loss):
+            torch.set_grad_enabled(True)
 
+            mixed = args.mixed in BOOLEAN_VALUES
+            if mixed and is_cuda:
+                with torch.autocast(device_type="cuda", dtype=torch.float16):
+                    torch.cuda.nvtx.range_push("DORT-FORWARD-MIXED")
+                    result = compiled_model(*inputs)
+                    torch.cuda.synchronize()
+                    torch.cuda.nvtx.range_pop()
+            elif is_cuda:
+                torch.cuda.nvtx.range_push("DORT-FORWARD")
+                result = compiled_model(*inputs)
+                torch.cuda.synchronize()
+                torch.cuda.nvtx.range_pop()
+            else:
+                result = compiled_model(*inputs)
 
-def loop_iteration(is_cuda, inputs, compiled_model, loss):
-    if args.mixed in (1, "1", True, "True") and is_cuda:
-        with torch.autocast(device_type="cuda", dtype=torch.float16):
-            result = compiled_model(*inputs)
-    else:
-        result = compiled_model(*inputs)
+            # dummy_target = torch.ones_like(result[0],
+            # memory_format=torch.contiguous_format)
+            if mixed and is_cuda:
+                with torch.autocast(device_type="cuda", dtype=torch.float16):
+                    torch.cuda.nvtx.range_push("DORT-ERROR-MIXED")
+                    error = result[0].sum()  # loss(result[0], dummy_target)
+                    torch.cuda.nvtx.range_pop()
+                    torch.cuda.nvtx.range_push("DORT-BACKWARD-MIXED")
+                    error.backward()
+                    torch.cuda.synchronize()
+                    torch.cuda.nvtx.range_pop()
+            elif is_cuda:
+                torch.cuda.nvtx.range_push("DORT-ERROR")
+                error = result[0].sum()  # loss(result[0], dummy_target)
+                torch.cuda.nvtx.range_pop()
+                torch.cuda.nvtx.range_push("DORT-BACKWARD")
+                error.backward()
+                torch.cuda.synchronize()
+                torch.cuda.nvtx.range_pop()
+            else:
+                error = result[0].sum()  # loss(result[0], dummy_target)
+                error.backward()
 
-    # dummy_target = torch.ones_like(result[0], memory_format=torch.contiguous_format)
-    error = result[0].sum()  # loss(result[0], dummy_target)
-    error.backward()
-    if is_cuda:
-        torch.cuda.synchronize()
-
-
-print(f"warmup on device={args.device}")
-warmup_times = []
-is_cuda = args.device == "cuda"
-loss = torch.nn.MSELoss()
-for i in range(args.warmup):
-    example_inputs = example_args_collection[i]
-    inputs = [t.to("cuda") for t in example_inputs] if is_cuda else example_inputs
-    if is_cuda:
-        torch.cuda.synchronize()
-    start_time = time.perf_counter()
-
-    if args.backend in ("ort", "custom", "debug") and i == 0 and args.export:
-        with dump_onnx(
-            f"dort-{args.export}-{args.backend}", folder="dump_dort_bench", clean=True
-        ):
-            loop_iteration(is_cuda, inputs, compiled_model, loss)
-
-        for onx in os.listdir("dump_dort_bench"):
-            if not onx.endswith(".onnx"):
-                continue
-            new_onx = onx.replace(".onnx", ".opt.onnx")
-            print(f"  ort_optimize {onx} -> {new_onx}")
-            ort_optimize(
-                os.path.join("dump_dort_bench", onx),
-                output=os.path.join("dump_dort_bench", new_onx),
-                providers=(
-                    [("CUDAExecutionProvider", {}), ("CPUExecutionProvider", {})]
-                    if is_cuda
-                    else ["CPUExecutionProvider"]
-                ),
+        print(f"warmup on device={args.device}")
+        if is_cuda:
+            print(
+                f"CUDA memory allocated={torch.cuda.memory_allocated(0)}, "
+                f"reserved={torch.cuda.memory_reserved(0)}"
             )
-    else:
-        loop_iteration(is_cuda, inputs, compiled_model, loss)
 
-    warmup_times.append(time.perf_counter() - start_time)
+        memory = start_spying_on(cuda=is_cuda)
 
-warmup_time = sum(warmup_times)
-print(f"warmup done in {warmup_time}s.")
+        warmup_times = []
+        loss = torch.nn.MSELoss()
+        for i in range(args.warmup):
+            example_inputs = example_args_collection[i]
+            inputs = [t.to("cuda") for t in example_inputs] if is_cuda else example_inputs
+            if is_cuda:
+                torch.cuda.synchronize()
+            start_time = time.perf_counter()
 
-print("measures")
-times = []
-for example_inputs in example_args_collection[args.warmup :]:
-    inputs = [t.to("cuda") for t in example_inputs] if is_cuda else example_inputs
-    start_time = time.perf_counter()
-    loop_iteration(is_cuda, inputs, compiled_model, loss)
-    times.append(time.perf_counter() - start_time)
+            if (
+                args.backend in ("ort", "custom", "debug", "plug", "ort+")
+                and i == 0
+                and args.export
+            ):
+                with dump_onnx(
+                    f"dort-{args.export}-{args.model}-{args.backend}",
+                    folder=dump_folder,
+                    clean=True,
+                ):
+                    loop_iteration(is_cuda, inputs, compiled_model, loss)
 
-print("measures done.")
-print(f"dynamic={args.dynamic}")
-print(f"mixed={args.mixed}")
-print(f"backend={args.backend}")
-print(f"num_hidden_layers={args.num_hidden_layers}")
-print(f"mixed={args.mixed}")
-print(f"repeat={args.repeat}")
-print(f"device={args.device}")
-print(f"avg={np.mean(times)}")
-print(f"times={times}")
-print(f"warmup_times={warmup_times}")
-print("-----------")
+                for onx in os.listdir(dump_folder):
+                    if not onx.endswith(".onnx"):
+                        continue
+                    if ".opt." in onx:
+                        continue
+                    new_onx = onx.replace(".onnx", ".opt.onnx")
+                    print(f"  ort_optimize {onx} -> {new_onx}")
+                    run_ort_optimize(
+                        os.path.join(dump_folder, onx),
+                        output=os.path.join(dump_folder, new_onx),
+                        providers=(
+                            [
+                                ("CUDAExecutionProvider", {}),
+                                ("CPUExecutionProvider", {}),
+                            ]
+                            if is_cuda
+                            else ["CPUExecutionProvider"]
+                        ),
+                    )
+            else:
+                if is_cuda:
+                    torch.cuda.nvtx.range_push("DORT-ITERATION")
+                loop_iteration(is_cuda, inputs, compiled_model, loss)
+                if is_cuda:
+                    torch.cuda.nvtx.range_pop()
 
-idims = "x".join(map(str, config_dict["input_dims"][0]))
-del config_dict["input_dims"]
-vals = "-".join(map(str, config_dict.values()))
-print(f":llama,{idims}-{vals};")
-print(f":config,{args.config};")
-print(f":mixed,{args.mixed};")
-print(f":dynamic,{use_dynamic};")
-print(f":backend,{args.backend};")
-print(f":repeat,{args.repeat};")
-print(f":warmup,{args.warmup};")
-print(f":torch,{torch.__version__};")
-print(f":transformers,{transformers.__version__};")
-if args.backend in {"custom"}:
-    print(f":patterns,+{args.enable_pattern}-{args.disable_pattern};")
-print(f":warmup_time,{sum(warmup_times)};")
-print(f":time,{np.mean(times)};")
+            warmup_times.append(time.perf_counter() - start_time)
+
+        warmup_time = sum(warmup_times)
+        print(f"warmup done in {warmup_time}s.")
+        if is_cuda:
+            print(
+                f"memory allocated={torch.cuda.memory_allocated(0)}, "
+                f"reserved={torch.cuda.memory_reserved(0)}"
+            )
+
+        print("measures")
+        times = []
+        for example_inputs in example_args_collection[args.warmup :]:
+            inputs = [t.to("cuda") for t in example_inputs] if is_cuda else example_inputs
+            start_time = time.perf_counter()
+            loop_iteration(is_cuda, inputs, compiled_model, loss)
+            times.append(time.perf_counter() - start_time)
+
+        print("measures done.")
+        print(f"dynamic={args.dynamic}")
+        print(f"mixed={args.mixed}")
+        print(f"backend={args.backend}")
+        print(f"num_hidden_layers={args.num_hidden_layers}")
+        print(f"mixed={args.mixed}")
+        print(f"repeat={args.repeat}")
+        print(f"device={args.device}")
+        print(f"avg={np.mean(times)}")
+        print(f"times={times}")
+        print(f"warmup_times={warmup_times}")
+        print("-----------")
+        stat_memory = flatten(memory.stop(), prefix="memory_")
+        print(stat_memory)
+
+        i_shapes = set(config_dict["input_dims"])
+        if len(i_shapes) == 1:
+            idims = "x".join(str(i) for i in i_shapes)
+        else:
+            idims = "|".join("x".join(map(str, shs)) for shs in list(i_shapes)[:2])
+        del config_dict["input_dims"]
+        vals = "-".join(map(str, config_dict.values()))
+        print(f":{args.model},{idims}-{vals};")
+        print(f":config,{args.config};")
+        print(f":mixed,{args.mixed};")
+        print(f":dynamic,{use_dynamic};")
+        print(f":optimize,{optimize};")
+        print(f":order,{args.order};")
+        print(f":ort_optimize,{ort_optimize};")
+        print(f":backend,{args.backend};")
+        print(f":repeat,{args.repeat};")
+        print(f":warmup,{args.warmup};")
+        print(f":with_mask,{args.with_mask};")
+        print(f":implementation,{args.implementation};")
+        print(f":torch,{torch.__version__};")
+        print(f":transformers,{transformers.__version__};")
+        for k, v in stat_memory.items():
+            print(f":{k},{v};")
+        if args.backend in {"custom", "ort+", "debug"}:
+            suffix = "+oo" if args.ort_optimize else ""
+            print(f":patterns,+{args.enable_pattern}-{args.disable_pattern}{suffix};")
+        print(f":warmup_time,{sum(warmup_times)};")
+        print(f":time,{np.mean(times)};")
+
+
+if __name__ == "__main__":
+    main()

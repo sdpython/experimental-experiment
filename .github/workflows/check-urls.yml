@@ -30,8 +30,8 @@ jobs:
         print_all: false
         timeout: 2
         retry_count# : 2
-        # exclude_urls: https://dumps.wikimedia.org/other/pageviews/%Y/%Y-%m/pageviews-%Y%m%d-%H0000.gz,https://dumps.wikimedia.org/frwiki/latest/latest-all-titles-in-ns0.gz
-        exclude_patterns: https://dumps.wikimedia.org/
+        exclude_urls: https://github.com/pytorch/pytorch/pull/117009
+        exclude_patterns: https://dumps.wikimedia.org/,https://github.com/pytorch/pytorch/pull/
         # force_pass : true
 
     - name: urls-checker-docs
@@ -42,6 +42,6 @@ jobs:
         print_all: false
         timeout: 2
         retry_count# : 2
-        exclude_urls: https://hal.archives-ouvertes.fr/hal-00990252/document,http://badge.fury.io/py/experimental-experiment
-        exclude_patterns: https://www.data.gouv.fr/fr/datasets/r/e3d83ab3-dc52-4c99-abaf-8a38050cc68c,https://dev.azure.com/
+        exclude_urls: https://hal.archives-,ouvertes.fr/hal-00990252/document,http://badge.fury.io/py/experimental-experiment,https://azure.microsoft.com/en-us/products/devops/pipelines,https://github.com/pytorch/pytorch/pull/83137#issuecomment-1211320670,https://github.com/NVIDIA/TransformerEngine.git@6a9edc38bf9b941b7d369af5103fa8fe0b121d61
+        exclude_patterns: https://www.data.gouv.fr/fr/datasets/r/e3d83ab3-dc52-4c99-abaf-8a38050cc68c,https://dev.azure.com/,https://azure.microsoft.com/en-us/products/devops/pipelines,https://github.com/pytorch/pytorch/pull/83137#issuecomment-1211320670,https://github.com/NVIDIA/TransformerEngine.git@6a9edc38bf9b941b7d369af5103fa8fe0b121d61
         # force_pass : true

@@ -58,7 +58,7 @@ from experimental_experiment.plotting.memory import memory_peak_plot
 from experimental_experiment.ext_test_case import measure_time, get_figure
 from experimental_experiment.args import get_parsed_args
 from experimental_experiment.memory_peak import start_spying_on
-from experimental_experiment.torch_helper.training_helper import make_aot_ort
+from experimental_experiment.torch_models.training_helper import make_aot_ort
 from tqdm import tqdm
 
 has_cuda = has_cuda and torch.cuda.is_available()
@@ -122,7 +122,7 @@ print(f"maxtime={script_args.maxtime}")
 
 class MyModelClass(nn.Module):
     def __init__(self, scenario=script_args.scenario):
-        super(MyModelClass, self).__init__()
+        super().__init__()
         if scenario == "middle":
             self.large = False
             self.conv1 = nn.Conv2d(1, 32, 5)
@@ -310,7 +310,7 @@ def flatten(ps):
 
 data = []
 
-for k, v in supported_exporters.items():
+for k in supported_exporters:
     print(f"run compile for memory {k} on cpu")
     filename = f"plot_torch_aot_{k}.onnx"
     if has_cuda:
@@ -371,10 +371,10 @@ for p in ["cpu", "cuda"]:
 
 data = []
 
-for k, v in supported_exporters.items():
+for k in supported_exporters:
     print(f"run dort cpu {k}: {script_args.repeat1}")
     times = []
-    for i in range(int(script_args.repeat1)):
+    for _ in range(int(script_args.repeat1)):
         model, input_tensors = create_model_and_input()
         torch._dynamo.reset()
         begin = time.perf_counter()
@@ -469,9 +469,7 @@ def clean_text(text):
     return text
 
 
-def profile_function(
-    name, export_function, with_args=True, verbose=False, suffix="export"
-):
+def profile_function(name, export_function, with_args=True, verbose=False, suffix="export"):
     if verbose:
         print(f"profile {name}: {export_function}")
     if with_args:
@@ -479,13 +477,13 @@ def profile_function(
         export_function(model, input_tensors)
         pr = cProfile.Profile()
         pr.enable()
-        for i in range(int(script_args.repeat1)):
+        for _ in range(int(script_args.repeat1)):
             export_function(model, input_tensors)
         pr.disable()
     else:
         pr = cProfile.Profile()
         pr.enable()
-        for i in range(int(script_args.repeat1)):
+        for _ in range(int(script_args.repeat1)):
             export_function()
         pr.disable()
     s = io.StringIO()
@@ -580,7 +578,7 @@ def benchmark(shape):
 
         # memory consumption
         stat = start_spying_on(cuda=1 if has_cuda else 0)
-        for i in range(0, script_args.warmup):
+        for _ in range(0, script_args.warmup):
             call_model()
         memobs = flatten(stat.stop())
         memobs.update(obs)
@@ -684,8 +682,7 @@ for compute in ["CPU", "CUDA"]:
     ax = memory_peak_plot(
         dfmemr[dfmemr.compute == compute],
         ("export",),
-        suptitle=f"Memory Consumption of backens, running time"
-        f"\nrunning on {compute}",
+        suptitle=f"Memory Consumption of backens, running time\nrunning on {compute}",
         bars=[model_size * i / 2**20 for i in range(1, 3)],
         figsize=(18, 6),
     )

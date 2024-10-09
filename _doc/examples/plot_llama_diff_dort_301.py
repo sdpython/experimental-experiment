@@ -20,7 +20,8 @@ and produces all the intermediate onnx graphs.
 
 ::
 
-    python _doc/examples/plot_llama_diff_dort.py --part model --ortopt 1 --cuda 1 --backward 0 --mixed 1
+    python _doc/examples/plot_llama_diff_dort.py --part model --ortopt 1 \\
+            --cuda 1 --backward 0 --mixed 1
 
 You may use ``--mixed=1`` to compare the backward graphs.
 
@@ -38,7 +39,8 @@ script_args = get_parsed_args(
     backward=(0, "does one operator for backward"),
     cuda=(0, "use cuda or not"),
     mixed=(0, "use miwed precision"),
-    expose="part,exporter,ortopt,cuda,mixed",
+    opset=(18, "onnx opset"),
+    expose="part,exporter,ortopt,cuda,mixed,opset",
 )
 
 
@@ -65,15 +67,15 @@ import torch
 from torch._dynamo.backends.common import aot_autograd
 from experimental_experiment.ext_test_case import unit_test_going
 from experimental_experiment.convert.convert_helper import (
-    optimize_model_proto,
+    optimize_model_proto_oxs,
     ort_optimize,
 )
-from experimental_experiment.torch_helper.llama_helper import (
+from experimental_experiment.torch_models.llama_helper import (
     get_llama_model,
     get_llama_attention,
     get_llama_decoder,
 )
-from experimental_experiment.torch_helper.dump_helper import (
+from experimental_experiment.torch_models.dump_helper import (
     assert_all_close,
     dump_onnx,
     reorder_functions_in_proto,
@@ -81,7 +83,7 @@ from experimental_experiment.torch_helper.dump_helper import (
     build_matching_inputs,
     results_to_string,
 )
-from experimental_experiment.torch_helper.training_helper import (
+from experimental_experiment.torch_models.training_helper import (
     train_loop,
     make_aot_ort,
 )
@@ -108,6 +110,8 @@ use_cuda = script_args.cuda in (1, "1")
 print(f"cuda={use_cuda}")
 use_mixed = script_args.mixed in (1, "1")
 print(f"mixed={use_mixed}")
+opset = int(script_args.opset)
+print(f"opset={opset}")
 
 ###################################
 # Model and data
@@ -170,6 +174,11 @@ else:
 # Exporting
 # +++++++++
 
+if hasattr(torch._dynamo.variables.misc, "LoggingLoggerVariable"):
+    # A tweak to make torch.export.export work.
+    torch._dynamo.variables.misc.LoggingLoggerVariable.call_method = lambda *_, **__: None
+
+
 folder = "dump_models"
 storage = {}
 
@@ -200,7 +209,7 @@ if backward:
         fw_compiler=lambda *args, **kwargs: onnx_debug_backend(
             *args,
             dump_prefix=os.path.join(folder, "llama_debug"),
-            target_opset=17,
+            target_opset=opset,
             storage=storage,
             **kwargs,
         ),
@@ -208,7 +217,7 @@ if backward:
     )
     onnx_mod = torch.compile(copy.deepcopy(model), backend=aot_compiler, fullgraph=True)
 
-    if False and use_mixed:
+    if use_mixed:
         with torch.autocast(device_type="cuda", dtype=torch.float16):
             torch.cuda.synchronize()
             got = train_loop(onnx_mod, *inputs[0])
@@ -324,9 +333,10 @@ print("debug:", inputs_from_onnx_model(model_debug, init=True))
 # +++++++++++++++++++++++++++++
 #
 # Let's try the model with a python backend (reference implementation).
-# First step, onnx-script uses many functions. The reference evaluation expects
+# First step, onnxscript uses many functions. The reference evaluation expects
 # every function to be defined so the order of functions in the model matters.
-# No recursivity is allowed by this runtime. We need to reorder as function Rank is usually placed
+# No recursivity is allowed by this runtime.
+# We need to reorder as function Rank is usually placed
 # at the end of the model.
 
 reorder_functions_in_proto(model_onnxrt)
@@ -336,7 +346,7 @@ reorder_functions_in_proto(model_onnxrt)
 
 debug = onnx.load(model_debug)
 try:
-    onnxrt = optimize_model_proto(onnx.load(model_onnxrt))
+    onnxrt = optimize_model_proto_oxs(onnx.load(model_onnxrt))
 except ImportError as e:
     print("missing library", e)
     onnxrt = debug

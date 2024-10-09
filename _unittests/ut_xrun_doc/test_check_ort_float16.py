@@ -8,22 +8,18 @@ import onnxruntime  # noqa: F401
 import onnx.helper as oh
 from onnx import TensorProto, load
 from onnx.numpy_helper import from_array
-from experimental_experiment.ext_test_case import ExtTestCase, ignore_warnings
-
-
-def has_cuda():
-    import torch
-
-    return torch.cuda.is_available()
+from experimental_experiment.ext_test_case import (
+    ExtTestCase,
+    ignore_warnings,
+    requires_cuda,
+)
 
 
 class TestCheckOrtFloat16(ExtTestCase):
     def common_scatter(self, opset, providers, dtype, reduction, expected_names):
         from onnxruntime import InferenceSession, SessionOptions
 
-        op_type = (
-            "ScatterElements" if "ScatterElements" in expected_names else "ScatterND"
-        )
+        op_type = "ScatterElements" if "ScatterElements" in expected_names else "ScatterND"
         ndim = 2 if op_type == "ScatterElements" else 3
 
         assert dtype in (np.float16, np.float32)
@@ -44,9 +40,7 @@ class TestCheckOrtFloat16(ExtTestCase):
                 "name",
                 [
                     oh.make_tensor_value_info("X", TensorProto.FLOAT, [None] * ndim),
-                    oh.make_tensor_value_info(
-                        "indices", TensorProto.INT64, [None, None]
-                    ),
+                    oh.make_tensor_value_info("indices", TensorProto.INT64, [None, None]),
                     oh.make_tensor_value_info("updates", itype, [None] * ndim),
                 ],
                 [oh.make_tensor_value_info("Y", itype, [None] * ndim)],
@@ -135,14 +129,10 @@ class TestCheckOrtFloat16(ExtTestCase):
             exe_providers.append(
                 (row.get("args_provider", None), row.get("args_op_name", None))
             )
-        short_list = [
-            (a, b) for a, b in exe_providers if a is not None and b is not None
-        ]
-        self.assertEqual(
-            short_list, [("CUDAExecutionProvider", o) for o in expected_names]
-        )
+        short_list = [(a, b) for a, b in exe_providers if a is not None and b is not None]
+        self.assertEqual(short_list, [("CUDAExecutionProvider", o) for o in expected_names])
 
-    @unittest.skipIf(not has_cuda(), reason="cuda not available")
+    @requires_cuda()
     @ignore_warnings(DeprecationWarning)
     def test_scatterels_cuda(self):
         default_value = [
@@ -170,7 +160,7 @@ class TestCheckOrtFloat16(ExtTestCase):
                     expected[dtype, reduction],
                 )
 
-    @unittest.skipIf(not has_cuda(), reason="cuda not available")
+    @requires_cuda()
     @ignore_warnings(DeprecationWarning)
     def test_scatternd_cuda(self):
         default_value = [

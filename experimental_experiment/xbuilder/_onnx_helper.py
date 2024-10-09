@@ -63,9 +63,7 @@ def _nice_shape(shape: TensorShapeProto) -> str:
     return "x".join(els)
 
 
-def compatible_opsets(
-    domain: str, op_type: str, current: int, new_version: int
-) -> bool:
+def compatible_opsets(domain: str, op_type: str, current: int, new_version: int) -> bool:
     """
     Tells if two opset version for a particular operator type
     means the same version of it.
@@ -98,11 +96,12 @@ def compatible_opsets(
         f"in {list(sorted(_history[domain]))}"
     )
     hist = _history[domain][op_type]
-    version = list(sorted(hist))
+    version = list(sorted(hist))  # noqa: C413
     pos = np.searchsorted(version, current, side="right") - 1
-    assert (
-        pos >= 0
-    ), f"Available version for {op_type!r} from {domain!r}, incompatible version is {current}"
+    assert pos >= 0, (
+        f"Available version for {op_type!r} from {domain!r}, "
+        f"incompatible version is {current}"
+    )
     if pos < len(version) - 1:
         a, b = version[pos], version[pos + 1]
         return a <= new_version < b
@@ -158,7 +157,7 @@ def choose_consistent_domain_opset(
     return _get_default_opset_for_domain(domain)
 
 
-def element_wise_op_types() -> Set[str]:
+def element_wise_binary_op_types() -> Set[str]:
     """
     Returns the list of element-wise operators.
 
@@ -166,8 +165,10 @@ def element_wise_op_types() -> Set[str]:
         :showcode:
 
         import pprint
-        from experimental_experiment.xbuilder._onnx_helper import element_wise_op_types
-        pprint.pprint(element_wise_op_types())
+        from experimental_experiment.xbuilder._onnx_helper import (
+            element_wise_binary_op_types,
+        )
+        pprint.pprint(element_wise_binary_op_types())
     """
     return {
         "Add",
@@ -241,12 +242,12 @@ def unary_like_op_types() -> Set[str]:
         "Neg",
         "Not",
         "PRelu",
-        "Pow",
         "QuantizeLinear",
         "Reciprocal",
         "Relu",
         "Round",
         "Selu",
+        "Sigmoid",
         "Sign",
         "Sin",
         "Sinh",
@@ -258,5 +259,4 @@ def unary_like_op_types() -> Set[str]:
         "Tan",
         "Tanh",
         "ThresholdRelu",
-        "Trilu",
     }

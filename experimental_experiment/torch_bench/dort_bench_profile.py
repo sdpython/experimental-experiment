@@ -6,14 +6,15 @@ The datas should be saved with script ``dort_bench.py`` and option ``--export <s
 
 ::
 
-    python -m experimental_experiment.llama.dort_bench_profile --help
+    python -m experimental_experiment.torch_bench.dort_bench_profile --help
 
 Example, run llama model with onnxrt backend on cuda.
 
 ::
 
-    python -m experimental_experiment.torch_bench.dort_bench_profile --model model.onnx --inputs model.onnx.pkl
-    
+    python -m experimental_experiment.torch_bench.dort_bench_profile \\
+           --model model.onnx --inputs model.onnx.pkl
+
 """
 
 from experimental_experiment.args import get_parsed_args
@@ -44,7 +45,7 @@ from onnxruntime.capi import _pybind_state as ORTC
 from experimental_experiment.torch_dynamo.fast_backend import (
     _run_onnx_session_with_ortvaluevector,
 )
-from experimental_experiment.convert.convert_helper import optimize_model_proto
+from experimental_experiment.convert.convert_helper import optimize_model_proto_oxs
 from experimental_experiment.torch_dynamo.backend_helper import get_dimensions
 
 
@@ -65,8 +66,9 @@ for i, t in enumerate(inputs[1]):
     else:
         print(f"input {i}: type={type(t)}")
 
+
 providers = (
-    [("CUDAExecutionProvider", {}), ("CPUExecutionProvider", {})]
+    [("CUDAExecutionProvider", {"device_id": max_device}), ("CPUExecutionProvider", {})]
     if max_device >= 0
     else ["CPUExecutionProvider"]
 )
@@ -81,7 +83,7 @@ if args.rewrite in (1, "1"):
     model_model = args.model.replace(".onnx", ".rewrite.onnx")
     print(f"-- optimize again into {model_model}")
     proto = onnx.load(args.model)
-    new_proto = optimize_model_proto(proto)
+    new_proto = optimize_model_proto_oxs(proto, verbose=args.verbose)
     onnx.save(new_proto, model_model)
     print("-- done")
 else:
@@ -107,9 +109,7 @@ TORCH_DTYPE_TO_NUMPY_DTYPE = {
 
 DEVICES = {-1: ORTC.OrtDevice(ORTC.OrtDevice.cpu(), ORTC.OrtDevice.default_memory(), 0)}
 for i in range(torch.cuda.device_count()):
-    DEVICES[i] = ORTC.OrtDevice(
-        ORTC.OrtDevice.cuda(), ORTC.OrtDevice.default_memory(), i
-    )
+    DEVICES[i] = ORTC.OrtDevice(ORTC.OrtDevice.cuda(), ORTC.OrtDevice.default_memory(), i)
 
 input_names, output_names = inputs[0], inputs[2]
 inputs = inputs[1]
@@ -123,14 +123,14 @@ if args.debug:
     feeds = dict(
         zip(
             input_names,
-            map(
-                lambda t: (
+            [
+                (
                     t.detach().cpu().numpy()
                     if isinstance(t, torch.Tensor)
                     else np.array([int(t)], dtype=np.int64)
-                ),
-                inputs,
-            ),
+                )
+                for t in inputs
+            ],
         )
     )
     ref.run(None, feeds)
@@ -165,6 +165,8 @@ for i in range(args.warmup):
                 )
             elif isinstance(t, torch.SymInt):
                 print(f"  output {ti}: dimension {t}")
+            elif isinstance(t, torch.SymFloat):
+                print(f"  output {ti}: dimensiof {t}")
 
 warmup_time = time.perf_counter() - begin
 print(f"-- done: warmup time {warmup_time}")
@@ -172,7 +174,7 @@ print(f"-- done: warmup time {warmup_time}")
 
 print(f"-- measure: {args.repeat}")
 times = []
-for i in range(args.repeat):
+for _ in range(args.repeat):
     if is_cuda:
         torch.cuda.synchronize()
     begin = time.perf_counter()
@@ -220,7 +222,7 @@ if args.profile in (1, "1"):
 
     # first graph: aggregated profile
     df = js_profile_to_dataframe(prof, first_it_out=True)
-    df.to_csv(f"{model_model}.csv")
+    df.to_csv(f"{model_model}.csv", errors="ignore")
     df.to_excel(f"{model_model}.xlsx")
     assert set(df["it==0"]) == {0, 1}
     for v in set(df["it==0"]):
@@ -228,9 +230,7 @@ if args.profile in (1, "1"):
         vs = "after" if v == 0 else "warmup"
         fig, ax = plt.subplots(1, 2, figsize=(10, max(5, n_unique_nodes // 12)))
 
-        plot_ort_profile(
-            dfv, ax[0], ax[1], f"profiling {vs} {n_nodes} nodes\n{model_model}"
-        )
+        plot_ort_profile(dfv, ax[0], ax[1], f"profiling {vs} {n_nodes} nodes\n{model_model}")
         fig.tight_layout()
         fig.savefig(f"{model_model}_{vs}.png")
 

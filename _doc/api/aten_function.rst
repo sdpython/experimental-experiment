@@ -1,3 +1,4 @@
+.. _l-aten-functions:
 
 ==============
 aten_functions

@@ -1,33 +1,91 @@
-import pprint
-from typing import List, Optional, Union
-
-# API
-from .patterns_api import MatchResult, PatternOptimization  # noqa: F401
+import inspect
+from typing import List, Optional
+from onnx import NodeProto
+from ..patterns_api import PatternOptimization, MatchResult
 
 # onnx patterns
-from .onnx_cast import CastPattern
+from .onnx_any import IdentityPattern, SameChildrenPattern
+from .onnx_cast import (
+    CastPattern,
+    CastCastBinaryPattern,
+    CastOpCastPattern,
+    ComputationCastOpCastPattern,
+)
+from .onnx_dropout import DropoutPattern
+from .onnx_equal import UnsqueezeEqualPattern
 from .onnx_expand import ExpandPattern, ExpandBroadcastPattern, ExpandSwapPattern
-from .onnx_mul import MulMulMulScalarPattern
+from .onnx_functions import GeluPattern, LeakyReluPattern, SoftmaxCrossEntropyLossCastPattern
+from .onnx_layer_normalization import (
+    CastLayerNormalizationCastPattern,
+    LayerNormalizationPattern,
+    LayerNormalizationScalePattern,
+)
+from .onnx_mul import (
+    MulMulMulScalarPattern,
+    SwitchOrderBinaryPattern,
+)
 from .onnx_matmul import (
     MatMulReshape2Of3Pattern,
+    MulMulMatMulPattern,
     ReshapeMatMulReshapePattern,
     TransposeMatMulPattern,
     TransposeReshapeMatMulPattern,
 )
+from .onnx_reduce import ReduceSumNormalizePattern
 from .onnx_reshape import (
+    ReshapePattern,
     ReduceReshapePattern,
     Reshape2Of3Pattern,
+    ReshapeReshapeBinaryPattern,
     ReshapeReshapePattern,
 )
 from .onnx_rotary import RotaryConcatPartPattern
+from .onnx_split import SlicesSplitPattern
 from .onnx_sub import Sub1MulPattern
-from .onnx_transpose import TransposeTransposePattern
+from .onnx_transpose import TransposeTransposePattern, TransposeReshapeTransposePattern
 from .onnx_unsqueeze import UnsqueezeUnsqueezePattern
 
 
-def get_default_patterns() -> List[PatternOptimization]:
+class AlmostDoNothingPattern(PatternOptimization):
     """
-    Returns a default list of optimization patters.
+    Checks that a Expand is really needed.
+    """
+
+    n_count = 0
+
+    def match(
+        self,
+        g: "GraphBuilderPatternOptimization",  # noqa: F821
+        node: NodeProto,
+        matched: List[MatchResult],
+    ) -> Optional[MatchResult]:
+        if self.n_count >= 0:
+            return self.none()
+        if node.op_type != "Pow" or node.domain != "":
+            return self.none()
+        if node.name is not None and "AlmostDoNothing" in node.name:
+            return self.none(node, inspect.currentframe().f_lineno)
+        self.n_count += 1
+        return MatchResult(self, [node], self.apply, insert_at=node)
+
+    def apply(
+        self,
+        g: "GraphBuilder",  # noqa: F821
+        node: NodeProto,
+    ) -> List[NodeProto]:
+        return [
+            g.make_node(
+                node.op_type,
+                node.input,
+                node.output,
+                name=f"AlmostDoNothing--{node.name}",
+            )
+        ]
+
+
+def get_default_patterns(verbose: int = 0) -> List[PatternOptimization]:
+    """
+    Returns a default list of optimization patterns.
     It is equal to the following list.
 
     .. runpython::
@@ -38,103 +96,41 @@ def get_default_patterns() -> List[PatternOptimization]:
         pprint.pprint(get_default_patterns())
     """
     return [
-        CastPattern(),
-        ExpandPattern(),
-        ExpandBroadcastPattern(),
-        ExpandSwapPattern(),
-        MulMulMulScalarPattern(),
-        ReduceReshapePattern(),
-        ReshapeMatMulReshapePattern(),
-        Reshape2Of3Pattern(),
-        MatMulReshape2Of3Pattern(),
-        ReshapeReshapePattern(),
-        RotaryConcatPartPattern(),
-        Sub1MulPattern(),
-        TransposeMatMulPattern(),
-        TransposeReshapeMatMulPattern(),
-        TransposeTransposePattern(),
-        UnsqueezeUnsqueezePattern(),
+        # AlmostDoNothingPattern(verbose=verbose),
+        CastLayerNormalizationCastPattern(verbose=verbose),
+        CastPattern(verbose=verbose),
+        CastCastBinaryPattern(verbose=verbose),
+        CastOpCastPattern(verbose=verbose),
+        ComputationCastOpCastPattern(verbose=verbose),
+        DropoutPattern(verbose=verbose),
+        ExpandPattern(verbose=verbose),
+        ExpandBroadcastPattern(verbose=verbose),
+        ExpandSwapPattern(verbose=verbose),
+        GeluPattern(verbose=verbose),
+        IdentityPattern(verbose=verbose),
+        LayerNormalizationPattern(verbose=verbose),
+        LayerNormalizationScalePattern(verbose=verbose),
+        LeakyReluPattern(verbose=verbose),
+        MulMulMulScalarPattern(verbose=verbose),
+        ReduceReshapePattern(verbose=verbose),
+        ReduceSumNormalizePattern(verbose=verbose),
+        ReshapePattern(verbose=verbose),
+        ReshapeMatMulReshapePattern(verbose=verbose),
+        Reshape2Of3Pattern(verbose=verbose),
+        ReshapeReshapeBinaryPattern(verbose=verbose),
+        MatMulReshape2Of3Pattern(verbose=verbose),
+        MulMulMatMulPattern(verbose=verbose),
+        ReshapeReshapePattern(verbose=verbose),
+        RotaryConcatPartPattern(verbose=verbose),
+        SameChildrenPattern(verbose=verbose),
+        SlicesSplitPattern(verbose=verbose),
+        SoftmaxCrossEntropyLossCastPattern(verbose=verbose),
+        Sub1MulPattern(verbose=verbose),
+        SwitchOrderBinaryPattern(verbose=verbose),
+        TransposeMatMulPattern(verbose=verbose),
+        TransposeReshapeMatMulPattern(verbose=verbose),
+        TransposeReshapeTransposePattern(verbose=verbose),
+        TransposeTransposePattern(verbose=verbose),
+        UnsqueezeEqualPattern(verbose=verbose),
+        UnsqueezeUnsqueezePattern(verbose=verbose),
     ]
-
-
-def get_pattern(
-    obj: Union[PatternOptimization, str], as_list: bool = False
-) -> PatternOptimization:
-    """
-    Returns an optimization pattern based on its name.
-    """
-    if isinstance(obj, PatternOptimization):
-        return [obj] if as_list else obj
-
-    from ..patterns_ort import get_onnxruntime_patterns
-
-    if isinstance(obj, str):
-        _pattern = dict(
-            default=get_default_patterns, onnxruntime=get_onnxruntime_patterns
-        )
-        sep = "," if "," in obj else ("+" if "+" in obj else None)
-        if sep:
-            assert as_list, f"Returns a list for obj={obj!r}, as_list must be True."
-            objs = obj.split(sep)
-            res = []
-            for o in objs:
-                res.extend(get_pattern(o, as_list=True))
-            return res
-
-        if obj in _pattern:
-            assert as_list, f"Returns a list for obj={obj!r}, as_list must be True."
-            return _pattern[obj]()
-
-    mapping = {
-        v.__class__.__name__.replace("Pattern", ""): v for v in get_default_patterns()
-    }
-    mapping.update(
-        {
-            v.__class__.__name__.replace("Pattern", ""): v
-            for v in get_onnxruntime_patterns()
-        }
-    )
-    if isinstance(obj, list):
-        assert as_list, f"obj={obj!r} is already a list"
-        res = []
-        for s in obj:
-            if isinstance(s, str) and s in mapping:
-                res.append(mapping[s])
-            else:
-                res.extend(get_pattern(s, as_list=True))
-        return res
-    if obj in mapping:
-        return [mapping[obj]] if as_list else mapping[obj]
-    raise RuntimeError(
-        f"Unable to find pattern for {obj!r} among {pprint.pformat(mapping)}."
-    )
-
-
-def get_pattern_list(
-    positive_list: Optional[Union[str, List[Union[str, type]]]] = "default",
-    negative_list: Optional[Union[str, List[Union[str, type]]]] = None,
-):
-    """
-    Builds a list of patterns based on two lists, negative and positive.
-
-    .. runpython::
-        :showcode:
-
-        import pprint
-        from experimental_experiment.xoptim.patterns import get_pattern_list
-        pprint.pprint(get_pattern_list("default", ["Cast"]))
-    """
-    if positive_list is None:
-        return []
-    pos_list = get_pattern(positive_list, as_list=True)
-    if negative_list is None:
-        return pos_list
-
-    neg_list = get_pattern(negative_list, as_list=True)
-
-    res = []
-    for p in pos_list:
-        if p in neg_list:
-            continue
-        res.append(p)
-    return res

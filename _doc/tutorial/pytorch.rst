@@ -6,7 +6,7 @@ pytorch and onnx
 Design
 ======
 
-
+See :ref:`l-design`.
 
 Examples
 ========
@@ -24,6 +24,7 @@ Examples
     :maxdepth: 1
 
     ../auto_examples/plot_convolutation_matmul_102
+    ../auto_examples/plot_custom_backend_llama_102
     ../auto_examples/plot_llama_bench_102
 
 .. toctree::

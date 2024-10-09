@@ -30,6 +30,28 @@ Some helpers
 ++++++++++++
 """
 
+from experimental_experiment.args import get_parsed_args
+
+
+script_args = get_parsed_args(
+    "plot_torch_export",
+    description=__doc__,
+    scenarios={
+        "small": "small model to test",
+        "middle": "55Mb model",
+        "large": "1Gb model",
+    },
+    warmup=5,
+    repeat=5,
+    maxtime=(
+        2,
+        "maximum time to run a model to measure the computation time, "
+        "it is 0.1 when scenario is small",
+    ),
+    expose="scenarios,repeat,warmup",
+)
+
+
 import contextlib
 import itertools
 import os
@@ -70,8 +92,8 @@ from experimental_experiment.torch_interpreter import to_onnx
 from experimental_experiment.xbuilder import OptimizationOptions
 from experimental_experiment.plotting.memory import memory_peak_plot
 from experimental_experiment.ext_test_case import measure_time, get_figure
-from experimental_experiment.args import get_parsed_args
 from experimental_experiment.memory_peak import start_spying_on
+from experimental_experiment.ext_test_case import unit_test_going
 from tqdm import tqdm
 
 has_cuda = has_cuda and torch.cuda.is_available()
@@ -99,26 +121,14 @@ pprint.pprint(system_info())
 # Scripts arguments
 
 
-script_args = get_parsed_args(
-    "plot_torch_export",
-    description=__doc__,
-    scenarios={
-        "small": "small model to test",
-        "middle": "55Mb model",
-        "large": "1Gb model",
-    },
-    warmup=5,
-    repeat=5,
-    maxtime=(
-        2,
-        "maximum time to run a model to measure the computation time, "
-        "it is 0.1 when scenario is small",
-    ),
-    expose="scenarios,repeat,warmup",
-)
-
 if script_args.scenario in (None, "small"):
     script_args.maxtime = 0.1
+
+if unit_test_going():
+    script_args.warmup = 1
+    script_args.repeat = 1
+    script_args.maxtime = 0.1
+    script_args.scenario = "small"
 
 print(f"scenario={script_args.scenario or 'small'}")
 print(f"warmup={script_args.warmup}")
@@ -134,7 +144,7 @@ print(f"maxtime={script_args.maxtime}")
 
 class MyModelClass(nn.Module):
     def __init__(self, scenario=script_args.scenario):
-        super(MyModelClass, self).__init__()
+        super().__init__()
         if scenario == "middle":
             self.large = False
             self.conv1 = nn.Conv2d(1, 128, 5)
@@ -245,7 +255,7 @@ def export_dynamo(filename, model, *args):
     with contextlib.redirect_stdout(io.StringIO()):
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            export_output = torch.onnx.dynamo_export(model, *args)
+            export_output = torch.onnx.export(model, args, dynamo=True)
             export_output.save(filename)
 
 
@@ -253,12 +263,15 @@ def export_dynopt(filename, model, *args):
     with contextlib.redirect_stdout(io.StringIO()):
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            export_output = torch.onnx.dynamo_export(model, *args)
+            export_output = torch.onnx.export(model, args, dynamo=True)
             model_onnx = export_output.model_proto
 
-            from onnxrewriter.optimizer import optimize
+            from experimental_experiment.convert.convert_helper import (
+                optimize_model_proto_oxs,
+            )
 
-            optimized_model = optimize(model_onnx)
+            optimized_model = optimize_model_proto_oxs(model_onnx)
+
             with open(filename, "wb") as f:
                 f.write(optimized_model.SerializeToString())
 
@@ -369,7 +382,7 @@ for k, v in supported_exporters.items():
     print(f"run exporter {k}")
     filename = f"plot_torch_export_{k}.onnx"
     times = []
-    for i in range(script_args.repeat):
+    for _ in range(script_args.repeat):
         begin = time.perf_counter()
         v(filename, model, input_tensor)
         duration = time.perf_counter() - begin
@@ -396,7 +409,7 @@ for k, v in supported_exporters.items():
 # except the first one.
 
 times = []
-for i in range(script_args.repeat):
+for _ in range(script_args.repeat):
     begin = time.perf_counter()
     exported_mod = torch.export.export(model, (input_tensor,))
     duration = time.perf_counter() - begin
@@ -456,7 +469,7 @@ def profile_function(name, export_function, verbose=False):
     print(f"profile {name}: {export_function}")
     pr = cProfile.Profile()
     pr.enable()
-    for i in range(script_args.repeat):
+    for _ in range(script_args.repeat):
         export_function("dummyc.onnx", model, input_tensor)
     pr.disable()
     s = io.StringIO()
@@ -588,7 +601,7 @@ def benchmark(shape):
 
         # memory consumption
         stat = start_spying_on(cuda=1 if has_cuda else 0)
-        for i in range(0, script_args.warmup):
+        for _ in range(0, script_args.warmup):
             sess.run(None, feeds)
         memobs = flatten(stat.stop())
         memobs.update(short_obs)
@@ -596,7 +609,7 @@ def benchmark(shape):
 
         obs.update(
             measure_time(
-                lambda: sess.run(None, feeds),
+                lambda sess=sess, feeds=feeds: sess.run(None, feeds),
                 max_time=script_args.maxtime,
                 repeat=script_args.repeat,
                 number=1,
@@ -609,7 +622,9 @@ def benchmark(shape):
         # check first run
         obs1.update(
             measure_time(
-                lambda: InferenceSession(name, opts, providers=ps).run(None, feeds),
+                lambda name=name, opts=opts, ps=ps, feeds=feeds: InferenceSession(
+                    name, opts, providers=ps
+                ).run(None, feeds),
                 max_time=script_args.maxtime,
                 repeat=max(1, script_args.repeat // 2),
                 number=1,
@@ -727,8 +742,7 @@ for compute in ["CPU", "CUDA"]:
     ax = memory_peak_plot(
         dfmem[dfmem.compute == compute],
         ("export", "aot"),
-        suptitle=f"Memory Consumption of onnxruntime loading time"
-        f"\nrunning on {compute}",
+        suptitle=f"Memory Consumption of onnxruntime loading time\nrunning on {compute}",
         bars=[model_size * i / 2**20 for i in range(1, 3)],
         figsize=(18, 6),
     )
@@ -761,8 +775,7 @@ for compute in ["CPU", "CUDA"]:
     ax = memory_peak_plot(
         dfmemr[dfmemr.compute == compute],
         ("export", "aot"),
-        suptitle=f"Memory Consumption of onnxruntime running time"
-        f"\nrunning on {compute}",
+        suptitle=f"Memory Consumption of onnxruntime running time\nrunning on {compute}",
         bars=[model_size * i / 2**20 for i in range(1, 3)],
         figsize=(18, 6),
     )

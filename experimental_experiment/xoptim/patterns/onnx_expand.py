@@ -1,15 +1,18 @@
 import inspect
 from typing import List, Optional
 from onnx import NodeProto
-from ...xbuilder._onnx_helper import element_wise_op_types, unary_like_op_types
-from ...xbuilder.shape_helper import all_int
-from .patterns_api import MatchResult, PatternOptimization
+from ...xbuilder._onnx_helper import element_wise_binary_op_types, unary_like_op_types
+from ...xbuilder._shape_helper import all_int
+from ..patterns_api import MatchResult, PatternOptimization
 
 
 class ExpandPattern(PatternOptimization):
     """
     Checks that a Expand is really needed.
     """
+
+    def __init__(self, verbose: int = 0, priority: int = 0):
+        super().__init__(verbose, priority)
 
     def match(
         self,
@@ -27,21 +30,28 @@ class ExpandPattern(PatternOptimization):
         if not g.is_constant(node.input[1]):
             # It may be a symbolic shape.
             return self.none(node, inspect.currentframe().f_lineno)
-        new_shape = tuple(g.get_computed_constant(node.input[1]))
+        value = g.get_computed_constant(node.input[1])
+        if value is None:
+            return self.none(node, inspect.currentframe().f_lineno)
+        new_shape = tuple(int(i) for i in value)
         if shape != new_shape:
             return self.none(node, inspect.currentframe().f_lineno)
 
-        def apply(g: "GraphBuilder", node: NodeProto) -> List[NodeProto]:  # noqa: F821
-            new_node = g.make_node(
-                "Identity",
-                node.input,
-                node.output,
-                name=f"{self.__class__.__name__}--{node.name}",
-                doc_string=node.doc_string,
-            )
-            return [new_node]
+        return MatchResult(self, [node], self.apply, insert_at=node)
 
-        return MatchResult(self, [node], apply, insert_at=node)
+    def apply(
+        self,
+        g: "GraphBuilder",  # noqa: F821
+        node: NodeProto,
+    ) -> List[NodeProto]:
+        new_node = g.make_node(
+            "Identity",
+            node.input,
+            node.output,
+            name=f"{self.__class__.__name__}--{node.name}",
+            doc_string=node.doc_string,
+        )
+        return [new_node]
 
 
 class ExpandBroadcastPattern(PatternOptimization):
@@ -51,7 +61,7 @@ class ExpandBroadcastPattern(PatternOptimization):
     do the expansion by broadcasting one input.
     """
 
-    _op_types = element_wise_op_types()
+    _op_types = element_wise_binary_op_types()
 
     def match(
         self,
@@ -69,16 +79,17 @@ class ExpandBroadcastPattern(PatternOptimization):
         if not g.is_constant(node.input[1]):
             # It may be a symbolic shape.
             return self.none(node, inspect.currentframe().f_lineno)
-        new_shape = tuple(g.get_computed_constant(node.input[1]))
+        value = g.get_computed_constant(node.input[1])
+        if value is None:
+            return self.none(node, inspect.currentframe().f_lineno)
+        new_shape = tuple(int(i) for i in value)
 
         if g.is_used_more_than_once(node.output[0]):
             # More than one output, not handled right now.
             return self.none(node, inspect.currentframe().f_lineno)
 
         next_nodes = g.next_nodes(node.output[0])
-        assert (
-            len(next_nodes) == 1
-        ), "The previous test should have cleared out this case."
+        assert len(next_nodes) == 1, "The previous test should have cleared out this case."
         next_node = next_nodes[0]
 
         if next_node.op_type not in self._op_types or next_node.domain != "":
@@ -106,9 +117,11 @@ class ExpandBroadcastPattern(PatternOptimization):
 
         return MatchResult(self, [node, next_node], self.apply, insert_at=next_node)
 
-    @classmethod
     def apply(
-        cls, g: "GraphBuilder", node: NodeProto, next_node: NodeProto  # noqa: F821
+        self,
+        g: "GraphBuilder",  # noqa: F821
+        node: NodeProto,
+        next_node: NodeProto,
     ) -> List[NodeProto]:
         if next_node.input[0] == node.output[0]:
             inputs = [node.input[0], next_node.input[1]]
@@ -119,7 +132,7 @@ class ExpandBroadcastPattern(PatternOptimization):
                 next_node.op_type,
                 inputs,
                 next_node.output,
-                name=f"{cls.__name__}--{node.name}",
+                name=f"{self.__class__.__name__}--{node.name}",
                 doc_string=next_node.doc_string,
             )
         ]
@@ -133,6 +146,7 @@ class ExpandSwapPattern(PatternOptimization):
     """
 
     _op_types = unary_like_op_types()
+    _other_types = {"NegXplus1", "ReplaceZero", "Pow"}
 
     def match(
         self,
@@ -145,35 +159,42 @@ class ExpandSwapPattern(PatternOptimization):
         if not g.has_shape(node.input[0]):
             return self.none(node, inspect.currentframe().f_lineno)
 
+        assert g.is_used(node.output[0]), (
+            f"The match should not even begin, {node.output[0]!r} "
+            f"is not used among {node.output} and type={node.op_type!r}"
+        )
         if g.is_used_more_than_once(node.output[0]):
             # More than one output so it probably must be done.
             return self.none(node, inspect.currentframe().f_lineno)
 
         next_nodes = g.next_nodes(node.output[0])
-        assert (
-            len(next_nodes) == 1
-        ), "The previous test should have cleared out this case."
+        assert len(next_nodes) == 1, "The previous test should have cleared out this case."
         next_node = next_nodes[0]
 
-        if next_node.op_type not in self._op_types or next_node.domain != "":
+        if next_node.op_type not in self._other_types and (
+            next_node.op_type not in self._op_types or next_node.domain != ""
+        ):
             # Not an unary wise operator.
             return self.none(node, inspect.currentframe().f_lineno)
 
         return MatchResult(self, [node, next_node], self.apply, insert_at=node)
 
-    @classmethod
     def apply(
-        cls, g: "GraphBuilder", node: NodeProto, next_node: NodeProto  # noqa: F821
+        self,
+        g: "GraphBuilder",  # noqa: F821
+        node: NodeProto,
+        next_node: NodeProto,
     ) -> List[NodeProto]:
         # We need to create a new name for the intermediate results.
         # The optimizer cannot reuse an existing name if the new result
         # has a different shape.
-        new_name = g.unique_name(f"{cls.__class__.__name__}_{node.input[0]}")
+        new_name = g.unique_name(f"{self.__class__.__name__}_{node.input[0]}")
         unary = g.make_node(
             next_node.op_type,
             [node.input[0], *next_node.input[1:]],
             [new_name],
-            name=f"{cls.__name__}--{node.name}",
+            name=f"{self.__class__.__name__}--{node.name}",
+            domain=next_node.domain,
             doc_string=next_node.doc_string,
         )
         unary.attribute.extend(next_node.attribute)
@@ -181,7 +202,7 @@ class ExpandSwapPattern(PatternOptimization):
             node.op_type,  # Expand
             [new_name, node.input[1]],
             [next_node.output[0]],
-            name=f"{cls.__name__}--{node.name}",
+            name=f"{self.__class__.__name__}--{node.name}",
             doc_string=node.doc_string,
         )
         return [unary, expand]

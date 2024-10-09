@@ -3,6 +3,11 @@
 torch_dynamo
 ============
 
+dynger_backend
+==============
+
+.. autofunction:: experimental_experiment.torch_dynamo.dynger_backend
+
 onnx_debug_backend
 ==================
 
@@ -18,10 +23,25 @@ filter_decomposition_table
 
 .. autofunction:: experimental_experiment.torch_dynamo.filter_decomposition_table
 
+get_decomposition_table_by_name
+===============================
+
+.. autofunction:: experimental_experiment.torch_dynamo.get_decomposition_table_by_name
+
 get_decomposition_table
 =======================
 
 .. autofunction:: experimental_experiment.torch_dynamo.get_decomposition_table
+
+get_decomposition_table_dynamo
+==============================
+
+.. autofunction:: experimental_experiment.torch_dynamo.get_decomposition_table_dynamo
+
+get_decomposition_table_onnxscript
+==================================
+
+.. autofunction:: experimental_experiment.torch_dynamo.get_decomposition_table_onnxscript
 
 OrtBackend
 ==========

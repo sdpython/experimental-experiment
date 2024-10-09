@@ -480,9 +480,7 @@ def add_loss_output(
     elif isinstance(output_index, int):
         outputs = [onx.graph.output[output_index]]
     elif isinstance(output_index, str):
-        outputs = [
-            (i, o) for i, o in enumerate(onx.graph.output) if o.name == output_index
-        ]
+        outputs = [(i, o) for i, o in enumerate(onx.graph.output) if o.name == output_index]
         if len(outputs) != 1:
             raise ValueError(  # pragma: no cover
                 "Unable to find output %r in %r."
@@ -577,9 +575,7 @@ def add_loss_output(
             pen_name = current
 
         cst_shape = _unique_name(existing_names, "shapevect")
-        inits.append(
-            from_array(numpy.array([-1, 1], dtype=numpy.int64), name=cst_shape)
-        )
+        inits.append(from_array(numpy.array([-1, 1], dtype=numpy.int64), name=cst_shape))
         loss_reshape = _unique_name(existing_names, "loss_reshape")
         pen_reshape = _unique_name(existing_names, "penalty_reshape")
         nodes.extend(
@@ -591,12 +587,12 @@ def add_loss_output(
 
         nodes.append(make_node("Add", [pen_reshape, loss_reshape], [final_name]))
 
-    inits = list(onx.graph.initializer) + inits
+    inits = [*onx.graph.initializer, *inits]
     graph = make_graph(
-        list(onx.graph.node) + nodes,
+        [*onx.graph.node, *nodes],
         onx.graph.name,
-        list(onx.graph.input) + inputs,
-        outputs + [onx.graph.output[output_index]],
+        [*onx.graph.input, *inputs],
+        [*outputs, onx.graph.output[output_index]],
         inits,
     )
     onnx_model = make_model(graph)

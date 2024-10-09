@@ -4,18 +4,36 @@
 102: Measure LLAMA speed
 ========================
 
-The script is calling many times the script ``experimental_experiment.torch_bench.dort_bench.py``.
+The script is calling many times the script
+``experimental_experiment.torch_bench.dort_bench.py``.
 
 ::
 
-    python _doc/examples/plot_llama_bench.py --help
-    
+    python _doc/examples/plot_llama_bench_102.py --help
+
 For exemple, to check mixed precision on multiple backend:
 
 ::
 
-    python _doc/examples/plot_llama_bench.py --device=cuda --num_hidden_layers=1 --mixed=1
+    python _doc/examples/plot_llama_bench_102.py \\
+           --device=cuda --num_hidden_layers=2 --mixed=1
 
+::
+
+    python _doc/examples/plot_llama_bench_102.py --device=cuda --num_hidden_layers=2 \\
+           --mixed=1 --backend=eager,dynger,ortmodule,inductor,ort+,custom --config=large
+
+With 32Gb GPU memory, the script runs with 6 layers.
+
+::
+
+    python _doc/examples/plot_llama_bench_102.py --device=cuda \\
+           --num_hidden_layers=6 --mixed=1 \\
+           --backend=eager,dynger,ortmodule,inductor,trt,ort+,custom --config=large
+
+    python _doc/examples/plot_llama_bench_102.py --device=cuda \\
+           --num_hidden_layers=2 --mixed=1 \\
+           --backend=eager,ort+,custom --config=large
 
 Run the following command to run one experiment and get the available options:
 
@@ -30,21 +48,44 @@ from experimental_experiment.args import get_parsed_args, check_cuda_availabilit
 parsed_args = get_parsed_args(
     "plot_llama_bench",
     description=__doc__,
-    warmup=3,
-    repeat=5,
-    backend=("eager,inductor,ort,custom", "backend to test"),
+    warmup=5,
+    repeat=10,
+    model=("llama", "model to benchmark"),
+    backend=(
+        "eager,dynger,inductor,ort,ort+,custom,ortmodule",
+        "backend to test, among eager,dynger,inductor,"
+        "ort,ort+,custom,plug,ortmodule,backort",
+    ),
     device=("cuda" if check_cuda_availability() else "cpu", "device to test"),
-    num_hidden_layers=("2", "hidden layers to test"),
+    num_hidden_layers=("1", "hidden layers to test"),
     mixed=("0", "boolean value to test (mixed precision or not)"),
     dynamic=("0", "boolean value to test dynamic shapes or not"),
     script_name=("experimental_experiment.torch_bench.dort_bench", "script to run"),
     dump=(0, "dump the models with env ONNXRT_DUMP_PATH"),
     check=(0, "just check the script is working, ignores all other parameters"),
     config=("medium", "configuration to use, default or medium"),
-    patterns=("none,default,default+onnxruntime", "optimization patterns to use"),
+    patterns=(
+        "none,default,default+onnxruntime,default+onnxruntime+experimental",
+        "optimization patterns to use",
+    ),
+    implementation=("eager", "eager or sdpa or both values comma separated value"),
+    with_mask=(1, "with or without a second input (mask"),
     disable_pattern=("none", "pattern or patterns to disable"),
+    ort_optimize=(
+        "0,1",
+        "enable or disable onnxruntime optimization, by default, tries both",
+    ),
+    order=("none", "optimization order see class OrderAlgorithm, none by default"),
+    shape_scenario=(
+        "",
+        "shapes to use, 2x1024 by default, 'batch' to get "
+        "shapes with different batch dimensions, 'length' to get "
+        "different length sizes",
+    ),
+    verbose=(1, "verbosity"),
     expose="backend,device,num_hidden_layers,mixed,scipt_name,repeat,"
-    "warmup,dump,check,config,patterns,dynamic,disable_pattern",
+    "warmup,dump,check,config,patterns,dynamic,disable_pattern,model"
+    "implementation,with_mask,ort_optimize,verbose,order,shape_scenario",
 )
 
 import onnxruntime  # noqa: F401
@@ -57,7 +98,7 @@ from experimental_experiment.ext_test_case import unit_test_going
 from experimental_experiment.bench_run import run_benchmark, get_machine, BenchmarkError
 
 script_name = "experimental_experiment.torch_bench.dort_bench"
-machine = {} if unit_test_going() else get_machine()
+machine = {} if unit_test_going() else get_machine(False)
 
 
 repeat = parsed_args.repeat
@@ -65,6 +106,7 @@ warmup = parsed_args.warmup
 
 
 def make_config(
+    model,
     backend,
     device,
     num_hidden_layers,
@@ -75,9 +117,20 @@ def make_config(
     warmup,
     pattern,
     disable_pattern,
+    implementation,
+    with_mask,
+    ort_optimize,
+    order,
+    shape_scenario,
+    verbose,
     existing=None,
 ):
+    if backend not in ("custom", "ort+"):
+        ort_optimize = None
+        pattern = None
+        disable_pattern = None
     cf = dict(
+        model=model,
         backend=backend,
         device=device,
         num_hidden_layers=num_hidden_layers,
@@ -86,9 +139,16 @@ def make_config(
         dynamic=dynamic,
         config=config,
         warmup=warmup,
+        implementation=implementation,
+        with_mask=with_mask,
+        ort_optimize=ort_optimize,
+        order=order,
+        shape_scenario=shape_scenario,
+        verbose=verbose,
     )
+    cf = {k: v for k, v in cf.items() if v is not None}
 
-    if existing and backend != "custom":
+    if existing and backend not in ("custom", "ort+"):
         for ex in existing:
             if not ex:
                 continue
@@ -100,23 +160,41 @@ def make_config(
             if equal:
                 return None
 
-    if pattern == "none":
-        opt = dict(disable_pattern="default")
-    elif pattern in ("default", "default+onnxruntime"):
+    if pattern is None:
+        opt = {}
+    elif pattern == "none":
+        opt = dict(enable_pattern="default", disable_pattern="default")
+    elif pattern in "default" or "+" in pattern:
         opt = dict(enable_pattern=pattern)
     else:
         raise AssertionError(f"unexpected value for pattern={pattern!r}")
     cf.update(opt)
-    if disable_pattern != "none":
+    if disable_pattern not in ("none", None):
         if "disable_pattern" in cf:
             cf["disable_pattern"] += f",{disable_pattern}"
         else:
             cf["disable_pattern"] = disable_pattern
+    if "enable_pattern" in cf and "+experimental" in cf["enable_pattern"]:
+        try:
+            import onnx_extended  # noqa: F401
+        except ImportError:
+            return None
+    elif not ort_optimize and backend in ("custom", "ort+"):
+        return None
+    assert (
+        cf["backend"] != "eager" or cf.get("ort_optimize", None) is None
+    ), f"Wrong configuration {cf}"
     return cf
 
 
-if parsed_args.check not in (1, "1"):
-    verbose = 1
+if parsed_args.check not in (1, "1") and not unit_test_going():
+
+    def _split(s):
+        if isinstance(s, int):
+            return [s]
+        return [int(i) for i in s.split(",")]
+
+    verbose = parsed_args.verbose
     configs = []
     for (
         backend,
@@ -125,13 +203,17 @@ if parsed_args.check not in (1, "1"):
         mixed,
         dynamic,
         pattern,
+        impl,
+        ort_optimize,
     ) in itertools.product(
         parsed_args.backend.split(","),
         parsed_args.device.split(","),
-        list(map(int, parsed_args.num_hidden_layers.split(","))),
-        list(map(int, parsed_args.mixed.split(","))),
-        list(map(int, parsed_args.dynamic.split(","))),
+        _split(parsed_args.num_hidden_layers),
+        _split(parsed_args.mixed),
+        _split(parsed_args.dynamic),
         parsed_args.patterns.split(","),
+        parsed_args.implementation.split(","),
+        _split(parsed_args.ort_optimize),
     ):
         if mixed == 1 and device == "cpu":
             continue
@@ -139,6 +221,7 @@ if parsed_args.check not in (1, "1"):
             continue
         configs.append(
             make_config(
+                model=parsed_args.model,
                 backend=backend,
                 device=device,
                 num_hidden_layers=num_hidden_layers,
@@ -150,6 +233,12 @@ if parsed_args.check not in (1, "1"):
                 pattern=pattern,
                 disable_pattern=parsed_args.disable_pattern,
                 existing=configs,
+                implementation=impl,
+                with_mask=parsed_args.with_mask,
+                ort_optimize=ort_optimize,
+                order=parsed_args.order,
+                shape_scenario=parsed_args.shape_scenario,
+                verbose=verbose,
             )
         )
 else:
@@ -157,7 +246,8 @@ else:
     device = "cuda" if torch.cuda.is_available() else "cpu"
     configs = [
         dict(
-            backend="ort",
+            model=parsed_args.model,
+            backend="custom",
             device=device,
             num_hidden_layers=1,
             repeat=1,
@@ -172,8 +262,9 @@ else:
 # All configurations to consider.
 
 configs = [cf for cf in configs if cf]
-for i, cf in enumerate(configs):
-    print(f"config {i+1}: {cf}")
+if verbose:
+    for i, cf in enumerate(configs):
+        print(f"config {i+1}: {cf}")
 
 ################################
 # Running configuration.
@@ -189,25 +280,35 @@ try:
     )
     data_collected = True
 except BenchmarkError as e:
-    print(e)
+    if verbose:
+        print(e)
     data_collected = False
 
 #########################
 # Let's process the data.
 
+prefix = (
+    f"plot_{parsed_args.model}-{parsed_args.with_mask}-"
+    f"m{parsed_args.mixed}d{parsed_args.dynamic}h{parsed_args.num_hidden_layers}-"
+    f"{parsed_args.implementation}"
+)
+
 if data_collected:
 
     def clean_pattern(s):
-        if "+default" in s:
-            s = s.replace("ConstantOfShapeScatterND", "")
         s = s.replace("+default-default", "")
         return s
 
     def make_legend(row):
         row = row.to_dict()
-        val = [row["device"], row["backend"], f"h{row['num_hidden_layers']}"]
+        val = [
+            row["device"],
+            f"h{row['num_hidden_layers']}",
+            row["implementation"],
+            row["backend"],
+        ]
         if row["mixed"]:
-            val.append("mixed")
+            val.append("mix")
         if row["dynamic"]:
             val.append("dyn")
         if "patterns" in row and row["patterns"] and "nan" not in str(row["patterns"]):
@@ -218,19 +319,39 @@ if data_collected:
 
     df = pandas.DataFrame(data)
     df = df.drop(["OUTPUT", "ERROR"], axis=1)
-    df["legend"] = df.apply(make_legend, axis=1)
-    df["time"] = df["time"].astype(float)
-    min_eager = df[df.legend.str.contains("eager")]["time"].dropna().min()
-    df["increase"] = df["time"] / min_eager - 1
-    # df["ERROR"] = df["ERROR"].apply(lambda s: s.replace("\n", " "))
-    filename = "plot_llama_bench_with_cmd.csv"
+    if "implementation" in df.columns:
+        df["legend"] = df.apply(make_legend, axis=1)
+        df["time"] = df["time"].astype(float)
+        df_eager = df[(df["implementation"] == "eager") & (df["backend"] == "eager")][
+            "time"
+        ].dropna()
+        if df_eager.shape[0] > 0:
+            min_eager = df_eager.min()
+            df["increase"] = df["time"] / min_eager - 1
+            # df["ERROR"] = df["ERROR"].apply(lambda s: s.replace("\n", " "))
+    filename = f"plot_{prefix}_bench_with_cmd.csv"
     df.to_csv(filename, index=False)
+    filename = f"plot_{prefix}_bench_with_cmd.xlsx"
+    df.to_excel(filename, index=False)
 
     df = df.drop(["CMD"], axis=1)
-    filename = "plot_llama_bench.csv"
+    filename = f"plot_{prefix}_bench.csv"
     df.to_csv(filename, index=False)
     df = pandas.read_csv(filename)  # to cast type
     print(df)
+
+    # summary
+    cs = [
+        c
+        for c in ["backend", "patterns", "warmup_time", "time", "increase"]
+        if c in df.columns
+    ]
+    dfs = df[cs]
+    filename = f"plot_{prefix}_summary.xlsx"
+    dfs.to_excel(filename, index=False)
+    filename = f"plot_{prefix}_summary.csv"
+    dfs.to_csv(filename, index=False)
+    print(dfs)
 
 ########################
 # First lines.
@@ -247,53 +368,59 @@ for c in ["time", "warmup_time"]:
 ########################################
 # Simplified data
 
-print(df.sort_values("legend"))
+print(df.sort_values("legend") if "legend" in df.columns else df)
 
 ###############################
 # Plot warmup time.
 
-torch_version = list(set(df["torch"].dropna()))
-transformers_version = list(set(df["transformers"].dropna()))
+torch_version = list(set(df["torch"].dropna())) if "torch" in df.columns else (0, 0)
+transformers_version = (
+    list(set(df["transformers"].dropna())) if "transformers" in df.columns else (0, 0)
+)
 ver = f"{torch_version[0]} - {transformers_version[0]}"
-llama = list(set(df["llama"].dropna()))[0]
+model = parsed_args.model
+modeldf = list(set(df[model].dropna()))[0] if model in df.columns else "?"  # noqa: RUF015
+title_prefix = (
+    f"lower better\n"
+    f"{parsed_args.model} - {ver} - mask{parsed_args.with_mask}"
+    f"\n<device>-h<hidden-layers>-<implementation>-<backend>-(optimization)"
+)
 
-if data_collected:
+
+if data_collected and "legend" in df.columns:
     fig, ax = plt.subplots(1, 1, figsize=(12, df.shape[0] // 3 + 1))
 
     df = df.sort_values("time").set_index("legend")
-    df[["warmup_time"]].plot.barh(
-        ax=ax, title=f"lower better\n{llama}\nwarmup time\n{ver}"
-    )
+    df[["warmup_time"]].plot.barh(ax=ax, title=f"warmup time\n{title_prefix}")
     ax.grid(True)
 
     fig.tight_layout()
-    fig.savefig("plot_llama_bench_warmup_time.png")
+    fig.savefig(f"plot_{prefix}_bench_warmup_time.png")
 
 ###############################
 # Plot time.
 
-if data_collected:
+if data_collected and "time" in df.columns:
     fig, ax = plt.subplots(1, 1, figsize=(12, df.shape[0] // 3 + 1))
 
-    df[["time"]].plot.barh(ax=ax, title=f"lower better\n{llama}\niteration time\n{ver}")
+    df[["time"]].plot.barh(ax=ax, title=f"computation time\n{title_prefix}")
     mi, ma = df["time"].min(), df["time"].max()
     mi = mi - (ma - mi) / 10
-    ax.set_xlim(left=mi)
+    if not np.isnan(mi):
+        ax.set_xlim(left=mi)
     ax.grid(True)
 
     fig.tight_layout()
-    fig.savefig("plot_llama_bench_time.png")
+    fig.savefig(f"plot_{prefix}_bench_time.png")
 
 ###############################
 # Plot increase.
 
-if data_collected:
+if data_collected and "increase" in df.columns:
     fig, ax = plt.subplots(1, 1, figsize=(12, df.shape[0] // 3 + 1))
 
-    df[["increase"]].plot.barh(
-        ax=ax, title=f"lower better\n{llama}\ncomparison to eager %"
-    )
+    df[["increase"]].plot.barh(ax=ax, title=f"comparison to eager %\n{title_prefix}")
     ax.grid(True)
 
     fig.tight_layout()
-    fig.savefig("plot_llama_bench_relative.png")
+    fig.savefig(f"plot_{prefix}_bench_relative.png")

@@ -7,10 +7,35 @@ get_default_patterns
 
 .. autofunction:: experimental_experiment.xoptim.patterns.get_default_patterns
 
+get_ml_patterns
+===============
+
+.. autofunction:: experimental_experiment.xoptim.patterns_ml.get_ml_patterns
+
+get_experimental_patterns
+=========================
+
+.. autofunction:: experimental_experiment.xoptim.patterns_exp.get_experimental_patterns
+
+get_onnxruntime_patterns
+========================
+
+.. autofunction:: experimental_experiment.xoptim.patterns_ort.get_onnxruntime_patterns
+
+get_fix_patterns
+================
+
+.. autofunction:: experimental_experiment.xoptim.patterns_fix.get_fix_patterns
+
+get_pattern
+===========
+
+.. autofunction:: experimental_experiment.xoptim.get_pattern
+
 get_pattern_list
 ================
 
-.. autofunction:: experimental_experiment.xoptim.patterns.get_pattern_list
+.. autofunction:: experimental_experiment.xoptim.get_pattern_list
 
 Classes
 =======
@@ -25,129 +50,17 @@ GraphBuilderPatternOptimization
 MatchResult
 +++++++++++
 
-.. autoclass:: experimental_experiment.xoptim.patterns.MatchResult
+.. autoclass:: experimental_experiment.xoptim.MatchResult
     :members:
 
 PatternOptimization
 +++++++++++++++++++
 
-.. autoclass:: experimental_experiment.xoptim.patterns.PatternOptimization
+.. autoclass:: experimental_experiment.xoptim.PatternOptimization
     :members:
 
-.. _l-pattern-optimization-onnx:
-
-Onnx Patterns
-=============
-
-CastPattern
-+++++++++++
-
-.. autoclass:: experimental_experiment.xoptim.patterns.CastPattern
-    :members:
-
-ExpandPattern
-+++++++++++++
-
-.. autoclass:: experimental_experiment.xoptim.patterns.ExpandPattern
-    :members:
-
-ExpandBroadcastPattern
-++++++++++++++++++++++
-
-.. autoclass:: experimental_experiment.xoptim.patterns.ExpandBroadcastPattern
-    :members:
-
-ExpandSwapPattern
-+++++++++++++++++
-
-.. autoclass:: experimental_experiment.xoptim.patterns.ExpandSwapPattern
-    :members:
-
-MatMulReshape2Of3Pattern
-++++++++++++++++++++++++
-
-.. autoclass:: experimental_experiment.xoptim.patterns.MatMulReshape2Of3Pattern
-    :members:
-
-MulMulMulScalarPattern
+EasyPatternOptimization
 +++++++++++++++++++++++
 
-.. autoclass:: experimental_experiment.xoptim.patterns.MulMulMulScalarPattern
-    :members:
-
-ReduceReshapePattern
-++++++++++++++++++++
-
-.. autoclass:: experimental_experiment.xoptim.patterns.ReduceReshapePattern
-    :members:
-
-ReshapeMatMulReshapePattern
-+++++++++++++++++++++++++++
-
-.. autoclass:: experimental_experiment.xoptim.patterns.ReshapeMatMulReshapePattern
-    :members:
-
-Reshape2Of3Pattern
-++++++++++++++++++
-
-.. autoclass:: experimental_experiment.xoptim.patterns.Reshape2Of3Pattern
-    :members:
-
-ReshapeReshapePattern
-+++++++++++++++++++++
-
-.. autoclass:: experimental_experiment.xoptim.patterns.ReshapeReshapePattern
-    :members:
-
-RotaryConcatPartPattern
-+++++++++++++++++++++++
-
-.. autoclass:: experimental_experiment.xoptim.patterns.RotaryConcatPartPattern
-    :members:
-
-Sub1MulPattern
-++++++++++++++
-
-.. autoclass:: experimental_experiment.xoptim.patterns.Sub1MulPattern
-    :members:
-
-TransposeMatMulPattern
-++++++++++++++++++++++
-
-.. autoclass:: experimental_experiment.xoptim.patterns.TransposeMatMulPattern
-    :members:
-
-TransposeReshapeMatMulPattern
-+++++++++++++++++++++++++++++
-
-.. autoclass:: experimental_experiment.xoptim.patterns.TransposeReshapeMatMulPattern
-    :members:
-
-TransposeTransposePattern
-+++++++++++++++++++++++++
-
-.. autoclass:: experimental_experiment.xoptim.patterns.TransposeTransposePattern
-    :members:
-
-UnsqueezeUnsqueezePattern
-+++++++++++++++++++++++++
-
-.. autoclass:: experimental_experiment.xoptim.patterns.UnsqueezeUnsqueezePattern
-    :members:
-
-.. _l-pattern-optimization-ort:
-
-Ort Patterns
-============
-
-ConstantOfShapeScatterNDPattern
-+++++++++++++++++++++++++++++++
-
-.. autoclass:: experimental_experiment.xoptim.patterns_ort.constant_of_shape_scatter_nd.ConstantOfShapeScatterNDPattern
-    :members:
-
-FusedMatMulPattern
-++++++++++++++++++
-
-.. autoclass:: experimental_experiment.xoptim.patterns_ort.fused_matmul.FusedMatMulPattern
+.. autoclass:: experimental_experiment.xoptim.EasyPatternOptimization
     :members:

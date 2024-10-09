@@ -4,14 +4,7 @@ import logging
 import numpy
 import onnx.defs
 from onnx.reference import ReferenceEvaluator
-
 from onnxruntime import InferenceSession
-
-try:
-    from onnxruntime import training
-except ImportError:
-    # onnxruntime not training
-    training = None
 
 try:
     from onnxruntime.capi._pybind_state import GradientGraphBuilder
@@ -31,7 +24,12 @@ from experimental_experiment.gradient.grad_helper import (
 )
 from experimental_experiment.gradient.loss_helper import add_loss_output
 from experimental_experiment.gradient.ops import new_ops
-from experimental_experiment.ext_test_case import ExtTestCase, ignore_warnings
+from experimental_experiment.ext_test_case import (
+    ExtTestCase,
+    ignore_warnings,
+    requires_onnxruntime_training,
+    skipif_ci_windows,
+)
 
 opset = min(onnx.defs.onnx_opset_version() - 2, 18)
 
@@ -45,9 +43,7 @@ class TestGradHelper(ExtTestCase):
                 n += 1
         if n == 0:
             raise AssertionError(f"No input with more than 5 rows: {feeds!r}.")
-        sess = InferenceSession(
-            onx.SerializeToString(), providers=["CPUExecutionProvider"]
-        )
+        sess = InferenceSession(onx.SerializeToString(), providers=["CPUExecutionProvider"])
         try:
             got = sess.run(None, feeds)
         except OrtFail as e:
@@ -60,7 +56,7 @@ class TestGradHelper(ExtTestCase):
         pygot = oinf.run(None, feeds)
         output_names = [o.name for o in onx.graph.output]
         self.assertGreater(len(output_names), 0)
-        for i, o in enumerate(output_names):
+        for i, _o in enumerate(output_names):
             self.assertEqualArray(got[i], pygot[i], atol=atol)
         if verbose:
             print(
@@ -81,7 +77,8 @@ class TestGradHelper(ExtTestCase):
         logging.basicConfig(level=logging.WARNING)
         ExtTestCase.setUpClass()
 
-    @unittest.skipIf(training is None, reason="not training")
+    @requires_onnxruntime_training()
+    @skipif_ci_windows("not working on windows")
     @ignore_warnings((DeprecationWarning, FutureWarning))
     def test_grad_helper_keep_yield(self):
         opv = opset
@@ -103,7 +100,8 @@ class TestGradHelper(ExtTestCase):
         with open(f"verbose_{'yield'}.onnx", "wb") as f:
             f.write(new_onx.SerializeToString())
 
-    @unittest.skipIf(training is None, reason="not training")
+    @requires_onnxruntime_training()
+    @skipif_ci_windows("not working on windows")
     @ignore_warnings((DeprecationWarning, FutureWarning))
     def test_grad_helper(self):
         opv = opset
@@ -125,7 +123,8 @@ class TestGradHelper(ExtTestCase):
         self.assertNotIn("Y", out_names)
         self.check_runtime(new_onx, "test_grad_helper")
 
-    @unittest.skipIf(training is None, reason="not training")
+    @requires_onnxruntime_training()
+    @skipif_ci_windows("not working on windows")
     @ignore_warnings((DeprecationWarning, FutureWarning))
     def test_grad_helper_nooutput(self):
         opv = opset
@@ -144,7 +143,8 @@ class TestGradHelper(ExtTestCase):
         new_onx = onnx_derivative(onx, options=DerivativeOptions.KeepOutputs)
         self.check_runtime(new_onx, "test_grad_helper_nooutput")
 
-    @unittest.skipIf(training is None, reason="not training")
+    @requires_onnxruntime_training()
+    @skipif_ci_windows("not working on windows")
     @ignore_warnings((DeprecationWarning, FutureWarning))
     def test_grad_helper_mul(self):
         opv = opset
@@ -159,7 +159,8 @@ class TestGradHelper(ExtTestCase):
         new_onx = onnx_derivative(onx)
         self.check_runtime(new_onx, "test_grad_helper_mul")
 
-    @unittest.skipIf(training is None, reason="not training")
+    @requires_onnxruntime_training()
+    @skipif_ci_windows("not working on windows")
     @ignore_warnings((DeprecationWarning, FutureWarning))
     def test_grad_helper_noweight(self):
         opv = opset
@@ -178,7 +179,8 @@ class TestGradHelper(ExtTestCase):
         new_onx = onnx_derivative(onx, weights=[])
         self.check_runtime(new_onx, "test_grad_helper_noweight")
 
-    @unittest.skipIf(training is None, reason="not training")
+    @requires_onnxruntime_training()
+    @skipif_ci_windows("not working on windows")
     @ignore_warnings((DeprecationWarning, FutureWarning))
     def test_grad_helper_fillgrad(self):
         opv = opset
@@ -194,9 +196,7 @@ class TestGradHelper(ExtTestCase):
             target_opset=opv,
         )
         self.assertRaise(
-            lambda: onnx_derivative(
-                onx, weights=[], options=DerivativeOptions.FillGrad
-            ),
+            lambda: onnx_derivative(onx, weights=[], options=DerivativeOptions.FillGrad),
             AssertionError,
         )
         onx.ir_version = 9
@@ -223,11 +223,9 @@ class TestGradHelper(ExtTestCase):
             {"Y": FloatTensorType([None, 10])},
             target_opset=opv,
         )
-        self.assertRaise(
-            lambda: onnx_derivative(onx, weights=[], options=1), AssertionError
-        )
+        self.assertRaise(lambda: onnx_derivative(onx, weights=[], options=1), AssertionError)
 
-    @unittest.skipIf(training is None, reason="not training")
+    @requires_onnxruntime_training()
     @unittest.skipIf(GradientGraphBuilder is None, reason="not recent")
     def test_grad_helper_loss(self):
         grad_file = "test_grad_helper_loss.onnx"

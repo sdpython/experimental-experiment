@@ -45,7 +45,10 @@ plot_dot(proto)
 gr = GraphBuilder(
     proto,
     infer_shapes=True,
-    optimization_options=OptimizationOptions(patterns="default"),
+    optimization_options=OptimizationOptions(
+        patterns="default",
+        verbose=1,  # a higher value increases the verbosity when optimizations for patterns
+    ),
 )
 stats = gr.optimize()
 df = pandas.DataFrame(stats)
@@ -60,18 +63,15 @@ for c in df.columns:
     if "time" not in c and "pattern" not in c:
         df[c] = df[c].fillna(0).astype(int)
 
-print(
-    df.groupby("pattern").agg(
-        {
-            "time_in": "sum",
-            "added": "sum",
-            "removed": "sum",
-            "iteration": "max",
-            "match_index": "max",
-            "instances": "sum",
-        }
-    )
-)
+aggs = {
+    "time_in": "sum",
+    "added": "sum",
+    "removed": "sum",
+    "iteration": "max",
+    "match_index": "max",
+    "instances": "sum",
+}
+print(df.groupby("pattern").agg(aggs))
 
 ##############################
 # The total is:
@@ -83,6 +83,8 @@ print(f"number of removed nodes: {-diff}")
 ##############################
 # Conversion to onnx.
 optimized_proto = gr.to_onnx(optimize=False)
+with open("plot_optimize_101.onnx", "wb") as f:
+    f.write(optimized_proto.SerializeToString())
 
 print(f"number of new nodes: {len(optimized_proto.graph.node)}")
 
@@ -102,3 +104,20 @@ plot_dot(optimized_proto)
 # standard onnx operators: :ref:`l-pattern-optimization-onnx`.
 # The second list is specific to :epkg:`onnxruntime`:
 # :ref:`l-pattern-optimization-ort`.
+#
+# Focus on one optimizer
+# ======================
+
+gr = GraphBuilder(
+    optimized_proto,
+    infer_shapes=True,
+    optimization_options=OptimizationOptions(
+        patterns="SwitchOrderBinary",
+        verbose=10,
+    ),
+)
+stats = gr.optimize()
+df = pandas.DataFrame(stats)
+df.to_csv("plot_optimize.csv")
+df.to_excel("plot_optimize.xlsx")
+df
