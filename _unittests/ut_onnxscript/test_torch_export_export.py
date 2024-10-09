@@ -1,10 +1,14 @@
 import unittest
 import torch
+from experimental_experiment.torch_interpreter.onnx_export import bypass_export_some_errors
 from experimental_experiment.ext_test_case import (
     ExtTestCase,
     skipif_ci_windows,
     skipif_ci_apple,
+    requires_monai,
     requires_torch,
+    ignore_warnings,
+    hide_stdout,
 )
 
 
@@ -104,6 +108,67 @@ class TestTorchExportExport(ExtTestCase):
         got = module(query, key, value)
         self.assertEqualArray(expected, got)
         export.run_decompositions()
+
+    @skipif_ci_windows("not available on Windows")
+    @skipif_ci_apple("not able to fix it")
+    @requires_torch("2.5")
+    def test_jit_isinstance(self):
+
+        class DummyModel(torch.nn.Module):
+            def __init__(self, enable_math: bool):
+                super().__init__()
+                self.enable_math = False
+
+            def forward(self, a, b):
+                if torch.jit.isinstance(a, torch.Tensor):
+                    return a.cos()
+                return b.sin()
+
+        model = DummyModel(False)
+        device = "cpu"
+
+        a = torch.rand(16, 16, dtype=torch.float16, device=device)
+        b = torch.rand(16, 16, dtype=torch.float16, device=device)
+        expected = model(a, b)
+        self.assertEqual(expected.dtype, torch.float16)
+        self.assertEqual(expected.shape, (16, 16))
+
+        cpl = torch.compile(model)
+        new_output = cpl(a, b)
+        self.assertEqual(new_output.dtype, torch.float16)
+        self.assertEqual(new_output.shape, (16, 16))
+        self.assertEqualArray(expected, new_output)
+
+        with bypass_export_some_errors():
+            export = torch.export.export(model, (a, b))
+        module = export.module()
+        got = module(a, b)
+        self.assertEqualArray(expected, got)
+
+    @skipif_ci_windows("not available on Windows")
+    @skipif_ci_apple("not able to fix it")
+    @requires_torch("2.5")
+    @requires_monai()
+    @ignore_warnings(DeprecationWarning)
+    @hide_stdout()
+    def test_basic_unet(self):
+        from monai.networks.nets import BasicUNet
+
+        model = BasicUNet(
+            spatial_dims=3,
+            in_channels=3,
+            out_channels=1,
+            features=[32, 64, 128, 256, 512, 32],
+            act=("LeakyReLU", {"negative_slope": 0.1, "inplace": False}),
+        )
+        x = torch.randn(1, 3, 128, 128, 128)
+        expected = model(x)
+
+        with bypass_export_some_errors():
+            export = torch.export.export(model, (x,))
+        module = export.module()
+        got = module(x)
+        self.assertEqualArray(expected, got)
 
 
 if __name__ == "__main__":
