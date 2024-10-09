@@ -10,16 +10,15 @@ from experimental_experiment.ext_test_case import (
     ExtTestCase,
     ignore_warnings,
     skipif_ci_windows,
-    skipif_ci_apple,
     has_cuda,
+    requires_onnxruntime_training,
 )
 
 
 class TestBackend(ExtTestCase):
-
     @ignore_warnings(DeprecationWarning)
     @skipif_ci_windows("onnxruntime-training not available")
-    @skipif_ci_apple("onnxruntime-training not available")
+    @requires_onnxruntime_training()
     def test_onnx_custom_backend_dump(self):
         import onnxruntime
         from experimental_experiment.torch_dynamo.fast_backend import OrtBackend
@@ -173,8 +172,8 @@ class TestBackend(ExtTestCase):
         self.assertEqualArray(expected, got, atol=1e-5)
         self.assertNotEmpty(stored)
 
-    @skipif_ci_apple("no onnxruntime-training")
     @skipif_ci_windows("no torch dynamo")
+    @requires_onnxruntime_training()
     def test_transforms_custom(self):
         from experimental_experiment.torch_dynamo import onnx_custom_backend
 
@@ -279,10 +278,10 @@ class TestBackend(ExtTestCase):
         self.assertEqualArray(expected, got, atol=1e-5)
         out = buf.getvalue()
         self.assertIn("[dynger_backend] done", out)
-        self.assertIn("Linear((l_x_,))", out)
+        self.assertInOr(("Linear((l_x_,))", "built-in function linear"), out)
 
-    @skipif_ci_apple("no onnxruntime-training")
     @skipif_ci_windows("no torch dynamo")
+    @requires_onnxruntime_training()
     def test_ort_graph_no_optimization(self):
         from experimental_experiment.torch_dynamo import onnx_custom_backend
 
@@ -326,8 +325,8 @@ class TestBackend(ExtTestCase):
         self.assertEqualArray(expected, got, atol=1e-5)
         self.assertNotEmpty(stored)
 
-    @skipif_ci_apple("no onnxruntime-training")
     @skipif_ci_windows("no torch dynamo")
+    @requires_onnxruntime_training()
     @unittest.skipIf(
         True,
         "TypeError: linear(): argument 'input' (position 1) must be Tensor, not NoneType",

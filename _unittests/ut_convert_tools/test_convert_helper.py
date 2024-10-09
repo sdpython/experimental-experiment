@@ -4,12 +4,13 @@ from onnx import ModelProto
 from experimental_experiment.ext_test_case import (
     ExtTestCase,
     skipif_ci_windows,
+    skipif_ci_apple,
     requires_cuda,
     requires_onnxscript,
     ignore_warnings,
 )
 from experimental_experiment.convert.convert_helper import (
-    optimize_model_proto,
+    optimize_model_proto_oxs,
     inline_model_proto,
     ort_optimize,
 )
@@ -32,10 +33,11 @@ class TestConvertHelper(ExtTestCase):
         model(*example_args_collection[0])
         model = torch.onnx.dynamo_export(model, *example_args_collection[0])
         model_proto = model.model_proto
-        model_proto = optimize_model_proto(model_proto)
+        model_proto = optimize_model_proto_oxs(model_proto)
         self.assertIsInstance(model_proto, ModelProto)
 
     @skipif_ci_windows("dynamo not working on windows")
+    @skipif_ci_apple("dynamo fails")
     @ignore_warnings(UserWarning)
     def test_inline_llama(self):
         import torch
@@ -110,9 +112,7 @@ class TestConvertHelper(ExtTestCase):
         model(*example_args_collection[0])
         model = to_onnx(model, example_args_collection[0])
         model_proto = model.model_proto
-        ort_optimize(
-            model_proto, providers="cuda", output="test_ort_optimize_cuda.onnx"
-        )
+        ort_optimize(model_proto, providers="cuda", output="test_ort_optimize_cuda.onnx")
 
 
 if __name__ == "__main__":

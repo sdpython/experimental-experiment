@@ -8,7 +8,9 @@ class Var:
     """
 
     def __init__(
-        self, name: str, builder: Optional["GraphBuilder"] = None  # noqa: F821
+        self,
+        name: str,
+        builder: Optional["GraphBuilder"] = None,  # noqa: F821
     ):
         assert isinstance(name, str), f"Unexpected type {type(name)} for name"
         self.name = name
@@ -180,9 +182,13 @@ class OxsOpset:
         :param kwargs: additional arguments
         :return: output name
         """
-        assert (
-            not op_type.startswith("Reduce") or self.builder.main_opset >= 18
-        ), f"Reduce operator {op_type!r} is not tested for opset < 18{self.builder.get_debug_msg()}"
+        assert not op_type.startswith("Reduce") or self.builder.main_opset >= 18, (
+            f"Reduce operator {op_type!r} is not tested for opset < 18"
+            f"{self.builder.get_debug_msg()}"
+        )
+        if name is None:
+            # This node is created by an externel converting library.
+            name = f"{self.__class__.__name__}"
 
         if outputs is None:
             outputs = self._implemented[op_type]
@@ -205,12 +211,7 @@ class OxsOpset:
                 new_inputs.append(cst_name)
 
         outputs = self.builder.make_node(
-            op_type,
-            new_inputs,
-            outputs=outputs,
-            domain=domain,
-            name=name or f"{self.__class__.__name__}",
-            **kwargs,
+            op_type, new_inputs, outputs=outputs, domain=domain, name=name, **kwargs
         )
         if isinstance(outputs, tuple):
             return tuple(Var(o, self.builder) for o in outputs)

@@ -168,8 +168,8 @@ class TestCustomOpsDispatch(ExtTestCase):
 
         dispatcher = Dispatcher(
             {
-                "_scaled_dot_product_efficient_attention_default": onnx_scaled_dot_product_efficient_attention,
-                "_scaled_dot_product_efficient_attention_backward_default": onnx_scaled_dot_product_attention_backward,
+                "_scaled_dot_product_efficient_attention_default": onnx_scaled_dot_product_efficient_attention,  # noqa: E501
+                "_scaled_dot_product_efficient_attention_backward_default": onnx_scaled_dot_product_attention_backward,  # noqa: E501
             }
         )
 

@@ -87,8 +87,9 @@ class RotaryConcatPartPattern(PatternOptimization):
         ):
             return self.none(node, inspect.currentframe().f_lineno)
 
-        concat_left, concat_right = g.node_before(node.input[0]), g.node_before(
-            node.input[1]
+        concat_left, concat_right = (
+            g.node_before(node.input[0]),
+            g.node_before(node.input[1]),
         )
         if concat_left is None or concat_right is None:
             return self.none(node, inspect.currentframe().f_lineno)
@@ -101,7 +102,7 @@ class RotaryConcatPartPattern(PatternOptimization):
 
         # checking every result has shapes
         all_inputs = list(concat_left.input) + list(concat_right.input)
-        if any(map(lambda x: not g.has_shape(x), all_inputs)):
+        if any(not g.has_shape(a) for a in all_inputs):
             return self.none(node, inspect.currentframe().f_lineno)
 
         concat_left_before = [g.node_before(i) for i in concat_left.input]
@@ -116,10 +117,8 @@ class RotaryConcatPartPattern(PatternOptimization):
         if type_left.index("ConstantOfShape") == type_right.index("ConstantOfShape"):
             return self.none(node, inspect.currentframe().f_lineno)
 
-        cst_left = [n for n in concat_left_before if n.op_type == "ConstantOfShape"][0]
-        cst_right = [n for n in concat_right_before if n.op_type == "ConstantOfShape"][
-            0
-        ]
+        cst_left = next(n for n in concat_left_before if n.op_type == "ConstantOfShape")
+        cst_right = next(n for n in concat_right_before if n.op_type == "ConstantOfShape")
 
         tl = [n for n in concat_right_before if n.op_type == "Neg"]
         tr = [n for n in concat_left_before if n.op_type == "Neg"]
@@ -140,7 +139,7 @@ class RotaryConcatPartPattern(PatternOptimization):
             slice_right = None if right_.op_type == "Split" else right_
             split_right = right_ if right_.op_type == "Split" else None
         elif tr:
-            neg_left = [n for n in concat_left_before if n.op_type == "Neg"][0]
+            neg_left = next(n for n in concat_left_before if n.op_type == "Neg")
             neg_right = None
 
             left_ = g.node_before(neg_left.input[0])
@@ -172,17 +171,13 @@ class RotaryConcatPartPattern(PatternOptimization):
                 return self.none(node, inspect.currentframe().f_lineno)
 
             slice_left_def = [g.get_computed_constant(i) for i in slice_left.input[1:]]
-            slice_right_def = [
-                g.get_computed_constant(i) for i in slice_right.input[1:]
-            ]
+            slice_right_def = [g.get_computed_constant(i) for i in slice_right.input[1:]]
             if len(slice_left_def) != 3 or len(slice_right_def) != 3:
                 return self.none(node, inspect.currentframe().f_lineno)
             if slice_left_def[2].tolist() != slice_right_def[2].tolist():
                 # axis are different
                 return self.none(node, inspect.currentframe().f_lineno)
-            lengths = {len(v) for v in slice_left_def} | {
-                len(v) for v in slice_right_def
-            }
+            lengths = {len(v) for v in slice_left_def} | {len(v) for v in slice_right_def}
             if lengths != {1}:
                 # more than one axis
                 return self.none(node, inspect.currentframe().f_lineno)
@@ -207,7 +202,7 @@ class RotaryConcatPartPattern(PatternOptimization):
             axis = g.get_axis(split_left, 0)
             axis1 = g.get_axis(concat_left, 0)
             axis2 = g.get_axis(concat_right, 0)
-            if len(set([axis, axis1, axis2])) != 1:
+            if len({axis, axis1, axis2}) != 1:
                 return self.none(node, inspect.currentframe().f_lineno)
 
         # last check about size.
@@ -323,13 +318,11 @@ class RotaryConcatPartPattern(PatternOptimization):
         ):
             return self.none(node, inspect.currentframe().f_lineno)
 
-        transpose_left, transpose_right = g.node_before(node.input[0]), g.node_before(
-            node.input[1]
+        transpose_left, transpose_right = (
+            g.node_before(node.input[0]),
+            g.node_before(node.input[1]),
         )
-        if (
-            transpose_left.op_type != "Transpose"
-            or transpose_right.op_type != "Transpose"
-        ):
+        if transpose_left.op_type != "Transpose" or transpose_right.op_type != "Transpose":
             return self.none(node, inspect.currentframe().f_lineno)
 
         perm_left = list(g.get_attribute(transpose_left, "perm").ints)
@@ -337,18 +330,20 @@ class RotaryConcatPartPattern(PatternOptimization):
         if perm_left != perm_right:
             return self.none(node, inspect.currentframe().f_lineno)
 
-        scatter_left, scatter_right = g.node_before(
-            transpose_left.input[0]
-        ), g.node_before(transpose_right.input[0])
+        scatter_left, scatter_right = (
+            g.node_before(transpose_left.input[0]),
+            g.node_before(transpose_right.input[0]),
+        )
         if scatter_left is None or scatter_right is None:
             return self.none(node, inspect.currentframe().f_lineno)
 
         if scatter_left.op_type != "ScatterND" or scatter_right.op_type != "ScatterND":
             return self.none(node, inspect.currentframe().f_lineno)
 
-        tr_data_left, tr_data_right = g.node_before(
-            scatter_left.input[0]
-        ), g.node_before(scatter_right.input[0])
+        tr_data_left, tr_data_right = (
+            g.node_before(scatter_left.input[0]),
+            g.node_before(scatter_right.input[0]),
+        )
         if (
             tr_data_left is None
             or tr_data_left.op_type != "Transpose"
@@ -363,9 +358,10 @@ class RotaryConcatPartPattern(PatternOptimization):
         ):
             return self.none(node, inspect.currentframe().f_lineno)
 
-        tr_update_left, tr_update_right = g.node_before(
-            scatter_left.input[2]
-        ), g.node_before(scatter_right.input[2])
+        tr_update_left, tr_update_right = (
+            g.node_before(scatter_left.input[2]),
+            g.node_before(scatter_right.input[2]),
+        )
         if (
             list(g.get_attribute(tr_update_left, "perm").ints) != perm_left
             or list(g.get_attribute(tr_update_right, "perm").ints) != perm_right
@@ -385,20 +381,14 @@ class RotaryConcatPartPattern(PatternOptimization):
 
         allowed = (scatter_left.input[0], scatter_right.input[0])
         if any(
-            map(
-                lambda node: node.output[0] not in allowed
-                and g.is_used_more_than_once(node.output[0]),
-                nodes,
-            )
+            (node.output[0] not in allowed and g.is_used_more_than_once(node.output[0]))
+            for node in nodes
         ):
             return self.none(node, inspect.currentframe().f_lineno)
 
         cst_left = g.node_before(tr_data_left.input[0])
         cst_right = g.node_before(tr_data_right.input[0])
-        if (
-            cst_left.op_type != "ConstantOfShape"
-            or cst_right.op_type != "ConstantOfShape"
-        ):
+        if cst_left.op_type != "ConstantOfShape" or cst_right.op_type != "ConstantOfShape":
             return self.none(node, inspect.currentframe().f_lineno)
 
         slice_left = g.node_before(tr_update_left.input[0])
@@ -444,12 +434,12 @@ class RotaryConcatPartPattern(PatternOptimization):
         ]
 
         if any(
-            map(
-                lambda node: node is not None
+            (
+                node is not None
                 and node.op_type not in {"Constant", "ConstantOfShape"}
-                and g.is_used_more_than_once(node.output[0]),
-                nodes2,
+                and g.is_used_more_than_once(node.output[0])
             )
+            for node in nodes2
         ):
             return self.none(node, inspect.currentframe().f_lineno)
 
@@ -460,9 +450,7 @@ class RotaryConcatPartPattern(PatternOptimization):
             use_split = True
 
         # Checking shapes and indices
-        if not g.has_shape(scatter_left.input[0]) or not g.has_shape(
-            scatter_right.input[0]
-        ):
+        if not g.has_shape(scatter_left.input[0]) or not g.has_shape(scatter_right.input[0]):
             return self.none(node, inspect.currentframe().f_lineno)
         shape_left = g.get_shape(scatter_left.input[0])
         shape_right = g.get_shape(scatter_right.input[0])
@@ -495,18 +483,14 @@ class RotaryConcatPartPattern(PatternOptimization):
                 return self.none(node, inspect.currentframe().f_lineno)
 
             slice_left_def = [g.get_computed_constant(i) for i in slice_left.input[1:]]
-            slice_right_def = [
-                g.get_computed_constant(i) for i in slice_right.input[1:]
-            ]
+            slice_right_def = [g.get_computed_constant(i) for i in slice_right.input[1:]]
             if len(slice_left_def) != 4 or len(slice_right_def) != 4:
                 return self.none(node, inspect.currentframe().f_lineno)
             if slice_left_def[2].tolist() != slice_right_def[2].tolist():
                 return self.none(node, inspect.currentframe().f_lineno)
             if slice_left_def[3].tolist() != [1] or slice_right_def[3].tolist() != [1]:
                 return self.none(node, inspect.currentframe().f_lineno)
-            lengths = {len(v) for v in slice_left_def} | {
-                len(v) for v in slice_right_def
-            }
+            lengths = {len(v) for v in slice_left_def} | {len(v) for v in slice_right_def}
             if lengths != {1}:
                 # more than one axis
                 return self.none(node, inspect.currentframe().f_lineno)
@@ -568,7 +552,6 @@ class RotaryConcatPartPattern(PatternOptimization):
         tr_update_right: NodeProto,
         node: NodeProto,
     ):
-
         keep = []
         if cst_left is not None and g.is_used_more_than_once(cst_left.output[0]):
             keep.append(cst_left)
@@ -584,16 +567,12 @@ class RotaryConcatPartPattern(PatternOptimization):
             axis = g.get_attribute(split, "axis").i
         else:
             slice_left_def = [g.get_computed_constant(i) for i in slice_left.input[1:]]
-            slice_right_def = [
-                g.get_computed_constant(i) for i in slice_right.input[1:]
-            ]
+            slice_right_def = [g.get_computed_constant(i) for i in slice_right.input[1:]]
             axis = slice_left_def[2][0]
             dim_left = slice_left_def[1][0] - slice_left_def[0][0]
             dim_right = slice_right_def[1][0] - slice_right_def[0][0]
 
-            splits = g.make_initializer(
-                "", np.array([dim_left, dim_right], dtype=np.int64)
-            )
+            splits = g.make_initializer("", np.array([dim_left, dim_right], dtype=np.int64))
 
             split = g.make_node(
                 "Split",
@@ -639,14 +618,11 @@ class RotaryConcatPartPattern(PatternOptimization):
                 other_nodes.append(tr_data_left)
             if cst_left is not None:
                 other_nodes.append(cst_left)
-        if scatter_right is not None and g.is_used_more_than_once(
-            scatter_right.input[0]
-        ):
+        if scatter_right is not None and g.is_used_more_than_once(scatter_right.input[0]):
             if tr_data_right is not None and id(tr_data_right) != id(tr_data_left):
                 other_nodes.append(tr_data_right)
             if cst_right is not None and id(cst_right) != id(cst_left):
                 other_nodes.append(cst_right)
         if other_nodes:
-            other_nodes = list(reversed(other_nodes))
-            return other_nodes + [split, neg, concat]
-        return keep + [split, neg, concat]
+            return [*reversed(other_nodes), split, neg, concat]
+        return [*keep, split, neg, concat]

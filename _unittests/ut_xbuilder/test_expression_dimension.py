@@ -14,6 +14,23 @@ class TestDimension(ExtTestCase):
         self.assertIsInstance(e, Expression)
         self.assertEqual(repr(e), "Expression('a*b*c')")
 
+    def test_parse_expression_div(self):
+        import torch
+
+        expr = torch.SymInt("32//s3")
+        e = parse_expression(expr, dict(s3=8))
+        self.assertIsInstance(e, Expression)
+        self.assertEqual(repr(e), "Expression('32//s3')")
+
+    def test_parse_expression_node(self):
+        import torch
+        from torch.fx.experimental.symbolic_shapes import ShapeEnv
+
+        expr = torch.fx.experimental.sym_node.SymNode("32//s3", ShapeEnv(), int, 3)
+        e = parse_expression(expr, dict(s3=8))
+        self.assertIsInstance(e, Expression)
+        self.assertEqual(repr(e), "Expression('32//s3')")
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

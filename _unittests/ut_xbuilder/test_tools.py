@@ -1,6 +1,6 @@
 import unittest
 from experimental_experiment.ext_test_case import ExtTestCase
-from experimental_experiment.xbuilder.shape_helper import (
+from experimental_experiment.xbuilder._shape_helper import (
     is_static_shape,
     all_float,
 )

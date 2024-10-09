@@ -9,6 +9,7 @@ from experimental_experiment.ext_test_case import (
     ExtTestCase,
     ignore_warnings,
     requires_torch,
+    requires_transformers,
     has_cuda,
 )
 from experimental_experiment.xbuilder import OptimizationOptions
@@ -67,7 +68,7 @@ class TestOnnxExportMistral(ExtTestCase):
                 import onnx
                 from onnx_array_api.plotting.text_plot import onnx_simple_text_plot
 
-                raise AssertionError(
+                raise AssertionError(  # noqa: B904
                     f"onnxruntime cannot load the model "
                     f"due to {e}\n{onnx_simple_text_plot(onnx.load(onx))}"
                 )
@@ -77,7 +78,7 @@ class TestOnnxExportMistral(ExtTestCase):
         except Exception as e:
             from onnx_array_api.plotting.text_plot import onnx_simple_text_plot
 
-            raise AssertionError(
+            raise AssertionError(  # noqa: B904
                 f"onnxruntime cannot load the model"
                 f"due to {e}\n{onnx_simple_text_plot(onx)}"
             )
@@ -85,6 +86,7 @@ class TestOnnxExportMistral(ExtTestCase):
     @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
     @requires_torch("2.3", "bug")
     @ignore_warnings(DeprecationWarning)
+    @requires_transformers("4.42", or_older_than="4.38")
     def test_mistral_model(self):
         model, input_tensors = get_mistral_model()
         input_tensors = input_tensors[0]

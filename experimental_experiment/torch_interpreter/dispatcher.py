@@ -49,7 +49,8 @@ class Dispatcher:
         if key not in self.registered_functions:
             if self.verbose > 3:
                 print(
-                    f"[Dispatcher.find_function] could not find a function for key={key!r} with name={name!r}"
+                    f"[Dispatcher.find_function] could not find a "
+                    f"function for key={key!r} with name={name!r}"
                 )
             return None
 
@@ -68,9 +69,7 @@ class Dispatcher:
         """
         if name not in self.registered_functions:
             if self.verbose > 3:
-                print(
-                    f"[Dispatcher.find_method] could not find a method for name={name!r}"
-                )
+                print(f"[Dispatcher.find_method] could not find a method for name={name!r}")
             return None
 
         return self.registered_functions[name]
@@ -100,8 +99,9 @@ class Dispatcher:
 
 class ForceDispatcher(Dispatcher):
     """
-    Implements a dispatcher which as an onnx as it is
-    when no converting function is found.
+    Implements a dispatcher which fails whenever there is no converting
+    for a node in the fx graph. There is no fallback to the existing functions.
+    When no function is found, an onnx node is added with a non standard domain.
 
     :param signatures: function used only for their signature mapping
         a name to a function in order to have parameter names
@@ -122,7 +122,7 @@ class ForceDispatcher(Dispatcher):
         strict: bool = False,
         only_registered: bool = False,
     ):
-        super(ForceDispatcher, self).__init__({}, verbose=verbose)
+        super().__init__({}, verbose=verbose)
         self.signatures = signatures or {}
         self.domain = domain
         self.version = version
@@ -144,7 +144,7 @@ class ForceDispatcher(Dispatcher):
                 f"annotation.__args__[0]={annotation.__args__[0]!r}"
             )
             t = annotation.__args__[0]
-            return lambda v: list(t(_) for _ in v)
+            return lambda v, t=t: [t(_) for _ in v]
 
         raise RuntimeError(f"Unexpected annotation {annotation!r}")
 
@@ -153,13 +153,11 @@ class ForceDispatcher(Dispatcher):
         kwargs = []
         sig = inspect.signature(f)
         has_annotation = any(
-            map(
-                lambda p: p.annotation is not None
-                and p.annotation is not inspect._empty,
-                sig.parameters.values(),
-            )
+            (p.annotation is not None and p.annotation is not inspect._empty)
+            for p in sig.parameters.values()
         )
-        # If there is annotation, we assume every result = None without annotation is an optional Tensor.
+        # If there is annotation, we assume every result = None
+        # without annotation is an optional Tensor.
         for name, p in sig.parameters.items():
             ann = p.annotation
             if p.default is inspect._empty:
@@ -261,7 +259,8 @@ class ForceDispatcher(Dispatcher):
                 if not sig:
                     if self.strict:
                         raise RuntimeError(
-                            f"Unsupported type {type(n)} for argument {i} for function {_name!r}{g.get_debug_msg()}"
+                            f"Unsupported type {type(n)} for argument {i} "
+                            f"for function {_name!r}{g.get_debug_msg()}"
                         )
                     kwargs[f"param_{i}"] = n
                     continue

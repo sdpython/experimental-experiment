@@ -33,12 +33,16 @@ def _dynamo_export(
     disable_pattern,
     rename_inputs,
     device,
-    **kwargs
+    **kwargs,
 ):
     import torch
     from torch.onnx._internal.fx import fx_onnx_interpreter, onnxfunction_dispatcher
     from torch.onnx._internal.fx import diagnostics
-    from torch.onnx._internal.exporter import OnnxRegistry
+
+    try:
+        from torch.onnx._internal._exporter_legacy import OnnxRegistry
+    except ImportError:
+        from torch.onnx._internal.exporter import OnnxRegistry
     from torch.onnx._internal.diagnostics import infra
 
     context = diagnostics.DiagnosticContext(
@@ -80,8 +84,8 @@ def _dynamo_export(
     # They are in-place modifications for avoiding unnecessary
     # copy of ONNX initializers.
     if optimize:
-        from ..convert.convert_helper import optimize_model_proto
+        from ..convert.convert_helper import optimize_model_proto_oxs
 
-        onnx_model = optimize_model_proto(onnx_model)
+        onnx_model = optimize_model_proto_oxs(onnx_model)
 
     return onnx_model, None

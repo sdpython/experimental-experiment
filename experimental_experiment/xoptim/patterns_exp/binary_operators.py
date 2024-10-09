@@ -6,7 +6,6 @@ from ..patterns_api import MatchResult, PatternOptimization
 
 
 class _common:
-
     def __init__(self, broadcast: bool):
         self.broadcast = broadcast
 
@@ -86,9 +85,7 @@ class AddAddMulMulPattern(PatternOptimization, _common):
             and node_left.op_type == node.op_type
             and self._same_shape(g, *node_left.input, broadcast=self.broadcast)
         ):
-            return MatchResult(
-                self, [node_left, None, node], self.apply, insert_at=node
-            )
+            return MatchResult(self, [node_left, None, node], self.apply, insert_at=node)
 
         node_right = g.node_before(node.input[1])
         if (
@@ -97,9 +94,7 @@ class AddAddMulMulPattern(PatternOptimization, _common):
             and node_right.op_type == node.op_type
             and self._same_shape(g, *node_right.input, broadcast=self.broadcast)
         ):
-            return MatchResult(
-                self, [None, node_right, node], self.apply, insert_at=node
-            )
+            return MatchResult(self, [None, node_right, node], self.apply, insert_at=node)
 
         return self.none(node, inspect.currentframe().f_lineno)
 
@@ -184,9 +179,7 @@ class AddMulPattern(PatternOptimization, _common):
             and node_left.op_type != node.op_type
             and self._same_shape(g, *node_left.input, broadcast=self.broadcast)
         ):
-            return MatchResult(
-                self, [node_left, None, node], self.apply, insert_at=node
-            )
+            return MatchResult(self, [node_left, None, node], self.apply, insert_at=node)
 
         node_right = g.node_before(node.input[1])
         if (
@@ -196,9 +189,7 @@ class AddMulPattern(PatternOptimization, _common):
             and node_right.op_type != node.op_type
             and self._same_shape(g, *node_right.input, broadcast=self.broadcast)
         ):
-            return MatchResult(
-                self, [None, node_right, node], self.apply, insert_at=node
-            )
+            return MatchResult(self, [None, node_right, node], self.apply, insert_at=node)
 
         return self.none(node, inspect.currentframe().f_lineno)
 
@@ -371,9 +362,7 @@ class SubMulPattern(PatternOptimization, _common):
             and node_left.op_type != node.op_type
             and self._same_shape(g, *node_left.input, broadcast=self.broadcast)
         ):
-            return MatchResult(
-                self, [node_left, None, node], self.apply, insert_at=node
-            )
+            return MatchResult(self, [node_left, None, node], self.apply, insert_at=node)
 
         node_right = g.node_before(node.input[1])
         if (
@@ -383,9 +372,7 @@ class SubMulPattern(PatternOptimization, _common):
             and node_right.op_type != node.op_type
             and self._same_shape(g, *node_right.input, broadcast=self.broadcast)
         ):
-            return MatchResult(
-                self, [None, node_right, node], self.apply, insert_at=node
-            )
+            return MatchResult(self, [None, node_right, node], self.apply, insert_at=node)
 
         return self.none(node, inspect.currentframe().f_lineno)
 
@@ -494,9 +481,7 @@ class AddMulSharedInputPattern(PatternOptimization, _common):
         if not self._same_shape(g, *node.input, broadcast=self.broadcast):
             return self.none(node, inspect.currentframe().f_lineno)
 
-        cons_left = [
-            n for n in g.next_nodes(node.input[0]) if n.op_type == node.op_type
-        ]
+        cons_left = [n for n in g.next_nodes(node.input[0]) if n.op_type == node.op_type]
         if len(cons_left) == 2:
             ok = True
             for n in cons_left:
@@ -506,9 +491,7 @@ class AddMulSharedInputPattern(PatternOptimization, _common):
             if ok and self.can_fuse(g, cons_left):
                 return MatchResult(self, cons_left, self.apply)
 
-        cons_right = [
-            n for n in g.next_nodes(node.input[1]) if n.op_type == node.op_type
-        ]
+        cons_right = [n for n in g.next_nodes(node.input[1]) if n.op_type == node.op_type]
         if len(cons_right) == 2:
             ok = True
             for n in cons_right:

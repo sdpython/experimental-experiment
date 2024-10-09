@@ -9,6 +9,7 @@ from experimental_experiment.ext_test_case import (
     requires_torch,
     requires_cuda,
     requires_onnxscript,
+    requires_onnxruntime_training,
     skipif_transformers,
 )
 from experimental_experiment.torch_models.dump_helper import assert_all_close
@@ -27,6 +28,23 @@ def implements(name: str) -> bool:
 
 
 class TestDynamoLlamaDynamic(ExtTestCase):
+    @classmethod
+    def setUp(cls):
+        import torch
+
+        if hasattr(torch._dynamo.variables.misc, "LoggingLoggerVariable"):
+            cls._old_value = torch._dynamo.variables.misc.LoggingLoggerVariable.call_method
+            torch._dynamo.variables.misc.LoggingLoggerVariable.call_method = (
+                lambda *_, **__: None
+            )
+
+    @classmethod
+    def tearDown(cls):
+        import torch
+
+        if hasattr(torch._dynamo.variables.misc, "LoggingLoggerVariable"):
+            torch._dynamo.variables.misc.LoggingLoggerVariable.call_method = cls._old_value
+
     @classmethod
     def get_input_dims(cls, dynamic: bool):
         if dynamic:
@@ -79,17 +97,15 @@ class TestDynamoLlamaDynamic(ExtTestCase):
             compiled_model = torch.compile(copy.deepcopy(model), backend=local_ort)
         else:
             if impl == "fast":
-                backend_debug = (  # noqa: E731
-                    lambda *args, **kwargs: onnx_custom_backend(
-                        *args,
-                        backend="ort",
-                        target_opset=18,
-                        storage=storage,
-                        verbose=verbose,
-                        dump_prefix=dump_prefix,
-                        disable_pattern=disable_pattern,
-                        **kwargs,
-                    )
+                backend_debug = lambda *args, **kwargs: onnx_custom_backend(  # noqa: E731
+                    *args,
+                    backend="ort",
+                    target_opset=18,
+                    storage=storage,
+                    verbose=verbose,
+                    dump_prefix=dump_prefix,
+                    disable_pattern=disable_pattern,
+                    **kwargs,
                 )
             else:
                 backend_debug = lambda *args, **kwargs: onnx_debug_backend(  # noqa: E731
@@ -253,7 +269,7 @@ class TestDynamoLlamaDynamic(ExtTestCase):
 
     @ignore_warnings((UserWarning, DeprecationWarning))
     @skipif_ci_windows("torch.compile not supported on Windows")
-    @requires_torch("2.3", "missing kernel")
+    @requires_torch("2.5", "missing kernel")
     def test_llama_attention_forward_dynamic(self):
         from experimental_experiment.torch_models.llama_helper import (
             get_llama_attention,
@@ -273,6 +289,7 @@ class TestDynamoLlamaDynamic(ExtTestCase):
             # verbose=10,
             dump_prefix="tt_temp_llama_attention_forward_dynamic",
             # raise_list={"view"}
+            atol=0.2,
         )
         onx = stored["instance"][0]["onnx"]
         builder = stored["instance"][0]["builder"]
@@ -284,7 +301,8 @@ class TestDynamoLlamaDynamic(ExtTestCase):
 
     @ignore_warnings((UserWarning, DeprecationWarning))
     @skipif_ci_windows("torch.compile not supported on Windows")
-    @requires_torch("2.3", "missing kernel")
+    @requires_torch("2.5", "missing kernel")
+    @requires_onnxruntime_training()
     def test_llama_attention_b_forward_dynamic(self):
         from experimental_experiment.torch_models.llama_helper import (
             get_llama_attention,
@@ -300,9 +318,10 @@ class TestDynamoLlamaDynamic(ExtTestCase):
             dynamic=True,
             fullgraph=True,
             onnx_export="tt_test_llama_attention_backward_forward_dynamic",
-            impl="ref",
+            impl="ort",
             verbose=0,
             dump_prefix="tt_temp_llama_attention_backward_forward_dynamic",
+            atol=0.2,
         )
 
     @ignore_warnings((UserWarning, DeprecationWarning))

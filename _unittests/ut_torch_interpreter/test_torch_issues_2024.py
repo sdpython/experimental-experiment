@@ -30,9 +30,7 @@ class TestTorchIssues2024(unittest.TestCase):
                 buffer = torch.cat((prev_in, frame))
                 x = torch.fft.rfft(buffer * self.win_a, axis=0)
                 y = (W @ x.unsqueeze(-1)).squeeze(-1)
-                curr_out, next_out = torch.chunk(
-                    torch.fft.irfft(y, axis=0) * self.win_s, 2
-                )
+                curr_out, next_out = torch.chunk(torch.fft.irfft(y, axis=0) * self.win_s, 2)
                 return curr_out + prev_out, frame, next_out
 
         frame_size = 1024

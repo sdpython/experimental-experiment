@@ -11,21 +11,29 @@ from .onnx_cast import (
     CastOpCastPattern,
     ComputationCastOpCastPattern,
 )
+from .onnx_dropout import DropoutPattern
 from .onnx_equal import UnsqueezeEqualPattern
 from .onnx_expand import ExpandPattern, ExpandBroadcastPattern, ExpandSwapPattern
+from .onnx_functions import GeluPattern, LeakyReluPattern, SoftmaxCrossEntropyLossCastPattern
+from .onnx_layer_normalization import (
+    CastLayerNormalizationCastPattern,
+    LayerNormalizationPattern,
+    LayerNormalizationScalePattern,
+)
 from .onnx_mul import (
-    DivByMulScalarPattern,
     MulMulMulScalarPattern,
     SwitchOrderBinaryPattern,
 )
 from .onnx_matmul import (
     MatMulReshape2Of3Pattern,
+    MulMulMatMulPattern,
     ReshapeMatMulReshapePattern,
     TransposeMatMulPattern,
     TransposeReshapeMatMulPattern,
 )
 from .onnx_reduce import ReduceSumNormalizePattern
 from .onnx_reshape import (
+    ReshapePattern,
     ReduceReshapePattern,
     Reshape2Of3Pattern,
     ReshapeReshapeBinaryPattern,
@@ -34,7 +42,7 @@ from .onnx_reshape import (
 from .onnx_rotary import RotaryConcatPartPattern
 from .onnx_split import SlicesSplitPattern
 from .onnx_sub import Sub1MulPattern
-from .onnx_transpose import TransposeTransposePattern
+from .onnx_transpose import TransposeTransposePattern, TransposeReshapeTransposePattern
 from .onnx_unsqueeze import UnsqueezeUnsqueezePattern
 
 
@@ -61,7 +69,9 @@ class AlmostDoNothingPattern(PatternOptimization):
         return MatchResult(self, [node], self.apply, insert_at=node)
 
     def apply(
-        self, g: "GraphBuilder", node: NodeProto  # noqa: F821
+        self,
+        g: "GraphBuilder",  # noqa: F821
+        node: NodeProto,
     ) -> List[NodeProto]:
         return [
             g.make_node(
@@ -87,30 +97,39 @@ def get_default_patterns(verbose: int = 0) -> List[PatternOptimization]:
     """
     return [
         # AlmostDoNothingPattern(verbose=verbose),
+        CastLayerNormalizationCastPattern(verbose=verbose),
         CastPattern(verbose=verbose),
         CastCastBinaryPattern(verbose=verbose),
         CastOpCastPattern(verbose=verbose),
         ComputationCastOpCastPattern(verbose=verbose),
-        DivByMulScalarPattern(verbose=verbose),
+        DropoutPattern(verbose=verbose),
         ExpandPattern(verbose=verbose),
         ExpandBroadcastPattern(verbose=verbose),
         ExpandSwapPattern(verbose=verbose),
+        GeluPattern(verbose=verbose),
         IdentityPattern(verbose=verbose),
+        LayerNormalizationPattern(verbose=verbose),
+        LayerNormalizationScalePattern(verbose=verbose),
+        LeakyReluPattern(verbose=verbose),
         MulMulMulScalarPattern(verbose=verbose),
         ReduceReshapePattern(verbose=verbose),
         ReduceSumNormalizePattern(verbose=verbose),
+        ReshapePattern(verbose=verbose),
         ReshapeMatMulReshapePattern(verbose=verbose),
         Reshape2Of3Pattern(verbose=verbose),
         ReshapeReshapeBinaryPattern(verbose=verbose),
         MatMulReshape2Of3Pattern(verbose=verbose),
+        MulMulMatMulPattern(verbose=verbose),
         ReshapeReshapePattern(verbose=verbose),
         RotaryConcatPartPattern(verbose=verbose),
         SameChildrenPattern(verbose=verbose),
         SlicesSplitPattern(verbose=verbose),
+        SoftmaxCrossEntropyLossCastPattern(verbose=verbose),
         Sub1MulPattern(verbose=verbose),
         SwitchOrderBinaryPattern(verbose=verbose),
         TransposeMatMulPattern(verbose=verbose),
         TransposeReshapeMatMulPattern(verbose=verbose),
+        TransposeReshapeTransposePattern(verbose=verbose),
         TransposeTransposePattern(verbose=verbose),
         UnsqueezeEqualPattern(verbose=verbose),
         UnsqueezeUnsqueezePattern(verbose=verbose),

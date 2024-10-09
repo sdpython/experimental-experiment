@@ -1,6 +1,6 @@
 import multiprocessing
 import os
-from typing import Optional
+from typing import Dict, Optional
 
 
 def get_memory_rss(pid: int) -> int:
@@ -32,15 +32,29 @@ class Monitor:
         return dict(
             peak=self.max_peak / funit,
             mean=self.average * 1.0 / self.n_measures / funit,
-            n=self.n_measures / funit,
+            n=self.n_measures,
             begin=self.begin / funit,
             end=self.end / funit,
         )
 
+    @property
+    def delta_peak(self):
+        return self.max_peak - self.begin
+
+    @property
+    def delta_end(self):
+        return self.end - self.begin
+
+    @property
+    def delta_avg(self):
+        return self.average / self.n_measures - self.begin
+
     def __repr__(self):
         return (
-            f"{self.__class__.__name__}(peak={self.max_peak}, "
-            f"average={self.average}, n={self.n_measures})"
+            f"{self.__class__.__name__}(begin={self.begin}, end={self.end}, "
+            f"peak={self.max_peak}, average={self.average}, n={self.n_measures}, "
+            f"d_end={self.delta_end}, d_peak={self.delta_peak}, d_avg={self.delta_avg}"
+            f")"
         )
 
     def update(self, mem):
@@ -88,10 +102,10 @@ def _process_memory_spy(conn):
 
     if cuda:
         from pynvml import (
-            nvmlInit,
             nvmlDeviceGetCount,
             nvmlDeviceGetHandleByIndex,
             nvmlDeviceGetMemoryInfo,
+            nvmlInit,
             nvmlShutdown,
         )
 
@@ -156,9 +170,7 @@ class MemorySpy:
         self.start()
 
     def start(self) -> "MemorySpy":
-        """
-        Starts another process and tells it to spy.
-        """
+        """Starts another process and tells it to spy."""
         self.parent_conn, self.child_conn = multiprocessing.Pipe()
         self.child_process = multiprocessing.Process(
             target=_process_memory_spy, args=(self.child_conn,)
@@ -166,9 +178,7 @@ class MemorySpy:
         self.child_process.start()
         data = self.parent_conn.recv()
         if data != -2:
-            raise RuntimeError(
-                f"The child processing is supposed to send -2 not {data}."
-            )
+            raise RuntimeError(f"The child processing is supposed to send -2 not {data}.")
         self.parent_conn.send(self.pid)
         self.parent_conn.send(self.delay)
         self.parent_conn.send(1 if self.cuda else 0)
@@ -180,16 +190,14 @@ class MemorySpy:
         return self
 
     def stop(self):
-        """
-        Stops spying on.
-        """
+        """Stops spying on."""
         self.parent_conn.send(-3)
 
         cpu = Monitor.recv(self.parent_conn)
 
         n_gpus = self.parent_conn.recv()
         gpus = []
-        for i in range(n_gpus):
+        for _i in range(n_gpus):
             gpus.append(Monitor.recv(self.parent_conn))
 
         self.parent_conn.close()
@@ -215,7 +223,7 @@ def start_spying_on(
 
     .. code-block:: python
 
-        from experimental_experiment.memory_peak import start_spying_on
+        from experimental_experiment.memory_peak import start_spying_on, flatten
 
         p = start_spying_on()
         # ...
@@ -223,7 +231,19 @@ def start_spying_on(
         # ...
         stat = p.stop()
         print(stat)
+        print(flatten(stat))
     """
     if pid is None:
         pid = os.getpid()
     return MemorySpy(pid, delay, cuda)
+
+
+def flatten(ps, prefix: str = "") -> Dict[str, float]:
+    obs = ps["cpu"].to_dict(unit=2**20)
+    if "gpus" in ps:
+        for i, g in enumerate(ps["gpus"]):
+            for k, v in g.to_dict(unit=2**20).items():
+                obs[f"gpu{i}_{k}"] = v
+    if prefix:
+        obs = {f"{prefix}{k}": v for k, v in obs.items()}
+    return obs

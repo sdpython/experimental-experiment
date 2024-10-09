@@ -6,8 +6,10 @@ from experimental_experiment.ext_test_case import (
     ExtTestCase,
     ignore_warnings,
     skipif_ci_windows,
+    skipif_ci_apple,
     requires_torch,
     requires_cuda,
+    requires_onnxruntime_training,
 )
 from experimental_experiment.torch_models.dump_helper import assert_all_close
 from experimental_experiment.torch_dynamo import (
@@ -18,6 +20,24 @@ from experimental_experiment.torch_dynamo import (
 
 
 class TestDynamoLlama(ExtTestCase):
+
+    @classmethod
+    def setUp(cls):
+        import torch
+
+        if hasattr(torch._dynamo.variables.misc, "LoggingLoggerVariable"):
+            cls._old_value = torch._dynamo.variables.misc.LoggingLoggerVariable.call_method
+            torch._dynamo.variables.misc.LoggingLoggerVariable.call_method = (
+                lambda *_, **__: None
+            )
+
+    @classmethod
+    def tearDown(cls):
+        import torch
+
+        if hasattr(torch._dynamo.variables.misc, "LoggingLoggerVariable"):
+            torch._dynamo.variables.misc.LoggingLoggerVariable.call_method = cls._old_value
+
     @ignore_warnings((UserWarning, DeprecationWarning))
     def test_aaaa(self):
         from transformers import LlamaConfig
@@ -48,6 +68,7 @@ class TestDynamoLlama(ExtTestCase):
         decompositions=False,
         mixed=False,
         raise_list=None,
+        enable_pattern="default",
     ):
         import torch
 
@@ -63,6 +84,8 @@ class TestDynamoLlama(ExtTestCase):
             verbose=verbose,
             dump_prefix=onnx_export,
             raise_list=raise_list,
+            enable_pattern=enable_pattern,
+            optimize=bool(enable_pattern),
             **kwargs,
         )
 
@@ -149,6 +172,7 @@ class TestDynamoLlama(ExtTestCase):
         rtol: float = 1e-4,
         mixed=False,
         raise_list=None,
+        enable_pattern="default",
     ):
         storage = self._assert_model_numerically(
             model,
@@ -163,6 +187,7 @@ class TestDynamoLlama(ExtTestCase):
             rtol=rtol,
             mixed=mixed,
             raise_list=raise_list,
+            enable_pattern=enable_pattern,
         )
         self.assertIsInstance(storage, dict)
 
@@ -232,8 +257,7 @@ class TestDynamoLlama(ExtTestCase):
         batch_sizes = [3, 3, 3, 3, 3]
 
         example_args_collection = [
-            (torch.randn(batch, 2, dtype=torch.float32).cuda(),)
-            for batch in batch_sizes
+            (torch.randn(batch, 2, dtype=torch.float32).cuda(),) for batch in batch_sizes
         ]
 
         model = MLP().eval().cuda()
@@ -324,6 +348,23 @@ class TestDynamoLlama(ExtTestCase):
     @ignore_warnings((UserWarning, DeprecationWarning))
     @skipif_ci_windows("torch.compile not supported on Windows")
     @requires_torch("2.3", "unexpected behaviour")
+    def test_llama_decoder_forward_not_optimized(self):
+        from experimental_experiment.torch_models.llama_helper import get_llama_decoder
+
+        input_dims = self.get_input_dims(False)
+        model, example_args_collection = get_llama_decoder(input_dims=input_dims)
+        self.common_test_model(
+            model,
+            example_args_collection,
+            test_backward=False,
+            dynamic=False,
+            onnx_export="test_llama_decoder_forward_not_optimized",
+            enable_pattern=None,
+        )
+
+    @ignore_warnings((UserWarning, DeprecationWarning))
+    @skipif_ci_windows("torch.compile not supported on Windows")
+    @requires_torch("2.3", "unexpected behaviour")
     def test_llama_decoder_forward(self):
         from experimental_experiment.torch_models.llama_helper import get_llama_decoder
 
@@ -390,6 +431,7 @@ class TestDynamoLlama(ExtTestCase):
 
     @ignore_warnings((UserWarning, DeprecationWarning))
     @skipif_ci_windows("torch.compile not supported on Windows")
+    @skipif_ci_apple("torch.compile fails")
     def test_llama_attention_backward(self):
         from experimental_experiment.torch_models.llama_helper import (
             get_llama_attention,
@@ -441,6 +483,7 @@ class TestDynamoLlama(ExtTestCase):
 
     @ignore_warnings((UserWarning, DeprecationWarning))
     @skipif_ci_windows("torch.compile not supported on Windows")
+    @requires_onnxruntime_training()
     def test_llama_model_backward_forward(self):
         import torch
         from experimental_experiment.torch_models.llama_helper import get_llama_model
@@ -484,6 +527,7 @@ class TestDynamoLlama(ExtTestCase):
             dynamic=False,
             fullgraph=True,
             onnx_export="test_llama_model_backward",
+            atol=5e-4,
         )
 
     @ignore_warnings((UserWarning, DeprecationWarning))

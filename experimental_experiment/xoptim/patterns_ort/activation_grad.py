@@ -41,9 +41,9 @@ class SoftmaxGradPattern(PatternOptimization):
         if {id(next_nodes[0]), id(next_nodes[1])} != {id(sub_node), id(node)}:
             return self.none(node, inspect.currentframe().f_lineno)
 
-        if g.is_used_more_than_once(
-            next_mul_node.output[0]
-        ) or g.is_used_more_than_once(node.output[0]):
+        if g.is_used_more_than_once(next_mul_node.output[0]) or g.is_used_more_than_once(
+            node.output[0]
+        ):
             return self.none(node, inspect.currentframe().f_lineno)
 
         nodes = [mul_node, node, next_mul_node, sub_node]
@@ -57,10 +57,7 @@ class SoftmaxGradPattern(PatternOptimization):
         next_mul_node: NodeProto,
         sub_node: NodeProto,
     ) -> List[NodeProto]:
-
-        axis = g.get_constant_or_attribute(
-            reduce_node, "axes", input_index=1, cvt=tuple
-        )
+        axis = g.get_constant_or_attribute(reduce_node, "axes", input_index=1, cvt=tuple)
 
         grad = g.make_node(
             "SoftmaxGrad",

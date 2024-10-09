@@ -6,11 +6,37 @@ from .fast_backend import onnx_custom_backend
 from .dynger_backend import dynger_backend
 
 
-def get_decomposition_table(
-    decomposition_table: Optional[
-        Dict["torch._ops.OpOverload", Callable[..., Any] | str]  # noqa: F821
-    ] = None
-) -> Dict["torch._ops.OpOverload", Callable[..., Any]]:  # noqa: F821
+def get_decomposition_table_by_name(name: str):
+    """
+    Returns a predefined decomposition table.
+
+    :param name: name see below
+    :return: decomposition table
+
+    * 'none': do not decompose
+    * 'default': :func:`get_decomposition_table`
+    * 'onnxscript': :func:`get_decomposition_table_onnxscript`
+    * 'dynamo': :func:`get_decomposition_table_dynamo`
+    """
+    if name is None or isinstance(name, dict):
+        return name
+    if name == "none":
+        return None
+    if name == "default":
+        return get_decomposition_table()
+    if name == "onnxscript":
+        return get_decomposition_table_onnxscript()
+    if name == "dynamo":
+        return get_decomposition_table_dynamo()
+    if name == "onnxscript2":
+        table = get_decomposition_table_onnxscript()
+        return filter_decomposition_table(
+            table, lambda op: "view" not in op.name() or "copy" in op.name()
+        )
+    raise AssertionError(f"Unknown decomposition table name={name!r}")
+
+
+def get_decomposition_table():
     """
     Returns the decomposition table needed to translate backward
     graph into onnx. It should used as follows:
@@ -23,7 +49,10 @@ def get_decomposition_table(
         from torch._dynamo.backends.common import aot_autograd
         from experimental_experiment.torch_dynamo import get_decomposition_table
 
-        aot_compiler = aot_autograd(fw_compiler=backend_debug, decompositions=get_decomposition_table("default"))
+        aot_compiler = aot_autograd(
+            fw_compiler=backend_debug,
+            decompositions=get_decomposition_table()
+        )
 
         compiled_model = torch.compile(
             model,
@@ -42,30 +71,46 @@ def get_decomposition_table(
 
         pprint.pprint(get_decomposition_table("default"))
     """
-    if decomposition_table == "default":
-        import torch
+    import torch
 
-        new_table = {}
-        for k, v in torch._decomp.decomposition_table.items():
-            if k.name() in {
-                "aten::embedding_dense_backward",
-                "aten::rrelu_with_noise",
-                "aten::native_layer_norm_backward",
-            }:
-                new_table[k] = v
-        return new_table
+    new_table = {}
+    for k, v in torch._decomp.decomposition_table.items():
+        if k.name() in {
+            "aten::embedding_dense_backward",
+            "aten::rrelu_with_noise",
+            "aten::native_layer_norm_backward",
+        }:
+            new_table[k] = v
+    return new_table
 
-    if isinstance(decomposition_table, dict):
-        return decomposition_table
 
-    raise AssertionError(
-        f"Unexpected value for decomposition_table: {decomposition_table!r}"
+def get_decomposition_table_onnxscript():
+    """
+    Returns the decomposition table used by :func:`torch.onnx.export`.
+
+    The value is:
+
+    .. runpython::
+        :showcode:
+
+        import pprint
+        from experimental_experiment.torch_dynamo import get_decomposition_table_onnxscript
+
+        pprint.pprint(get_decomposition_table_onnxscript())
+    """
+    from torch.onnx._internal.exporter._registration import ONNXRegistry
+    from torch.onnx._internal.exporter._decomp import (
+        get_onnx_implemented_overloads,
+        create_onnx_friendly_decomposition_table,
     )
 
+    registry = ONNXRegistry.from_torchlib()
+    onnx_registered_ops = set(get_onnx_implemented_overloads(registry))
+    decomposition_table = create_onnx_friendly_decomposition_table(onnx_registered_ops)
+    return decomposition_table
 
-def get_decomposition_table_dynamo(
-    onnx_registry=None,
-) -> Dict["torch._ops.OpOverload", Callable[..., Any]]:  # noqa: F821
+
+def get_decomposition_table_dynamo(onnx_registry=None):
     """
     Returns the decomposition table needed for the dynamo exporter.
 
@@ -85,20 +130,26 @@ def get_decomposition_table_dynamo(
     from torch.onnx._internal.fx.decomposition_table import (
         create_onnx_friendly_decomposition_table,
     )
-    from torch.onnx._internal.exporter import OnnxRegistry
+
+    try:
+        from torch.onnx._internal._exporter_legacy import OnnxRegistry
+    except ImportError:
+        from torch.onnx._internal.exporter import OnnxRegistry
 
     return create_onnx_friendly_decomposition_table(onnx_registry or OnnxRegistry())
 
 
 def filter_decomposition_table(
-    existing_table: Optional[Dict] = None,
-) -> Dict["torch._ops.OpOverload", Callable[..., Any]]:  # noqa: F821
+    existing_table: Optional[Dict] = None, filter_fct: Optional[Callable[Any, bool]] = None
+) -> Dict:
     """
     Returns the decomposition table when some conversions because
     their translation in ONNX is less efficient.
 
     :param existing_table: dictionary of decompositions, by default,
         it is ``torch._decomp.decomposition_table``.
+    :param filter_fct: if specified, a decomposition function is remove
+        if the function returns false
     :return: new table
 
     ::
@@ -107,7 +158,10 @@ def filter_decomposition_table(
         from torch._dynamo.backends.common import aot_autograd
         from experimental_experiment.torch_dynamo import filter_decomposition_table
 
-        aot_compiler = aot_autograd(fw_compiler=backend_debug, decompositions=filter_decomposition_table())
+        aot_compiler = aot_autograd(
+            fw_compiler=backend_debug,
+            decompositions=filter_decomposition_table()
+        )
 
         compiled_model = torch.compile(
             model,
@@ -130,10 +184,15 @@ def filter_decomposition_table(
         import torch
 
         existing_table = torch._decomp.decomposition_table.items()
+    elif isinstance(existing_table, dict):
+        existing_table = existing_table.items()
 
     new_table = {}
     for k, v in existing_table:
-        if k.name() in {
+        if filter_fct:
+            if not filter_fct(k):
+                continue
+        elif k.name() in {
             "aten::slice_backward",
             "aten::select_backward.out",
             "aten::slice.Tensor",
@@ -184,10 +243,7 @@ def pprint_storage(
         rows = [sind + _single_print(storage)]
     elif isinstance(storage, dict):
         if len(storage) <= 10 and all(
-            map(
-                lambda v: isinstance(v, (int, float, str, bool, type(None))),
-                storage.values(),
-            )
+            isinstance(v, (int, float, str, bool, type(None))) for v in storage.values()
         ):
             rows = [sind + str(storage)]
         else:
@@ -203,7 +259,7 @@ def pprint_storage(
             rows.append(sind + "}")
     elif isinstance(storage, list):
         if len(storage) <= 10 and all(
-            map(lambda v: isinstance(v, (int, float, str, bool, type(None))), storage)
+            isinstance(v, (int, float, str, bool, type(None))) for v in storage
         ):
             rows = [sind + str(storage)]
         else:
@@ -218,7 +274,7 @@ def pprint_storage(
             rows.append(sind + "]")
     elif isinstance(storage, tuple):
         if len(storage) <= 10 and all(
-            map(lambda v: isinstance(v, (int, float, str, bool, type(None))), storage)
+            isinstance(v, (int, float, str, bool, type(None))) for v in storage
         ):
             rows = [sind + str(storage)]
         else:

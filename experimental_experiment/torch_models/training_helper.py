@@ -16,6 +16,7 @@ def make_aot_ort(
     ort_optimization_level: Optional[str] = None,
     order_algorithm: Optional[str] = None,
     dump_patterns: Optional[str] = None,
+    dump_prefix: Optional[str] = None,
 ) -> tuple:
     """
     Creates a backend to train model with DORT.
@@ -34,8 +35,10 @@ def make_aot_ort(
     :param order_algorithm: algorithm optimizing the order the onnx node,
         none by default
     :param dump_patterns: dump the applied patterns
+    :param dump_prefix: prefix before saving the models
     :return: twice the same backend
     """
+    assert not dump_prefix, f"dump_prefix={dump_prefix!r} not implemented"
     import onnxruntime
     from torch.onnx import (
         OnnxRegistry,
@@ -76,7 +79,7 @@ def make_aot_ort(
     if (
         enable_pattern
         and "experimental" in enable_pattern
-        or any(map(lambda s: "experimental" in s, enable_pattern))
+        or any("experimental" in s for s in enable_pattern)
     ):
         try:
             from onnx_extended.ortops.optim.cuda import get_ort_ext_libs
@@ -113,9 +116,7 @@ def make_aot_ort(
     else:
         if verbose:
             print(f"[make_aot_ort] enable {onnx_registry!r}")
-        export_options = ExportOptions(
-            dynamic_shapes=dynamic, onnx_registry=onnx_registry
-        )
+        export_options = ExportOptions(dynamic_shapes=dynamic, onnx_registry=onnx_registry)
 
     from torch.onnx._internal import onnxruntime
 
@@ -141,13 +142,11 @@ def make_aot_ort(
             first_model_proto = args[0]
 
             next_model = inline_local_functions(first_model_proto)
-            # next_model = optimize_model_proto(
+            # next_model = optimize_model_proto_oxs(
             #     *args, verbose=verbose, onnx_shape_inference=False, **kwargs
             # )
 
-            patterns = get_pattern_list(
-                enable_pattern, disable_pattern, verbose=verbose
-            )
+            patterns = get_pattern_list(enable_pattern, disable_pattern, verbose=verbose)
             if order_algorithm is not None:
                 from ..xoptim import OrderAlgorithm
 
@@ -183,7 +182,7 @@ def make_aot_ort(
             first_model_proto = args[0]
 
             next_model = inline_local_functions(first_model_proto)
-            # next_model = optimize_model_proto(
+            # next_model = optimize_model_proto_oxs(
             #     *args, verbose=verbose, onnx_shape_inference=False, **kwargs
             # )
 
@@ -256,7 +255,8 @@ def train_loop_mixed_precision(model, *args, loss_fn=None, optimizer=None):
         optimizer = torch.optim.SGD(model.parameters(), lr=1e-3)
 
     with torch.autocast(device_type="cuda", dtype=torch.float16):
-        # Set the model to training mode - important for batch normalization and dropout layers
+        # Set the model to training mode -
+        # important for batch normalization and dropout layers
         # Unnecessary in this situation but added for best practices
         model.train()
 

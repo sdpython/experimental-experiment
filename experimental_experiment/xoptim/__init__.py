@@ -24,6 +24,7 @@ def get_pattern(
     from .patterns_exp import get_experimental_patterns
     from .patterns_fix import get_fix_patterns
     from .patterns_investigation import get_investigation_patterns
+    from .patterns_ml import get_ml_patterns
 
     _pattern = dict(
         default=get_default_patterns,
@@ -31,6 +32,7 @@ def get_pattern(
         experimental=get_experimental_patterns,
         fix=get_fix_patterns,
         investigation=get_investigation_patterns,
+        ml=get_ml_patterns,
     )
 
     if isinstance(obj, str):
@@ -53,10 +55,7 @@ def get_pattern(
     }
     for fct in _pattern.values():
         mapping.update(
-            {
-                v.__class__.__name__.replace("Pattern", ""): v
-                for v in fct(verbose=verbose)
-            }
+            {v.__class__.__name__.replace("Pattern", ""): v for v in fct(verbose=verbose)}
         )
     if isinstance(obj, list):
         assert as_list, f"obj={obj!r} is already a list"
@@ -69,8 +68,11 @@ def get_pattern(
         return res
     if obj in mapping:
         return [mapping[obj]] if as_list else mapping[obj]
+    if obj == "none":
+        return []
     raise RuntimeError(
-        f"Unable to find pattern for {obj!r} among {pprint.pformat(mapping)}."
+        f"Unable to find pattern for {obj!r} among {len(mapping)} "
+        f"pattenrs\n{pprint.pformat(mapping)}."
     )
 
 
@@ -91,6 +93,8 @@ def get_pattern_list(
     """
     if positive_list is None:
         return []
+    if isinstance(positive_list, str) and "-" in positive_list and not negative_list:
+        positive_list, negative_list = positive_list.split("-")
     pos_list = get_pattern(positive_list, as_list=True, verbose=verbose)
     if negative_list is None:
         return pos_list

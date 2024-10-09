@@ -6,12 +6,12 @@ from experimental_experiment.ext_test_case import (
     ignore_warnings,
     skipif_ci_windows,
     has_cuda,
+    requires_torch,
 )
 from experimental_experiment.torch_test_helper import export_to_onnx, check_model_ort
 
 
 class TestEdTransformer(ExtTestCase):
-
     def _get_model(self):
         if hasattr(self, "model"):
             return self.model, self.expected, self.src, self.tgt
@@ -130,7 +130,11 @@ class TestEdTransformer(ExtTestCase):
         diff1 = np.abs(expected.detach().numpy() - results[0]).sum()
         self.assertGreater(diff1, 1000)
         if has_cuda():
-            sess = check_model_ort(onx, providers="cuda")
+            sess = check_model_ort(
+                onx,
+                providers="cuda",
+                dump_file="test_transformer_export_new_2of3_only.onnx",
+            )
             results = sess.run(None, feeds)
             self.assertEqualArray(expected.detach().numpy(), results[0], atol=5)
             diff2 = np.abs(expected.detach().numpy() - results[0]).sum()
@@ -138,6 +142,7 @@ class TestEdTransformer(ExtTestCase):
 
     @skipif_ci_windows("dynamo exporter not on windows")
     @ignore_warnings(UserWarning)
+    @requires_torch("2.5", "unexpected failure")
     def test_transformer_export_new_2of3_expand(self):
         transformer_model, expected, src, tgt = self._get_model()
         ret = export_to_onnx(

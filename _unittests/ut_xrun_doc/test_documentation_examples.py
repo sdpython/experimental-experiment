@@ -6,7 +6,12 @@ import importlib.util
 import subprocess
 import time
 from experimental_experiment import __file__ as experimental_experiment_file
-from experimental_experiment.ext_test_case import ExtTestCase, is_windows, is_apple
+from experimental_experiment.ext_test_case import (
+    ExtTestCase,
+    is_windows,
+    is_apple,
+    has_onnxruntime_training,
+)
 
 VERBOSE = 0
 ROOT = os.path.realpath(
@@ -52,7 +57,7 @@ class TestDocumentationExamples(ExtTestCase):
                     if verbose:
                         print(f"failed: {name!r} due to missing dot.")
                     return 0
-                raise AssertionError(
+                raise AssertionError(  # noqa: B904
                     "Example '{}' (cmd: {} - exec_prefix='{}') "
                     "failed due to\n{}"
                     "".format(name, cmds, sys.exec_prefix, st)
@@ -64,6 +69,8 @@ class TestDocumentationExamples(ExtTestCase):
 
     @classmethod
     def add_test_methods(cls):
+        import torch
+
         this = os.path.abspath(os.path.dirname(__file__))
         fold = os.path.normpath(os.path.join(this, "..", "..", "_doc", "examples"))
         found = os.listdir(fold)
@@ -72,16 +79,30 @@ class TestDocumentationExamples(ExtTestCase):
                 continue
             reason = None
 
+            if pv.Version(".".join(torch.__version__.split(".")[:2])) < pv.Version("2.5"):
+                reason = "too long, pytorch < 2.5"
+
             if name in {"plot_torch_export_201.py"}:
                 if sys.platform in {"win32"}:
                     # dynamo not supported on windows
                     reason = "windows not supported"
 
-            if name in {"plot_llama_bench_102.py", "plot_torch_custom_backend_101.py"}:
-                if sys.platform in {"win32", "darwin"}:
+            if not reason and name in {
+                "plot_llama_bench_102.py",
+                "plot_torch_custom_backend_101.py",
+                "plot_custom_backend_llama_102.py",
+            }:
+                if sys.platform in {"win32"}:
+                    # dynamo not supported on windows
+                    reason = "dynamo not supported on windows"
+                if sys.platform in {"darwin"}:
                     # dynamo not supported on windows
                     reason = "onnxruntime-training not available"
-
+                if sys.platform == "linux" and name in {
+                    "plot_llama_bench_102.py",
+                    "plot_custom_backend_llama_102.py",
+                }:
+                    reason = "too long"
             if not reason and name in {
                 "plot_convolutation_matmul_102.py",
                 "plot_optimize_101.py",
@@ -93,16 +114,42 @@ class TestDocumentationExamples(ExtTestCase):
                     reason = "graphviz not installed"
 
             if name in {"plot_llama_diff_dort_301.py", "plot_llama_diff_export_301.py"}:
-                import torch
+                from torch import __version__ as tv
 
-                if pv.Version(".".join(torch.__version__.split(".")[:2])) < pv.Version(
-                    "2.4"
-                ):
+                if pv.Version(".".join(tv.split(".")[:2])) < pv.Version("2.4"):
                     reason = "requires torch 2.4"
+
+            if name in {
+                "plot_llama_diff_dort_301.py",
+                "plot_llama_diff_export_301.py",
+                "plot_profile_existing_onnx_101.py",
+            }:
+                from torch import __version__ as tv
+
+                if sys.platform == "win32":
+                    reason = "does not work on windows"
+
+            if name in {"plot_torch_export_201.py"}:
+                from torch import __version__ as tv
+
+                if pv.Version(".".join(tv.split(".")[:2])) < pv.Version("2.5"):
+                    reason = "requires torch 2.5"
 
             if name in {"plot_llama_bench_102.py"}:
                 if sys.platform in {"darwin"}:
                     reason = "apple not supported"
+
+            if name in {
+                "plot_torch_custom_backend_101.py",
+                "lot_llama_bench_102.py",
+                "plot_custom_backend_llama_102.py",
+            }:
+                if not has_onnxruntime_training(True):
+                    reason = "OrtValueVector.push_back_batch is missing (onnxruntime)"
+
+            if name in {"plot_convolutation_matmul_102.py"}:
+                if not has_onnxruntime_training(True):
+                    reason = "OrtModuleGraphBuilder is missing (onnxruntime)"
 
             if not reason and name in {
                 # "plot_convolutation_matmul.py",
@@ -115,11 +162,7 @@ class TestDocumentationExamples(ExtTestCase):
                 # too long
                 reason = "not working yet or too long"
 
-            if (
-                not reason
-                and is_apple()
-                and name in {"plot_convolutation_matmul_102.py"}
-            ):
+            if not reason and is_apple() and name in {"plot_convolutation_matmul_102.py"}:
                 reason = "dot is missing"
 
             if not reason and is_apple():

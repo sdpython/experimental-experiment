@@ -1,5 +1,6 @@
 import os
 import unittest
+from typing import Optional
 import numpy as np
 from onnx import ModelProto, TensorProto, helper as oh, load as load_onnx
 from onnx.checker import check_model
@@ -21,8 +22,7 @@ TFLOAT16 = TensorProto.FLOAT16
 
 
 class TestGraphOrderOptimization(ExtTestCase):
-
-    def _range(self, *shape, bias: float = None):
+    def _range(self, *shape, bias: Optional[float] = None):
         n = np.prod(shape)
         x = np.arange(n).astype(np.float32) / n
         if bias:
@@ -54,7 +54,6 @@ class TestGraphOrderOptimization(ExtTestCase):
         onx.graph.value_info.extend(new_shapes)
 
     def _check_ort_cpu_or_cuda(self, onx):
-
         def cl(text):
             return (
                 text.replace("\n", " ")
@@ -72,9 +71,7 @@ class TestGraphOrderOptimization(ExtTestCase):
         for i in onx.graph.input:
             assert s(i.type.tensor_type.elem_type != 0), f"Input {i.name!r} has no type"
         for i in onx.graph.output:
-            assert s(
-                i.type.tensor_type.elem_type != 0
-            ), f"Output {i.name!r} has no type"
+            assert s(i.type.tensor_type.elem_type != 0), f"Output {i.name!r} has no type"
 
         skip_names = set()
         for node in onx.graph.node:
@@ -84,9 +81,7 @@ class TestGraphOrderOptimization(ExtTestCase):
         for sh in onx.graph.value_info:
             if sh.name in skip_names:
                 continue
-            assert s(
-                sh.type.tensor_type.elem_type != 0
-            ), f"Result {sh.name!r} has no type"
+            assert s(sh.type.tensor_type.elem_type != 0), f"Result {sh.name!r} has no type"
 
         import onnxruntime
         from onnxruntime.capi.onnxruntime_pybind11_state import Fail, InvalidArgument
@@ -98,7 +93,7 @@ class TestGraphOrderOptimization(ExtTestCase):
             try:
                 from onnx_extended.ortops.optim.cuda import get_ort_ext_libs
             except ImportError:
-                raise unittest.SkipTest("onnx_extended not installed.")
+                raise unittest.SkipTest("onnx_extended not installed.")  # noqa: B904
 
             options.register_custom_ops_library(get_ort_ext_libs()[0])
             providers = ["CUDAExecutionProvider", "CPUExecutionProvider"]
@@ -106,7 +101,7 @@ class TestGraphOrderOptimization(ExtTestCase):
             try:
                 from onnx_extended.ortops.optim.cpu import get_ort_ext_libs
             except ImportError:
-                raise unittest.SkipTest("onnx_extended not installed.")
+                raise unittest.SkipTest("onnx_extended not installed.")  # noqa: B904
 
             options.register_custom_ops_library(get_ort_ext_libs()[0])
 

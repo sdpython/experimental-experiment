@@ -9,13 +9,11 @@ from experimental_experiment.ext_test_case import (
 
 
 class TestZooLlama3(ExtTestCase):
-
     @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
     @ignore_warnings(DeprecationWarning)
     @requires_torch("2.3")
     @requires_zoo()  # ZOO=1 python _unittests/ut_xrun_models/test_zoo_llama3.py
     def test_llama3_export(self):
-
         import os
         import time
         import onnxruntime
@@ -36,9 +34,7 @@ class TestZooLlama3(ExtTestCase):
             print(f"output type: {type(expected)}")
             print(f"logits: {expected.logits.shape}, {expected.logits.dtype}")
 
-            print(
-                "start conversion... with input_ids", input_ids.dtype, input_ids.shape
-            )
+            print("start conversion... with input_ids", input_ids.dtype, input_ids.shape)
             begin = time.perf_counter()
             large_onx = to_onnx(
                 model,
@@ -47,7 +43,8 @@ class TestZooLlama3(ExtTestCase):
                 verbose=1,
                 large_model=True,
                 # dynamic_shapes fails with transformers==4.37.2
-                # TypeError: scaled_dot_product_attention(): argument 'is_causal' must be bool, not SymBool
+                # TypeError: scaled_dot_product_attention():
+                # argument 'is_causal' must be bool, not SymBool
                 # dynamic_shapes={"x": {1: torch.export.Dim("length", min=2)}},
             )
             duration = time.perf_counter() - begin
@@ -69,9 +66,7 @@ class TestZooLlama3(ExtTestCase):
 
         print(f"loading model {filename!r} with onnxruntime.")
         begin = time.perf_counter()
-        sess = onnxruntime.InferenceSession(
-            filename, providers=["CPUExecutionProvider"]
-        )
+        sess = onnxruntime.InferenceSession(filename, providers=["CPUExecutionProvider"])
         print(f"done in {time.perf_counter() - begin}s")
 
         print("running the first iteration")
@@ -85,14 +80,14 @@ class TestZooLlama3(ExtTestCase):
         N = 5
         print(f"running {N} iterations with torch")
         begin = time.perf_counter()
-        for i in range(N):
+        for _ in range(N):
             model(input_ids)
         d = time.perf_counter() - begin
         print(f"done in {d}s for torch")
 
         print(f"running {N} iterations with onnxruntime")
         begin = time.perf_counter()
-        for i in range(N):
+        for _ in range(N):
             sess.run(None, {name: np_input})
         d = time.perf_counter() - begin
         print(f"done in {d}s for onnxruntime")
