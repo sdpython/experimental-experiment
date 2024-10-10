@@ -65,7 +65,8 @@ class DynamoInterpreter:
             f"Unexpected type for one input in example_inputs "
             f"{[type(t) for t in example_inputs]}"
         )
-        self.example_inputs_ = self.flatten_inputs(example_inputs)
+        self.example_inputs_ = example_inputs
+        self.flat_example_inputs_ = self.flatten_inputs(example_inputs)
         self.current_input_ = 0
 
     def flatten_inputs(self, x: Any) -> List["torch.Tensor"]:  # noqa: F821
@@ -208,28 +209,28 @@ class DynamoInterpreter:
         users: Iterable[str],
     ) -> str:
         if self.example_inputs_ is not None and not self.builder.was_inputs_renamed:
-            assert len(self.builder.input_names) < len(self.example_inputs_), (
+            assert len(self.builder.input_names) < len(self.flat_example_inputs_), (
                 f"Too many inputs already ({len(self.builder.input_names)}), "
                 f"self.current_input_={self.current_input_}, "
                 f"unexpected {name!r} "
                 f"after {self.builder.input_names}"
                 f"{self.builder.get_debug_msg()}"
             )
-            if self.example_inputs_[self.current_input_] is None:
+            if self.flat_example_inputs_[self.current_input_] is None:
                 # We skip it.
                 assert len(users) == 0, (
                     f"Input {name!r} (index {self.current_input_}"
-                    f"/{len(self.example_inputs_)}) "
+                    f"/{len(self.flat_example_inputs_)}) "
                     f"is None but it is used by {users}. "
                     f"Existing inputs {self.builder.input_names}. Example inputs: "
-                    f"{['-' if t is None else t.shape for t in self.example_inputs_]}"
+                    f"{['-' if t is None else t.shape for t in self.flat_example_inputs_]}"
                     f"{self.builder.get_debug_msg()}"
                 )
                 self.current_input_ += 1
                 return ""
 
             # second check
-            not_none = tuple(t for t in self.example_inputs_ if t is not None)
+            not_none = tuple(t for t in self.flat_example_inputs_ if t is not None)
             assert len(self.builder.input_names) < len(not_none), (
                 f"Too many inputs already ({len(self.builder.input_names)}), "
                 f"unexpected {name!r} "

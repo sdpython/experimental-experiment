@@ -1310,14 +1310,13 @@ class ModelRunner:
                     f"Length mismatch len(dynamic_shapes[i])={len(dynamic_shapes[i])} "
                     f"len(inp)={len(inp)}"
                 )
-                dyn_inputs.append(
-                    [
-                        self._make_export_new_dynamic_shape(
-                            x.shape, ds, dyn_values=dyn_values, i=i
-                        )
-                        for x, ds in zip(inp, dynamic_shapes[i])
-                    ]
-                )
+                new_inputs = []
+                for x, ds in zip(inp, dynamic_shapes[i]):
+                    nds = self._make_export_new_dynamic_shape(
+                        x.shape, ds, dyn_values=dyn_values, i=i
+                    )
+                    new_inputs.append(x if nds == ds else x.expand(nds))
+                dyn_inputs.append(new_inputs)
                 continue
             new_shape = self._make_export_new_dynamic_shape(
                 inp.shape, dynamic_shapes[i], dyn_values=dyn_values, i=i
@@ -1442,6 +1441,29 @@ class ModelRunner:
             dyn_input_shapes.append(new_shape)
         return tuple(dyn_input_shapes)
 
+    def _make_dynamic_inputs_tensor(
+        self, input_shape, dyn_shape, dyn_values: Dict[str, Any], i: Optional[int] = None
+    ):
+        new_shape = []
+        assert isinstance(dyn_shape, dict), (
+            f"Unexpected type for input {i}, dyn_shape{dyn_shape}, "
+            f"shape of input[{i}]={input_shape}"
+        )
+        for j in range(len(input_shape)):
+            if j not in dyn_shape:
+                new_shape.append(input_shape[j])
+                continue
+            name = dyn_shape[j]
+            if name in dyn_values:
+                new_shape.append(dyn_values[name])
+                continue
+            d = input_shape[j]
+            d += 1
+            dyn_values[name] = d
+            new_shape.append(d)
+
+        return tuple(new_shape)
+
     def make_dynamic_inputs(self, wrapped: bool = False):
         """
         Creates dynamic inputs based on the static ones by changing the dynamic
@@ -1468,30 +1490,32 @@ class ModelRunner:
             if i >= len(dynamic_shapes):
                 dyn_inputs.append(inp)
                 continue
-            new_shape = []
             dyn_shape = dynamic_shapes[i]
             if inp is None:
                 dyn_inputs.append(None)
                 continue
-            assert isinstance(dyn_shape, dict), (
-                f"Unexpected type for input {i}, dyn_shape{dyn_shape}, "
-                f"shape of input[{i}]={inp.shape}, "
-                f"dynamic_shapes={dynamic_shapes}, "
-            )
-            for j in range(len(inp.shape)):
-                if j not in dyn_shape:
-                    new_shape.append(inp.shape[j])
-                    continue
-                name = dyn_shape[j]
-                if name in dyn_values:
-                    new_shape.append(dyn_values[name])
-                    continue
-                d = inp.shape[j]
-                d += 1
-                dyn_values[name] = d
-                new_shape.append(d)
 
-            new_shape = tuple(new_shape)
+            if isinstance(dyn_shape, list):
+                assert isinstance(inp, list), f"Unexpected type {type(inp)} for input {i}"
+                assert len(inp) == len(dyn_shape), (
+                    f"Length mismatch len(self.inputs[i])={len(inp)} == "
+                    f"len(dynamic_shapes[i])={len(dyn_shape)}"
+                )
+                new_input = []
+                for x, ds in zip(inp, dyn_shape):
+                    ns = self._make_dynamic_inputs_tensor(
+                        input_shape=x.shape, i=i, dyn_shape=ds, dyn_values=dyn_values
+                    )
+                    zeros = torch.zeros(ns, dtype=x.dtype, device=x.device)
+                    slices = tuple(slice(0, s) for s in x.shape)
+                    zeros[slices] = x[slices]
+                    new_input.append(zeros)
+                dyn_inputs.append(new_input)
+                continue
+
+            new_shape = self._make_dynamic_inputs_tensor(
+                input_shape=inp.shape, i=i, dyn_shape=dyn_shape, dyn_values=dyn_values
+            )
             zeros = torch.zeros(new_shape, dtype=inp.dtype, device=inp.device)
             slices = tuple(slice(0, s) for s in inp.shape)
             zeros[slices] = inp[slices]
