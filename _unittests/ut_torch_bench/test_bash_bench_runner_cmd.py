@@ -33,7 +33,7 @@ class TestBashBenchRunnerCmd(ExtTestCase):
         self,
         exporter,
         models,
-        verbose=0,
+        verbose=1,
         debug=False,
         optimization=None,
         dump_ort=False,
@@ -547,7 +547,11 @@ class TestBashBenchRunnerCmd(ExtTestCase):
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.5")
     def test_huggingface_export_bench_custom_cpu_dummy_list_dynamic(self):
-        self._huggingface_export_bench_cpu("custom", "101DummyIList", dynamic=True)
+        self._huggingface_export_bench_cpu(
+            "custom",
+            "101DummyIList",
+            dynamic=True,  # debug=True
+        )
 
     @skipif_ci_windows("exporter does not work on Windows")
     @ignore_warnings((DeprecationWarning, UserWarning))

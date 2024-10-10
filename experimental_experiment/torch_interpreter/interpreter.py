@@ -77,7 +77,9 @@ class DynamoInterpreter:
         if isinstance(x, (list, tuple)):
             res = []
             for i in x:
-                if i is None or isinstance(i, self.torch.Tensor):
+                if i is None or isinstance(
+                    i, (self.torch.Tensor, self.torch.SymInt, self.torch.SymFloat)
+                ):
                     res.append(i)
                 else:
                     res.extend(self.flatten_inputs(i))

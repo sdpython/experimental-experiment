@@ -212,7 +212,7 @@ class HuggingfaceRunner(BenchmarkRunner):
                 ),
                 "101Dummy2Inputs": (
                     lambda: Neuron2Inputs.config,
-                    Neuron,
+                    Neuron2Inputs,
                 ),
                 "101DummyNamed1": (
                     lambda: NeuronNamed1.config,

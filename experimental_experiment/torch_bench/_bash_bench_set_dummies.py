@@ -69,7 +69,7 @@ class Neuron2Inputs(torch.nn.Module):
         return torch.sigmoid(z)
 
     def _get_random_inputs(self, device: str):
-        return (torch.randn(1, 5).to(device), torch.randn(1, 5).to(device))
+        return (torch.randn(1, 5).to(device), torch.randn(1, 3).to(device))
 
     config = MakeConfig(download=False, to_tuple=False)
 
