@@ -889,6 +889,21 @@ class ModelRunner:
                     if inp is None:
                         continue
                     dname = f"input{len(input_names)}"
+                    if isinstance(inp, list):
+                        for di, d in enumerate(inp):
+                            assert isinstance(d, dict), (
+                                f"Unexpected for input {dname!r}, {type(d)}, i={i}, "
+                                f"inp={inp}, dyn={dyn}, "
+                                f"dynamic_shapes_for_export={dynamic_shapes_for_export}"
+                            )
+                            dn = f"{dname}_{di}"
+                            daxes = {}
+                            for k, v in d.items():
+                                daxes[k] = v.__name__
+                            dynamic_axes[dn] = daxes
+                            input_names.append(dn)
+                        continue
+
                     assert isinstance(inp, dict), (
                         f"Unexpected for input {dname!r}, {type(inp)}, i={i}, dyn={dyn}, "
                         f"dynamic_shapes_for_export={dynamic_shapes_for_export}"
