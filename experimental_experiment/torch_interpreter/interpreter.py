@@ -72,10 +72,12 @@ class DynamoInterpreter:
         """
         Flatten inputs.
         """
+        if x is None:
+            return x
         if isinstance(x, (list, tuple)):
             res = []
             for i in x:
-                if isinstance(i, self.torch.Tensor):
+                if i is None or isinstance(i, self.torch.Tensor):
                     res.append(i)
                 else:
                     res.extend(self.flatten_inputs(i))

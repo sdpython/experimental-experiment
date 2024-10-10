@@ -6,6 +6,7 @@ from experimental_experiment.ext_test_case import (
     ExtTestCase,
     requires_torch,
     skipif_ci_windows,
+    hide_stdout,
 )
 from experimental_experiment.reference import ExtendedReferenceEvaluator
 from experimental_experiment.torch_interpreter import to_onnx
@@ -128,6 +129,7 @@ class TestOnnxExportControlFlow(ExtTestCase):
 
     @skipif_ci_windows("not yet supported on Windows")
     @requires_torch("2.4")
+    @hide_stdout()
     def test_controlflow_custom_if_inline(self):
         cls, x = self.get_custom_model()
         model = cls()
