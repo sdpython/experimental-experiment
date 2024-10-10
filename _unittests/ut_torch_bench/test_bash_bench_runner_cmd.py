@@ -535,6 +535,44 @@ class TestBashBenchRunnerCmd(ExtTestCase):
     def test_huggingface_export_bench_onnx_dynamo_cpu_dummy_name_dict_dynamic(self):
         self._huggingface_export_bench_cpu("onnx_dynamo", "101DummyNamedDict", dynamic=True)
 
+    # list
+
+    @skipif_ci_windows("exporter does not work on Windows")
+    @ignore_warnings((DeprecationWarning, UserWarning))
+    @requires_torch("2.5")
+    def test_huggingface_export_bench_custom_cpu_dummy_list(self):
+        self._huggingface_export_bench_cpu("custom", "101DummyIList", dynamic=False)
+
+    @skipif_ci_windows("exporter does not work on Windows")
+    @ignore_warnings((DeprecationWarning, UserWarning))
+    @requires_torch("2.5")
+    def test_huggingface_export_bench_custom_cpu_dummy_list_dynamic(self):
+        self._huggingface_export_bench_cpu("custom", "101DummyIList", dynamic=True)
+
+    @skipif_ci_windows("exporter does not work on Windows")
+    @ignore_warnings((DeprecationWarning, UserWarning))
+    @requires_torch("2.5")
+    def test_huggingface_export_bench_script_cpu_dummy_list(self):
+        self._huggingface_export_bench_cpu("torch_script", "101DummyIList", dynamic=False)
+
+    @skipif_ci_windows("exporter does not work on Windows")
+    @ignore_warnings((DeprecationWarning, UserWarning))
+    @requires_torch("2.5")
+    def test_huggingface_export_bench_script_cpu_dummy_list_dynamic(self):
+        self._huggingface_export_bench_cpu("torch_script", "101DummyIList", dynamic=True)
+
+    @skipif_ci_windows("exporter does not work on Windows")
+    @ignore_warnings((DeprecationWarning, UserWarning))
+    @requires_torch("2.5")
+    def test_huggingface_export_bench_dynamo_cpu_dummy_list(self):
+        self._huggingface_export_bench_cpu("onnx_dynamo", "101DummyIList", dynamic=False)
+
+    @skipif_ci_windows("exporter does not work on Windows")
+    @ignore_warnings((DeprecationWarning, UserWarning))
+    @requires_torch("2.5")
+    def test_huggingface_export_bench_dynamo_cpu_dummy_list_dynamic(self):
+        self._huggingface_export_bench_cpu("onnx_dynamo", "101DummyIList", dynamic=True)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

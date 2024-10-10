@@ -18,6 +18,7 @@ from ._bash_bench_set_dummies import (
     NeuronNamed1,
     NeuronNamed2,
     NeuronNamedDict,
+    NeuronIList,
 )
 
 
@@ -224,6 +225,10 @@ class HuggingfaceRunner(BenchmarkRunner):
                 "101DummyNamedDict": (
                     lambda: NeuronNamedDict.config,
                     NeuronNamedDict,
+                ),
+                "101DummyIList": (
+                    lambda: NeuronIList.config,
+                    NeuronIList,
                 ),
                 "AllenaiLongformerBase": (
                     lambda: transformers.AutoConfig.from_pretrained(
