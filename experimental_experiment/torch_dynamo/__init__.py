@@ -46,6 +46,8 @@ def get_decomposition_table():
     Returns the decomposition table needed to translate backward
     graph into onnx. It should used as follows:
 
+    :param decomposition_table: a string or a table
+
     ::
 
         import torch
@@ -72,7 +74,7 @@ def get_decomposition_table():
         import pprint
         from experimental_experiment.torch_dynamo import get_decomposition_table
 
-        pprint.pprint(get_decomposition_table())
+        pprint.pprint(get_decomposition_table("default"))
     """
     import torch
 
@@ -199,6 +201,7 @@ def filter_decomposition_table(
             "aten::slice_backward",
             "aten::select_backward.out",
             "aten::slice.Tensor",
+            "aten::fft_rfft",
         }:
             continue
         new_table[k] = v
