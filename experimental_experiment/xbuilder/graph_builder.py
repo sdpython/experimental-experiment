@@ -278,7 +278,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         for input_name, v in self.dynamic_shapes.items():
             if isinstance(v, dict):
                 pos_vv = list(v.items())
-            elif isinstance(v, tuple):
+            elif isinstance(v, (list, tuple)):
                 pos_vv = [(f"{input_name}_{i}", v[i]) for i in range(len(v))]
             else:
                 raise AssertionError(

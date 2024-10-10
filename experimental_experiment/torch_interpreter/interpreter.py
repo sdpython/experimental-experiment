@@ -59,14 +59,28 @@ class DynamoInterpreter:
             example_inputs, tuple
         ), f"Unexpected type for example_inputs {type(example_inputs)}"
         assert example_inputs is None or all(
-            (t is None or isinstance(t, (torch.SymInt, torch.SymFloat, torch.Tensor)))
+            (t is None or isinstance(t, (torch.SymInt, torch.SymFloat, torch.Tensor, list)))
             for t in example_inputs
         ), (
             f"Unexpected type for one input in example_inputs "
             f"{[type(t) for t in example_inputs]}"
         )
-        self.example_inputs_ = example_inputs
+        self.example_inputs_ = self.flatten_inputs(example_inputs)
         self.current_input_ = 0
+
+    def flatten_inputs(self, x: Any) -> List["torch.Tensor"]:  # noqa: F821
+        """
+        Flatten inputs.
+        """
+        if isinstance(x, (list, tuple)):
+            res = []
+            for i in x:
+                if isinstance(i, self.torch.Tensor):
+                    res.append(i)
+                else:
+                    res.extend(self.flatten_inputs(i))
+            return tuple(res) if isinstance(x, tuple) else res
+        raise AssertionError(f"Unexpected type {type(x)} for x")
 
     def run_node(self, node: "torch.fx.Node"):  # noqa: F821
         """

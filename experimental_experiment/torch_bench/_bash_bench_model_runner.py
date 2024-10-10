@@ -380,10 +380,11 @@ class ModelRunner:
         )
         dim = torch.export.Dim("batch", min=1, max=1024)
         res = []
-        for x in self.inputs:
+        for i, x in enumerate(self.inputs):
             if x is None:
                 res.append(None)
                 continue
+            assert hasattr(x, "shape"), f"Unexpected type for input {i}/{len(self.inputs)}"
             res.append({0: dim} if len(x.shape) > 1 else None)
 
         final = tuple(res)
@@ -591,6 +592,7 @@ class ModelRunner:
                 optimization=optimization,
                 verbose=verbose,
                 target_opset=target_opset,
+                decomposition_table=decomposition_table,
             )
         if exporter == "inductor":
             return self._to_inductor(
@@ -1051,6 +1053,7 @@ class ModelRunner:
         fake_tensor: bool,
         no_grad: bool,
         optimization: str,
+        decomposition_table: Optional[str],
         verbose: int,
         target_opset: int,
     ):
@@ -1062,12 +1065,31 @@ class ModelRunner:
         from torch.export import export
 
         with torch.no_grad():
-            res = export(
+            exported_mod = export(
                 self.model,
                 self.make_export_inputs(dynamic, wrapped=True),
                 dynamic_shapes=self.get_dynamic_shapes(dynamic, wrapped=True),
             )
-        return res.module(), None
+        if isinstance(decomposition_table, str):
+            from ..torch_dynamo import get_decomposition_table_by_name
+
+            decomposition_table = get_decomposition_table_by_name(decomposition_table)
+
+        if decomposition_table is not None:
+            from ..torch_interpreter.onnx_export import (
+                _insert_contiguous_between_transpose_and_view,
+            )
+
+            exported_mod = _insert_contiguous_between_transpose_and_view(exported_mod)
+            exported_mod = exported_mod.run_decompositions(decomposition_table)
+
+        root_name = os.path.splitext(name)[0]
+        with open(f"{root_name}.txt", "w") as f:
+            f.write(str(exported_mod))
+        with open(f"{root_name}.graph.txt", "w") as f:
+            f.write(str(exported_mod.graph))
+
+        return exported_mod.module(), None
 
     def _to_eager(
         self,
@@ -1294,8 +1316,8 @@ class ModelRunner:
         assert isinstance(
             inputs, tuple
         ), f"Not implemented for type(self.inputs)={type(inputs)}"
-        dynamic_shapes = self.get_dynamic_shapes(True, wrapped=wrapped)
-        if wrapped:
+        dynamic_shapes = self.get_dynamic_shapes(dynamic, wrapped=wrapped)
+        if dynamic_shapes is not None and wrapped:
             assert isinstance(dynamic_shapes, tuple), (
                 f"Unexpected type {type(dynamic_shapes)} for dynamic_shapes, "
                 f"wrapped={wrapped}, input type is {type(self.inputs)}"
@@ -1312,7 +1334,10 @@ class ModelRunner:
             if inp is None:
                 dyn_input_shapes.append(None)
                 continue
-            if i >= len(dynamic_shapes):
+            assert hasattr(
+                inp, "shape"
+            ), f"Unexpected type {type(inp)} for input {i}/{len(self.inputs)}"
+            if dynamic_shapes is None or i >= len(dynamic_shapes):
                 dyn_input_shapes.append(inp.shape)
                 continue
             new_shape = []

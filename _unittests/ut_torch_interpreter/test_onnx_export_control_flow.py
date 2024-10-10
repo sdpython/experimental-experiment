@@ -11,7 +11,7 @@ from experimental_experiment.reference import ExtendedReferenceEvaluator
 from experimental_experiment.torch_interpreter import to_onnx
 
 
-class TestControlFlow(ExtTestCase):
+class TestOnnxExportControlFlow(ExtTestCase):
 
     @classmethod
     def get_custom_model(cls):
