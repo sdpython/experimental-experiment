@@ -380,10 +380,18 @@ class ModelRunner:
         )
         dim = torch.export.Dim("batch", min=1, max=1024)
         res = []
-        for x in self.inputs:
+        for i, x in enumerate(self.inputs):
             if x is None:
                 res.append(None)
                 continue
+            if isinstance(x, list):
+                assert all(
+                    hasattr(_, "shape") for _ in x
+                ), f"Unsupported types in a list {[type(_) for _ in x]} at position {i}"
+                tries = [{0: dim} if len(_.shape) > 1 else None for _ in x]
+                res.append(tries)
+                continue
+            assert hasattr(x, "shape"), f"Unexpected type for input {i}/{len(self.inputs)}"
             res.append({0: dim} if len(x.shape) > 1 else None)
 
         final = tuple(res)
@@ -591,6 +599,7 @@ class ModelRunner:
                 optimization=optimization,
                 verbose=verbose,
                 target_opset=target_opset,
+                decomposition_table=decomposition_table,
             )
         if exporter == "inductor":
             return self._to_inductor(
@@ -880,6 +889,21 @@ class ModelRunner:
                     if inp is None:
                         continue
                     dname = f"input{len(input_names)}"
+                    if isinstance(inp, list):
+                        for di, d in enumerate(inp):
+                            assert isinstance(d, dict), (
+                                f"Unexpected for input {dname!r}, {type(d)}, i={i}, "
+                                f"inp={inp}, dyn={dyn}, "
+                                f"dynamic_shapes_for_export={dynamic_shapes_for_export}"
+                            )
+                            dn = f"{dname}_{di}"
+                            daxes = {}
+                            for k, v in d.items():
+                                daxes[k] = v.__name__
+                            dynamic_axes[dn] = daxes
+                            input_names.append(dn)
+                        continue
+
                     assert isinstance(inp, dict), (
                         f"Unexpected for input {dname!r}, {type(inp)}, i={i}, dyn={dyn}, "
                         f"dynamic_shapes_for_export={dynamic_shapes_for_export}"
@@ -1051,6 +1075,7 @@ class ModelRunner:
         fake_tensor: bool,
         no_grad: bool,
         optimization: str,
+        decomposition_table: Optional[str],
         verbose: int,
         target_opset: int,
     ):
@@ -1062,12 +1087,31 @@ class ModelRunner:
         from torch.export import export
 
         with torch.no_grad():
-            res = export(
+            exported_mod = export(
                 self.model,
                 self.make_export_inputs(dynamic, wrapped=True),
                 dynamic_shapes=self.get_dynamic_shapes(dynamic, wrapped=True),
             )
-        return res.module(), None
+        if isinstance(decomposition_table, str):
+            from ..torch_dynamo import get_decomposition_table_by_name
+
+            decomposition_table = get_decomposition_table_by_name(decomposition_table)
+
+        if decomposition_table is not None:
+            from ..torch_interpreter.onnx_export import (
+                _insert_contiguous_between_transpose_and_view,
+            )
+
+            exported_mod = _insert_contiguous_between_transpose_and_view(exported_mod)
+            exported_mod = exported_mod.run_decompositions(decomposition_table)
+
+        root_name = os.path.splitext(name)[0]
+        with open(f"{root_name}.txt", "w") as f:
+            f.write(str(exported_mod))
+        with open(f"{root_name}.graph.txt", "w") as f:
+            f.write(str(exported_mod.graph))
+
+        return exported_mod.module(), None
 
     def _to_eager(
         self,
@@ -1197,6 +1241,32 @@ class ModelRunner:
                 )
         return res, None
 
+    def _make_export_new_dynamic_shape(
+        self,
+        input_shape: Tuple[int, ...],
+        dyn_shape: Dict[int, Any],
+        dyn_values: Dict[int, str],
+        i: Optional[int] = None,
+    ) -> Tuple[int, ...]:
+        new_shape = []
+        assert isinstance(
+            dyn_shape, dict
+        ), f"Unexpected type for input {i}, dyn_shape={dyn_shape}"
+        for j in range(len(input_shape)):
+            if input_shape[j] != 1 or j not in dyn_shape:
+                new_shape.append(input_shape[j])
+                continue
+            name = dyn_shape[j]
+            if name in dyn_values:
+                new_shape.append(dyn_values[name])
+                continue
+            d = input_shape[j]
+            d += 1
+            dyn_values[name] = d
+            new_shape.append(d)
+
+        return tuple(new_shape)
+
     def make_export_inputs(
         self, dynamic: bool = False, wrapped: bool = False, inputs: Optional[Any] = None
     ) -> Any:
@@ -1243,32 +1313,67 @@ class ModelRunner:
             if i >= len(dynamic_shapes):
                 dyn_inputs.append(inp)
                 continue
-            new_shape = []
-            dyn_shape = dynamic_shapes[i]
-            assert isinstance(dyn_shape, dict), (
-                f"Unexpected type for input {i}, dyn_shape={dyn_shape}, "
-                f"shape of input[{i}]={inp.shape}, "
-                f"dynamic_shapes={dynamic_shapes}, "
+            if isinstance(inp, list):
+                assert isinstance(dynamic_shapes[i], list), (
+                    f"Unexpected type {type(dynamic_shapes[i])} for input(list) {i}, "
+                    f"dynamic_shapes[i]={dynamic_shapes[i]}"
+                )
+                assert all(
+                    isinstance(x, torch.Tensor) for x in inp
+                ), f"Unexpected type in input(list) {i}, {[type(x) for x in inp]}"
+                assert len(dynamic_shapes[i]) == len(inp), (
+                    f"Length mismatch len(dynamic_shapes[i])={len(dynamic_shapes[i])} "
+                    f"len(inp)={len(inp)}"
+                )
+                new_inputs = []
+                for x, ds in zip(inp, dynamic_shapes[i]):
+                    if x is None:
+                        new_inputs.append(x)
+                        continue
+                    nds = self._make_export_new_dynamic_shape(
+                        x.shape, ds, dyn_values=dyn_values, i=i
+                    )
+                    new_inputs.append(x if nds == ds else x.expand(nds))
+                dyn_inputs.append(new_inputs)
+                continue
+            new_shape = self._make_export_new_dynamic_shape(
+                inp.shape, dynamic_shapes[i], dyn_values=dyn_values, i=i
             )
-            for j in range(len(inp.shape)):
-                if inp.shape[j] != 1 or j not in dyn_shape:
-                    new_shape.append(inp.shape[j])
-                    continue
-                name = dyn_shape[j]
-                if name in dyn_values:
-                    new_shape.append(dyn_values[name])
-                    continue
-                d = inp.shape[j]
-                d += 1
-                dyn_values[name] = d
-                new_shape.append(d)
-
-            new_shape = tuple(new_shape)
             if new_shape == inp.shape:
                 dyn_inputs.append(inp)
                 continue
             dyn_inputs.append(inp.expand(new_shape))
         return tuple(dyn_inputs)
+
+    def _get_input_shape_tensor(
+        self,
+        export: bool,
+        input_shape: Tuple[int, ...],
+        dyn_shape,
+        dyn_values: Dict[int, Any],
+        i: Optional[int] = None,
+    ):
+        if dyn_shape is None:
+            return input_shape
+        new_shape = []
+        assert isinstance(dyn_shape, dict), (
+            f"Unexpected type for input {i}, "
+            f"dyn_shape{dyn_shape}, shape of input[{i}]={input_shape}, "
+        )
+        for j in range(len(input_shape)):
+            if not export or j not in dyn_shape or input_shape[j] != 1:
+                new_shape.append(input_shape[j])
+                continue
+            name = dyn_shape[j]
+            if name in dyn_values:
+                new_shape.append(dyn_values[name])
+                continue
+            d = input_shape[j]
+            d += 1
+            dyn_values[name] = d
+            new_shape.append(d)
+
+        return tuple(new_shape)
 
     def get_input_shapes(
         self,
@@ -1294,8 +1399,8 @@ class ModelRunner:
         assert isinstance(
             inputs, tuple
         ), f"Not implemented for type(self.inputs)={type(inputs)}"
-        dynamic_shapes = self.get_dynamic_shapes(True, wrapped=wrapped)
-        if wrapped:
+        dynamic_shapes = self.get_dynamic_shapes(dynamic, wrapped=wrapped)
+        if dynamic_shapes is not None and wrapped:
             assert isinstance(dynamic_shapes, tuple), (
                 f"Unexpected type {type(dynamic_shapes)} for dynamic_shapes, "
                 f"wrapped={wrapped}, input type is {type(self.inputs)}"
@@ -1312,32 +1417,70 @@ class ModelRunner:
             if inp is None:
                 dyn_input_shapes.append(None)
                 continue
-            if i >= len(dynamic_shapes):
-                dyn_input_shapes.append(inp.shape)
-                continue
-            new_shape = []
-            dyn_shape = dynamic_shapes[i]
-            assert isinstance(dyn_shape, dict), (
-                f"Unexpected type for input {i}, wrapped={wrapped}, "
-                f"dyn_shape{dyn_shape}, shape of input[{i}]={inp.shape}, "
-                f"dynamic_shapes={dynamic_shapes}, "
-            )
-            for j in range(len(inp.shape)):
-                if not export or j not in dyn_shape or inp.shape[j] != 1:
-                    new_shape.append(inp.shape[j])
+            if isinstance(inp, list):
+                # List of inputs.
+                dyn_shape = (
+                    None
+                    if dynamic_shapes is None or i >= len(dynamic_shapes)
+                    else dynamic_shapes[i]
+                )
+                if dyn_shape is None:
+                    dyn_input_shapes.append([{} for t in inp])
                     continue
-                name = dyn_shape[j]
-                if name in dyn_values:
-                    new_shape.append(dyn_values[name])
-                    continue
-                d = inp.shape[j]
-                d += 1
-                dyn_values[name] = d
-                new_shape.append(d)
 
-            new_shape = tuple(new_shape)
+                assert len(dyn_shape) == len(
+                    inp
+                ), f"Length mismatch len(dyn_shape)={len(dyn_shape)}, len(inp)={len(inp)}"
+                new_shapes = []
+                for t, ds in zip(inp, dyn_shape):
+                    new_shapes.append(
+                        self._get_input_shape_tensor(
+                            export=export,
+                            input_shape=t.shape,
+                            dyn_shape=ds,
+                            dyn_values=dyn_values,
+                            i=i,
+                        )
+                    )
+                dyn_input_shapes.append(new_shapes)
+                continue
+
+            new_shape = self._get_input_shape_tensor(
+                export=export,
+                input_shape=inp.shape,
+                dyn_shape=(
+                    None
+                    if dynamic_shapes is None or i >= len(dynamic_shapes)
+                    else dynamic_shapes[i]
+                ),
+                dyn_values=dyn_values,
+                i=i,
+            )
             dyn_input_shapes.append(new_shape)
         return tuple(dyn_input_shapes)
+
+    def _make_dynamic_inputs_tensor(
+        self, input_shape, dyn_shape, dyn_values: Dict[str, Any], i: Optional[int] = None
+    ):
+        new_shape = []
+        assert isinstance(dyn_shape, dict), (
+            f"Unexpected type for input {i}, dyn_shape{dyn_shape}, "
+            f"shape of input[{i}]={input_shape}"
+        )
+        for j in range(len(input_shape)):
+            if j not in dyn_shape:
+                new_shape.append(input_shape[j])
+                continue
+            name = dyn_shape[j]
+            if name in dyn_values:
+                new_shape.append(dyn_values[name])
+                continue
+            d = input_shape[j]
+            d += 1
+            dyn_values[name] = d
+            new_shape.append(d)
+
+        return tuple(new_shape)
 
     def make_dynamic_inputs(self, wrapped: bool = False):
         """
@@ -1365,30 +1508,32 @@ class ModelRunner:
             if i >= len(dynamic_shapes):
                 dyn_inputs.append(inp)
                 continue
-            new_shape = []
             dyn_shape = dynamic_shapes[i]
             if inp is None:
                 dyn_inputs.append(None)
                 continue
-            assert isinstance(dyn_shape, dict), (
-                f"Unexpected type for input {i}, dyn_shape{dyn_shape}, "
-                f"shape of input[{i}]={inp.shape}, "
-                f"dynamic_shapes={dynamic_shapes}, "
-            )
-            for j in range(len(inp.shape)):
-                if j not in dyn_shape:
-                    new_shape.append(inp.shape[j])
-                    continue
-                name = dyn_shape[j]
-                if name in dyn_values:
-                    new_shape.append(dyn_values[name])
-                    continue
-                d = inp.shape[j]
-                d += 1
-                dyn_values[name] = d
-                new_shape.append(d)
 
-            new_shape = tuple(new_shape)
+            if isinstance(dyn_shape, list):
+                assert isinstance(inp, list), f"Unexpected type {type(inp)} for input {i}"
+                assert len(inp) == len(dyn_shape), (
+                    f"Length mismatch len(self.inputs[i])={len(inp)} == "
+                    f"len(dynamic_shapes[i])={len(dyn_shape)}"
+                )
+                new_input = []
+                for x, ds in zip(inp, dyn_shape):
+                    ns = self._make_dynamic_inputs_tensor(
+                        input_shape=x.shape, i=i, dyn_shape=ds, dyn_values=dyn_values
+                    )
+                    zeros = torch.zeros(ns, dtype=x.dtype, device=x.device)
+                    slices = tuple(slice(0, s) for s in x.shape)
+                    zeros[slices] = x[slices]
+                    new_input.append(zeros)
+                dyn_inputs.append(new_input)
+                continue
+
+            new_shape = self._make_dynamic_inputs_tensor(
+                input_shape=inp.shape, i=i, dyn_shape=dyn_shape, dyn_values=dyn_values
+            )
             zeros = torch.zeros(new_shape, dtype=inp.dtype, device=inp.device)
             slices = tuple(slice(0, s) for s in inp.shape)
             zeros[slices] = inp[slices]

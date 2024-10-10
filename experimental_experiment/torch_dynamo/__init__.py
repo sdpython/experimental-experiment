@@ -20,20 +20,25 @@ def get_decomposition_table_by_name(name: str):
     """
     if name is None or isinstance(name, dict):
         return name
-    if name == "none":
-        return None
-    if name == "default":
-        return get_decomposition_table()
-    if name == "onnxscript":
-        return get_decomposition_table_onnxscript()
-    if name == "dynamo":
-        return get_decomposition_table_dynamo()
-    if name == "onnxscript2":
-        table = get_decomposition_table_onnxscript()
-        return filter_decomposition_table(
-            table, lambda op: "view" not in op.name() or "copy" in op.name()
-        )
-    raise AssertionError(f"Unknown decomposition table name={name!r}")
+
+    mapping = {
+        "none": lambda: None,
+        "default": get_decomposition_table,
+        "onnxscript": get_decomposition_table_onnxscript,
+        "dynamo": get_decomposition_table_dynamo,
+        "onnxscript2": lambda: (
+            filter_decomposition_table(
+                get_decomposition_table_onnxscript(),
+                lambda op: "view" not in op.name() or "copy" in op.name(),
+            )
+        ),
+    }
+
+    if name in mapping:
+        return mapping[name]()
+    raise AssertionError(
+        f"Unknown decomposition table name={name!r} among {sorted(mapping)}"
+    )
 
 
 def get_decomposition_table():

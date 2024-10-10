@@ -1152,6 +1152,8 @@ class BenchmarkRunner:
                 f"rt{1 if rtopt in BOOLEAN_VALUES else 0}"
             ),
         )
+        if decomposition_table is not None and decomposition_table != "none":
+            pfilename += f"DT{decomposition_table}"
         if pfilename and not os.path.exists(pfilename):
             os.makedirs(pfilename)
         cleaned_name = model_name.replace(".", "_").replace("/", "_")
@@ -1164,10 +1166,11 @@ class BenchmarkRunner:
             print("[BenchmarkRunner.benchmark] start_spying_on")
 
         if self.verbose:
-            print(
-                f"[BenchmarkRunner.benchmark] dynamic_shapes="
-                f"{model_runner.get_dynamic_shapes(dynamic,wrapped=True)}"
-            )
+            if dynamic:
+                print(
+                    f"[BenchmarkRunner.benchmark] dynamic_shapes="
+                    f"{model_runner.get_dynamic_shapes(dynamic, wrapped=True)}"
+                )
             print(
                 f"[BenchmarkRunner.benchmark] input shapes="
                 f"{model_runner.get_input_shapes(dynamic=dynamic, wrapped=True)}"
@@ -1531,7 +1534,7 @@ class BenchmarkRunner:
         # dynamic
         #########
 
-        if feeds_dynamic is None:
+        if feeds_dynamic is None or not isinstance(exported_model, onnx.ModelProto):
             got_dynamic = None
         else:
             if self.verbose:

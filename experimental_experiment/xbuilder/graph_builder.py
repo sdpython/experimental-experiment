@@ -271,6 +271,33 @@ class GraphBuilder(_GraphBuilderRuntime):
                 f"{type(target_opset_or_existing_proto)} is not supported."
             )
 
+    def _register_dynamic_object_from_dynamic_shapes_dict(self, pos, pos_vv, vv):
+        # example:
+        # args_0 {0: <class '._bash_bench_model_runner.batch'>}
+        for _k, _v in vv.items():
+            if isinstance(_v, self.torch.SymInt):
+                if not self.has_dynamic_object(_v.__name__):
+                    self.make_dynamic_object(
+                        _v.__name__,
+                        _v,
+                        axis=_k,
+                        input_name=pos,
+                    )
+            elif isinstance(_v, self.torch.export.dynamic_shapes._Dim):
+                if not self.has_dynamic_object(_v.__name__):
+                    self.make_dynamic_object(
+                        _v.__name__,
+                        self.torch.SymInt(_v.__name__),
+                        axis=_k,
+                        input_name=pos,
+                    )
+            else:
+                raise AssertionError(
+                    f"Unexpected type {type(_v)} in {vv} for dynamic "
+                    f"dimension {pos!r}, pos_vv={pos_vv!r}, "
+                    f"self.dynamic_shapes={self.dynamic_shapes}"
+                )
+
     def _register_dynamic_object_from_dynamic_shapes(self):
         assert (
             self.dynamic_shapes is not None
@@ -278,7 +305,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         for input_name, v in self.dynamic_shapes.items():
             if isinstance(v, dict):
                 pos_vv = list(v.items())
-            elif isinstance(v, tuple):
+            elif isinstance(v, (list, tuple)):
                 pos_vv = [(f"{input_name}_{i}", v[i]) for i in range(len(v))]
             else:
                 raise AssertionError(
@@ -288,32 +315,16 @@ class GraphBuilder(_GraphBuilderRuntime):
             for pos, vv in pos_vv:
                 if vv is None:
                     continue
-                if isinstance(vv, dict):
-                    # example:
-                    # args_0 {0: <class '._bash_bench_model_runner.batch'>}
-                    for _k, _v in vv.items():
-                        if isinstance(_v, self.torch.SymInt):
-                            if not self.has_dynamic_object(_v.__name__):
-                                self.make_dynamic_object(
-                                    _v.__name__,
-                                    _v,
-                                    axis=_k,
-                                    input_name=pos,
-                                )
-                        elif isinstance(_v, self.torch.export.dynamic_shapes._Dim):
-                            if not self.has_dynamic_object(_v.__name__):
-                                self.make_dynamic_object(
-                                    _v.__name__,
-                                    self.torch.SymInt(_v.__name__),
-                                    axis=_k,
-                                    input_name=pos,
-                                )
-                        else:
-                            raise AssertionError(
-                                f"Unexpected type {type(_v)} in {vv} for dynamic "
-                                f"dimension {pos!r}, pos_vv={pos_vv!r}, "
-                                f"self.dynamic_shapes={self.dynamic_shapes}"
-                            )
+                if isinstance(vv, list):
+                    for vvv in vv:
+                        assert isinstance(
+                            vvv, dict
+                        ), f"Unexpected type {type(vvv)} at pos={pos} and {vv}"
+                        self._register_dynamic_object_from_dynamic_shapes_dict(
+                            pos, pos_vv, vvv
+                        )
+                elif isinstance(vv, dict):
+                    self._register_dynamic_object_from_dynamic_shapes_dict(pos, pos_vv, vv)
                 elif isinstance(vv, self.torch.SymInt):
                     if not self.has_dynamic_object(vv.__name__):
                         self.make_dynamic_object(

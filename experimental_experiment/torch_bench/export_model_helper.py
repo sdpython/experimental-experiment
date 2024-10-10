@@ -374,6 +374,14 @@ class WrapForTorch:
             return self.model(**inputs)
         return self.model(*inputs)
 
+    @property
+    def input_names(self):
+        res = []
+        for node in self.model.graph.nodes:
+            if node.op == "placeholder":
+                res.append(node.target)
+        return res
+
 
 class WrapInferenceSessionForTorch:
     def __init__(self, sess: Any, nvtx: bool = False):

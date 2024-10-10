@@ -11,7 +11,7 @@ from experimental_experiment.reference import ExtendedReferenceEvaluator
 from experimental_experiment.torch_interpreter import to_onnx, Dispatcher
 
 
-class TestCustomCode(ExtTestCase):
+class TestOnnxExportCustomCode(ExtTestCase):
 
     @classmethod
     def get_custom_model_autograd(cls):
