@@ -1312,6 +1312,9 @@ class ModelRunner:
                 )
                 new_inputs = []
                 for x, ds in zip(inp, dynamic_shapes[i]):
+                    if x is None:
+                        new_inputs.append(x)
+                        continue
                     nds = self._make_export_new_dynamic_shape(
                         x.shape, ds, dyn_values=dyn_values, i=i
                     )
