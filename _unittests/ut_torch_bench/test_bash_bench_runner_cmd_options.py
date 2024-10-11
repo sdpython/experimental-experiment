@@ -219,6 +219,20 @@ class TestBashBenchRunnerCmdOptions(ExtTestCase):
             "onnx_dynamo-detailed", "101Dummy", check_file=True
         )
 
+    # kind of inputs
+
+    @skipif_ci_windows("exporter does not work on Windows")
+    @ignore_warnings((DeprecationWarning, UserWarning))
+    @requires_torch("2.4")
+    def test_eager_list(self):
+        self._huggingface_export_bench_cpu("eager", "101DummyIList", check_file=False)
+
+    @skipif_ci_windows("exporter does not work on Windows")
+    @ignore_warnings((DeprecationWarning, UserWarning))
+    @requires_torch("2.4")
+    def test_eager_int(self):
+        self._huggingface_export_bench_cpu("eager", "101DummyIInt", check_file=False)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

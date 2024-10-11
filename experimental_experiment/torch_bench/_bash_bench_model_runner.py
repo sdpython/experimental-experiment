@@ -381,7 +381,7 @@ class ModelRunner:
         dim = torch.export.Dim("batch", min=1, max=1024)
         res = []
         for i, x in enumerate(self.inputs):
-            if x is None:
+            if x is None or isinstance(x, (int, float)):
                 res.append(None)
                 continue
             if isinstance(x, list):
@@ -391,7 +391,9 @@ class ModelRunner:
                 tries = [{0: dim} if len(_.shape) > 1 else None for _ in x]
                 res.append(tries)
                 continue
-            assert hasattr(x, "shape"), f"Unexpected type for input {i}/{len(self.inputs)}"
+            assert hasattr(
+                x, "shape"
+            ), f"Unexpected type {type(x)} for input {i}/{len(self.inputs)}"
             res.append({0: dim} if len(x.shape) > 1 else None)
 
         final = tuple(res)
@@ -568,7 +570,6 @@ class ModelRunner:
                 no_grad=no_grad,
                 optimization=optimization,
                 verbose=verbose,
-                target_opset=target_opset,
             )
         if exporter == "compile":
             assert strategy in (
@@ -582,7 +583,6 @@ class ModelRunner:
                 no_grad=no_grad,
                 optimization=optimization,
                 verbose=verbose,
-                target_opset=target_opset,
             )
         if exporter == "export":
             assert strategy in {
@@ -616,7 +616,6 @@ class ModelRunner:
                 no_grad=no_grad,
                 optimization=optimization,
                 verbose=verbose,
-                target_opset=target_opset,
                 fullgraph=strategy != "partial",
             )
         if exporter == "dort":
@@ -682,7 +681,7 @@ class ModelRunner:
             with torch.autocast(device_type=self.device, dtype=self.dtype), torch.no_grad():
                 onx, builder, stats = to_onnx(
                     self.model,
-                    self.make_export_inputs(dynamic, wrapped=True),
+                    self.make_export_inputs(dynamic, wrapped=True, int_to_tensor=True),
                     optimize=bool(optimization),
                     large_model=True,
                     verbose=10 if verbose >= 100 else (1 if verbose > 1 else 0),
@@ -697,7 +696,7 @@ class ModelRunner:
             with torch.no_grad():
                 onx, builder, stats = to_onnx(
                     self.model,
-                    self.make_export_inputs(dynamic, wrapped=True),
+                    self.make_export_inputs(dynamic, wrapped=True, int_to_tensor=True),
                     optimize=bool(optimization),
                     large_model=True,
                     verbose=10 if verbose >= 100 else (1 if verbose > 1 else 0),
@@ -1277,7 +1276,11 @@ class ModelRunner:
         return tuple(new_shape)
 
     def make_export_inputs(
-        self, dynamic: bool = False, wrapped: bool = False, inputs: Optional[Any] = None
+        self,
+        dynamic: bool = False,
+        wrapped: bool = False,
+        inputs: Optional[Any] = None,
+        int_to_tensor: bool = False,
     ) -> Any:
         """
         Creates the new inputs for the benchmarks.
@@ -1289,11 +1292,29 @@ class ModelRunner:
         :param dynamic: dynamic, yes or no?
         :param wrapped: wrapped model
         :param inputs: existing inputs or None to use `self.inputs`
+        :param int_to_tensor: converts integers or float to tensors
         :return: new inputs
         """
         if not dynamic:
             # easy case
-            return self.inputs if inputs is None else inputs
+            if not int_to_tensor:
+                return self.inputs if inputs is None else inputs
+            if inputs is None:
+                inputs = self.inputs
+            new_inputs = []
+            for i in range(len(inputs)):
+                inp = inputs[i]
+                if inp is None:
+                    new_inputs.append(None)
+                    continue
+                if isinstance(inp, int):
+                    new_inputs.append(torch.Tensor([inp]).to(torch.int64))
+                    continue
+                if isinstance(inp, float):
+                    new_inputs.append(torch.Tensor([inp]).to(torch.float32))
+                    continue
+                new_inputs.append(inp)
+            return tuple(new_inputs)
 
         if inputs is None:
             inputs = self.inputs
@@ -1314,10 +1335,20 @@ class ModelRunner:
 
         dyn_inputs = []
         dyn_values = {}
-        for i in range(len(self.inputs)):
+        for i in range(len(inputs)):
             inp = inputs[i]
             if inp is None:
                 dyn_inputs.append(None)
+                continue
+            if isinstance(inp, int):
+                dyn_inputs.append(
+                    torch.Tensor([inp]).to(torch.int64) if int_to_tensor else inp
+                )
+                continue
+            if isinstance(inp, float):
+                dyn_inputs.append(
+                    torch.Tensor([inp]).to(torch.float32) if int_to_tensor else inp
+                )
                 continue
             if i >= len(dynamic_shapes):
                 dyn_inputs.append(inp)
@@ -1352,6 +1383,7 @@ class ModelRunner:
                 dyn_inputs.append(inp)
                 continue
             dyn_inputs.append(inp.expand(new_shape))
+
         return tuple(dyn_inputs)
 
     def _get_input_shape_tensor(
@@ -1425,6 +1457,9 @@ class ModelRunner:
             inp = self.inputs[i]
             if inp is None:
                 dyn_input_shapes.append(None)
+                continue
+            if isinstance(inp, (int, float)):
+                dyn_input_shapes.append((1,))
                 continue
             if isinstance(inp, list):
                 # List of inputs.
@@ -1518,8 +1553,8 @@ class ModelRunner:
                 dyn_inputs.append(inp)
                 continue
             dyn_shape = dynamic_shapes[i]
-            if inp is None:
-                dyn_inputs.append(None)
+            if inp is None or isinstance(inp, (int, float)):
+                dyn_inputs.append(inp)
                 continue
 
             if isinstance(dyn_shape, list):
@@ -1541,7 +1576,10 @@ class ModelRunner:
                 continue
 
             new_shape = self._make_dynamic_inputs_tensor(
-                input_shape=inp.shape, i=i, dyn_shape=dyn_shape, dyn_values=dyn_values
+                input_shape=(1,) if isinstance(inp, (int, float)) else inp.shape,
+                i=i,
+                dyn_shape=dyn_shape,
+                dyn_values=dyn_values,
             )
             zeros = torch.zeros(new_shape, dtype=inp.dtype, device=inp.device)
             slices = tuple(slice(0, s) for s in inp.shape)
@@ -1576,25 +1614,30 @@ class ModelRunner:
             ), f"Input names mismatch, got {set(use_inputs)}, expecting {set(names)}."
             return self.inputs
         inputs = [i for i, d in zip(use_inputs, self.raw_use_defaults) if not d]
-        if len(names) > len(inputs) and any(isinstance(i, list) for i in inputs):
-            # We need to flatten the inputs.
-            new_inputs = []
-            for i in inputs:
-                if isinstance(i, torch.Tensor):
-                    new_inputs.append(i)
-                    continue
-                if isinstance(i, list):
-                    for u in i:
-                        if isinstance(u, torch.Tensor):
-                            new_inputs.append(u)
-                            continue
-                        raise AssertionError(
-                            f"Unable to process input type {type(u)} in input list"
-                        )
-                    continue
-                raise AssertionError(f"Unable to process input type {type(i)}")
-        else:
-            new_inputs = inputs
+
+        # We need to flatten list, wrap scalar
+        new_inputs = []
+        for i in inputs:
+            if isinstance(i, torch.Tensor):
+                new_inputs.append(i)
+                continue
+            if isinstance(i, int):
+                new_inputs.append(torch.Tensor([i]).to(torch.int64))
+                continue
+            if isinstance(i, float):
+                new_inputs.append(torch.Tensor([i]).to(torch.float32))
+                continue
+            if isinstance(i, list):
+                for u in i:
+                    if isinstance(u, torch.Tensor):
+                        new_inputs.append(u)
+                        continue
+                    raise AssertionError(
+                        f"Unable to process input type {type(u)} in input list"
+                    )
+                continue
+            raise AssertionError(f"Unable to process input type {type(i)}")
+
         assert len(names) == len(new_inputs), (
             f"Mismatch number of inputs, {len(inputs)} ({len(new_inputs)}) "
             f"inputs, there are {len(new_inputs)} flattened inputs.\n----\n"

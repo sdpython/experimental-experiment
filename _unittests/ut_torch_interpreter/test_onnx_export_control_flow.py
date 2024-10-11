@@ -9,7 +9,7 @@ from experimental_experiment.ext_test_case import (
     hide_stdout,
 )
 from experimental_experiment.reference import ExtendedReferenceEvaluator
-from experimental_experiment.torch_interpreter import to_onnx
+from experimental_experiment.torch_interpreter import to_onnx, ExportOptions
 
 
 class TestOnnxExportControlFlow(ExtTestCase):
@@ -235,7 +235,7 @@ class TestOnnxExportControlFlow(ExtTestCase):
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             torch.onnx.export(model, (x,), filename, input_names=["x"], opset_version=18)
-            onx = to_onnx(model, (x,), strategy="jit")
+            onx = to_onnx(model, (x,), export_options=ExportOptions(jit=True))
         co = Counter([n.op_type for n in onx.graph.node])
         self.assertEqual(co, {"Sin": 1})
         self.assertEqual(len(onx.functions), 0)
@@ -267,7 +267,7 @@ class TestOnnxExportControlFlow(ExtTestCase):
         model = RawTest()
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            onx = to_onnx(model, (x,), strategy="fallback")
+            onx = to_onnx(model, (x,), export_options=ExportOptions(strategy="fallback"))
         co = Counter([n.op_type for n in onx.graph.node])
         self.assertEqual(co, {"Sin": 1})
         self.assertEqual(len(onx.functions), 0)

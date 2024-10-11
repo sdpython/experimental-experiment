@@ -1293,6 +1293,16 @@ class BenchmarkRunner:
                 f"{'' if feeds_dynamic is None else 'not'} None"
             )
 
+        assert isinstance(feeds, tuple) or all(
+            isinstance(v, torch.Tensor) for v in feeds.values()
+        ), f"One input is not a tensor {dict((k,type(v)) for k,v in feeds.items())}"  # noqa: C402
+        if feeds_dynamic:
+            assert isinstance(feeds_dynamic, tuple) or all(
+                isinstance(v, torch.Tensor) for v in feeds_dynamic.values()
+            ), (
+                f"One dynamic input is not a tensor "
+                f"{dict((k,type(v)) for k,v in feeds_dynamic.items())}"  # noqa: C402
+            )
         context["feeds"] = feeds
         context["feeds_dynamic"] = feeds_dynamic
 
