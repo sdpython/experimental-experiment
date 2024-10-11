@@ -7,6 +7,7 @@ from experimental_experiment.ext_test_case import (
     ExtTestCase,
     ignore_warnings,
     requires_torch,
+    requires_pyinstrument,
     skipif_ci_windows,
 )
 
@@ -216,6 +217,7 @@ class TestBashBenchRunnerCmdOptions(ExtTestCase):
     @skipif_ci_windows("exporter does not work on Windows")
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.4")
+    @requires_pyinstrument()
     def test_onnx_dynamo_detailed(self):
         self._huggingface_export_bench_cpu(
             "onnx_dynamo-detailed", "101Dummy", check_file=True

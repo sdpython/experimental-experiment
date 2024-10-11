@@ -131,6 +131,7 @@ class TestBashBenchRunnerCmd(ExtTestCase):
         optimization=None,
         tag=None,
         timeout=600,
+        output_data=False,
     ):
         from experimental_experiment.torch_bench.bash_bench_explicit import main
 
@@ -153,9 +154,9 @@ class TestBashBenchRunnerCmd(ExtTestCase):
             "dump_test_bash_bench",
             "--timeout",
             str(timeout),
-            "--output_data",
-            "",
         ]
+        if not output_data:
+            args.extend(["--output_data", ""])
         if optimization:
             args.extend(["--opt_patterns", optimization])
         if tag:
@@ -231,13 +232,15 @@ class TestBashBenchRunnerCmd(ExtTestCase):
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.4")
     def test_huggingface_export_bench_custom_cpu_fail(self):
-        self._explicit_export_bench_cpu("custom", "1001Fail,1001Fail2")
+        self._explicit_export_bench_cpu("custom", "1001Fail,1001Fail2", output_data=True)
 
     @skipif_ci_windows("exporter does not work on Windows")
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.4")
     def test_huggingface_export_bench_onnx_dynamo_cpu_fail(self):
-        self._explicit_export_bench_cpu("onnx_dynamo", "1001Fail,1001Fail2")
+        self._explicit_export_bench_cpu(
+            "onnx_dynamo", "1001Fail,1001Fail2", output_data=True
+        )
 
     @skipif_ci_windows("exporter does not work on Windows")
     @ignore_warnings((DeprecationWarning, UserWarning))

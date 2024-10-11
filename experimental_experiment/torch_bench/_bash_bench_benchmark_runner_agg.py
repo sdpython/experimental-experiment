@@ -14,6 +14,7 @@ from ._bash_bench_benchmark_runner_agg_helper import (
     BUCKET_SCALES,
     SELECTED_FEATURES,
     _apply_excel_style,
+    _format_excel_cells,
     _compute_correlations,
     _create_aggregation_figures,
     _filter_data,
@@ -22,6 +23,7 @@ from ._bash_bench_benchmark_runner_agg_helper import (
     _reverse_column_names_order,
     _select_metrics,
     _select_model_metrics,
+    _fix_report_piv,
 )
 
 
@@ -1442,11 +1444,8 @@ def _build_aggregated_document(
             .sort_index(axis=0)
             .sort_index(axis=1)
         )
-        piv_total = piv_total[piv_total.index != (15, "average export time")]
-        piv_total = piv_total[piv_total.index != (16, "average speedup (geo)")]
-        indices = list(enumerate(piv_total.index))
-        dates = [row[0] for row in indices if "date" in row[1]]
-        piv_total.iloc[dates, :] = piv_total.iloc[dates, :].apply(lambda s: s[:10])
+        piv = _fix_report_piv(piv)
+        piv_total = _fix_report_piv(piv_total, agg=True)
 
         export_simple_x = f"{export_simple}.xlsx"
         if verbose:
@@ -1454,6 +1453,7 @@ def _build_aggregated_document(
         with pandas.ExcelWriter(export_simple_x) as writer:
             piv.to_excel(writer, sheet_name="by_suite")
             piv_total.to_excel(writer, sheet_name="all_suites")
+            _format_excel_cells(["by_suite", "all_suites"], writer, verbose=verbose)
 
     if export_correlations:
         models = [c for c in model if c in df.columns]

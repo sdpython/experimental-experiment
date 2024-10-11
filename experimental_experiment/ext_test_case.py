@@ -589,6 +589,23 @@ def requires_monai(version: str = "", msg: str = "") -> Callable:
     return lambda x: x
 
 
+def requires_pyinstrument(version: str = "", msg: str = "") -> Callable:
+    """Skips a unit test if :epkg:`pytorch` is not recent enough."""
+    import packaging.version as pv
+
+    try:
+        import pyinstrument
+    except ImportError:
+        return unittest.skip(msg)
+
+    if version and pv.Version(
+        ".".join(pyinstrument.__version__.split(".")[:2])
+    ) < pv.Version(version):
+        msg = f"torch version {pyinstrument.__version__} < {version}: {msg}"
+        return unittest.skip(msg)
+    return lambda x: x
+
+
 def requires_numpy(version: str, msg: str = "") -> Callable:
     """Skips a unit test if :epkg:`numpy` is not recent enough."""
     import packaging.version as pv
