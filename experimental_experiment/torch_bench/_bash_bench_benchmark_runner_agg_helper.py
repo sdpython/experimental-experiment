@@ -1428,6 +1428,7 @@ def _compute_correlations(
     name_j = [f"{c}_j" for c in exporter_column]
     nonans = {}
 
+    piv = None
     for c in columns:
         if verbose:
             print(f"[_compute_correlations] process {c!r}")
@@ -1469,20 +1470,23 @@ def _compute_correlations(
                     nonans[key] &= nonan_
         res[f"c_{c}"] = pandas.DataFrame(obs)
 
-    obs = []
-    for i in range(piv.shape[1]):
-        for j in range(piv.shape[1]):
-            ci = piv.columns[i][1:]
-            cj = piv.columns[j][1:]
-            o = dict(
-                zip(
-                    [*name_i, *name_j, "nonan"],
-                    [*ci, *cj, nonans[ci, cj].sum()],
+    res_join = None
+    if piv is not None:
+        obs = []
+        for i in range(piv.shape[1]):
+            for j in range(piv.shape[1]):
+                ci = piv.columns[i][1:]
+                cj = piv.columns[j][1:]
+                o = dict(
+                    zip(
+                        [*name_i, *name_j, "nonan"],
+                        [*ci, *cj, nonans[ci, cj].sum()],
+                    )
                 )
-            )
-            obs.append(o)
-    res_join = {"nonan": pandas.DataFrame(obs)}
+                obs.append(o)
+        res_join = {"nonan": pandas.DataFrame(obs)}
 
+    piv = None
     for c in columns:
         if verbose:
             print(f"[_compute_correlations] process 2 {c!r}")
@@ -1515,19 +1519,20 @@ def _compute_correlations(
                 obs.append(o)
         res_join[f"c_{c}"] = pandas.DataFrame(obs)
 
-    index_columns = [*name_i, *name_j]
-    joined = res_join["nonan"].set_index(index_columns)
-    for c in columns:
-        if verbose:
-            print(f"[_compute_correlations] joins {c!r}")
-        joined = joined.join(res_join[f"c_{c}"].set_index(index_columns), how="outer")
-    if "win_latency" in joined.columns:
-        res["LATENCY"] = pandas.pivot_table(
-            joined, index=name_i, columns=name_j, values="win_latency"
-        )
-    if "win_disc_abs" in joined.columns:
-        res["DISC_ABS"] = pandas.pivot_table(
-            joined, index=name_i, columns=name_j, values="win_disc_abs"
-        )
-    res["JOINED"] = joined.reset_index(drop=False)
+    if res_join is not None:
+        index_columns = [*name_i, *name_j]
+        joined = res_join["nonan"].set_index(index_columns)
+        for c in columns:
+            if verbose:
+                print(f"[_compute_correlations] joins {c!r}")
+            joined = joined.join(res_join[f"c_{c}"].set_index(index_columns), how="outer")
+        if "win_latency" in joined.columns:
+            res["LATENCY"] = pandas.pivot_table(
+                joined, index=name_i, columns=name_j, values="win_latency"
+            )
+        if "win_disc_abs" in joined.columns:
+            res["DISC_ABS"] = pandas.pivot_table(
+                joined, index=name_i, columns=name_j, values="win_disc_abs"
+            )
+        res["JOINED"] = joined.reset_index(drop=False)
     return res
