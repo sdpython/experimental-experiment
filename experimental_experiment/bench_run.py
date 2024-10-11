@@ -476,3 +476,278 @@ def measure_discrepancies(
             abs_errs.append(abs_err)
             rel_errs.append(rel_err)
     return dict(abs=max(abs_errs), rel=max(rel_errs), sum=sum(rel_errs), n=len(abs_errs))
+
+
+def max_diff(
+    expected: Any,
+    got: Any,
+    verbose: int = 0,
+    level: int = 0,
+    flatten: bool = False,
+    debug_info: Optional[List[str]] = None,
+    begin: int = 0,
+    end: int = -1,
+    _index: int = 0,
+) -> Dict[str, float]:
+    """
+    Returns the maximum discrepancy.
+
+    :param expected: expected values
+    :param got: values
+    :param verbose: verbosity level
+    :param level: for embedded outputs, used for debug purpposes
+    :param flatten: flatten outputs
+    :param debug_info: debug information
+    :param begin: first output to considered
+    :param end: last output to considered (-1 for the last one)
+    :param _index: used with begin and end
+    :return: dictionary with many values
+
+    * abs: max abolute error
+    * rel: max relative error
+    * sum: sum of the errors
+    * n: number of outputs values, if there is one
+        output, this number will be the number of elements
+        of this output
+    """
+
+    if hasattr(expected, "to_tuple"):
+        return max_diff(
+            expected.to_tuple(),
+            got,
+            verbose=verbose,
+            level=level + 1,
+            debug_info=(
+                debug_info
+                if verbose < 10
+                else (
+                    [f"{' ' * level}to_tupleA"]
+                    if not debug_info
+                    else ([*debug_info, f"{' ' * level}to_tupleA"])
+                )
+            ),
+            begin=begin,
+            end=end,
+            _index=_index,
+        )
+
+    if hasattr(got, "to_tuple"):
+        return max_diff(
+            expected,
+            got.to_tuple(),
+            verbose=verbose,
+            level=level + 1,
+            debug_info=(
+                debug_info
+                if verbose < 10
+                else (
+                    [f"{' ' * level}to_tupleB"]
+                    if not debug_info
+                    else ([*debug_info, f"{' ' * level}to_tupleB"])
+                )
+            ),
+            begin=begin,
+            end=end,
+            _index=_index,
+        )
+
+    import torch
+
+    if isinstance(expected, torch.Tensor):
+        if isinstance(got, torch.Tensor):
+            if _index < begin or (end != -1 and _index >= end):
+                # out of boundary
+                return dict(abs=0.0, rel=0.0, sum=0.0, n=0.0)
+            diff = (got.to(torch.float64) - expected.to(torch.float64)).abs()
+            rdiff = diff / (expected.abs() + 1e-3)
+            abs_diff, rel_diff, sum_diff, n_diff = (
+                float(diff.max()),
+                float(rdiff.max()),
+                float(diff.sum()),
+                float(diff.numel()),
+            )
+            if verbose >= 10 and (abs_diff >= 10 or rel_diff >= 10):
+                # To understand the value it comes from.
+                if debug_info:
+                    print("\n".join(debug_info))
+                print(
+                    f"[max_diff-1] abs_diff={abs_diff}, rel_diff={rel_diff}, "
+                    f"dtype={expected.dtype}, shape={expected.shape}, level={level}, "
+                    f"_index={_index}"
+                )
+                if abs_diff >= 10:
+                    idiff = torch.argmax(diff.reshape((-1,)))
+                    x = expected.reshape((-1,))[idiff]
+                    y = got.reshape((-1,))[idiff]
+                    print(
+                        f"   [max_diff-2] abs diff={abs_diff}, "
+                        f"x={x}, y={y}, level={level}, "
+                        f"_index={_index}"
+                    )
+                    print(y)
+
+                if rel_diff >= 10:
+                    idiff = torch.argmax(rdiff.reshape((-1,)))
+                    x = expected.reshape((-1,))[idiff]
+                    y = got.reshape((-1,))[idiff]
+                    print(
+                        f"   [max_diff-3] rel diff={rel_diff}, "
+                        f"x={x}, y={y}, level={level}, "
+                        f"_index={_index}"
+                    )
+
+            return dict(abs=abs_diff, rel=rel_diff, sum=sum_diff, n=n_diff)
+
+        if isinstance(got, (list, tuple)):
+            if len(got) != 1:
+                if verbose > 2:
+                    print(
+                        f"[max_diff] (a) inf because len(expected)={len(expected)}!=1, "
+                        f"len(got)={len(got)}, level={level}, _index={_index}"
+                    )
+                    for i, (a, b) in enumerate(zip(expected, got)):
+                        if isinstance(a, torch.Tensor) and isinstance(b, torch.Tensor):
+                            print(
+                                f"    i={i} expected {a.dtype}:{a.shape}, "
+                                f"has {b.dtype}:{b.shape}, _index={_index}"
+                            )
+                        else:
+                            print(
+                                f"    i={i} a is {type(a)}, "
+                                f"b is {type(b)}, _index={_index}"
+                            )
+                return dict(abs=np.inf, rel=np.inf, sum=np.inf, n=np.inf)
+            return max_diff(
+                expected,
+                got[0],
+                verbose=verbose,
+                level=level + 1,
+                begin=begin,
+                end=end,
+                _index=_index,
+                debug_info=debug_info,
+            )
+
+    if isinstance(expected, (tuple, list)):
+        if len(expected) == 1:
+            return max_diff(
+                expected[0],
+                got,
+                verbose=verbose,
+                level=level + 1,
+                begin=begin,
+                end=end,
+                _index=_index,
+                debug_info=debug_info,
+            )
+        if not isinstance(got, (tuple, list)):
+            if verbose > 2:
+                print(
+                    f"[max_diff] inf because type(expected)={type(expected)}, "
+                    f"type(got)={type(got)}, level={level}, _index={_index}"
+                )
+            return dict(abs=np.inf, rel=np.inf, sum=np.inf, n=np.inf)
+        if len(got) != len(expected):
+            if verbose > 2:
+                print(
+                    f"[max_diff] (b) inf because len(expected)={len(expected)}, "
+                    f"len(got)={len(got)}, level={level}, _index={_index}"
+                )
+                for i, (a, b) in enumerate(zip(expected, got)):
+                    if isinstance(a, torch.Tensor) and isinstance(b, torch.Tensor):
+                        print(
+                            f"    i={i} expected {a.dtype}:{a.shape}, "
+                            f"has {b.dtype}:{b.shape}, _index={_index}"
+                        )
+                    else:
+                        print(f"    i={i} a is {type(a)}, b is {type(b)}")
+            return dict(abs=np.inf, rel=np.inf, sum=np.inf, n=np.inf)
+        am, rm, sm, n = 0, 0, 0.0, 0.0
+        for ip, (e, g) in enumerate(zip(expected, got)):
+            d = max_diff(
+                e,
+                g,
+                verbose=verbose,
+                level=level + 1,
+                debug_info=(
+                    debug_info
+                    if verbose < 10
+                    else (
+                        [f"{' ' * level}[{ip}] so far abs {am} - rel {rm}"]
+                        if not debug_info
+                        else (
+                            [
+                                *debug_info,
+                                f"{' ' * level}[{ip}] so far abs {am} - rel {rm}",
+                            ]
+                        )
+                    )
+                ),
+                begin=begin,
+                end=end,
+                _index=_index + ip,
+            )
+            am = max(am, d["abs"])
+            rm = max(rm, d["rel"])
+            sm += d["sum"]
+            n += d["n"]
+        return dict(abs=am, rel=rm, sum=sm, n=n)
+
+    if isinstance(expected, dict):
+        assert (
+            begin == 0 and end == -1
+        ), f"begin={begin}, end={end} not compatible with dictionaries"
+        if isinstance(got, dict):
+            if len(expected) != len(got):
+                return dict(abs=np.inf, rel=np.inf, sum=np.inf, n=np.inf)
+            if set(expected) != set(got):
+                return dict(abs=np.inf, rel=np.inf, sum=np.inf, n=np.inf)
+            keys = list(sorted(expected))
+            return max_diff(
+                [expected[k] for k in keys],
+                [got[k] for k in keys],
+                level=level,
+                flatten=flatten,
+                debug_info=debug_info,
+                begin=begin,
+                end=end,
+                _index=_index,
+            )
+
+        if not isinstance(got, (tuple, list)):
+            return dict(abs=np.inf, rel=np.inf, sum=np.inf, n=np.inf)
+        if len(expected) != len(got):
+            return dict(abs=np.inf, rel=np.inf, sum=np.inf, n=np.inf)
+        return max_diff(
+            list(expected.values()),
+            got,
+            level=level,
+            flatten=flatten,
+            debug_info=debug_info,
+            begin=begin,
+            end=end,
+            _index=_index,
+        )
+
+    if "SquashedNormal" in expected.__class__.__name__:
+        values = (
+            expected.mean.detach().to("cpu"),
+            expected.scale.detach().to("cpu"),
+        )
+        return max_diff(
+            values,
+            got,
+            verbose=verbose,
+            level=level + 1,
+            begin=begin,
+            end=end,
+            _index=_index,
+        )
+
+    raise AssertionError(
+        f"Not implemented with type(expected)={type(expected)}, "
+        f"type(results)={type(got)},\n"
+        f"dir(expected)={dir(expected)}, level={level}\n"
+        f"expected={expected}\n"
+        f"got={got}"
+    )

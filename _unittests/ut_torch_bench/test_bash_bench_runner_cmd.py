@@ -42,6 +42,7 @@ class TestBashBenchRunnerCmd(ExtTestCase):
         timeout=600,
         dynamic=False,
         check_file=True,
+        output_data=False,
     ):
         from experimental_experiment.torch_bench.bash_bench_huggingface import main
 
@@ -66,9 +67,9 @@ class TestBashBenchRunnerCmd(ExtTestCase):
             "dump_test_bash_bench",
             "--timeout",
             str(timeout),
-            "--output_data",
-            "",
         ]
+        if not output_data:
+            args.extend(["--output_data", ""])
         if dynamic:
             args.extend(["--dynamic", "1"])
         if process:
@@ -89,7 +90,7 @@ class TestBashBenchRunnerCmd(ExtTestCase):
         out = st.getvalue()
         if debug:
             print(out)
-        if "," in models:
+        if "," in models and output_data:
             self.assertIn("Prints", out)
         else:
             self.assertIn(":model_name,", out)
@@ -295,7 +296,9 @@ class TestBashBenchRunnerCmd(ExtTestCase):
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.4")
     def test_huggingface_export_bench_custom_cpu2(self):
-        self._huggingface_export_bench_cpu("custom", "101Dummy,101Dummy16", check_file=False)
+        self._huggingface_export_bench_cpu(
+            "custom", "101Dummy,101Dummy16", check_file=False, output_data=True
+        )
 
     @skipif_ci_windows("exporter does not work on Windows")
     @ignore_warnings((DeprecationWarning, UserWarning))
@@ -315,6 +318,7 @@ class TestBashBenchRunnerCmd(ExtTestCase):
             timeout=1,
             verbose=0,
             check_file=False,
+            output_data=True,
         )
 
     @skipif_ci_windows("exporter does not work on Windows")

@@ -6,6 +6,7 @@ from experimental_experiment.bench_run import (
     get_machine,
     make_configs,
     run_benchmark,
+    max_diff,
 )
 from experimental_experiment.ext_test_case import ExtTestCase
 
@@ -97,6 +98,42 @@ class TestBenchScript(ExtTestCase):
                 {"single": "1", "multi2": "1", "multi3": "ZZZ"},
                 {"single": "1", "multi2": "2", "multi3": "ZZZ"},
             ],
+        )
+
+    def test_max_diff(self):
+        import torch
+
+        self.assertEqual(
+            max_diff(torch.Tensor([1, 2]), torch.Tensor([1, 2])),
+            {"abs": 0.0, "rel": 0.0, "sum": 0.0, "n": 2.0},
+        )
+        self.assertEqual(
+            max_diff(
+                (torch.Tensor([1, 2]),),
+                (torch.Tensor([1, 2])),
+            ),
+            {"abs": 0.0, "rel": 0.0, "sum": 0.0, "n": 2.0},
+        )
+        self.assertEqual(
+            max_diff(
+                (torch.Tensor([1, 2]), (torch.Tensor([1, 2]),)),
+                (torch.Tensor([1, 2]), (torch.Tensor([1, 2]),)),
+            ),
+            {"abs": 0.0, "rel": 0.0, "sum": 0.0, "n": 4.0},
+        )
+        self.assertEqual(
+            max_diff(
+                {"a": torch.Tensor([1, 2])},
+                {"a": torch.Tensor([1, 2])},
+            ),
+            {"abs": 0.0, "rel": 0.0, "sum": 0.0, "n": 2.0},
+        )
+        self.assertEqual(
+            max_diff(
+                {"a": torch.Tensor([1, 2])},
+                [torch.Tensor([1, 2])],
+            ),
+            {"abs": 0.0, "rel": 0.0, "sum": 0.0, "n": 2.0},
         )
 
 

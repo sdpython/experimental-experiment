@@ -1444,6 +1444,10 @@ def _build_aggregated_document(
         )
         piv_total = piv_total[piv_total.index != (15, "average export time")]
         piv_total = piv_total[piv_total.index != (16, "average speedup (geo)")]
+        indices = list(enumerate(piv_total.index))
+        dates = [row[0] for row in indices if "date" in row[1]]
+        piv_total.iloc[dates, :] = piv_total.iloc[dates, :].apply(lambda s: s[:10])
+
         export_simple_x = f"{export_simple}.xlsx"
         if verbose:
             print(f"[merge_benchmark_reports] writes {export_simple_x!r}")
