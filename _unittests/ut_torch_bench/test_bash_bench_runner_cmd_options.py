@@ -125,7 +125,7 @@ class TestBashBenchRunnerCmdOptions(ExtTestCase):
 
     @skipif_ci_windows("exporter does not work on Windows")
     @ignore_warnings((DeprecationWarning, UserWarning))
-    @requires_torch("2.4")
+    @requires_torch("2.5")
     def test_export_jit(self):
         self._export_cmd("export-jit", "101Dummy", check_file=False)
 
@@ -163,7 +163,7 @@ class TestBashBenchRunnerCmdOptions(ExtTestCase):
 
     @skipif_ci_windows("exporter does not work on Windows")
     @ignore_warnings((DeprecationWarning, UserWarning))
-    @requires_torch("2.4")
+    @requires_torch("2.5")
     def test_custom_jit(self):
         self._export_cmd("custom-jit", "101Dummy", check_file=True)
 
@@ -195,13 +195,13 @@ class TestBashBenchRunnerCmdOptions(ExtTestCase):
 
     @skipif_ci_windows("exporter does not work on Windows")
     @ignore_warnings((DeprecationWarning, UserWarning))
-    @requires_torch("2.4")
+    @requires_torch("2.5")
     def test_onnx_dynamo(self):
         self._export_cmd("onnx_dynamo", "101Dummy", check_file=True)
 
     @skipif_ci_windows("exporter does not work on Windows")
     @ignore_warnings((DeprecationWarning, UserWarning))
-    @requires_torch("2.4")
+    @requires_torch("2.5")
     def test_onnx_dynamo_fallback(self):
         self._export_cmd("onnx_dynamo-fallback", "101Dummy", check_file=True)
 
