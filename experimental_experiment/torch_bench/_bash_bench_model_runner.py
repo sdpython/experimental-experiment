@@ -662,7 +662,7 @@ class ModelRunner:
     ):
         assert not fake_tensor, "fake_tensor not implemented."
         assert no_grad, "no_grad false not implemented yet"
-        from ..torch_interpreter import to_onnx
+        from ..torch_interpreter import to_onnx, ExportOptions
         from ..xbuilder import OptimizationOptions
 
         if optimization and optimization != "none":
@@ -675,6 +675,8 @@ class ModelRunner:
             )
         else:
             options = None
+
+        export_options = ExportOptions(strategy=strategy)
 
         if self.autocast:
             with torch.autocast(device_type=self.device, dtype=self.dtype), torch.no_grad():
@@ -689,7 +691,7 @@ class ModelRunner:
                     options=options,
                     return_builder=True,
                     dynamic_shapes=self.get_dynamic_shapes(dynamic, wrapped=True),
-                    strategy=strategy,
+                    export_options=export_options,
                 )
         else:
             with torch.no_grad():
@@ -704,6 +706,7 @@ class ModelRunner:
                     options=options,
                     return_builder=True,
                     dynamic_shapes=self.get_dynamic_shapes(dynamic, wrapped=True),
+                    export_options=export_options,
                 )
         begin = time.perf_counter()
         self.std_to_dump.append(pprint.pformat(stats))
@@ -1099,6 +1102,7 @@ class ModelRunner:
             dynamic_shapes=dynamic_shapes,
             tracing_mode=False,
             same_signature=False,
+            verbose=verbose,
         )
 
         if export_options.decomposition_table:

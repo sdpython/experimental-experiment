@@ -152,6 +152,7 @@ class ExportOptions:
                         same_signature=same_signature,
                         input_names=input_names,
                         exc=False,
+                        verbose=verbose,
                     )
                 except Exception as e:
                     excs.append(e)

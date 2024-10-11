@@ -766,13 +766,14 @@ class TorchBenchRunner(BenchmarkRunner):
                 f"with batch_size={batch_size}"
             )
 
-        status = torchbenchmark.setup(
-            models=[model_name],
-            verbose=self.verbose,
-            continue_on_fail=False,
-            allow_canary=False,  # TODO: should we allow canary models?
-        )
-        assert status, f"Could not setup model {model_name!r}, status={status!r}"
+        if os.environ.get("TORCHBENCHSETUP", "1") in ("1", "true", "True", 1, True):
+            status = torchbenchmark.setup(
+                models=[model_name],
+                verbose=self.verbose,
+                continue_on_fail=False,
+                allow_canary=False,  # TODO: should we allow canary models?
+            )
+            assert status, f"Could not setup model {model_name!r}, status={status!r}"
 
         is_training = self.training
         use_eval_mode = self.use_eval_mode

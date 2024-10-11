@@ -229,6 +229,7 @@ def _make_builder_interpreter(
                 dynamic_shapes=dynamic_shapes,
                 same_signature=same_signature,
                 input_names=input_names,
+                verbose=verbose,
             )
 
         if verbose > 0:
