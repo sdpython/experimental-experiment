@@ -117,6 +117,8 @@ def ignore_warnings(warns: List[Warning]) -> Callable:
 
     :param warns:   warnings to ignore
     """
+    if not isinstance(warns, (tuple, list)):
+        warns = (warns,)
     new_list = []
     for w in warns:
         if w == "TracerWarning":
@@ -125,7 +127,7 @@ def ignore_warnings(warns: List[Warning]) -> Callable:
             new_list.append(TracerWarning)
         else:
             new_list.append(w)
-    warns = new_list
+    warns = tuple(new_list)
 
     def wrapper(fct):
         if warns is None:
