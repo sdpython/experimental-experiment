@@ -922,7 +922,9 @@ class ModelRunner:
             kwargs_export["input_names"] = input_names
 
         if self.autocast:
-            with torch.autocast(device_type=self.device, dtype=self.dtype), torch.no_grad():
+            with torch.autocast(
+                device_type=self.device, dtype=self.dtype
+            ), torch.no_grad(), bypass_export_some_errors():
                 torch.onnx.export(
                     self.model,
                     inputs,
