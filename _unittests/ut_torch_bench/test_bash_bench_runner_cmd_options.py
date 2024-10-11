@@ -88,10 +88,7 @@ class TestBashBenchRunnerCmdOptions(ExtTestCase):
         out = st.getvalue()
         if debug:
             print(out)
-        if "," in models:
-            self.assertIn("Prints", out)
-        else:
-            self.assertIn(":model_name,", out)
+        self.assertIn(":model_name,", out)
         self.assertNotIn(":discrepancies_abs,inf;", out)
         if tag:
             self.assertIn(f":version_tag,{tag};", out)

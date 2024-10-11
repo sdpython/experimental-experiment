@@ -170,7 +170,7 @@ class TestBashBenchRunnerCmd(ExtTestCase):
         out = st.getvalue()
         if debug:
             print(out)
-        if "," in models:
+        if "," in models and output_data:
             self.assertIn("Prints", out)
         else:
             self.assertIn(":model_name,", out)

@@ -21,8 +21,9 @@ from .export_model_helper import (
     str_dtype,
     str_shape,
 )
-from ..memory_peak import flatten, start_spying_on
 from ..bench_run import max_diff
+from ..memory_peak import flatten, start_spying_on
+
 from ..ext_test_case import has_onnxruntime_training
 from ..xbuilder._dtype_helper import torch_dtype_to_onnx_dtype
 
