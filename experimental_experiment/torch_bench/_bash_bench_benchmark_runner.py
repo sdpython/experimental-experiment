@@ -8,6 +8,7 @@ from typing import Any, Dict, Iterator, List, Optional, Set, Tuple, Union
 
 import numpy as np
 import onnx
+from onnx.helper import tensor_dtype_to_np_dtype
 import torch
 from torch._dynamo.testing import collect_results
 from torch._dynamo.utils import clone_inputs
@@ -22,6 +23,7 @@ from .export_model_helper import (
 )
 from ..memory_peak import flatten, start_spying_on
 from ..ext_test_case import has_onnxruntime_training
+from ..xbuilder._dtype_helper import torch_dtype_to_onnx_dtype
 
 
 class BenchmarkRunner:
@@ -231,7 +233,13 @@ class BenchmarkRunner:
         # if isinstance(obj, onnxruntime.capi.onnxruntime_pybind11_state.OrtValue):
         if hasattr(obj, "numpy"):
             # Implicit copy to torch.Tensor
-            return torch.Tensor(obj.numpy()).to(device)
+            t = torch.Tensor(obj.numpy()).to(device)
+            assert torch_dtype_to_onnx_dtype(t.dtype) == tensor_dtype_to_np_dtype(
+                obj.dtype
+            ), f"Type mismatch between {obj.dtype} and {t.dtype}"
+            return t
+        if isinstance(obj, np.ndarray):
+            return torch.Tensor(obj).to(device)
         if "SquashedNormal" in obj.__class__.__name__ and device == "cpu":
             return obj
         if hasattr(obj, "conv_states") and obj.__class__.__name__ == "MambaCache":

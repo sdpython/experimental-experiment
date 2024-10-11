@@ -20,6 +20,8 @@ from ._bash_bench_model_runner import (
 
 
 class TorchBenchRunner(BenchmarkRunner):
+    # Installation to make
+    # dalle2_pytorch
     SUITE = "TorchBench"
 
     YAML = textwrap.dedent(
