@@ -9,52 +9,7 @@ from onnx import ModelProto
 from onnx.defs import onnx_opset_version
 from onnx.model_container import ModelContainer
 from ..xbuilder.graph_builder import GraphBuilder, OptimizationOptions
-
-
-def _insert_contiguous_between_transpose_and_view(
-    exported_program: "torch.export.ExportedProgram",  # noqa: F821
-) -> "torch.export.ExportedProgram":  # noqa: F821
-    """
-    Modifies the module inplace to insert a node 'contiguous' between a node
-    'transpose' followed by a node 'view'.
-    The modification takes place inplace.
-    See issue https://github.com/pytorch/pytorch/issues/136543.
-    """
-    modified = False
-    graph = exported_program.graph_module.graph
-    for node in graph.nodes:
-        if (node.op != "call_method" or node.target != "transpose") and (
-            node.op != "call_function"
-            or not hasattr(node.target, "name")
-            or node.target.name() != "aten::transpose.int"
-        ):
-            continue
-        insert = False
-        for user in node.users:
-            if (user.op == "call_method" and user.target == "view") or (
-                user.op == "call_function"
-                and hasattr(node.target, "name")
-                and user.target.name() == "aten::view"
-            ):
-                insert = True
-                break
-        if not insert:
-            continue
-
-        modified = True
-        with graph.inserting_after(node):
-            new_node = graph.call_method("contiguous", args=(node,))
-            node.replace_all_uses_with(new_node)
-            # new_node is replaced as well so we manually revert the replacement
-            new_node.update_arg(0, node)
-            node.users = {new_node: None}
-
-    if not modified:
-        # no rewrite was done.
-        return exported_program
-
-    graph.lint()
-    return exported_program
+from .export_options import ExportOptions
 
 
 def _retrieve(
@@ -179,97 +134,6 @@ def _retrieve(
     return None
 
 
-def _apply_decompositions(
-    exported_mod: "torch.export.ExportedProgram", decomposition_table  # noqa: F821
-) -> "torch.export.ExportedProgram":  # noqa: F821
-    if isinstance(decomposition_table, str):
-        from ..torch_dynamo import get_decomposition_table_by_name
-
-        decomposition_table = get_decomposition_table_by_name(decomposition_table)
-
-    if decomposition_table is not None:
-        exported_mod = _insert_contiguous_between_transpose_and_view(exported_mod)
-        exported_mod = exported_mod.run_decompositions(decomposition_table)
-
-    return exported_mod
-
-
-def _export(
-    mod,
-    args,
-    tracing_mode,
-    dynamic_shapes,
-    same_signature,
-    decomposition_table,
-    strategy,
-    strict,
-    input_names=None,
-):
-    import torch
-
-    if strategy is None or strategy == "fallback":
-        try:
-            exported_mod = torch.export.export(
-                mod, args, dynamic_shapes=dynamic_shapes, strict=strict
-            )
-        except torch._export.verifier.SpecViolationError:
-            # see https://github.com/pytorch/pytorch/issues/128394
-            exported_mod = torch.export._trace._export(
-                mod,
-                args,
-                dynamic_shapes=dynamic_shapes,
-                pre_dispatch=False,
-                strict=strict,
-            )
-        except torch._dynamo.exc.UserError as e:
-            if strategy != "fallback":
-                eee = None
-                try:
-                    exported_mod = torch.export.export(mod, args, strict=strict).graph
-                except torch._export.verifier.SpecViolationError as ee:
-                    exported_mod = None
-                    eee = ee
-                raise RuntimeError(
-                    f"Unable to convert model {type(mod)}, "
-                    f"type(args)={type(args)}, type(args[0])="
-                    f"{type(args[0]) if isinstance(args, tuple) and args else '?'}, "
-                    f"strict={strict}, input_names={input_names}\n--\n"
-                    f"dynamic_shapes={dynamic_shapes}\n--\ne={e}\n--\neee={eee}"
-                    f"\n---exported-program---\n{exported_mod}"
-                ) from e
-            exported_mod = None
-
-        if exported_mod is not None:
-            return _apply_decompositions(exported_mod, decomposition_table)
-
-    if strategy == "dynamo":
-        # import torch.utils._pytree as pytree
-        # flat_args, orig_in_spec = pytree.tree_flatten((args, ))
-        # print("+++++", orig_in_spec, type(flat_args), len(flat_args))
-        res = torch._dynamo.export(
-            mod,
-            aten_graph=True,
-            tracing_mode=tracing_mode,
-            dynamic_shapes=dynamic_shapes,
-            same_signature=same_signature,
-            decomposition_table=decomposition_table,
-            assume_static_by_default=dynamic_shapes is None,
-        )(*args)
-
-        return _apply_decompositions(res, decomposition_table)
-
-    if strategy == "jit" or strategy == "fallback":
-        from torch._export.converter import TS2EPConverter
-
-        jit_model = torch.jit.trace(
-            mod, example_inputs=args, check_trace=False, strict=False
-        )
-        res = TS2EPConverter(jit_model, args).convert()
-        return _apply_decompositions(res, decomposition_table)
-
-    raise ValueError(f"Unable to convert, unknown strategy={strategy!r}")
-
-
 @contextlib.contextmanager
 def bypass_export_some_errors():
     """
@@ -299,12 +163,8 @@ def _make_builder_interpreter(
     dynamic_shapes: Optional[Union[Dict[str, Any], Tuple[Any]]] = None,
     tracing_mode: str = "symbolic",
     same_signature: bool = True,
-    decomposition_table: Optional[
-        Union[str, Dict["torch._ops.OpOverload", Callable[..., Any]]]  # noqa: F821
-    ] = None,
     dispatcher: Optional["Dispatcher"] = None,  # noqa: F821
-    strategy: Optional[str] = None,
-    strict: bool = True,
+    export_options: Optional[Union[str, ExportOptions]] = None,
 ) -> Tuple["torch.fx.GraphModule", GraphBuilder, "DynamoInterpreter"]:  # noqa: F821
     """
     Exports a torch model into ONNX using
@@ -323,14 +183,8 @@ def _make_builder_interpreter(
     :param dynamic_shapes: see :epkg:`torch.export.export` or ``torch._dynamo.export``
     :param same_signature: same signature
     :param tracing_mode: tracing model
-    :param decomposition_table: decomposition table, it can a string as well,
-        'default' means :func:`get_decomposition_table
-        <experimental_experiment.torch_dynamo.get_decomposition_table>`
-        is used
     :param dispatcher: see :class:`experimental_experiment.torch_interpreter.Dispatcher`
-    :param strategy: use ``torch.export.export`` (None) or ``torch._dynamo.export``,
-        stratregy=="dynamo"
-    :param strict: given to ``torch.export.export``
+    :param export_options: Optional[Union[str, ExportOptions]] = None,
     :return: onnx model
     """
 
@@ -350,6 +204,9 @@ def _make_builder_interpreter(
         import torch
         import torch.export
 
+    if export_options is None:
+        export_options = ExportOptions()
+
     if isinstance(mod, torch.fx.GraphModule):
         if verbose > 0:
             print(f"[_make_builder_interpreter] use existing {type(mod)}")
@@ -363,20 +220,14 @@ def _make_builder_interpreter(
             print(graph_module.graph)
     else:
         if verbose > 0:
-            print(
-                f"[_make_builder_interpreter] use decomposition_table="
-                f"{decomposition_table!r}"
-            )
+            print(f"[_make_builder_interpreter] export_options={export_options!r}")
         with bypass_export_some_errors():
-            exported_mod = _export(
+            exported_mod = export_options.export(
                 mod,
                 args,
                 tracing_mode=tracing_mode,
                 dynamic_shapes=dynamic_shapes,
                 same_signature=same_signature,
-                decomposition_table=decomposition_table,
-                strategy=strategy,
-                strict=strict,
                 input_names=input_names,
             )
 
@@ -430,6 +281,7 @@ def _make_builder_interpreter(
                     or k[2:] in sig_mismatch_constants
                     or k[2:].replace("getattr_l__self", "getattr_L__self") in constants
                 ), (
+                    f"export_options={export_options!r}"
                     f"A constant {k!r}, k[2:]={k[2:]!r}, v={v!r} was detected "
                     f"in the signature was not retrieved from the model. "
                     f"k in constants={k in constants}, "
@@ -486,9 +338,8 @@ def _make_builder_interpreter(
         builder,
         retrieve,
         dispatcher=dispatcher,
-        strategy=strategy,
         example_inputs=args,
-        decomposition_table=decomposition_table,
+        export_options=export_options,
     )
     return graph_module, builder, interpreter
 
@@ -571,12 +422,8 @@ def to_onnx(
     dispatcher: Optional["Dispatcher"] = None,  # noqa: F821
     large_model: bool = False,
     external_threshold: int = 1024,
-    strategy: Optional[str] = None,
+    export_options: Optional[Union[str, ExportOptions]] = None,
     return_optimize_report: bool = False,
-    strict: bool = True,
-    decomposition_table: Optional[
-        Union[str, Dict["torch._ops.OpOverload", Callable[..., Any]]]  # noqa: F821
-    ] = None,
     inline: bool = False,
 ) -> Union[
     Union[ModelProto, ModelContainer],
@@ -605,16 +452,10 @@ def to_onnx(
         or saved as external weights
     :param external_threshold: if large_model is True, every tensor above this limit
         is stored as external
-    :param strategy: use ``torch._dynamo.export`` (strategy="dynamo")
-        instead of ``torch.export.export`` (None)
     :param return_optimize_report: returns statistics on the optimization as well
-    :param strict: given to ``torch.export.export``
-    :param decomposition_table: decomposition_table, a string as well such as default
-        to use the default decomposition table returned by
-        :func:`get_decomposition_table
-        <experimental_experiment.torch_dynamo.get_decomposition_table>`
     :param inline: inline the model before converting to onnx, this is done before
             any optimization takes place
+    :param export_options: to apply differents options before to get the exported program
     :return: onnx model
 
     If environment variable ``PRINT_GRAPH_MODULE`` is set to one,
@@ -696,9 +537,7 @@ def to_onnx(
         raise_list=raise_list,
         dynamic_shapes=use_dynamic_shapes,
         dispatcher=dispatcher,
-        strategy=strategy,
-        strict=strict,
-        decomposition_table=decomposition_table,
+        export_options=export_options,
     )
 
     t = time.perf_counter()

@@ -13,6 +13,7 @@ from ..xbuilder._dtype_helper import (
 )
 from ..xbuilder.model_container import _get_type
 from . import LOCAL_DOMAIN
+from .export_options import ExportOptions
 from ._exceptions import FunctionNotFoundError
 from .aten_functions import find_function
 from .aten_methods import find_method
@@ -28,8 +29,8 @@ class DynamoInterpreter:
         see function `_retrieve
         <experimental_experiment.torch_interpreter.onnx_export._retrieve>`.
     :param dispatcher: see :class:`experimental_experiment.torch_interpreter.Dispatcher`
-    :param strtegy: see
-        :func:`to_onnx <experimental_experiment.torch_interpreter.to_onnx>`
+    :param export_options: see :class:`ExportOptions
+        <experimental_experiment.torch_interpreter.ExportOptions>`
     """
 
     def _hash(self) -> str:
@@ -40,11 +41,8 @@ class DynamoInterpreter:
         graph_builder: "GraphBuilder",  # noqa: F821
         retriever: Callable,
         dispatcher: Optional["Dispatcher"] = None,  # noqa: F821
-        strategy: Optional[str] = None,
         example_inputs: Optional[Tuple["torch.Tensor", ...]] = None,  # noqa: F821
-        decomposition_table: Optional[
-            Dict["torch._ops.OpOverload", Callable[..., Any]]  # noqa: F821
-        ] = None,
+        export_options: Optional[ExportOptions] = None,
     ):
         import torch
 
@@ -52,9 +50,8 @@ class DynamoInterpreter:
         self.builder = graph_builder
         self.retriever = retriever
         self.dispatcher = dispatcher
-        self.strategy = (strategy,)
+        self.export_options = export_options
         self.example_values_ = {}
-        self.decomposition_table = decomposition_table
         assert example_inputs is None or isinstance(
             example_inputs, tuple
         ), f"Unexpected type for example_inputs {type(example_inputs)}"
@@ -1258,8 +1255,7 @@ class DynamoInterpreter:
             dispatcher=self.dispatcher,
             raise_list=self.builder.raise_list,
             dynamic_shapes=self.builder.dynamic_shapes,
-            strategy=self.strategy,
-            decomposition_table=self.decomposition_table,
+            export_options=self.export_options,
         )
         builder.process(graph_module, interpreter)
         assert builder.outputs, f"No output detected for node={source_node}, graph={gm}"

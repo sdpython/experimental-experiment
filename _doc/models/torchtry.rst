@@ -66,7 +66,6 @@ Example about torch._dynamo.export
         model,
         aten_graph=True,
         tracing_mode="symbolic",
-        decomposition_table={},
         constraints=constraints,
     )(*args)
 

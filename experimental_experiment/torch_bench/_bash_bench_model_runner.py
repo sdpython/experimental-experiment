@@ -458,7 +458,6 @@ class ModelRunner:
         optimization: str,
         verbose: int,
         target_opset: int,
-        decomposition_table: Optional[str],
     ) -> Tuple[onnx.ModelProto, Optional[Dict[str, Any]]]:
         """
         Converts a model into onnx.
@@ -471,13 +470,19 @@ class ModelRunner:
         :param optimization: defines the optimizations
         :param verbose: verbosity
         :param target_opset: target opset
-        :param decomposition_table: decomposition table to apply
         :return: the model proto with or without weights, statistics
         """
         assert not fake_tensor, "fake_tensor not implemented."
 
         if name == "1001Fail":
             raise RuntimeError(f"Model {name!r} is meant to fail for unit test purpose.")
+
+        if "-" in exporter:
+            spl = exporter.split("-", maxsplit=1)
+            assert len(spl) == 2, f"Unexpected name={exporter!r} for the exporter"
+            exporter, strategy = spl
+        else:
+            strategy = None
 
         if exporter == "custom":
             return self._to_onnx_custom(
@@ -488,23 +493,13 @@ class ModelRunner:
                 optimization=optimization,
                 verbose=verbose,
                 target_opset=target_opset,
-                decomposition_table=decomposition_table,
+                strategy=strategy,
             )
-
-        if exporter == "custom-fallback":
-            return self._to_onnx_custom(
-                name,
-                dynamic=dynamic,
-                fake_tensor=fake_tensor,
-                no_grad=no_grad,
-                optimization=optimization,
-                verbose=verbose,
-                target_opset=target_opset,
-                decomposition_table=decomposition_table,
-                strategy="fallback",
-            )
-
         if exporter in ("cort", "cortgrad"):
+            assert strategy in (
+                None,
+                "none",
+            ), f"strategy={strategy!r} not implemented for {exporter!r}"
             return self._to_cort(
                 name,
                 dynamic=dynamic,
@@ -514,10 +509,12 @@ class ModelRunner:
                 verbose=verbose,
                 target_opset=target_opset,
                 autograd=exporter == "cortgrad",
-                decomposition_table=decomposition_table,
             )
-
         if exporter == "torch_script":
+            assert strategy in (
+                None,
+                "none",
+            ), f"strategy={strategy!r} not implemented for {exporter!r}"
             return self._to_onnx_script(
                 name,
                 dynamic=dynamic,
@@ -527,8 +524,13 @@ class ModelRunner:
                 verbose=verbose,
                 target_opset=target_opset,
             )
-
         if exporter == "onnx_dynamo":
+            assert strategy in (
+                None,
+                "none",
+                "fallback",
+                "detailed",
+            ), f"strategy={strategy!r} not implemented for {exporter!r}"
             return self._to_onnx_dynamo(
                 name,
                 dynamic=dynamic,
@@ -537,30 +539,14 @@ class ModelRunner:
                 optimization=optimization,
                 verbose=verbose,
                 target_opset=target_opset,
-            )
-        if exporter == "onnx_dynamo-detailed":
-            return self._to_onnx_dynamo(
-                name,
-                dynamic=dynamic,
-                fake_tensor=fake_tensor,
-                no_grad=no_grad,
-                optimization=optimization,
-                verbose=verbose,
-                target_opset=target_opset,
-                detailed=True,
-            )
-        if exporter == "onnx_dynamo-fallback":
-            return self._to_onnx_dynamo(
-                name,
-                dynamic=dynamic,
-                fake_tensor=fake_tensor,
-                no_grad=no_grad,
-                optimization=optimization,
-                verbose=verbose,
-                target_opset=target_opset,
-                fallback=True,
+                detailed=strategy == "detailed",
+                fallback=strategy == "fallback",
             )
         if exporter == "dynamo_export":
+            assert strategy in (
+                None,
+                "none",
+            ), f"strategy={strategy!r} not implemented for {exporter!r}"
             return self._to_onnx_dynamo2(
                 name,
                 dynamic=dynamic,
@@ -571,6 +557,10 @@ class ModelRunner:
                 target_opset=target_opset,
             )
         if exporter == "eager":
+            assert strategy in (
+                None,
+                "none",
+            ), f"strategy={strategy!r} not implemented for {exporter!r}"
             return self._to_eager(
                 name,
                 dynamic=dynamic,
@@ -581,6 +571,10 @@ class ModelRunner:
                 target_opset=target_opset,
             )
         if exporter == "compile":
+            assert strategy in (
+                None,
+                "none",
+            ), f"strategy={strategy!r} not implemented for {exporter!r}"
             return self._to_compile(
                 name,
                 dynamic=dynamic,
@@ -591,6 +585,15 @@ class ModelRunner:
                 target_opset=target_opset,
             )
         if exporter == "export":
+            assert strategy in {
+                None,
+                "default",
+                "nostrict",
+                "none",
+                "fallback",
+                "fallback-default",
+                "jit",
+            }, f"strategy={strategy!r} not implemented for {exporter!r}"
             return self._to_export(
                 name,
                 dynamic=dynamic,
@@ -598,10 +601,14 @@ class ModelRunner:
                 no_grad=no_grad,
                 optimization=optimization,
                 verbose=verbose,
-                target_opset=target_opset,
-                decomposition_table=decomposition_table,
+                strategy=strategy,
             )
         if exporter == "inductor":
+            assert strategy in (
+                None,
+                "partial",
+                "none",
+            ), f"strategy={strategy!r} not implemented for {exporter!r}"
             return self._to_inductor(
                 name,
                 dynamic=dynamic,
@@ -610,20 +617,13 @@ class ModelRunner:
                 optimization=optimization,
                 verbose=verbose,
                 target_opset=target_opset,
-                fullgraph=True,
-            )
-        if exporter == "inductor-partial":
-            return self._to_inductor(
-                name,
-                dynamic=dynamic,
-                fake_tensor=fake_tensor,
-                no_grad=no_grad,
-                optimization=optimization,
-                verbose=verbose,
-                target_opset=target_opset,
-                fullgraph=False,
+                fullgraph=strategy != "partial",
             )
         if exporter == "dort":
+            assert strategy in (
+                None,
+                "none",
+            ), f"strategy={strategy!r} not implemented for {exporter!r}"
             return self._to_dort(
                 name,
                 dynamic=dynamic,
@@ -634,6 +634,10 @@ class ModelRunner:
                 target_opset=target_opset,
             )
         if exporter == "ORTModule":
+            assert strategy in (
+                None,
+                "none",
+            ), f"strategy={strategy!r} not implemented for {exporter!r}"
             return self._to_ortmodule(
                 name,
                 dynamic=dynamic,
@@ -654,7 +658,6 @@ class ModelRunner:
         optimization: str,
         verbose: int,
         target_opset: int,
-        decomposition_table: Optional[str],
         strategy: Optional[str] = None,
     ):
         assert not fake_tensor, "fake_tensor not implemented."
@@ -686,7 +689,6 @@ class ModelRunner:
                     options=options,
                     return_builder=True,
                     dynamic_shapes=self.get_dynamic_shapes(dynamic, wrapped=True),
-                    decomposition_table=decomposition_table,
                     strategy=strategy,
                 )
         else:
@@ -702,7 +704,6 @@ class ModelRunner:
                     options=options,
                     return_builder=True,
                     dynamic_shapes=self.get_dynamic_shapes(dynamic, wrapped=True),
-                    decomposition_table=decomposition_table,
                 )
         begin = time.perf_counter()
         self.std_to_dump.append(pprint.pformat(stats))
@@ -727,7 +728,6 @@ class ModelRunner:
         verbose: int,
         target_opset: int,
         autograd: bool = False,
-        decomposition_table: Optional[str] = None,
     ):
         assert not fake_tensor, "fake_tensor not implemented."
         assert not dynamic, "dynamic true not implemented yet"
@@ -752,20 +752,11 @@ class ModelRunner:
             verbose=verbose,
             options=options,
             optimize=bool(optimization),
-            decomposition_table=decomposition_table,
             **kwargs,
         )
 
         if autograd:
             from torch._dynamo.backends.common import aot_autograd
-
-            assert decomposition_table is None or decomposition_table in (
-                "none",
-                "default",
-            ), (
-                f"No other option than 'default' for decomposition_table="
-                f"{decomposition_table!r} is supported"
-            )
 
             cbf = aot_autograd(fw_compiler=cbff, decompositions=get_decomposition_table())
 
@@ -1077,9 +1068,8 @@ class ModelRunner:
         fake_tensor: bool,
         no_grad: bool,
         optimization: str,
-        decomposition_table: Optional[str],
         verbose: int,
-        target_opset: int,
+        strategy: Optional[str] = None,
     ):
         assert not fake_tensor, "fake_tensor not implemented."
         assert no_grad, "no_grad false not implemented yet"
@@ -1087,6 +1077,7 @@ class ModelRunner:
             not optimization or optimization == "none"
         ), f"optimization {optimization!r} not compatible with export"
         from torch.export import export
+        from ..torch_interpreter import ExportOptions
 
         with torch.no_grad():
             exported_mod = export(
@@ -1094,20 +1085,35 @@ class ModelRunner:
                 self.make_export_inputs(dynamic, wrapped=True),
                 dynamic_shapes=self.get_dynamic_shapes(dynamic, wrapped=True),
             )
-        if isinstance(decomposition_table, str):
-            from ..torch_dynamo import get_decomposition_table_by_name
 
-            decomposition_table = get_decomposition_table_by_name(decomposition_table)
+        export_options = ExportOptions(strategy=strategy)
+        dynamic_shapes = self.get_dynamic_shapes(dynamic, wrapped=True)
 
-        if decomposition_table is not None:
-            from ..torch_interpreter.onnx_export import (
-                _insert_contiguous_between_transpose_and_view,
+        if verbose:
+            print(f"[ModelRunner._to_export] export_options={export_options!r}")
+            print(f"[ModelRunner._to_export] dynamic_shapes={dynamic_shapes!r}")
+
+        exported_mod = export_options.export(
+            self.model,
+            self.make_export_inputs(dynamic, wrapped=True),
+            dynamic_shapes=dynamic_shapes,
+            tracing_mode=False,
+            same_signature=False,
+        )
+
+        if export_options.decomposition_table:
+            from ..torch_interpreter.export_options import (
+                insert_contiguous_between_transpose_and_view,
             )
 
-            exported_mod = _insert_contiguous_between_transpose_and_view(exported_mod)
-            exported_mod = exported_mod.run_decompositions(decomposition_table)
+            exported_mod = insert_contiguous_between_transpose_and_view(exported_mod)
+            exported_mod = exported_mod.run_decompositions(
+                export_options.get_decomposition_table()
+            )
 
         root_name = os.path.splitext(name)[0]
+        if verbose:
+            print(f"[ModelRunner._to_export] write fx graph intp {root_name!r}")
         with open(f"{root_name}.txt", "w") as f:
             f.write(str(exported_mod))
         with open(f"{root_name}.graph.txt", "w") as f:
@@ -1123,7 +1129,6 @@ class ModelRunner:
         no_grad: bool,
         optimization: str,
         verbose: int,
-        target_opset: int,
     ):
         assert not fake_tensor, "fake_tensor not implemented."
         assert no_grad, "no_grad false not implemented yet"
@@ -1161,7 +1166,6 @@ class ModelRunner:
         no_grad: bool,
         optimization: str,
         verbose: int,
-        target_opset: int,
     ):
         assert not fake_tensor, "fake_tensor not implemented."
         assert no_grad, "no_grad true not implemented yet"
@@ -1171,7 +1175,7 @@ class ModelRunner:
 
         def custom_backend(gm: torch.fx.GraphModule, example_inputs: List[torch.Tensor]):
             if verbose:
-                print("[compile: fx_graph]")
+                print("[_to_compile] fx_graph]")
                 print(gm)
                 self.std_to_dump.append(str(gm))
 
@@ -1197,7 +1201,6 @@ class ModelRunner:
         no_grad: bool,
         optimization: str,
         verbose: int,
-        target_opset: int,
         fullgraph: bool,
     ):
         assert not fake_tensor, "fake_tensor not implemented."
@@ -1546,12 +1549,11 @@ class ModelRunner:
         self, exporter: str, filename: Optional[str] = None, dynamic: bool = False
     ):
         """Creates feed inputs."""
-        if exporter in {
+        if exporter.split("-", maxsplit=1)[0] in {
             "eager",
             "export",
             "compile",
             "inductor",
-            "inductor-partial",
             "dort",
             "cort",
             "cortgrad",
