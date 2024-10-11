@@ -7,6 +7,7 @@ from experimental_experiment.ext_test_case import (
 
 
 class TestIssuePytorch_124525(ExtTestCase):
+    @ignore_warnings(UserWarning)
     def test_dort(self):
         import torch
 

@@ -28,7 +28,7 @@ class TestBashBenchRunnerCmdOptions(ExtTestCase):
 
         torch.set_grad_enabled(cls.is_grad_enabled)
 
-    def _huggingface_export_bench_cpu(
+    def _export_cmd(
         self,
         exporter,
         models,
@@ -121,39 +121,37 @@ class TestBashBenchRunnerCmdOptions(ExtTestCase):
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.4")
     def test_export(self):
-        self._huggingface_export_bench_cpu("export", "101Dummy", check_file=False)
+        self._export_cmd("export", "101Dummy", check_file=False)
 
     @skipif_ci_windows("exporter does not work on Windows")
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.4")
     def test_export_jit(self):
-        self._huggingface_export_bench_cpu("export-jit", "101Dummy", check_file=False)
+        self._export_cmd("export-jit", "101Dummy", check_file=False)
 
     @skipif_ci_windows("exporter does not work on Windows")
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.4")
     def test_export_default(self):
-        self._huggingface_export_bench_cpu("export-default", "101Dummy", check_file=False)
+        self._export_cmd("export-default", "101Dummy", check_file=False)
 
     @skipif_ci_windows("exporter does not work on Windows")
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.4")
     def test_export_nostrict(self):
-        self._huggingface_export_bench_cpu("export-nostrict", "101Dummy", check_file=False)
+        self._export_cmd("export-nostrict", "101Dummy", check_file=False)
 
     @skipif_ci_windows("exporter does not work on Windows")
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.4")
     def test_export_fallback(self):
-        self._huggingface_export_bench_cpu("export-fallback", "101Dummy", check_file=False)
+        self._export_cmd("export-fallback", "101Dummy", check_file=False)
 
     @skipif_ci_windows("exporter does not work on Windows")
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.4")
     def test_export_fallback_default(self):
-        self._huggingface_export_bench_cpu(
-            "export-fallback-default", "101Dummy", check_file=False
-        )
+        self._export_cmd("export-fallback-default", "101Dummy", check_file=False)
 
     # custom
 
@@ -161,39 +159,37 @@ class TestBashBenchRunnerCmdOptions(ExtTestCase):
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.4")
     def test_custom(self):
-        self._huggingface_export_bench_cpu("custom", "101Dummy", check_file=True)
+        self._export_cmd("custom", "101Dummy", check_file=True)
 
     @skipif_ci_windows("exporter does not work on Windows")
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.4")
     def test_custom_jit(self):
-        self._huggingface_export_bench_cpu("custom-jit", "101Dummy", check_file=True)
+        self._export_cmd("custom-jit", "101Dummy", check_file=True)
 
     @skipif_ci_windows("exporter does not work on Windows")
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.4")
     def test_custom_default(self):
-        self._huggingface_export_bench_cpu("custom-default", "101Dummy", check_file=True)
+        self._export_cmd("custom-default", "101Dummy", check_file=True)
 
     @skipif_ci_windows("exporter does not work on Windows")
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.4")
     def test_custom_nostrict(self):
-        self._huggingface_export_bench_cpu("custom-nostrict", "101Dummy", check_file=True)
+        self._export_cmd("custom-nostrict", "101Dummy", check_file=True)
 
     @skipif_ci_windows("exporter does not work on Windows")
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.4")
     def test_custom_fallback(self):
-        self._huggingface_export_bench_cpu("custom-fallback", "101Dummy", check_file=True)
+        self._export_cmd("custom-fallback", "101Dummy", check_file=True)
 
     @skipif_ci_windows("exporter does not work on Windows")
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.4")
     def test_custom_fallback_default(self):
-        self._huggingface_export_bench_cpu(
-            "export-fallback-default", "101Dummy", check_file=False
-        )
+        self._export_cmd("export-fallback-default", "101Dummy", check_file=False)
 
     # onnx_dynamo
 
@@ -201,24 +197,20 @@ class TestBashBenchRunnerCmdOptions(ExtTestCase):
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.4")
     def test_onnx_dynamo(self):
-        self._huggingface_export_bench_cpu("onnx_dynamo", "101Dummy", check_file=True)
+        self._export_cmd("onnx_dynamo", "101Dummy", check_file=True)
 
     @skipif_ci_windows("exporter does not work on Windows")
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.4")
     def test_onnx_dynamo_fallback(self):
-        self._huggingface_export_bench_cpu(
-            "onnx_dynamo-fallback", "101Dummy", check_file=True
-        )
+        self._export_cmd("onnx_dynamo-fallback", "101Dummy", check_file=True)
 
     @skipif_ci_windows("exporter does not work on Windows")
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.4")
     @requires_pyinstrument()
     def test_onnx_dynamo_detailed(self):
-        self._huggingface_export_bench_cpu(
-            "onnx_dynamo-detailed", "101Dummy", check_file=True
-        )
+        self._export_cmd("onnx_dynamo-detailed", "101Dummy", check_file=True)
 
     # kind of inputs
 
@@ -226,13 +218,13 @@ class TestBashBenchRunnerCmdOptions(ExtTestCase):
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.4")
     def test_eager_list(self):
-        self._huggingface_export_bench_cpu("eager", "101DummyIList", check_file=False)
+        self._export_cmd("eager", "101DummyIList", check_file=False)
 
     @skipif_ci_windows("exporter does not work on Windows")
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.4")
     def test_eager_int(self):
-        self._huggingface_export_bench_cpu("eager", "101DummyIInt", check_file=False)
+        self._export_cmd("eager", "101DummyIInt", check_file=False)
 
 
 if __name__ == "__main__":

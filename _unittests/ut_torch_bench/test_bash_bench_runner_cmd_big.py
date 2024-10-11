@@ -27,7 +27,7 @@ class TestBashBenchRunnerCmdBig(ExtTestCase):
 
         torch.set_grad_enabled(cls.is_grad_enabled)
 
-    def _huggingface_export_bench_big_cpu(
+    def _hg_big_export_bench_big_cpu(
         self,
         exporter,
         models,
@@ -118,7 +118,7 @@ class TestBashBenchRunnerCmdBig(ExtTestCase):
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.5")
     def test_huggingface_export_bench_custom_cpu(self):
-        self._huggingface_export_bench_big_cpu(
+        self._hg_big_export_bench_big_cpu(
             "custom", "all_MiniLM_L6_v1", verbose=0, debug=False
         )
 

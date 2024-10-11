@@ -25,7 +25,7 @@ class TestGraphPatternOptimizationExp(ExtTestCase):
         n = np.prod(shape)
         x = np.arange(n).astype(np.float32) / n
         if bias:
-            x = x + bias
+            x = x + np.array([bias], dtype=x.dtype)
         return x.reshape(tuple(shape)).astype(np.float32)
 
     def test_get_pattern_list(self):
