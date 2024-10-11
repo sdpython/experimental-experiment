@@ -28,7 +28,7 @@ class ExportOptions:
 
         pprint.pprint(ExportOptions().get_fallback_options())
         pprint.pprint(
-            ExportOptions(decomposition_table="default").get_fallback_options(decomposition_table="default)
+            ExportOptions(decomposition_table="default").get_fallback_options()
         )
     """
 
@@ -85,13 +85,15 @@ class ExportOptions:
         if self.dynamo:
             return (
                 f"{self.__class__.__name__}(strict={self.strict!r}, "
-                f"fallback={self.fallback}, decomposition_table={self.decomposition_table}, "
+                f"fallback={self.fallback}, "
+                f"decomposition_table={self.decomposition_table!r}, "
                 f"dynamo={self.dynamo})"
             )
         if self.decomposition_table:
             return (
                 f"{self.__class__.__name__}(strict={self.strict!r}, "
-                f"fallback={self.fallback}, decomposition_table={self.decomposition_table})"
+                f"fallback={self.fallback}, "
+                f"decomposition_table={self.decomposition_table}!r)"
             )
         return f"{self.__class__.__name__}(strict={self.strict!r}, fallback={self.fallback})"
 
