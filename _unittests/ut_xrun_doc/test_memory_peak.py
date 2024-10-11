@@ -2,7 +2,11 @@ import os
 import time
 import unittest
 import numpy as np
-from experimental_experiment.ext_test_case import ExtTestCase, skipif_ci_apple
+from experimental_experiment.ext_test_case import (
+    ExtTestCase,
+    skipif_ci_apple,
+    ignore_warnings,
+)
 from experimental_experiment.memory_peak import get_memory_rss, start_spying_on
 import torch
 
@@ -14,6 +18,7 @@ class TestMemoryPeak(ExtTestCase):
         self.assertIsInstance(mem, int)
 
     @skipif_ci_apple("stuck")
+    @ignore_warnings(DeprecationWarning)
     def test_spy_cpu(self):
         p = start_spying_on(cuda=False)
         n_elements = 0

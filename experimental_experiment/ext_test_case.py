@@ -117,6 +117,17 @@ def ignore_warnings(warns: List[Warning]) -> Callable:
 
     :param warns:   warnings to ignore
     """
+    if not isinstance(warns, (tuple, list)):
+        warns = (warns,)
+    new_list = []
+    for w in warns:
+        if w == "TracerWarning":
+            from torch.jit import TracerWarning
+
+            new_list.append(TracerWarning)
+        else:
+            new_list.append(w)
+    warns = tuple(new_list)
 
     def wrapper(fct):
         if warns is None:
@@ -552,6 +563,7 @@ def requires_zoo(msg: str = "") -> Callable:
 
 
 def requires_sklearn(version: str, msg: str = "") -> Callable:
+    """Skips a unit test if :epkg:`scikit-learn` is not recent enough."""
     import packaging.version as pv
     import sklearn
 
@@ -573,7 +585,7 @@ def requires_torch(version: str, msg: str = "") -> Callable:
 
 
 def requires_monai(version: str = "", msg: str = "") -> Callable:
-    """Skips a unit test if :epkg:`pytorch` is not recent enough."""
+    """Skips a unit test if :epkg:`monai` is not recent enough."""
     import packaging.version as pv
 
     try:
@@ -585,6 +597,23 @@ def requires_monai(version: str = "", msg: str = "") -> Callable:
         version
     ):
         msg = f"torch version {monai.__version__} < {version}: {msg}"
+        return unittest.skip(msg)
+    return lambda x: x
+
+
+def requires_pyinstrument(version: str = "", msg: str = "") -> Callable:
+    """Skips a unit test if :epkg:`pyinstrument` is not recent enough."""
+    import packaging.version as pv
+
+    try:
+        import pyinstrument
+    except ImportError:
+        return unittest.skip(msg)
+
+    if version and pv.Version(
+        ".".join(pyinstrument.__version__.split(".")[:2])
+    ) < pv.Version(version):
+        msg = f"torch version {pyinstrument.__version__} < {version}: {msg}"
         return unittest.skip(msg)
     return lambda x: x
 

@@ -1,6 +1,6 @@
 import time
 import warnings
-from typing import Dict, List, Optional, Sequence, Set
+from typing import Dict, List, Optional, Sequence, Set, Union
 
 import numpy as np
 import pandas
@@ -139,7 +139,7 @@ def _SELECTED_FEATURES():
             cat="time",
             agg="SUM",
             stat="latency",
-            new_name="total time exported model",
+            new_name="total latency time exported model",
             unit="x",
             help="Total latency time with the exported model "
             "(onnxruntime, inductor, ...)",
@@ -149,7 +149,7 @@ def _SELECTED_FEATURES():
             cat="time",
             agg="SUM",
             stat="latency_eager_if_exported_run",
-            new_name="total time eager / exported model",
+            new_name="total latency time eager / exported model",
             unit="x",
             help="Total latency of eager mode knowing when the "
             "exported model (onnxruntime, inductor, ...) runs",
@@ -516,6 +516,74 @@ def _column_name(ci: int) -> str:
     a = ci // 26
     b = ci % 26
     return f"{chr(65+a)}{chr(65+b)}"
+
+
+def _format_excel_cells(
+    sheets: Union[str, List[str]],
+    writer: pandas.ExcelWriter,
+    verbose: int = 0,
+):
+    if isinstance(sheets, list):
+        for sheet in sheets:
+            _format_excel_cells(sheet, writer, verbose=verbose)
+        return
+
+    from openpyxl.styles import Alignment, Font
+    from openpyxl.utils import get_column_letter
+
+    bold_font = Font(bold=True)
+    left = Alignment(horizontal="left")
+    right = Alignment(horizontal="right")
+
+    sheet = writer.sheets[sheets]
+    rows = sheet.max_row
+    co = {}
+    sizes = {}
+    cols = set()
+    for i in range(1, rows + 1):
+        for j, cell in enumerate(sheet[i]):
+            cols.add(cell.column)
+            if isinstance(cell.value, float):
+                co[j] = co.get(j, 0) + 1
+            elif isinstance(cell.value, str):
+                sizes[cell.column] = max(sizes.get(cell.column, 0), len(cell.value))
+
+    for k, v in sizes.items():
+        c = get_column_letter(k)
+        sheet.column_dimensions[c].width = max(15, v)
+    for k in cols:
+        if k not in sizes:
+            c = get_column_letter(k)
+            sheet.column_dimensions[c].width = 15
+
+    top = [(v, k) for k, v in co.items()]
+    top.sort()
+    i = len(top) - 1
+    while i > 0 and top[i - 1][0] == top[-1][0]:
+        i -= 1
+    first_col = top[i][-1]
+    for i in range(1, rows + 1):
+        for j, cell in enumerate(sheet[i]):
+            if j < first_col:
+                cell.font = bold_font
+                cell.alignment = left
+            elif isinstance(cell.value, float):
+                cell.alignment = right
+                x = cell.value
+                if x in (0, 1):
+                    cell.number_format = "0"
+                elif x > 1000:
+                    cell.number_format = "0 000"
+                elif x >= 100:
+                    cell.number_format = "0.0"
+                elif x >= 10:
+                    cell.number_format = "0.00"
+                elif x >= 1:
+                    cell.number_format = "0.000"
+                elif x > 0.1:
+                    cell.number_format = "0.000"
+                else:
+                    cell.number_format = "0.000000"
 
 
 def _apply_excel_style(
@@ -1536,3 +1604,29 @@ def _compute_correlations(
             )
         res["JOINED"] = joined.reset_index(drop=False)
     return res
+
+
+def _fix_report_piv(piv: pandas.DataFrame, agg: bool = False) -> pandas.DataFrame:
+
+    if agg:
+        piv = piv[piv.index != (15, "average export time")]
+        piv = piv[piv.index != (16, "average speedup (geo)")]
+
+    # simplify dates
+    indices = list(enumerate(piv.index))
+    dates = [row[0] for row in indices if "date" in row[1]]
+    piv.iloc[dates, :] = piv.iloc[dates, :].apply(lambda s: s[:10])
+
+    # add speed by latency
+    latencies = [row[0] for row in indices if "total latency time exported model" in row[1]]
+    insert_at = []
+    for ind in latencies:
+        index = piv.index[ind]
+        index = (*index[:-1], "speedup weighted by latency")
+        speedup = piv.iloc[ind + 1].values / piv.iloc[ind].values
+        mindex = pandas.MultiIndex.from_tuples([index], names=piv.index.names)
+        add = pandas.DataFrame([speedup.tolist()], columns=piv.columns, index=mindex)
+        insert_at.append(add)
+    piv = pandas.concat([piv, *insert_at])
+    piv = piv.sort_index()
+    return piv

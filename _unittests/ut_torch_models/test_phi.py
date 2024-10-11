@@ -4,11 +4,13 @@ from experimental_experiment.ext_test_case import (
     ExtTestCase,
     requires_onnxruntime_training,
     requires_cuda,
+    ignore_warnings,
 )
 from experimental_experiment.reference import ExtendedReferenceEvaluator
 
 
 class TestPhi(ExtTestCase):
+    @ignore_warnings("TracerWarning")
     def test_get_phi_model_export(self):
         import torch
         from experimental_experiment.torch_models.phi_helper import (

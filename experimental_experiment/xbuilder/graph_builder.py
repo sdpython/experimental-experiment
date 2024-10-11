@@ -2870,6 +2870,11 @@ class GraphBuilder(_GraphBuilderRuntime):
                     t = onh.from_array(np.array([v], dtype=np.float32), name=k)
                     initializer.append(t)
                     continue
+                elif isinstance(v, np.float16):
+                    # This should not happen.
+                    t = onh.from_array(np.array([v], dtype=np.float16), name=k)
+                    initializer.append(t)
+                    continue
                 else:
                     assert isinstance(
                         v, self.torch.Tensor

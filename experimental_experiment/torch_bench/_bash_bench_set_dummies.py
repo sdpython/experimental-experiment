@@ -141,3 +141,18 @@ class NeuronIList(torch.nn.Module):
         )
 
     config = MakeConfig(download=False, to_tuple=False)
+
+
+class NeuronIInt(torch.nn.Module):
+    def __init__(self, n_dims: int = 5, n_targets: int = 3):
+        super().__init__()
+        self.linear = torch.nn.Linear(n_dims, n_targets)
+
+    def forward(self, x, i_input):
+        z = self.linear(x)
+        return torch.sigmoid(z)[:, i_input]
+
+    def _get_random_inputs(self, device: str):
+        return (torch.randn(1, 5).to(device), 2)
+
+    config = MakeConfig(download=False, to_tuple=False)

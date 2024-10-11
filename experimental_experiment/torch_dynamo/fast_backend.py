@@ -12,7 +12,7 @@ from onnxruntime.capi import _pybind_state as ORTC
 from ..convert.ort_helper import append_custom_libraries
 from ..xbuilder import OptimizationOptions
 from ..xbuilder._dtype_helper import onnx_dtype_to_torch_dtype
-from ..torch_interpreter import to_onnx
+from ..torch_interpreter import to_onnx, ExportOptions
 from ..torch_interpreter._torch_helper import create_input_names
 from ..xoptim import get_pattern_list
 from .backend_helper import get_dimensions
@@ -437,7 +437,7 @@ def _default_export(
     order_algorithm=None,
     dump_patterns=None,
     options=None,
-    onnx_custom_backend=None,
+    export_options: Optional[Union[str, ExportOptions]] = None,
 ):
     input_names = input_names = (
         create_input_names(graph_module, args) if rename_inputs else None
@@ -475,7 +475,7 @@ def _default_export(
         return_builder=True,
         dispatcher=dispatcher,
         optimize=optimize,
-        decomposition_table=onnx_custom_backend,
+        export_options=export_options,
     )
 
     return onx, builder
@@ -515,7 +515,7 @@ def onnx_custom_backend(
     processor: str = "CPU",
     order_algorithm: Optional[str] = None,
     options: Optional[OptimizationOptions] = None,
-    decomposition_table: Optional[str] = None,
+    export_options: Optional[Union[str, ExportOptions]] = None,
 ) -> Callable:
     """
     Custom backend to export torch models into onnx
@@ -549,7 +549,8 @@ def onnx_custom_backend(
         none by default
     :param options: to define custom Optimization options, in that case,
         any other optimization parameter is ignored
-    :param decomposition_table: decomposition table to apply
+    :param export_options: see :class:`ExportOptions
+        <experimental_experiment.torch_interpreter.ExportOptions>`
     :return: Callable
 
     See :ref:`l-plot-onnxrt-diff` or :ref:`l-plot-custom-backend` for examples.
@@ -641,7 +642,7 @@ def onnx_custom_backend(
             order_algorithm=order_algorithm,
             dump_patterns=dump_patterns,
             options=options,
-            onnx_custom_backend=onnx_custom_backend,
+            export_options=export_options,
         )
     elif exporter == "dynamo":
         from ._dynamo_exporter import _dynamo_export

@@ -4,6 +4,7 @@ from experimental_experiment.ext_test_case import (
     ExtTestCase,
     requires_onnxruntime_training,
     requires_cuda,
+    ignore_warnings,
 )
 from experimental_experiment.reference import ExtendedReferenceEvaluator
 from experimental_experiment.torch_models.phi3_helper import has_phi3
@@ -11,6 +12,7 @@ from experimental_experiment.torch_models.phi3_helper import has_phi3
 
 class TestPhi3(ExtTestCase):
     @unittest.skipIf(not has_phi3(), reason="transformers not recent enough")
+    @ignore_warnings("TracerWarning")
     def test_get_phi3_model_export(self):
         import torch
         from experimental_experiment.torch_models.phi3_helper import (
