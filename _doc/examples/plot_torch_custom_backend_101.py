@@ -29,6 +29,7 @@ from experimental_experiment.torch_dynamo import (
     onnx_custom_backend,
     get_decomposition_table,
 )
+from experimental_experiment.torch_interpreter import ExportOptions
 
 
 class MLP(torch.nn.Module):
@@ -87,7 +88,7 @@ aot_compiler = aot_autograd(
     fw_compiler=lambda *args, **kwargs: onnx_custom_backend(
         *args, target_opset=18, **kwargs
     ),
-    decompositions=get_decomposition_table(),
+    export_options=ExportOptions(decomposition_table=get_decomposition_table()),
 )
 
 compiled_model = torch.compile(

@@ -233,13 +233,13 @@ class BenchmarkRunner:
         # if isinstance(obj, onnxruntime.capi.onnxruntime_pybind11_state.OrtValue):
         if hasattr(obj, "numpy"):
             # Implicit copy to torch.Tensor
-            t = torch.Tensor(obj.numpy()).to(device)
+            return torch.Tensor(obj.numpy()).to(device)
+        if isinstance(obj, np.ndarray):
+            t = torch.Tensor(obj).to(device)
             assert torch_dtype_to_onnx_dtype(t.dtype) == tensor_dtype_to_np_dtype(
                 obj.dtype
             ), f"Type mismatch between {obj.dtype} and {t.dtype}"
             return t
-        if isinstance(obj, np.ndarray):
-            return torch.Tensor(obj).to(device)
         if "SquashedNormal" in obj.__class__.__name__ and device == "cpu":
             return obj
         if hasattr(obj, "conv_states") and obj.__class__.__name__ == "MambaCache":
