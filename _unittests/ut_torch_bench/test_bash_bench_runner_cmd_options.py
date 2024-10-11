@@ -64,6 +64,8 @@ class TestBashBenchRunnerCmdOptions(ExtTestCase):
             "dump_test_bash_bench",
             "--timeout",
             str(timeout),
+            "--output_data",
+            "",
         ]
         if dynamic:
             args.extend(["--dynamic", "1"])

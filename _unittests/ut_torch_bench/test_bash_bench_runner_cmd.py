@@ -66,6 +66,8 @@ class TestBashBenchRunnerCmd(ExtTestCase):
             "dump_test_bash_bench",
             "--timeout",
             str(timeout),
+            "--output_data",
+            "",
         ]
         if dynamic:
             args.extend(["--dynamic", "1"])
@@ -150,6 +152,8 @@ class TestBashBenchRunnerCmd(ExtTestCase):
             "dump_test_bash_bench",
             "--timeout",
             str(timeout),
+            "--output_data",
+            "",
         ]
         if optimization:
             args.extend(["--opt_patterns", optimization])
