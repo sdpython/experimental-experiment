@@ -86,9 +86,11 @@ print(compiled_model(x))
 
 aot_compiler = aot_autograd(
     fw_compiler=lambda *args, **kwargs: onnx_custom_backend(
-        *args, target_opset=18, **kwargs
+        *args,
+        target_opset=18,
+        export_options=ExportOptions(decomposition_table=get_decomposition_table()),
+        **kwargs,
     ),
-    export_options=ExportOptions(decomposition_table=get_decomposition_table()),
 )
 
 compiled_model = torch.compile(
