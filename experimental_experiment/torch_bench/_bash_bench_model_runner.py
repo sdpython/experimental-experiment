@@ -185,7 +185,7 @@ class ModelRunner:
         if not optimization or optimization == "none":
             # always possible
             return True
-        if exporter in {"custom", "custom-ballback"}:
+        if exporter in {"custom", "custom-fallback"}:
             return True
         if exporter in {"torch_script", "dynamo_export"}:
             return optimization in {"default"}
