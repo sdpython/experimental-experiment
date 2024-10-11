@@ -1148,15 +1148,17 @@ class DynamoInterpreter:
             for i, (v, r) in enumerate(zip(val, res)):
                 if isinstance(v, self.torch.Tensor):
                     dtype = _get_type(v.dtype)
-                    if i >= 1 and node.target.name() in {
-                        "aten::_native_batch_norm_legit.no_stats",
-                        "aten::_native_batch_norm_legit_no_training",
-                    }:
-                        # It seems the type is not very consistant
-                        # and the output might not be used.
-                        self.builder.set_type(r, dtype, exc=False)
-                    else:
-                        self.builder.set_type(r, dtype)
+                    if dtype not in (TensorProto.COMPLEX64, TensorProto.COMPLEX128):
+                        # Complex may be handled differently.
+                        if i >= 1 and node.target.name() in {
+                            "aten::_native_batch_norm_legit.no_stats",
+                            "aten::_native_batch_norm_legit_no_training",
+                        }:
+                            # It seems the type is not very consistant
+                            # and the output might not be used.
+                            self.builder.set_type(r, dtype, exc=False)
+                        else:
+                            self.builder.set_type(r, dtype)
                     shape = tuple(v.shape)
 
                     for t in shape:

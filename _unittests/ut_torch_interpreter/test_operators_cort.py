@@ -233,7 +233,7 @@ class TestOperatorsCort(ExtTestCase):
                     aot_autograd(
                         fw_compiler=backend_dynger,
                         decompositions=(
-                            get_decomposition_table()
+                            get_decomposition_table("default")
                             if use_decomposition is True
                             else use_decomposition
                         ),
@@ -257,7 +257,7 @@ class TestOperatorsCort(ExtTestCase):
                     aot_autograd(
                         fw_compiler=backend_debug,
                         decompositions=(
-                            get_decomposition_table()
+                            get_decomposition_table("default")
                             if use_decomposition is True
                             else use_decomposition
                         ),

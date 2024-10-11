@@ -374,7 +374,7 @@ class TestFallbackForce(ExtTestCase):
                 ),
                 **kwargs,
             ),
-            decompositions=get_decomposition_table(),
+            decompositions=get_decomposition_table("default"),
         )
 
         compiled_model = torch.compile(
@@ -457,7 +457,7 @@ class TestFallbackForce(ExtTestCase):
                 verbose=0,
                 **kwargs,
             ),
-            decompositions=get_decomposition_table(),
+            decompositions=get_decomposition_table("default"),
         )
 
         compiled_model = torch.compile(
