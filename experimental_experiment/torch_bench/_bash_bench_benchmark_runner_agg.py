@@ -1301,6 +1301,10 @@ def _build_aggregated_document(
     ), f"Some rows were added or deleted {final_res['SIMPLE'].shape} -> {simple.shape}"
     final_res["SIMPLE"] = simple
 
+    # na to -
+    if "ERR" in final_res:
+        final_res["ERR"] = final_res["ERR"].fillna("-")
+
     if verbose:
         print(
             f"[merge_benchmark_reports] done with shapes "
