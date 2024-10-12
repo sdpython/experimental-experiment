@@ -20,6 +20,10 @@ from ._bash_bench_set_dummies import (
     NeuronNamedDict,
     NeuronIList,
     NeuronIInt,
+    NeuronNoneInt,
+    NeuronNoneListInt,
+    NeuronNoneIntDefault,
+    NeuronNoneIntDict,
 )
 
 
@@ -234,6 +238,22 @@ class HuggingfaceRunner(BenchmarkRunner):
                 "101DummyIInt": (
                     lambda: NeuronIInt.config,
                     NeuronIInt,
+                ),
+                "101DummyNoneInt": (
+                    lambda: NeuronNoneInt.config,
+                    NeuronNoneInt,
+                ),
+                "101DummyNoneListInt": (
+                    lambda: NeuronNoneListInt.config,
+                    NeuronNoneListInt,
+                ),
+                "101DummyNoneIntDefault": (
+                    lambda: NeuronNoneIntDefault.config,
+                    NeuronNoneIntDefault,
+                ),
+                "101DummyNoneIntDict": (
+                    lambda: NeuronNoneIntDict.config,
+                    NeuronNoneIntDict,
                 ),
                 "AllenaiLongformerBase": (
                     lambda: transformers.AutoConfig.from_pretrained(
