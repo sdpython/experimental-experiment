@@ -480,8 +480,8 @@ class BenchmarkRunner:
         * rel: max relative error
         * sum: sum of the errors
         * n: number of outputs values, if there is one
-            output, this number will be the number of elements
-            of this output
+          output, this number will be the number of elements
+          of this output
         """
         if flatten:
             return cls.max_diff(

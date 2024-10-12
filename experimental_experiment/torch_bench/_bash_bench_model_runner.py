@@ -1,7 +1,7 @@
 import collections
 import contextlib
-import inspect
 import enum
+import inspect
 import os
 import pprint
 import shutil
@@ -953,7 +953,7 @@ class ModelRunner:
         if self.autocast:
             with torch.autocast(
                 device_type=self.device, dtype=self.dtype
-            ), torch.no_grad(), bypass_export_some_errors():
+            ), torch.no_grad():
                 torch.onnx.export(
                     self.model,
                     inputs,
@@ -1026,9 +1026,7 @@ class ModelRunner:
         dyn_shapes = self.get_dynamic_shapes(dynamic, wrapped=True)
 
         if self.autocast:
-            with torch.autocast(
-                device_type=self.device, dtype=self.dtype
-            ), torch.no_grad(), bypass_export_some_errors():
+            with torch.autocast(device_type=self.device, dtype=self.dtype), torch.no_grad():
                 onnx_program = torch.onnx.export(
                     self.model,
                     export_inputs,
@@ -1040,7 +1038,7 @@ class ModelRunner:
                     **additional_kwargs,
                 )
         else:
-            with torch.no_grad(), bypass_export_some_errors():
+            with torch.no_grad():
                 onnx_program = torch.onnx.export(
                     self.model,
                     export_inputs,
