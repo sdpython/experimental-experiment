@@ -1615,7 +1615,7 @@ def _fix_report_piv(piv: pandas.DataFrame, agg: bool = False) -> pandas.DataFram
     # simplify dates
     indices = list(enumerate(piv.index))
     dates = [row[0] for row in indices if "date" in row[1]]
-    piv.iloc[dates, :] = piv.iloc[dates, :].apply(lambda s: s[:10])
+    piv.iloc[dates, :] = piv.iloc[dates, :].applymap(lambda s: s[:10])
 
     # add speed by latency
     latencies = [row[0] for row in indices if "total latency time exported model" in row[1]]
