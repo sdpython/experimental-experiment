@@ -1607,7 +1607,6 @@ def _compute_correlations(
 
 
 def _fix_report_piv(piv: pandas.DataFrame, agg: bool = False) -> pandas.DataFrame:
-
     if agg:
         piv = piv[piv.index != (15, "average export time")]
         piv = piv[piv.index != (16, "average speedup (geo)")]
