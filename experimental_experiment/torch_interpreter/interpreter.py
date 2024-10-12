@@ -56,7 +56,12 @@ class DynamoInterpreter:
             example_inputs, tuple
         ), f"Unexpected type for example_inputs {type(example_inputs)}"
         assert example_inputs is None or all(
-            (t is None or isinstance(t, (torch.SymInt, torch.SymFloat, torch.Tensor, list)))
+            (
+                t is None
+                or isinstance(
+                    t, (torch.SymInt, torch.SymFloat, torch.Tensor, list, int, float)
+                )
+            )
             for t in example_inputs
         ), (
             f"Unexpected type for one input in example_inputs "
@@ -76,7 +81,8 @@ class DynamoInterpreter:
             res = []
             for i in x:
                 if i is None or isinstance(
-                    i, (self.torch.Tensor, self.torch.SymInt, self.torch.SymFloat)
+                    i,
+                    (self.torch.Tensor, self.torch.SymInt, self.torch.SymFloat, int, float),
                 ):
                     res.append(i)
                 else:
@@ -334,6 +340,16 @@ class DynamoInterpreter:
 
         if isinstance(val, (self.torch.SymInt, self.torch.SymFloat)):
             return self.builder.make_dynamic_object(node.name, val, shape_as_input=True)
+
+        if isinstance(val, (int, float)):
+            # scalar input
+            return self._make_tensor_input(
+                node.name,
+                elem_type=TensorProto.INT64 if isinstance(val, int) else TensorProto.FLOAT,
+                shape=(1,),
+                is_dimension=False,
+                users=node.users,
+            )
 
         raise RuntimeError(
             f"Unsupported type {type(val)} for placeholder "

@@ -676,7 +676,7 @@ class ModelRunner:
             options = None
 
         export_options = ExportOptions(strategy=strategy)
-        export_inputs = self.make_export_inputs(dynamic, wrapped=True, int_to_tensor=True)
+        export_inputs = self.make_export_inputs(dynamic, wrapped=True, int_to_tensor=False)
         dyn_shapes = self.get_dynamic_shapes(dynamic, wrapped=True)
 
         if self.autocast:
