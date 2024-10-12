@@ -270,11 +270,13 @@ class DynamoInterpreter:
                 return self._make_tensor_input(
                     node.name, None, None, is_dimension=False, users=node.users
                 )
+
             if example_value is None:
                 # The input is not defined.
                 # We return.
                 self.current_input_ += 1
                 return
+
             if isinstance(
                 example_value, (self.builder.torch.SymInt, self.builder.torch.SymFloat)
             ):
@@ -285,6 +287,20 @@ class DynamoInterpreter:
                     elem_type=self.builder.torch.int64,
                     shape=(1,),
                     is_dimension=True,
+                    users=node.users,
+                )
+
+            if isinstance(example_value, (int, float)):
+                # int or float
+                return self._make_tensor_input(
+                    node.name,
+                    elem_type=(
+                        self.builder.torch.int64
+                        if isinstance(example_value, int)
+                        else self.builder.torch.float32
+                    ),
+                    shape=(1,),
+                    is_dimension=False,
                     users=node.users,
                 )
 

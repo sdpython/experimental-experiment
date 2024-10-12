@@ -618,6 +618,22 @@ class TestBashBenchRunnerCmd(ExtTestCase):
     def test_huggingface_export_bench_dynamo_cpu_dummy_int_dynamic(self):
         self._hg_export_bench_cpu("onnx_dynamo", "101DummyIInt", dynamic=True)
 
+    # int, none
+
+    @skipif_ci_windows("exporter does not work on Windows")
+    @ignore_warnings((DeprecationWarning, UserWarning))
+    @requires_torch("2.5")
+    def test_huggingface_export_bench_custom_cpu_dummy_none_int(self):
+        self._hg_export_bench_cpu("custom", "101DummyNoneInt", dynamic=False)
+
+    # int, list, none
+
+    @skipif_ci_windows("exporter does not work on Windows")
+    @ignore_warnings((DeprecationWarning, UserWarning))
+    @requires_torch("2.5")
+    def test_huggingface_export_bench_custom_cpu_dummy_none_list_int(self):
+        self._hg_export_bench_cpu("custom", "101DummyNoneListInt", dynamic=False)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

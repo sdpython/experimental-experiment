@@ -1635,6 +1635,8 @@ class ModelRunner:
                 continue
             if isinstance(i, list):
                 for u in i:
+                    if u is None:
+                        continue
                     if isinstance(u, torch.Tensor):
                         new_inputs.append(u)
                         continue
