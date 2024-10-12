@@ -226,6 +226,54 @@ class TestBashBenchRunnerCmdOptions(ExtTestCase):
     def test_eager_int(self):
         self._export_cmd("eager", "101DummyIInt", check_file=False)
 
+    # int, none
+
+    @skipif_ci_windows("exporter does not work on Windows")
+    @ignore_warnings((DeprecationWarning, UserWarning))
+    @requires_torch("2.5")
+    def test_eager_none_int(self):
+        for exporter in ["eager", "export"]:
+            with self.subTest(exporter=exporter):
+                self._export_cmd(
+                    exporter, "101DummyNoneInt", dynamic=False, check_file=False
+                )
+
+    # int, none, default
+
+    @skipif_ci_windows("exporter does not work on Windows")
+    @ignore_warnings((DeprecationWarning, UserWarning))
+    @requires_torch("2.5")
+    def test_eager_none_int_default(self):
+        for exporter in ["eager", "export"]:
+            with self.subTest(exporter=exporter):
+                self._export_cmd(
+                    exporter, "101DummyNoneIntDefault", dynamic=False, check_file=False
+                )
+
+    # int, list, none
+
+    @skipif_ci_windows("exporter does not work on Windows")
+    @ignore_warnings((DeprecationWarning, UserWarning))
+    @requires_torch("2.5")
+    def test_eager_none_list_int(self):
+        for exporter in ["eager", "export"]:
+            with self.subTest(exporter=exporter):
+                self._export_cmd(
+                    exporter, "101DummyNoneListInt", dynamic=False, check_file=False
+                )
+
+    # dict, none, int
+
+    @skipif_ci_windows("exporter does not work on Windows")
+    @ignore_warnings((DeprecationWarning, UserWarning))
+    @requires_torch("2.5")
+    def test_eager_none_int_dict(self):
+        for exporter in ["eager", "export"]:
+            with self.subTest(exporter=exporter):
+                self._export_cmd(
+                    exporter, "101DummyNoneIntDict", dynamic=False, check_file=False
+                )
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

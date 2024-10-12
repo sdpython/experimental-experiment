@@ -1,6 +1,7 @@
 import collections
 import contextlib
 import inspect
+import enum
 import os
 import pprint
 import shutil
@@ -9,6 +10,20 @@ from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 import onnx
 import torch
 from .export_model_helper import compute_weight_size
+
+
+class UseDefaultValue(enum.IntEnum):
+    """
+    Defines if the exporter may use the default value.
+
+    * FALSE: no default value
+    * TRUE: there is a default value and the input is not specified
+    * BOTH: there is a default and one input
+    """
+
+    FALSE = 1
+    TRUE = 2
+    BOTH = 3
 
 
 @contextlib.contextmanager
@@ -290,13 +305,17 @@ class ModelRunner:
                 if n in inputs:
                     new_inputs.append(inputs[n])
                     added += 1
-                    use_default.append(False)
+                    use_default.append(
+                        UseDefaultValue.FALSE
+                        if sig.parameters[n].default is inspect._empty
+                        else UseDefaultValue.BOTH
+                    )
                 else:
                     if sig.parameters[n].default is inspect._empty:
                         # probably one optional input
                         continue
                     new_inputs.append(sig.parameters[n].default)
-                    use_default.append(True)
+                    use_default.append(UseDefaultValue.TRUE)
                 new_names.append(n)
             assert added == len(inputs), (
                 f"Unexpected input name in {sorted(inputs)} and "
@@ -307,7 +326,10 @@ class ModelRunner:
             self.raw_use_defaults = use_default
         else:
             self.raw_input_names = [f"input{i}" for i in range(len(inputs))]
-            self.raw_use_defaults = [i is None for i in inputs]
+            self.raw_use_defaults = [
+                (UseDefaultValue.TRUE if i is None else UseDefaultValue.FALSE)
+                for i in inputs
+            ]
 
         config = getattr(model, "config", {})
         to_tuple = not (hasattr(config, "to_tuple") and not config.to_tuple)
@@ -485,6 +507,18 @@ class ModelRunner:
             exporter, strategy = spl
         else:
             strategy = None
+
+        if verbose:
+            print(
+                f"[ModelRunner.export_as] exporter={exporter!r} "
+                f"strategy={strategy!r} optimization={optimization!r} "
+                f"n_inputs={len(self.inputs)}"
+            )
+            print(
+                f"[ModelRunner.export_as] fake_tensor={fake_tensor} dynamic={dynamic} "
+                f"target_opset={target_opset} no_grad={no_grad} name={name!r}"
+            )
+            print(f"[ModelRunner.export_as] use_raw_default={self.raw_use_defaults!r}")
 
         if exporter == "custom":
             return self._to_onnx_custom(
@@ -1619,7 +1653,16 @@ class ModelRunner:
                 self.inputs
             ), f"Input names mismatch, got {set(use_inputs)}, expecting {set(names)}."
             return self.inputs
-        inputs = [i for i, d in zip(use_inputs, self.raw_use_defaults) if not d]
+        assert len(use_inputs) == len(self.raw_use_defaults), (
+            f"Mismatch len(use_inputs)={len(use_inputs)}, "
+            f"len(self.raw_use_defaults)={len(self.raw_use_defaults)}, "
+            f"self.raw_use_defaults={self.raw_use_defaults}"
+        )
+        inputs = [
+            i
+            for i, d in zip(use_inputs, self.raw_use_defaults)
+            if d != UseDefaultValue.TRUE or i is not None
+        ]
 
         # We need to flatten list, wrap scalar
         new_inputs = []
@@ -1645,6 +1688,16 @@ class ModelRunner:
                     )
                 continue
             raise AssertionError(f"Unable to process input type {type(i)}")
+
+        if len(names) < len(new_inputs) and all(
+            (
+                r == UseDefaultValue.TRUE
+                # onnx_dynamo does not seem to consider int or float as inputs
+                or (exporter == "onnx_dynamo" and isinstance(i, (int, float)))
+            )
+            for i, r in zip(use_inputs[len(names) :], self.raw_use_defaults[len(names) :])
+        ):
+            new_inputs = new_inputs[: len(names)]
 
         assert len(names) == len(new_inputs), (
             f"Mismatch number of inputs, {len(inputs)} ({len(new_inputs)}) "
