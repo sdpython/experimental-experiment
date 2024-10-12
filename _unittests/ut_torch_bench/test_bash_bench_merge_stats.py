@@ -307,10 +307,28 @@ class TestBashBenchMergeStats(ExtTestCase):
         for p in sig.parameters:
             if p == "keys":
                 keys = sig.parameters[p].default
+        self.assertNotEmpty(keys)
         dfs = merge_benchmark_reports(
             data,
             excel_output="test_merge_stats_bug_merge_gr.xlsx",
             export_simple="test_merge_stats_bug_merge_gr_simple.csv",
+            keys=tuple(c for c in keys if c not in {"version_python"}),
+        )
+        self.assertNotEmpty(dfs)
+
+    @ignore_warnings((FutureWarning,))
+    def test_merge_stats_fix_report(self):
+        data = os.path.join(os.path.dirname(__file__), "data", "data_2024.csv")
+        sig = inspect.signature(merge_benchmark_reports)
+        keys = None
+        for p in sig.parameters:
+            if p == "keys":
+                keys = sig.parameters[p].default
+        self.assertNotEmpty(keys)
+        dfs = merge_benchmark_reports(
+            data,
+            excel_output="test_merge_stats_fix_report.xlsx",
+            export_simple="test_merge_stats_fix_report.csv",
             keys=tuple(c for c in keys if c not in {"version_python"}),
         )
         self.assertNotEmpty(dfs)
