@@ -676,12 +676,14 @@ class ModelRunner:
             options = None
 
         export_options = ExportOptions(strategy=strategy)
+        export_inputs = self.make_export_inputs(dynamic, wrapped=True, int_to_tensor=True)
+        dyn_shapes = self.get_dynamic_shapes(dynamic, wrapped=True)
 
         if self.autocast:
             with torch.autocast(device_type=self.device, dtype=self.dtype), torch.no_grad():
                 onx, builder, stats = to_onnx(
                     self.model,
-                    self.make_export_inputs(dynamic, wrapped=True, int_to_tensor=True),
+                    export_inputs,
                     optimize=bool(optimization),
                     large_model=True,
                     verbose=10 if verbose >= 100 else (1 if verbose > 1 else 0),
@@ -689,14 +691,14 @@ class ModelRunner:
                     return_optimize_report=True,
                     options=options,
                     return_builder=True,
-                    dynamic_shapes=self.get_dynamic_shapes(dynamic, wrapped=True),
+                    dynamic_shapes=dyn_shapes,
                     export_options=export_options,
                 )
         else:
             with torch.no_grad():
                 onx, builder, stats = to_onnx(
                     self.model,
-                    self.make_export_inputs(dynamic, wrapped=True, int_to_tensor=True),
+                    export_inputs,
                     optimize=bool(optimization),
                     large_model=True,
                     verbose=10 if verbose >= 100 else (1 if verbose > 1 else 0),
@@ -704,7 +706,7 @@ class ModelRunner:
                     return_optimize_report=True,
                     options=options,
                     return_builder=True,
-                    dynamic_shapes=self.get_dynamic_shapes(dynamic, wrapped=True),
+                    dynamic_shapes=dyn_shapes,
                     export_options=export_options,
                 )
         begin = time.perf_counter()
@@ -986,30 +988,33 @@ class ModelRunner:
         if fallback:
             additional_kwargs.update(dict(fallback=True))
 
+        export_inputs = self.make_export_inputs(dynamic, wrapped=True)
+        dyn_shapes = self.get_dynamic_shapes(dynamic, wrapped=True)
+
         if self.autocast:
             with torch.autocast(
                 device_type=self.device, dtype=self.dtype
             ), torch.no_grad(), bypass_export_some_errors():
                 onnx_program = torch.onnx.export(
                     self.model,
-                    self.make_export_inputs(dynamic, wrapped=True),
+                    export_inputs,
                     name,
                     opset_version=target_opset,
                     dynamo=True,
                     external_data=True,
-                    dynamic_shapes=self.get_dynamic_shapes(dynamic, wrapped=True),
+                    dynamic_shapes=dyn_shapes,
                     **additional_kwargs,
                 )
         else:
             with torch.no_grad(), bypass_export_some_errors():
                 onnx_program = torch.onnx.export(
                     self.model,
-                    self.make_export_inputs(dynamic, wrapped=True),
+                    export_inputs,
                     name,
                     opset_version=target_opset,
                     dynamo=True,
                     external_data=True,
-                    dynamic_shapes=self.get_dynamic_shapes(dynamic, wrapped=True),
+                    dynamic_shapes=dyn_shapes,
                     **additional_kwargs,
                 )
 
@@ -1075,6 +1080,7 @@ class ModelRunner:
     ):
         assert not fake_tensor, "fake_tensor not implemented."
         assert no_grad, "no_grad false not implemented yet"
+        assert not self.autocast, "not implemented for autocast"
         assert (
             not optimization or optimization == "none"
         ), f"optimization {optimization!r} not compatible with export"
