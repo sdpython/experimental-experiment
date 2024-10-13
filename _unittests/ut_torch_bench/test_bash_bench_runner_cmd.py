@@ -468,7 +468,7 @@ class TestBashBenchRunnerCmd(ExtTestCase):
             ["custom", "onnx_dynamo", "torch_script"], [True, False]
         ):
             with self.subTest(exporter=exporter, dynamic=dynamic):
-                self._hg_export_bench_cpu("custom", "101DummyNamed1", dynamic=dynamic)
+                self._hg_export_bench_cpu(exporter, "101DummyNamed1", dynamic=dynamic)
 
     # name2
 
@@ -480,7 +480,7 @@ class TestBashBenchRunnerCmd(ExtTestCase):
             ["custom", "onnx_dynamo", "torch_script"], [True, False]
         ):
             with self.subTest(exporter=exporter, dynamic=dynamic):
-                self._hg_export_bench_cpu("custom", "101DummyNamed2", dynamic=dynamic)
+                self._hg_export_bench_cpu(exporter, "101DummyNamed2", dynamic=dynamic)
 
     # name dict
 
@@ -492,7 +492,7 @@ class TestBashBenchRunnerCmd(ExtTestCase):
             ["custom", "onnx_dynamo", "torch_script"], [True, False]
         ):
             with self.subTest(exporter=exporter, dynamic=dynamic):
-                self._hg_export_bench_cpu("custom", "101DummyNamedDict", dynamic=dynamic)
+                self._hg_export_bench_cpu(exporter, "101DummyNamedDict", dynamic=dynamic)
 
     # list
 
