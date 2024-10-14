@@ -801,6 +801,16 @@ class BenchmarkRunner:
                 f"[BenchmarkRunner.benchmark] warmup model {model_name!r} "
                 f"- {warmup} times"
             )
+            print(f"[BenchmarkRunner.benchmark] device={model_runner.device!r}")
+            devices = [
+                (
+                    i.get_device()
+                    if hasattr(i, "get_device")
+                    else (None if i is None else type(i))
+                )
+                for i in model_runner.inputs
+            ]
+            print(f"[BenchmarkRunner.benchmark] input device={devices}")
 
         begin = time.perf_counter()
         if quiet:
