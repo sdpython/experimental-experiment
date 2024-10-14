@@ -1,5 +1,4 @@
 import glob
-import itertools
 import os
 import pprint
 import warnings
@@ -12,7 +11,6 @@ import pandas
 
 from . import BOOLEAN_VALUES
 from ._bash_bench_benchmark_runner_agg_helper import (
-    BUCKET_SCALES,
     SELECTED_FEATURES,
     _apply_excel_style,
     _format_excel_cells,
@@ -25,6 +23,7 @@ from ._bash_bench_benchmark_runner_agg_helper import (
     _select_metrics,
     _select_model_metrics,
     _fix_report_piv,
+    _process_formulas,
 )
 
 
@@ -187,6 +186,7 @@ def merge_benchmark_reports(
         "accuracy_rate",
         "date",
         "correction",
+        "error",
     ),
     excel_output: Optional[str] = None,
     exc: bool = True,
@@ -515,360 +515,17 @@ def merge_benchmark_reports(
             df.to_csv(nn)
 
     # formulas
-    for expr in formulas:
-        if verbose:
-            print(f"[merge_benchmark_reports] process formula={expr}")
-
-        if expr == "memory_delta":
-            if (
-                "memory_begin" in set_columns
-                and "memory_peak" in set_columns
-                and "memory_end" in set_columns
-            ):
-                df["memory_peak_cpu_pp"] = (
-                    np.maximum(df["memory_peak"], df["memory_end"]) - df["memory_begin"]
-                )
-                report_on.append("memory_peak_cpu_pp")
-            delta_gpu = None
-            m_gpu = None
-            for i in range(1024):
-                c1 = f"memory_gpu{i}_begin"
-                c2 = f"memory_gpu{i}_peak"
-                if c1 in set_columns and c2 in set_columns:
-                    d = df[c2] - df[c1]
-                    if delta_gpu is None:
-                        delta_gpu = d
-                        m_gpu = d
-                    else:
-                        delta_gpu += d
-                        m_gpu += d
-                else:
-                    break
-            if delta_gpu is not None:
-                df["memory_peak_gpu_pp"] = m_gpu
-                df["memory_delta_peak_gpu_pp"] = delta_gpu * 2**20
-                report_on.append("memory_peak_gpu_pp")
-                report_on.append("memory_delta_peak_gpu_pp")
-            if "memory_peak_cpu_pp" in df.columns:
-                df["memory_delta_peak_cpu_pp"] = df["memory_peak_cpu_pp"] * 2**20
-                report_on.append("memory_delta_peak_cpu_pp")
-
-        if expr == "memory_peak":
-            if (
-                "mema_gpu_5_after_export" in set_columns
-                and "mema_gpu_4_reset" in set_columns
-                and "mema_gpu_1_after_loading" in set_columns
-                and "mema_gpu_2_after_warmup" in set_columns
-                and "mema_gpu_6_before_session" in set_columns
-                and "mema_gpu_8_after_export_warmup" in set_columns
-            ):
-                col_name = "memory_delta_peak_gpu_export"
-                df[col_name] = df["mema_gpu_5_after_export"] - df["mema_gpu_4_reset"]
-                report_on.append(col_name)
-
-                col_name = "memory_peak_gpu_export"
-                df[col_name] = df["mema_gpu_5_after_export"]
-                report_on.append(col_name)
-
-                col_name = "memory_delta_peak_gpu_eager_warmup"
-                df[col_name] = (
-                    df["mema_gpu_2_after_warmup"] - df["mema_gpu_0_before_loading"]
-                )
-                report_on.append(col_name)
-
-                col_name = "memory_peak_gpu_eager_warmup"
-                df[col_name] = df["mema_gpu_2_after_warmup"]
-                report_on.append(col_name)
-
-                col_name = "memory_delta_peak_gpu_warmup"
-                df[col_name] = (
-                    df["mema_gpu_8_after_export_warmup"] - df["mema_gpu_6_before_session"]
-                )
-                report_on.append(col_name)
-
-                col_name = "memory_peak_gpu_warmup"
-                df[col_name] = df["mema_gpu_8_after_export_warmup"]
-                report_on.append(col_name)
-            continue
-
-        if expr == "pass_rate":
-            if "discrepancies_abs" in set_columns and "speedup" in set_columns:
-                col = (df["discrepancies_abs"] <= 0.1) & (df["speedup"] >= 0.98)
-                if "discrepancies_dynamic_abs" in set_columns and "dynamic" in set_columns:
-                    col &= (df["dynamic"] == 0) | (
-                        (~df["discrepancies_dynamic_abs"].isna())
-                        & (df["discrepancies_dynamic_abs"] <= 0.1)
-                    )
-                df["status_pass_rate"] = col.astype(int)
-                df.loc[df["discrepancies_abs"].isna(), "status_pass_rate"] = np.nan
-                report_on.append("status_pass_rate")
-            continue
-
-        if expr == "correction":
-            if "time_latency_eager" in df.columns and "time_latency" in df.columns:
-                weights = df["time_latency"].apply(lambda x: np.nan if np.isnan(x) else 1.0)
-                df["time_latency_eager_if_exported_run"] = df["time_latency_eager"] * weights
-                report_on.append("time_latency_eager_if_exported_run")
-            continue
-
-        if expr == "accuracy_rate":
-            if "discrepancies_abs" in set_columns:
-                col = df["discrepancies_abs"] <= 0.1
-                df["status_accuracy_rate"] = col.astype(int)
-                df.loc[df["discrepancies_abs"].isna(), "status_accuracy_rate"] = np.nan
-                report_on.append("status_accuracy_rate")
-            continue
-
-        if expr == "date":
-            if "date_start" in set_columns:
-                df["status_date"] = (
-                    pandas.to_datetime(df["date_start"]).astype("int64").astype(float) / 1e9
-                )
-                set_columns = set(df.columns)
-                report_on.append("status_date")
-            continue
-
-        if expr == "status":
-            if "time_export_success" in set_columns:
-                df["status_convert"] = (~df["time_export_success"].isna()).astype(int)
-                report_on.append("status_convert")
-            if "discrepancies_dynamic_abs" in set_columns:
-                df["status_dynamic"] = (
-                    (~df["discrepancies_dynamic_abs"].isna())
-                    & (df["discrepancies_dynamic_abs"] <= 0.1)
-                ).astype(int)
-                report_on.append("status_dynamic")
-            if "discrepancies_abs" in set_columns:
-                df["status_convert_ort"] = (~df["discrepancies_abs"].isna()).astype(int)
-                mets = []
-                for th, mt in itertools.product(
-                    ["1e-1", "1e-2", "1e-3", "1e-4"], ["abs", "abs_0", "abs_1+"]
-                ):
-                    dis = f"discrepancies_{mt}"
-                    if dis not in df.columns:
-                        continue
-                    met = f"status_err{mt[3:]}<{th}"
-                    mets.append(met)
-                    df[met] = (~df[dis].isna() & (df[dis] < float(th))).astype(int)
-                df["status_lat<=eager+2%"] = (
-                    ~df["discrepancies_abs"].isna()
-                    & (df["time_latency"] <= df["time_latency_eager"] * 1.02)
-                ).astype(int)
-                set_columns = set(df.columns)
-                report_on.extend(
-                    [
-                        "status_convert_ort",
-                        *mets,
-                        "status_lat<=eager+2%",
-                    ]
-                )
-            continue
-
-        if expr == "control_flow":
-            if (
-                "exporter" in set_columns
-                and "time_export_success" in set_columns
-                and ({"export", "compile"} & set(df.exporter))
-                and len(set(df.exporter)) > 1
-            ):
-                expo = "export" if "export" in set(df.exporter) else "compile"
-                keep = [*model, *new_keys, "time_export_success"]
-                gr = df[df.exporter == expo][keep].copy()
-                gr["status_control_flow"] = gr["time_export_success"].isna().astype(int)
-                gr = gr.drop("time_export_success", axis=1)
-                if "opt_patterns" in gr.columns and len(set(gr.opt_patterns)) == 1:
-                    on = [
-                        k
-                        for k in keep[:-1]
-                        if k not in {"exporter", "opt_patterns", "rtopt"}
-                    ]
-                else:
-                    on = [k for k in keep[:-1] if k != "exporter"]
-                joined = pandas.merge(df, gr, left_on=on, right_on=on, how="left")
-                assert (
-                    df.shape[0] == joined.shape[0]
-                ), f"Shape mismatch after join {df.shape} -> {joined.shape}"
-                df = joined.copy()
-                for c in column_keys:
-                    cc = f"{c}_x"
-                    if cc in df.columns:
-                        df[c] = df[cc]
-                drop = [
-                    c
-                    for c in [
-                        *[f"{c}_x" for c in column_keys],
-                        *[f"{c}_y" for c in column_keys],
-                    ]
-                    if c in df.columns
-                ]
-                df = df.drop(drop, axis=1)
-                set_columns = set(df.columns)
-                report_on.append("status_control_flow")
-            continue
-
-        if expr == "buckets":
-            if (
-                "exporter" in set_columns
-                and "dynamic" in set_columns
-                and "opt_patterns" in set_columns
-                and "speedup" in set_columns
-                and "torch_script" in set(df.exporter)
-                and len(set(df.exporter)) > 1
-            ):
-                # Do the same with the exporter as a baseline.
-                keep = [*model, *new_keys, "speedup"]
-                gr = df[
-                    (df.exporter == "torch_script")
-                    & (df.opt_patterns.isin({"", "-", "none"}))
-                    & (df.rtopt == 1)
-                ][keep].copy()
-                gr = gr[~gr["speedup"].isna()]
-
-                if gr.shape[0] == 0:
-                    # No figures for torch_script
-                    if verbose:
-                        print(
-                            f"[merge_benchmark_reports] gr.shape={gr.shape}, "
-                            f"unable to compute speedup_script, "
-                            f"exporters={set(df.exporter)}, "
-                            f"opt_patterns={set(df.opt_patterns)}, "
-                            f"dynamic={set(df.dynamic)}, rtopt={set(df.rtopt)}"
-                        )
-                else:
-                    if verbose:
-                        print(
-                            f"[merge_benchmark_reports] compute speedup_script: "
-                            f"gr.shape={gr.shape}"
-                        )
-                    gr["speedup_script"] = gr["speedup"]
-                    gr = gr.drop("speedup", axis=1)
-
-                    on = [
-                        k
-                        for k in keep[:-1]
-                        if k not in {"exporter", "opt_patterns", "rtopt"}
-                    ]
-                    joined = pandas.merge(df, gr, left_on=on, right_on=on, how="left")
-
-                    assert df.shape[0] == joined.shape[0], (
-                        f"Shape mismatch after join {df.shape} -> {joined.shape}, "
-                        f"gr.shape={gr.shape}, on={on}"
-                    )
-                    df = joined.copy()
-                    df["speedup_increase_script"] = (
-                        df["speedup"] / df["speedup_script"] - 1
-                    ).fillna(-np.inf)
-                    report_on.extend(["speedup_script", "speedup_increase_script"])
-                    for c in column_keys:
-                        cc = f"{c}_x"
-                        if cc in df.columns:
-                            df[c] = df[cc]
-                    drop = [
-                        c
-                        for c in [
-                            *[f"{c}_x" for c in column_keys],
-                            *[f"{c}_y" for c in column_keys],
-                        ]
-                        if c in df.columns
-                    ]
-                    df = df.drop(drop, axis=1)
-                    set_columns = set(df.columns)
-                    df["status_lat<=script+2%"] = (
-                        df["speedup_increase_script"] >= (1 / 1.02 - 1)
-                    ).astype(int)
-                    report_on.append("status_lat<=script+2%")
-
-            for c in ["speedup_increase", "speedup_increase_script"]:
-                if c not in set_columns:
-                    continue
-                scale = BUCKET_SCALES
-                ind = df["speedup_increase"].isna()
-                for i in range(1, len(scale)):
-                    val = (df[c] >= scale[i - 1] / 100) & (df[c] < scale[i] / 100)
-                    v1 = f"{scale[i-1]}%" if not np.isinf(scale[i - 1]) else ""
-                    v2 = f"{scale[i]}%" if not np.isinf(scale[i]) else ""
-                    suf = f"[{v1},{v2}[" if v1 and v2 else (f"<{v2}" if v2 else f">={v1}")
-                    if c == "speedup_increase_script":
-                        d = f"bucket_script {suf}"
-                    else:
-                        d = f"bucket_{suf}"
-                    df[d] = val.astype(int)
-                    df.loc[ind, d] = np.nan
-                    report_on.append(d)
-
-            # for inductor
-            if (
-                "exporter" in set_columns
-                and "dynamic" in set_columns
-                and "opt_patterns" in set_columns
-                and "speedup" in set_columns
-                and "inductor" in set(df.exporter)
-                and len(set(df.exporter)) > 1
-            ):
-                # Do the same with the exporter as a baseline.
-                keep = [*model, *new_keys, "speedup"]
-                gr = df[
-                    (df.exporter == "inductor")
-                    & (df.opt_patterns.isin({"", "-", "none"}))
-                    & (df.rtopt == 1)
-                ][keep].copy()
-                gr = gr[~gr["speedup"].isna()]
-
-                if gr.shape[0] == 0:
-                    # No figures for inductor
-                    if verbose:
-                        print(
-                            f"[merge_benchmark_reports] gr.shape={gr.shape}, "
-                            f"unable to compute speedup_inductor, "
-                            f"exporters={set(df.exporter)}, "
-                            f"opt_patterns={set(df.opt_patterns)}, "
-                            f"dynamic={set(df.dynamic)}, rtopt={set(df.rtopt)}"
-                        )
-                else:
-                    if verbose:
-                        print(
-                            f"[merge_benchmark_reports] compute speedup_inductor: "
-                            f"gr.shape={gr.shape}"
-                        )
-                    gr["speedup_inductor"] = gr["speedup"]
-                    gr = gr.drop("speedup", axis=1)
-
-                    on = [
-                        k
-                        for k in keep[:-1]
-                        if k not in {"exporter", "opt_patterns", "rtopt"}
-                    ]
-                    joined = pandas.merge(df, gr, left_on=on, right_on=on, how="left")
-
-                    assert df.shape[0] == joined.shape[0], (
-                        f"Shape mismatch after join {df.shape} -> {joined.shape}, "
-                        f"gr.shape={gr.shape}, on={on}"
-                    )
-                    df = joined.copy()
-                    df["speedup_increase_inductor"] = (
-                        df["speedup"] / df["speedup_inductor"] - 1
-                    ).fillna(-np.inf)
-                    report_on.extend(["speedup_inductor", "speedup_increase_inductor"])
-                    for c in column_keys:
-                        cc = f"{c}_x"
-                        if cc in df.columns:
-                            df[c] = df[cc]
-                    drop = [
-                        c
-                        for c in [
-                            *[f"{c}_x" for c in column_keys],
-                            *[f"{c}_y" for c in column_keys],
-                        ]
-                        if c in df.columns
-                    ]
-                    df = df.drop(drop, axis=1)
-                    set_columns = set(df.columns)
-                    df["status_lat<=inductor+2%"] = (
-                        df["speedup_increase_inductor"] >= (1 / 1.02 - 1)
-                    ).astype(int)
-                    report_on.append("status_lat<=inductor+2%")
-
-            continue
+    if formulas:
+        df, report_on_add = _process_formulas(
+            df,
+            formulas,
+            column_keys=column_keys,
+            new_keys=new_keys,
+            model=model,
+            set_columns=set_columns,
+            verbose=verbose,
+        )
+        report_on.extend(report_on_add)
 
     if verbose:
         print(f"[merge_benchmark_reports] done, shape={df.shape}")

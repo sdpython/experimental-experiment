@@ -1049,7 +1049,16 @@ class ModelRunner:
                 )
 
         if optimization:
-            return self._optimize_rewrite(name, optimization)
+            opts = optimization.split("+")
+            for opt in opts:
+                if opt == "ir":
+                    onnx_program.optimize()
+                    continue
+                assert opt in (
+                    "",
+                    "none",
+                    "-",
+                ), f"Unexpected optimization scenario {opt!r} in {opts!r}"
         return onnx_program.model_proto, None
 
     def _to_onnx_dynamo2(

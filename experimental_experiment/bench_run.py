@@ -274,12 +274,9 @@ def run_benchmark(
         metrics["ITER"] = iter_loop
         metrics["TIME_ITER"] = time.perf_counter() - begin
         metrics["ERROR"] = _clean_string(serr)
+        metrics["ERR_stdout"] = _clean_string(sout)
         if metrics["ERROR"]:
             metrics["ERR_std"] = metrics["ERROR"]
-            if "CUDA out of memory" in metrics["ERROR"]:
-                metrics["ERR_CUDA_OOM"] = 1
-            if "Cannot access gated repo for url" in metrics["ERROR"]:
-                metrics["ERR_ACCESS"] = 1
         if timeout_error:
             metrics["ERR_timeout"] = _clean_string(timeout_error)
         metrics["OUTPUT"] = _clean_string(sout)
