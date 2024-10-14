@@ -2046,7 +2046,7 @@ def _process_formulas(
             add = {}
             err_cols = []
             for c in df.columns:
-                if c.startswith("ERR_"):
+                if c.startswith("ERR_") and df[c].dtype in (str, object):
                     oom = df[c].str.contains("CUDA out of memory")
                     if True in set(oom):
                         add[f"ERR_OOM_{c[4:]}"] = oom.fillna(0.0).astype(int)
