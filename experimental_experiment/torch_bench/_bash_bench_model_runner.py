@@ -1667,10 +1667,16 @@ class ModelRunner:
                 new_inputs.append(i)
                 continue
             if isinstance(i, int):
-                new_inputs.append(torch.Tensor([i]).to(torch.int64))
+                t = torch.Tensor([i]).to(torch.int64)
+                if exporter == "torch_script":
+                    t = t.squeeze(dim=0)
+                new_inputs.append(t)
                 continue
             if isinstance(i, float):
-                new_inputs.append(torch.Tensor([i]).to(torch.float32))
+                t = torch.Tensor([i]).to(torch.float32)
+                if exporter == "torch_script":
+                    t = t.squeeze(dim=0)
+                new_inputs.append(t)
                 continue
             if isinstance(i, list):
                 for u in i:
