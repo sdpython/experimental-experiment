@@ -3,13 +3,13 @@ import os
 import pickle
 import sys
 import time
+import traceback
 from datetime import datetime
 from typing import Any, Dict, Iterator, List, Optional, Set, Tuple, Union
 
 import numpy as np
 import onnx
 from onnx.helper import tensor_dtype_to_np_dtype
-import traceback
 import torch
 from torch._dynamo.testing import collect_results
 from torch._dynamo.utils import clone_inputs
@@ -1508,6 +1508,7 @@ class BenchmarkRunner:
                     except Exception as e:
                         if self.verbose:
                             print(f"[benchmarkrunner.benchmark] err_warmup {e}")
+                            traceback.print_tb(e.__traceback__, file=sys.stdout)
                         stats["ERR_warmup"] = _clean_string(str(e)).replace("\n", "_ ")
                         stats["time_warmup"] = (time.perf_counter() - begin) / warmup
                         return stats
