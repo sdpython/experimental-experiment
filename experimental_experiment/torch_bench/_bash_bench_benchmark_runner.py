@@ -674,10 +674,6 @@ class BenchmarkRunner:
             import timm
         except ImportError:
             timm = None
-        try:
-            import torch_onnx
-        except ImportError:
-            torch_onnx = None
 
         from experimental_experiment.ext_test_case import BOOLEAN_VALUES
         from experimental_experiment.bench_run import _clean_string
@@ -713,9 +709,6 @@ class BenchmarkRunner:
                 "-" if monai is None else getattr(monai, "__version__", "dev")
             ),
             "version_timm": ("-" if timm is None else getattr(timm, "__version__", "dev")),
-            "version_torch_onnx": (
-                "-" if torch_onnx is None else getattr(torch_onnx, "__version__", "dev")
-            ),
         }
         stats.update(machine_specs)
         if self.device.startswith("cuda"):

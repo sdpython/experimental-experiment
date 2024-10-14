@@ -3,8 +3,9 @@ import itertools
 import os
 import pprint
 import warnings
+import zipfile
 from collections import Counter
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Dict, Iterator, List, Optional, Tuple, Union
 
 import numpy as np
 import pandas
@@ -25,6 +26,105 @@ from ._bash_bench_benchmark_runner_agg_helper import (
     _select_model_metrics,
     _fix_report_piv,
 )
+
+
+def enumerate_csv_files(
+    data: Union[
+        pandas.DataFrame, List[Union[str, Tuple[str, str]]], str, Tuple[str, str, str, str]
+    ],
+    verbose: int = 0,
+) -> Iterator[Union[pandas.DataFrame, str, Tuple[str, str, str, str]]]:
+    """
+    Enumerates files considered for the aggregation.
+    Only csv files are considered.
+    If a zip file is given, the function digs into the zip files and
+    loops over csv candidates.
+
+    :param data: dataframe with the raw data or a file or list of files
+
+    data can contains:
+    * a dataframe
+    * a string for a filename, zip or csv
+    * a list of string
+    * a tuple
+    """
+    if not isinstance(data, list):
+        data = [data]
+    for filename in data:
+
+        if isinstance(filename, pandas.DataFrame):
+            yield filename
+            continue
+
+        if isinstance(filename, tuple):
+            # A file in a zipfile
+            yield filename
+
+        if not os.path.exists(filename):
+            found = glob.glob(filename)
+            if verbose and not found:
+                print(f"[enumerate_csv_files] unable to find file in {filename!r}")
+            for f in found:
+                yield from enumerate_csv_files(f, verbose=verbose)
+            continue
+
+        ext = os.path.splitext(filename)[-1]
+        if ext == ".csv":
+            # We check the first line is ok.
+            with open(filename, "r", encoding="utf-8") as f:
+                line = f.readline()
+                if "~help" in line or (",CMD" not in line and ",DATE" not in line):
+                    continue
+                yield (os.path.split(filename)[-1], os.stat(filename).st_mtime, filename, "")
+            continue
+
+        if ext == ".zip":
+            zf = zipfile.ZipFile(filename, "r")
+            for info in zf.infolist():
+                name = info.filename
+                ext = os.path.splitext(name)[-1]
+                if ext != ".csv":
+                    continue
+                with zf.open(name) as f:
+                    line = f.readline()
+                if b"~help" in line or (b",CMD" not in line and b",DATE" not in line):
+                    continue
+                yield (
+                    os.path.split(name)[-1],
+                    "%04d-%02d-%02d %02d:%02d:%02d" % info.date_time,
+                    name,
+                    filename,
+                )
+            zf.close()
+            continue
+
+        raise AssertionError(f"Unexpected {filename!r}, cannot read it.")
+
+
+def open_dataframe(
+    data: Union[str, Tuple[str, str, str, str], pandas.DataFrame]
+) -> pandas.DataFrame:
+    """
+    Opens a filename.
+
+    :param data: a dataframe, a filename, a tuple indicating the file is coming
+        from a zip file
+    :return: a dataframe
+    """
+    if isinstance(data, pandas.DataFrame):
+        return data
+    if isinstance(data, str):
+        return pandas.read_csv(data)
+    if isinstance(data, tuple):
+        if not data[-1]:
+            return pandas.read_csv(data[2])
+        zf = zipfile.ZipFile(data[-1])
+        with zf.open(data[2]) as f:
+            df = pandas.read_csv(f)
+        zf.close()
+        return df
+
+    raise ValueError(f"Unexpected value for data: {data!r}")
 
 
 def merge_benchmark_reports(
@@ -54,7 +154,6 @@ def merge_benchmark_reports(
         "version_transformers",
         "version_monai",
         "version_timm",
-        "version_torch_onnx",
         "strategy",
     ),
     column_keys=(
@@ -104,6 +203,7 @@ def merge_benchmark_reports(
     fast: Optional[float] = None,
     slow_script: Optional[float] = None,
     fast_script: Optional[float] = None,
+    exclude: Optional[List[int]] = None,
 ) -> Dict[str, pandas.DataFrame]:
     """
     Merges multiple files produced by bash_benchmark...
@@ -115,7 +215,7 @@ def merge_benchmark_reports(
         101Dummy-script,2024-07-08,,1,6.705480073112994,7.0,40,2024-07-08,cuda,...
         101Dummy16-custom,2024-07-08,,2,6.970448340754956,7.0,40,2024-07-08,cuda,...
 
-    :param data: dataframe with the raw data
+    :param data: dataframe with the raw data or a file or list of files
     :param model: columns defining a unique model
     :param keys: colimns definined a unique experiment
     :param report_on: report on those metrics, ``<prefix>*`` means all
@@ -138,6 +238,7 @@ def merge_benchmark_reports(
         per exporter compare to torch_script
     :param fast_script: produce a document for the fast models
         per exporter compare to torch_script
+    :param exclude: exclude a list of files in the list
     :return: dictionary of dataframes
 
     Every key with a unique value is removed.
@@ -171,6 +272,7 @@ def merge_benchmark_reports(
     * a value or a set of values separated by ``;``
     """
     if baseline:
+        assert not exclude, f"exclude={exclude} not compatiable with baseline={baseline!r}"
         base_dfs = merge_benchmark_reports(
             baseline,
             model=model,
@@ -186,70 +288,49 @@ def merge_benchmark_reports(
     else:
         base_dfs = None
 
-    if isinstance(data, str):
-        data = [data]
-
-    if isinstance(data, list):
+    dfs = []
+    for i, dname in enumerate(sorted(enumerate_csv_files(data))):
+        if exclude and i in exclude:
+            if verbose:
+                print(f"[merge_benchmark_reports] - {' '.join(dname)}")
+            continue
         if verbose:
-            print(f"[merge_benchmark_reports] start with {len(data)} dataframes")
-        dfs = []
-        for filename in data:
-            if isinstance(filename, str):
+            print(f"[merge_benchmark_reports] + {' '.join(dname)}")
+        df = open_dataframe(dname)
+        if df.columns[0] == "#order":
+            # probably a status report
+            continue
+        updates = {}
+        for c in df.columns:
+            values = set(df[c])
+            if values & {True, False, np.nan} == values:
+                updates[c] = (
+                    df[c]
+                    .apply(lambda x: x if np.isnan(x) else (1 if x else 0))
+                    .astype(float)
+                )
+            if (
+                df[c].dtype not in {float, np.float64, np.float32}
+                and "_qu" not in c
+                and c.startswith(("time_", "discrepancies_", "memory"))
+            ):
                 try:
-                    df = pandas.read_csv(filename)
-                except (FileNotFoundError, pandas.errors.ParserError) as e:
-                    found = glob.glob(filename)
-                    if not found:
-                        raise AssertionError(f"Unable to find {filename!r}") from e
-                    for f in found:
-                        try:
-                            df = pandas.read_csv(f)
-                        except pandas.errors.ParserError as ee:
-                            raise AssertionError(f"Unable to read {f!r}") from ee
-                        dfs.append(df)
-                    continue
-            elif isinstance(filename, pandas.DataFrame):
-                df = filename
-            else:
-                raise TypeError(f"Unexpected type {type(filename)} for one element of data")
-            if df.columns[0] == "#order":
-                # probably a status report
-                continue
-            updates = {}
-            for c in df.columns:
-                values = set(df[c])
-                if values & {True, False, np.nan} == values:
-                    updates[c] = (
-                        df[c]
-                        .apply(lambda x: x if np.isnan(x) else (1 if x else 0))
-                        .astype(float)
-                    )
-                if (
-                    df[c].dtype not in {float, np.float64, np.float32}
-                    and "_qu" not in c
-                    and c.startswith(("time_", "discrepancies_", "memory"))
-                ):
-                    try:
-                        val = df[c].astype(float)
-                    except (ValueError, TypeError) as e:
-                        raise AssertionError(
-                            f"Unable to convert to float column {c!r} from file "
-                            f"{filename!r}, values\n---\n"
-                            f"{pprint.pformat(list(enumerate(zip(df['_index'], df[c]))))}"
-                        ) from e
-                    updates[c] = val
+                    val = df[c].astype(float)
+                except (ValueError, TypeError) as e:
+                    raise AssertionError(
+                        f"Unable to convert to float column {c!r} from file "
+                        f"{dname!r}, values\n---\n"
+                        f"{pprint.pformat(list(enumerate(zip(df['_index'], df[c]))))}"
+                    ) from e
+                updates[c] = val
 
-            if updates:
-                for k, v in updates.items():
-                    df[k] = v
-            dfs.append(df)
-        df = pandas.concat(dfs, axis=0)
-    elif isinstance(data, pandas.DataFrame):
-        if verbose:
-            print("[merge_benchmark_reports] start with 1 dataframe")
-        df = data
-    else:
-        raise TypeError(f"Unexpected type {type(data)} for data")
+        if updates:
+            for k, v in updates.items():
+                df[k] = v
+        dfs.append(df)
+
+    assert len(dfs) > 0, f"No dataframe found in {data!r}"
+    df = pandas.concat(dfs, axis=0) if len(dfs) > 1 else dfs[0]
 
     if verbose:
         print(f"[merge_benchmark_reports] shape={df.shape}")
@@ -967,7 +1048,15 @@ def _build_aggregated_document(
         dfc = df[keep]
         dfc = dfc[~dfc[model].isna().min(axis=1)]
         if new_keys:
-            pivot = dfc.pivot(index=model, columns=new_keys, values=c)
+            try:
+                pivot = dfc.pivot(index=model, columns=new_keys, values=c)
+            except ValueError as e:
+                cc = [*model, *new_keys]
+                dg = dfc.copy()
+                dg["__C__"] = 1
+                under = dg.groupby(cc).count()[["__C__"]]
+                under = under[under["__C__"] > 1]
+                raise ValueError(f"Ambiguities for columns {cc}\n{under}") from e
         else:
             pivot = dfc.set_index(model)
         res[c] = pivot

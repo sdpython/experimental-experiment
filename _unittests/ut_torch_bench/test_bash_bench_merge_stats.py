@@ -5,6 +5,8 @@ import numpy as np
 from pandas.errors import PerformanceWarning
 from experimental_experiment.torch_bench._bash_bench_benchmark_runner_agg import (
     merge_benchmark_reports,
+    enumerate_csv_files,
+    open_dataframe,
 )
 from experimental_experiment.ext_test_case import (
     ExtTestCase,
@@ -241,7 +243,7 @@ class TestBashBenchMergeStats(ExtTestCase):
         )
         self.assertEqual(df, {})
 
-    @ignore_warnings((FutureWarning,))
+    @ignore_warnings((FutureWarning, RuntimeWarning))
     def test_merge_stats_diff(self):
         base = os.path.join(os.path.dirname(__file__), "data", "baseline.csv")
         data = os.path.join(os.path.dirname(__file__), "data", "baseline2.csv")
@@ -332,6 +334,14 @@ class TestBashBenchMergeStats(ExtTestCase):
             keys=tuple(c for c in keys if c not in {"version_python"}),
         )
         self.assertNotEmpty(dfs)
+
+    @ignore_warnings((FutureWarning,))
+    def test_list(self):
+        data = os.path.join(os.path.dirname(__file__), "data", "*.csv")
+        dfs = list(enumerate_csv_files(data))
+        self.assertNotEmpty(dfs)
+        for df in dfs:
+            open_dataframe(df)
 
 
 if __name__ == "__main__":
