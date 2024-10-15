@@ -74,11 +74,12 @@ def _SELECTED_FEATURES():
             cat="status",
             stat="control_flow",
             agg="SUM",
-            new_name="number of control flow",
+            new_name="number of failures for torch.export.export",
             unit="N",
             help="torch.export.export does not work because of a "
-            "control flow, in practice, this column means torch.export.export "
-            "succeeds, this metric is only available if the data of exporter "
+            "control flow or any other reason, in practice, "
+            "this column means the number of models torch.export.export "
+            "fails, this metric is only available if the data of exporter "
             "'export' or 'compile' is aggregated",
             simple=True,
         ),
@@ -2047,12 +2048,27 @@ def _process_formulas(
             err_cols = []
             for c in df.columns:
                 if c.startswith("ERR_") and df[c].dtype in (str, object):
-                    oom = df[c].str.contains("CUDA out of memory")
+                    oom = df[c].str.contains("CUDA out of memory", regex=False)
                     if True in set(oom):
                         add[f"ERR_OOM_{c[4:]}"] = oom.fillna(0.0).astype(int)
-                    acc = df[c].str.contains("Cannot access gated repo for url")
+                    oomort = df[c].str.contains(
+                        "onnxruntime::BFCArena::AllocateRawInternal(size_t bool "
+                        "onnxruntime::Stream* bool onnxruntime::WaitNotificationFn) "
+                        "Failed to allocate memory for requested buffer of size",
+                        regex=False,
+                    )
+                    if True in set(oomort):
+                        add[f"ERR_OOMORT_{c[4:]}"] = oomort.fillna(0.0).astype(int)
+                    acc = df[c].str.contains("Cannot access gated repo for url", regex=False)
                     if True in set(acc):
                         add[f"ERR_HTTP_{c[4:]}"] = acc.fillna(0.0).astype(int)
+                    mem = df[c].str.contains(
+                        "Memcpy nodes are added to the graph main_graph "
+                        "for CUDAExecutionProvider",
+                        regex=False,
+                    )
+                    if True in set(mem):
+                        add[f"ERR_ORTMEMCPY_{c[4:]}"] = mem.fillna(0.0).astype(int)
                     err_cols.append(c)
             if err_cols:
                 set_cols = set(err_cols)

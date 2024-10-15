@@ -113,13 +113,18 @@ def open_dataframe(
     if isinstance(data, pandas.DataFrame):
         return data
     if isinstance(data, str):
-        return pandas.read_csv(data)
+        df = pandas.read_csv(data)
+        df["RAWFILENAME"] = data
+        return df
     if isinstance(data, tuple):
         if not data[-1]:
-            return pandas.read_csv(data[2])
+            df = pandas.read_csv(data[2])
+            df["RAWFILENAME"] = data[2]
+            return df
         zf = zipfile.ZipFile(data[-1])
         with zf.open(data[2]) as f:
             df = pandas.read_csv(f)
+            df["RAWFILENAME"] = f"{data[-1]}/{data[2]}"
         zf.close()
         return df
 
@@ -713,7 +718,22 @@ def _build_aggregated_document(
                 dg["__C__"] = 1
                 under = dg.groupby(cc).count()[["__C__"]]
                 under = under[under["__C__"] > 1]
-                raise ValueError(f"Ambiguities for columns {cc}\n{under}") from e
+                if "RAWFILENAME" in df.columns:
+                    filenames = df[[*cc, "RAWFILENAME"]].set_index(cc)
+                    under_with_file = under.join(filenames, how="left")
+                    text = "\n".join(
+                        map(
+                            str,
+                            under_with_file.reset_index(drop=False).head().values.tolist(),
+                        )
+                    )
+                else:
+                    under_with_file = ""
+                raise ValueError(
+                    f"Ambiguities for columns {cc}, model={model}, "
+                    f"new_keys={new_keys}\n{under}\n-----\n"
+                    f"{text}"
+                ) from e
         else:
             pivot = dfc.set_index(model)
         res[c] = pivot

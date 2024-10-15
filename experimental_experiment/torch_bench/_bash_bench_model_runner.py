@@ -999,8 +999,6 @@ class ModelRunner:
             opts = optimization.split("+")
             if "ir" in opts:
                 os.environ["TORCH_ONNX_ENABLE_OPTIMIZATION"] = "1"
-                opts.pop(opts.index("ir"))
-                optimization = "+".join(opts)
             else:
                 os.environ["TORCH_ONNX_ENABLE_OPTIMIZATION"] = "0"
         else:
@@ -1048,10 +1046,13 @@ class ModelRunner:
                     **additional_kwargs,
                 )
 
+        print("*************", [optimization])
+        assert optimization
         if optimization:
             opts = optimization.split("+")
             for opt in opts:
                 if opt == "ir":
+                    print("***********************", opt)
                     onnx_program.optimize()
                     continue
                 assert opt in (
