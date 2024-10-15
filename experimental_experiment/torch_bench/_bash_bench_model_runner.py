@@ -1026,7 +1026,7 @@ class ModelRunner:
                 onnx_program = torch.onnx.export(
                     self.model,
                     export_inputs,
-                    name,
+                    None,
                     opset_version=target_opset,
                     dynamo=True,
                     external_data=True,
@@ -1038,7 +1038,7 @@ class ModelRunner:
                 onnx_program = torch.onnx.export(
                     self.model,
                     export_inputs,
-                    name,
+                    None,
                     opset_version=target_opset,
                     dynamo=True,
                     external_data=True,
@@ -1046,21 +1046,25 @@ class ModelRunner:
                     **additional_kwargs,
                 )
 
-        print("*************", [optimization])
+        stats = None
         assert optimization
         if optimization:
             opts = optimization.split("+")
             for opt in opts:
                 if opt == "ir":
-                    print("***********************", opt)
+                    if stats is None:
+                        stats = {}
+                    begin = time.perf_counter()
                     onnx_program.optimize()
+                    stats["time_export_optimization"] = time.perf_counter() - begin
                     continue
                 assert opt in (
                     "",
                     "none",
                     "-",
                 ), f"Unexpected optimization scenario {opt!r} in {opts!r}"
-        return onnx_program.model_proto, None
+        onnx_program.save(name, external_data=True)
+        return onnx.load(name, load_external_data=False), stats
 
     def _to_onnx_dynamo2(
         self,
