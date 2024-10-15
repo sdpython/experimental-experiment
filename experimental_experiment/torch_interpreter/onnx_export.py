@@ -425,7 +425,6 @@ def to_onnx(
     external_threshold: int = 1024,
     export_options: Optional[Union[str, ExportOptions]] = None,
     return_optimize_report: bool = False,
-    strict: bool = True,
     filename: Optional[str] = None,
     inline: bool = False,
 ) -> Union[
@@ -456,7 +455,6 @@ def to_onnx(
     :param external_threshold: if large_model is True, every tensor above this limit
         is stored as external
     :param return_optimize_report: returns statistics on the optimization as well
-    :param strict: given to ``torch.export.export``
     :param filename: if specified, stores the model into that file
     :param inline: inline the model before converting to onnx, this is done before
             any optimization takes place

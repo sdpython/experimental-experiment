@@ -10,7 +10,8 @@ from experimental_experiment.ext_test_case import (
     requires_onnxscript,
     requires_onnxruntime_training,
 )
-from experimental_experiment.torch_interpreter import to_onnx
+from experimental_experiment.reference import ExtendedReferenceEvaluator
+from experimental_experiment.torch_interpreter import to_onnx, ExportOptions
 
 
 class TestIssuesPytorch2024(ExtTestCase):
@@ -150,32 +151,53 @@ class TestIssuesPytorch2024(ExtTestCase):
         results = session.run(None, {"x": input_tensor.cpu().numpy()})
         self.assertEqualArray(expected, results[0])
 
-    def _updated_parameter(self, exporter):
+    def _updated_parameter(self, exporter, d3, decomposition=False):
         # https://github.com/pytorch/pytorch/issues/135233
 
         import torch
 
-        class UpdateModel(torch.nn.Module):
+        if d3:
 
-            def __init__(self):
-                super().__init__()
-                self.params = torch.zeros((2, 1, 10))
+            class UpdateModel(torch.nn.Module):
 
-            def forward(self, update: torch.Tensor, index: torch.LongTensor):
-                indices = torch.arange(update.shape[0])
-                middle = torch.zeros((1,), dtype=torch.long)
-                copy = self.params.clone()
-                copy[index, middle, indices] = update.transpose(1, 0)
-                return copy
+                def __init__(self):
+                    super().__init__()
+                    self.params = torch.zeros((2, 1, 10))
 
-        model = UpdateModel()
+                def forward(self, update: torch.Tensor, index: torch.LongTensor):
+                    indices = torch.arange(update.shape[0])
+                    middle = torch.zeros((1,), dtype=torch.long)
+                    copy = self.params.clone()
+                    copy[index, middle, indices] = update.transpose(1, 0)
+                    return copy
+
+            model = UpdateModel()
+
+        else:
+
+            class UpdateModel(torch.nn.Module):
+
+                def __init__(self):
+                    super().__init__()
+                    self.params = torch.zeros((2, 10))
+
+                def forward(self, update: torch.Tensor, kv_index: torch.LongTensor):
+                    indices = torch.arange(update.shape[0])
+                    copy = self.params.clone()
+                    copy[kv_index, indices] = update.transpose(1, 0)
+                    return copy
+
+            model = UpdateModel()
 
         n = 6
         update = torch.ones((n, 1))
         kv_index = torch.tensor([0])
         model(update, kv_index)
 
-        model_path = f"test_updated_cache_{exporter}.onnx"
+        model_path = (
+            f"test_updated_cache_{exporter}_d{3 if d3 else 2}"
+            f"D{1 if decomposition else 0}.onnx"
+        )
 
         if exporter == "script":
             torch.onnx.export(
@@ -200,7 +222,12 @@ class TestIssuesPytorch2024(ExtTestCase):
                 dynamo=True,
             )
         else:
-            to_onnx(model, (update, kv_index), filename=model_path)
+            export_options = (
+                ExportOptions(decomposition_table="all") if decomposition else None
+            )
+            to_onnx(
+                model, (update, kv_index), filename=model_path, export_options=export_options
+            )
 
         check_model(model_path)
 
@@ -214,25 +241,45 @@ class TestIssuesPytorch2024(ExtTestCase):
         def gen_numpy_inputs(n: int, idx: int):
             return {
                 "update": 5 * np.ones((n, 1), dtype=np.float32),
-                "index": np.array([idx], dtype=np.int64),
+                "kv_index": np.array([idx], dtype=np.int64),
             }
 
         input_n = gen_numpy_inputs(n, 0)
+        expected = model(
+            torch.Tensor(input_n["update"]), torch.Tensor(input_n["kv_index"]).to(int)
+        )
         e1 = session.run(None, input_n)[0]
-        self.assertEqual(e1[0].shape, model.params.shape)
+        self.assertEqualArray(expected, e1)
 
         input_2 = gen_numpy_inputs(2, 0)
+        expected = model(
+            torch.Tensor(input_2["update"]), torch.Tensor(input_2["kv_index"]).to(int)
+        )
         e2 = session.run(None, input_2)[0]
-        self.assertEqual(e2[0].shape, model.params.shape)
+        self.assertEqual(e2, expected)
 
-    def test_update_parameter_script(self):
-        self._updated_parameter("script")
+    @unittest.skip("index_put fails with torch_script")
+    def test_update_parameter_script_2d(self):
+        self._updated_parameter("script", False)
 
-    def test_update_parameter_dynamo(self):
-        self._updated_parameter("dynamo")
+    @unittest.skip("index_put fails with torch_script")
+    def test_update_parameter_script_3d(self):
+        self._updated_parameter("script", True)
 
-    def test_update_parameter_custom(self):
-        self._updated_parameter("custom")
+    def test_update_parameter_dynamo_2d(self):
+        self._updated_parameter("dynamo", False)
+
+    def test_update_parameter_dynamo_3d(self):
+        self._updated_parameter("dynamo", True)
+
+    def test_update_parameter_custom_2d(self):
+        self._updated_parameter("custom", False)
+
+    def test_update_parameter_custom_2d_dec(self):
+        self._updated_parameter("custom", False, decomposition=True)
+
+    def test_update_parameter_custom_3d(self):
+        self._updated_parameter("custom", True)
 
     def _scaled_dot_product_attention(self, exporter):
         # https://github.com/pytorch/pytorch/issues/135615
@@ -533,23 +580,20 @@ class TestIssuesPytorch2024(ExtTestCase):
         else:
             to_onnx(model, (example_input,), filename=onnx_file_path)
 
-        import onnxruntime
-
-        sess_options = onnxruntime.SessionOptions()
-        session = onnxruntime.InferenceSession(
-            onnx_file_path,
-            sess_options=sess_options,
-            providers=[("CPUExecutionProvider")],
-        )
-        inputs_names = [i.name for i in session.get_inputs()]
-        output = session.run(None, dict(zip(inputs_names, (example_input.numpy(),))))
         expected_output = model(example_input)
+
+        ref = ExtendedReferenceEvaluator(onnx_file_path)
+        inputs_names = [i.name for i in ref.proto_.graph.input]
+        feeds = dict(zip(inputs_names, (example_input.numpy(),)))
+        output = ref.run(None, feeds)
         self.assertEqual(expected_output.shape, output[0].shape)
         self.assertEqualArray(expected_output, output[0], atol=1e-4)
 
+    @unittest.skip("torch_script not supported on complex numbers")
     def test_complex_weights_script(self):
         self._complex_weights("script")
 
+    @requires_onnxscript("0.3")
     @hide_stdout()
     def test_complex_weights_dynamo(self):
         self._complex_weights("dynamo")

@@ -2998,7 +2998,9 @@ def aten_index_put(
                 g.set_shape(res, g.get_shape(x))
             return res
 
-    raise AssertionError(f"No implementation when indices={indices}{g.get_debug_msg()}")
+    raise AssertionError(
+        f"No implementation for index_put when indices={indices}{g.get_debug_msg()}"
+    )
 
 
 def aten_instance_norm(
