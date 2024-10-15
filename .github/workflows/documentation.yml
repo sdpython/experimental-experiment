@@ -73,7 +73,7 @@ jobs:
 
       - name: Install onnxruntime-training again (2)
         run: |
-          python -m pip uninstall -y onnxruntime
+          python -m pip uninstall -y onnxruntime onnxruntime-training
           python -m pip install onnxruntime-training
 
       - name: pip freeze
@@ -102,7 +102,7 @@ jobs:
 
       - name: Install onnxruntime-training again (3)
         run: |
-          python -m pip uninstall -y onnxruntime
+          python -m pip uninstall -y onnxruntime onnxruntime-training
           python -m pip install onnxruntime-training
 
       - name: Documentation
