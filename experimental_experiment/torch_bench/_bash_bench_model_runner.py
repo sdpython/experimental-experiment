@@ -583,7 +583,7 @@ class ModelRunner:
                 None,
                 "none",
             ), f"strategy={strategy!r} not implemented for {exporter!r}"
-            return self._to_onnx_dynamo2(
+            return self._to_dynamo_export(
                 name,
                 dynamic=dynamic,
                 fake_tensor=fake_tensor,
@@ -995,15 +995,6 @@ class ModelRunner:
         assert not fake_tensor, "fake_tensor not implemented."
         assert no_grad, "no_grad false not implemented yet"
 
-        if optimization:
-            opts = optimization.split("+")
-            if "ir" in opts:
-                os.environ["TORCH_ONNX_ENABLE_OPTIMIZATION"] = "1"
-            else:
-                os.environ["TORCH_ONNX_ENABLE_OPTIMIZATION"] = "0"
-        else:
-            os.environ["TORCH_ONNX_ENABLE_OPTIMIZATION"] = "0"
-
         additional_kwargs = {}
         if detailed:
             additional_kwargs.update(
@@ -1066,7 +1057,7 @@ class ModelRunner:
         onnx_program.save(name, external_data=True)
         return onnx.load(name, load_external_data=False), stats
 
-    def _to_onnx_dynamo2(
+    def _to_dynamo_export(
         self,
         name: str,
         dynamic: bool,
