@@ -2,13 +2,14 @@ import unittest
 import onnx.helper as oh
 import numpy as np
 from onnx import TensorProto
-from experimental_experiment.ext_test_case import ExtTestCase, hide_stdout
+from experimental_experiment.ext_test_case import ExtTestCase, hide_stdout, ignore_warnings
 from experimental_experiment.reference import ExtendedReferenceEvaluator
 from experimental_experiment.xbuilder import GraphBuilder
 
 
 class TestTools(ExtTestCase):
 
+    @ignore_warnings(DeprecationWarning)
     @hide_stdout
     def test_inline_1_function(self):
         new_domain = "custom"

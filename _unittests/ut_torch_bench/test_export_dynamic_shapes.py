@@ -3,7 +3,6 @@ from experimental_experiment.ext_test_case import ExtTestCase, requires_torch
 
 
 class TestExportDynamicShapes(ExtTestCase):
-
     @classmethod
     def get_class_model(cls):
         import torch

@@ -11,7 +11,7 @@ from experimental_experiment.ext_test_case import (
     skipif_ci_windows,
 )
 from experimental_experiment.xbuilder import OptimizationOptions
-from experimental_experiment.torch_interpreter import to_onnx, Dispatcher
+from experimental_experiment.torch_interpreter import to_onnx, Dispatcher, ExportOptions
 
 
 def return_module_cls_conv():
@@ -125,6 +125,13 @@ def export_utils(
 
 
 class TestOnnxExport(ExtTestCase):
+
+    def test_export_options(self):
+        for k in ExportOptions._allowed:
+            st = ExportOptions(strategy=k)
+            s = repr(st)
+            self.assertIn("ExportOptions(", s)
+
     def check_model_ort(self, name):
         from onnxruntime import InferenceSession
 

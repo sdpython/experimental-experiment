@@ -69,7 +69,7 @@ class Neuron2Inputs(torch.nn.Module):
         return torch.sigmoid(z)
 
     def _get_random_inputs(self, device: str):
-        return (torch.randn(1, 5).to(device), torch.randn(1, 5).to(device))
+        return (torch.randn(1, 5).to(device), torch.randn(1, 3).to(device))
 
     config = MakeConfig(download=False, to_tuple=False)
 
@@ -121,5 +121,102 @@ class NeuronNamedDict(torch.nn.Module):
 
     def _get_random_inputs(self, device: str):
         return {"input_y": torch.randn(1, 5).to(device)}
+
+    config = MakeConfig(download=False, to_tuple=False)
+
+
+class NeuronIList(torch.nn.Module):
+    def __init__(self, n_dims: int = 5, n_targets: int = 3):
+        super().__init__()
+        self.linear = torch.nn.Linear(n_dims, n_targets)
+
+    def forward(self, x, yz):
+        z = self.linear(x + yz[0] + yz[1])
+        return torch.sigmoid(z)
+
+    def _get_random_inputs(self, device: str):
+        return (
+            torch.randn(1, 5).to(device),
+            [torch.randn(1, 5).to(device), torch.randn(1, 5).to(device)],
+        )
+
+    config = MakeConfig(download=False, to_tuple=False)
+
+
+class NeuronIInt(torch.nn.Module):
+    def __init__(self, n_dims: int = 5, n_targets: int = 3):
+        super().__init__()
+        self.linear = torch.nn.Linear(n_dims, n_targets)
+
+    def forward(self, x, i_input):
+        z = self.linear(x)
+        return torch.sigmoid(z)[:, i_input]
+
+    def _get_random_inputs(self, device: str):
+        return (torch.randn(1, 5).to(device), 2)
+
+    config = MakeConfig(download=False, to_tuple=False)
+
+
+class NeuronNoneInt(torch.nn.Module):
+    def __init__(self, n_dims: int = 5, n_targets: int = 3):
+        super().__init__()
+        self.linear = torch.nn.Linear(n_dims, n_targets)
+
+    def forward(self, x, empty_input, i_input):
+        z = self.linear(x)
+        return torch.sigmoid(z)[:, i_input]
+
+    def _get_random_inputs(self, device: str):
+        return (torch.randn(1, 5).to(device), None, 2)
+
+    config = MakeConfig(download=False, to_tuple=False)
+
+
+class NeuronNoneListInt(torch.nn.Module):
+    def __init__(self, n_dims: int = 5, n_targets: int = 3):
+        super().__init__()
+        self.linear = torch.nn.Linear(n_dims, n_targets)
+
+    def forward(self, x, yz, i_input):
+        z = self.linear(x + yz[0] + yz[3])
+        return torch.sigmoid(z)[:i_input]
+
+    def _get_random_inputs(self, device: str):
+        return (
+            torch.randn(1, 5).to(device),
+            [torch.randn(1, 5).to(device), None, None, torch.randn(1, 5).to(device)],
+            2,
+        )
+
+    config = MakeConfig(download=False, to_tuple=False)
+
+
+class NeuronNoneIntDefault(torch.nn.Module):
+    def __init__(self, n_dims: int = 5, n_targets: int = 3):
+        super().__init__()
+        self.linear = torch.nn.Linear(n_dims, n_targets)
+
+    def forward(self, x, empty_input, i_input=10):
+        z = self.linear(x)
+        return torch.sigmoid(z)[:, i_input]
+
+    def _get_random_inputs(self, device: str):
+        return (torch.randn(1, 5).to(device), None, 2)
+
+    config = MakeConfig(download=False, to_tuple=False)
+
+
+class NeuronNoneIntDict(torch.nn.Module):
+    def __init__(self, n_dims: int = 5, n_targets: int = 3):
+        super().__init__()
+        self.linear = torch.nn.Linear(n_dims, n_targets)
+
+    def forward(self, x, empty_input=None, i_input=2):
+        z = self.linear(x)
+        return torch.sigmoid(z)[:, i_input]
+
+    def _get_random_inputs(self, device: str):
+        return {"x": torch.randn(1, 5).to(device)}
 
     config = MakeConfig(download=False, to_tuple=False)

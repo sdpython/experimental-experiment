@@ -117,6 +117,17 @@ def ignore_warnings(warns: List[Warning]) -> Callable:
 
     :param warns:   warnings to ignore
     """
+    if not isinstance(warns, (tuple, list)):
+        warns = (warns,)
+    new_list = []
+    for w in warns:
+        if w == "TracerWarning":
+            from torch.jit import TracerWarning
+
+            new_list.append(TracerWarning)
+        else:
+            new_list.append(w)
+    warns = tuple(new_list)
 
     def wrapper(fct):
         if warns is None:
@@ -524,13 +535,15 @@ def requires_cuda(msg: str = "", version: str = "", memory: int = 0):
 
     if not torch.cuda.is_available():
         msg = msg or "only runs on CUDA but torch does not have it"
-        return unittest.skip(msg)
+        return unittest.skip(msg or "cuda not installed")
     if version:
         import packaging.versions as pv
 
         if pv.Version(torch.version.cuda) < pv.Version(version):
             msg = msg or f"CUDA older than {version}"
-            return unittest.skip(msg)
+        return unittest.skip(
+            msg or f"cuda not recent enough {torch.version.cuda} < {version}"
+        )
 
     if memory:
         m = torch.cuda.get_device_properties(0).total_memory / 2**30
@@ -547,16 +560,17 @@ def requires_zoo(msg: str = "") -> Callable:
 
     if not var:
         msg = f"ZOO not set up or != 1. {msg}"
-        return unittest.skip(msg)
+        return unittest.skip(msg or "zoo not installed")
     return lambda x: x
 
 
 def requires_sklearn(version: str, msg: str = "") -> Callable:
+    """Skips a unit test if :epkg:`scikit-learn` is not recent enough."""
     import packaging.version as pv
     import sklearn
 
     if pv.Version(".".join(sklearn.__version__.split(".")[:2])) < pv.Version(version):
-        msg = f"torch version {sklearn.__version__} < {version}: {msg}"
+        msg = f"scikit-learn version {sklearn.__version__} < {version}: {msg}"
         return unittest.skip(msg)
     return lambda x: x
 
@@ -573,18 +587,51 @@ def requires_torch(version: str, msg: str = "") -> Callable:
 
 
 def requires_monai(version: str = "", msg: str = "") -> Callable:
-    """Skips a unit test if :epkg:`pytorch` is not recent enough."""
+    """Skips a unit test if :epkg:`monai` is not recent enough."""
     import packaging.version as pv
 
     try:
         import monai
     except ImportError:
-        return unittest.skip(msg)
+        return unittest.skip(msg or "monai not installed")
 
     if version and pv.Version(".".join(monai.__version__.split(".")[:2])) < pv.Version(
         version
     ):
-        msg = f"torch version {monai.__version__} < {version}: {msg}"
+        return unittest.skip(f"monai version {monai.__version__} < {version}: {msg}")
+    return lambda x: x
+
+
+def requires_vocos(version: str = "", msg: str = "") -> Callable:
+    """Skips a unit test if :epkg:`vocos` is not recent enough."""
+    import packaging.version as pv
+
+    try:
+        import vocos
+    except ImportError:
+        return unittest.skip(msg or "vocos not installed")
+
+    if version and pv.Version(".".join(vocos.__version__.split(".")[:2])) < pv.Version(
+        version
+    ):
+        msg = f"vocos version {vocos.__version__} < {version}: {msg}"
+        return unittest.skip(msg)
+    return lambda x: x
+
+
+def requires_pyinstrument(version: str = "", msg: str = "") -> Callable:
+    """Skips a unit test if :epkg:`pyinstrument` is not recent enough."""
+    import packaging.version as pv
+
+    try:
+        import pyinstrument
+    except ImportError:
+        return unittest.skip(msg or "pyinstrument not installed")
+
+    if version and pv.Version(
+        ".".join(pyinstrument.__version__.split(".")[:2])
+    ) < pv.Version(version):
+        msg = f"torch version {pyinstrument.__version__} < {version}: {msg}"
         return unittest.skip(msg)
     return lambda x: x
 

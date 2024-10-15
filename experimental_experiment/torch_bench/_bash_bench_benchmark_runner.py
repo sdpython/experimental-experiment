@@ -3,11 +3,13 @@ import os
 import pickle
 import sys
 import time
+import traceback
 from datetime import datetime
 from typing import Any, Dict, Iterator, List, Optional, Set, Tuple, Union
 
 import numpy as np
 import onnx
+from onnx.helper import tensor_dtype_to_np_dtype
 import torch
 from torch._dynamo.testing import collect_results
 from torch._dynamo.utils import clone_inputs
@@ -20,8 +22,11 @@ from .export_model_helper import (
     str_dtype,
     str_shape,
 )
+from ..bench_run import max_diff
 from ..memory_peak import flatten, start_spying_on
+
 from ..ext_test_case import has_onnxruntime_training
+from ..xbuilder._dtype_helper import torch_dtype_to_onnx_dtype
 
 
 class BenchmarkRunner:
@@ -232,6 +237,12 @@ class BenchmarkRunner:
         if hasattr(obj, "numpy"):
             # Implicit copy to torch.Tensor
             return torch.Tensor(obj.numpy()).to(device)
+        if isinstance(obj, np.ndarray):
+            t = torch.Tensor(obj).to(device)
+            assert torch_dtype_to_onnx_dtype(t.dtype) == tensor_dtype_to_np_dtype(
+                obj.dtype
+            ), f"Type mismatch between {obj.dtype} and {t.dtype}"
+            return t
         if "SquashedNormal" in obj.__class__.__name__ and device == "cpu":
             return obj
         if hasattr(obj, "conv_states") and obj.__class__.__name__ == "MambaCache":
@@ -439,8 +450,9 @@ class BenchmarkRunner:
             res.append(value)
         return tuple(res)
 
+    @classmethod
     def max_diff(
-        self,
+        cls,
         expected: Any,
         got: Any,
         verbose: int = 0,
@@ -473,9 +485,9 @@ class BenchmarkRunner:
           of this output
         """
         if flatten:
-            return self.max_diff(
-                self._flatten(expected),
-                self._flatten(got),
+            return cls.max_diff(
+                cls._flatten(expected),
+                cls._flatten(got),
                 verbose=verbose,
                 flatten=False,
                 debug_info=(
@@ -493,207 +505,16 @@ class BenchmarkRunner:
                 _index=_index,
             )
 
-        if hasattr(expected, "to_tuple"):
-            return self.max_diff(
-                expected.to_tuple(),
-                got,
-                verbose=verbose,
-                level=level + 1,
-                debug_info=(
-                    debug_info
-                    if verbose < 10
-                    else (
-                        [f"{' ' * level}to_tupleA"]
-                        if not debug_info
-                        else ([*debug_info, f"{' ' * level}to_tupleA"])
-                    )
-                ),
-                begin=begin,
-                end=end,
-                _index=_index,
-            )
-
-        if hasattr(got, "to_tuple"):
-            return self.max_diff(
-                expected,
-                got.to_tuple(),
-                verbose=verbose,
-                level=level + 1,
-                debug_info=(
-                    debug_info
-                    if verbose < 10
-                    else (
-                        [f"{' ' * level}to_tupleB"]
-                        if not debug_info
-                        else ([*debug_info, f"{' ' * level}to_tupleB"])
-                    )
-                ),
-                begin=begin,
-                end=end,
-                _index=_index,
-            )
-
-        if isinstance(expected, torch.Tensor):
-            if isinstance(got, torch.Tensor):
-                if _index < begin or (end != -1 and _index >= end):
-                    # out of boundary
-                    return dict(abs=0.0, rel=0.0, sum=0.0, n=0.0)
-                diff = (got.to(torch.float64) - expected.to(torch.float64)).abs()
-                rdiff = diff / (expected.abs() + 1e-3)
-                abs_diff, rel_diff, sum_diff, n_diff = (
-                    float(diff.max()),
-                    float(rdiff.max()),
-                    float(diff.sum()),
-                    float(diff.numel()),
-                )
-                if self.verbose >= 10 and (abs_diff >= 10 or rel_diff >= 10):
-                    # To understand the value it comes from.
-                    if debug_info:
-                        print("\n".join(debug_info))
-                    print(
-                        f"[max_diff-1] abs_diff={abs_diff}, rel_diff={rel_diff}, "
-                        f"dtype={expected.dtype}, shape={expected.shape}, level={level}, "
-                        f"_index={_index}"
-                    )
-                    if abs_diff >= 10:
-                        idiff = torch.argmax(diff.reshape((-1,)))
-                        x = expected.reshape((-1,))[idiff]
-                        y = got.reshape((-1,))[idiff]
-                        print(
-                            f"   [max_diff-2] abs diff={abs_diff}, "
-                            f"x={x}, y={y}, level={level}, "
-                            f"_index={_index}"
-                        )
-                        print(y)
-
-                    if rel_diff >= 10:
-                        idiff = torch.argmax(rdiff.reshape((-1,)))
-                        x = expected.reshape((-1,))[idiff]
-                        y = got.reshape((-1,))[idiff]
-                        print(
-                            f"   [max_diff-3] rel diff={rel_diff}, "
-                            f"x={x}, y={y}, level={level}, "
-                            f"_index={_index}"
-                        )
-
-                return dict(abs=abs_diff, rel=rel_diff, sum=sum_diff, n=n_diff)
-
-            if isinstance(got, (list, tuple)):
-                if len(got) != 1:
-                    if verbose > 2:
-                        print(
-                            f"[max_diff] (a) inf because len(expected)={len(expected)}!=1, "
-                            f"len(got)={len(got)}, level={level}, _index={_index}"
-                        )
-                        for i, (a, b) in enumerate(zip(expected, got)):
-                            if isinstance(a, torch.Tensor) and isinstance(b, torch.Tensor):
-                                print(
-                                    f"    i={i} expected {a.dtype}:{a.shape}, "
-                                    f"has {b.dtype}:{b.shape}, _index={_index}"
-                                )
-                            else:
-                                print(
-                                    f"    i={i} a is {type(a)}, "
-                                    f"b is {type(b)}, _index={_index}"
-                                )
-                    return dict(abs=np.inf, rel=np.inf, sum=np.inf, n=np.inf)
-                return self.max_diff(
-                    expected,
-                    got[0],
-                    verbose=verbose,
-                    level=level + 1,
-                    begin=begin,
-                    end=end,
-                    _index=_index,
-                    debug_info=debug_info,
-                )
-
-        if isinstance(expected, (tuple, list)):
-            if len(expected) == 1:
-                return self.max_diff(
-                    expected[0],
-                    got,
-                    verbose=verbose,
-                    level=level + 1,
-                    begin=begin,
-                    end=end,
-                    _index=_index,
-                    debug_info=debug_info,
-                )
-            if not isinstance(got, (tuple, list)):
-                if verbose > 2:
-                    print(
-                        f"[max_diff] inf because type(expected)={type(expected)}, "
-                        f"type(got)={type(got)}, level={level}, _index={_index}"
-                    )
-                return dict(abs=np.inf, rel=np.inf, sum=np.inf, n=np.inf)
-            if len(got) != len(expected):
-                if verbose > 2:
-                    print(
-                        f"[max_diff] (b) inf because len(expected)={len(expected)}, "
-                        f"len(got)={len(got)}, level={level}, _index={_index}"
-                    )
-                    for i, (a, b) in enumerate(zip(expected, got)):
-                        if isinstance(a, torch.Tensor) and isinstance(b, torch.Tensor):
-                            print(
-                                f"    i={i} expected {a.dtype}:{a.shape}, "
-                                f"has {b.dtype}:{b.shape}, _index={_index}"
-                            )
-                        else:
-                            print(f"    i={i} a is {type(a)}, b is {type(b)}")
-                return dict(abs=np.inf, rel=np.inf, sum=np.inf, n=np.inf)
-            am, rm, sm, n = 0, 0, 0.0, 0.0
-            for ip, (e, g) in enumerate(zip(expected, got)):
-                d = self.max_diff(
-                    e,
-                    g,
-                    verbose=verbose,
-                    level=level + 1,
-                    debug_info=(
-                        debug_info
-                        if verbose < 10
-                        else (
-                            [f"{' ' * level}[{ip}] so far abs {am} - rel {rm}"]
-                            if not debug_info
-                            else (
-                                [
-                                    *debug_info,
-                                    f"{' ' * level}[{ip}] so far abs {am} - rel {rm}",
-                                ]
-                            )
-                        )
-                    ),
-                    begin=begin,
-                    end=end,
-                    _index=_index + ip,
-                )
-                am = max(am, d["abs"])
-                rm = max(rm, d["rel"])
-                sm += d["sum"]
-                n += d["n"]
-            return dict(abs=am, rel=rm, sum=sm, n=n)
-
-        if "SquashedNormal" in expected.__class__.__name__:
-            values = (
-                expected.mean.detach().to("cpu"),
-                expected.scale.detach().to("cpu"),
-            )
-            return self.max_diff(
-                values,
-                got,
-                verbose=verbose,
-                level=level + 1,
-                begin=begin,
-                end=end,
-                _index=_index,
-            )
-
-        raise AssertionError(
-            f"Not implemented with type(expected)={type(expected)}, "
-            f"type(results)={type(got)},\n"
-            f"dir(expected)={dir(expected)}, level={level}\n"
-            f"expected={expected}\n"
-            f"got={got}"
+        return max_diff(
+            expected=expected,
+            got=got,
+            verbose=verbose,
+            level=level,
+            flatten=flatten,
+            debug_info=debug_info,
+            begin=begin,
+            end=end,
+            _index=_index,
         )
 
     def enumerate_test_models(
@@ -709,7 +530,6 @@ class BenchmarkRunner:
         pickled_name: Optional[str] = None,
         rtopt: bool = True,
         shape_again: bool = False,
-        decomposition_table: Optional[str] = None,
     ) -> Iterator[Dict[Any, Any]]:
         """
         Runs the benchmarks, run, export, run in onnx, measure the speedup.
@@ -728,8 +548,6 @@ class BenchmarkRunner:
         :param rtopt: disable onnxruntime optimization
         :param shape_again: run shape inference after the export,
             erases whatever the model already contains
-        :param decomposition_table: decomposition table to apply, not all
-            exporters support this
         """
         assert not process, "process=True not implemented."
 
@@ -771,7 +589,6 @@ class BenchmarkRunner:
                     initial_no_grad=initial_no_grad,
                     rtopt=rtopt,
                     shape_again=shape_again,
-                    decomposition_table=decomposition_table,
                 )
                 if part == 0:
                     stats["STEP"] = "export"
@@ -832,7 +649,6 @@ class BenchmarkRunner:
         autocast=None,
         rtopt=None,
         shape_again=None,
-        decomposition_table=None,
     ):
         assert quiet is not None
         assert exporter is not None
@@ -859,10 +675,6 @@ class BenchmarkRunner:
             import timm
         except ImportError:
             timm = None
-        try:
-            import torch_onnx
-        except ImportError:
-            torch_onnx = None
 
         from experimental_experiment.ext_test_case import BOOLEAN_VALUES
         from experimental_experiment.bench_run import _clean_string
@@ -898,9 +710,6 @@ class BenchmarkRunner:
                 "-" if monai is None else getattr(monai, "__version__", "dev")
             ),
             "version_timm": ("-" if timm is None else getattr(timm, "__version__", "dev")),
-            "version_torch_onnx": (
-                "-" if torch_onnx is None else getattr(torch_onnx, "__version__", "dev")
-            ),
         }
         stats.update(machine_specs)
         if self.device.startswith("cuda"):
@@ -950,7 +759,6 @@ class BenchmarkRunner:
         stats["warmup"] = warmup
         stats["repeat"] = repeat
         stats["dynamic"] = 1 if dynamic else 0
-        stats["decomposition_table"] = decomposition_table
         stats["flag_no_grad"] = self.no_grad
         stats["flag_fake_tensor"] = self.fake_tensor
         stats["flag_training"] = self.training
@@ -993,6 +801,16 @@ class BenchmarkRunner:
                 f"[BenchmarkRunner.benchmark] warmup model {model_name!r} "
                 f"- {warmup} times"
             )
+            print(f"[BenchmarkRunner.benchmark] device={model_runner.device!r}")
+            devices = [
+                (
+                    i.get_device()
+                    if hasattr(i, "get_device")
+                    else (None if i is None else type(i))
+                )
+                for i in model_runner.inputs
+            ]
+            print(f"[BenchmarkRunner.benchmark] input device={devices}")
 
         begin = time.perf_counter()
         if quiet:
@@ -1164,10 +982,11 @@ class BenchmarkRunner:
             print("[BenchmarkRunner.benchmark] start_spying_on")
 
         if self.verbose:
-            print(
-                f"[BenchmarkRunner.benchmark] dynamic_shapes="
-                f"{model_runner.get_dynamic_shapes(dynamic,wrapped=True)}"
-            )
+            if dynamic:
+                print(
+                    f"[BenchmarkRunner.benchmark] dynamic_shapes="
+                    f"{model_runner.get_dynamic_shapes(dynamic, wrapped=True)}"
+                )
             print(
                 f"[BenchmarkRunner.benchmark] input shapes="
                 f"{model_runner.get_input_shapes(dynamic=dynamic, wrapped=True)}"
@@ -1189,7 +1008,6 @@ class BenchmarkRunner:
                     fake_tensor=self.fake_tensor,
                     no_grad=self.no_grad,
                     target_opset=self.target_opset,
-                    decomposition_table=decomposition_table,
                 )
             except Exception as e:
                 stats["time_export"] = time.perf_counter() - begin
@@ -1217,7 +1035,6 @@ class BenchmarkRunner:
                 fake_tensor=self.fake_tensor,
                 no_grad=self.no_grad,
                 target_opset=self.target_opset,
-                decomposition_table=decomposition_table,
             )
             stats["time_export"] = time.perf_counter() - begin
             stats["time_export_success"] = time.perf_counter() - begin
@@ -1292,6 +1109,16 @@ class BenchmarkRunner:
                 f"{'' if feeds_dynamic is None else 'not'} None"
             )
 
+        assert isinstance(feeds, tuple) or all(
+            isinstance(v, torch.Tensor) for v in feeds.values()
+        ), f"One input is not a tensor {dict((k,type(v)) for k,v in feeds.items())}"  # noqa: C402
+        if feeds_dynamic:
+            assert isinstance(feeds_dynamic, tuple) or all(
+                isinstance(v, torch.Tensor) for v in feeds_dynamic.values()
+            ), (
+                f"One dynamic input is not a tensor "
+                f"{dict((k,type(v)) for k,v in feeds_dynamic.items())}"  # noqa: C402
+            )
         context["feeds"] = feeds
         context["feeds_dynamic"] = feeds_dynamic
 
@@ -1531,7 +1358,7 @@ class BenchmarkRunner:
         # dynamic
         #########
 
-        if feeds_dynamic is None:
+        if feeds_dynamic is None or not isinstance(exported_model, onnx.ModelProto):
             got_dynamic = None
         else:
             if self.verbose:
@@ -1570,6 +1397,7 @@ class BenchmarkRunner:
                 except Exception as e:
                     if self.verbose:
                         print(f"[benchmarkrunner.benchmark] err_warmup {e}")
+                        traceback.print_tb(e.__traceback__, file=sys.stdout)
                     stats["ERR_warmup"] = _clean_string(str(e)).replace("\n", "_ ")
                     stats["time_warmup"] = (time.perf_counter() - begin) / warmup
                     return stats
@@ -1690,6 +1518,7 @@ class BenchmarkRunner:
                     except Exception as e:
                         if self.verbose:
                             print(f"[benchmarkrunner.benchmark] err_warmup {e}")
+                            traceback.print_tb(e.__traceback__, file=sys.stdout)
                         stats["ERR_warmup"] = _clean_string(str(e)).replace("\n", "_ ")
                         stats["time_warmup"] = (time.perf_counter() - begin) / warmup
                         return stats

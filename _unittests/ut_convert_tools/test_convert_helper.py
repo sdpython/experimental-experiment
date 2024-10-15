@@ -20,7 +20,7 @@ input_dims = ((2, 1024),)
 
 
 class TestConvertHelper(ExtTestCase):
-    @ignore_warnings(UserWarning)
+    @ignore_warnings((UserWarning, DeprecationWarning))
     @requires_onnxscript("0.2")
     @skipif_ci_windows("not working on windows")
     def test_optimize_llama(self):
@@ -38,7 +38,7 @@ class TestConvertHelper(ExtTestCase):
 
     @skipif_ci_windows("dynamo not working on windows")
     @skipif_ci_apple("dynamo fails")
-    @ignore_warnings(UserWarning)
+    @ignore_warnings((UserWarning, DeprecationWarning))
     def test_inline_llama(self):
         import torch
         from experimental_experiment.torch_models.llama_helper import (
@@ -53,7 +53,7 @@ class TestConvertHelper(ExtTestCase):
         self.assertIsInstance(model_proto, ModelProto)
 
     @skipif_ci_windows("dynamo not working on windows")
-    @ignore_warnings(UserWarning)
+    @ignore_warnings((UserWarning, DeprecationWarning))
     @unittest.skipIf(True, reason="unstable")
     def test_ort_optimize_dynamo_cpu(self):
         import torch
@@ -70,7 +70,7 @@ class TestConvertHelper(ExtTestCase):
         )
 
     @requires_cuda()
-    @ignore_warnings(UserWarning)
+    @ignore_warnings((UserWarning, DeprecationWarning))
     @unittest.skipIf(True, reason="unstable")
     def test_ort_optimize_dynamo_cuda(self):
         import torch
@@ -87,7 +87,7 @@ class TestConvertHelper(ExtTestCase):
         )
 
     @skipif_ci_windows("dynamo not working on windows")
-    @ignore_warnings(UserWarning)
+    @ignore_warnings((UserWarning, DeprecationWarning))
     @unittest.skipIf(True, reason="unstable")
     def test_ort_optimize_cpu(self):
         from experimental_experiment.torch_models.llama_helper import (
@@ -101,7 +101,7 @@ class TestConvertHelper(ExtTestCase):
         ort_optimize(model_proto, providers="cpu", output="test_ort_optimize_cpu.onnx")
 
     @requires_cuda()
-    @ignore_warnings(UserWarning)
+    @ignore_warnings((UserWarning, DeprecationWarning))
     @unittest.skipIf(True, reason="unstable")
     def test_ort_optimize_cuda(self):
         from experimental_experiment.torch_models.llama_helper import (

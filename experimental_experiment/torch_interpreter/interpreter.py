@@ -13,6 +13,7 @@ from ..xbuilder._dtype_helper import (
 )
 from ..xbuilder.model_container import _get_type
 from . import LOCAL_DOMAIN
+from .export_options import ExportOptions
 from ._exceptions import FunctionNotFoundError
 from .aten_functions import find_function
 from .aten_methods import find_method
@@ -28,8 +29,8 @@ class DynamoInterpreter:
         see function `_retrieve
         <experimental_experiment.torch_interpreter.onnx_export._retrieve>`.
     :param dispatcher: see :class:`experimental_experiment.torch_interpreter.Dispatcher`
-    :param strtegy: see
-        :func:`to_onnx <experimental_experiment.torch_interpreter.to_onnx>`
+    :param export_options: see :class:`ExportOptions
+        <experimental_experiment.torch_interpreter.ExportOptions>`
     """
 
     def _hash(self) -> str:
@@ -40,11 +41,8 @@ class DynamoInterpreter:
         graph_builder: "GraphBuilder",  # noqa: F821
         retriever: Callable,
         dispatcher: Optional["Dispatcher"] = None,  # noqa: F821
-        strategy: Optional[str] = None,
         example_inputs: Optional[Tuple["torch.Tensor", ...]] = None,  # noqa: F821
-        decomposition_table: Optional[
-            Dict["torch._ops.OpOverload", Callable[..., Any]]  # noqa: F821
-        ] = None,
+        export_options: Optional[ExportOptions] = None,
     ):
         import torch
 
@@ -52,21 +50,45 @@ class DynamoInterpreter:
         self.builder = graph_builder
         self.retriever = retriever
         self.dispatcher = dispatcher
-        self.strategy = (strategy,)
+        self.export_options = export_options
         self.example_values_ = {}
-        self.decomposition_table = decomposition_table
         assert example_inputs is None or isinstance(
             example_inputs, tuple
         ), f"Unexpected type for example_inputs {type(example_inputs)}"
         assert example_inputs is None or all(
-            (t is None or isinstance(t, (torch.SymInt, torch.SymFloat, torch.Tensor)))
+            (
+                t is None
+                or isinstance(
+                    t, (torch.SymInt, torch.SymFloat, torch.Tensor, list, int, float)
+                )
+            )
             for t in example_inputs
         ), (
             f"Unexpected type for one input in example_inputs "
             f"{[type(t) for t in example_inputs]}"
         )
         self.example_inputs_ = example_inputs
+        self.flat_example_inputs_ = self.flatten_inputs(example_inputs)
         self.current_input_ = 0
+
+    def flatten_inputs(self, x: Any) -> List["torch.Tensor"]:  # noqa: F821
+        """
+        Flatten inputs.
+        """
+        if x is None:
+            return x
+        if isinstance(x, (list, tuple)):
+            res = []
+            for i in x:
+                if i is None or isinstance(
+                    i,
+                    (self.torch.Tensor, self.torch.SymInt, self.torch.SymFloat, int, float),
+                ):
+                    res.append(i)
+                else:
+                    res.extend(self.flatten_inputs(i))
+            return tuple(res) if isinstance(x, tuple) else res
+        raise AssertionError(f"Unexpected type {type(x)} for x")
 
     def run_node(self, node: "torch.fx.Node"):  # noqa: F821
         """
@@ -190,28 +212,28 @@ class DynamoInterpreter:
         users: Iterable[str],
     ) -> str:
         if self.example_inputs_ is not None and not self.builder.was_inputs_renamed:
-            assert len(self.builder.input_names) < len(self.example_inputs_), (
+            assert len(self.builder.input_names) < len(self.flat_example_inputs_), (
                 f"Too many inputs already ({len(self.builder.input_names)}), "
                 f"self.current_input_={self.current_input_}, "
                 f"unexpected {name!r} "
                 f"after {self.builder.input_names}"
                 f"{self.builder.get_debug_msg()}"
             )
-            if self.example_inputs_[self.current_input_] is None:
+            if self.flat_example_inputs_[self.current_input_] is None:
                 # We skip it.
                 assert len(users) == 0, (
                     f"Input {name!r} (index {self.current_input_}"
-                    f"/{len(self.example_inputs_)}) "
+                    f"/{len(self.flat_example_inputs_)}) "
                     f"is None but it is used by {users}. "
                     f"Existing inputs {self.builder.input_names}. Example inputs: "
-                    f"{['-' if t is None else t.shape for t in self.example_inputs_]}"
+                    f"{['-' if t is None else t.shape for t in self.flat_example_inputs_]}"
                     f"{self.builder.get_debug_msg()}"
                 )
                 self.current_input_ += 1
                 return ""
 
             # second check
-            not_none = tuple(t for t in self.example_inputs_ if t is not None)
+            not_none = tuple(t for t in self.flat_example_inputs_ if t is not None)
             assert len(self.builder.input_names) < len(not_none), (
                 f"Too many inputs already ({len(self.builder.input_names)}), "
                 f"unexpected {name!r} "
@@ -248,11 +270,13 @@ class DynamoInterpreter:
                 return self._make_tensor_input(
                     node.name, None, None, is_dimension=False, users=node.users
                 )
+
             if example_value is None:
                 # The input is not defined.
                 # We return.
                 self.current_input_ += 1
                 return
+
             if isinstance(
                 example_value, (self.builder.torch.SymInt, self.builder.torch.SymFloat)
             ):
@@ -263,6 +287,20 @@ class DynamoInterpreter:
                     elem_type=self.builder.torch.int64,
                     shape=(1,),
                     is_dimension=True,
+                    users=node.users,
+                )
+
+            if isinstance(example_value, (int, float)):
+                # int or float
+                return self._make_tensor_input(
+                    node.name,
+                    elem_type=(
+                        self.builder.torch.int64
+                        if isinstance(example_value, int)
+                        else self.builder.torch.float32
+                    ),
+                    shape=(1,),
+                    is_dimension=False,
                     users=node.users,
                 )
 
@@ -318,6 +356,16 @@ class DynamoInterpreter:
 
         if isinstance(val, (self.torch.SymInt, self.torch.SymFloat)):
             return self.builder.make_dynamic_object(node.name, val, shape_as_input=True)
+
+        if isinstance(val, (int, float)):
+            # scalar input
+            return self._make_tensor_input(
+                node.name,
+                elem_type=TensorProto.INT64 if isinstance(val, int) else TensorProto.FLOAT,
+                shape=(1,),
+                is_dimension=False,
+                users=node.users,
+            )
 
         raise RuntimeError(
             f"Unsupported type {type(val)} for placeholder "
@@ -881,7 +929,7 @@ class DynamoInterpreter:
             return i.name
         if isinstance(i, tuple):
             return tuple(self._process_arg(node, aten_name, t) for t in i)
-        if isinstance(i, (float, int, tuple, slice)):
+        if isinstance(i, (float, int, tuple, slice, complex)):
             return i
         if isinstance(i, list):
             new_list = []
@@ -1239,8 +1287,7 @@ class DynamoInterpreter:
             dispatcher=self.dispatcher,
             raise_list=self.builder.raise_list,
             dynamic_shapes=self.builder.dynamic_shapes,
-            strategy=self.strategy,
-            decomposition_table=self.decomposition_table,
+            export_options=self.export_options,
         )
         builder.process(graph_module, interpreter)
         assert builder.outputs, f"No output detected for node={source_node}, graph={gm}"

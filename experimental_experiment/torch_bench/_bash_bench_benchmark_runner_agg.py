@@ -1,19 +1,19 @@
 import glob
-import itertools
 import os
 import pprint
 import warnings
+import zipfile
 from collections import Counter
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Dict, Iterator, List, Optional, Tuple, Union
 
 import numpy as np
 import pandas
 
 from . import BOOLEAN_VALUES
 from ._bash_bench_benchmark_runner_agg_helper import (
-    BUCKET_SCALES,
     SELECTED_FEATURES,
     _apply_excel_style,
+    _format_excel_cells,
     _compute_correlations,
     _create_aggregation_figures,
     _filter_data,
@@ -22,7 +22,113 @@ from ._bash_bench_benchmark_runner_agg_helper import (
     _reverse_column_names_order,
     _select_metrics,
     _select_model_metrics,
+    _fix_report_piv,
+    _process_formulas,
 )
+
+
+def enumerate_csv_files(
+    data: Union[
+        pandas.DataFrame, List[Union[str, Tuple[str, str]]], str, Tuple[str, str, str, str]
+    ],
+    verbose: int = 0,
+) -> Iterator[Union[pandas.DataFrame, str, Tuple[str, str, str, str]]]:
+    """
+    Enumerates files considered for the aggregation.
+    Only csv files are considered.
+    If a zip file is given, the function digs into the zip files and
+    loops over csv candidates.
+
+    :param data: dataframe with the raw data or a file or list of files
+
+    data can contains:
+    * a dataframe
+    * a string for a filename, zip or csv
+    * a list of string
+    * a tuple
+    """
+    if not isinstance(data, list):
+        data = [data]
+    for filename in data:
+
+        if isinstance(filename, pandas.DataFrame):
+            yield filename
+            continue
+
+        if isinstance(filename, tuple):
+            # A file in a zipfile
+            yield filename
+
+        if not os.path.exists(filename):
+            found = glob.glob(filename)
+            if verbose and not found:
+                print(f"[enumerate_csv_files] unable to find file in {filename!r}")
+            for f in found:
+                yield from enumerate_csv_files(f, verbose=verbose)
+            continue
+
+        ext = os.path.splitext(filename)[-1]
+        if ext == ".csv":
+            # We check the first line is ok.
+            with open(filename, "r", encoding="utf-8") as f:
+                line = f.readline()
+                if "~help" in line or (",CMD" not in line and ",DATE" not in line):
+                    continue
+                yield (os.path.split(filename)[-1], os.stat(filename).st_mtime, filename, "")
+            continue
+
+        if ext == ".zip":
+            zf = zipfile.ZipFile(filename, "r")
+            for info in zf.infolist():
+                name = info.filename
+                ext = os.path.splitext(name)[-1]
+                if ext != ".csv":
+                    continue
+                with zf.open(name) as f:
+                    line = f.readline()
+                if b"~help" in line or (b",CMD" not in line and b",DATE" not in line):
+                    continue
+                yield (
+                    os.path.split(name)[-1],
+                    "%04d-%02d-%02d %02d:%02d:%02d" % info.date_time,
+                    name,
+                    filename,
+                )
+            zf.close()
+            continue
+
+        raise AssertionError(f"Unexpected {filename!r}, cannot read it.")
+
+
+def open_dataframe(
+    data: Union[str, Tuple[str, str, str, str], pandas.DataFrame]
+) -> pandas.DataFrame:
+    """
+    Opens a filename.
+
+    :param data: a dataframe, a filename, a tuple indicating the file is coming
+        from a zip file
+    :return: a dataframe
+    """
+    if isinstance(data, pandas.DataFrame):
+        return data
+    if isinstance(data, str):
+        df = pandas.read_csv(data)
+        df["RAWFILENAME"] = data
+        return df
+    if isinstance(data, tuple):
+        if not data[-1]:
+            df = pandas.read_csv(data[2])
+            df["RAWFILENAME"] = data[2]
+            return df
+        zf = zipfile.ZipFile(data[-1])
+        with zf.open(data[2]) as f:
+            df = pandas.read_csv(f)
+            df["RAWFILENAME"] = f"{data[-1]}/{data[2]}"
+        zf.close()
+        return df
+
+    raise ValueError(f"Unexpected value for data: {data!r}")
 
 
 def merge_benchmark_reports(
@@ -52,8 +158,7 @@ def merge_benchmark_reports(
         "version_transformers",
         "version_monai",
         "version_timm",
-        "version_torch_onnx",
-        "decomposition_table",
+        "strategy",
     ),
     column_keys=(
         "stat",
@@ -86,6 +191,7 @@ def merge_benchmark_reports(
         "accuracy_rate",
         "date",
         "correction",
+        "error",
     ),
     excel_output: Optional[str] = None,
     exc: bool = True,
@@ -102,6 +208,7 @@ def merge_benchmark_reports(
     fast: Optional[float] = None,
     slow_script: Optional[float] = None,
     fast_script: Optional[float] = None,
+    exclude: Optional[List[int]] = None,
 ) -> Dict[str, pandas.DataFrame]:
     """
     Merges multiple files produced by bash_benchmark...
@@ -113,7 +220,7 @@ def merge_benchmark_reports(
         101Dummy-script,2024-07-08,,1,6.705480073112994,7.0,40,2024-07-08,cuda,...
         101Dummy16-custom,2024-07-08,,2,6.970448340754956,7.0,40,2024-07-08,cuda,...
 
-    :param data: dataframe with the raw data
+    :param data: dataframe with the raw data or a file or list of files
     :param model: columns defining a unique model
     :param keys: colimns definined a unique experiment
     :param report_on: report on those metrics, ``<prefix>*`` means all
@@ -136,6 +243,7 @@ def merge_benchmark_reports(
         per exporter compare to torch_script
     :param fast_script: produce a document for the fast models
         per exporter compare to torch_script
+    :param exclude: exclude a list of files in the list
     :return: dictionary of dataframes
 
     Every key with a unique value is removed.
@@ -169,6 +277,7 @@ def merge_benchmark_reports(
     * a value or a set of values separated by ``;``
     """
     if baseline:
+        assert not exclude, f"exclude={exclude} not compatiable with baseline={baseline!r}"
         base_dfs = merge_benchmark_reports(
             baseline,
             model=model,
@@ -184,70 +293,49 @@ def merge_benchmark_reports(
     else:
         base_dfs = None
 
-    if isinstance(data, str):
-        data = [data]
-
-    if isinstance(data, list):
+    dfs = []
+    for i, dname in enumerate(sorted(enumerate_csv_files(data))):
+        if exclude and i in exclude:
+            if verbose:
+                print(f"[merge_benchmark_reports] - {' '.join(dname)}")
+            continue
         if verbose:
-            print(f"[merge_benchmark_reports] start with {len(data)} dataframes")
-        dfs = []
-        for filename in data:
-            if isinstance(filename, str):
+            print(f"[merge_benchmark_reports] + {' '.join(dname)}")
+        df = open_dataframe(dname)
+        if df.columns[0] == "#order":
+            # probably a status report
+            continue
+        updates = {}
+        for c in df.columns:
+            values = set(df[c])
+            if values & {True, False, np.nan} == values:
+                updates[c] = (
+                    df[c]
+                    .apply(lambda x: x if np.isnan(x) else (1 if x else 0))
+                    .astype(float)
+                )
+            if (
+                df[c].dtype not in {float, np.float64, np.float32}
+                and "_qu" not in c
+                and c.startswith(("time_", "discrepancies_", "memory"))
+            ):
                 try:
-                    df = pandas.read_csv(filename)
-                except (FileNotFoundError, pandas.errors.ParserError) as e:
-                    found = glob.glob(filename)
-                    if not found:
-                        raise AssertionError(f"Unable to find {filename!r}") from e
-                    for f in found:
-                        try:
-                            df = pandas.read_csv(f)
-                        except pandas.errors.ParserError as ee:
-                            raise AssertionError(f"Unable to read {f!r}") from ee
-                        dfs.append(df)
-                    continue
-            elif isinstance(filename, pandas.DataFrame):
-                df = filename
-            else:
-                raise TypeError(f"Unexpected type {type(filename)} for one element of data")
-            if df.columns[0] == "#order":
-                # probably a status report
-                continue
-            updates = {}
-            for c in df.columns:
-                values = set(df[c])
-                if values & {True, False, np.nan} == values:
-                    updates[c] = (
-                        df[c]
-                        .apply(lambda x: x if np.isnan(x) else (1 if x else 0))
-                        .astype(float)
-                    )
-                if (
-                    df[c].dtype not in {float, np.float64, np.float32}
-                    and "_qu" not in c
-                    and c.startswith(("time_", "discrepancies_", "memory"))
-                ):
-                    try:
-                        val = df[c].astype(float)
-                    except (ValueError, TypeError) as e:
-                        raise AssertionError(
-                            f"Unable to convert to float column {c!r} from file "
-                            f"{filename!r}, values\n---\n"
-                            f"{pprint.pformat(list(enumerate(zip(df['_index'], df[c]))))}"
-                        ) from e
-                    updates[c] = val
+                    val = df[c].astype(float)
+                except (ValueError, TypeError) as e:
+                    raise AssertionError(
+                        f"Unable to convert to float column {c!r} from file "
+                        f"{dname!r}, values\n---\n"
+                        f"{pprint.pformat(list(enumerate(zip(df['_index'], df[c]))))}"
+                    ) from e
+                updates[c] = val
 
-            if updates:
-                for k, v in updates.items():
-                    df[k] = v
-            dfs.append(df)
-        df = pandas.concat(dfs, axis=0)
-    elif isinstance(data, pandas.DataFrame):
-        if verbose:
-            print("[merge_benchmark_reports] start with 1 dataframe")
-        df = data
-    else:
-        raise TypeError(f"Unexpected type {type(data)} for data")
+        if updates:
+            for k, v in updates.items():
+                df[k] = v
+        dfs.append(df)
+
+    assert len(dfs) > 0, f"No dataframe found in {data!r}"
+    df = pandas.concat(dfs, axis=0) if len(dfs) > 1 else dfs[0]
 
     if verbose:
         print(f"[merge_benchmark_reports] shape={df.shape}")
@@ -432,360 +520,17 @@ def merge_benchmark_reports(
             df.to_csv(nn)
 
     # formulas
-    for expr in formulas:
-        if verbose:
-            print(f"[merge_benchmark_reports] process formula={expr}")
-
-        if expr == "memory_delta":
-            if (
-                "memory_begin" in set_columns
-                and "memory_peak" in set_columns
-                and "memory_end" in set_columns
-            ):
-                df["memory_peak_cpu_pp"] = (
-                    np.maximum(df["memory_peak"], df["memory_end"]) - df["memory_begin"]
-                )
-                report_on.append("memory_peak_cpu_pp")
-            delta_gpu = None
-            m_gpu = None
-            for i in range(1024):
-                c1 = f"memory_gpu{i}_begin"
-                c2 = f"memory_gpu{i}_peak"
-                if c1 in set_columns and c2 in set_columns:
-                    d = df[c2] - df[c1]
-                    if delta_gpu is None:
-                        delta_gpu = d
-                        m_gpu = d
-                    else:
-                        delta_gpu += d
-                        m_gpu += d
-                else:
-                    break
-            if delta_gpu is not None:
-                df["memory_peak_gpu_pp"] = m_gpu
-                df["memory_delta_peak_gpu_pp"] = delta_gpu * 2**20
-                report_on.append("memory_peak_gpu_pp")
-                report_on.append("memory_delta_peak_gpu_pp")
-            if "memory_peak_cpu_pp" in df.columns:
-                df["memory_delta_peak_cpu_pp"] = df["memory_peak_cpu_pp"] * 2**20
-                report_on.append("memory_delta_peak_cpu_pp")
-
-        if expr == "memory_peak":
-            if (
-                "mema_gpu_5_after_export" in set_columns
-                and "mema_gpu_4_reset" in set_columns
-                and "mema_gpu_1_after_loading" in set_columns
-                and "mema_gpu_2_after_warmup" in set_columns
-                and "mema_gpu_6_before_session" in set_columns
-                and "mema_gpu_8_after_export_warmup" in set_columns
-            ):
-                col_name = "memory_delta_peak_gpu_export"
-                df[col_name] = df["mema_gpu_5_after_export"] - df["mema_gpu_4_reset"]
-                report_on.append(col_name)
-
-                col_name = "memory_peak_gpu_export"
-                df[col_name] = df["mema_gpu_5_after_export"]
-                report_on.append(col_name)
-
-                col_name = "memory_delta_peak_gpu_eager_warmup"
-                df[col_name] = (
-                    df["mema_gpu_2_after_warmup"] - df["mema_gpu_0_before_loading"]
-                )
-                report_on.append(col_name)
-
-                col_name = "memory_peak_gpu_eager_warmup"
-                df[col_name] = df["mema_gpu_2_after_warmup"]
-                report_on.append(col_name)
-
-                col_name = "memory_delta_peak_gpu_warmup"
-                df[col_name] = (
-                    df["mema_gpu_8_after_export_warmup"] - df["mema_gpu_6_before_session"]
-                )
-                report_on.append(col_name)
-
-                col_name = "memory_peak_gpu_warmup"
-                df[col_name] = df["mema_gpu_8_after_export_warmup"]
-                report_on.append(col_name)
-            continue
-
-        if expr == "pass_rate":
-            if "discrepancies_abs" in set_columns and "speedup" in set_columns:
-                col = (df["discrepancies_abs"] <= 0.1) & (df["speedup"] >= 0.98)
-                if "discrepancies_dynamic_abs" in set_columns and "dynamic" in set_columns:
-                    col &= (df["dynamic"] == 0) | (
-                        (~df["discrepancies_dynamic_abs"].isna())
-                        & (df["discrepancies_dynamic_abs"] <= 0.1)
-                    )
-                df["status_pass_rate"] = col.astype(int)
-                df.loc[df["discrepancies_abs"].isna(), "status_pass_rate"] = np.nan
-                report_on.append("status_pass_rate")
-            continue
-
-        if expr == "correction":
-            if "time_latency_eager" in df.columns and "time_latency" in df.columns:
-                weights = df["time_latency"].apply(lambda x: np.nan if np.isnan(x) else 1.0)
-                df["time_latency_eager_if_exported_run"] = df["time_latency_eager"] * weights
-                report_on.append("time_latency_eager_if_exported_run")
-            continue
-
-        if expr == "accuracy_rate":
-            if "discrepancies_abs" in set_columns:
-                col = df["discrepancies_abs"] <= 0.1
-                df["status_accuracy_rate"] = col.astype(int)
-                df.loc[df["discrepancies_abs"].isna(), "status_accuracy_rate"] = np.nan
-                report_on.append("status_accuracy_rate")
-            continue
-
-        if expr == "date":
-            if "date_start" in set_columns:
-                df["status_date"] = (
-                    pandas.to_datetime(df["date_start"]).astype("int64").astype(float) / 1e9
-                )
-                set_columns = set(df.columns)
-                report_on.append("status_date")
-            continue
-
-        if expr == "status":
-            if "time_export_success" in set_columns:
-                df["status_convert"] = (~df["time_export_success"].isna()).astype(int)
-                report_on.append("status_convert")
-            if "discrepancies_dynamic_abs" in set_columns:
-                df["status_dynamic"] = (
-                    (~df["discrepancies_dynamic_abs"].isna())
-                    & (df["discrepancies_dynamic_abs"] <= 0.1)
-                ).astype(int)
-                report_on.append("status_dynamic")
-            if "discrepancies_abs" in set_columns:
-                df["status_convert_ort"] = (~df["discrepancies_abs"].isna()).astype(int)
-                mets = []
-                for th, mt in itertools.product(
-                    ["1e-1", "1e-2", "1e-3", "1e-4"], ["abs", "abs_0", "abs_1+"]
-                ):
-                    dis = f"discrepancies_{mt}"
-                    if dis not in df.columns:
-                        continue
-                    met = f"status_err{mt[3:]}<{th}"
-                    mets.append(met)
-                    df[met] = (~df[dis].isna() & (df[dis] < float(th))).astype(int)
-                df["status_lat<=eager+2%"] = (
-                    ~df["discrepancies_abs"].isna()
-                    & (df["time_latency"] <= df["time_latency_eager"] * 1.02)
-                ).astype(int)
-                set_columns = set(df.columns)
-                report_on.extend(
-                    [
-                        "status_convert_ort",
-                        *mets,
-                        "status_lat<=eager+2%",
-                    ]
-                )
-            continue
-
-        if expr == "control_flow":
-            if (
-                "exporter" in set_columns
-                and "time_export_success" in set_columns
-                and ({"export", "compile"} & set(df.exporter))
-                and len(set(df.exporter)) > 1
-            ):
-                expo = "export" if "export" in set(df.exporter) else "compile"
-                keep = [*model, *new_keys, "time_export_success"]
-                gr = df[df.exporter == expo][keep].copy()
-                gr["status_control_flow"] = gr["time_export_success"].isna().astype(int)
-                gr = gr.drop("time_export_success", axis=1)
-                if "opt_patterns" in gr.columns and len(set(gr.opt_patterns)) == 1:
-                    on = [
-                        k
-                        for k in keep[:-1]
-                        if k not in {"exporter", "opt_patterns", "rtopt"}
-                    ]
-                else:
-                    on = [k for k in keep[:-1] if k != "exporter"]
-                joined = pandas.merge(df, gr, left_on=on, right_on=on, how="left")
-                assert (
-                    df.shape[0] == joined.shape[0]
-                ), f"Shape mismatch after join {df.shape} -> {joined.shape}"
-                df = joined.copy()
-                for c in column_keys:
-                    cc = f"{c}_x"
-                    if cc in df.columns:
-                        df[c] = df[cc]
-                drop = [
-                    c
-                    for c in [
-                        *[f"{c}_x" for c in column_keys],
-                        *[f"{c}_y" for c in column_keys],
-                    ]
-                    if c in df.columns
-                ]
-                df = df.drop(drop, axis=1)
-                set_columns = set(df.columns)
-                report_on.append("status_control_flow")
-            continue
-
-        if expr == "buckets":
-            if (
-                "exporter" in set_columns
-                and "dynamic" in set_columns
-                and "opt_patterns" in set_columns
-                and "speedup" in set_columns
-                and "torch_script" in set(df.exporter)
-                and len(set(df.exporter)) > 1
-            ):
-                # Do the same with the exporter as a baseline.
-                keep = [*model, *new_keys, "speedup"]
-                gr = df[
-                    (df.exporter == "torch_script")
-                    & (df.opt_patterns.isin({"", "-", "none"}))
-                    & (df.rtopt == 1)
-                ][keep].copy()
-                gr = gr[~gr["speedup"].isna()]
-
-                if gr.shape[0] == 0:
-                    # No figures for torch_script
-                    if verbose:
-                        print(
-                            f"[merge_benchmark_reports] gr.shape={gr.shape}, "
-                            f"unable to compute speedup_script, "
-                            f"exporters={set(df.exporter)}, "
-                            f"opt_patterns={set(df.opt_patterns)}, "
-                            f"dynamic={set(df.dynamic)}, rtopt={set(df.rtopt)}"
-                        )
-                else:
-                    if verbose:
-                        print(
-                            f"[merge_benchmark_reports] compute speedup_script: "
-                            f"gr.shape={gr.shape}"
-                        )
-                    gr["speedup_script"] = gr["speedup"]
-                    gr = gr.drop("speedup", axis=1)
-
-                    on = [
-                        k
-                        for k in keep[:-1]
-                        if k not in {"exporter", "opt_patterns", "rtopt"}
-                    ]
-                    joined = pandas.merge(df, gr, left_on=on, right_on=on, how="left")
-
-                    assert df.shape[0] == joined.shape[0], (
-                        f"Shape mismatch after join {df.shape} -> {joined.shape}, "
-                        f"gr.shape={gr.shape}, on={on}"
-                    )
-                    df = joined.copy()
-                    df["speedup_increase_script"] = (
-                        df["speedup"] / df["speedup_script"] - 1
-                    ).fillna(-np.inf)
-                    report_on.extend(["speedup_script", "speedup_increase_script"])
-                    for c in column_keys:
-                        cc = f"{c}_x"
-                        if cc in df.columns:
-                            df[c] = df[cc]
-                    drop = [
-                        c
-                        for c in [
-                            *[f"{c}_x" for c in column_keys],
-                            *[f"{c}_y" for c in column_keys],
-                        ]
-                        if c in df.columns
-                    ]
-                    df = df.drop(drop, axis=1)
-                    set_columns = set(df.columns)
-                    df["status_lat<=script+2%"] = (
-                        df["speedup_increase_script"] >= (1 / 1.02 - 1)
-                    ).astype(int)
-                    report_on.append("status_lat<=script+2%")
-
-            for c in ["speedup_increase", "speedup_increase_script"]:
-                if c not in set_columns:
-                    continue
-                scale = BUCKET_SCALES
-                ind = df["speedup_increase"].isna()
-                for i in range(1, len(scale)):
-                    val = (df[c] >= scale[i - 1] / 100) & (df[c] < scale[i] / 100)
-                    v1 = f"{scale[i-1]}%" if not np.isinf(scale[i - 1]) else ""
-                    v2 = f"{scale[i]}%" if not np.isinf(scale[i]) else ""
-                    suf = f"[{v1},{v2}[" if v1 and v2 else (f"<{v2}" if v2 else f">={v1}")
-                    if c == "speedup_increase_script":
-                        d = f"bucket_script {suf}"
-                    else:
-                        d = f"bucket_{suf}"
-                    df[d] = val.astype(int)
-                    df.loc[ind, d] = np.nan
-                    report_on.append(d)
-
-            # for inductor
-            if (
-                "exporter" in set_columns
-                and "dynamic" in set_columns
-                and "opt_patterns" in set_columns
-                and "speedup" in set_columns
-                and "inductor" in set(df.exporter)
-                and len(set(df.exporter)) > 1
-            ):
-                # Do the same with the exporter as a baseline.
-                keep = [*model, *new_keys, "speedup"]
-                gr = df[
-                    (df.exporter == "inductor")
-                    & (df.opt_patterns.isin({"", "-", "none"}))
-                    & (df.rtopt == 1)
-                ][keep].copy()
-                gr = gr[~gr["speedup"].isna()]
-
-                if gr.shape[0] == 0:
-                    # No figures for inductor
-                    if verbose:
-                        print(
-                            f"[merge_benchmark_reports] gr.shape={gr.shape}, "
-                            f"unable to compute speedup_inductor, "
-                            f"exporters={set(df.exporter)}, "
-                            f"opt_patterns={set(df.opt_patterns)}, "
-                            f"dynamic={set(df.dynamic)}, rtopt={set(df.rtopt)}"
-                        )
-                else:
-                    if verbose:
-                        print(
-                            f"[merge_benchmark_reports] compute speedup_inductor: "
-                            f"gr.shape={gr.shape}"
-                        )
-                    gr["speedup_inductor"] = gr["speedup"]
-                    gr = gr.drop("speedup", axis=1)
-
-                    on = [
-                        k
-                        for k in keep[:-1]
-                        if k not in {"exporter", "opt_patterns", "rtopt"}
-                    ]
-                    joined = pandas.merge(df, gr, left_on=on, right_on=on, how="left")
-
-                    assert df.shape[0] == joined.shape[0], (
-                        f"Shape mismatch after join {df.shape} -> {joined.shape}, "
-                        f"gr.shape={gr.shape}, on={on}"
-                    )
-                    df = joined.copy()
-                    df["speedup_increase_inductor"] = (
-                        df["speedup"] / df["speedup_inductor"] - 1
-                    ).fillna(-np.inf)
-                    report_on.extend(["speedup_inductor", "speedup_increase_inductor"])
-                    for c in column_keys:
-                        cc = f"{c}_x"
-                        if cc in df.columns:
-                            df[c] = df[cc]
-                    drop = [
-                        c
-                        for c in [
-                            *[f"{c}_x" for c in column_keys],
-                            *[f"{c}_y" for c in column_keys],
-                        ]
-                        if c in df.columns
-                    ]
-                    df = df.drop(drop, axis=1)
-                    set_columns = set(df.columns)
-                    df["status_lat<=inductor+2%"] = (
-                        df["speedup_increase_inductor"] >= (1 / 1.02 - 1)
-                    ).astype(int)
-                    report_on.append("status_lat<=inductor+2%")
-
-            continue
+    if formulas:
+        df, report_on_add = _process_formulas(
+            df,
+            formulas,
+            column_keys=column_keys,
+            new_keys=new_keys,
+            model=model,
+            set_columns=set_columns,
+            verbose=verbose,
+        )
+        report_on.extend(report_on_add)
 
     if verbose:
         print(f"[merge_benchmark_reports] done, shape={df.shape}")
@@ -965,7 +710,30 @@ def _build_aggregated_document(
         dfc = df[keep]
         dfc = dfc[~dfc[model].isna().min(axis=1)]
         if new_keys:
-            pivot = dfc.pivot(index=model, columns=new_keys, values=c)
+            try:
+                pivot = dfc.pivot(index=model, columns=new_keys, values=c)
+            except ValueError as e:
+                cc = [*model, *new_keys]
+                dg = dfc.copy()
+                dg["__C__"] = 1
+                under = dg.groupby(cc).count()[["__C__"]]
+                under = under[under["__C__"] > 1]
+                if "RAWFILENAME" in df.columns:
+                    filenames = df[[*cc, "RAWFILENAME"]].set_index(cc)
+                    under_with_file = under.join(filenames, how="left")
+                    text = "\n".join(
+                        map(
+                            str,
+                            under_with_file.reset_index(drop=False).head().values.tolist(),
+                        )
+                    )
+                else:
+                    under_with_file = ""
+                raise ValueError(
+                    f"Ambiguities for columns {cc}, model={model}, "
+                    f"new_keys={new_keys}\n{under}\n-----\n"
+                    f"{text}"
+                ) from e
         else:
             pivot = dfc.set_index(model)
         res[c] = pivot
@@ -1299,6 +1067,10 @@ def _build_aggregated_document(
     ), f"Some rows were added or deleted {final_res['SIMPLE'].shape} -> {simple.shape}"
     final_res["SIMPLE"] = simple
 
+    # na to -
+    if "ERR" in final_res:
+        final_res["ERR"] = final_res["ERR"].fillna("-")
+
     if verbose:
         print(
             f"[merge_benchmark_reports] done with shapes "
@@ -1442,14 +1214,16 @@ def _build_aggregated_document(
             .sort_index(axis=0)
             .sort_index(axis=1)
         )
-        piv_total = piv_total[piv_total.index != (15, "average export time")]
-        piv_total = piv_total[piv_total.index != (16, "average speedup (geo)")]
+        piv = _fix_report_piv(piv)
+        piv_total = _fix_report_piv(piv_total, agg=True)
+
         export_simple_x = f"{export_simple}.xlsx"
         if verbose:
             print(f"[merge_benchmark_reports] writes {export_simple_x!r}")
         with pandas.ExcelWriter(export_simple_x) as writer:
             piv.to_excel(writer, sheet_name="by_suite")
             piv_total.to_excel(writer, sheet_name="all_suites")
+            _format_excel_cells(["by_suite", "all_suites"], writer, verbose=verbose)
 
     if export_correlations:
         models = [c for c in model if c in df.columns]

@@ -18,6 +18,12 @@ from ._bash_bench_set_dummies import (
     NeuronNamed1,
     NeuronNamed2,
     NeuronNamedDict,
+    NeuronIList,
+    NeuronIInt,
+    NeuronNoneInt,
+    NeuronNoneListInt,
+    NeuronNoneIntDefault,
+    NeuronNoneIntDict,
 )
 
 
@@ -211,7 +217,7 @@ class HuggingfaceRunner(BenchmarkRunner):
                 ),
                 "101Dummy2Inputs": (
                     lambda: Neuron2Inputs.config,
-                    Neuron,
+                    Neuron2Inputs,
                 ),
                 "101DummyNamed1": (
                     lambda: NeuronNamed1.config,
@@ -224,6 +230,30 @@ class HuggingfaceRunner(BenchmarkRunner):
                 "101DummyNamedDict": (
                     lambda: NeuronNamedDict.config,
                     NeuronNamedDict,
+                ),
+                "101DummyIList": (
+                    lambda: NeuronIList.config,
+                    NeuronIList,
+                ),
+                "101DummyIInt": (
+                    lambda: NeuronIInt.config,
+                    NeuronIInt,
+                ),
+                "101DummyNoneInt": (
+                    lambda: NeuronNoneInt.config,
+                    NeuronNoneInt,
+                ),
+                "101DummyNoneListInt": (
+                    lambda: NeuronNoneListInt.config,
+                    NeuronNoneListInt,
+                ),
+                "101DummyNoneIntDefault": (
+                    lambda: NeuronNoneIntDefault.config,
+                    NeuronNoneIntDefault,
+                ),
+                "101DummyNoneIntDict": (
+                    lambda: NeuronNoneIntDict.config,
+                    NeuronNoneIntDict,
                 ),
                 "AllenaiLongformerBase": (
                     lambda: transformers.AutoConfig.from_pretrained(

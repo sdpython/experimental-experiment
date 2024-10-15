@@ -1,5 +1,6 @@
 import sys
 import unittest
+import warnings
 from typing import Any
 import numpy
 import onnx.backend.base
@@ -68,7 +69,9 @@ class ExtendedReferenceEvaluatorBackend(onnx.backend.base.Backend):
     @classmethod
     def run_model(cls, model, inputs, device=None, **kwargs):
         rep = cls.prepare(model, device, **kwargs)
-        return rep.run(inputs, **kwargs)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            return rep.run(inputs, **kwargs)
 
     @classmethod
     def run_node(cls, node, inputs, device=None, outputs_info=None, **kwargs):

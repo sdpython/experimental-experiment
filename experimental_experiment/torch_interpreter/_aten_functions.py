@@ -910,6 +910,19 @@ def aten_clamp_Tensor(
     return res
 
 
+def aten_clip(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    min: Optional[float] = None,
+    max: Optional[float] = None,
+    name: str = "clip",
+) -> T:
+    "clip"
+    return aten_clamp(g, sts, outputs, x, min=min, max=max, name=name)
+
+
 def aten_clone(
     g: GraphBuilder,
     sts: Optional[Dict[str, Any]],
@@ -3381,7 +3394,7 @@ def aten__log_softmax(
     dim: int = -1,
     unnamed: bool = False,
     dtype: Optional["torch.dtype"] = None,  # noqa: F821
-    name: str = "log_softmax",
+    name: str = "_log_softmax",
 ) -> T:
     "logsoftmax"
     assert not unnamed, "Not implemented when the third parameter is False"
@@ -3395,6 +3408,22 @@ def aten__log_softmax(
     if not sts:
         set_type_shape_unary_op(g, res, xc, itype=itype)
     return res
+
+
+def aten_log_softmax_int(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    dim: int = -1,
+    unnamed: bool = False,
+    dtype: Optional["torch.dtype"] = None,  # noqa: F821
+    name: str = "log_softmax_int",
+) -> T:
+    "logsoftmax"
+    return aten__log_softmax(
+        g, sts, outputs, x, dim=dim, unnamed=unnamed, dtype=dtype, name=name
+    )
 
 
 def aten__log_softmax_backward_data(
@@ -6289,6 +6318,49 @@ def aten_stack(
     res = g.op.Concat(*new_tensors, axis=dim, outputs=outputs, name=name)
     if not sts:
         g.set_type(res, g.get_type(tensors[0]))
+    return res
+
+
+def aten_std_dim(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    dims: Sequence[int],
+    correction: float,
+    keepdim: bool = False,
+    name: str = "std_dim",
+) -> T:
+    "std_dim"
+    assert isinstance(dims, list) and all_int(
+        dims
+    ), f"Unexpected value for dims={dims!r}{g.get_debug_msg()}"
+    cdims = np.array(dims, dtype=np.int64)
+
+    mean = g.op.ReduceMeanAnyOpset(x, cdims, name=name)
+    sub_mean = g.op.Sub(x, mean, name=name)
+    sqr_mean = g.op.Mul(sub_mean, sub_mean, name=name)
+    var = g.op.ReduceMeanAnyOpset(sqr_mean, cdims, keepdims=1 if keepdim else 0, name=name)
+
+    if correction > 0:
+        assert g.has_shape(
+            x
+        ), f"not implemented if shape of x={x!r} is missing{g.get_debug_msg()}"
+        shape = g.get_shape(x)
+        assert is_static_shape(
+            shape
+        ), f"not implemented for shape={shape!r} for x={x!r}{g.get_debug_msg()}"
+        dim_size = np.array(shape)[cdims]
+        itype = g.get_type(x)
+        dtype = tensor_dtype_to_np_dtype(itype)
+        numel = np.prod(dim_size).astype(dtype)
+        mul = g.op.Mul(var, numel, name=name)
+        sub = g.op.Sub(numel, np.array([correction], dtype=dtype), name=name)
+        var = g.op.Div(mul, sub, name=name)
+
+    res = g.op.Sqrt(var, name=name)
+    if not sts:
+        g.set_type(res, g.get_type(x))
     return res
 
 

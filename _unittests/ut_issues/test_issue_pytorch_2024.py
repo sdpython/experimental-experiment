@@ -1,11 +1,154 @@
 import unittest
 import numpy as np
 from onnx.checker import check_model
-from experimental_experiment.ext_test_case import ExtTestCase, requires_cuda, hide_stdout
+from experimental_experiment.ext_test_case import (
+    ExtTestCase,
+    requires_cuda,
+    hide_stdout,
+    ignore_warnings,
+    requires_torch,
+    requires_onnxscript,
+    requires_onnxruntime_training,
+)
 from experimental_experiment.torch_interpreter import to_onnx
 
 
-class TestIssuesOnnxExporter(ExtTestCase):
+class TestIssuesPytorch2024(ExtTestCase):
+
+    @ignore_warnings(UserWarning)
+    def test_dort(self):
+        import torch
+
+        def _make_aot_ort(dynamic: bool = False) -> tuple:
+            from torch.onnx import (
+                _OrtBackend as OrtBackend,
+                _OrtBackendOptions as OrtBackendOptions,
+                ExportOptions,
+            )
+
+            export_options = ExportOptions(dynamic_shapes=dynamic)
+            options = OrtBackendOptions(export_options=export_options)
+            ort_backend = OrtBackend(options=options)
+            return ort_backend
+
+        class Linear(torch.nn.Module):
+            def __init__(self):
+                super(Linear, self).__init__()
+                self.linear = torch.nn.Linear(128, 10)
+                self.activation = torch.nn.ReLU()
+
+            def forward(self, *inputs):
+                input = self.linear(inputs[0])
+                input = self.activation(input)
+                return input
+
+        model = Linear()
+        model.train()
+        loss_fn = torch.nn.MSELoss()
+
+        input = torch.randn((64, 128), requires_grad=True)
+        labels = torch.randn((64, 10), requires_grad=True)
+
+        compiled_model = torch.compile(model, backend=_make_aot_ort())
+        output = compiled_model(*input)
+        loss = loss_fn(output, labels)
+        loss.backward()
+
+    @ignore_warnings((UserWarning, DeprecationWarning))
+    @requires_onnxruntime_training()
+    def test_cort(self):
+        import torch
+        from torch._dynamo.backends.common import aot_autograd
+        from experimental_experiment.torch_dynamo import onnx_custom_backend
+
+        backend_onnx = lambda *args, **kwargs: onnx_custom_backend(  # noqa: E731
+            *args, target_opset=18, verbose=0, **kwargs
+        )
+
+        class Linear(torch.nn.Module):
+            def __init__(self):
+                super(Linear, self).__init__()
+                self.linear = torch.nn.Linear(128, 10)
+                self.activation = torch.nn.ReLU()
+
+            def forward(self, *inputs):
+                input = self.linear(inputs[0])
+                input = self.activation(input)
+                return input
+
+        model = Linear()
+        model.train()
+        loss_fn = torch.nn.MSELoss()
+
+        x = torch.randn((64, 128), requires_grad=True)
+        labels = torch.randn((64, 10), requires_grad=True)
+
+        aot_compiler = aot_autograd(fw_compiler=backend_onnx)
+        compiled_model = torch.compile(model, backend=aot_compiler)
+        output = compiled_model(x)
+        loss = loss_fn(output, labels)
+        loss.backward()
+
+    @ignore_warnings((DeprecationWarning, UserWarning))
+    @requires_onnxscript("0.2")
+    @requires_torch("2.6")
+    def test_export_set_dynamo(self):
+        import torch
+        import onnxruntime as rt
+        from torch import nn
+
+        class Model(nn.Module):
+            def __init__(self):
+                super(Model, self).__init__()
+
+            def forward(self, x):
+                mask = torch.ones((1, 3, 3), dtype=bool)
+                x[mask] = 0
+                return x
+
+        model = Model()
+        input_tensor = torch.randn((1, 3, 3))
+        expected = model(input_tensor)
+        onnx_program = torch.onnx.export(model, input_tensor, dynamo=True)
+        session = rt.InferenceSession(
+            onnx_program.model_proto.SerializeToString(),
+            providers=["CPUExecutionProvider"],
+        )
+        feeds = {onnx_program.model_proto.graph.input[0].name: input_tensor.cpu().numpy()}
+        try:
+            results = session.run(None, feeds)
+        except ValueError as e:
+            if "are missing from input feed" in str(e):
+                raise unittest.SkipTest(f"bug in dynamo exporter: {e}")
+        self.assertEqualArray(expected, results[0])
+
+    @ignore_warnings((DeprecationWarning, UserWarning))
+    @requires_torch("2.4")
+    def test_export_set_custom(self):
+        import torch
+        import onnxruntime as rt
+        from torch import nn
+        from experimental_experiment.torch_interpreter import to_onnx
+
+        class Model(nn.Module):
+            def __init__(self):
+                super(Model, self).__init__()
+
+            def forward(self, x):
+                mask = torch.ones((1, 3, 3), dtype=bool)
+                x[mask] = 2
+                return x
+
+        model = Model()
+        input_tensor = torch.randn((1, 3, 3))
+        expected = model(input_tensor)
+        onx = to_onnx(model, (input_tensor,), verbose=0, optimize=False)
+        session = rt.InferenceSession(
+            onx.SerializeToString(),
+            providers=["CPUExecutionProvider"],
+        )
+        results = session.run(None, {"x": input_tensor.cpu().numpy()})
+        self.assertEqualArray(expected, results[0])
 
     def _updated_parameter(self, exporter):
         # https://github.com/pytorch/pytorch/issues/135233

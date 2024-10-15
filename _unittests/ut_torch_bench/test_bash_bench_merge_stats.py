@@ -5,6 +5,8 @@ import numpy as np
 from pandas.errors import PerformanceWarning
 from experimental_experiment.torch_bench._bash_bench_benchmark_runner_agg import (
     merge_benchmark_reports,
+    enumerate_csv_files,
+    open_dataframe,
 )
 from experimental_experiment.ext_test_case import (
     ExtTestCase,
@@ -241,7 +243,7 @@ class TestBashBenchMergeStats(ExtTestCase):
         )
         self.assertEqual(df, {})
 
-    @ignore_warnings((FutureWarning,))
+    @ignore_warnings((FutureWarning, RuntimeWarning))
     def test_merge_stats_diff(self):
         base = os.path.join(os.path.dirname(__file__), "data", "baseline.csv")
         data = os.path.join(os.path.dirname(__file__), "data", "baseline2.csv")
@@ -307,6 +309,7 @@ class TestBashBenchMergeStats(ExtTestCase):
         for p in sig.parameters:
             if p == "keys":
                 keys = sig.parameters[p].default
+        self.assertNotEmpty(keys)
         dfs = merge_benchmark_reports(
             data,
             excel_output="test_merge_stats_bug_merge_gr.xlsx",
@@ -314,6 +317,31 @@ class TestBashBenchMergeStats(ExtTestCase):
             keys=tuple(c for c in keys if c not in {"version_python"}),
         )
         self.assertNotEmpty(dfs)
+
+    @ignore_warnings((FutureWarning,))
+    def test_merge_stats_fix_report(self):
+        data = os.path.join(os.path.dirname(__file__), "data", "data_2024.csv")
+        sig = inspect.signature(merge_benchmark_reports)
+        keys = None
+        for p in sig.parameters:
+            if p == "keys":
+                keys = sig.parameters[p].default
+        self.assertNotEmpty(keys)
+        dfs = merge_benchmark_reports(
+            data,
+            excel_output="test_merge_stats_fix_report.xlsx",
+            export_simple="test_merge_stats_fix_report.csv",
+            keys=tuple(c for c in keys if c not in {"version_python"}),
+        )
+        self.assertNotEmpty(dfs)
+
+    @ignore_warnings((FutureWarning,))
+    def test_list(self):
+        data = os.path.join(os.path.dirname(__file__), "data", "*.csv")
+        dfs = list(enumerate_csv_files(data))
+        self.assertNotEmpty(dfs)
+        for df in dfs:
+            open_dataframe(df)
 
 
 if __name__ == "__main__":

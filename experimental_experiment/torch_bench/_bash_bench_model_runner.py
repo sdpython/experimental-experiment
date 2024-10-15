@@ -1,5 +1,6 @@
-import contextlib
 import collections
+import contextlib
+import enum
 import inspect
 import os
 import pprint
@@ -9,6 +10,20 @@ from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 import onnx
 import torch
 from .export_model_helper import compute_weight_size
+
+
+class UseDefaultValue(enum.IntEnum):
+    """
+    Defines if the exporter may use the default value.
+
+    * FALSE: no default value
+    * TRUE: there is a default value and the input is not specified
+    * BOTH: there is a default and one input
+    """
+
+    FALSE = 1
+    TRUE = 2
+    BOTH = 3
 
 
 @contextlib.contextmanager
@@ -185,7 +200,7 @@ class ModelRunner:
         if not optimization or optimization == "none":
             # always possible
             return True
-        if exporter in {"custom", "custom-ballback"}:
+        if exporter in {"custom", "custom-fallback"}:
             return True
         if exporter in {"torch_script", "dynamo_export"}:
             return optimization in {"default"}
@@ -290,13 +305,17 @@ class ModelRunner:
                 if n in inputs:
                     new_inputs.append(inputs[n])
                     added += 1
-                    use_default.append(False)
+                    use_default.append(
+                        UseDefaultValue.FALSE
+                        if sig.parameters[n].default is inspect._empty
+                        else UseDefaultValue.BOTH
+                    )
                 else:
                     if sig.parameters[n].default is inspect._empty:
                         # probably one optional input
                         continue
                     new_inputs.append(sig.parameters[n].default)
-                    use_default.append(True)
+                    use_default.append(UseDefaultValue.TRUE)
                 new_names.append(n)
             assert added == len(inputs), (
                 f"Unexpected input name in {sorted(inputs)} and "
@@ -307,7 +326,10 @@ class ModelRunner:
             self.raw_use_defaults = use_default
         else:
             self.raw_input_names = [f"input{i}" for i in range(len(inputs))]
-            self.raw_use_defaults = [i is None for i in inputs]
+            self.raw_use_defaults = [
+                (UseDefaultValue.TRUE if i is None else UseDefaultValue.FALSE)
+                for i in inputs
+            ]
 
         config = getattr(model, "config", {})
         to_tuple = not (hasattr(config, "to_tuple") and not config.to_tuple)
@@ -380,10 +402,20 @@ class ModelRunner:
         )
         dim = torch.export.Dim("batch", min=1, max=1024)
         res = []
-        for x in self.inputs:
-            if x is None:
+        for i, x in enumerate(self.inputs):
+            if x is None or isinstance(x, (int, float)):
                 res.append(None)
                 continue
+            if isinstance(x, list):
+                assert all(
+                    hasattr(_, "shape") for _ in x
+                ), f"Unsupported types in a list {[type(_) for _ in x]} at position {i}"
+                tries = [{0: dim} if len(_.shape) > 1 else None for _ in x]
+                res.append(tries)
+                continue
+            assert hasattr(
+                x, "shape"
+            ), f"Unexpected type {type(x)} for input {i}/{len(self.inputs)}"
             res.append({0: dim} if len(x.shape) > 1 else None)
 
         final = tuple(res)
@@ -450,7 +482,6 @@ class ModelRunner:
         optimization: str,
         verbose: int,
         target_opset: int,
-        decomposition_table: Optional[str],
     ) -> Tuple[onnx.ModelProto, Optional[Dict[str, Any]]]:
         """
         Converts a model into onnx.
@@ -463,13 +494,31 @@ class ModelRunner:
         :param optimization: defines the optimizations
         :param verbose: verbosity
         :param target_opset: target opset
-        :param decomposition_table: decomposition table to apply
         :return: the model proto with or without weights, statistics
         """
         assert not fake_tensor, "fake_tensor not implemented."
 
         if name == "1001Fail":
             raise RuntimeError(f"Model {name!r} is meant to fail for unit test purpose.")
+
+        if "-" in exporter:
+            spl = exporter.split("-", maxsplit=1)
+            assert len(spl) == 2, f"Unexpected name={exporter!r} for the exporter"
+            exporter, strategy = spl
+        else:
+            strategy = None
+
+        if verbose:
+            print(
+                f"[ModelRunner.export_as] exporter={exporter!r} "
+                f"strategy={strategy!r} optimization={optimization!r} "
+                f"n_inputs={len(self.inputs)}"
+            )
+            print(
+                f"[ModelRunner.export_as] fake_tensor={fake_tensor} dynamic={dynamic} "
+                f"target_opset={target_opset} no_grad={no_grad} name={name!r}"
+            )
+            print(f"[ModelRunner.export_as] use_raw_default={self.raw_use_defaults!r}")
 
         if exporter == "custom":
             return self._to_onnx_custom(
@@ -480,23 +529,13 @@ class ModelRunner:
                 optimization=optimization,
                 verbose=verbose,
                 target_opset=target_opset,
-                decomposition_table=decomposition_table,
+                strategy=strategy,
             )
-
-        if exporter == "custom-fallback":
-            return self._to_onnx_custom(
-                name,
-                dynamic=dynamic,
-                fake_tensor=fake_tensor,
-                no_grad=no_grad,
-                optimization=optimization,
-                verbose=verbose,
-                target_opset=target_opset,
-                decomposition_table=decomposition_table,
-                strategy="fallback",
-            )
-
         if exporter in ("cort", "cortgrad"):
+            assert strategy in (
+                None,
+                "none",
+            ), f"strategy={strategy!r} not implemented for {exporter!r}"
             return self._to_cort(
                 name,
                 dynamic=dynamic,
@@ -506,10 +545,12 @@ class ModelRunner:
                 verbose=verbose,
                 target_opset=target_opset,
                 autograd=exporter == "cortgrad",
-                decomposition_table=decomposition_table,
             )
-
         if exporter == "torch_script":
+            assert strategy in (
+                None,
+                "none",
+            ), f"strategy={strategy!r} not implemented for {exporter!r}"
             return self._to_onnx_script(
                 name,
                 dynamic=dynamic,
@@ -519,8 +560,13 @@ class ModelRunner:
                 verbose=verbose,
                 target_opset=target_opset,
             )
-
         if exporter == "onnx_dynamo":
+            assert strategy in (
+                None,
+                "none",
+                "fallback",
+                "detailed",
+            ), f"strategy={strategy!r} not implemented for {exporter!r}"
             return self._to_onnx_dynamo(
                 name,
                 dynamic=dynamic,
@@ -529,31 +575,15 @@ class ModelRunner:
                 optimization=optimization,
                 verbose=verbose,
                 target_opset=target_opset,
-            )
-        if exporter == "onnx_dynamo-detailed":
-            return self._to_onnx_dynamo(
-                name,
-                dynamic=dynamic,
-                fake_tensor=fake_tensor,
-                no_grad=no_grad,
-                optimization=optimization,
-                verbose=verbose,
-                target_opset=target_opset,
-                detailed=True,
-            )
-        if exporter == "onnx_dynamo-fallback":
-            return self._to_onnx_dynamo(
-                name,
-                dynamic=dynamic,
-                fake_tensor=fake_tensor,
-                no_grad=no_grad,
-                optimization=optimization,
-                verbose=verbose,
-                target_opset=target_opset,
-                fallback=True,
+                detailed=strategy == "detailed",
+                fallback=strategy == "fallback",
             )
         if exporter == "dynamo_export":
-            return self._to_onnx_dynamo2(
+            assert strategy in (
+                None,
+                "none",
+            ), f"strategy={strategy!r} not implemented for {exporter!r}"
+            return self._to_dynamo_export(
                 name,
                 dynamic=dynamic,
                 fake_tensor=fake_tensor,
@@ -563,6 +593,10 @@ class ModelRunner:
                 target_opset=target_opset,
             )
         if exporter == "eager":
+            assert strategy in (
+                None,
+                "none",
+            ), f"strategy={strategy!r} not implemented for {exporter!r}"
             return self._to_eager(
                 name,
                 dynamic=dynamic,
@@ -570,9 +604,12 @@ class ModelRunner:
                 no_grad=no_grad,
                 optimization=optimization,
                 verbose=verbose,
-                target_opset=target_opset,
             )
         if exporter == "compile":
+            assert strategy in (
+                None,
+                "none",
+            ), f"strategy={strategy!r} not implemented for {exporter!r}"
             return self._to_compile(
                 name,
                 dynamic=dynamic,
@@ -580,9 +617,17 @@ class ModelRunner:
                 no_grad=no_grad,
                 optimization=optimization,
                 verbose=verbose,
-                target_opset=target_opset,
             )
         if exporter == "export":
+            assert strategy in {
+                None,
+                "default",
+                "nostrict",
+                "none",
+                "fallback",
+                "fallback-default",
+                "jit",
+            }, f"strategy={strategy!r} not implemented for {exporter!r}"
             return self._to_export(
                 name,
                 dynamic=dynamic,
@@ -590,9 +635,14 @@ class ModelRunner:
                 no_grad=no_grad,
                 optimization=optimization,
                 verbose=verbose,
-                target_opset=target_opset,
+                strategy=strategy,
             )
         if exporter == "inductor":
+            assert strategy in (
+                None,
+                "partial",
+                "none",
+            ), f"strategy={strategy!r} not implemented for {exporter!r}"
             return self._to_inductor(
                 name,
                 dynamic=dynamic,
@@ -600,21 +650,13 @@ class ModelRunner:
                 no_grad=no_grad,
                 optimization=optimization,
                 verbose=verbose,
-                target_opset=target_opset,
-                fullgraph=True,
-            )
-        if exporter == "inductor-partial":
-            return self._to_inductor(
-                name,
-                dynamic=dynamic,
-                fake_tensor=fake_tensor,
-                no_grad=no_grad,
-                optimization=optimization,
-                verbose=verbose,
-                target_opset=target_opset,
-                fullgraph=False,
+                fullgraph=strategy != "partial",
             )
         if exporter == "dort":
+            assert strategy in (
+                None,
+                "none",
+            ), f"strategy={strategy!r} not implemented for {exporter!r}"
             return self._to_dort(
                 name,
                 dynamic=dynamic,
@@ -625,6 +667,10 @@ class ModelRunner:
                 target_opset=target_opset,
             )
         if exporter == "ORTModule":
+            assert strategy in (
+                None,
+                "none",
+            ), f"strategy={strategy!r} not implemented for {exporter!r}"
             return self._to_ortmodule(
                 name,
                 dynamic=dynamic,
@@ -645,12 +691,11 @@ class ModelRunner:
         optimization: str,
         verbose: int,
         target_opset: int,
-        decomposition_table: Optional[str],
         strategy: Optional[str] = None,
     ):
         assert not fake_tensor, "fake_tensor not implemented."
         assert no_grad, "no_grad false not implemented yet"
-        from ..torch_interpreter import to_onnx
+        from ..torch_interpreter import to_onnx, ExportOptions
         from ..xbuilder import OptimizationOptions
 
         if optimization and optimization != "none":
@@ -664,11 +709,15 @@ class ModelRunner:
         else:
             options = None
 
+        export_options = ExportOptions(strategy=strategy)
+        export_inputs = self.make_export_inputs(dynamic, wrapped=True, int_to_tensor=False)
+        dyn_shapes = self.get_dynamic_shapes(dynamic, wrapped=True)
+
         if self.autocast:
             with torch.autocast(device_type=self.device, dtype=self.dtype), torch.no_grad():
                 onx, builder, stats = to_onnx(
                     self.model,
-                    self.make_export_inputs(dynamic, wrapped=True),
+                    export_inputs,
                     optimize=bool(optimization),
                     large_model=True,
                     verbose=10 if verbose >= 100 else (1 if verbose > 1 else 0),
@@ -676,15 +725,14 @@ class ModelRunner:
                     return_optimize_report=True,
                     options=options,
                     return_builder=True,
-                    dynamic_shapes=self.get_dynamic_shapes(dynamic, wrapped=True),
-                    decomposition_table=decomposition_table,
-                    strategy=strategy,
+                    dynamic_shapes=dyn_shapes,
+                    export_options=export_options,
                 )
         else:
             with torch.no_grad():
                 onx, builder, stats = to_onnx(
                     self.model,
-                    self.make_export_inputs(dynamic, wrapped=True),
+                    export_inputs,
                     optimize=bool(optimization),
                     large_model=True,
                     verbose=10 if verbose >= 100 else (1 if verbose > 1 else 0),
@@ -692,8 +740,8 @@ class ModelRunner:
                     return_optimize_report=True,
                     options=options,
                     return_builder=True,
-                    dynamic_shapes=self.get_dynamic_shapes(dynamic, wrapped=True),
-                    decomposition_table=decomposition_table,
+                    dynamic_shapes=dyn_shapes,
+                    export_options=export_options,
                 )
         begin = time.perf_counter()
         self.std_to_dump.append(pprint.pformat(stats))
@@ -718,7 +766,6 @@ class ModelRunner:
         verbose: int,
         target_opset: int,
         autograd: bool = False,
-        decomposition_table: Optional[str] = None,
     ):
         assert not fake_tensor, "fake_tensor not implemented."
         assert not dynamic, "dynamic true not implemented yet"
@@ -743,20 +790,11 @@ class ModelRunner:
             verbose=verbose,
             options=options,
             optimize=bool(optimization),
-            decomposition_table=decomposition_table,
             **kwargs,
         )
 
         if autograd:
             from torch._dynamo.backends.common import aot_autograd
-
-            assert decomposition_table is None or decomposition_table in (
-                "none",
-                "default",
-            ), (
-                f"No other option than 'default' for decomposition_table="
-                f"{decomposition_table!r} is supported"
-            )
 
             cbf = aot_autograd(fw_compiler=cbff, decompositions=get_decomposition_table())
 
@@ -880,6 +918,21 @@ class ModelRunner:
                     if inp is None:
                         continue
                     dname = f"input{len(input_names)}"
+                    if isinstance(inp, list):
+                        for di, d in enumerate(inp):
+                            assert isinstance(d, dict), (
+                                f"Unexpected for input {dname!r}, {type(d)}, i={i}, "
+                                f"inp={inp}, dyn={dyn}, "
+                                f"dynamic_shapes_for_export={dynamic_shapes_for_export}"
+                            )
+                            dn = f"{dname}_{di}"
+                            daxes = {}
+                            for k, v in d.items():
+                                daxes[k] = v.__name__
+                            dynamic_axes[dn] = daxes
+                            input_names.append(dn)
+                        continue
+
                     assert isinstance(inp, dict), (
                         f"Unexpected for input {dname!r}, {type(inp)}, i={i}, dyn={dyn}, "
                         f"dynamic_shapes_for_export={dynamic_shapes_for_export}"
@@ -942,17 +995,6 @@ class ModelRunner:
         assert not fake_tensor, "fake_tensor not implemented."
         assert no_grad, "no_grad false not implemented yet"
 
-        if optimization:
-            opts = optimization.split("+")
-            if "ir" in opts:
-                os.environ["TORCH_ONNX_ENABLE_OPTIMIZATION"] = "1"
-                opts.pop(opts.index("ir"))
-                optimization = "+".join(opts)
-            else:
-                os.environ["TORCH_ONNX_ENABLE_OPTIMIZATION"] = "0"
-        else:
-            os.environ["TORCH_ONNX_ENABLE_OPTIMIZATION"] = "0"
-
         additional_kwargs = {}
         if detailed:
             additional_kwargs.update(
@@ -967,38 +1009,54 @@ class ModelRunner:
         if fallback:
             additional_kwargs.update(dict(fallback=True))
 
+        export_inputs = self.make_export_inputs(dynamic, wrapped=True)
+        dyn_shapes = self.get_dynamic_shapes(dynamic, wrapped=True)
+
         if self.autocast:
-            with torch.autocast(
-                device_type=self.device, dtype=self.dtype
-            ), torch.no_grad(), bypass_export_some_errors():
+            with torch.autocast(device_type=self.device, dtype=self.dtype), torch.no_grad():
                 onnx_program = torch.onnx.export(
                     self.model,
-                    self.make_export_inputs(dynamic, wrapped=True),
-                    name,
+                    export_inputs,
+                    None,
                     opset_version=target_opset,
                     dynamo=True,
                     external_data=True,
-                    dynamic_shapes=self.get_dynamic_shapes(dynamic, wrapped=True),
+                    dynamic_shapes=dyn_shapes,
                     **additional_kwargs,
                 )
         else:
-            with torch.no_grad(), bypass_export_some_errors():
+            with torch.no_grad():
                 onnx_program = torch.onnx.export(
                     self.model,
-                    self.make_export_inputs(dynamic, wrapped=True),
-                    name,
+                    export_inputs,
+                    None,
                     opset_version=target_opset,
                     dynamo=True,
                     external_data=True,
-                    dynamic_shapes=self.get_dynamic_shapes(dynamic, wrapped=True),
+                    dynamic_shapes=dyn_shapes,
                     **additional_kwargs,
                 )
 
+        stats = None
         if optimization:
-            return self._optimize_rewrite(name, optimization)
-        return onnx_program.model_proto, None
+            opts = optimization.split("+")
+            for opt in opts:
+                if opt == "ir":
+                    if stats is None:
+                        stats = {}
+                    begin = time.perf_counter()
+                    onnx_program.optimize()
+                    stats["time_export_optimization"] = time.perf_counter() - begin
+                    continue
+                assert opt in (
+                    "",
+                    "none",
+                    "-",
+                ), f"Unexpected optimization scenario {opt!r} in {opts!r}"
+        onnx_program.save(name, external_data=True)
+        return onnx.load(name, load_external_data=False), stats
 
-    def _to_onnx_dynamo2(
+    def _to_dynamo_export(
         self,
         name: str,
         dynamic: bool,
@@ -1052,22 +1110,59 @@ class ModelRunner:
         no_grad: bool,
         optimization: str,
         verbose: int,
-        target_opset: int,
+        strategy: Optional[str] = None,
     ):
         assert not fake_tensor, "fake_tensor not implemented."
         assert no_grad, "no_grad false not implemented yet"
+        assert not self.autocast, "not implemented for autocast"
         assert (
             not optimization or optimization == "none"
         ), f"optimization {optimization!r} not compatible with export"
         from torch.export import export
+        from ..torch_interpreter import ExportOptions
 
         with torch.no_grad():
-            res = export(
+            exported_mod = export(
                 self.model,
                 self.make_export_inputs(dynamic, wrapped=True),
                 dynamic_shapes=self.get_dynamic_shapes(dynamic, wrapped=True),
             )
-        return res.module(), None
+
+        export_options = ExportOptions(strategy=strategy)
+        dynamic_shapes = self.get_dynamic_shapes(dynamic, wrapped=True)
+
+        if verbose:
+            print(f"[ModelRunner._to_export] export_options={export_options!r}")
+            print(f"[ModelRunner._to_export] dynamic_shapes={dynamic_shapes!r}")
+
+        exported_mod = export_options.export(
+            self.model,
+            self.make_export_inputs(dynamic, wrapped=True),
+            dynamic_shapes=dynamic_shapes,
+            tracing_mode=False,
+            same_signature=False,
+            verbose=verbose,
+        )
+
+        if export_options.decomposition_table:
+            from ..torch_interpreter.export_options import (
+                insert_contiguous_between_transpose_and_view,
+            )
+
+            exported_mod = insert_contiguous_between_transpose_and_view(exported_mod)
+            exported_mod = exported_mod.run_decompositions(
+                export_options.get_decomposition_table()
+            )
+
+        root_name = os.path.splitext(name)[0]
+        if verbose:
+            print(f"[ModelRunner._to_export] write fx graph intp {root_name!r}")
+        with open(f"{root_name}.txt", "w") as f:
+            f.write(str(exported_mod))
+        with open(f"{root_name}.graph.txt", "w") as f:
+            f.write(str(exported_mod.graph))
+
+        return exported_mod.module(), None
 
     def _to_eager(
         self,
@@ -1077,7 +1172,6 @@ class ModelRunner:
         no_grad: bool,
         optimization: str,
         verbose: int,
-        target_opset: int,
     ):
         assert not fake_tensor, "fake_tensor not implemented."
         assert no_grad, "no_grad false not implemented yet"
@@ -1115,7 +1209,6 @@ class ModelRunner:
         no_grad: bool,
         optimization: str,
         verbose: int,
-        target_opset: int,
     ):
         assert not fake_tensor, "fake_tensor not implemented."
         assert no_grad, "no_grad true not implemented yet"
@@ -1125,7 +1218,7 @@ class ModelRunner:
 
         def custom_backend(gm: torch.fx.GraphModule, example_inputs: List[torch.Tensor]):
             if verbose:
-                print("[compile: fx_graph]")
+                print("[_to_compile] fx_graph]")
                 print(gm)
                 self.std_to_dump.append(str(gm))
 
@@ -1151,7 +1244,6 @@ class ModelRunner:
         no_grad: bool,
         optimization: str,
         verbose: int,
-        target_opset: int,
         fullgraph: bool,
     ):
         assert not fake_tensor, "fake_tensor not implemented."
@@ -1197,8 +1289,38 @@ class ModelRunner:
                 )
         return res, None
 
+    def _make_export_new_dynamic_shape(
+        self,
+        input_shape: Tuple[int, ...],
+        dyn_shape: Dict[int, Any],
+        dyn_values: Dict[int, str],
+        i: Optional[int] = None,
+    ) -> Tuple[int, ...]:
+        new_shape = []
+        assert isinstance(
+            dyn_shape, dict
+        ), f"Unexpected type for input {i}, dyn_shape={dyn_shape}"
+        for j in range(len(input_shape)):
+            if input_shape[j] != 1 or j not in dyn_shape:
+                new_shape.append(input_shape[j])
+                continue
+            name = dyn_shape[j]
+            if name in dyn_values:
+                new_shape.append(dyn_values[name])
+                continue
+            d = input_shape[j]
+            d += 1
+            dyn_values[name] = d
+            new_shape.append(d)
+
+        return tuple(new_shape)
+
     def make_export_inputs(
-        self, dynamic: bool = False, wrapped: bool = False, inputs: Optional[Any] = None
+        self,
+        dynamic: bool = False,
+        wrapped: bool = False,
+        inputs: Optional[Any] = None,
+        int_to_tensor: bool = False,
     ) -> Any:
         """
         Creates the new inputs for the benchmarks.
@@ -1210,11 +1332,29 @@ class ModelRunner:
         :param dynamic: dynamic, yes or no?
         :param wrapped: wrapped model
         :param inputs: existing inputs or None to use `self.inputs`
+        :param int_to_tensor: converts integers or float to tensors
         :return: new inputs
         """
         if not dynamic:
             # easy case
-            return self.inputs if inputs is None else inputs
+            if not int_to_tensor:
+                return self.inputs if inputs is None else inputs
+            if inputs is None:
+                inputs = self.inputs
+            new_inputs = []
+            for i in range(len(inputs)):
+                inp = inputs[i]
+                if inp is None:
+                    new_inputs.append(None)
+                    continue
+                if isinstance(inp, int):
+                    new_inputs.append(torch.Tensor([inp]).to(torch.int64))
+                    continue
+                if isinstance(inp, float):
+                    new_inputs.append(torch.Tensor([inp]).to(torch.float32))
+                    continue
+                new_inputs.append(inp)
+            return tuple(new_inputs)
 
         if inputs is None:
             inputs = self.inputs
@@ -1235,40 +1375,86 @@ class ModelRunner:
 
         dyn_inputs = []
         dyn_values = {}
-        for i in range(len(self.inputs)):
+        for i in range(len(inputs)):
             inp = inputs[i]
             if inp is None:
                 dyn_inputs.append(None)
                 continue
+            if isinstance(inp, int):
+                dyn_inputs.append(
+                    torch.Tensor([inp]).to(torch.int64) if int_to_tensor else inp
+                )
+                continue
+            if isinstance(inp, float):
+                dyn_inputs.append(
+                    torch.Tensor([inp]).to(torch.float32) if int_to_tensor else inp
+                )
+                continue
             if i >= len(dynamic_shapes):
                 dyn_inputs.append(inp)
                 continue
-            new_shape = []
-            dyn_shape = dynamic_shapes[i]
-            assert isinstance(dyn_shape, dict), (
-                f"Unexpected type for input {i}, dyn_shape={dyn_shape}, "
-                f"shape of input[{i}]={inp.shape}, "
-                f"dynamic_shapes={dynamic_shapes}, "
+            if isinstance(inp, list):
+                assert isinstance(dynamic_shapes[i], list), (
+                    f"Unexpected type {type(dynamic_shapes[i])} for input(list) {i}, "
+                    f"dynamic_shapes[i]={dynamic_shapes[i]}"
+                )
+                assert all(
+                    isinstance(x, torch.Tensor) for x in inp
+                ), f"Unexpected type in input(list) {i}, {[type(x) for x in inp]}"
+                assert len(dynamic_shapes[i]) == len(inp), (
+                    f"Length mismatch len(dynamic_shapes[i])={len(dynamic_shapes[i])} "
+                    f"len(inp)={len(inp)}"
+                )
+                new_inputs = []
+                for x, ds in zip(inp, dynamic_shapes[i]):
+                    if x is None:
+                        new_inputs.append(x)
+                        continue
+                    nds = self._make_export_new_dynamic_shape(
+                        x.shape, ds, dyn_values=dyn_values, i=i
+                    )
+                    new_inputs.append(x if nds == ds else x.expand(nds))
+                dyn_inputs.append(new_inputs)
+                continue
+            new_shape = self._make_export_new_dynamic_shape(
+                inp.shape, dynamic_shapes[i], dyn_values=dyn_values, i=i
             )
-            for j in range(len(inp.shape)):
-                if inp.shape[j] != 1 or j not in dyn_shape:
-                    new_shape.append(inp.shape[j])
-                    continue
-                name = dyn_shape[j]
-                if name in dyn_values:
-                    new_shape.append(dyn_values[name])
-                    continue
-                d = inp.shape[j]
-                d += 1
-                dyn_values[name] = d
-                new_shape.append(d)
-
-            new_shape = tuple(new_shape)
             if new_shape == inp.shape:
                 dyn_inputs.append(inp)
                 continue
             dyn_inputs.append(inp.expand(new_shape))
+
         return tuple(dyn_inputs)
+
+    def _get_input_shape_tensor(
+        self,
+        export: bool,
+        input_shape: Tuple[int, ...],
+        dyn_shape,
+        dyn_values: Dict[int, Any],
+        i: Optional[int] = None,
+    ):
+        if dyn_shape is None:
+            return input_shape
+        new_shape = []
+        assert isinstance(dyn_shape, dict), (
+            f"Unexpected type for input {i}, "
+            f"dyn_shape{dyn_shape}, shape of input[{i}]={input_shape}, "
+        )
+        for j in range(len(input_shape)):
+            if not export or j not in dyn_shape or input_shape[j] != 1:
+                new_shape.append(input_shape[j])
+                continue
+            name = dyn_shape[j]
+            if name in dyn_values:
+                new_shape.append(dyn_values[name])
+                continue
+            d = input_shape[j]
+            d += 1
+            dyn_values[name] = d
+            new_shape.append(d)
+
+        return tuple(new_shape)
 
     def get_input_shapes(
         self,
@@ -1294,8 +1480,8 @@ class ModelRunner:
         assert isinstance(
             inputs, tuple
         ), f"Not implemented for type(self.inputs)={type(inputs)}"
-        dynamic_shapes = self.get_dynamic_shapes(True, wrapped=wrapped)
-        if wrapped:
+        dynamic_shapes = self.get_dynamic_shapes(dynamic, wrapped=wrapped)
+        if dynamic_shapes is not None and wrapped:
             assert isinstance(dynamic_shapes, tuple), (
                 f"Unexpected type {type(dynamic_shapes)} for dynamic_shapes, "
                 f"wrapped={wrapped}, input type is {type(self.inputs)}"
@@ -1312,32 +1498,73 @@ class ModelRunner:
             if inp is None:
                 dyn_input_shapes.append(None)
                 continue
-            if i >= len(dynamic_shapes):
-                dyn_input_shapes.append(inp.shape)
+            if isinstance(inp, (int, float)):
+                dyn_input_shapes.append((1,))
                 continue
-            new_shape = []
-            dyn_shape = dynamic_shapes[i]
-            assert isinstance(dyn_shape, dict), (
-                f"Unexpected type for input {i}, wrapped={wrapped}, "
-                f"dyn_shape{dyn_shape}, shape of input[{i}]={inp.shape}, "
-                f"dynamic_shapes={dynamic_shapes}, "
-            )
-            for j in range(len(inp.shape)):
-                if not export or j not in dyn_shape or inp.shape[j] != 1:
-                    new_shape.append(inp.shape[j])
+            if isinstance(inp, list):
+                # List of inputs.
+                dyn_shape = (
+                    None
+                    if dynamic_shapes is None or i >= len(dynamic_shapes)
+                    else dynamic_shapes[i]
+                )
+                if dyn_shape is None:
+                    dyn_input_shapes.append([{} for t in inp])
                     continue
-                name = dyn_shape[j]
-                if name in dyn_values:
-                    new_shape.append(dyn_values[name])
-                    continue
-                d = inp.shape[j]
-                d += 1
-                dyn_values[name] = d
-                new_shape.append(d)
 
-            new_shape = tuple(new_shape)
+                assert len(dyn_shape) == len(
+                    inp
+                ), f"Length mismatch len(dyn_shape)={len(dyn_shape)}, len(inp)={len(inp)}"
+                new_shapes = []
+                for t, ds in zip(inp, dyn_shape):
+                    new_shapes.append(
+                        self._get_input_shape_tensor(
+                            export=export,
+                            input_shape=t.shape,
+                            dyn_shape=ds,
+                            dyn_values=dyn_values,
+                            i=i,
+                        )
+                    )
+                dyn_input_shapes.append(new_shapes)
+                continue
+
+            new_shape = self._get_input_shape_tensor(
+                export=export,
+                input_shape=inp.shape,
+                dyn_shape=(
+                    None
+                    if dynamic_shapes is None or i >= len(dynamic_shapes)
+                    else dynamic_shapes[i]
+                ),
+                dyn_values=dyn_values,
+                i=i,
+            )
             dyn_input_shapes.append(new_shape)
         return tuple(dyn_input_shapes)
+
+    def _make_dynamic_inputs_tensor(
+        self, input_shape, dyn_shape, dyn_values: Dict[str, Any], i: Optional[int] = None
+    ):
+        new_shape = []
+        assert isinstance(dyn_shape, dict), (
+            f"Unexpected type for input {i}, dyn_shape{dyn_shape}, "
+            f"shape of input[{i}]={input_shape}"
+        )
+        for j in range(len(input_shape)):
+            if j not in dyn_shape:
+                new_shape.append(input_shape[j])
+                continue
+            name = dyn_shape[j]
+            if name in dyn_values:
+                new_shape.append(dyn_values[name])
+                continue
+            d = input_shape[j]
+            d += 1
+            dyn_values[name] = d
+            new_shape.append(d)
+
+        return tuple(new_shape)
 
     def make_dynamic_inputs(self, wrapped: bool = False):
         """
@@ -1365,30 +1592,35 @@ class ModelRunner:
             if i >= len(dynamic_shapes):
                 dyn_inputs.append(inp)
                 continue
-            new_shape = []
             dyn_shape = dynamic_shapes[i]
-            if inp is None:
-                dyn_inputs.append(None)
+            if inp is None or isinstance(inp, (int, float)):
+                dyn_inputs.append(inp)
                 continue
-            assert isinstance(dyn_shape, dict), (
-                f"Unexpected type for input {i}, dyn_shape{dyn_shape}, "
-                f"shape of input[{i}]={inp.shape}, "
-                f"dynamic_shapes={dynamic_shapes}, "
-            )
-            for j in range(len(inp.shape)):
-                if j not in dyn_shape:
-                    new_shape.append(inp.shape[j])
-                    continue
-                name = dyn_shape[j]
-                if name in dyn_values:
-                    new_shape.append(dyn_values[name])
-                    continue
-                d = inp.shape[j]
-                d += 1
-                dyn_values[name] = d
-                new_shape.append(d)
 
-            new_shape = tuple(new_shape)
+            if isinstance(dyn_shape, list):
+                assert isinstance(inp, list), f"Unexpected type {type(inp)} for input {i}"
+                assert len(inp) == len(dyn_shape), (
+                    f"Length mismatch len(self.inputs[i])={len(inp)} == "
+                    f"len(dynamic_shapes[i])={len(dyn_shape)}"
+                )
+                new_input = []
+                for x, ds in zip(inp, dyn_shape):
+                    ns = self._make_dynamic_inputs_tensor(
+                        input_shape=x.shape, i=i, dyn_shape=ds, dyn_values=dyn_values
+                    )
+                    zeros = torch.zeros(ns, dtype=x.dtype, device=x.device)
+                    slices = tuple(slice(0, s) for s in x.shape)
+                    zeros[slices] = x[slices]
+                    new_input.append(zeros)
+                dyn_inputs.append(new_input)
+                continue
+
+            new_shape = self._make_dynamic_inputs_tensor(
+                input_shape=(1,) if isinstance(inp, (int, float)) else inp.shape,
+                i=i,
+                dyn_shape=dyn_shape,
+                dyn_values=dyn_values,
+            )
             zeros = torch.zeros(new_shape, dtype=inp.dtype, device=inp.device)
             slices = tuple(slice(0, s) for s in inp.shape)
             zeros[slices] = inp[slices]
@@ -1399,12 +1631,11 @@ class ModelRunner:
         self, exporter: str, filename: Optional[str] = None, dynamic: bool = False
     ):
         """Creates feed inputs."""
-        if exporter in {
+        if exporter.split("-", maxsplit=1)[0] in {
             "eager",
             "export",
             "compile",
             "inductor",
-            "inductor-partial",
             "dort",
             "cort",
             "cortgrad",
@@ -1422,26 +1653,58 @@ class ModelRunner:
                 self.inputs
             ), f"Input names mismatch, got {set(use_inputs)}, expecting {set(names)}."
             return self.inputs
-        inputs = [i for i, d in zip(use_inputs, self.raw_use_defaults) if not d]
-        if len(names) > len(inputs) and any(isinstance(i, list) for i in inputs):
-            # We need to flatten the inputs.
-            new_inputs = []
-            for i in inputs:
-                if isinstance(i, torch.Tensor):
-                    new_inputs.append(i)
-                    continue
-                if isinstance(i, list):
-                    for u in i:
-                        if isinstance(u, torch.Tensor):
-                            new_inputs.append(u)
-                            continue
-                        raise AssertionError(
-                            f"Unable to process input type {type(u)} in input list"
-                        )
-                    continue
-                raise AssertionError(f"Unable to process input type {type(i)}")
-        else:
-            new_inputs = inputs
+        assert len(use_inputs) == len(self.raw_use_defaults), (
+            f"Mismatch len(use_inputs)={len(use_inputs)}, "
+            f"len(self.raw_use_defaults)={len(self.raw_use_defaults)}, "
+            f"self.raw_use_defaults={self.raw_use_defaults}"
+        )
+        inputs = [
+            i
+            for i, d in zip(use_inputs, self.raw_use_defaults)
+            if d != UseDefaultValue.TRUE or i is not None
+        ]
+
+        # We need to flatten list, wrap scalar
+        new_inputs = []
+        for i in inputs:
+            if isinstance(i, torch.Tensor):
+                new_inputs.append(i)
+                continue
+            if isinstance(i, int):
+                t = torch.Tensor([i]).to(torch.int64)
+                if exporter == "torch_script":
+                    t = t.squeeze(dim=0)
+                new_inputs.append(t)
+                continue
+            if isinstance(i, float):
+                t = torch.Tensor([i]).to(torch.float32)
+                if exporter == "torch_script":
+                    t = t.squeeze(dim=0)
+                new_inputs.append(t)
+                continue
+            if isinstance(i, list):
+                for u in i:
+                    if u is None:
+                        continue
+                    if isinstance(u, torch.Tensor):
+                        new_inputs.append(u)
+                        continue
+                    raise AssertionError(
+                        f"Unable to process input type {type(u)} in input list"
+                    )
+                continue
+            raise AssertionError(f"Unable to process input type {type(i)}")
+
+        if len(names) < len(new_inputs) and all(
+            (
+                r == UseDefaultValue.TRUE
+                # onnx_dynamo does not seem to consider int or float as inputs
+                or (exporter == "onnx_dynamo" and isinstance(i, (int, float)))
+            )
+            for i, r in zip(use_inputs[len(names) :], self.raw_use_defaults[len(names) :])
+        ):
+            new_inputs = new_inputs[: len(names)]
+
         assert len(names) == len(new_inputs), (
             f"Mismatch number of inputs, {len(inputs)} ({len(new_inputs)}) "
             f"inputs, there are {len(new_inputs)} flattened inputs.\n----\n"
