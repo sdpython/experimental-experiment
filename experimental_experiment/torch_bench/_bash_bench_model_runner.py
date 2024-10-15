@@ -1017,7 +1017,7 @@ class ModelRunner:
                 onnx_program = torch.onnx.export(
                     self.model,
                     export_inputs,
-                    None,
+                    name if fallback else None,
                     opset_version=target_opset,
                     dynamo=True,
                     external_data=True,
@@ -1029,7 +1029,7 @@ class ModelRunner:
                 onnx_program = torch.onnx.export(
                     self.model,
                     export_inputs,
-                    None,
+                    name if fallback else None,
                     opset_version=target_opset,
                     dynamo=True,
                     external_data=True,
@@ -1053,7 +1053,10 @@ class ModelRunner:
                     "none",
                     "-",
                 ), f"Unexpected optimization scenario {opt!r} in {opts!r}"
-        onnx_program.save(name, external_data=True)
+            onnx_program.save(name, external_data=True)
+        elif not fallback:
+            # The model was not save in that case.
+            onnx_program.save(name, external_data=True)
         return onnx.load(name, load_external_data=False), stats
 
     def _to_dynamo_export(
