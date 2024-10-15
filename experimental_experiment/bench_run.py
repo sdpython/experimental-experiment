@@ -196,7 +196,7 @@ def run_benchmark(
             for c in ["name", "model"]:
                 if c not in config:
                     continue
-                loop.set_description(f"[{config[c]}]", refresh=False)
+                loop.set_description(f"[{config[c]}]")
                 break
         cmd = _cmd_line(script_name, **config)
         begin = time.perf_counter()
