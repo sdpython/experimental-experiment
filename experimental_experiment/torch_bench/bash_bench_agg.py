@@ -195,7 +195,9 @@ def main(args=None):
         fast=float(res.fast),
         slow_script=float(res.slow_script),
         fast_script=float(res.fast_script),
-        exclude=[int(i) for i in res.exclude.split(",")],
+        exclude=(
+            [int(i) for i in res.exclude.strip().split(",")] if res.exclude.strip() else None
+        ),
         **kwargs,
     )
 
