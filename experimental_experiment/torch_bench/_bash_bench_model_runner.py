@@ -1038,7 +1038,6 @@ class ModelRunner:
                 )
 
         stats = None
-        assert optimization
         if optimization:
             opts = optimization.split("+")
             for opt in opts:
