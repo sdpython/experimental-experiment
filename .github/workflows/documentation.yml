@@ -71,6 +71,11 @@ jobs:
             ${{ runner.os }}-pip-
             ${{ runner.os }}-
 
+      - name: Install onnxruntime-training again (2)
+        run: |
+          python -m pip uninstall -y onnxruntime
+          python -m pip install onnxruntime-training
+
       - name: pip freeze
         run: python -m pip freeze
 
@@ -94,6 +99,11 @@ jobs:
         run: |
           cp LICENSE* ./_doc
           cp CHANGELOGS* ./_doc
+
+      - name: Install onnxruntime-training again (3)
+        run: |
+          python -m pip uninstall -y onnxruntime
+          python -m pip install onnxruntime-training
 
       - name: Documentation
         run: UNITTEST_GOING=1 python -m sphinx ./_doc ./dist/html -n -w doc.txt
