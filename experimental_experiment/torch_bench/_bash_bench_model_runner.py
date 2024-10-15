@@ -583,7 +583,7 @@ class ModelRunner:
                 None,
                 "none",
             ), f"strategy={strategy!r} not implemented for {exporter!r}"
-            return self._to_onnx_dynamo2(
+            return self._to_dynamo_export(
                 name,
                 dynamic=dynamic,
                 fake_tensor=fake_tensor,
@@ -995,17 +995,6 @@ class ModelRunner:
         assert not fake_tensor, "fake_tensor not implemented."
         assert no_grad, "no_grad false not implemented yet"
 
-        if optimization:
-            opts = optimization.split("+")
-            if "ir" in opts:
-                os.environ["TORCH_ONNX_ENABLE_OPTIMIZATION"] = "1"
-                opts.pop(opts.index("ir"))
-                optimization = "+".join(opts)
-            else:
-                os.environ["TORCH_ONNX_ENABLE_OPTIMIZATION"] = "0"
-        else:
-            os.environ["TORCH_ONNX_ENABLE_OPTIMIZATION"] = "0"
-
         additional_kwargs = {}
         if detailed:
             additional_kwargs.update(
@@ -1028,7 +1017,7 @@ class ModelRunner:
                 onnx_program = torch.onnx.export(
                     self.model,
                     export_inputs,
-                    name,
+                    None,
                     opset_version=target_opset,
                     dynamo=True,
                     external_data=True,
@@ -1040,7 +1029,7 @@ class ModelRunner:
                 onnx_program = torch.onnx.export(
                     self.model,
                     export_inputs,
-                    name,
+                    None,
                     opset_version=target_opset,
                     dynamo=True,
                     external_data=True,
@@ -1048,11 +1037,26 @@ class ModelRunner:
                     **additional_kwargs,
                 )
 
+        stats = None
         if optimization:
-            return self._optimize_rewrite(name, optimization)
-        return onnx_program.model_proto, None
+            opts = optimization.split("+")
+            for opt in opts:
+                if opt == "ir":
+                    if stats is None:
+                        stats = {}
+                    begin = time.perf_counter()
+                    onnx_program.optimize()
+                    stats["time_export_optimization"] = time.perf_counter() - begin
+                    continue
+                assert opt in (
+                    "",
+                    "none",
+                    "-",
+                ), f"Unexpected optimization scenario {opt!r} in {opts!r}"
+        onnx_program.save(name, external_data=True)
+        return onnx.load(name, load_external_data=False), stats
 
-    def _to_onnx_dynamo2(
+    def _to_dynamo_export(
         self,
         name: str,
         dynamic: bool,

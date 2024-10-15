@@ -192,6 +192,12 @@ def run_benchmark(
     for iter_loop, config in enumerate(loop):
         if iter_loop < start:
             continue
+        if hasattr(loop, "set_description"):
+            for c in ["name", "model"]:
+                if c not in config:
+                    continue
+                loop.set_description(f"[{config[c]}]")
+                break
         cmd = _cmd_line(script_name, **config)
         begin = time.perf_counter()
 
@@ -274,12 +280,9 @@ def run_benchmark(
         metrics["ITER"] = iter_loop
         metrics["TIME_ITER"] = time.perf_counter() - begin
         metrics["ERROR"] = _clean_string(serr)
+        metrics["ERR_stdout"] = _clean_string(sout)
         if metrics["ERROR"]:
             metrics["ERR_std"] = metrics["ERROR"]
-            if "CUDA out of memory" in metrics["ERROR"]:
-                metrics["ERR_CUDA_OOM"] = 1
-            if "Cannot access gated repo for url" in metrics["ERROR"]:
-                metrics["ERR_ACCESS"] = 1
         if timeout_error:
             metrics["ERR_timeout"] = _clean_string(timeout_error)
         metrics["OUTPUT"] = _clean_string(sout)

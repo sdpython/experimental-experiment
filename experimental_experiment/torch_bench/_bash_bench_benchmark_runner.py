@@ -3,6 +3,7 @@ import os
 import pickle
 import sys
 import time
+import traceback
 from datetime import datetime
 from typing import Any, Dict, Iterator, List, Optional, Set, Tuple, Union
 
@@ -674,10 +675,6 @@ class BenchmarkRunner:
             import timm
         except ImportError:
             timm = None
-        try:
-            import torch_onnx
-        except ImportError:
-            torch_onnx = None
 
         from experimental_experiment.ext_test_case import BOOLEAN_VALUES
         from experimental_experiment.bench_run import _clean_string
@@ -713,9 +710,6 @@ class BenchmarkRunner:
                 "-" if monai is None else getattr(monai, "__version__", "dev")
             ),
             "version_timm": ("-" if timm is None else getattr(timm, "__version__", "dev")),
-            "version_torch_onnx": (
-                "-" if torch_onnx is None else getattr(torch_onnx, "__version__", "dev")
-            ),
         }
         stats.update(machine_specs)
         if self.device.startswith("cuda"):
@@ -807,6 +801,16 @@ class BenchmarkRunner:
                 f"[BenchmarkRunner.benchmark] warmup model {model_name!r} "
                 f"- {warmup} times"
             )
+            print(f"[BenchmarkRunner.benchmark] device={model_runner.device!r}")
+            devices = [
+                (
+                    i.get_device()
+                    if hasattr(i, "get_device")
+                    else (None if i is None else type(i))
+                )
+                for i in model_runner.inputs
+            ]
+            print(f"[BenchmarkRunner.benchmark] input device={devices}")
 
         begin = time.perf_counter()
         if quiet:
@@ -1393,6 +1397,7 @@ class BenchmarkRunner:
                 except Exception as e:
                     if self.verbose:
                         print(f"[benchmarkrunner.benchmark] err_warmup {e}")
+                        traceback.print_tb(e.__traceback__, file=sys.stdout)
                     stats["ERR_warmup"] = _clean_string(str(e)).replace("\n", "_ ")
                     stats["time_warmup"] = (time.perf_counter() - begin) / warmup
                     return stats
@@ -1513,6 +1518,7 @@ class BenchmarkRunner:
                     except Exception as e:
                         if self.verbose:
                             print(f"[benchmarkrunner.benchmark] err_warmup {e}")
+                            traceback.print_tb(e.__traceback__, file=sys.stdout)
                         stats["ERR_warmup"] = _clean_string(str(e)).replace("\n", "_ ")
                         stats["time_warmup"] = (time.perf_counter() - begin) / warmup
                         return stats
