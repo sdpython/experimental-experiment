@@ -192,6 +192,12 @@ def run_benchmark(
     for iter_loop, config in enumerate(loop):
         if iter_loop < start:
             continue
+        if hasattr(loop, "set_description"):
+            for c in ["name", "model"]:
+                if c not in config:
+                    continue
+                loop.set_description(f"[{config[c]}]")
+                break
         cmd = _cmd_line(script_name, **config)
         begin = time.perf_counter()
 
