@@ -1,3 +1,4 @@
+import datetime
 import glob
 import os
 import pprint
@@ -74,7 +75,9 @@ def enumerate_csv_files(
                 line = f.readline()
                 if "~help" in line or (",CMD" not in line and ",DATE" not in line):
                     continue
-                yield (os.path.split(filename)[-1], os.stat(filename).st_mtime, filename, "")
+                dt = datetime.datetime.fromtimestamp(os.stat(filename).st_mtime)
+                du = dt.strftime("%Y-%m-%d %H:%M:%S")
+                yield (os.path.split(filename)[-1], du, filename, "")
             continue
 
         if ext == ".zip":
