@@ -1,6 +1,7 @@
 import pprint
 import time
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+from ._doc_ import TorchOpOverload
 
 
 class ExportOptions:
@@ -48,7 +49,7 @@ class ExportOptions:
         fallback: bool = False,
         jit: bool = False,
         decomposition_table: Optional[
-            Union[str, Dict["torch._ops.OpOverload", Callable[..., Any]]]  # noqa: F821
+            Union[str, Dict[TorchOpOverload, Callable[..., Any]]]  # noqa: F821
         ] = None,
         strategy: Optional[str] = None,
         dynamo: bool = False,
@@ -99,7 +100,7 @@ class ExportOptions:
 
     def get_decomposition_table(
         self,
-    ) -> Dict["torch._ops.OpOverload", Callable[..., Any]]:  # noqa: F821
+    ) -> Dict[TorchOpOverload, Callable[..., Any]]:  # noqa: F821
         "Returns the decompisitions table."
         if self.decomposition_table is None:
             return None

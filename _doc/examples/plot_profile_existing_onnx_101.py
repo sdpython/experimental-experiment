@@ -1,4 +1,6 @@
 """
+.. _l-plot-profile-existing-onnx-101:
+
 101: Profile an existing model with onnxruntime
 ===============================================
 

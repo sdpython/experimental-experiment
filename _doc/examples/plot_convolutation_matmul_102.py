@@ -1,4 +1,6 @@
 """
+.. _l-plot-convolution-matmul-102:
+
 ==========================================
 102: Convolution and Matrix Multiplication
 ==========================================
