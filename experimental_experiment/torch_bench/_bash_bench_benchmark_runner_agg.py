@@ -196,6 +196,7 @@ def merge_benchmark_reports(
         "correction",
         "error",
     ),
+    timestamp_column: str = "timestamp",
     excel_output: Optional[str] = None,
     exc: bool = True,
     filter_in: Optional[str] = None,
@@ -212,6 +213,7 @@ def merge_benchmark_reports(
     slow_script: Optional[float] = None,
     fast_script: Optional[float] = None,
     exclude: Optional[List[int]] = None,
+    keep_more_recent: bool = False,
 ) -> Dict[str, pandas.DataFrame]:
     """
     Merges multiple files produced by bash_benchmark...
@@ -229,6 +231,7 @@ def merge_benchmark_reports(
     :param report_on: report on those metrics, ``<prefix>*`` means all
         columns starting with this prefix
     :param formulas: add computed metrics
+    :param timestamp_column: a day, used to tell the user this was run on this day
     :param excel_output: output the computed dataframe into a excel document
     :param exc: raise exception by default
     :param filter_in: filter in some data to make the report smaller (see below)
@@ -247,6 +250,7 @@ def merge_benchmark_reports(
     :param fast_script: produce a document for the fast models
         per exporter compare to torch_script
     :param exclude: exclude a list of files in the list
+    :param keep_more_recent: in case of duplicates, keep the most recent value
     :return: dictionary of dataframes
 
     Every key with a unique value is removed.
@@ -286,6 +290,7 @@ def merge_benchmark_reports(
             model=model,
             keys=keys,
             column_keys=column_keys,
+            timestamp_column=timestamp_column,
             report_on=report_on,
             formulas=formulas,
             exc=exc,
@@ -505,11 +510,39 @@ def merge_benchmark_reports(
     assert new_keys, f"new_keys is empty, column_keys={column_keys}"
 
     # remove duplicated rows
+    full_index = [
+        s
+        for s in df.columns
+        if s in {*column_keys, *keys, *model, "date", "date_start", timestamp_column}
+    ]
     if verbose:
-        print("[merge_benchmark_reports] remove duplicated rows")
-    full_index = [s for s in df.columns if s in {*column_keys, *keys, *model}]
+        print(f"[merge_benchmark_reports] remove duplicated rows, starts with {df.shape}")
+        print(f"[merge_benchmark_reports] index is {full_index}")
     dupli = ~df.duplicated(full_index, keep="last")
     df = df[dupli].copy()
+    if verbose:
+        print("[merge_benchmark_reports] continue with {df.shape}")
+
+    if keep_more_recent:
+        unique = [*model, *new_keys]
+        dates = [c for c in df.columns if c in ["date", "date_start", timestamp_column]]
+        if verbose:
+            # Keeps the most recent result.
+            print(
+                f"[merge_benchmark_reports] keep the most recent, "
+                f"starts with {df.shape}, with columns={unique} "
+                f"and dates={dates}"
+            )
+        g = df[[*unique, *dates]].copy()
+        for c in g.columns:
+            if g[c].dtype in (str, object):
+                g[c] = g[c].fillna("")
+        dfg = g.groupby(unique, as_index=False).max()
+        df = pandas.merge(df, dfg, on=[*unique, *dates], how="inner")
+        if verbose:
+            # Keeps the most recent result.
+            print(f"[merge_benchmark_reports] continue with {df.shape}")
+
     if verbose:
         print(f"[merge_benchmark_reports] done, shape={df.shape}")
         if output_clean_raw_data:

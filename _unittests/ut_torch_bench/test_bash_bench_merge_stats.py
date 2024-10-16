@@ -343,6 +343,30 @@ class TestBashBenchMergeStats(ExtTestCase):
         for df in dfs:
             open_dataframe(df)
 
+    @ignore_warnings((FutureWarning,))
+    def test_merge_stats_duplicates_keep_more_recent(self):
+        data = [
+            os.path.join(os.path.dirname(__file__), "data", "data_2024.csv"),
+            os.path.join(os.path.dirname(__file__), "data", "data_2024_2.csv"),
+        ]
+        sig = inspect.signature(merge_benchmark_reports)
+        keys = None
+        for p in sig.parameters:
+            if p == "keys":
+                keys = sig.parameters[p].default
+        self.assertNotEmpty(keys)
+        dfs = merge_benchmark_reports(
+            data,
+            excel_output="test_merge_stats_duplicates_keep_more_recent.xlsx",
+            export_simple="test_merge_stats_duplicates_keep_more_recent.csv",
+            keys=tuple(c for c in keys if c not in {"version_python"}),
+            keep_more_recent=True,
+        )
+        self.assertNotEmpty(dfs)
+        time = dfs["time"]
+        avg = time[("ITER", "custom", "default")].mean()
+        self.assertEqual(avg, 152.34884692227206)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

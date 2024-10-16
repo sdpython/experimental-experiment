@@ -107,6 +107,12 @@ def main(args=None):
         help="List of files involved in the aggregation",
     )
     parser.add_argument(
+        "--recent",
+        default=False,
+        action=BooleanOptionalAction,
+        help="If the same experiment was run twice, keeps only the latest one",
+    )
+    parser.add_argument(
         "--exclude",
         default="",
         help="excludes files from the aggregation given by their number "
@@ -198,6 +204,7 @@ def main(args=None):
         exclude=(
             [int(i) for i in res.exclude.strip().split(",")] if res.exclude.strip() else None
         ),
+        keep_more_recent=res.recent,
         **kwargs,
     )
 
