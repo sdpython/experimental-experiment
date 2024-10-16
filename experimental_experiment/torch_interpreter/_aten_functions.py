@@ -4171,7 +4171,7 @@ def aten__native_batch_norm(
     else:
         assert isinstance(
             batch_out, str
-        ), f"Unexpected output for batch nortmalisation{g.get_debug_msg()}"
+        ), f"Unexpected output for batch normalisation{g.get_debug_msg()}"
         norm = batch_out
 
     if empty_mean_std:

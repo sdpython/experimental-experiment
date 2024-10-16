@@ -146,7 +146,7 @@ class GraphBuilder(_GraphBuilderRuntime):
 
     You can setup environment variable ``ONNXSTOP``, ``ONNXSTOPSHAPE``, ``ONNXSTOPTYPE``
     to raise an exception when the type or shape
-    of a variable is set. Example: ``ONNXSTOP=attn_output python ...
+    of a variable is set. Example: ``ONNXSTOP=attn_output python ...``
     """
 
     class WrapSym:

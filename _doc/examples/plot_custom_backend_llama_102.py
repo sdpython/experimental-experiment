@@ -1,4 +1,6 @@
 """
+.. _l-plot-custom-backend-llama-102:
+
 ========================================
 102: Fuse kernels in a small Llama Model
 ========================================
