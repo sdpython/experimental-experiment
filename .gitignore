@@ -5,6 +5,7 @@
 *.whl
 *.xlsx
 *.onnx
+*.onnx.data
 *.png
 *.csv
 *.nsys-rep

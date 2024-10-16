@@ -290,6 +290,8 @@ def _get_input_type(
         return TensorProto.INT64 if python_default else None
     if isinstance(x, float):
         return TensorProto.FLOAT if python_default else None
+    if isinstance(x, complex):
+        return TensorProto.COMPLEX64 if python_default else None
     if isinstance(x, str):
         return g.get_type(x)
     if isinstance(x, np.ndarray):
@@ -302,7 +304,9 @@ def _get_input_type(
 
 def _get_compute_type(dtypes: Set[int]) -> int:
     order = [
+        TensorProto.COMPLEX128,
         TensorProto.DOUBLE,
+        TensorProto.COMPLEX64,
         TensorProto.FLOAT,
         TensorProto.FLOAT16,
         TensorProto.INT64,
@@ -337,7 +341,7 @@ def _cast_inputs(
         else:
             g.set_rank(res, g.get_rank(a))
         return res
-    if isinstance(a, (int, float)):
+    if isinstance(a, (int, float, complex)):
         if a is True or a is False:
             a = np.array(a, dtype=np.bool_)
         else:
