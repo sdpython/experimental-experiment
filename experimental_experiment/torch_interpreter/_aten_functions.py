@@ -2200,6 +2200,14 @@ def aten_flatten(
             )
             resh = g.op.Concat(take, np.array([-1], dtype=np.int64), axis=0, name=name)
             return g.op.Reshape(x, resh, outputs=outputs, name=name)
+        if end_dim == -1:
+            shape = g.op.Shape(x, name=name)
+            take = g.op.GatherElements(
+                shape, np.arange(start_dim).astype(np.int64), axis=0, name=name
+            )
+            resh = g.op.Concat(take, np.array([-1], dtype=np.int64), axis=0, name=name)
+            return g.op.Reshape(x, resh, outputs=outputs, name=name)
+
         # x='_onx_tile03', start_dim=3, end_dim=-1 not supported, GPTJForCausalLM
         raise NotImplementedError(
             f"x={x!r}, start_dim={start_dim}, end_dim={end_dim} "

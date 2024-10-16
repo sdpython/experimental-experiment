@@ -1412,10 +1412,18 @@ class TestOperatorsCort(ExtTestCase):
             onnx_export=inspect.currentframe().f_code.co_name,
         )
 
-    def test_flatten2D(self):
+    def test_flatten2D_1(self):
         x = torch.randn(1, 2, 3, 4, requires_grad=True)
         self.assertONNX(
             lambda x: torch.flatten(x, 1),
+            x,
+            onnx_export=inspect.currentframe().f_code.co_name,
+        )
+
+    def test_flatten2D_2(self):
+        x = torch.randn(1, 2, 3, 4, requires_grad=True)
+        self.assertONNX(
+            lambda x: torch.flatten(x, 2),
             x,
             onnx_export=inspect.currentframe().f_code.co_name,
         )
