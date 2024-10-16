@@ -85,8 +85,16 @@ class BenchmarkRunner:
         self.use_eval_mode = use_eval_mode
         self.enable_activation_checkpointing = enable_activation_checkpointing
         if isinstance(dtype, str):
-            self.dtype = getattr(torch, dtype.replace("autocast_", "")) if dtype else None
-            self.autocast = dtype.startswith("autocast_")
+            if dtype == "default":
+                dtype = ""
+                self.dtype = None
+                self.autocast = False
+            else:
+                assert hasattr(torch, dtype), f"Unexpected dtype={dtype!r}"
+                self.dtype = (
+                    getattr(torch, dtype.replace("autocast_", "")) if dtype else None
+                )
+                self.autocast = dtype.startswith("autocast_")
         else:
             self.dtype = dtype
             self.autocast = False
