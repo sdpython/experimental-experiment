@@ -56,6 +56,7 @@ def match_input_parameters(
         print(expected)
 
         # converts the model, fill inputs with the weights
+        names = [i.name for i in onx.graph.input]
         pfeeds = match_input_parameters(not_fake_model, names, (x,))
         nfeeds = {k:v.detach().numpy() for k,v in pfeeds.items()}
         ref = ExtendedReferenceEvaluator(onx)
