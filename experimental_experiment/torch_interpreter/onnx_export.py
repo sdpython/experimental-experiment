@@ -12,6 +12,94 @@ from ..xbuilder.graph_builder import GraphBuilder, OptimizationOptions
 from .export_options import ExportOptions
 
 
+def match_input_parameters(
+    model: Any, names: List[str], args: Optional[Tuple[Any, ...]] = None
+) -> Dict[str, Any]:
+    """
+    Maps the given names with the parameter names in the model.
+
+    :param model: model
+    :param names: names to retrieve
+    :param args: available inputs
+    :return: dictionary with values
+
+    Example:
+
+    .. runpython::
+        :showcode:
+
+        import torch
+        from torch._subclasses.fake_tensor import FakeTensorMode
+        from experimental_experiment.reference import ExtendedReferenceEvaluator
+        from experimental_experiment.torch_interpreter import to_onnx, match_input_parameters
+
+        class Neuron(torch.nn.Module):
+            def __init__(self, n_dims: int, n_targets: int):
+                super(Neuron, self).__init__()
+                self.linear = torch.nn.Linear(n_dims, n_targets)
+
+            def forward(self, x):
+                return torch.relu(self.linear(x))
+
+        fake_mode = FakeTensorMode()
+        converter = fake_mode.fake_tensor_converter
+
+        fake_x = converter.from_real_tensor(fake_mode, torch.rand(2, 5))
+        with fake_mode:
+            model = Neuron(5, 3)
+            onx = to_onnx(model, (fake_x,))
+
+        # expected values with a different model
+        not_fake_model = Neuron(5, 3)
+        x = torch.rand(2, 5)
+        expected = not_fake_model(x)
+        print(expected)
+
+        # converts the model, fill inputs with the weights
+        names = [i.name for i in onx.graph.input]
+        pfeeds = match_input_parameters(not_fake_model, names, (x,))
+        nfeeds = {k:v.detach().numpy() for k,v in pfeeds.items()}
+        ref = ExtendedReferenceEvaluator(onx)
+        got = ref.run(None, nfeeds)
+        print(got)
+    """
+
+    def cl(s):
+        s = s.replace(".", "_")
+        return s
+
+    weights = dict(model.named_parameters())
+    buffers = dict(model.named_buffers())
+    constants = model.state_dict()
+    mapping = {}
+    for k in weights:
+        mapping[f"p_{cl(k)}"] = (k, weights[k], 0)
+    for k in buffers:
+        mapping[f"L__self__{cl(k)}"] = (k, buffers[k], 1)
+    for k in constants:
+        mapping[k] = (k, constants[k], 2)
+    feeds = {}
+    pos = 0
+    for name in names:
+        if name in mapping:
+            t = mapping[name]
+            feeds[name] = t[1]
+        elif args is not None:
+            # We assume it is an input.
+            assert pos < len(args), (
+                f"Unable to find argument at position {pos} "
+                f"in args (len(args)={len(args)}"
+            )
+            feeds[name] = args[pos]
+            pos += 1
+    assert len(names) == 0 or len(feeds) > 0, (
+        f"Unable to retrieve any name from {names!r}, "
+        f"len(args)={len(args) if args else 0}, "
+        f"mapping={sorted(mapping)}"
+    )
+    return feeds
+
+
 def _retrieve(
     name: str,
     value: Any,

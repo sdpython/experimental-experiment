@@ -158,7 +158,7 @@ def main(args=None):
                 assert len(filename) == 4, f"Unexpected value {filename!r}"
                 print(
                     f"{i} - {prefix}{filename[0]} - {filename[1]} - "
-                    f"{os.stat(filename[0]).st_size} bytes (fullname={filename[2]})"
+                    f"{os.stat(filename[2]).st_size} bytes (fullname={filename[2]})"
                 )
             elif isinstance(filename, tuple):
                 assert len(filename) == 4, f"Unexpected value {filename!r}"

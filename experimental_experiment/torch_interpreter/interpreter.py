@@ -210,8 +210,13 @@ class DynamoInterpreter:
         shape: DYNAMIC_SHAPE,
         is_dimension: bool,
         users: Iterable[str],
+        fake_tensor: bool = False,
     ) -> str:
-        if self.example_inputs_ is not None and not self.builder.was_inputs_renamed:
+        if (
+            not fake_tensor
+            and self.example_inputs_ is not None
+            and not self.builder.was_inputs_renamed
+        ):
             assert len(self.builder.input_names) < len(self.flat_example_inputs_), (
                 f"Too many inputs already ({len(self.builder.input_names)}), "
                 f"self.current_input_={self.current_input_}, "
@@ -328,6 +333,9 @@ class DynamoInterpreter:
                         shape=val.shape,
                         is_dimension=False,
                         users=node.users,
+                        fake_tensor=isinstance(
+                            val, self.torch._subclasses.fake_tensor.FakeTensor
+                        ),
                     )
             if value is None:
                 if "nn_module_stack" not in node.meta:
@@ -342,12 +350,14 @@ class DynamoInterpreter:
                         )
                 else:
                     value = self.retriever(node.target, val, debug={"node": node})
-            if value is None:
+            if value is None or isinstance(
+                value, self.torch._subclasses.fake_tensor.FakeTensor
+            ):
                 if ".FakeTensor" in str(type(val)):
                     dtype = val.dtype
                     shape = val.shape
                     return self._make_tensor_input(
-                        node.name, dtype, shape, False, users=node.users
+                        node.name, dtype, shape, False, users=node.users, fake_tensor=True
                     )
                 raise RuntimeError(
                     f"value is None, unable to retrieve target {node.target!r}"

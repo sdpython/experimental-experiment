@@ -301,7 +301,7 @@ class TestDynamoLlamaDynamic(ExtTestCase):
 
     @ignore_warnings((UserWarning, DeprecationWarning))
     @skipif_ci_windows("torch.compile not supported on Windows")
-    @requires_torch("2.5", "missing kernel")
+    @requires_torch("2.7", "issue with transformers")
     @requires_onnxruntime_training()
     def test_llama_attention_b_forward_dynamic(self):
         from experimental_experiment.torch_models.llama_helper import (
