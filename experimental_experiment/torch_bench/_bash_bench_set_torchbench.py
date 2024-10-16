@@ -765,7 +765,7 @@ class TorchBenchRunner(BenchmarkRunner):
         if self.verbose:
             print(
                 f"[{self.__class__.__name__}.load_model] setup {model_name!r} "
-                f"with batch_size={batch_size}"
+                f"with batch_size={batch_size} set TORCHBENCHSETUP=0 to skip it"
             )
 
         if os.environ.get("TORCHBENCHSETUP", "1") in ("1", "true", "True", 1, True):

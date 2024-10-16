@@ -2048,9 +2048,16 @@ def _process_formulas(
             err_cols = []
             for c in df.columns:
                 if c.startswith("ERR_") and df[c].dtype in (str, object):
+                    setup = df[c].str.contains(
+                        "Cannot install -r requirements.txt", regex=False
+                    )
+                    if True in set(setup):
+                        add[f"ERR_SETUP_{c[4:]}"] = setup.fillna(0.0).astype(int)
+                        report_on.append(f"ERR_SETUP_{c[4:]}")
                     oom = df[c].str.contains("CUDA out of memory", regex=False)
                     if True in set(oom):
                         add[f"ERR_OOM_{c[4:]}"] = oom.fillna(0.0).astype(int)
+                        report_on.append(f"ERR_OOM_{c[4:]}")
                     oomort = df[c].str.contains(
                         "onnxruntime::BFCArena::AllocateRawInternal(size_t bool "
                         "onnxruntime::Stream* bool onnxruntime::WaitNotificationFn) "
@@ -2059,9 +2066,11 @@ def _process_formulas(
                     )
                     if True in set(oomort):
                         add[f"ERR_OOMORT_{c[4:]}"] = oomort.fillna(0.0).astype(int)
+                        report_on.append(f"ERR_OOMORT_{c[4:]}")
                     acc = df[c].str.contains("Cannot access gated repo for url", regex=False)
                     if True in set(acc):
                         add[f"ERR_HTTP_{c[4:]}"] = acc.fillna(0.0).astype(int)
+                        report_on.append(f"ERR_HTTP_{c[4:]}")
                     mem = df[c].str.contains(
                         "Memcpy nodes are added to the graph main_graph "
                         "for CUDAExecutionProvider",
@@ -2069,6 +2078,7 @@ def _process_formulas(
                     )
                     if True in set(mem):
                         add[f"ERR_ORTMEMCPY_{c[4:]}"] = mem.fillna(0.0).astype(int)
+                        report_on.append(f"ERR_ORTMEMCPY_{c[4:]}")
                     err_cols.append(c)
             if err_cols:
                 set_cols = set(err_cols)

@@ -811,7 +811,9 @@ def aten_cat(
 ) -> T:
     "concat"
     assert len(tensors) > 0, f"No tensor to concat{g.get_debug_msg()}"
-    assert len(tensors) > 1, f"Not enough tensors to concat{g.get_debug_msg()}"
+    if len(tensors) == 1:
+        # Nothing to concatenate.
+        return g.op.Identity(tensors[0], name=name, outputs=outputs)
     res = g.op.Concat(*tensors, axis=dim, outputs=outputs, name="cat")
     if not sts:
         dt0 = g.get_type(tensors[0])
@@ -5504,6 +5506,21 @@ def aten_select_scatter(
     )
     if not sts:
         g.set_type(res, g.get_type(x))
+    return res
+
+
+def aten_selu(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    inplace: bool = False,
+) -> T:
+    "relu"
+    assert not inplace, f"inplace computation is not allowed with onnx{g.get_debug_msg()}"
+    res = g.op.Selu(x, outputs=outputs)
+    if not sts:
+        set_type_shape_unary_op(g, outputs[0], x)
     return res
 
 
