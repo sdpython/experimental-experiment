@@ -1222,12 +1222,12 @@ def _convolution(
 
     args = [x, weight]
 
-    if bias is not None and g.has_rank(bias) and g.get_rank(bias) == 1:
+    if bias is not None and bias != "" and g.has_rank(bias) and g.get_rank(bias) == 1:
         # ONNX only supports 1D bias
         args.append(bias)
-        add_bias = False
-    else:
         add_bias = True
+    else:
+        add_bias = False
 
     kwargs = {
         "kernel_shape": list(weight_size[2:]),
@@ -1254,8 +1254,10 @@ def _convolution(
         n = g.op.ConvTranspose(*args, name=name, **kwargs)
     else:
         n = g.op.Conv(*args, name=name, **kwargs)
+    g.set_type(n, g.get_type(x))
 
     if add_bias:
+        print("***********", n, bias, add_bias)
         return g.op.Add(n, bias, outputs=outputs, name=name)
     return g.op.Identity(n, outputs=outputs, name=name)
 
