@@ -2103,25 +2103,32 @@ def _process_formulas(
             # guess the export time, for some exporter it is the first iteration.
             def unbiased_export(row):
                 exporter = row["exporter"]
-                export_success = row["export_success"]
+                time_export_success = row["time_export_success"]
                 time_warmup_first_iteration = row["time_warmup_first_iteration"]
                 if (
-                    export_success is None
-                    or np.isnan(export_success)
+                    time_export_success is None
+                    or np.isnan(time_export_success)
                     or time_warmup_first_iteration is None
                     or np.isnan(time_warmup_first_iteration)
                 ):
                     return np.nan
-                if exporter in {"inductor", "eager", "export", "compile", "dort", "cort"}:
-                    return export_success + time_warmup_first_iteration
-                return export_success
+                if exporter in {
+                    "inductor",
+                    "eager",
+                    "export",
+                    "compile",
+                    "dort",
+                    "cort",
+                }:
+                    return time_export_success + time_warmup_first_iteration
+                return time_export_success
 
             if (
-                "exporter" in df.columns
-                and "export_success" in df.columns
-                and "time_warmup_first_iteration" in df.columns
+                "exporter" in set_columns
+                and "time_export_success" in set_columns
+                and "time_warmup_first_iteration" in set_columns
             ):
-                df["time_export_unbiased"] = df.applymap(unbiased_export)
+                df["time_export_unbiased"] = df.apply(unbiased_export, axis=1)
                 report_on.append("time_export_unbiased")
             continue
 
