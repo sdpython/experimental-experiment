@@ -534,7 +534,12 @@ class WrapInferenceSessionForTorch:
             bind.bind_input(
                 name,
                 self.DEVICES[d],
-                int(self.TORCH_DTYPE_TO_ONNX_DTYPE[tensor.dtype]),
+                self.TORCH_DTYPE_TO_NUMPY_DTYPE.get(
+                    # it works on CI
+                    tensor.dtype,
+                    # it does not seem to write for all releases
+                    self.TORCH_DTYPE_TO_ONNX_DTYPE[tensor.dtype],
+                ),
                 tensor.shape,
                 tensor.data_ptr(),
             )
