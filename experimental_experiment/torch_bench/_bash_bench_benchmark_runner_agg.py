@@ -185,6 +185,7 @@ def merge_benchmark_reports(
         "config_*",
     ),
     formulas=(
+        "export",
         "memory_peak",
         "buckets",
         "status",
@@ -1269,7 +1270,7 @@ def _build_aggregated_document(
             for c in [
                 "time_latency",
                 "time_latency_eager",
-                "time_export_success",
+                "time_export_unbiased",
                 "discrepancies_abs",
             ]
             if c in df.columns

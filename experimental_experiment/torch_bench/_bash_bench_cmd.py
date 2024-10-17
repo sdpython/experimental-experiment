@@ -147,7 +147,7 @@ def bash_bench_main(script_name: str, doc: str, args: Optional[List[str]] = None
             "model_name": _name(config["model"], names),
             "ERR_crash": "INFERENCE failed",
         },
-        "time_export_success": lambda missing, config: {
+        "time_export_unbiased": lambda missing, config: {
             "model_name": _name(config["model"], names),
             "ERR_crash": "EXPORT failed",
         },

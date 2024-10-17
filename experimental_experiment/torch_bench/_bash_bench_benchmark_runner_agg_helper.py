@@ -86,7 +86,7 @@ def _SELECTED_FEATURES():
         dict(
             cat="time",
             agg="COUNT",
-            stat="export_success",
+            stat="export_unbiased",
             new_name="export number",
             unit="N",
             help="Number of models successfully converted into ONNX. "
@@ -129,7 +129,7 @@ def _SELECTED_FEATURES():
         dict(
             cat="time",
             agg="SUM",
-            stat="export_success",
+            stat="export_unbiased",
             new_name="total export time",
             unit="s",
             help="Total export time when the export succeeds. "
@@ -190,7 +190,7 @@ def _SELECTED_FEATURES():
         dict(
             cat="time",
             agg="MEAN",
-            stat="export_success",
+            stat="export_unbiased",
             new_name="average export time",
             unit="s",
             help="Average export time when the export succeeds. "
@@ -1759,8 +1759,8 @@ def _process_formulas(
             continue
 
         if expr == "status":
-            if "time_export_success" in set_columns:
-                df["status_convert"] = (~df["time_export_success"].isna()).astype(int)
+            if "time_export_unbiased" in set_columns:
+                df["status_convert"] = (~df["time_export_unbiased"].isna()).astype(int)
                 report_on.append("status_convert")
             if "discrepancies_dynamic_abs" in set_columns:
                 df["status_dynamic"] = (
@@ -1797,15 +1797,15 @@ def _process_formulas(
         if expr == "control_flow":
             if (
                 "exporter" in set_columns
-                and "time_export_success" in set_columns
+                and "time_export_unbiased" in set_columns
                 and ({"export", "compile"} & set(df.exporter))
                 and len(set(df.exporter)) > 1
             ):
                 expo = "export" if "export" in set(df.exporter) else "compile"
-                keep = [*model, *new_keys, "time_export_success"]
+                keep = [*model, *new_keys, "time_export_unbiased"]
                 gr = df[df.exporter == expo][keep].copy()
-                gr["status_control_flow"] = gr["time_export_success"].isna().astype(int)
-                gr = gr.drop("time_export_success", axis=1)
+                gr["status_control_flow"] = gr["time_export_unbiased"].isna().astype(int)
+                gr = gr.drop("time_export_unbiased", axis=1)
                 if "opt_patterns" in gr.columns and len(set(gr.opt_patterns)) == 1:
                     on = [
                         k
@@ -2097,6 +2097,32 @@ def _process_formulas(
             for k, v in add.items():
                 df[k] = v
                 report_on.append(k)
+            continue
+
+        if expr == "export":
+            # guess the export time, for some exporter it is the first iteration.
+            def unbiased_export(row):
+                exporter = row["exporter"]
+                export_success = row["export_success"]
+                time_warmup_first_iteration = row["time_warmup_first_iteration"]
+                if (
+                    export_success is None
+                    or np.isnan(export_success)
+                    or time_warmup_first_iteration is None
+                    or np.isnan(time_warmup_first_iteration)
+                ):
+                    return np.nan
+                if exporter in {"inductor", "eager", "export", "compile", "dort", "cort"}:
+                    return export_success + time_warmup_first_iteration
+                return export_success
+
+            if (
+                "exporter" in df.columns
+                and "export_success" in df.columns
+                and "time_warmup_first_iteration" in df.columns
+            ):
+                df["time_export_unbiased"] = df.applymap(unbiased_export)
+                report_on.append("time_export_unbiased")
             continue
 
         raise AssertionError(f"Unknown formula {expr!r}")
