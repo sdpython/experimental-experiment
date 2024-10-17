@@ -282,7 +282,7 @@ def merge_benchmark_reports(
 
     The format is the following:
 
-    * a value or a set of values separated by ``/``
+    * a value or a set of values separated by ``;``
     """
     if baseline:
         assert not exclude, f"exclude={exclude} not compatiable with baseline={baseline!r}"

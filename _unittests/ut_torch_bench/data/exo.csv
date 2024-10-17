@@ -1,0 +1,653 @@
+#order,METRIC,exporter,suite,unit,value,~help,dtype,dynamic,DATE
+0,date,custom,HuggingFace,date,2024-10-17,Most recent date involved,default,0.0,2024-10-17
+1,benchmark duration,custom,HuggingFace,s,146.37248720699426,Total duration of the benchmark,default,0.0,2024-10-17
+2,number of models,custom,HuggingFace,N,11.0,Number of models evaluated in this document.,default,0.0,2024-10-17
+3,number of models eager mode,custom,HuggingFace,N,11.0,Number of models running with eager mode,default,0.0,2024-10-17
+5,export number,custom,HuggingFace,N,11.0,Number of models successfully converted into ONNX. The ONNX model may not be run through onnxruntime or with significant discrepancies.,default,0.0,2024-10-17
+6,number of running models,custom,HuggingFace,N,11.0,Number of models converted and running with onnxruntime. The outputs may be right or wrong. Unit test ensures every aten functions is correctly converted but the combination may produce outputs with higher discrepancies than expected.,default,0.0,2024-10-17
+7,accuracy number,custom,HuggingFace,N,11.0,Number of models successfully converted into ONNX. It may be slow but the discrepancies are < 0.1.,default,0.0,2024-10-17
+8,pass number,custom,HuggingFace,N,3.0,"Number of models successfully converted into ONNX, with a maximum discrepancy < 0.1 and a speedup > 0.98.",default,0.0,2024-10-17
+9,total export time,custom,HuggingFace,s,12.445785648997116,Total export time when the export succeeds. The model may not run through onnxruntime and the model may produce higher discrepancies than expected (lower is better).,default,0.0,2024-10-17
+10,total latency time exported model,custom,HuggingFace,x,0.0029800413052721,"Total latency time with the exported model (onnxruntime, inductor, ...)",default,0.0,2024-10-17
+11,total latency time eager / exported model,custom,HuggingFace,x,0.002013591104332107,"Total latency of eager mode knowing when the exported model (onnxruntime, inductor, ...) runs",default,0.0,2024-10-17
+13,number of models equal or faster than eager,custom,HuggingFace,N,3.0,Number of models as fast or faster than torch eager mode.,default,0.0,2024-10-17
+15,average export time,custom,HuggingFace,s,1.131435058999738,Average export time when the export succeeds. The model may not run through onnxruntime and the model may produce higher discrepancies than expected (lower is better).,default,0.0,2024-10-17
+16,average speedup (geo),custom,HuggingFace,x,0.6511438222568782,Geometric mean of all speedup for all model converted and runnning.,default,0.0,2024-10-17
+17,discrepancies < 0.1,custom,HuggingFace,N,11.0,Number of models for which the maximum discrepancies is below 0.1 for all outputs.,default,0.0,2024-10-17
+18,discrepancies < 0.01,custom,HuggingFace,N,11.0,Number of models for which the maximum discrepancies is below 0.01 for all outputs.,default,0.0,2024-10-17
+19,average GPU delta peak (export) (torch),custom,HuggingFace,bytes,1861.8181818181818,Average GPU peak of new allocated memory while converting the model (torch metric),default,0.0,2024-10-17
+22,speedup in <-20%,custom,HuggingFace,N,4.0,Number of models whose speedup against eager falls into this interval,default,0.0,2024-10-17
+23,"speedup in [-20%,-10%[",custom,HuggingFace,N,3.0,Number of models whose speedup against eager falls into this interval,default,0.0,2024-10-17
+24,"speedup in [-10%,-5%[",custom,HuggingFace,N,1.0,Number of models whose speedup against eager falls into this interval,default,0.0,2024-10-17
+25,"speedup in [-5%,-2%[",custom,HuggingFace,N,0.0,Number of models whose speedup against eager falls into this interval,default,0.0,2024-10-17
+26,"speedup in [-2%,0%[",custom,HuggingFace,N,0.0,Number of models whose speedup against eager falls into this interval,default,0.0,2024-10-17
+27,"speedup in [0%,2%[",custom,HuggingFace,N,1.0,Number of models whose speedup against eager falls into this interval,default,0.0,2024-10-17
+28,"speedup in [2%,5%[",custom,HuggingFace,N,0.0,Number of models whose speedup against eager falls into this interval,default,0.0,2024-10-17
+29,"speedup in [5%,10%[",custom,HuggingFace,N,0.0,Number of models whose speedup against eager falls into this interval,default,0.0,2024-10-17
+30,"speedup in [10%,20%[",custom,HuggingFace,N,0.0,Number of models whose speedup against eager falls into this interval,default,0.0,2024-10-17
+31,speedup in >=20%,custom,HuggingFace,N,2.0,Number of models whose speedup against eager falls into this interval,default,0.0,2024-10-17
+0,benchmark duration,custom,All,,,,,0.0,2024-10-17
+0,number of models,custom,All,,,,,0.0,2024-10-17
+0,number of models eager mode,custom,All,,,,,0.0,2024-10-17
+0,export number,custom,All,,,,,0.0,2024-10-17
+0,number of running models,custom,All,,,,,0.0,2024-10-17
+0,accuracy number,custom,All,,,,,0.0,2024-10-17
+0,pass number,custom,All,,,,,0.0,2024-10-17
+0,total export time,custom,All,,,,,0.0,2024-10-17
+0,speedup weighted by latency,custom,All,,,,,0.0,2024-10-17
+0,total latency time exported model,custom,All,,,,,0.0,2024-10-17
+0,total latency time eager / exported model,custom,All,,,,,0.0,2024-10-17
+0,number of models equal or faster than eager,custom,All,,,,,0.0,2024-10-17
+0,discrepancies < 0.1,custom,All,,,,,0.0,2024-10-17
+0,discrepancies < 0.01,custom,All,,,,,0.0,2024-10-17
+0,average GPU delta peak (export) (torch),custom,All,,,,,0.0,2024-10-17
+0,speedup in <-20%,custom,All,,,,,0.0,2024-10-17
+0,"speedup in [-20%,-10%[",custom,All,,,,,0.0,2024-10-17
+0,"speedup in [-10%,-5%[",custom,All,,,,,0.0,2024-10-17
+0,"speedup in [-5%,-2%[",custom,All,,,,,0.0,2024-10-17
+0,"speedup in [-2%,0%[",custom,All,,,,,0.0,2024-10-17
+0,"speedup in [0%,2%[",custom,All,,,,,0.0,2024-10-17
+0,"speedup in [2%,5%[",custom,All,,,,,0.0,2024-10-17
+0,"speedup in [5%,10%[",custom,All,,,,,0.0,2024-10-17
+0,"speedup in [10%,20%[",custom,All,,,,,0.0,2024-10-17
+0,speedup in >=20%,custom,All,,,,,0.0,2024-10-17
+1,benchmark duration,custom,All,,146.37248720699426,,,0.0,2024-10-17
+1,number of models,custom,All,,,,,0.0,2024-10-17
+1,number of models eager mode,custom,All,,,,,0.0,2024-10-17
+1,export number,custom,All,,,,,0.0,2024-10-17
+1,number of running models,custom,All,,,,,0.0,2024-10-17
+1,accuracy number,custom,All,,,,,0.0,2024-10-17
+1,pass number,custom,All,,,,,0.0,2024-10-17
+1,total export time,custom,All,,,,,0.0,2024-10-17
+1,speedup weighted by latency,custom,All,,,,,0.0,2024-10-17
+1,total latency time exported model,custom,All,,,,,0.0,2024-10-17
+1,total latency time eager / exported model,custom,All,,,,,0.0,2024-10-17
+1,number of models equal or faster than eager,custom,All,,,,,0.0,2024-10-17
+1,discrepancies < 0.1,custom,All,,,,,0.0,2024-10-17
+1,discrepancies < 0.01,custom,All,,,,,0.0,2024-10-17
+1,average GPU delta peak (export) (torch),custom,All,,,,,0.0,2024-10-17
+1,speedup in <-20%,custom,All,,,,,0.0,2024-10-17
+1,"speedup in [-20%,-10%[",custom,All,,,,,0.0,2024-10-17
+1,"speedup in [-10%,-5%[",custom,All,,,,,0.0,2024-10-17
+1,"speedup in [-5%,-2%[",custom,All,,,,,0.0,2024-10-17
+1,"speedup in [-2%,0%[",custom,All,,,,,0.0,2024-10-17
+1,"speedup in [0%,2%[",custom,All,,,,,0.0,2024-10-17
+1,"speedup in [2%,5%[",custom,All,,,,,0.0,2024-10-17
+1,"speedup in [5%,10%[",custom,All,,,,,0.0,2024-10-17
+1,"speedup in [10%,20%[",custom,All,,,,,0.0,2024-10-17
+1,speedup in >=20%,custom,All,,,,,0.0,2024-10-17
+2,benchmark duration,custom,All,,,,,0.0,2024-10-17
+2,number of models,custom,All,,11.0,,,0.0,2024-10-17
+2,number of models eager mode,custom,All,,,,,0.0,2024-10-17
+2,export number,custom,All,,,,,0.0,2024-10-17
+2,number of running models,custom,All,,,,,0.0,2024-10-17
+2,accuracy number,custom,All,,,,,0.0,2024-10-17
+2,pass number,custom,All,,,,,0.0,2024-10-17
+2,total export time,custom,All,,,,,0.0,2024-10-17
+2,speedup weighted by latency,custom,All,,,,,0.0,2024-10-17
+2,total latency time exported model,custom,All,,,,,0.0,2024-10-17
+2,total latency time eager / exported model,custom,All,,,,,0.0,2024-10-17
+2,number of models equal or faster than eager,custom,All,,,,,0.0,2024-10-17
+2,discrepancies < 0.1,custom,All,,,,,0.0,2024-10-17
+2,discrepancies < 0.01,custom,All,,,,,0.0,2024-10-17
+2,average GPU delta peak (export) (torch),custom,All,,,,,0.0,2024-10-17
+2,speedup in <-20%,custom,All,,,,,0.0,2024-10-17
+2,"speedup in [-20%,-10%[",custom,All,,,,,0.0,2024-10-17
+2,"speedup in [-10%,-5%[",custom,All,,,,,0.0,2024-10-17
+2,"speedup in [-5%,-2%[",custom,All,,,,,0.0,2024-10-17
+2,"speedup in [-2%,0%[",custom,All,,,,,0.0,2024-10-17
+2,"speedup in [0%,2%[",custom,All,,,,,0.0,2024-10-17
+2,"speedup in [2%,5%[",custom,All,,,,,0.0,2024-10-17
+2,"speedup in [5%,10%[",custom,All,,,,,0.0,2024-10-17
+2,"speedup in [10%,20%[",custom,All,,,,,0.0,2024-10-17
+2,speedup in >=20%,custom,All,,,,,0.0,2024-10-17
+3,benchmark duration,custom,All,,,,,0.0,2024-10-17
+3,number of models,custom,All,,,,,0.0,2024-10-17
+3,number of models eager mode,custom,All,,11.0,,,0.0,2024-10-17
+3,export number,custom,All,,,,,0.0,2024-10-17
+3,number of running models,custom,All,,,,,0.0,2024-10-17
+3,accuracy number,custom,All,,,,,0.0,2024-10-17
+3,pass number,custom,All,,,,,0.0,2024-10-17
+3,total export time,custom,All,,,,,0.0,2024-10-17
+3,speedup weighted by latency,custom,All,,,,,0.0,2024-10-17
+3,total latency time exported model,custom,All,,,,,0.0,2024-10-17
+3,total latency time eager / exported model,custom,All,,,,,0.0,2024-10-17
+3,number of models equal or faster than eager,custom,All,,,,,0.0,2024-10-17
+3,discrepancies < 0.1,custom,All,,,,,0.0,2024-10-17
+3,discrepancies < 0.01,custom,All,,,,,0.0,2024-10-17
+3,average GPU delta peak (export) (torch),custom,All,,,,,0.0,2024-10-17
+3,speedup in <-20%,custom,All,,,,,0.0,2024-10-17
+3,"speedup in [-20%,-10%[",custom,All,,,,,0.0,2024-10-17
+3,"speedup in [-10%,-5%[",custom,All,,,,,0.0,2024-10-17
+3,"speedup in [-5%,-2%[",custom,All,,,,,0.0,2024-10-17
+3,"speedup in [-2%,0%[",custom,All,,,,,0.0,2024-10-17
+3,"speedup in [0%,2%[",custom,All,,,,,0.0,2024-10-17
+3,"speedup in [2%,5%[",custom,All,,,,,0.0,2024-10-17
+3,"speedup in [5%,10%[",custom,All,,,,,0.0,2024-10-17
+3,"speedup in [10%,20%[",custom,All,,,,,0.0,2024-10-17
+3,speedup in >=20%,custom,All,,,,,0.0,2024-10-17
+5,benchmark duration,custom,All,,,,,0.0,2024-10-17
+5,number of models,custom,All,,,,,0.0,2024-10-17
+5,number of models eager mode,custom,All,,,,,0.0,2024-10-17
+5,export number,custom,All,,11.0,,,0.0,2024-10-17
+5,number of running models,custom,All,,,,,0.0,2024-10-17
+5,accuracy number,custom,All,,,,,0.0,2024-10-17
+5,pass number,custom,All,,,,,0.0,2024-10-17
+5,total export time,custom,All,,,,,0.0,2024-10-17
+5,speedup weighted by latency,custom,All,,,,,0.0,2024-10-17
+5,total latency time exported model,custom,All,,,,,0.0,2024-10-17
+5,total latency time eager / exported model,custom,All,,,,,0.0,2024-10-17
+5,number of models equal or faster than eager,custom,All,,,,,0.0,2024-10-17
+5,discrepancies < 0.1,custom,All,,,,,0.0,2024-10-17
+5,discrepancies < 0.01,custom,All,,,,,0.0,2024-10-17
+5,average GPU delta peak (export) (torch),custom,All,,,,,0.0,2024-10-17
+5,speedup in <-20%,custom,All,,,,,0.0,2024-10-17
+5,"speedup in [-20%,-10%[",custom,All,,,,,0.0,2024-10-17
+5,"speedup in [-10%,-5%[",custom,All,,,,,0.0,2024-10-17
+5,"speedup in [-5%,-2%[",custom,All,,,,,0.0,2024-10-17
+5,"speedup in [-2%,0%[",custom,All,,,,,0.0,2024-10-17
+5,"speedup in [0%,2%[",custom,All,,,,,0.0,2024-10-17
+5,"speedup in [2%,5%[",custom,All,,,,,0.0,2024-10-17
+5,"speedup in [5%,10%[",custom,All,,,,,0.0,2024-10-17
+5,"speedup in [10%,20%[",custom,All,,,,,0.0,2024-10-17
+5,speedup in >=20%,custom,All,,,,,0.0,2024-10-17
+6,benchmark duration,custom,All,,,,,0.0,2024-10-17
+6,number of models,custom,All,,,,,0.0,2024-10-17
+6,number of models eager mode,custom,All,,,,,0.0,2024-10-17
+6,export number,custom,All,,,,,0.0,2024-10-17
+6,number of running models,custom,All,,11.0,,,0.0,2024-10-17
+6,accuracy number,custom,All,,,,,0.0,2024-10-17
+6,pass number,custom,All,,,,,0.0,2024-10-17
+6,total export time,custom,All,,,,,0.0,2024-10-17
+6,speedup weighted by latency,custom,All,,,,,0.0,2024-10-17
+6,total latency time exported model,custom,All,,,,,0.0,2024-10-17
+6,total latency time eager / exported model,custom,All,,,,,0.0,2024-10-17
+6,number of models equal or faster than eager,custom,All,,,,,0.0,2024-10-17
+6,discrepancies < 0.1,custom,All,,,,,0.0,2024-10-17
+6,discrepancies < 0.01,custom,All,,,,,0.0,2024-10-17
+6,average GPU delta peak (export) (torch),custom,All,,,,,0.0,2024-10-17
+6,speedup in <-20%,custom,All,,,,,0.0,2024-10-17
+6,"speedup in [-20%,-10%[",custom,All,,,,,0.0,2024-10-17
+6,"speedup in [-10%,-5%[",custom,All,,,,,0.0,2024-10-17
+6,"speedup in [-5%,-2%[",custom,All,,,,,0.0,2024-10-17
+6,"speedup in [-2%,0%[",custom,All,,,,,0.0,2024-10-17
+6,"speedup in [0%,2%[",custom,All,,,,,0.0,2024-10-17
+6,"speedup in [2%,5%[",custom,All,,,,,0.0,2024-10-17
+6,"speedup in [5%,10%[",custom,All,,,,,0.0,2024-10-17
+6,"speedup in [10%,20%[",custom,All,,,,,0.0,2024-10-17
+6,speedup in >=20%,custom,All,,,,,0.0,2024-10-17
+7,benchmark duration,custom,All,,,,,0.0,2024-10-17
+7,number of models,custom,All,,,,,0.0,2024-10-17
+7,number of models eager mode,custom,All,,,,,0.0,2024-10-17
+7,export number,custom,All,,,,,0.0,2024-10-17
+7,number of running models,custom,All,,,,,0.0,2024-10-17
+7,accuracy number,custom,All,,11.0,,,0.0,2024-10-17
+7,pass number,custom,All,,,,,0.0,2024-10-17
+7,total export time,custom,All,,,,,0.0,2024-10-17
+7,speedup weighted by latency,custom,All,,,,,0.0,2024-10-17
+7,total latency time exported model,custom,All,,,,,0.0,2024-10-17
+7,total latency time eager / exported model,custom,All,,,,,0.0,2024-10-17
+7,number of models equal or faster than eager,custom,All,,,,,0.0,2024-10-17
+7,discrepancies < 0.1,custom,All,,,,,0.0,2024-10-17
+7,discrepancies < 0.01,custom,All,,,,,0.0,2024-10-17
+7,average GPU delta peak (export) (torch),custom,All,,,,,0.0,2024-10-17
+7,speedup in <-20%,custom,All,,,,,0.0,2024-10-17
+7,"speedup in [-20%,-10%[",custom,All,,,,,0.0,2024-10-17
+7,"speedup in [-10%,-5%[",custom,All,,,,,0.0,2024-10-17
+7,"speedup in [-5%,-2%[",custom,All,,,,,0.0,2024-10-17
+7,"speedup in [-2%,0%[",custom,All,,,,,0.0,2024-10-17
+7,"speedup in [0%,2%[",custom,All,,,,,0.0,2024-10-17
+7,"speedup in [2%,5%[",custom,All,,,,,0.0,2024-10-17
+7,"speedup in [5%,10%[",custom,All,,,,,0.0,2024-10-17
+7,"speedup in [10%,20%[",custom,All,,,,,0.0,2024-10-17
+7,speedup in >=20%,custom,All,,,,,0.0,2024-10-17
+8,benchmark duration,custom,All,,,,,0.0,2024-10-17
+8,number of models,custom,All,,,,,0.0,2024-10-17
+8,number of models eager mode,custom,All,,,,,0.0,2024-10-17
+8,export number,custom,All,,,,,0.0,2024-10-17
+8,number of running models,custom,All,,,,,0.0,2024-10-17
+8,accuracy number,custom,All,,,,,0.0,2024-10-17
+8,pass number,custom,All,,3.0,,,0.0,2024-10-17
+8,total export time,custom,All,,,,,0.0,2024-10-17
+8,speedup weighted by latency,custom,All,,,,,0.0,2024-10-17
+8,total latency time exported model,custom,All,,,,,0.0,2024-10-17
+8,total latency time eager / exported model,custom,All,,,,,0.0,2024-10-17
+8,number of models equal or faster than eager,custom,All,,,,,0.0,2024-10-17
+8,discrepancies < 0.1,custom,All,,,,,0.0,2024-10-17
+8,discrepancies < 0.01,custom,All,,,,,0.0,2024-10-17
+8,average GPU delta peak (export) (torch),custom,All,,,,,0.0,2024-10-17
+8,speedup in <-20%,custom,All,,,,,0.0,2024-10-17
+8,"speedup in [-20%,-10%[",custom,All,,,,,0.0,2024-10-17
+8,"speedup in [-10%,-5%[",custom,All,,,,,0.0,2024-10-17
+8,"speedup in [-5%,-2%[",custom,All,,,,,0.0,2024-10-17
+8,"speedup in [-2%,0%[",custom,All,,,,,0.0,2024-10-17
+8,"speedup in [0%,2%[",custom,All,,,,,0.0,2024-10-17
+8,"speedup in [2%,5%[",custom,All,,,,,0.0,2024-10-17
+8,"speedup in [5%,10%[",custom,All,,,,,0.0,2024-10-17
+8,"speedup in [10%,20%[",custom,All,,,,,0.0,2024-10-17
+8,speedup in >=20%,custom,All,,,,,0.0,2024-10-17
+9,benchmark duration,custom,All,,,,,0.0,2024-10-17
+9,number of models,custom,All,,,,,0.0,2024-10-17
+9,number of models eager mode,custom,All,,,,,0.0,2024-10-17
+9,export number,custom,All,,,,,0.0,2024-10-17
+9,number of running models,custom,All,,,,,0.0,2024-10-17
+9,accuracy number,custom,All,,,,,0.0,2024-10-17
+9,pass number,custom,All,,,,,0.0,2024-10-17
+9,total export time,custom,All,,12.445785648997116,,,0.0,2024-10-17
+9,speedup weighted by latency,custom,All,,,,,0.0,2024-10-17
+9,total latency time exported model,custom,All,,,,,0.0,2024-10-17
+9,total latency time eager / exported model,custom,All,,,,,0.0,2024-10-17
+9,number of models equal or faster than eager,custom,All,,,,,0.0,2024-10-17
+9,discrepancies < 0.1,custom,All,,,,,0.0,2024-10-17
+9,discrepancies < 0.01,custom,All,,,,,0.0,2024-10-17
+9,average GPU delta peak (export) (torch),custom,All,,,,,0.0,2024-10-17
+9,speedup in <-20%,custom,All,,,,,0.0,2024-10-17
+9,"speedup in [-20%,-10%[",custom,All,,,,,0.0,2024-10-17
+9,"speedup in [-10%,-5%[",custom,All,,,,,0.0,2024-10-17
+9,"speedup in [-5%,-2%[",custom,All,,,,,0.0,2024-10-17
+9,"speedup in [-2%,0%[",custom,All,,,,,0.0,2024-10-17
+9,"speedup in [0%,2%[",custom,All,,,,,0.0,2024-10-17
+9,"speedup in [2%,5%[",custom,All,,,,,0.0,2024-10-17
+9,"speedup in [5%,10%[",custom,All,,,,,0.0,2024-10-17
+9,"speedup in [10%,20%[",custom,All,,,,,0.0,2024-10-17
+9,speedup in >=20%,custom,All,,,,,0.0,2024-10-17
+10,benchmark duration,custom,All,,,,,0.0,2024-10-17
+10,number of models,custom,All,,,,,0.0,2024-10-17
+10,number of models eager mode,custom,All,,,,,0.0,2024-10-17
+10,export number,custom,All,,,,,0.0,2024-10-17
+10,number of running models,custom,All,,,,,0.0,2024-10-17
+10,accuracy number,custom,All,,,,,0.0,2024-10-17
+10,pass number,custom,All,,,,,0.0,2024-10-17
+10,total export time,custom,All,,,,,0.0,2024-10-17
+10,speedup weighted by latency,custom,All,,0.675692347206661,,,0.0,2024-10-17
+10,total latency time exported model,custom,All,,0.0029800413052721,,,0.0,2024-10-17
+10,total latency time eager / exported model,custom,All,,,,,0.0,2024-10-17
+10,number of models equal or faster than eager,custom,All,,,,,0.0,2024-10-17
+10,discrepancies < 0.1,custom,All,,,,,0.0,2024-10-17
+10,discrepancies < 0.01,custom,All,,,,,0.0,2024-10-17
+10,average GPU delta peak (export) (torch),custom,All,,,,,0.0,2024-10-17
+10,speedup in <-20%,custom,All,,,,,0.0,2024-10-17
+10,"speedup in [-20%,-10%[",custom,All,,,,,0.0,2024-10-17
+10,"speedup in [-10%,-5%[",custom,All,,,,,0.0,2024-10-17
+10,"speedup in [-5%,-2%[",custom,All,,,,,0.0,2024-10-17
+10,"speedup in [-2%,0%[",custom,All,,,,,0.0,2024-10-17
+10,"speedup in [0%,2%[",custom,All,,,,,0.0,2024-10-17
+10,"speedup in [2%,5%[",custom,All,,,,,0.0,2024-10-17
+10,"speedup in [5%,10%[",custom,All,,,,,0.0,2024-10-17
+10,"speedup in [10%,20%[",custom,All,,,,,0.0,2024-10-17
+10,speedup in >=20%,custom,All,,,,,0.0,2024-10-17
+11,benchmark duration,custom,All,,,,,0.0,2024-10-17
+11,number of models,custom,All,,,,,0.0,2024-10-17
+11,number of models eager mode,custom,All,,,,,0.0,2024-10-17
+11,export number,custom,All,,,,,0.0,2024-10-17
+11,number of running models,custom,All,,,,,0.0,2024-10-17
+11,accuracy number,custom,All,,,,,0.0,2024-10-17
+11,pass number,custom,All,,,,,0.0,2024-10-17
+11,total export time,custom,All,,,,,0.0,2024-10-17
+11,speedup weighted by latency,custom,All,,,,,0.0,2024-10-17
+11,total latency time exported model,custom,All,,,,,0.0,2024-10-17
+11,total latency time eager / exported model,custom,All,,0.002013591104332107,,,0.0,2024-10-17
+11,number of models equal or faster than eager,custom,All,,,,,0.0,2024-10-17
+11,discrepancies < 0.1,custom,All,,,,,0.0,2024-10-17
+11,discrepancies < 0.01,custom,All,,,,,0.0,2024-10-17
+11,average GPU delta peak (export) (torch),custom,All,,,,,0.0,2024-10-17
+11,speedup in <-20%,custom,All,,,,,0.0,2024-10-17
+11,"speedup in [-20%,-10%[",custom,All,,,,,0.0,2024-10-17
+11,"speedup in [-10%,-5%[",custom,All,,,,,0.0,2024-10-17
+11,"speedup in [-5%,-2%[",custom,All,,,,,0.0,2024-10-17
+11,"speedup in [-2%,0%[",custom,All,,,,,0.0,2024-10-17
+11,"speedup in [0%,2%[",custom,All,,,,,0.0,2024-10-17
+11,"speedup in [2%,5%[",custom,All,,,,,0.0,2024-10-17
+11,"speedup in [5%,10%[",custom,All,,,,,0.0,2024-10-17
+11,"speedup in [10%,20%[",custom,All,,,,,0.0,2024-10-17
+11,speedup in >=20%,custom,All,,,,,0.0,2024-10-17
+13,benchmark duration,custom,All,,,,,0.0,2024-10-17
+13,number of models,custom,All,,,,,0.0,2024-10-17
+13,number of models eager mode,custom,All,,,,,0.0,2024-10-17
+13,export number,custom,All,,,,,0.0,2024-10-17
+13,number of running models,custom,All,,,,,0.0,2024-10-17
+13,accuracy number,custom,All,,,,,0.0,2024-10-17
+13,pass number,custom,All,,,,,0.0,2024-10-17
+13,total export time,custom,All,,,,,0.0,2024-10-17
+13,speedup weighted by latency,custom,All,,,,,0.0,2024-10-17
+13,total latency time exported model,custom,All,,,,,0.0,2024-10-17
+13,total latency time eager / exported model,custom,All,,,,,0.0,2024-10-17
+13,number of models equal or faster than eager,custom,All,,3.0,,,0.0,2024-10-17
+13,discrepancies < 0.1,custom,All,,,,,0.0,2024-10-17
+13,discrepancies < 0.01,custom,All,,,,,0.0,2024-10-17
+13,average GPU delta peak (export) (torch),custom,All,,,,,0.0,2024-10-17
+13,speedup in <-20%,custom,All,,,,,0.0,2024-10-17
+13,"speedup in [-20%,-10%[",custom,All,,,,,0.0,2024-10-17
+13,"speedup in [-10%,-5%[",custom,All,,,,,0.0,2024-10-17
+13,"speedup in [-5%,-2%[",custom,All,,,,,0.0,2024-10-17
+13,"speedup in [-2%,0%[",custom,All,,,,,0.0,2024-10-17
+13,"speedup in [0%,2%[",custom,All,,,,,0.0,2024-10-17
+13,"speedup in [2%,5%[",custom,All,,,,,0.0,2024-10-17
+13,"speedup in [5%,10%[",custom,All,,,,,0.0,2024-10-17
+13,"speedup in [10%,20%[",custom,All,,,,,0.0,2024-10-17
+13,speedup in >=20%,custom,All,,,,,0.0,2024-10-17
+17,benchmark duration,custom,All,,,,,0.0,2024-10-17
+17,number of models,custom,All,,,,,0.0,2024-10-17
+17,number of models eager mode,custom,All,,,,,0.0,2024-10-17
+17,export number,custom,All,,,,,0.0,2024-10-17
+17,number of running models,custom,All,,,,,0.0,2024-10-17
+17,accuracy number,custom,All,,,,,0.0,2024-10-17
+17,pass number,custom,All,,,,,0.0,2024-10-17
+17,total export time,custom,All,,,,,0.0,2024-10-17
+17,speedup weighted by latency,custom,All,,,,,0.0,2024-10-17
+17,total latency time exported model,custom,All,,,,,0.0,2024-10-17
+17,total latency time eager / exported model,custom,All,,,,,0.0,2024-10-17
+17,number of models equal or faster than eager,custom,All,,,,,0.0,2024-10-17
+17,discrepancies < 0.1,custom,All,,11.0,,,0.0,2024-10-17
+17,discrepancies < 0.01,custom,All,,,,,0.0,2024-10-17
+17,average GPU delta peak (export) (torch),custom,All,,,,,0.0,2024-10-17
+17,speedup in <-20%,custom,All,,,,,0.0,2024-10-17
+17,"speedup in [-20%,-10%[",custom,All,,,,,0.0,2024-10-17
+17,"speedup in [-10%,-5%[",custom,All,,,,,0.0,2024-10-17
+17,"speedup in [-5%,-2%[",custom,All,,,,,0.0,2024-10-17
+17,"speedup in [-2%,0%[",custom,All,,,,,0.0,2024-10-17
+17,"speedup in [0%,2%[",custom,All,,,,,0.0,2024-10-17
+17,"speedup in [2%,5%[",custom,All,,,,,0.0,2024-10-17
+17,"speedup in [5%,10%[",custom,All,,,,,0.0,2024-10-17
+17,"speedup in [10%,20%[",custom,All,,,,,0.0,2024-10-17
+17,speedup in >=20%,custom,All,,,,,0.0,2024-10-17
+18,benchmark duration,custom,All,,,,,0.0,2024-10-17
+18,number of models,custom,All,,,,,0.0,2024-10-17
+18,number of models eager mode,custom,All,,,,,0.0,2024-10-17
+18,export number,custom,All,,,,,0.0,2024-10-17
+18,number of running models,custom,All,,,,,0.0,2024-10-17
+18,accuracy number,custom,All,,,,,0.0,2024-10-17
+18,pass number,custom,All,,,,,0.0,2024-10-17
+18,total export time,custom,All,,,,,0.0,2024-10-17
+18,speedup weighted by latency,custom,All,,,,,0.0,2024-10-17
+18,total latency time exported model,custom,All,,,,,0.0,2024-10-17
+18,total latency time eager / exported model,custom,All,,,,,0.0,2024-10-17
+18,number of models equal or faster than eager,custom,All,,,,,0.0,2024-10-17
+18,discrepancies < 0.1,custom,All,,,,,0.0,2024-10-17
+18,discrepancies < 0.01,custom,All,,11.0,,,0.0,2024-10-17
+18,average GPU delta peak (export) (torch),custom,All,,,,,0.0,2024-10-17
+18,speedup in <-20%,custom,All,,,,,0.0,2024-10-17
+18,"speedup in [-20%,-10%[",custom,All,,,,,0.0,2024-10-17
+18,"speedup in [-10%,-5%[",custom,All,,,,,0.0,2024-10-17
+18,"speedup in [-5%,-2%[",custom,All,,,,,0.0,2024-10-17
+18,"speedup in [-2%,0%[",custom,All,,,,,0.0,2024-10-17
+18,"speedup in [0%,2%[",custom,All,,,,,0.0,2024-10-17
+18,"speedup in [2%,5%[",custom,All,,,,,0.0,2024-10-17
+18,"speedup in [5%,10%[",custom,All,,,,,0.0,2024-10-17
+18,"speedup in [10%,20%[",custom,All,,,,,0.0,2024-10-17
+18,speedup in >=20%,custom,All,,,,,0.0,2024-10-17
+19,benchmark duration,custom,All,,,,,0.0,2024-10-17
+19,number of models,custom,All,,,,,0.0,2024-10-17
+19,number of models eager mode,custom,All,,,,,0.0,2024-10-17
+19,export number,custom,All,,,,,0.0,2024-10-17
+19,number of running models,custom,All,,,,,0.0,2024-10-17
+19,accuracy number,custom,All,,,,,0.0,2024-10-17
+19,pass number,custom,All,,,,,0.0,2024-10-17
+19,total export time,custom,All,,,,,0.0,2024-10-17
+19,speedup weighted by latency,custom,All,,,,,0.0,2024-10-17
+19,total latency time exported model,custom,All,,,,,0.0,2024-10-17
+19,total latency time eager / exported model,custom,All,,,,,0.0,2024-10-17
+19,number of models equal or faster than eager,custom,All,,,,,0.0,2024-10-17
+19,discrepancies < 0.1,custom,All,,,,,0.0,2024-10-17
+19,discrepancies < 0.01,custom,All,,,,,0.0,2024-10-17
+19,average GPU delta peak (export) (torch),custom,All,,1861.8181818181818,,,0.0,2024-10-17
+19,speedup in <-20%,custom,All,,,,,0.0,2024-10-17
+19,"speedup in [-20%,-10%[",custom,All,,,,,0.0,2024-10-17
+19,"speedup in [-10%,-5%[",custom,All,,,,,0.0,2024-10-17
+19,"speedup in [-5%,-2%[",custom,All,,,,,0.0,2024-10-17
+19,"speedup in [-2%,0%[",custom,All,,,,,0.0,2024-10-17
+19,"speedup in [0%,2%[",custom,All,,,,,0.0,2024-10-17
+19,"speedup in [2%,5%[",custom,All,,,,,0.0,2024-10-17
+19,"speedup in [5%,10%[",custom,All,,,,,0.0,2024-10-17
+19,"speedup in [10%,20%[",custom,All,,,,,0.0,2024-10-17
+19,speedup in >=20%,custom,All,,,,,0.0,2024-10-17
+22,benchmark duration,custom,All,,,,,0.0,2024-10-17
+22,number of models,custom,All,,,,,0.0,2024-10-17
+22,number of models eager mode,custom,All,,,,,0.0,2024-10-17
+22,export number,custom,All,,,,,0.0,2024-10-17
+22,number of running models,custom,All,,,,,0.0,2024-10-17
+22,accuracy number,custom,All,,,,,0.0,2024-10-17
+22,pass number,custom,All,,,,,0.0,2024-10-17
+22,total export time,custom,All,,,,,0.0,2024-10-17
+22,speedup weighted by latency,custom,All,,,,,0.0,2024-10-17
+22,total latency time exported model,custom,All,,,,,0.0,2024-10-17
+22,total latency time eager / exported model,custom,All,,,,,0.0,2024-10-17
+22,number of models equal or faster than eager,custom,All,,,,,0.0,2024-10-17
+22,discrepancies < 0.1,custom,All,,,,,0.0,2024-10-17
+22,discrepancies < 0.01,custom,All,,,,,0.0,2024-10-17
+22,average GPU delta peak (export) (torch),custom,All,,,,,0.0,2024-10-17
+22,speedup in <-20%,custom,All,,4.0,,,0.0,2024-10-17
+22,"speedup in [-20%,-10%[",custom,All,,,,,0.0,2024-10-17
+22,"speedup in [-10%,-5%[",custom,All,,,,,0.0,2024-10-17
+22,"speedup in [-5%,-2%[",custom,All,,,,,0.0,2024-10-17
+22,"speedup in [-2%,0%[",custom,All,,,,,0.0,2024-10-17
+22,"speedup in [0%,2%[",custom,All,,,,,0.0,2024-10-17
+22,"speedup in [2%,5%[",custom,All,,,,,0.0,2024-10-17
+22,"speedup in [5%,10%[",custom,All,,,,,0.0,2024-10-17
+22,"speedup in [10%,20%[",custom,All,,,,,0.0,2024-10-17
+22,speedup in >=20%,custom,All,,,,,0.0,2024-10-17
+23,benchmark duration,custom,All,,,,,0.0,2024-10-17
+23,number of models,custom,All,,,,,0.0,2024-10-17
+23,number of models eager mode,custom,All,,,,,0.0,2024-10-17
+23,export number,custom,All,,,,,0.0,2024-10-17
+23,number of running models,custom,All,,,,,0.0,2024-10-17
+23,accuracy number,custom,All,,,,,0.0,2024-10-17
+23,pass number,custom,All,,,,,0.0,2024-10-17
+23,total export time,custom,All,,,,,0.0,2024-10-17
+23,speedup weighted by latency,custom,All,,,,,0.0,2024-10-17
+23,total latency time exported model,custom,All,,,,,0.0,2024-10-17
+23,total latency time eager / exported model,custom,All,,,,,0.0,2024-10-17
+23,number of models equal or faster than eager,custom,All,,,,,0.0,2024-10-17
+23,discrepancies < 0.1,custom,All,,,,,0.0,2024-10-17
+23,discrepancies < 0.01,custom,All,,,,,0.0,2024-10-17
+23,average GPU delta peak (export) (torch),custom,All,,,,,0.0,2024-10-17
+23,speedup in <-20%,custom,All,,,,,0.0,2024-10-17
+23,"speedup in [-20%,-10%[",custom,All,,3.0,,,0.0,2024-10-17
+23,"speedup in [-10%,-5%[",custom,All,,,,,0.0,2024-10-17
+23,"speedup in [-5%,-2%[",custom,All,,,,,0.0,2024-10-17
+23,"speedup in [-2%,0%[",custom,All,,,,,0.0,2024-10-17
+23,"speedup in [0%,2%[",custom,All,,,,,0.0,2024-10-17
+23,"speedup in [2%,5%[",custom,All,,,,,0.0,2024-10-17
+23,"speedup in [5%,10%[",custom,All,,,,,0.0,2024-10-17
+23,"speedup in [10%,20%[",custom,All,,,,,0.0,2024-10-17
+23,speedup in >=20%,custom,All,,,,,0.0,2024-10-17
+24,benchmark duration,custom,All,,,,,0.0,2024-10-17
+24,number of models,custom,All,,,,,0.0,2024-10-17
+24,number of models eager mode,custom,All,,,,,0.0,2024-10-17
+24,export number,custom,All,,,,,0.0,2024-10-17
+24,number of running models,custom,All,,,,,0.0,2024-10-17
+24,accuracy number,custom,All,,,,,0.0,2024-10-17
+24,pass number,custom,All,,,,,0.0,2024-10-17
+24,total export time,custom,All,,,,,0.0,2024-10-17
+24,speedup weighted by latency,custom,All,,,,,0.0,2024-10-17
+24,total latency time exported model,custom,All,,,,,0.0,2024-10-17
+24,total latency time eager / exported model,custom,All,,,,,0.0,2024-10-17
+24,number of models equal or faster than eager,custom,All,,,,,0.0,2024-10-17
+24,discrepancies < 0.1,custom,All,,,,,0.0,2024-10-17
+24,discrepancies < 0.01,custom,All,,,,,0.0,2024-10-17
+24,average GPU delta peak (export) (torch),custom,All,,,,,0.0,2024-10-17
+24,speedup in <-20%,custom,All,,,,,0.0,2024-10-17
+24,"speedup in [-20%,-10%[",custom,All,,,,,0.0,2024-10-17
+24,"speedup in [-10%,-5%[",custom,All,,1.0,,,0.0,2024-10-17
+24,"speedup in [-5%,-2%[",custom,All,,,,,0.0,2024-10-17
+24,"speedup in [-2%,0%[",custom,All,,,,,0.0,2024-10-17
+24,"speedup in [0%,2%[",custom,All,,,,,0.0,2024-10-17
+24,"speedup in [2%,5%[",custom,All,,,,,0.0,2024-10-17
+24,"speedup in [5%,10%[",custom,All,,,,,0.0,2024-10-17
+24,"speedup in [10%,20%[",custom,All,,,,,0.0,2024-10-17
+24,speedup in >=20%,custom,All,,,,,0.0,2024-10-17
+25,benchmark duration,custom,All,,,,,0.0,2024-10-17
+25,number of models,custom,All,,,,,0.0,2024-10-17
+25,number of models eager mode,custom,All,,,,,0.0,2024-10-17
+25,export number,custom,All,,,,,0.0,2024-10-17
+25,number of running models,custom,All,,,,,0.0,2024-10-17
+25,accuracy number,custom,All,,,,,0.0,2024-10-17
+25,pass number,custom,All,,,,,0.0,2024-10-17
+25,total export time,custom,All,,,,,0.0,2024-10-17
+25,speedup weighted by latency,custom,All,,,,,0.0,2024-10-17
+25,total latency time exported model,custom,All,,,,,0.0,2024-10-17
+25,total latency time eager / exported model,custom,All,,,,,0.0,2024-10-17
+25,number of models equal or faster than eager,custom,All,,,,,0.0,2024-10-17
+25,discrepancies < 0.1,custom,All,,,,,0.0,2024-10-17
+25,discrepancies < 0.01,custom,All,,,,,0.0,2024-10-17
+25,average GPU delta peak (export) (torch),custom,All,,,,,0.0,2024-10-17
+25,speedup in <-20%,custom,All,,,,,0.0,2024-10-17
+25,"speedup in [-20%,-10%[",custom,All,,,,,0.0,2024-10-17
+25,"speedup in [-10%,-5%[",custom,All,,,,,0.0,2024-10-17
+25,"speedup in [-5%,-2%[",custom,All,,0.0,,,0.0,2024-10-17
+25,"speedup in [-2%,0%[",custom,All,,,,,0.0,2024-10-17
+25,"speedup in [0%,2%[",custom,All,,,,,0.0,2024-10-17
+25,"speedup in [2%,5%[",custom,All,,,,,0.0,2024-10-17
+25,"speedup in [5%,10%[",custom,All,,,,,0.0,2024-10-17
+25,"speedup in [10%,20%[",custom,All,,,,,0.0,2024-10-17
+25,speedup in >=20%,custom,All,,,,,0.0,2024-10-17
+26,benchmark duration,custom,All,,,,,0.0,2024-10-17
+26,number of models,custom,All,,,,,0.0,2024-10-17
+26,number of models eager mode,custom,All,,,,,0.0,2024-10-17
+26,export number,custom,All,,,,,0.0,2024-10-17
+26,number of running models,custom,All,,,,,0.0,2024-10-17
+26,accuracy number,custom,All,,,,,0.0,2024-10-17
+26,pass number,custom,All,,,,,0.0,2024-10-17
+26,total export time,custom,All,,,,,0.0,2024-10-17
+26,speedup weighted by latency,custom,All,,,,,0.0,2024-10-17
+26,total latency time exported model,custom,All,,,,,0.0,2024-10-17
+26,total latency time eager / exported model,custom,All,,,,,0.0,2024-10-17
+26,number of models equal or faster than eager,custom,All,,,,,0.0,2024-10-17
+26,discrepancies < 0.1,custom,All,,,,,0.0,2024-10-17
+26,discrepancies < 0.01,custom,All,,,,,0.0,2024-10-17
+26,average GPU delta peak (export) (torch),custom,All,,,,,0.0,2024-10-17
+26,speedup in <-20%,custom,All,,,,,0.0,2024-10-17
+26,"speedup in [-20%,-10%[",custom,All,,,,,0.0,2024-10-17
+26,"speedup in [-10%,-5%[",custom,All,,,,,0.0,2024-10-17
+26,"speedup in [-5%,-2%[",custom,All,,,,,0.0,2024-10-17
+26,"speedup in [-2%,0%[",custom,All,,0.0,,,0.0,2024-10-17
+26,"speedup in [0%,2%[",custom,All,,,,,0.0,2024-10-17
+26,"speedup in [2%,5%[",custom,All,,,,,0.0,2024-10-17
+26,"speedup in [5%,10%[",custom,All,,,,,0.0,2024-10-17
+26,"speedup in [10%,20%[",custom,All,,,,,0.0,2024-10-17
+26,speedup in >=20%,custom,All,,,,,0.0,2024-10-17
+27,benchmark duration,custom,All,,,,,0.0,2024-10-17
+27,number of models,custom,All,,,,,0.0,2024-10-17
+27,number of models eager mode,custom,All,,,,,0.0,2024-10-17
+27,export number,custom,All,,,,,0.0,2024-10-17
+27,number of running models,custom,All,,,,,0.0,2024-10-17
+27,accuracy number,custom,All,,,,,0.0,2024-10-17
+27,pass number,custom,All,,,,,0.0,2024-10-17
+27,total export time,custom,All,,,,,0.0,2024-10-17
+27,speedup weighted by latency,custom,All,,,,,0.0,2024-10-17
+27,total latency time exported model,custom,All,,,,,0.0,2024-10-17
+27,total latency time eager / exported model,custom,All,,,,,0.0,2024-10-17
+27,number of models equal or faster than eager,custom,All,,,,,0.0,2024-10-17
+27,discrepancies < 0.1,custom,All,,,,,0.0,2024-10-17
+27,discrepancies < 0.01,custom,All,,,,,0.0,2024-10-17
+27,average GPU delta peak (export) (torch),custom,All,,,,,0.0,2024-10-17
+27,speedup in <-20%,custom,All,,,,,0.0,2024-10-17
+27,"speedup in [-20%,-10%[",custom,All,,,,,0.0,2024-10-17
+27,"speedup in [-10%,-5%[",custom,All,,,,,0.0,2024-10-17
+27,"speedup in [-5%,-2%[",custom,All,,,,,0.0,2024-10-17
+27,"speedup in [-2%,0%[",custom,All,,,,,0.0,2024-10-17
+27,"speedup in [0%,2%[",custom,All,,1.0,,,0.0,2024-10-17
+27,"speedup in [2%,5%[",custom,All,,,,,0.0,2024-10-17
+27,"speedup in [5%,10%[",custom,All,,,,,0.0,2024-10-17
+27,"speedup in [10%,20%[",custom,All,,,,,0.0,2024-10-17
+27,speedup in >=20%,custom,All,,,,,0.0,2024-10-17
+28,benchmark duration,custom,All,,,,,0.0,2024-10-17
+28,number of models,custom,All,,,,,0.0,2024-10-17
+28,number of models eager mode,custom,All,,,,,0.0,2024-10-17
+28,export number,custom,All,,,,,0.0,2024-10-17
+28,number of running models,custom,All,,,,,0.0,2024-10-17
+28,accuracy number,custom,All,,,,,0.0,2024-10-17
+28,pass number,custom,All,,,,,0.0,2024-10-17
+28,total export time,custom,All,,,,,0.0,2024-10-17
+28,speedup weighted by latency,custom,All,,,,,0.0,2024-10-17
+28,total latency time exported model,custom,All,,,,,0.0,2024-10-17
+28,total latency time eager / exported model,custom,All,,,,,0.0,2024-10-17
+28,number of models equal or faster than eager,custom,All,,,,,0.0,2024-10-17
+28,discrepancies < 0.1,custom,All,,,,,0.0,2024-10-17
+28,discrepancies < 0.01,custom,All,,,,,0.0,2024-10-17
+28,average GPU delta peak (export) (torch),custom,All,,,,,0.0,2024-10-17
+28,speedup in <-20%,custom,All,,,,,0.0,2024-10-17
+28,"speedup in [-20%,-10%[",custom,All,,,,,0.0,2024-10-17
+28,"speedup in [-10%,-5%[",custom,All,,,,,0.0,2024-10-17
+28,"speedup in [-5%,-2%[",custom,All,,,,,0.0,2024-10-17
+28,"speedup in [-2%,0%[",custom,All,,,,,0.0,2024-10-17
+28,"speedup in [0%,2%[",custom,All,,,,,0.0,2024-10-17
+28,"speedup in [2%,5%[",custom,All,,0.0,,,0.0,2024-10-17
+28,"speedup in [5%,10%[",custom,All,,,,,0.0,2024-10-17
+28,"speedup in [10%,20%[",custom,All,,,,,0.0,2024-10-17
+28,speedup in >=20%,custom,All,,,,,0.0,2024-10-17
+29,benchmark duration,custom,All,,,,,0.0,2024-10-17
+29,number of models,custom,All,,,,,0.0,2024-10-17
+29,number of models eager mode,custom,All,,,,,0.0,2024-10-17
+29,export number,custom,All,,,,,0.0,2024-10-17
+29,number of running models,custom,All,,,,,0.0,2024-10-17
+29,accuracy number,custom,All,,,,,0.0,2024-10-17
+29,pass number,custom,All,,,,,0.0,2024-10-17
+29,total export time,custom,All,,,,,0.0,2024-10-17
+29,speedup weighted by latency,custom,All,,,,,0.0,2024-10-17
+29,total latency time exported model,custom,All,,,,,0.0,2024-10-17
+29,total latency time eager / exported model,custom,All,,,,,0.0,2024-10-17
+29,number of models equal or faster than eager,custom,All,,,,,0.0,2024-10-17
+29,discrepancies < 0.1,custom,All,,,,,0.0,2024-10-17
+29,discrepancies < 0.01,custom,All,,,,,0.0,2024-10-17
+29,average GPU delta peak (export) (torch),custom,All,,,,,0.0,2024-10-17
+29,speedup in <-20%,custom,All,,,,,0.0,2024-10-17
+29,"speedup in [-20%,-10%[",custom,All,,,,,0.0,2024-10-17
+29,"speedup in [-10%,-5%[",custom,All,,,,,0.0,2024-10-17
+29,"speedup in [-5%,-2%[",custom,All,,,,,0.0,2024-10-17
+29,"speedup in [-2%,0%[",custom,All,,,,,0.0,2024-10-17
+29,"speedup in [0%,2%[",custom,All,,,,,0.0,2024-10-17
+29,"speedup in [2%,5%[",custom,All,,,,,0.0,2024-10-17
+29,"speedup in [5%,10%[",custom,All,,0.0,,,0.0,2024-10-17
+29,"speedup in [10%,20%[",custom,All,,,,,0.0,2024-10-17
+29,speedup in >=20%,custom,All,,,,,0.0,2024-10-17
+30,benchmark duration,custom,All,,,,,0.0,2024-10-17
+30,number of models,custom,All,,,,,0.0,2024-10-17
+30,number of models eager mode,custom,All,,,,,0.0,2024-10-17
+30,export number,custom,All,,,,,0.0,2024-10-17
+30,number of running models,custom,All,,,,,0.0,2024-10-17
+30,accuracy number,custom,All,,,,,0.0,2024-10-17
+30,pass number,custom,All,,,,,0.0,2024-10-17
+30,total export time,custom,All,,,,,0.0,2024-10-17
+30,speedup weighted by latency,custom,All,,,,,0.0,2024-10-17
+30,total latency time exported model,custom,All,,,,,0.0,2024-10-17
+30,total latency time eager / exported model,custom,All,,,,,0.0,2024-10-17
+30,number of models equal or faster than eager,custom,All,,,,,0.0,2024-10-17
+30,discrepancies < 0.1,custom,All,,,,,0.0,2024-10-17
+30,discrepancies < 0.01,custom,All,,,,,0.0,2024-10-17
+30,average GPU delta peak (export) (torch),custom,All,,,,,0.0,2024-10-17
+30,speedup in <-20%,custom,All,,,,,0.0,2024-10-17
+30,"speedup in [-20%,-10%[",custom,All,,,,,0.0,2024-10-17
+30,"speedup in [-10%,-5%[",custom,All,,,,,0.0,2024-10-17
+30,"speedup in [-5%,-2%[",custom,All,,,,,0.0,2024-10-17
+30,"speedup in [-2%,0%[",custom,All,,,,,0.0,2024-10-17
+30,"speedup in [0%,2%[",custom,All,,,,,0.0,2024-10-17
+30,"speedup in [2%,5%[",custom,All,,,,,0.0,2024-10-17
+30,"speedup in [5%,10%[",custom,All,,,,,0.0,2024-10-17
+30,"speedup in [10%,20%[",custom,All,,0.0,,,0.0,2024-10-17
+30,speedup in >=20%,custom,All,,,,,0.0,2024-10-17
+31,benchmark duration,custom,All,,,,,0.0,2024-10-17
+31,number of models,custom,All,,,,,0.0,2024-10-17
+31,number of models eager mode,custom,All,,,,,0.0,2024-10-17
+31,export number,custom,All,,,,,0.0,2024-10-17
+31,number of running models,custom,All,,,,,0.0,2024-10-17
+31,accuracy number,custom,All,,,,,0.0,2024-10-17
+31,pass number,custom,All,,,,,0.0,2024-10-17
+31,total export time,custom,All,,,,,0.0,2024-10-17
+31,speedup weighted by latency,custom,All,,,,,0.0,2024-10-17
+31,total latency time exported model,custom,All,,,,,0.0,2024-10-17
+31,total latency time eager / exported model,custom,All,,,,,0.0,2024-10-17
+31,number of models equal or faster than eager,custom,All,,,,,0.0,2024-10-17
+31,discrepancies < 0.1,custom,All,,,,,0.0,2024-10-17
+31,discrepancies < 0.01,custom,All,,,,,0.0,2024-10-17
+31,average GPU delta peak (export) (torch),custom,All,,,,,0.0,2024-10-17
+31,speedup in <-20%,custom,All,,,,,0.0,2024-10-17
+31,"speedup in [-20%,-10%[",custom,All,,,,,0.0,2024-10-17
+31,"speedup in [-10%,-5%[",custom,All,,,,,0.0,2024-10-17
+31,"speedup in [-5%,-2%[",custom,All,,,,,0.0,2024-10-17
+31,"speedup in [-2%,0%[",custom,All,,,,,0.0,2024-10-17
+31,"speedup in [0%,2%[",custom,All,,,,,0.0,2024-10-17
+31,"speedup in [2%,5%[",custom,All,,,,,0.0,2024-10-17
+31,"speedup in [5%,10%[",custom,All,,,,,0.0,2024-10-17
+31,"speedup in [10%,20%[",custom,All,,,,,0.0,2024-10-17
+31,speedup in >=20%,custom,All,,2.0,,,0.0,2024-10-17

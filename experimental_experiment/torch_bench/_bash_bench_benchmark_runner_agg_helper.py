@@ -2234,6 +2234,7 @@ def build_historical_report(
         print(f"[build_historical_report] create {output!r}")
     with pandas.ExcelWriter(output, engine="xlsxwriter") as writer:
 
+        export_export = {}
         for k, v in graphs.items():
             if verbose:
                 print(f"[build_historical_report] create graph {k!r}, exporter={exporter}")
@@ -2277,7 +2278,7 @@ def build_historical_report(
                     locations_rows[suite] = (
                         (max(locations_rows.values()) + 15) if locations_rows else 0
                     )
-                key = dynamic, ex, optim
+                key = int(dynamic), ex, optim
                 if key not in locations_cols:
                     locations_cols[key] = (
                         (max(locations_cols.values()) + 8) if locations_cols else 0
@@ -2292,26 +2293,30 @@ def build_historical_report(
                         f"[build_historical_report] + {suite},{ex},{optim},{dynamic}, "
                         f"d={idate}, add chart from row {i} to {j} ({k!r})"
                     )
+
                 chart = workbook.add_chart({"type": "line"})
+                chart2 = workbook.add_chart({"type": "line"})
                 for col in v:
                     if col not in subset.columns:
                         continue
                     ivalue = list(subset.columns).index(col)
                     if verbose:
                         print(f"[build_historical_report] ++ serie {col!r}")
-                    chart.add_series(
-                        {
-                            "name": [k, 0, ivalue],
-                            "categories": [k, i + 1, idate, j, idate],
-                            "values": [k, i + 1, ivalue, j, ivalue],
-                            "line": {"width": 1.00},
-                        }
-                    )
+                    kwargs = {
+                        "name": [k, 0, ivalue],
+                        "categories": [k, i + 1, idate, j, idate],
+                        "values": [k, i + 1, ivalue, j, ivalue],
+                        "line": {"width": 2},
+                    }
+                    chart.add_series(kwargs)
+                    chart2.add_series(kwargs)
+
                 chart.set_x_axis({"name": "date", "date_axis": True})
                 chart.set_y_axis({"name": k, "major_gridlines": {"visible": False}})
                 chart.set_legend({"position": "top"})
                 title = f"{suite} - {ex} +{optim}{' dynamic shape' if dynamic else ''}"
                 chart.set_title({"name": title})
+                chart2.set_title({"name": f"{suite} - {k}"})
                 x, y = locations_cols[key], locations_rows[suite]
                 place = (
                     f"{chr(65 + x)}{y + 1}"
@@ -2324,4 +2329,39 @@ def build_historical_report(
                         f"{place} add title {k}: {title!r}"
                     )
                 worksheet.insert_chart(place, chart)
+                export_export[key, suite, k] = (chart2, f"{suite} - {k}")
                 i = j
+
+        # second round
+        locations_cols = set()
+        locations_rows = set()
+        pages = set()
+        for k in export_export:
+            key, suite, kind = k
+            skey = "-".join(map(str, key))
+            pages.add(skey)
+            locations_cols.add(suite)
+            locations_rows.add(kind)
+
+        pages = sorted(pages)
+        locations_rows = sorted(locations_rows)
+        locations_cols = sorted(locations_cols)
+        for p in pages:
+            pandas.DataFrame({p: list(range(10))}).to_excel(
+                writer, sheet_name=p, index=False
+            )
+        workbook = writer.book
+        for k, (chart, title) in export_export.items():
+            key, suite, kind = k
+            skey = "-".join(map(str, key))
+            worksheet = writer.sheets[skey]
+            x = locations_cols.index(suite) * 8
+            y = locations_rows.index(kind) * 15
+            place = (
+                f"{chr(65 + x)}{y + 1}"
+                if x < 26
+                else f"{chr(64 + x // 26)}{chr(65 + (x % 26))}{y + 1}"
+            )
+            if verbose:
+                print(f"[build_historical_report] insert on {skey} at {place}: {title}")
+            worksheet.insert_chart(place, chart)
