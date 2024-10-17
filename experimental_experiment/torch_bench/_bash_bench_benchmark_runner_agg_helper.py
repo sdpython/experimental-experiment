@@ -2130,6 +2130,11 @@ def _process_formulas(
             ):
                 df["time_export_unbiased"] = df.apply(unbiased_export, axis=1)
                 report_on.append("time_export_unbiased")
+            elif "exporter" in set_columns and "time_export_success" in set_columns:
+                # old data
+                df["time_export_unbiased"] = df["time_export_success"]
+                report_on.append("time_export_unbiased")
+
             continue
 
         raise AssertionError(f"Unknown formula {expr!r}")

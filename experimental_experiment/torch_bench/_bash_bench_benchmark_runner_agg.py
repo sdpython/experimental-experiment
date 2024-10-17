@@ -1206,8 +1206,8 @@ def _build_aggregated_document(
         if verbose:
             print(f"[merge_benchmark_reports] writes {export_simple!r}")
 
-        final_res["SIMPLE"].to_csv(export_simple, index=False)
-        _set_ = set(final_res["SIMPLE"])
+        data_csv = final_res["SIMPLE"]
+        _set_ = set(data_csv)
 
         # first pivot
         piv_index = tuple(c for c in ("dtype", "suite", "#order", "METRIC") if c in _set_)
@@ -1215,18 +1215,17 @@ def _build_aggregated_document(
             c for c in ("exporter", "opt_patterns", "dynamic", "rtopt") if c in _set_
         )
         ccc = [*piv_index, *piv_columns]
-        gr = final_res["SIMPLE"][[*ccc, "value"]].groupby(ccc).count()
+        gr = data_csv[[*ccc, "value"]].groupby(ccc).count()
         assert gr.values.max() <= 1, (
             f"Unexpected duplicated, piv_index={piv_index}, "
-            f"piv_columns={piv_columns}, columns={final_res['SIMPLE'].columns}, "
+            f"piv_columns={piv_columns}, columns={data_csv.columns}, "
             f"set of columns you may want to skip to pass this test: "
             f"{dict((k,set(df[k])) for k in new_keys if k in df.columns)}, "  # noqa: C402
             f"issue=\n{gr[gr['value'] > 1]}"
         )
 
         piv = (
-            final_res["SIMPLE"]
-            .pivot(
+            data_csv.pivot(
                 index=piv_index,
                 columns=piv_columns,
                 values="value",
@@ -1242,7 +1241,7 @@ def _build_aggregated_document(
         )
         piv_total = (
             pandas.pivot_table(
-                final_res["SIMPLE"],
+                data_csv,
                 index=piv_index,
                 columns=piv_columns,
                 values="value",
@@ -1253,6 +1252,16 @@ def _build_aggregated_document(
         )
         piv = _fix_report_piv(piv)
         piv_total = _fix_report_piv(piv_total, agg=True)
+
+        # concatenation with the all suite
+        series_append = piv_total.unstack(level=list(range(len(piv_total.index.names))))
+        data_append = pandas.DataFrame({"value": series_append}).reset_index(drop=False)
+        data_append["suite"] = "All"
+        if "DATE" in data_csv.columns:
+            data_append["DATE"] = data_csv["DATE"].max()
+        data_append = data_append[data_append["METRIC"] != "date"]
+        data_csv = pandas.concat([data_csv.copy(), data_append], axis=0)
+        data_csv.to_csv(export_simple, index=False)
 
         export_simple_x = f"{export_simple}.xlsx"
         if verbose:
