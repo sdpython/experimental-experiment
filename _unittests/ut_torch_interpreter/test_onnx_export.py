@@ -226,6 +226,24 @@ class TestOnnxExport(ExtTestCase):
 
     @skipif_ci_windows("torch dynamo not supported on windows")
     @ignore_warnings((UserWarning, DeprecationWarning))
+    @unittest.skip("not yet ready")
+    def test_simple_export_pool_bfloat16(self):
+        import torch
+        from experimental_experiment.reference import OrtEval
+
+        model, input_tensor = return_module_cls_pool()
+        model = model.to(torch.bfloat16)
+        input_tensor = input_tensor.to(torch.bfloat16)
+        names = export_utils("test_simple_export_pool", model, input_tensor)
+        x = input_tensor.numpy()
+        results = []
+        for name in names:
+            ref = OrtEval(name, providers=["CPUExecutionProvider"])
+            results.append(ref.run(None, {"input": x})[0])
+        self.assertEqualArray(results[0], results[1])
+
+    @skipif_ci_windows("torch dynamo not supported on windows")
+    @ignore_warnings((UserWarning, DeprecationWarning))
     def test_remove_unused_nodes(self):
         from onnx_array_api.plotting.text_plot import onnx_simple_text_plot
 
