@@ -8,10 +8,14 @@ from experimental_experiment.torch_bench._bash_bench_benchmark_runner_agg import
     enumerate_csv_files,
     open_dataframe,
 )
+from experimental_experiment.torch_bench._bash_bench_benchmark_runner_agg_helper import (
+    build_historical_report,
+)
 from experimental_experiment.ext_test_case import (
     ExtTestCase,
     ignore_warnings,
     skipif_ci_windows,
+    hide_stdout,
 )
 
 
@@ -366,6 +370,15 @@ class TestBashBenchMergeStats(ExtTestCase):
         time = dfs["time"]
         avg = time[("ITER", "custom", "default")].mean()
         self.assertEqual(avg, 152.34884692227206)
+
+    @ignore_warnings((FutureWarning,))
+    @hide_stdout()
+    def test_build_historical_report(self):
+        data = [
+            os.path.join(os.path.dirname(__file__), "data", "exo.csv"),
+            os.path.join(os.path.dirname(__file__), "data", "exo2.csv"),
+        ]
+        build_historical_report("test_build_historical_report.xlsx", data, verbose=1)
 
 
 if __name__ == "__main__":

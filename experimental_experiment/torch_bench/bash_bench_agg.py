@@ -107,6 +107,12 @@ def main(args=None):
         help="List of files involved in the aggregation",
     )
     parser.add_argument(
+        "--history",
+        default=False,
+        action=BooleanOptionalAction,
+        help="Computes historical graphs",
+    )
+    parser.add_argument(
         "--recent",
         default=False,
         action=BooleanOptionalAction,
@@ -127,6 +133,9 @@ def main(args=None):
         enumerate_csv_files,
         open_dataframe,
     )
+    from experimental_experiment.torch_bench._bash_bench_benchmark_runner_agg_helper import (
+        build_historical_report,
+    )
 
     kwargs = {}
     if res.skip_keys:
@@ -138,6 +147,16 @@ def main(args=None):
         assert keys is not None, f"Unable to extract the default values for keys in {sig}"
         skip = set(res.skip_keys.split(","))
         kwargs["keys"] = tuple(c for c in keys if c not in skip)
+
+    if res.history:
+        build_historical_report(
+            input_files=res.inputs,
+            output=res.output,
+            verbose=res.verbose,
+            filter_in=res.filter_in,
+            filter_out=res.filter_out,
+        )
+        return
 
     if res.list:
         print(f"Looking into {res.inputs!r}...")

@@ -282,7 +282,7 @@ def merge_benchmark_reports(
 
     The format is the following:
 
-    * a value or a set of values separated by ``;``
+    * a value or a set of values separated by ``/``
     """
     if baseline:
         assert not exclude, f"exclude={exclude} not compatiable with baseline={baseline!r}"
@@ -1203,9 +1203,6 @@ def _build_aggregated_document(
                     f"{set(final_res['SIMPLE'].dropna())}"
                 )
 
-        if verbose:
-            print(f"[merge_benchmark_reports] writes {export_simple!r}")
-
         data_csv = final_res["SIMPLE"]
         _set_ = set(data_csv)
 
@@ -1250,8 +1247,8 @@ def _build_aggregated_document(
             .sort_index(axis=0)
             .sort_index(axis=1)
         )
-        piv = _fix_report_piv(piv)
-        piv_total = _fix_report_piv(piv_total, agg=True)
+        piv, weighted_speedup = _fix_report_piv(piv)
+        piv_total, _ = _fix_report_piv(piv_total, agg=True)
 
         # concatenation with the all suite
         series_append = piv_total.unstack(level=list(range(len(piv_total.index.names))))
@@ -1260,13 +1257,18 @@ def _build_aggregated_document(
         if "DATE" in data_csv.columns:
             data_append["DATE"] = data_csv["DATE"].max()
         data_append = data_append[data_append["METRIC"] != "date"]
-        data_csv = pandas.concat([data_csv, data_append], axis=0)
+        data_csv = pandas.concat([data_csv, weighted_speedup, data_append], axis=0)
+        if verbose:
+            print(f"[merge_benchmark_reports] writes {export_simple!r}")
         data_csv.to_csv(export_simple, index=False)
 
         export_simple_x = f"{export_simple}.xlsx"
         if verbose:
-            print(f"[merge_benchmark_reports] writes {export_simple_x!r}")
-        with pandas.ExcelWriter(export_simple_x) as writer:
+            print(
+                f"[merge_benchmark_reports] writes {export_simple_x!r} "
+                f"shapes: {piv.shape}, {piv_total.shape}"
+            )
+        with pandas.ExcelWriter(export_simple_x, engine="openpyxl") as writer:
             piv.to_excel(writer, sheet_name="by_suite")
             piv_total.to_excel(writer, sheet_name="all_suites")
             _format_excel_cells(["by_suite", "all_suites"], writer, verbose=verbose)
@@ -1305,7 +1307,7 @@ def _build_aggregated_document(
     if excel_output:
         if verbose:
             print(f"[merge_benchmark_reports] apply Excel style with {excel_output!r}")
-        with pandas.ExcelWriter(excel_output) as writer:
+        with pandas.ExcelWriter(excel_output, engine="openpyxl") as writer:
             no_index = {
                 "0raw",
                 "0main",
