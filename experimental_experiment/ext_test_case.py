@@ -372,6 +372,30 @@ class ExtTestCase(unittest.TestCase):
         msg: Optional[str] = None,
     ):
         """In the name"""
+        if hasattr(expected, "detach") and hasattr(value, "detach"):
+            if msg:
+                try:
+                    self.assertEqual(expected.dtype, value.dtype)
+                except AssertionError as e:
+                    raise AssertionError(msg) from e
+                try:
+                    self.assertEqual(expected.shape, value.shape)
+                except AssertionError as e:
+                    raise AssertionError(msg) from e
+            else:
+                self.assertEqual(expected.dtype, value.dtype)
+                self.assertEqual(expected.shape, value.shape)
+
+            import torch
+
+            try:
+                torch.testing.assert_close(value, expected, atol=atol, rtol=rtol)
+            except AssertionError as e:
+                if msg:
+                    raise AssertionError(msg) from e
+                raise
+            return
+
         if hasattr(expected, "detach"):
             expected = expected.detach().cpu().numpy()
         if hasattr(value, "detach"):
