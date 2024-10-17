@@ -399,6 +399,7 @@ class WrapInferenceSessionForTorch:
         self.torch = torch
         self.nvtx = nvtx
         self.run_options = onnxruntime.RunOptions()
+        self.dlpack = False
 
         self.TORCH_DTYPE_TO_NUMPY_DTYPE = {
             torch.float16: np.float16,

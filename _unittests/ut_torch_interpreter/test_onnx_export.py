@@ -9,6 +9,7 @@ from experimental_experiment.ext_test_case import (
     ExtTestCase,
     ignore_warnings,
     skipif_ci_windows,
+    requires_cuda,
 )
 from experimental_experiment.xbuilder import OptimizationOptions
 from experimental_experiment.torch_interpreter import to_onnx, Dispatcher, ExportOptions
@@ -226,21 +227,41 @@ class TestOnnxExport(ExtTestCase):
 
     @skipif_ci_windows("torch dynamo not supported on windows")
     @ignore_warnings((UserWarning, DeprecationWarning))
-    @unittest.skip("not yet ready")
+    @requires_cuda()
     def test_simple_export_pool_bfloat16(self):
         import torch
-        from experimental_experiment.reference import OrtEval
+        from onnxruntime import InferenceSession
+        from experimental_experiment.torch_bench.export_model_helper import (
+            WrapInferenceSessionForTorch,
+        )
 
-        model, input_tensor = return_module_cls_pool()
+        class Neuron(torch.nn.Module):
+            def __init__(self):
+                super(Neuron, self).__init__()
+
+            def forward(self, x):
+                return x + torch.transpose(x, 1, 0)
+
+        model, input_tensor = Neuron(), torch.rand(4, 4)
         model = model.to(torch.bfloat16)
         input_tensor = input_tensor.to(torch.bfloat16)
-        names = export_utils("test_simple_export_pool", model, input_tensor)
-        x = input_tensor.numpy()
+        expected = model(input_tensor)
+        names = export_utils("test_simple_export_pool_bfloat16", model, input_tensor)
         results = []
         for name in names:
-            ref = OrtEval(name, providers=["CPUExecutionProvider"])
-            results.append(ref.run(None, {"input": x})[0])
-        self.assertEqualArray(results[0], results[1])
+            sess = InferenceSession(name, providers=["CUDAExecutionProvider"])
+            ref = WrapInferenceSessionForTorch(sess)
+            results.append(ref.run(None, {"input": input_tensor})[0])
+
+        def move_to(obj):
+            if hasattr(obj, "to_dlpack"):
+                from torch._C import _from_dlpack
+
+                return _from_dlpack(obj.to_dlpack()).to("cpu")
+            return torch.Tensor(obj.numpy()).to("cpu")
+
+        self.assertEqualArray(expected, move_to(results[0]))
+        self.assertEqualArray(expected, move_to(results[1]))
 
     @skipif_ci_windows("torch dynamo not supported on windows")
     @ignore_warnings((UserWarning, DeprecationWarning))
