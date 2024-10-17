@@ -412,6 +412,19 @@ class WrapInferenceSessionForTorch:
             torch.bool: np.bool_,
         }
 
+        self.TORCH_DTYPE_TO_ONNX_DTYPE = {
+            torch.float16: TensorProto.FLOAT16,
+            torch.bfloat16: TensorProto.BFLOAT16,
+            torch.float32: TensorProto.FLOAT,
+            torch.float64: TensorProto.DOUBLE,
+            torch.uint8: TensorProto.UINT8,
+            torch.int8: TensorProto.INT8,
+            torch.int16: TensorProto.INT16,
+            torch.int32: TensorProto.INT32,
+            torch.int64: TensorProto.INT64,
+            torch.bool: TensorProto.BOOL,
+        }
+
         DEVICES = {
             -1: ORTC.OrtDevice(ORTC.OrtDevice.cpu(), ORTC.OrtDevice.default_memory(), 0)
         }
@@ -520,7 +533,12 @@ class WrapInferenceSessionForTorch:
             bind.bind_input(
                 name,
                 self.DEVICES[d],
-                self.TORCH_DTYPE_TO_NUMPY_DTYPE[tensor.dtype],
+                self.TORCH_DTYPE_TO_NUMPY_DTYPE.get(
+                    # it works on CI
+                    tensor.dtype,
+                    # it does not seem to write for all releases
+                    self.TORCH_DTYPE_TO_ONNX_DTYPE[tensor.dtype],
+                ),
                 tensor.shape,
                 tensor.data_ptr(),
             )

@@ -2981,7 +2981,7 @@ class GraphBuilder(_GraphBuilderRuntime):
 
         def _values(t):
             if hasattr(t, "detach"):
-                return t.detach().cpu().numpy().ravel().tolist()
+                return t.detach().cpu().flatten().tolist()
             if hasattr(t, "size"):
                 return t.ravel().tolist()
             if hasattr(t, "dims"):

@@ -1,4 +1,5 @@
 import os
+import ctypes
 import time
 import sys
 from typing import Any, Optional
@@ -7,6 +8,11 @@ import onnx.helper as oh
 from onnx import ModelProto, StringStringEntryProto, TensorProto
 from onnx.model_container import ModelContainer, _set_external_data
 from onnx.external_data_helper import _get_all_tensors, uses_external_data
+
+STORAGE_TYPE = {
+    TensorProto.FLOAT16: np.int16,
+    TensorProto.BFLOAT16: np.int16,
+}
 
 
 def _get_type(elem_type: Any, exc: bool = True) -> int:
@@ -68,7 +74,13 @@ def proto_from_array(
         arr_cpu = arr.cpu()
     else:
         arr_cpu = arr.contiguous().cpu()
-    if arr_cpu.data_ptr() == arr.data_ptr():
+
+    numel = torch.numel(arr_cpu)
+    element_size = arr_cpu.element_size()
+
+    if arr_cpu.dtype in {torch.bfloat16}:
+        np_arr = arr_cpu
+    elif arr_cpu.data_ptr() == arr.data_ptr():
         copy = arr_cpu.clone().detach().requires_grad_(False)
         assert arr_cpu.data_ptr() != copy.data_ptr()
         np_arr = np.from_dlpack(copy)
@@ -85,15 +97,20 @@ def proto_from_array(
     }, f"Type {arr.dtype} is not supported yet for name={name!r}"
     tensor.data_type = itype
 
-    if verbose > 1 and np.prod(arr_cpu.shape) > 100:
+    if verbose > 1 and numel > 100:
         print(f"[proto_from_array] {tensor.data_type}[{arr_cpu.shape}]")
 
-    if sys.byteorder == "big":
-        tensor.raw_data = np_arr.tobytes()
-        np_dtype = oh.tensor_dtype_to_np_dtype(tensor.data_type)
-        np.byteswap(np.frombuffer(tensor.raw_data, dtype=np_dtype), inplace=True)
+    if isinstance(np_arr, torch.Tensor):
+        byte_data = (ctypes.c_ubyte * numel * element_size).from_address(np_arr.data_ptr())
+        tensor.raw_data = bytes(byte_data)
+        if sys.byteorder == "big":
+            np_dtype = oh.tensor_dtype_to_np_dtype(STORAGE_TYPE[tensor.data_type])
+            np.byteswap(np.frombuffer(tensor.raw_data, dtype=np_dtype), inplace=True)
     else:
         tensor.raw_data = np_arr.tobytes()
+        if sys.byteorder == "big":
+            np_dtype = oh.tensor_dtype_to_np_dtype(tensor.data_type)
+            np.byteswap(np.frombuffer(tensor.raw_data, dtype=np_dtype), inplace=True)
 
     return tensor
 
