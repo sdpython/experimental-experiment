@@ -1260,7 +1260,7 @@ def _build_aggregated_document(
         if "DATE" in data_csv.columns:
             data_append["DATE"] = data_csv["DATE"].max()
         data_append = data_append[data_append["METRIC"] != "date"]
-        data_csv = pandas.concat([data_csv.copy(), data_append], axis=0)
+        data_csv = pandas.concat([data_csv, data_append], axis=0)
         data_csv.to_csv(export_simple, index=False)
 
         export_simple_x = f"{export_simple}.xlsx"
