@@ -110,7 +110,11 @@ class BenchmarkRunner:
         self.dump_ort = dump_ort
         assert no_grad, "no_grad false not implemented yet"
         assert not fake_tensor, "fake_tensor true not implemented yet"
-        self.dlpack = has_onnxruntime_training(push_back_batch=True)
+        self.dlpack = self.dtype not in {
+            "bfloat16",
+            onnx.TensorProto.BFLOAT16,
+            torch.bfloat16,
+        } and has_onnxruntime_training(push_back_batch=True)
 
     def forward_pass(self, mod, inputs, collect_outputs=True):
         return mod(**inputs)
@@ -244,16 +248,20 @@ class BenchmarkRunner:
             return None
         if hasattr(obj, "to"):
             return obj.to(device)
-        # if isinstance(obj, onnxruntime.capi.onnxruntime_pybind11_state.OrtValue):
-        if hasattr(obj, "numpy"):
-            # Implicit copy to torch.Tensor
-            return torch.Tensor(obj.numpy()).to(device)
         if isinstance(obj, np.ndarray):
             t = torch.Tensor(obj).to(device)
             assert torch_dtype_to_onnx_dtype(t.dtype) == tensor_dtype_to_np_dtype(
                 obj.dtype
             ), f"Type mismatch between {obj.dtype} and {t.dtype}"
             return t
+        if hasattr(obj, "numpy"):
+            # if isinstance(obj, onnxruntime.capi.onnxruntime_pybind11_state.OrtValue):
+            # Implicit copy to torch.Tensor
+            if hasattr(obj, "to_dlpack"):
+                from torch._C import _from_dlpack
+
+                return _from_dlpack(obj.to_dlpack()).to(device)
+            return torch.Tensor(obj.numpy()).to(device)
         if "SquashedNormal" in obj.__class__.__name__ and device == "cpu":
             return obj
         if hasattr(obj, "conv_states") and obj.__class__.__name__ == "MambaCache":
