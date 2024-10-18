@@ -416,7 +416,7 @@ class ModelRunner:
 
         batch = torch.export.Dim("batch", min=1, max=1024)
         seq_length = (
-            (torch.export.Dim("seql", min=1, max=131072) * 8) if self.is_lm else None
+            (torch.export.Dim("seql", min=1, max=131072) * 8) if self.is_lm() else None
         )
         res = []
 
