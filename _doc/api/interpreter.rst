@@ -46,3 +46,8 @@ _retrieve
 +++++++++
 
 .. autofunction:: experimental_experiment.torch_interpreter.onnx_export._retrieve
+
+TorchOpOverload
+================
+
+.. autoclass:: experimental_experiment.torch_interpreter._doc_.TorchOpOverload

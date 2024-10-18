@@ -146,7 +146,7 @@ class GraphBuilder(_GraphBuilderRuntime):
 
     You can setup environment variable ``ONNXSTOP``, ``ONNXSTOPSHAPE``, ``ONNXSTOPTYPE``
     to raise an exception when the type or shape
-    of a variable is set. Example: ``ONNXSTOP=attn_output python ...
+    of a variable is set. Example: ``ONNXSTOP=attn_output python ...``
     """
 
     class WrapSym:
@@ -2945,10 +2945,13 @@ class GraphBuilder(_GraphBuilderRuntime):
             )
         return res, large_inits
 
-    def get_debug_msg(self) -> str:
+    def get_debug_msg(self, limit: int = 1000) -> str:
         """
         Returns a string providing as much information as possible
         to help the developper understand why a conversion failed.
+
+        :param limit: limit the string if the model is big
+        :return: many pieces of informations about the on going conversion
         """
 
         def _align(s, length):
@@ -2990,6 +2993,14 @@ class GraphBuilder(_GraphBuilderRuntime):
             raise RuntimeError(f"Values unknown for type {type(t)}-{t}.")
 
         rows = ["", "--DEBUG--"]
+        hs = self._hash()
+        rows.append(
+            f"[GraphBuilder-{hs}] Message starts, there are "
+            f"{len(self.initializers_dict)} initializers, "
+            f"{len(self.nodes)} nodes, {len(self.inputs)} inputs, "
+            f"{len(self.inputs)} outputs."
+        )
+
         rows.append("--LOCAL FUNCTIONS--")
         for k, v in self.functions.items():
             rows.append(f"{k[0]},{k[1]}({v.input}) -> {v.output}")
@@ -3077,26 +3088,19 @@ class GraphBuilder(_GraphBuilderRuntime):
                 f"{self.get_rank(kk) if self.has_rank(kk) else ''}:"
                 f"{self.get_shape(kk) if self.has_shape(kk) else ''}:"
             )
-            if len(rows) > 1000:
+            if len(rows) > limit:
                 rows.append("...")
-                rows.append(
-                    f"Stopped with {len(self.initializers_dict)} "
-                    f"initializers and {len(self.nodes)} nodes."
-                )
-                return "\n".join(rows)
+                break
+
         rows.append("--ONNX--")
         for k, v in self._debug_msg.items():
             rows.append(f"-- {k} --")
             rows.append(pprint.pformat(v) if isinstance(v, dict) else str(v))
-            if len(rows) > 1000:
+            if len(rows) > limit:
                 rows.append("...")
-                rows.append(
-                    f"Stopped with {len(self.initializers_dict)} "
-                    f"initializers and {len(self.nodes)} nodes."
-                )
-                return "\n".join(rows)
+                break
+
         rows.append("--")
-        hs = self._hash()
         for io in self.inputs:
             shh = _nice_shape(io.type.tensor_type.shape)
             rows.append(
@@ -3109,13 +3113,10 @@ class GraphBuilder(_GraphBuilderRuntime):
                 f"[GraphBuilder-{hs}.make_initializer] "
                 f"{name}[{_dtype(init)}:{_shape(init)}{sval}]"
             )
-            if len(rows) > 1000:
+            if len(rows) > limit:
                 rows.append("...")
-                rows.append(
-                    f"Stopped with {len(self.initializers_dict)} "
-                    f"initializers and {len(self.nodes)} nodes."
-                )
-                return "\n".join(rows)
+                break
+
         for node in self.nodes:
             if node is None:
                 continue
@@ -3129,13 +3130,10 @@ class GraphBuilder(_GraphBuilderRuntime):
                 f"[{self._debug_string_inputs(node.input, node.output, 6)}] "
                 f"{node.op_type}{ext}:{node.input}->{node.output}"
             )
-            if len(rows) > 1000:
+            if len(rows) > limit:
                 rows.append("...")
-                rows.append(
-                    f"Stopped with {len(self.initializers_dict)} "
-                    f"initializers and {len(self.nodes)} nodes."
-                )
-                return "\n".join(rows)
+                break
+
         for io in self.outputs:
             shh = _nice_shape(io.type.tensor_type.shape)
             rows.append(
