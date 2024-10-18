@@ -239,7 +239,7 @@ jobs:
   - task: UsePythonVersion@0
     inputs:
       versionSpec: '$(python.version)'
-      architecture: 'x64'
+      architecture: 'arm64'
   - script: python -m pip install --upgrade pip setuptools wheel
     displayName: 'Install tools'
   - script: pip install -r requirements.txt
