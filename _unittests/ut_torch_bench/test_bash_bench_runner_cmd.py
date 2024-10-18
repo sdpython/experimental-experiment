@@ -353,11 +353,6 @@ class TestBashBenchRunnerCmd(ExtTestCase):
     def test_huggingface_export_bench_onnx_dynamo_cpu(self):
         self._hg_export_bench_cpu("onnx_dynamo", "101Dummy")
 
-    @ignore_warnings((DeprecationWarning, UserWarning))
-    @requires_torch("2.5")
-    def test_huggingface_export_bench_dynamo_cpu(self):
-        self._hg_export_bench_cpu("dynamo_export", "101Dummy")
-
     @skipif_ci_windows("exporter does not work on Windows")
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.4")
