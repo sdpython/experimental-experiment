@@ -1,4 +1,3 @@
-import sys
 import unittest
 from onnx.reference import ReferenceEvaluator
 from experimental_experiment.ext_test_case import (
@@ -8,6 +7,7 @@ from experimental_experiment.ext_test_case import (
     requires_onnxruntime,
     requires_torch,
     requires_transformers,
+    skipif_ci_windows,
 )
 from experimental_experiment.reference import ExtendedReferenceEvaluator, OrtEval
 from experimental_experiment.xbuilder import OptimizationOptions
@@ -16,7 +16,7 @@ from experimental_experiment.torch_models.llama_helper import get_llama_model
 
 
 class TestOnnxExportDynamicShapes(ExtTestCase):
-    @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
+    @skipif_ci_windows("not supported yet on Windows")
     @ignore_warnings((UserWarning, DeprecationWarning))
     @requires_torch("2.5")
     def test_linear_regression_dynamic_batch(self):
@@ -89,7 +89,7 @@ class TestOnnxExportDynamicShapes(ExtTestCase):
         got = ref.run(None, {"x": x.detach().cpu().numpy()})
         self.assertEqualArray(expected, got[0], atol=1e-5)
 
-    @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
+    @skipif_ci_windows("not supported yet on Windows")
     @ignore_warnings((UserWarning, DeprecationWarning))
     @requires_torch("2.5")
     def test_linear_regression_dynamic_derived_batch(self):
@@ -162,7 +162,7 @@ class TestOnnxExportDynamicShapes(ExtTestCase):
         got = ref.run(None, {"x": x.detach().cpu().numpy()})
         self.assertEqualArray(expected, got[0], atol=1e-5)
 
-    @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
+    @skipif_ci_windows("not supported yet on Windows")
     @ignore_warnings((UserWarning, DeprecationWarning))
     @requires_torch("2.5")
     def test_linear_regression_dynamic_batch_as_tuple(self):
@@ -235,7 +235,7 @@ class TestOnnxExportDynamicShapes(ExtTestCase):
         got = ref.run(None, {"x": x.detach().cpu().numpy()})
         self.assertEqualArray(expected, got[0], atol=1e-5)
 
-    @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
+    @skipif_ci_windows("not supported yet on Windows")
     @ignore_warnings((UserWarning, DeprecationWarning))
     @requires_torch("2.5")
     def test_linear_regression_dynamic_batch_only_dynamic(self):
@@ -282,7 +282,7 @@ class TestOnnxExportDynamicShapes(ExtTestCase):
         got = ref.run(None, {"x": x.detach().cpu().numpy()})
         self.assertEqualArray(expected, got[0], atol=1e-5)
 
-    @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
+    @skipif_ci_windows("not supported yet on Windows")
     @requires_torch("2.4", "bug")
     @requires_transformers("4.41.0", "dynamic shapes issue")
     @ignore_warnings(DeprecationWarning)
@@ -317,7 +317,7 @@ class TestOnnxExportDynamicShapes(ExtTestCase):
                     msg=f"input {i} failed",
                 )
 
-    @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
+    @skipif_ci_windows("not supported yet on Windows")
     @requires_torch("2.4", "bug")
     @requires_transformers("4.41.0", "dynamic shapes issue")
     @requires_onnxruntime("1.18")
@@ -356,7 +356,7 @@ class TestOnnxExportDynamicShapes(ExtTestCase):
                     msg=f"input {i} failed",
                 )
 
-    @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
+    @skipif_ci_windows("not supported yet on Windows")
     @requires_torch("2.5", "bug")
     @requires_transformers("4.41.0", "dynamic shapes issue")
     @requires_onnxruntime("1.18")
@@ -417,7 +417,7 @@ class TestOnnxExportDynamicShapes(ExtTestCase):
                     msg=f"input {i} failed",
                 )
 
-    @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
+    @skipif_ci_windows("not supported yet on Windows")
     @requires_cuda()
     @requires_torch("2.3", "bug")
     @requires_transformers("4.41.0", "dynamic shapes issue")
@@ -486,7 +486,7 @@ class TestOnnxExportDynamicShapes(ExtTestCase):
                 f"ExtendedReferenceEvaluator and OrtEval",
             )
 
-    @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
+    @skipif_ci_windows("not supported yet on Windows")
     @requires_cuda()
     @requires_torch("2.3", "bug")
     @requires_transformers("4.41.0", "dynamic shapes issue")
@@ -548,7 +548,7 @@ class TestOnnxExportDynamicShapes(ExtTestCase):
                 msg=f"input {i} failed with InferenceSession",
             )
 
-    @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
+    @skipif_ci_windows("not supported yet on Windows")
     @requires_cuda()
     @requires_torch("2.3", "bug")
     @requires_transformers("4.41.0", "dynamic shapes issue")

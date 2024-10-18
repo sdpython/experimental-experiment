@@ -1,5 +1,4 @@
 import unittest
-import sys
 import numpy as np
 from onnx import ModelProto, TensorProto
 from experimental_experiment.ext_test_case import (
@@ -192,7 +191,7 @@ class TestFallbackOxs(ExtTestCase):
         got = ext.run(None, {"x": x.numpy()})[0]
         self.assertEqual(got.shape, (5, 1))
 
-    @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
+    @skipif_ci_windows("not supported yet on Windows")
     @requires_torch("2.3", "bug")
     @ignore_warnings(DeprecationWarning)
     def test_llama_model_fallback_debug(self):

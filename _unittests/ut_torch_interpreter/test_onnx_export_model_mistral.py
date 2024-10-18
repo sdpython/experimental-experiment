@@ -1,6 +1,5 @@
 import contextlib
 import io
-import sys
 import unittest
 import warnings
 import onnxruntime  # noqa: F401
@@ -11,6 +10,7 @@ from experimental_experiment.ext_test_case import (
     requires_torch,
     requires_transformers,
     has_cuda,
+    skipif_ci_windows,
 )
 from experimental_experiment.xbuilder import OptimizationOptions
 from experimental_experiment.torch_interpreter import to_onnx
@@ -83,7 +83,7 @@ class TestOnnxExportMistral(ExtTestCase):
                 f"due to {e}\n{onnx_simple_text_plot(onx)}"
             )
 
-    @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
+    @skipif_ci_windows("not supported yet on Windows")
     @requires_torch("2.3", "bug")
     @ignore_warnings(DeprecationWarning)
     @requires_transformers("4.42", or_older_than="4.38")
