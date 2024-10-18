@@ -44,6 +44,10 @@ def _get_type(elem_type: Any, exc: bool = True) -> int:
             elem_type = TensorProto.UINT8
         elif "int8" in st:
             elem_type = TensorProto.INT8
+        elif "complex64" in st:
+            elem_type = TensorProto.COMPLEX64
+        elif "complex128" in st:
+            elem_type = TensorProto.COMPLEX128
         elif elem_type is None:
             elem_type = TensorProto.UNDEFINED
         elif exc:
