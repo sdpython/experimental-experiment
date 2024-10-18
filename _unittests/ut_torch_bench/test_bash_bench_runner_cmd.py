@@ -219,7 +219,7 @@ class TestBashBenchRunnerCmd(ExtTestCase):
 
     @skipif_ci_windows("exporter does not work on Windows")
     @ignore_warnings((DeprecationWarning, UserWarning))
-    @requires_torch("2.4")
+    @requires_torch("2.6")
     def test_export_bench_custom_cpu_dynamic_2_inputs(self):
         self._hg_export_bench_cpu("custom", "101Dummy2Inputs", dynamic=True, debug=False)
 

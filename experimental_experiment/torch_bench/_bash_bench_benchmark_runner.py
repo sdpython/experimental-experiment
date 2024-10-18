@@ -110,7 +110,11 @@ class BenchmarkRunner:
         self.dump_ort = dump_ort
         assert no_grad, "no_grad false not implemented yet"
         assert not fake_tensor, "fake_tensor true not implemented yet"
-        self.dlpack = has_onnxruntime_training(push_back_batch=True)
+        self.dlpack = self.dtype not in {
+            "bfloat16",
+            onnx.TensorProto.BFLOAT16,
+            torch.bfloat16,
+        } and has_onnxruntime_training(push_back_batch=True)
 
     def forward_pass(self, mod, inputs, collect_outputs=True):
         return mod(**inputs)
@@ -244,16 +248,20 @@ class BenchmarkRunner:
             return None
         if hasattr(obj, "to"):
             return obj.to(device)
-        # if isinstance(obj, onnxruntime.capi.onnxruntime_pybind11_state.OrtValue):
-        if hasattr(obj, "numpy"):
-            # Implicit copy to torch.Tensor
-            return torch.Tensor(obj.numpy()).to(device)
         if isinstance(obj, np.ndarray):
             t = torch.Tensor(obj).to(device)
             assert torch_dtype_to_onnx_dtype(t.dtype) == tensor_dtype_to_np_dtype(
                 obj.dtype
             ), f"Type mismatch between {obj.dtype} and {t.dtype}"
             return t
+        if hasattr(obj, "numpy"):
+            # if isinstance(obj, onnxruntime.capi.onnxruntime_pybind11_state.OrtValue):
+            # Implicit copy to torch.Tensor
+            if hasattr(obj, "to_dlpack"):
+                from torch._C import _from_dlpack
+
+                return _from_dlpack(obj.to_dlpack()).to(device)
+            return torch.Tensor(obj.numpy()).to(device)
         if "SquashedNormal" in obj.__class__.__name__ and device == "cpu":
             return obj
         if hasattr(obj, "conv_states") and obj.__class__.__name__ == "MambaCache":
@@ -1394,6 +1402,7 @@ class BenchmarkRunner:
         if isinstance(exported_model, onnx.ModelProto):
             # warmup session
             begin = time.perf_counter()
+            time_first_iter = None
             if quiet:
                 try:
                     for _ in range(warmup):
@@ -1403,6 +1412,8 @@ class BenchmarkRunner:
                             got = self.ort_run(sess, feeds)
                         else:
                             self.ort_run(sess, feeds)
+                        if time_first_iter is None:
+                            time_first_iter = time.perf_counter() - begin
                         if self.nvtx:
                             torch.cuda.nvtx.range_pop()
                 except Exception as e:
@@ -1410,7 +1421,7 @@ class BenchmarkRunner:
                         print(f"[benchmarkrunner.benchmark] err_warmup {e}")
                         traceback.print_tb(e.__traceback__, file=sys.stdout)
                     stats["ERR_warmup"] = _clean_string(str(e)).replace("\n", "_ ")
-                    stats["time_warmup"] = (time.perf_counter() - begin) / warmup
+                    stats["time_warmup_fail"] = time.perf_counter() - begin
                     return stats
             else:
                 for _ in range(warmup):
@@ -1420,9 +1431,13 @@ class BenchmarkRunner:
                         got = self.ort_run(sess, feeds)
                     else:
                         self.ort_run(sess, feeds)
+                    if time_first_iter is None:
+                        time_first_iter = time.perf_counter() - begin
                     if self.nvtx:
                         torch.cuda.nvtx.range_pop()
             stats["time_warmup"] = (time.perf_counter() - begin) / warmup
+            if time_first_iter is not None:
+                stats["time_warmup_first_iteration"] = time_first_iter
             if self.device.startswith("cuda"):
                 stats["mema_gpu_8_after_export_warmup"] = torch.cuda.max_memory_allocated(
                     device_id
@@ -1503,6 +1518,7 @@ class BenchmarkRunner:
             if exporter == "eager":
                 # no try, catch needed for eager mode.
                 begin = time.perf_counter()
+                time_first_iter = None
                 for _ in range(warmup):
                     if self.nvtx:
                         torch.cuda.nvtx.range_push("EAGER-WARMUP")
@@ -1510,11 +1526,16 @@ class BenchmarkRunner:
                         got = sess.run(feeds)
                     else:
                         sess.run(feeds)
+                    if time_first_iter is None:
+                        time_first_iter = time.perf_counter() - begin
                     if self.nvtx:
                         torch.cuda.nvtx.range_pop()
                 stats["time_warmup"] = (time.perf_counter() - begin) / warmup
+                if time_first_iter is not None:
+                    stats["time_warmup_first_iteration"] = time_first_iter
             else:
                 begin = time.perf_counter()
+                time_first_iter = None
                 if quiet:
                     try:
                         for _ in range(warmup):
@@ -1524,6 +1545,8 @@ class BenchmarkRunner:
                                 got = sess.run(feeds)
                             else:
                                 sess.run(feeds)
+                            if time_first_iter is None:
+                                time_first_iter = time.perf_counter() - begin
                             if self.nvtx:
                                 torch.cuda.nvtx.range_pop()
                     except Exception as e:
@@ -1531,7 +1554,7 @@ class BenchmarkRunner:
                             print(f"[benchmarkrunner.benchmark] err_warmup {e}")
                             traceback.print_tb(e.__traceback__, file=sys.stdout)
                         stats["ERR_warmup"] = _clean_string(str(e)).replace("\n", "_ ")
-                        stats["time_warmup"] = (time.perf_counter() - begin) / warmup
+                        stats["time_warmup_fail"] = time.perf_counter() - begin
                         return stats
                 else:
                     for _ in range(warmup):
@@ -1541,9 +1564,13 @@ class BenchmarkRunner:
                             got = sess.run(feeds)
                         else:
                             sess.run(feeds)
+                        if time_first_iter is None:
+                            time_first_iter = time.perf_counter() - begin
                         if self.nvtx:
                             torch.cuda.nvtx.range_pop()
                 stats["time_warmup"] = (time.perf_counter() - begin) / warmup
+                if time_first_iter is not None:
+                    stats["time_warmup_first_iteration"] = time_first_iter
             if self.device.startswith("cuda"):
                 stats["mema_gpu_8_after_export_warmup"] = torch.cuda.max_memory_allocated(
                     device_id

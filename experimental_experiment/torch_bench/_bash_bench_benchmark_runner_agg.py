@@ -185,6 +185,7 @@ def merge_benchmark_reports(
         "config_*",
     ),
     formulas=(
+        "export",
         "memory_peak",
         "buckets",
         "status",
@@ -196,6 +197,7 @@ def merge_benchmark_reports(
         "correction",
         "error",
     ),
+    timestamp_column: str = "timestamp",
     excel_output: Optional[str] = None,
     exc: bool = True,
     filter_in: Optional[str] = None,
@@ -212,6 +214,7 @@ def merge_benchmark_reports(
     slow_script: Optional[float] = None,
     fast_script: Optional[float] = None,
     exclude: Optional[List[int]] = None,
+    keep_more_recent: bool = False,
 ) -> Dict[str, pandas.DataFrame]:
     """
     Merges multiple files produced by bash_benchmark...
@@ -229,6 +232,7 @@ def merge_benchmark_reports(
     :param report_on: report on those metrics, ``<prefix>*`` means all
         columns starting with this prefix
     :param formulas: add computed metrics
+    :param timestamp_column: a day, used to tell the user this was run on this day
     :param excel_output: output the computed dataframe into a excel document
     :param exc: raise exception by default
     :param filter_in: filter in some data to make the report smaller (see below)
@@ -247,6 +251,7 @@ def merge_benchmark_reports(
     :param fast_script: produce a document for the fast models
         per exporter compare to torch_script
     :param exclude: exclude a list of files in the list
+    :param keep_more_recent: in case of duplicates, keep the most recent value
     :return: dictionary of dataframes
 
     Every key with a unique value is removed.
@@ -286,6 +291,7 @@ def merge_benchmark_reports(
             model=model,
             keys=keys,
             column_keys=column_keys,
+            timestamp_column=timestamp_column,
             report_on=report_on,
             formulas=formulas,
             exc=exc,
@@ -505,11 +511,39 @@ def merge_benchmark_reports(
     assert new_keys, f"new_keys is empty, column_keys={column_keys}"
 
     # remove duplicated rows
+    full_index = [
+        s
+        for s in df.columns
+        if s in {*column_keys, *keys, *model, "date", "date_start", timestamp_column}
+    ]
     if verbose:
-        print("[merge_benchmark_reports] remove duplicated rows")
-    full_index = [s for s in df.columns if s in {*column_keys, *keys, *model}]
+        print(f"[merge_benchmark_reports] remove duplicated rows, starts with {df.shape}")
+        print(f"[merge_benchmark_reports] index is {full_index}")
     dupli = ~df.duplicated(full_index, keep="last")
     df = df[dupli].copy()
+    if verbose:
+        print("[merge_benchmark_reports] continue with {df.shape}")
+
+    if keep_more_recent:
+        unique = [*model, *new_keys]
+        dates = [c for c in df.columns if c in ["date", "date_start", timestamp_column]]
+        if verbose:
+            # Keeps the most recent result.
+            print(
+                f"[merge_benchmark_reports] keep the most recent, "
+                f"starts with {df.shape}, with columns={unique} "
+                f"and dates={dates}"
+            )
+        g = df[[*unique, *dates]].copy()
+        for c in g.columns:
+            if g[c].dtype in (str, object):
+                g[c] = g[c].fillna("")
+        dfg = g.groupby(unique, as_index=False).max()
+        df = pandas.merge(df, dfg, on=[*unique, *dates], how="inner")
+        if verbose:
+            # Keeps the most recent result.
+            print(f"[merge_benchmark_reports] continue with {df.shape}")
+
     if verbose:
         print(f"[merge_benchmark_reports] done, shape={df.shape}")
         if output_clean_raw_data:
@@ -1169,11 +1203,8 @@ def _build_aggregated_document(
                     f"{set(final_res['SIMPLE'].dropna())}"
                 )
 
-        if verbose:
-            print(f"[merge_benchmark_reports] writes {export_simple!r}")
-
-        final_res["SIMPLE"].to_csv(export_simple, index=False)
-        _set_ = set(final_res["SIMPLE"])
+        data_csv = final_res["SIMPLE"]
+        _set_ = set(data_csv)
 
         # first pivot
         piv_index = tuple(c for c in ("dtype", "suite", "#order", "METRIC") if c in _set_)
@@ -1181,18 +1212,17 @@ def _build_aggregated_document(
             c for c in ("exporter", "opt_patterns", "dynamic", "rtopt") if c in _set_
         )
         ccc = [*piv_index, *piv_columns]
-        gr = final_res["SIMPLE"][[*ccc, "value"]].groupby(ccc).count()
+        gr = data_csv[[*ccc, "value"]].groupby(ccc).count()
         assert gr.values.max() <= 1, (
             f"Unexpected duplicated, piv_index={piv_index}, "
-            f"piv_columns={piv_columns}, columns={final_res['SIMPLE'].columns}, "
+            f"piv_columns={piv_columns}, columns={data_csv.columns}, "
             f"set of columns you may want to skip to pass this test: "
             f"{dict((k,set(df[k])) for k in new_keys if k in df.columns)}, "  # noqa: C402
             f"issue=\n{gr[gr['value'] > 1]}"
         )
 
         piv = (
-            final_res["SIMPLE"]
-            .pivot(
+            data_csv.pivot(
                 index=piv_index,
                 columns=piv_columns,
                 values="value",
@@ -1208,7 +1238,7 @@ def _build_aggregated_document(
         )
         piv_total = (
             pandas.pivot_table(
-                final_res["SIMPLE"],
+                data_csv,
                 index=piv_index,
                 columns=piv_columns,
                 values="value",
@@ -1217,13 +1247,28 @@ def _build_aggregated_document(
             .sort_index(axis=0)
             .sort_index(axis=1)
         )
-        piv = _fix_report_piv(piv)
-        piv_total = _fix_report_piv(piv_total, agg=True)
+        piv, weighted_speedup = _fix_report_piv(piv)
+        piv_total, _ = _fix_report_piv(piv_total, agg=True)
+
+        # concatenation with the all suite
+        series_append = piv_total.unstack(level=list(range(len(piv_total.index.names))))
+        data_append = pandas.DataFrame({"value": series_append}).reset_index(drop=False)
+        data_append["suite"] = "All"
+        if "DATE" in data_csv.columns:
+            data_append["DATE"] = data_csv["DATE"].max()
+        data_append = data_append[data_append["METRIC"] != "date"]
+        data_csv = pandas.concat([data_csv, weighted_speedup, data_append], axis=0)
+        if verbose:
+            print(f"[merge_benchmark_reports] writes {export_simple!r}")
+        data_csv.to_csv(export_simple, index=False)
 
         export_simple_x = f"{export_simple}.xlsx"
         if verbose:
-            print(f"[merge_benchmark_reports] writes {export_simple_x!r}")
-        with pandas.ExcelWriter(export_simple_x) as writer:
+            print(
+                f"[merge_benchmark_reports] writes {export_simple_x!r} "
+                f"shapes: {piv.shape}, {piv_total.shape}"
+            )
+        with pandas.ExcelWriter(export_simple_x, engine="openpyxl") as writer:
             piv.to_excel(writer, sheet_name="by_suite")
             piv_total.to_excel(writer, sheet_name="all_suites")
             _format_excel_cells(["by_suite", "all_suites"], writer, verbose=verbose)
@@ -1236,7 +1281,7 @@ def _build_aggregated_document(
             for c in [
                 "time_latency",
                 "time_latency_eager",
-                "time_export_success",
+                "time_export_unbiased",
                 "discrepancies_abs",
             ]
             if c in df.columns
@@ -1262,7 +1307,7 @@ def _build_aggregated_document(
     if excel_output:
         if verbose:
             print(f"[merge_benchmark_reports] apply Excel style with {excel_output!r}")
-        with pandas.ExcelWriter(excel_output) as writer:
+        with pandas.ExcelWriter(excel_output, engine="openpyxl") as writer:
             no_index = {
                 "0raw",
                 "0main",
