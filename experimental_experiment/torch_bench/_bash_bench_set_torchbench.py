@@ -932,6 +932,7 @@ class TorchBenchRunner(BenchmarkRunner):
             repeat=self.repeat,
             suite=self.SUITE,
             autocast=self.autocast,
+			model_name=model_name,
         )
 
     def iter_model_names(self):
