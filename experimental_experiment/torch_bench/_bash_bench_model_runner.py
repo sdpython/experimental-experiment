@@ -9,6 +9,7 @@ import time
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 import onnx
 import torch
+from ..torch_test_helper import string_type
 from .export_model_helper import compute_weight_size
 
 
@@ -732,8 +733,15 @@ class ModelRunner:
             options = None
 
         export_options = ExportOptions(strategy=strategy)
-        export_inputs = self.make_export_inputs(dynamic, wrapped=True, int_to_tensor=False)
-        dyn_shapes = self.get_dynamic_shapes(dynamic, wrapped=True)
+        export_inputs = self.make_export_inputs(dynamic)
+        dyn_shapes = self.get_dynamic_shapes(dynamic)
+
+        if verbose:
+            print(f"[ModelRunner._to_onnx_custom] dynamic_shapes={dyn_shapes!r}")
+            print(f"[ModelRunner._to_onnx_custom] type(model)={type(self.model)!r}")
+            print(
+                f"[ModelRunner._to_onnx_custom] export_inputs={string_type(export_inputs)!r}"
+            )
 
         if self.autocast:
             with torch.autocast(
@@ -923,8 +931,8 @@ class ModelRunner:
         else:
             inputs = self.inputs
 
-        dynamic_shapes_for_export = self.get_dynamic_shapes(dynamic, wrapped=True)
-        inputs = self.make_export_inputs(dynamic, wrapped=True, inputs=inputs)
+        dynamic_shapes_for_export = self.get_dynamic_shapes(dynamic)
+        inputs = self.make_export_inputs(dynamic, inputs=inputs)
         kwargs_export = {}
         if dynamic_shapes_for_export is not None:
             # torch_script only supports a dictionary
@@ -1035,8 +1043,15 @@ class ModelRunner:
         if fallback:
             additional_kwargs.update(dict(fallback=True))
 
-        export_inputs = self.make_export_inputs(dynamic, wrapped=True)
-        dyn_shapes = self.get_dynamic_shapes(dynamic, wrapped=True)
+        export_inputs = self.make_export_inputs(dynamic)
+        dyn_shapes = self.get_dynamic_shapes(dynamic)
+
+        if verbose:
+            print(f"[ModelRunner._to_onnx_dynamo] dynamic_shapes={dyn_shapes!r}")
+            print(
+                f"[ModelRunner._to_onnx_dynamo] export_inputs={string_type(export_inputs)!r}"
+            )
+            print(f"[ModelRunner._to_onnx_dynamo] type(model)={type(self.model)!r}")
 
         if self.autocast:
             with torch.autocast(device_type=self.device, dtype=self.dtype), torch.no_grad():
@@ -1147,26 +1162,21 @@ class ModelRunner:
         assert (
             not optimization or optimization == "none"
         ), f"optimization {optimization!r} not compatible with export"
-        from torch.export import export
         from ..torch_interpreter import ExportOptions
 
-        with torch.no_grad():
-            exported_mod = export(
-                self.model,
-                self.make_export_inputs(dynamic, wrapped=True),
-                dynamic_shapes=self.get_dynamic_shapes(dynamic, wrapped=True),
-            )
-
+        export_inputs = self.make_export_inputs(dynamic)
+        dynamic_shapes = self.get_dynamic_shapes(dynamic)
         export_options = ExportOptions(strategy=strategy)
-        dynamic_shapes = self.get_dynamic_shapes(dynamic, wrapped=True)
-
         if verbose:
-            print(f"[ModelRunner._to_export] export_options={export_options!r}")
             print(f"[ModelRunner._to_export] dynamic_shapes={dynamic_shapes!r}")
+            print(f"[ModelRunner._to_export] export_inputs={string_type(export_inputs)!r}")
+            print(f"[ModelRunner._to_export] strategy={strategy!r}")
+            print(f"[ModelRunner._to_export] export_options={export_options!r}")
+            print(f"[ModelRunner._to_export] type(model)={type(self.model)!r}")
 
         exported_mod = export_options.export(
             self.model,
-            self.make_export_inputs(dynamic, wrapped=True),
+            export_inputs,
             dynamic_shapes=dynamic_shapes,
             tracing_mode=False,
             same_signature=False,
@@ -1174,6 +1184,11 @@ class ModelRunner:
         )
 
         if export_options.decomposition_table:
+            if verbose:
+                print(
+                    f"[ModelRunner._to_export] decomposition_table="
+                    f"{export_options.decomposition_table!r}"
+                )
             from ..torch_interpreter.export_options import (
                 insert_contiguous_between_transpose_and_view,
             )
@@ -1671,7 +1686,7 @@ class ModelRunner:
         }:
             return self.inputs
 
-        use_inputs = self.inputs if not dynamic else self.make_dynamic_inputs(wrapped=True)
+        use_inputs = self.inputs if not dynamic else self.make_dynamic_inputs()
 
         # for onnx
         onx = onnx.load(filename, load_external_data=False)

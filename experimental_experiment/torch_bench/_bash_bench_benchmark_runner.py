@@ -992,7 +992,14 @@ class BenchmarkRunner:
         if pfilename and not os.path.exists(pfilename):
             os.makedirs(pfilename)
         cleaned_name = model_name.replace(".", "_").replace("/", "_")
-        filename = os.path.join(pfilename, f"model_{cleaned_name}-{exporter}.onnx")
+        filename = os.path.join(
+            pfilename,
+            (
+                f"model_{cleaned_name}-{exporter}{sopt}-"
+                f"d{1 if dynamic in BOOLEAN_VALUES else 0}"
+                f"rt{1 if rtopt in BOOLEAN_VALUES else 0}.onnx"
+            ),
+        )
 
         memory_session = (
             start_spying_on(cuda=self.device.startswith("cuda")) if memory_peak else None
@@ -1004,15 +1011,13 @@ class BenchmarkRunner:
             if dynamic:
                 print(
                     f"[BenchmarkRunner.benchmark] dynamic_shapes="
-                    f"{model_runner.get_dynamic_shapes(dynamic, wrapped=True)}"
+                    f"{model_runner.get_dynamic_shapes(dynamic)}"
                 )
             print(
                 f"[BenchmarkRunner.benchmark] input shapes="
-                f"{model_runner.get_input_shapes(dynamic=dynamic, wrapped=True)}"
+                f"{model_runner.get_input_shapes(dynamic=dynamic)}"
             )
-            _ishapes = model_runner.get_input_shapes(
-                dynamic=dynamic, wrapped=True, export=True
-            )
+            _ishapes = model_runner.get_input_shapes(dynamic=dynamic, export=True)
             print(f"[BenchmarkRunner.benchmark] export input shapes={_ishapes}")
 
         begin = time.perf_counter()

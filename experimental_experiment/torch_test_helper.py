@@ -7,6 +7,7 @@ import io
 import os
 import warnings
 from typing import Any, Dict, List, Optional, Union
+import numpy as np
 from onnx import ModelProto, save
 
 
@@ -131,3 +132,38 @@ def export_to_onnx(
             f.write((onx[0] if return_builder else onx).SerializeToString())
         ret["custom"] = filename
     return ret
+
+
+def string_type(obj: Any) -> str:
+    """
+    Displays the types of an object as a string.
+
+    :param obj: any
+    :return: str
+
+    .. runpython::
+        :showcode:
+
+        from experimental_experiment.torch_test_helper import string_type
+        print(string_type(tuple(1, "r")))
+    """
+    if isinstance(obj, int):
+        return "int"
+    if isinstance(obj, float):
+        return "float"
+    if isinstance(obj, np.ndarray):
+        return "A"
+    if isinstance(obj, tuple):
+        return f"tuple({','.join(map(string_type, obj))})"
+    if isinstance(obj, list):
+        return f"list({','.join(map(string_type, obj))})"
+    if isinstance(dict, list):
+        s = ",".join(map(lambda k, v: f"{k}:{string_type(v)}"))
+        return f"dict({s})"
+
+    import torch
+
+    if isinstance(obj, torch.Tensor):
+        return "T"
+
+    raise AssertionError(f"Unsupported type {type(obj)}")
