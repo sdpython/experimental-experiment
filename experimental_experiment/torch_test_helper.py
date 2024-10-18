@@ -147,23 +147,35 @@ def string_type(obj: Any) -> str:
         from experimental_experiment.torch_test_helper import string_type
         print(string_type(tuple(1, "r")))
     """
+    if obj is None:
+        return "None"
+    if isinstance(obj, tuple):
+        if len(obj) == 1:
+            return f"({string_type(obj[0])},)"
+        return f"({','.join(map(string_type, obj))})"
+    if isinstance(obj, list):
+        return f"list({','.join(map(string_type, obj))})"
+    if isinstance(obj, dict):
+        s = ",".join(f"{kv[0]}:{string_type(kv[1])}" for kv in obj.items())
+        return f"dict({s})"
+    if isinstance(obj, np.ndarray):
+        return "A"
+
+    import torch
+
+    if isinstance(obj, torch.export.dynamic_shapes._DerivedDim):
+        return "DerivedDim"
+    if isinstance(obj, torch.export.dynamic_shapes._Dim):
+        return "Dim"
+    if isinstance(obj, torch.SymInt):
+        return "SymInt"
+    if isinstance(obj, torch.SymFloat):
+        return "SymFloat"
+    if isinstance(obj, torch.Tensor):
+        return "T"
     if isinstance(obj, int):
         return "int"
     if isinstance(obj, float):
         return "float"
-    if isinstance(obj, np.ndarray):
-        return "A"
-    if isinstance(obj, tuple):
-        return f"tuple({','.join(map(string_type, obj))})"
-    if isinstance(obj, list):
-        return f"list({','.join(map(string_type, obj))})"
-    if isinstance(dict, list):
-        s = ",".join(map(lambda k, v: f"{k}:{string_type(v)}"))
-        return f"dict({s})"
-
-    import torch
-
-    if isinstance(obj, torch.Tensor):
-        return "T"
 
     raise AssertionError(f"Unsupported type {type(obj)}")

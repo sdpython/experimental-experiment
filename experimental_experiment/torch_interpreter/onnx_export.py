@@ -569,11 +569,7 @@ def to_onnx(
         print(f"[to_onnx] build the graph module with input_names={input_names}")
 
     if isinstance(dynamic_shapes, tuple):
-        if is_wrapped(model, dynamic_shapes):
-            # Model is wrapped
-            dyn_shapes = dynamic_shapes[0]
-        else:
-            dyn_shapes = dynamic_shapes
+        dyn_shapes = dynamic_shapes[0] if is_wrapped(mod, dynamic_shapes) else dynamic_shapes
         if not input_names:
             input_names = [f"input{i}" for i in range(len(dyn_shapes))]
         assert len(input_names) == len(dyn_shapes), (
