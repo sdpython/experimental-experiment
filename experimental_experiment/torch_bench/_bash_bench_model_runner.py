@@ -746,7 +746,7 @@ class ModelRunner:
         begin = time.perf_counter()
         self.std_to_dump.append(pprint.pformat(stats))
         self.std_to_dump.append("----------------------------")
-        self.std_to_dump.append(builder.get_debug_msg())
+        self.std_to_dump.append(builder.get_debug_msg(2**24))
         stats["time_export_debuginfo"] = time.perf_counter() - begin
         begin = time.perf_counter()
         onx.save(name, all_tensors_to_one_file=True)
