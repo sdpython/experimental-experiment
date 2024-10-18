@@ -1,7 +1,6 @@
 import os
-import sys
 import unittest
-from experimental_experiment.ext_test_case import ExtTestCase
+from experimental_experiment.ext_test_case import ExtTestCase, skipif_ci_windows
 from experimental_experiment.xbuilder import OptimizationOptions
 from experimental_experiment.torch_interpreter import to_onnx
 
@@ -123,7 +122,7 @@ class TestOnnxExportBreak(ExtTestCase):
             return
         InferenceSession(name.SerializeToString(), providers=["CPUExecutionProvider"])
 
-    @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
+    @skipif_ci_windows("not supported yet on Windows")
     def test_simple_export_pool(self):
         from onnxruntime import InferenceSession
 
@@ -136,7 +135,7 @@ class TestOnnxExportBreak(ExtTestCase):
             results.append(ref.run(None, {"input": x})[0])
         self.assertEqualArray(results[0], results[1])
 
-    @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
+    @skipif_ci_windows("not supported yet on Windows")
     @unittest.skip(reason="graph break not supported")
     def test_simple_export_explicit_break(self):
         from onnxruntime import InferenceSession

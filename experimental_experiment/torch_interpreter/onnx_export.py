@@ -496,6 +496,15 @@ def _replacements_dynamic_shapes(
     return new_dynamic_shapes
 
 
+def is_wrapped(model: Any, dynamic_shapes: Optional[Any] = None) -> bool:
+    """
+    Tells if a model is wrapped.
+    """
+    if len(dynamic_shapes) != 1 or not isinstance(dynamic_shapes[0], tuple):
+        return False
+    raise AssertionError(f"Unable to tell for type {type(model)}")
+
+
 def to_onnx(
     mod: Union["torch.nn.Module", "torch.fx.GraphModule"],  # noqa: F821
     args: Sequence["torch.Tensor"],  # noqa: F821
@@ -560,11 +569,7 @@ def to_onnx(
         print(f"[to_onnx] build the graph module with input_names={input_names}")
 
     if isinstance(dynamic_shapes, tuple):
-        if len(dynamic_shapes) == 1 and isinstance(dynamic_shapes[0], tuple):
-            # Model is wrapped
-            dyn_shapes = dynamic_shapes[0]
-        else:
-            dyn_shapes = dynamic_shapes
+        dyn_shapes = dynamic_shapes[0] if is_wrapped(mod, dynamic_shapes) else dynamic_shapes
         if not input_names:
             input_names = [f"input{i}" for i in range(len(dyn_shapes))]
         assert len(input_names) == len(dyn_shapes), (

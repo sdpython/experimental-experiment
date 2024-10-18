@@ -1,4 +1,3 @@
-import sys
 import unittest
 from experimental_experiment.reference import ExtendedReferenceEvaluator
 from experimental_experiment.ext_test_case import (
@@ -7,6 +6,7 @@ from experimental_experiment.ext_test_case import (
     requires_torch,
     requires_onnxruntime_training,
     has_cuda,
+    skipif_ci_windows,
 )
 from experimental_experiment.torch_models.llama_helper import get_llama_model
 from experimental_experiment.torch_models.mistral_helper import get_mistral_model
@@ -16,7 +16,7 @@ from experimental_experiment.torch_models.training_helper import train_loop
 
 
 class TestEdMistral(ExtTestCase):
-    @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
+    @skipif_ci_windows("not supported yet on Windows")
     @ignore_warnings(DeprecationWarning)
     @requires_torch("2.3", "AssertionError: original output #6 is None")
     def test_mistral_export_rename(self):
@@ -45,7 +45,7 @@ class TestEdMistral(ExtTestCase):
             results = sess.run(None, feeds)
             self.assertEqualArray(expected[0].detach().numpy(), results[0], atol=5e-3)
 
-    @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
+    @skipif_ci_windows("not supported yet on Windows")
     @ignore_warnings(DeprecationWarning)
     @requires_torch("2.3", "AssertionError: original output #6 is None")
     def test_mistral_export_norename(self):
@@ -77,7 +77,7 @@ class TestEdMistral(ExtTestCase):
             results = sess.run(None, feeds)
             self.assertEqualArray(expected[0].detach().numpy(), results[0], atol=1e-3)
 
-    @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
+    @skipif_ci_windows("not supported yet on Windows")
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.3", "AssertionError: original output #6 is None")
     def test_mistral_cort_static(self):
@@ -108,7 +108,7 @@ class TestEdMistral(ExtTestCase):
             for i, inst in enumerate(instances):
                 self.dump_onnx(f"test_mistral_cort_static_{i}.onnx", inst["onnx"])
 
-    @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
+    @skipif_ci_windows("not supported yet on Windows")
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.3", "AssertionError: original output #6 is None")
     def test_mistral_cort_static_norename(self):
@@ -139,7 +139,7 @@ class TestEdMistral(ExtTestCase):
             for i, inst in enumerate(instances):
                 self.dump_onnx(f"test_mistral_cort_static_{i}_norename.onnx", inst["onnx"])
 
-    @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
+    @skipif_ci_windows("not supported yet on Windows")
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.5", "AssertionError: original output #6 is None")
     @requires_onnxruntime_training(True)
@@ -167,7 +167,7 @@ class TestEdMistral(ExtTestCase):
         train_loop(model, *input_tensors)
         train_loop(compiled_model, *input_tensors)
 
-    @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
+    @skipif_ci_windows("not supported yet on Windows")
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.5", "AssertionError: original output #6 is None")
     @requires_onnxruntime_training(True)
@@ -191,7 +191,7 @@ class TestEdMistral(ExtTestCase):
         train_loop(model, *input_tensors)
         train_loop(compiled_model, *input_tensors)
 
-    @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
+    @skipif_ci_windows("not supported yet on Windows")
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.5", "AssertionError: original output #6 is None")
     @requires_onnxruntime_training(True)

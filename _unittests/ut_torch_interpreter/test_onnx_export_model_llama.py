@@ -1,6 +1,5 @@
 import contextlib
 import io
-import sys
 import unittest
 import warnings
 import onnxruntime  # noqa: F401
@@ -9,6 +8,7 @@ from experimental_experiment.ext_test_case import (
     ExtTestCase,
     ignore_warnings,
     requires_torch,
+    skipif_ci_windows,
 )
 from experimental_experiment.xbuilder import OptimizationOptions
 from experimental_experiment.torch_interpreter import to_onnx
@@ -89,7 +89,7 @@ class TestOnnxExportLlama(ExtTestCase):
                 f"due to {e}\n{onnx_simple_text_plot(onx)}"
             )
 
-    @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
+    @skipif_ci_windows("not supported yet on Windows")
     @ignore_warnings(DeprecationWarning)
     @requires_torch("2.7", "dynamic_shapes are not well carries")
     def test_llama_attention(self):
@@ -126,7 +126,7 @@ class TestOnnxExportLlama(ExtTestCase):
         self.assertEqualArray(expected.detach().numpy(), results[0], atol=1e-5)
         self.check_model_ort(onx)
 
-    @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
+    @skipif_ci_windows("not supported yet on Windows")
     @ignore_warnings(DeprecationWarning)
     @requires_torch("2.7", "dynamic_shapes are not well carries")
     def test_llama_decoder(self):
@@ -144,7 +144,7 @@ class TestOnnxExportLlama(ExtTestCase):
             self.assertEqualArray(expected.detach().numpy(), results[0], atol=1e-5)
             self.check_model_ort(onx)
 
-    @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
+    @skipif_ci_windows("not supported yet on Windows")
     @requires_torch("2.4", "Unable to find input 'x' in known results")
     @ignore_warnings(DeprecationWarning)
     def test_llama_model_dynamo_false(self):
@@ -170,7 +170,7 @@ class TestOnnxExportLlama(ExtTestCase):
             #     f.write(onx.SerializeToString())
             self.check_model_ort(onx)
 
-    @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
+    @skipif_ci_windows("not supported yet on Windows")
     @requires_torch("2.4", "Unable to find input 'x' in known results")
     @ignore_warnings(DeprecationWarning)
     def test_nn_dynamo_false(self):

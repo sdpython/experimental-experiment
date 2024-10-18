@@ -3,5 +3,4 @@ onnx>=1.16.0
 # onnxruntime-training; sys_platform == 'linux' and python_version < "3.12"
 # onnxruntime; sys_platform != 'linux' or python_version >= "3.12"
 onnxruntime
-torch>=2.3; sys_platform != 'darwin'
-torch; sys_platform == 'darwin'
+torch>=2.3

@@ -1,4 +1,3 @@
-import sys
 import unittest
 from experimental_experiment.reference import ExtendedReferenceEvaluator
 from experimental_experiment.ext_test_case import (
@@ -7,6 +6,7 @@ from experimental_experiment.ext_test_case import (
     requires_torch,
     requires_onnxruntime_training,
     has_cuda,
+    skipif_ci_windows,
 )
 from experimental_experiment.torch_models.phi_helper import get_phi_model
 from experimental_experiment.torch_test_helper import export_to_onnx, check_model_ort
@@ -18,7 +18,7 @@ from experimental_experiment.torch_models.training_helper import (
 
 
 class TestEdPhi(ExtTestCase):
-    @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
+    @skipif_ci_windows("not supported yet on Windows")
     @ignore_warnings(DeprecationWarning)
     @requires_torch("2.5", "AssertionError: original output #6 is None")
     def test_phi_export_no_rename(self):
@@ -47,7 +47,7 @@ class TestEdPhi(ExtTestCase):
             results = sess.run(None, feeds)
             self.assertEqualArray(expected[0].detach().numpy(), results[0], atol=1e-2)
 
-    @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
+    @skipif_ci_windows("not supported yet on Windows")
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.3", "AssertionError: original output #6 is None")
     def test_phi_cort_static_not_mixed(self):
@@ -81,7 +81,7 @@ class TestEdPhi(ExtTestCase):
             for i, inst in enumerate(instances):
                 self.dump_onnx(f"test_phi_cort_static_{i}.onnx", inst["onnx"])
 
-    @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
+    @skipif_ci_windows("not supported yet on Windows")
     @ignore_warnings((DeprecationWarning, UserWarning, RuntimeWarning))
     @requires_torch("2.4")
     @unittest.skipIf(not has_cuda(), reason="requires cuda")
@@ -125,7 +125,7 @@ class TestEdPhi(ExtTestCase):
             for i, inst in enumerate(instances):
                 self.dump_onnx(f"test_phi_cort_static_mixed_{i}.onnx", inst["onnx"])
 
-    @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
+    @skipif_ci_windows("not supported yet on Windows")
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.4")
     @unittest.skipIf(not has_cuda(), reason="requires cuda")
@@ -169,7 +169,7 @@ class TestEdPhi(ExtTestCase):
             for i, inst in enumerate(instances):
                 self.dump_onnx(f"test_phi_cort_static_mixed_{i}.onnx", inst["onnx"])
 
-    @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
+    @skipif_ci_windows("not supported yet on Windows")
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.5", "AssertionError: original output #6 is None")
     @requires_onnxruntime_training(True)
@@ -204,7 +204,7 @@ class TestEdPhi(ExtTestCase):
                 self.dump_onnx(f"test_phi_cort_dynamic_{i}.onnx", inst["onnx"])
 
     """
-    @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
+    @skipif_ci_windows("not supported yet on Windows")
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.3", "AssertionError: original output #6 is None")
     def test_phi_cort_static(self):
@@ -235,7 +235,7 @@ class TestEdPhi(ExtTestCase):
             for i, inst in enumerate(instances):
                 self.dump_onnx(f"test_phi_cort_static_{i}.onnx", inst["onnx"])
 
-    @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
+    @skipif_ci_windows("not supported yet on Windows")
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.3", "AssertionError: original output #6 is None")
     def test_phi_cort_static_norename(self):
@@ -268,7 +268,7 @@ class TestEdPhi(ExtTestCase):
                     f"test_phi_cort_static_{i}_norename.onnx", inst["onnx"]
                 )
 
-    @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
+    @skipif_ci_windows("not supported yet on Windows")
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.3", "AssertionError: original output #6 is None")
     def test_phi_cort_dynamic(self):
@@ -299,7 +299,7 @@ class TestEdPhi(ExtTestCase):
             for i, inst in enumerate(instances):
                 self.dump_onnx(f"test_phi_cort_dynamic_{i}.onnx", inst["onnx"])
 
-    @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
+    @skipif_ci_windows("not supported yet on Windows")
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.3", "AssertionError: original output #6 is None")
     def test_phi_cort_dynamic_norename(self):
@@ -332,7 +332,7 @@ class TestEdPhi(ExtTestCase):
                     f"test_phi_cort_dynamic_{i}_norename.onnx", inst["onnx"]
                 )
 
-    @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
+    @skipif_ci_windows("not supported yet on Windows")
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.3", "AssertionError: original output #6 is None")
     def test_phi_cort_dynamic_norename_custom(self):

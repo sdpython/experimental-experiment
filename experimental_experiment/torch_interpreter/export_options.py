@@ -202,6 +202,10 @@ class ExportOptions:
             return dec
 
         if exc:
+            exported_mod = torch.export.export(
+                mod, args, dynamic_shapes=dynamic_shapes, strict=self.strict
+            )
+        else:
             try:
                 exported_mod = torch.export.export(
                     mod, args, dynamic_shapes=dynamic_shapes, strict=self.strict
@@ -230,10 +234,6 @@ class ExportOptions:
                     f"dynamic_shapes={dynamic_shapes}\n--\ne={e}\n--\neee={eee}"
                     f"\n---exported-program---\n{exported_mod}"
                 ) from e
-        else:
-            exported_mod = torch.export.export(
-                mod, args, dynamic_shapes=dynamic_shapes, strict=self.strict
-            )
 
         if exported_mod is None:
             if verbose:

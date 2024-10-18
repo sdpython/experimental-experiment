@@ -1,4 +1,3 @@
-import sys
 import unittest
 from experimental_experiment.reference import ExtendedReferenceEvaluator
 from experimental_experiment.ext_test_case import (
@@ -6,6 +5,7 @@ from experimental_experiment.ext_test_case import (
     ignore_warnings,
     requires_torch,
     has_cuda,
+    skipif_ci_windows,
 )
 from experimental_experiment.torch_models.phi3_helper import get_phi3_model
 from experimental_experiment.torch_test_helper import export_to_onnx, check_model_ort
@@ -32,7 +32,7 @@ class TestEdPhi3(ExtTestCase):
         torch._dynamo.config.suppress_errors = cls._keep
 
     @unittest.skipIf(not has_phi3(), reason="transformers not recent enough")
-    @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
+    @skipif_ci_windows("not supported yet on Windows")
     @ignore_warnings(DeprecationWarning)
     @requires_torch("2.4", "for transformers 4.41.1")
     def test_phi3_export_no_rename(self):
@@ -62,7 +62,7 @@ class TestEdPhi3(ExtTestCase):
             self.assertEqualArray(expected[0].detach().numpy(), results[0], atol=1e-5)
 
     @unittest.skipIf(not has_phi3(), reason="transformers not recent enough")
-    @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
+    @skipif_ci_windows("not supported yet on Windows")
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.4", "for transformers 4.41.1")
     def test_phi3_cort_static_not_mixed(self):
@@ -106,7 +106,7 @@ class TestEdPhi3(ExtTestCase):
                 self.dump_onnx(f"test_phi3_cort_static_{i}.onnx", inst["onnx"])
 
     @unittest.skipIf(not has_phi3(), reason="transformers not recent enough")
-    @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
+    @skipif_ci_windows("not supported yet on Windows")
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.4", "for transformers 4.41.1")
     @unittest.skipIf(not has_cuda(), reason="CUDA is needed.")
@@ -158,7 +158,7 @@ class TestEdPhi3(ExtTestCase):
                 self.dump_onnx(f"test_phi3_cort_static_mixed_{i}.onnx", inst["onnx"])
 
     @unittest.skipIf(not has_phi3(), reason="transformers not recent enough")
-    @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
+    @skipif_ci_windows("not supported yet on Windows")
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.5", "for transformers 4.41.1")
     def test_phi3_cort_dynamic(self):
@@ -201,7 +201,7 @@ class TestEdPhi3(ExtTestCase):
                 self.dump_onnx(f"test_phi3_cort_dynamic_{i}.onnx", inst["onnx"])
 
     @unittest.skipIf(not has_phi3(), reason="transformers not recent enough")
-    @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
+    @skipif_ci_windows("not supported yet on Windows")
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.4", "for transformers 4.41.1")
     def test_phi3_cort_static(self):
@@ -242,7 +242,7 @@ class TestEdPhi3(ExtTestCase):
                 self.dump_onnx(f"test_phi3_cort_static_{i}.onnx", inst["onnx"])
 
     """
-    @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
+    @skipif_ci_windows("not supported yet on Windows")
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.3", "AssertionError: original output #6 is None")
     def test_phi3_cort_static_norename(self):
@@ -275,7 +275,7 @@ class TestEdPhi3(ExtTestCase):
                     f"test_phi3_cort_static_{i}_norename.onnx", inst["onnx"]
                 )
 
-    @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
+    @skipif_ci_windows("not supported yet on Windows")
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.3", "AssertionError: original output #6 is None")
     def test_phi3_cort_dynamic(self):
@@ -306,7 +306,7 @@ class TestEdPhi3(ExtTestCase):
             for i, inst in enumerate(instances):
                 self.dump_onnx(f"test_phi3_cort_dynamic_{i}.onnx", inst["onnx"])
 
-    @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
+    @skipif_ci_windows("not supported yet on Windows")
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.3", "AssertionError: original output #6 is None")
     def test_phi3_cort_dynamic_norename(self):
@@ -339,7 +339,7 @@ class TestEdPhi3(ExtTestCase):
                     f"test_phi3_cort_dynamic_{i}_norename.onnx", inst["onnx"]
                 )
 
-    @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
+    @skipif_ci_windows("not supported yet on Windows")
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.3", "AssertionError: original output #6 is None")
     def test_phi3_cort_dynamic_norename_custom(self):

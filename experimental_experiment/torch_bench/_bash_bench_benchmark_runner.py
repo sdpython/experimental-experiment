@@ -26,6 +26,7 @@ from ..bench_run import max_diff
 from ..memory_peak import flatten, start_spying_on
 
 from ..ext_test_case import has_onnxruntime_training
+from ..torch_test_helper import string_type
 from ..xbuilder._dtype_helper import torch_dtype_to_onnx_dtype
 
 
@@ -992,7 +993,14 @@ class BenchmarkRunner:
         if pfilename and not os.path.exists(pfilename):
             os.makedirs(pfilename)
         cleaned_name = model_name.replace(".", "_").replace("/", "_")
-        filename = os.path.join(pfilename, f"model_{cleaned_name}-{exporter}.onnx")
+        filename = os.path.join(
+            pfilename,
+            (
+                f"model_{cleaned_name}-{exporter}{sopt}-"
+                f"d{1 if dynamic in BOOLEAN_VALUES else 0}"
+                f"rt{1 if rtopt in BOOLEAN_VALUES else 0}.onnx"
+            ),
+        )
 
         memory_session = (
             start_spying_on(cuda=self.device.startswith("cuda")) if memory_peak else None
@@ -1000,20 +1008,22 @@ class BenchmarkRunner:
         if memory_session is not None and self.verbose:
             print("[BenchmarkRunner.benchmark] start_spying_on")
 
+        dyn_shapes = model_runner.get_input_shapes(dynamic=dynamic)
         if self.verbose:
             if dynamic:
                 print(
                     f"[BenchmarkRunner.benchmark] dynamic_shapes="
-                    f"{model_runner.get_dynamic_shapes(dynamic, wrapped=True)}"
+                    f"{model_runner.get_dynamic_shapes(dynamic)}"
                 )
-            print(
-                f"[BenchmarkRunner.benchmark] input shapes="
-                f"{model_runner.get_input_shapes(dynamic=dynamic, wrapped=True)}"
-            )
-            _ishapes = model_runner.get_input_shapes(
-                dynamic=dynamic, wrapped=True, export=True
-            )
+            print(f"[BenchmarkRunner.benchmark] input shapes={dyn_shapes}")
+            _ishapes = model_runner.get_input_shapes(dynamic=dynamic, export=True)
             print(f"[BenchmarkRunner.benchmark] export input shapes={_ishapes}")
+
+        stats["onnx_type_input"] = string_type(model_runner.inputs)
+        if dynamic:
+            stats["onnx_type_dynshapes"] = string_type(
+                model_runner.get_dynamic_shapes(dynamic=dynamic)
+            )
 
         begin = time.perf_counter()
         if quiet:
