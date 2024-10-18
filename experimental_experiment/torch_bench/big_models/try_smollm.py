@@ -57,21 +57,21 @@ def demo_model(
     :param verbose: verbosity
     :return: results (a string in this case)
     """
-    prompt = inputs or """def print_hello_world():"""
+    prompt = inputs or """def print_hello_world(): in french"""
     with torch.no_grad():
         if verbose:
             print("[demo_model] tokenize the input for codellama")
         input_ids = tokenizer(prompt, return_tensors="pt")["input_ids"]
         input_ids = input_ids.to(device)
+        print(input_ids)
         if verbose:
             print("[demo_model] generates the token (codellama)")
         generated_ids = model.generate(input_ids, max_new_tokens=max_new_tokens)
         if verbose:
             print("[demo_model] interpret the answer")
-        filling = tokenizer.batch_decode(
+        output = tokenizer.batch_decode(
             generated_ids[:, input_ids.shape[1] :], skip_special_tokens=skip_special_tokens
         )[0]
-        output = prompt.replace("<FILL_ME>", filling)
         if verbose:
             print(output)
             print("[demo_model] done")

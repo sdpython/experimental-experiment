@@ -188,6 +188,7 @@ class ModelRunner:
         None is default behavior,
         'nowrap' to explicit avoid wrapping
     :param nvtx: enable nvtx events
+    :param model_name: model name
     """
 
     _patched = None
@@ -279,6 +280,7 @@ class ModelRunner:
         autocast: bool = False,
         wrap_kind: Optional[None] = None,
         nvtx: bool = False,
+        model_name: Optional[str] = None,
     ):
         if dtype is None:
             cvt = lambda o: self._to_type_or_device(o, device)  # noqa: E731
@@ -368,6 +370,7 @@ class ModelRunner:
         self.warmup = warmup
         self.suite = suite
         self.autocast = autocast
+        self.model_name = model_name
         self.nvtx = nvtx
         assert self.autocast is not None
         self.std_to_dump = []
@@ -375,6 +378,16 @@ class ModelRunner:
     @property
     def input_names(self):
         return self.raw_input_names
+
+    def is_lm(self) -> bool:
+        """
+        Returns True if the model is a language model.
+        In that case, the dynamic dimensions with the two first ones.
+        This test relies on the model name.
+        """
+        if not self.model_name:
+            return False
+        return "LM" in self.model_name
 
     def get_dynamic_shapes(
         self,
@@ -400,23 +413,32 @@ class ModelRunner:
             f"Unexpected number of input_names {len(input_names)} != "
             f"{len(self.inputs)} (expected), input_names={input_names!r}"
         )
-        dim = torch.export.Dim("batch", min=1, max=1024)
+
+        batch = torch.export.Dim("batch", min=1, max=1024)
+        seq_length = (
+            (torch.export.Dim("seql", min=1, max=131072) * 8) if self.is_lm else None
+        )
         res = []
+
         for i, x in enumerate(self.inputs):
             if x is None or isinstance(x, (int, float)):
                 res.append(None)
                 continue
+
+            dyn_dims = {0: batch}
+            if seq_length is not None:
+                dyn_dims.update({1: seq_length})
             if isinstance(x, list):
                 assert all(
                     hasattr(_, "shape") for _ in x
                 ), f"Unsupported types in a list {[type(_) for _ in x]} at position {i}"
-                tries = [{0: dim} if len(_.shape) > 1 else None for _ in x]
+                tries = [dyn_dims if len(_.shape) > 1 else None for _ in x]
                 res.append(tries)
                 continue
             assert hasattr(
                 x, "shape"
             ), f"Unexpected type {type(x)} for input {i}/{len(self.inputs)}"
-            res.append({0: dim} if len(x.shape) > 1 else None)
+            res.append(dyn_dims if len(x.shape) > 1 else None)
 
         final = tuple(res)
         if wrapped:
@@ -714,7 +736,9 @@ class ModelRunner:
         dyn_shapes = self.get_dynamic_shapes(dynamic, wrapped=True)
 
         if self.autocast:
-            with torch.autocast(device_type=self.device, dtype=self.dtype), torch.no_grad():
+            with torch.autocast(
+                device_type=self.device, dtype=self.dtype
+            ), torch.no_grad(), bypass_export_some_errors():
                 onx, builder, stats = to_onnx(
                     self.model,
                     export_inputs,
@@ -727,9 +751,10 @@ class ModelRunner:
                     return_builder=True,
                     dynamic_shapes=dyn_shapes,
                     export_options=export_options,
+                    inline=True,
                 )
         else:
-            with torch.no_grad():
+            with torch.no_grad(), bypass_export_some_errors():
                 onx, builder, stats = to_onnx(
                     self.model,
                     export_inputs,
@@ -742,6 +767,7 @@ class ModelRunner:
                     return_builder=True,
                     dynamic_shapes=dyn_shapes,
                     export_options=export_options,
+                    inline=True,
                 )
         begin = time.perf_counter()
         self.std_to_dump.append(pprint.pformat(stats))
@@ -1563,7 +1589,7 @@ class ModelRunner:
                 new_shape.append(dyn_values[name])
                 continue
             d = input_shape[j]
-            d += 1
+            d += 1 if j == 0 else 8
             dyn_values[name] = d
             new_shape.append(d)
 

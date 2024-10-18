@@ -97,6 +97,7 @@ class ExplicitRunner(BenchmarkRunner):
             suite=self.SUITE,
             autocast=self.autocast,
             wrap_kind="nowrap",
+            model_name=model_name,
         )
 
     def iter_model_names(self):

@@ -58,7 +58,7 @@ def parse_expression(
                             f"Unable to convert type {type(d)} into string"
                         ) from e
                 sds.append(sd)
-            assert node.id in context or node.id in set(sds), (
+            assert context is None or node.id in context or node.id in set(sds), (
                 f"Unable to find name {node.id!r} from expression {expr!r}, "
                 f"context is {sorted(context)}"
             )

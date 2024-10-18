@@ -30,9 +30,12 @@ def is_static_shape(shape: DYNAMIC_SHAPE) -> bool:
 
 
 def is_static_dimension(d: int) -> bool:
+    import torch
+
+    if isinstance(d, torch.export.dynamic_shapes._Dim):
+        return False
     if isinstance(d, int):
         return True
-    import torch
 
     assert isinstance(
         d, (torch.SymInt, torch.SymFloat, str)

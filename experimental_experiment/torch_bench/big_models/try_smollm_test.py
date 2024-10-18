@@ -9,7 +9,7 @@ from experimental_experiment.torch_bench.big_models.try_smollm import (
 
 class TestSmolLM(ExtTestCase):
     @hide_stdout()
-    @requires_cuda(memory=7)
+    @requires_cuda(memory=24)
     def test_demo_float16(self):
         tokenizer, model = load_model(
             device="cuda", dtype="float16", verbose=1, load_tokenizer=True
