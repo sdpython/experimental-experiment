@@ -226,7 +226,7 @@ jobs:
       artifactName: 'wheel-linux-$(python.version)'
       targetPath: 'dist'
 
-- job: 'Windows311'
+- job: 'Windows312'
   pool:
     vmImage: 'windows-latest'
   strategy:
@@ -289,14 +289,14 @@ jobs:
   strategy:
     matrix:
       Python311-Mac:
-        python.version: '3.11'
+        python.version: '3.12'
     maxParallel: 3
 
   steps:
   - task: UsePythonVersion@0
     inputs:
       versionSpec: '$(python.version)'
-      architecture: 'arm64'
+      architecture: 'x86_64'
   - script: gcc --version
     displayName: 'gcc version'
   #- script: brew upgrade

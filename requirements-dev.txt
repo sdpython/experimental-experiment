@@ -10,6 +10,7 @@ Pillow
 psutil
 pytest
 pytest-coverage
+pytest-subtests
 ruff
 scikit-learn>=1.4.0
 skl2onnx
