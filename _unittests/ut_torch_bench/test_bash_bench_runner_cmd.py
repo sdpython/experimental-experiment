@@ -125,10 +125,13 @@ class TestBashBenchRunnerCmd(ExtTestCase):
         if check_slice_input:
             if onx is None:
                 onx = onnx.load(filename)
-            slices = [n for n in onx.graph.node if n.op_type == "Slice"]
+            slices = [n for n in onx.graph.node if n.op_type in ("Slice", "Gather")]
             self.assertEqual(len(slices), 1)
             ends = slices[0].input[1]
             input_names = [i.name for i in onx.graph.input]
+            for n in onx.graph.node:
+                if n.op_type == "Identity" and n.input[0] in input_names:
+                    input_names.append(n.output[0])
             self.assertIn(ends, input_names)
 
     def _explicit_export_bench_cpu(

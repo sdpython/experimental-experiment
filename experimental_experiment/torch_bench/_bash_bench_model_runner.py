@@ -208,7 +208,7 @@ class ModelRunner:
 
     @classmethod
     def _to_type_or_device(cls, o, dtype_or_device):
-        if dtype_or_device is None or o is None or isinstance(o, (str, bool, int, float)):
+        if dtype_or_device is None or o is None or isinstance(o, str):
             return o
         if isinstance(o, list):
             return [cls._to_type_or_device(v, dtype_or_device) for v in o]
@@ -223,6 +223,27 @@ class ModelRunner:
             }:
                 return o.to(dtype_or_device)
             return o
+
+        if isinstance(o, int):
+            # int gets ignored by torch.export.export
+            t = torch.Tensor([o]).to(torch.int32)
+            if isinstance(dtype_or_device, str):
+                t = t.to(dtype_or_device)
+            return t
+
+        if isinstance(o, bool):
+            # int gets ignored by torch.export.export
+            t = torch.Tensor([o]).to(torch.bool)
+            if isinstance(dtype_or_device, str):
+                t = t.to(dtype_or_device)
+            return t
+
+        if isinstance(o, float):
+            # int gets ignored by torch.export.export
+            t = torch.Tensor([o]).to(torch.float32)
+            if isinstance(dtype_or_device, str):
+                t = t.to(dtype_or_device)
+            return t
 
         if cls.isinstance_namedtuple(o):
             new_vals = {}
@@ -1337,11 +1358,12 @@ class ModelRunner:
         i: Optional[int] = None,
     ) -> Tuple[int, ...]:
         new_shape = []
-        assert isinstance(
-            dyn_shape, dict
-        ), f"Unexpected type for input {i}, dyn_shape={dyn_shape}"
+        assert dyn_shape is None or isinstance(dyn_shape, dict), (
+            f"Unexpected type for input {i}, dyn_shape={dyn_shape}, "
+            f"input_shape={input_shape}, dyn_values={string_type(dyn_values)}"
+        )
         for j in range(len(input_shape)):
-            if input_shape[j] != 1 or j not in dyn_shape:
+            if dyn_shape is None or input_shape[j] != 1 or j not in dyn_shape:
                 new_shape.append(input_shape[j])
                 continue
             name = dyn_shape[j]
@@ -1590,12 +1612,12 @@ class ModelRunner:
         self, input_shape, dyn_shape, dyn_values: Dict[str, Any], i: Optional[int] = None
     ):
         new_shape = []
-        assert isinstance(dyn_shape, dict), (
+        assert dyn_shape is None or isinstance(dyn_shape, dict), (
             f"Unexpected type for input {i}, dyn_shape{dyn_shape}, "
             f"shape of input[{i}]={input_shape}"
         )
         for j in range(len(input_shape)):
-            if j not in dyn_shape:
+            if dyn_shape is None or j not in dyn_shape:
                 new_shape.append(input_shape[j])
                 continue
             name = dyn_shape[j]

@@ -19,6 +19,7 @@ Examples
 * :ref:`l-plot-optimize-101`
 * :ref:`l-plot-profile-existing-onnx-101`
 * :ref:`l-plot-rewrite-101`
+* :ref:`l-plot-torch-export-101`
 
 102
 +++
