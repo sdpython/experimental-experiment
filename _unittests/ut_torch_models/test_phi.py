@@ -22,9 +22,7 @@ class TestPhi(ExtTestCase):
         filename = self.get_dump_file("test_get_phi_model_export.onnx")
         torch.onnx.export(model, model_inputs[0], filename, input_names=["input0", "input1"])
         ref = ExtendedReferenceEvaluator(filename)
-        feeds = dict(
-            zip(["input0", "input1"], [t.detach().numpy() for t in model_inputs[0]])
-        )
+        feeds = dict(zip(["input0", "input1"], [t.detach().numpy() for t in model_inputs[0]]))
         got = ref.run(None, feeds)
         self.assertEqualArray(expected[0], got[0], atol=1e-5)
 

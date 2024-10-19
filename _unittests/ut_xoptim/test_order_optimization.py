@@ -106,9 +106,7 @@ class TestGraphOrderOptimization(ExtTestCase):
             options.register_custom_ops_library(get_ort_ext_libs()[0])
 
         try:
-            onnxruntime.InferenceSession(
-                onx.SerializeToString(), options, providers=providers
-            )
+            onnxruntime.InferenceSession(onx.SerializeToString(), options, providers=providers)
         except (Fail, InvalidArgument) as e:
             err = []
             rows = []

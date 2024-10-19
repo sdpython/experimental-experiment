@@ -82,9 +82,7 @@ class TestGraphPatternOptimization(ExtTestCase):
             InferenceSession(proto.SerializeToString(), providers=providers)
         except Fail as e:
             saved = self.dump_onnx("test_graph_pattern_optimization.onnx", proto)
-            raise AssertionError(  # noqa: B904
-                f"Fails due to {e}, model saved into {saved!r}"
-            )
+            raise AssertionError(f"Fails due to {e}, model saved into {saved!r}")  # noqa: B904
 
     @ignore_warnings(DeprecationWarning)
     def test_try_with_custom_model(self):
@@ -1000,9 +998,7 @@ class TestGraphPatternOptimization(ExtTestCase):
                         value=onh.from_array(np.array([1], dtype=np.float32)),
                     ),
                     oh.make_node("Sub", ["one", "X" if side == "left" else "Y"], ["i1"]),
-                    oh.make_node(
-                        "Mul", ["i1", "Y"] if side == "left" else ["X", "i1"], ["Z"]
-                    ),
+                    oh.make_node("Mul", ["i1", "Y"] if side == "left" else ["X", "i1"], ["Z"]),
                 ],
                 "dummy",
                 [
@@ -1131,9 +1127,7 @@ class TestGraphPatternOptimization(ExtTestCase):
             oh.make_graph(
                 [
                     oh.make_node("Expand", ["X", "shape"], ["i1"]),
-                    oh.make_node(
-                        "Mul", ["i1", "Y"] if side == "left" else ["Y", "i1"], ["Z"]
-                    ),
+                    oh.make_node("Mul", ["i1", "Y"] if side == "left" else ["Y", "i1"], ["Z"]),
                 ],
                 "dummy",
                 [
@@ -2227,9 +2221,7 @@ class TestGraphPatternOptimization(ExtTestCase):
         before = [node for node in origin.graph.node if node.op_type == "Transpose"]
         gr = GraphBuilder(
             origin,
-            optimization_options=OptimizationOptions(
-                patterns=["RotaryConcatPart"], verbose=0
-            ),
+            optimization_options=OptimizationOptions(patterns=["RotaryConcatPart"], verbose=0),
             infer_shapes=True,
         )
         onx = gr.to_onnx(optimize=True)
@@ -2873,11 +2865,7 @@ class TestGraphPatternOptimization(ExtTestCase):
                 [
                     onh.from_array(
                         np.array(
-                            (
-                                [1, 1, 1, 1, 1, 1]
-                                if kwargs.get("axis", -1) == 0
-                                else [1, 1, 1]
-                            ),
+                            ([1, 1, 1, 1, 1, 1] if kwargs.get("axis", -1) == 0 else [1, 1, 1]),
                             dtype=np.float32,
                         ),
                         name="one",
@@ -3271,9 +3259,7 @@ class TestGraphPatternOptimization(ExtTestCase):
                 [oh.make_tensor_value_info("X", TFLOAT16, [3, 3])],
                 [oh.make_tensor_value_info("Y", TFLOAT16, [3, 3])],
                 [
-                    onh.from_array(
-                        np.array([0.5, 0.6, 0.7], dtype=np.float32), name="scale"
-                    ),
+                    onh.from_array(np.array([0.5, 0.6, 0.7], dtype=np.float32), name="scale"),
                     onh.from_array(
                         np.array([-0.5, -0.6, -0.7], dtype=np.float32), name="bias"
                     ),

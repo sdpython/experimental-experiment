@@ -225,9 +225,7 @@ class LayerNormalizationScalePattern(PatternOptimization):
     ) -> List[NodeProto]:
         # scale
         scale = (
-            mul_node.input[1]
-            if mul_node.input[0] == ln_node.output[0]
-            else mul_node.input[0]
+            mul_node.input[1] if mul_node.input[0] == ln_node.output[0] else mul_node.input[0]
         )
         new_scale = None
         if g.is_constant_scalar(ln_node.input[1], broadcast=True):

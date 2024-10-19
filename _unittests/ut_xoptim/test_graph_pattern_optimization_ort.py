@@ -481,9 +481,7 @@ class TestGraphPatternOptimizationOrt(ExtTestCase):
     def test_simplified_layer_normalization_model_output(self):
         for div, dyn in itertools.product([False, True], [False, True]):
             with self.subTest(div=div, dyn=dyn):
-                model = self.get_simplified_layer_normalization_model_output(
-                    div=div, dyn=dyn
-                )
+                model = self.get_simplified_layer_normalization_model_output(div=div, dyn=dyn)
                 gr = GraphBuilder(
                     model,
                     infer_shapes=True,
@@ -824,9 +822,7 @@ class TestGraphPatternOptimizationOrt(ExtTestCase):
                     onh.from_array(np.array([0.5], dtype=np.float32), name="half"),
                     onh.from_array(np.array([1.4140625], dtype=np.float32), name="sq2"),
                     onh.from_array(
-                        np.array(
-                            [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, -0.4, -0.1], dtype=np.float32
-                        ),
+                        np.array([0.1, 0.2, 0.3, 0.4, 0.5, 0.6, -0.4, -0.1], dtype=np.float32),
                         name="B",
                     ),
                 ],
@@ -883,9 +879,7 @@ class TestGraphPatternOptimizationOrt(ExtTestCase):
                     onh.from_array(np.array([0.5], dtype=np.float32), name="half"),
                     onh.from_array(np.array([1.4140625], dtype=np.float32), name="sq2"),
                     onh.from_array(
-                        np.array(
-                            [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, -0.4, -0.1], dtype=np.float32
-                        ),
+                        np.array([0.1, 0.2, 0.3, 0.4, 0.5, 0.6, -0.4, -0.1], dtype=np.float32),
                         name="B",
                     ),
                 ],

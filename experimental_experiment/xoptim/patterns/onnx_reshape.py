@@ -83,9 +83,7 @@ class ReduceReshapePattern(PatternOptimization):
             axes = tuple(g.get_computed_constant(node.input[1]))
         else:
             att = g.get_attribute(node, "axes", exc=False)
-            axes = (
-                tuple(range(g.get_rank(node.input[0]))) if att is None else tuple(att.ints)
-            )
+            axes = tuple(range(g.get_rank(node.input[0]))) if att is None else tuple(att.ints)
 
         next_nodes = g.next_nodes(node.output[0])
         if len(next_nodes) != 1:
@@ -285,9 +283,7 @@ class Reshape2Of3Pattern(PatternOptimization):
         next_node: NodeProto,
         node: NodeProto,
     ) -> List[NodeProto]:
-        compute_shape_name = (
-            node_left.input[1] if node_right is None else node_right.input[1]
-        )
+        compute_shape_name = node_left.input[1] if node_right is None else node_right.input[1]
         final_shape_name = compute_shape_name if next_node is None else next_node.input[1]
 
         res = []
@@ -385,9 +381,7 @@ class ReshapeReshapeBinaryPattern(PatternOptimization):
         if node.op_type not in self._op_types or node.domain != "":
             return self.none()
 
-        if g.is_used_more_than_once(node.input[0]) or g.is_used_more_than_once(
-            node.input[1]
-        ):
+        if g.is_used_more_than_once(node.input[0]) or g.is_used_more_than_once(node.input[1]):
             return self.none(node, inspect.currentframe().f_lineno)
 
         left, right = g.node_before(node.input[0]), g.node_before(node.input[1])

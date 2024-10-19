@@ -458,9 +458,7 @@ class TorchBenchRunner(BenchmarkRunner):
 
             _ = torch.ops.fbgemm.asynchronous_complete_cumsum
         except (AttributeError, ImportError) as e:
-            warnings.warn(
-                f"Something wrong in the installation because of {e}.", stacklevel=1
-            )
+            warnings.warn(f"Something wrong in the installation because of {e}.", stacklevel=1)
         cls._config = cls.load_yaml_file()
         assert "batch_size" in cls._config, f"config wrong {cls._config}"
         assert cls._config["batch_size"] is not None, f"config wrong {cls._config}"
@@ -592,9 +590,7 @@ class TorchBenchRunner(BenchmarkRunner):
                 model.config.visual_feat_dim,
                 model.config.visual_pos_dim,
             )
-            input_dict["visual_feats"] = torch.randn(
-                bs, num_visual_features, visual_feat_dim
-            )
+            input_dict["visual_feats"] = torch.randn(bs, num_visual_features, visual_feat_dim)
             input_dict["visual_pos"] = torch.randn(bs, num_visual_features, visual_pos_dim)
 
         if include_loss_args:
@@ -615,9 +611,7 @@ class TorchBenchRunner(BenchmarkRunner):
                     )
                     input_dict[label_name] = _rand_int_tensor(device, 0, 1, (bs,))
             elif model_name.endswith("QuestionAnswering"):
-                input_dict["start_positions"] = _rand_int_tensor(
-                    device, 0, seq_length, (bs,)
-                )
+                input_dict["start_positions"] = _rand_int_tensor(device, 0, seq_length, (bs,))
                 input_dict["end_positions"] = _rand_int_tensor(device, 0, seq_length, (bs,))
             elif model_name.endswith(
                 ("MaskedLM", "HeadModel", "CausalLM", "DoubleHeadsModel")
@@ -869,9 +863,7 @@ class TorchBenchRunner(BenchmarkRunner):
             print(f"[{self.__class__.__name__}.load_model] clsname={benchmark}")
         model, example_inputs = benchmark.get_module()
         if self.verbose:
-            print(
-                f"[{self.__class__.__name__}.load_model] clsname={benchmark}, done loading"
-            )
+            print(f"[{self.__class__.__name__}.load_model] clsname={benchmark}, done loading")
         if model_name in [
             "basic_gnn_edgecnn",
             "basic_gnn_gcn",
@@ -889,9 +881,7 @@ class TorchBenchRunner(BenchmarkRunner):
             model.gradient_checkpointing_enable()
 
         # Models that must be in train mode while training
-        if is_training and (
-            not use_eval_mode or model_name in self._config["only_training"]
-        ):
+        if is_training and (not use_eval_mode or model_name in self._config["only_training"]):
             model.train()
         else:
             model.eval()
@@ -932,7 +922,7 @@ class TorchBenchRunner(BenchmarkRunner):
             repeat=self.repeat,
             suite=self.SUITE,
             autocast=self.autocast,
-			model_name=model_name,
+            model_name=model_name,
         )
 
     def iter_model_names(self):

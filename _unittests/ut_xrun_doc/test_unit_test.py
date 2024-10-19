@@ -30,9 +30,7 @@ class TestUnitTest(ExtTestCase):
         stat = statistics_on_folder(
             [
                 os.path.join(os.path.dirname(experimental_experiment.__file__)),
-                os.path.join(
-                    os.path.dirname(experimental_experiment.__file__), "..", "_doc"
-                ),
+                os.path.join(os.path.dirname(experimental_experiment.__file__), "..", "_doc"),
                 os.path.join(
                     os.path.dirname(experimental_experiment.__file__),
                     "..",

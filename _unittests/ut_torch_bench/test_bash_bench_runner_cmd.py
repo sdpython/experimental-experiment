@@ -113,9 +113,7 @@ class TestBashBenchRunnerCmd(ExtTestCase):
                 if value not in ((1,), tuple()):
                     self.assertIn(value[0], ("batch", "s0", "s1", "s2"))
                     input_values.append(value[0])
-            assert (
-                len(set(input_values)) <= 3
-            ), f"no unique value: input_values={input_values}"
+            assert len(set(input_values)) <= 3, f"no unique value: input_values={input_values}"
             for i in onx.graph.output:
                 shape = i.type.tensor_type.shape
                 value = tuple(d.dim_param or d.dim_value for d in shape.dim)
@@ -189,7 +187,13 @@ class TestBashBenchRunnerCmd(ExtTestCase):
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.5")
     def test_export_bench_onnx_dynamo_cpu_dynamic_1_input(self):
-        self._hg_export_bench_cpu("onnx_dynamo", "101Dummy", dynamic=True, debug=False)
+        self._hg_export_bench_cpu("onnx_dynamo", "101Dummy", dynamic=True)
+
+    @skipif_ci_windows("exporter does not work on Windows")
+    @ignore_warnings((DeprecationWarning, UserWarning))
+    @requires_torch("2.5")
+    def test_export_bench_dynamo_export_cpu_dynamic_1_input(self):
+        self._hg_export_bench_cpu("dynamo_export", "101Dummy", dynamic=True)
 
     @skipif_ci_windows("exporter does not work on Windows")
     @ignore_warnings((DeprecationWarning, UserWarning))
@@ -207,9 +211,7 @@ class TestBashBenchRunnerCmd(ExtTestCase):
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.5")
     def test_export_bench_onnx_dynamo_cpu_dynamic_2_inputs(self):
-        self._hg_export_bench_cpu(
-            "onnx_dynamo", "101Dummy2Inputs", dynamic=True, debug=False
-        )
+        self._hg_export_bench_cpu("onnx_dynamo", "101Dummy2Inputs", dynamic=True, debug=False)
 
     @skipif_ci_windows("exporter does not work on Windows")
     @ignore_warnings((DeprecationWarning, UserWarning))
@@ -233,9 +235,7 @@ class TestBashBenchRunnerCmd(ExtTestCase):
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.4")
     def test_huggingface_export_bench_onnx_dynamo_cpu_fail(self):
-        self._explicit_export_bench_cpu(
-            "onnx_dynamo", "1001Fail,1001Fail2", output_data=True
-        )
+        self._explicit_export_bench_cpu("onnx_dynamo", "1001Fail,1001Fail2", output_data=True)
 
     @skipif_ci_windows("exporter does not work on Windows")
     @ignore_warnings((DeprecationWarning, UserWarning))

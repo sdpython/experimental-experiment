@@ -44,10 +44,7 @@ def load_llm_model(
     if load_tokenizer:
         if os.path.exists(os.path.join(cache, f"{model_name}-tokenizer{stype}")):
             if verbose:
-                print(
-                    f"[load_model] loads cached tokenizer "
-                    f"for {model_name}, dtype={dtype}"
-                )
+                print(f"[load_model] loads cached tokenizer for {model_name}, dtype={dtype}")
             tokenizer = cls_tokenizer.from_pretrained(
                 os.path.join(cache, f"{model_name}-tokenizer{stype}")
             )

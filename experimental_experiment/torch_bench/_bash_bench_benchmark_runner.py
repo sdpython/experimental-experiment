@@ -726,9 +726,7 @@ class BenchmarkRunner:
             "version_onnxruntime": getattr(onnxruntime, "__version__", "dev"),
             "version_onnxscript": getattr(onnxscript, "__version__", "dev"),
             "version_onnx": getattr(onnx, "__version__", "dev"),
-            "version_monai": (
-                "-" if monai is None else getattr(monai, "__version__", "dev")
-            ),
+            "version_monai": ("-" if monai is None else getattr(monai, "__version__", "dev")),
             "version_timm": ("-" if timm is None else getattr(timm, "__version__", "dev")),
         }
         stats.update(machine_specs)
@@ -817,10 +815,7 @@ class BenchmarkRunner:
         ########
 
         if self.verbose > 1:
-            print(
-                f"[BenchmarkRunner.benchmark] warmup model {model_name!r} "
-                f"- {warmup} times"
-            )
+            print(f"[BenchmarkRunner.benchmark] warmup model {model_name!r} - {warmup} times")
             print(f"[BenchmarkRunner.benchmark] device={model_runner.device!r}")
             devices = [
                 (
@@ -914,10 +909,7 @@ class BenchmarkRunner:
         ########
 
         if self.verbose > 1:
-            print(
-                f"[BenchmarkRunner.benchmark] repeat model {model_name!r} "
-                f"- {repeat} times"
-            )
+            print(f"[BenchmarkRunner.benchmark] repeat model {model_name!r} - {repeat} times")
 
         with torch.no_grad():
             # training mode consumes too much memory
@@ -977,9 +969,7 @@ class BenchmarkRunner:
             torch.cuda.reset_peak_memory_stats(device_id)
             stats["mema_gpu_4_reset"] = torch.cuda.max_memory_allocated(device_id)
 
-        sopt = (
-            ("-" + optimization.replace("+", "_").replace("/", "_")) if optimization else ""
-        )
+        sopt = ("-" + optimization.replace("+", "_").replace("/", "_")) if optimization else ""
         sdtype = str(self.dtype).lower().split(".")[-1]
         pfilename = os.path.join(
             folder,
@@ -1127,9 +1117,7 @@ class BenchmarkRunner:
         else:
             feeds = model_runner.make_feeds(exporter, filename)
             feeds_dynamic = (
-                model_runner.make_feeds(exporter, filename, dynamic=True)
-                if dynamic
-                else None
+                model_runner.make_feeds(exporter, filename, dynamic=True) if dynamic else None
             )
             assert (dynamic and feeds_dynamic is not None) or (
                 not dynamic and feeds_dynamic is None
@@ -1508,9 +1496,7 @@ class BenchmarkRunner:
                             lats, list(range(len(lats)))
                         )[0, 1]
                     if len(lats) > 2:
-                        stats["time_latency_t_corrp"] = np.corrcoef(lats[1:], lats[:-1])[
-                            0, 1
-                        ]
+                        stats["time_latency_t_corrp"] = np.corrcoef(lats[1:], lats[:-1])[0, 1]
 
             if self.device.startswith("cuda"):
                 stats["mema_gpu_9_after_export_repeat"] = torch.cuda.max_memory_allocated(
@@ -1641,9 +1627,7 @@ class BenchmarkRunner:
                             lats, list(range(len(lats)))
                         )[0, 1]
                     if len(lats) > 2:
-                        stats["time_latency_t_corrp"] = np.corrcoef(lats[1:], lats[:-1])[
-                            0, 1
-                        ]
+                        stats["time_latency_t_corrp"] = np.corrcoef(lats[1:], lats[:-1])[0, 1]
 
             if self.device.startswith("cuda"):
                 stats["mema_gpu_9_after_export_repeat"] = torch.cuda.max_memory_allocated(

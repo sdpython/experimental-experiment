@@ -36,9 +36,7 @@ def get_decomposition_table_by_name(name: str):
 
     if name in mapping:
         return mapping[name]()
-    raise AssertionError(
-        f"Unknown decomposition table name={name!r} among {sorted(mapping)}"
-    )
+    raise AssertionError(f"Unknown decomposition table name={name!r} among {sorted(mapping)}")
 
 
 def get_decomposition_table():

@@ -85,9 +85,7 @@ class TestFallbackOxs(ExtTestCase):
 
         mod.op, mod.IsScalar = old_value
 
-        gr.make_tensor_output(
-            y, TensorProto.BOOL, (1, "b"), indexed=False, is_dimension=False
-        )
+        gr.make_tensor_output(y, TensorProto.BOOL, (1, "b"), indexed=False, is_dimension=False)
         onx = gr.to_onnx()
 
         ext = ExtendedReferenceEvaluator(onx)

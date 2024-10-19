@@ -998,9 +998,9 @@ class TestGraphPatternBuilder(ExtTestCase):
 
                 if x_shape is None or y_shape is None or z_shape is None:
                     return False
-                return self._same_shape(
-                    x_shape, y_shape, broadcast=True
-                ) and self._same_shape(y_shape, z_shape, broadcast=True)
+                return self._same_shape(x_shape, y_shape, broadcast=True) and self._same_shape(
+                    y_shape, z_shape, broadcast=True
+                )
 
         class AddSharedInput1(_CombineBinary):
             def match_pattern(self, g: GraphBuilder, x, y, z):

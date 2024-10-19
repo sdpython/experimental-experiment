@@ -144,10 +144,7 @@ class IdentityPattern(PatternOptimization):
         node: NodeProto,
         matched: List[MatchResult],
     ) -> Optional[MatchResult]:
-        if (
-            node.op_type not in {"Add", "Mul", "Div", "Sub", "Transpose"}
-            or node.domain != ""
-        ):
+        if node.op_type not in {"Add", "Mul", "Div", "Sub", "Transpose"} or node.domain != "":
             return self.none()
 
         if node.op_type == "Transpose":

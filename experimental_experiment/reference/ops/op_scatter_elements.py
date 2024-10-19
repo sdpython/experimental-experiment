@@ -38,15 +38,11 @@ def scatter_elements(data, indices, updates, axis=0, reduction=None):  # type: i
         if axis == 0:
             for i in range(indices.shape[0]):
                 for j in range(indices.shape[1]):
-                    scattered[indices[i, j], j] = f(
-                        scattered[indices[i, j], j], updates[i, j]
-                    )
+                    scattered[indices[i, j], j] = f(scattered[indices[i, j], j], updates[i, j])
         else:
             for i in range(indices.shape[0]):
                 for j in range(indices.shape[1]):
-                    scattered[i, indices[i, j]] = f(
-                        scattered[i, indices[i, j]], updates[i, j]
-                    )
+                    scattered[i, indices[i, j]] = f(scattered[i, indices[i, j]], updates[i, j])
         return scattered
 
     if len(indices.shape) == 3:

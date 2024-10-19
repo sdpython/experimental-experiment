@@ -610,9 +610,9 @@ def requires_pyinstrument(version: str = "", msg: str = "") -> Callable:
     except ImportError:
         return unittest.skip(msg)
 
-    if version and pv.Version(
-        ".".join(pyinstrument.__version__.split(".")[:2])
-    ) < pv.Version(version):
+    if version and pv.Version(".".join(pyinstrument.__version__.split(".")[:2])) < pv.Version(
+        version
+    ):
         msg = f"torch version {pyinstrument.__version__} < {version}: {msg}"
         return unittest.skip(msg)
     return lambda x: x
@@ -795,9 +795,7 @@ def statistics_on_folder(
         rows = []
         for fo in folder:
             last = fo.replace("\\", "/").split("/")[-1]
-            r = statistics_on_folder(
-                fo, pattern=pattern, aggregation=max(aggregation - 1, 0)
-            )
+            r = statistics_on_folder(fo, pattern=pattern, aggregation=max(aggregation - 1, 0))
             if aggregation == 0:
                 rows.extend(r)
                 continue

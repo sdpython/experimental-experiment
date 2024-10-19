@@ -215,9 +215,7 @@ if args.profile in (1, "1"):
     n_nodes = len(onx.graph.node)
     n_unique_nodes = len(set(n.name for n in onx.graph.node))
     print(
-        "\n".join(
-            f"{_align(n.op_type, 16)} - {n.input} -> {n.output}" for n in onx.graph.node
-        )
+        "\n".join(f"{_align(n.op_type, 16)} - {n.input} -> {n.output}" for n in onx.graph.node)
     )
 
     # first graph: aggregated profile

@@ -82,9 +82,7 @@ class RotaryConcatPartPattern(PatternOptimization):
     ) -> Optional[MatchResult]:
         if node.op_type != "Add" or node.domain != "":
             return self.none()
-        if g.is_used_more_than_once(node.input[0]) or g.is_used_more_than_once(
-            node.input[1]
-        ):
+        if g.is_used_more_than_once(node.input[0]) or g.is_used_more_than_once(node.input[1]):
             return self.none(node, inspect.currentframe().f_lineno)
 
         concat_left, concat_right = (
@@ -313,9 +311,7 @@ class RotaryConcatPartPattern(PatternOptimization):
     ) -> Optional[MatchResult]:
         if node.op_type != "Add" or node.domain != "":
             return self.none()
-        if g.is_used_more_than_once(node.input[0]) or g.is_used_more_than_once(
-            node.input[1]
-        ):
+        if g.is_used_more_than_once(node.input[0]) or g.is_used_more_than_once(node.input[1]):
             return self.none(node, inspect.currentframe().f_lineno)
 
         transpose_left, transpose_right = (
@@ -404,9 +400,10 @@ class RotaryConcatPartPattern(PatternOptimization):
         ):
             return self.none(node, inspect.currentframe().f_lineno)
 
-        if slice_left.op_type == "Neg" and g.node_before(
-            slice_left.input[0]
-        ).op_type not in ("Slice", "Split"):
+        if slice_left.op_type == "Neg" and g.node_before(slice_left.input[0]).op_type not in (
+            "Slice",
+            "Split",
+        ):
             return self.none(node, inspect.currentframe().f_lineno)
 
         if slice_right.op_type == "Neg" and g.node_before(

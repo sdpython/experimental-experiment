@@ -116,9 +116,7 @@ def dynger_backend(
                         v = ",".join(map(str, res.ravel().detach().cpu().numpy().tolist()))
                     else:
                         v = (
-                            ",".join(
-                                map(str, res.ravel().detach().cpu().numpy().tolist()[:5])
-                            )
+                            ",".join(map(str, res.ravel().detach().cpu().numpy().tolist()[:5]))
                             + "..."
                         )
                     print(f"  + {self._name}: {res.dtype}:{res.shape}:{v}")

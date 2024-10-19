@@ -15,12 +15,8 @@ class FusedMatMul(OpRun):
         transBatchA: int = 0,
         transBatchB: int = 0,
     ):
-        assert (
-            transBatchA == 0
-        ), f"Not implemented for transBatchA==1 and {A.shape}x{B.shape}"
-        assert (
-            transBatchB == 0
-        ), f"Not implemented for transBatchB==1 and {A.shape}x{B.shape}"
+        assert transBatchA == 0, f"Not implemented for transBatchA==1 and {A.shape}x{B.shape}"
+        assert transBatchB == 0, f"Not implemented for transBatchB==1 and {A.shape}x{B.shape}"
         if transA:
             perm = list(range(len(A.shape)))
             dim = len(perm)

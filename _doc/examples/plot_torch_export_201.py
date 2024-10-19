@@ -369,8 +369,7 @@ print(df1)
 ax = memory_peak_plot(
     data,
     bars=[model_size * i / 2**20 for i in range(1, 5)],
-    suptitle=f"Memory Consumption of the Export\n"
-    f"model size={model_size / 2**20:1.0f} Mb",
+    suptitle=f"Memory Consumption of the Export\nmodel size={model_size / 2**20:1.0f} Mb",
 )
 get_figure(ax).savefig("plot_torch_export_memory.png")
 
@@ -449,12 +448,8 @@ fig.savefig("plot_torch_export_time.png")
 
 def clean_text(text):
     pathes = [
-        os.path.abspath(
-            os.path.normpath(os.path.join(os.path.dirname(torch.__file__), ".."))
-        ),
-        os.path.abspath(
-            os.path.normpath(os.path.join(os.path.dirname(onnx.__file__), ".."))
-        ),
+        os.path.abspath(os.path.normpath(os.path.join(os.path.dirname(torch.__file__), ".."))),
+        os.path.abspath(os.path.normpath(os.path.join(os.path.dirname(onnx.__file__), ".."))),
         os.path.abspath(
             os.path.normpath(
                 os.path.join(os.path.dirname(experimental_experiment.__file__), "..")
@@ -564,8 +559,7 @@ def benchmark(shape):
         opts.add_session_config_entry("session.disable_aot_function_inlining", aot)
         opts.graph_optimization_level = GraphOptimizationLevel.ORT_ENABLE_ALL
         opts.optimized_model_filepath = (
-            f"ort-{name.replace('.onnx', '')}-{p.lower()}-"
-            f"aot{1 if aot == '0' else 0}.onnx"
+            f"ort-{name.replace('.onnx', '')}-{p.lower()}-aot{1 if aot == '0' else 0}.onnx"
         )
 
         try:
@@ -660,9 +654,7 @@ print(df)
 
 
 def view_time(df, title, suffix="time"):
-    piv = pandas.pivot_table(
-        df, index="export", columns=["compute", "aot"], values="average"
-    )
+    piv = pandas.pivot_table(df, index="export", columns=["compute", "aot"], values="average")
     print(piv)
     piv.to_csv(f"plot_torch_export_ort_{suffix}_compute.csv")
     piv.to_excel(f"plot_torch_export_ort_{suffix}_compute.xlsx")

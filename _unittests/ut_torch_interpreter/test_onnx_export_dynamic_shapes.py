@@ -296,9 +296,7 @@ class TestOnnxExportDynamicShapes(ExtTestCase):
             onx = to_onnx(
                 model,
                 input_tensors[0],
-                dynamic_shapes={
-                    "input_ids": {0: torch.export.Dim("batch", min=2, max=8192)}
-                },
+                dynamic_shapes={"input_ids": {0: torch.export.Dim("batch", min=2, max=8192)}},
             )
 
             for i in range(0, len(input_tensors)):
@@ -434,9 +432,7 @@ class TestOnnxExportDynamicShapes(ExtTestCase):
             onx = to_onnx(
                 model,
                 input_tensors[0],
-                dynamic_shapes={
-                    "input_ids": {0: torch.export.Dim("batch", min=2, max=8192)}
-                },
+                dynamic_shapes={"input_ids": {0: torch.export.Dim("batch", min=2, max=8192)}},
             )
 
             for i in range(0, len(input_tensors)):
@@ -509,9 +505,7 @@ class TestOnnxExportDynamicShapes(ExtTestCase):
             onx = to_onnx(
                 model,
                 input_tensors[0],
-                dynamic_shapes={
-                    "input_ids": {0: torch.export.Dim("batch", min=2, max=8192)}
-                },
+                dynamic_shapes={"input_ids": {0: torch.export.Dim("batch", min=2, max=8192)}},
                 options=OptimizationOptions(
                     patterns=(
                         "default+onnxruntime+experimental"

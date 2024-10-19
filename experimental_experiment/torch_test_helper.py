@@ -159,7 +159,7 @@ def string_type(obj: Any) -> str:
         s = ",".join(f"{kv[0]}:{string_type(kv[1])}" for kv in obj.items())
         return f"dict({s})"
     if isinstance(obj, np.ndarray):
-        return "A"
+        return f"A{len(obj.shape)}"
 
     import torch
 
@@ -172,7 +172,7 @@ def string_type(obj: Any) -> str:
     if isinstance(obj, torch.SymFloat):
         return "SymFloat"
     if isinstance(obj, torch.Tensor):
-        return "T"
+        return f"T{len(obj.shape)}"
     if isinstance(obj, int):
         return "int"
     if isinstance(obj, float):

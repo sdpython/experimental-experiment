@@ -52,9 +52,7 @@ class MakeConfig:
             setattr(self, k, v)
 
 
-def _rand_int_tensor(
-    device: str, low: int, high: int, shape: Tuple[int, ...]
-) -> torch.Tensor:
+def _rand_int_tensor(device: str, low: int, high: int, shape: Tuple[int, ...]) -> torch.Tensor:
     """Creates a random input integer tensor.
 
     :param device: device
@@ -129,12 +127,8 @@ def get_dynamo_stats() -> Dict[str, float]:
             "graph_breaks": sum(torch._dynamo.utils.counters["graph_break"].values()),
             # NB: The plus removes zero counts
             "unique_graph_breaks": len(+torch._dynamo.utils.counters["graph_break"]),
-            "autograd_captures": torch._dynamo.utils.counters["compiled_autograd"][
-                "captures"
-            ],
-            "autograd_compiles": torch._dynamo.utils.counters["compiled_autograd"][
-                "compiles"
-            ],
+            "autograd_captures": torch._dynamo.utils.counters["compiled_autograd"]["captures"],
+            "autograd_compiles": torch._dynamo.utils.counters["compiled_autograd"]["compiles"],
             "cudagraph_skips": torch._dynamo.utils.counters["inductor"]["cudagraph_skips"],
         }
     )
@@ -195,9 +189,7 @@ class ModelRunner:
     _patched = None
 
     @classmethod
-    def allowed_configuration(
-        cls, exporter: str, optimization: Optional[str] = None
-    ) -> bool:
+    def allowed_configuration(cls, exporter: str, optimization: Optional[str] = None) -> bool:
         """Defines the allowed configurations."""
         if not optimization or optimization == "none":
             # always possible
@@ -330,8 +322,7 @@ class ModelRunner:
         else:
             self.raw_input_names = [f"input{i}" for i in range(len(inputs))]
             self.raw_use_defaults = [
-                (UseDefaultValue.TRUE if i is None else UseDefaultValue.FALSE)
-                for i in inputs
+                (UseDefaultValue.TRUE if i is None else UseDefaultValue.FALSE) for i in inputs
             ]
 
         config = getattr(model, "config", {})
@@ -1040,13 +1031,16 @@ class ModelRunner:
                     artifacts_dir=os.path.dirname(name),
                 )
             )
-        if fallback:
-            additional_kwargs.update(dict(fallback=True))
 
         export_inputs = self.make_export_inputs(dynamic)
         dyn_shapes = self.get_dynamic_shapes(dynamic)
 
+        if dyn_shapes and isinstance(self.model, WrappedModelBase):
+            dyn_shapes = (dyn_shapes,)
+
         if verbose:
+            print(f"[ModelRunner._to_onnx_dynamo] detailed={detailed}, fallback={fallback}")
+            print(f"[ModelRunner._to_onnx_dynamo] additional_kwargs={additional_kwargs}")
             print(f"[ModelRunner._to_onnx_dynamo] dynamic_shapes={dyn_shapes!r}")
             print(
                 f"[ModelRunner._to_onnx_dynamo] export_inputs={string_type(export_inputs)!r}"
@@ -1063,6 +1057,7 @@ class ModelRunner:
                     dynamo=True,
                     external_data=True,
                     dynamic_shapes=dyn_shapes,
+                    fallback=fallback,
                     **additional_kwargs,
                 )
         else:
@@ -1075,6 +1070,7 @@ class ModelRunner:
                     dynamo=True,
                     external_data=True,
                     dynamic_shapes=dyn_shapes,
+                    fallback=fallback,
                     **additional_kwargs,
                 )
 
@@ -1113,7 +1109,6 @@ class ModelRunner:
         assert not fake_tensor, "fake_tensor not implemented."
         assert no_grad, "no_grad false not implemented yet"
         stats = {}
-
         if self.autocast:
             with torch.autocast(device_type=self.device, dtype=self.dtype), torch.no_grad():
                 exported = torch.onnx.dynamo_export(
@@ -1671,9 +1666,7 @@ class ModelRunner:
             dyn_inputs.append(zeros)
         return tuple(dyn_inputs)
 
-    def make_feeds(
-        self, exporter: str, filename: Optional[str] = None, dynamic: bool = False
-    ):
+    def make_feeds(self, exporter: str, filename: Optional[str] = None, dynamic: bool = False):
         """Creates feed inputs."""
         if exporter.split("-", maxsplit=1)[0] in {
             "eager",

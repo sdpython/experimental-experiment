@@ -168,9 +168,7 @@ class GraphBuilder(_GraphBuilderRuntime):
 
     def __init__(
         self,
-        target_opset_or_existing_proto: Union[
-            int, Dict[str, int], ModelProto, FunctionProto
-        ],
+        target_opset_or_existing_proto: Union[int, Dict[str, int], ModelProto, FunctionProto],
         input_names: Optional[Sequence[str]] = None,
         as_function: bool = False,
         optimization_options: Optional[OptimizationOptions] = None,
@@ -731,9 +729,7 @@ class GraphBuilder(_GraphBuilderRuntime):
             # Set ONNXSTOP or ONNXSTOPSHAPE to stop here.
             raise AssertionError(f"Requested stop, name={name!r}, rank={value}")
         assert isinstance(value, int), f"Unexpected rank type {type(value)} for {name!r}"
-        assert not isinstance(
-            value, bool
-        ), f"Unexpected rank type {type(value)} for {name!r}"
+        assert not isinstance(value, bool), f"Unexpected rank type {type(value)} for {name!r}"
         assert isinstance(name, str), f"Unexpected type {type(name)} for name."
         if name in self._known_ranks:
             assert value == self._known_ranks[name], (
@@ -1108,10 +1104,9 @@ class GraphBuilder(_GraphBuilderRuntime):
 
     def has_name(self, name: str) -> bool:
         """Tells if a result exists."""
-        assert isinstance(name, str), (
-            f"Unexpected type {type(name)} for name "
-            f"(name={name!r}){self.get_debug_msg()}"
-        )
+        assert isinstance(
+            name, str
+        ), f"Unexpected type {type(name)} for name (name={name!r}){self.get_debug_msg()}"
         return name in self._known_names
 
     def has_rank(self, name: str) -> bool:
@@ -1962,9 +1957,7 @@ class GraphBuilder(_GraphBuilderRuntime):
             # We assume if len(new_value) > 1 that all names are equivalent.
             # The graph is doing the same computation multiple times.
             final = new_value[0]
-            assert isinstance(final, str) or (
-                isinstance(final, tuple) and len(final) == 2
-            ), (
+            assert isinstance(final, str) or (isinstance(final, tuple) and len(final) == 2), (
                 f"Unexpected type {type(final)}, final={final}, value={value}, d={d}"
                 f"new_value={new_value}, {self.get_debug_msg()}"
             )
@@ -2015,9 +2008,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                 or "_DerivedDim" in str(d)
                 or "_Dim" in str(d)
             ):
-                raise NotImplementedError(
-                    f"Not yet implemented for type(d)={type(d)}, d={d}"
-                )
+                raise NotImplementedError(f"Not yet implemented for type(d)={type(d)}, d={d}")
             if isinstance(d, int):
                 new_shape.append(d)
                 continue
@@ -2531,9 +2522,7 @@ class GraphBuilder(_GraphBuilderRuntime):
             )
         except TypeError as e:
             iti = [type(i) for i in inputs]
-            ito = (
-                [type(o) for o in outputs] if isinstance(outputs, (tuple, list)) else outputs
-            )
+            ito = [type(o) for o in outputs] if isinstance(outputs, (tuple, list)) else outputs
             raise TypeError(
                 f"A node {op_type!r} cannot be created with "
                 f"inputs={inputs} (types={iti}), outputs={outputs} (types={ito}), "
@@ -2627,9 +2616,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                     )
                     inputs = inputs[:1]
                 elif opset >= 13 and len(inputs) == 1:
-                    name = self.make_initializer(
-                        "", np.array(kwargs["axes"], dtype=np.int64)
-                    )
+                    name = self.make_initializer("", np.array(kwargs["axes"], dtype=np.int64))
                     inputs.append(name)
                     del kwargs["axes"]
         return inputs, kwargs
@@ -2757,9 +2744,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         )
         return None
 
-    def get_attributes_with_default(
-        self, node: NodeProto, **default_values
-    ) -> Dict[str, Any]:
+    def get_attributes_with_default(self, node: NodeProto, **default_values) -> Dict[str, Any]:
         """
         Returns int or float attributes. If missing, the default value is returned.
 
@@ -2831,10 +2816,9 @@ class GraphBuilder(_GraphBuilderRuntime):
         for k, v in builder.dynamic_objects.items():
             self.make_dynamic_object(k, v)
 
-        assert len(input_names) == len(builder.inputs), (
-            f"Inconsistency between input_names={input_names} "
-            f"and inputs={builder.inputs}"
-        )
+        assert len(input_names) == len(
+            builder.inputs
+        ), f"Inconsistency between input_names={input_names} and inputs={builder.inputs}"
         for name, inp in zip(input_names, builder.inputs):
             new_name = self.unique_name(f"{prefix}{inp.name}")
             renaming[inp.name] = new_name
@@ -3151,9 +3135,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                 try:
                     rows.append(f"   {k} = {v!r}")
                 except AttributeError:
-                    rows.append(
-                        f"   {k} = ERR-: {type(v)!r}:{getattr(v, 'node', 'node=?')!r}"
-                    )
+                    rows.append(f"   {k} = ERR-: {type(v)!r}:{getattr(v, 'node', 'node=?')!r}")
             if i >= 10000:
                 break
 
@@ -3919,9 +3901,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                     if "warnings" not in self._debug_msg:
                         self._debug_msg["warnings"] = []
                     sv = str(v).replace("\n", " ")
-                    self._debug_msg["warnings"].append(
-                        f"Issue with v={sv}, feeds={sf}, e={e}"
-                    )
+                    self._debug_msg["warnings"].append(f"Issue with v={sv}, feeds={sf}, e={e}")
                     self.time_evaluation_constants_ += time.perf_counter() - begin
                     return None, None
 
@@ -4229,9 +4209,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         added = 0
         for node in new_nodes:
             repo = {o for o in node.output if o in replacements}
-            repi = {
-                o for o in self._enumerate_inputs_with_subgraph(node) if o in replacements
-            }
+            repi = {o for o in self._enumerate_inputs_with_subgraph(node) if o in replacements}
             if repi or repo:
                 new_inputs = [replacements.get(i, i) for i in node.input]
                 new_outputs = [replacements.get(i, i) for i in node.output]
@@ -4594,8 +4572,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         if itype > 0:
             self.set_type(val.name, itype)
         shape = tuple(
-            d.dim_param if d.dim_param else d.dim_value
-            for d in val.type.tensor_type.shape.dim
+            d.dim_param if d.dim_param else d.dim_value for d in val.type.tensor_type.shape.dim
         )
         if all(isinstance(s, int) for s in shape) and -1 in shape:
             # Some converters uses -1 to specify a dynamic dimension.
@@ -4978,10 +4955,9 @@ class GraphBuilder(_GraphBuilderRuntime):
         if not self.optimization_options.constant_fusing:
             return None
         key = self._constant_key(node)
-        assert key not in self.constants_node_, (
-            f"A constant with the same key {key!r} was already added"
-            f"{self.get_debug_msg()}"
-        )
+        assert (
+            key not in self.constants_node_
+        ), f"A constant with the same key {key!r} was already added{self.get_debug_msg()}"
         self.constants_node_[key] = node
         return key
 
@@ -5132,9 +5108,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         # We can remove the local functions now.
         self.functions = {}
         if verbose:
-            print(
-                f"[inline_functions] done graph {id(self)} in {time.perf_counter()-begin0}"
-            )
+            print(f"[inline_functions] done graph {id(self)} in {time.perf_counter()-begin0}")
         return stats
 
     def local_functions_found(self, g: GraphProto) -> bool:

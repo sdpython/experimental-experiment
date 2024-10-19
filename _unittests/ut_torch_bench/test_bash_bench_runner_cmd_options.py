@@ -106,9 +106,7 @@ class TestBashBenchRunnerCmdOptions(ExtTestCase):
                 value = tuple(d.dim_param or d.dim_value for d in shape.dim)
                 self.assertIn(value[0], ("batch", "s0", "s1"))
                 input_values.append(value[0])
-            assert (
-                len(set(input_values)) <= 2
-            ), f"no unique value: input_values={input_values}"
+            assert len(set(input_values)) <= 2, f"no unique value: input_values={input_values}"
             for i in onx.graph.output:
                 shape = i.type.tensor_type.shape
                 value = tuple(d.dim_param or d.dim_value for d in shape.dim)
@@ -234,9 +232,7 @@ class TestBashBenchRunnerCmdOptions(ExtTestCase):
     def test_eager_none_int(self):
         for exporter in ["eager", "export"]:
             with self.subTest(exporter=exporter):
-                self._export_cmd(
-                    exporter, "101DummyNoneInt", dynamic=False, check_file=False
-                )
+                self._export_cmd(exporter, "101DummyNoneInt", dynamic=False, check_file=False)
 
     # int, none, default
 

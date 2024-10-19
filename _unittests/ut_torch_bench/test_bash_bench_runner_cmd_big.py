@@ -105,9 +105,7 @@ class TestBashBenchRunnerCmdBig(ExtTestCase):
                 value = tuple(d.dim_param or d.dim_value for d in shape.dim)
                 self.assertIn(value[0], ("batch", "s0"))
                 input_values.append(value[0])
-            assert (
-                len(set(input_values)) == 1
-            ), f"no unique value: input_values={input_values}"
+            assert len(set(input_values)) == 1, f"no unique value: input_values={input_values}"
             for i in onx.graph.output:
                 shape = i.type.tensor_type.shape
                 value = tuple(d.dim_param or d.dim_value for d in shape.dim)
@@ -118,9 +116,7 @@ class TestBashBenchRunnerCmdBig(ExtTestCase):
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.5")
     def test_huggingface_export_bench_custom_cpu(self):
-        self._hg_big_export_bench_big_cpu(
-            "custom", "all_MiniLM_L6_v1", verbose=0, debug=False
-        )
+        self._hg_big_export_bench_big_cpu("custom", "all_MiniLM_L6_v1", verbose=0, debug=False)
 
 
 if __name__ == "__main__":

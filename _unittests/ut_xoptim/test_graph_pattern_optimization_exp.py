@@ -296,9 +296,7 @@ class TestGraphPatternOptimizationExp(ExtTestCase):
         for op_type, left in itertools.product(["Add", "Mul"], [True, False]):
             other_type = "Add" if op_type == "Mul" else "Mul"
             with self.subTest(op_type=op_type, left=left):
-                model = self._get_aamm_model(
-                    op_type=op_type, left=left, other_type=other_type
-                )
+                model = self._get_aamm_model(op_type=op_type, left=left, other_type=other_type)
                 self.assertEqual(len(model.graph.node), 2)
                 gr = GraphBuilder(
                     model,

@@ -397,9 +397,7 @@ class TimmRunner(BenchmarkRunner):
                 model.config.visual_feat_dim,
                 model.config.visual_pos_dim,
             )
-            input_dict["visual_feats"] = torch.randn(
-                bs, num_visual_features, visual_feat_dim
-            )
+            input_dict["visual_feats"] = torch.randn(bs, num_visual_features, visual_feat_dim)
             input_dict["visual_pos"] = torch.randn(bs, num_visual_features, visual_pos_dim)
 
         if include_loss_args:
@@ -420,9 +418,7 @@ class TimmRunner(BenchmarkRunner):
                     )
                     input_dict[label_name] = _rand_int_tensor(device, 0, 1, (bs,))
             elif model_name.endswith("QuestionAnswering"):
-                input_dict["start_positions"] = _rand_int_tensor(
-                    device, 0, seq_length, (bs,)
-                )
+                input_dict["start_positions"] = _rand_int_tensor(device, 0, seq_length, (bs,))
                 input_dict["end_positions"] = _rand_int_tensor(device, 0, seq_length, (bs,))
             elif model_name.endswith(
                 ("MaskedLM", "HeadModel", "CausalLM", "DoubleHeadsModel")
@@ -524,9 +520,7 @@ class TimmRunner(BenchmarkRunner):
 
     @classmethod
     def _gen_target(cls, batch_size, device, num_classes):
-        return torch.empty((batch_size,), device=device, dtype=torch.long).random_(
-            num_classes
-        )
+        return torch.empty((batch_size,), device=device, dtype=torch.long).random_(num_classes)
 
     @download_retry_decorator(retry=5)
     def _download_model(self, model_name):

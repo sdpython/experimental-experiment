@@ -125,9 +125,7 @@ def _reshape_shape(shape: Tuple[int, ...], new_shape: Tuple[int, ...]) -> Tuple[
         return new_shape
     pos = [i for i in new_shape if i > 0]
     if not pos:
-        assert new_shape == (
-            -1,
-        ), f"Unexpected new_shape={new_shape}, input shape is {shape}"
+        assert new_shape == (-1,), f"Unexpected new_shape={new_shape}, input shape is {shape}"
         return (int(np.prod(shape)),)
     res = []
     for i in new_shape:
@@ -136,8 +134,6 @@ def _reshape_shape(shape: Tuple[int, ...], new_shape: Tuple[int, ...]) -> Tuple[
         else:
             p = np.prod(pos)
             s = np.prod(shape)
-            assert (
-                s % p == 0
-            ), f"Incompatible shapes shape={shape}, reshaped into {new_shape}"
+            assert s % p == 0, f"Incompatible shapes shape={shape}, reshaped into {new_shape}"
             res.append(int(s // p))
     return tuple(res)

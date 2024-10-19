@@ -286,9 +286,7 @@ if sess2 is not None:
         text = dc.to_str(res1, res2, align, column_size=90)
         print(text)
     except AssertionError as e:
-        if "Unexpected type <class 'list'> for value, it must be a numpy array." not in str(
-            e
-        ):
+        if "Unexpected type <class 'list'> for value, it must be a numpy array." not in str(e):
             raise
         print(e)
 

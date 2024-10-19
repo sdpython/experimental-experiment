@@ -72,9 +72,7 @@ class CastCastBinaryPattern(PatternOptimization):
         if node.op_type not in {"Add", "Div", "Mul", "Sub"} or node.domain != "":
             return self.none()
 
-        if g.is_used_more_than_once(node.input[0]) or g.is_used_more_than_once(
-            node.input[1]
-        ):
+        if g.is_used_more_than_once(node.input[0]) or g.is_used_more_than_once(node.input[1]):
             return self.none(node, inspect.currentframe().f_lineno)
 
         if not g.has_type(node.input[0]) or not g.has_type(node.input[1]):
