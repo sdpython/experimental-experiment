@@ -802,7 +802,22 @@ def aten_cat(
     if len(tensors) == 1:
         # Nothing to concatenate.
         return g.op.Identity(tensors[0], name=name, outputs=outputs)
-    res = g.op.Concat(*tensors, axis=dim, outputs=outputs, name="cat")
+    input_types = [(g.get_type(t) if isinstance(t, str) else None) for t in tensors]
+    if len(set(input_types)) != 1:
+        # Type conflicts: we use the output type
+        itype = g.get_type_known(outputs[0])
+        new_inputs = []
+        for t, dt in zip(tensors, input_types):
+            if dt == itype:
+                new_inputs.append(t)
+                continue
+            new_inputs.append(g.op.Cast(t, to=itype, name=name))
+        name += "c"
+    else:
+        new_inputs = tensors
+
+    print("*****", tensors, new_inputs)
+    res = g.op.Concat(*new_inputs, axis=dim, outputs=outputs, name="cat")
     if not sts:
         dt0 = g.get_type(tensors[0])
         assert all(g.get_type(t) == dt0 for t in tensors)
@@ -3034,7 +3049,7 @@ def aten_instance_norm(
         [bi_name],
         epsilon=eps,
         momentum=1.0 - momentum,
-        training_mode=False,
+        training_mode=0,
         name=name,
     )
 
@@ -4131,6 +4146,9 @@ def aten__native_batch_norm(
         running_var,
         epsilon=eps,
         momentum=1 - momentum,
+        # training_mode=1 is not supported by onnxruntime
+        # Training mode does not support BN opset 14 (or higher) yet.
+        # An optimizer should probably take care of that.
         training_mode=0 if not training else 1,
         name=name,
         outputs=outs,

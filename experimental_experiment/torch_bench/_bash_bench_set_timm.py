@@ -46,7 +46,7 @@ class TimmRunner(BenchmarkRunner):
         inception_v3 128
         jx_nest_base 128
         lcnet_050 256
-        levit_128 1024
+        levit_128 256
         mixer_b16_224 128
         mixnet_l 128
         mnasnet_100 512
