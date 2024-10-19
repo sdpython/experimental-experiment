@@ -84,3 +84,33 @@ exported_program = torch.export.export(
     WrappedNeuronIInt(NeuronIInt()), (torch.randn(1, 5), torch.Tensor([2]).to(torch.int32))
 )
 print(exported_program.graph)
+
+
+###########################################
+# List
+# ++++
+
+
+class NeuronNoneListInt(torch.nn.Module):
+    def __init__(self, n_dims: int = 5, n_targets: int = 3):
+        super().__init__()
+        self.linear = torch.nn.Linear(n_dims, n_targets)
+
+    def forward(self, x, yz, i_input):
+        z = self.linear(x + yz[0] * yz[3])
+        return torch.sigmoid(z)[:i_input]
+
+
+try:
+    exported_program = torch.export.export(
+        NeuronNoneListInt(),
+        (
+            torch.randn(1, 5),
+            [torch.randn(1, 5), None, None, torch.randn(1, 5)],
+            torch.Tensor([2]).to(torch.int32),
+        ),
+    )
+    print(exported_program.graph)
+except torch._dynamo.exc.Unsupported as e:
+    print("-- an error occured:")
+    print(e)
