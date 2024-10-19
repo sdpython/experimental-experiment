@@ -154,7 +154,7 @@ def string_type(obj: Any) -> str:
             return f"({string_type(obj[0])},)"
         return f"({','.join(map(string_type, obj))})"
     if isinstance(obj, list):
-        return f"list({','.join(map(string_type, obj))})"
+        return f"[{','.join(map(string_type, obj))}]"
     if isinstance(obj, dict):
         s = ",".join(f"{kv[0]}:{string_type(kv[1])}" for kv in obj.items())
         return f"dict({s})"

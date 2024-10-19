@@ -422,9 +422,9 @@ class ModelRunner:
                 dyn_dims.update({1: seq_length})
             if isinstance(x, list):
                 assert all(
-                    hasattr(_, "shape") for _ in x
+                    _ is None or hasattr(_, "shape") for _ in x
                 ), f"Unsupported types in a list {[type(_) for _ in x]} at position {i}"
-                tries = [dyn_dims if len(_.shape) > 1 else None for _ in x]
+                tries = [dyn_dims if _ is not None and len(_.shape) > 1 else None for _ in x]
                 res.append(tries)
                 continue
             assert hasattr(
@@ -1439,7 +1439,7 @@ class ModelRunner:
                     f"dynamic_shapes[i]={dynamic_shapes[i]}"
                 )
                 assert all(
-                    isinstance(x, torch.Tensor) for x in inp
+                    x is None or isinstance(x, torch.Tensor) for x in inp
                 ), f"Unexpected type in input(list) {i}, {[type(x) for x in inp]}"
                 assert len(dynamic_shapes[i]) == len(inp), (
                     f"Length mismatch len(dynamic_shapes[i])={len(dynamic_shapes[i])} "
@@ -1557,6 +1557,9 @@ class ModelRunner:
                 ), f"Length mismatch len(dyn_shape)={len(dyn_shape)}, len(inp)={len(inp)}"
                 new_shapes = []
                 for t, ds in zip(inp, dyn_shape):
+                    if t is None:
+                        new_shapes.append(None)
+                        continue
                     new_shapes.append(
                         self._get_input_shape_tensor(
                             export=export,
@@ -1645,6 +1648,9 @@ class ModelRunner:
                 )
                 new_input = []
                 for x, ds in zip(inp, dyn_shape):
+                    if x is None:
+                        new_input.append(None)
+                        continue
                     ns = self._make_dynamic_inputs_tensor(
                         input_shape=x.shape, i=i, dyn_shape=ds, dyn_values=dyn_values
                     )
@@ -1746,7 +1752,8 @@ class ModelRunner:
         assert len(names) == len(new_inputs), (
             f"Mismatch number of inputs, {len(inputs)} ({len(new_inputs)}) "
             f"inputs, there are {len(new_inputs)} flattened inputs.\n----\n"
-            f"names={names}\n----\ninput types={[type(i) for i in inputs]}\n----\n"
+            f"names={names}\n----\ninput types={string_type(inputs)}\n----\n"
+            f"new input types={string_type(new_inputs)}\n----\n"
             f"named parameters={sorted(p[0] for p in self.model.named_parameters())}"
             f"\n----\nnamed buffers={sorted(p[0] for p in self.model.named_buffers())}"
             f"\n----\nself.raw_input_names={self.raw_input_names}\n----\n"

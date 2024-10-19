@@ -331,6 +331,8 @@ class GraphBuilder(_GraphBuilderRuntime):
                     continue
                 if isinstance(vv, list):
                     for vvv in vv:
+                        if vvv is None:
+                            continue
                         assert isinstance(
                             vvv, dict
                         ), f"Unexpected type {type(vvv)} at pos={pos} and {vv}"
