@@ -535,7 +535,7 @@ class TestBashBenchRunnerCmd(ExtTestCase):
                 if dynamic and exporter == "torch_script":
                     raise unittest.SkipTest("integer input fails with dynamic shapes")
                 self._hg_export_bench_cpu(
-                    exporter, "101DummyIInt", dynamic=dynamic, check_slide_input=True
+                    exporter, "101DummyIInt", dynamic=dynamic, check_slice_input=True
                 )
 
     # int, none
@@ -551,7 +551,7 @@ class TestBashBenchRunnerCmd(ExtTestCase):
                 if dynamic and exporter == "torch_script":
                     raise unittest.SkipTest("integer input fails with none + int")
                 self._hg_export_bench_cpu(
-                    exporter, "101DummyNoneInt", dynamic=dynamic, check_slide_input=True
+                    exporter, "101DummyNoneInt", dynamic=dynamic, check_slice_input=True
                 )
 
     # int, none, default
