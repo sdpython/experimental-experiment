@@ -458,7 +458,7 @@ class TorchBenchRunner(BenchmarkRunner):
 
             _ = torch.ops.fbgemm.asynchronous_complete_cumsum
         except (AttributeError, ImportError) as e:
-            warnings.warn(f"Something wrong in the installation because of {e}.", stacklevel=1)
+            warnings.warn(f"Something wrong in the installation because of {e}.", stacklevel=2)
         cls._config = cls.load_yaml_file()
         assert "batch_size" in cls._config, f"config wrong {cls._config}"
         assert cls._config["batch_size"] is not None, f"config wrong {cls._config}"

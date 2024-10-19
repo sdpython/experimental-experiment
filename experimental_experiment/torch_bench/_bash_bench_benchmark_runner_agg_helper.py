@@ -1635,7 +1635,6 @@ def _process_formulas(
     set_columns: List[str],
     verbose: int = 0,
 ) -> Tuple[pandas.DataFrame, List[str]]:
-
     report_on = []
     for expr in formulas:
         if verbose:
@@ -2214,7 +2213,6 @@ def build_historical_report(
     if verbose:
         print(f"[build_historical_report] create {output!r}")
     with pandas.ExcelWriter(output, engine="xlsxwriter") as writer:
-
         export_export = {}
         for k, v in graphs.items():
             if verbose:

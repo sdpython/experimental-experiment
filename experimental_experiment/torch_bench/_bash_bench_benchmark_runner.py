@@ -726,8 +726,8 @@ class BenchmarkRunner:
             "version_onnxruntime": getattr(onnxruntime, "__version__", "dev"),
             "version_onnxscript": getattr(onnxscript, "__version__", "dev"),
             "version_onnx": getattr(onnx, "__version__", "dev"),
-            "version_monai": ("-" if monai is None else getattr(monai, "__version__", "dev")),
-            "version_timm": ("-" if timm is None else getattr(timm, "__version__", "dev")),
+            "version_monai": "-" if monai is None else getattr(monai, "__version__", "dev"),
+            "version_timm": "-" if timm is None else getattr(timm, "__version__", "dev"),
         }
         stats.update(machine_specs)
         if self.device.startswith("cuda"):
