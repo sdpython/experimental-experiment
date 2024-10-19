@@ -1,5 +1,5 @@
 jobs:
-- job: 'LinuxWheelPip312_nightly'
+- job: 'LinuxWheelPip_nightly'
   pool:
     vmImage: 'ubuntu-latest'
   strategy:
@@ -65,7 +65,7 @@ jobs:
       artifactName: 'wheel-linux-wheel-$(python.version)'
       targetPath: 'dist'
 
-- job: 'LinuxWheelPip311_4372'
+- job: 'LinuxWheelPip_4372'
   pool:
     vmImage: 'ubuntu-latest'
   strategy:
@@ -144,7 +144,7 @@ jobs:
       artifactName: 'wheel-linux-wheel-$(python.version)'
       targetPath: 'dist'
 
-- job: 'LinuxSetup311'
+- job: 'LinuxSetup'
   pool:
     vmImage: 'ubuntu-latest'
   strategy:
@@ -226,7 +226,7 @@ jobs:
       artifactName: 'wheel-linux-$(python.version)'
       targetPath: 'dist'
 
-- job: 'Windows312'
+- job: 'Windows'
   pool:
     vmImage: 'windows-latest'
   strategy:
@@ -283,20 +283,22 @@ jobs:
       artifactName: 'wheel-windows-$(python.version)'
       targetPath: 'dist'
 
-#- job: 'Mac311'
+#- job: 'MacOS'
 #  pool:
 #    vmImage: 'macOS-latest'
 #  strategy:
 #    matrix:
 #      Python311-Mac:
 #        python.version: '3.12'
+#        target.architecture: ['arm64']
+#
 #    maxParallel: 3
 #
 #  steps:
 #  - task: UsePythonVersion@0
 #    inputs:
 #      versionSpec: '$(python.version)'
-#      architecture: 'x86_64'
+#      architecture: 'arm64'
 #  - script: gcc --version
 #    displayName: 'gcc version'
 #  #- script: brew upgrade

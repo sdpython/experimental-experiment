@@ -516,6 +516,8 @@ class TestBashBenchRunnerCmd(ExtTestCase):
             ["custom", "onnx_dynamo", "torch_script"], [True, False]
         ):
             with self.subTest(exporter=exporter, dynamic=dynamic):
+                if dynamic and exporter == "torch_script":
+                    raise unittest.SkipTest("integer input fails with dynamic shapes")
                 self._hg_export_bench_cpu(exporter, "101DummyIInt", dynamic=dynamic)
 
     # int, none
@@ -524,9 +526,11 @@ class TestBashBenchRunnerCmd(ExtTestCase):
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.5")
     def test_huggingface_export_bench_cpu_dummy_none_int(self):
-        for exporter in ["custom", "onnx_dynamo", "torch_script"]:
-            with self.subTest(exporter=exporter):
-                self._hg_export_bench_cpu(exporter, "101DummyNoneInt", dynamic=False)
+        for exporter, dynamic in itertools.product(
+            ["custom", "onnx_dynamo", "torch_script"], [True, False]
+        ):
+            with self.subTest(exporter=exporter, dynamic=dynamic):
+                self._hg_export_bench_cpu(exporter, "101DummyNoneInt", dynamic=dynamic)
 
     # int, none, default
 
@@ -534,13 +538,11 @@ class TestBashBenchRunnerCmd(ExtTestCase):
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.5")
     def test_huggingface_export_bench_cpu_dummy_none_int_default(self):
-        for exporter in ["custom", "onnx_dynamo", "torch_script"]:
-            with self.subTest(exporter=exporter):
-                self._hg_export_bench_cpu(
-                    exporter,
-                    "101DummyNoneIntDefault",
-                    dynamic=False,
-                )
+        for exporter, dynamic in itertools.product(
+            ["custom", "onnx_dynamo", "torch_script"], [True, False]
+        ):
+            with self.subTest(exporter=exporter, dynamic=dynamic):
+                self._hg_export_bench_cpu(exporter, "101DummyNoneIntDefault", dynamic=dynamic)
 
     # int, list, none
 
@@ -548,9 +550,11 @@ class TestBashBenchRunnerCmd(ExtTestCase):
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.5")
     def test_huggingface_export_bench_cpu_dummy_none_list_int(self):
-        for exporter in ["custom", "onnx_dynamo"]:  # torch_script is failing for this one
-            with self.subTest(exporter=exporter):
-                self._hg_export_bench_cpu(exporter, "101DummyNoneListInt", dynamic=False)
+        for exporter, dynamic in itertools.product(
+            ["custom", "onnx_dynamo", "torch_script"], [True, False]
+        ):
+            with self.subTest(exporter=exporter, dynamic=dynamic):
+                self._hg_export_bench_cpu(exporter, "101DummyNoneListInt", dynamic=dynamic)
 
     # dict, none, int
 
@@ -558,9 +562,11 @@ class TestBashBenchRunnerCmd(ExtTestCase):
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.5")
     def test_huggingface_export_bench_cpu_dummy_none_int_dict(self):
-        for exporter in ["custom", "onnx_dynamo", "torch_script"]:
-            with self.subTest(exporter=exporter):
-                self._hg_export_bench_cpu(exporter, "101DummyNoneIntDict", dynamic=False)
+        for exporter, dynamic in itertools.product(
+            ["custom", "onnx_dynamo", "torch_script"], [True, False]
+        ):
+            with self.subTest(exporter=exporter, dynamic=dynamic):
+                self._hg_export_bench_cpu(exporter, "101DummyNoneIntDict", dynamic=dynamic)
 
 
 if __name__ == "__main__":
