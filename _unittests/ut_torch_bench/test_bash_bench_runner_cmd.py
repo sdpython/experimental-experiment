@@ -125,9 +125,9 @@ class TestBashBenchRunnerCmd(ExtTestCase):
         if check_slice_input:
             if onx is None:
                 onx = onnx.load(filename)
-            slice = [n for n in onx.graph.node if n.op_type == "Slice"]
-            self.assertEqual(len(slice), 1)
-            ends = slice.input[1]
+            slices = [n for n in onx.graph.node if n.op_type == "Slice"]
+            self.assertEqual(len(slices), 1)
+            ends = slices[0].input[1]
             input_names = [i.name for i in onx.graph.input]
             self.assertIn(ends, input_names)
 
