@@ -577,7 +577,7 @@ class TestBashBenchRunnerCmd(ExtTestCase):
 
     # int, list, none
 
-    @unittest.sip("torch.expot.export does not work")
+    @unittest.skip("torch.expot.export does not work")
     @skipif_ci_windows("exporter does not work on Windows")
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.5")
