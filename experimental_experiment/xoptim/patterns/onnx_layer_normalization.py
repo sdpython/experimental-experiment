@@ -208,13 +208,29 @@ class LayerNormalizationScalePattern(PatternOptimization):
         nodes = g.next_nodes(mul_node.output[0])
         if len(nodes) == 0:
             return MatchResult(self, [node, mul_node, None], self.apply, insert_at=mul_node)
-        if len(nodes) == 1 and nodes[0].op_type == "Add":
-            if len(node.input) != 2:
-                return self.none(node, inspect.currentframe().f_lineno)
-            return MatchResult(
-                self, [node, mul_node, nodes[0]], self.apply, insert_at=nodes[0]
-            )
-        return self.none(node, inspect.currentframe().f_lineno)
+
+        index = 1 if mul_node.input[0] == node.output[0] else 0
+        if not g.has_shape(mul_node.input[index]):
+            return self.none(node, inspect.currentframe().f_lineno)
+        if not g.has_shape(node.input[1]):
+            return self.none(node, inspect.currentframe().f_lineno)
+        if g.get_shape(mul_node.input[index]) != g.get_shape(node.input[1]):
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        nodes = g.next_nodes(mul_node.output[0])
+        if len(nodes) != 1 or nodes[0].op_type != "Add":
+            return MatchResult(self, [node, mul_node, None], self.apply, insert_at=nodes[0])
+
+        add_node = nodes[0]
+        index = 1 if add_node.input[0] == mul_node.output[0] else 0
+        if not g.has_shape(add_node.input[index]):
+            return self.none(node, inspect.currentframe().f_lineno)
+        if not g.has_shape(node.input[1]):
+            return self.none(node, inspect.currentframe().f_lineno)
+        if g.get_shape(add_node.input[index]) != g.get_shape(node.input[1]):
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        return MatchResult(self, [node, mul_node, add_node], self.apply, insert_at=nodes[0])
 
     def apply(
         self,
@@ -244,12 +260,45 @@ class LayerNormalizationScalePattern(PatternOptimization):
             new_nodes.append(node)
 
         if add_node:
-            assert len(ln_node.input) == 2, "Only two inputs are expected in node."
-            new_bias = (
-                add_node.input[1]
-                if add_node.input[0] == mul_node.output[0]
-                else add_node.input[0]
-            )
+            if len(ln_node.input) == 2:
+                new_bias = (
+                    add_node.input[1]
+                    if add_node.input[0] == mul_node.output[0]
+                    else add_node.input[0]
+                )
+            else:
+                # there is an existing bias
+                existing_bias = ln_node.input[2]
+                mul_cst = (
+                    mul_node.input[0]
+                    if mul_node.input[1] == ln_node.output[0]
+                    else mul_node.input[1]
+                )
+                add_cst = (
+                    add_node.input[0]
+                    if add_node.input[1] == mul_node.output[0]
+                    else add_node.input[1]
+                )
+
+                # new_bias = existing_bias * mul_cst + add_cst
+                temp = g.unique_name(f"{self.__class__.__name__}_{ln_node.input[1]}")
+                new_bias = g.unique_name(f"{self.__class__.__name__}_{ln_node.input[1]}")
+                new_nodes.extend(
+                    [
+                        g.make_node(
+                            "Mul",
+                            [mul_cst, existing_bias],
+                            [temp],
+                            name=f"{self.__class__.__name__}--{ln_node.name}",
+                        ),
+                        g.make_node(
+                            "Add",
+                            [temp, add_cst],
+                            [new_bias],
+                            name=f"{self.__class__.__name__}--{ln_node.name}",
+                        ),
+                    ]
+                )
         else:
             new_bias = ln_node.input[2] if len(ln_node.input) > 2 else None
 
