@@ -636,7 +636,7 @@ class GraphBuilder(_GraphBuilderRuntime):
             return value
 
         if isinstance(value, self.torch.Tensor):
-            v = value.detach().cpu().numpy()
+            v = value.detach().cpu()
             self.constants_computed_[name] = v
             assert not multiple_outputs, f"Multiple output is not allowed for name={name!r}"
             return v
