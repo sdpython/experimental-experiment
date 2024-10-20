@@ -145,7 +145,7 @@ def string_type(obj: Any) -> str:
         :showcode:
 
         from experimental_experiment.torch_test_helper import string_type
-        print(string_type(tuple(1, "r")))
+        print(string_type((1, ["r", 6.6])))
     """
     if obj is None:
         return "None"
@@ -177,5 +177,7 @@ def string_type(obj: Any) -> str:
         return "int"
     if isinstance(obj, float):
         return "float"
+    if isinstance(obj, str):
+        return "str"
 
     raise AssertionError(f"Unsupported type {type(obj)}")
