@@ -438,9 +438,7 @@ def prims_split_dim(
 ):
     "split"
     assert len(outputs) == 1, f"Expecting 1 outputs but got {outputs}{g.get_debug_msg()}"
-    assert g.has_shape(
-        x
-    ), f"Not implemented when shape of {x!r} is unknown{g.get_debug_msg()}"
+    assert g.has_shape(x), f"Not implemented when shape of {x!r} is unknown{g.get_debug_msg()}"
     shape = g.get_shape(x)
     shape_dim = shape[dim]
     assert isinstance(

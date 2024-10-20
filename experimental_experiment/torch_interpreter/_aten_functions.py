@@ -75,9 +75,7 @@ def aten_acos(g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str]
     return res
 
 
-def aten_acosh(
-    g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T
-) -> T:
+def aten_acosh(g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T) -> T:
     "acosh"
     res = g.make_node("Acosh", [x], outputs, name="acosh")
     if not sts:
@@ -251,9 +249,7 @@ def aten_addmm(
     return res
 
 
-def aten_alias(
-    g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T
-) -> T:
+def aten_alias(g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T) -> T:
     "identity"
     return g.make_node("Identity", [x], outputs, name="alias")
 
@@ -372,9 +368,7 @@ def aten_arange(
         _may_cast(start, itype) if isinstance(start, str) else np.array(start, dtype=npdtype)
     )
     i_end = _may_cast(end, itype) if isinstance(end, str) else np.array(end, dtype=npdtype)
-    i_step = (
-        _may_cast(step, itype) if isinstance(step, str) else np.array(step, dtype=npdtype)
-    )
+    i_step = _may_cast(step, itype) if isinstance(step, str) else np.array(step, dtype=npdtype)
 
     res = g.op.Range(i_start, i_end, i_step, outputs=outputs, name=name)
     if not sts:
@@ -523,9 +517,7 @@ def aten_asin(g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str]
     return res
 
 
-def aten_asinh(
-    g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T
-) -> T:
+def aten_asinh(g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T) -> T:
     "asinh"
     res = g.make_node("Asinh", [x], outputs, name="asinh")
     if not sts:
@@ -541,9 +533,7 @@ def aten_atan(g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str]
     return res
 
 
-def aten_atanh(
-    g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T
-) -> T:
+def aten_atanh(g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T) -> T:
     "atanh"
     res = g.make_node("Atanh", [x], outputs, name="atanh")
     if not sts:
@@ -559,9 +549,7 @@ def _adjust_attributes_of_avg_pool(
 ) -> Tuple[Sequence[int], Sequence[int], Sequence[int]]:
     """Adjust attributes of avg_pool to match ONNX specification."""
 
-    kernel_shape = (
-        [kernel_size] * expand_size if isinstance(kernel_size, int) else kernel_size
-    )
+    kernel_shape = [kernel_size] * expand_size if isinstance(kernel_size, int) else kernel_size
 
     if isinstance(padding, int):
         pads = [padding] * expand_size * 2
@@ -814,7 +802,22 @@ def aten_cat(
     if len(tensors) == 1:
         # Nothing to concatenate.
         return g.op.Identity(tensors[0], name=name, outputs=outputs)
-    res = g.op.Concat(*tensors, axis=dim, outputs=outputs, name="cat")
+    input_types = [(g.get_type(t) if isinstance(t, str) else None) for t in tensors]
+    if len(set(input_types)) != 1:
+        # Type conflicts: we use the output type
+        itype = g.get_type_known(outputs[0])
+        new_inputs = []
+        for t, dt in zip(tensors, input_types):
+            if dt == itype:
+                new_inputs.append(t)
+                continue
+            new_inputs.append(g.op.Cast(t, to=itype, name=name))
+        name += "c"
+    else:
+        new_inputs = tensors
+
+    print("*****", tensors, new_inputs)
+    res = g.op.Concat(*new_inputs, axis=dim, outputs=outputs, name="cat")
     if not sts:
         dt0 = g.get_type(tensors[0])
         assert all(g.get_type(t) == dt0 for t in tensors)
@@ -1410,9 +1413,7 @@ def aten_cross_entropy_loss(
     elif reduction == Reduction.MEAN.value:
         reduction_name = "mean"
     else:
-        raise AssertionError(
-            f"Unexpected value for reduction={reduction}{g.get_debug_msg()}"
-        )
+        raise AssertionError(f"Unexpected value for reduction={reduction}{g.get_debug_msg()}")
 
     res = g.op.SoftmaxCrossEntropyLoss(
         x,
@@ -1462,9 +1463,7 @@ def aten_cumsum(
     return res
 
 
-def aten_detach(
-    g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T
-) -> T:
+def aten_detach(g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T) -> T:
     "identity"
     return g.make_node("Identity", [x], outputs, name="detach")
 
@@ -1796,9 +1795,7 @@ def aten_embedding_bag_padding_idx(
         ]
 
     nodes = [
-        make_node(
-            "Gather", [offsets_starts, "block_input_iter"], ["indices_starts"], axis=0
-        ),
+        make_node("Gather", [offsets_starts, "block_input_iter"], ["indices_starts"], axis=0),
         make_node("Gather", [offsets_ends, "block_input_iter"], ["indices_ends"], axis=0),
         make_node("Unsqueeze", ["indices_starts", "zero"], ["indices_start"]),
         make_node("Unsqueeze", ["indices_ends", "zero"], ["indices_end"]),
@@ -2198,9 +2195,7 @@ def aten_flatten(
                 end_dim = -1
         if start_dim == 1 and end_dim == -1:
             shape = g.op.Shape(x, name=name)
-            take = g.op.GatherElements(
-                shape, np.array([0], dtype=np.int64), axis=0, name=name
-            )
+            take = g.op.GatherElements(shape, np.array([0], dtype=np.int64), axis=0, name=name)
             resh = g.op.Concat(take, np.array([-1], dtype=np.int64), axis=0, name=name)
             return g.op.Reshape(x, resh, outputs=outputs, name=name)
         if end_dim == -1:
@@ -2812,9 +2807,7 @@ def aten_im2col(
 
         padded_input = g.op.Pad(
             x,
-            np.array(
-                [0, 0, padding_h, padding_w, 0, 0, padding_h, padding_w], dtype=np.int64
-            ),
+            np.array([0, 0, padding_h, padding_w, 0, 0, padding_h, padding_w], dtype=np.int64),
             name=name,
         )
         g.set_type(padded_input, g.get_type(x))
@@ -2959,9 +2952,7 @@ def aten_index_put(
             f"because ScatterND does not support reduction"
             f"{g.get_debug_msg()}"
         )
-        res = g.op.ScatterND(
-            x, new_index, values, name=name, reduction="add", outputs=outputs
-        )
+        res = g.op.ScatterND(x, new_index, values, name=name, reduction="add", outputs=outputs)
     else:
         res = g.op.ScatterND(x, new_index, values, name=name, outputs=outputs)
 
@@ -3058,7 +3049,7 @@ def aten_instance_norm(
         [bi_name],
         epsilon=eps,
         momentum=1.0 - momentum,
-        training_mode=False,
+        training_mode=0,
         name=name,
     )
 
@@ -3534,9 +3525,7 @@ def aten_max_dim(
 ) -> T:
     """maximum"""
     axes = np.array([dim], dtype=np.int64)
-    res = g.op.ReduceMax(
-        x, axes, name=name, outputs=outputs[:1], keepdims=1 if keepdim else 0
-    )
+    res = g.op.ReduceMax(x, axes, name=name, outputs=outputs[:1], keepdims=1 if keepdim else 0)
     if not sts:
         set_type_shape_unary_op(g, res, x)
     if len(outputs) == 1:
@@ -3973,9 +3962,7 @@ def aten_native_dropout(
 ):
     "dropout"
     if not train:
-        assert (
-            len(outputs) == 1
-        ), f"train is False and outputs is {outputs}{g.get_debug_msg()}"
+        assert len(outputs) == 1, f"train is False and outputs is {outputs}{g.get_debug_msg()}"
         return g.op.Identity(x, outputs=outputs, name=name)
     assert len(outputs) == 2, f"train is True and outputs is {outputs}{g.get_debug_msg()}"
     tp = g.make_initializer("", np.array(p, dtype=tensor_dtype_to_np_dtype(g.get_type(x))))
@@ -4139,9 +4126,7 @@ def aten__native_batch_norm(
         # default is var
         mean = g.op.ReduceMeanAnyOpset(x, axes_np, name=name, keepdims=1)
         input_sub_mean = g.op.Sub(x, mean, name=name)
-        sqr_input_sub_mean = g.op.Pow(
-            input_sub_mean, np.array([2], dtype=np.int64), name=name
-        )
+        sqr_input_sub_mean = g.op.Pow(input_sub_mean, np.array([2], dtype=np.int64), name=name)
         running_var = g.op.ReduceMean(sqr_input_sub_mean, axes_np, name=name, keepdims=0)
 
     assert len(outputs) == 3, (
@@ -4161,6 +4146,9 @@ def aten__native_batch_norm(
         running_var,
         epsilon=eps,
         momentum=1 - momentum,
+        # training_mode=1 is not supported by onnxruntime
+        # Training mode does not support BN opset 14 (or higher) yet.
+        # An optimizer should probably take care of that.
         training_mode=0 if not training else 1,
         name=name,
         outputs=outs,
@@ -4967,9 +4955,7 @@ def aten_repeat(
         # repeats is like a shape
         irep = g.make_shape_from_results(repeats)
     else:
-        raise RuntimeError(
-            f"repeat not implemented for repeats={repeats}{g.get_debug_msg()}"
-        )
+        raise RuntimeError(f"repeat not implemented for repeats={repeats}{g.get_debug_msg()}")
     if g.get_rank(x) != len(repeats):
         expanded = g.op.Expand(x, np.array((1,) * len(repeats), dtype=np.int64), name=name)
     else:
@@ -5108,9 +5094,7 @@ def aten_roll(
     return g.op.Identity(result, name=name, outputs=outputs)
 
 
-def aten_round(
-    g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T
-) -> T:
+def aten_round(g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T) -> T:
     "round"
     res = g.make_node("Round", [x], outputs, name="round")
     if not sts:
@@ -5118,9 +5102,7 @@ def aten_round(
     return res
 
 
-def aten_rsqrt(
-    g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T
-) -> T:
+def aten_rsqrt(g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T) -> T:
     "rqsrt"
     ext = g.make_node("Sqrt", [x], name="rsqrt")
     res = g.op.Reciprocal(ext, outputs=outputs, name="rsqrt")
@@ -5320,9 +5302,9 @@ def aten_scaled_dot_product_attention(
     set_type_shape_unary_op(g, attn_weight, mul_qk_add)
 
     if dropout_p != 0:
-        _attn_weight = g.op.Dropout(
-            attn_weight, np.array(dropout_p, dtype=dtype), name=name
-        )[0]
+        _attn_weight = g.op.Dropout(attn_weight, np.array(dropout_p, dtype=dtype), name=name)[
+            0
+        ]
         set_type_shape_unary_op(g, _attn_weight, attn_weight)
         attn_weight = _attn_weight
 
@@ -5467,9 +5449,7 @@ def aten_select_int(
 ) -> T:
     "gather"
     assert isinstance(dim, int), f"Unexpected type {type(dim)} for dim{g.get_debug_msg()}"
-    assert isinstance(
-        index, int
-    ), f"Unexpected type {type(index)} for dim{g.get_debug_msg()}"
+    assert isinstance(index, int), f"Unexpected type {type(index)} for dim{g.get_debug_msg()}"
     res = g.op.Gather(x, np.array(index, dtype=np.int64), axis=dim, outputs=outputs)
     if not sts:
         g.set_type(res, g.get_type(x))
@@ -5708,9 +5688,7 @@ def aten_slice_backward(
         shape = g.op.Shape(grad_output, name=name_d)
 
         if isinstance(start, str) or start > 0:
-            the_start = (
-                np.array([start], dtype=np.int64) if isinstance(start, int) else start
-            )
+            the_start = np.array([start], dtype=np.int64) if isinstance(start, int) else start
             cst_shape = g.op.ScatterElements(
                 shape,
                 np.array([dim], dtype=np.int64),
@@ -6401,9 +6379,7 @@ def aten_sum(
             adim = np.array([dim], dtype=np.int64)
         else:
             adim = np.array(dim, dtype=np.int64)
-        result = g.op.ReduceSumAnyOpset(
-            xc, adim, keepdims=keepdim, outputs=outputs, name=name
-        )
+        result = g.op.ReduceSumAnyOpset(xc, adim, keepdims=keepdim, outputs=outputs, name=name)
     if not sts:
         set_type_shape_reduce_op(g, outputs[0], x, keepdim=keepdim)
     return result
@@ -6465,9 +6441,7 @@ def aten__to_copy(
     # assert device is None, f"_to_copy implemented with device={device!r}"
     assert pin_memory is None, f"_to_copy implemented with pin_memory={pin_memory!r}"
     assert not non_blocking, f"_to_copy implemented with non_blocking={non_blocking!r}"
-    assert (
-        memory_format is None
-    ), f"_to_copy implemented with memory_format={memory_format!r}"
+    assert memory_format is None, f"_to_copy implemented with memory_format={memory_format!r}"
     if dtype is None:
         return g.op.Identity(x, outputs=outputs, name="_to_copy")
     itype = torch_dtype_to_onnx_dtype(dtype)
@@ -6607,8 +6581,7 @@ def aten_tensor(
                 cst = np.array(x, dtype=np.float32)
             else:
                 raise RuntimeError(
-                    f"Unable to convert to guess value dtype "
-                    f"for x={x}{g.get_debug_msg()}"
+                    f"Unable to convert to guess value dtype for x={x}{g.get_debug_msg()}"
                 )
 
             return g.make_initializer(outputs[0], cst)
@@ -6955,9 +6928,7 @@ def _upsample_compute_output_size(input_size, output_size, scale_factors):
         assert len(output_size) == spatial_dimensions, f"output_size={output_size}"
         return output_size
     if scale_factors is not None:
-        assert (
-            output_size is None
-        ), f"scale_factors={scale_factors}, output_size={output_size}"
+        assert output_size is None, f"scale_factors={scale_factors}, output_size={output_size}"
         assert len(scale_factors) == spatial_dimensions, f"output_size={scale_factors}"
         output_size = []
         for i, s in enumerate(scale_factors):

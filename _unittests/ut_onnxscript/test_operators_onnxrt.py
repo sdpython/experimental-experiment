@@ -393,9 +393,7 @@ class TestOperatorsOnnxrt(ExtTestCase):
     @hide_stdout()
     def test_xt_addconstant(self):
         x = torch.randn(2, 3, requires_grad=True).double()
-        self.assertONNX(
-            lambda x: x + 1, x, onnx_export=inspect.currentframe().f_code.co_name
-        )
+        self.assertONNX(lambda x: x + 1, x, onnx_export=inspect.currentframe().f_code.co_name)
 
     @ignore_warnings(UserWarning)
     @hide_stdout()
@@ -552,9 +550,7 @@ class TestOperatorsOnnxrt(ExtTestCase):
 
     @hide_stdout()
     def test_xt_pad(self):
-        x = torch.tensor(
-            [[[[0.0, 1.0, 1.0, 1.0], [2.0, 3.0, 7.0, 7.0]]]], requires_grad=True
-        )
+        x = torch.tensor([[[[0.0, 1.0, 1.0, 1.0], [2.0, 3.0, 7.0, 7.0]]]], requires_grad=True)
         self.assertONNX(
             nn.ReflectionPad2d((2, 3, 0, 1)),
             x,
@@ -829,8 +825,7 @@ class TestOperatorsOnnxrt(ExtTestCase):
         )
 
     @unittest.skip(
-        "Cannot find any perfect/nearest match "
-        "of symbolic function for aten::mean.default"
+        "Cannot find any perfect/nearest match of symbolic function for aten::mean.default"
     )
     @hide_stdout()
     def test_xt_mean(self):
@@ -1378,9 +1373,7 @@ class TestOperatorsOnnxrt(ExtTestCase):
     @hide_stdout()
     def test_xt_implicit_expand(self):
         x = torch.randn(3, 4, requires_grad=True)
-        self.assertONNX(
-            lambda x: x + 1, x, onnx_export=inspect.currentframe().f_code.co_name
-        )
+        self.assertONNX(lambda x: x + 1, x, onnx_export=inspect.currentframe().f_code.co_name)
 
     @hide_stdout()
     def test_xt_reduce_sum_negative_indices(self):
@@ -1396,9 +1389,7 @@ class TestOperatorsOnnxrt(ExtTestCase):
     @hide_stdout()
     def test_xt_rrelu(self):
         x = torch.randn(1, 2, 3, 4)
-        self.assertONNX(
-            torch.nn.RReLU(), x, onnx_export=inspect.currentframe().f_code.co_name
-        )
+        self.assertONNX(torch.nn.RReLU(), x, onnx_export=inspect.currentframe().f_code.co_name)
 
     @hide_stdout()
     def test_xt_prelu(self):
@@ -1658,9 +1649,7 @@ class TestOperatorsOnnxrt(ExtTestCase):
                 return x_out
 
         x = {torch.tensor(1.0): torch.randn(1, 2, 3)}
-        self.assertONNX(
-            MyModel(), (x, {}), onnx_export=inspect.currentframe().f_code.co_name
-        )
+        self.assertONNX(MyModel(), (x, {}), onnx_export=inspect.currentframe().f_code.co_name)
 
     @unittest.skipIf(not DICT_SUPPORTED, reason="only tensor are supported")
     @hide_stdout()
@@ -1672,9 +1661,7 @@ class TestOperatorsOnnxrt(ExtTestCase):
                 return x_out
 
         x = {"test_key_in": torch.randn(1, 2, 3)}
-        self.assertONNX(
-            MyModel(), (x, {}), onnx_export=inspect.currentframe().f_code.co_name
-        )
+        self.assertONNX(MyModel(), (x, {}), onnx_export=inspect.currentframe().f_code.co_name)
 
     @unittest.skipIf(not DYNAMIC_SHAPE_SUPPORTED, reason="dynamic shape")
     @hide_stdout()

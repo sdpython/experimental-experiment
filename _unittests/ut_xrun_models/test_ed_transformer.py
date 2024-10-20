@@ -70,6 +70,7 @@ class TestEdTransformer(ExtTestCase):
 
     @skipif_ci_windows("dynamo exporter not on windows")
     @ignore_warnings(UserWarning)
+    @requires_torch("2.5")
     def test_transformer_export_new_none(self):
         transformer_model, expected, src, tgt = self._get_model()
         ret = export_to_onnx(

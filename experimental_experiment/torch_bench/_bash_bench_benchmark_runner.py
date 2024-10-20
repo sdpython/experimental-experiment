@@ -26,6 +26,7 @@ from ..bench_run import max_diff
 from ..memory_peak import flatten, start_spying_on
 
 from ..ext_test_case import has_onnxruntime_training
+from ..torch_test_helper import string_type
 from ..xbuilder._dtype_helper import torch_dtype_to_onnx_dtype
 
 
@@ -725,10 +726,8 @@ class BenchmarkRunner:
             "version_onnxruntime": getattr(onnxruntime, "__version__", "dev"),
             "version_onnxscript": getattr(onnxscript, "__version__", "dev"),
             "version_onnx": getattr(onnx, "__version__", "dev"),
-            "version_monai": (
-                "-" if monai is None else getattr(monai, "__version__", "dev")
-            ),
-            "version_timm": ("-" if timm is None else getattr(timm, "__version__", "dev")),
+            "version_monai": "-" if monai is None else getattr(monai, "__version__", "dev"),
+            "version_timm": "-" if timm is None else getattr(timm, "__version__", "dev"),
         }
         stats.update(machine_specs)
         if self.device.startswith("cuda"):
@@ -816,10 +815,7 @@ class BenchmarkRunner:
         ########
 
         if self.verbose > 1:
-            print(
-                f"[BenchmarkRunner.benchmark] warmup model {model_name!r} "
-                f"- {warmup} times"
-            )
+            print(f"[BenchmarkRunner.benchmark] warmup model {model_name!r} - {warmup} times")
             print(f"[BenchmarkRunner.benchmark] device={model_runner.device!r}")
             devices = [
                 (
@@ -913,10 +909,7 @@ class BenchmarkRunner:
         ########
 
         if self.verbose > 1:
-            print(
-                f"[BenchmarkRunner.benchmark] repeat model {model_name!r} "
-                f"- {repeat} times"
-            )
+            print(f"[BenchmarkRunner.benchmark] repeat model {model_name!r} - {repeat} times")
 
         with torch.no_grad():
             # training mode consumes too much memory
@@ -976,9 +969,7 @@ class BenchmarkRunner:
             torch.cuda.reset_peak_memory_stats(device_id)
             stats["mema_gpu_4_reset"] = torch.cuda.max_memory_allocated(device_id)
 
-        sopt = (
-            ("-" + optimization.replace("+", "_").replace("/", "_")) if optimization else ""
-        )
+        sopt = ("-" + optimization.replace("+", "_").replace("/", "_")) if optimization else ""
         sdtype = str(self.dtype).lower().split(".")[-1]
         pfilename = os.path.join(
             folder,
@@ -992,7 +983,14 @@ class BenchmarkRunner:
         if pfilename and not os.path.exists(pfilename):
             os.makedirs(pfilename)
         cleaned_name = model_name.replace(".", "_").replace("/", "_")
-        filename = os.path.join(pfilename, f"model_{cleaned_name}-{exporter}.onnx")
+        filename = os.path.join(
+            pfilename,
+            (
+                f"model_{cleaned_name}-{exporter}{sopt}-"
+                f"d{1 if dynamic in BOOLEAN_VALUES else 0}"
+                f"rt{1 if rtopt in BOOLEAN_VALUES else 0}.onnx"
+            ),
+        )
 
         memory_session = (
             start_spying_on(cuda=self.device.startswith("cuda")) if memory_peak else None
@@ -1000,20 +998,22 @@ class BenchmarkRunner:
         if memory_session is not None and self.verbose:
             print("[BenchmarkRunner.benchmark] start_spying_on")
 
+        dyn_shapes = model_runner.get_input_shapes(dynamic=dynamic)
         if self.verbose:
             if dynamic:
                 print(
                     f"[BenchmarkRunner.benchmark] dynamic_shapes="
-                    f"{model_runner.get_dynamic_shapes(dynamic, wrapped=True)}"
+                    f"{model_runner.get_dynamic_shapes(dynamic)}"
                 )
-            print(
-                f"[BenchmarkRunner.benchmark] input shapes="
-                f"{model_runner.get_input_shapes(dynamic=dynamic, wrapped=True)}"
-            )
-            _ishapes = model_runner.get_input_shapes(
-                dynamic=dynamic, wrapped=True, export=True
-            )
+            print(f"[BenchmarkRunner.benchmark] input shapes={dyn_shapes}")
+            _ishapes = model_runner.get_input_shapes(dynamic=dynamic, export=True)
             print(f"[BenchmarkRunner.benchmark] export input shapes={_ishapes}")
+
+        stats["onnx_type_input"] = string_type(model_runner.inputs)
+        if dynamic:
+            stats["onnx_type_dynshapes"] = string_type(
+                model_runner.get_dynamic_shapes(dynamic=dynamic)
+            )
 
         begin = time.perf_counter()
         if quiet:
@@ -1117,9 +1117,7 @@ class BenchmarkRunner:
         else:
             feeds = model_runner.make_feeds(exporter, filename)
             feeds_dynamic = (
-                model_runner.make_feeds(exporter, filename, dynamic=True)
-                if dynamic
-                else None
+                model_runner.make_feeds(exporter, filename, dynamic=True) if dynamic else None
             )
             assert (dynamic and feeds_dynamic is not None) or (
                 not dynamic and feeds_dynamic is None
@@ -1498,9 +1496,7 @@ class BenchmarkRunner:
                             lats, list(range(len(lats)))
                         )[0, 1]
                     if len(lats) > 2:
-                        stats["time_latency_t_corrp"] = np.corrcoef(lats[1:], lats[:-1])[
-                            0, 1
-                        ]
+                        stats["time_latency_t_corrp"] = np.corrcoef(lats[1:], lats[:-1])[0, 1]
 
             if self.device.startswith("cuda"):
                 stats["mema_gpu_9_after_export_repeat"] = torch.cuda.max_memory_allocated(
@@ -1631,9 +1627,7 @@ class BenchmarkRunner:
                             lats, list(range(len(lats)))
                         )[0, 1]
                     if len(lats) > 2:
-                        stats["time_latency_t_corrp"] = np.corrcoef(lats[1:], lats[:-1])[
-                            0, 1
-                        ]
+                        stats["time_latency_t_corrp"] = np.corrcoef(lats[1:], lats[:-1])[0, 1]
 
             if self.device.startswith("cuda"):
                 stats["mema_gpu_9_after_export_repeat"] = torch.cuda.max_memory_allocated(

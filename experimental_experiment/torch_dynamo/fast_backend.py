@@ -252,9 +252,7 @@ class OrtBackend:
                     f"type(tensor)={type(tensor)}, "
                     f"dimension={[t for t in tensors if isinstance(t, dim_types)]}"
                 )
-                t = torch.tensor(
-                    [ti] if rk == 1 else ti, dtype=onnx_dtype_to_torch_dtype(dt)
-                )
+                t = torch.tensor([ti] if rk == 1 else ti, dtype=onnx_dtype_to_torch_dtype(dt))
                 devices.append(self.devices[-1])
                 new_tensors.append(t)
                 dimensions.append(t)
@@ -291,9 +289,7 @@ class OrtBackend:
             return tuple()
 
         res = ortvalues.to_dlpacks(self.from_dlpack)
-        return tuple(
-            _post_process(r, d[2], d[0]) for r, d in zip(res, self.is_dimension_out)
-        )
+        return tuple(_post_process(r, d[2], d[0]) for r, d in zip(res, self.is_dimension_out))
 
     def _run_onnx_session_with_ortvaluevector(
         self,
@@ -414,9 +410,7 @@ class OrtBackend:
             if dim[0]:
                 v = int(value[0]) if value.shape == (1,) else int(value)
             else:
-                v = torch.Tensor(value.copy()).to(
-                    cls.NUMPY_DTYPE_TO_TORCH_DTYPE[value.dtype]
-                )
+                v = torch.Tensor(value.copy()).to(cls.NUMPY_DTYPE_TO_TORCH_DTYPE[value.dtype])
                 if device >= 0:
                     v = v.to(device)
             new_inputs.append(v)
@@ -730,9 +724,7 @@ def onnx_custom_backend(
     )
 
     if verbose:
-        print(
-            f"[onnx_custom_backend] InferenceSession done in {time.perf_counter() - begin}"
-        )
+        print(f"[onnx_custom_backend] InferenceSession done in {time.perf_counter() - begin}")
         _print_memory(max_device)
 
     input_names = [i.name for i in onx.graph.input]

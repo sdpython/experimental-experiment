@@ -1,4 +1,3 @@
-import sys
 import unittest
 from typing import List
 from onnx.reference import ReferenceEvaluator
@@ -6,6 +5,7 @@ from experimental_experiment.ext_test_case import (
     ExtTestCase,
     ignore_warnings,
     requires_torch,
+    skipif_ci_windows,
 )
 from experimental_experiment.torch_interpreter import to_onnx
 from experimental_experiment.xbuilder import OptimizationOptions
@@ -55,7 +55,7 @@ class TestDynamoCompileOnnx(ExtTestCase):
         torch._dynamo.reset()
         OrtBackend.clear_cached_instances()
 
-    @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
+    @skipif_ci_windows("not supported yet on Windows")
     @requires_torch("2.2", "export fails")
     @ignore_warnings((UserWarning, DeprecationWarning))
     def test_simple_dort_0(self):
@@ -69,7 +69,7 @@ class TestDynamoCompileOnnx(ExtTestCase):
         self.assertEqual(expected.dtype, got.dtype)
         self.assertEqualArray(expected.detach().numpy(), got.detach().numpy(), atol=1e-5)
 
-    @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
+    @skipif_ci_windows("not supported yet on Windows")
     @unittest.skipIf(True, reason="export fails")
     def test_simple_dort_1(self):
         import torch
@@ -100,7 +100,7 @@ class TestDynamoCompileOnnx(ExtTestCase):
         self.assertEqual(expected.dtype, got.dtype)
         self.assertEqualArray(expected.detach().numpy(), got.detach().numpy())
 
-    @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
+    @skipif_ci_windows("not supported yet on Windows")
     @requires_torch("2.2", "export fails")
     def test_simple_dort_2_onnx(self):
         import torch
@@ -154,7 +154,7 @@ class TestDynamoCompileOnnx(ExtTestCase):
         )
         self.assertEqual(expected.shape, got.shape)
 
-    @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
+    @skipif_ci_windows("not supported yet on Windows")
     @requires_torch("2.2", "export fails")
     @ignore_warnings((UserWarning, DeprecationWarning))
     def test_simple_dort_2_ort(self):

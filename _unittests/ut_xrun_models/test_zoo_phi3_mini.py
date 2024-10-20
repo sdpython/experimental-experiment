@@ -1,17 +1,17 @@
-import sys
 import unittest
 from experimental_experiment.ext_test_case import (
     ExtTestCase,
     ignore_warnings,
     requires_torch,
     requires_zoo,
+    skipif_ci_windows,
 )
 from experimental_experiment.torch_models.phi3_helper import has_phi3
 
 
 class TestZooPhi3(ExtTestCase):
     @unittest.skipIf(not has_phi3(), reason="transformers not recent enough")
-    @unittest.skipIf(sys.platform == "win32", reason="not supported yet on Windows")
+    @skipif_ci_windows("not supported yet on Windows")
     @ignore_warnings(DeprecationWarning)
     @requires_torch("2.3")
     @requires_zoo()  # ZOO=1 python _unittests/ut_xrun_models/test_zoo_phi3_mini.py

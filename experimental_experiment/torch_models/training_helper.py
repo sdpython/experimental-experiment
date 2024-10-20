@@ -121,10 +121,9 @@ def make_aot_ort(
     from torch.onnx._internal import onnxruntime
 
     code = inspect.getsource(onnxruntime)
-    assert "optimizer.optimize" in code, (
-        f"torch is not recent enough, file {onnxruntime.__file__!r} "
-        f"is not recent enough."
-    )
+    assert (
+        "optimizer.optimize" in code
+    ), f"torch is not recent enough, file {onnxruntime.__file__!r} is not recent enough."
 
     if rewrite_more:
 

@@ -175,9 +175,7 @@ def aten_meth_pow(
             "", np.array(exponent, dtype=tensor_dtype_to_np_dtype(g.get_type(x)))
         )
     elif isinstance(exponent, np.array):
-        cst = g.make_initializer(
-            "", exponent.as_type(tensor_dtype_to_np_dtype(g.get_type(x)))
-        )
+        cst = g.make_initializer("", exponent.as_type(tensor_dtype_to_np_dtype(g.get_type(x))))
     elif isinstance(exponent, str):
         cst = exponent
     else:
@@ -257,9 +255,7 @@ def aten_meth_size(
     return res
 
 
-def aten_meth_t(
-    g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T
-) -> T:
+def aten_meth_t(g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T) -> T:
     "transpose"
     return aten_t(g, sts, outputs, x, name=".t")
 

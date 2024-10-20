@@ -301,9 +301,7 @@ class TestFallbackForce(ExtTestCase):
             onx, new_ops=[_scaled_dot_product_flash_attention_for_cpu_default]
         )
         names = [i.name for i in onx.graph.input]
-        got = ext.run(
-            None, dict(zip(names, [i.numpy() for i in example_args_collection[0]]))
-        )
+        got = ext.run(None, dict(zip(names, [i.numpy() for i in example_args_collection[0]])))
         # TODO: something is wrong
         self.assertEqualArray(expected[0], got[0], atol=2)
 

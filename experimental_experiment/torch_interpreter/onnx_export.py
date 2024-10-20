@@ -86,10 +86,9 @@ def match_input_parameters(
             feeds[name] = t[1]
         elif args is not None:
             # We assume it is an input.
-            assert pos < len(args), (
-                f"Unable to find argument at position {pos} "
-                f"in args (len(args)={len(args)}"
-            )
+            assert pos < len(
+                args
+            ), f"Unable to find argument at position {pos} in args (len(args)={len(args)}"
             feeds[name] = args[pos]
             pos += 1
     assert len(names) == 0 or len(feeds) > 0, (
@@ -151,10 +150,7 @@ def _retrieve(
     if is_weight:
         # weights
         if new_name not in weights:
-            if (
-                new_name.startswith("L__self___")
-                and new_name[len("L__self___") :] in weights
-            ):
+            if new_name.startswith("L__self___") and new_name[len("L__self___") :] in weights:
                 new_name = new_name[len("L__self___") :]
         assert new_name in weights, (
             f"Unexpected name {name!r} for input "
@@ -326,9 +322,7 @@ def _make_builder_interpreter(
                     "None"
                     if a is None
                     else (
-                        f"{a.dtype}:{tuple(a.shape)})"
-                        if hasattr(a, "dtype")
-                        else str(type(a))
+                        f"{a.dtype}:{tuple(a.shape)})" if hasattr(a, "dtype") else str(type(a))
                     )
                 )
                 for a in args
@@ -461,10 +455,9 @@ def _replacements_dynamic_shapes(
                 f"input_names={input_names}, dynamic_shapes="
                 f"{dict_dynamic_shapes}"
             )
-            assert input_names or None or len(input_names) == len(args), (
-                f"Mimsatch number between len(args)={len(args)}, "
-                f"input_names={input_names}"
-            )
+            assert (
+                input_names or None or len(input_names) == len(args)
+            ), f"Mimsatch number between len(args)={len(args)}, input_names={input_names}"
             true_input_names.append(p.name)
             has_args = (p.name, len(args), len(true_input_names))
             n_args -= len(args)
@@ -472,9 +465,7 @@ def _replacements_dynamic_shapes(
             true_input_names.append(name)
 
     if has_args is None:
-        replacements = (
-            {} if input_names is None else dict(zip(input_names, true_input_names))
-        )
+        replacements = {} if input_names is None else dict(zip(input_names, true_input_names))
         for k, v in dict_dynamic_shapes.items():
             r = replacements.get(k, k)
             new_dynamic_shapes[r] = v if not has_args or has_args[0] != r else (v,)
@@ -489,11 +480,18 @@ def _replacements_dynamic_shapes(
             f"Mismatch for has_args={has_args}, dynamic_shapes={dict_dynamic_shapes}"
             f", input_names={input_names}"
         )
-        new_dynamic_shapes = {
-            has_args[0]: tuple(dict_dynamic_shapes[n] for n in input_names)
-        }
+        new_dynamic_shapes = {has_args[0]: tuple(dict_dynamic_shapes[n] for n in input_names)}
         return new_dynamic_shapes
     return new_dynamic_shapes
+
+
+def is_wrapped(model: Any, dynamic_shapes: Optional[Any] = None) -> bool:
+    """
+    Tells if a model is wrapped.
+    """
+    if len(dynamic_shapes) != 1 or not isinstance(dynamic_shapes[0], tuple):
+        return False
+    raise AssertionError(f"Unable to tell for type {type(model)}")
 
 
 def to_onnx(
@@ -560,11 +558,7 @@ def to_onnx(
         print(f"[to_onnx] build the graph module with input_names={input_names}")
 
     if isinstance(dynamic_shapes, tuple):
-        if len(dynamic_shapes) == 1 and isinstance(dynamic_shapes[0], tuple):
-            # Model is wrapped
-            dyn_shapes = dynamic_shapes[0]
-        else:
-            dyn_shapes = dynamic_shapes
+        dyn_shapes = dynamic_shapes[0] if is_wrapped(mod, dynamic_shapes) else dynamic_shapes
         if not input_names:
             input_names = [f"input{i}" for i in range(len(dyn_shapes))]
         assert len(input_names) == len(dyn_shapes), (
@@ -607,9 +601,7 @@ def to_onnx(
             f"use_dynamic_shapes={use_dynamic_shapes}"
         )
 
-    assert use_dynamic_shapes is None or isinstance(
-        use_dynamic_shapes, (dict, type(args))
-    ), (
+    assert use_dynamic_shapes is None or isinstance(use_dynamic_shapes, (dict, type(args))), (
         f"type(use_dynamic_shapes)={type(use_dynamic_shapes)} should have the "
         f"same type as args or a dictionary: {type(args)}, "
         f"dynamic_shapes={dynamic_shapes}, dict_dynamic_shapes={dict_dynamic_shapes}, "

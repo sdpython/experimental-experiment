@@ -319,9 +319,7 @@ def merge_benchmark_reports(
             values = set(df[c])
             if values & {True, False, np.nan} == values:
                 updates[c] = (
-                    df[c]
-                    .apply(lambda x: x if np.isnan(x) else (1 if x else 0))
-                    .astype(float)
+                    df[c].apply(lambda x: x if np.isnan(x) else (1 if x else 0)).astype(float)
                 )
             if (
                 df[c].dtype not in {float, np.float64, np.float32}

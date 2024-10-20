@@ -367,9 +367,7 @@ class TreeEnsembleRegressorConcatPattern(PatternOptimization):
             )
             outputs = [sig_outs]
 
-        transpose_output = g.unique_name(
-            f"{self.__class__.__name__}_{concat_node.output[0]}T"
-        )
+        transpose_output = g.unique_name(f"{self.__class__.__name__}_{concat_node.output[0]}T")
         transpose = g.make_node(
             "Transpose",
             outputs,

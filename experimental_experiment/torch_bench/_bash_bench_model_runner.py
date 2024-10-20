@@ -9,6 +9,7 @@ import time
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 import onnx
 import torch
+from ..torch_test_helper import string_type
 from .export_model_helper import compute_weight_size
 
 
@@ -51,9 +52,7 @@ class MakeConfig:
             setattr(self, k, v)
 
 
-def _rand_int_tensor(
-    device: str, low: int, high: int, shape: Tuple[int, ...]
-) -> torch.Tensor:
+def _rand_int_tensor(device: str, low: int, high: int, shape: Tuple[int, ...]) -> torch.Tensor:
     """Creates a random input integer tensor.
 
     :param device: device
@@ -128,12 +127,8 @@ def get_dynamo_stats() -> Dict[str, float]:
             "graph_breaks": sum(torch._dynamo.utils.counters["graph_break"].values()),
             # NB: The plus removes zero counts
             "unique_graph_breaks": len(+torch._dynamo.utils.counters["graph_break"]),
-            "autograd_captures": torch._dynamo.utils.counters["compiled_autograd"][
-                "captures"
-            ],
-            "autograd_compiles": torch._dynamo.utils.counters["compiled_autograd"][
-                "compiles"
-            ],
+            "autograd_captures": torch._dynamo.utils.counters["compiled_autograd"]["captures"],
+            "autograd_compiles": torch._dynamo.utils.counters["compiled_autograd"]["compiles"],
             "cudagraph_skips": torch._dynamo.utils.counters["inductor"]["cudagraph_skips"],
         }
     )
@@ -188,14 +183,13 @@ class ModelRunner:
         None is default behavior,
         'nowrap' to explicit avoid wrapping
     :param nvtx: enable nvtx events
+    :param model_name: model name
     """
 
     _patched = None
 
     @classmethod
-    def allowed_configuration(
-        cls, exporter: str, optimization: Optional[str] = None
-    ) -> bool:
+    def allowed_configuration(cls, exporter: str, optimization: Optional[str] = None) -> bool:
         """Defines the allowed configurations."""
         if not optimization or optimization == "none":
             # always possible
@@ -214,7 +208,7 @@ class ModelRunner:
 
     @classmethod
     def _to_type_or_device(cls, o, dtype_or_device):
-        if dtype_or_device is None or o is None or isinstance(o, (str, bool, int, float)):
+        if dtype_or_device is None or o is None or isinstance(o, str):
             return o
         if isinstance(o, list):
             return [cls._to_type_or_device(v, dtype_or_device) for v in o]
@@ -229,6 +223,27 @@ class ModelRunner:
             }:
                 return o.to(dtype_or_device)
             return o
+
+        if isinstance(o, int):
+            # int gets ignored by torch.export.export
+            t = torch.Tensor([o]).to(torch.int32)
+            if isinstance(dtype_or_device, str):
+                t = t.to(dtype_or_device)
+            return t
+
+        if isinstance(o, bool):
+            # int gets ignored by torch.export.export
+            t = torch.Tensor([o]).to(torch.bool)
+            if isinstance(dtype_or_device, str):
+                t = t.to(dtype_or_device)
+            return t
+
+        if isinstance(o, float):
+            # int gets ignored by torch.export.export
+            t = torch.Tensor([o]).to(torch.float32)
+            if isinstance(dtype_or_device, str):
+                t = t.to(dtype_or_device)
+            return t
 
         if cls.isinstance_namedtuple(o):
             new_vals = {}
@@ -279,6 +294,7 @@ class ModelRunner:
         autocast: bool = False,
         wrap_kind: Optional[None] = None,
         nvtx: bool = False,
+        model_name: Optional[str] = None,
     ):
         if dtype is None:
             cvt = lambda o: self._to_type_or_device(o, device)  # noqa: E731
@@ -327,8 +343,7 @@ class ModelRunner:
         else:
             self.raw_input_names = [f"input{i}" for i in range(len(inputs))]
             self.raw_use_defaults = [
-                (UseDefaultValue.TRUE if i is None else UseDefaultValue.FALSE)
-                for i in inputs
+                (UseDefaultValue.TRUE if i is None else UseDefaultValue.FALSE) for i in inputs
             ]
 
         config = getattr(model, "config", {})
@@ -368,6 +383,7 @@ class ModelRunner:
         self.warmup = warmup
         self.suite = suite
         self.autocast = autocast
+        self.model_name = model_name
         self.nvtx = nvtx
         assert self.autocast is not None
         self.std_to_dump = []
@@ -375,6 +391,16 @@ class ModelRunner:
     @property
     def input_names(self):
         return self.raw_input_names
+
+    def is_lm(self) -> bool:
+        """
+        Returns True if the model is a language model.
+        In that case, the dynamic dimensions with the two first ones.
+        This test relies on the model name.
+        """
+        if not self.model_name:
+            return False
+        return "LM" in self.model_name
 
     def get_dynamic_shapes(
         self,
@@ -400,23 +426,32 @@ class ModelRunner:
             f"Unexpected number of input_names {len(input_names)} != "
             f"{len(self.inputs)} (expected), input_names={input_names!r}"
         )
-        dim = torch.export.Dim("batch", min=1, max=1024)
+
+        batch = torch.export.Dim("batch", min=1, max=1024)
+        seq_length = (
+            (torch.export.Dim("seql", min=1, max=131072) * 8) if self.is_lm() else None
+        )
         res = []
+
         for i, x in enumerate(self.inputs):
             if x is None or isinstance(x, (int, float)):
                 res.append(None)
                 continue
+
+            dyn_dims = {0: batch}
+            if seq_length is not None:
+                dyn_dims.update({1: seq_length})
             if isinstance(x, list):
                 assert all(
-                    hasattr(_, "shape") for _ in x
+                    _ is None or hasattr(_, "shape") for _ in x
                 ), f"Unsupported types in a list {[type(_) for _ in x]} at position {i}"
-                tries = [{0: dim} if len(_.shape) > 1 else None for _ in x]
+                tries = [dyn_dims if _ is not None and len(_.shape) > 1 else None for _ in x]
                 res.append(tries)
                 continue
             assert hasattr(
                 x, "shape"
             ), f"Unexpected type {type(x)} for input {i}/{len(self.inputs)}"
-            res.append({0: dim} if len(x.shape) > 1 else None)
+            res.append(dyn_dims if len(x.shape) > 1 else None)
 
         final = tuple(res)
         if wrapped:
@@ -710,11 +745,20 @@ class ModelRunner:
             options = None
 
         export_options = ExportOptions(strategy=strategy)
-        export_inputs = self.make_export_inputs(dynamic, wrapped=True, int_to_tensor=False)
-        dyn_shapes = self.get_dynamic_shapes(dynamic, wrapped=True)
+        export_inputs = self.make_export_inputs(dynamic)
+        dyn_shapes = self.get_dynamic_shapes(dynamic)
+
+        if verbose:
+            print(f"[ModelRunner._to_onnx_custom] dynamic_shapes={dyn_shapes!r}")
+            print(f"[ModelRunner._to_onnx_custom] type(model)={type(self.model)!r}")
+            print(
+                f"[ModelRunner._to_onnx_custom] export_inputs={string_type(export_inputs)!r}"
+            )
 
         if self.autocast:
-            with torch.autocast(device_type=self.device, dtype=self.dtype), torch.no_grad():
+            with torch.autocast(
+                device_type=self.device, dtype=self.dtype
+            ), torch.no_grad(), bypass_export_some_errors():
                 onx, builder, stats = to_onnx(
                     self.model,
                     export_inputs,
@@ -727,9 +771,10 @@ class ModelRunner:
                     return_builder=True,
                     dynamic_shapes=dyn_shapes,
                     export_options=export_options,
+                    inline=True,
                 )
         else:
-            with torch.no_grad():
+            with torch.no_grad(), bypass_export_some_errors():
                 onx, builder, stats = to_onnx(
                     self.model,
                     export_inputs,
@@ -742,6 +787,7 @@ class ModelRunner:
                     return_builder=True,
                     dynamic_shapes=dyn_shapes,
                     export_options=export_options,
+                    inline=True,
                 )
         begin = time.perf_counter()
         self.std_to_dump.append(pprint.pformat(stats))
@@ -897,8 +943,8 @@ class ModelRunner:
         else:
             inputs = self.inputs
 
-        dynamic_shapes_for_export = self.get_dynamic_shapes(dynamic, wrapped=True)
-        inputs = self.make_export_inputs(dynamic, wrapped=True, inputs=inputs)
+        dynamic_shapes_for_export = self.get_dynamic_shapes(dynamic)
+        inputs = self.make_export_inputs(dynamic, inputs=inputs)
         kwargs_export = {}
         if dynamic_shapes_for_export is not None:
             # torch_script only supports a dictionary
@@ -1006,11 +1052,21 @@ class ModelRunner:
                     artifacts_dir=os.path.dirname(name),
                 )
             )
-        if fallback:
-            additional_kwargs.update(dict(fallback=True))
 
-        export_inputs = self.make_export_inputs(dynamic, wrapped=True)
-        dyn_shapes = self.get_dynamic_shapes(dynamic, wrapped=True)
+        export_inputs = self.make_export_inputs(dynamic)
+        dyn_shapes = self.get_dynamic_shapes(dynamic)
+
+        if dyn_shapes and isinstance(self.model, WrappedModelBase):
+            dyn_shapes = (dyn_shapes,)
+
+        if verbose:
+            print(f"[ModelRunner._to_onnx_dynamo] detailed={detailed}, fallback={fallback}")
+            print(f"[ModelRunner._to_onnx_dynamo] additional_kwargs={additional_kwargs}")
+            print(f"[ModelRunner._to_onnx_dynamo] dynamic_shapes={dyn_shapes!r}")
+            print(
+                f"[ModelRunner._to_onnx_dynamo] export_inputs={string_type(export_inputs)!r}"
+            )
+            print(f"[ModelRunner._to_onnx_dynamo] type(model)={type(self.model)!r}")
 
         if self.autocast:
             with torch.autocast(device_type=self.device, dtype=self.dtype), torch.no_grad():
@@ -1022,6 +1078,7 @@ class ModelRunner:
                     dynamo=True,
                     external_data=True,
                     dynamic_shapes=dyn_shapes,
+                    fallback=fallback,
                     **additional_kwargs,
                 )
         else:
@@ -1034,6 +1091,7 @@ class ModelRunner:
                     dynamo=True,
                     external_data=True,
                     dynamic_shapes=dyn_shapes,
+                    fallback=fallback,
                     **additional_kwargs,
                 )
 
@@ -1121,26 +1179,21 @@ class ModelRunner:
         assert (
             not optimization or optimization == "none"
         ), f"optimization {optimization!r} not compatible with export"
-        from torch.export import export
         from ..torch_interpreter import ExportOptions
 
-        with torch.no_grad():
-            exported_mod = export(
-                self.model,
-                self.make_export_inputs(dynamic, wrapped=True),
-                dynamic_shapes=self.get_dynamic_shapes(dynamic, wrapped=True),
-            )
-
+        export_inputs = self.make_export_inputs(dynamic)
+        dynamic_shapes = self.get_dynamic_shapes(dynamic)
         export_options = ExportOptions(strategy=strategy)
-        dynamic_shapes = self.get_dynamic_shapes(dynamic, wrapped=True)
-
         if verbose:
-            print(f"[ModelRunner._to_export] export_options={export_options!r}")
             print(f"[ModelRunner._to_export] dynamic_shapes={dynamic_shapes!r}")
+            print(f"[ModelRunner._to_export] export_inputs={string_type(export_inputs)!r}")
+            print(f"[ModelRunner._to_export] strategy={strategy!r}")
+            print(f"[ModelRunner._to_export] export_options={export_options!r}")
+            print(f"[ModelRunner._to_export] type(model)={type(self.model)!r}")
 
         exported_mod = export_options.export(
             self.model,
-            self.make_export_inputs(dynamic, wrapped=True),
+            export_inputs,
             dynamic_shapes=dynamic_shapes,
             tracing_mode=False,
             same_signature=False,
@@ -1148,6 +1201,11 @@ class ModelRunner:
         )
 
         if export_options.decomposition_table:
+            if verbose:
+                print(
+                    f"[ModelRunner._to_export] decomposition_table="
+                    f"{export_options.decomposition_table!r}"
+                )
             from ..torch_interpreter.export_options import (
                 insert_contiguous_between_transpose_and_view,
             )
@@ -1300,11 +1358,12 @@ class ModelRunner:
         i: Optional[int] = None,
     ) -> Tuple[int, ...]:
         new_shape = []
-        assert isinstance(
-            dyn_shape, dict
-        ), f"Unexpected type for input {i}, dyn_shape={dyn_shape}"
+        assert dyn_shape is None or isinstance(dyn_shape, dict), (
+            f"Unexpected type for input {i}, dyn_shape={dyn_shape}, "
+            f"input_shape={input_shape}, dyn_values={string_type(dyn_values)}"
+        )
         for j in range(len(input_shape)):
-            if input_shape[j] != 1 or j not in dyn_shape:
+            if dyn_shape is None or input_shape[j] != 1 or j not in dyn_shape:
                 new_shape.append(input_shape[j])
                 continue
             name = dyn_shape[j]
@@ -1402,7 +1461,7 @@ class ModelRunner:
                     f"dynamic_shapes[i]={dynamic_shapes[i]}"
                 )
                 assert all(
-                    isinstance(x, torch.Tensor) for x in inp
+                    x is None or isinstance(x, torch.Tensor) for x in inp
                 ), f"Unexpected type in input(list) {i}, {[type(x) for x in inp]}"
                 assert len(dynamic_shapes[i]) == len(inp), (
                     f"Length mismatch len(dynamic_shapes[i])={len(dynamic_shapes[i])} "
@@ -1520,6 +1579,9 @@ class ModelRunner:
                 ), f"Length mismatch len(dyn_shape)={len(dyn_shape)}, len(inp)={len(inp)}"
                 new_shapes = []
                 for t, ds in zip(inp, dyn_shape):
+                    if t is None:
+                        new_shapes.append(None)
+                        continue
                     new_shapes.append(
                         self._get_input_shape_tensor(
                             export=export,
@@ -1550,12 +1612,12 @@ class ModelRunner:
         self, input_shape, dyn_shape, dyn_values: Dict[str, Any], i: Optional[int] = None
     ):
         new_shape = []
-        assert isinstance(dyn_shape, dict), (
+        assert dyn_shape is None or isinstance(dyn_shape, dict), (
             f"Unexpected type for input {i}, dyn_shape{dyn_shape}, "
             f"shape of input[{i}]={input_shape}"
         )
         for j in range(len(input_shape)):
-            if j not in dyn_shape:
+            if dyn_shape is None or j not in dyn_shape:
                 new_shape.append(input_shape[j])
                 continue
             name = dyn_shape[j]
@@ -1563,7 +1625,7 @@ class ModelRunner:
                 new_shape.append(dyn_values[name])
                 continue
             d = input_shape[j]
-            d += 1
+            d += 1 if j == 0 else 8
             dyn_values[name] = d
             new_shape.append(d)
 
@@ -1608,6 +1670,9 @@ class ModelRunner:
                 )
                 new_input = []
                 for x, ds in zip(inp, dyn_shape):
+                    if x is None:
+                        new_input.append(None)
+                        continue
                     ns = self._make_dynamic_inputs_tensor(
                         input_shape=x.shape, i=i, dyn_shape=ds, dyn_values=dyn_values
                     )
@@ -1630,9 +1695,7 @@ class ModelRunner:
             dyn_inputs.append(zeros)
         return tuple(dyn_inputs)
 
-    def make_feeds(
-        self, exporter: str, filename: Optional[str] = None, dynamic: bool = False
-    ):
+    def make_feeds(self, exporter: str, filename: Optional[str] = None, dynamic: bool = False):
         """Creates feed inputs."""
         if exporter.split("-", maxsplit=1)[0] in {
             "eager",
@@ -1645,7 +1708,7 @@ class ModelRunner:
         }:
             return self.inputs
 
-        use_inputs = self.inputs if not dynamic else self.make_dynamic_inputs(wrapped=True)
+        use_inputs = self.inputs if not dynamic else self.make_dynamic_inputs()
 
         # for onnx
         onx = onnx.load(filename, load_external_data=False)
@@ -1711,7 +1774,8 @@ class ModelRunner:
         assert len(names) == len(new_inputs), (
             f"Mismatch number of inputs, {len(inputs)} ({len(new_inputs)}) "
             f"inputs, there are {len(new_inputs)} flattened inputs.\n----\n"
-            f"names={names}\n----\ninput types={[type(i) for i in inputs]}\n----\n"
+            f"names={names}\n----\ninput types={string_type(inputs)}\n----\n"
+            f"new input types={string_type(new_inputs)}\n----\n"
             f"named parameters={sorted(p[0] for p in self.model.named_parameters())}"
             f"\n----\nnamed buffers={sorted(p[0] for p in self.model.named_buffers())}"
             f"\n----\nself.raw_input_names={self.raw_input_names}\n----\n"

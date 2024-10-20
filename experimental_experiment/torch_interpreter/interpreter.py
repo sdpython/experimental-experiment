@@ -317,9 +317,7 @@ class DynamoInterpreter:
                 users=node.users,
             )
 
-        if isinstance(
-            val, (self.torch.Tensor, self.torch._subclasses.fake_tensor.FakeTensor)
-        ):
+        if isinstance(val, (self.torch.Tensor, self.torch._subclasses.fake_tensor.FakeTensor)):
             stack_trace = node.meta.get("stack_trace", None)
             value = None
             if stack_trace is None and "from_node" not in node.meta:
@@ -359,9 +357,7 @@ class DynamoInterpreter:
                     return self._make_tensor_input(
                         node.name, dtype, shape, False, users=node.users, fake_tensor=True
                     )
-                raise RuntimeError(
-                    f"value is None, unable to retrieve target {node.target!r}"
-                )
+                raise RuntimeError(f"value is None, unable to retrieve target {node.target!r}")
             return self.builder.make_initializer(node.name, value)
 
         if isinstance(val, (self.torch.SymInt, self.torch.SymFloat)):
@@ -796,9 +792,7 @@ class DynamoInterpreter:
                 self.builder.set_type(node.name, self.builder.get_type(result_name))
                 self.builder.set_rank(
                     node.name,
-                    self.builder.get_rank(result_name)
-                    + self.builder.get_rank(index.name)
-                    - 1,
+                    self.builder.get_rank(result_name) + self.builder.get_rank(index.name) - 1,
                 )
             return res
 
@@ -1035,9 +1029,7 @@ class DynamoInterpreter:
         name_fct = f"aten_meth_{method_name}"
         fct = find_method(name_fct)
         if self.dispatcher is not None:
-            fct = self.dispatcher.fallback(
-                name_fct, fct, node.args, node.kwargs, self.builder
-            )
+            fct = self.dispatcher.fallback(name_fct, fct, node.args, node.kwargs, self.builder)
         if fct is None:
             raise FunctionNotFoundError(
                 f"Unable to interpret method {name_fct!r}, "
@@ -1277,9 +1269,7 @@ class DynamoInterpreter:
     def _interpret_sub_module(self, sub_module, args, source_node=None):
         from .onnx_export import _make_builder_interpreter
 
-        if hasattr(sub_module, "graph") and isinstance(
-            sub_module, self.torch.fx.GraphModule
-        ):
+        if hasattr(sub_module, "graph") and isinstance(sub_module, self.torch.fx.GraphModule):
             gm = sub_module
         else:
             # https://pytorch.org/docs/stable/fx.html
@@ -1364,9 +1354,7 @@ class DynamoInterpreter:
             args.append(val)
 
         if self.builder.verbose > 1:
-            print(
-                f"[DynamoInterpreter-{self._hash()}.call_module] class [{type(sub_module)}]"
-            )
+            print(f"[DynamoInterpreter-{self._hash()}.call_module] class [{type(sub_module)}]")
 
         builder, args, output_names = self._interpret_sub_module(
             sub_module, args, source_node=node

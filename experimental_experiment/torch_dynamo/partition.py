@@ -22,9 +22,7 @@ class CustomOperatorSupport(OperatorSupport):
     ) -> bool:
         if node.op not in CALLABLE_NODE_OPS:
             if self.verbose > 1:
-                print(
-                    f"[CustomOperatorSupport.is_node_support] validate node.op [{node.op}]"
-                )
+                print(f"[CustomOperatorSupport.is_node_support] validate node.op [{node.op}]")
             return True
 
         target = get_node_target(submodules, node)

@@ -20,19 +20,13 @@ class MulMulMulScalarPattern(PatternOptimization):
     ) -> Optional[MatchResult]:
         if node.op_type not in {"Div", "Mul"} or node.domain != "":
             return self.none()
-        if g.is_used_more_than_once(node.input[0]) or g.is_used_more_than_once(
-            node.input[1]
-        ):
+        if g.is_used_more_than_once(node.input[0]) or g.is_used_more_than_once(node.input[1]):
             return self.none(node, inspect.currentframe().f_lineno)
         node_left = g.node_before(node.input[0])
         if node_left is None or node_left.op_type not in {"Div", "Mul"} or node.domain != "":
             return self.none(node, inspect.currentframe().f_lineno)
         node_right = g.node_before(node.input[1])
-        if (
-            node_right is None
-            or node_right.op_type not in {"Div", "Mul"}
-            or node.domain != ""
-        ):
+        if node_right is None or node_right.op_type not in {"Div", "Mul"} or node.domain != "":
             return self.none(node, inspect.currentframe().f_lineno)
 
         # checking for the constant (right)
@@ -174,10 +168,7 @@ class SwitchOrderBinaryPattern(PatternOptimization):
         before_left = g.get_shape(other_node.input[0])
         before_right = g.get_shape(other_node.input[1])
 
-        if (
-            self.switch_order(shape_left, shape_right, before_left, before_right, choose)
-            == 0
-        ):
+        if self.switch_order(shape_left, shape_right, before_left, before_right, choose) == 0:
             if choose < 3:
                 return self.none(node, inspect.currentframe().f_lineno)
             choose = 1
@@ -337,9 +328,7 @@ class SwitchOrderBinaryPattern(PatternOptimization):
                 return [op1, op2]
 
             # case 2
-            op1 = g.make_node(
-                op_type, [C, A], name=f"{self.__class__.__name__}--{node.name}"
-            )
+            op1 = g.make_node(op_type, [C, A], name=f"{self.__class__.__name__}--{node.name}")
             op2 = g.make_node(
                 op_type,
                 [op1.output[0], B],
@@ -352,9 +341,7 @@ class SwitchOrderBinaryPattern(PatternOptimization):
         # side 1
         B, C, A = other_node.input[0], other_node.input[1], node.input[0]
         if case == 1:
-            op1 = g.make_node(
-                op_type, [B, A], name=f"{self.__class__.__name__}--{node.name}"
-            )
+            op1 = g.make_node(op_type, [B, A], name=f"{self.__class__.__name__}--{node.name}")
             op2 = g.make_node(
                 op_type,
                 [op1.output[0], C],

@@ -562,9 +562,7 @@ class OrtEval:
             pth_outputs = self._ortvalues_to_torch_tensor(ort_outputs)
             return pth_outputs
 
-        ortvalues, output_devices = self._get_ortvalues_from_torch_tensors(
-            inputs, len(onames)
-        )
+        ortvalues, output_devices = self._get_ortvalues_from_torch_tensors(inputs, len(onames))
         assert len(onames) == len(output_devices), (
             f"Length mismatch {onames} but {len(output_devices)} devices, "
             f"node.output={node.output}."

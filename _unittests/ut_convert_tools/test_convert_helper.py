@@ -65,9 +65,7 @@ class TestConvertHelper(ExtTestCase):
         model(*example_args_collection[0])
         model = torch.onnx.dynamo_export(model, *example_args_collection[0])
         model_proto = model.model_proto
-        ort_optimize(
-            model_proto, providers="cpu", output="test_ort_optimize_dynamo_cpu.onnx"
-        )
+        ort_optimize(model_proto, providers="cpu", output="test_ort_optimize_dynamo_cpu.onnx")
 
     @requires_cuda()
     @ignore_warnings((UserWarning, DeprecationWarning))

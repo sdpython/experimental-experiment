@@ -31,9 +31,7 @@ def get_fused_aten_ops_dispatcher():
         scale: float = 1.0,
         **kwargs,
     ):
-        assert (
-            len(outputs) == 4
-        ), f"Unexpected number of outputs {outputs}{g.get_debug_msg()}"
+        assert len(outputs) == 4, f"Unexpected number of outputs {outputs}{g.get_debug_msg()}"
         assert len(kwargs) == 0, (
             f"Unexpected kwargs {kwargs} in "
             f"onnx_scaled_dot_product_efficient_attention{g.get_debug_msg()}"
@@ -113,9 +111,7 @@ def get_fused_aten_ops_dispatcher():
         scale: float = 1.0,
         **kwargs,
     ):
-        assert (
-            len(outputs) == 4
-        ), f"Unexpected number of outputs {outputs}{g.get_debug_msg()}"
+        assert len(outputs) == 4, f"Unexpected number of outputs {outputs}{g.get_debug_msg()}"
         assert len(kwargs) == 0, (
             f"Unexpected kwargs {kwargs} in "
             f"onnx_scaled_dot_product_attention_backward{g.get_debug_msg()}"

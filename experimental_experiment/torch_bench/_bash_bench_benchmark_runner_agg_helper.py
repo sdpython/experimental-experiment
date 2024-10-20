@@ -143,8 +143,7 @@ def _SELECTED_FEATURES():
             stat="latency",
             new_name="total latency time exported model",
             unit="x",
-            help="Total latency time with the exported model "
-            "(onnxruntime, inductor, ...)",
+            help="Total latency time with the exported model(onnxruntime, inductor, ...)",
             simple=True,
         ),
         dict(
@@ -1086,9 +1085,7 @@ def _create_aggregation_figures(
             v[key] = "?"
             v = v.reset_index(drop=False).set_index([key, *v.index.names])
 
-        assert (
-            key in v.index.names
-        ), f"Unable to find key={key} in {v.index.names} for k={k!r}"
+        assert key in v.index.names, f"Unable to find key={key} in {v.index.names} for k={k!r}"
         assert len(v.index.names) == len(
             model
         ), f"Length mismatch for k={k!r}, v.index.names={v.index.names}, model={model}"
@@ -1190,9 +1187,7 @@ def _create_aggregation_figures(
             df.index = _add_level(df.index, "agg", name)
             df.index = _add_level(df.index, "cat", k)
             assert _nonone_(df.index), f"None in {df.index.names}, k={k!r}, name={name!r}"
-            assert _nonone_(
-                df.columns
-            ), f"None in {df.columns.names}, k={k!r}, name={name!r}"
+            assert _nonone_(df.columns), f"None in {df.columns.names}, k={k!r}, name={name!r}"
             dfs.append(df)
 
         if len(dfs) == 0:
@@ -1223,9 +1218,7 @@ def _create_aggregation_figures(
                     assert _nonone_(
                         df.columns
                     ), f"None in {df.columns.names}, k={k!r}, df={df}"
-            assert isinstance(
-                df, pandas.DataFrame
-            ), f"Unexpected type {type(df)} for k={k!r}"
+            assert isinstance(df, pandas.DataFrame), f"Unexpected type {type(df)} for k={k!r}"
             assert _nonone_(df.index), f"None in {df.index.names}, k={k!r}"
             assert _nonone_(df.columns), f"None in {df.columns.names}, k={k!r}, df={df}"
         assert isinstance(df, pandas.DataFrame), f"Unexpected type {type(df)} for k={k!r}"
@@ -1296,9 +1289,7 @@ def _select_metrics(
     for i in df.index.tolist():
         rows.append(set(dict(zip(names, i)).items()))
 
-    subset = [
-        (s, set({k: v for k, v in s.items() if k in set_names}.items())) for s in select
-    ]
+    subset = [(s, set({k: v for k, v in s.items() if k in set_names}.items())) for s in select]
 
     keep = []
     for i, row in enumerate(rows):
@@ -1644,7 +1635,6 @@ def _process_formulas(
     set_columns: List[str],
     verbose: int = 0,
 ) -> Tuple[pandas.DataFrame, List[str]]:
-
     report_on = []
     for expr in formulas:
         if verbose:
@@ -1703,9 +1693,7 @@ def _process_formulas(
                 report_on.append(col_name)
 
                 col_name = "memory_delta_peak_gpu_eager_warmup"
-                df[col_name] = (
-                    df["mema_gpu_2_after_warmup"] - df["mema_gpu_0_before_loading"]
-                )
+                df[col_name] = df["mema_gpu_2_after_warmup"] - df["mema_gpu_0_before_loading"]
                 report_on.append(col_name)
 
                 col_name = "memory_peak_gpu_eager_warmup"
@@ -1810,9 +1798,7 @@ def _process_formulas(
                 gr = gr.drop("time_export_unbiased", axis=1)
                 if "opt_patterns" in gr.columns and len(set(gr.opt_patterns)) == 1:
                     on = [
-                        k
-                        for k in keep[:-1]
-                        if k not in {"exporter", "opt_patterns", "rtopt"}
+                        k for k in keep[:-1] if k not in {"exporter", "opt_patterns", "rtopt"}
                     ]
                 else:
                     on = [k for k in keep[:-1] if k != "exporter"]
@@ -1876,9 +1862,7 @@ def _process_formulas(
                     gr = gr.drop("speedup", axis=1)
 
                     on = [
-                        k
-                        for k in keep[:-1]
-                        if k not in {"exporter", "opt_patterns", "rtopt"}
+                        k for k in keep[:-1] if k not in {"exporter", "opt_patterns", "rtopt"}
                     ]
                     joined = pandas.merge(df, gr, left_on=on, right_on=on, how="left")
 
@@ -1967,9 +1951,7 @@ def _process_formulas(
                     gr = gr.drop("speedup", axis=1)
 
                     on = [
-                        k
-                        for k in keep[:-1]
-                        if k not in {"exporter", "opt_patterns", "rtopt"}
+                        k for k in keep[:-1] if k not in {"exporter", "opt_patterns", "rtopt"}
                     ]
                     joined = pandas.merge(df, gr, left_on=on, right_on=on, how="left")
 
@@ -2195,9 +2177,7 @@ def build_historical_report(
     df["value"] = df["value"].astype(float)
     df["dtype"] = df["dtype"].fillna("all")
     df = df[~df["value"].isna()]
-    exporter = [
-        c for c in ["exporter", "opt_patterns", "dynamic", "dtype"] if c in df.columns
-    ]
+    exporter = [c for c in ["exporter", "opt_patterns", "dynamic", "dtype"] if c in df.columns]
     if verbose:
         print(f"[build_historical_report] shape={df.shape}, exporter={exporter}")
         print(f"[build_historical_report] unique exporter={set(df.exporter)}")
@@ -2233,7 +2213,6 @@ def build_historical_report(
     if verbose:
         print(f"[build_historical_report] create {output!r}")
     with pandas.ExcelWriter(output, engine="xlsxwriter") as writer:
-
         export_export = {}
         for k, v in graphs.items():
             if verbose:
@@ -2347,9 +2326,7 @@ def build_historical_report(
         locations_rows = sorted(locations_rows)
         locations_cols = sorted(locations_cols)
         for p in pages:
-            pandas.DataFrame({p: list(range(10))}).to_excel(
-                writer, sheet_name=p, index=False
-            )
+            pandas.DataFrame({p: list(range(10))}).to_excel(writer, sheet_name=p, index=False)
         workbook = writer.book
         for k, (chart, title) in export_export.items():
             key, suite, kind = k
