@@ -2,7 +2,7 @@
 Benchmark exporters
 ===================
 
-Benchmarks many models from the `HuggingFace <https://huggingface.co/models>`_.
+Benchmarks many models coming from issues.
 Available exporters:
 
 * eager: identity
@@ -25,8 +25,7 @@ Available exporters:
 ::
 
     python -m experimental_experiment.torch_bench.bash_bench_issues \\
-           --model codellama --exporter eager
-
+           --model FluxT5 --exporter eager
 """
 
 from experimental_experiment.torch_bench._bash_bench_cmd import bash_bench_main
