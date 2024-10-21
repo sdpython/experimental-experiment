@@ -61,17 +61,26 @@ def bypass_export_some_errors():
     except ImportError:
         MambaCache = None
 
+    unregistered = True
     if MambaCache is not None:
-        _torch_pytree.register_pytree_node(
-            MambaCache,
-            flatten_mamba_cache,
-            unflatten_mamba_cache,
-            serialized_type_name=f"{MambaCache.__module__}.{MambaCache.__name__}",
-        )
+        if MambaCache in _torch_pytree.SUPPORTED_NODES:
+            # It is already registered because bypass_export_some_errors was called
+            # within a section already calling bypass_export_some_errors or transformers
+            # has updated its code to do it.
+            # No need to register and unregister then.
+            unregistered = False
+        else:
+            _torch_pytree.register_pytree_node(
+                MambaCache,
+                flatten_mamba_cache,
+                unflatten_mamba_cache,
+                serialized_type_name=f"{MambaCache.__module__}.{MambaCache.__name__}",
+            )
 
     try:
         yield
     finally:
         torch.jit.isinstance = f
         torch._dynamo.mark_static_address = f2
-        _torch_pytree.SUPPORTED_NODES.pop(MambaCache)
+        if unregistered and MambaCache is not None:
+            _torch_pytree.SUPPORTED_NODES.pop(MambaCache)
