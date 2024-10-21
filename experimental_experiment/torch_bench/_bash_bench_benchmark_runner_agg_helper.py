@@ -2286,6 +2286,7 @@ def build_historical_report(
                         "categories": [k, i + 1, idate, j, idate],
                         "values": [k, i + 1, ivalue, j, ivalue],
                         "line": {"width": 2},
+                        "marker": {"type": "diamond"},
                     }
                     chart.add_series(kwargs)
                     chart2.add_series(kwargs)

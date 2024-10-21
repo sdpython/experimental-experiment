@@ -1,5 +1,4 @@
 import collections
-import contextlib
 import enum
 import inspect
 import os
@@ -10,6 +9,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 import onnx
 import torch
 from ..torch_test_helper import string_type
+from ..torch_interpreter.onnx_export_errors import bypass_export_some_errors
 from .export_model_helper import compute_weight_size
 
 
@@ -25,23 +25,6 @@ class UseDefaultValue(enum.IntEnum):
     FALSE = 1
     TRUE = 2
     BOTH = 3
-
-
-@contextlib.contextmanager
-def bypass_export_some_errors():
-    """
-    Tries to bypass some functions torch.export.export does not
-    support such as ``torch.jit.isinstance``.
-    """
-    import torch.jit
-
-    f = torch.jit.isinstance
-    torch.jit.isinstance = isinstance
-
-    try:
-        yield
-    finally:
-        torch.jit.isinstance = f
 
 
 class MakeConfig:
@@ -1221,15 +1204,16 @@ class ModelRunner:
             print(f"[ModelRunner._to_export] export_options={export_options!r}")
             print(f"[ModelRunner._to_export] type(model)={type(self.model)!r}")
 
-        exported_mod = export_options.export(
-            self.model,
-            export_inputs,
-            export_kw_inputs,
-            dynamic_shapes=dynamic_shapes,
-            tracing_mode=False,
-            same_signature=False,
-            verbose=verbose,
-        )
+        with bypass_export_some_errors():
+            exported_mod = export_options.export(
+                self.model,
+                export_inputs,
+                export_kw_inputs,
+                dynamic_shapes=dynamic_shapes,
+                tracing_mode=False,
+                same_signature=False,
+                verbose=verbose,
+            )
 
         if export_options.decomposition_table:
             if verbose:

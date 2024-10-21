@@ -1,4 +1,3 @@
-import contextlib
 import inspect
 import os
 import pprint
@@ -218,23 +217,6 @@ def _retrieve(
     return None
 
 
-@contextlib.contextmanager
-def bypass_export_some_errors():
-    """
-    Tries to bypass some functions torch.export.export does not
-    support such as ``torch.jit.isinstance``.
-    """
-    import torch.jit
-
-    f = torch.jit.isinstance
-    torch.jit.isinstance = isinstance
-
-    try:
-        yield
-    finally:
-        torch.jit.isinstance = f
-
-
 def _make_builder_interpreter(
     mod: Union["torch.nn.Module", "torch.fx.GraphModule"],  # noqa: F821
     args: Optional[Sequence["torch.Tensor"]] = None,  # noqa: F821
@@ -316,17 +298,17 @@ def _make_builder_interpreter(
                 f"[_make_builder_interpreter] same_signature={same_signature}, "
                 f"tracing_mode={tracing_mode}"
             )
-        with bypass_export_some_errors():
-            exported_mod = export_options.export(
-                mod,
-                args if isinstance(args, tuple) else (tuple() if args is None else args),
-                kwargs,
-                tracing_mode=tracing_mode,
-                dynamic_shapes=dynamic_shapes,
-                same_signature=same_signature,
-                input_names=input_names,
-                verbose=verbose,
-            )
+        # If this step fails, try bypass_export_some_errors.
+        exported_mod = export_options.export(
+            mod,
+            args if isinstance(args, tuple) else (tuple() if args is None else args),
+            kwargs,
+            tracing_mode=tracing_mode,
+            dynamic_shapes=dynamic_shapes,
+            same_signature=same_signature,
+            input_names=input_names,
+            verbose=verbose,
+        )
 
         if verbose > 2:
             print(f"[_make_builder_interpreter] exported_mod {exported_mod}")
