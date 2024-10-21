@@ -424,7 +424,6 @@ class ModelRunner:
             (torch.export.Dim("seql", min=1, max=131072) * 8) if self.is_lm() else None
         )
         res = []
-
         for i, x in enumerate(self.inputs):
             if x is None or isinstance(x, (int, float)):
                 res.append(None)

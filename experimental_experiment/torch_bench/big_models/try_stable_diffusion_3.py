@@ -25,6 +25,8 @@ def load_model(
     from diffusers import StableDiffusion3Pipeline
 
     assert isinstance(dtype, str), f"Unexpected type for dtype={dtype!r}"
+    dtype = getattr(torch, dtype, dtype)
+    assert isinstance(dtype, torch.dtype), f"Unexpected type for dtype={dtype!r}"
     stype = str_dtype(dtype) if dtype is not None else ""
 
     if os.path.exists(os.path.join(cache, f"StableDiffusion3Medium{stype}")):
