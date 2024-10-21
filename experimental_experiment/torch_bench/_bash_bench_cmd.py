@@ -21,7 +21,7 @@ def bash_bench_parse_args(name: str, doc: str, new_args: Optional[List[str]] = N
         exporter=(
             "custom",
             "export, export-nostrict, export-default, "
-            "custom, custom-fallback, custom-nostrict, "
+            "inductor, custom, custom-fallback, custom-nostrict, "
             "onnx_dynamo, onnx_dynamo-fallback, "
             "dynamo_export, torch_script",
         ),
@@ -116,6 +116,10 @@ def bash_bench_main(script_name: str, doc: str, args: Optional[List[str]] = None
         from ._bash_bench_set_huggingface_big import HuggingfaceBigRunner
 
         runner = HuggingfaceBigRunner(device=args.device, verbose=int(args.verbose))
+    elif script_name == "bash_bench_issues":
+        from ._bash_bench_set_issues import IssueRunner
+
+        runner = IssueRunner(device=args.device, verbose=int(args.verbose))
     elif script_name == "bash_bench_torchbench":
         from ._bash_bench_set_torchbench import TorchBenchRunner
 
