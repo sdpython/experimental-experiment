@@ -1,7 +1,7 @@
 import itertools
 import time
 import warnings
-from typing import Dict, List, Optional, Sequence, Set, Tuple, Union
+from typing import Any, Dict, List, Optional, Sequence, Set, Tuple, Union
 
 import numpy as np
 import pandas
@@ -86,7 +86,7 @@ def _SELECTED_FEATURES():
         dict(
             cat="time",
             agg="COUNT",
-            stat="export_success",
+            stat="export_unbiased",
             new_name="export number",
             unit="N",
             help="Number of models successfully converted into ONNX. "
@@ -129,7 +129,7 @@ def _SELECTED_FEATURES():
         dict(
             cat="time",
             agg="SUM",
-            stat="export_success",
+            stat="export_unbiased",
             new_name="total export time",
             unit="s",
             help="Total export time when the export succeeds. "
@@ -143,8 +143,7 @@ def _SELECTED_FEATURES():
             stat="latency",
             new_name="total latency time exported model",
             unit="x",
-            help="Total latency time with the exported model "
-            "(onnxruntime, inductor, ...)",
+            help="Total latency time with the exported model(onnxruntime, inductor, ...)",
             simple=True,
         ),
         dict(
@@ -190,7 +189,7 @@ def _SELECTED_FEATURES():
         dict(
             cat="time",
             agg="MEAN",
-            stat="export_success",
+            stat="export_unbiased",
             new_name="average export time",
             unit="s",
             help="Average export time when the export succeeds. "
@@ -1086,9 +1085,7 @@ def _create_aggregation_figures(
             v[key] = "?"
             v = v.reset_index(drop=False).set_index([key, *v.index.names])
 
-        assert (
-            key in v.index.names
-        ), f"Unable to find key={key} in {v.index.names} for k={k!r}"
+        assert key in v.index.names, f"Unable to find key={key} in {v.index.names} for k={k!r}"
         assert len(v.index.names) == len(
             model
         ), f"Length mismatch for k={k!r}, v.index.names={v.index.names}, model={model}"
@@ -1190,9 +1187,7 @@ def _create_aggregation_figures(
             df.index = _add_level(df.index, "agg", name)
             df.index = _add_level(df.index, "cat", k)
             assert _nonone_(df.index), f"None in {df.index.names}, k={k!r}, name={name!r}"
-            assert _nonone_(
-                df.columns
-            ), f"None in {df.columns.names}, k={k!r}, name={name!r}"
+            assert _nonone_(df.columns), f"None in {df.columns.names}, k={k!r}, name={name!r}"
             dfs.append(df)
 
         if len(dfs) == 0:
@@ -1223,9 +1218,7 @@ def _create_aggregation_figures(
                     assert _nonone_(
                         df.columns
                     ), f"None in {df.columns.names}, k={k!r}, df={df}"
-            assert isinstance(
-                df, pandas.DataFrame
-            ), f"Unexpected type {type(df)} for k={k!r}"
+            assert isinstance(df, pandas.DataFrame), f"Unexpected type {type(df)} for k={k!r}"
             assert _nonone_(df.index), f"None in {df.index.names}, k={k!r}"
             assert _nonone_(df.columns), f"None in {df.columns.names}, k={k!r}, df={df}"
         assert isinstance(df, pandas.DataFrame), f"Unexpected type {type(df)} for k={k!r}"
@@ -1296,9 +1289,7 @@ def _select_metrics(
     for i in df.index.tolist():
         rows.append(set(dict(zip(names, i)).items()))
 
-    subset = [
-        (s, set({k: v for k, v in s.items() if k in set_names}.items())) for s in select
-    ]
+    subset = [(s, set({k: v for k, v in s.items() if k in set_names}.items())) for s in select]
 
     keep = []
     for i, row in enumerate(rows):
@@ -1608,7 +1599,9 @@ def _compute_correlations(
     return res
 
 
-def _fix_report_piv(piv: pandas.DataFrame, agg: bool = False) -> pandas.DataFrame:
+def _fix_report_piv(
+    piv: pandas.DataFrame, agg: bool = False
+) -> Tuple[pandas.DataFrame, pandas.DataFrame]:
     if agg:
         piv = piv[piv.index != (15, "average export time")]
         piv = piv[piv.index != (16, "average speedup (geo)")]
@@ -1616,7 +1609,7 @@ def _fix_report_piv(piv: pandas.DataFrame, agg: bool = False) -> pandas.DataFram
     # simplify dates
     indices = list(enumerate(piv.index))
     dates = [row[0] for row in indices if "date" in row[1]]
-    piv.iloc[dates, :] = piv.iloc[dates, :].applymap(lambda s: s[:10])
+    piv.iloc[dates, :] = piv.iloc[dates, :].map(lambda s: s[:10])
 
     # add speed by latency
     latencies = [row[0] for row in indices if "total latency time exported model" in row[1]]
@@ -1628,9 +1621,9 @@ def _fix_report_piv(piv: pandas.DataFrame, agg: bool = False) -> pandas.DataFram
         mindex = pandas.MultiIndex.from_tuples([index], names=piv.index.names)
         add = pandas.DataFrame([speedup.tolist()], columns=piv.columns, index=mindex)
         insert_at.append(add)
-    piv = pandas.concat([piv, *insert_at])
+    piv = pandas.concat([piv, *insert_at], axis=0)
     piv = piv.sort_index()
-    return piv
+    return piv, pandas.concat(insert_at, axis=0)
 
 
 def _process_formulas(
@@ -1642,7 +1635,6 @@ def _process_formulas(
     set_columns: List[str],
     verbose: int = 0,
 ) -> Tuple[pandas.DataFrame, List[str]]:
-
     report_on = []
     for expr in formulas:
         if verbose:
@@ -1701,9 +1693,7 @@ def _process_formulas(
                 report_on.append(col_name)
 
                 col_name = "memory_delta_peak_gpu_eager_warmup"
-                df[col_name] = (
-                    df["mema_gpu_2_after_warmup"] - df["mema_gpu_0_before_loading"]
-                )
+                df[col_name] = df["mema_gpu_2_after_warmup"] - df["mema_gpu_0_before_loading"]
                 report_on.append(col_name)
 
                 col_name = "memory_peak_gpu_eager_warmup"
@@ -1759,8 +1749,8 @@ def _process_formulas(
             continue
 
         if expr == "status":
-            if "time_export_success" in set_columns:
-                df["status_convert"] = (~df["time_export_success"].isna()).astype(int)
+            if "time_export_unbiased" in set_columns:
+                df["status_convert"] = (~df["time_export_unbiased"].isna()).astype(int)
                 report_on.append("status_convert")
             if "discrepancies_dynamic_abs" in set_columns:
                 df["status_dynamic"] = (
@@ -1797,20 +1787,18 @@ def _process_formulas(
         if expr == "control_flow":
             if (
                 "exporter" in set_columns
-                and "time_export_success" in set_columns
+                and "time_export_unbiased" in set_columns
                 and ({"export", "compile"} & set(df.exporter))
                 and len(set(df.exporter)) > 1
             ):
                 expo = "export" if "export" in set(df.exporter) else "compile"
-                keep = [*model, *new_keys, "time_export_success"]
+                keep = [*model, *new_keys, "time_export_unbiased"]
                 gr = df[df.exporter == expo][keep].copy()
-                gr["status_control_flow"] = gr["time_export_success"].isna().astype(int)
-                gr = gr.drop("time_export_success", axis=1)
+                gr["status_control_flow"] = gr["time_export_unbiased"].isna().astype(int)
+                gr = gr.drop("time_export_unbiased", axis=1)
                 if "opt_patterns" in gr.columns and len(set(gr.opt_patterns)) == 1:
                     on = [
-                        k
-                        for k in keep[:-1]
-                        if k not in {"exporter", "opt_patterns", "rtopt"}
+                        k for k in keep[:-1] if k not in {"exporter", "opt_patterns", "rtopt"}
                     ]
                 else:
                     on = [k for k in keep[:-1] if k != "exporter"]
@@ -1874,15 +1862,14 @@ def _process_formulas(
                     gr = gr.drop("speedup", axis=1)
 
                     on = [
-                        k
-                        for k in keep[:-1]
-                        if k not in {"exporter", "opt_patterns", "rtopt"}
+                        k for k in keep[:-1] if k not in {"exporter", "opt_patterns", "rtopt"}
                     ]
                     joined = pandas.merge(df, gr, left_on=on, right_on=on, how="left")
 
                     assert df.shape[0] == joined.shape[0], (
                         f"Shape mismatch after join {df.shape} -> {joined.shape}, "
-                        f"gr.shape={gr.shape}, on={on}"
+                        f"gr.shape={gr.shape}, on={on}. This usually means you have "
+                        f"duplicates. You should use keep_more_recent=True"
                     )
                     df = joined.copy()
                     df["speedup_increase_script"] = (
@@ -1964,9 +1951,7 @@ def _process_formulas(
                     gr = gr.drop("speedup", axis=1)
 
                     on = [
-                        k
-                        for k in keep[:-1]
-                        if k not in {"exporter", "opt_patterns", "rtopt"}
+                        k for k in keep[:-1] if k not in {"exporter", "opt_patterns", "rtopt"}
                     ]
                     joined = pandas.merge(df, gr, left_on=on, right_on=on, how="left")
 
@@ -2048,9 +2033,16 @@ def _process_formulas(
             err_cols = []
             for c in df.columns:
                 if c.startswith("ERR_") and df[c].dtype in (str, object):
+                    setup = df[c].str.contains(
+                        "Cannot install -r requirements.txt", regex=False
+                    )
+                    if True in set(setup):
+                        add[f"ERR_SETUP_{c[4:]}"] = setup.fillna(0.0).astype(int)
+                        report_on.append(f"ERR_SETUP_{c[4:]}")
                     oom = df[c].str.contains("CUDA out of memory", regex=False)
                     if True in set(oom):
                         add[f"ERR_OOM_{c[4:]}"] = oom.fillna(0.0).astype(int)
+                        report_on.append(f"ERR_OOM_{c[4:]}")
                     oomort = df[c].str.contains(
                         "onnxruntime::BFCArena::AllocateRawInternal(size_t bool "
                         "onnxruntime::Stream* bool onnxruntime::WaitNotificationFn) "
@@ -2059,9 +2051,11 @@ def _process_formulas(
                     )
                     if True in set(oomort):
                         add[f"ERR_OOMORT_{c[4:]}"] = oomort.fillna(0.0).astype(int)
+                        report_on.append(f"ERR_OOMORT_{c[4:]}")
                     acc = df[c].str.contains("Cannot access gated repo for url", regex=False)
                     if True in set(acc):
                         add[f"ERR_HTTP_{c[4:]}"] = acc.fillna(0.0).astype(int)
+                        report_on.append(f"ERR_HTTP_{c[4:]}")
                     mem = df[c].str.contains(
                         "Memcpy nodes are added to the graph main_graph "
                         "for CUDAExecutionProvider",
@@ -2069,6 +2063,7 @@ def _process_formulas(
                     )
                     if True in set(mem):
                         add[f"ERR_ORTMEMCPY_{c[4:]}"] = mem.fillna(0.0).astype(int)
+                        report_on.append(f"ERR_ORTMEMCPY_{c[4:]}")
                     err_cols.append(c)
             if err_cols:
                 set_cols = set(err_cols)
@@ -2089,5 +2084,261 @@ def _process_formulas(
                 report_on.append(k)
             continue
 
+        if expr == "export":
+            # guess the export time, for some exporter it is the first iteration.
+            def unbiased_export(row):
+                exporter = row["exporter"]
+                time_export_success = row["time_export_success"]
+                time_warmup_first_iteration = row["time_warmup_first_iteration"]
+                if (
+                    time_export_success is None
+                    or np.isnan(time_export_success)
+                    or time_warmup_first_iteration is None
+                    or np.isnan(time_warmup_first_iteration)
+                ):
+                    return np.nan
+                if exporter in {
+                    "inductor",
+                    "eager",
+                    "export",
+                    "compile",
+                    "dort",
+                    "cort",
+                }:
+                    return time_export_success + time_warmup_first_iteration
+                return time_export_success
+
+            if (
+                "exporter" in set_columns
+                and "time_export_success" in set_columns
+                and "time_warmup_first_iteration" in set_columns
+            ):
+                df["time_export_unbiased"] = df.apply(unbiased_export, axis=1)
+                report_on.append("time_export_unbiased")
+            elif "exporter" in set_columns and "time_export_success" in set_columns:
+                # old data
+                df["time_export_unbiased"] = df["time_export_success"]
+                report_on.append("time_export_unbiased")
+
+            continue
+
         raise AssertionError(f"Unknown formula {expr!r}")
     return df, report_on
+
+
+def build_historical_report(
+    output: str,
+    input_files: List[str],
+    verbose: int = 0,
+    filter_in: Optional[Any] = None,
+    filter_out: Optional[Any] = None,
+):
+    """
+    Builds historical graph using the aggregated data (export_simple options).
+
+    :param output: output, an excel file
+    :param input_files: input_files
+    :param verbose: verbosity
+    :param filter_in: filter in some data to make the report smaller (see below)
+    :param filter_out: filter out some data to make the report smaller (see below)
+
+    Argument `filter_in` or `filter_out` follows the syntax
+    ``<column1>:<fmt1>/<column2>:<fmt2>``.
+
+    The format is the following:
+
+    * a value or a set of values separated by ``;``
+    """
+    expected_columns = ["METRIC", "suite", "value", "DATE"]
+    dfs = []
+    for name in input_files:
+        if verbose:
+            print(f"[build_historical_report] read {name!r}")
+        df = pandas.read_csv(name)
+        assert all(
+            c in df.columns for c in expected_columns
+        ), f"Unexpected columns {df.columns} in {name!r}"
+        dfs.append(df)
+
+    df = pandas.concat(dfs, axis=0)
+
+    if filter_in or filter_out:
+        if verbose:
+            print("[merge_benchmark_reports] filtering data")
+
+        df = _filter_data(df, filter_in=filter_in, filter_out=filter_out)
+
+        if verbose:
+            print(f"[merge_benchmark_reports] done, new shape={df.shape}")
+        if df.shape[0] == 0:
+            return {}
+
+    df = df[df.METRIC != "date"]
+    df["value"] = df["value"].astype(float)
+    df["dtype"] = df["dtype"].fillna("all")
+    df = df[~df["value"].isna()]
+    exporter = [c for c in ["exporter", "opt_patterns", "dynamic", "dtype"] if c in df.columns]
+    if verbose:
+        print(f"[build_historical_report] shape={df.shape}, exporter={exporter}")
+        print(f"[build_historical_report] unique exporter={set(df.exporter)}")
+        print(f"[build_historical_report] suite={set(df.suite)}")
+
+    graphs = {
+        "model number": ["number of models", "number of models eager mode"],
+        "export number": [
+            "export number",
+            "number of running models",
+            "accuracy number",
+            "pass number",
+        ],
+        "faster number": [
+            "number of models equal or faster than eager",
+            "number of models equal or faster than inductor",
+        ],
+        "torch.export.export numbers": [
+            "number of models",
+            "number of models eager mode",
+            "number of failures for torch.export.export",
+        ],
+        "benchmark time": ["total export time", "benchmark duration"],
+        "export time": ["average export time"],
+        "speedup": ["speedup weighted by latency", "average speedup (geo)"],
+        "discrepancies": ["discrepancies < 0.1", "discrepancies < 0.01"],
+        "memory": [
+            "average GPU delta peak (export) (torch)",
+            "average GPU delta peak (export) (nvidia-smi)",
+        ],
+    }
+
+    if verbose:
+        print(f"[build_historical_report] create {output!r}")
+    with pandas.ExcelWriter(output, engine="xlsxwriter") as writer:
+        export_export = {}
+        for k, v in graphs.items():
+            if verbose:
+                print(f"[build_historical_report] create graph {k!r}, exporter={exporter}")
+            sdf = df[df.METRIC.isin(v)]
+            if sdf.shape[0] == 0:
+                continue
+            sdf = sdf.sort_values([*exporter, "suite", "METRIC", "DATE"])
+            sdf = sdf[[*exporter, "suite", "METRIC", "DATE", "value"]].copy()
+            if verbose:
+                print(f"[build_historical_report] shape={sdf.shape}")
+
+            try:
+                piv = sdf.pivot(
+                    index=[*exporter, "suite", "DATE"], columns="METRIC", values="value"
+                )
+            except ValueError as e:
+                cc = [*exporter, "suite", "DATE"]
+                dg = sdf.copy()
+                dg["__C__"] = 1
+                under = dg.groupby(cc).count()[["__C__"]]
+                under = under[under["__C__"] > 1]
+                raise ValueError(f"Ambiguities for columns {cc}\n{under}") from e
+
+            subset = piv.reset_index(drop=False)
+            subset.to_excel(writer, sheet_name=k, index=False)
+            idate = list(subset.columns).index("DATE")
+
+            workbook = writer.book
+            worksheet = writer.sheets[k]
+
+            locations_cols = {}
+            locations_rows = {}
+
+            i = 0
+            while i < subset.shape[0]:
+                suite = subset.loc[i, "suite"]
+                ex = subset.loc[i, "exporter"]
+                optim = subset.loc[i, "opt_patterns"] if "opt_patterns" in exporter else ""
+                dynamic = subset.loc[i, "dynamic"] if "dynamic" in exporter else ""
+                if suite not in locations_rows:
+                    locations_rows[suite] = (
+                        (max(locations_rows.values()) + 15) if locations_rows else 0
+                    )
+                key = int(dynamic), ex, optim
+                if key not in locations_cols:
+                    locations_cols[key] = (
+                        (max(locations_cols.values()) + 8) if locations_cols else 0
+                    )
+
+                j = i + 1
+                while j < subset.shape[0] and subset.loc[j, "suite"] == suite:
+                    j += 1
+
+                if verbose:
+                    print(
+                        f"[build_historical_report] + {suite},{ex},{optim},{dynamic}, "
+                        f"d={idate}, add chart from row {i} to {j} ({k!r})"
+                    )
+
+                chart = workbook.add_chart({"type": "line"})
+                chart2 = workbook.add_chart({"type": "line"})
+                for col in v:
+                    if col not in subset.columns:
+                        continue
+                    ivalue = list(subset.columns).index(col)
+                    if verbose:
+                        print(f"[build_historical_report] ++ serie {col!r}")
+                    kwargs = {
+                        "name": [k, 0, ivalue],
+                        "categories": [k, i + 1, idate, j, idate],
+                        "values": [k, i + 1, ivalue, j, ivalue],
+                        "line": {"width": 2},
+                    }
+                    chart.add_series(kwargs)
+                    chart2.add_series(kwargs)
+
+                chart.set_x_axis({"name": "date", "date_axis": True})
+                chart.set_y_axis({"name": k, "major_gridlines": {"visible": False}})
+                chart.set_legend({"position": "top"})
+                title = f"{suite} - {ex} +{optim}{' dynamic shape' if dynamic else ''}"
+                chart.set_title({"name": title})
+                chart2.set_title({"name": f"{suite} - {k}"})
+                x, y = locations_cols[key], locations_rows[suite]
+                place = (
+                    f"{chr(65 + x)}{y + 1}"
+                    if x < 26
+                    else f"{chr(64 + x // 26)}{chr(65 + (x % 26))}{y + 1}"
+                )
+                if verbose:
+                    print(
+                        f"[build_historical_report] insert at "
+                        f"{place} add title {k}: {title!r}"
+                    )
+                worksheet.insert_chart(place, chart)
+                export_export[key, suite, k] = (chart2, f"{suite} - {k}")
+                i = j
+
+        # second round
+        locations_cols = set()
+        locations_rows = set()
+        pages = set()
+        for k in export_export:
+            key, suite, kind = k
+            skey = "-".join(map(str, key))
+            pages.add(skey)
+            locations_cols.add(suite)
+            locations_rows.add(kind)
+
+        pages = sorted(pages)
+        locations_rows = sorted(locations_rows)
+        locations_cols = sorted(locations_cols)
+        for p in pages:
+            pandas.DataFrame({p: list(range(10))}).to_excel(writer, sheet_name=p, index=False)
+        workbook = writer.book
+        for k, (chart, title) in export_export.items():
+            key, suite, kind = k
+            skey = "-".join(map(str, key))
+            worksheet = writer.sheets[skey]
+            x = locations_cols.index(suite) * 8
+            y = locations_rows.index(kind) * 15
+            place = (
+                f"{chr(65 + x)}{y + 1}"
+                if x < 26
+                else f"{chr(64 + x // 26)}{chr(65 + (x % 26))}{y + 1}"
+            )
+            if verbose:
+                print(f"[build_historical_report] insert on {skey} at {place}: {title}")
+            worksheet.insert_chart(place, chart)

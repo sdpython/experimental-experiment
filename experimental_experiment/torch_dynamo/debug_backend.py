@@ -59,9 +59,7 @@ def _get_session(
                     onnxruntime.GraphOptimizationLevel, ort_optimization_level
                 )
 
-        return onnxruntime.InferenceSession(
-            onx.SerializeToString(), opts, providers=providers
-        )
+        return onnxruntime.InferenceSession(onx.SerializeToString(), opts, providers=providers)
 
 
 def onnx_debug_backend(
@@ -338,10 +336,9 @@ def onnx_debug_backend(
                 res.append(None)
                 continue
             if dim:
-                assert len(y.shape) <= 1, (
-                    f"Unexpected shape {y.shape} ({y}) for a dimension {name!r} "
-                    f"(rk={rk})"
-                )
+                assert (
+                    len(y.shape) <= 1
+                ), f"Unexpected shape {y.shape} ({y}) for a dimension {name!r} (rk={rk})"
                 assert y.shape in (tuple(), (1,)), (
                     f"Unxpected shape {y.shape} for dim={dim!r}, "
                     f"name={name!r}, dt={dt}, rk={rk}, y={y}"

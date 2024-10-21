@@ -413,9 +413,7 @@ class TestOperatorsCort(ExtTestCase):
                     for i, inst in enumerate(storage["instance"]):
                         with open(f"{onnx_export}_{i}.onnx", "wb") as f:
                             f.write(inst["onnx"].SerializeToString())
-                assert_all_close(
-                    baseline_result, result, atol=atol, rtol=rtol, msg="FORWARD"
-                )
+                assert_all_close(baseline_result, result, atol=atol, rtol=rtol, msg="FORWARD")
 
     @ignore_warnings(UserWarning)
     def test_aaa(self):
@@ -531,9 +529,7 @@ class TestOperatorsCort(ExtTestCase):
     @ignore_warnings(UserWarning)
     def test_addconstant(self):
         x = torch.randn(2, 3, requires_grad=True).double()
-        self.assertONNX(
-            lambda x: x + 1, x, onnx_export=inspect.currentframe().f_code.co_name
-        )
+        self.assertONNX(lambda x: x + 1, x, onnx_export=inspect.currentframe().f_code.co_name)
 
     @ignore_warnings(UserWarning)
     def test_add_broadcast(self):
@@ -663,9 +659,7 @@ class TestOperatorsCort(ExtTestCase):
     def test_mm(self):
         m1 = torch.randn(2, 3, requires_grad=True)
         m2 = torch.randn(3, 4, requires_grad=True)
-        self.assertONNX(
-            torch.mm, (m1, m2), onnx_export=inspect.currentframe().f_code.co_name
-        )
+        self.assertONNX(torch.mm, (m1, m2), onnx_export=inspect.currentframe().f_code.co_name)
 
     @ignore_warnings(UserWarning)
     def test_addmm(self):
@@ -688,9 +682,7 @@ class TestOperatorsCort(ExtTestCase):
         )
 
     def test_pad_op(self):
-        x = torch.tensor(
-            [[[[0.0, 1.0, 1.0, 1.0], [2.0, 3.0, 7.0, 7.0]]]], requires_grad=True
-        )
+        x = torch.tensor([[[[0.0, 1.0, 1.0, 1.0], [2.0, 3.0, 7.0, 7.0]]]], requires_grad=True)
         self.assertONNX(
             nn.ReflectionPad2d((2, 3, 0, 1)),
             x,
@@ -1412,10 +1404,18 @@ class TestOperatorsCort(ExtTestCase):
             onnx_export=inspect.currentframe().f_code.co_name,
         )
 
-    def test_flatten2D(self):
+    def test_flatten2D_1(self):
         x = torch.randn(1, 2, 3, 4, requires_grad=True)
         self.assertONNX(
             lambda x: torch.flatten(x, 1),
+            x,
+            onnx_export=inspect.currentframe().f_code.co_name,
+        )
+
+    def test_flatten2D_2(self):
+        x = torch.randn(1, 2, 3, 4, requires_grad=True)
+        self.assertONNX(
+            lambda x: torch.flatten(x, 2),
             x,
             onnx_export=inspect.currentframe().f_code.co_name,
         )
@@ -1585,9 +1585,7 @@ class TestOperatorsCort(ExtTestCase):
 
     def test_implicit_expand(self):
         x = torch.randn(3, 4, requires_grad=True)
-        self.assertONNX(
-            lambda x: x + 1, x, onnx_export=inspect.currentframe().f_code.co_name
-        )
+        self.assertONNX(lambda x: x + 1, x, onnx_export=inspect.currentframe().f_code.co_name)
 
     def test_reduce_sum_negative_indices(self):
         x = torch.randn(3, 4, requires_grad=True)
@@ -1613,9 +1611,7 @@ class TestOperatorsCort(ExtTestCase):
 
     def test_relu(self):
         x = torch.randn(1, 2, 3, 4)
-        self.assertONNX(
-            torch.nn.ReLU(), x, onnx_export=inspect.currentframe().f_code.co_name
-        )
+        self.assertONNX(torch.nn.ReLU(), x, onnx_export=inspect.currentframe().f_code.co_name)
 
     @requires_torch(
         "2.3.0",
@@ -1895,9 +1891,7 @@ class TestOperatorsCort(ExtTestCase):
                 return x_out
 
         x = {torch.tensor(1.0): torch.randn(1, 2, 3)}
-        self.assertONNX(
-            MyModel(), (x, {}), onnx_export=inspect.currentframe().f_code.co_name
-        )
+        self.assertONNX(MyModel(), (x, {}), onnx_export=inspect.currentframe().f_code.co_name)
 
     @unittest.skipIf(not DICT_SUPPORTED, reason="only tensor are supported")
     def test_dict_str(self):
@@ -1908,9 +1902,7 @@ class TestOperatorsCort(ExtTestCase):
                 return x_out
 
         x = {"test_key_in": torch.randn(1, 2, 3)}
-        self.assertONNX(
-            MyModel(), (x, {}), onnx_export=inspect.currentframe().f_code.co_name
-        )
+        self.assertONNX(MyModel(), (x, {}), onnx_export=inspect.currentframe().f_code.co_name)
 
     @unittest.skipIf(not DYNAMIC_SHAPE_SUPPORTED, reason="dynamic shape")
     def test_arange_dynamic(self):

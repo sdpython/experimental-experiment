@@ -74,10 +74,9 @@ def model_run(
     else:
         raise AssertionError(f"Unexpected value {processor!r} for processor.")
 
-    assert processor == "CPU", (
-        f"This function does not implement anything yet for CUDA, "
-        f"processor={processor!r}"
-    )
+    assert (
+        processor == "CPU"
+    ), f"This function does not implement anything yet for CUDA, processor={processor!r}"
 
     if verbose:
         smodel = model if isinstance(model, str) else str(type(model))

@@ -1,5 +1,5 @@
 [tool.black]
-line-length = 93
+line-length = 95
 
 [tool.ruff]
 
@@ -12,7 +12,7 @@ exclude = [
     "onnxscript",
 ]
 
-line-length = 93
+line-length = 95
 
 [tool.ruff.lint]
 select = [

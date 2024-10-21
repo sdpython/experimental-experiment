@@ -476,9 +476,7 @@ def _set_shape_type_op_any_reshape(self: "GraphBuilder", node: NodeProto):  # no
     self.set_type(k, self.get_type(node.input[0]))
     shape_set = False
     if self.is_constant(node.input[1]):
-        value = self.get_constant(
-            node.input[1], computed_value=True, as_shape=True, exc=False
-        )
+        value = self.get_constant(node.input[1], computed_value=True, as_shape=True, exc=False)
         if value is not None:
             cst = tuple(value)
             if all_int(cst):

@@ -70,12 +70,8 @@ class TestGraphSimplification(ExtTestCase):
         inputs.append(oh.make_tensor_value_info("input", TensorProto.FLOAT, shape=(2, 3)))
         nodes.append(oh.make_node("Softmax", ["input"], ["output_0"], axis=0))
         nodes.append(oh.make_node("Identity", ["output_0"], ["output_1"]))
-        outputs.append(
-            oh.make_tensor_value_info("output_0", TensorProto.FLOAT, shape=(2, 3))
-        )
-        outputs.append(
-            oh.make_tensor_value_info("output_1", TensorProto.FLOAT, shape=(2, 3))
-        )
+        outputs.append(oh.make_tensor_value_info("output_0", TensorProto.FLOAT, shape=(2, 3)))
+        outputs.append(oh.make_tensor_value_info("output_1", TensorProto.FLOAT, shape=(2, 3)))
         graph = oh.make_graph(
             nodes,
             "experiment",

@@ -18,9 +18,7 @@ class TestDortCmdCommond(ExtTestCase):
         for config in {"small", "large", "medium"}:
             d = create_configuration_for_benchmark("llama", config)
             self.assertIsInstance(d, dict)
-        self.assertRaise(
-            lambda: create_configuration_for_benchmark("llama", "f"), ValueError
-        )
+        self.assertRaise(lambda: create_configuration_for_benchmark("llama", "f"), ValueError)
 
     @skipif_ci_windows("dynamo not supported")
     @ignore_warnings((DeprecationWarning, UserWarning))

@@ -6,13 +6,14 @@ from .big_models import CACHE as CACHE_DEFAULT
 from .big_models.try_codellama import get_model_inputs as get_model_inputs_codellama
 from .big_models.try_falcon_mamba import get_model_inputs as get_model_inputs_falcon_mamba
 from .big_models.try_minilm import get_model_inputs as get_model_inputs_minilm
+from .big_models.try_smollm import get_model_inputs as get_model_inputs_smollm
 from .big_models.try_stable_diffusion_3 import (
     get_model_inputs as get_model_inputs_stable_diffusion_3,
 )
 
 
 class HuggingfaceBigRunner(BenchmarkRunner):
-    SUITE = "HuggingFace"
+    SUITE = "HuggingFaceBig"
     MODELS: Dict[str, Callable] = {}
     CACHE = CACHE_DEFAULT
 
@@ -25,6 +26,7 @@ class HuggingfaceBigRunner(BenchmarkRunner):
                 "code_llama": get_model_inputs_codellama,
                 "stable_diffusion_3": get_model_inputs_stable_diffusion_3,
                 "falcon_mamba_7b": get_model_inputs_falcon_mamba,
+                "SmolLM_1_7b": get_model_inputs_smollm,
             }
         )
 
@@ -102,6 +104,7 @@ class HuggingfaceBigRunner(BenchmarkRunner):
             suite=self.SUITE,
             autocast=self.autocast,
             wrap_kind="nowrap",
+            model_name=model_name,
         )
 
     def iter_model_names(self):

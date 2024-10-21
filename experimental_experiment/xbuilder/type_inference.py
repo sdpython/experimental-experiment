@@ -171,9 +171,7 @@ def _infer_type_pow(node: NodeProto, input_types: Sequence[int]) -> Tuple[int]:
     """
     Returns the output type for a node Where.
     """
-    raise AssertionError(
-        f"Not implemented yet for node={node} and input_types={input_types}"
-    )
+    raise AssertionError(f"Not implemented yet for node={node} and input_types={input_types}")
 
 
 def _infer_type_range(node: NodeProto, input_types: Sequence[int]) -> Tuple[int]:

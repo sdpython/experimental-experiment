@@ -432,9 +432,7 @@ class ReshapeMatMulReshapePattern(PatternOptimization):
         # condition on shapes
         if not g.is_constant(node_before_left.input[1]):
             return
-        shape_left = tuple(
-            int(i) for i in g.get_computed_constant(node_before_left.input[1])
-        )
+        shape_left = tuple(int(i) for i in g.get_computed_constant(node_before_left.input[1]))
         if not g.is_constant(node_before_right.input[1]):
             return
         shape_right = tuple(
@@ -729,9 +727,7 @@ class TransposeReshapeMatMulPattern(PatternOptimization):
             # right side
             perm = list(range(g.get_rank(node.input[1])))
             perm[-2], perm[-1] = perm[-1], perm[-2]
-            right_name = g.unique_name(
-                f"{self.__class__.__name__}L_{node_right_tr.input[0]}"
-            )
+            right_name = g.unique_name(f"{self.__class__.__name__}L_{node_right_tr.input[0]}")
             res = [
                 g.make_node(
                     "Reshape",

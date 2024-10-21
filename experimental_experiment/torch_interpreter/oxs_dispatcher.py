@@ -216,10 +216,7 @@ class OxsDebugDispatcher(OxsDispatcher):
             res = OxsDispatcher.fallback(self, name, None, args, kwargs, builder)
             res(builder, False, None, *args, **kwargs)
             if self.verbose > 1:
-                print(
-                    f"[OxsDebugDispatcher.fallback] fallback "
-                    f"verified for {name!r}: {res}"
-                )
+                print(f"[OxsDebugDispatcher.fallback] fallback verified for {name!r}: {res}")
         else:
             try:
                 res = OxsDispatcher.fallback(self, name, None, args, kwargs, builder)
@@ -252,8 +249,5 @@ class OxsDebugDispatcher(OxsDispatcher):
                     )
                 return fct
         if self.verbose > 1:
-            print(
-                f"[OxsDebugDispatcher.fallback] fallback verified "
-                f"for {name!r} with {res}"
-            )
+            print(f"[OxsDebugDispatcher.fallback] fallback verified for {name!r} with {res}")
         return fct or res

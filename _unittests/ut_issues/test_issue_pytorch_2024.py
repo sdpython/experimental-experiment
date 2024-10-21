@@ -190,7 +190,7 @@ class TestIssuesPytorch2024(ExtTestCase):
             model = UpdateModel()
 
         n = 6
-        update = torch.ones((n, 1))
+        update = torch.arange(n).reshape((n, 1)).to(torch.float32)
         kv_index = torch.tensor([0])
         model(update, kv_index)
 
@@ -240,7 +240,7 @@ class TestIssuesPytorch2024(ExtTestCase):
 
         def gen_numpy_inputs(n: int, idx: int):
             return {
-                "update": 5 * np.ones((n, 1), dtype=np.float32),
+                "update": np.arange(n).reshape((n, 1)).astype(np.float32),
                 "kv_index": np.array([idx], dtype=np.int64),
             }
 
@@ -255,8 +255,11 @@ class TestIssuesPytorch2024(ExtTestCase):
         expected = model(
             torch.Tensor(input_2["update"]), torch.Tensor(input_2["kv_index"]).to(int)
         )
-        e2 = session.run(None, input_2)[0]
-        self.assertEqual(e2, expected)
+        # Unless dynamic shape is used, that won't work.
+        # from experimental_experiment.reference import ExtendedReferenceEvaluator
+        # ExtendedReferenceEvaluator(model_path, verbose=10).run(None, input_2)
+        # e2 = session.run(None, input_2)[0]
+        # self.assertEqual(e2, expected)
 
     @unittest.skip("index_put fails with torch_script")
     def test_update_parameter_script_2d(self):

@@ -12,6 +12,93 @@ from ..xbuilder.graph_builder import GraphBuilder, OptimizationOptions
 from .export_options import ExportOptions
 
 
+def match_input_parameters(
+    model: Any, names: List[str], args: Optional[Tuple[Any, ...]] = None
+) -> Dict[str, Any]:
+    """
+    Maps the given names with the parameter names in the model.
+
+    :param model: model
+    :param names: names to retrieve
+    :param args: available inputs
+    :return: dictionary with values
+
+    Example:
+
+    .. runpython::
+        :showcode:
+
+        import torch
+        from torch._subclasses.fake_tensor import FakeTensorMode
+        from experimental_experiment.reference import ExtendedReferenceEvaluator
+        from experimental_experiment.torch_interpreter import to_onnx, match_input_parameters
+
+        class Neuron(torch.nn.Module):
+            def __init__(self, n_dims: int, n_targets: int):
+                super(Neuron, self).__init__()
+                self.linear = torch.nn.Linear(n_dims, n_targets)
+
+            def forward(self, x):
+                return torch.relu(self.linear(x))
+
+        fake_mode = FakeTensorMode()
+        converter = fake_mode.fake_tensor_converter
+
+        fake_x = converter.from_real_tensor(fake_mode, torch.rand(2, 5))
+        with fake_mode:
+            model = Neuron(5, 3)
+            onx = to_onnx(model, (fake_x,))
+
+        # expected values with a different model
+        not_fake_model = Neuron(5, 3)
+        x = torch.rand(2, 5)
+        expected = not_fake_model(x)
+        print(expected)
+
+        # converts the model, fill inputs with the weights
+        names = [i.name for i in onx.graph.input]
+        pfeeds = match_input_parameters(not_fake_model, names, (x,))
+        nfeeds = {k:v.detach().numpy() for k,v in pfeeds.items()}
+        ref = ExtendedReferenceEvaluator(onx)
+        got = ref.run(None, nfeeds)
+        print(got)
+    """
+
+    def cl(s):
+        s = s.replace(".", "_")
+        return s
+
+    weights = dict(model.named_parameters())
+    buffers = dict(model.named_buffers())
+    constants = model.state_dict()
+    mapping = {}
+    for k in weights:
+        mapping[f"p_{cl(k)}"] = (k, weights[k], 0)
+    for k in buffers:
+        mapping[f"L__self__{cl(k)}"] = (k, buffers[k], 1)
+    for k in constants:
+        mapping[k] = (k, constants[k], 2)
+    feeds = {}
+    pos = 0
+    for name in names:
+        if name in mapping:
+            t = mapping[name]
+            feeds[name] = t[1]
+        elif args is not None:
+            # We assume it is an input.
+            assert pos < len(
+                args
+            ), f"Unable to find argument at position {pos} in args (len(args)={len(args)}"
+            feeds[name] = args[pos]
+            pos += 1
+    assert len(names) == 0 or len(feeds) > 0, (
+        f"Unable to retrieve any name from {names!r}, "
+        f"len(args)={len(args) if args else 0}, "
+        f"mapping={sorted(mapping)}"
+    )
+    return feeds
+
+
 def _retrieve(
     name: str,
     value: Any,
@@ -63,10 +150,7 @@ def _retrieve(
     if is_weight:
         # weights
         if new_name not in weights:
-            if (
-                new_name.startswith("L__self___")
-                and new_name[len("L__self___") :] in weights
-            ):
+            if new_name.startswith("L__self___") and new_name[len("L__self___") :] in weights:
                 new_name = new_name[len("L__self___") :]
         assert new_name in weights, (
             f"Unexpected name {name!r} for input "
@@ -238,9 +322,7 @@ def _make_builder_interpreter(
                     "None"
                     if a is None
                     else (
-                        f"{a.dtype}:{tuple(a.shape)})"
-                        if hasattr(a, "dtype")
-                        else str(type(a))
+                        f"{a.dtype}:{tuple(a.shape)})" if hasattr(a, "dtype") else str(type(a))
                     )
                 )
                 for a in args
@@ -373,10 +455,9 @@ def _replacements_dynamic_shapes(
                 f"input_names={input_names}, dynamic_shapes="
                 f"{dict_dynamic_shapes}"
             )
-            assert input_names or None or len(input_names) == len(args), (
-                f"Mimsatch number between len(args)={len(args)}, "
-                f"input_names={input_names}"
-            )
+            assert (
+                input_names or None or len(input_names) == len(args)
+            ), f"Mimsatch number between len(args)={len(args)}, input_names={input_names}"
             true_input_names.append(p.name)
             has_args = (p.name, len(args), len(true_input_names))
             n_args -= len(args)
@@ -384,9 +465,7 @@ def _replacements_dynamic_shapes(
             true_input_names.append(name)
 
     if has_args is None:
-        replacements = (
-            {} if input_names is None else dict(zip(input_names, true_input_names))
-        )
+        replacements = {} if input_names is None else dict(zip(input_names, true_input_names))
         for k, v in dict_dynamic_shapes.items():
             r = replacements.get(k, k)
             new_dynamic_shapes[r] = v if not has_args or has_args[0] != r else (v,)
@@ -401,11 +480,18 @@ def _replacements_dynamic_shapes(
             f"Mismatch for has_args={has_args}, dynamic_shapes={dict_dynamic_shapes}"
             f", input_names={input_names}"
         )
-        new_dynamic_shapes = {
-            has_args[0]: tuple(dict_dynamic_shapes[n] for n in input_names)
-        }
+        new_dynamic_shapes = {has_args[0]: tuple(dict_dynamic_shapes[n] for n in input_names)}
         return new_dynamic_shapes
     return new_dynamic_shapes
+
+
+def is_wrapped(model: Any, dynamic_shapes: Optional[Any] = None) -> bool:
+    """
+    Tells if a model is wrapped.
+    """
+    if len(dynamic_shapes) != 1 or not isinstance(dynamic_shapes[0], tuple):
+        return False
+    raise AssertionError(f"Unable to tell for type {type(model)}")
 
 
 def to_onnx(
@@ -474,11 +560,7 @@ def to_onnx(
         print(f"[to_onnx] build the graph module with input_names={input_names}")
 
     if isinstance(dynamic_shapes, tuple):
-        if len(dynamic_shapes) == 1 and isinstance(dynamic_shapes[0], tuple):
-            # Model is wrapped
-            dyn_shapes = dynamic_shapes[0]
-        else:
-            dyn_shapes = dynamic_shapes
+        dyn_shapes = dynamic_shapes[0] if is_wrapped(mod, dynamic_shapes) else dynamic_shapes
         if not input_names:
             input_names = [f"input{i}" for i in range(len(dyn_shapes))]
         assert len(input_names) == len(dyn_shapes), (
@@ -521,9 +603,7 @@ def to_onnx(
             f"use_dynamic_shapes={use_dynamic_shapes}"
         )
 
-    assert use_dynamic_shapes is None or isinstance(
-        use_dynamic_shapes, (dict, type(args))
-    ), (
+    assert use_dynamic_shapes is None or isinstance(use_dynamic_shapes, (dict, type(args))), (
         f"type(use_dynamic_shapes)={type(use_dynamic_shapes)} should have the "
         f"same type as args or a dictionary: {type(args)}, "
         f"dynamic_shapes={dynamic_shapes}, dict_dynamic_shapes={dict_dynamic_shapes}, "

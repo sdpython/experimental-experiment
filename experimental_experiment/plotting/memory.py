@@ -33,9 +33,7 @@ def memory_peak_plot(
     dfi = df1[[*keys, "peak-begin"]].set_index(keys)
     dfi["peak-begin"].plot.bar(ax=ax[0, 1], title="Memory peak - memory begin (Mb)", rot=30)
     dfi = df1[[*keys, "mean-begin"]].set_index(keys)
-    dfi["mean-begin"].plot.bar(
-        ax=ax[0, 2], title="Memory average - memory begin (Mb)", rot=30
-    )
+    dfi["mean-begin"].plot.bar(ax=ax[0, 2], title="Memory average - memory begin (Mb)", rot=30)
 
     if "gpu0_peak" in df1.columns:
         dfi = df1[[*keys, "gpu0_peak"]].set_index(keys)

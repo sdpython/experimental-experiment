@@ -7,7 +7,7 @@ from experimental_experiment.ext_test_case import (
     ExtTestCase,
     ignore_warnings,
     requires_torch,
-    skipif_ci_windows,
+    is_windows,
 )
 
 
@@ -41,6 +41,8 @@ class TestBashBenchRunnerCmdBig(ExtTestCase):
         dynamic=False,
         check_file=True,
     ):
+        if is_windows():
+            raise unittest.SkipTest("export does not work on Windows")
         from experimental_experiment.torch_bench.bash_bench_huggingface_big import main
 
         args = [
@@ -105,22 +107,17 @@ class TestBashBenchRunnerCmdBig(ExtTestCase):
                 value = tuple(d.dim_param or d.dim_value for d in shape.dim)
                 self.assertIn(value[0], ("batch", "s0"))
                 input_values.append(value[0])
-            assert (
-                len(set(input_values)) == 1
-            ), f"no unique value: input_values={input_values}"
+            assert len(set(input_values)) == 1, f"no unique value: input_values={input_values}"
             for i in onx.graph.output:
                 shape = i.type.tensor_type.shape
                 value = tuple(d.dim_param or d.dim_value for d in shape.dim)
                 self.assertIn(value[0], ("batch", "s0"))
                 self.assertEqual(input_values[0], value[0])
 
-    @skipif_ci_windows("exporter does not work on Windows")
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.5")
     def test_huggingface_export_bench_custom_cpu(self):
-        self._hg_big_export_bench_big_cpu(
-            "custom", "all_MiniLM_L6_v1", verbose=0, debug=False
-        )
+        self._hg_big_export_bench_big_cpu("custom", "all_MiniLM_L6_v1", verbose=0, debug=False)
 
 
 if __name__ == "__main__":

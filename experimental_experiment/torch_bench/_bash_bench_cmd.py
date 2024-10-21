@@ -147,7 +147,7 @@ def bash_bench_main(script_name: str, doc: str, args: Optional[List[str]] = None
             "model_name": _name(config["model"], names),
             "ERR_crash": "INFERENCE failed",
         },
-        "time_export_success": lambda missing, config: {
+        "time_export_unbiased": lambda missing, config: {
             "model_name": _name(config["model"], names),
             "ERR_crash": "EXPORT failed",
         },
@@ -176,6 +176,20 @@ def bash_bench_main(script_name: str, doc: str, args: Optional[List[str]] = None
             args.model = ",".join([n for n in names if not n.startswith("101")][:10])
         elif args.model == "Tail":
             args.model = ",".join(n for n in names[-10:] if not n.startswith("101"))
+        elif isinstance(args.model, str) and "-" in args.model:
+            ms = []
+            for v in args.model.split(","):
+                if "-" not in v:
+                    ms.append(v)
+                    continue
+                spl = v.split("-")
+                assert len(spl) == 2, f"Unexpected value {v!r} in {args.model!r}"
+                a, b = spl
+                ia = int(a)
+                ib = int(b)
+                for i in range(ia, ib + 1):
+                    ms.append(str(i))
+            args.model = ",".join(ms)
 
         assert (
             "," not in args.tag

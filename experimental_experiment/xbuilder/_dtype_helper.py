@@ -45,6 +45,8 @@ def torch_dtype_to_onnx_dtype(to: "torch.dtype") -> int:  # noqa: F821
         return TensorProto.FLOAT
     if to == torch.float16:
         return TensorProto.FLOAT16
+    if to == torch.bfloat16:
+        return TensorProto.BFLOAT16
     if to == torch.float64:
         return TensorProto.DOUBLE
     if to == torch.int64:

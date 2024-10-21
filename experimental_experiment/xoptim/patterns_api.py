@@ -359,9 +359,7 @@ class EasyPatternOptimization(PatternOptimization):
             f"{fct.__name__}({', '.join(pat.input_names)}) -> {', '.join(pat.output_names)}"
         )
         for node in pat.nodes:
-            rows.append(
-                f"{node.op_type}({', '.join(node.input)}) -> {', '.join(node.output)}"
-            )
+            rows.append(f"{node.op_type}({', '.join(node.input)}) -> {', '.join(node.output)}")
         return "\n".join(rows)
 
     def _match_backward(
@@ -905,9 +903,7 @@ class EasyPatternOptimization(PatternOptimization):
                 f"marked={set(id(b[1]) for b in marked.values())}"
             )
 
-            res = self._match_forward(
-                g, node, pat, marked, pair_results_names, stacked, n, pn
-            )
+            res = self._match_forward(g, node, pat, marked, pair_results_names, stacked, n, pn)
             if res is None:
                 if self.verbose > 5:
                     print("[EasyPatternOptimization.match] done. forward failed.")
@@ -1107,9 +1103,7 @@ class EasyPatternOptimization(PatternOptimization):
                 if size >= g.builder.optimization_options.constant_size:
                     # We check the size to convert it into initializer if needed.
                     name = g.make_initializer(new_outputs[0], value)
-                    assert (
-                        name == new_outputs[0]
-                    ), f"Name mismatch {name} != {new_outputs[0]}"
+                    assert name == new_outputs[0], f"Name mismatch {name} != {new_outputs[0]}"
                     continue
 
             new_node = g.make_node(

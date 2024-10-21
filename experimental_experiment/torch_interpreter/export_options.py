@@ -1,6 +1,7 @@
 import pprint
 import time
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+from ._doc_ import TorchOpOverload
 
 
 class ExportOptions:
@@ -48,7 +49,7 @@ class ExportOptions:
         fallback: bool = False,
         jit: bool = False,
         decomposition_table: Optional[
-            Union[str, Dict["torch._ops.OpOverload", Callable[..., Any]]]  # noqa: F821
+            Union[str, Dict[TorchOpOverload, Callable[..., Any]]]  # noqa: F821
         ] = None,
         strategy: Optional[str] = None,
         dynamo: bool = False,
@@ -99,7 +100,7 @@ class ExportOptions:
 
     def get_decomposition_table(
         self,
-    ) -> Dict["torch._ops.OpOverload", Callable[..., Any]]:  # noqa: F821
+    ) -> Dict[TorchOpOverload, Callable[..., Any]]:  # noqa: F821
         "Returns the decompisitions table."
         if self.decomposition_table is None:
             return None
@@ -201,6 +202,10 @@ class ExportOptions:
             return dec
 
         if exc:
+            exported_mod = torch.export.export(
+                mod, args, dynamic_shapes=dynamic_shapes, strict=self.strict
+            )
+        else:
             try:
                 exported_mod = torch.export.export(
                     mod, args, dynamic_shapes=dynamic_shapes, strict=self.strict
@@ -229,10 +234,6 @@ class ExportOptions:
                     f"dynamic_shapes={dynamic_shapes}\n--\ne={e}\n--\neee={eee}"
                     f"\n---exported-program---\n{exported_mod}"
                 ) from e
-        else:
-            exported_mod = torch.export.export(
-                mod, args, dynamic_shapes=dynamic_shapes, strict=self.strict
-            )
 
         if exported_mod is None:
             if verbose:

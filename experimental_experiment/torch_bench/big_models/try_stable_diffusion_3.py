@@ -88,9 +88,7 @@ def demo_model(
         if verbose:
             print("[demo_model] interpret the answer")
         if verbose:
-            print(
-                f"[demo model] len(generated_images.images)={len(generated_images.images)}"
-            )
+            print(f"[demo model] len(generated_images.images)={len(generated_images.images)}")
             print("[demo_model] done")
             generated_images.images[0].save("try_stable_diffusion_3.demo_model.png")
         return generated_images.images[0]

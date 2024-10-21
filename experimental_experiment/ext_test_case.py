@@ -372,6 +372,30 @@ class ExtTestCase(unittest.TestCase):
         msg: Optional[str] = None,
     ):
         """In the name"""
+        if hasattr(expected, "detach") and hasattr(value, "detach"):
+            if msg:
+                try:
+                    self.assertEqual(expected.dtype, value.dtype)
+                except AssertionError as e:
+                    raise AssertionError(msg) from e
+                try:
+                    self.assertEqual(expected.shape, value.shape)
+                except AssertionError as e:
+                    raise AssertionError(msg) from e
+            else:
+                self.assertEqual(expected.dtype, value.dtype)
+                self.assertEqual(expected.shape, value.shape)
+
+            import torch
+
+            try:
+                torch.testing.assert_close(value, expected, atol=atol, rtol=rtol)
+            except AssertionError as e:
+                if msg:
+                    raise AssertionError(msg) from e
+                raise
+            return
+
         if hasattr(expected, "detach"):
             expected = expected.detach().cpu().numpy()
         if hasattr(value, "detach"):
@@ -541,9 +565,7 @@ def requires_cuda(msg: str = "", version: str = "", memory: int = 0):
 
         if pv.Version(torch.version.cuda) < pv.Version(version):
             msg = msg or f"CUDA older than {version}"
-        return unittest.skip(
-            msg or f"cuda not recent enough {torch.version.cuda} < {version}"
-        )
+        return unittest.skip(msg or f"cuda not recent enough {torch.version.cuda} < {version}")
 
     if memory:
         m = torch.cuda.get_device_properties(0).total_memory / 2**30
@@ -628,9 +650,9 @@ def requires_pyinstrument(version: str = "", msg: str = "") -> Callable:
     except ImportError:
         return unittest.skip(msg or "pyinstrument not installed")
 
-    if version and pv.Version(
-        ".".join(pyinstrument.__version__.split(".")[:2])
-    ) < pv.Version(version):
+    if version and pv.Version(".".join(pyinstrument.__version__.split(".")[:2])) < pv.Version(
+        version
+    ):
         msg = f"torch version {pyinstrument.__version__} < {version}: {msg}"
         return unittest.skip(msg)
     return lambda x: x
@@ -813,9 +835,7 @@ def statistics_on_folder(
         rows = []
         for fo in folder:
             last = fo.replace("\\", "/").split("/")[-1]
-            r = statistics_on_folder(
-                fo, pattern=pattern, aggregation=max(aggregation - 1, 0)
-            )
+            r = statistics_on_folder(fo, pattern=pattern, aggregation=max(aggregation - 1, 0))
             if aggregation == 0:
                 rows.extend(r)
                 continue

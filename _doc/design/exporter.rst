@@ -496,8 +496,8 @@ to the list of known converter functions.
 Pratice
 =======
 
-Example
-+++++++
+First Example
++++++++++++++
 
 .. runpython::
     :showcode:
@@ -696,3 +696,8 @@ by a function coming from another source such as :epkg:`onnxscript`.
     onx = to_onnx(model, (x,), input_names=["x"], dispatcher=OxsDispatcher(verbose=2))  
 
     print(onnx_simple_text_plot(onx))
+
+Fake Tensors
+++++++++++++
+
+See example in function :func:`experimental_experiment.torch_interpreter.match_input_parameters`.

@@ -292,9 +292,7 @@ class GraphBuilderPatternOptimization:
             return tuple(proto.dims)
         if isinstance(proto, NodeProto) and proto.domain == "":
             if proto.op_type == "Cast":
-                if self.is_constant(proto.output[0]) and not self.is_constant(
-                    proto.input[0]
-                ):
+                if self.is_constant(proto.output[0]) and not self.is_constant(proto.input[0]):
                     if exc:
                         raise AssertionError(
                             f"Incompatibilities, output is constant "
@@ -368,9 +366,7 @@ class GraphBuilderPatternOptimization:
             return float(value)
         return int(value)
 
-    def get_computed_constant(
-        self, name: str, statistics: Optional[List[str]] = None
-    ) -> Any:
+    def get_computed_constant(self, name: str, statistics: Optional[List[str]] = None) -> Any:
         """
         Returns the value for the constant `name`.
         """
@@ -406,9 +402,7 @@ class GraphBuilderPatternOptimization:
         """
         return self.builder.get_attribute(node, att_name, exc=exc)
 
-    def get_attributes_with_default(
-        self, node: NodeProto, **default_values
-    ) -> Dict[str, Any]:
+    def get_attributes_with_default(self, node: NodeProto, **default_values) -> Dict[str, Any]:
         """
         Returns integer or float values for attributes.
         """
@@ -630,9 +624,7 @@ class GraphBuilderPatternOptimization:
         assert domain == "", f"The method only supports the main domain not {domain!r}"
         if op_type in {"Squeeze", "Unsqueeze"}:
             if self.builder.main_opset < 13:
-                assert (
-                    len(inputs) == 1
-                ), f"axis must be given as an attribute for {op_type!r}"
+                assert len(inputs) == 1, f"axis must be given as an attribute for {op_type!r}"
                 return self.make_node(
                     op_type,
                     inputs,
@@ -749,9 +741,7 @@ class GraphBuilderPatternOptimization:
                     continue
                 print(f"  + {node.op_type}: {node.input} -> {node.output}")
 
-        self.builder.insert_and_remove_nodes(
-            position_insert, new_nodes, removed, debug=match
-        )
+        self.builder.insert_and_remove_nodes(position_insert, new_nodes, removed, debug=match)
         if self.verbose >= 10:
             print(f"[GraphBuilderPatternOptimization.apply_match] {match} applied.")
         if self.dump_applied_patterns:
@@ -929,8 +919,7 @@ class GraphBuilderPatternOptimization:
             )
             assert self.builder.has_name(val.name), f"name {val.name!r} is missing"
             assert (
-                not self.builder.has_type(val.name)
-                or self.builder.get_type(val.name) == itype
+                not self.builder.has_type(val.name) or self.builder.get_type(val.name) == itype
             ), (
                 f"Result {val.name!r} has type {itype} but the builder "
                 f"assumes it is {self.builder.get_type(val.name)}"

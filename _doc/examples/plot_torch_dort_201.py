@@ -1,4 +1,6 @@
 """
+.. _l-plot-torch-dort-201:
+
 201: Evaluate DORT
 ==================
 
@@ -446,12 +448,8 @@ fig.savefig("plot_torch_dort_1_time.png")
 
 def clean_text(text):
     pathes = [
-        os.path.abspath(
-            os.path.normpath(os.path.join(os.path.dirname(torch.__file__), ".."))
-        ),
-        os.path.abspath(
-            os.path.normpath(os.path.join(os.path.dirname(onnx.__file__), ".."))
-        ),
+        os.path.abspath(os.path.normpath(os.path.join(os.path.dirname(torch.__file__), ".."))),
+        os.path.abspath(os.path.normpath(os.path.join(os.path.dirname(onnx.__file__), ".."))),
         os.path.abspath(
             os.path.normpath(
                 os.path.join(os.path.dirname(experimental_experiment.__file__), "..")

@@ -96,6 +96,19 @@ class OrtEval:
             torch.bool: np.bool_,
         }
 
+        self.TORCH_DTYPE_TO_ONNX_DTYPE = {
+            torch.float16: TensorProto.FLOAT16,
+            torch.bfloat16: TensorProto.BFLOAT16,
+            torch.float32: TensorProto.FLOAT,
+            torch.float64: TensorProto.DOUBLE,
+            torch.uint8: TensorProto.UINT8,
+            torch.int8: TensorProto.INT8,
+            torch.int16: TensorProto.INT16,
+            torch.int32: TensorProto.INT32,
+            torch.int64: TensorProto.INT64,
+            torch.bool: TensorProto.BOOL,
+        }
+
     def _get_torch_dtype(self, dt: Any) -> "torch.dtype":  # noqa: F821
         if dt == np.bool_:
             return self.torch.bool
@@ -110,6 +123,8 @@ class OrtEval:
     def _get_itype(self, dt: Any) -> int:
         if isinstance(dt, int):
             return dt
+        if dt in self.TORCH_DTYPE_TO_ONNX_DTYPE:
+            return self.TORCH_DTYPE_TO_ONNX_DTYPE[dt]
         if dt in self.TORCH_DTYPE_TO_NUMPY_DTYPE:
             dt = self.TORCH_DTYPE_TO_NUMPY_DTYPE[dt]
         if dt == np.bool_:
@@ -547,9 +562,7 @@ class OrtEval:
             pth_outputs = self._ortvalues_to_torch_tensor(ort_outputs)
             return pth_outputs
 
-        ortvalues, output_devices = self._get_ortvalues_from_torch_tensors(
-            inputs, len(onames)
-        )
+        ortvalues, output_devices = self._get_ortvalues_from_torch_tensors(inputs, len(onames))
         assert len(onames) == len(output_devices), (
             f"Length mismatch {onames} but {len(output_devices)} devices, "
             f"node.output={node.output}."

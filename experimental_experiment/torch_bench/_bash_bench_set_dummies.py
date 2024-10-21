@@ -131,7 +131,7 @@ class NeuronIList(torch.nn.Module):
         self.linear = torch.nn.Linear(n_dims, n_targets)
 
     def forward(self, x, yz):
-        z = self.linear(x + yz[0] + yz[1])
+        z = self.linear(x + yz[0] * yz[1])
         return torch.sigmoid(z)
 
     def _get_random_inputs(self, device: str):
@@ -179,7 +179,7 @@ class NeuronNoneListInt(torch.nn.Module):
         self.linear = torch.nn.Linear(n_dims, n_targets)
 
     def forward(self, x, yz, i_input):
-        z = self.linear(x + yz[0] + yz[3])
+        z = self.linear(x + yz[0] * yz[3])
         return torch.sigmoid(z)[:i_input]
 
     def _get_random_inputs(self, device: str):
