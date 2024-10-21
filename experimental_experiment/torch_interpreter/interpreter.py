@@ -196,7 +196,7 @@ class DynamoInterpreter:
         if isinstance(init, self.torch.fx.GraphModule):
             # This function is meant to be used later.
             builder, args, kwargs, output_names = self._interpret_sub_module(
-                init, None, source_node=node
+                init, None, None, source_node=node
             )
             self.builder.make_local_function(node.name, builder, domain=LOCAL_DOMAIN)
             return None
