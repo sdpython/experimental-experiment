@@ -7,9 +7,7 @@ from .big_models.try_codellama import get_model_inputs as get_model_inputs_codel
 from .big_models.try_falcon_mamba import get_model_inputs as get_model_inputs_falcon_mamba
 from .big_models.try_minilm import get_model_inputs as get_model_inputs_minilm
 from .big_models.try_smollm import get_model_inputs as get_model_inputs_smollm
-from .big_models.try_stable_diffusion_3 import (
-    get_model_inputs as get_model_inputs_stable_diffusion_3,
-)
+from .big_models.try_stable_diffusion_3 import get_model_inputs as get_stable_diffusion_3
 
 
 class HuggingfaceBigRunner(BenchmarkRunner):
@@ -24,7 +22,7 @@ class HuggingfaceBigRunner(BenchmarkRunner):
             {
                 "all_MiniLM_L6_v1": get_model_inputs_minilm,
                 "code_llama": get_model_inputs_codellama,
-                "stable_diffusion_3": get_model_inputs_stable_diffusion_3,
+                "stable_diffusion_3": get_stable_diffusion_3,
                 "falcon_mamba_7b": get_model_inputs_falcon_mamba,
                 "SmolLM_1_7b": get_model_inputs_smollm,
             }

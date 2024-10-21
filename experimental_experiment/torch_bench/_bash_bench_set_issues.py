@@ -3,9 +3,8 @@ from torch._dynamo.testing import reset_rng_state
 from ._bash_bench_benchmark_runner import BenchmarkRunner
 from ._bash_bench_model_runner import ModelRunner
 from .big_models import CACHE as CACHE_DEFAULT
-from .big_models.try_flux_t5 import (
-    get_model_inputs as get_model_inputs_stable_flux_t5,
-)
+from .big_models.try_flux_t5 import get_model_inputs as get_flux_t5
+from .big_models.try_flux_transformer import get_model_inputs as get_flux_transformer
 
 
 class IssueRunner(BenchmarkRunner):
@@ -16,7 +15,7 @@ class IssueRunner(BenchmarkRunner):
     @classmethod
     def initialize(cls):
         """Steps to run before running the benchmark."""
-        cls.MODELS.update({"FluxT5": get_model_inputs_stable_flux_t5})
+        cls.MODELS.update({"FluxT5": get_flux_t5, "FluxTransformer": get_flux_transformer})
 
     def __init__(
         self,
