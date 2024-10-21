@@ -127,7 +127,8 @@ class ExportOptions:
     def export(
         self,
         mod: Any,
-        args: Tuple[Any, ...],
+        args: Optional[Tuple[Any, ...]],
+        kwargs: Optional[Dict[str, Any]],
         tracing_mode: bool,
         dynamic_shapes: Dict,
         same_signature: bool,
@@ -150,6 +151,7 @@ class ExportOptions:
                     return opt.export(
                         mod,
                         args,
+                        kwargs,
                         tracing_mode=tracing_mode,
                         dynamic_shapes=dynamic_shapes,
                         same_signature=same_signature,
@@ -183,7 +185,7 @@ class ExportOptions:
                 same_signature=same_signature,
                 decomposition_table=self.get_decomposition_table(),
                 assume_static_by_default=dynamic_shapes is None,
-            )(*args)
+            )(*args, **(kwargs or {}))
 
             if verbose:
                 print(f"[ExportOptions.export] done in {time.perf_counter() - begin}")
@@ -195,7 +197,7 @@ class ExportOptions:
             jit_model = torch.jit.trace(
                 mod, example_inputs=args, check_trace=False, strict=False
             )
-            res = TS2EPConverter(jit_model, args).convert()
+            res = TS2EPConverter(jit_model, args, **kwargs).convert()
             dec = apply_decompositions(res, self.decomposition_table)
             if verbose:
                 print(f"[ExportOptions.export] done in {time.perf_counter() - begin}")
@@ -203,18 +205,19 @@ class ExportOptions:
 
         if exc:
             exported_mod = torch.export.export(
-                mod, args, dynamic_shapes=dynamic_shapes, strict=self.strict
+                mod, args, kwargs, dynamic_shapes=dynamic_shapes, strict=self.strict
             )
         else:
             try:
                 exported_mod = torch.export.export(
-                    mod, args, dynamic_shapes=dynamic_shapes, strict=self.strict
+                    mod, args, kwargs, dynamic_shapes=dynamic_shapes, strict=self.strict
                 )
             except torch._export.verifier.SpecViolationError:
                 # see https://github.com/pytorch/pytorch/issues/128394
                 exported_mod = torch.export._trace._export(
                     mod,
                     args,
+                    kwargs,
                     dynamic_shapes=dynamic_shapes,
                     pre_dispatch=False,
                     strict=self.strict,
@@ -222,7 +225,9 @@ class ExportOptions:
             except torch._dynamo.exc.UserError as e:
                 eee = None
                 try:
-                    exported_mod = torch.export.export(mod, args, strict=self.strict).graph
+                    exported_mod = torch.export.export(
+                        mod, args, kwargs, strict=self.strict
+                    ).graph
                 except torch._export.verifier.SpecViolationError as ee:
                     exported_mod = None
                     eee = ee

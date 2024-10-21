@@ -238,6 +238,7 @@ def bypass_export_some_errors():
 def _make_builder_interpreter(
     mod: Union["torch.nn.Module", "torch.fx.GraphModule"],  # noqa: F821
     args: Optional[Sequence["torch.Tensor"]] = None,  # noqa: F821
+    kwargs: Optional[Dict[str, "torch.Tensor"]] = None,  # noqa: F821
     input_names: Optional[Sequence[str]] = None,
     target_opset: Union[int, Dict[str, int]] = 18,
     as_function: bool = False,
@@ -257,6 +258,7 @@ def _make_builder_interpreter(
 
     :param mod: torch module
     :param args: input arguments
+    :param kwargs: keyword attributes
     :param input_names: input names
     :param target_opset: targeted opset or targeted opsets as a dictionary
     :param as_function: export as a ModelProto or a FunctionProto
@@ -304,11 +306,21 @@ def _make_builder_interpreter(
             print(graph_module.graph)
     else:
         if verbose > 0:
+            from ..torch_test_helper import string_type
+
             print(f"[_make_builder_interpreter] export_options={export_options!r}")
+            print(f"[_make_builder_interpreter] input args={string_type(args)}")
+            print(f"[_make_builder_interpreter] input kwargs={string_type(kwargs)}")
+            print(f"[_make_builder_interpreter] dynamic_shapes={dynamic_shapes}")
+            print(
+                f"[_make_builder_interpreter] same_signature={same_signature}, "
+                f"tracing_mode={tracing_mode}"
+            )
         with bypass_export_some_errors():
             exported_mod = export_options.export(
                 mod,
-                args,
+                args if isinstance(args, tuple) else (tuple() if args is None else args),
+                kwargs,
                 tracing_mode=tracing_mode,
                 dynamic_shapes=dynamic_shapes,
                 same_signature=same_signature,
@@ -316,21 +328,8 @@ def _make_builder_interpreter(
                 verbose=verbose,
             )
 
-        if verbose > 0:
-            msg = ", ".join(
-                (
-                    "None"
-                    if a is None
-                    else (
-                        f"{a.dtype}:{tuple(a.shape)})" if hasattr(a, "dtype") else str(type(a))
-                    )
-                )
-                for a in args
-            )
-            print(f"[_make_builder_interpreter] args={msg}")
-            print(f"[_make_builder_interpreter] dynamic_shapes={dynamic_shapes}")
-            if verbose > 2:
-                print(f"[_make_builder_interpreter] exported_mod {exported_mod}")
+        if verbose > 2:
+            print(f"[_make_builder_interpreter] exported_mod {exported_mod}")
         graph_module = exported_mod.graph_module
         if os.environ.get("PRINT_GRAPH_MODULE", "0") in (1, "1"):
             print("-- EXPORTED GRAPH MODULE")
@@ -496,7 +495,8 @@ def is_wrapped(model: Any, dynamic_shapes: Optional[Any] = None) -> bool:
 
 def to_onnx(
     mod: Union["torch.nn.Module", "torch.fx.GraphModule"],  # noqa: F821
-    args: Sequence["torch.Tensor"],  # noqa: F821
+    args: Optional[Sequence["torch.Tensor"]] = None,  # noqa: F821
+    kwargs: Optional[Dict[str, "torch.Tensor"]] = None,  # noqa: F821
     input_names: Optional[Sequence[str]] = None,
     target_opset: Optional[Union[int, Dict[str, int]]] = None,
     as_function: bool = False,
@@ -523,6 +523,7 @@ def to_onnx(
 
     :param mod: torch module
     :param args: input arguments
+    :param kwargs: keyword attributes
     :param input_names: input names
     :param target_opset: targeted opset or targeted opsets as a dictionary
     :param as_function: export as a ModelProto or a FunctionProto
@@ -610,6 +611,7 @@ def to_onnx(
     graph_module, builder, interpreter = _make_builder_interpreter(
         mod=mod,
         args=args,
+        kwargs=kwargs,
         input_names=input_names,
         target_opset=target_opset,
         as_function=as_function,

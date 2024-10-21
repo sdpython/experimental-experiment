@@ -3,32 +3,20 @@ from torch._dynamo.testing import reset_rng_state
 from ._bash_bench_benchmark_runner import BenchmarkRunner
 from ._bash_bench_model_runner import ModelRunner
 from .big_models import CACHE as CACHE_DEFAULT
-from .big_models.try_codellama import get_model_inputs as get_model_inputs_codellama
-from .big_models.try_falcon_mamba import get_model_inputs as get_model_inputs_falcon_mamba
-from .big_models.try_minilm import get_model_inputs as get_model_inputs_minilm
-from .big_models.try_smollm import get_model_inputs as get_model_inputs_smollm
-from .big_models.try_stable_diffusion_3 import (
-    get_model_inputs as get_model_inputs_stable_diffusion_3,
+from .big_models.try_flux_t5 import (
+    get_model_inputs as get_model_inputs_stable_flux_t5,
 )
 
 
-class HuggingfaceBigRunner(BenchmarkRunner):
-    SUITE = "HuggingFaceBig"
+class IssueRunner(BenchmarkRunner):
+    SUITE = "Issues"
     MODELS: Dict[str, Callable] = {}
     CACHE = CACHE_DEFAULT
 
     @classmethod
     def initialize(cls):
         """Steps to run before running the benchmark."""
-        cls.MODELS.update(
-            {
-                "all_MiniLM_L6_v1": get_model_inputs_minilm,
-                "code_llama": get_model_inputs_codellama,
-                "stable_diffusion_3": get_model_inputs_stable_diffusion_3,
-                "falcon_mamba_7b": get_model_inputs_falcon_mamba,
-                "SmolLM_1_7b": get_model_inputs_smollm,
-            }
-        )
+        cls.MODELS.update({"FluxT5": get_model_inputs_stable_flux_t5})
 
     def __init__(
         self,
@@ -48,7 +36,7 @@ class HuggingfaceBigRunner(BenchmarkRunner):
         dump_ort: bool = False,
     ):
         super().__init__(
-            "huggingface_big",
+            "issues",
             device=device,
             partition_id=partition_id,
             total_partitions=total_partitions,
