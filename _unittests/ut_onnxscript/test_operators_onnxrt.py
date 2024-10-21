@@ -1554,6 +1554,7 @@ class TestOperatorsOnnxrt(ExtTestCase):
         )
 
     @hide_stdout()
+    @requires_torch("2.6")
     def test_xt_gather_opset11(self):
         data = torch.randn(3, 4, 3, requires_grad=True)
         index = torch.tensor([2, 0]).view(1, 2, 1).expand(3, 2, 3)

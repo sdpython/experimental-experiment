@@ -169,6 +169,20 @@ def hide_stdout(f: Optional[Callable] = None) -> Callable:
     return wrapper
 
 
+def long_test(msg: str = "") -> Callable:
+    """
+    Catches warnings.
+
+    :param f: the function is called with the stdout as an argument
+    """
+
+    """Skips a unit test if it runs on :epkg:`azure pipeline` on :epkg:`Windows`."""
+    if os.environ.get("LONGTEST", "0") in ("0", 0, False, "False", "false"):
+        msg = f"Skipped (set LONGTEST=1 to run it. {msg}"
+        return unittest.skip(msg)
+    return lambda x: x
+
+
 def measure_time(
     stmt: Union[str, Callable],
     context: Optional[Dict[str, Any]] = None,

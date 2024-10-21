@@ -1,5 +1,10 @@
 import unittest
-from experimental_experiment.ext_test_case import ExtTestCase, requires_cuda, hide_stdout
+from experimental_experiment.ext_test_case import (
+    ExtTestCase,
+    hide_stdout,
+    requires_cuda,
+    long_test,
+)
 from experimental_experiment.torch_bench.big_models.try_stable_diffusion_3 import (
     load_model,
     demo_model,
@@ -8,12 +13,14 @@ from experimental_experiment.torch_bench.big_models.try_stable_diffusion_3 impor
 
 
 class TestStableDiffusion3(ExtTestCase):
+    @long_test()
     @hide_stdout()
     @requires_cuda(memory=24)
     def test_demo_float16(self):
         tokenizer, model = load_model(device="cuda", dtype="float16", verbose=1)
         demo_model(tokenizer, model, verbose=1)
 
+    @long_test()
     @hide_stdout()
     @requires_cuda(memory=24)
     def test_get_model_inputs(self):

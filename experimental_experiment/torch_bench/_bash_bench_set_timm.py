@@ -618,6 +618,7 @@ class TimmRunner(BenchmarkRunner):
         return ModelRunner(
             model,
             example_inputs,
+            None,  # kwargs
             device=self.device,
             dtype=self.dtype,
             warmup=self.warmup,

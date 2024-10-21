@@ -143,7 +143,7 @@ def _SELECTED_FEATURES():
             stat="latency",
             new_name="total latency time exported model",
             unit="x",
-            help="Total latency time with the exported model(onnxruntime, inductor, ...)",
+            help="Total latency time with the exported model (onnxruntime, inductor, ...)",
             simple=True,
         ),
         dict(
@@ -1609,7 +1609,7 @@ def _fix_report_piv(
     # simplify dates
     indices = list(enumerate(piv.index))
     dates = [row[0] for row in indices if "date" in row[1]]
-    piv.iloc[dates, :] = piv.iloc[dates, :].map(lambda s: s[:10])
+    piv.iloc[dates, :] = piv.iloc[dates, :].map(lambda s: s[:10] if isinstance(s, str) else s)
 
     # add speed by latency
     latencies = [row[0] for row in indices if "total latency time exported model" in row[1]]
@@ -2286,6 +2286,7 @@ def build_historical_report(
                         "categories": [k, i + 1, idate, j, idate],
                         "values": [k, i + 1, ivalue, j, ivalue],
                         "line": {"width": 2},
+                        "marker": {"type": "diamond"},
                     }
                     chart.add_series(kwargs)
                     chart2.add_series(kwargs)
