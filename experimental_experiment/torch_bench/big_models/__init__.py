@@ -36,39 +36,23 @@ def load_llm_model(
         ``TypeError: Object of type dtype is not JSON serializable``
     :return: tokenizer, model
     """
+    import torch
+
     assert isinstance(dtype, str), f"Unexpected type for dtype={dtype!r}"
     if dtype in (None, "None"):
         dtype = "auto"
     stype = str_dtype(dtype) if dtype is not None else ""
-
+    dtype = getattr(torch, dtype, dtype)
     if load_tokenizer:
-        if os.path.exists(os.path.join(cache, f"{model_name}-tokenizer{stype}")):
-            if verbose:
-                print(f"[load_model] loads cached tokenizer for {model_name}, dtype={dtype}")
-            tokenizer = cls_tokenizer.from_pretrained(
-                os.path.join(cache, f"{model_name}-tokenizer{stype}")
-            )
-        else:
-            if verbose:
-                print(f"[load_model] retrieves tokenizer for {model_name}, dtype={dtype}")
-            tokenizer = cls_tokenizer.from_pretrained(model_id, torch_dtype=dtype)
-            if verbose:
-                print(f"[load_model] cache tokenizer for {model_name}, dtype={dtype}")
-            tokenizer.save_pretrained(os.path.join(cache, f"{model_name}-tokenizer{stype}"))
+        if verbose:
+            print(f"[load_model] retrieves tokenizer for {model_name}, dtype={stype}")
+        tokenizer = cls_tokenizer.from_pretrained(model_id, torch_dtype=dtype, cache_dir=cache)
     else:
         tokenizer = None
 
-    if os.path.exists(os.path.join(cache, f"{model_name}-model{stype}")):
-        if verbose:
-            print(f"[load_model] loads cached model {model_name}")
-        model = cls_model.from_pretrained(os.path.join(cache, f"{model_name}-model{stype}"))
-    else:
-        if verbose:
-            print(f"[load_model] retrieves model {model_name}, dtype={dtype}")
-        model = cls_model.from_pretrained(model_id, torch_dtype=dtype)
-        if verbose:
-            print(f"[load_model] cache model {model_name}, dtype={dtype}")
-        model.save_pretrained(os.path.join(cache, f"{model_name}-model{stype}"))
+    if verbose:
+        print(f"[load_model] retrieves model {model_name}, dtype={stype}")
+    model = cls_model.from_pretrained(model_id, torch_dtype=dtype, cache_dir=cache)
 
     if verbose:
         print(f"[load_model] converts to {device!r} and dtype={dtype!r}")

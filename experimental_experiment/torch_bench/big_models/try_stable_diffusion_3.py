@@ -25,22 +25,24 @@ def load_model(
     from diffusers import StableDiffusion3Pipeline
 
     assert isinstance(dtype, str), f"Unexpected type for dtype={dtype!r}"
+    dtype = getattr(torch, dtype, dtype)
+    assert isinstance(dtype, torch.dtype), f"Unexpected type for dtype={dtype!r}"
     stype = str_dtype(dtype) if dtype is not None else ""
 
     if os.path.exists(os.path.join(cache, f"StableDiffusion3Medium{stype}")):
         if verbose:
-            print("[load_model] loads cached codellama model")
+            print("[load_model] loads cached stable diffusion 3 medium model")
         model = StableDiffusion3Pipeline.from_pretrained(
             os.path.join(cache, f"StableDiffusion3Medium{stype}")
         )
     else:
         if verbose:
-            print("[load_model] retrieves codellama model")
+            print("[load_model] retrieves stable diffusion 3 medium model")
         model = StableDiffusion3Pipeline.from_pretrained(
             "stabilityai/stable-diffusion-3-medium-diffusers", torch_dtype=dtype
         )
         if verbose:
-            print("[load_model] cache codellama model")
+            print("[load_model] cache stable diffusion 3 medium model")
         model.save_pretrained(os.path.join(cache, f"StableDiffusion3Medium{stype}"))
 
     if verbose:
@@ -112,7 +114,7 @@ def get_model_inputs(
     device: str = "cuda",
     dtype: Optional[str] = None,
 ) -> Tuple[Callable, Tuple[Any, ...]]:
-    """Returns a codellama model and its inputs."""
+    """Returns a stable diffusion 3 medium model and its inputs."""
 
     input_ids = ids_tensor((1, 128), 32016).to(device)
 

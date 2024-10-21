@@ -5,6 +5,7 @@ import types
 from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple, Union
 import numpy as np
 from onnx import TensorProto
+from ..torch_test_helper import string_type
 from ..xbuilder._shape_helper import all_int, DYNAMIC_SHAPE
 from ..xbuilder._helper import make_hash
 from ..xbuilder._dtype_helper import (
@@ -194,8 +195,8 @@ class DynamoInterpreter:
 
         if isinstance(init, self.torch.fx.GraphModule):
             # This function is meant to be used later.
-            builder, args, output_names = self._interpret_sub_module(
-                init, None, source_node=node
+            builder, args, kwargs, output_names = self._interpret_sub_module(
+                init, None, None, source_node=node
             )
             self.builder.make_local_function(node.name, builder, domain=LOCAL_DOMAIN)
             return None
@@ -1266,7 +1267,7 @@ class DynamoInterpreter:
         if last_node is not None and description:
             last_node.doc_string += "\n".join(description)
 
-    def _interpret_sub_module(self, sub_module, args, source_node=None):
+    def _interpret_sub_module(self, sub_module, args, kwargs, source_node=None):
         from .onnx_export import _make_builder_interpreter
 
         if hasattr(sub_module, "graph") and isinstance(sub_module, self.torch.fx.GraphModule):
@@ -1279,7 +1280,8 @@ class DynamoInterpreter:
 
         graph_module, builder, interpreter = _make_builder_interpreter(
             gm,
-            None if args is None else tuple(args),
+            args=None if args is None else tuple(args),
+            kwargs=None if kwargs is None else kwargs,
             as_function=True,
             target_opset=self.builder.opsets,
             optimization_options=self.builder.optimization_options,
@@ -1292,8 +1294,9 @@ class DynamoInterpreter:
         builder.process(graph_module, interpreter)
         assert builder.outputs, f"No output detected for node={source_node}, graph={gm}"
 
-        fx_args, _ = self._fill_in_default_kwargs(source_node)
+        fx_args, fx_kwargs = self._fill_in_default_kwargs(source_node)
         args = [getattr(i, "name", i) for i in fx_args]
+        kwargs = [getattr(i, "name", i) for i in fx_kwargs]
 
         val = source_node.meta.get("val", None)
         if val is not None and isinstance(val, tuple):
@@ -1320,7 +1323,7 @@ class DynamoInterpreter:
                     source_node.name, "call_module", (val[i].dtype, val[i].shape)
                 )
 
-        return builder, args, output_names
+        return builder, args, kwargs, output_names
 
     def call_module(self, node: "torch.fx.Node"):  # noqa: F821
         """
@@ -1356,8 +1359,12 @@ class DynamoInterpreter:
         if self.builder.verbose > 1:
             print(f"[DynamoInterpreter-{self._hash()}.call_module] class [{type(sub_module)}]")
 
-        builder, args, output_names = self._interpret_sub_module(
+        builder, args, kwargs, output_names = self._interpret_sub_module(
             sub_module, args, source_node=node
+        )
+        assert kwargs is None or len(kwargs) == 0, (
+            f"args={string_type(args)}, kwargs={string_type(kwargs)} "
+            f"is not implemented yet{self.builder.get_debug_msg()}"
         )
 
         self.builder.make_nodes(
