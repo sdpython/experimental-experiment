@@ -143,7 +143,7 @@ def _SELECTED_FEATURES():
             stat="latency",
             new_name="total latency time exported model",
             unit="x",
-            help="Total latency time with the exported model(onnxruntime, inductor, ...)",
+            help="Total latency time with the exported model (onnxruntime, inductor, ...)",
             simple=True,
         ),
         dict(

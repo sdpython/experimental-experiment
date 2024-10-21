@@ -366,7 +366,7 @@ class TestBashBenchMergeStats(ExtTestCase):
         )
         self.assertNotEmpty(dfs)
         time = dfs["time"]
-        avg = time[("ITER", "custom", "default")].mean()
+        avg = time["ITER", "custom", "default"].mean()
         self.assertEqual(avg, 152.34884692227206)
 
     @ignore_warnings((FutureWarning,))

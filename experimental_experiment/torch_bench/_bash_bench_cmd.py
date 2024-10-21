@@ -21,7 +21,7 @@ def bash_bench_parse_args(name: str, doc: str, new_args: Optional[List[str]] = N
         exporter=(
             "custom",
             "export, export-nostrict, export-default, "
-            "custom, custom-fallback, custom-nostrict, "
+            "inductor, custom, custom-fallback, custom-nostrict, "
             "onnx_dynamo, onnx_dynamo-fallback, "
             "dynamo_export, torch_script",
         ),

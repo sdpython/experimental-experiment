@@ -114,9 +114,7 @@ class ExportOptions:
         return self.decomposition_table
 
     def get_fallback_options(self) -> List["ExportOptions"]:
-        """
-        Returns the fallback scenario.
-        """
+        """Returns the fallback scenario."""
         return [
             ExportOptions(decomposition_table=self.decomposition_table),
             ExportOptions(strict=False, decomposition_table=self.decomposition_table),
@@ -136,9 +134,7 @@ class ExportOptions:
         exc: bool = True,
         verbose: int = 0,
     ):
-        """
-        Exports the model into an exported program.
-        """
+        """Exports the model into an exported program."""
         import torch
 
         if self.strategy == "fallback":
