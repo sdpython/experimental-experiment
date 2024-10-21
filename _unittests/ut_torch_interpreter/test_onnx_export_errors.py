@@ -1,11 +1,12 @@
 import unittest
-from experimental_experiment.ext_test_case import ExtTestCase
+from experimental_experiment.ext_test_case import ExtTestCase, requires_transformers
 from experimental_experiment.torch_interpreter.onnx_export_errors import (
     bypass_export_some_errors,
 )
 
 
 class TestOnnxExportErrors(ExtTestCase):
+    @requires_transformers("4.43")
     def test_pytree_flatten(self):
         import torch
         import torch.utils._pytree as py_pytree
