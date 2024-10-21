@@ -1,4 +1,3 @@
-import contextlib
 import inspect
 import os
 import pprint
@@ -10,6 +9,7 @@ from onnx.defs import onnx_opset_version
 from onnx.model_container import ModelContainer
 from ..xbuilder.graph_builder import GraphBuilder, OptimizationOptions
 from .export_options import ExportOptions
+from .onnx_export_errors import bypass_export_some_errors
 
 
 def match_input_parameters(
@@ -216,23 +216,6 @@ def _retrieve(
             f"{', '.join(sorted(constants))}"
         )
     return None
-
-
-@contextlib.contextmanager
-def bypass_export_some_errors():
-    """
-    Tries to bypass some functions torch.export.export does not
-    support such as ``torch.jit.isinstance``.
-    """
-    import torch.jit
-
-    f = torch.jit.isinstance
-    torch.jit.isinstance = isinstance
-
-    try:
-        yield
-    finally:
-        torch.jit.isinstance = f
 
 
 def _make_builder_interpreter(

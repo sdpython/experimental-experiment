@@ -751,6 +751,26 @@ def max_diff(
             _index=_index,
         )
 
+    if expected.__class__.__name__ == "transformers.cache_utils.MambaCache":
+        if got.__class__.__name__ != expected.__class__.__name__:
+            return dict(abs=np.inf, rel=np.inf, sum=np.inf, n=np.inf)
+        atts = []
+        for k in ["conv_states", "ssm_states"]:
+            if hasattr(expected, k) and not hasattr(got, k):
+                return dict(abs=np.inf, rel=np.inf, sum=np.inf, n=np.inf)
+            atts.append(k)
+
+        return max_diff(
+            [getattr(expected, k) for k in atts],
+            [getattr(got, k) for k in atts],
+            level=level,
+            flatten=flatten,
+            debug_info=debug_info,
+            begin=begin,
+            end=end,
+            _index=_index,
+        )
+
     raise AssertionError(
         f"Not implemented with type(expected)={type(expected)}, "
         f"type(results)={type(got)},\n"
