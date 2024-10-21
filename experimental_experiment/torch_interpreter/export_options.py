@@ -163,8 +163,11 @@ class ExportOptions:
                     excs.append(e)
 
             if exc:
+                from ..torch_test_helper import string_type
+
                 raise RuntimeError(
                     f"None of the following options {tries} worked, "
+                    f"args={string_type(args)}, kwargs={string_type(kwargs)}, "
                     f"exception=\n-----\n{pprint.pformat(excs)}"
                 )
             return None
@@ -185,7 +188,7 @@ class ExportOptions:
                 same_signature=same_signature,
                 decomposition_table=self.get_decomposition_table(),
                 assume_static_by_default=dynamic_shapes is None,
-            )(*args, **(kwargs or {}))
+            )(*(args or tuple()), **(kwargs or {}))
 
             if verbose:
                 print(f"[ExportOptions.export] done in {time.perf_counter() - begin}")
@@ -197,7 +200,7 @@ class ExportOptions:
             jit_model = torch.jit.trace(
                 mod, example_inputs=args, check_trace=False, strict=False
             )
-            res = TS2EPConverter(jit_model, args, **kwargs).convert()
+            res = TS2EPConverter(jit_model, args, kwargs).convert()
             dec = apply_decompositions(res, self.decomposition_table)
             if verbose:
                 print(f"[ExportOptions.export] done in {time.perf_counter() - begin}")
