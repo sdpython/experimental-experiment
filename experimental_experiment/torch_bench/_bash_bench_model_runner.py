@@ -174,6 +174,7 @@ class ModelRunner:
 
     :param model: torch model
     :param inputs: example of inputs
+    :param kw_inputs: example of keyword inputs
     :param device: device
     :param dtype: if the model needs to be converted
     :param warmup: number of iteration to warmup the model
@@ -286,6 +287,7 @@ class ModelRunner:
         self,
         model: Any,
         inputs: Any,
+        kw_inputs: Optional[Dict[str, Any]],
         device: str,
         dtype: torch.dtype,
         warmup: int,
@@ -309,6 +311,13 @@ class ModelRunner:
             inputs = tuple(cvt(v) for v in inputs)
         else:
             raise AssertionError - (f"Input type is {type(inputs)}")
+
+        if isinstance(kw_inputs, dict):
+            kw_inputs = {k: cvt(v) for k, v in kw_inputs.items()}
+        elif kw_inputs is not None:
+            raise AssertionError - (f"Input type is {type(inputs)}")
+        assert not kw_inputs, "Keyword inputs are not yet implemented."
+        self.kw_inputs = kw_inputs
 
         if isinstance(inputs, dict):
             # torch.export.export does not allow that.
@@ -745,7 +754,7 @@ class ModelRunner:
             options = None
 
         export_options = ExportOptions(strategy=strategy)
-        export_inputs = self.make_export_inputs(dynamic)
+        export_inputs, export_kw_inputs = self.make_export_inputs(dynamic)
         dyn_shapes = self.get_dynamic_shapes(dynamic)
 
         if verbose:
@@ -753,6 +762,10 @@ class ModelRunner:
             print(f"[ModelRunner._to_onnx_custom] type(model)={type(self.model)!r}")
             print(
                 f"[ModelRunner._to_onnx_custom] export_inputs={string_type(export_inputs)!r}"
+            )
+            print(
+                f"[ModelRunner._to_onnx_custom] export_kw_inputs="
+                f"{string_type(export_kw_inputs)!r}"
             )
 
         if self.autocast:
@@ -762,6 +775,7 @@ class ModelRunner:
                 onx, builder, stats = to_onnx(
                     self.model,
                     export_inputs,
+                    export_kw_inputs,
                     optimize=bool(optimization),
                     large_model=True,
                     verbose=10 if verbose >= 100 else (1 if verbose > 1 else 0),
@@ -778,6 +792,7 @@ class ModelRunner:
                 onx, builder, stats = to_onnx(
                     self.model,
                     export_inputs,
+                    export_kw_inputs,
                     optimize=bool(optimization),
                     large_model=True,
                     verbose=10 if verbose >= 100 else (1 if verbose > 1 else 0),
@@ -944,7 +959,10 @@ class ModelRunner:
             inputs = self.inputs
 
         dynamic_shapes_for_export = self.get_dynamic_shapes(dynamic)
-        inputs = self.make_export_inputs(dynamic, inputs=inputs)
+        inputs, kw_inputs = self.make_export_inputs(dynamic, inputs=inputs)
+        assert (
+            not kw_inputs
+        ), f"kwargs is not implemented yet but kw_inputs={string_type(kw_inputs)}"
         kwargs_export = {}
         if dynamic_shapes_for_export is not None:
             # torch_script only supports a dictionary
@@ -992,7 +1010,10 @@ class ModelRunner:
             if verbose:
                 print(f"[ModelRunner._to_onnx_script] dynamic_axes={dynamic_axes}")
                 print(f"[ModelRunner._to_onnx_script] input_names={input_names}")
-                print(f"[ModelRunner._to_onnx_script] n_inputs={len(inputs)}")
+                print(
+                    f"[ModelRunner._to_onnx_script] n_inputs={len(inputs)}, "
+                    f"n_kw_inputs={len(kw_inputs)}"
+                )
             kwargs_export["dynamic_axes"] = dynamic_axes
             kwargs_export["input_names"] = input_names
 
@@ -1053,7 +1074,7 @@ class ModelRunner:
                 )
             )
 
-        export_inputs = self.make_export_inputs(dynamic)
+        export_inputs, export_kw_inputs = self.make_export_inputs(dynamic)
         dyn_shapes = self.get_dynamic_shapes(dynamic)
 
         if dyn_shapes and isinstance(self.model, WrappedModelBase):
@@ -1066,6 +1087,10 @@ class ModelRunner:
             print(
                 f"[ModelRunner._to_onnx_dynamo] export_inputs={string_type(export_inputs)!r}"
             )
+            print(
+                f"[ModelRunner._to_onnx_dynamo] export_kw_inputs="
+                f"{string_type(export_kw_inputs)!r}"
+            )
             print(f"[ModelRunner._to_onnx_dynamo] type(model)={type(self.model)!r}")
 
         if self.autocast:
@@ -1074,6 +1099,7 @@ class ModelRunner:
                     self.model,
                     export_inputs,
                     name if fallback else None,
+                    kwargs=export_kw_inputs,
                     opset_version=target_opset,
                     dynamo=True,
                     external_data=True,
@@ -1087,6 +1113,7 @@ class ModelRunner:
                     self.model,
                     export_inputs,
                     name if fallback else None,
+                    kwargs=export_kw_inputs,
                     opset_version=target_opset,
                     dynamo=True,
                     external_data=True,
@@ -1181,12 +1208,15 @@ class ModelRunner:
         ), f"optimization {optimization!r} not compatible with export"
         from ..torch_interpreter import ExportOptions
 
-        export_inputs = self.make_export_inputs(dynamic)
+        export_inputs, export_kw_inputs = self.make_export_inputs(dynamic)
         dynamic_shapes = self.get_dynamic_shapes(dynamic)
         export_options = ExportOptions(strategy=strategy)
         if verbose:
             print(f"[ModelRunner._to_export] dynamic_shapes={dynamic_shapes!r}")
             print(f"[ModelRunner._to_export] export_inputs={string_type(export_inputs)!r}")
+            print(
+                f"[ModelRunner._to_export] export_kw_inputs={string_type(export_kw_inputs)!r}"
+            )
             print(f"[ModelRunner._to_export] strategy={strategy!r}")
             print(f"[ModelRunner._to_export] export_options={export_options!r}")
             print(f"[ModelRunner._to_export] type(model)={type(self.model)!r}")
@@ -1194,6 +1224,7 @@ class ModelRunner:
         exported_mod = export_options.export(
             self.model,
             export_inputs,
+            export_kw_inputs,
             dynamic_shapes=dynamic_shapes,
             tracing_mode=False,
             same_signature=False,
@@ -1381,9 +1412,10 @@ class ModelRunner:
         self,
         dynamic: bool = False,
         wrapped: bool = False,
-        inputs: Optional[Any] = None,
+        inputs: Optional[Tuple[Any, ...]] = None,
+        kw_inputs: Optional[Dict[str, Any]] = None,
         int_to_tensor: bool = False,
-    ) -> Any:
+    ) -> Tuple[Tuple[Any, ...], Dict[str, Any]]:
         """
         Creates the new inputs for the benchmarks.
         :func:`torch.export.export` fails when a dimension is dynamic
@@ -1400,9 +1432,13 @@ class ModelRunner:
         if not dynamic:
             # easy case
             if not int_to_tensor:
-                return self.inputs if inputs is None else inputs
+                return self.inputs if inputs is None else inputs, self.kw_inputs
+
             if inputs is None:
                 inputs = self.inputs
+            if kw_inputs is None:
+                kw_inputs = self.kw_inputs
+
             new_inputs = []
             for i in range(len(inputs)):
                 inp = inputs[i]
@@ -1410,16 +1446,37 @@ class ModelRunner:
                     new_inputs.append(None)
                     continue
                 if isinstance(inp, int):
-                    new_inputs.append(torch.Tensor([inp]).to(torch.int64))
+                    new_inputs.append(torch.Tensor([inp]).to(torch.int32))
                     continue
                 if isinstance(inp, float):
                     new_inputs.append(torch.Tensor([inp]).to(torch.float32))
                     continue
                 new_inputs.append(inp)
-            return tuple(new_inputs)
+
+            new_kw_inputs = {}
+            for k, inp in self.kw_inputs.items():
+                if inp is None:
+                    new_kw_inputs[k] = None
+                    continue
+                if isinstance(inp, int):
+                    new_kw_inputs[k] = torch.Tensor([inp]).to(torch.int32)
+                    continue
+                if isinstance(inp, float):
+                    new_kw_inputs[k] = torch.Tensor([inp]).to(torch.float32)
+                    continue
+                new_kw_inputs[k] = inp
+
+            return tuple(new_inputs), new_kw_inputs
 
         if inputs is None:
             inputs = self.inputs
+        if kw_inputs is None:
+            kw_inputs = self.kw_inputs
+
+        assert (
+            not kw_inputs
+        ), f"Keyword attribute are not implemented yet but kw_inputs={string_type(kw_inputs)}"
+
         assert isinstance(
             inputs, tuple
         ), f"Not implemented for type(self.inputs)={type(inputs)}"
@@ -1486,7 +1543,7 @@ class ModelRunner:
                 continue
             dyn_inputs.append(inp.expand(new_shape))
 
-        return tuple(dyn_inputs)
+        return tuple(dyn_inputs), None
 
     def _get_input_shape_tensor(
         self,
