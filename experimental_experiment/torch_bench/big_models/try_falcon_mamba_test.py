@@ -1,8 +1,8 @@
 import unittest
 from experimental_experiment.ext_test_case import (
     ExtTestCase,
-    requires_cuda,
     hide_stdout,
+    requires_cuda,
     long_test,
 )
 from experimental_experiment.torch_interpreter.onnx_export_errors import (
@@ -16,6 +16,7 @@ from experimental_experiment.torch_bench.big_models.try_falcon_mamba import (
 
 
 class TestFalconMamba(ExtTestCase):
+    @long_test()
     @hide_stdout()
     @requires_cuda(memory=24)
     def test_demo_float16(self):

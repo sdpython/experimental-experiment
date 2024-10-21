@@ -1,14 +1,15 @@
 import unittest
 from experimental_experiment.ext_test_case import (
     ExtTestCase,
-    requires_cuda,
     hide_stdout,
+    requires_cuda,
     long_test,
 )
 from experimental_experiment.torch_bench.big_models.try_flux_t5 import get_model_inputs
 
 
 class TestFluxT5(ExtTestCase):
+    @long_test()
     @hide_stdout()
     @requires_cuda(memory=16)
     def test_get_model_inputs(self):
