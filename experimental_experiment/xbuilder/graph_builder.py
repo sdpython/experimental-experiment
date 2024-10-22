@@ -2700,7 +2700,7 @@ class GraphBuilder(_GraphBuilderRuntime):
             dtype = self._get_tensor_type(node)
             self.set_shape(k, shape)
             self.set_type(k, dtype)
-            if self.verbose and (self.verbose > 3 or np.prod(shape) > 100):
+            if self.verbose > 2 or np.prod(shape) > 100:
                 print(f"[GraphBuilder-{self._hash()}.make_node] {k}[{dtype}:{shape}]")
         elif node.op_type == "ConstantOfShape":
             if len(node.attribute) == 1 and node.attribute[0].name == "value":
@@ -2775,7 +2775,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         assert node is None or isinstance(
             node, NodeProto
         ), f"Unexpected type {type(node)} for name={name!r}"
-        if self.verbose and self.verbose > 2:
+        if self.verbose > 2:
             print(
                 f"[GraphBuilder.update_node_constant] new constant "
                 f"{name!r}, node={None if node is None else node.op_type}"
@@ -3055,7 +3055,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                 res.append(t)
                 continue
             if isinstance(v, np.ndarray):
-                if self.verbose > 1 and np.prod(v.shape) > 100:
+                if self.verbose > 2 and np.prod(v.shape) > 100:
                     print(
                         f"[GraphBuilder-{self._hash()}._build_initializers]"
                         f"onh.from_array:{k}:{v.dtype}[{v.shape}]"
