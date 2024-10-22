@@ -340,7 +340,6 @@ class _GraphBuilderRuntime:
         node: NodeProto,
         feeds: Dict[str, "torch.Tensor"],  # noqa: F821
     ) -> "torch.Tensor":  # noqa: F821
-        x = feeds[node.input[0]]
         new_feeds = {}
         for k, v in feeds.items():
             if isinstance(v, np.ndarray):
@@ -358,3 +357,49 @@ class _GraphBuilderRuntime:
                 new_feeds[k] = v
         y = self.torch.where(*[new_feeds[k] for k in node.input])
         return [y]
+
+    def _apply_slice(
+        self,
+        node: NodeProto,
+        feeds: Dict[str, "torch.Tensor"],  # noqa: F821
+    ) -> "torch.Tensor":  # noqa: F821
+        new_feeds = {}
+        for k, v in feeds.items():
+            if isinstance(v, np.ndarray):
+                # Type conversion between numpy and torch is not robust.
+                itype = dtype_to_tensor_dtype(v.dtype)
+                ttype = onnx_dtype_to_torch_dtype(itype)
+                x = self.torch.Tensor(v.copy()).to(ttype)
+                assert "FakeTensor" not in str(type(x)), (
+                    f"FakeTensor {node.output[0]!r} cannot be a constant {type(x)}, "
+                    f"node.op_type={node.op_type!r}, type={self.torch.Tensor}"
+                    f"{self.get_debug_msg()}"
+                )
+                new_feeds[k] = x
+            else:
+                new_feeds[k] = v
+        data, starts, ends = [new_feeds[k] for k in node.input[:3]]
+        axes = new_feeds[node.input[3]] if len(node.input) > 3 and node.input[3] else None
+        steps = new_feeds[node.input[4]] if len(node.input) > 4 and node.input[4] else None
+
+        if axes is None:
+            if steps is None:
+                slices = [slice(s, e) for s, e in zip(starts, ends)]
+            else:
+                slices = [slice(s, e, d) for s, e, d in zip(starts, ends, steps)]
+        else:
+            if steps is None:
+                slices = [slice(0, a) for a in data.shape]
+                for s, e, a in zip(starts, ends, axes):
+                    slices[a] = slice(s, e)
+            else:
+                slices = [slice(0, a) for a in data.shape]
+                for s, e, a, d in zip(starts, ends, axes, steps):
+                    slices[a] = slice(s, e, d)
+        res = data[tuple(slices)]
+        assert len(res.shape) == 0 or min(res.shape) > 0, (
+            f"Empty shape found {res.shape} after Slice when x.shape={data.shape}, "
+            f"starts={starts}, ends={ends}, axes={axes}, steps={steps}, "
+            f"node.name={node.name!r}, input names={node.input}"
+        )
+        return [res]

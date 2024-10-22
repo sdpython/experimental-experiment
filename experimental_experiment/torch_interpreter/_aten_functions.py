@@ -5349,33 +5349,36 @@ def aten_roll(
     for i in range(len(shifts)):
         shapes = []
         if shape_x is not None and is_static_dimension(shape_x[dims[i]]):
-            shape = g.op.Slice(
-                result,
-                np.array([-shifts[i]], dtype=np.int64),
-                np.array([shape_x[dims[i]]], dtype=np.int64),
-                np.array([dims[i]], dtype=np.int64),
-                name=name,
-            )
+            end = np.array([shape_x[dims[i]]], dtype=np.int64)
         else:
             if shape_xx is None:
                 shape_xx = g.op.Shape(x, name=name)
-            dim = g.op.Gather(shape_xx, np.array([dims[i]], dtype=np.int64), name=name)
+            end = g.op.Gather(shape_xx, np.array([dims[i]], dtype=np.int64), name=name)
+
+        axis = np.array([dims[i]], dtype=np.int64)
+        if shifts[i] >= 0:
+            shape = g.op.Slice(
+                result, np.array([-shifts[i]], dtype=np.int64), end, axis, name=name
+            )
+            shapes.append(shape)
+            shape = g.op.Slice(
+                result, np.array([shifts[i]], dtype=np.int64), end, axis, name=name
+            )
+            shapes.append(shape)
+        else:
+            shape = g.op.Slice(
+                result, np.array([-shifts[i]], dtype=np.int64), end, axis, name=name
+            )
+            shapes.append(shape)
             shape = g.op.Slice(
                 result,
-                np.array([-shifts[i]], dtype=np.int64),
-                dim,
-                np.array([dims[i]], dtype=np.int64),
+                np.array([0], dtype=np.int64),
+                np.array([shifts[i]], dtype=np.int64),
+                axis,
                 name=name,
             )
-        shapes.append(shape)
-        shape = g.op.Slice(
-            result,
-            np.array([dims[i]], dtype=np.int64),
-            np.array([0], dtype=np.int64),
-            np.array([-shifts[i]], dtype=np.int64),
-            name=name,
-        )
-        shapes.append(shape)
+            shapes.append(shape)
+
         result = g.op.Concat(*shapes, axis=dims[i], name=name)
         g.set_type(result, g.get_type(x))
         if g.has_shape(x):

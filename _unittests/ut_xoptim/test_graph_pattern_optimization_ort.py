@@ -15,6 +15,7 @@ from experimental_experiment.ext_test_case import (
     ExtTestCase,
     skipif_ci_windows,
     requires_onnxruntime_training,
+    ignore_warnings,
 )
 from experimental_experiment.xbuilder.graph_builder import (
     GraphBuilder,
@@ -759,6 +760,7 @@ class TestGraphPatternOptimizationOrt(ExtTestCase):
         got = opt_ref.run(None, feeds)
         self.assertEqualArray(expected[0], got[0])
 
+    @ignore_warnings(UserWarning)
     def test_fast_gelu(self):
         data = os.path.join(os.path.dirname(__file__), "data", "layernorm.onnx")
         model = onnx_load(data, load_external_data=False)
@@ -791,7 +793,7 @@ class TestGraphPatternOptimizationOrt(ExtTestCase):
             model,
             infer_shapes=True,
             optimization_options=OptimizationOptions(
-                patterns=["Cast", "GeluOrt", "FastGelu"], verbose=10
+                patterns=["Cast", "GeluOrt", "FastGelu"], verbose=0
             ),
         )
         opt_onx = gr.to_onnx(optimize=True)
