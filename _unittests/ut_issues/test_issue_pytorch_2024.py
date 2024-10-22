@@ -164,11 +164,11 @@ class TestIssuesPytorch2024(ExtTestCase):
                     super().__init__()
                     self.params = torch.zeros((2, 1, 10))
 
-                def forward(self, update: torch.Tensor, index: torch.LongTensor):
+                def forward(self, update: torch.Tensor, kv_index: torch.LongTensor):
                     indices = torch.arange(update.shape[0])
                     middle = torch.zeros((1,), dtype=torch.long)
                     copy = self.params.clone()
-                    copy[index, middle, indices] = update.transpose(1, 0)
+                    copy[kv_index, middle, indices] = update.transpose(1, 0)
                     return copy
 
             model = UpdateModel()
@@ -234,6 +234,7 @@ class TestIssuesPytorch2024(ExtTestCase):
                     {"update": {0: torch.export.Dim("n")}, "kv_index": {}} if dynamic else None
                 ),
                 verbose=0,
+                optimize=True,
             )
 
         check_model(model_path)
@@ -255,6 +256,9 @@ class TestIssuesPytorch2024(ExtTestCase):
         expected = model(
             torch.Tensor(input_n["update"]), torch.Tensor(input_n["kv_index"]).to(int)
         )
+        # from experimental_experiment.reference import ExtendedReferenceEvaluator
+        # _ = ExtendedReferenceEvaluator(model_path, verbose=10).run(None, input_n)
+        # self.assertEqualArray(expected, _[0])
         e1 = session.run(None, input_n)[0]
         self.assertEqualArray(expected, e1)
 
@@ -297,8 +301,11 @@ class TestIssuesPytorch2024(ExtTestCase):
     def test_update_parameter_custom_2d_dec(self):
         self._updated_parameter("custom", False, decomposition=True)
 
-    def test_update_parameter_custom_3d(self):
-        self._updated_parameter("custom", True)
+    def test_update_parameter_custom_3d_static(self):
+        self._updated_parameter("custom", True, dynamic=False)
+
+    def test_update_parameter_custom_3d_dynamic(self):
+        self._updated_parameter("custom", True, dynamic=True)
 
     def _scaled_dot_product_attention(self, exporter):
         # https://github.com/pytorch/pytorch/issues/135615
