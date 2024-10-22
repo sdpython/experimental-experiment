@@ -1628,7 +1628,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                 if is_proto
                 else dtype_to_tensor_dtype(value.dtype)
             )
-        if existing:
+        if existing is True:
             assert name in self.initializers_dict, (
                 f"initializer {name!r} not found (itype={itype}, shape={shape})"
                 f"{self.get_debug_msg()}"
@@ -1648,16 +1648,17 @@ class GraphBuilder(_GraphBuilderRuntime):
             self.set_shape(name, shape)
             self.set_type(name, itype)
         else:
-            assert name not in self.initializers_dict, (
+            assert existing is None or name not in self.initializers_dict, (
                 f"initializer {name!r} was already added (itype={itype}, shape={shape})"
                 f"{self.get_debug_msg()}"
             )
-            assert not self.has_name(
+            assert existing is None or not self.has_name(
                 name
             ), f"initializer {name!r} already exists{self.get_debug_msg()}"
             self.set_shape(name, shape)
             self.set_type(name, itype)
-            self.set_name(name)
+            if not self.has_name(name):
+                self.set_name(name)
             self._unique_names.add(name)
 
         self.initializers_dict[name] = value
@@ -4073,7 +4074,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                             f"{[type(i) for i in feeds.values()]})"
                             f"{self.get_debug_msg()}"
                         )
-                        self.add_initializer(name, value, existing=True)
+                        self.add_initializer(name, value, existing=None)
                     else:
                         updates[name] = v
                     if self.verbose > 3:
