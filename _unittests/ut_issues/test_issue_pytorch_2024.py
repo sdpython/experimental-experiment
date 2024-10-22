@@ -1,5 +1,6 @@
 import unittest
 import numpy as np
+import onnx
 from onnx.checker import check_model
 from experimental_experiment.ext_test_case import (
     ExtTestCase,
@@ -710,6 +711,7 @@ class TestIssuesPytorch2024(ExtTestCase):
         # https://github.com/pytorch/pytorch/issues/131349
 
         import torch
+        import onnxruntime
 
         # 3D
 
@@ -743,8 +745,10 @@ class TestIssuesPytorch2024(ExtTestCase):
         else:
             to_onnx(model, example_inputs, filename=onnx_file_path)
 
-        ref = ExtendedReferenceEvaluator(onnx_file_path)
-        inputs_names = [i.name for i in ref.proto_.graph.input]
+        onx = onnx.load(onnx_file_path)
+        # ref = ExtendedReferenceEvaluator(onnx_file_path)
+        ref = onnxruntime.InferenceSession(onnx_file_path, providers=["CPUExecutionProvider"])
+        inputs_names = [i.name for i in onx.graph.input]
         feeds = dict(zip(inputs_names, tuple(i.numpy() for i in example_inputs)))
         output = ref.run(None, feeds)
         self.assertEqualArray(expected, output[0], atol=1e-4)
@@ -773,8 +777,10 @@ class TestIssuesPytorch2024(ExtTestCase):
         else:
             to_onnx(model, example_inputs, filename=onnx_file_path)
 
-        ref = ExtendedReferenceEvaluator(onnx_file_path)
-        inputs_names = [i.name for i in ref.proto_.graph.input]
+        onx = onnx.load(onnx_file_path)
+        # ref = ExtendedReferenceEvaluator(onnx_file_path)
+        ref = onnxruntime.InferenceSession(onnx_file_path, providers=["CPUExecutionProvider"])
+        inputs_names = [i.name for i in onx.graph.input]
         feeds = dict(zip(inputs_names, tuple(i.numpy() for i in example_inputs)))
         output = ref.run(None, feeds)
         self.assertEqualArray(expected, output[0], atol=1e-4)

@@ -6374,6 +6374,42 @@ def aten__softmax_backward_data(
     return res
 
 
+def aten_softplus(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    beta: float = 1.0,
+    threshold: float = 20.0,
+    name: str = "softplus",
+):
+    "softplus"
+    assert isinstance(
+        beta, (int, float)
+    ), f"softplus not implemented for beta={beta!a}{g.get_debug_msg()}"
+    assert isinstance(
+        threshold, (int, float)
+    ), f"softplus not implemented for threshold={threshold!a}{g.get_debug_msg()}"
+
+    dtype = tensor_dtype_to_np_dtype(g.get_type(x))
+    if beta != 1:
+        bnp = np.array([beta], dtype=dtype)
+        x = g.op.Mul(x, bnp, name=name)
+    softplus = g.op.Softplus(x, name=name)
+    if beta != 1:
+        softplus = g.op.Div(softplus, bnp, name=name)
+    res = g.op.Where(
+        g.op.Greater(x, np.array([threshold], dtype=dtype), name=name),
+        x,
+        softplus,
+        name=name,
+        outputs=outputs,
+    )
+    if not sts:
+        set_type_shape_unary_op(g, res, x)
+    return res
+
+
 def aten_split_Tensor(
     g: GraphBuilder,
     sts: Optional[Dict[str, Any]],
@@ -7568,6 +7604,32 @@ def aten_wrap_with_set_grad_enabled(
         new_outputs,
         name="wrap_with_set_grad_enabled",
         domain=LOCAL_DOMAIN,
+    )
+
+
+def aten_zero(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    dtype: Optional["torch.dtype"] = None,  # noqa: F821
+    layout=None,
+    device: Optional["torch.device"] = None,  # noqa: F821
+    pin_memory=None,
+    memory_format: Optional[str] = None,
+    name: str = "zero",
+) -> T:
+    "constantofshape"
+    return aten_zeros_like(
+        g,
+        sts,
+        outputs,
+        x,
+        dtype=dtype,
+        layout=layout,
+        device=device,
+        pin_memory=pin_memory,
+        name=name,
     )
 
 

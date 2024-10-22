@@ -405,6 +405,10 @@ class DynamoInterpreter:
                     a_name = None
                     o = f"{output_name}_{i}"
                 else:
+                    assert not isinstance(a, int), (
+                        f"Unexpected type int in output[{i}], outputs={output}, "
+                        f"node={node}{self.builder.get_debug_msg()}"
+                    )
                     a_name = a if isinstance(a, str) else a.name
                     if self.builder.get_is_dimension(a_name, n_outputs=len(output)):
                         o = f"{output_name}_dim_{i}"
