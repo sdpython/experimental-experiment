@@ -1591,18 +1591,60 @@ class GraphBuilder(_GraphBuilderRuntime):
             )
             name = self.unique_name(f"init{itype}_s{sh}_{sh2}")
 
+        self.add_initializer(name, value, itype=itype, shape=shape, key=key)
+        return name
+
+    def add_initializer(
+        self,
+        name: str,
+        value: Any,
+        itype: Optional[int] = None,
+        shape: Optional[Tuple[int, ...]] = None,
+        cst: Optional[Any] = None,
+        key: Optional[Any] = None,
+    ):
+        """
+        Adds an initializer.
+
+        :param name: constant name
+        :param value: initializer
+        :param itype: to overwrite the type
+        :param shape: to overwrite the shape
+        :param cst: value to send to :meth:`update_node_constant`
+        :param key: used to register the initializer
+        """
+        assert name not in self.initializers_dict, (
+            f"initializer {name!r} was already added (itype={itype}, shape={shape})"
+            f"{self.get_debug_msg()}"
+        )
+        is_proto = isinstance(value, (TensorProto, NodeProto))
+        if shape is None:
+            shape = (
+                self._get_tensor_shape(value)
+                if is_proto
+                else tuple(int(i) for i in value.shape)
+            )
         self.set_shape(name, shape)
+        if itype is None:
+            itype = (
+                self._get_tensor_type(value)
+                if is_proto
+                else torch_dtype_to_onnx_dtype(value.dtype)
+            )
         self.set_type(name, itype)
         self.set_name(name)
         self.initializers_dict[name] = value
-        self.update_node_constant(name, None)
+        self.update_node_constant(name, cst)
         if self.verbose and (
             self.verbose > 2 or (self.verbose > 1 and np.prod(value.shape) > 100)
         ):
             print(f"[GraphBuilder-{self._hash()}.make_initializer] {name}[{itype}:{shape}]")
-        if key:
+
+        self._unique_names.add(name)
+        if key is None:
+            key = self.make_key(value)
+        if key not in self._values:
             self._values[key] = name
-        return name
 
     def is_dynamic_shape(
         self, shape: DYNAMIC_SHAPE, verify: bool = True, allow_none: bool = False
@@ -2817,12 +2859,12 @@ class GraphBuilder(_GraphBuilderRuntime):
                     f"FakeTensor {name!r} cannot be an initializer {type(value)}"
                     f"{self.get_debug_msg()}"
                 )
-            self.initializers_dict[name] = value
-
-            self.update_node_constant(name, None)
-            self.set_name(name)
-            self.set_shape(name, builder._known_shapes[init])
-            self.set_type(name, builder._known_types[init])
+            self.add_initializer(
+                name,
+                value,
+                itype=builder._known_types[init],
+                shape=builder._known_shapes[init],
+            )
 
         for k, v in builder.dynamic_objects.items():
             self.make_dynamic_object(k, v)
@@ -3869,7 +3911,7 @@ class GraphBuilder(_GraphBuilderRuntime):
             if only_array and isinstance(value, TensorProto):
                 # Should reuse memory buffer here.
                 v = onh.to_array(value)
-                self.initializers_dict[name] = v
+                self.add_initializer(name, v)
                 return v, None
             return value, None
 
@@ -4005,7 +4047,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                             f"{[type(i) for i in feeds.values()]})"
                             f"{self.get_debug_msg()}"
                         )
-                        self.initializers_dict[name] = value
+                        self.add_initializer(name, value)
                     else:
                         updates[name] = v
                     if self.verbose > 3:
@@ -4216,10 +4258,14 @@ class GraphBuilder(_GraphBuilderRuntime):
                     f"FakeTensor {k!r} cannot be an initializer "
                     f"{type(self.initializers_dict[k])}{self.get_debug_msg()}"
                 )
-                self.initializers_dict[v] = self.initializers_dict[k]
+                self.add_initializer(
+                    v,
+                    self.initializers_dict[k],
+                    itype=self.get_type(k),
+                    shape=self.get_shape(k),
+                    cst=self.constants_[k],
+                )
                 del self.initializers_dict[k]
-                assert self.constants_[v]
-                self.update_node_constant(v, self.constants_[k])
                 del self.constants_[k]
 
         # third pass: replacements in node
@@ -4690,8 +4736,10 @@ class GraphBuilder(_GraphBuilderRuntime):
         if self.ir_version is None:
             self.ir_version = proto.ir_version
         self.nodes = list(proto.graph.node)
-        self.initializers_dict = {i.name: i for i in proto.graph.initializer}
-        self.initializers_dict.update({i.name: i for i in proto.graph.sparse_initializer})
+        for i in proto.graph.initializer:
+            self.add_initializer(i.name, i)
+        for i in proto.graph.sparse_initializer:
+            self.add_initializer(i.name, i)
         self.functions = {}
         for f in proto.functions:
             self.functions[f.domain, f.name] = f
@@ -4704,16 +4752,6 @@ class GraphBuilder(_GraphBuilderRuntime):
             available_shapes = {v.name: v for v in proto.graph.value_info}
         else:
             available_shapes = {}
-
-        for k, v in self.initializers_dict.items():
-            self.update_node_constant(k, None)
-            self._unique_names.add(k)
-            self.set_name(k)
-            self.set_shape(k, self._get_tensor_shape(v))
-            self.set_type(k, self._get_tensor_type(v))
-            key = self.make_key(v)
-            if key not in self._values:
-                self._values[key] = k
 
         for i in self.inputs + self.outputs:
             self.set_name(i.name)
