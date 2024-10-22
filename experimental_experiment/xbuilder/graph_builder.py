@@ -855,6 +855,9 @@ class GraphBuilder(_GraphBuilderRuntime):
                 f"elem_type={elem_type}, shape={shape}, n_outputs={n_outputs}"
                 f"{self.get_debug_msg()}"
             )
+        elif "_INT_" in name:
+            # This is most likely a dimension but not marked as such for the time being.
+            return False
         else:
             if elem_type in {
                 TensorProto.FLOAT16,
@@ -1593,7 +1596,9 @@ class GraphBuilder(_GraphBuilderRuntime):
         self.set_name(name)
         self.initializers_dict[name] = value
         self.update_node_constant(name, None)
-        if self.verbose and (self.verbose > 1 or np.prod(value.shape) > 100):
+        if self.verbose and (
+            self.verbose > 2 or (self.verbose > 1 and np.prod(value.shape) > 100)
+        ):
             print(f"[GraphBuilder-{self._hash()}.make_initializer] {name}[{itype}:{shape}]")
         if key:
             self._values[key] = name
@@ -2177,7 +2182,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                 )
 
         self.inputs.append(oh.make_tensor_value_info(input_name, elem_type, dyn_shape))
-        if self.verbose:
+        if self.verbose > 1:
             print(
                 f"[GraphBuilder-{self._hash()}.make_tensor_input] "
                 f"{input_name}[{elem_type}:{dyn_shape}]"
@@ -2245,7 +2250,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         dyn_shape = self.verify_shape(shape, name=name, elem_type=elem_type)
         self.outputs.append(oh.make_tensor_value_info(name, elem_type, dyn_shape))
         assert self.has_name(name), f"Output {name!r} not found{self.get_debug_msg()}"
-        if self.verbose:
+        if self.verbose > 1:
             print(
                 f"[GraphBuilder-{self._hash()}.make_tensor_output] "
                 f"{name}[{elem_type}:{dyn_shape}]"
@@ -2271,7 +2276,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                     out = oh.make_tensor_value_info(
                         name, self.get_type(name), self.get_shape(name)
                     )
-                    if self.verbose:
+                    if self.verbose > 1:
                         print(
                             f"[GraphBuilder-{self._hash()}.make_tensor_output] "
                             f"{name}[{self.get_type(name)}:R{self.get_shape(name)}]"
@@ -2280,14 +2285,14 @@ class GraphBuilder(_GraphBuilderRuntime):
                     out = oh.make_tensor_value_info(
                         name, self.get_type(name), [None] * self.get_rank(name)
                     )
-                    if self.verbose:
+                    if self.verbose > 1:
                         print(
                             f"[GraphBuilder-{self._hash()}.make_tensor_output] "
                             f"{name}[{self.get_type(name)}:R{self.get_rank(name)}]"
                         )
             else:
                 out = oh.make_value_info(name, TypeProto())
-                if self.verbose:
+                if self.verbose > 1:
                     print(f"[GraphBuilder-{self._hash()}.make_tensor_output] {name}")
             new_outputs.append(out)
 
@@ -3254,8 +3259,17 @@ class GraphBuilder(_GraphBuilderRuntime):
         #         cloned_node = graph_module.graph.call_method("clone", args=(node.target,))
         #         node.replace_all_uses_with(cloned_node)
         # graph_module.recompile()
+        if self.verbose and len(graph_module.graph.nodes) > 100:
+            try:
+                import tqdm
 
-        for i, node in enumerate(graph_module.graph.nodes):
+                loop = tqdm.tqdm(list(enumerate(graph_module.graph.nodes)))
+            except ImportError:
+                loop = enumerate(graph_module.graph.nodes)
+        else:
+            loop = enumerate(graph_module.graph.nodes)
+
+        for i, node in loop:
             self._debug_msg["process.progress"] = (
                 f"node {i}/{len(graph_module.graph.nodes)} target={node.target}"
             )

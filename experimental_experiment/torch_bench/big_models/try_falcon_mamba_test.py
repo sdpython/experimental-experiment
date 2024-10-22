@@ -56,13 +56,20 @@ class TestFalconMamba(ExtTestCase):
 
     @long_test()
     @requires_cuda(memory=24)
-    def test_export_custom(self):
+    def test_export_onnx_custom(self):
         from experimental_experiment.torch_interpreter import to_onnx
+        from experimental_experiment.xbuilder import OptimizationOptions
 
         model_fct, inputs = get_model_inputs(verbose=1, device="cuda", dtype="float16")
         model = model_fct()
         with bypass_export_some_errors():
-            onx = to_onnx(model, inputs, large_model=True)
+            onx = to_onnx(
+                model,
+                inputs,
+                large_model=True,
+                verbose=1,
+                options=OptimizationOptions(max_iter=10),
+            )
             onx.save("test_falcon_mamba_custom.onnx", all_tensors_to_one_file=True)
 
 

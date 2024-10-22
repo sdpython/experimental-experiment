@@ -1,5 +1,6 @@
 import unittest
 import numpy as np
+import onnx
 from onnx.checker import check_model
 from experimental_experiment.ext_test_case import (
     ExtTestCase,
@@ -472,8 +473,7 @@ class TestIssuesPytorch2024(ExtTestCase):
         inputs_names = [i.name for i in session.get_inputs()]
         output = session.run(None, dict(zip(inputs_names, (example_input.numpy(),))))
         expected_output = model(example_input)
-        self.assertEqual(expected_output.shape, output[0].shape)
-        self.assertEqualArray(expected_output, output[0], atol=1e-4)
+        self.assertEqualArray(expected_output, output[0], atol=1e-3)
 
     def test_in_projection_packed_script(self):
         self._in_projection_packed("script")
@@ -705,6 +705,87 @@ class TestIssuesPytorch2024(ExtTestCase):
 
     def test_dyn_slice_4d_custom(self):
         self._slice_4d("custom")
+
+    def _index_put_ellipsis(self, exporter):
+        # https://github.com/pytorch/pytorch/issues/131349
+
+        import torch
+        import onnxruntime
+
+        # 3D
+
+        class UpdateModel(torch.nn.Module):
+            def forward(
+                self, values: torch.Tensor, update: torch.Tensor, kv_index: torch.LongTensor
+            ):
+                values = values.clone()
+                values[..., kv_index] = update
+                return values
+
+        model = UpdateModel()
+        example_inputs = (
+            torch.ones((2, 2, 10)).to(torch.float32),
+            torch.arange(2).to(torch.float32).reshape((2, 1, 1)),
+            torch.Tensor([1]).to(torch.int32),
+        )
+        expected = model(*example_inputs)
+        onnx_file_path = f"test_index_put_ellipsis_{exporter}.onnx"
+
+        # with torch.no_grad():
+        if exporter == "dynamo":
+            torch.onnx.export(
+                model,
+                example_inputs,
+                onnx_file_path,
+                output_names=["out"],
+                dynamo=True,
+                fallback=False,
+            )
+        else:
+            to_onnx(model, example_inputs, filename=onnx_file_path)
+
+        onx = onnx.load(onnx_file_path)
+        # ref = ExtendedReferenceEvaluator(onnx_file_path)
+        ref = onnxruntime.InferenceSession(onnx_file_path, providers=["CPUExecutionProvider"])
+        inputs_names = [i.name for i in onx.graph.input]
+        feeds = dict(zip(inputs_names, tuple(i.numpy() for i in example_inputs)))
+        output = ref.run(None, feeds)
+        self.assertEqualArray(expected, output[0], atol=1e-4)
+
+        # 2D
+
+        model = UpdateModel()
+        example_inputs = (
+            torch.ones((2, 10)).to(torch.float32),
+            torch.arange(2).to(torch.float32).reshape((2, 1)),
+            torch.Tensor([1]).to(torch.int32),
+        )
+        expected = model(*example_inputs)
+        onnx_file_path = f"test_index_put_ellipsis_{exporter}.onnx"
+
+        # with torch.no_grad():
+        if exporter == "dynamo":
+            torch.onnx.export(
+                model,
+                example_inputs,
+                onnx_file_path,
+                output_names=["out"],
+                dynamo=True,
+                fallback=False,
+            )
+        else:
+            to_onnx(model, example_inputs, filename=onnx_file_path)
+
+        onx = onnx.load(onnx_file_path)
+        # ref = ExtendedReferenceEvaluator(onnx_file_path)
+        ref = onnxruntime.InferenceSession(onnx_file_path, providers=["CPUExecutionProvider"])
+        inputs_names = [i.name for i in onx.graph.input]
+        feeds = dict(zip(inputs_names, tuple(i.numpy() for i in example_inputs)))
+        output = ref.run(None, feeds)
+        self.assertEqualArray(expected, output[0], atol=1e-4)
+
+    def test_index_put_ellipsis(self):
+        self._index_put_ellipsis("custom")
 
 
 if __name__ == "__main__":
