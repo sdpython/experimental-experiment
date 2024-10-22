@@ -1641,7 +1641,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                 f"Type mismatch for {name!r}, existing type {self.get_type(name)}, "
                 f"new type {itype}{self.get_debug_msg()}"
             )
-            assert not self.has_shape(name) or itype == self.get_shape(name), (
+            assert not self.has_shape(name) or shape == self.get_shape(name), (
                 f"Type mismatch for {name!r}, existing shape "
                 f"{self.get_shape(name)}, new shape {shape}{self.get_debug_msg()}"
             )
