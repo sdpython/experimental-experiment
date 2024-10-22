@@ -82,6 +82,16 @@ def scatter_elements(data, indices, updates, axis=0, reduction=None):  # type: i
                                 updates[a, i, j, k],
                             )
             return scattered
+        if axis == 0:
+            for a in range(indices.shape[0]):
+                for i in range(indices.shape[1]):
+                    for j in range(indices.shape[2]):
+                        for k in range(indices.shape[3]):
+                            scattered[indices[a, i, j, k], i, j, k] = f(
+                                scattered[indices[a, i, j, k], i, j, k],
+                                updates[a, i, j, k],
+                            )
+            return scattered
 
     raise RuntimeError(f"Not implemented for indices.shape={indices.shape} and axis={axis}")
 
