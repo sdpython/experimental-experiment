@@ -2997,27 +2997,49 @@ def aten_index_put(
                 f"{g.get_debug_msg()}"
             )
             if g.get_rank(values) == 1:
-                shape_x = g.op.Shape(x, name=name)
-                n_cols = g.op.GatherElements(shape_x, np.array([1], dtype=np.int64), name=name)
+                if g.has_shape(x) and is_static_shape(g.get_shape(x)):
+                    shape_x = np.array(g.get_shape(x), dtype=np.int64)
+                    n_cols = shape_x[1:2]
+                    size = np.prod(shape_x).astype(np.int64)
+                    arange_1d = np.arange(0, size).astype(np.int64)
+                else:
+                    shape_x = g.op.Shape(x, name=name)
+                    n_cols = g.op.GatherElements(
+                        shape_x, np.array([1], dtype=np.int64), name=name
+                    )
+                    size = g.op.Size(x, name=name)
+                    arange_1d = g.op.Range(
+                        np.array(0, dtype=np.int64),
+                        size,
+                        np.array(1, dtype=np.int64),
+                        name=name,
+                    )
+
                 ind0_ = g.op.Reshape(ind0, np.array([-1, 1], dtype=np.int64), name=name)
                 ind1_ = g.op.Reshape(ind1, np.array([1, -1], dtype=np.int64), name=name)
                 indices_2d = g.op.Add(g.op.Mul(ind0_, n_cols, name=name), ind1_, name=name)
-                size = g.op.Size(x, name=name)
-                arange_1d = g.op.Range(
-                    np.array(0, dtype=np.int64), size, np.array(1, dtype=np.int64), name=name
-                )
                 indices_1d = g.op.GatherElements(
                     arange_1d,
                     g.op.Reshape(indices_2d, np.array([-1], dtype=np.int64), name=name),
                     name=name,
                 )
 
-                new_shape = g.op.Concat(
-                    g.op.Shape(ind0, name=name),
-                    g.op.Shape(ind1, name=name),
-                    axis=0,
-                    name=name,
-                )
+                if (
+                    g.has_shape(ind0)
+                    and is_static_shape(g.get_shape(ind0))
+                    and g.has_shape(ind1)
+                    and is_static_shape(g.get_shape(ind1))
+                ):
+                    sh0 = g.get_shape(ind0)
+                    sh1 = g.get_shape(ind1)
+                    new_shape = np.hstack([sh0, sh1])
+                else:
+                    new_shape = g.op.Concat(
+                        g.op.Shape(ind0, name=name),
+                        g.op.Shape(ind1, name=name),
+                        axis=0,
+                        name=name,
+                    )
                 v2 = g.op.UnsqueezeAnyOpset(values, np.array([0], dtype=np.int64), name=name)
                 expanded = g.op.Reshape(
                     g.op.Expand(v2, new_shape, name=name),

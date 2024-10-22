@@ -1507,7 +1507,11 @@ class GraphBuilder(_GraphBuilderRuntime):
                     f"{shape}{self.get_debug_msg()}"
                 )
 
-        res = self.make_node("Concat", conc, axis=0, name=f"_mkshape_{name}")
+        if len(conc) > 1:
+            res = self.make_node("Concat", conc, axis=0, name=f"_mkshape_{name}")
+        else:
+            assert len(conc) > 0, f"No shape to concatenate{self.get_debug_msg()}"
+            res = self.make_node("Identity", conc[0], name=f"_mkshape1_{name}")
         self._cache_shape[key] = res
         return res
 

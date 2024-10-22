@@ -151,7 +151,7 @@ class TestIssuesPytorch2024(ExtTestCase):
         results = session.run(None, {"x": input_tensor.cpu().numpy()})
         self.assertEqualArray(expected, results[0])
 
-    def _updated_parameter(self, exporter, d3, decomposition=False):
+    def _updated_parameter(self, exporter, d3, decomposition=False, dynamic=False):
         # https://github.com/pytorch/pytorch/issues/135233
 
         import torch
@@ -196,7 +196,7 @@ class TestIssuesPytorch2024(ExtTestCase):
 
         model_path = (
             f"test_updated_cache_{exporter}_d{3 if d3 else 2}"
-            f"D{1 if decomposition else 0}.onnx"
+            f"D{1 if decomposition else 0}-{'dyn' if dynamic else 'sta'}.onnx"
         )
 
         if exporter == "script":
@@ -206,7 +206,7 @@ class TestIssuesPytorch2024(ExtTestCase):
                 model_path,
                 input_names=["update", "kv_index"],
                 output_names=["updated"],
-                dynamic_axes={"update": {0: "n"}},
+                dynamic_axes={"update": {0: "n"}} if dynamic else None,
                 opset_version=13,
                 verbose=False,
             )
@@ -217,7 +217,7 @@ class TestIssuesPytorch2024(ExtTestCase):
                 model_path,
                 input_names=["update", "kv_index"],
                 output_names=["updated"],
-                dynamic_axes={"update": {0: "n"}},
+                dynamic_axes={"update": {0: "n"}} if dynamic else None,
                 verbose=False,
                 dynamo=True,
             )
@@ -226,7 +226,14 @@ class TestIssuesPytorch2024(ExtTestCase):
                 ExportOptions(decomposition_table="all") if decomposition else None
             )
             to_onnx(
-                model, (update, kv_index), filename=model_path, export_options=export_options
+                model,
+                (update, kv_index),
+                filename=model_path,
+                export_options=export_options,
+                dynamic_shapes=(
+                    {"update": {0: torch.export.Dim("n")}, "kv_index": {}} if dynamic else None
+                ),
+                verbose=0,
             )
 
         check_model(model_path)
@@ -255,11 +262,11 @@ class TestIssuesPytorch2024(ExtTestCase):
         expected = model(
             torch.Tensor(input_2["update"]), torch.Tensor(input_2["kv_index"]).to(int)
         )
-        # Unless dynamic shape is used, that won't work.
-        # from experimental_experiment.reference import ExtendedReferenceEvaluator
-        # ExtendedReferenceEvaluator(model_path, verbose=10).run(None, input_2)
-        # e2 = session.run(None, input_2)[0]
-        # self.assertEqual(e2, expected)
+        if dynamic:
+            # from experimental_experiment.reference import ExtendedReferenceEvaluator
+            # ExtendedReferenceEvaluator(model_path, verbose=10).run(None, input_2)
+            e2 = session.run(None, input_2)[0]
+            self.assertEqualArray(expected, e2)
 
     @unittest.skip("index_put fails with torch_script")
     def test_update_parameter_script_2d(self):
@@ -269,14 +276,23 @@ class TestIssuesPytorch2024(ExtTestCase):
     def test_update_parameter_script_3d(self):
         self._updated_parameter("script", True)
 
-    def test_update_parameter_dynamo_2d(self):
-        self._updated_parameter("dynamo", False)
+    @requires_onnxscript("0.2")
+    def test_update_parameter_dynamo_2d_static(self):
+        self._updated_parameter("dynamo", False, dynamic=False)
 
+    @requires_onnxscript("0.2")
+    def test_update_parameter_dynamo_2d_dynamic(self):
+        self._updated_parameter("dynamo", False, dynamic=True)
+
+    @requires_onnxscript("0.2")
     def test_update_parameter_dynamo_3d(self):
         self._updated_parameter("dynamo", True)
 
-    def test_update_parameter_custom_2d(self):
-        self._updated_parameter("custom", False)
+    def test_update_parameter_custom_2d_static(self):
+        self._updated_parameter("custom", False, dynamic=False)
+
+    def test_update_parameter_custom_2d_dynamic(self):
+        self._updated_parameter("custom", False, dynamic=True)
 
     def test_update_parameter_custom_2d_dec(self):
         self._updated_parameter("custom", False, decomposition=True)
