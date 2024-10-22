@@ -3032,7 +3032,7 @@ def aten_index_put(
                 ):
                     sh0 = g.get_shape(ind0)
                     sh1 = g.get_shape(ind1)
-                    new_shape = np.hstack([sh0, sh1])
+                    new_shape = np.hstack([sh0, sh1]).astype(np.int64)
                 else:
                     new_shape = g.op.Concat(
                         g.op.Shape(ind0, name=name),
@@ -3148,7 +3148,7 @@ def aten_index_put(
                     sh0 = g.get_shape(ind0)
                     sh1 = g.get_shape(ind1)
                     sh2 = g.get_shape(ind2)
-                    new_shape = np.hstack([sh0, sh1, sh2])
+                    new_shape = np.hstack([sh0, sh1, sh2]).astype(np.int64)
                 else:
                     new_shape = g.op.Concat(
                         g.op.Shape(ind0, name=name),
