@@ -1633,6 +1633,11 @@ class GraphBuilder(_GraphBuilderRuntime):
                 else dtype_to_tensor_dtype(value.dtype)
             )
         if existing:
+            assert len(shape) == 0 or min(shape) > 0, (
+                f"Initializer {name!r} has an empty shape={shape}, itype={itype}, "
+                f"existing shape={self.get_shape(name) if self.has_shape(name) else '?'}, "
+                f"type={type(value)}{self.get_debug_msg()}"
+            )
             assert self.has_name(name), (
                 f"value {name!r} is replaced by an initializer "
                 f"already exists{self.get_debug_msg()}"
@@ -1648,6 +1653,10 @@ class GraphBuilder(_GraphBuilderRuntime):
             self.set_shape(name, shape)
             self.set_type(name, itype)
         else:
+            assert len(shape) == 0 or min(shape) > 0, (
+                f"Initializer {name!r} has an empty shape={shape}, itype={itype}, "
+                f"type={type(value)}{self.get_debug_msg()}"
+            )
             assert not self.has_name(
                 name
             ), f"initializer {name!r} already exists{self.get_debug_msg()}"
