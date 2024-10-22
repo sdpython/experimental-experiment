@@ -1,5 +1,5 @@
 import contextlib
-from typing import Any, List, Tuple
+from typing import Any, Dict, List, Tuple
 
 
 def flatten_mamba_cache(
@@ -42,6 +42,15 @@ def unflatten_mamba_cache(
     return cache
 
 
+def flatten_with_keys_mamba_cache(
+    d: Dict[Any, Any]
+) -> Tuple[List[Tuple["_torch_pytree.KeyEntry", Any]], "_torch_pytree.Context"]:  # noqa: F821
+    import torch.utils._pytree as _torch_pytree
+
+    values, context = flatten_mamba_cache(d)
+    return [(_torch_pytree.MappingKey(k), v) for k, v in zip(context, values)], context
+
+
 @contextlib.contextmanager
 def bypass_export_some_errors():
     """
@@ -75,6 +84,7 @@ def bypass_export_some_errors():
                 flatten_mamba_cache,
                 unflatten_mamba_cache,
                 serialized_type_name=f"{MambaCache.__module__}.{MambaCache.__name__}",
+                flatten_with_keys_fn=flatten_with_keys_mamba_cache,
             )
 
     try:

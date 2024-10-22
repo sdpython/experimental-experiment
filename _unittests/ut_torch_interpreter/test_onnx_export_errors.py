@@ -52,12 +52,12 @@ class TestOnnxExportErrors(ExtTestCase):
                 self.dtype = torch.float16
 
         class Model(torch.nn.Module):
-            def forward(self, x):
-                cache = MambaCache(_config(), batch_size=1)
+            def forward(self, x, cache: MambaCache):
                 return cache.conv_states + x
 
         with bypass_export_some_errors():
-            torch.export.export(Model(), (torch.ones(16, 16),))
+            cache = MambaCache(_config(), batch_size=1)
+            torch.export.export(Model(), (torch.ones(16, 16), cache))
 
 
 if __name__ == "__main__":
