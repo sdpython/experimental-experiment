@@ -934,7 +934,7 @@ class DynamoInterpreter:
             return i.name
         if isinstance(i, tuple):
             return tuple(self._process_arg(node, aten_name, t) for t in i)
-        if isinstance(i, (float, int, tuple, slice)):
+        if isinstance(i, (float, int, tuple, slice, complex)):
             return i
         if isinstance(i, list):
             new_list = []

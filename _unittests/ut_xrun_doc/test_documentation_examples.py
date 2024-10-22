@@ -131,9 +131,12 @@ class TestDocumentationExamples(ExtTestCase):
 
             if name in {"plot_torch_export_201.py"}:
                 from torch import __version__ as tv
+                from onnx_array_api import __version__ as toaa
 
                 if pv.Version(".".join(tv.split(".")[:2])) < pv.Version("2.5"):
                     reason = "requires torch 2.5"
+                if pv.Version(".".join(toaa.split(".")[:2])) < pv.Version("0.3"):
+                    reason = "requires onnx-array-api 0.3"
 
             if name in {"plot_llama_bench_102.py"}:
                 if sys.platform in {"darwin"}:

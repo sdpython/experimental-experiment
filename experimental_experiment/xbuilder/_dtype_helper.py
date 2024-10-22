@@ -31,6 +31,10 @@ def onnx_dtype_to_torch_dtype(itype: int) -> "torch.dtype":  # noqa: F821
         return torch.int16
     if itype == TensorProto.UINT8:
         return torch.uint16
+    if itype == TensorProto.COMPLEX64:
+        return torch.complex64
+    if itype == TensorProto.COMPLEX128:
+        return torch.complex128
     raise NotImplementedError(f"Unable to convert onnx type {itype} to torch.type.")
 
 
@@ -55,6 +59,10 @@ def torch_dtype_to_onnx_dtype(to: "torch.dtype") -> int:  # noqa: F821
         return TensorProto.INT64
     if to == torch.SymFloat:
         return TensorProto.FLOAT
+    if to == torch.complex64:
+        return TensorProto.COMPLEX64
+    if to == torch.complex128:
+        return TensorProto.COMPLEX128
     raise NotImplementedError(f"Unable to convert torch dtype {to!r} to onnx dtype.")
 
 

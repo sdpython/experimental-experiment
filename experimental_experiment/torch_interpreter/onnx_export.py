@@ -4,7 +4,7 @@ import pprint
 import time
 import warnings
 from typing import Any, Callable, Dict, List, Optional, Sequence, Set, Tuple, Union
-from onnx import ModelProto
+from onnx import ModelProto, save_model
 from onnx.defs import onnx_opset_version
 from onnx.model_container import ModelContainer
 from ..xbuilder.graph_builder import GraphBuilder, OptimizationOptions
@@ -493,6 +493,7 @@ def to_onnx(
     external_threshold: int = 1024,
     export_options: Optional[Union[str, ExportOptions]] = None,
     return_optimize_report: bool = False,
+    filename: Optional[str] = None,
     inline: bool = False,
 ) -> Union[
     Union[ModelProto, ModelContainer],
@@ -523,6 +524,7 @@ def to_onnx(
     :param external_threshold: if large_model is True, every tensor above this limit
         is stored as external
     :param return_optimize_report: returns statistics on the optimization as well
+    :param filename: if specified, stores the model into that file
     :param inline: inline the model before converting to onnx, this is done before
             any optimization takes place
     :param export_options: to apply differents options before to get the exported program
@@ -645,6 +647,11 @@ def to_onnx(
         if verbose >= 10:
             print(builder.get_debug_msg())
 
+    if filename:
+        if isinstance(onx, ModelProto):
+            save_model(onx, filename)
+        else:
+            onx.save(filename, all_tensors_to_one_file=True)
     all_stats.update(add_stats)
     if return_builder:
         return (onx, builder, all_stats) if return_optimize_report else (onx, builder)

@@ -257,6 +257,11 @@ class ExportOptions:
 def apply_decompositions(
     exported_mod: "torch.export.ExportedProgram", decomposition_table  # noqa: F821
 ) -> "torch.export.ExportedProgram":  # noqa: F821
+    if decomposition_table == "all":
+        exported_mod = insert_contiguous_between_transpose_and_view(exported_mod)
+        exported_mod = exported_mod.run_decompositions()
+        return exported_mod
+
     if isinstance(decomposition_table, str):
         from ..torch_dynamo import get_decomposition_table_by_name
 

@@ -857,7 +857,7 @@ class TorchBenchRunner(BenchmarkRunner):
                     f"{getattr(benchmark_cls, 'DEFAULT_EVAL_BSIZE', '?')}, "
                     f"ALLOW_CUSTOMIZE_BSIZE="
                     f"{getattr(benchmark_cls, 'ALLOW_CUSTOMIZE_BSIZE', '?')} "
-                    f" --- exception={e}"
+                    f"--- exception={e}"
                 ) from e
         if self.verbose:
             print(f"[{self.__class__.__name__}.load_model] clsname={benchmark}")

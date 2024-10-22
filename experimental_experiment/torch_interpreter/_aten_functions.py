@@ -915,6 +915,19 @@ def aten_clamp_Tensor(
     return res
 
 
+def aten_clip(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    min: Optional[float] = None,
+    max: Optional[float] = None,
+    name: str = "clip",
+) -> T:
+    "clip"
+    return aten_clamp(g, sts, outputs, x, min=min, max=max, name=name)
+
+
 def aten_clone(
     g: GraphBuilder,
     sts: Optional[Dict[str, Any]],
@@ -2921,45 +2934,260 @@ def aten_index_put(
     accumulate: bool = False,
     name="aten_index_put",
 ) -> T:
-    "[...,:, ...]"
+    "M[..., :, ...] = ..."
     assert isinstance(indices, list), f"Unexpected type {type(indices)}{g.get_debug_msg()}"
-    assert len(indices) == 1, f"Not implementeded for indices={indices}{g.get_debug_msg()}"
     assert g.has_shape(x), f"Missing shape for {x!r}{g.get_debug_msg()}"
 
-    index = indices[0]  # tensor
-    index_dtype = g.get_type(index)
-    if index_dtype == TensorProto.BOOL:
-        assert not accumulate, (
-            f"accumulate is True but it does not make sense in that case"
-            f"{g.get_debug_msg()}"
-        )
-        res = g.op.Where(index, values, x, outputs=outputs)
+    if len(indices) == 1:
+        name = f"{name}1_"
+        index = indices[0]  # tensor
+        index_dtype = g.get_type(index)
+        if index_dtype == TensorProto.BOOL:
+            assert not accumulate, (
+                f"accumulate is True but it does not make sense in that case"
+                f"{g.get_debug_msg()}"
+            )
+            res = g.op.Where(index, values, x, outputs=outputs)
+            if not sts:
+                g.set_type(res, g.get_type(x))
+                g.set_shape(res, g.get_shape(x))
+            return res
+
+        new_index = g.op.UnsqueezeAnyOpset(index, np.array([-1], dtype=np.int64), name=name)
+        g.set_type(new_index, index_dtype)
+        if g.has_shape(index):
+            g.set_shape(new_index, (*g.get_shape(index), 1))
+        else:
+            g.set_rank(new_index, g.get_rank(index) + 1)
+
+        if accumulate:
+            assert g.main_opset >= 13, (
+                f"index_put cannot be implemented for opset < 13 "
+                f"because ScatterND does not support reduction"
+                f"{g.get_debug_msg()}"
+            )
+            res = g.op.ScatterND(
+                x, new_index, values, name=name, reduction="add", outputs=outputs
+            )
+        else:
+            res = g.op.ScatterND(x, new_index, values, name=name, outputs=outputs)
+
         if not sts:
             g.set_type(res, g.get_type(x))
             g.set_shape(res, g.get_shape(x))
         return res
 
-    new_index = g.op.UnsqueezeAnyOpset(index, np.array([-1], dtype=np.int64), name=name)
-    g.set_type(new_index, index_dtype)
-    if g.has_shape(index):
-        g.set_shape(new_index, (*g.get_shape(index), 1))
-    else:
-        g.set_rank(new_index, g.get_rank(index) + 1)
+    if len(indices) == 2:
+        # copy[kv_index, indices] = update.transpose(1, 0)
+        name = f"{name}2_"
+        ind0, ind1 = indices
+        if (
+            g.get_type(ind0) in {TensorProto.INT64, TensorProto.INT32}
+            and g.get_type(ind1) in {TensorProto.INT64, TensorProto.INT32}
+            and g.has_rank(ind0)
+            and g.get_rank(ind0) == 1
+            and g.has_rank(ind1)
+            and g.get_rank(ind1) == 1
+            and g.has_rank(values)
+            and g.has_rank(x)
+        ):
+            assert g.get_rank(x) == 2, (
+                f"No implementation for index_put when indices={indices}, "
+                f"rk(x)={g.get_rank(x)}, rk(values)={g.get_rank(values)} "
+                f"{g.get_debug_msg()}"
+            )
+            if g.get_rank(values) == 1:
+                if g.has_shape(x) and is_static_shape(g.get_shape(x)):
+                    shape_x = np.array(g.get_shape(x), dtype=np.int64)
+                    n_cols = shape_x[1:2]
+                    size = np.prod(shape_x).astype(np.int64)
+                    arange_1d = np.arange(0, size).astype(np.int64)
+                else:
+                    shape_x = g.op.Shape(x, name=name)
+                    n_cols = g.op.GatherElements(
+                        shape_x, np.array([1], dtype=np.int64), name=name
+                    )
+                    size = g.op.Size(x, name=name)
+                    arange_1d = g.op.Range(
+                        np.array(0, dtype=np.int64),
+                        size,
+                        np.array(1, dtype=np.int64),
+                        name=name,
+                    )
 
-    if accumulate:
-        assert g.main_opset >= 13, (
-            f"index_put cannot be implemented for opset < 13 "
-            f"because ScatterND does not support reduction"
-            f"{g.get_debug_msg()}"
-        )
-        res = g.op.ScatterND(x, new_index, values, name=name, reduction="add", outputs=outputs)
-    else:
-        res = g.op.ScatterND(x, new_index, values, name=name, outputs=outputs)
+                ind0_ = g.op.Reshape(ind0, np.array([-1, 1], dtype=np.int64), name=name)
+                ind1_ = g.op.Reshape(ind1, np.array([1, -1], dtype=np.int64), name=name)
+                indices_2d = g.op.Add(g.op.Mul(ind0_, n_cols, name=name), ind1_, name=name)
+                indices_1d = g.op.GatherElements(
+                    arange_1d,
+                    g.op.Reshape(indices_2d, np.array([-1], dtype=np.int64), name=name),
+                    name=name,
+                )
 
-    if not sts:
-        g.set_type(res, g.get_type(x))
-        g.set_shape(res, g.get_shape(x))
-    return res
+                if (
+                    g.has_shape(ind0)
+                    and is_static_shape(g.get_shape(ind0))
+                    and g.has_shape(ind1)
+                    and is_static_shape(g.get_shape(ind1))
+                ):
+                    sh0 = g.get_shape(ind0)
+                    sh1 = g.get_shape(ind1)
+                    new_shape = np.hstack([sh0, sh1]).astype(np.int64)
+                else:
+                    new_shape = g.op.Concat(
+                        g.op.Shape(ind0, name=name),
+                        g.op.Shape(ind1, name=name),
+                        axis=0,
+                        name=name,
+                    )
+                v2 = g.op.UnsqueezeAnyOpset(values, np.array([0], dtype=np.int64), name=name)
+                expanded = g.op.Reshape(
+                    g.op.Expand(v2, new_shape, name=name),
+                    np.array([-1], dtype=np.int64),
+                    name=name,
+                )
+
+                flat_x = g.op.Reshape(x, np.array([-1], dtype=np.int64), name=name)
+                if accumulate:
+                    flat_up_x = g.op.ScatterElements(
+                        flat_x, indices_1d, expanded, name=name, reduction="add"
+                    )
+                else:
+                    flat_up_x = g.op.ScatterElements(flat_x, indices_1d, expanded, name=name)
+                g.set_type(flat_up_x, g.get_type(x))
+
+                res = g.op.Reshape(flat_up_x, shape_x, name=name, outputs=outputs)
+                if not sts:
+                    g.set_type(res, g.get_type(x))
+                    g.set_shape(res, g.get_shape(x))
+                return res
+
+            raise AssertionError(
+                f"No implementation for index_put when indices={indices}, "
+                f"rk(x)={g.get_rank(x)}, rk(values)={g.get_rank(values)} "
+                f"{g.get_debug_msg()}"
+            )
+
+    if len(indices) == 3:
+        # copy[index, middle, indices] = update.transpose(1, 0)
+        # index_put.default(args = (%clone, [%kv_index, %arange], %view), kwargs = {})
+        name = f"{name}3_"
+        ind0, ind1, ind2 = indices
+        if (
+            g.get_type(ind0) in {TensorProto.INT64, TensorProto.INT32}
+            and g.get_type(ind1) in {TensorProto.INT64, TensorProto.INT32}
+            and g.has_rank(ind0)
+            and g.get_rank(ind0) == 1
+            and g.has_rank(ind1)
+            and g.get_rank(ind1) == 1
+            and g.has_rank(ind2)
+            and g.get_rank(ind2) == 1
+            and g.has_rank(values)
+            and g.has_rank(x)
+        ):
+            assert g.get_rank(x) == 3, (
+                f"No implementation for index_put when indices={indices}, "
+                f"rk(x)={g.get_rank(x)}, rk(values)={g.get_rank(values)} "
+                f"{g.get_debug_msg()}"
+            )
+
+            if g.get_rank(values) == 1:
+                if g.has_shape(x) and is_static_shape(g.get_shape(x)):
+                    shape_x = np.array(g.get_shape(x), dtype=np.int64)
+                    stride_1 = np.prod(shape_x[1:3]).reshape((-1,)).astype(np.int64)
+                    stride_2 = shape_x[2:3]
+                    size = np.prod(shape_x).astype(np.int64)
+                    arange_1d = np.arange(0, size).reshape((-1,)).astype(np.int64)
+                else:
+                    shape_x = g.op.Shape(x, name=name)
+                    stride_1 = g.op.ReduceProd(
+                        g.op.GatherElements(
+                            shape_x, np.array([1, 2], dtype=np.int64), name=name, keepdim=1
+                        ),
+                        name=name,
+                        keepdim=1,
+                    )
+                    stride_2 = g.op.GatherElements(
+                        shape_x, np.array([2], dtype=np.int64), name=name
+                    )
+                    size = g.op.Size(x, name=name)
+                    arange_1d = g.op.Range(
+                        np.array(0, dtype=np.int64),
+                        size,
+                        np.array(1, dtype=np.int64),
+                        name=name,
+                    )
+
+                ind0_ = g.op.Reshape(ind0, np.array([-1, 1, 1], dtype=np.int64), name=name)
+                ind1_ = g.op.Reshape(ind1, np.array([1, -1, 1], dtype=np.int64), name=name)
+                ind2_ = g.op.Reshape(ind2, np.array([1, 1, -1], dtype=np.int64), name=name)
+                indices_3d = g.op.Add(
+                    g.op.Add(
+                        g.op.Mul(ind0_, stride_1, name=name),
+                        g.op.Mul(ind1_, stride_2, name=name),
+                        name=name,
+                    ),
+                    ind2_,
+                    name=name,
+                )
+
+                indices_1d = g.op.GatherElements(
+                    arange_1d,
+                    g.op.Reshape(indices_3d, np.array([-1], dtype=np.int64), name=name),
+                    name=name,
+                )
+
+                if (
+                    g.has_shape(ind0)
+                    and is_static_shape(g.get_shape(ind0))
+                    and g.has_shape(ind1)
+                    and is_static_shape(g.get_shape(ind1))
+                    and g.has_shape(ind2)
+                    and is_static_shape(g.get_shape(ind2))
+                ):
+                    sh0 = g.get_shape(ind0)
+                    sh1 = g.get_shape(ind1)
+                    sh2 = g.get_shape(ind2)
+                    new_shape = np.hstack([sh0, sh1, sh2]).astype(np.int64)
+                else:
+                    new_shape = g.op.Concat(
+                        g.op.Shape(ind0, name=name),
+                        g.op.Shape(ind1, name=name),
+                        g.op.Shape(ind2, name=name),
+                        axis=0,
+                        name=name,
+                    )
+                v2 = g.op.UnsqueezeAnyOpset(values, np.array([0], dtype=np.int64), name=name)
+                expanded = g.op.Reshape(
+                    g.op.Expand(v2, new_shape, name=name),
+                    np.array([-1], dtype=np.int64),
+                    name=name,
+                )
+
+                flat_x = g.op.Reshape(x, np.array([-1], dtype=np.int64), name=name)
+                if accumulate:
+                    flat_up_x = g.op.ScatterElements(
+                        flat_x, indices_1d, expanded, name=name, reduction="add"
+                    )
+                else:
+                    flat_up_x = g.op.ScatterElements(flat_x, indices_1d, expanded, name=name)
+                g.set_type(flat_up_x, g.get_type(x))
+
+                res = g.op.Reshape(flat_up_x, shape_x, name=name, outputs=outputs)
+                if not sts:
+                    g.set_type(res, g.get_type(x))
+                    g.set_shape(res, g.get_shape(x))
+                return res
+
+            raise AssertionError(
+                f"No implementation for index_put when indices={indices}, "
+                f"rk(x)={g.get_rank(x)}, rk(values)={g.get_rank(values)} "
+                f"{g.get_debug_msg()}"
+            )
+
+    raise AssertionError(
+        f"No implementation for index_put when indices={indices}{g.get_debug_msg()}"
+    )
 
 
 def aten_instance_norm(
@@ -5240,7 +5468,7 @@ def aten_scaled_dot_product_attention(
     attn_mask: Optional[T] = None,
     dropout_p: float = 0.0,
     is_causal: bool = False,
-    scale: Optional[T] = None,
+    scale: Optional[float] = None,
     enable_gqa: bool = False,
     name: str = "aten_scaled_dot_product_attention",
 ):

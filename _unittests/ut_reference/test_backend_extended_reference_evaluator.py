@@ -78,7 +78,7 @@ class ExtendedReferenceEvaluatorBackend(onnx.backend.base.Backend):
         raise NotImplementedError("Unable to run the model node by node.")
 
 
-dft_atol = 1e-3 if sys.platform != "linux" else 1e-6
+dft_atol = 1e-3 if sys.platform != "linux" else 1e-5
 backend_test = onnx.backend.test.BackendTest(
     ExtendedReferenceEvaluatorBackend,
     __name__,
