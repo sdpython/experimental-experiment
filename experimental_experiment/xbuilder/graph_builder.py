@@ -1602,6 +1602,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         shape: Optional[Tuple[int, ...]] = None,
         cst: Optional[Any] = None,
         key: Optional[Any] = None,
+        existing: bool = False,
     ):
         """
         Adds an initializer.
@@ -1612,6 +1613,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         :param shape: to overwrite the shape
         :param cst: value to send to :meth:`update_node_constant`
         :param key: used to register the initializer
+        :param existing: if True, shape and type should exist
         """
         assert name not in self.initializers_dict, (
             f"initializer {name!r} was already added (itype={itype}, shape={shape})"
@@ -1624,23 +1626,43 @@ class GraphBuilder(_GraphBuilderRuntime):
                 if is_proto
                 else tuple(int(i) for i in value.shape)
             )
-        self.set_shape(name, shape)
         if itype is None:
             itype = (
                 self._get_tensor_type(value)
                 if is_proto
-                else torch_dtype_to_onnx_dtype(value.dtype)
+                else dtype_to_tensor_dtype(value.dtype)
             )
-        self.set_type(name, itype)
-        self.set_name(name)
+        if existing:
+            assert self.has_name(name), (
+                f"value {name!r} is replaced by an initializer "
+                f"already exists{self.get_debug_msg()}"
+            )
+            assert not self.has_type(name) or itype == self.get_type(name), (
+                f"Type mismatch for {name!r}, existing type {self.get_type(name)}, "
+                f"new type {itype}{self.get_debug_msg()}"
+            )
+            assert not self.has_shape(name) or itype == self.get_shape(name), (
+                f"Type mismatch for {name!r}, existing shape "
+                f"{self.get_shape(name)}, new shape {shape}{self.get_debug_msg()}"
+            )
+            self.set_shape(name, shape)
+            self.set_type(name, itype)
+        else:
+            assert not self.has_name(
+                name
+            ), f"initializer {name!r} already exists{self.get_debug_msg()}"
+            self.set_shape(name, shape)
+            self.set_type(name, itype)
+            self.set_name(name)
+            self._unique_names.add(name)
+
         self.initializers_dict[name] = value
+        if cst is None and isinstance(value, NodeProto):
+            cst = value
         self.update_node_constant(name, cst)
-        if self.verbose and (
-            self.verbose > 2 or (self.verbose > 1 and np.prod(value.shape) > 100)
-        ):
+        if self.verbose and (self.verbose > 3 or (self.verbose > 2 and np.prod(shape) > 100)):
             print(f"[GraphBuilder-{self._hash()}.make_initializer] {name}[{itype}:{shape}]")
 
-        self._unique_names.add(name)
         if key is None:
             key = self.make_key(value)
         if key not in self._values:
@@ -4047,7 +4069,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                             f"{[type(i) for i in feeds.values()]})"
                             f"{self.get_debug_msg()}"
                         )
-                        self.add_initializer(name, value)
+                        self.add_initializer(name, value, existing=True)
                     else:
                         updates[name] = v
                     if self.verbose > 3:
