@@ -1,5 +1,9 @@
 import unittest
-from experimental_experiment.ext_test_case import ExtTestCase, requires_transformers
+from experimental_experiment.ext_test_case import (
+    ExtTestCase,
+    requires_transformers,
+    skipif_ci_windows,
+)
 from experimental_experiment.torch_interpreter.onnx_export_errors import (
     bypass_export_some_errors,
 )
@@ -32,6 +36,28 @@ class TestOnnxExportErrors(ExtTestCase):
             self.assertEqual(cache.conv_kernel_size, cache2.conv_kernel_size)
             self.assertEqualArray(cache.conv_states, cache2.conv_states)
             self.assertEqualArray(cache.ssm_states, cache2.ssm_states)
+
+    @requires_transformers("4.43")
+    @skipif_ci_windows("not working on Windows")
+    def test_exportable_mamba_cache(self):
+        import torch
+        from transformers.models.mamba.modeling_mamba import MambaCache
+
+        class _config:
+            def __init__(self):
+                self.intermediate_size = 16
+                self.state_size = 16
+                self.conv_kernel = 16
+                self.num_hidden_layers = 16
+                self.dtype = torch.float16
+
+        class Model(torch.nn.Module):
+            def forward(self, x):
+                cache = MambaCache(_config(), batch_size=1)
+                return cache.conv_states + x
+
+        with bypass_export_some_errors():
+            torch.export.export(Model(), (torch.ones(16, 16),))
 
 
 if __name__ == "__main__":

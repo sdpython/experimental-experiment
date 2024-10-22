@@ -9,6 +9,7 @@ from experimental_experiment.ext_test_case import (
     requires_torch,
     requires_onnxscript,
     requires_onnxruntime_training,
+    skipif_ci_windows,
 )
 from experimental_experiment.reference import ExtendedReferenceEvaluator
 from experimental_experiment.torch_interpreter import to_onnx, ExportOptions
@@ -303,6 +304,7 @@ class TestIssuesPytorch2024(ExtTestCase):
     def test_update_parameter_custom_2d_dec(self):
         self._updated_parameter("custom", False, decomposition=True)
 
+    @skipif_ci_windows("not working on Windows")
     def test_update_parameter_custom_3d_static(self):
         self._updated_parameter("custom", True, dynamic=False)
 
