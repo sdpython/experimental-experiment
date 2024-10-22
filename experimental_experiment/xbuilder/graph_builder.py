@@ -1593,7 +1593,9 @@ class GraphBuilder(_GraphBuilderRuntime):
         self.set_name(name)
         self.initializers_dict[name] = value
         self.update_node_constant(name, None)
-        if self.verbose and (self.verbose > 1 or np.prod(value.shape) > 100):
+        if self.verbose and (
+            self.verbose > 2 or (self.verbose > 1 and np.prod(value.shape) > 100)
+        ):
             print(f"[GraphBuilder-{self._hash()}.make_initializer] {name}[{itype}:{shape}]")
         if key:
             self._values[key] = name
@@ -3254,8 +3256,17 @@ class GraphBuilder(_GraphBuilderRuntime):
         #         cloned_node = graph_module.graph.call_method("clone", args=(node.target,))
         #         node.replace_all_uses_with(cloned_node)
         # graph_module.recompile()
+        if self.verbose and len(graph_module.graph.nodes) > 100:
+            try:
+                import tqdm
 
-        for i, node in enumerate(graph_module.graph.nodes):
+                loop = tqdm.tqdm(list(enumerate(graph_module.graph.nodes)))
+            except ImportError:
+                loop = enumerate(graph_module.graph.nodes)
+        else:
+            loop = enumerate(graph_module.graph.nodes)
+
+        for i, node in loop:
             self._debug_msg["process.progress"] = (
                 f"node {i}/{len(graph_module.graph.nodes)} target={node.target}"
             )

@@ -169,7 +169,7 @@ class ExportOptions:
             return None
 
         if verbose:
-            print(f"[ExportOptions.export]  {self!r}")
+            print(f"[ExportOptions.export] {self!r}")
             begin = time.perf_counter()
 
         if self.dynamo:

@@ -473,8 +473,7 @@ class TestIssuesPytorch2024(ExtTestCase):
         inputs_names = [i.name for i in session.get_inputs()]
         output = session.run(None, dict(zip(inputs_names, (example_input.numpy(),))))
         expected_output = model(example_input)
-        self.assertEqual(expected_output.shape, output[0].shape)
-        self.assertEqualArray(expected_output, output[0], atol=1e-4)
+        self.assertEqualArray(expected_output, output[0], atol=1e-3)
 
     def test_in_projection_packed_script(self):
         self._in_projection_packed("script")

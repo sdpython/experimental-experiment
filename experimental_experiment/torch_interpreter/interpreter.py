@@ -404,22 +404,33 @@ class DynamoInterpreter:
                 if a is None:
                     a_name = None
                     o = f"{output_name}_{i}"
-                else:
-                    assert not isinstance(a, int), (
-                        f"Unexpected type int in output[{i}], outputs={output}, "
-                        f"node={node}{self.builder.get_debug_msg()}"
+                    cst = None
+                elif isinstance(a, int):
+                    # The model seems to return an integer.
+                    o = f"{output_name}_INT_{i}"
+                    a_name = None
+                    cst = self.builder.make_node(
+                        "Constant", [], [o], value_int=a, name=".output_INT_{a}"
                     )
+                    self.builder.set_type(o, TensorProto.INT64)
+                    self.builder.set_shape(o, tuple())
+                else:
+                    cst = None
                     a_name = a if isinstance(a, str) else a.name
                     if self.builder.get_is_dimension(a_name, n_outputs=len(output)):
                         o = f"{output_name}_dim_{i}"
                     else:
                         o = f"{output_name}_{i}"
+
                 if a_name is None:
                     # the gradient may need unused output
-                    o = f"{output_name}_NONE_{i}"
-                    self.builder.make_node(
-                        "Constant", [], [o], value_float=0.0, name=".output"
-                    )
+                    if cst is None:
+                        o = f"{output_name}_NONE_{i}"
+                        self.builder.make_node(
+                            "Constant", [], [o], value_float=0.0, name=".output_NONE"
+                        )
+                        self.builder.set_type(o, TensorProto.FLOAT)
+                        self.builder.set_shape(o, tuple())
                     outputs.append((None, o))
                 else:
                     self.builder.make_node(
