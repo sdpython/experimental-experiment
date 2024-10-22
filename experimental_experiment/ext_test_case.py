@@ -434,14 +434,17 @@ class ExtTestCase(unittest.TestCase):
                 raise AssertionError(msg) from e
             raise
 
-    def assertEqual(self, expected: Any, value: Any):
+    def assertEqual(self, expected: Any, value: Any, msg: str = ""):
         "Overwrites the error message to get a more explicit message about what is what."
-        try:
-            super().assertEqual(expected, value)
-        except AssertionError as e:
-            raise AssertionError(  # noqa: B904
-                f"expected is {expected!r}, value is {value!r}\n{e}"
-            )
+        if msg:
+            super().assertEqual(expected, value, msg)
+        else:
+            try:
+                super().assertEqual(expected, value)
+            except AssertionError as e:
+                raise AssertionError(  # noqa: B904
+                    f"expected is {expected!r}, value is {value!r}\n{e}"
+                )
 
     def assertAlmostEqual(
         self,

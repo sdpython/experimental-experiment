@@ -150,6 +150,30 @@ class TestTorchExportExport(ExtTestCase):
     @skipif_ci_windows("not available on Windows")
     @skipif_ci_apple("not able to fix it")
     @requires_torch("2.5")
+    def test_mark_static_address(self):
+
+        class Model(torch.nn.Module):
+            def forward(self, a, cst):
+                torch._dynamo.mark_static_address(cst)
+                if torch.jit.isinstance(a, torch.Tensor):
+                    return a + cst
+                else:
+                    return a - cst
+
+        model = Model()
+
+        a = torch.rand(8, 8, dtype=torch.float16)
+        cst = torch.rand(8, 8, dtype=torch.float16)
+        expected = model(a, cst)
+        with bypass_export_some_errors():
+            export = torch.export.export(model, (a, cst))
+        module = export.module()
+        got = module(a, cst)
+        self.assertEqualArray(expected, got)
+
+    @skipif_ci_windows("not available on Windows")
+    @skipif_ci_apple("not able to fix it")
+    @requires_torch("2.5")
     @requires_monai()
     @ignore_warnings(DeprecationWarning)
     @hide_stdout()
