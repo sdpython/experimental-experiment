@@ -1615,10 +1615,6 @@ class GraphBuilder(_GraphBuilderRuntime):
         :param key: used to register the initializer
         :param existing: if True, shape and type should exist
         """
-        assert name not in self.initializers_dict, (
-            f"initializer {name!r} was already added (itype={itype}, shape={shape})"
-            f"{self.get_debug_msg()}"
-        )
         is_proto = isinstance(value, (TensorProto, NodeProto))
         if shape is None:
             shape = (
@@ -1633,6 +1629,10 @@ class GraphBuilder(_GraphBuilderRuntime):
                 else dtype_to_tensor_dtype(value.dtype)
             )
         if existing:
+            assert name in self.initializers_dict, (
+                f"initializer {name!r} not found (itype={itype}, shape={shape})"
+                f"{self.get_debug_msg()}"
+            )
             assert self.has_name(name), (
                 f"value {name!r} is replaced by an initializer "
                 f"already exists{self.get_debug_msg()}"
@@ -1648,6 +1648,10 @@ class GraphBuilder(_GraphBuilderRuntime):
             self.set_shape(name, shape)
             self.set_type(name, itype)
         else:
+            assert name not in self.initializers_dict, (
+                f"initializer {name!r} was already added (itype={itype}, shape={shape})"
+                f"{self.get_debug_msg()}"
+            )
             assert not self.has_name(
                 name
             ), f"initializer {name!r} already exists{self.get_debug_msg()}"
@@ -3933,7 +3937,7 @@ class GraphBuilder(_GraphBuilderRuntime):
             if only_array and isinstance(value, TensorProto):
                 # Should reuse memory buffer here.
                 v = onh.to_array(value)
-                self.add_initializer(name, v)
+                self.add_initializer(name, v, existing=True)
                 return v, None
             return value, None
 
