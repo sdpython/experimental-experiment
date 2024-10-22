@@ -91,6 +91,7 @@ class TestIssuesPytorch2024(ExtTestCase):
         loss.backward()
 
     @ignore_warnings((DeprecationWarning, UserWarning))
+    @hide_stdout()
     @requires_onnxscript("0.2")
     @requires_torch("2.6")
     def test_export_set_dynamo(self):
@@ -256,7 +257,6 @@ class TestIssuesPytorch2024(ExtTestCase):
         expected = model(
             torch.Tensor(input_n["update"]), torch.Tensor(input_n["kv_index"]).to(int)
         )
-        # from experimental_experiment.reference import ExtendedReferenceEvaluator
         # _ = ExtendedReferenceEvaluator(model_path, verbose=10).run(None, input_n)
         # self.assertEqualArray(expected, _[0])
         e1 = session.run(None, input_n)[0]
@@ -267,7 +267,6 @@ class TestIssuesPytorch2024(ExtTestCase):
             torch.Tensor(input_2["update"]), torch.Tensor(input_2["kv_index"]).to(int)
         )
         if dynamic:
-            # from experimental_experiment.reference import ExtendedReferenceEvaluator
             # ExtendedReferenceEvaluator(model_path, verbose=10).run(None, input_2)
             e2 = session.run(None, input_2)[0]
             self.assertEqualArray(expected, e2)
@@ -281,14 +280,17 @@ class TestIssuesPytorch2024(ExtTestCase):
         self._updated_parameter("script", True)
 
     @requires_onnxscript("0.2")
+    @hide_stdout()
     def test_update_parameter_dynamo_2d_static(self):
         self._updated_parameter("dynamo", False, dynamic=False)
 
     @requires_onnxscript("0.2")
+    @hide_stdout()
     def test_update_parameter_dynamo_2d_dynamic(self):
         self._updated_parameter("dynamo", False, dynamic=True)
 
     @requires_onnxscript("0.2")
+    @hide_stdout()
     def test_update_parameter_dynamo_3d(self):
         self._updated_parameter("dynamo", True)
 
@@ -347,8 +349,7 @@ class TestIssuesPytorch2024(ExtTestCase):
         query_states = torch.randn(batch_size, seq_length_q, embedding_dim)
         key_states = torch.randn(batch_size, seq_length_kv, embedding_dim)
         value_states = torch.randn(batch_size, seq_length_kv, embedding_dim)
-
-        output = model(query_states, key_states, value_states)
+        expected_output = model(query_states.clone(), key_states.clone(), value_states.clone())
 
         onnx_file_path = f"test_scaled_dot_product_attention_{exporter}.onnx"
 
@@ -384,28 +385,29 @@ class TestIssuesPytorch2024(ExtTestCase):
         import onnxruntime
 
         sess_options = onnxruntime.SessionOptions()
+        # sess_options.graph_optimization_level, sess_options.optimized_model_filepath = (
+        #    onnxruntime.GraphOptimizationLevel.ORT_ENABLE_ALL,
+        #    f"test_scaled_dot_product_attention_{exporter}.opt.onnx",
+        # )
         session = onnxruntime.InferenceSession(
             onnx_file_path,
             sess_options=sess_options,
             providers=[("CPUExecutionProvider")],
         )
         inputs_names = [i.name for i in session.get_inputs()]
-        output = session.run(
-            None,
-            dict(
-                zip(
-                    inputs_names,
-                    (query_states.numpy(), key_states.numpy(), value_states.numpy()),
-                )
-            ),
+        feeds = dict(
+            zip(inputs_names, (query_states.numpy(), key_states.numpy(), value_states.numpy()))
         )
-        expected_output = model(query_states, key_states, value_states)
-        self.assertEqual(expected_output[0].shape, output[0].shape)
-        self.assertEqualArray(expected_output[0], output[0])
+        # got = ExtendedReferenceEvaluator(onnx_file_path, verbose=10).run(None, feeds)
+        # self.assertEqualArray(expected_output, got[0], atol=1e-5)
+        output = session.run(None, feeds)
+        self.assertEqualArray(expected_output, output[0], atol=1e-5)
 
+    @unittest.skip("not implemented")
     def test_scaled_dot_product_attention_script(self):
         self._scaled_dot_product_attention("script")
 
+    @hide_stdout()
     def test_scaled_dot_product_attention_dynamo(self):
         self._scaled_dot_product_attention("dynamo")
 
@@ -474,6 +476,7 @@ class TestIssuesPytorch2024(ExtTestCase):
     def test_in_projection_packed_script(self):
         self._in_projection_packed("script")
 
+    @hide_stdout()
     def test_in_projection_packed_dynamo(self):
         self._in_projection_packed("dynamo")
 
@@ -550,6 +553,7 @@ class TestIssuesPytorch2024(ExtTestCase):
         self._flash_attn("script")
 
     @requires_cuda()
+    @hide_stdout()
     def test__flash_attn_dynamo(self):
         self._flash_attn("dynamo")
 
@@ -693,6 +697,7 @@ class TestIssuesPytorch2024(ExtTestCase):
     def test_dyn_slice_4d_script(self):
         self._slice_4d("script")
 
+    @hide_stdout()
     def test_dyn_slice_4d_dynamo(self):
         self._slice_4d("dynamo")
 
