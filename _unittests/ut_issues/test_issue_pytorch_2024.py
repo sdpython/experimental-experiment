@@ -1,3 +1,4 @@
+import itertools
 import unittest
 import numpy as np
 import onnx
@@ -220,7 +221,9 @@ class TestIssuesPytorch2024(ExtTestCase):
                 model_path,
                 input_names=["update", "kv_index"],
                 output_names=["updated"],
-                dynamic_axes={"update": {0: "n"}} if dynamic else None,
+                dynamic_shapes=(
+                    {"update": {0: torch.export.Dim("n")}, "kv_index": {}} if dynamic else None
+                ),
                 verbose=False,
                 dynamo=True,
             )
@@ -274,42 +277,42 @@ class TestIssuesPytorch2024(ExtTestCase):
             self.assertEqualArray(expected, e2)
 
     @unittest.skip("index_put fails with torch_script")
-    def test_update_parameter_script_2d(self):
+    def test_index_put_update_parameter_script_2d(self):
         self._updated_parameter("script", False)
 
     @unittest.skip("index_put fails with torch_script")
-    def test_update_parameter_script_3d(self):
+    def test_index_put_update_parameter_script_3d(self):
         self._updated_parameter("script", True)
 
     @requires_onnxscript("0.2")
     @hide_stdout()
-    def test_update_parameter_dynamo_2d_static(self):
+    def test_index_put_update_parameter_dynamo_2d_static(self):
         self._updated_parameter("dynamo", False, dynamic=False)
 
     @requires_onnxscript("0.2")
     @hide_stdout()
-    def test_update_parameter_dynamo_2d_dynamic(self):
+    def test_index_put_update_parameter_dynamo_2d_dynamic(self):
         self._updated_parameter("dynamo", False, dynamic=True)
 
     @requires_onnxscript("0.2")
     @hide_stdout()
-    def test_update_parameter_dynamo_3d(self):
+    def test_index_put_update_parameter_dynamo_3d(self):
         self._updated_parameter("dynamo", True)
 
-    def test_update_parameter_custom_2d_static(self):
+    def test_index_put_update_parameter_custom_2d_static(self):
         self._updated_parameter("custom", False, dynamic=False)
 
-    def test_update_parameter_custom_2d_dynamic(self):
+    def test_index_put_update_parameter_custom_2d_dynamic(self):
         self._updated_parameter("custom", False, dynamic=True)
 
-    def test_update_parameter_custom_2d_dec(self):
+    def test_index_put_update_parameter_custom_2d_dec(self):
         self._updated_parameter("custom", False, decomposition=True)
 
     @skipif_ci_windows("not working on Windows")
-    def test_update_parameter_custom_3d_static(self):
+    def test_index_put_update_parameter_custom_3d_static(self):
         self._updated_parameter("custom", True, dynamic=False)
 
-    def test_update_parameter_custom_3d_dynamic(self):
+    def test_index_put_update_parameter_custom_3d_dynamic(self):
         self._updated_parameter("custom", True, dynamic=True)
 
     def _scaled_dot_product_attention(self, exporter):
@@ -663,6 +666,7 @@ class TestIssuesPytorch2024(ExtTestCase):
                 export_params=True,
             )
         elif exporter == "dynamo":
+            batch = torch.export.Dim("batch", min=1, max=1024)
             torch.onnx.export(
                 model,
                 (example_input,),
@@ -670,7 +674,7 @@ class TestIssuesPytorch2024(ExtTestCase):
                 input_names=["input"],
                 output_names=["output"],
                 dynamo=True,
-                dynamic_axes={"input": {0: "batch_size"}},
+                dynamic_shapes={"input": {0: batch}},
                 fallback=False,
             )
         else:
@@ -724,9 +728,9 @@ class TestIssuesPytorch2024(ExtTestCase):
 
         model = UpdateModel()
         example_inputs = (
-            torch.ones((2, 2, 10)).to(torch.float32),
-            torch.arange(2).to(torch.float32).reshape((2, 1, 1)),
-            torch.Tensor([1]).to(torch.int32),
+            torch.ones((4, 4, 10)).to(torch.float32),
+            (torch.arange(2) + 10).to(torch.float32).reshape((1, 1, 2)),
+            torch.Tensor([1, 2]).to(torch.int32),
         )
         expected = model(*example_inputs)
         onnx_file_path = f"test_index_put_ellipsis_{exporter}.onnx"
@@ -786,6 +790,135 @@ class TestIssuesPytorch2024(ExtTestCase):
 
     def test_index_put_ellipsis(self):
         self._index_put_ellipsis("custom")
+
+    def _index_put_no_none(self, exporter, d3, decomposition=False, dynamic=False):
+        # https://github.com/pytorch/pytorch/issues/135233
+
+        import torch
+
+        if d3:
+
+            class UpdateModel(torch.nn.Module):
+
+                def __init__(self):
+                    super().__init__()
+                    self.params = torch.zeros((4, 4, 10))
+
+                def forward(self, update, index1, index2):
+                    copy = self.params.clone()
+                    copy[
+                        index1, torch.from_numpy(np.array([1, 2], dtype=np.int64)), index2
+                    ] = update
+                    return copy
+
+            model = UpdateModel()
+
+        else:
+
+            class UpdateModel(torch.nn.Module):
+
+                def __init__(self):
+                    super().__init__()
+                    self.params = torch.zeros((4, 10))
+
+                def forward(self, update, index1, index2):
+                    copy = self.params.clone()
+                    copy[index1, index2] = update
+                    return copy
+
+            model = UpdateModel()
+
+        update = (torch.arange(2) + 10).reshape((2,)).to(torch.float32)
+        index1 = torch.from_numpy(np.array([1, 2])).to(torch.int64)
+        index2 = torch.from_numpy(np.array([7, 8])).to(torch.int64)
+        model(update, index1, index2)
+
+        model_path = (
+            f"test_index_put_no_node_{exporter}_d{3 if d3 else 2}"
+            f"D{1 if decomposition else 0}-{'dyn' if dynamic else 'sta'}.onnx"
+        )
+
+        if exporter == "script":
+            torch.onnx.export(
+                model,
+                (update, index1, index2),
+                model_path,
+                input_names=["update", "index1", "index2"],
+                output_names=["updated"],
+                dynamic_axes={"update": {0: "n"}} if dynamic else None,
+                opset_version=13,
+                verbose=False,
+            )
+        elif exporter == "dynamo":
+            dn = torch.export.Dim("n")
+            torch.onnx.export(
+                model,
+                (update, index1, index2),
+                model_path,
+                input_names=["update", "index1", "index2"],
+                output_names=["updated"],
+                dynamic_shapes=(
+                    {"update": {0: dn}, "index1": {0: dn}, "index2": {0: dn}}
+                    if dynamic
+                    else None
+                ),
+                verbose=False,
+                dynamo=True,
+            )
+        else:
+            export_options = (
+                ExportOptions(decomposition_table="all") if decomposition else None
+            )
+            dn = torch.export.Dim("n")
+            to_onnx(
+                model,
+                (update, index1, index2),
+                filename=model_path,
+                export_options=export_options,
+                dynamic_shapes=(
+                    {"update": {0: dn}, "index1": {0: dn}, "index2": {0: dn}}
+                    if dynamic
+                    else None
+                ),
+                verbose=0,
+                optimize=True,
+            )
+
+        check_model(model_path)
+
+        import onnxruntime
+
+        sess_options = onnxruntime.SessionOptions()
+        session = onnxruntime.InferenceSession(
+            model_path, sess_options=sess_options, providers=[("CPUExecutionProvider")]
+        )
+
+        input_n = dict(
+            zip(
+                ["update", "index1", "index2"],
+                [update.numpy(), index1.numpy(), index2.numpy()],
+            )
+        )
+        expected = model(update, index1, index2)
+        # _ = ExtendedReferenceEvaluator(model_path, verbose=10).run(None, input_n)
+        # self.assertEqualArray(expected, _[0])
+        e1 = session.run(None, input_n)[0]
+        self.assertEqualArray(expected, e1)
+
+    @ignore_warnings(UserWarning)
+    def test_index_put_no_none(self):
+        for exporter, d3, decomposition, dynamic in itertools.product(
+            ["custom", "onnx_dynamo", "torch_script"],
+            [True, False],
+            [False, True],
+            [False, True],
+        ):
+            with self.subTest(
+                exporter=exporter, d3=d3, decomposition=decomposition, dynamic=dynamic
+            ):
+                self._index_put_no_none(
+                    exporter=exporter, d3=d3, decomposition=decomposition, dynamic=dynamic
+                )
 
 
 if __name__ == "__main__":

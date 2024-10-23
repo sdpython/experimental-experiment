@@ -4304,6 +4304,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                     itype=self.get_type(k),
                     shape=self.get_shape(k),
                     cst=self.constants_[k],
+                    existing=None,
                 )
                 del self.initializers_dict[k]
                 del self.constants_[k]

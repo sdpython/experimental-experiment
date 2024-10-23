@@ -102,8 +102,10 @@ def prims_broadcast_in_dim(
         if x != -1:
             uns.append(idx)
 
-    unsqueezed = g.op.UnsqueezeAnyOpset(
-        a, np.array(uns, dtype=np.int64), name="broadcast_in_dim"
+    unsqueezed = (
+        g.op.UnsqueezeAnyOpset(a, np.array(uns, dtype=np.int64), name="broadcast_in_dim")
+        if len(uns) > 0
+        else a
     )
     res = g.op.Expand(
         unsqueezed,
