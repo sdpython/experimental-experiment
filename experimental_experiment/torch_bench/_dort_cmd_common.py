@@ -480,6 +480,7 @@ def dort_args(name: str, description: str, new_args: Optional[List[str]] = None)
         with_mask=("1", "with or without mask, dynamo may fail with a mask"),
         ort_optimize=("1", "enable or disable onnxruntime optimization"),
         order=("none", "optimization order see class OrderAlgorithm, none by default"),
+        memory_spy=("1", "enable, disable memory monitoring"),
         shape_scenario=(
             "",
             "shapes to use, 2x1024 by default, 'batch' to get "
@@ -490,7 +491,7 @@ def dort_args(name: str, description: str, new_args: Optional[List[str]] = None)
             "output_data_multi.csv",
             "when running multiple configuration, save the results in that file",
         ),
-        expose="backend,repeat,warmup,device,num_hidden_layers,"
+        expose="backend,repeat,warmup,device,num_hidden_layers,memory_spy,"
         "mixed,export,config,target_opset,dynamic,verbose,dump_folder,shape_scenario"
         "enable_pattern,disable_pattern,model,optimize,with_mask,order,output_data",
         new_args=new_args,

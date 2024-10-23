@@ -720,11 +720,11 @@ class TestIssuesPytorch2024(ExtTestCase):
 
         class UpdateModel(torch.nn.Module):
             def forward(
-                self, values: torch.Tensor, update: torch.Tensor, kv_index: torch.LongTensor
+                self, x: torch.Tensor, update: torch.Tensor, kv_index: torch.LongTensor
             ):
-                values = values.clone()
-                values[..., kv_index] = update
-                return values
+                x = x.clone()
+                x[..., kv_index] = update
+                return x
 
         model = UpdateModel()
         example_inputs = (
@@ -778,7 +778,7 @@ class TestIssuesPytorch2024(ExtTestCase):
                 fallback=False,
             )
         else:
-            to_onnx(model, example_inputs, filename=onnx_file_path)
+            to_onnx(model, example_inputs, filename=onnx_file_path, optimize=False)
 
         onx = onnx.load(onnx_file_path)
         # ref = ExtendedReferenceEvaluator(onnx_file_path)

@@ -1603,6 +1603,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         cst: Optional[Any] = None,
         key: Optional[Any] = None,
         existing: bool = False,
+        allow_empty: bool = False,
     ):
         """
         Adds an initializer.
@@ -1613,7 +1614,9 @@ class GraphBuilder(_GraphBuilderRuntime):
         :param shape: to overwrite the shape
         :param cst: value to send to :meth:`update_node_constant`
         :param key: used to register the initializer
-        :param existing: if True, shape and type should exist
+        :param existing: if True, shape and type should exist,
+            if False, it should not exist, if None, both case are allowed
+        :param allow_empty: allow empty tensor anyway
         """
         is_proto = isinstance(value, (TensorProto, NodeProto))
         if shape is None:
@@ -1629,7 +1632,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                 else dtype_to_tensor_dtype(value.dtype)
             )
         if existing:
-            assert len(shape) == 0 or min(shape) > 0, (
+            assert allow_empty or len(shape) == 0 or min(shape) > 0, (
                 f"Initializer {name!r} has an empty shape={shape}, itype={itype}, "
                 f"existing shape={self.get_shape(name) if self.has_shape(name) else '?'}, "
                 f"type={type(value)}{self.get_debug_msg()}"
@@ -1649,7 +1652,7 @@ class GraphBuilder(_GraphBuilderRuntime):
             self.set_shape(name, shape)
             self.set_type(name, itype)
         else:
-            assert len(shape) == 0 or min(shape) > 0, (
+            assert allow_empty or len(shape) == 0 or min(shape) > 0, (
                 f"Initializer {name!r} has an empty shape={shape}, itype={itype}, "
                 f"type={type(value)}{self.get_debug_msg()}"
             )
@@ -2765,7 +2768,9 @@ class GraphBuilder(_GraphBuilderRuntime):
         elif node.op_type == "Reshape":
             self.set_type(node.output[0], self.get_type(node.input[0]))
             if self.is_constant(node.input[1]):
-                cst, _ = self.compute_constant(node.input[1], exc=False, only_array=True)
+                cst, _ = self.compute_constant(
+                    node.input[1], exc=False, only_array=True, allow_empty=True
+                )
                 if cst is not None:
                     shape_cst = tuple(int(i) for i in cst)
                     if -1 in shape_cst:
@@ -3924,7 +3929,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         return start - len(self.nodes)
 
     def compute_constant(
-        self, name: str, exc: bool = True, only_array: bool = False
+        self, name: str, exc: bool = True, only_array: bool = False, allow_empty: bool = False
     ) -> Tuple[np.ndarray, Optional[Dict[str, np.ndarray]]]:
         """
         Computes a constant.
@@ -3932,6 +3937,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         :param name: constant name
         :param exc: raises an exception if any failure
         :param only_array: do not return TensorProto
+        :param allow_empty: allow empty result
         :return: constant
         """
         assert self.is_constant(name), f"Name {name!r} is not a constant"
@@ -3943,7 +3949,7 @@ class GraphBuilder(_GraphBuilderRuntime):
             if only_array and isinstance(value, TensorProto):
                 # Should reuse memory buffer here.
                 v = onh.to_array(value)
-                self.add_initializer(name, v, existing=True)
+                self.add_initializer(name, v, existing=True, allow_empty=allow_empty)
                 return v, None
             return value, None
 
@@ -4778,9 +4784,9 @@ class GraphBuilder(_GraphBuilderRuntime):
             self.ir_version = proto.ir_version
         self.nodes = list(proto.graph.node)
         for i in proto.graph.initializer:
-            self.add_initializer(i.name, i)
+            self.add_initializer(i.name, i, allow_empty=True)
         for i in proto.graph.sparse_initializer:
-            self.add_initializer(i.name, i)
+            self.add_initializer(i.name, i, allow_empty=True)
         self.functions = {}
         for f in proto.functions:
             self.functions[f.domain, f.name] = f

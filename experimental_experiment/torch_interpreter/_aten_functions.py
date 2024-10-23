@@ -351,7 +351,10 @@ def aten_arange(
         rk = g.get_rank(a)
         if rk == 1:
             # It must be a scalar.
-            a = g.op.Reshape(a, np.array([], dtype=np.int64), name=name)
+            dt = g.get_type(a)
+            a = g.op.SqueezeAnyOpset(a, np.array([0], dtype=np.int64), name=name)
+            g.set_type(a, dt)
+            g.set_shape(a, tuple())
         gi = g.get_type(a)
         if gi == it:
             return a
@@ -3111,8 +3114,7 @@ def aten_index_put(
 
             res = g.op.Reshape(flat_up_x, shape_x, name=name, outputs=outputs)
             if not sts:
-                g.set_type(res, g.get_type(x))
-                g.set_shape(res, g.get_shape(x))
+                set_type_shape_unary_op(g, res, x)
             return res
 
         raise AssertionError(
@@ -3198,15 +3200,6 @@ def aten_index_put(
                 ind0_ = g.op.Reshape(ind0, np.array([-1, 1, 1], dtype=np.int64), name=name)
                 ind1_ = g.op.Reshape(ind1, np.array([1, -1, 1], dtype=np.int64), name=name)
                 ind2_ = g.op.Reshape(ind2, np.array([1, 1, -1], dtype=np.int64), name=name)
-                indices_3d = g.op.Add(
-                    g.op.Add(
-                        g.op.Mul(ind0_, stride_1, name=name),
-                        g.op.Mul(ind1_, stride_2, name=name),
-                        name=name,
-                    ),
-                    ind2_,
-                    name=name,
-                )
 
                 if (
                     (
@@ -3235,7 +3228,17 @@ def aten_index_put(
                         name=name,
                     )
                 expanded = g.op.Expand(values, new_shape, name=name)
+                indices_3d = g.op.Add(
+                    g.op.Add(
+                        g.op.Mul(ind0_, stride_1, name=name),
+                        g.op.Mul(ind1_, stride_2, name=name),
+                        name=name,
+                    ),
+                    ind2_,
+                    name=name,
+                )
             else:
+                expanded = values
                 indices_3d = g.op.Add(
                     g.op.Add(
                         g.op.Mul(ind0, stride_1, name=name),
@@ -3245,7 +3248,6 @@ def aten_index_put(
                     ind2,
                     name=name,
                 )
-                expanded = values
 
             indices_1d = g.op.GatherElements(
                 arange_1d,
@@ -3256,6 +3258,7 @@ def aten_index_put(
             expanded = g.op.Reshape(expanded, np.array([-1], dtype=np.int64), name=name)
 
             flat_x = g.op.Reshape(x, np.array([-1], dtype=np.int64), name=name)
+            print("*****", x, "*", flat_x, indices_1d, expanded, shape_x)
             if accumulate:
                 flat_up_x = g.op.ScatterElements(
                     flat_x, indices_1d, expanded, name=name, reduction="add"
@@ -3266,8 +3269,7 @@ def aten_index_put(
             g.set_type(flat_up_x, g.get_type(x))
             res = g.op.Reshape(flat_up_x, shape_x, name=name, outputs=outputs)
             if not sts:
-                g.set_type(res, g.get_type(x))
-                g.set_shape(res, g.get_shape(x))
+                set_type_shape_unary_op(g, res, x)
             return res
 
         def _s(ind):
