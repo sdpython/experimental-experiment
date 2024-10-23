@@ -819,7 +819,6 @@ def aten_cat(
     else:
         new_inputs = tensors
 
-    print("*****", tensors, new_inputs)
     res = g.op.Concat(*new_inputs, axis=dim, outputs=outputs, name="cat")
     if not sts:
         dt0 = g.get_type(tensors[0])
@@ -3095,7 +3094,7 @@ def aten_index_put(
                 )
             else:
                 indices_2d = g.op.Add(g.op.Mul(ind0, n_cols, name=name), ind1, name=name)
-                expanded = x
+                expanded = values
 
             indices_1d = g.op.GatherElements(
                 arange_1d,
@@ -3103,13 +3102,14 @@ def aten_index_put(
                 name=name,
             )
 
-            flat_x = g.op.Reshape(expanded, np.array([-1], dtype=np.int64), name=name)
+            expanded = g.op.Reshape(expanded, np.array([-1], dtype=np.int64), name=name)
+            flat_x = g.op.Reshape(x, np.array([-1], dtype=np.int64), name=name)
             if accumulate:
                 flat_up_x = g.op.ScatterElements(
-                    flat_x, indices_1d, values, name=name, reduction="add"
+                    flat_x, indices_1d, expanded, name=name, reduction="add"
                 )
             else:
-                flat_up_x = g.op.ScatterElements(flat_x, indices_1d, values, name=name)
+                flat_up_x = g.op.ScatterElements(flat_x, indices_1d, expanded, name=name)
             g.set_type(flat_up_x, g.get_type(x))
 
             res = g.op.Reshape(flat_up_x, shape_x, name=name, outputs=outputs)
@@ -3258,7 +3258,6 @@ def aten_index_put(
             expanded = g.op.Reshape(expanded, np.array([-1], dtype=np.int64), name=name)
 
             flat_x = g.op.Reshape(x, np.array([-1], dtype=np.int64), name=name)
-            print("*****", x, "*", flat_x, indices_1d, expanded, shape_x)
             if accumulate:
                 flat_up_x = g.op.ScatterElements(
                     flat_x, indices_1d, expanded, name=name, reduction="add"

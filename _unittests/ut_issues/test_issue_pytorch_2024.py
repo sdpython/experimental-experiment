@@ -305,6 +305,7 @@ class TestIssuesPytorch2024(ExtTestCase):
     def test_index_put_update_parameter_custom_2d_dynamic(self):
         self._updated_parameter("custom", False, dynamic=True)
 
+    @ignore_warnings(UserWarning)
     def test_index_put_update_parameter_custom_2d_dec(self):
         self._updated_parameter("custom", False, decomposition=True)
 
@@ -733,7 +734,7 @@ class TestIssuesPytorch2024(ExtTestCase):
             torch.Tensor([1, 2]).to(torch.int32),
         )
         expected = model(*example_inputs)
-        onnx_file_path = f"test_index_put_ellipsis_{exporter}.onnx"
+        onnx_file_path = f"test_index_put_ellipsis_{exporter}_3d.onnx"
 
         # with torch.no_grad():
         if exporter == "dynamo":
@@ -765,7 +766,7 @@ class TestIssuesPytorch2024(ExtTestCase):
             torch.Tensor([1]).to(torch.int32),
         )
         expected = model(*example_inputs)
-        onnx_file_path = f"test_index_put_ellipsis_{exporter}.onnx"
+        onnx_file_path = f"test_index_put_ellipsis_{exporter}_2d.onnx"
 
         # with torch.no_grad():
         if exporter == "dynamo":
