@@ -369,7 +369,12 @@ class _GraphBuilderRuntime:
                 # Type conversion between numpy and torch is not robust.
                 itype = dtype_to_tensor_dtype(v.dtype)
                 ttype = onnx_dtype_to_torch_dtype(itype)
-                x = self.torch.Tensor(v.copy()).to(ttype)
+                x = self.torch.from_numpy(v)
+                assert x.dtype == ttype, (
+                    f"Unexpected conversion from numpy {v.dtype} to "
+                    f"{x.dtype} != {ttype}{self.get_debug_msg()}"
+                )
+
                 assert "FakeTensor" not in str(type(x)), (
                     f"FakeTensor {node.output[0]!r} cannot be a constant {type(x)}, "
                     f"node.op_type={node.op_type!r}, type={self.torch.Tensor}"
@@ -400,6 +405,7 @@ class _GraphBuilderRuntime:
         assert len(res.shape) == 0 or min(res.shape) > 0, (
             f"Empty shape found {res.shape} after Slice when x.shape={data.shape}, "
             f"starts={starts}, ends={ends}, axes={axes}, steps={steps}, "
-            f"node.name={node.name!r}, input names={node.input}"
+            f"node.name={node.name!r}, input names={node.input}, "
+            f"slices={slices}"
         )
         return [res]

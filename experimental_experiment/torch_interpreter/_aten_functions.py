@@ -2331,10 +2331,15 @@ def aten_full(
     new_shape = None
 
     if isinstance(size, tuple) and all_int(size):
-        tsize = np.array(size, dtype=np.int64)
-        new_shape = size
+        if len(size) == 0:
+            tsize = None
+        else:
+            tsize = np.array(size, dtype=np.int64)
+            new_shape = size
     elif isinstance(size, (list, tuple)):
-        if all_int(size):
+        if len(size) == 0:
+            tsize = None
+        elif all_int(size):
             tsize = np.array(size, dtype=np.int64)
             new_shape = size
         else:
@@ -2362,6 +2367,15 @@ def aten_full(
         itype = dtype if isinstance(dtype, int) else torch_dtype_to_onnx_dtype(dtype)
         ntype = tensor_dtype_to_np_dtype(itype)
         value = np.array(fill_value or 0, dtype=ntype).reshape((1,))
+
+    if tsize is None:
+        # A scalar
+        v = from_array(value.squeeze())
+        res = g.op.Constant(value=v, outputs=outputs, name=name)
+        if not sts:
+            g.set_type(res, itype)
+            g.set_shape(res, tuple())
+        return res
 
     res = g.op.ConstantOfShape(tsize, value=from_array(value), outputs=outputs, name=name)
     if not sts:
