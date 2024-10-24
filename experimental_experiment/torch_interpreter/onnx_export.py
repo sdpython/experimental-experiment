@@ -576,8 +576,10 @@ def to_onnx(
     If environment variable ``PRINT_GRAPH_MODULE`` is set to one,
     information about the graph module is printed out.
 
-    Environment variable TO_ONNX_VERBOSE can be used to
+    Environment variable ``TO_ONNX_VERBOSE=1`` can be used to
     increase verbosity in this function.
+    Environment variable ``ONNX_BUILDER_PROGRESS=1`` can be used to show
+    a progress bar on big models.
     """
     if target_opset is None:
         target_opset = min(18, onnx_opset_version() - 1)
