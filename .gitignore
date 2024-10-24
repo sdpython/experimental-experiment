@@ -8,6 +8,7 @@
 *.onnx.data
 *.png
 *.csv
+*.pte
 *.nsys-rep
 *.pkl
 *.xlsx

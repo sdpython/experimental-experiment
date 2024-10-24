@@ -49,7 +49,7 @@ class TestOnnxExportAten(ExtTestCase):
                 return torch.roll(x, -1, -1)
 
         model = Model()
-        x = (torch.arange(4 * 8192) + 10).reshape((1, -1, 4)).to(torch.float32)
+        x = (torch.arange(4 * 3) + 10).reshape((1, -1, 4)).to(torch.float32)
         expected = model(x)
         model_path = self._call_exporter("test_aten_roll_neg", "custom", model, (x,))
         check_model(model_path)
@@ -86,7 +86,7 @@ class TestOnnxExportAten(ExtTestCase):
 
             def __init__(self):
                 super().__init__()
-                self.params = torch.zeros((1, 3, 4), dtype=torch.float32)
+                self.params = torch.zeros((1, 8192, 4), dtype=torch.float32)
 
             def forward(self, index, update):
                 copy = self.params.clone()

@@ -4,6 +4,7 @@ specific functionalities to this project.
 """
 
 import glob
+import importlib
 import logging
 import os
 import re
@@ -610,6 +611,11 @@ def requires_zoo(msg: str = "") -> Callable:
         msg = f"ZOO not set up or != 1. {msg}"
         return unittest.skip(msg or "zoo not installed")
     return lambda x: x
+
+
+def has_executorch(version: str, msg: str = "") -> Callable:
+    """Tells if :epkg:`ExecuTorch` is installed."""
+    return importlib.util.find_spec("executorch")
 
 
 def requires_sklearn(version: str, msg: str = "") -> Callable:
