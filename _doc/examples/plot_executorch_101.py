@@ -13,18 +13,23 @@ Convert a Model
 
 from pathlib import Path
 import torch
-from executorch.exir import (
-    EdgeProgramManager,
-    to_edge,
-    ExecutorchProgramManager,
-    ExecutorchBackendConfig,
-)
-from executorch.runtime import Verification, Runtime, Program, Method
 
-# This line is needed when executing to_backend.
-from executorch.exir.backend.test.backend_with_compiler_demo import (  # noqa
-    BackendWithCompilerDemo,
-)
+try:
+    from executorch.exir import (
+        EdgeProgramManager,
+        to_edge,
+        ExecutorchProgramManager,
+        ExecutorchBackendConfig,
+    )
+    from executorch.runtime import Verification, Runtime, Program, Method
+
+    # This line is needed when executing to_backend.
+    from executorch.exir.backend.test.backend_with_compiler_demo import (  # noqa
+        BackendWithCompilerDemo,
+    )
+except ImportError:
+    print("executorch is not installed.")
+    executorch = None
 
 
 class Neuron(torch.nn.Module):
@@ -46,20 +51,22 @@ print(exported_program.graph)
 ######################################
 # Conversion to an `EdgeProgramManager`.
 
-edge_program: EdgeProgramManager = to_edge(exported_program)
+if executorch:
+    edge_program: EdgeProgramManager = to_edge(exported_program)
 
 ######################################
 # Serializes.
 
-save_path = "plot_executorch_101.pte"
-executorch_program: ExecutorchProgramManager = edge_program.to_executorch(
-    ExecutorchBackendConfig(
-        passes=[],  # User-defined passes
+if executorch:
+    save_path = "plot_executorch_101.pte"
+    executorch_program: ExecutorchProgramManager = edge_program.to_executorch(
+        ExecutorchBackendConfig(
+            passes=[],  # User-defined passes
+        )
     )
-)
 
-with open(save_path, "wb") as file:
-    file.write(executorch_program.buffer)
+    with open(save_path, "wb") as file:
+        file.write(executorch_program.buffer)
 
 
 ########################################
@@ -81,18 +88,20 @@ with open(save_path, "wb") as file:
 # Execution
 # +++++++++
 
-et_runtime: Runtime = Runtime.get()
-program: Program = et_runtime.load_program(
-    Path("plot_executorch_101.pte"), verification=Verification.Minimal
-)
+if executorch:
+    et_runtime: Runtime = Runtime.get()
+    program: Program = et_runtime.load_program(
+        Path("plot_executorch_101.pte"), verification=Verification.Minimal
+    )
 
-print("Program methods:", program.method_names)
-forward: Method = program.load_method("forward")
+    print("Program methods:", program.method_names)
+    forward: Method = program.load_method("forward")
 
-outputs = forward.execute(inputs)
+    outputs = forward.execute(inputs)
 
 ###################
 # Let's compare.
 
-diff = torch.abs(outputs[0] - expected).max()
-print("max discrepancies:", diff)
+if executorch:
+    diff = torch.abs(outputs[0] - expected).max()
+    print("max discrepancies:", diff)
