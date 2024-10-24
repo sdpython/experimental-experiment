@@ -179,5 +179,7 @@ def string_type(obj: Any) -> str:
         return "float"
     if isinstance(obj, str):
         return "str"
+    if type(obj).__name__ == "MambaCache":
+        return "MambaCache"
 
-    raise AssertionError(f"Unsupported type {type(obj)}")
+    raise AssertionError(f"Unsupported type {type(obj).__name__!r} - {type(obj)}")

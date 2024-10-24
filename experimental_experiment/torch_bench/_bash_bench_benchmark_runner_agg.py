@@ -183,6 +183,7 @@ def merge_benchmark_reports(
         "memory_*",
         "mem_*",
         "config_*",
+        "model_*",
     ),
     formulas=(
         "export",
@@ -943,6 +944,7 @@ def _build_aggregated_document(
         "speedup_",
         "bucket_",
         "config_",
+        "model_",
     ]:
         merge = [k for k in res if k.startswith(prefix)]
         merge.sort()
@@ -982,6 +984,8 @@ def _build_aggregated_document(
             if "output_names" in c or "input_names" in c:
                 continue
             if "date" in c:
+                continue
+            if any((isinstance(_, str) and _.startswith("model_")) for _ in c):
                 continue
             cc = v[c]
             if cc.dtype == np.object_:
