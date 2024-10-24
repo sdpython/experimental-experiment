@@ -165,6 +165,10 @@ class TestDocumentationExamples(ExtTestCase):
                 # too long
                 reason = "not working yet or too long"
 
+            if not reason and name in {"plot_torch_export_101.py"}:
+                if pv.Version(".".join(tv.split(".")[:2])) < pv.Version("2.6"):
+                    reason = "requires torch 2.6"
+
             if not reason and is_apple() and name in {"plot_convolutation_matmul_102.py"}:
                 reason = "dot is missing"
 

@@ -267,7 +267,10 @@ def main(args=None):
                 f"reserved={torch.cuda.memory_reserved(0)}"
             )
 
-        memory = start_spying_on(cuda=is_cuda)
+        if args.memory_spy in ("1", 1, "True", "true", True):
+            memory = start_spying_on(cuda=is_cuda)
+        else:
+            memory = None
 
         warmup_times = []
         loss = torch.nn.MSELoss()
@@ -346,8 +349,11 @@ def main(args=None):
         print(f"times={times}")
         print(f"warmup_times={warmup_times}")
         print("-----------")
-        stat_memory = flatten(memory.stop(), prefix="memory_")
-        print(stat_memory)
+        if memory is not None:
+            stat_memory = flatten(memory.stop(), prefix="memory_")
+            print(stat_memory)
+        else:
+            stat_memory = None
 
         i_shapes = set(config_dict["input_dims"])
         if len(i_shapes) == 1:
@@ -370,8 +376,9 @@ def main(args=None):
         print(f":implementation,{args.implementation};")
         print(f":torch,{torch.__version__};")
         print(f":transformers,{transformers.__version__};")
-        for k, v in stat_memory.items():
-            print(f":{k},{v};")
+        if stat_memory:
+            for k, v in stat_memory.items():
+                print(f":{k},{v};")
         if args.backend in {"custom", "ort+", "debug"}:
             suffix = "+oo" if args.ort_optimize else ""
             print(f":patterns,+{args.enable_pattern}-{args.disable_pattern}{suffix};")
