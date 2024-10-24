@@ -163,7 +163,11 @@ class IdentityPattern(PatternOptimization):
             # simple case
             if not g.is_constant_scalar(node.input[1]):
                 return self.none(node, inspect.currentframe().f_lineno)
-            val = float(g.get_constant_scalar(node.input[1]))
+            cst = g.get_constant_scalar(node.input[1])
+            try:
+                val = float(cst)
+            except TypeError:
+                val = complex(cst)
             if val == 0 and node.op_type in {"Add", "Sub"}:
                 return MatchResult(node, [node], self.apply, insert_at=node)
             if val == 1 and node.op_type in {"Mul", "Div"}:

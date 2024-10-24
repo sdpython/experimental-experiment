@@ -5020,6 +5020,31 @@ def aten_permute(
     return g.op.Transpose(x, perm=dims, outputs=outputs, name="permute")
 
 
+def aten_polar(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    angle: T,
+    name: str = "polar",
+) -> T:
+    """polar"""
+    itype = g.get_type(x)
+    ctype = TensorProto.COMPLEX128 if itype == TensorProto.DOUBLE else TensorProto.COMPLEX64
+    j = np.array([1j], dtype=np.complex128 if itype == TensorProto.DOUBLE else np.complex64)
+    real = g.op.Cast(g.op.Cos(angle, name=name), to=ctype, name=name)
+    imag = g.op.Mul(g.op.Cast(g.op.Sin(angle, name=name), to=ctype, name=name), j, name=name)
+    res = g.op.Mul(
+        g.op.Cast(x, to=ctype, name=name),
+        g.op.Add(real, imag, name=name),
+        name=name,
+        outputs=outputs,
+    )
+    if not sts:
+        set_type_shape_binary_op(g, res, x, angle, itype=ctype)
+    return res
+
+
 def aten_pow_Scalar(
     g: GraphBuilder,
     sts: Optional[Dict[str, Any]],
