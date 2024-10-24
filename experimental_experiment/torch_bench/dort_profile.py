@@ -22,7 +22,6 @@ args = dort_args("experimental_experiment.torch_bench.dort_profile", description
 
 import os
 import time
-import onnxruntime  # noqa: F401
 import numpy as np
 from onnx_array_api.profiling import profile, profile2graph
 import torch

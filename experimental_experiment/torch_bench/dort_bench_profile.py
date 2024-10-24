@@ -34,7 +34,6 @@ args = get_parsed_args(
 
 import pickle
 import time
-import onnxruntime  # noqa: F401
 import numpy as np
 import onnx
 import matplotlib.pyplot as plt

@@ -1,4 +1,3 @@
-import onnxruntime  # noqa: F401
 import unittest
 from onnx import ModelProto
 from experimental_experiment.ext_test_case import (

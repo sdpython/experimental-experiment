@@ -1,4 +1,3 @@
-import onnxruntime  # noqa: F401
 import unittest
 from experimental_experiment.ext_test_case import (
     ExtTestCase,
@@ -50,6 +49,7 @@ class TestPhi(ExtTestCase):
 
     @requires_onnxruntime_training()
     def test_get_phi_model_mask_eager_ortmodule(self):
+        import onnxruntime
         from onnxruntime.training.ortmodule import ORTModule
         from experimental_experiment.torch_models.phi_helper import (
             get_phi_model,
@@ -66,6 +66,7 @@ class TestPhi(ExtTestCase):
 
     @requires_onnxruntime_training()
     def test_get_phi_model_mask_eager_ortmodule_backward(self):
+        import onnxruntime
         from onnxruntime.training.ortmodule import ORTModule, DebugOptions
         from experimental_experiment.torch_models.phi_helper import (
             get_phi_model,

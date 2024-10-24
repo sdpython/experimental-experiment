@@ -87,7 +87,6 @@ def main(args=None):
     else:
         import logging
         import time
-        import onnxruntime  # noqa: F401
         import numpy as np
         import torch
         import torch._dynamo.backends.registry

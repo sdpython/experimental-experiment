@@ -88,7 +88,6 @@ parsed_args = get_parsed_args(
     "implementation,with_mask,ort_optimize,verbose,order,shape_scenario",
 )
 
-import onnxruntime  # noqa: F401
 import numpy as np
 import pandas
 import matplotlib.pyplot as plt

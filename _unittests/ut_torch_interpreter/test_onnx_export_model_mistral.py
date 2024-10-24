@@ -2,7 +2,6 @@ import contextlib
 import io
 import unittest
 import warnings
-import onnxruntime  # noqa: F401
 from experimental_experiment.reference import ExtendedReferenceEvaluator
 from experimental_experiment.ext_test_case import (
     ExtTestCase,

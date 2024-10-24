@@ -4,7 +4,6 @@ import os
 import unittest
 import packaging.version as pv
 import numpy as np
-import onnxruntime  # noqa: F401
 import onnx.helper as oh
 from onnx import TensorProto, load
 from onnx.numpy_helper import from_array
@@ -17,6 +16,7 @@ from experimental_experiment.ext_test_case import (
 
 class TestCheckOrtFloat16(ExtTestCase):
     def common_scatter(self, opset, providers, dtype, reduction, expected_names):
+        import onnxruntime
         from onnxruntime import InferenceSession, SessionOptions
 
         op_type = "ScatterElements" if "ScatterElements" in expected_names else "ScatterND"

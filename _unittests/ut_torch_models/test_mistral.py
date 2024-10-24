@@ -1,4 +1,3 @@
-import onnxruntime  # noqa: F401
 import copy
 import unittest
 from typing import Optional, Tuple

@@ -7,7 +7,6 @@ import unittest
 import sys
 import numpy as np
 from onnx.onnx_cpp2py_export.shape_inference import InferenceError
-import onnxruntime  # noqa: F401
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
