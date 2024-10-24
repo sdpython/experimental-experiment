@@ -138,7 +138,7 @@ class ExportOptions:
         import torch
         from ..torch_test_helper import string_type
 
-        if self.strategy == "fallback":
+        if self.fallback or self.strategy == "fallback":
             if verbose:
                 print("[ExportOptions.export] fallback")
             tries = self.get_fallback_options()
