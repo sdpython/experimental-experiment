@@ -41,7 +41,6 @@ class TestFalconMamba(ExtTestCase):
         model = model_fct()
         with bypass_export_some_errors():
             export_program = torch.export.export(model, inputs)
-            print(export_program.graph)
             self.assertNotEmpty(export_program)
 
     @long_test()
