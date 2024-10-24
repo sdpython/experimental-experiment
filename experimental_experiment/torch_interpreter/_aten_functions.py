@@ -157,78 +157,6 @@ def aten_addcmul(
     return res
 
 
-def aten_and(
-    g: GraphBuilder,
-    sts: Optional[Dict[str, Any]],
-    outputs: List[str],
-    x: T,
-    y: T,
-    name="and",
-) -> T:
-    "and"
-    res, x, y = prepare_inputs_homogeneous_operator(
-        g, x, y, f=g.op.And, name=name, outputs=outputs, sts=sts
-    )
-    if not sts:
-        set_type_shape_binary_op(g, outputs[0], x, y)
-    return res
-
-
-def aten_and_(
-    g: GraphBuilder,
-    sts: Optional[Dict[str, Any]],
-    outputs: List[str],
-    x: T,
-    y: T,
-    name="and",
-) -> T:
-    "and"
-    return aten_and(g, sts, outputs, x, y, name="and_")
-
-
-def aten_any(
-    g: GraphBuilder,
-    sts: Optional[Dict[str, Any]],
-    outputs: List[str],
-    x: T,
-    name: str = "any",
-) -> T:
-    """any"""
-
-    if g.has_shape(x):
-        shape = g.get_shape(x)
-        if shape in (tuple(), (1,)):
-            return g.op.Cast(x, to=TensorProto.BOOL, name=name, outputs=outputs)
-
-    if g.main_opset >= 20:
-        self_bool = g.op.Cast(x, to=TensorProto.BOOL, name=name)
-        res = g.op.ReduceMax(self_bool, keepdims=0, name=name, outputs=outputs)
-    else:
-        self_int = g.op.Cast(x, to=TensorProto.INT32, name=name)
-        res = g.op.Cast(
-            g.op.ReduceMax(self_int, keepdims=0, name=name),
-            to=TensorProto.BOOL,
-            outputs=outputs,
-        )
-
-    if not sts:
-        g.set_type(res, TensorProto.BOOL)
-        g.set_shape(res, tuple())
-    return res
-
-
-def aten_logical_and(
-    g: GraphBuilder,
-    sts: Optional[Dict[str, Any]],
-    outputs: List[str],
-    x: T,
-    y: T,
-    name="and",
-) -> T:
-    "and"
-    return aten_and(g, sts, outputs, x, y, name="logical_and")
-
-
 def aten_addmm(
     g: GraphBuilder,
     sts: Optional[Dict[str, Any]],
@@ -247,11 +175,6 @@ def aten_addmm(
         g.set_type(res, g.get_type(b))
         g.set_rank(res, 2)
     return res
-
-
-def aten_alias(g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T) -> T:
-    "identity"
-    return g.make_node("Identity", [x], outputs, name="alias")
 
 
 def aten_all(g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T) -> T:
@@ -304,6 +227,11 @@ def aten_all_dim(
     return res
 
 
+def aten_alias(g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T) -> T:
+    "identity"
+    return g.make_node("Identity", [x], outputs, name="alias")
+
+
 def aten_amax(
     g: GraphBuilder,
     sts: Optional[Dict[str, Any]],
@@ -318,6 +246,114 @@ def aten_amax(
     from ._prims_functions import prims_amax
 
     return prims_amax(g, sts, outputs, x, dim, keepdim, output_dtype=output_dtype, name=name)
+
+
+def aten_and(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    y: T,
+    name="and",
+) -> T:
+    "and"
+    res, x, y = prepare_inputs_homogeneous_operator(
+        g, x, y, f=g.op.And, name=name, outputs=outputs, sts=sts
+    )
+    if not sts:
+        set_type_shape_binary_op(g, outputs[0], x, y)
+    return res
+
+
+def aten_and_(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    y: T,
+    name="and",
+) -> T:
+    "and"
+    return aten_and(g, sts, outputs, x, y, name="and_")
+
+
+def aten_logical_and(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    y: T,
+    name="and",
+) -> T:
+    "and"
+    return aten_and(g, sts, outputs, x, y, name="logical_and")
+
+
+def aten_any(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    name: str = "any",
+) -> T:
+    """any"""
+
+    if g.has_shape(x):
+        shape = g.get_shape(x)
+        if shape in (tuple(), (1,)):
+            return g.op.Cast(x, to=TensorProto.BOOL, name=name, outputs=outputs)
+
+    if g.main_opset >= 20:
+        self_bool = g.op.Cast(x, to=TensorProto.BOOL, name=name)
+        res = g.op.ReduceMax(self_bool, keepdims=0, name=name, outputs=outputs)
+    else:
+        self_int = g.op.Cast(x, to=TensorProto.INT32, name=name)
+        res = g.op.Cast(
+            g.op.ReduceMax(self_int, keepdims=0, name=name),
+            to=TensorProto.BOOL,
+            outputs=outputs,
+        )
+
+    if not sts:
+        g.set_type(res, TensorProto.BOOL)
+        g.set_shape(res, tuple())
+    return res
+
+
+def aten_any_dim(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    dim: int,
+    keepdim: bool = False,
+    name: str = "all_dim",
+) -> T:
+    "all_dim"
+    assert g.has_rank(x), f"{x!r} must have a rank{g.get_debug_msg()}"
+    rkx = g.get_rank(x)
+    if rkx == 0:
+        res = g.op.Cast(x, to=TensorProto.BOOL, outputs=outputs, name=name)
+        if not sts:
+            g.get_type(res, TensorProto.BOOL)
+            g.get_shape(res, tuple())
+        return res
+
+    res = g.op.Cast(
+        g.op.ReduceMax(
+            g.op.Cast(x, to=TensorProto.INT32, name=name),
+            np.array([dim], dtype=np.int64),
+            keepdims=1 if keepdim else 0,
+            name=name,
+        ),
+        to=TensorProto.BOOL,
+        outputs=outputs,
+        name=name,
+    )
+    if not sts:
+        g.set_type(res, TensorProto.BOOL)
+        g.set_rank(res, rkx if keepdim else (rkx - 1))
+    return res
 
 
 def aten_arange(
@@ -4889,6 +4925,17 @@ def aten_not(
     if not sts:
         set_type_shape_unary_op(g, res, x)
     return res
+
+
+def aten_logical_not(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    name="logical_not",
+) -> T:
+    "logical not"
+    return aten_not(g, sts, outputs, x, name=name)
 
 
 def aten_not_(

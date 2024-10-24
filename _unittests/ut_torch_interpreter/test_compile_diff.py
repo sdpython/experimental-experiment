@@ -37,7 +37,6 @@ class TestDynamoCompileDiff(ExtTestCase):
     @requires_torch("2.4", "onnxrt not fully implemented")
     @ignore_warnings((UserWarning, RuntimeWarning, DeprecationWarning))
     def test_standalone(self):
-        import onnxruntime  # noqa: F401
         import logging
         import onnx
         from onnx_array_api.reference import (
