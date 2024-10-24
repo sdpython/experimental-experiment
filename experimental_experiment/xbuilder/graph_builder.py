@@ -3324,6 +3324,10 @@ class GraphBuilder(_GraphBuilderRuntime):
         graph_module: "torch.f.GraphModule",  # noqa: F821
         interpreter: "Interpreter",  # noqa: F821
     ):
+        """
+        Environment variable ``ONNX_BUILDER_PROGRESS=1`` can be used to show
+        a progress bar on big models.
+        """
         self._debug_msg["process.graph_module"] = graph_module.graph
 
         # looks into output marked as "alias_of_input"
@@ -3338,7 +3342,9 @@ class GraphBuilder(_GraphBuilderRuntime):
         #         cloned_node = graph_module.graph.call_method("clone", args=(node.target,))
         #         node.replace_all_uses_with(cloned_node)
         # graph_module.recompile()
-        if self.verbose and len(graph_module.graph.nodes) > 100:
+        if int(os.environ.get("ONNX_BUILDER_PROGRESS", "0")) or (
+            self.verbose and len(graph_module.graph.nodes) > 100
+        ):
             try:
                 import tqdm
 
