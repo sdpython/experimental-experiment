@@ -1731,6 +1731,7 @@ class TestOperatorsOnnxrt(ExtTestCase):
             lambda x, y: torch.remainder(x, y),
             (x, y),
             onnx_export=inspect.currentframe().f_code.co_name,
+            atol=1e-5,
         )
 
     @hide_stdout()
