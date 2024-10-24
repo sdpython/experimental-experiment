@@ -771,8 +771,9 @@ class BenchmarkRunner:
         repeat = model_runner.repeat
         warmup = model_runner.warmup
         stats["model_name"] = model_name
-        stats["model_type"] = type(model_runner.model).__name__
-        stats["model_inputs"] = string_type(model_runner.inputs)
+        stats["torch_model_name"] = model_name
+        stats["torch_model_type"] = type(model_runner.model).__name__
+        stats["torch_model_inputs"] = string_type(model_runner.inputs)
         stats["suite"] = model_runner.suite
         stats["time_load"] = time.perf_counter() - begin
         stats["params_size"] = model_runner.compute_weight_size()
@@ -884,7 +885,7 @@ class BenchmarkRunner:
             stats["time_warmup_eager"] = (time.perf_counter() - begin) / warmup
 
         expected = self.move_to("cpu", expected)
-        stats["model_outputs"] = string_type(expected)
+        stats["torch_model_outputs"] = string_type(expected)
         stats["output_size"] = self.obj_size(expected)
         if self.verbose > 1:
             print(f"[benchmarkrunner.benchmark] output_size={stats['output_size']}")

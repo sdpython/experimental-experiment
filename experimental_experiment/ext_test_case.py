@@ -613,9 +613,15 @@ def requires_zoo(msg: str = "") -> Callable:
     return lambda x: x
 
 
-def has_executorch(version: str, msg: str = "") -> Callable:
+def has_executorch(version: str = "", msg: str = "") -> Callable:
     """Tells if :epkg:`ExecuTorch` is installed."""
-    return importlib.util.find_spec("executorch")
+    if not version:
+        return importlib.util.find_spec("executorch")
+
+    import packaging.version as pv
+    import executorch
+
+    return pv.Version(".".join(executorch.__version__.split(".")[:2])) < pv.Version(version)
 
 
 def requires_sklearn(version: str, msg: str = "") -> Callable:

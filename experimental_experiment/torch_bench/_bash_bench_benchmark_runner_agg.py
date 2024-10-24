@@ -183,7 +183,7 @@ def merge_benchmark_reports(
         "memory_*",
         "mem_*",
         "config_*",
-        "model_*",
+        "torch_*",
     ),
     formulas=(
         "export",
@@ -752,7 +752,13 @@ def _build_aggregated_document(
                 cc = [*model, *new_keys]
                 dg = dfc.copy()
                 dg["__C__"] = 1
-                under = dg.groupby(cc).count()[["__C__"]]
+                try:
+                    under = dg.groupby(cc).count()[["__C__"]]
+                except ValueError as e:
+                    raise AssertionError(
+                        "Unable to deal with index={model}, columns={new_keys}, "
+                        f"values={c}, dfc={dfc.head()}"
+                    ) from e
                 under = under[under["__C__"] > 1]
                 if "RAWFILENAME" in df.columns:
                     filenames = df[[*cc, "RAWFILENAME"]].set_index(cc)
@@ -944,7 +950,7 @@ def _build_aggregated_document(
         "speedup_",
         "bucket_",
         "config_",
-        "model_",
+        "torch_",
     ]:
         merge = [k for k in res if k.startswith(prefix)]
         merge.sort()
@@ -1018,6 +1024,7 @@ def _build_aggregated_document(
             "op_onnx",
             "op_torch",
             "MODELS",
+            "torch",
         },
         model=model,
         exc=exc,
