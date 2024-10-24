@@ -136,6 +136,7 @@ class ExportOptions:
     ):
         """Exports the model into an exported program."""
         import torch
+        from ..torch_test_helper import string_type
 
         if self.strategy == "fallback":
             if verbose:
@@ -159,8 +160,6 @@ class ExportOptions:
                     excs.append(e)
 
             if exc:
-                from ..torch_test_helper import string_type
-
                 raise RuntimeError(
                     f"None of the following options {tries} worked, "
                     f"args={string_type(args)}, kwargs={string_type(kwargs)}, "
@@ -169,13 +168,15 @@ class ExportOptions:
             return None
 
         if verbose:
-            print(f"[ExportOptions.export] {self!r} - torch.export.export")
+            print(f"[ExportOptions.export] {self!r} - torch.export.export {type(mod)}")
             begin = time.perf_counter()
 
         if self.dynamo:
             # import torch.utils._pytree as pytree
             # flat_args, orig_in_spec = pytree.tree_flatten((args, ))
             # debug: orig_in_spec, type(flat_args), len(flat_args))
+            if verbose:
+                print("[ExportOptions.export] torch._dynamo.export")
             res = torch._dynamo.export(
                 mod,
                 aten_graph=True,
@@ -191,6 +192,8 @@ class ExportOptions:
             return res  # _apply_decompositions(res, self.decomposition_table)
 
         if self.jit:
+            if verbose:
+                print("[ExportOptions.export] torch.jit.trace")
             from torch._export.converter import TS2EPConverter
 
             jit_model = torch.jit.trace(
@@ -202,6 +205,13 @@ class ExportOptions:
                 print(f"[ExportOptions.export] done in {time.perf_counter() - begin}")
             return dec
 
+        if verbose:
+            print("[ExportOptions.export] torch.export.export")
+            print(f"[ExportOptions.export] dynamic_shapes={dynamic_shapes}")
+            print(f"[ExportOptions.export] strict={self.strict}")
+            print(f"[ExportOptions.export] args={string_type(args)}")
+            print(f"[ExportOptions.export] kwargs={string_type(kwargs)}")
+            print(f"[ExportOptions.export] verbose={verbose}")
         if exc:
             exported_mod = torch.export.export(
                 mod, args, kwargs, dynamic_shapes=dynamic_shapes, strict=self.strict
@@ -213,6 +223,8 @@ class ExportOptions:
                 )
             except torch._export.verifier.SpecViolationError:
                 # see https://github.com/pytorch/pytorch/issues/128394
+                if verbose:
+                    print("[ExportOptions.export] torch.export._trace._export")
                 exported_mod = torch.export._trace._export(
                     mod,
                     args,
@@ -223,6 +235,8 @@ class ExportOptions:
                 )
             except torch._dynamo.exc.UserError as e:
                 eee = None
+                if verbose:
+                    print("[ExportOptions.export] torch.export.export")
                 try:
                     exported_mod = torch.export.export(
                         mod, args, kwargs, strict=self.strict

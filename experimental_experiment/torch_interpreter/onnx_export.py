@@ -419,18 +419,34 @@ def _model_signature(
 def _replacements_dynamic_shapes(
     mod: Any,
     args: Tuple[Any, ...],
-    dict_dynamic_shapes: Dict[str, Any],
+    kwargs: Optional[Dict[str, Any]] = None,
+    dict_dynamic_shapes: Optional[Dict[str, Any]] = None,
     input_names: Optional[List[str]] = None,
+    verbose: int = 0,
 ):
+    assert dict_dynamic_shapes is not None, "dict_dynamic_shapes is missing"
+    if verbose > 2:
+        from ..torch_test_helper import string_type
+
+        print(f"[_replacements_dynamic_shapes] type(mod)={type(mod)}")
+        print(f"[_replacements_dynamic_shapes] args={string_type(args)}")
+        print(f"[_replacements_dynamic_shapes] kwargs={string_type(kwargs)}")
+        print(f"[_replacements_dynamic_shapes] dict_dynamic_shapes={dict_dynamic_shapes}")
+        print(f"[_replacements_dynamic_shapes] input_names={input_names}")
     new_dynamic_shapes = {}
     sig = _model_signature(mod)
     true_input_names = []
     has_args = None
     n_args = None if input_names is None else len(input_names)
     for name, p in sig.parameters.items():
+        if verbose > 3:
+            print(
+                f"[_replacements_dynamic_shapes] -- {name}: {p.kind} - "
+                f"has_args={has_args} - n_args={n_args}"
+            )
         if n_args is not None and n_args <= 0:
             break
-        if p.kind == p.VAR_POSITIONAL or p.kind == p.VAR_KEYWORD:
+        if p.kind in (p.VAR_POSITIONAL, p.VAR_KEYWORD, p.POSITIONAL_OR_KEYWORD):
             assert not has_args, (
                 f"has_args={has_args} is already specified, "
                 f"input_names={input_names}, dynamic_shapes="
@@ -440,19 +456,28 @@ def _replacements_dynamic_shapes(
                 input_names or None or len(input_names) == len(args)
             ), f"Mimsatch number between len(args)={len(args)}, input_names={input_names}"
             true_input_names.append(p.name)
-            has_args = (p.name, len(args), len(true_input_names))
+            # has_args = (p.name, len(args), len(true_input_names))
             n_args -= len(args)
+            if verbose > 3:
+                print(f"[_replacements_dynamic_shapes]    + {p.name}, n_args={n_args}")
         elif p.default in (None, inspect.Parameter.empty):
             true_input_names.append(name)
+            if verbose > 3:
+                print(f"[_replacements_dynamic_shapes]     + {p.name}")
 
     if has_args is None:
         replacements = {} if input_names is None else dict(zip(input_names, true_input_names))
         for k, v in dict_dynamic_shapes.items():
             r = replacements.get(k, k)
             new_dynamic_shapes[r] = v if not has_args or has_args[0] != r else (v,)
+        if verbose > 2:
+            print(f"[_replacements_dynamic_shapes] 1> input_names={input_names}")
+            print(f"[_replacements_dynamic_shapes] 1> input_names={true_input_names}")
+            print(f"[_replacements_dynamic_shapes] 1> new_dynamic_shapes={new_dynamic_shapes}")
         return new_dynamic_shapes
 
     if has_args:
+        # has_args is supposed to be used when *args is used.
         assert input_names is not None, (
             f"Not implemented for has_args={has_args}, dynamic_shapes={dict_dynamic_shapes}"
             f", input_names={input_names}"
@@ -462,7 +487,16 @@ def _replacements_dynamic_shapes(
             f", input_names={input_names}"
         )
         new_dynamic_shapes = {has_args[0]: tuple(dict_dynamic_shapes[n] for n in input_names)}
+        if verbose > 2:
+            print(f"[_replacements_dynamic_shapes] 2> has_args={has_args}")
+            print(f"[_replacements_dynamic_shapes] 2> input_names={input_names}")
+            print(
+                f"[_replacements_dynamic_shapes] 2> dict_dynamic_shapes={dict_dynamic_shapes}"
+            )
+            print(f"[_replacements_dynamic_shapes] 2> new_dynamic_shapes={new_dynamic_shapes}")
         return new_dynamic_shapes
+    if verbose > 2:
+        print(f"[_replacements_dynamic_shapes] 3> new_dynamic_shapes={new_dynamic_shapes}")
     return new_dynamic_shapes
 
 
@@ -566,8 +600,10 @@ def to_onnx(
         use_dynamic_shapes = _replacements_dynamic_shapes(
             mod,
             args,
+            kwargs,
             dynamic_shapes if isinstance(dynamic_shapes, dict) else dict_dynamic_shapes,
             input_names,
+            verbose=verbose,
         )
     else:
         use_dynamic_shapes = (
@@ -576,15 +612,15 @@ def to_onnx(
             else _replacements_dynamic_shapes(
                 mod,
                 args,
+                kwargs,
                 dynamic_shapes if isinstance(dynamic_shapes, tuple) else dict_dynamic_shapes,
+                verbose=verbose,
             )
         )
 
     if verbose and dynamic_shapes:
-        print(
-            f"[to_onnx] dynamic_shapes={dynamic_shapes}, "
-            f"use_dynamic_shapes={use_dynamic_shapes}"
-        )
+        print(f"[to_onnx] dynamic_shapes={dynamic_shapes}")
+        print(f"[to_onnx] use_dynamic_shapes={use_dynamic_shapes}")
 
     assert use_dynamic_shapes is None or isinstance(use_dynamic_shapes, (dict, type(args))), (
         f"type(use_dynamic_shapes)={type(use_dynamic_shapes)} should have the "
