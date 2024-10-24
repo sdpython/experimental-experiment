@@ -255,7 +255,7 @@ def aten_alias(g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str
 
 
 def aten_all(g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T) -> T:
-    "cast"
+    "all"
     res = g.op.Cast(
         g.op.ReduceMin(g.op.Cast(x, to=TensorProto.INT32, name="all"), name="all"),
         to=TensorProto.BOOL,
@@ -265,6 +265,42 @@ def aten_all(g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str],
     if not sts:
         g.set_type(res, TensorProto.BOOL)
         g.set_shape(res, tuple())
+    return res
+
+
+def aten_all_dim(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    dim: int,
+    keepdim: bool = False,
+    name: str = "all_dim",
+) -> T:
+    "all_dim"
+    assert g.has_rank(x), f"{x!r} must have a rank{g.get_debug_msg()}"
+    rkx = g.get_rank(x)
+    if rkx == 0:
+        res = g.op.Cast(x, to=TensorProto.BOOL, outputs=outputs, name=name)
+        if not sts:
+            g.get_type(res, TensorProto.BOOL)
+            g.get_shape(res, tuple())
+        return res
+
+    res = g.op.Cast(
+        g.op.ReduceMin(
+            g.op.Cast(x, to=TensorProto.INT32, name=name),
+            np.array([dim], dtype=np.int64),
+            keepdims=1 if keepdim else 0,
+            name=name,
+        ),
+        to=TensorProto.BOOL,
+        outputs=outputs,
+        name=name,
+    )
+    if not sts:
+        g.set_type(res, TensorProto.BOOL)
+        g.set_rank(res, rkx if keepdim else (rkx - 1))
     return res
 
 
