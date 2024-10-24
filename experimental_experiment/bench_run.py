@@ -751,8 +751,9 @@ def max_diff(
             _index=_index,
         )
 
-    if expected.__class__.__name__ == "transformers.cache_utils.MambaCache":
+    if expected.__class__.__name__ in ("transformers.cache_utils.MambaCache", "MambaCache"):
         if got.__class__.__name__ != expected.__class__.__name__:
+            # This case happens with onnx where the outputs are flattened.
             return dict(abs=np.inf, rel=np.inf, sum=np.inf, n=np.inf)
         atts = []
         for k in ["conv_states", "ssm_states"]:

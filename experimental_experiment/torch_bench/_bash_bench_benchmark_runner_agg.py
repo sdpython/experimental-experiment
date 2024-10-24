@@ -183,6 +183,7 @@ def merge_benchmark_reports(
         "memory_*",
         "mem_*",
         "config_*",
+        "torch_*",
     ),
     formulas=(
         "export",
@@ -751,7 +752,13 @@ def _build_aggregated_document(
                 cc = [*model, *new_keys]
                 dg = dfc.copy()
                 dg["__C__"] = 1
-                under = dg.groupby(cc).count()[["__C__"]]
+                try:
+                    under = dg.groupby(cc).count()[["__C__"]]
+                except ValueError as e:
+                    raise AssertionError(
+                        "Unable to deal with index={model}, columns={new_keys}, "
+                        f"values={c}, dfc={dfc.head()}"
+                    ) from e
                 under = under[under["__C__"] > 1]
                 if "RAWFILENAME" in df.columns:
                     filenames = df[[*cc, "RAWFILENAME"]].set_index(cc)
@@ -943,6 +950,7 @@ def _build_aggregated_document(
         "speedup_",
         "bucket_",
         "config_",
+        "torch_",
     ]:
         merge = [k for k in res if k.startswith(prefix)]
         merge.sort()
@@ -983,6 +991,8 @@ def _build_aggregated_document(
                 continue
             if "date" in c:
                 continue
+            if any((isinstance(_, str) and _.startswith("model_")) for _ in c):
+                continue
             cc = v[c]
             if cc.dtype == np.object_:
                 try:
@@ -1014,6 +1024,7 @@ def _build_aggregated_document(
             "op_onnx",
             "op_torch",
             "MODELS",
+            "torch",
         },
         model=model,
         exc=exc,
@@ -1255,7 +1266,10 @@ def _build_aggregated_document(
         if "DATE" in data_csv.columns:
             data_append["DATE"] = data_csv["DATE"].max()
         data_append = data_append[data_append["METRIC"] != "date"]
-        data_csv = pandas.concat([data_csv, weighted_speedup, data_append], axis=0)
+        if weighted_speedup is not None:
+            data_csv = pandas.concat([data_csv, weighted_speedup, data_append], axis=0)
+        else:
+            data_csv = pandas.concat([data_csv, data_append], axis=0)
         if verbose:
             print(f"[merge_benchmark_reports] writes {export_simple!r}")
         data_csv.to_csv(export_simple, index=False)

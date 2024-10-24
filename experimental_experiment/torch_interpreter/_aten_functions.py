@@ -2955,10 +2955,11 @@ def aten_index_put(
     assert g.has_shape(x), f"Missing shape for {x!r}{g.get_debug_msg()}"
 
     if len(indices) == 1:
-        name = f"{name}1_"
+        name = f"{name}1"
         index = indices[0]  # tensor
         index_dtype = g.get_type(index)
         if index_dtype == TensorProto.BOOL:
+            name += "b_"
             assert not accumulate, (
                 f"accumulate is True but it does not make sense in that case"
                 f"{g.get_debug_msg()}"
@@ -2972,8 +2973,10 @@ def aten_index_put(
         new_index = g.op.UnsqueezeAnyOpset(index, np.array([-1], dtype=np.int64), name=name)
         g.set_type(new_index, index_dtype)
         if g.has_shape(index):
+            name += "s_"
             g.set_shape(new_index, (*g.get_shape(index), 1))
         else:
+            name += "r_"
             g.set_rank(new_index, g.get_rank(index) + 1)
 
         if accumulate:
@@ -3014,7 +3017,6 @@ def aten_index_put(
 
     if len(indices) == 2:
         # copy[kv_index, indices] = update.transpose(1, 0)
-        name = f"{name}2_"
         ind0, ind1 = indices
         if (
             (
@@ -3036,6 +3038,11 @@ def aten_index_put(
             and g.has_rank(values)
             and g.has_rank(x)
         ):
+            name = (
+                f"{name}2{'o' if ind0 is None else {g.get_rank(ind0)}}"
+                f"{'o' if ind1 is None else g.get_rank(ind1)}_"
+                f"{g.get_rank(x)}_{g.get_rank(values)}_"
+            )
             assert g.get_rank(x) == 2 and (
                 g.get_rank(values) == 1 or ind0 is None or ind1 is None
             ), (
@@ -3126,7 +3133,6 @@ def aten_index_put(
     if len(indices) == 3:
         # copy[index, middle, indices] = update.transpose(1, 0)
         # index_put.default(args = (%clone, [%kv_index, %arange], %view), kwargs = {})
-        name = f"{name}3_"
         ind0, ind1, ind2 = indices
         if (
             (
@@ -3156,6 +3162,12 @@ def aten_index_put(
             and g.has_rank(values)
             and g.has_rank(x)
         ):
+            name = (
+                f"{name}3{'o' if ind0 is None else g.get_rank(ind0)}"
+                f"{'o' if ind1 is None else g.get_rank(ind1)}"
+                f"{'o' if ind2 is None else g.get_rank(ind2)}_"
+                f"{g.get_rank(x)}_{g.get_rank(values)}_"
+            )
             assert g.get_rank(x) == 3 and (
                 g.get_rank(values) == 1 or ind0 is None or ind1 is None or ind2 is None
             ), (
@@ -5020,6 +5032,31 @@ def aten_permute(
     return g.op.Transpose(x, perm=dims, outputs=outputs, name="permute")
 
 
+def aten_polar(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    angle: T,
+    name: str = "polar",
+) -> T:
+    """polar"""
+    itype = g.get_type(x)
+    ctype = TensorProto.COMPLEX128 if itype == TensorProto.DOUBLE else TensorProto.COMPLEX64
+    j = np.array([1j], dtype=np.complex128 if itype == TensorProto.DOUBLE else np.complex64)
+    real = g.op.Cast(g.op.Cos(angle, name=name), to=ctype, name=name)
+    imag = g.op.Mul(g.op.Cast(g.op.Sin(angle, name=name), to=ctype, name=name), j, name=name)
+    res = g.op.Mul(
+        g.op.Cast(x, to=ctype, name=name),
+        g.op.Add(real, imag, name=name),
+        name=name,
+        outputs=outputs,
+    )
+    if not sts:
+        set_type_shape_binary_op(g, res, x, angle, itype=ctype)
+    return res
+
+
 def aten_pow_Scalar(
     g: GraphBuilder,
     sts: Optional[Dict[str, Any]],
@@ -5387,6 +5424,9 @@ def aten_roll(
 
     result = x
     for i in range(len(shifts)):
+        if shifts[i] == 0:
+            continue
+
         shapes = []
         if shape_x is not None and is_static_dimension(shape_x[dims[i]]):
             end = np.array([shape_x[dims[i]]], dtype=np.int64)
@@ -5396,28 +5436,21 @@ def aten_roll(
             end = g.op.Gather(shape_xx, np.array([dims[i]], dtype=np.int64), name=name)
 
         axis = np.array([dims[i]], dtype=np.int64)
-        if shifts[i] >= 0:
-            shape = g.op.Slice(
-                result, np.array([-shifts[i]], dtype=np.int64), end, axis, name=name
-            )
-            shapes.append(shape)
-            shape = g.op.Slice(
-                result, np.array([shifts[i]], dtype=np.int64), end, axis, name=name
-            )
-            shapes.append(shape)
-        else:
-            shape = g.op.Slice(
-                result, np.array([-shifts[i]], dtype=np.int64), end, axis, name=name
-            )
-            shapes.append(shape)
-            shape = g.op.Slice(
-                result,
-                np.array([0], dtype=np.int64),
-                np.array([shifts[i]], dtype=np.int64),
-                axis,
-                name=name,
-            )
-            shapes.append(shape)
+
+        # first part
+        shape = g.op.Slice(
+            result, np.array([-shifts[i]], dtype=np.int64), end, axis, name=name
+        )
+        shapes.append(shape)
+        # second part
+        shape = g.op.Slice(
+            result,
+            np.array([0], dtype=np.int64),
+            np.array([-shifts[i]], dtype=np.int64),
+            axis,
+            name=name,
+        )
+        shapes.append(shape)
 
         result = g.op.Concat(*shapes, axis=dims[i], name=name)
         g.set_type(result, g.get_type(x))

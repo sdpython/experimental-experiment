@@ -11,6 +11,7 @@ from experimental_experiment.ext_test_case import (
     is_windows,
     is_apple,
     has_onnxruntime_training,
+    has_executorch,
 )
 
 VERBOSE = 0
@@ -113,13 +114,16 @@ class TestDocumentationExamples(ExtTestCase):
                     # dynamo not supported on windows
                     reason = "graphviz not installed"
 
-            if name in {"plot_llama_diff_dort_301.py", "plot_llama_diff_export_301.py"}:
+            if not reason and name in {
+                "plot_llama_diff_dort_301.py",
+                "plot_llama_diff_export_301.py",
+            }:
                 from torch import __version__ as tv
 
                 if pv.Version(".".join(tv.split(".")[:2])) < pv.Version("2.4"):
                     reason = "requires torch 2.4"
 
-            if name in {
+            if not reason and name in {
                 "plot_llama_diff_dort_301.py",
                 "plot_llama_diff_export_301.py",
                 "plot_profile_existing_onnx_101.py",
@@ -129,7 +133,7 @@ class TestDocumentationExamples(ExtTestCase):
                 if sys.platform == "win32":
                     reason = "does not work on windows"
 
-            if name in {"plot_torch_export_201.py"}:
+            if not reason and name in {"plot_torch_export_201.py"}:
                 from torch import __version__ as tv
                 from onnx_array_api import __version__ as toaa
 
@@ -138,11 +142,11 @@ class TestDocumentationExamples(ExtTestCase):
                 if pv.Version(".".join(toaa.split(".")[:2])) < pv.Version("0.3"):
                     reason = "requires onnx-array-api 0.3"
 
-            if name in {"plot_llama_bench_102.py"}:
+            if not reason and name in {"plot_llama_bench_102.py"}:
                 if sys.platform in {"darwin"}:
                     reason = "apple not supported"
 
-            if name in {
+            if not reason and name in {
                 "plot_torch_custom_backend_101.py",
                 "lot_llama_bench_102.py",
                 "plot_custom_backend_llama_102.py",
@@ -150,7 +154,11 @@ class TestDocumentationExamples(ExtTestCase):
                 if not has_onnxruntime_training(True):
                     reason = "OrtValueVector.push_back_batch is missing (onnxruntime)"
 
-            if name in {"plot_convolutation_matmul_102.py"}:
+            if not reason and name in {"plot_executorch_101.py"}:
+                if not has_executorch():
+                    reason = "execution is not installed"
+
+            if not reason and name in {"plot_convolutation_matmul_102.py"}:
                 if not has_onnxruntime_training(True):
                     reason = "OrtModuleGraphBuilder is missing (onnxruntime)"
 

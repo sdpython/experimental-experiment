@@ -4,6 +4,7 @@ rm *.png
 rm *.csv
 rm *.nsys-rep
 rm *.sqlite
+rm *.pte
 rm tt_*
 rm plot*
 rm test* -rf

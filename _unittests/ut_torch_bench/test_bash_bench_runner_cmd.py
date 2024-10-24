@@ -2,6 +2,7 @@ import contextlib
 import io
 import itertools
 import logging
+import os
 import unittest
 import onnx
 from experimental_experiment.ext_test_case import (
@@ -86,7 +87,7 @@ class TestBashBenchRunnerCmd(ExtTestCase):
             print("CMD")
             print(" ".join(args))
         st = io.StringIO()
-        if debug:
+        if debug or int(os.environ.get("TO_ONNX_VERBOSE", "0")) > 0:
             main(args=args)
         else:
             with contextlib.redirect_stderr(st), contextlib.redirect_stdout(st):
@@ -181,8 +182,11 @@ class TestBashBenchRunnerCmd(ExtTestCase):
             print("CMD")
             print(" ".join(args))
         st = io.StringIO()
-        with contextlib.redirect_stderr(st), contextlib.redirect_stdout(st):
+        if debug or int(os.environ.get("TO_ONNX_VERBOSE", "0")) > 0:
             main(args=args)
+        else:
+            with contextlib.redirect_stderr(st), contextlib.redirect_stdout(st):
+                main(args=args)
         out = st.getvalue()
         if debug:
             print(out)
@@ -413,8 +417,11 @@ class TestBashBenchRunnerCmd(ExtTestCase):
             print("CMD")
             print(" ".join(args))
         st = io.StringIO()
-        with contextlib.redirect_stdout(st):
+        if debug or int(os.environ.get("TO_ONNX_VERBOSE", "0")) > 0:
             main(args=args)
+        else:
+            with contextlib.redirect_stdout(st):
+                main(args=args)
         out = st.getvalue()
         if debug:
             print(out)

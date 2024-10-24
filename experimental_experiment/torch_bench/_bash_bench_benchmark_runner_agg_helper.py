@@ -1621,9 +1621,11 @@ def _fix_report_piv(
         mindex = pandas.MultiIndex.from_tuples([index], names=piv.index.names)
         add = pandas.DataFrame([speedup.tolist()], columns=piv.columns, index=mindex)
         insert_at.append(add)
-    piv = pandas.concat([piv, *insert_at], axis=0)
-    piv = piv.sort_index()
-    return piv, pandas.concat(insert_at, axis=0)
+    if insert_at:
+        piv = pandas.concat([piv, *insert_at], axis=0)
+        piv = piv.sort_index()
+        return piv, pandas.concat(insert_at, axis=0)
+    return piv, None
 
 
 def _process_formulas(

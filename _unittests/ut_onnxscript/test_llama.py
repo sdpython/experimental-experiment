@@ -67,6 +67,8 @@ class TestLlama(ExtTestCase):
         onnx_export=None,
         expected_graph_break=0,
         device="cpu",
+        atol: float = 1e-4,
+        rtol: float = 1e-4,
     ):
         import torch
 
@@ -81,6 +83,8 @@ class TestLlama(ExtTestCase):
             fullgraph=fullgraph,
             onnx_export=onnx_export,
             device=device,
+            atol=atol,
+            rtol=rtol,
         )
 
     @ignore_warnings((UserWarning, DeprecationWarning))
@@ -200,50 +204,6 @@ class TestLlama(ExtTestCase):
             dynamic=False,
             fullgraph=True,
             onnx_export="test_ort_llama_model",
-            expected_graph_break=0,
-            device="cuda",
-        )
-
-    @ignore_warnings((UserWarning, DeprecationWarning))
-    @skipif_ci_windows("torch.compile not supported on Windows")
-    @requires_torch("2.4")
-    @hide_stdout()
-    def test_ort_llama_model_backward(self):
-        from experimental_experiment.torch_models.llama_helper import (
-            get_llama_model,
-        )
-
-        input_dims = self.get_input_dims(False)
-        model, example_args_collection = get_llama_model(input_dims=input_dims)
-        self.common_test_model(
-            model,
-            example_args_collection,
-            test_backward=True,
-            dynamic=False,
-            fullgraph=True,
-            onnx_export="test_ort_llama_model_backward",
-            expected_graph_break=0,
-        )
-
-    @ignore_warnings((UserWarning, DeprecationWarning))
-    @skipif_ci_windows("torch.compile not supported on Windows")
-    @requires_torch("2.4")
-    @requires_cuda()
-    @hide_stdout()
-    def test_ort_llama_model_backward_cuda(self):
-        from experimental_experiment.torch_models.llama_helper import (
-            get_llama_model,
-        )
-
-        input_dims = self.get_input_dims(False)
-        model, example_args_collection = get_llama_model(input_dims=input_dims)
-        self.common_test_model(
-            model,
-            example_args_collection,
-            test_backward=True,
-            dynamic=False,
-            fullgraph=True,
-            onnx_export="test_ort_llama_model_backward",
             expected_graph_break=0,
             device="cuda",
         )

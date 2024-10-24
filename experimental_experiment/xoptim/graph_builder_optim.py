@@ -364,6 +364,13 @@ class GraphBuilderPatternOptimization:
             np.dtype("float64"),
         }:
             return float(value)
+        if value.dtype in {
+            np.complex64,
+            np.complex128,
+            np.dtype("complex64"),
+            np.dtype("complex128"),
+        }:
+            return complex(value)
         return int(value)
 
     def get_computed_constant(self, name: str, statistics: Optional[List[str]] = None) -> Any:
