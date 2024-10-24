@@ -1255,7 +1255,10 @@ def _build_aggregated_document(
         if "DATE" in data_csv.columns:
             data_append["DATE"] = data_csv["DATE"].max()
         data_append = data_append[data_append["METRIC"] != "date"]
-        data_csv = pandas.concat([data_csv, weighted_speedup, data_append], axis=0)
+        if weighted_speedup is not None:
+            data_csv = pandas.concat([data_csv, weighted_speedup, data_append], axis=0)
+        else:
+            data_csv = pandas.concat([data_csv, data_append], axis=0)
         if verbose:
             print(f"[merge_benchmark_reports] writes {export_simple!r}")
         data_csv.to_csv(export_simple, index=False)

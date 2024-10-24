@@ -424,10 +424,10 @@ def _replacements_dynamic_shapes(
     input_names: Optional[List[str]] = None,
     verbose: int = 0,
 ):
+    from ..torch_test_helper import string_type
+
     assert dict_dynamic_shapes is not None, "dict_dynamic_shapes is missing"
     if verbose > 2:
-        from ..torch_test_helper import string_type
-
         print(f"[_replacements_dynamic_shapes] type(mod)={type(mod)}")
         print(f"[_replacements_dynamic_shapes] args={string_type(args)}")
         print(f"[_replacements_dynamic_shapes] kwargs={string_type(kwargs)}")
@@ -446,18 +446,27 @@ def _replacements_dynamic_shapes(
             )
         if n_args is not None and n_args <= 0:
             break
-        if p.kind in (p.VAR_POSITIONAL, p.VAR_KEYWORD, p.POSITIONAL_OR_KEYWORD):
+        if p.kind in (
+            p.VAR_POSITIONAL,
+            p.VAR_KEYWORD,
+            p.POSITIONAL_OR_KEYWORD,
+            p.POSITIONAL_ONLY,
+        ):
             assert not has_args, (
                 f"has_args={has_args} is already specified, "
                 f"input_names={input_names}, dynamic_shapes="
                 f"{dict_dynamic_shapes}"
             )
-            assert (
-                input_names or None or len(input_names) == len(args)
-            ), f"Mimsatch number between len(args)={len(args)}, input_names={input_names}"
+            assert input_names is None or len(input_names) == len(
+                args
+            ), f"Mismatch number between args={string_type(args)}, input_names={input_names}"
             true_input_names.append(p.name)
-            # has_args = (p.name, len(args), len(true_input_names))
-            n_args -= len(args)
+            if p.kind == p.VAR_POSITIONAL:
+                if verbose > 3:
+                    print(f"[_replacements_dynamic_shapes]    + {p.name}, has_args={has_args}")
+                has_args = (p.name, len(args), len(true_input_names))
+            if n_args is not None:
+                n_args -= len(args)
             if verbose > 3:
                 print(f"[_replacements_dynamic_shapes]    + {p.name}, n_args={n_args}")
         elif p.default in (None, inspect.Parameter.empty):
@@ -566,6 +575,9 @@ def to_onnx(
 
     If environment variable ``PRINT_GRAPH_MODULE`` is set to one,
     information about the graph module is printed out.
+
+    Environment variable TO_ONNX_VERBOSE can be used to
+    increase verbosity in this function.
     """
     if target_opset is None:
         target_opset = min(18, onnx_opset_version() - 1)
@@ -573,6 +585,7 @@ def to_onnx(
         options = OptimizationOptions()
     begin = time.perf_counter()
 
+    verbose = max(verbose, int(os.environ.get("TO_ONNX_VERBOSE", verbose)))
     if verbose:
         print(f"[to_onnx] build the graph module with input_names={input_names}")
 
