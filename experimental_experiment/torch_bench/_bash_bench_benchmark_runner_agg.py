@@ -51,7 +51,6 @@ def enumerate_csv_files(
     if not isinstance(data, list):
         data = [data]
     for filename in data:
-
         if isinstance(filename, pandas.DataFrame):
             yield filename
             continue
@@ -756,7 +755,7 @@ def _build_aggregated_document(
                     under = dg.groupby(cc).count()[["__C__"]]
                 except ValueError as e:
                     raise AssertionError(
-                        "Unable to deal with index={model}, columns={new_keys}, "
+                        f"Unable to deal with index={model}, columns={new_keys}, "
                         f"values={c}, dfc={dfc.head()}"
                     ) from e
                 under = under[under["__C__"] > 1]

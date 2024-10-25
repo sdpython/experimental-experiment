@@ -703,7 +703,7 @@ def requires_pyinstrument(version: str = "", msg: str = "") -> Callable:
     try:
         import pyinstrument
     except ImportError:
-        return unittest.skip(msg or "pyinstrument not installed")
+        return unittest.skip(msg or "pyinstrument is not installed")
 
     if version and pv.Version(".".join(pyinstrument.__version__.split(".")[:2])) < pv.Version(
         version

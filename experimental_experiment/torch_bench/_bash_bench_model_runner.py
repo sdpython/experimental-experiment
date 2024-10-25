@@ -1031,7 +1031,7 @@ class ModelRunner:
                     name,
                     do_constant_folding=False,
                     opset_version=target_opset,
-                    verbose=max(verbose - 1, 0),
+                    verbose=max(verbose - 2, 0),
                     **kwargs_export,
                 )
         else:
@@ -1042,7 +1042,7 @@ class ModelRunner:
                     name,
                     do_constant_folding=False,
                     opset_version=target_opset,
-                    verbose=max(verbose - 1, 0),
+                    verbose=max(verbose - 2, 0),
                     **kwargs_export,
                 )
 

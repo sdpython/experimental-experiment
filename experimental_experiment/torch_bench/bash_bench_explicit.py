@@ -2,7 +2,7 @@
 Benchmark exporters
 ===================
 
-Benchmarks many custom models.
+Benchmarks many models.
 Available exporters:
 
 * eager: identity
