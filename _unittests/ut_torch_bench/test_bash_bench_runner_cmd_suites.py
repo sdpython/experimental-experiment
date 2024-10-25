@@ -118,7 +118,7 @@ class TestBashBenchRunnerCmdUntrained(ExtTestCase):
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.5")
     def test_untrained_export_bench_custom_cpu(self):
-        self._untrained_export("custom", "Phi35MiniiInstruct_1Layer", verbose=1, debug=True)
+        self._untrained_export("custom", "Phi35MiniiInstruct_1Layer", verbose=1, debug=False)
 
 
 if __name__ == "__main__":

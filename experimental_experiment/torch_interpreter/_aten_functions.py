@@ -7420,11 +7420,17 @@ def aten_wrap_with_autocast(
     *args: Sequence[T],
     **kwargs,
 ) -> T:
-    "identity"
-    assert dtype is None, f"Not implemented with dtype={dtype}{g.get_debug_msg()}"
+    "identity, calling a local function"
+    # We don't need to check for the type, the module is converted as a function,
+    # hopefully this will go smoothly. Maybe here, we should check the local
+    # function is valid for the considered dtype.
+    # dtype is mentioned in the doc_string and should remain unless the graph
+    # is inlined.
+
+    # assert dtype is None, f"Not implemented with dtype={dtype}{g.get_debug_msg()}"
     assert not enabled, f"Not implemented with dtype={enabled}{g.get_debug_msg()}"
     assert (
-        cache_enabled is None
+        not cache_enabled
     ), f"Not implemented with cache_enabled={cache_enabled}{g.get_debug_msg()}"
     assert g.has_local_function(
         wrapped_func, domain=LOCAL_DOMAIN
@@ -7440,6 +7446,7 @@ def aten_wrap_with_autocast(
             outputs,
             name="wrap_with_autocast",
             domain=LOCAL_DOMAIN,
+            doc_string=f"wrap_with_autocast(..., dtype={dtype})" if dtype is not None else "",
         )
     assert len(outputs) == 1, (
         f"Unexpected outputs={outputs} but local_outputs={local_outputs} "
