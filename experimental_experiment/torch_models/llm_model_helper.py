@@ -1,6 +1,16 @@
-def get_phi_35_mini_instruct(**kwargs):
+import pprint
+from typing import Any, Dict, Tuple, Union
+
+
+def get_phi_35_mini_instruct(
+    inputs_as_dict: bool = False, **kwargs
+) -> Tuple[Any, Union[Tuple[Any, ...], Dict[str, Any]]]:
     """
     Gets a non initialized model.
+
+    :param inputs_as_dict: returns dummy inputs as a dictionary or not
+    :param kwargs: to overwrite the configuration, example ``num_hidden_layers=1``
+    :return: model, inputs
 
     See `Phi-3.5-mini-instruct/config.json
     <https://huggingface.co/microsoft/Phi-3.5-mini-instruct/blob/main/config.json>`_.
@@ -143,6 +153,10 @@ def get_phi_35_mini_instruct(**kwargs):
         "attention_bias": False,
         "vocab_size": 32064,
     }
+    for k in kwargs:
+        assert (
+            k in config
+        ), f"Parameter {k!r} is not mentioned in the configuration {pprint.pformat(config)}"
     config.update(**kwargs)
     conf = Phi3Config(**config)
     model = Phi3ForCausalLM(conf)
@@ -153,5 +167,8 @@ def get_phi_35_mini_instruct(**kwargs):
         input_ids=torch.randint(0, 32064, dim).to(torch.int64),
         attention_mask=torch.ones(*dim, dtype=torch.int64),
     )
+
+    if inputs_as_dict:
+        inputs = tuple(inputs.values())
 
     return model, inputs

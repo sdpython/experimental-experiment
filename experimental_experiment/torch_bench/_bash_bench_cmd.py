@@ -137,7 +137,7 @@ def bash_bench_main(script_name: str, doc: str, args: Optional[List[str]] = None
 
         runner = ExplicitRunner(device=args.device, verbose=int(args.verbose))
     elif script_name == "bash_bench_untrained":
-        from ._bash_bench_set_untrained import UntrainedRunner
+        from ._bash_bench_suites import UntrainedRunner
 
         runner = UntrainedRunner(device=args.device, verbose=int(args.verbose))
     else:

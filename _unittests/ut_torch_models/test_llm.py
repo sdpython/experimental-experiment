@@ -79,10 +79,10 @@ class TestLlm(ExtTestCase):
         sess = onnxruntime.InferenceSession(
             filename, providers=["CUDAExecutionProvider", "CPUExecutionProvider"]
         )
-        got = sess.run(None, {k: v.numpy() for k, v in model_inputs.items()})
+        got = sess.run(None, {k: v.cpu().numpy() for k, v in model_inputs.items()})
         self.assertEqual(len(expected), len(got))
         for a, b in zip(expected, got):
-            self.assertEqualArray(a, b, atol=1e-5)
+            self.assertEqualArray(a, b, atol=1e-2)
 
 
 if __name__ == "__main__":

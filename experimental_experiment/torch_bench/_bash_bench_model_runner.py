@@ -168,6 +168,7 @@ class ModelRunner:
         'nowrap' to explicit avoid wrapping
     :param nvtx: enable nvtx events
     :param model_name: model name
+    :param export_options: additional options when exporting if the default options never work
     """
 
     _patched = None
@@ -280,6 +281,7 @@ class ModelRunner:
         wrap_kind: Optional[None] = None,
         nvtx: bool = False,
         model_name: Optional[str] = None,
+        export_options: Optional[Dict[str, Any]] = None,
     ):
         if dtype is None:
             cvt = lambda o: self._to_type_or_device(o, device)  # noqa: E731
@@ -377,6 +379,7 @@ class ModelRunner:
         self.autocast = autocast
         self.model_name = model_name
         self.nvtx = nvtx
+        self.export_options = export_options
         assert self.autocast is not None
         self.std_to_dump = []
 
@@ -735,7 +738,7 @@ class ModelRunner:
         else:
             options = None
 
-        export_options = ExportOptions(strategy=strategy)
+        export_options = ExportOptions(strategy=strategy, **(self.export_options or {}))
         export_inputs, export_kw_inputs = self.make_export_inputs(dynamic)
         dyn_shapes = self.get_dynamic_shapes(dynamic)
 
@@ -749,6 +752,8 @@ class ModelRunner:
                 f"[ModelRunner._to_onnx_custom] export_kw_inputs="
                 f"{string_type(export_kw_inputs)!r}"
             )
+            print(f"[ModelRunner._to_onnx_custom] export_options={self.export_options!r}")
+            print(f"[ModelRunner._to_onnx_custom] export_options={export_options!r}")
 
         if self.autocast:
             with torch.autocast(

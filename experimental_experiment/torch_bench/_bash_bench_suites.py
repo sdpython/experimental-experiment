@@ -2,9 +2,8 @@ from typing import Any, Callable, Dict, Optional, Set, Tuple
 from torch._dynamo.testing import reset_rng_state
 from ._bash_bench_benchmark_runner import BenchmarkRunner
 from ._bash_bench_model_runner import ModelRunner
-from ._bash_bench_models_helper import (
-    get_llama_model_layer,
-)
+from ._bash_bench_models_helper import get_llama_model_layer
+from ..torch_models.llm_model_helper import get_phi_35_mini_instruct
 
 
 class UntrainedRunner(BenchmarkRunner):
@@ -17,6 +16,10 @@ class UntrainedRunner(BenchmarkRunner):
         cls.MODELS.update(
             {
                 "Llama2Layer": lambda: get_llama_model_layer(num_hidden_layers=2),
+                "Phi35MiniiInstruct_1Layer": lambda: (
+                    *get_phi_35_mini_instruct(num_hidden_layers=1),
+                    dict(strict=False),
+                ),
             }
         )
 
@@ -70,9 +73,13 @@ class UntrainedRunner(BenchmarkRunner):
         is_training = self.training
         use_eval_mode = self.use_eval_mode
         reset_rng_state()
-        model_cls, example_inputs = self._get_model_cls_and_config(model_name)()
-
-        model = model_cls()
+        tu = self._get_model_cls_and_config(model_name)()
+        if len(tu) == 2:
+            model_cls, example_inputs = tu
+            export_options = None
+        else:
+            model_cls, example_inputs, export_options = tu
+        model = model_cls() if isinstance(model_cls, type) else model_cls
 
         if is_training and not use_eval_mode:
             model.train()
@@ -91,6 +98,7 @@ class UntrainedRunner(BenchmarkRunner):
             autocast=self.autocast,
             wrap_kind="nowrap",
             model_name=model_name,
+            export_options=export_options,
         )
 
     def iter_model_names(self):
