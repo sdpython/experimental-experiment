@@ -206,6 +206,37 @@ class TestLlm(ExtTestCase):
         expected = list(flatten_outputs(model(**model_inputs)))
         self.assertNotEmpty(expected)
 
+    @unittest.skipIf(not has_phi3(), reason="transformers not recent enough")
+    @ignore_warnings("TracerWarning")
+    @ignore_warnings(UserWarning)
+    def test_get_phi_35_mini_instruct_cache_export(self):
+        import torch
+        from transformers.models.phi3.modeling_phi3 import Phi3Attention
+        from experimental_experiment.torch_models.llm_model_helper import (
+            get_phi_35_mini_instruct,
+        )
+        from experimental_experiment.torch_interpreter.onnx_export_errors import (
+            bypass_export_some_errors,
+        )
+
+        model, model_inputs = get_phi_35_mini_instruct(num_hidden_layers=1)
+        attentions = {
+            name: inst
+            for name, inst in model.named_modules()
+            if isinstance(inst, Phi3Attention)
+        }
+        self.assertEqual(len(attentions), 1)
+
+        with bypass_export_some_errors():
+            exported_program = torch.export.export(
+                model,
+                tuple(),
+                model_inputs,
+                strict=False,
+                preserve_module_call_signature=tuple(attentions),
+            )
+        self.assertNotEmpty(exported_program)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
