@@ -1437,7 +1437,7 @@ def _select_model_metrics(
         df = res[name].copy()
         cols = list(df.columns)
         if len(cols) == 1:
-            col = (cols[0],) if isinstance(cols[0], str) else tuple(cols[0])
+            col = (cols[0],) if isinstance(cols[0], (str, int)) else tuple(cols[0])
             col = (i, cat, stat, new_name, *col)
             names = ["#order", "cat", "stat", "full_name", *df.columns.names]
             df.columns = pandas.MultiIndex.from_tuples([col], names=names)

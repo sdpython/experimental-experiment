@@ -89,7 +89,7 @@ class HuggingfaceBigRunner(BenchmarkRunner):
 
         if is_training and not use_eval_mode:
             model.train()
-        else:
+        elif hasattr(model, "eval"):
             model.eval()
 
         return ModelRunner(

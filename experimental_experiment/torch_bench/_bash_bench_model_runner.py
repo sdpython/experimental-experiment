@@ -497,6 +497,8 @@ class ModelRunner:
 
     def parameters_dtype(self) -> str:
         """Returns the unique dtypes of all parameters."""
+        if not hasattr(self.model, "parameters"):
+            return ""
         return ",".join(
             sorted({str(p.dtype).replace("torch.", "") for p in self.model.parameters()})
         )
