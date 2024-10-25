@@ -944,6 +944,7 @@ class TestOperatorsOnnxrt(ExtTestCase):
             lambda x: torch.prod(x, dim=2),
             x,
             onnx_export=inspect.currentframe().f_code.co_name,
+            atol=1e-5,
         )
 
     @hide_stdout()

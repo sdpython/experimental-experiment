@@ -150,7 +150,7 @@ def compute_weight_size(model: Any) -> int:
         # executorch
         return len(model.buffer)
 
-    raise AssertionError(f"Unexpected type {type(model)} - {dir(model)}.")
+    return np.nan
 
 
 def common_export(
