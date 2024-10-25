@@ -1,10 +1,11 @@
 import unittest
-from experimental_experiment.ext_test_case import ExtTestCase
+from experimental_experiment.ext_test_case import ExtTestCase, require_diffusers
 from experimental_experiment.torch_models import flatten_outputs
 
 
 class TestDiffusion(ExtTestCase):
 
+    @require_diffusers("0.30.0")
     def test_get_stable_diffusion_2_unet(self):
         # import torch
         from experimental_experiment.torch_models.diffusion_model_helper import (
