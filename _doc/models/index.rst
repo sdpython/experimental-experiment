@@ -27,4 +27,5 @@ This projects was started with LLaMa.
     :caption: Other LLMs
     :maxdepth: 1
 
-    llms
+    diffusion_helper
+    llm_helper

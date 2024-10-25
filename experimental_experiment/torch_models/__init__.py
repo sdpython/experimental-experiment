@@ -23,5 +23,5 @@ def assert_found(kwargs: Dict[str, Any], config: Dict[str, Any]):
     """
     for k in kwargs:
         assert (
-            k in config
+            k in config or k == "_attn_implementation"
         ), f"Parameter {k!r} is not mentioned in the configuration {pprint.pformat(config)}"
