@@ -2,7 +2,7 @@ import os
 import unittest
 import onnx
 from onnx import ModelProto
-from experimental_experiment.ext_test_case import ExtTestCase
+from experimental_experiment.ext_test_case import ExtTestCase, skipif_ci_windows
 from experimental_experiment.xbuilder.graph_builder import (
     GraphBuilder,
     OptimizationOptions,
@@ -38,6 +38,7 @@ class TestGraphFullModelPatternOptimization(ExtTestCase):
         self.assertEqual(len(before), 0)
         self.assertEqual(len(after), 7)
 
+    @skipif_ci_windows("too much memory allocated")
     def test_fused_matmul(self):
         origin = self._get_model("opt-llama-custom-backward.onnx")
         before = [n.op_type for n in origin.graph.node if n.op_type == "FusedMatMul"]
@@ -51,6 +52,7 @@ class TestGraphFullModelPatternOptimization(ExtTestCase):
         self.assertEqual(len(before), 2)
         self.assertEqual(len(after), 4)
 
+    @skipif_ci_windows("Too mcuh memory allocated.")
     def test_scatter_constant_of_shape(self):
         origin = self._get_model("opt-llama-custom-backward.onnx")
         before = [n.op_type for n in origin.graph.node if n.op_type == "ScatterNDOfShape"]

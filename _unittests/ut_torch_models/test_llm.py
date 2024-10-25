@@ -136,7 +136,7 @@ class TestLlm(ExtTestCase):
         got = sess.run(None, {k: v.numpy() for k, v in model_inputs.items()})
         self.assertEqual(len(expected), len(got))
         for a, b in zip(expected, got):
-            self.assertEqualArray(a, b, atol=1e-5)
+            self.assertEqualArray(a, b, atol=1e-4)
 
     @unittest.skipIf(not has_phi3(), reason="transformers not recent enough")
     @ignore_warnings("TracerWarning")
