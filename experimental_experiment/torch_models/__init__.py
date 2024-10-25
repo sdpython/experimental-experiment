@@ -1,4 +1,5 @@
-from typing import Any, Iterator
+import pprint
+from typing import Any, Dict, Iterator
 
 
 def flatten_outputs(output: Any) -> Iterator[Any]:
@@ -14,3 +15,13 @@ def flatten_outputs(output: Any) -> Iterator[Any]:
         yield from flatten_outputs(output.to_tuple())
     else:
         yield output
+
+
+def assert_found(kwargs: Dict[str, Any], config: Dict[str, Any]):
+    """
+    Checks a parameter is available.
+    """
+    for k in kwargs:
+        assert (
+            k in config
+        ), f"Parameter {k!r} is not mentioned in the configuration {pprint.pformat(config)}"

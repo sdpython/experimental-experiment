@@ -164,6 +164,48 @@ class TestLlm(ExtTestCase):
         expected = list(flatten_outputs(model(**model_inputs)))
         self.assertNotEmpty(expected)
 
+    @unittest.skipIf(not has_phi3(), reason="transformers not recent enough")
+    @ignore_warnings("TracerWarning")
+    @ignore_warnings(UserWarning)
+    def test_get_all_mini_ml_l6_v1(self):
+        # import torch
+        from experimental_experiment.torch_models.llm_model_helper import (
+            get_all_mini_ml_l6_v1,
+        )
+
+        model, model_inputs = get_all_mini_ml_l6_v1(num_hidden_layers=1)
+        expected = list(flatten_outputs(model(**model_inputs)))
+        self.assertNotEmpty(expected)
+
+    @unittest.skipIf(not has_phi3(), reason="transformers not recent enough")
+    @ignore_warnings("TracerWarning")
+    @ignore_warnings(UserWarning)
+    def test_get_smollm_1_7b(self):
+        # import torch
+        from experimental_experiment.torch_models.llm_model_helper import (
+            get_smollm_1_7b,
+        )
+
+        model, model_inputs = get_smollm_1_7b(num_hidden_layers=1)
+        expected = list(flatten_outputs(model(**model_inputs)))
+        self.assertNotEmpty(expected)
+
+    @unittest.skipIf(not has_phi3(), reason="transformers not recent enough")
+    @ignore_warnings("TracerWarning")
+    @ignore_warnings(UserWarning)
+    def test_get_phi_3_vision_128k_instruct(self):
+        # import torch
+        from experimental_experiment.torch_models.llm_model_helper import (
+            get_phi_3_vision_128k_instruct,
+        )
+
+        try:
+            model, model_inputs = get_phi_3_vision_128k_instruct(num_hidden_layers=1)
+        except ImportError as e:
+            raise unittest.SkipTest(f"missing file: {e}")
+        expected = list(flatten_outputs(model(**model_inputs)))
+        self.assertNotEmpty(expected)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

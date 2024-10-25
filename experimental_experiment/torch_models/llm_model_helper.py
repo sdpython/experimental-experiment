@@ -1,5 +1,5 @@
-import pprint
 from typing import Any, Dict, Tuple, Union
+from . import assert_found
 
 
 def get_phi_35_mini_instruct(
@@ -153,13 +153,192 @@ def get_phi_35_mini_instruct(
         "attention_bias": False,
         "vocab_size": 32064,
     }
-    for k in kwargs:
-        assert (
-            k in config
-        ), f"Parameter {k!r} is not mentioned in the configuration {pprint.pformat(config)}"
+    assert_found(kwargs, config)
     config.update(**kwargs)
     conf = Phi3Config(**config)
     model = Phi3ForCausalLM(conf)
+    model.eval()
+
+    dim = (1, 30)
+    inputs = dict(
+        input_ids=torch.randint(0, 32064, dim).to(torch.int64),
+        attention_mask=torch.ones(*dim, dtype=torch.int64),
+    )
+
+    if inputs_as_dict:
+        inputs = tuple(inputs.values())
+
+    return model, inputs
+
+
+def get_phi_3_vision_128k_instruct(
+    inputs_as_dict: bool = False, **kwargs
+) -> Tuple[Any, Union[Tuple[Any, ...], Dict[str, Any]]]:
+    """
+    Gets a non initialized model.
+
+    :param inputs_as_dict: returns dummy inputs as a dictionary or not
+    :param kwargs: to overwrite the configuration, example ``num_hidden_layers=1``
+    :return: model, inputs
+
+    See `Phi-3-vision-128k-instruct/config.json
+    <https://huggingface.co/microsoft/Phi-3-vision-128k-instruct/blob/main/config.json>`_.
+    """
+    import torch
+    from .configuration_phi3_v import Phi3VConfig
+    from .modeling_phi3_v import Phi3VForCausalLM
+
+    config = {
+        "_name_or_path": "Phi-3-vision-128k-instruct",
+        "architectures": ["Phi3VForCausalLM"],
+        "attention_dropout": 0.0,
+        "auto_map": {
+            "AutoConfig": "configuration_phi3_v.Phi3VConfig",
+            "AutoModelForCausalLM": "modeling_phi3_v.Phi3VForCausalLM",
+        },
+        "bos_token_id": 1,
+        "embd_layer": {
+            "embedding_cls": "image",
+            "hd_transform_order": "sub_glb",
+            "projection_cls": "mlp",
+            "use_hd_transform": True,
+            "with_learnable_separator": True,
+        },
+        "eos_token_id": 2,
+        "hidden_act": "silu",
+        "hidden_size": 3072,
+        "img_processor": {
+            "image_dim_out": 1024,
+            "model_name": "openai/clip-vit-large-patch14-336",
+            "name": "clip_vision_model",
+            "num_img_tokens": 144,
+        },
+        "initializer_range": 0.02,
+        "intermediate_size": 8192,
+        "max_position_embeddings": 131072,
+        "model_type": "phi3_v",
+        "num_attention_heads": 32,
+        "num_hidden_layers": 32,
+        "num_key_value_heads": 32,
+        "original_max_position_embeddings": 4096,
+        "rms_norm_eps": 1e-05,
+        "rope_scaling": {
+            "long_factor": [
+                1.0299999713897705,
+                1.0499999523162842,
+                1.0499999523162842,
+                1.0799999237060547,
+                1.2299998998641968,
+                1.2299998998641968,
+                1.2999999523162842,
+                1.4499999284744263,
+                1.5999999046325684,
+                1.6499998569488525,
+                1.8999998569488525,
+                2.859999895095825,
+                3.68999981880188,
+                5.419999599456787,
+                5.489999771118164,
+                5.489999771118164,
+                9.09000015258789,
+                11.579999923706055,
+                15.65999984741211,
+                15.769999504089355,
+                15.789999961853027,
+                18.360000610351562,
+                21.989999771118164,
+                23.079999923706055,
+                30.009998321533203,
+                32.35000228881836,
+                32.590003967285156,
+                35.56000518798828,
+                39.95000457763672,
+                53.840003967285156,
+                56.20000457763672,
+                57.95000457763672,
+                59.29000473022461,
+                59.77000427246094,
+                59.920005798339844,
+                61.190006256103516,
+                61.96000671386719,
+                62.50000762939453,
+                63.3700065612793,
+                63.48000717163086,
+                63.48000717163086,
+                63.66000747680664,
+                63.850006103515625,
+                64.08000946044922,
+                64.760009765625,
+                64.80001068115234,
+                64.81001281738281,
+                64.81001281738281,
+            ],
+            "short_factor": [
+                1.05,
+                1.05,
+                1.05,
+                1.1,
+                1.1,
+                1.1,
+                1.2500000000000002,
+                1.2500000000000002,
+                1.4000000000000004,
+                1.4500000000000004,
+                1.5500000000000005,
+                1.8500000000000008,
+                1.9000000000000008,
+                2.000000000000001,
+                2.000000000000001,
+                2.000000000000001,
+                2.000000000000001,
+                2.000000000000001,
+                2.000000000000001,
+                2.000000000000001,
+                2.000000000000001,
+                2.000000000000001,
+                2.000000000000001,
+                2.000000000000001,
+                2.000000000000001,
+                2.000000000000001,
+                2.000000000000001,
+                2.000000000000001,
+                2.000000000000001,
+                2.000000000000001,
+                2.000000000000001,
+                2.000000000000001,
+                2.1000000000000005,
+                2.1000000000000005,
+                2.2,
+                2.3499999999999996,
+                2.3499999999999996,
+                2.3499999999999996,
+                2.3499999999999996,
+                2.3999999999999995,
+                2.3999999999999995,
+                2.6499999999999986,
+                2.6999999999999984,
+                2.8999999999999977,
+                2.9499999999999975,
+                3.049999999999997,
+                3.049999999999997,
+                3.049999999999997,
+            ],
+            "type": "su",
+        },
+        "rope_theta": 10000.0,
+        "sliding_window": 131072,
+        "tie_word_embeddings": False,
+        "torch_dtype": "bfloat16",
+        "transformers_version": "4.38.1",
+        "use_cache": True,
+        "vocab_size": 32064,
+        "_attn_implementation": "flash_attention_2",
+    }
+
+    assert_found(kwargs, config)
+    config.update(**kwargs)
+    conf = Phi3VConfig(**config)
+    model = Phi3VForCausalLM(conf)
     model.eval()
 
     dim = (1, 30)
@@ -238,11 +417,7 @@ def get_ai21_jamba_15_mini(
             "transformers_version": "4.40.2",
         }
     )
-
-    for k in kwargs:
-        assert (
-            k in config
-        ), f"Parameter {k!r} is not mentioned in the configuration {pprint.pformat(config)}"
+    assert_found(kwargs, config)
     config.update(**kwargs)
     conf = JambaConfig(**config)
     model = JambaForCausalLM(conf)
@@ -317,11 +492,7 @@ def get_falcon_mamba_7b(
             "transformers_version": "4.43.0.dev0",
         }
     )
-
-    for k in kwargs:
-        assert (
-            k in config
-        ), f"Parameter {k!r} is not mentioned in the configuration {pprint.pformat(config)}"
+    assert_found(kwargs, config)
     config.update(**kwargs)
     conf = FalconMambaConfig(**config)
     model = FalconMambaForCausalLM(conf)
@@ -330,6 +501,130 @@ def get_falcon_mamba_7b(
     dim = (1, 30)
     inputs = dict(
         input_ids=torch.randint(0, 65024, dim).to(torch.int64),
+        attention_mask=torch.ones(*dim, dtype=torch.int64),
+    )
+
+    if inputs_as_dict:
+        inputs = tuple(inputs.values())
+
+    return model, inputs
+
+
+def get_all_mini_ml_l6_v1(
+    inputs_as_dict: bool = False, **kwargs
+) -> Tuple[Any, Union[Tuple[Any, ...], Dict[str, Any]]]:
+    """
+    Gets a non initialized model.
+
+    :param inputs_as_dict: returns dummy inputs as a dictionary or not
+    :param kwargs: to overwrite the configuration, example ``num_hidden_layers=1``
+    :return: model, inputs
+
+    See `all-MiniLM-L6-v1
+    <https://huggingface.co/sentence-transformers/all-MiniLM-L6-v1/blob/main/config.json>`_.
+    """
+    import torch
+    from transformers import BertConfig, BertModel
+
+    config = {
+        "_name_or_path": "nreimers/MiniLM-L6-H384-uncased",
+        "architectures": ["BertModel"],
+        "attention_probs_dropout_prob": 0.1,
+        "gradient_checkpointing": False,
+        "hidden_act": "gelu",
+        "hidden_dropout_prob": 0.1,
+        "hidden_size": 384,
+        "initializer_range": 0.02,
+        "intermediate_size": 1536,
+        "layer_norm_eps": 1e-12,
+        "max_position_embeddings": 512,
+        "model_type": "bert",
+        "num_attention_heads": 12,
+        "num_hidden_layers": 6,
+        "pad_token_id": 0,
+        "position_embedding_type": "absolute",
+        "transformers_version": "4.8.2",
+        "type_vocab_size": 2,
+        "use_cache": True,
+        "vocab_size": 30522,
+    }
+    assert_found(kwargs, config)
+    config.update(**kwargs)
+    conf = BertConfig(**config)
+    model = BertModel(conf)
+    model.eval()
+
+    dim = (1, 30)
+    inputs = dict(
+        input_ids=torch.randint(0, 30522, dim).to(torch.int64),
+        attention_mask=torch.ones(*dim, dtype=torch.int64),
+    )
+
+    if inputs_as_dict:
+        inputs = tuple(inputs.values())
+
+    return model, inputs
+
+
+def get_smollm_1_7b(
+    inputs_as_dict: bool = False, **kwargs
+) -> Tuple[Any, Union[Tuple[Any, ...], Dict[str, Any]]]:
+    """
+    Gets a non initialized model.
+
+    :param inputs_as_dict: returns dummy inputs as a dictionary or not
+    :param kwargs: to overwrite the configuration, example ``num_hidden_layers=1``
+    :return: model, inputs
+
+    See `SmolLM-1.7B
+    <https://huggingface.co/HuggingFaceTB/SmolLM-1.7B/blob/main/config.json>`_.
+    """
+    import torch
+    from transformers import LlamaConfig, LlamaForCausalLM
+
+    config = {
+        "_name_or_path": "/fsx/loubna/checkpoints/cosmo2_1T/500000",
+        "architectures": ["LlamaForCausalLM"],
+        "attention_bias": False,
+        "attention_dropout": 0.0,
+        "bos_token_id": 0,
+        "eos_token_id": 0,
+        "hidden_act": "silu",
+        "hidden_size": 2048,
+        "initializer_range": 0.02,
+        "intermediate_size": 8192,
+        "max_position_embeddings": 2048,
+        "model_type": "llama",
+        "num_attention_heads": 32,
+        "num_hidden_layers": 24,
+        "num_key_value_heads": 32,
+        "pretraining_tp": 1,
+        "rms_norm_eps": 1e-05,
+        "rope_scaling": None,
+        "rope_theta": 10000.0,
+        "tie_word_embeddings": True,
+        "torch_dtype": "float32",
+        "transformers_version": "4.39.3",
+        "use_cache": True,
+        "vocab_size": 49152,
+    }
+    config.update(
+        {
+            "_from_model_config": True,
+            "bos_token_id": 0,
+            "eos_token_id": 0,
+            "transformers_version": "4.39.3",
+        }
+    )
+    assert_found(kwargs, config)
+    config.update(**kwargs)
+    conf = LlamaConfig(**config)
+    model = LlamaForCausalLM(conf)
+    model.eval()
+
+    dim = (1, 30)
+    inputs = dict(
+        input_ids=torch.randint(0, 49152, dim).to(torch.int64),
         attention_mask=torch.ones(*dim, dtype=torch.int64),
     )
 
