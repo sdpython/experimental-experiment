@@ -1,7 +1,7 @@
 import os
 import sys
 import time
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 import onnx
@@ -146,7 +146,11 @@ def compute_weight_size(model: Any) -> int:
         assert isinstance(size, int), f"Unexpected type {type(size)}: {size}"
         return size
 
-    raise AssertionError(f"Unexpected type {type(model)}.")
+    if hasattr(model, "buffer"):
+        # executorch
+        return len(model.buffer)
+
+    raise AssertionError(f"Unexpected type {type(model)} - {dir(model)}.")
 
 
 def common_export(
@@ -361,7 +365,7 @@ def run_inference(
 
 
 class WrapForTorch:
-    """Wraps  a torch model."""
+    """Wraps a torch model."""
 
     def __init__(self, torch_model: Any):
         if hasattr(torch_model, "graph_module"):
@@ -376,6 +380,26 @@ class WrapForTorch:
 
     @property
     def input_names(self):
+        res = []
+        for node in self.model.graph.nodes:
+            if node.op == "placeholder":
+                res.append(node.target)
+        return res
+
+
+class WrapExecutorchForTorch(WrapForTorch):
+    """Wraps a executorch model."""
+
+    def __init__(self, model: Any, forward_method: Callable):
+        self.model = model
+        self.forward_method = forward_method
+
+    def run(self, inputs):
+        return self.forward_method.execute(inputs)
+
+    @property
+    def input_names(self):
+        raise NotImplementedError(f"Not implemented yet {dir(self.model)}.")
         res = []
         for node in self.model.graph.nodes:
             if node.op == "placeholder":

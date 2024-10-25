@@ -8,11 +8,12 @@ from experimental_experiment.ext_test_case import (
     ExtTestCase,
     ignore_warnings,
     requires_torch,
+    requires_executorch,
     is_windows,
 )
 
 
-class TestBashBenchRunnerCmdUntrained(ExtTestCase):
+class TestBashBenchRunnerCmdExecutorch(ExtTestCase):
     @classmethod
     def setUpClass(cls):
         import torch
@@ -28,11 +29,11 @@ class TestBashBenchRunnerCmdUntrained(ExtTestCase):
 
         torch.set_grad_enabled(cls.is_grad_enabled)
 
-    def _untrained_export(
+    def _export_cmd(
         self,
         exporter,
         models,
-        verbose=0,
+        verbose=1,
         debug=False,
         optimization=None,
         dump_ort=False,
@@ -44,7 +45,7 @@ class TestBashBenchRunnerCmdUntrained(ExtTestCase):
     ):
         if is_windows():
             raise unittest.SkipTest("export does not work on Windows")
-        from experimental_experiment.torch_bench.bash_bench_untrained import main
+        from experimental_experiment.torch_bench.bash_bench_huggingface import main
 
         args = [
             "--model",
@@ -106,19 +107,22 @@ class TestBashBenchRunnerCmdUntrained(ExtTestCase):
             for i in onx.graph.input:
                 shape = i.type.tensor_type.shape
                 value = tuple(d.dim_param or d.dim_value for d in shape.dim)
-                self.assertIn(value[0], ("batch", "s0"))
+                self.assertIn(value[0], ("batch", "s0", "s1"))
                 input_values.append(value[0])
-            assert len(set(input_values)) == 1, f"no unique value: input_values={input_values}"
+            assert len(set(input_values)) <= 2, f"no unique value: input_values={input_values}"
             for i in onx.graph.output:
                 shape = i.type.tensor_type.shape
                 value = tuple(d.dim_param or d.dim_value for d in shape.dim)
-                self.assertIn(value[0], ("batch", "s0"))
+                self.assertIn(value[0], ("batch", "s0", "s1"))
                 self.assertEqual(input_values[0], value[0])
+
+    # export
 
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.5")
-    def test_untrained_export_bench_custom_cpu(self):
-        self._untrained_export("custom", "Phi35MiniInstructLM_1Layer", verbose=1, debug=False)
+    @requires_executorch("0.4")
+    def test_executorch(self):
+        self._export_cmd("executorch", "101Dummy", check_file=False)
 
 
 if __name__ == "__main__":

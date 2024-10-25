@@ -666,6 +666,25 @@ class ModelRunner:
                 verbose=verbose,
                 strategy=strategy,
             )
+        if exporter == "executorch":
+            assert strategy in {
+                None,
+                "default",
+                "nostrict",
+                "none",
+                "fallback",
+                "fallback-default",
+                "jit",
+            }, f"strategy={strategy!r} not implemented for {exporter!r}"
+            return self._to_executorch(
+                name,
+                dynamic=dynamic,
+                fake_tensor=fake_tensor,
+                no_grad=no_grad,
+                optimization=optimization,
+                verbose=verbose,
+                strategy=strategy,
+            )
         if exporter == "inductor":
             assert strategy in (
                 None,
@@ -752,7 +771,7 @@ class ModelRunner:
                 f"[ModelRunner._to_onnx_custom] export_kw_inputs="
                 f"{string_type(export_kw_inputs)!r}"
             )
-            print(f"[ModelRunner._to_onnx_custom] export_options={self.export_options!r}")
+            print(f"[ModelRunner._to_onnx_custom] self.export_options={self.export_options!r}")
             print(f"[ModelRunner._to_onnx_custom] export_options={export_options!r}")
 
         if self.autocast:
@@ -1197,7 +1216,7 @@ class ModelRunner:
 
         export_inputs, export_kw_inputs = self.make_export_inputs(dynamic)
         dynamic_shapes = self.get_dynamic_shapes(dynamic)
-        export_options = ExportOptions(strategy=strategy)
+        export_options = ExportOptions(strategy=strategy, **(self.export_options or {}))
         if verbose:
             print(f"[ModelRunner._to_export] dynamic_shapes={dynamic_shapes!r}")
             print(f"[ModelRunner._to_export] export_inputs={string_type(export_inputs)!r}")
@@ -1205,6 +1224,7 @@ class ModelRunner:
                 f"[ModelRunner._to_export] export_kw_inputs={string_type(export_kw_inputs)!r}"
             )
             print(f"[ModelRunner._to_export] strategy={strategy!r}")
+            print(f"[ModelRunner._to_export] self.export_options={self.export_options!r}")
             print(f"[ModelRunner._to_export] export_options={export_options!r}")
             print(f"[ModelRunner._to_export] type(model)={type(self.model)!r}")
 
@@ -1219,21 +1239,6 @@ class ModelRunner:
                 verbose=verbose,
             )
 
-        if export_options.decomposition_table:
-            if verbose:
-                print(
-                    f"[ModelRunner._to_export] decomposition_table="
-                    f"{export_options.decomposition_table!r}"
-                )
-            from ..torch_interpreter.export_options import (
-                insert_contiguous_between_transpose_and_view,
-            )
-
-            exported_mod = insert_contiguous_between_transpose_and_view(exported_mod)
-            exported_mod = exported_mod.run_decompositions(
-                export_options.get_decomposition_table()
-            )
-
         root_name = os.path.splitext(name)[0]
         if verbose:
             print(f"[ModelRunner._to_export] write fx graph intp {root_name!r}")
@@ -1243,6 +1248,82 @@ class ModelRunner:
             f.write(str(exported_mod.graph))
 
         return exported_mod.module(), None
+
+    def _to_executorch(
+        self,
+        name: str,
+        dynamic: bool,
+        fake_tensor: bool,
+        no_grad: bool,
+        optimization: str,
+        verbose: int,
+        strategy: Optional[str] = None,
+    ):
+        assert self.device == "cpu", f"executorch only works with CPU not {self.device!r}"
+        assert not fake_tensor, "fake_tensor not implemented."
+        assert no_grad, "no_grad false not implemented yet"
+        assert not self.autocast, "not implemented for autocast"
+        assert (
+            not optimization or optimization == "none"
+        ), f"optimization {optimization!r} not compatible with export"
+        from ..torch_interpreter import ExportOptions
+        from executorch.exir import to_edge, ExecutorchBackendConfig
+
+        export_inputs, export_kw_inputs = self.make_export_inputs(dynamic)
+        dynamic_shapes = self.get_dynamic_shapes(dynamic)
+        export_options = ExportOptions(strategy=strategy, **(self.export_options or {}))
+        if verbose:
+            print(f"[ModelRunner._to_executorch] dynamic_shapes={dynamic_shapes!r}")
+            print(f"[ModelRunner._to_executorch] export_inputs={string_type(export_inputs)!r}")
+            print(
+                f"[ModelRunner._to_executorch] export_kw_inputs="
+                f"{string_type(export_kw_inputs)!r}"
+            )
+            print(f"[ModelRunner._to_executorch] strategy={strategy!r}")
+            print(f"[ModelRunner._to_executorch] self.export_options={self.export_options!r}")
+            print(f"[ModelRunner._to_executorch] export_options={export_options!r}")
+            print(f"[ModelRunner._to_executorch] type(model)={type(self.model)!r}")
+            print("[ModelRunner._to_executorch] run torch.export.export")
+
+        with bypass_export_some_errors():
+            exported_mod = export_options.export(
+                self.model,
+                export_inputs,
+                export_kw_inputs,
+                dynamic_shapes=dynamic_shapes,
+                tracing_mode=False,
+                same_signature=False,
+                verbose=verbose,
+            )
+
+        root_name = os.path.splitext(name)[0]
+        if verbose:
+            print(f"[ModelRunner._to_executorch] write fx graph intp {root_name!r}")
+        with open(f"{root_name}.txt", "w") as f:
+            f.write(str(exported_mod))
+        with open(f"{root_name}.graph.txt", "w") as f:
+            f.write(str(exported_mod.graph))
+
+        assert os.path.splitext(name)[-1] == ".pte", f"Unexpected extension for {name!r}"
+        if verbose:
+            print("[ModelRunner._to_executorch] export to EdgeProgramManager")
+        edge_program = to_edge(exported_mod)
+        if verbose:
+            print(
+                f"[ModelRunner._to_executorch] export {type(edge_program)} "
+                f"to ExecutorchProgramManager"
+            )
+
+        executorch_program = edge_program.to_executorch(ExecutorchBackendConfig(passes=[]))
+
+        if verbose:
+            print(
+                f"[ModelRunner._to_executorch] saved {type(executorch_program)} into {name!r}"
+            )
+        with open(name, "wb") as file:
+            file.write(executorch_program.buffer)
+
+        return executorch_program, None
 
     def _to_eager(
         self,
@@ -1750,6 +1831,7 @@ class ModelRunner:
             "dort",
             "cort",
             "cortgrad",
+            "executorch",
         }:
             return self.inputs
 

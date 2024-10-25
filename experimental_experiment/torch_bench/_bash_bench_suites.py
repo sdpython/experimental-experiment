@@ -16,8 +16,12 @@ class UntrainedRunner(BenchmarkRunner):
         cls.MODELS.update(
             {
                 "Llama2Layer": lambda: get_llama_model_layer(num_hidden_layers=2),
-                "Phi35MiniiInstruct_1Layer": lambda: (
+                "Phi35MiniInstructLM_1Layer": lambda: (
                     *get_phi_35_mini_instruct(num_hidden_layers=1),
+                    dict(strict=False),
+                ),
+                "Phi35MiniInstructLM": lambda: (
+                    *get_phi_35_mini_instruct(),
                     dict(strict=False),
                 ),
             }

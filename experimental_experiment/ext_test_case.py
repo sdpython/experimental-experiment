@@ -646,6 +646,23 @@ def requires_torch(version: str, msg: str = "") -> Callable:
     return lambda x: x
 
 
+def requires_executorch(version: str, msg: str = "") -> Callable:
+    """Skips a unit test if :epkg:`executorch` is not recent enough."""
+    if not has_executorch():
+        msg = f"executorch is not installed: {msg}"
+        return unittest.skip(msg)
+
+    import packaging.version as pv
+    import executorch
+
+    if hasattr(executorch, "__version__") and pv.Version(
+        ".".join(executorch.__version__.split(".")[:2])
+    ) < pv.Version(version):
+        msg = f"torch version {executorch.__version__} < {version}: {msg}"
+        return unittest.skip(msg)
+    return lambda x: x
+
+
 def requires_monai(version: str = "", msg: str = "") -> Callable:
     """Skips a unit test if :epkg:`monai` is not recent enough."""
     import packaging.version as pv

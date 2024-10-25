@@ -24,6 +24,8 @@ Examples
 102
 +++
 
+* :ref:`l-plot-onnxscript-102`
+* :ref:`l-plot-executorch-102`
 * :ref:`l-plot-convolution-matmul-102`
 * :ref:`l-plot-custom-backend-llama-102`
 * :ref:`l-plot-llama-bench-102`
