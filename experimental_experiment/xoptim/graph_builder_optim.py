@@ -242,10 +242,7 @@ class GraphBuilderPatternOptimization:
         elif cst_shape not in (tuple(), (1,)):
             return False
         cst = self.get_computed_constant(name)
-        if hasattr(cst, "numpy"):
-            # This could fail xith bfloat16, ...
-            cst = cst.detach().cpu().numpy()
-        assert isinstance(
+        assert hasattr(cst, "numpy") or isinstance(
             cst, np.ndarray
         ), f"Unexpected type for constant {name}!r, type is {type(cst)}"
         shape = cst.shape
@@ -341,10 +338,7 @@ class GraphBuilderPatternOptimization:
         :return: int or float
         """
         cst = self.get_computed_constant(name)
-        if hasattr(cst, "numpy"):
-            # This could fail xith bfloat16, ...
-            cst = cst.detach().cpu().numpy()
-        assert isinstance(
+        assert hasattr(cst, "numpy") or isinstance(
             cst, np.ndarray
         ), f"Unexpected type for constant {name}!r, type is {type(cst)}"
         assert cst.shape == tuple() or (
@@ -371,6 +365,20 @@ class GraphBuilderPatternOptimization:
             np.dtype("complex128"),
         }:
             return complex(value)
+
+        if value.dtype in {
+            self.builder.torch.float32,
+            self.builder.torch.float16,
+            self.builder.torch.float64,
+            self.builder.torch.bfloat16,
+        }:
+            return float(value)
+        if value.dtype in {
+            self.builder.torch.complex64,
+            self.builder.torch.complex128,
+        }:
+            return complex(value)
+
         return int(value)
 
     def get_computed_constant(self, name: str, statistics: Optional[List[str]] = None) -> Any:

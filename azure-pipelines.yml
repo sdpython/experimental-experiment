@@ -58,7 +58,7 @@ jobs:
       python -m pip install . -v -v -v
     displayName: 'install wheel'
   - script: |
-      UNITTEST_ONNXRT=1 UNITTEST_GOING=1 python -m pytest _unittests --durations=10
+      UNITTEST_ONNXRT=1 UNITTEST_GOING=1 python -m pytest _unittests --durations=20
     displayName: 'Runs Unit Tests'
   - task: PublishPipelineArtifact@0
     inputs:
@@ -137,7 +137,7 @@ jobs:
       python -m pip freeze
     displayName: 'pip freeze'
   - script: |
-      UNITTEST_ONNXRT=1 UNITTEST_GOING=1 python -m pytest _unittests --durations=10
+      UNITTEST_ONNXRT=1 UNITTEST_GOING=1 python -m pytest _unittests --durations=20
     displayName: 'Runs Unit Tests'
   - task: PublishPipelineArtifact@0
     inputs:
@@ -213,7 +213,7 @@ jobs:
       python -m pip freeze
     displayName: 'pip freeze'
   - script: |
-      UNITTEST_GOING=1 python -m pytest --cov _unittests --durations=10
+      UNITTEST_GOING=1 python -m pytest --cov _unittests --durations=20
     displayName: 'Runs Unit Tests'
   - script: |
       python -u setup.py bdist_wheel
@@ -322,7 +322,7 @@ jobs:
 #      python -m pip freeze
 #    displayName: 'pip freeze'
 #  - script: |
-#      UNITTEST_ONNXRT=1 UNITTEST_GOING=1 python -m pytest _unittests --durations=10
+#      UNITTEST_ONNXRT=1 UNITTEST_GOING=1 python -m pytest _unittests --durations=20
 #    displayName: 'Runs Unit Tests'
 #  - script: |
 #      python -u setup.py bdist_wheel

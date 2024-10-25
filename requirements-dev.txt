@@ -1,4 +1,5 @@
 black
+diffusers>=0.30.0
 furo
 matplotlib
 onnx-array-api

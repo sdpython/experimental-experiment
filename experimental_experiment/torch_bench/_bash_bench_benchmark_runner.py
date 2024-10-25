@@ -4,6 +4,7 @@ import pickle
 import sys
 import time
 import traceback
+from pathlib import Path
 from datetime import datetime
 from typing import Any, Dict, Iterator, List, Optional, Set, Tuple, Union
 
@@ -16,6 +17,7 @@ from torch._dynamo.utils import clone_inputs
 from .export_model_helper import (
     WrapForTorch,
     WrapInferenceSessionForTorch,
+    WrapExecutorchForTorch,
     compute_weight_size,
     obj_size,
     size_type,
@@ -988,12 +990,13 @@ class BenchmarkRunner:
         if pfilename and not os.path.exists(pfilename):
             os.makedirs(pfilename)
         cleaned_name = model_name.replace(".", "_").replace("/", "_")
+        ext = "pte" if exporter == "executorch" else "onnx"
         filename = os.path.join(
             pfilename,
             (
                 f"model_{cleaned_name}-{exporter}{sopt}-"
                 f"d{1 if dynamic in BOOLEAN_VALUES else 0}"
-                f"rt{1 if rtopt in BOOLEAN_VALUES else 0}.onnx"
+                f"rt{1 if rtopt in BOOLEAN_VALUES else 0}.{ext}"
             ),
         )
 
@@ -1348,6 +1351,33 @@ class BenchmarkRunner:
                 onnx.save(ortops, new_filename, save_as_external_data=True)
                 # Let's free some space.
                 os.remove(session_options.optimized_model_filepath)
+        elif "ExecutorchProgramManager" in str(type(exported_model)):
+            # executorch
+            from executorch.runtime import Verification, Runtime
+
+            stats["onnx_model"] = "0"
+            if quiet:
+                try:
+                    et_runtime = Runtime.get()
+                    program = et_runtime.load_program(
+                        Path(filename), verification=Verification.Minimal
+                    )
+                    forward = program.load_method("forward")
+                except Exception as e:
+                    stats["ERR_executorch"] = _clean_string(str(e)).replace("\n", " ")
+                    if self.verbose:
+                        print(f"[benchmarkrunner.benchmark] err_executorch {e}")
+                    return stats
+            else:
+                et_runtime = Runtime.get()
+                program = et_runtime.load_program(
+                    Path(filename), verification=Verification.Minimal
+                )
+                forward = program.load_method("forward")
+            if self.verbose > 1:
+                print("[BenchmarkRunner.benchmark] WrapExecutorchForTorch")
+            sess = WrapExecutorchForTorch(program, forward)
+            is_onnx = False
         else:
             if self.verbose > 1:
                 print("[BenchmarkRunner.benchmark] WrapForTorch")

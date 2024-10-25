@@ -136,6 +136,10 @@ def bash_bench_main(script_name: str, doc: str, args: Optional[List[str]] = None
         from ._bash_bench_set_explicit import ExplicitRunner
 
         runner = ExplicitRunner(device=args.device, verbose=int(args.verbose))
+    elif script_name == "bash_bench_untrained":
+        from ._bash_bench_suites import UntrainedRunner
+
+        runner = UntrainedRunner(device=args.device, verbose=int(args.verbose))
     else:
         raise AssertionError(f"Unexpected bash_bench name {script_name!r}.")
     names = runner.get_model_name_list()

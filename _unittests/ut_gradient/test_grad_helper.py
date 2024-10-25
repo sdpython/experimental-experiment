@@ -1,4 +1,3 @@
-import onnxruntime  # noqa: F401
 import unittest
 import logging
 import numpy

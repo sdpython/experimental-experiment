@@ -20,8 +20,6 @@ from ._bash_bench_model_runner import (
 
 
 class TorchBenchRunner(BenchmarkRunner):
-    # Installation to make
-    # dalle2_pytorch
     SUITE = "TorchBench"
 
     YAML = textwrap.dedent(
@@ -913,6 +911,7 @@ class TorchBenchRunner(BenchmarkRunner):
             model.config.to_tuple = False
         else:
             model.config = MakeConfig(to_tuple=False)
+
         return ModelRunner(
             model,
             example_inputs,

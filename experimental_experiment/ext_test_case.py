@@ -646,6 +646,23 @@ def requires_torch(version: str, msg: str = "") -> Callable:
     return lambda x: x
 
 
+def requires_executorch(version: str, msg: str = "") -> Callable:
+    """Skips a unit test if :epkg:`executorch` is not recent enough."""
+    if not has_executorch():
+        msg = f"executorch is not installed: {msg}"
+        return unittest.skip(msg)
+
+    import packaging.version as pv
+    import executorch
+
+    if hasattr(executorch, "__version__") and pv.Version(
+        ".".join(executorch.__version__.split(".")[:2])
+    ) < pv.Version(version):
+        msg = f"torch version {executorch.__version__} < {version}: {msg}"
+        return unittest.skip(msg)
+    return lambda x: x
+
+
 def requires_monai(version: str = "", msg: str = "") -> Callable:
     """Skips a unit test if :epkg:`monai` is not recent enough."""
     import packaging.version as pv
@@ -686,7 +703,7 @@ def requires_pyinstrument(version: str = "", msg: str = "") -> Callable:
     try:
         import pyinstrument
     except ImportError:
-        return unittest.skip(msg or "pyinstrument not installed")
+        return unittest.skip(msg or "pyinstrument is not installed")
 
     if version and pv.Version(".".join(pyinstrument.__version__.split(".")[:2])) < pv.Version(
         version
@@ -712,16 +729,46 @@ def requires_transformers(
 ) -> Callable:
     """Skips a unit test if :epkg:`transformers` is not recent enough."""
     import packaging.version as pv
-    import transformers
+
+    try:
+        import transformers
+    except ImportError:
+        msg = f"diffusers not installed {msg}"
+        return unittest.skip(msg)
 
     v = pv.Version(".".join(transformers.__version__.split(".")[:2]))
     if v < pv.Version(version):
-        msg = f"transformers version {transformers.__version__} < {version}: {msg}"
+        msg = f"transformers version {transformers.__version__} < {version} {msg}"
         return unittest.skip(msg)
     if or_older_than and v > pv.Version(or_older_than):
         msg = (
             f"transformers version {or_older_than} < "
-            f"{transformers.__version__} < {version}: {msg}"
+            f"{transformers.__version__} < {version} {msg}"
+        )
+        return unittest.skip(msg)
+    return lambda x: x
+
+
+def require_diffusers(
+    version: str, msg: str = "", or_older_than: Optional[str] = None
+) -> Callable:
+    """Skips a unit test if :epkg:`transformers` is not recent enough."""
+    import packaging.version as pv
+
+    try:
+        import diffusers
+    except ImportError:
+        msg = f"diffusers not installed {msg}"
+        return unittest.skip(msg)
+
+    v = pv.Version(".".join(diffusers.__version__.split(".")[:2]))
+    if v < pv.Version(version):
+        msg = f"diffusers version {diffusers.__version__} < {version} {msg}"
+        return unittest.skip(msg)
+    if or_older_than and v > pv.Version(or_older_than):
+        msg = (
+            f"diffusers version {or_older_than} < "
+            f"{diffusers.__version__} < {version} {msg}"
         )
         return unittest.skip(msg)
     return lambda x: x

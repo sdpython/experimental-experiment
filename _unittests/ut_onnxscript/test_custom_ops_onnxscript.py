@@ -3,10 +3,6 @@ from experimental_experiment.ext_test_case import ExtTestCase, requires_cuda
 
 
 class TestCustomOpsOnnxScript(ExtTestCase):
-    @classmethod
-    def setUpClass(cls):
-        import onnxruntime  # noqa: F401
-
     @requires_cuda()
     def test_llama_sdpa_model_efficient(self):
         # see https://pytorch.org/tutorials/beginner/onnx/onnx_registry_tutorial.html

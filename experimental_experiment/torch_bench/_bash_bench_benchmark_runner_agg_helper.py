@@ -1072,8 +1072,9 @@ def _create_aggregation_figures(
     for k, v in final_res.items():
         if k in skip:
             continue
-        assert (
-            v.select_dtypes(include=np.number).shape[1] > 0
+        n_numerical = v.select_dtypes(include=np.number).shape[1]
+        assert k in {"onnx"} or (
+            n_numerical > 0
         ), f"No numeric column for k={k!r}, dtypes=\n{v.dtypes}"
         assert None not in v.index.names, f"None in v.index.names={v.index.names}, k={k!r}"
         assert (
@@ -1194,6 +1195,10 @@ def _create_aggregation_figures(
             continue
         df = pandas.concat(dfs, axis=0)
 
+        if df.shape[1] == 0 and k in {"onnx"}:
+            # nothing to do
+            continue
+
         assert df.shape[0] > 0, f"Empty set for k={k!r}"
         assert df.shape[1] > 0, f"Empty columns for k={k!r}"
         assert _nonone_(df.index), f"None in {df.index.names}, k={k!r}"
@@ -1246,7 +1251,9 @@ def _create_aggregation_figures(
     # concatenation
     dfs = pandas.concat(list(aggs.values()), axis=0)
     assert None not in dfs.index.names, f"None in dfs.index.names={dfs.index.names}"
-    assert None not in dfs.columns.names, f"None in dfs.columns.names={dfs.columns.names}"
+    assert (
+        None not in dfs.columns.names
+    ), f"None in dfs.columns.names={dfs.columns.names}, aggs: {set(aggs)}"
     names = list(dfs.columns.names)
     dfs = dfs.unstack(key)
     keep_columns = dfs

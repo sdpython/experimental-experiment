@@ -7,11 +7,16 @@ API
     :maxdepth: 1
     :caption: Builder and Optimizer
 
-    onnx_export
     graph_builder
     graph_builder_pattern
     graph_builder_patterns
     order_optimization
+
+.. toctree::
+    :maxdepth: 1
+    :caption: Converter, Builder and Optimizer
+
+    onnx_export
     interpreter
     aten_function
     aten_method

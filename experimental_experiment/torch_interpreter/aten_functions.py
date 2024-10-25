@@ -1,9 +1,14 @@
 from typing import Any, Callable, Dict, List, Optional, Tuple
-from . import _aten_functions, _prims_functions
+from . import _aten_functions, _aten_functions_attention, _prims_functions
 
 
 def _enumerate_aten_functions():
     for k, v in _aten_functions.__dict__.items():
+        if not k.startswith("aten_") or not callable(v):
+            continue
+        assert v.__doc__, f"doc missing for {k!r} ({v})"
+        yield k, v
+    for k, v in _aten_functions_attention.__dict__.items():
         if not k.startswith("aten_") or not callable(v):
             continue
         assert v.__doc__, f"doc missing for {k!r} ({v})"

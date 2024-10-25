@@ -213,6 +213,8 @@ class _GraphBuilderRuntime:
         node: NodeProto,
         feeds: Dict[str, "torch.Tensor"],  # noqa: F821
     ) -> "torch.Tensor":  # noqa: F821
+        from . import str_tensor_proto_type
+
         x = feeds[node.input[0]]
         if not isinstance(x, (np.ndarray, self.torch.Tensor)):
             # Maybe a float, then we process it as a float, tensor.to only works
@@ -231,7 +233,9 @@ class _GraphBuilderRuntime:
                 saturate = att.i
                 break
         assert to, f"to not here in node {node}"
-        assert to <= 11, f"Cast not implemented for to={to}"
+        assert (
+            to != 8 and to < 17
+        ), f"Cast not implemented for to={to}, {str_tensor_proto_type()}"
         del saturate
         if isinstance(x, np.ndarray):
             # Type conversion between numpy and torch is not robust.

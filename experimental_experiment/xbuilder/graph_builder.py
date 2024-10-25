@@ -1072,18 +1072,13 @@ class GraphBuilder(_GraphBuilderRuntime):
         if name in self._known_types:
             # 0 is undefined
             if self._known_types[name] != 0 and int_type != self._known_types[name]:
-                mapping = [
-                    (getattr(TensorProto, att), att)
-                    for att in dir(TensorProto)
-                    if att.upper() == att and isinstance(getattr(TensorProto, att), int)
-                ]
-                mapping.sort()
-                smap = ",".join(f"{k}:{v}" for k, v in mapping)
                 if exc:
+                    from . import str_tensor_proto_type
+
                     raise RuntimeError(
                         f"Type for name {name!r} already exists and it is different, "
                         f"known is {self._known_types[name]} != {int_type} (new) - "
-                        f"(mapping={smap}){self.get_debug_msg()}"
+                        f"(mapping={str_tensor_proto_type()}){self.get_debug_msg()}"
                     )
                 if "warnings" not in self._debug_msg:
                     self._debug_msg["warnings"] = []

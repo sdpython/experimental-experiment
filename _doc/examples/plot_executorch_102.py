@@ -1,10 +1,11 @@
 """
-.. _l-plot-torch-export-101:
+.. _l-plot-executorch-102:
 
-101: First test with ExecuTorch
+102: First test with ExecuTorch
 ===============================
 
-See :epkg:`ExecuTorch`, :epkg:`ExecuTorch Tutorial`,
+This script demonstrates :epkg:`ExecuTorch` on a very simple example,
+see also :epkg:`ExecuTorch Tutorial`,
 :epkg:`ExecuTorch Runtime Python API Reference`.
 
 Convert a Model

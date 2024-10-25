@@ -1,4 +1,3 @@
-import onnxruntime  # noqa: F401
 import unittest
 from experimental_experiment.ext_test_case import (
     ExtTestCase,
@@ -55,6 +54,7 @@ class TestPhi3(ExtTestCase):
     @unittest.skipIf(not has_phi3(), reason="transformers not recent enough")
     @requires_onnxruntime_training()
     def test_get_phi3_model_mask_eager_ortmodule(self):
+        import onnxruntime
         from onnxruntime.training.ortmodule import ORTModule
         from experimental_experiment.torch_models.phi3_helper import (
             get_phi3_model,
@@ -72,6 +72,7 @@ class TestPhi3(ExtTestCase):
     @unittest.skipIf(not has_phi3(), reason="transformers not recent enough")
     @requires_onnxruntime_training()
     def test_get_phi3_model_mask_eager_ortmodule_backward(self):
+        import onnxruntime
         from onnxruntime.training.ortmodule import ORTModule, DebugOptions
         from experimental_experiment.torch_models.phi3_helper import (
             get_phi3_model,
