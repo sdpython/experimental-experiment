@@ -1,6 +1,6 @@
-================
-Supported Models
-================
+======================================
+Supported Models By the Custom Backend
+======================================
 
 This projects was started with LLaMa.
 
@@ -14,7 +14,7 @@ This projects was started with LLaMa.
     plot_custom_backend_code_llama_102
 
 .. toctree::
-    :caption: Models
+    :caption: Llama, Phi, Mistral
     :maxdepth: 1
 
     llama
@@ -22,3 +22,9 @@ This projects was started with LLaMa.
     phi
     phi3
     speech2text
+
+.. toctree::
+    :caption: Other LLMs
+    :maxdepth: 1
+
+    llms

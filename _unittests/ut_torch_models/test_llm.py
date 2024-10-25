@@ -138,6 +138,32 @@ class TestLlm(ExtTestCase):
         for a, b in zip(expected, got):
             self.assertEqualArray(a, b, atol=1e-5)
 
+    @unittest.skipIf(not has_phi3(), reason="transformers not recent enough")
+    @ignore_warnings("TracerWarning")
+    @ignore_warnings(UserWarning)
+    def test_get_ai21_jamba_15_mini(self):
+        # import torch
+        from experimental_experiment.torch_models.llm_model_helper import (
+            get_ai21_jamba_15_mini,
+        )
+
+        model, model_inputs = get_ai21_jamba_15_mini(num_hidden_layers=1)
+        expected = list(flatten_outputs(model(**model_inputs)))
+        self.assertNotEmpty(expected)
+
+    @unittest.skipIf(not has_phi3(), reason="transformers not recent enough")
+    @ignore_warnings("TracerWarning")
+    @ignore_warnings(UserWarning)
+    def test_get_falcon_mamba_7b(self):
+        # import torch
+        from experimental_experiment.torch_models.llm_model_helper import (
+            get_falcon_mamba_7b,
+        )
+
+        model, model_inputs = get_falcon_mamba_7b(num_hidden_layers=1)
+        expected = list(flatten_outputs(model(**model_inputs)))
+        self.assertNotEmpty(expected)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

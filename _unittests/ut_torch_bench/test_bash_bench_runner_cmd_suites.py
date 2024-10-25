@@ -10,6 +10,7 @@ from experimental_experiment.ext_test_case import (
     requires_torch,
     is_windows,
 )
+from experimental_experiment.torch_models.phi3_helper import has_phi3
 
 
 class TestBashBenchRunnerCmdUntrained(ExtTestCase):
@@ -117,6 +118,7 @@ class TestBashBenchRunnerCmdUntrained(ExtTestCase):
 
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.5")
+    @unittest.skipIf(not has_phi3(), reason="transformers not recent enough")
     def test_untrained_export_bench_custom_cpu(self):
         self._untrained_export("custom", "Phi35MiniInstructLM_1Layer", verbose=1, debug=False)
 

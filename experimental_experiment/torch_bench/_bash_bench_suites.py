@@ -3,7 +3,11 @@ from torch._dynamo.testing import reset_rng_state
 from ._bash_bench_benchmark_runner import BenchmarkRunner
 from ._bash_bench_model_runner import ModelRunner
 from ._bash_bench_models_helper import get_llama_model_layer
-from ..torch_models.llm_model_helper import get_phi_35_mini_instruct
+from ..torch_models.llm_model_helper import (
+    get_ai21_jamba_15_mini,
+    get_falcon_mamba_7b,
+    get_phi_35_mini_instruct,
+)
 
 
 class UntrainedRunner(BenchmarkRunner):
@@ -15,14 +19,17 @@ class UntrainedRunner(BenchmarkRunner):
         """Steps to run before running the benchmark."""
         cls.MODELS.update(
             {
-                "Llama2Layer": lambda: get_llama_model_layer(num_hidden_layers=2),
-                "Phi35MiniInstructLM_1Layer": lambda: (
-                    *get_phi_35_mini_instruct(num_hidden_layers=1),
-                    dict(strict=False),
+                "AI21Jamba15MiniLM": get_ai21_jamba_15_mini,
+                "FalconMamba7bLM": get_falcon_mamba_7b,
+                "Llama2Layer": (lambda: get_llama_model_layer(num_hidden_layers=2)),
+                "Phi35MiniInstructLM_1Layer": (
+                    lambda: (
+                        *get_phi_35_mini_instruct(num_hidden_layers=1),
+                        dict(strict=False),
+                    )
                 ),
-                "Phi35MiniInstructLM": lambda: (
-                    *get_phi_35_mini_instruct(),
-                    dict(strict=False),
+                "Phi35MiniInstructLM": (
+                    lambda: (*get_phi_35_mini_instruct(), dict(strict=False)),
                 ),
             }
         )

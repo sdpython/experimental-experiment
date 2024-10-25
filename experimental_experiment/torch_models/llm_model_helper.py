@@ -172,3 +172,168 @@ def get_phi_35_mini_instruct(
         inputs = tuple(inputs.values())
 
     return model, inputs
+
+
+def get_ai21_jamba_15_mini(
+    inputs_as_dict: bool = False, **kwargs
+) -> Tuple[Any, Union[Tuple[Any, ...], Dict[str, Any]]]:
+    """
+    Gets a non initialized model.
+
+    :param inputs_as_dict: returns dummy inputs as a dictionary or not
+    :param kwargs: to overwrite the configuration, example ``num_hidden_layers=1``
+    :return: model, inputs
+
+    See `ai21labs/AI21-Jamba-1.5-Mini/config.json
+    <https://huggingface.co/ai21labs/AI21-Jamba-1.5-Mini/blob/main/config.json>`_.
+    """
+    import torch
+    from transformers import JambaConfig, JambaForCausalLM
+
+    config = {
+        "architectures": ["JambaForCausalLM"],
+        "attention_dropout": 0.0,
+        "attn_layer_offset": 4,
+        "attn_layer_period": 8,
+        "bos_token_id": 1,
+        "eos_token_id": [2, 518],
+        "expert_layer_offset": 1,
+        "expert_layer_period": 2,
+        "hidden_act": "silu",
+        "hidden_size": 4096,
+        "initializer_range": 0.02,
+        "intermediate_size": 14336,
+        "mamba_conv_bias": True,
+        "mamba_d_conv": 4,
+        "mamba_d_state": 16,
+        "mamba_dt_rank": 256,
+        "mamba_expand": 2,
+        "mamba_proj_bias": False,
+        "max_position_embeddings": 262144,
+        "model_type": "jamba",
+        "num_attention_heads": 32,
+        "num_experts": 16,
+        "num_experts_per_tok": 2,
+        "num_hidden_layers": 32,
+        "num_key_value_heads": 8,
+        "num_logits_to_keep": 1,
+        "output_router_logits": False,
+        "pad_token_id": 0,
+        "rms_norm_eps": 1e-06,
+        "router_aux_loss_coef": 0.001,
+        "sliding_window": None,
+        "tie_word_embeddings": False,
+        "torch_dtype": "bfloat16",
+        "transformers_version": "4.40.2",
+        "use_cache": True,
+        "use_mamba_kernels": False,  # maybe another test to add
+        "vocab_size": 65536,
+    }
+    config.update(
+        {
+            "_from_model_config": True,
+            "bos_token_id": 1,
+            "eos_token_id": [2, 518],
+            "pad_token_id": 0,
+            "transformers_version": "4.40.2",
+        }
+    )
+
+    for k in kwargs:
+        assert (
+            k in config
+        ), f"Parameter {k!r} is not mentioned in the configuration {pprint.pformat(config)}"
+    config.update(**kwargs)
+    conf = JambaConfig(**config)
+    model = JambaForCausalLM(conf)
+    model.eval()
+
+    dim = (1, 30)
+    inputs = dict(
+        input_ids=torch.randint(0, 63028, dim).to(torch.int64),
+        attention_mask=torch.ones(*dim, dtype=torch.int64),
+    )
+
+    if inputs_as_dict:
+        inputs = tuple(inputs.values())
+
+    return model, inputs
+
+
+def get_falcon_mamba_7b(
+    inputs_as_dict: bool = False, **kwargs
+) -> Tuple[Any, Union[Tuple[Any, ...], Dict[str, Any]]]:
+    """
+    Gets a non initialized model.
+
+    :param inputs_as_dict: returns dummy inputs as a dictionary or not
+    :param kwargs: to overwrite the configuration, example ``num_hidden_layers=1``
+    :return: model, inputs
+
+    See `flacon-mamba-7b/config.json
+    <https://huggingface.co/tiiuae/falcon-mamba-7b/blob/main/config.json>`_.
+    """
+    import torch
+    from transformers import FalconMambaConfig, FalconMambaForCausalLM
+
+    config = {
+        "_name_or_path": "./",
+        "architectures": ["FalconMambaForCausalLM"],
+        "bos_token_id": 0,
+        "conv_kernel": 4,
+        "eos_token_id": 11,
+        "expand": 16,
+        "hidden_act": "silu",
+        "hidden_size": 4096,
+        "initializer_range": 0.1,
+        "intermediate_size": 8192,
+        "layer_norm_epsilon": 1e-05,
+        "model_type": "falcon_mamba",
+        "num_hidden_layers": 64,
+        "pad_token_id": 11,
+        "rescale_prenorm_residual": False,
+        "residual_in_fp32": True,
+        "state_size": 16,
+        "tie_word_embeddings": False,
+        "time_step_floor": 0.0001,
+        "time_step_init_scheme": "random",
+        "time_step_max": 0.1,
+        "time_step_min": 0.001,
+        "time_step_rank": 256,
+        "time_step_scale": 1.0,
+        "torch_dtype": "bfloat16",
+        "transformers_version": "4.43.0.dev0",
+        "use_bias": False,
+        "use_cache": True,
+        "use_conv_bias": True,
+        "vocab_size": 65024,
+    }
+    config.update(
+        {
+            "_from_model_config": True,
+            "bos_token_id": 0,
+            "eos_token_id": 11,
+            "pad_token_id": 11,
+            "transformers_version": "4.43.0.dev0",
+        }
+    )
+
+    for k in kwargs:
+        assert (
+            k in config
+        ), f"Parameter {k!r} is not mentioned in the configuration {pprint.pformat(config)}"
+    config.update(**kwargs)
+    conf = FalconMambaConfig(**config)
+    model = FalconMambaForCausalLM(conf)
+    model.eval()
+
+    dim = (1, 30)
+    inputs = dict(
+        input_ids=torch.randint(0, 65024, dim).to(torch.int64),
+        attention_mask=torch.ones(*dim, dtype=torch.int64),
+    )
+
+    if inputs_as_dict:
+        inputs = tuple(inputs.values())
+
+    return model, inputs
