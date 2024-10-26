@@ -551,7 +551,9 @@ def to_onnx(
     return_optimize_report: bool = False,
     filename: Optional[str] = None,
     inline: bool = False,
-    export_modules_as_functions: bool = False,
+    export_modules_as_functions: Union[
+        bool, Set[type["torch.nn.Module"]]  # noqa: F821
+    ] = False,
 ) -> Union[
     Union[ModelProto, ModelContainer],
     Tuple[Union[ModelProto, ModelContainer], GraphBuilder],
@@ -585,7 +587,9 @@ def to_onnx(
     :param inline: inline the model before converting to onnx, this is done before
             any optimization takes place
     :param export_options: to apply differents options before to get the exported program
-    :param export_modules_as_functions: export submodules as local functions
+    :param export_modules_as_functions: export submodules as local functions,
+        this parameter can be filled with a set of class to preserve,
+        all this other will be exported as usual
     :return: onnx model
 
     If environment variable ``PRINT_GRAPH_MODULE`` is set to one,
@@ -685,8 +689,16 @@ def to_onnx(
         assert isinstance(
             graph_module, torch.export.ExportedProgram
         ), f"Unexpected type {type(graph_module)} for graph_module"
+
+        if export_modules_as_functions is True:
+            export_modules_as_functions = set(type(m) for m in mod.modules())
+        interpreter.register(export_modules_as_functions, dict(mod.named_modules()))
         if verbose > 1:
-            print("[to_onnx] unflatten the graph_module")
+            print(
+                f"[to_onnx] unflatten the graph_module, "
+                f"preserve {sorted(c.__name__ for c in export_modules_as_functions)}"
+            )
+
         a = time.perf_counter()
         new_graph_module = torch.export.unflatten(graph_module)
         add_stats["time_export_unflatten"] = t - a
@@ -697,16 +709,16 @@ def to_onnx(
 
     if verbose:
         print("[to_onnx] start creating the onnx nodes")
+
     begin = t
     builder.process(graph_module, interpreter)
-
     t = time.perf_counter()
     add_stats["time_export_builder_process"] = t - begin
     if verbose:
         print(f"[to_onnx] {len(builder.nodes)} onnx nodes done in {t - begin} s")
         print("[to_onnx] start conversion to onnx (before optimization)")
-    begin = t
 
+    begin = t
     onx, stats = builder.to_onnx(
         optimize=optimize,
         large_model=large_model,
@@ -716,9 +728,10 @@ def to_onnx(
     )
     all_stats = dict(builder=builder.statistics_)
     if stats:
-        all_stats["optimization"] = stats
+        add_stats["optimization"] = stats
     t = time.perf_counter()
     add_stats["time_export_to_onnx"] = t - begin
+
     if verbose:
         proto = onx if isinstance(onx, ModelProto) else onx.model_proto
         print(

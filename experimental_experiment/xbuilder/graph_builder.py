@@ -2868,6 +2868,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         input_names: List[str],
         output_names: List[str],
         prefix: str = "",
+        local_function_name: Optional[str] = None,
     ) -> Union[str, List[str]]:
         """
         Appends all nodes and initializers from another builder.
@@ -2878,8 +2879,18 @@ class GraphBuilder(_GraphBuilderRuntime):
         :param input_names: input names
         :param output_names: output names
         :param prefix: prefix all name from this builder
+        :param local_function_name: inserts the nodes as a local function,
+            they become a local function, the name does not need to be unique,
+            if the builder detects a local function with the same name,
+            it checks they are identical, otherwise, it gives a different name,
+            initializers are still inserted into the main graph and become
+            additional inputs
         :return: output names
         """
+        if local_function_name:
+            raise NotImplementedError(
+                f"Local function not implemented yet {local_function_name!r}"
+            )
         renaming = {}
         for init, value in builder.initializers_dict.items():
             name = self.unique_name(f"{prefix}{init}")

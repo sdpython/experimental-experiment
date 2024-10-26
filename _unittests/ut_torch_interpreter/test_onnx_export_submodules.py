@@ -33,7 +33,11 @@ class TestOnnxExportSubModules(ExtTestCase):
         # expected = model(*inputs)
 
         onx = to_onnx(
-            model, inputs, export_modules_as_functions=True, optimize=False, verbose=10
+            model,
+            inputs,
+            export_modules_as_functions=True,
+            optimize=False,
+            verbose=1,
         )
         from onnx_array_api.plotting.text_plot import onnx_simple_text_plot
 

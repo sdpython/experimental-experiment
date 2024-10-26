@@ -173,7 +173,10 @@ class TestDocumentationExamples(ExtTestCase):
                 # too long
                 reason = "not working yet or too long"
 
-            if not reason and name in {"plot_torch_export_101.py"}:
+            if not reason and name in {
+                "plot_torch_export_101.py",
+                "plot_torch_export_compile_102.py",
+            }:
                 if pv.Version(".".join(tv.split(".")[:2])) < pv.Version("2.6"):
                     reason = "requires torch 2.6"
 

@@ -18,7 +18,6 @@ class ExportOptions:
         <experimental_experiment.torch_dynamo.get_decomposition_table>`
     :param dynamo: to use :func:`torch._dynamo.export` instead of:func:`torch.export.export`
     :param jit: use jit to get a graph then converts it into a fx graph
-    :param export_modules_as_functions: keeps the sub modules as local function
     :param strategy: to overwrite all the previous parameters with just a value
 
     The fallback strategy tries the following in order:
@@ -154,7 +153,9 @@ class ExportOptions:
             return None
 
         if verbose:
-            print(f"[ExportOptions.export] {self!r} - torch.export.export {type(mod)}")
+            print(
+                f"[ExportOptions.export] {self!r} - torch.export.export {type(mod).__name__!r}"
+            )
             begin = time.perf_counter()
 
         if self.dynamo:

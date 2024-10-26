@@ -139,9 +139,9 @@ The following methods are used to add onnx elements to the graph.
 Some needs are very common and deserve a dedicated method.
 
 * :meth:`make_nodes <experimental_experiment.xbuilder.GraphBuilder.make_nodes>`:
-  adds many nodes in one row, it renames the intermediate result if needed.
+  adds many nodes in one row, it renames the intermediate results if needed.
 * :meth:`get_attribute <experimental_experiment.xbuilder.GraphBuilder.get_attribute>`:
-  retrieve an attribute from a NodeProto
+  retrieves an attribute from a NodeProto
 * :meth:`make_shape_from_results <experimental_experiment.xbuilder.GraphBuilder.make_shape_from_results>`:
   makes a shape from a tuple having integer, string, or `torch.SymInt`
 
@@ -179,8 +179,8 @@ A function used to provide information to the user and calls in most of the erro
 ::
 
     assert name in self._known_ranks, (
-      f"Rank is unknown for result {name!r}, "
-      f"known_shapes={self._known_ranks}{self.get_debug_msg()}"
+        f"Rank is unknown for result {name!r}, "
+        f"known_shapes={self._known_ranks}{self.get_debug_msg()}"
     )
 
 Example
@@ -335,7 +335,7 @@ Except constant folding, they are called by default.
 * :meth:`remove_identity_nodes <experimental_experiment.xbuilder.GraphBuilder.remove_identity_nodes>`:
   removes identity nodes
 * :meth:`constant_folding <experimental_experiment.xbuilder.GraphBuilder.constant_folding>`:
-  replaces constant whenever it is possible and it makes sense
+  replaces constants whenever it is possible and it makes sense
 
 DynamoInterpreter
 =================
