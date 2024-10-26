@@ -5,16 +5,13 @@
 102: Tweak onnx export
 ======================
 
-export or compile
-=================
+export, unflatten and compile
+=============================
 """
 
-import pprint
 import torch
-from experimental_experiment.helpers import string_type
-from experimental_experiment.torch_models.llm_model_helper import get_phi_35_mini_instruct
-
-# from experimental_experiment.bench_run import max_diff
+from onnx_array_api.plotting.text_plot import onnx_simple_text_plot
+from experimental_experiment.torch_interpreter import to_onnx
 
 
 class SubNeuron(torch.nn.Module):
@@ -58,12 +55,8 @@ ep = torch.export.unflatten(exported_program)
 print("-- unflatten", type(exported_program.graph))
 print(ep.graph)
 
-
-#######################################
-# There is no trace left of the sub modules.
-#
-# And through compile
-# ===================
+##########################################
+# Another graph obtained with torch.compile.
 
 
 def my_compiler(gm, example_inputs):
@@ -75,32 +68,41 @@ def my_compiler(gm, example_inputs):
 optimized_mod = torch.compile(model, fullgraph=True, backend=my_compiler)
 optimized_mod(*inputs)
 
-################################################
-# Applied to Phi
-# ==============
+############################################
+# Unflattened
+# ===========
 
-phi, inputs = get_phi_35_mini_instruct(num_hidden_layers=1, _attn_implementation="eager")
 
-print("model type", type(phi))
-print("inputs:", string_type(inputs))
+class SubNeuron2(torch.nn.Module):
+    def __init__(self, n_dims: int = 5, n_targets: int = 3):
+        super().__init__()
+        self.linear = torch.nn.Linear(n_dims, n_targets)
 
-expected = phi(**inputs)
+    def forward(self, x):
+        z = self.linear(x)
+        return torch.sigmoid(z)
 
-###################################
-# The module it contains
-# ++++++++++++++++++++++
 
-types = set(type(inst) for _, inst in phi.named_modules())
-print("interesting types:")
-pprint.pprint(list(types))
+class Neuron2(torch.nn.Module):
+    def __init__(self, n_dims: int = 5, n_targets: int = 3):
+        super().__init__()
+        self.neuron = SubNeuron2(n_dims, n_targets)
 
-###################################
-# The exported program.
-# +++++++++++++++++++++
+    def forward(self, x):
+        z = self.neuron(x)
+        return torch.relu(z)
 
-from transformers.models.phi3.modeling_phi3 import logger
 
-logger.warning_once = lambda *_, **__: None
-torch.export._EXPORT_FLAGS = {"non_script"}
-optimized_mod = torch.compile(phi, fullgraph=True, backend=my_compiler)
-optimized_mod(**inputs)
+model = Neuron2()
+inputs = (torch.randn(1, 5),)
+expected = model(*inputs)
+
+onx = to_onnx(model, inputs)
+print(onnx_simple_text_plot(onx))
+
+#################################
+# Let's preserve the module.
+
+
+onx = to_onnx(model, inputs, export_modules_as_functions=True)
+print(onnx_simple_text_plot(onx))

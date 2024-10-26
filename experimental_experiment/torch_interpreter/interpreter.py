@@ -1287,6 +1287,12 @@ class DynamoInterpreter:
 
         if hasattr(sub_module, "graph") and isinstance(sub_module, self.torch.fx.GraphModule):
             gm = sub_module
+        elif (
+            hasattr(sub_module, "graph")
+            and isinstance(sub_module, self.torch.nn.Module)
+            and sub_module.__class__.__name__ == "InterpreterModule"
+        ):
+            gm = sub_module
         else:
             # https://pytorch.org/docs/stable/fx.html
             tracer_class = self.torch.fx.Tracer
@@ -1300,7 +1306,7 @@ class DynamoInterpreter:
             as_function=True,
             target_opset=self.builder.opsets,
             optimization_options=self.builder.optimization_options,
-            verbose=self.builder.verbose,
+            verbose=max(0, self.builder.verbose - 1),
             dispatcher=self.dispatcher,
             raise_list=self.builder.raise_list,
             dynamic_shapes=self.builder.dynamic_shapes,
@@ -1373,9 +1379,21 @@ class DynamoInterpreter:
 
         if self.builder.verbose > 1:
             print(f"[DynamoInterpreter-{self._hash()}.call_module] class [{type(sub_module)}]")
+            print(
+                f"[DynamoInterpreter-{self._hash()}.call_module] with "
+                f"node.args={string_type(node.args)}]"
+            )
+            print(
+                f"[DynamoInterpreter-{self._hash()}.call_module] with "
+                f"args={string_type(args)}]"
+            )
+            print(
+                f"[DynamoInterpreter-{self._hash()}.call_module] with "
+                f"kwargs={string_type(node.kwargs)}]"
+            )
 
         builder, args, kwargs, output_names = self._interpret_sub_module(
-            sub_module, args, source_node=node
+            sub_module, args, node.kwargs, source_node=node
         )
         assert kwargs is None or len(kwargs) == 0, (
             f"args={string_type(args)}, kwargs={string_type(kwargs)} "

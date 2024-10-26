@@ -1,7 +1,7 @@
 import pprint
 import time
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
-from ..helpers import string_type
+from ..helpers import string_type, string_sig
 from ._doc_ import TorchOpOverload
 
 
@@ -43,7 +43,6 @@ class ExportOptions:
         "fallback": {"fallback": True},
         "fallback-default": {"fallback": True, "decomposition_table": "default"},
         "default": {"decomposition_table": "default"},
-        "unflatten": {"export_modules_as_functions": True},
     }
 
     def __init__(
@@ -56,14 +55,12 @@ class ExportOptions:
         ] = None,
         strategy: Optional[str] = None,
         dynamo: bool = False,
-        export_modules_as_functions: bool = False,
     ):
         self.strict = strict
         self.fallback = fallback
         self.decomposition_table = (
             None if decomposition_table in ("none", None) else decomposition_table
         )
-        self.export_modules_as_functions = export_modules_as_functions
         self.dynamo = dynamo
         self.strategy = strategy
         self.jit = jit
@@ -86,22 +83,7 @@ class ExportOptions:
         ), "strict and dynamo cannot be true at the same time"
 
     def __repr__(self) -> str:
-        if self.strategy:
-            return f"{self.__class__.__name__}(strategy={self.strategy!r})"
-        if self.dynamo:
-            return (
-                f"{self.__class__.__name__}(strict={self.strict!r}, "
-                f"fallback={self.fallback}, "
-                f"decomposition_table={self.decomposition_table!r}, "
-                f"dynamo={self.dynamo})"
-            )
-        if self.decomposition_table:
-            return (
-                f"{self.__class__.__name__}(strict={self.strict!r}, "
-                f"fallback={self.fallback}, "
-                f"decomposition_table={self.decomposition_table}!r)"
-            )
-        return f"{self.__class__.__name__}(strict={self.strict!r}, fallback={self.fallback})"
+        return string_sig(self)
 
     def get_decomposition_table(
         self,
@@ -217,19 +199,19 @@ class ExportOptions:
             print(f"[ExportOptions.export] kwargs={string_type(kwargs)}")
             print(f"[ExportOptions.export] verbose={verbose}")
         if exc:
-            exported_mod = torch.export.export(
+            exported_program = torch.export.export(
                 mod, args, kwargs, dynamic_shapes=dynamic_shapes, strict=self.strict
             )
         else:
             try:
-                exported_mod = torch.export.export(
+                exported_program = torch.export.export(
                     mod, args, kwargs, dynamic_shapes=dynamic_shapes, strict=self.strict
                 )
             except torch._export.verifier.SpecViolationError:
                 # see https://github.com/pytorch/pytorch/issues/128394
                 if verbose:
                     print("[ExportOptions.export] torch.export._trace._export")
-                exported_mod = torch.export._trace._export(
+                exported_program = torch.export._trace._export(
                     mod,
                     args,
                     kwargs,
@@ -242,11 +224,11 @@ class ExportOptions:
                 if verbose:
                     print("[ExportOptions.export] torch.export.export")
                 try:
-                    exported_mod = torch.export.export(
+                    exported_program = torch.export.export(
                         mod, args, kwargs, strict=self.strict
                     ).graph
                 except torch._export.verifier.SpecViolationError as ee:
-                    exported_mod = None
+                    exported_program = None
                     eee = ee
                 raise RuntimeError(
                     f"Unable to convert model {type(mod)}, "
@@ -254,31 +236,32 @@ class ExportOptions:
                     f"{type(args[0]) if isinstance(args, tuple) and args else '?'}, "
                     f"strict={self.strict}, input_names={input_names}\n--\n"
                     f"dynamic_shapes={dynamic_shapes}\n--\ne={e}\n--\neee={eee}"
-                    f"\n---exported-program---\n{exported_mod}"
+                    f"\n---exported-program---\n{exported_program}"
                 ) from e
 
-        if exported_mod is None:
+        if exported_program is None:
             if verbose:
                 print(f"[ExportOptions.export] done in {time.perf_counter() - begin}")
-            return exported_mod
+            return exported_program
 
         if self.decomposition_table:
-            dec = apply_decompositions(exported_mod, self.decomposition_table)
+            dec = apply_decompositions(exported_program, self.decomposition_table)
             if verbose:
                 print(f"[ExportOptions.export] done in {time.perf_counter() - begin}")
             return dec
+
         if verbose:
             print(f"[ExportOptions.export] done in {time.perf_counter() - begin}")
-        return exported_mod
+        return exported_program
 
 
 def apply_decompositions(
-    exported_mod: "torch.export.ExportedProgram", decomposition_table  # noqa: F821
+    exported_program: "torch.export.ExportedProgram", decomposition_table  # noqa: F821
 ) -> "torch.export.ExportedProgram":  # noqa: F821
     if decomposition_table == "all":
-        exported_mod = insert_contiguous_between_transpose_and_view(exported_mod)
-        exported_mod = exported_mod.run_decompositions()
-        return exported_mod
+        exported_program = insert_contiguous_between_transpose_and_view(exported_program)
+        exported_program = exported_program.run_decompositions()
+        return exported_program
 
     if isinstance(decomposition_table, str):
         from ..torch_dynamo import get_decomposition_table_by_name
@@ -286,10 +269,10 @@ def apply_decompositions(
         decomposition_table = get_decomposition_table_by_name(decomposition_table)
 
     if decomposition_table is not None:
-        exported_mod = insert_contiguous_between_transpose_and_view(exported_mod)
-        exported_mod = exported_mod.run_decompositions(decomposition_table)
+        exported_program = insert_contiguous_between_transpose_and_view(exported_program)
+        exported_program = exported_program.run_decompositions(decomposition_table)
 
-    return exported_mod
+    return exported_program
 
 
 def insert_contiguous_between_transpose_and_view(

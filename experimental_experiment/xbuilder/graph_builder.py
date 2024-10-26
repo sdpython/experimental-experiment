@@ -3316,7 +3316,7 @@ class GraphBuilder(_GraphBuilderRuntime):
 
     def process(
         self,
-        graph_module: "torch.f.GraphModule",  # noqa: F821
+        graph_module: "torch.fx.GraphModule",  # noqa: F821
         interpreter: "Interpreter",  # noqa: F821
     ):
         """
