@@ -177,7 +177,7 @@ class TestDocumentationExamples(ExtTestCase):
                 "plot_torch_export_101.py",
                 "plot_torch_export_compile_102.py",
             }:
-                if pv.Version(".".join(tv.split(".")[:2])) < pv.Version("2.6"):
+                if pv.Version(".".join(torch.__version__.split(".")[:2])) < pv.Version("2.6"):
                     reason = "requires torch 2.6"
 
             if not reason and is_apple() and name in {"plot_convolutation_matmul_102.py"}:
