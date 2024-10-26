@@ -7,6 +7,7 @@ from typing import Any, Callable, Dict, List, Optional, Sequence, Set, Tuple, Un
 from onnx import ModelProto, save_model
 from onnx.defs import onnx_opset_version
 from onnx.model_container import ModelContainer
+from ..helpers import string_type
 from ..xbuilder.graph_builder import GraphBuilder, OptimizationOptions
 from .export_options import ExportOptions
 
@@ -288,8 +289,6 @@ def _make_builder_interpreter(
             print(graph_module.graph)
     else:
         if verbose > 0:
-            from ..torch_test_helper import string_type
-
             print(f"[_make_builder_interpreter] export_options={export_options!r}")
             print(f"[_make_builder_interpreter] input args={string_type(args)}")
             print(f"[_make_builder_interpreter] input kwargs={string_type(kwargs)}")
@@ -424,8 +423,6 @@ def _replacements_dynamic_shapes(
     input_names: Optional[List[str]] = None,
     verbose: int = 0,
 ):
-    from ..torch_test_helper import string_type
-
     assert dict_dynamic_shapes is not None, "dict_dynamic_shapes is missing"
     if verbose > 2:
         print(f"[_replacements_dynamic_shapes] type(mod)={type(mod)}")

@@ -11,8 +11,9 @@ export or compile
 
 import pprint
 import torch
-from experimental_experiment.torch_test_helper import string_type
+from experimental_experiment.helpers import string_type
 from experimental_experiment.torch_models.llm_model_helper import get_phi_35_mini_instruct
+
 # from experimental_experiment.bench_run import max_diff
 
 
@@ -40,8 +41,23 @@ model = Neuron()
 inputs = (torch.randn(1, 5),)
 expected = model(*inputs)
 exported_program = torch.export.export(model, inputs)
+
 print("-- fx graph with torch.export.export")
 print(exported_program.graph)
+
+####################################
+# The export keeps track of the submodules calls.
+
+print("-- module_call_graph", type(exported_program.module_call_graph))
+print(exported_program.module_call_graph)
+
+#########################################
+# That information can be converted back into a exported program.
+
+ep = torch.export.unflatten(exported_program)
+print("-- unflatten", type(exported_program.graph))
+print(ep.graph)
+
 
 #######################################
 # There is no trace left of the sub modules.

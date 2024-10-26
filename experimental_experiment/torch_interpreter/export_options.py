@@ -1,6 +1,7 @@
 import pprint
 import time
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+from ..helpers import string_type
 from ._doc_ import TorchOpOverload
 
 
@@ -17,6 +18,7 @@ class ExportOptions:
         <experimental_experiment.torch_dynamo.get_decomposition_table>`
     :param dynamo: to use :func:`torch._dynamo.export` instead of:func:`torch.export.export`
     :param jit: use jit to get a graph then converts it into a fx graph
+    :param export_modules_as_functions: keeps the sub modules as local function
     :param strategy: to overwrite all the previous parameters with just a value
 
     The fallback strategy tries the following in order:
@@ -41,6 +43,7 @@ class ExportOptions:
         "fallback": {"fallback": True},
         "fallback-default": {"fallback": True, "decomposition_table": "default"},
         "default": {"decomposition_table": "default"},
+        "unflatten": {"export_modules_as_functions": True},
     }
 
     def __init__(
@@ -53,12 +56,14 @@ class ExportOptions:
         ] = None,
         strategy: Optional[str] = None,
         dynamo: bool = False,
+        export_modules_as_functions: bool = False,
     ):
         self.strict = strict
         self.fallback = fallback
         self.decomposition_table = (
             None if decomposition_table in ("none", None) else decomposition_table
         )
+        self.export_modules_as_functions = export_modules_as_functions
         self.dynamo = dynamo
         self.strategy = strategy
         self.jit = jit
@@ -136,7 +141,6 @@ class ExportOptions:
     ):
         """Exports the model into an exported program."""
         import torch
-        from ..torch_test_helper import string_type
 
         if self.fallback or self.strategy == "fallback":
             if verbose:
