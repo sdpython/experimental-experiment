@@ -4,7 +4,7 @@ import numpy as np
 from onnx import TensorProto
 from experimental_experiment.ext_test_case import ExtTestCase, hide_stdout, ignore_warnings
 from experimental_experiment.reference import ExtendedReferenceEvaluator
-from experimental_experiment.xbuilder import GraphBuilder
+from experimental_experiment.xbuilder import GraphBuilder, OnnxType
 
 
 class TestTools(ExtTestCase):
@@ -139,7 +139,8 @@ class TestTools(ExtTestCase):
         self.assertEqual(len(onx.functions), 2)
 
         self.assertRaise(
-            lambda: gr.to_onnx(as_function=True, function_name="lr"), AssertionError
+            lambda: gr.to_onnx(as_function=True, function_name="lr"),
+            AssertionError,
         )
         gr.inline_functions()
         function_proto = gr.to_onnx(
@@ -233,6 +234,72 @@ class TestTools(ExtTestCase):
         ref2 = ExtendedReferenceEvaluator(onx)
         got = ref2.run(None, feeds)[0]
         self.assertEqualArray(expected, got)
+
+    @ignore_warnings(DeprecationWarning)
+    def test_as_function_constant(self):
+        g = GraphBuilder(18, ir_version=9, as_function=True)
+        g.make_tensor_input("X", None, None, False)
+        np_weights = np.random.randn(4, 3).astype(np.float32)
+        np_bias = np.random.randn(1, 3).astype(np.float32)
+        init = g.make_initializer("weights", np_weights)
+        bias = g.make_initializer("bias", np_bias)
+        g.op.Add(g.op.MatMul("X", init, name="linear"), bias, name="linear", outputs=["Y"])
+        g.make_tensor_output("Y", is_dimension=False, indexed=False)
+        g.move_initializers_to_constant()
+        fct = g.to_onnx(
+            as_function=True,
+            function_name="linear",
+            function_domain="mine",
+        )
+        feeds = dict(X=np.random.randn(2, 4).astype(np.float32))
+        expected = feeds["X"] @ np_weights + np_bias
+        ref = ExtendedReferenceEvaluator(fct)
+        got = ref.run(None, feeds)
+        self.assertEqualArray(expected, got[0])
+
+    @ignore_warnings(DeprecationWarning)
+    def test_as_function_second(self):
+        gf = GraphBuilder(18, ir_version=9, as_function=True)
+        gf.make_tensor_input("X", None, None, False)
+        np_weights = np.random.randn(4, 3).astype(np.float32)
+        np_bias = np.random.randn(1, 3).astype(np.float32)
+        init = gf.make_initializer("weights", np_weights)
+        bias = gf.make_initializer("bias", np_bias)
+        gf.op.Add(gf.op.MatMul("X", init, name="linear"), bias, name="linear", outputs=["Y"])
+        gf.make_tensor_output("Y", is_dimension=False, indexed=False)
+
+        g = GraphBuilder(18, ir_version=9, as_function=True)
+        g.make_tensor_input("X", None, None, False)
+        g.make_local_function("Regression", gf, domain="custom")
+
+        np_weights = np.random.randn(4, 3).astype(np.float32)
+        np_bias = np.random.randn(1, 3).astype(np.float32)
+        init = g.make_initializer("weights", np_weights)
+        bias = g.make_initializer("bias", np_bias)
+        g.op.Add(g.op.MatMul("X", init, name="linear"), bias, name="linear", outputs=["Y"])
+        g.make_tensor_output("Y", is_dimension=False, indexed=False)
+
+        self.assertRaise(
+            lambda: g.to_onnx(
+                as_function=True, function_name="linear", function_domain="mine"
+            ),
+            AssertionError,
+        )
+
+        fct = g.to_onnx(
+            as_function=OnnxType.FUNCTION_AND_INITIALIZERS,
+            function_name="linear",
+            function_domain="mine",
+        )
+
+        self.assertIsInstance(fct, dict)
+        feeds = dict(X=np.random.randn(2, 4).astype(np.float32))
+        feeds.update(dict(fct["initializers"]))
+        self.assertEqual(set(feeds), {"X", "weights", "bias"})
+        expected = feeds["X"] @ np_weights + np_bias
+        ref = ExtendedReferenceEvaluator(fct["proto"])
+        got = ref.run(None, feeds)
+        self.assertEqualArray(expected, got[0])
 
 
 if __name__ == "__main__":

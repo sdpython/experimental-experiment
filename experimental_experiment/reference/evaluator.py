@@ -172,4 +172,59 @@ class ExtendedReferenceEvaluator(ReferenceEvaluator):
         if len(args) == 1 and isinstance(args[0], list):
             feeds = dict(zip(self.input_names, args[0]))
             return self.run(None, feeds, **kwargs)
+        if isinstance(self.proto_, FunctionProto):
+            return self._run_function(*args, **kwargs)
         return ReferenceEvaluator.run(self, *args, **kwargs)
+
+    def _run_function(
+        self,
+        output_names,
+        feed_inputs: dict[str, Any],
+        attributes: dict[str, Any] | None = None,
+        intermediate: bool = False,
+    ) -> dict[str, Any] | list[Any]:  # type: ignore
+        if output_names is None:
+            output_names = self.output_names
+
+        # step 1: inputs and initializers
+        results = {"": None}  # optional input
+        results.update(self.rt_inits_)  # type: ignore[arg-type]
+        results.update(feed_inputs)
+        for k, v in self.rt_inits_.items():
+            self._log(2, " +C %s: %s", k, v)  # type: ignore[arg-type]
+        for k, v in feed_inputs.items():
+            self._log(2, " +I %s: %s", k, v)  # type: ignore[arg-type]
+
+        # step 2: execute nodes
+        for node in self.rt_nodes_:
+            self._log(1, "%s(%s) -> %s", node.op_type, node.input, node.output)
+            for i in node.input:
+                if i not in results:
+                    raise RuntimeError(
+                        f"Unable to find input {i!r} in known results {sorted(results)}, "
+                        f"self.rt_inits_ has {sorted(self.rt_inits_)}, "
+                        f"feed_inputs has {sorted(feed_inputs)}."
+                    )
+            inputs = [results[i] for i in node.input]
+            linked_attributes = {}
+            if node.has_linked_attribute and attributes:
+                linked_attributes["linked_attributes"] = attributes
+            if node.need_context():
+                outputs = node.run(*inputs, context=results, **linked_attributes)
+            else:
+                outputs = node.run(*inputs, **linked_attributes)
+            for name, value in zip(node.output, outputs):
+                self._log(2, " + %s: %s", name, value)  # type: ignore[arg-type]
+                results[name] = value
+
+        # return the results
+        if intermediate:
+            return results
+
+        for name in output_names:
+            if name not in results:
+                raise RuntimeError(
+                    f"Unable to find output name {name!r} "
+                    f"in {sorted(results)}, proto is\n{self.proto_}"
+                )
+        return [results[name] for name in output_names]

@@ -1,4 +1,5 @@
 import contextlib
+import enum
 import pprint
 import time
 import os
@@ -63,6 +64,14 @@ from .optimization_options import OptimizationOptions
 from .expression_dimension import Expression, parse_expression
 from .graph_builder_opset import Opset
 from ._graph_builder_runtime import _GraphBuilderRuntime
+
+
+class OnnxType(enum.IntEnum):
+    """Defines which can of onnx the builder needs to produces"""
+
+    MODEL_PROTO = 0
+    FUNCTION_PROTO = 1
+    FUNCTION_AND_INITIALIZERS = 2
 
 
 @contextlib.contextmanager
@@ -170,7 +179,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         self,
         target_opset_or_existing_proto: Union[int, Dict[str, int], ModelProto, FunctionProto],
         input_names: Optional[Sequence[str]] = None,
-        as_function: bool = False,
+        as_function: Union[bool, OnnxType] = False,
         optimization_options: Optional[OptimizationOptions] = None,
         args: Optional[List[Any]] = None,
         ir_version: Optional[int] = None,
@@ -396,7 +405,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         return [o.name for o in self.outputs]
 
     def empty_copy(
-        self, as_function: bool = False, constant_size: int = 2**24
+        self, as_function: Union[bool, OnnxType] = False, constant_size: int = 2**24
     ) -> "GraphBuilder":
         """
         Creates an empty copy but with the same opsets.
@@ -3123,6 +3132,26 @@ class GraphBuilder(_GraphBuilderRuntime):
             )
         return res, large_inits
 
+    def get_initializer_size(self, name: str) -> int:
+        """
+        Returns the size of an initializer.
+
+        :param name: name
+        :return: size
+        """
+        assert name in self.initializers_dict, f"Initializer {name!r} was not found."
+        init = self.initializers_dict[name]
+        if hasattr(init, "numel"):
+            # torch.Tensor
+            return init.numel()
+        if hasattr(init, "size"):
+            # numpy array
+            return init.size
+        if hasattr(init, "size"):
+            # TensorProto
+            return np.prod(init.dims)
+        raise AssertionError(f"Unexpected type {type(init)} for initializer {name!r}")
+
     def get_debug_msg(self, limit: int = 1000) -> str:
         """
         Returns a string providing as much information as possible
@@ -3368,7 +3397,7 @@ class GraphBuilder(_GraphBuilderRuntime):
 
     def to_onnx(
         self,
-        as_function: bool = False,
+        as_function: Union[bool, OnnxType] = False,
         optimize: bool = True,
         large_model: bool = False,
         external_threshold: int = 1024,
@@ -3376,12 +3405,13 @@ class GraphBuilder(_GraphBuilderRuntime):
         function_name: str = "",
         function_domain: str = "",
         inline: bool = False,
-    ) -> Union[FunctionProto, ModelProto, TorchModelContainer]:
+    ) -> Union[FunctionProto, ModelProto, TorchModelContainer, Dict[str, Any]]:
         """
         Conversion to onnx. Only then the initializer are converted into
         TensorProto.
 
-        :param as_function: converts the graph as a FunctionProto or a ModelProto
+        :param as_function: converts the graph as a FunctionProto or a ModelProto,
+            by default the function assumes there is no initializer
         :param optimize: disable or enable the optimization,
             the optimization are set when the class constructor is called
         :param large_model: if True returns a :class:`onnx.model_container.ModelContainer`,
@@ -3420,18 +3450,21 @@ class GraphBuilder(_GraphBuilderRuntime):
         if as_function:
             assert function_name, "Function name cannot be empty."
             assert function_domain, "Function domain cannot be empty."
-            assert not self.initializers_dict, (
+            assert (
+                as_function == OnnxType.FUNCTION_AND_INITIALIZERS or not self.initializers_dict
+            ), (
                 f"function_name={function_name!r}, initializers "
-                f"are not supported when exporting a local function "
+                f"are not supported when exporting a local function. "
+                f"You should call 'move_initializers_to_constant'"
                 f"{self.get_debug_msg()}"
             )
-            assert not self.functions, (
+            assert as_function == OnnxType.FUNCTION_AND_INITIALIZERS or not self.functions, (
                 f"function_name={function_name!r}, local functions "
                 f"[{', '.join(f.name for f in self.functions.values())}] "
                 f"are not supported yet when exporting a local function "
                 f"{self.get_debug_msg()}"
             )
-            return oh.make_function(
+            proto = oh.make_function(
                 function_domain,
                 function_name,
                 [i.name for i in self.inputs],
@@ -3439,6 +3472,30 @@ class GraphBuilder(_GraphBuilderRuntime):
                 self.nodes,
                 [_ for _ in opsets if _.domain != function_domain],
             )
+            if (
+                len(self.initializers_dict) == 0 and len(self.functions) == 0
+            ) or as_function != OnnxType.FUNCTION_AND_INITIALIZERS:
+                return proto
+            assert as_function == OnnxType.FUNCTION_AND_INITIALIZERS, (
+                f"Unexpected value for as_function={as_function!r}"
+                f"It should be 'OnnxType.FUNCTION_AND_CONSTANTS'."
+            )
+
+            # We need to move the initializers as inputs, we sort than by decresing size
+            if len(self.functions) == 0:
+                inits = [
+                    (self.get_initializer_size(k), k, v)
+                    for k, v in self.initializers_dict.items()
+                ]
+                inits.sort(reverse=True)
+                inits = [_[1:] for _ in inits]
+                proto.input.extend([_[0] for _ in inits])
+                return dict(
+                    proto=proto,
+                    initializers=inits,
+                )
+
+            raise NotImplementedError("Not implemented yet with multiple local functions")
 
         if self.ir_version:
             ir_version = self.ir_version
@@ -3562,7 +3619,10 @@ class GraphBuilder(_GraphBuilderRuntime):
                 )
                 if i == "":
                     continue
-                assert i in known, f"Unknown input {i!r}, step {step!r} in node {node}"
+                assert i in known, (
+                    f"Unknown input {i!r}, step {step!r} in node type "
+                    f"{node.op_type}, name is {node.name!r}\n{node}"
+                )
             known |= set(node.output)
         for o in self.outputs:
             assert o.name in known, f"Unknown output {o.name!r}, step {step!r}"
