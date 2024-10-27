@@ -2572,6 +2572,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         if isinstance(outputs, int):
             if outputs < 1:
                 raise ValueError(f"outputs={outputs} must be > 0.")
+            assert isinstance(op_type, str), f"Unexpected type {type(op_type)}: {op_type}"
             lower = op_type.lower()
             output_names = [self.unique_name(f"_onx_{lower}{i}") for i in range(outputs)]
         elif isinstance(outputs, str):
@@ -2936,14 +2937,14 @@ class GraphBuilder(_GraphBuilderRuntime):
             else:
                 name = local_function_name
                 domain = "local_domain"
-            new_inits, fname = self.make_local_function(
+            new_inits, (fdomain, fname) = self.make_local_function(
                 name, builder, domain=domain, move_initializer_to_constant=False
             )
             self.make_node(
                 fname,
                 [*input_names, *new_inits],
                 output_names,
-                domain=domain,
+                domain=fdomain,
                 check=False,
                 name=name,
             )
@@ -5280,7 +5281,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         move_initializer_to_constant: bool = True,
         optimize: bool = False,
         rename_allowed: bool = False,
-    ) -> Tuple[List[str], str]:
+    ) -> Tuple[List[str], Tuple[str, str]]:
         """
         Adds a local function to exiting graph.
 
@@ -5294,7 +5295,8 @@ class GraphBuilder(_GraphBuilderRuntime):
             replacing an existing one
         :return: the list of added initializers if
             *move_initializer_to_constant* is True,
-            and the function name, it can be changed if one is already existing
+            and the function name (domain, name),
+            it can be changed if one is already existing
 
         Method :meth:`GraphBuilder.inline_functions`,
         meth:`GraphBuilder.move_initializers_to_constant` are called on
@@ -5323,14 +5325,18 @@ class GraphBuilder(_GraphBuilderRuntime):
                 optimize=optimize,
             )
             onx = fct["proto"]
+            to_rename = {}
+            keys = []
             for f in builder.functions.values():
                 # What if on is already existing?
-                old_name = f.name
-                new_name = self.add_function(f, rename_allowed=rename_allowed)
-                if new_name != old_name:
-                    raise NotImplementedError(
-                        f"Function name changed {new_name} != {old_name}"
-                    )
+                old_key = f.domain, f.name
+                new_key = self.add_function(f, rename_allowed=rename_allowed)
+                if new_key != old_key:
+                    to_rename[old_key] = new_key
+                keys.append(new_key)
+            if to_rename:
+                # We rename the local functions.
+                onx = self.rename_in_local_functions(to_rename, keys, proto=onx)
 
             # Let's rename the initializers.
             repl = {}
@@ -5355,10 +5361,100 @@ class GraphBuilder(_GraphBuilderRuntime):
             f"\n------ONNX----\n{onx}"
             f"{self.get_debug_msg()}"
         )
-        new_name = self.add_function(onx, rename_allowed=rename_allowed)
-        if domain not in self.opsets:
-            self.opsets[domain] = 1
-        return new_inits, new_name
+        new_domain, new_name = self.add_function(onx, rename_allowed=rename_allowed)
+        if new_domain not in self.opsets:
+            self.opsets[new_domain] = 1
+        return new_inits, (new_domain, new_name)
+
+    def rename_in_local_functions(
+        self,
+        replacements: Dict[Tuple[str, str], Tuple[str, str]],
+        list_keys: List[Tuple[str, str]],
+        proto: FunctionProto,
+    ) -> FunctionProto:
+        """
+        Renames local function in a given list of local functions.
+
+        :param replacements: replacements to make
+        :param list_keys: list of local function to modify
+        :param proto: one function to update as well
+        :return: the modified proto for proto
+
+        The function does not modify inplace the functions,
+        it creates a copy assuming this one is not too big.
+        """
+        for key in list_keys:
+            assert (
+                key in self.functions
+            ), f"Local function {key!r} is missing from {sorted(self.functions)}"
+            new_f = self._rename_op_type_in_local_functions(self.functions[key], replacements)
+            self.functions[key] = new_f
+        if proto is None:
+            return None
+        return self._rename_op_type_in_local_functions(proto, replacements)
+
+    @classmethod
+    def _detect_op_type_replacements(
+        cls,
+        proto: Union[FunctionProto, GraphProto],
+        replacements: Dict[Tuple[str, str], Tuple[str, str]],
+    ) -> bool:
+        """
+        Detects a replacements to make in a proto.
+        """
+        for node in proto.node:
+            if (node.domain, node.op_type) in replacements:
+                return True
+            for att in node.attribute:
+                if att.type == AttributeProto.GRAPH:
+                    if cls._detect_op_type_replacements(att.g, replacements):
+                        return True
+        return False
+
+    @classmethod
+    def _rename_op_type_in_local_functions(
+        cls,
+        proto: Union[FunctionProto, GraphProto],
+        replacements: Dict[Tuple[str, str], Tuple[str, str]],
+    ) -> Union[FunctionProto, GraphProto]:
+        """
+        Modifies the function to replace a call by another one.
+
+        :param proto: the proto to modify
+        :param replacements: the replacements to do
+        :return: the new proto, or the existing one if no replacements was found
+        """
+        if not cls._detect_op_type_replacements(proto, replacements):
+            return proto
+        if isinstance(proto, FunctionProto):
+            new_proto = FunctionProto()
+        elif isinstance(proto, GraphProto):
+            new_proto = GraphProto()
+        else:
+            raise AssertionError(f"Unexpected type {type(proto)}")
+        new_proto.ParseFromString(proto.SerializeToString())
+        for node in new_proto.node:
+            key = node.domain, node.op_type
+            if key in replacements:
+                node.domain, node.op_type = replacements[key]
+            node_attributes = []
+            modified = False
+            for att in node.attribute:
+                if att.type == AttributeProto.GRAPH:
+                    if not cls._detect_op_type_replacements(att.g, replacements):
+                        node_attributes.append(att)
+                        continue
+                modified = True
+                node_attributes.append(
+                    oh.make_attribute(
+                        att.name,
+                        cls._rename_op_type_in_local_functions(att.g, replacements),
+                    )
+                )
+            if modified:
+                del node.attribute[:]
+                node.attribute.extend(node_attributes)
+        return new_proto
 
     def add_function(self, f: FunctionProto, rename_allowed: bool = False):
         """
@@ -5382,7 +5478,7 @@ class GraphBuilder(_GraphBuilderRuntime):
             key not in self.functions
         ), f"Function {key} was already added{self.get_debug_msg()}"
         self.functions[key] = f
-        return f.name
+        return f.domain, f.name
 
     def has_local_function(self, name: str, domain: str = ""):
         """

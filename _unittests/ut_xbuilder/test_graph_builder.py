@@ -645,7 +645,6 @@ class TestTools(ExtTestCase):
         np_weights = np.arange(12).reshape((4, 3)).astype(np.float32) / 10
         np_bias = np.arange(3).reshape((1, 3)).astype(np.float32) + 10
         np_bias2 = np.arange(3).reshape((1, 3)).astype(np.float32) + 100
-        np_bias3 = np.arange(3).reshape((1, 3)).astype(np.float32) + 1000
 
         # a last step
         # second function calling the first one
@@ -660,7 +659,7 @@ class TestTools(ExtTestCase):
         self.assertEqual(len(g.functions), 2)
         # let's add the second function
         g2 = _make_function()
-        new_inits_2, function_name = g.make_local_function(
+        new_inits_2, (domain_name, function_name) = g.make_local_function(
             "RegressionBias",
             g2,
             domain="custom",
@@ -671,7 +670,7 @@ class TestTools(ExtTestCase):
 
         g.op.Add(
             g.anyop.RegressionBias("X", *new_inits_1, name="reg2", domain="custom"),
-            g.make_node(function_name, ["X", *new_inits_2], name="reg2", domain="custom"),
+            g.make_node(function_name, ["X", *new_inits_2], name="reg2", domain=domain_name),
             outputs=["Y"],
         )
         g.make_tensor_output("Y", is_dimension=False, indexed=False)
@@ -696,9 +695,11 @@ class TestTools(ExtTestCase):
         self.assertEqual(
             fct["initializers_name"],
             [
+                "RegressionBias_Regression_weights2",
                 "RegressionBias_Regression_weights",
-                "bias3",
+                "RegressionBias_bias22",
                 "RegressionBias_bias2",
+                "RegressionBias_Regression_bias2",
                 "RegressionBias_Regression_bias",
             ],
         )
@@ -713,15 +714,17 @@ class TestTools(ExtTestCase):
             proto.input,
             [
                 "X",
+                "RegressionBias_Regression_weights2",
                 "RegressionBias_Regression_weights",
-                "bias3",
+                "RegressionBias_bias22",
                 "RegressionBias_bias2",
+                "RegressionBias_Regression_bias2",
                 "RegressionBias_Regression_bias",
             ],
         )
         self.assertEqual(proto.domain, "mine")
         self.assertEqual(proto.name, "linear")
-        self.assertEqual(2, len(fct["functions"]))
+        self.assertEqual(4, len(fct["functions"]))
         f1 = fct["functions"][0]
         self.assertEqual(f1.domain, "custom")
         self.assertEqual(f1.name, "Regression")
@@ -738,18 +741,7 @@ class TestTools(ExtTestCase):
         self.assertEqualArray(np_weights, feeds["RegressionBias_Regression_weights"])
         self.assertEqualArray(np_bias, feeds["RegressionBias_Regression_bias"])
         self.assertEqualArray(np_bias2, feeds["RegressionBias_bias2"])
-        self.assertEqualArray(np_bias3, feeds["bias3"])
-        self.assertEqual(
-            set(feeds),
-            {
-                "X",
-                "RegressionBias_Regression_weights",
-                "RegressionBias_Regression_bias",
-                "bias3",
-                "RegressionBias_bias2",
-            },
-        )
-        expected = feeds["X"] @ np_weights + np_bias + np_bias2 + np_bias3
+        expected = (feeds["X"] @ np_weights + np_bias + np_bias2) * 2
 
         # Evaluation of a function
         self.assertIn("opset: '': 18", g.print_text())
@@ -759,7 +751,7 @@ class TestTools(ExtTestCase):
 
         # Same with a model
         proto = g.to_onnx()
-        self.assertEqual(len(proto.functions), 2)
+        self.assertEqual(len(proto.functions), 4)
         ref = ExtendedReferenceEvaluator(proto)
         got = ref.run(None, feeds)
         self.assertEqualArray(expected, got[0])
