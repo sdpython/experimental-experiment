@@ -37,20 +37,21 @@ from experimental_experiment.reference import ExtendedReferenceEvaluator
 from ._shape_helper import (
     DYNAMIC_SHAPE,
     STATIC_SHAPE,
+    _reshape_shape,
     all_int,
     all_int_or_str,
     is_static_dimension,
     is_static_shape,
-    _reshape_shape,
 )
 from .shape_type_compute import set_shape_type_op_any, set_shape_type_custom
 from ._onnx_helper import (
-    choose_consistent_domain_opset,
-    compatible_opsets,
     _default_OPSET_TO_IR_VERSION,
     _nice_shape,
+    choose_consistent_domain_opset,
+    compatible_opsets,
     element_wise_binary_op_types,
     element_wise_op_cmp_types,
+    same_function_proto,
     unary_like_op_types,
 )
 from .model_container import TorchModelContainer, proto_from_array, _get_type
@@ -2913,7 +2914,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         output_names: List[str],
         prefix: str = "",
         local_function_name: Optional[
-            Union[str, Tuple[str, str], Tuple[str, str, bool]]
+            Union[str, Tuple[str, str], Tuple[str, str, Dict[str, bool]]]
         ] = None,
     ) -> Union[str, List[str]]:
         """
@@ -2932,26 +2933,29 @@ class GraphBuilder(_GraphBuilderRuntime):
             initializers are still inserted into the main graph and become
             additional inputs, this parameter can be a string, the local function name,
             a tuple, a pair `(domain, name)` or three values
-            `(domain, name, rename_allowed)`,
+            `(domain, name, dict(rename_allowed=True))`,
+            `(domain, name, dict(merge_allowed=True))`
             see :meth:`GraphBuilder.make_local_function`
         :return: output names
         """
         if local_function_name:
+            rename_allowed = False
+            merge_allowed = False
             if isinstance(local_function_name, tuple):
                 domain, name = local_function_name[:2]
-                rename_allowed = (
-                    local_function_name[-1] if len(local_function_name) == 3 else False
-                )
+                if len(local_function_name) == 3:
+                    rename_allowed = local_function_name[2].get("rename_allowed", False)
+                    merge_allowed = local_function_name[2].get("merge_allowed", False)
             else:
                 name = local_function_name
                 domain = "local_domain"
-                rename_allowed = False
             new_inits, (fdomain, fname) = self.make_local_function(
                 name,
                 builder,
                 domain=domain,
                 move_initializer_to_constant=False,
                 rename_allowed=rename_allowed,
+                merge_allowed=merge_allowed,
             )
             self.make_node(
                 fname,
@@ -5294,6 +5298,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         move_initializer_to_constant: bool = True,
         optimize: bool = False,
         rename_allowed: bool = False,
+        merge_allowed: bool = False,
     ) -> Tuple[List[str], Tuple[str, str]]:
         """
         Adds a local function to exiting graph.
@@ -5306,6 +5311,8 @@ class GraphBuilder(_GraphBuilderRuntime):
         :param optimize: optimize the function
         :param rename_allowed: function renaming is allowed to avoid
             replacing an existing one
+        :param merge_allowed: if a function with the same name already exists,
+            it checks it is the same, if it is, then no new function is added
         :return: the list of added initializers if
             *move_initializer_to_constant* is True,
             and the function name (domain, name),
@@ -5316,8 +5323,10 @@ class GraphBuilder(_GraphBuilderRuntime):
         the builder if *move_initializer_to_constant* is True.
         It modifies the builder inplace.
         """
-        assert rename_allowed or not self.has_local_function(
-            name=name, domain=domain
+        assert (
+            rename_allowed
+            or merge_allowed
+            or not self.has_local_function(name=name, domain=domain)
         ), f"Function {name!r}, domain={domain!r} already exists"
         if move_initializer_to_constant:
             builder.inline_functions(verbose=max(0, self.verbose - 1))
@@ -5343,7 +5352,9 @@ class GraphBuilder(_GraphBuilderRuntime):
             for f in builder.functions.values():
                 # What if on is already existing?
                 old_key = f.domain, f.name
-                new_key = self.add_function(f, rename_allowed=rename_allowed)
+                new_key = self.add_function(
+                    f, rename_allowed=rename_allowed, merge_allowed=merge_allowed
+                )
                 if new_key != old_key:
                     to_rename[old_key] = new_key
                 keys.append(new_key)
@@ -5374,7 +5385,9 @@ class GraphBuilder(_GraphBuilderRuntime):
             f"\n------ONNX----\n{onx}"
             f"{self.get_debug_msg()}"
         )
-        new_domain, new_name = self.add_function(onx, rename_allowed=rename_allowed)
+        new_domain, new_name = self.add_function(
+            onx, rename_allowed=rename_allowed, merge_allowed=merge_allowed
+        )
         if new_domain not in self.opsets:
             self.opsets[new_domain] = 1
         return new_inits, (new_domain, new_name)
@@ -5469,16 +5482,26 @@ class GraphBuilder(_GraphBuilderRuntime):
                 node.attribute.extend(node_attributes)
         return new_proto
 
-    def add_function(self, f: FunctionProto, rename_allowed: bool = False):
+    def add_function(
+        self, f: FunctionProto, rename_allowed: bool = False, merge_allowed: bool = False
+    ):
         """
         Adds a new local function.
 
         :param f: new function to register
-        :param rename_allowed: the function be renamed,
+        :param rename_allowed: the function can be renamed if a function
+            with the same name already exists,
             the proto is modified inplace
+        :param merge_allowed: the function is not added if another function
+            of the same name already exists and is the same
         :return: function name
         """
         key = f.domain, f.name
+        if merge_allowed and key in self.functions:
+            existing = self.functions[key]
+            if same_function_proto(existing, f):
+                # No need to add it again.
+                return f.domain, f.name
         if rename_allowed and key in self.functions:
             i = 2
             new_name = f"{f.name}_2"

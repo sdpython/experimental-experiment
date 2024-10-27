@@ -1396,7 +1396,9 @@ class DynamoInterpreter:
                 f"\nVALUES\n{pprint.pformat(self.example_values_)}"
             )
 
-        sub_module = node.graph.owning_module.get_submodule(node.target)
+        owning_module = node.graph.owning_module
+        assert owning_module is not None, f"owning_module is None\n{raise_msg()}"
+        sub_module = owning_module.get_submodule(node.target)
 
         assert isinstance(
             sub_module, self.torch.nn.Module
@@ -1453,7 +1455,13 @@ class DynamoInterpreter:
             output_names,
             prefix=f"_sub_{name}_",
             local_function_name=(
-                (LOCAL_DOMAIN, local_function_name, True) if local_function_name else None
+                (
+                    LOCAL_DOMAIN,
+                    local_function_name,
+                    dict(merge_allowed=True, rename_allowed=True),
+                )
+                if local_function_name
+                else None
             ),
         )
         return output_names

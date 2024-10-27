@@ -84,13 +84,10 @@ class TestOnnxExportSubModules(ExtTestCase):
             verbose=0,
         )
         check_model(onx)
-        self.assertEqual(len(onx.functions), 3)
+        self.assertEqual(len(onx.functions), 2)
         ref = ExtendedReferenceEvaluator(onx)
         got = ref.run(None, feeds)
         self.assertEqualArray(expected, got[0], atol=1e-5)
-        from onnx_array_api.plotting.text_plot import onnx_simple_text_plot
-
-        print(onnx_simple_text_plot(onx))
 
 
 if __name__ == "__main__":
