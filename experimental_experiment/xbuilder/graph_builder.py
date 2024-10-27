@@ -5324,7 +5324,13 @@ class GraphBuilder(_GraphBuilderRuntime):
             )
             onx = fct["proto"]
             for f in builder.functions.values():
-                self.add_function(f)
+                # What if on is already existing?
+                old_name = f.name
+                new_name = self.add_function(f, rename_allowed=rename_allowed)
+                if new_name != old_name:
+                    raise NotImplementedError(
+                        f"Function name changed {new_name} != {old_name}"
+                    )
 
             # Let's rename the initializers.
             repl = {}
@@ -5349,7 +5355,7 @@ class GraphBuilder(_GraphBuilderRuntime):
             f"\n------ONNX----\n{onx}"
             f"{self.get_debug_msg()}"
         )
-        new_name = self.add_function(onx, rename_allowed=True)
+        new_name = self.add_function(onx, rename_allowed=rename_allowed)
         if domain not in self.opsets:
             self.opsets[domain] = 1
         return new_inits, new_name
