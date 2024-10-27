@@ -526,7 +526,7 @@ class TestTools(ExtTestCase):
         self.assertEqualArray(gf.initializers_dict["weights"], np_weights)
 
         self.assertEqual(len(g.functions), 1)
-        new_inits_2, function_name = g.make_local_function(
+        new_inits_2, (domain_name, function_name) = g.make_local_function(
             "Regression",
             gf,
             domain="custom",
@@ -540,7 +540,7 @@ class TestTools(ExtTestCase):
         # two functions
         g.op.Add(
             g.anyop.Regression("X", *new_inits, name="linear", domain="custom"),
-            g.make_node(function_name, ["X", *new_inits_2], name="linear", domain="custom"),
+            g.make_node(function_name, ["X", *new_inits_2], name="linear", domain=domain_name),
             outputs=["Y"],
         )
         g.make_tensor_output("Y", is_dimension=False, indexed=False)

@@ -1452,6 +1452,8 @@ class DynamoInterpreter:
             args,
             output_names,
             prefix=f"_sub_{name}_",
-            local_function_name=(LOCAL_DOMAIN, local_function_name),
+            local_function_name=(
+                (LOCAL_DOMAIN, local_function_name, True) if local_function_name else None
+            ),
         )
         return output_names

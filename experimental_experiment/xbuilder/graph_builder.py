@@ -2912,7 +2912,9 @@ class GraphBuilder(_GraphBuilderRuntime):
         input_names: List[str],
         output_names: List[str],
         prefix: str = "",
-        local_function_name: Optional[str] = None,
+        local_function_name: Optional[
+            Union[str, Tuple[str, str], Tuple[str, str, bool]]
+        ] = None,
     ) -> Union[str, List[str]]:
         """
         Appends all nodes and initializers from another builder.
@@ -2928,17 +2930,28 @@ class GraphBuilder(_GraphBuilderRuntime):
             if the builder detects a local function with the same name,
             it checks they are identical, otherwise, it gives a different name,
             initializers are still inserted into the main graph and become
-            additional inputs
+            additional inputs, this parameter can be a string, the local function name,
+            a tuple, a pair `(domain, name)` or three values
+            `(domain, name, rename_allowed)`,
+            see :meth:`GraphBuilder.make_local_function`
         :return: output names
         """
         if local_function_name:
             if isinstance(local_function_name, tuple):
-                domain, name = local_function_name
+                domain, name = local_function_name[:2]
+                rename_allowed = (
+                    local_function_name[-1] if len(local_function_name) == 3 else False
+                )
             else:
                 name = local_function_name
                 domain = "local_domain"
+                rename_allowed = False
             new_inits, (fdomain, fname) = self.make_local_function(
-                name, builder, domain=domain, move_initializer_to_constant=False
+                name,
+                builder,
+                domain=domain,
+                move_initializer_to_constant=False,
+                rename_allowed=rename_allowed,
             )
             self.make_node(
                 fname,
