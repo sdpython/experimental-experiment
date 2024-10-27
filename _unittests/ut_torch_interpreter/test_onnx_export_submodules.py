@@ -1,6 +1,10 @@
 import unittest
 from onnx.checker import check_model
-from experimental_experiment.ext_test_case import ExtTestCase, skipif_ci_windows
+from experimental_experiment.ext_test_case import (
+    ExtTestCase,
+    skipif_ci_windows,
+    requires_torch,
+)
 from experimental_experiment.torch_interpreter import to_onnx
 from experimental_experiment.reference import ExtendedReferenceEvaluator
 
@@ -8,6 +12,7 @@ from experimental_experiment.reference import ExtendedReferenceEvaluator
 class TestOnnxExportSubModules(ExtTestCase):
 
     @skipif_ci_windows("not available on windows")
+    @requires_torch("2.6", "owning module is None before that")
     def test_submodule_local_functions_simple(self):
         import torch
 
@@ -48,6 +53,7 @@ class TestOnnxExportSubModules(ExtTestCase):
         self.assertEqualArray(expected, got[0], atol=1e-5)
 
     @skipif_ci_windows("not available on windows")
+    @requires_torch("2.6", "owning module is None before that")
     def test_submodule_local_functions_double(self):
         import torch
 
