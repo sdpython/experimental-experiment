@@ -1441,13 +1441,17 @@ class DynamoInterpreter:
             m = self.named_modules[node.target]
             if type(m) in self.preserved_modules:
                 name = type(m).__name__
-                local_function_name = f"{m.__module__}.{name}".replace("torch.nn.modules.", "")
+                local_function_name = (
+                    f"{m.__module__}.{name}".replace("torch.nn.modules.", "")
+                    if m.__module__ != "__main__"
+                    else name.replace("torch.nn.modules.", "")
+                )
 
         self.builder.make_nodes(
             builder,
             args,
             output_names,
             prefix=f"_sub_{name}_",
-            local_function_name=local_function_name,
+            local_function_name=(LOCAL_DOMAIN, local_function_name),
         )
         return output_names

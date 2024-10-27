@@ -2,6 +2,7 @@ import unittest
 from onnx.checker import check_model
 from experimental_experiment.ext_test_case import ExtTestCase, skipif_ci_windows
 from experimental_experiment.torch_interpreter import to_onnx
+from experimental_experiment.reference import ExtendedReferenceEvaluator
 
 
 class TestOnnxExportSubModules(ExtTestCase):
@@ -30,20 +31,21 @@ class TestOnnxExportSubModules(ExtTestCase):
 
         model = Neuron2()
         inputs = (torch.randn(1, 5),)
-        # expected = model(*inputs)
+        expected = model(*inputs)
+        feeds = {"x": inputs[0].numpy()}
 
         onx = to_onnx(
             model,
             inputs,
             export_modules_as_functions=True,
             optimize=False,
-            verbose=1,
+            verbose=0,
         )
-        from onnx_array_api.plotting.text_plot import onnx_simple_text_plot
-
-        print(onnx_simple_text_plot(onx))
         check_model(onx)
-        self.assertEqual(len(onx.functions), 3)
+        self.assertEqual(len(onx.functions), 2)
+        ref = ExtendedReferenceEvaluator(onx)
+        got = ref.run(None, feeds)
+        self.assertEqualArray(expected, got[0])
 
 
 if __name__ == "__main__":

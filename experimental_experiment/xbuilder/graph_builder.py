@@ -456,7 +456,40 @@ class GraphBuilder(_GraphBuilderRuntime):
 
     @classmethod
     def print_node(cls, node: NodeProto):
+        if node.domain:
+            return f"{node.op_type}[{node.domain}]: {node.input} -> {node.output}"
         return f"{node.op_type}: {node.input} -> {node.output}"
+
+    def print_text(self) -> str:
+        def _v(v):
+            if hasattr(v, "shape"):
+                shape = "x".join(map(str, v.shape))
+                dtype = str(v.dtype)
+            else:
+                shape = "?"
+                dtype = "?"
+            return f"{dtype}:{shape}"
+
+        rows = []
+        for k, v in self.opsets.items():
+            rows.append(f"opset: {k}: {v}")
+        for k, v in self.initializers_dict.items():
+            rows.append(f"init: {k}: {_v(v)}")
+        for i in self.input_names:
+            rows.append(f"input: {i}")
+        for node in self.nodes:
+            rows.append(self.print_node(node))
+        for i in self.output_names:
+            rows.append(f"output: {i}")
+        for f in self.functions.values():
+            rows.append("")
+            rows.append(f"FUNC {f.name}[{f.domain}]: {f.input} -> {f.output}")
+            for op in f.opset_import:
+                n = op.domain if op.domain else "''"
+                rows.append(f"  opset: {n}: {op.version}")
+            for node in f.node:
+                rows.append(f"  {self.print_node(node)}")
+        return "\n".join(rows)
 
     @property
     def main_opset(self):
@@ -1684,6 +1717,7 @@ class GraphBuilder(_GraphBuilderRuntime):
             key = self.make_key(value)
         if key not in self._values:
             self._values[key] = name
+        return name
 
     def is_dynamic_shape(
         self, shape: DYNAMIC_SHAPE, verify: bool = True, allow_none: bool = False
@@ -2897,73 +2931,89 @@ class GraphBuilder(_GraphBuilderRuntime):
         :return: output names
         """
         if local_function_name:
-            raise NotImplementedError(
-                f"Local function not implemented yet {local_function_name!r}"
-            )
-        renaming = {}
-        for init, value in builder.initializers_dict.items():
-            name = self.unique_name(f"{prefix}{init}")
-            renaming[init] = name
-            if isinstance(value, TensorProto):
-                value.name = name
+            if isinstance(local_function_name, tuple):
+                domain, name = local_function_name
             else:
-                assert "FakeTensor" not in str(type(value)), (
-                    f"FakeTensor {name!r} cannot be an initializer {type(value)}"
-                    f"{self.get_debug_msg()}"
-                )
-            self.add_initializer(
-                name,
-                value,
-                itype=builder._known_types[init],
-                shape=builder._known_shapes[init],
+                name = local_function_name
+                domain = "local_domain"
+            new_inits = self.make_local_function(
+                name, builder, domain=domain, move_initializer_to_constant=False
             )
-
-        for k, v in builder.dynamic_objects.items():
-            self.make_dynamic_object(k, v)
-
-        assert len(input_names) == len(
-            builder.inputs
-        ), f"Inconsistency between input_names={input_names} and inputs={builder.inputs}"
-        for name, inp in zip(input_names, builder.inputs):
-            new_name = self.unique_name(f"{prefix}{inp.name}")
-            renaming[inp.name] = new_name
-            self.make_node("Identity", [name], [new_name], name=".make_nodes")
-
-        for node in builder.nodes:
-            assert name is not None and not name.startswith("None"), (
-                f"It is good practice to give every node a name so that is "
-                f"easier to see where this node is created but name={name!r} "
-                f"and op_type={node.op_type!r}."
-            )
-            new_inputs = [renaming[i] for i in node.input]
-            new_outputs = [self.unique_name(f"{prefix}{o}") for o in node.output]
-            for o, no in zip(node.output, new_outputs):
-                renaming[o] = no
             self.make_node(
-                node.op_type,
-                new_inputs,
-                new_outputs,
-                domain=node.domain,
-                attributes=node.attribute,
+                name,
+                [*input_names, *new_inits],
+                output_names,
+                domain=domain,
                 check=False,
-                name=node.name,
+                name=name,
             )
-            for o, no in zip(node.output, new_outputs):
-                if builder.has_shape(o):
-                    shape = builder.get_shape(o)
-                    if None in shape:
-                        self.set_rank(no, len(shape))
-                    else:
-                        self.set_shape(no, shape)
-                if builder.has_type(o):
-                    self.set_type(no, builder.get_type(o))
+            if domain not in self.opsets:
+                self.opsets[domain] = 1
+        else:
+            renaming = {}
+            for init, value in builder.initializers_dict.items():
+                name = self.unique_name(f"{prefix}{init}")
+                renaming[init] = name
+                if isinstance(value, TensorProto):
+                    value.name = name
+                else:
+                    assert "FakeTensor" not in str(type(value)), (
+                        f"FakeTensor {name!r} cannot be an initializer {type(value)}"
+                        f"{self.get_debug_msg()}"
+                    )
+                self.add_initializer(
+                    name,
+                    value,
+                    itype=builder._known_types[init],
+                    shape=builder._known_shapes[init],
+                )
 
-        assert len(output_names) == len(builder.outputs), (
-            f"Inconsistency between output_names={output_names} and "
-            f"outputs={builder.outputs}, renaming={renaming}{self.get_debug_msg()}"
-        )
-        for name, out in zip(output_names, builder.outputs):
-            self.make_node("Identity", [renaming[out.name]], [name], name=".make_nodes")
+            for k, v in builder.dynamic_objects.items():
+                self.make_dynamic_object(k, v)
+
+            assert len(input_names) == len(
+                builder.inputs
+            ), f"Inconsistency between input_names={input_names} and inputs={builder.inputs}"
+            for name, inp in zip(input_names, builder.inputs):
+                new_name = self.unique_name(f"{prefix}{inp.name}")
+                renaming[inp.name] = new_name
+                self.make_node("Identity", [name], [new_name], name=".make_nodes")
+
+            for node in builder.nodes:
+                assert name is not None and not name.startswith("None"), (
+                    f"It is good practice to give every node a name so that is "
+                    f"easier to see where this node is created but name={name!r} "
+                    f"and op_type={node.op_type!r}."
+                )
+                new_inputs = [renaming[i] for i in node.input]
+                new_outputs = [self.unique_name(f"{prefix}{o}") for o in node.output]
+                for o, no in zip(node.output, new_outputs):
+                    renaming[o] = no
+                self.make_node(
+                    node.op_type,
+                    new_inputs,
+                    new_outputs,
+                    domain=node.domain,
+                    attributes=node.attribute,
+                    check=False,
+                    name=node.name,
+                )
+                for o, no in zip(node.output, new_outputs):
+                    if builder.has_shape(o):
+                        shape = builder.get_shape(o)
+                        if None in shape:
+                            self.set_rank(no, len(shape))
+                        else:
+                            self.set_shape(no, shape)
+                    if builder.has_type(o):
+                        self.set_type(no, builder.get_type(o))
+
+            assert len(output_names) == len(builder.outputs), (
+                f"Inconsistency between output_names={output_names} and "
+                f"outputs={builder.outputs}, renaming={renaming}{self.get_debug_msg()}"
+            )
+            for name, out in zip(output_names, builder.outputs):
+                self.make_node("Identity", [renaming[out.name]], [name], name=".make_nodes")
 
         # opsets and domains
         for o, v in builder.opsets.items():
@@ -3034,7 +3084,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                 if self.verbose > 1:
                     print(
                         f"[GraphBuilder-{self._hash()}._build_initializers] "
-                        f"{type(v)}-{k}:{v.dtype}[{v.shape}]"
+                        f"<{v.__class__.__name__}>-{k}:{v.dtype}[{v.shape}]"
                     )
                 if isinstance(v, np.ndarray):
                     itype = dtype_to_tensor_dtype(v.dtype)
@@ -3395,6 +3445,30 @@ class GraphBuilder(_GraphBuilderRuntime):
             )
             interpreter.run_node(node)
 
+    def _extend_local_function_inputs(self) -> Tuple[Tuple[str, Any], Set[Tuple[str, str]]]:
+        """
+        All the initializers may not be used in the main function.
+        The function filter out all the unused initializers.
+        The functions also filters out the unused local functions.
+
+        :param proto: function to modify, modified inplace
+        :param functions: other local functions
+        :param initializers_dict: initializers
+        :return: the new proto, the local functions names, and the used initializers
+        """
+        # Let's sort the additional inputs by size, bigger is first.
+        used_initializers = self._get_used_initializers()
+        inits = [
+            (self.get_initializer_size(k), k, v)
+            for k, v in self.initializers_dict.items()
+            if k in used_initializers
+        ]
+        inits.sort(reverse=True)
+        inits = [_[1:] for _ in inits]
+        inputs_to_add = [_[0] for _ in inits]
+        used_functions = self._get_used_local_functions()
+        return inputs_to_add, used_functions
+
     def to_onnx(
         self,
         as_function: Union[bool, OnnxType] = False,
@@ -3470,7 +3544,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                 [i.name for i in self.inputs],
                 [o.name for o in self.outputs],
                 self.nodes,
-                [_ for _ in opsets if _.domain != function_domain],
+                opsets,
             )
             if (
                 len(self.initializers_dict) == 0 and len(self.functions) == 0
@@ -3482,20 +3556,18 @@ class GraphBuilder(_GraphBuilderRuntime):
             )
 
             # We need to move the initializers as inputs, we sort than by decresing size
-            if len(self.functions) == 0:
-                inits = [
-                    (self.get_initializer_size(k), k, v)
-                    for k, v in self.initializers_dict.items()
-                ]
-                inits.sort(reverse=True)
-                inits = [_[1:] for _ in inits]
-                proto.input.extend([_[0] for _ in inits])
-                return dict(
-                    proto=proto,
-                    initializers=inits,
-                )
-
-            raise NotImplementedError("Not implemented yet with multiple local functions")
+            inits, functions = self._extend_local_function_inputs()
+            proto.input.extend(inits)
+            res = dict(
+                proto=proto,
+                initializers_name=inits,
+                initializers_dict={
+                    k: v for k, v in self.initializers_dict.items() if k in set(inits)
+                },
+            )
+            if functions:
+                res["functions"] = [v for k, v in self.functions.items() if k in functions]
+            return res
 
         if self.ir_version:
             ir_version = self.ir_version
@@ -3928,6 +4000,55 @@ class GraphBuilder(_GraphBuilderRuntime):
                     hidden |= less
             memo |= set(node.output)
         return hidden
+
+    def _get_used_initializers(self) -> Set[str]:
+        """
+        Returns the initializers name involved in the graph.
+        """
+        hidden = set()
+        memo = set(i.name for i in self.inputs)
+        for node in self.nodes:
+            for i in node.input:
+                if i not in memo:
+                    hidden.add(i)
+            for att in node.attribute:
+                if att.type == AttributeProto.GRAPH and att.g:
+                    hid = self._get_hidden_inputs(att.g)
+                    less = set(h for h in hid if h not in memo)
+                    hidden |= less
+            memo |= set(node.output)
+        assert all(name in self.initializers_dict for name in hidden), (
+            f"Some hidden inputs in {sorted(hidden)!r} are not initializers "
+            f"{sorted(self.initializers_dict)}. It is unexpected."
+        )
+        return hidden
+
+    def _get_used_local_functions(
+        self, nodes: Optional[Sequence[NodeProto]] = None
+    ) -> Set[Tuple[str, str]]:
+        """
+        Returns the local functions used in the graph.
+        """
+        if nodes is None:
+            nodes = self.nodes
+        used = set()
+        for node in nodes:
+            key = node.domain, node.op_type
+            if key in self.functions:
+                used.add(key)
+            for att in node.attribute:
+                if att.type == AttributeProto.GRAPH and att.g:
+                    used |= self._get_used_local_functions(att.g.node)
+        # Looking into used functions
+        done = set()
+        stack = list(used)
+        while stack:
+            key = stack.pop()
+            if key not in done:
+                f = self.functions[key]
+                used |= self._get_used_local_functions(f.node)
+                done.add(key)
+        return used
 
     @classmethod
     def _enumerate_inputs_with_subgraph(cls, node: NodeProto) -> Iterator[str]:
@@ -4861,7 +4982,7 @@ class GraphBuilder(_GraphBuilderRuntime):
             self.add_initializer(i.name, i, allow_empty=True)
         self.functions = {}
         for f in proto.functions:
-            self.functions[f.domain, f.name] = f
+            self.add_function(f)
         self.value_info = list(proto.graph.value_info)
         self.inputs = list(proto.graph.input)
         self.outputs = list(proto.graph.output)
@@ -5151,25 +5272,70 @@ class GraphBuilder(_GraphBuilderRuntime):
             return self.constants_node_[key]
         return None
 
-    def make_local_function(self, name: str, builder: "GraphBuilder", domain: str = ""):
+    def make_local_function(
+        self,
+        name: str,
+        builder: "GraphBuilder",
+        domain: str = "",
+        move_initializer_to_constant: bool = True,
+        optimize: bool = False,
+    ) -> List[str]:
         """
         Adds a local function to exiting graph.
 
         :param name: local function name
         :param builder: builder
-        :domain: domain name
+        :param domain: domain name
+        :param move_initializer_to_constant: move initializers to constant (True)
+            or add them as inputs (False)
+        :param optimize: optimize the function
+        :return: the list of added initializers if
+            *move_initializer_to_constant* is True
 
-        Method :meth:`GraphBuilder.inline_functions` is called on
-        the builder. It modifies the builder inplace.
+        Method :meth:`GraphBuilder.inline_functions`,
+        meth:`GraphBuilder.move_initializers_to_constant` are called on
+        the builder if *move_initializer_to_constant* is True.
+        It modifies the builder inplace.
         """
         assert not self.has_local_function(
             name=name, domain=domain
         ), f"Function {name!r}, domain={domain!r} already exists"
-        builder.inline_functions(verbose=max(0, self.verbose - 1))
-        builder.move_initializers_to_constant(verbose=max(0, self.verbose - 1))
-        onx = builder.to_onnx(
-            as_function=True, function_name=name, function_domain=domain, optimize=False
-        )
+        if move_initializer_to_constant:
+            builder.inline_functions(verbose=max(0, self.verbose - 1))
+            builder.move_initializers_to_constant(verbose=max(0, self.verbose - 1))
+            onx = builder.to_onnx(
+                as_function=True,
+                function_name=name,
+                function_domain=domain,
+                optimize=optimize,
+            )
+            new_inits = []
+        else:
+            fct = builder.to_onnx(
+                as_function=OnnxType.FUNCTION_AND_INITIALIZERS,
+                function_name=name,
+                function_domain=domain,
+                optimize=optimize,
+            )
+            onx = fct["proto"]
+            for f in builder.functions.values():
+                self.add_function(f)
+
+            # Let's rename the initializers.
+            repl = {}
+            inits = fct["initializers_dict"]
+            new_inits = []
+            for i in onx.input:
+                if i in inits:
+                    new_inits.append(i)
+            for i in inits:
+                if i not in new_inits:
+                    new_inits.append(i)
+            for k, v in inits.items():
+                new_name = self.add_initializer(self.unique_name(f"{onx.name}_{k}"), v)
+                repl[k] = new_name
+            new_inits = [repl.get(i, i) for i in new_inits]
+
         assert isinstance(
             onx, FunctionProto
         ), f"Unexpected type {type(onx)}, name={name!r}, domain={domain!r}"
@@ -5178,9 +5344,20 @@ class GraphBuilder(_GraphBuilderRuntime):
             f"\n------ONNX----\n{onx}"
             f"{self.get_debug_msg()}"
         )
-        self.functions[domain, name] = onx
+        self.add_function(onx)
         if domain not in self.opsets:
             self.opsets[domain] = 1
+        return new_inits
+
+    def add_function(self, f: FunctionProto):
+        """
+        Adds a new local function.
+        """
+        key = f.domain, f.name
+        assert (
+            key not in self.functions
+        ), f"Function {key} was already added{self.get_debug_msg()}"
+        self.functions[f.domain, f.name] = f
 
     def has_local_function(self, name: str, domain: str = ""):
         """
