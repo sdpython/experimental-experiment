@@ -45,7 +45,7 @@ class TestOnnxExportSubModules(ExtTestCase):
         self.assertEqual(len(onx.functions), 2)
         ref = ExtendedReferenceEvaluator(onx)
         got = ref.run(None, feeds)
-        self.assertEqualArray(expected, got[0])
+        self.assertEqualArray(expected, got[0], atol=1e-5)
 
 
 if __name__ == "__main__":

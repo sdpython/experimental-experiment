@@ -2936,11 +2936,11 @@ class GraphBuilder(_GraphBuilderRuntime):
             else:
                 name = local_function_name
                 domain = "local_domain"
-            new_inits = self.make_local_function(
+            new_inits, fname = self.make_local_function(
                 name, builder, domain=domain, move_initializer_to_constant=False
             )
             self.make_node(
-                name,
+                fname,
                 [*input_names, *new_inits],
                 output_names,
                 domain=domain,
@@ -5279,7 +5279,8 @@ class GraphBuilder(_GraphBuilderRuntime):
         domain: str = "",
         move_initializer_to_constant: bool = True,
         optimize: bool = False,
-    ) -> List[str]:
+        rename_allowed: bool = False,
+    ) -> Tuple[List[str], str]:
         """
         Adds a local function to exiting graph.
 
@@ -5289,15 +5290,18 @@ class GraphBuilder(_GraphBuilderRuntime):
         :param move_initializer_to_constant: move initializers to constant (True)
             or add them as inputs (False)
         :param optimize: optimize the function
+        :param rename_allowed: function renaming is allowed to avoid
+            replacing an existing one
         :return: the list of added initializers if
-            *move_initializer_to_constant* is True
+            *move_initializer_to_constant* is True,
+            and the function name, it can be changed if one is already existing
 
         Method :meth:`GraphBuilder.inline_functions`,
         meth:`GraphBuilder.move_initializers_to_constant` are called on
         the builder if *move_initializer_to_constant* is True.
         It modifies the builder inplace.
         """
-        assert not self.has_local_function(
+        assert rename_allowed or not self.has_local_function(
             name=name, domain=domain
         ), f"Function {name!r}, domain={domain!r} already exists"
         if move_initializer_to_constant:
@@ -5310,6 +5314,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                 optimize=optimize,
             )
             new_inits = []
+            new_name = name
         else:
             fct = builder.to_onnx(
                 as_function=OnnxType.FUNCTION_AND_INITIALIZERS,
@@ -5344,20 +5349,34 @@ class GraphBuilder(_GraphBuilderRuntime):
             f"\n------ONNX----\n{onx}"
             f"{self.get_debug_msg()}"
         )
-        self.add_function(onx)
+        new_name = self.add_function(onx, rename_allowed=True)
         if domain not in self.opsets:
             self.opsets[domain] = 1
-        return new_inits
+        return new_inits, new_name
 
-    def add_function(self, f: FunctionProto):
+    def add_function(self, f: FunctionProto, rename_allowed: bool = False):
         """
         Adds a new local function.
+
+        :param f: new function to register
+        :param rename_allowed: the function be renamed,
+            the proto is modified inplace
+        :return: function name
         """
+        key = f.domain, f.name
+        if rename_allowed and key in self.functions:
+            i = 2
+            new_name = f"{f.name}_2"
+            while new_name in self.functions:
+                i += 1
+                new_name = f"{f.name}_{i}"
+            f.name = new_name
         key = f.domain, f.name
         assert (
             key not in self.functions
         ), f"Function {key} was already added{self.get_debug_msg()}"
-        self.functions[f.domain, f.name] = f
+        self.functions[key] = f
+        return f.name
 
     def has_local_function(self, name: str, domain: str = ""):
         """

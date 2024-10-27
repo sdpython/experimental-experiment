@@ -273,7 +273,7 @@ class TestTools(ExtTestCase):
 
         g = GraphBuilder(18, ir_version=9, as_function=True)
         g.make_tensor_input("X", None, None, False)
-        new_inits = g.make_local_function(
+        new_inits, _ = g.make_local_function(
             "Regression", gf, domain="custom", move_initializer_to_constant=False
         )
         self.assertEqual(new_inits, ["Regression_weights", "Regression_bias"])
@@ -356,7 +356,7 @@ class TestTools(ExtTestCase):
         self.assertEqualArray(expected, got[0])
 
     @ignore_warnings(DeprecationWarning)
-    def test_as_function_nested(self):
+    def test_as_function_nested_unique(self):
         np_weights = np.arange(12).reshape((4, 3)).astype(np.float32) / 10
         np_bias = np.arange(3).reshape((1, 3)).astype(np.float32) + 10
         np_bias2 = np.arange(3).reshape((1, 3)).astype(np.float32) + 100
@@ -374,7 +374,7 @@ class TestTools(ExtTestCase):
         # second function calling the first one
         g2 = GraphBuilder(18, ir_version=9, as_function=True)
         g2.make_tensor_input("X", None, None, False)
-        new_inits = g2.make_local_function(
+        new_inits, _ = g2.make_local_function(
             "Regression", gf, domain="custom", move_initializer_to_constant=False
         )
 
@@ -390,7 +390,7 @@ class TestTools(ExtTestCase):
         # second function calling the first one
         g = GraphBuilder(18, ir_version=9, as_function=True)
         g.make_tensor_input("X", None, None, False)
-        new_inits = g.make_local_function(
+        new_inits, _ = g.make_local_function(
             "RegressionBias", g2, domain="custom", move_initializer_to_constant=False
         )
         self.assertEqual(len(g.functions), 2)
@@ -488,6 +488,122 @@ class TestTools(ExtTestCase):
         proto = g.to_onnx()
         self.assertEqual(len(proto.functions), 2)
         ref = ExtendedReferenceEvaluator(proto)
+        got = ref.run(None, feeds)
+        self.assertEqualArray(expected, got[0])
+
+    @ignore_warnings(DeprecationWarning)
+    def test_as_function_second_twice(self):
+        np_weights = np.arange(12).reshape((4, 3)).astype(np.float32) / 10
+        np_bias = np.arange(3).reshape((1, 3)).astype(np.float32) + 10
+
+        # function 1
+        gf = GraphBuilder(18, ir_version=9, as_function=True)
+        gf.make_tensor_input("X", None, None, False)
+        init = gf.make_initializer("weights", np_weights)
+        bias = gf.make_initializer("bias", np_bias)
+        gf.op.Add(gf.op.MatMul("X", init, name="linear"), bias, name="linear", outputs=["Y"])
+        gf.make_tensor_output("Y", is_dimension=False, indexed=False)
+        self.assertEqualArray(gf.initializers_dict["weights"], np_weights)
+
+        # main graph
+        g = GraphBuilder(18, ir_version=9, as_function=True)
+        g.make_tensor_input("X", None, None, False)
+        new_inits, _ = g.make_local_function(
+            "Regression", gf, domain="custom", move_initializer_to_constant=False
+        )
+        self.assertEqual(len(g.functions), 1)
+        self.assertEqual(new_inits, ["Regression_weights", "Regression_bias"])
+        self.assertEqualArray(g.initializers_dict["Regression_weights"], np_weights)
+
+        # function 3: the same name but different
+        gf = GraphBuilder(18, ir_version=9, as_function=True)
+        gf.make_tensor_input("X", None, None, False)
+
+        init = gf.make_initializer("weights", np_weights)
+        bias = gf.make_initializer("bias", np_bias)
+        gf.op.Sub(gf.op.MatMul("X", init, name="linear"), bias, name="linear", outputs=["Y"])
+        gf.make_tensor_output("Y", is_dimension=False, indexed=False)
+        self.assertEqualArray(gf.initializers_dict["weights"], np_weights)
+
+        self.assertEqual(len(g.functions), 1)
+        new_inits_2, function_name = g.make_local_function(
+            "Regression",
+            gf,
+            domain="custom",
+            move_initializer_to_constant=False,
+            rename_allowed=True,
+        )
+        self.assertEqual(len(g.functions), 2)
+        self.assertEqual(new_inits, ["Regression_weights", "Regression_bias"])
+        self.assertEqualArray(g.initializers_dict["Regression_weights"], np_weights)
+
+        # two functions
+        g.op.Add(
+            g.anyop.Regression("X", *new_inits, name="linear", domain="custom"),
+            g.make_node(function_name, ["X", *new_inits_2], name="linear", domain="custom"),
+            outputs=["Y"],
+        )
+        g.make_tensor_output("Y", is_dimension=False, indexed=False)
+        self.assertEqual(len(g.functions), 2)
+
+        # finally, the conversion to onnx
+        fct = g.to_onnx(
+            as_function=OnnxType.FUNCTION_AND_INITIALIZERS,
+            function_name="linear",
+            function_domain="mine",
+        )
+
+        self.assertIsInstance(fct, dict)
+        self.assertEqual(
+            set(fct), {"proto", "functions", "initializers_name", "initializers_dict"}
+        )
+        self.assertIsInstance(fct["proto"], FunctionProto)
+        self.assertIsInstance(fct["functions"], list)
+        self.assertTrue(all(isinstance(p, FunctionProto) for p in fct["functions"]))
+        self.assertIsInstance(fct["initializers_name"], list)
+        self.assertEqual(
+            fct["initializers_name"],
+            [
+                "Regression_weights2",
+                "Regression_weights",
+                "Regression_bias2",
+                "Regression_bias",
+            ],
+        )
+        self.assertIsInstance(fct["initializers_dict"], dict)
+        self.assertTrue(
+            all(isinstance(p, np.ndarray) for p in fct["initializers_dict"].values())
+        )
+        self.assertEqual(len(fct["initializers_name"]), len(fct["initializers_dict"]))
+        proto = fct["proto"]
+        self.assertEqual(proto.output, ["Y"])
+        self.assertEqual(
+            proto.input,
+            [
+                "X",
+                "Regression_weights2",
+                "Regression_weights",
+                "Regression_bias2",
+                "Regression_bias",
+            ],
+        )
+        self.assertEqual(proto.domain, "mine")
+        self.assertEqual(proto.name, "linear")
+        f1 = fct["functions"][0]
+        self.assertEqual(f1.domain, "custom")
+        self.assertEqual(f1.name, "Regression")
+        self.assertEqual(f1.output, ["Y"])
+        self.assertEqual(f1.input, ["X", "weights", "bias"])
+        f2 = fct["functions"][1]
+        self.assertEqual(f2.domain, "custom")
+        self.assertEqual(f2.name, "Regression_2")
+        self.assertEqual(f2.output, ["Y"])
+        self.assertEqual(f2.input, ["X", "weights", "bias"])
+
+        feeds = dict(X=np.random.randn(2, 4).astype(np.float32))
+        feeds.update(fct["initializers_dict"])
+        expected = feeds["X"] @ np_weights + np_bias + feeds["X"] @ np_weights - np_bias
+        ref = ExtendedReferenceEvaluator(fct["proto"], functions=fct["functions"])
         got = ref.run(None, feeds)
         self.assertEqualArray(expected, got[0])
 
