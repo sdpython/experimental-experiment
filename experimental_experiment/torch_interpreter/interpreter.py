@@ -1377,20 +1377,42 @@ class DynamoInterpreter:
             val = (val,)
 
         if val is not None:
-            assert len(val) == len(builder.outputs), (
-                f"Output mismatch {len(val)} != {len(builder.outputs)}, "
-                f"source_node.name={source_node.name!r}, target={source_node.target!r}"
-                f"{self.builder.get_debug_msg()}"
-            )
-            for i in range(len(val)):
-                name = builder.outputs[i].name
-                if name not in builder._known_shapes:
-                    builder.set_shape(name, val[i].shape)
-                if name not in builder._known_types:
-                    builder.set_type(name, val[i].dtype)
-                self.builder.set_shapes_types(
-                    source_node.name, "call_module", (val[i].dtype, val[i].shape)
+            if len(val) == 1 and isinstance(val[0], list):
+                # submodules
+                assert len(val[0]) == len(builder.outputs), (
+                    f"Output mismatch {len(val[0])} != {len(builder.outputs)}, "
+                    f"source_node.name={source_node.name!r}, target={source_node.target!r}"
+                    f"type(val)={string_type(val)}, "
+                    f"builder.outputs={string_type(builder.outputs)}"
+                    f"{self.builder.get_debug_msg()}"
                 )
+                for i in range(len(val[0])):
+                    name = builder.outputs[i].name
+                    if name not in builder._known_shapes:
+                        builder.set_shape(name, val[0][i].shape)
+                    if name not in builder._known_types:
+                        builder.set_type(name, val[0][i].dtype)
+                    self.builder.set_shapes_types(
+                        source_node.name, "call_module", (val[0][i].dtype, val[0][i].shape)
+                    )
+            else:
+                # regular node
+                assert len(val) == len(builder.outputs), (
+                    f"Output mismatch {len(val)} != {len(builder.outputs)}, "
+                    f"source_node.name={source_node.name!r}, target={source_node.target!r}"
+                    f"type(val)={string_type(val)}, "
+                    f"builder.outputs={string_type(builder.outputs)}"
+                    f"{self.builder.get_debug_msg()}"
+                )
+                for i in range(len(val)):
+                    name = builder.outputs[i].name
+                    if name not in builder._known_shapes:
+                        builder.set_shape(name, val[i].shape)
+                    if name not in builder._known_types:
+                        builder.set_type(name, val[i].dtype)
+                    self.builder.set_shapes_types(
+                        source_node.name, "call_module", (val[i].dtype, val[i].shape)
+                    )
 
         return builder, args, kwargs, output_names
 

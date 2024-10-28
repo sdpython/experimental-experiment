@@ -2971,6 +2971,7 @@ class GraphBuilder(_GraphBuilderRuntime):
             )
 
             # Shape information, needs to handle multiple outputs
+            # hopefully, the interpreter fills this information with what it knows
             # fproto = self.functions[fdomain, fname]
             # for o, no in zip(fproto.output, output_names):
             #    if builder.has_shape(o):
@@ -3584,7 +3585,8 @@ class GraphBuilder(_GraphBuilderRuntime):
             if (
                 len(self.initializers_dict) == 0 and len(self.functions) == 0
             ) or as_function != OnnxType.FUNCTION_AND_INITIALIZERS:
-                return proto
+                return dict(proto=proto)
+
             assert as_function == OnnxType.FUNCTION_AND_INITIALIZERS, (
                 f"Unexpected value for as_function={as_function!r}"
                 f"It should be 'OnnxType.FUNCTION_AND_CONSTANTS'."
@@ -5363,6 +5365,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                 function_domain=domain,
                 optimize=optimize,
             )
+            assert isinstance(fct, dict), f"Unexpected type {type(fct)}{self.get_debug_msg()}"
             onx = fct["proto"]
             to_rename = {}
             keys = []
@@ -5380,19 +5383,22 @@ class GraphBuilder(_GraphBuilderRuntime):
                 onx = self.rename_in_local_functions(to_rename, keys, proto=onx)
 
             # Let's rename the initializers.
-            repl = {}
-            inits = fct["initializers_dict"]
-            new_inits = []
-            for i in onx.input:
-                if i in inits:
-                    new_inits.append(i)
-            for i in inits:
-                if i not in new_inits:
-                    new_inits.append(i)
-            for k, v in inits.items():
-                new_name = self.add_initializer(self.unique_name(f"{onx.name}_{k}"), v)
-                repl[k] = new_name
-            new_inits = [repl.get(i, i) for i in new_inits]
+            if "initializers_dict" in fct:
+                repl = {}
+                inits = fct["initializers_dict"]
+                new_inits = []
+                for i in onx.input:
+                    if i in inits:
+                        new_inits.append(i)
+                for i in inits:
+                    if i not in new_inits:
+                        new_inits.append(i)
+                for k, v in inits.items():
+                    new_name = self.add_initializer(self.unique_name(f"{onx.name}_{k}"), v)
+                    repl[k] = new_name
+                new_inits = [repl.get(i, i) for i in new_inits]
+            else:
+                new_inits = []
 
         assert isinstance(
             onx, FunctionProto

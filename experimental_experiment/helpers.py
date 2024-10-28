@@ -53,6 +53,8 @@ def string_type(obj: Any) -> str:
     if type(obj).__name__ == "Node" and hasattr(obj, "meta"):
         # torch.fx.node.Node
         return f"%{obj.target}"
+    if type(obj).__name__ == "ValueInfoProto":
+        return f"OT{obj.type.tensor_type.elem_type}"
 
     raise AssertionError(f"Unsupported type {type(obj).__name__!r} - {type(obj)}")
 

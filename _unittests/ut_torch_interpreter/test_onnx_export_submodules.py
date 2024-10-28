@@ -95,6 +95,48 @@ class TestOnnxExportSubModules(ExtTestCase):
         got = ref.run(None, feeds)
         self.assertEqualArray(expected, got[0], atol=1e-5)
 
+    @skipif_ci_windows("not available on windows")
+    @requires_torch("2.6", "owning module is None before that")
+    def test_submodule_local_functions_two_outputs(self):
+        import torch
+
+        class SubNeuron2Outputs(torch.nn.Module):
+            def __init__(self, n_dims: int = 5, n_targets: int = 3):
+                super().__init__()
+
+            def forward(self, x):
+                return (
+                    torch.sigmoid(x),
+                    torch.sigmoid(x * x),
+                )
+
+        class Neuron2(torch.nn.Module):
+            def __init__(self, n_dims: int = 5, n_targets: int = 3):
+                super().__init__()
+                self.neuron = SubNeuron2Outputs(n_dims, n_targets)
+
+            def forward(self, x):
+                z, z1 = self.neuron(x)
+                return torch.relu(z) + z1
+
+        model = Neuron2()
+        inputs = (torch.randn(1, 5),)
+        expected = model(*inputs)
+        feeds = {"x": inputs[0].numpy()}
+
+        onx = to_onnx(
+            model,
+            inputs,
+            export_modules_as_functions=True,
+            optimize=False,
+            verbose=0,
+        )
+        check_model(onx)
+        self.assertEqual(len(onx.functions), 1)
+        ref = ExtendedReferenceEvaluator(onx)
+        got = ref.run(None, feeds)
+        self.assertEqualArray(expected, got[0], atol=1e-5)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
