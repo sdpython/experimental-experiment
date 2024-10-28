@@ -3,6 +3,18 @@
 Frequent Exceptions
 ===================
 
+If the converter to onnx fails, function :func:`bypass_export_some_errors
+<experimental_experiment.torch_interpreter.onnx_export_errors.bypass_export_some_errors>`
+may help solving some of them.
+
+::
+
+    from experimental_experiment.torch_interpreter.onnx_export_errors import bypass_export_some_errors
+    
+    with bypass_export_some_errors():
+        onx = to_onnx(...)
+
+
 torch._dynamo.exc.Unsupported
 =============================
 

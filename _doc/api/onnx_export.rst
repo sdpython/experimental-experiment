@@ -18,3 +18,8 @@ ExportOptions
 
 .. autoclass:: experimental_experiment.torch_interpreter.ExportOptions
     :members:
+
+bypass_export_some_errors
+=========================
+
+.. autofunction:: experimental_experiment.torch_interpreter.onnx_export_errors.bypass_export_some_errors

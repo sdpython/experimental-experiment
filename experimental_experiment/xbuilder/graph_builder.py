@@ -1650,7 +1650,8 @@ class GraphBuilder(_GraphBuilderRuntime):
         :param value: initializer
         :param itype: to overwrite the type
         :param shape: to overwrite the shape
-        :param cst: value to send to :meth:`update_node_constant`
+        :param cst: value to send to :meth:`update_node_constant
+            <experimental_experiment.xbuilder.GraphBuilder.update_node_constant>`
         :param key: used to register the initializer
         :param existing: if True, shape and type should exist,
             if False, it should not exist, if None, both case are allowed
@@ -3425,7 +3426,7 @@ class GraphBuilder(_GraphBuilderRuntime):
     def process(
         self,
         graph_module: "torch.fx.GraphModule",  # noqa: F821
-        interpreter: "Interpreter",  # noqa: F821
+        interpreter: "DynamoInterpreter",  # noqa: F821
     ):
         """
         Environment variable ``ONNX_BUILDER_PROGRESS=1`` can be used to show

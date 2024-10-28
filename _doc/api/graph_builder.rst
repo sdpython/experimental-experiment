@@ -9,6 +9,12 @@ GraphBuilder
 .. autoclass:: experimental_experiment.xbuilder.GraphBuilder
     :members:
 
+OnnxType
+========
+
+.. autoclass:: experimental_experiment.xbuilder.OnnxType
+    :members:
+
 OptimizationOptions
 ===================
 

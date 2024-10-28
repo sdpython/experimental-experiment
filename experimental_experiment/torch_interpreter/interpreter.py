@@ -82,7 +82,7 @@ class DynamoInterpreter:
         Registers a list of module to preserve as local function
         in the onnx model. If empty, the graph is almost inlined.
         The module to convert to onnx should the output of method
-        :func:`torch.export.unflatten`.
+        :func:`torch.export.unflatten.unflatten`.
         """
         if self.builder.verbose > 4 and preserved_modules:
             print(
