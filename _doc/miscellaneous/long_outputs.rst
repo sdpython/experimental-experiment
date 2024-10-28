@@ -2,11 +2,6 @@
 Long Outputs uneasy to read
 ===========================
 
-:hide-toc:
-
-.. contents::
-    :local:
-
 examples
 ========
 

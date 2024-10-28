@@ -35,13 +35,13 @@ Source are `sdpython/experimental-experiment
     :maxdepth: 1
     :caption: Contents
 
-    tutorial/index
     design/index
+    tutorial/index
     api/index
     auto_examples/index
     models/index
     command_lines
-    times
+    miscellaneous/index
 
 .. toctree::
     :maxdepth: 1
@@ -49,7 +49,6 @@ Source are `sdpython/experimental-experiment
 
     CHANGELOGS
     license
-    long_outputs
 
 Older versions
 ++++++++++++++

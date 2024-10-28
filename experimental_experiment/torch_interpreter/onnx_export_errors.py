@@ -93,8 +93,16 @@ def flatten_with_keys_dynamic_cache(
 @contextlib.contextmanager
 def bypass_export_some_errors():
     """
-    Tries to bypass some functions torch.export.export does not
-    support such as ``torch.jit.isinstance``.
+    Tries to bypass some functions :func:`torch.export.export` does not
+    support:
+
+    * `torch.jit.isinstance`
+    * `torch._dynamo.mark_static_address`
+    * Serialialization of `MambaCache` (in :epkg:`transformers`)
+    * Serialialization of `DynamicCache` (in :epkg:`transformers`)
+
+    Serialization issues happen when a module takes one input or output
+    has a type :func:`torch.export.export` cannot serialize.
     """
     import torch.jit
     import torch.utils._pytree as _torch_pytree

@@ -6,24 +6,30 @@ This benchmark aims measures a couple of exporter or ways to run a pytorch model
 and various sets of models to check which one is running or better in some conditions.
 It can be triggered on sets or models through a different script for each of them:
 
+* **explicit**: ``python -m experimental_experiment.torch_bench.bash_bench_explicit``
 * **huggingface**: ``python -m experimental_experiment.torch_bench.bash_bench_huggingface``
+* **huggingface_big**: ``python -m experimental_experiment.torch_bench.bash_bench_huggingface_big``
+* **issues**: ``python -m experimental_experiment.torch_bench.bash_bench_issues``
 * **timm**: ``python -m experimental_experiment.torch_bench.bash_bench_timm``
 * **torchbench**: ``python -m experimental_experiment.torch_bench.bash_bench_torchbench``
 * **torchbench_ado**: ``python -m experimental_experiment.torch_bench.bash_bench_torchbench_ado``
-* **explicit**: ``python -m experimental_experiment.torch_bench.bash_bench_explicit``
+* **untrained**: ``python -m experimental_experiment.torch_bench.bash_bench_untrained``
 
 **huggingface** is a set of models coming from :epkg:`transformers`,
+**huggingface_big** is a another set of models coming from :epkg:`transformers`, models are bigger,
 **timm** is a set of models coming from :epkg:`timm`,
 **torchbench** and **torchbench_ado** models come from :epkg:`torchbench`,
-**explicit** is a set of custom models.
+**explicit** is a set of custom models,
+**issues** is a set of models to track after they failed,
+**untrained** is a set similar to *huggingface_big* but it bypasses the downloading
+part which can takes several minutes.
 
 These scripts are usually uses in two ways:
 
 * a single run: to investigate a failure or a slow model
 * a batch run: to benchmark many models on many exporters
 
-Examples are using with ``bash_bench_huggingface`` but any of the other
-can be used.
+Examples are using with ``bash_bench_huggingface`` but any of the other can be used.
 
 List of models
 ==============

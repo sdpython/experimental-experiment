@@ -46,6 +46,7 @@ The documentation was generated with the following versions.
 .. runpython::
     :showcode:
 
+    import numpy
     import onnx
     import onnx_array_api
     import onnxruntime
@@ -53,7 +54,7 @@ The documentation was generated with the following versions.
     import transformers
     import onnxscript
 
-    for pck in [onnx, onnx_array_api, onnxruntime, torch, transformers, onnxscript]:
+    for pck in [numpy, onnx, onnx_array_api, onnxruntime, torch, transformers, onnxscript]:
         if pck is None:
             continue
         try:
