@@ -3586,6 +3586,13 @@ class GraphBuilder(_GraphBuilderRuntime):
                 self.nodes,
                 opsets,
             )
+            if as_function is True:
+                assert len(self.initializers_dict) == 0, (
+                    f"The function ({function_domain},{function_name}) has initializers, "
+                    f"method move_initializers_to_constant can be used to convert "
+                    f"them into constant."
+                )
+                return proto
             if (
                 len(self.initializers_dict) == 0 and len(self.functions) == 0
             ) or as_function != OnnxType.FUNCTION_AND_INITIALIZERS:
