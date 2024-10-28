@@ -2969,6 +2969,19 @@ class GraphBuilder(_GraphBuilderRuntime):
                 check=False,
                 name=name,
             )
+
+            # Shape information, needs to handle multiple outputs
+            # fproto = self.functions[fdomain, fname]
+            # for o, no in zip(fproto.output, output_names):
+            #    if builder.has_shape(o):
+            #        shape = builder.get_shape(o)
+            #        if None in shape:
+            #            self.set_rank(no, len(shape))
+            #        else:
+            #            self.set_shape(no, shape)
+            #    if builder.has_type(o):
+            #        self.set_type(no, builder.get_type(o))
+
             if domain not in self.opsets:
                 self.opsets[domain] = 1
         else:

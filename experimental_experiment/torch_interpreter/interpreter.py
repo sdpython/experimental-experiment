@@ -245,12 +245,16 @@ class DynamoInterpreter:
                 f"after {self.builder.input_names}"
                 f"{self.builder.get_debug_msg()}"
             )
-            if self.flat_example_inputs_[self.current_input_] is None:
+            if (
+                not self.builder.as_function
+                and self.flat_example_inputs_[self.current_input_] is None
+            ):
                 # We skip it.
                 assert len(users) == 0, (
                     f"Input {name!r} (index {self.current_input_}"
                     f"/{len(self.flat_example_inputs_)}) "
-                    f"is None but it is used by {users}. "
+                    f"is None but it is used by {users}, "
+                    f"as_function={self.builder.as_function}. "
                     f"Existing inputs {self.builder.input_names}. Example inputs: "
                     f"{['-' if t is None else t.shape for t in self.flat_example_inputs_]}"
                     f"{self.builder.get_debug_msg()}"
@@ -259,8 +263,9 @@ class DynamoInterpreter:
                 return ""
 
             # second check
-            not_none = tuple(t for t in self.flat_example_inputs_ if t is not None)
-            assert len(self.builder.input_names) < len(not_none), (
+            assert self.builder.as_function or len(self.builder.input_names) < len(
+                tuple(t for t in self.flat_example_inputs_ if t is not None)
+            ), (
                 f"Too many inputs already ({len(self.builder.input_names)}), "
                 f"unexpected {name!r} "
                 f"after {self.builder.input_names}"
@@ -368,7 +373,17 @@ class DynamoInterpreter:
                             users=node.users,
                         )
                 else:
-                    value = self.retriever(node.target, val, debug={"node": node})
+                    value = self.retriever(node.target, val, debug={"node": node}, exc=False)
+                    if value is None:
+                        # This is probably one input then.
+                        return self._make_tensor_input(
+                            node.target,
+                            elem_type=val.dtype,
+                            shape=val.shape,
+                            is_dimension=False,
+                            users=node.users,
+                        )
+
             if value is None or isinstance(
                 value, self.torch._subclasses.fake_tensor.FakeTensor
             ):
@@ -1362,9 +1377,11 @@ class DynamoInterpreter:
             val = (val,)
 
         if val is not None:
-            assert len(val) == len(
-                builder.outputs
-            ), f"Output mismatch {len(val)} != {len(builder.outputs)}"
+            assert len(val) == len(builder.outputs), (
+                f"Output mismatch {len(val)} != {len(builder.outputs)}, "
+                f"source_node.name={source_node.name!r}, target={source_node.target!r}"
+                f"{self.builder.get_debug_msg()}"
+            )
             for i in range(len(val)):
                 name = builder.outputs[i].name
                 if name not in builder._known_shapes:
