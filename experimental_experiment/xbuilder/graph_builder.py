@@ -2849,6 +2849,9 @@ class GraphBuilder(_GraphBuilderRuntime):
                     self.set_rank(node.output[0], self.get_rank(node.input[1]))
 
     def update_node_constant(self, name: str, node: NodeProto):
+        """
+        Updates a constant NodeProto.
+        """
         assert isinstance(name, str), f"Unexpected type {type(name)} for name"
         assert node is None or isinstance(
             node, NodeProto
