@@ -3521,11 +3521,14 @@ class GraphBuilder(_GraphBuilderRuntime):
         inline: bool = False,
     ) -> Union[FunctionProto, ModelProto, TorchModelContainer, Dict[str, Any]]:
         """
-        Conversion to onnx. Only then the initializer are converted into
+        Conversion to onnx. Only then the initializers are converted into
         TensorProto.
 
         :param as_function: converts the graph as a FunctionProto or a ModelProto,
-            by default the function assumes there is no initializer
+            if it is True, all initializers are converted into constants nodes,
+            if it is ``OnxType.FUNCTION_AND_INITIALIZERS``, the function returns
+            the initializers and the FunctionProto with additional inputs for
+            the remaining initializers
         :param optimize: disable or enable the optimization,
             the optimization are set when the class constructor is called
         :param large_model: if True returns a :class:`onnx.model_container.ModelContainer`,
@@ -3564,6 +3567,8 @@ class GraphBuilder(_GraphBuilderRuntime):
         if as_function:
             assert function_name, "Function name cannot be empty."
             assert function_domain, "Function domain cannot be empty."
+            if as_function is True and self.initializers_dict:
+                self.move_initializers_to_constant(verbose=max(0, self.verbose - 1))
             assert (
                 as_function == OnnxType.FUNCTION_AND_INITIALIZERS or not self.initializers_dict
             ), (
@@ -3587,11 +3592,6 @@ class GraphBuilder(_GraphBuilderRuntime):
                 opsets,
             )
             if as_function is True:
-                assert len(self.initializers_dict) == 0, (
-                    f"The function ({function_domain},{function_name}) has initializers, "
-                    f"method move_initializers_to_constant can be used to convert "
-                    f"them into constant."
-                )
                 return proto
             if (
                 len(self.initializers_dict) == 0 and len(self.functions) == 0
@@ -4196,7 +4196,9 @@ class GraphBuilder(_GraphBuilderRuntime):
 
         v = self.constants_[name]
         # It should not be None but a node as it is not an initializer.
-        assert isinstance(v, NodeProto), f"Unexpected type {type(v)} for name={name!r}"
+        assert isinstance(
+            v, NodeProto
+        ), f"Unexpected type {type(v)} for constant name={name!r}"
         feeds = {i: self.get_constant(i, exc=exc, computed_value=True) for i in v.input}
         for kval, val in feeds.items():
             assert "FakeTensor" not in str(type(val)), (
@@ -5301,6 +5303,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         will be fused.
         `self.optimization_options.constant_fusing` must be True.
         """
+        assert isinstance(node, NodeProto), f"Unexpected type {type(node)} for a node"
         if not self.optimization_options.constant_fusing:
             return None
         key = self._constant_key(node)
@@ -5363,7 +5366,6 @@ class GraphBuilder(_GraphBuilderRuntime):
         ), f"Function {name!r}, domain={domain!r} already exists"
         if move_initializer_to_constant:
             builder.inline_functions(verbose=max(0, self.verbose - 1))
-            builder.move_initializers_to_constant(verbose=max(0, self.verbose - 1))
             onx = builder.to_onnx(
                 as_function=True,
                 function_name=name,
@@ -5955,7 +5957,12 @@ class GraphBuilder(_GraphBuilderRuntime):
                 )
             cst = oh.make_node("Constant", [], [proto.name], value=proto)
             cst_nodes.append(cst)
-            self.constants_node_[proto.name] = cst
+            self.add_constant_node(cst)
+            self.update_node_constant(proto.name, cst)
+            assert self.has_type(proto.name), f"Type is missing for initializer {proto.name!r}"
+            assert self.has_shape(
+                proto.name
+            ), f"Shape is missing for initializer {proto.name!r}"
 
         self.initializers_dict = {}
         self.nodes = [*cst_nodes, *self.nodes]
