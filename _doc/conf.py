@@ -113,6 +113,7 @@ epkg_dictionary = {
     "aten functions": "https://pytorch.org/cppdocs/api/namespace_at.html#functions",
     "azure pipeline": "https://azure.microsoft.com/en-us/products/devops/pipelines",
     "Custom Backends": "https://pytorch.org/docs/stable/torch.compiler_custom_backends.html",
+    "diffusers": "https://github.com/huggingface/diffusers",
     "DOT": "https://graphviz.org/doc/info/lang.html",
     "executorch": "https://pytorch.org/executorch/stable/intro-overview.html",
     "ExecuTorch": "https://pytorch.org/executorch/stable/intro-overview.html",
