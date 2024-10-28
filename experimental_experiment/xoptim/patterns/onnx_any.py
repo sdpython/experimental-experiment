@@ -154,6 +154,11 @@ class IdentityPattern(PatternOptimization):
                 return self.none(node, inspect.currentframe().f_lineno)
             return MatchResult(node, [node], self.apply, insert_at=node)
 
+        assert len(node.input) == 2, (
+            f"Unexpected number of inputs {len(node.input)} "
+            f"for node type {node.op_type!r} and name {node.name!r}, "
+            f"node.input={node.input}"
+        )
         if not g.is_constant(node.input[1]):
             return self.none(node, inspect.currentframe().f_lineno)
         shape = g.get_constant_shape(node.input[1], exc=False)

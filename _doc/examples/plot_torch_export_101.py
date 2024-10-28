@@ -1,15 +1,19 @@
 """
 .. _l-plot-torch-export-101:
 
+=================================================
 101: Some dummy examples with torch.export.export
 =================================================
 
+:func:`torch.export.export` behaviour in various situations.
+
 Easy Case
-+++++++++
+=========
+
+A simple model.
 """
 
 import torch
-import torch.export._swap
 
 
 class Neuron(torch.nn.Module):
@@ -223,7 +227,13 @@ print(exported_program.graph)
 ############################
 # And now?
 
+import torch.export._swap
+
 swapped_gm = torch.export._swap._swap_modules(exported_program, {"my_neuron": Neuron()})
 
 print("-- preserved?")
 print(swapped_gm.graph)
+
+###################################
+# Unfortunately this approach does not work well on big models
+# and it is a provite API.

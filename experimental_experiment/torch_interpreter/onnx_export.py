@@ -7,6 +7,7 @@ from typing import Any, Callable, Dict, List, Optional, Sequence, Set, Tuple, Un
 from onnx import ModelProto, save_model
 from onnx.defs import onnx_opset_version
 from onnx.model_container import ModelContainer
+from ..helpers import string_type
 from ..xbuilder.graph_builder import GraphBuilder, OptimizationOptions
 from .export_options import ExportOptions
 
@@ -232,7 +233,11 @@ def _make_builder_interpreter(
     same_signature: bool = True,
     dispatcher: Optional["Dispatcher"] = None,  # noqa: F821
     export_options: Optional[Union[str, ExportOptions]] = None,
-) -> Tuple["torch.fx.GraphModule", GraphBuilder, "DynamoInterpreter"]:  # noqa: F821
+) -> Tuple[
+    Union["torch.export.ExportedProgram", "torch.fx.GraphModule"],  # noqa: F821
+    GraphBuilder,
+    "DynamoInterpreter",  # noqa: F821
+]:
     """
     Exports a torch model into ONNX using
     `dynamo export
@@ -286,10 +291,22 @@ def _make_builder_interpreter(
         if os.environ.get("PRINT_GRAPH_MODULE", "0") in (1, "1"):
             print("-- GIVEN GRAPH MODULE")
             print(graph_module.graph)
+        exported_program = None
+    elif isinstance(mod, torch.nn.Module) and mod.__class__.__name__ == "InterpreterModule":
+        # comes from unflatten function
+        if verbose > 0:
+            print(f"[_make_builder_interpreter] use existing submodule {type(mod)}")
+        graph_module = mod
+        weights = dict(graph_module.named_parameters())
+        buffers = dict(graph_module.named_buffers())
+        constants = mod.state_dict()
+        mapping = {}
+        if os.environ.get("PRINT_GRAPH_MODULE", "0") in (1, "1"):
+            print("-- GIVEN GRAPH MODULE")
+            print(graph_module.graph)
+        exported_program = None
     else:
         if verbose > 0:
-            from ..torch_test_helper import string_type
-
             print(f"[_make_builder_interpreter] export_options={export_options!r}")
             print(f"[_make_builder_interpreter] input args={string_type(args)}")
             print(f"[_make_builder_interpreter] input kwargs={string_type(kwargs)}")
@@ -299,7 +316,7 @@ def _make_builder_interpreter(
                 f"tracing_mode={tracing_mode}"
             )
         # If this step fails, try bypass_export_some_errors.
-        exported_mod = export_options.export(
+        exported_program = export_options.export(
             mod,
             args if isinstance(args, tuple) else (tuple() if args is None else args),
             kwargs,
@@ -310,28 +327,26 @@ def _make_builder_interpreter(
             verbose=verbose,
         )
 
-        if verbose > 2:
-            print(f"[_make_builder_interpreter] exported_mod {exported_mod}")
-        graph_module = exported_mod.graph_module
+        graph_module = exported_program.graph_module
         if os.environ.get("PRINT_GRAPH_MODULE", "0") in (1, "1"):
             print("-- EXPORTED GRAPH MODULE")
             print(graph_module.graph)
         try:
-            weights = dict(exported_mod.named_parameters())
+            weights = dict(exported_program.named_parameters())
         except AttributeError:
             weights = dict(mod.named_parameters())
         try:
-            buffers = dict(exported_mod.named_buffers())
+            buffers = dict(exported_program.named_buffers())
         except AttributeError:
             buffers = dict(mod.named_buffers())
-        if hasattr(exported_mod, "tensor_constants"):
-            constants = exported_mod.tensor_constants or {}
+        if hasattr(exported_program, "tensor_constants"):
+            constants = exported_program.tensor_constants or {}
         else:
             # A bug may appear later.
             constants = {}
-        if hasattr(exported_mod, "graph_signature"):
+        if hasattr(exported_program, "graph_signature"):
             sig_mismatch_constants = set(k.replace(".", "_") for k in constants)
-            signature = exported_mod.graph_signature
+            signature = exported_program.graph_signature
             mapping = {}
             for k, v in signature.inputs_to_parameters.items():
                 mapping[k] = v, True
@@ -353,12 +368,12 @@ def _make_builder_interpreter(
                     f"type(constants)={type(constants)}, "
                     f"\nlist(constants)={pprint.pformat(list(sorted(constants)))}"
                     f"\nexported_mod.tensor_constants="
-                    f"{pprint.pformat(_get(exported_mod, 'tensor_constants'))}"
+                    f"{pprint.pformat(_get(exported_program, 'tensor_constants'))}"
                     f"\nexported_mod._constants="
-                    f"{pprint.pformat(_get(exported_mod, '_constants'))}"
+                    f"{pprint.pformat(_get(exported_program, '_constants'))}"
                     f"\nsig_mismatch_constants="
                     f"{pprint.pformat(_get(sig_mismatch_constants))}"
-                    f"\ndir(export_mod)={dir(exported_mod)}"
+                    f"\ndir(export_mod)={dir(exported_program)}"
                     f"\ndir(mod)={dir(mod)}"
                 )
         else:
@@ -405,7 +420,7 @@ def _make_builder_interpreter(
         example_inputs=args,
         export_options=export_options,
     )
-    return graph_module, builder, interpreter
+    return (exported_program or graph_module), builder, interpreter
 
 
 def _model_signature(
@@ -424,8 +439,6 @@ def _replacements_dynamic_shapes(
     input_names: Optional[List[str]] = None,
     verbose: int = 0,
 ):
-    from ..torch_test_helper import string_type
-
     assert dict_dynamic_shapes is not None, "dict_dynamic_shapes is missing"
     if verbose > 2:
         print(f"[_replacements_dynamic_shapes] type(mod)={type(mod)}")
@@ -538,6 +551,9 @@ def to_onnx(
     return_optimize_report: bool = False,
     filename: Optional[str] = None,
     inline: bool = False,
+    export_modules_as_functions: Union[
+        bool, Set[type["torch.nn.Module"]]  # noqa: F821
+    ] = False,
 ) -> Union[
     Union[ModelProto, ModelContainer],
     Tuple[Union[ModelProto, ModelContainer], GraphBuilder],
@@ -571,6 +587,9 @@ def to_onnx(
     :param inline: inline the model before converting to onnx, this is done before
             any optimization takes place
     :param export_options: to apply differents options before to get the exported program
+    :param export_modules_as_functions: export submodules as local functions,
+        this parameter can be filled with a set of class to preserve,
+        all this other will be exported as usual
     :return: onnx model
 
     If environment variable ``PRINT_GRAPH_MODULE`` is set to one,
@@ -658,22 +677,48 @@ def to_onnx(
         export_options=export_options,
     )
 
+    add_stats = {}
     t = time.perf_counter()
-    add_stats = {"time_export_graph_module": t - begin}
+    add_stats["time_export_graph_module"] = t - begin
     if verbose:
         print(f"[to_onnx] graph module done in {t - begin} s")
+
+    if export_modules_as_functions:
+        import torch.export
+
+        assert isinstance(
+            graph_module, torch.export.ExportedProgram
+        ), f"Unexpected type {type(graph_module)} for graph_module"
+
+        if export_modules_as_functions is True:
+            export_modules_as_functions = set(type(m) for m in mod.modules())
+        interpreter.register(export_modules_as_functions, dict(mod.named_modules()))
+        if verbose > 1:
+            print(
+                f"[to_onnx] unflatten the graph_module, "
+                f"preserve {sorted(c.__name__ for c in export_modules_as_functions)}"
+            )
+
+        a = time.perf_counter()
+        new_graph_module = torch.export.unflatten(graph_module)
+        add_stats["time_export_unflatten"] = t - a
+        graph_module = new_graph_module
+
+    if verbose > 4:
+        print(f"[to_onnx] -- fx graph --\n{graph_module.graph}")
+
+    if verbose:
         print("[to_onnx] start creating the onnx nodes")
+
     begin = t
-
     builder.process(graph_module, interpreter)
-
     t = time.perf_counter()
     add_stats["time_export_builder_process"] = t - begin
     if verbose:
         print(f"[to_onnx] {len(builder.nodes)} onnx nodes done in {t - begin} s")
         print("[to_onnx] start conversion to onnx (before optimization)")
-    begin = t
 
+    begin = t
     onx, stats = builder.to_onnx(
         optimize=optimize,
         large_model=large_model,
@@ -683,9 +728,10 @@ def to_onnx(
     )
     all_stats = dict(builder=builder.statistics_)
     if stats:
-        all_stats["optimization"] = stats
+        add_stats["optimization"] = stats
     t = time.perf_counter()
     add_stats["time_export_to_onnx"] = t - begin
+
     if verbose:
         proto = onx if isinstance(onx, ModelProto) else onx.model_proto
         print(

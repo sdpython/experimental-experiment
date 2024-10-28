@@ -51,6 +51,45 @@ def flatten_with_keys_mamba_cache(
     return [(_torch_pytree.MappingKey(k), v) for k, v in zip(context, values)], context
 
 
+def flatten_dynamic_cache(
+    dynamic_cache: "DynamicCache",  # noqa: F821
+) -> Tuple[List[Any], "_torch_pytree.Context"]:  # noqa: F821
+    flat = [
+        (k, getattr(dynamic_cache, k))
+        for k in [
+            "_seen_tokens",
+            "key_cache",
+            "value_cache",
+        ]
+        if hasattr(dynamic_cache, k)
+    ]
+    return [f[1] for f in flat], [f[0] for f in flat]
+
+
+def unflatten_dynamic_cache(
+    values: List[Any],
+    context: "_torch_pytree.Context",  # noqa: F821
+    output_type=None,
+) -> "DynamicCache":  # noqa: F821
+
+    from transformers.cache_utils import DynamicCache
+
+    cache = DynamicCache()
+    values = dict(zip(context, values))
+    for k, v in values.items():
+        setattr(cache, k, v)
+    return cache
+
+
+def flatten_with_keys_dynamic_cache(
+    d: Dict[Any, Any]
+) -> Tuple[List[Tuple["_torch_pytree.KeyEntry", Any]], "_torch_pytree.Context"]:  # noqa: F821
+    import torch.utils._pytree as _torch_pytree
+
+    values, context = flatten_dynamic_cache(d)
+    return [(_torch_pytree.MappingKey(k), v) for k, v in zip(context, values)], context
+
+
 @contextlib.contextmanager
 def bypass_export_some_errors():
     """
@@ -66,12 +105,13 @@ def bypass_export_some_errors():
     torch._dynamo.mark_static_address = lambda *_, **y_: None
 
     try:
-        from transformers.cache_utils import MambaCache
+        from transformers.cache_utils import MambaCache, DynamicCache
     except ImportError:
         MambaCache = None
+        DynamicCache = None
 
     unregistered = True
-    if MambaCache is not None:
+    if MambaCache is not None and DynamicCache is not None:
         if MambaCache in _torch_pytree.SUPPORTED_NODES:
             # It is already registered because bypass_export_some_errors was called
             # within a section already calling bypass_export_some_errors or transformers
@@ -87,6 +127,17 @@ def bypass_export_some_errors():
                 flatten_with_keys_fn=flatten_with_keys_mamba_cache,
             )
 
+        if DynamicCache in _torch_pytree.SUPPORTED_NODES:
+            unregistered = False
+        else:
+            _torch_pytree.register_pytree_node(
+                DynamicCache,
+                flatten_dynamic_cache,
+                unflatten_dynamic_cache,
+                serialized_type_name=f"{DynamicCache.__module__}.{DynamicCache.__name__}",
+                flatten_with_keys_fn=flatten_with_keys_dynamic_cache,
+            )
+
     try:
         yield
     finally:
@@ -94,3 +145,4 @@ def bypass_export_some_errors():
         torch._dynamo.mark_static_address = f2
         if unregistered and MambaCache is not None:
             _torch_pytree.SUPPORTED_NODES.pop(MambaCache)
+            _torch_pytree.SUPPORTED_NODES.pop(DynamicCache)

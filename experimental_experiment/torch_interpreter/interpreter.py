@@ -2,10 +2,10 @@ import inspect
 import operator
 import pprint
 import types
-from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple, Union
+from typing import Any, Callable, Dict, Iterable, List, Optional, Set, Tuple, Union
 import numpy as np
 from onnx import TensorProto
-from ..torch_test_helper import string_type
+from ..helpers import string_type
 from ..xbuilder._shape_helper import all_int, DYNAMIC_SHAPE
 from ..xbuilder._helper import make_hash
 from ..xbuilder._dtype_helper import (
@@ -71,6 +71,26 @@ class DynamoInterpreter:
         self.example_inputs_ = example_inputs
         self.flat_example_inputs_ = self.flatten_inputs(example_inputs)
         self.current_input_ = 0
+        self.preserved_modules = set()
+
+    def register(
+        self,
+        preserved_modules: Set[type["torch.nn.Module"]],  # noqa: F821
+        named_modules: Dict[str, "torch.nn.Module"],  # noqa: F821
+    ):
+        """
+        Registers a list of module to preserve as local function
+        in the onnx model. If empty, the graph is almost inlined.
+        The module to convert to onnx should the output of method
+        :func:`torch.export.unflatten`.
+        """
+        if self.builder.verbose > 4 and preserved_modules:
+            print(
+                f"[DynamoInterpreter-{self._hash()}.register] "
+                f"{sorted(c.__name__ for c in preserved_modules)}"
+            )
+        self.preserved_modules = preserved_modules
+        self.named_modules = named_modules
 
     def flatten_inputs(self, x: Any) -> List["torch.Tensor"]:  # noqa: F821
         """
@@ -195,7 +215,7 @@ class DynamoInterpreter:
 
         if isinstance(init, self.torch.fx.GraphModule):
             # This function is meant to be used later.
-            builder, args, kwargs, output_names = self._interpret_sub_module(
+            builder, _args, _kwargs, _output_names = self._interpret_sub_module(
                 init, None, None, source_node=node
             )
             self.builder.make_local_function(node.name, builder, domain=LOCAL_DOMAIN)
@@ -1287,6 +1307,12 @@ class DynamoInterpreter:
 
         if hasattr(sub_module, "graph") and isinstance(sub_module, self.torch.fx.GraphModule):
             gm = sub_module
+        elif (
+            hasattr(sub_module, "graph")
+            and isinstance(sub_module, self.torch.nn.Module)
+            and sub_module.__class__.__name__ == "InterpreterModule"
+        ):
+            gm = sub_module
         else:
             # https://pytorch.org/docs/stable/fx.html
             tracer_class = self.torch.fx.Tracer
@@ -1300,12 +1326,23 @@ class DynamoInterpreter:
             as_function=True,
             target_opset=self.builder.opsets,
             optimization_options=self.builder.optimization_options,
-            verbose=self.builder.verbose,
+            verbose=max(0, self.builder.verbose - 1),
             dispatcher=self.dispatcher,
             raise_list=self.builder.raise_list,
             dynamic_shapes=self.builder.dynamic_shapes,
             export_options=self.export_options,
         )
+        if self.preserved_modules:
+            assert (
+                source_node is not None
+            ), f"For this option, source_node cannot be None{self.builder.get_debug_msg()}"
+            module_name = source_node.target
+            assert module_name in self.named_modules, (
+                f"Unable to find {module_name!r} in "
+                f"{sorted(self.named_module)}{self.builder.get_debug_msg()}"
+            )
+            module_child = self.named_modules[module_name]
+            interpreter.register(self.preserved_modules, dict(module_child.named_modules()))
         builder.process(graph_module, interpreter)
         assert builder.outputs, f"No output detected for node={source_node}, graph={gm}"
 
@@ -1359,7 +1396,9 @@ class DynamoInterpreter:
                 f"\nVALUES\n{pprint.pformat(self.example_values_)}"
             )
 
-        sub_module = node.graph.owning_module.get_submodule(node.target)
+        owning_module = node.graph.owning_module
+        assert owning_module is not None, f"owning_module is None\n{raise_msg()}"
+        sub_module = owning_module.get_submodule(node.target)
 
         assert isinstance(
             sub_module, self.torch.nn.Module
@@ -1373,16 +1412,56 @@ class DynamoInterpreter:
 
         if self.builder.verbose > 1:
             print(f"[DynamoInterpreter-{self._hash()}.call_module] class [{type(sub_module)}]")
+            print(
+                f"[DynamoInterpreter-{self._hash()}.call_module] with "
+                f"node.args={string_type(node.args)}]"
+            )
+            print(
+                f"[DynamoInterpreter-{self._hash()}.call_module] with "
+                f"args={string_type(args)}]"
+            )
+            print(
+                f"[DynamoInterpreter-{self._hash()}.call_module] with "
+                f"kwargs={string_type(node.kwargs)}]"
+            )
 
         builder, args, kwargs, output_names = self._interpret_sub_module(
-            sub_module, args, source_node=node
+            sub_module, args, node.kwargs, source_node=node
         )
         assert kwargs is None or len(kwargs) == 0, (
             f"args={string_type(args)}, kwargs={string_type(kwargs)} "
             f"is not implemented yet{self.builder.get_debug_msg()}"
         )
 
+        name = sub_module.__class__.__name__
+        local_function_name = None
+        if sub_module.__class__.__name__ == "InterpreterModule":
+            assert node.target in self.named_modules, (
+                f"Unable to find module name {node.target!r} in "
+                f"{sorted(self.named_modules)}{self.builder.get_debug_msg()}"
+            )
+            m = self.named_modules[node.target]
+            if type(m) in self.preserved_modules:
+                name = type(m).__name__
+                local_function_name = (
+                    f"{m.__module__}.{name}".replace("torch.nn.modules.", "")
+                    if m.__module__ != "__main__"
+                    else name.replace("torch.nn.modules.", "")
+                )
+
         self.builder.make_nodes(
-            builder, args, output_names, prefix=f"_sub_{sub_module.__class__.__name__}_"
+            builder,
+            args,
+            output_names,
+            prefix=f"_sub_{name}_",
+            local_function_name=(
+                (
+                    LOCAL_DOMAIN,
+                    local_function_name,
+                    dict(merge_allowed=True, rename_allowed=True),
+                )
+                if local_function_name
+                else None
+            ),
         )
         return output_names

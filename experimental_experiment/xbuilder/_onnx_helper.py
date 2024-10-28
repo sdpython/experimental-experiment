@@ -1,6 +1,6 @@
-from typing import Dict, Iterator, Optional, Set, Tuple
+from typing import Dict, Iterator, Optional, Set, Tuple, Union
 import numpy as np
-from onnx import AttributeProto, GraphProto, NodeProto, TensorShapeProto
+from onnx import AttributeProto, FunctionProto, GraphProto, NodeProto, TensorShapeProto
 from onnx.defs import onnx_opset_version, get_all_schemas_with_history
 
 
@@ -258,3 +258,70 @@ def unary_like_op_types() -> Set[str]:
         "Tanh",
         "ThresholdRelu",
     }
+
+
+def same_function_proto(
+    f1: FunctionProto, f2: FunctionProto, verbose: int = 0
+) -> Union[str, bool]:
+    """
+    Compares two functions and tells if they are equal.
+
+    :param f1: first function
+    :param f2: second function
+    :param verbose: to know why the comparison failed,
+        the function returns a string in that case or True
+    :return: comparison
+
+    They may have different names.
+    """
+    if len(f1.input) != len(f2.input):
+        return "different number of inputs" if verbose else False
+    if len(f1.output) != len(f2.output):
+        return "different number of outputs" if verbose else False
+    if len(f1.node) != len(f2.node):
+        return "different number of nodes" if verbose else False
+    if len(f1.attribute) != len(f2.attribute):
+        return "different number of attributes" if verbose else False
+    if len(f1.attribute_proto) != len(f2.attribute_proto):
+        return "different number of attributes (2)" if verbose else False
+    if list(f1.attribute) != list(f2.attribute):
+        return "different attribute names" if verbose else False
+    if [a.SerializeToString() for a in f1.attribute_proto] != [
+        a.SerializeToString() for a in f2.attribute_proto
+    ]:
+        return "different attribute protos" if verbose else False
+    mapped = dict(zip(f1.input, f2.input))
+    for i, (n1, n2) in enumerate(zip(f1.node, f2.node)):
+        if n1.op_type != n2.op_type:
+            return (
+                f"different node type at position {i} - {n1.op_type} != {n2.op_type}"
+                if verbose
+                else False
+            )
+        if len(n1.input) != len(n2.input):
+            return f"different number of inputs at node {i}" if verbose else False
+        if len(n1.output) != len(n2.output):
+            return f"different number of outputs at node {i}" if verbose else False
+        if len(n1.attribute) != len(n2.attribute):
+            return f"different number of attributes at node {i}" if verbose else False
+        n2_input = [mapped[i] for i in n1.input]
+        if list(n2.input) != n2_input:
+            return (
+                f"different input names at node {i}, {n1.input}, {n2.input} != {n2_input}"
+                if verbose
+                else False
+            )
+        for a1, a2 in zip(n1.attribute, n2.attribute):
+            # The test should be improved for subgraphs.
+            if a1.SerializeToString() != a2.SerializeToString():
+                return f"different attribute {a1.name!r}" if verbose else False
+        mapped.update(dict(zip(n1.output, n2.output)))
+
+    f2_output = [mapped[i] for i in f1.output]
+    if list(f2.output) != f2_output:
+        return (
+            f"different output names, {f1.output}, {f2.output} != {f2_output}"
+            if verbose
+            else False
+        )
+    return True

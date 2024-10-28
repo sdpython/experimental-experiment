@@ -6,7 +6,7 @@ from experimental_experiment.xbuilder._shape_helper import (
 )
 
 
-class TestTools(ExtTestCase):
+class TestShapeHelper(ExtTestCase):
     def test_all_float(self):
         self.assertTrue(all_float([6.7, 7.8]))
 

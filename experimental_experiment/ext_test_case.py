@@ -435,6 +435,11 @@ class ExtTestCase(unittest.TestCase):
                 raise AssertionError(msg) from e
             raise
 
+    def assertEqualTrue(self, value: Any, msg: str = ""):
+        if value is True:
+            return
+        raise AssertionError(msg or f"value is not True: {value!r}")
+
     def assertEqual(self, expected: Any, value: Any, msg: str = ""):
         "Overwrites the error message to get a more explicit message about what is what."
         if msg:
