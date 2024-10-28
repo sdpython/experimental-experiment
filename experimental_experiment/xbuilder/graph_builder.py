@@ -2946,11 +2946,13 @@ class GraphBuilder(_GraphBuilderRuntime):
         if local_function_name:
             rename_allowed = False
             merge_allowed = False
+            optimize = False
             if isinstance(local_function_name, tuple):
                 domain, name = local_function_name[:2]
                 if len(local_function_name) == 3:
                     rename_allowed = local_function_name[2].get("rename_allowed", False)
                     merge_allowed = local_function_name[2].get("merge_allowed", False)
+                    optimize = local_function_name[2].get("optimize", False)
             else:
                 name = local_function_name
                 domain = "local_domain"
@@ -2961,6 +2963,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                 move_initializer_to_constant=False,
                 rename_allowed=rename_allowed,
                 merge_allowed=merge_allowed,
+                optimize=optimize,
             )
             self.make_node(
                 fname,

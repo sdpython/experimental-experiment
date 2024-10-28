@@ -233,6 +233,7 @@ def _make_builder_interpreter(
     same_signature: bool = True,
     dispatcher: Optional["Dispatcher"] = None,  # noqa: F821
     export_options: Optional[Union[str, ExportOptions]] = None,
+    optimize_submodules: bool = False,
 ) -> Tuple[
     Union["torch.export.ExportedProgram", "torch.fx.GraphModule"],  # noqa: F821
     GraphBuilder,
@@ -258,6 +259,8 @@ def _make_builder_interpreter(
     :param tracing_mode: tracing model
     :param dispatcher: see :class:`experimental_experiment.torch_interpreter.Dispatcher`
     :param export_options: Optional[Union[str, ExportOptions]] = None,
+    :param optimize_submodules: optimizes submodules, this is done while building the model,
+        and not at the end
     :return: onnx model
     """
 
@@ -419,6 +422,7 @@ def _make_builder_interpreter(
         dispatcher=dispatcher,
         example_inputs=args,
         export_options=export_options,
+        optimize_submodules=optimize_submodules,
     )
     return (exported_program or graph_module), builder, interpreter
 
@@ -675,6 +679,7 @@ def to_onnx(
         dynamic_shapes=use_dynamic_shapes,
         dispatcher=dispatcher,
         export_options=export_options,
+        optimize_submodules=optimize,
     )
 
     add_stats = {}

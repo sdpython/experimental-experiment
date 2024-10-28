@@ -32,6 +32,7 @@ class DynamoInterpreter:
     :param dispatcher: see :class:`experimental_experiment.torch_interpreter.Dispatcher`
     :param export_options: see :class:`ExportOptions
         <experimental_experiment.torch_interpreter.ExportOptions>`
+    :param optimize_submodules: optimizes submodules after they are built
     """
 
     def _hash(self) -> str:
@@ -44,6 +45,7 @@ class DynamoInterpreter:
         dispatcher: Optional["Dispatcher"] = None,  # noqa: F821
         example_inputs: Optional[Tuple["torch.Tensor", ...]] = None,  # noqa: F821
         export_options: Optional[ExportOptions] = None,
+        optimize_submodules: bool = False,
     ):
         import torch
 
@@ -52,6 +54,7 @@ class DynamoInterpreter:
         self.retriever = retriever
         self.dispatcher = dispatcher
         self.export_options = export_options
+        self.optimize_submodules = optimize_submodules
         self.example_values_ = {}
         assert example_inputs is None or isinstance(
             example_inputs, tuple
@@ -218,7 +221,9 @@ class DynamoInterpreter:
             builder, _args, _kwargs, _output_names = self._interpret_sub_module(
                 init, None, None, source_node=node
             )
-            self.builder.make_local_function(node.name, builder, domain=LOCAL_DOMAIN)
+            self.builder.make_local_function(
+                node.name, builder, domain=LOCAL_DOMAIN, optimize=self.optimize_submodules
+            )
             return None
 
         self.builder.make_initializer(node.name, init)
@@ -1351,6 +1356,7 @@ class DynamoInterpreter:
             raise_list=self.builder.raise_list,
             dynamic_shapes=self.builder.dynamic_shapes,
             export_options=self.export_options,
+            optimize_submodules=self.optimize_submodules,
         )
         if self.preserved_modules:
             assert (
@@ -1423,6 +1429,17 @@ class DynamoInterpreter:
 
         return builder, args, kwargs, output_names
 
+    @classmethod
+    def _clean_any_name(cls, name):
+        # Shorten name. A better way should be implemented.
+        name = (
+            name.replace("torch.nn.modules.", "")
+            .replace("transformers.", "")
+            .replace("models.", "")
+            .replace("modeling_", "")
+        )
+        return name
+
     def call_module(self, node: "torch.fx.Node"):  # noqa: F821
         """
         Called for a module.
@@ -1490,8 +1507,8 @@ class DynamoInterpreter:
             m = self.named_modules[node.target]
             if type(m) in self.preserved_modules:
                 name = type(m).__name__
-                local_function_name = (
-                    f"{m.__module__}.{name}".replace("torch.nn.modules.", "")
+                local_function_name = self._clean_any_name(
+                    f"{m.__module__}.{name}"
                     if m.__module__ != "__main__"
                     else name.replace("torch.nn.modules.", "")
                 )
@@ -1503,7 +1520,11 @@ class DynamoInterpreter:
                 local_function_name=(
                     LOCAL_DOMAIN,
                     local_function_name,
-                    dict(merge_allowed=True, rename_allowed=True),
+                    dict(
+                        merge_allowed=True,
+                        rename_allowed=True,
+                        optimize=self.optimize_submodules,
+                    ),
                 ),
             )
             if len(output_names) == len(builder.outputs):
