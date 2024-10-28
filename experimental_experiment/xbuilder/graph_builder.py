@@ -720,7 +720,7 @@ class GraphBuilder(_GraphBuilderRuntime):
     def set_sequence(
         self,
         name: str,
-        dtype: int,
+        dtype: Union[int, Tuple[int, ...]],
         shapes: Optional[DYNAMIC_SHAPE] = None,
         ranks: Optional[Tuple[int, ...]] = None,
         unknown: bool = False,
@@ -732,8 +732,9 @@ class GraphBuilder(_GraphBuilderRuntime):
             shapes is not None or ranks is not None or unknown
         ), f"shapes or ranks must be defines for name={name!r}{self.get_debug_msg()}"
         assert self.has_name(name), f"No result name={name!r}{self.get_debug_msg()}"
-        assert isinstance(dtype, int), (
-            f"Only one type is allowed in sequences but dtype={dtype!r}"
+        assert isinstance(dtype, (int, tuple)), (
+            f"Only one type is allowed in onnx sequences but dtype={dtype!r}, "
+            f"the interpret allows multiple types for simplicity"
             f"{self.get_debug_msg()}"
         )
         d = dict(dtype=dtype, shapes=shapes, ranks=ranks)
@@ -5115,6 +5116,9 @@ class GraphBuilder(_GraphBuilderRuntime):
                 position = self.get_constant(node.input[1], computed_value=True)
                 seq = self.get_sequence(node.input[0])
                 dtype = seq["dtype"]
+                if isinstance(dtype, tuple):
+                    # More than one type is allowed in torch sequences.
+                    dtype = dtype[int(position)]
                 if not self.has_name(node.output[0]):
                     self.set_name(node.output[0])
                 self.set_type(node.output[0], dtype)

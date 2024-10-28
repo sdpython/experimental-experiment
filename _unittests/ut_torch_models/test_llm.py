@@ -106,7 +106,7 @@ class TestLlm(ExtTestCase):
             None,  # args
             model_inputs,  # kwargs
             large_model=True,
-            verbose=4,
+            verbose=0,
             options=OptimizationOptions(max_iter=10),
             export_options=ExportOptions(strict=False, decomposition_table="all"),
             export_modules_as_functions=True,

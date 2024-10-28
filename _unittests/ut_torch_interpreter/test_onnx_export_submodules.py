@@ -125,11 +125,7 @@ class TestOnnxExportSubModules(ExtTestCase):
         feeds = {"x": inputs[0].numpy()}
 
         onx = to_onnx(
-            model,
-            inputs,
-            export_modules_as_functions=True,
-            optimize=False,
-            verbose=0,
+            model, inputs, export_modules_as_functions=True, optimize=False, verbose=0
         )
         check_model(onx)
         self.assertEqual(len(onx.functions), 1)
