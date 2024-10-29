@@ -4237,6 +4237,20 @@ class GraphBuilder(_GraphBuilderRuntime):
         assert isinstance(
             v, NodeProto
         ), f"Unexpected type {type(v)} for constant name={name!r}"
+
+        if v.op_type == "Shape" and not self.is_constant(v.input[0]):
+            # One exception here as the input maybe not constant but the shape may be known.
+            assert self.has_shape(
+                v.input[0]
+            ), f"Shape must be known if shape is constant in {v}{self.get_debug_msg()}"
+            shape = self.get_shape(v.input[0])
+            assert all_int(shape), (
+                f"Shape must be static ({shape}) if shape is constant in {v}"
+                f"{self.get_debug_msg()}"
+            )
+            output = self._apply_shape_on_shape(v, shape)
+            return output[0], None
+
         feeds = {i: self.get_constant(i, exc=exc, computed_value=True) for i in v.input}
         for kval, val in feeds.items():
             assert "FakeTensor" not in str(type(val)), (

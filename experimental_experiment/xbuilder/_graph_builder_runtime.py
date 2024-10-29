@@ -1,5 +1,5 @@
 import contextlib
-from typing import Dict, Generator, List
+from typing import Dict, Generator, List, Tuple
 import numpy as np
 from onnx import NodeProto
 import onnx.helper as oh
@@ -414,12 +414,9 @@ class _GraphBuilderRuntime:
         )
         return [res]
 
-    def _apply_shape(
-        self,
-        node: NodeProto,
-        feeds: Dict[str, "torch.Tensor"],  # noqa: F821
+    def _apply_shape_on_shape(
+        self, node: NodeProto, shape: Tuple[int, ...]
     ) -> "torch.Tensor":  # noqa: F821
-        shape = tuple(map(int, feeds[node.input[0]].shape))
         if node.attribute:
             start = 0
             end = None
@@ -430,3 +427,11 @@ class _GraphBuilderRuntime:
                     end = att.i
             shape = shape[start:] if end is None else shape[start:end]
         return [self.torch.from_numpy(np.array(shape, dtype=np.int64))]
+
+    def _apply_shape(
+        self,
+        node: NodeProto,
+        feeds: Dict[str, "torch.Tensor"],  # noqa: F821
+    ) -> "torch.Tensor":  # noqa: F821
+        shape = tuple(map(int, feeds[node.input[0]].shape))
+        return self._apply_shape_on_shape(node, shape)
