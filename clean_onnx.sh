@@ -28,6 +28,7 @@ rm _doc/examples/*.sarif
 rm _doc/examples/*.json
 rm _doc/examples/*.png
 rm _doc/examples/*.csv
+rm _doc/examples/*.pte
 rm _doc/examples/*.xlsx
 rm _doc/examples/dummy*.onnx
 rm _doc/examples/*.opt.onnx

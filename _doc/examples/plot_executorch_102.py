@@ -28,6 +28,8 @@ try:
     from executorch.exir.backend.test.backend_with_compiler_demo import (  # noqa
         BackendWithCompilerDemo,
     )
+
+    executorch = True
 except ImportError:
     print("executorch is not installed.")
     executorch = None

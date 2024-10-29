@@ -720,7 +720,7 @@ class GraphBuilder(_GraphBuilderRuntime):
     def set_sequence(
         self,
         name: str,
-        dtype: int,
+        dtype: Union[int, Tuple[int, ...]],
         shapes: Optional[DYNAMIC_SHAPE] = None,
         ranks: Optional[Tuple[int, ...]] = None,
         unknown: bool = False,
@@ -732,8 +732,9 @@ class GraphBuilder(_GraphBuilderRuntime):
             shapes is not None or ranks is not None or unknown
         ), f"shapes or ranks must be defines for name={name!r}{self.get_debug_msg()}"
         assert self.has_name(name), f"No result name={name!r}{self.get_debug_msg()}"
-        assert isinstance(dtype, int), (
-            f"Only one type is allowed in sequences but dtype={dtype!r}"
+        assert isinstance(dtype, (int, tuple)), (
+            f"Only one type is allowed in onnx sequences but dtype={dtype!r}, "
+            f"the interpret allows multiple types for simplicity"
             f"{self.get_debug_msg()}"
         )
         d = dict(dtype=dtype, shapes=shapes, ranks=ranks)
@@ -1650,7 +1651,8 @@ class GraphBuilder(_GraphBuilderRuntime):
         :param value: initializer
         :param itype: to overwrite the type
         :param shape: to overwrite the shape
-        :param cst: value to send to :meth:`update_node_constant`
+        :param cst: value to send to :meth:`update_node_constant
+            <experimental_experiment.xbuilder.GraphBuilder.update_node_constant>`
         :param key: used to register the initializer
         :param existing: if True, shape and type should exist,
             if False, it should not exist, if None, both case are allowed
@@ -2848,6 +2850,9 @@ class GraphBuilder(_GraphBuilderRuntime):
                     self.set_rank(node.output[0], self.get_rank(node.input[1]))
 
     def update_node_constant(self, name: str, node: NodeProto):
+        """
+        Updates a constant NodeProto.
+        """
         assert isinstance(name, str), f"Unexpected type {type(name)} for name"
         assert node is None or isinstance(
             node, NodeProto
@@ -2941,11 +2946,13 @@ class GraphBuilder(_GraphBuilderRuntime):
         if local_function_name:
             rename_allowed = False
             merge_allowed = False
+            optimize = False
             if isinstance(local_function_name, tuple):
                 domain, name = local_function_name[:2]
                 if len(local_function_name) == 3:
                     rename_allowed = local_function_name[2].get("rename_allowed", False)
                     merge_allowed = local_function_name[2].get("merge_allowed", False)
+                    optimize = local_function_name[2].get("optimize", False)
             else:
                 name = local_function_name
                 domain = "local_domain"
@@ -2956,6 +2963,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                 move_initializer_to_constant=False,
                 rename_allowed=rename_allowed,
                 merge_allowed=merge_allowed,
+                optimize=optimize,
             )
             self.make_node(
                 fname,
@@ -2965,6 +2973,20 @@ class GraphBuilder(_GraphBuilderRuntime):
                 check=False,
                 name=name,
             )
+
+            # Shape information, needs to handle multiple outputs
+            # hopefully, the interpreter fills this information with what it knows
+            # fproto = self.functions[fdomain, fname]
+            # for o, no in zip(fproto.output, output_names):
+            #    if builder.has_shape(o):
+            #        shape = builder.get_shape(o)
+            #        if None in shape:
+            #            self.set_rank(no, len(shape))
+            #        else:
+            #            self.set_shape(no, shape)
+            #    if builder.has_type(o):
+            #        self.set_type(no, builder.get_type(o))
+
             if domain not in self.opsets:
                 self.opsets[domain] = 1
         else:
@@ -3425,7 +3447,7 @@ class GraphBuilder(_GraphBuilderRuntime):
     def process(
         self,
         graph_module: "torch.fx.GraphModule",  # noqa: F821
-        interpreter: "Interpreter",  # noqa: F821
+        interpreter: "DynamoInterpreter",  # noqa: F821
     ):
         """
         Environment variable ``ONNX_BUILDER_PROGRESS=1`` can be used to show
@@ -3499,11 +3521,14 @@ class GraphBuilder(_GraphBuilderRuntime):
         inline: bool = False,
     ) -> Union[FunctionProto, ModelProto, TorchModelContainer, Dict[str, Any]]:
         """
-        Conversion to onnx. Only then the initializer are converted into
+        Conversion to onnx. Only then the initializers are converted into
         TensorProto.
 
         :param as_function: converts the graph as a FunctionProto or a ModelProto,
-            by default the function assumes there is no initializer
+            if it is True, all initializers are converted into constants nodes,
+            if it is ``OnxType.FUNCTION_AND_INITIALIZERS``, the function returns
+            the initializers and the FunctionProto with additional inputs for
+            the remaining initializers
         :param optimize: disable or enable the optimization,
             the optimization are set when the class constructor is called
         :param large_model: if True returns a :class:`onnx.model_container.ModelContainer`,
@@ -3542,6 +3567,8 @@ class GraphBuilder(_GraphBuilderRuntime):
         if as_function:
             assert function_name, "Function name cannot be empty."
             assert function_domain, "Function domain cannot be empty."
+            if as_function is True and self.initializers_dict:
+                self.move_initializers_to_constant(verbose=max(0, self.verbose - 1))
             assert (
                 as_function == OnnxType.FUNCTION_AND_INITIALIZERS or not self.initializers_dict
             ), (
@@ -3564,10 +3591,13 @@ class GraphBuilder(_GraphBuilderRuntime):
                 self.nodes,
                 opsets,
             )
+            if as_function is True:
+                return proto
             if (
                 len(self.initializers_dict) == 0 and len(self.functions) == 0
             ) or as_function != OnnxType.FUNCTION_AND_INITIALIZERS:
-                return proto
+                return dict(proto=proto)
+
             assert as_function == OnnxType.FUNCTION_AND_INITIALIZERS, (
                 f"Unexpected value for as_function={as_function!r}"
                 f"It should be 'OnnxType.FUNCTION_AND_CONSTANTS'."
@@ -4166,7 +4196,9 @@ class GraphBuilder(_GraphBuilderRuntime):
 
         v = self.constants_[name]
         # It should not be None but a node as it is not an initializer.
-        assert isinstance(v, NodeProto), f"Unexpected type {type(v)} for name={name!r}"
+        assert isinstance(
+            v, NodeProto
+        ), f"Unexpected type {type(v)} for constant name={name!r}"
         feeds = {i: self.get_constant(i, exc=exc, computed_value=True) for i in v.input}
         for kval, val in feeds.items():
             assert "FakeTensor" not in str(type(val)), (
@@ -5096,6 +5128,9 @@ class GraphBuilder(_GraphBuilderRuntime):
                 position = self.get_constant(node.input[1], computed_value=True)
                 seq = self.get_sequence(node.input[0])
                 dtype = seq["dtype"]
+                if isinstance(dtype, tuple):
+                    # More than one type is allowed in torch sequences.
+                    dtype = dtype[int(position)]
                 if not self.has_name(node.output[0]):
                     self.set_name(node.output[0])
                 self.set_type(node.output[0], dtype)
@@ -5268,6 +5303,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         will be fused.
         `self.optimization_options.constant_fusing` must be True.
         """
+        assert isinstance(node, NodeProto), f"Unexpected type {type(node)} for a node"
         if not self.optimization_options.constant_fusing:
             return None
         key = self._constant_key(node)
@@ -5330,7 +5366,6 @@ class GraphBuilder(_GraphBuilderRuntime):
         ), f"Function {name!r}, domain={domain!r} already exists"
         if move_initializer_to_constant:
             builder.inline_functions(verbose=max(0, self.verbose - 1))
-            builder.move_initializers_to_constant(verbose=max(0, self.verbose - 1))
             onx = builder.to_onnx(
                 as_function=True,
                 function_name=name,
@@ -5346,6 +5381,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                 function_domain=domain,
                 optimize=optimize,
             )
+            assert isinstance(fct, dict), f"Unexpected type {type(fct)}{self.get_debug_msg()}"
             onx = fct["proto"]
             to_rename = {}
             keys = []
@@ -5363,19 +5399,22 @@ class GraphBuilder(_GraphBuilderRuntime):
                 onx = self.rename_in_local_functions(to_rename, keys, proto=onx)
 
             # Let's rename the initializers.
-            repl = {}
-            inits = fct["initializers_dict"]
-            new_inits = []
-            for i in onx.input:
-                if i in inits:
-                    new_inits.append(i)
-            for i in inits:
-                if i not in new_inits:
-                    new_inits.append(i)
-            for k, v in inits.items():
-                new_name = self.add_initializer(self.unique_name(f"{onx.name}_{k}"), v)
-                repl[k] = new_name
-            new_inits = [repl.get(i, i) for i in new_inits]
+            if "initializers_dict" in fct:
+                repl = {}
+                inits = fct["initializers_dict"]
+                new_inits = []
+                for i in onx.input:
+                    if i in inits:
+                        new_inits.append(i)
+                for i in inits:
+                    if i not in new_inits:
+                        new_inits.append(i)
+                for k, v in inits.items():
+                    new_name = self.add_initializer(self.unique_name(f"{onx.name}_{k}"), v)
+                    repl[k] = new_name
+                new_inits = [repl.get(i, i) for i in new_inits]
+            else:
+                new_inits = []
 
         assert isinstance(
             onx, FunctionProto
@@ -5918,7 +5957,12 @@ class GraphBuilder(_GraphBuilderRuntime):
                 )
             cst = oh.make_node("Constant", [], [proto.name], value=proto)
             cst_nodes.append(cst)
-            self.constants_node_[proto.name] = cst
+            self.add_constant_node(cst)
+            self.update_node_constant(proto.name, cst)
+            assert self.has_type(proto.name), f"Type is missing for initializer {proto.name!r}"
+            assert self.has_shape(
+                proto.name
+            ), f"Shape is missing for initializer {proto.name!r}"
 
         self.initializers_dict = {}
         self.nodes = [*cst_nodes, *self.nodes]

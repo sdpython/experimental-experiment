@@ -32,6 +32,7 @@ class DynamoInterpreter:
     :param dispatcher: see :class:`experimental_experiment.torch_interpreter.Dispatcher`
     :param export_options: see :class:`ExportOptions
         <experimental_experiment.torch_interpreter.ExportOptions>`
+    :param optimize_submodules: optimizes submodules after they are built
     """
 
     def _hash(self) -> str:
@@ -44,6 +45,7 @@ class DynamoInterpreter:
         dispatcher: Optional["Dispatcher"] = None,  # noqa: F821
         example_inputs: Optional[Tuple["torch.Tensor", ...]] = None,  # noqa: F821
         export_options: Optional[ExportOptions] = None,
+        optimize_submodules: bool = False,
     ):
         import torch
 
@@ -52,6 +54,7 @@ class DynamoInterpreter:
         self.retriever = retriever
         self.dispatcher = dispatcher
         self.export_options = export_options
+        self.optimize_submodules = optimize_submodules
         self.example_values_ = {}
         assert example_inputs is None or isinstance(
             example_inputs, tuple
@@ -82,7 +85,7 @@ class DynamoInterpreter:
         Registers a list of module to preserve as local function
         in the onnx model. If empty, the graph is almost inlined.
         The module to convert to onnx should the output of method
-        :func:`torch.export.unflatten`.
+        :func:`torch.export.unflatten.unflatten`.
         """
         if self.builder.verbose > 4 and preserved_modules:
             print(
@@ -218,7 +221,9 @@ class DynamoInterpreter:
             builder, _args, _kwargs, _output_names = self._interpret_sub_module(
                 init, None, None, source_node=node
             )
-            self.builder.make_local_function(node.name, builder, domain=LOCAL_DOMAIN)
+            self.builder.make_local_function(
+                node.name, builder, domain=LOCAL_DOMAIN, optimize=self.optimize_submodules
+            )
             return None
 
         self.builder.make_initializer(node.name, init)
@@ -245,12 +250,16 @@ class DynamoInterpreter:
                 f"after {self.builder.input_names}"
                 f"{self.builder.get_debug_msg()}"
             )
-            if self.flat_example_inputs_[self.current_input_] is None:
+            if (
+                not self.builder.as_function
+                and self.flat_example_inputs_[self.current_input_] is None
+            ):
                 # We skip it.
                 assert len(users) == 0, (
                     f"Input {name!r} (index {self.current_input_}"
                     f"/{len(self.flat_example_inputs_)}) "
-                    f"is None but it is used by {users}. "
+                    f"is None but it is used by {users}, "
+                    f"as_function={self.builder.as_function}. "
                     f"Existing inputs {self.builder.input_names}. Example inputs: "
                     f"{['-' if t is None else t.shape for t in self.flat_example_inputs_]}"
                     f"{self.builder.get_debug_msg()}"
@@ -259,8 +268,9 @@ class DynamoInterpreter:
                 return ""
 
             # second check
-            not_none = tuple(t for t in self.flat_example_inputs_ if t is not None)
-            assert len(self.builder.input_names) < len(not_none), (
+            assert self.builder.as_function or len(self.builder.input_names) < len(
+                tuple(t for t in self.flat_example_inputs_ if t is not None)
+            ), (
                 f"Too many inputs already ({len(self.builder.input_names)}), "
                 f"unexpected {name!r} "
                 f"after {self.builder.input_names}"
@@ -368,7 +378,17 @@ class DynamoInterpreter:
                             users=node.users,
                         )
                 else:
-                    value = self.retriever(node.target, val, debug={"node": node})
+                    value = self.retriever(node.target, val, debug={"node": node}, exc=False)
+                    if value is None:
+                        # This is probably one input then.
+                        return self._make_tensor_input(
+                            node.target,
+                            elem_type=val.dtype,
+                            shape=val.shape,
+                            is_dimension=False,
+                            users=node.users,
+                        )
+
             if value is None or isinstance(
                 value, self.torch._subclasses.fake_tensor.FakeTensor
             ):
@@ -461,8 +481,10 @@ class DynamoInterpreter:
         val = node.meta.get("val", None)
 
         if isinstance(val, tuple):
-            if len(val) > 1:
-                raise NotImplementedError("Not yet implemented for multiple outputs.")
+            assert len(val) == 1, (
+                f"Not yet implemented for multiple outputs, node={node}"
+                f"{self.builder.get_debug_msg()}"
+            )
             val = val[0]
 
         if val is None:
@@ -851,7 +873,10 @@ class DynamoInterpreter:
                 )
                 if not sts:
                     info = self.builder.get_sequence_info(result_name)
-                    self.builder.set_type(res, info["dtype"])
+                    dtype = info["dtype"]
+                    if isinstance(dtype, tuple):
+                        dtype = dtype[index]
+                    self.builder.set_type(res, dtype)
                     if info["shape"] is not None:
                         self.builder.set_shape(res, info["shape"][index])
                     else:
@@ -1331,6 +1356,7 @@ class DynamoInterpreter:
             raise_list=self.builder.raise_list,
             dynamic_shapes=self.builder.dynamic_shapes,
             export_options=self.export_options,
+            optimize_submodules=self.optimize_submodules,
         )
         if self.preserved_modules:
             assert (
@@ -1346,14 +1372,20 @@ class DynamoInterpreter:
         builder.process(graph_module, interpreter)
         assert builder.outputs, f"No output detected for node={source_node}, graph={gm}"
 
+        # processing args, kwargs
         fx_args, fx_kwargs = self._fill_in_default_kwargs(source_node)
         args = [getattr(i, "name", i) for i in fx_args]
         kwargs = [getattr(i, "name", i) for i in fx_kwargs]
 
+        # looking at the sample example
         val = source_node.meta.get("val", None)
         if val is not None and isinstance(val, tuple):
             n_outputs = len(val)
             output_names = [f"{source_node.name}#{i}" for i in range(n_outputs)]
+        elif self.preserved_modules and val is not None and isinstance(val, list):
+            n_outputs = len(val)
+            output_names = [f"{source_node.name}#{i}" for i in range(n_outputs)]
+            val = tuple(val)
         else:
             output_names = [source_node.name]
             if val is None:
@@ -1361,21 +1393,52 @@ class DynamoInterpreter:
         if val is not None and not isinstance(val, tuple):
             val = (val,)
 
+        # if not none
         if val is not None:
-            assert len(val) == len(
-                builder.outputs
-            ), f"Output mismatch {len(val)} != {len(builder.outputs)}"
-            for i in range(len(val)):
-                name = builder.outputs[i].name
-                if name not in builder._known_shapes:
-                    builder.set_shape(name, val[i].shape)
-                if name not in builder._known_types:
-                    builder.set_type(name, val[i].dtype)
-                self.builder.set_shapes_types(
-                    source_node.name, "call_module", (val[i].dtype, val[i].shape)
+            if self.preserved_modules and len(val) == 1 and isinstance(val[0], list):
+                # submodules with multiple outputs
+                assert len(val[0]) == len(builder.outputs), (
+                    f"Output mismatch {len(val[0])} != {len(builder.outputs)}, "
+                    f"source_node.name={source_node.name!r}, target={source_node.target!r}"
+                    f"type(val)={string_type(val)}, "
+                    f"builder.outputs={string_type(builder.outputs)}"
+                    f"{self.builder.get_debug_msg()}"
                 )
+                # Shapes and types are set outside this function when the final node is added.
+            else:
+                # regular node
+                assert len(val) == len(builder.outputs), (
+                    f"Output mismatch {len(val)} != {len(builder.outputs)}, "
+                    f"source_node.name={source_node.name!r}, target={source_node.target!r}"
+                    f"type(val)={string_type(val)}, "
+                    f"builder.outputs={string_type(builder.outputs)}"
+                    f"{self.builder.get_debug_msg()}"
+                )
+                for i in range(len(val)):
+                    name = builder.outputs[i].name
+                    if not builder.has_shape(name):
+                        builder.set_shape(name, val[i].shape)
+                    if not builder.has_type(name):
+                        builder.set_type(name, val[i].dtype)
+                    self.builder.set_shapes_types(
+                        source_node.name, "call_module", (val[i].dtype, val[i].shape)
+                    )
+        else:
+            # We could use the informations stored in the builder.
+            pass
 
         return builder, args, kwargs, output_names
+
+    @classmethod
+    def _clean_any_name(cls, name):
+        # Shorten name. A better way should be implemented.
+        name = (
+            name.replace("torch.nn.modules.", "")
+            .replace("transformers.", "")
+            .replace("models.", "")
+            .replace("modeling_", "")
+        )
+        return name
 
     def call_module(self, node: "torch.fx.Node"):  # noqa: F821
         """
@@ -1436,6 +1499,7 @@ class DynamoInterpreter:
         name = sub_module.__class__.__name__
         local_function_name = None
         if sub_module.__class__.__name__ == "InterpreterModule":
+            # a local function is added.
             assert node.target in self.named_modules, (
                 f"Unable to find module name {node.target!r} in "
                 f"{sorted(self.named_modules)}{self.builder.get_debug_msg()}"
@@ -1443,25 +1507,55 @@ class DynamoInterpreter:
             m = self.named_modules[node.target]
             if type(m) in self.preserved_modules:
                 name = type(m).__name__
-                local_function_name = (
-                    f"{m.__module__}.{name}".replace("torch.nn.modules.", "")
+                local_function_name = self._clean_any_name(
+                    f"{m.__module__}.{name}"
                     if m.__module__ != "__main__"
                     else name.replace("torch.nn.modules.", "")
                 )
-
-        self.builder.make_nodes(
-            builder,
-            args,
-            output_names,
-            prefix=f"_sub_{name}_",
-            local_function_name=(
-                (
+            self.builder.make_nodes(
+                builder,
+                args,
+                output_names,
+                prefix=f"_sub_{name}_",
+                local_function_name=(
                     LOCAL_DOMAIN,
                     local_function_name,
-                    dict(merge_allowed=True, rename_allowed=True),
+                    dict(
+                        merge_allowed=True,
+                        rename_allowed=True,
+                        optimize=self.optimize_submodules,
+                    ),
+                ),
+            )
+            if len(output_names) == len(builder.outputs):
+                # One output, both tensor
+                for name, out_name in zip(builder.output_names, output_names):
+                    if builder.has_type(name):
+                        self.builder.set_type(out_name, builder.get_type(name))
+                    if builder.has_shape(name):
+                        self.builder.set_shape(out_name, builder.get_shape(name))
+                    elif builder.has_rank(name):
+                        self.builder.set_rank(out_name, builder.get_rank(name))
+            elif len(output_names) == 1 and len(builder.outputs) > 1:
+                # The module outputs more than one output
+                itypes, shapes, ranks = [], [], []
+                for name in builder.output_names:
+                    itypes.append(builder.get_type(name) if builder.has_type(name) else None)
+                    shapes.append(builder.get_shape(name) if builder.has_shape(name) else None)
+                    ranks.append(builder.get_rank(name) if builder.has_rank(name) else None)
+                self.builder.set_sequence(
+                    output_names[0], tuple(itypes), shapes=tuple(shapes), ranks=ranks
                 )
-                if local_function_name
-                else None
-            ),
-        )
+            else:
+                raise AssertionError(
+                    f"Unexpected number of outputs, output_names={output_names}, "
+                    f"len(builder.outputs)={len(builder.outputs)}, "
+                    f"builder.output_names={builder.output_names}"
+                    f"{builder.get_debug_msg()}\n--\n--\n--"
+                    f"{self.builder.get_debug_msg()}\n------\n"
+                )
+        else:
+            # nodes are inserted inline
+            self.builder.make_nodes(builder, args, output_names, prefix=f"_sub_{name}_")
+
         return output_names

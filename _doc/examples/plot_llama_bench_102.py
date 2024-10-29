@@ -52,9 +52,10 @@ parsed_args = get_parsed_args(
     repeat=10,
     model=("llama", "model to benchmark"),
     backend=(
-        "eager,dynger,inductor,ort,ort+,custom,ortmodule",
+        "eager,inductor,custom",
         "backend to test, among eager,dynger,inductor,"
-        "ort,ort+,custom,plug,ortmodule,backort",
+        "ort,ort+,custom,plug,ortmodule,backort,",
+        "eager,dynger,inductor,custom,ortmodule",
     ),
     device=("cuda" if check_cuda_availability() else "cpu", "device to test"),
     num_hidden_layers=("1", "hidden layers to test"),
