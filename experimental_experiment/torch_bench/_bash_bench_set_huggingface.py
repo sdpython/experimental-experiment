@@ -592,7 +592,6 @@ class HuggingfaceRunner(BenchmarkRunner):
             suite=self.SUITE,
             autocast=self.autocast,
             model_name=model_name,
-            wrap_kind="nowrap",
         )
 
     def iter_model_names(self):

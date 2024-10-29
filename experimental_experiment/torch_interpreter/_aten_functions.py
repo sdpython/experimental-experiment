@@ -5294,6 +5294,42 @@ def aten_reciprocal(
     return res
 
 
+def aten_scatter_reduce_two(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    dim: int,
+    index: T,
+    src: T,
+    reduce: str,
+    include_self: bool = True,
+    name: str = "scatter_reduce_two",
+):
+    """scatter_reduce.two"""
+    assert (
+        reduce != "mean"
+    ), f"scatter_reduce_two not implemented for reduce={reduce!r}{g.get_debug_msg()}"
+    assert g.has_rank(x), f"rank of {x!r} is expected{g.get_debug_msg()}"
+    assert not include_self, f"not implemented if include_self is True{g.get_debug_smg()}"
+    reduce_mode = {"mean": "none", "sum": "add", "prod": "mul", "amin": "min", "amax": "max"}
+    onnx_reduce = reduce_mode[reduce]
+    is_scalar = g.get_rank(x) == 0
+    if is_scalar:
+        x = g.op.Reshape(x, np.array([-1], dtype=np.int64), name=name)
+        index = g.op.Reshape(x, np.array([-1], dtype=np.int64), name=name)
+        src = g.op.Reshape(src, np.array([-1], dtype=np.int64), name=name)
+        result = g.op.ScatterElements(
+            x, index, src, axis=dim, reduction=onnx_reduce, name=name
+        )
+        result = g.op.Squeeze(result, name=name, outputs=outputs)
+    else:
+        result = g.op.ScatterElements(
+            x, index, src, axis=dim, reduction=onnx_reduce, name=name, outputs=outputs
+        )
+    return result
+
+
 def aten_relu(
     g: GraphBuilder,
     sts: Optional[Dict[str, Any]],

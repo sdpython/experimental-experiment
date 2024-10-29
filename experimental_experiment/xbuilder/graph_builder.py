@@ -1761,27 +1761,27 @@ class GraphBuilder(_GraphBuilderRuntime):
         if node.domain != "":
             return False
         if node.op_type not in {
-            "Concat",
-            "Gather",
-            "Shape",
-            "Add",
-            "Mul",
-            "Div",
-            "Sub",
-            "Mod",
-            "Slice",
             "Abs",
+            "Add",
+            "Concat",
+            "Div",
+            "Gather",
+            "Greater",
+            "GreaterOrEqual",
+            "Equal",
+            "Identity",
+            "Less",
+            "LessOrEqual",
+            "Mod",
+            "Mul",
+            "Not",
             "Range",
             "Scatter",
+            "Shape",
+            "Slice",
             "Squeeze",
-            "Identity",
+            "Sub",
             "Unsqueeze",
-            "Greater",
-            "Less",
-            "GreaterOrEqual",
-            "LessOrEqual",
-            "Equal",
-            "Not",
         }:
             return False
 
@@ -1832,7 +1832,10 @@ class GraphBuilder(_GraphBuilderRuntime):
         if node.op_type == "Shape":
             if len(node.attribute) == 0:
                 if self.has_shape(node.input[0]):
-                    self.set_value_shape(node.output[0], self.get_shape(node.input[0]))
+                    shape = self.get_shape(node.input[0])
+                    self.set_value_shape(node.output[0], shape)
+                    if all_int(shape):
+                        self.update_node_constant(node.output[0], node)
                 else:
                     self.set_value_shape(node.output[0], node.output[0])
                 return True
@@ -1849,14 +1852,20 @@ class GraphBuilder(_GraphBuilderRuntime):
                     f"is {shape}{self.get_debug_msg()}"
                 )
                 if end is None:
-                    self.set_value_shape(node.output[0], shape[start.i :])
+                    n_shape = shape[start.i :]
+                    self.set_value_shape(node.output[0], n_shape)
+                    if all_int(shape):
+                        self.update_node_constant(node.output[0], node)
                     return True
                 assert getattr(end, "i", end) <= len(shape), (
                     f"Shape mismatch, end={getattr(end, 'i', end)}, "
                     f"shape of {node.input[0]!r} "
                     f"is {shape}{self.get_debug_msg()}"
                 )
-                self.set_value_shape(node.output[0], shape[start.i : getattr(end, "i", end)])
+                n_shape = shape[start.i : getattr(end, "i", end)]
+                if all_int(shape):
+                    self.update_node_constant(node.output[0], node)
+                self.set_value_shape(node.output[0], n_shape)
                 return True
 
             if end is None:
@@ -4207,6 +4216,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                 f"{self.get_debug_msg()}"
             )
             if val is None:
+                print("AAAAAA", name)
                 return None, None
             assert len(val.shape) == 0 or min(val.shape) > 0, (
                 f"One input has a empty shape {val.shape}, name={kval!r}"
@@ -4301,8 +4311,8 @@ class GraphBuilder(_GraphBuilderRuntime):
             if self.verbose >= 10:
                 for name in self._known_names:
                     print(
-                        f"[GraphBuilder.constant_folding] "
-                        f"cst:: {1 if self.is_constant(name) else '.'} :: {name}"
+                        f"[GraphBuilder.constant_folding] cst:: "
+                        f"{1 if self.is_constant(name) else '.'} :: {name}"
                     )
         start = len(self.nodes)
         updates = {}

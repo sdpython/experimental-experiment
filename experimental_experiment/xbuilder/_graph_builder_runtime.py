@@ -413,3 +413,20 @@ class _GraphBuilderRuntime:
             f"slices={slices}"
         )
         return [res]
+
+    def _apply_shape(
+        self,
+        node: NodeProto,
+        feeds: Dict[str, "torch.Tensor"],  # noqa: F821
+    ) -> "torch.Tensor":  # noqa: F821
+        shape = tuple(map(int, feeds[node.input[0]].shape))
+        if node.attribute:
+            start = 0
+            end = None
+            for att in node.attribute:
+                if att.name == "start":
+                    start = att.i
+                elif att.name == "end":
+                    end = att.i
+            shape = shape[start:] if end is None else shape[start:end]
+        return [self.torch.from_numpy(np.array(shape, dtype=np.int64))]
