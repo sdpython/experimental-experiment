@@ -1,5 +1,4 @@
 import contextlib
-import enum
 import pprint
 import time
 import os
@@ -33,7 +32,8 @@ import onnx.numpy_helper as onh
 from onnx.external_data_helper import uses_external_data
 from onnx.model_container import make_large_tensor_proto
 from onnx.shape_inference import infer_shapes as onnx_infer_shapes
-from experimental_experiment.reference import ExtendedReferenceEvaluator
+from ..helpers import string_sig
+from ..reference import ExtendedReferenceEvaluator
 from ._shape_helper import (
     DYNAMIC_SHAPE,
     STATIC_SHAPE,
@@ -67,14 +67,6 @@ from .graph_builder_opset import Opset
 from ._graph_builder_runtime import _GraphBuilderRuntime
 
 
-class OnnxType(enum.IntEnum):
-    """Defines which can of onnx the builder needs to produces"""
-
-    MODEL_PROTO = 0
-    FUNCTION_PROTO = 1
-    FUNCTION_AND_INITIALIZERS = 2
-
-
 @contextlib.contextmanager
 def _unset_fake_temporarily() -> Generator:
     import torch
@@ -87,6 +79,64 @@ def _unset_fake_temporarily() -> Generator:
             torch._C._set_dispatch_mode(old)
 
 
+class FunctionOptions:
+    """
+    Defines how local functions must behave.
+
+    :param name: function name
+    :param domain: function domain
+    :param export_as_function: export the onnx as functions or keep local function
+    :param external_threshold: whether or not keep initializer as input for the function
+        or move them as constant of the function
+    :param move_initializer_to_constant: move initializers as constant first before
+        creating the function proto, that depends on the size defined by
+        external_threshold
+    :param return_initializer: return the remaining initializer and add them as input
+        to the function
+    :param inline: inline functions
+    :param rename_allowed: allow to rename the function if a duplicate is detected
+    :param merge_allowed: allow to merge a function in case the same code is detected
+    """
+
+    def __init__(
+        self,
+        export_as_function: bool = False,
+        name: str = "",
+        domain: str = "",
+        external_threshold: int = 2**25,
+        move_initializer_to_constant: bool = False,
+        return_initializer: bool = False,
+        inline: bool = False,
+        merge_allowed: bool = False,
+        rename_allowed: bool = False,
+    ):
+        if name:
+            export_as_function = True
+        assert not export_as_function or name, (
+            f"to be removed help track bugs, name={name!r}, domain={domain!r}, "
+            f"export_as_function={export_as_function!r}"
+        )
+        assert export_as_function or (not name and not domain), (
+            f"to be removed help track bugs, name={name!r}, domain={domain!r}, "
+            f"export_as_function={export_as_function!r}"
+        )
+        assert isinstance(
+            external_threshold, int
+        ), f"Unexpected type {type(external_threshold)} for external_threshold"
+        self.export_as_function = export_as_function
+        self.external_threshold = external_threshold
+        self.move_initializer_to_constant = move_initializer_to_constant
+        self.name = name
+        self.domain = domain
+        self.return_initializer = return_initializer
+        self.inline = inline
+        self.rename_allowed = rename_allowed
+        self.merge_allowed = merge_allowed
+
+    def __repr__(self) -> str:
+        return string_sig(self)
+
+
 class GraphBuilder(_GraphBuilderRuntime):
     """
     Simplifies the creation of a model.
@@ -95,6 +145,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         a dictionary of domain, version
     :param input_names: input names
     :param as_function: export as a function or a model
+       there are less assert when as_function is True
     :param optimization_options: optimizations options,
         see :class:`OptimizationOptions`
     :param args: example of inputs
@@ -108,7 +159,8 @@ class GraphBuilder(_GraphBuilderRuntime):
     Important attributes:
 
     - `input_names: List[str]`: list of input names
-    - `as_function: bool`: the model must be exported as a function or as a model
+    - `as_function: bool`: the model must be exported as a function or as a model,
+      there are less assert when as_function is True
     - `optimization_options: OptimizationOptions`:
     - `nodes: List[NodeProto]`: list of nodes
     - `initializers_dict: Dict[str, Any]`: initializers
@@ -159,7 +211,27 @@ class GraphBuilder(_GraphBuilderRuntime):
     of a variable is set. Example: ``ONNXSTOP=attn_output python ...``
     """
 
+    class ShapeConstant:
+        """
+        Wraps a constant shape even if the input producing the shape is not.
+        """
+
+        def __init__(self, name: str, shape: Tuple[int, ...], node: NodeProto):
+            self.name = name
+            self.shape = shape
+            self.node = node
+
+        def __repr__(self) -> str:
+            return (
+                f"{self.__class__.__name__}({self.name!r}, shape={self.shape!r}, "
+                f"node=<{self.node.op_type})"
+            )
+
     class WrapSym:
+        """
+        Wraps a symbolic int (a dimension for example).
+        """
+
         def __init__(self, sym: Union["torch.SymInt", "torch.SymFloat"]):  # noqa: F821
             self.sym = sym
 
@@ -180,7 +252,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         self,
         target_opset_or_existing_proto: Union[int, Dict[str, int], ModelProto, FunctionProto],
         input_names: Optional[Sequence[str]] = None,
-        as_function: Union[bool, OnnxType] = False,
+        as_function: bool = False,
         optimization_options: Optional[OptimizationOptions] = None,
         args: Optional[List[Any]] = None,
         ir_version: Optional[int] = None,
@@ -406,11 +478,12 @@ class GraphBuilder(_GraphBuilderRuntime):
         return [o.name for o in self.outputs]
 
     def empty_copy(
-        self, as_function: Union[bool, OnnxType] = False, constant_size: int = 2**24
+        self, as_function: bool = False, constant_size: int = 2**24
     ) -> "GraphBuilder":
         """
         Creates an empty copy but with the same opsets.
         """
+        assert isinstance(as_function, bool), f"wrong type {type(as_function)} for as_function"
         opt = OptimizationOptions(
             constant_size=constant_size,
             constant_fusing=False,
@@ -2927,9 +3000,8 @@ class GraphBuilder(_GraphBuilderRuntime):
         input_names: List[str],
         output_names: List[str],
         prefix: str = "",
-        local_function_name: Optional[
-            Union[str, Tuple[str, str], Tuple[str, str, Dict[str, bool]]]
-        ] = None,
+        function_options: Optional[FunctionOptions] = None,
+        optimize: bool = False,
     ) -> Union[str, List[str]]:
         """
         Appends all nodes and initializers from another builder.
@@ -2940,38 +3012,15 @@ class GraphBuilder(_GraphBuilderRuntime):
         :param input_names: input names
         :param output_names: output names
         :param prefix: prefix all name from this builder
-        :param local_function_name: inserts the nodes as a local function,
-            they become a local function, the name does not need to be unique,
-            if the builder detects a local function with the same name,
-            it checks they are identical, otherwise, it gives a different name,
-            initializers are still inserted into the main graph and become
-            additional inputs, this parameter can be a string, the local function name,
-            a tuple, a pair `(domain, name)` or three values
-            `(domain, name, dict(rename_allowed=True))`,
-            `(domain, name, dict(merge_allowed=True))`
-            see :meth:`GraphBuilder.make_local_function`
+        :param function_options: defines how to create a local function if needed
+        :param optimize: optimize the function
         :return: output names
         """
-        if local_function_name:
-            rename_allowed = False
-            merge_allowed = False
+        if function_options is not None and function_options.export_as_function:
             optimize = False
-            if isinstance(local_function_name, tuple):
-                domain, name = local_function_name[:2]
-                if len(local_function_name) == 3:
-                    rename_allowed = local_function_name[2].get("rename_allowed", False)
-                    merge_allowed = local_function_name[2].get("merge_allowed", False)
-                    optimize = local_function_name[2].get("optimize", False)
-            else:
-                name = local_function_name
-                domain = "local_domain"
             new_inits, (fdomain, fname) = self.make_local_function(
-                name,
                 builder,
-                domain=domain,
-                move_initializer_to_constant=False,
-                rename_allowed=rename_allowed,
-                merge_allowed=merge_allowed,
+                function_options=function_options,
                 optimize=optimize,
             )
             self.make_node(
@@ -2980,7 +3029,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                 output_names,
                 domain=fdomain,
                 check=False,
-                name=name,
+                name=fname,
             )
 
             # Shape information, needs to handle multiple outputs
@@ -2996,8 +3045,8 @@ class GraphBuilder(_GraphBuilderRuntime):
             #    if builder.has_type(o):
             #        self.set_type(no, builder.get_type(o))
 
-            if domain not in self.opsets:
-                self.opsets[domain] = 1
+            if fdomain not in self.opsets:
+                self.opsets[fdomain] = 1
         else:
             renaming = {}
             for init, value in builder.initializers_dict.items():
@@ -3547,24 +3596,16 @@ class GraphBuilder(_GraphBuilderRuntime):
 
     def to_onnx(
         self,
-        as_function: Union[bool, OnnxType] = False,
         optimize: bool = True,
         large_model: bool = False,
         external_threshold: int = 1024,
         return_optimize_report: bool = False,
-        function_name: str = "",
-        function_domain: str = "",
         inline: bool = False,
+        function_options: Optional[FunctionOptions] = None,
     ) -> Union[FunctionProto, ModelProto, TorchModelContainer, Dict[str, Any]]:
         """
-        Conversion to onnx. Only then the initializers are converted into
-        TensorProto.
+        Conversion to onnx. Only then the initializers are converted into TensorProto.
 
-        :param as_function: converts the graph as a FunctionProto or a ModelProto,
-            if it is True, all initializers are converted into constants nodes,
-            if it is ``OnxType.FUNCTION_AND_INITIALIZERS``, the function returns
-            the initializers and the FunctionProto with additional inputs for
-            the remaining initializers
         :param optimize: disable or enable the optimization,
             the optimization are set when the class constructor is called
         :param large_model: if True returns a :class:`onnx.model_container.ModelContainer`,
@@ -3573,12 +3614,13 @@ class GraphBuilder(_GraphBuilderRuntime):
         :param external_threshold: if large_model is True, every tensor above this limit
             is stored as external
         :param return_optimize_report: return statistics about the optimization as well
-        :param function_name: only used if as_function is True
-        :param function_domain: only used if as_function is True
         :param inline: inline local functions, this is done before
             any optimization takes place
+        :param function_options: to be set to export as a function
         :return: the proto
         """
+        if function_options is None:
+            function_options = FunctionOptions()
         if len(self.nodes) == 0:
             raise RuntimeError(f"The onnx model is empty (no node).\n{self.get_debug_msg()}")
 
@@ -3600,46 +3642,41 @@ class GraphBuilder(_GraphBuilderRuntime):
         )
 
         opsets = [oh.make_opsetid(*o) for o in self.opsets.items()]
-        if as_function:
-            assert function_name, "Function name cannot be empty."
-            assert function_domain, "Function domain cannot be empty."
-            if as_function is True and self.initializers_dict:
-                self.move_initializers_to_constant(verbose=max(0, self.verbose - 1))
-            assert (
-                as_function == OnnxType.FUNCTION_AND_INITIALIZERS or not self.initializers_dict
-            ), (
-                f"function_name={function_name!r}, initializers "
-                f"are not supported when exporting a local function. "
-                f"You should call 'move_initializers_to_constant'"
-                f"{self.get_debug_msg()}"
-            )
-            assert as_function == OnnxType.FUNCTION_AND_INITIALIZERS or not self.functions, (
-                f"function_name={function_name!r}, local functions "
-                f"[{', '.join(f.name for f in self.functions.values())}] "
-                f"are not supported yet when exporting a local function "
-                f"{self.get_debug_msg()}"
-            )
-            # We still move tiny initializers to the function proto to improve the model.
-            self.move_initializers_to_constant(verbose=max(0, self.verbose - 1), threshold=256)
+        if function_options.export_as_function:
+            assert function_options.name not in (
+                None,
+                "",
+                "any",
+            ), f"Function name={function_options.name!r} cannot be empty."
+            assert function_options.domain not in (
+                None,
+                "",
+                "any",
+            ), f"Function domain={function_options.domain!r} cannot be empty."
+            if function_options.move_initializer_to_constant:
+                self.move_initializers_to_constant(
+                    threshold=function_options.external_threshold,
+                    verbose=max(0, self.verbose - 1),
+                )
             proto = oh.make_function(
-                function_domain,
-                function_name,
+                function_options.domain,
+                function_options.name,
                 [i.name for i in self.inputs],
                 [o.name for o in self.outputs],
                 self.nodes,
                 opsets,
             )
-            if as_function is True:
-                return proto
-            if (
-                len(self.initializers_dict) == 0 and len(self.functions) == 0
-            ) or as_function != OnnxType.FUNCTION_AND_INITIALIZERS:
-                return dict(proto=proto)
 
-            assert as_function == OnnxType.FUNCTION_AND_INITIALIZERS, (
-                f"Unexpected value for as_function={as_function!r}"
-                f"It should be 'OnnxType.FUNCTION_AND_CONSTANTS'."
-            )
+            if not function_options.return_initializer:
+                return proto
+
+            if len(self.initializers_dict) == 0 and len(self.functions) == 0:
+                res = dict(proto=proto)
+                if self.functions:
+                    used_functions = self._get_used_local_functions()
+                    if used_functions:
+                        res["functions"] = used_functions
+                return res
 
             # We need to move the initializers as inputs, we sort than by decresing size
             inits, functions = self._extend_local_function_inputs()
@@ -4249,7 +4286,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                 f"{self.get_debug_msg()}"
             )
             output = self._apply_shape_on_shape(v, shape)
-            return output[0], None
+            return output[0], {v.input[0]: self.ShapeConstant(v.input[0], shape)}
 
         feeds = {i: self.get_constant(i, exc=exc, computed_value=True) for i in v.input}
         for kval, val in feeds.items():
@@ -5380,27 +5417,16 @@ class GraphBuilder(_GraphBuilderRuntime):
 
     def make_local_function(
         self,
-        name: str,
         builder: "GraphBuilder",
-        domain: str = "",
-        move_initializer_to_constant: bool = True,
+        function_options,
         optimize: bool = False,
-        rename_allowed: bool = False,
-        merge_allowed: bool = False,
     ) -> Tuple[List[str], Tuple[str, str]]:
         """
         Adds a local function to exiting graph.
 
-        :param name: local function name
         :param builder: builder
-        :param domain: domain name
-        :param move_initializer_to_constant: move initializers to constant (True)
-            or add them as inputs (False)
+        :param function_options: to define how to handle weights
         :param optimize: optimize the function
-        :param rename_allowed: function renaming is allowed to avoid
-            replacing an existing one
-        :param merge_allowed: if a function with the same name already exists,
-            it checks it is the same, if it is, then no new function is added
         :return: the list of added initializers if
             *move_initializer_to_constant* is True,
             and the function name (domain, name),
@@ -5411,62 +5437,68 @@ class GraphBuilder(_GraphBuilderRuntime):
         the builder if *move_initializer_to_constant* is True.
         It modifies the builder inplace.
         """
+        name = function_options.name
+        domain = function_options.domain
+        assert name, f"function_options is wrong {function_options!r}"
         assert (
-            rename_allowed
-            or merge_allowed
+            function_options.rename_allowed
+            or function_options.merge_allowed
             or not self.has_local_function(name=name, domain=domain)
         ), f"Function {name!r}, domain={domain!r} already exists"
-        if move_initializer_to_constant:
-            builder.inline_functions(verbose=max(0, self.verbose - 1))
-            onx = builder.to_onnx(
-                as_function=True,
-                function_name=name,
-                function_domain=domain,
-                optimize=optimize,
-            )
-            new_inits = []
-            new_name = name
-        else:
-            fct = builder.to_onnx(
-                as_function=OnnxType.FUNCTION_AND_INITIALIZERS,
-                function_name=name,
-                function_domain=domain,
-                optimize=optimize,
-            )
-            assert isinstance(fct, dict), f"Unexpected type {type(fct)}{self.get_debug_msg()}"
-            onx = fct["proto"]
-            to_rename = {}
-            keys = []
-            for f in builder.functions.values():
-                # What if on is already existing?
-                old_key = f.domain, f.name
-                new_key = self.add_function(
-                    f, rename_allowed=rename_allowed, merge_allowed=merge_allowed
-                )
-                if new_key != old_key:
-                    to_rename[old_key] = new_key
-                keys.append(new_key)
-            if to_rename:
-                # We rename the local functions.
-                onx = self.rename_in_local_functions(to_rename, keys, proto=onx)
+        if function_options is None:
+            function_options = FunctionOptions()
 
-            # Let's rename the initializers.
-            if "initializers_dict" in fct:
-                repl = {}
-                inits = fct["initializers_dict"]
-                new_inits = []
-                for i in onx.input:
-                    if i in inits:
-                        new_inits.append(i)
-                for i in inits:
-                    if i not in new_inits:
-                        new_inits.append(i)
-                for k, v in inits.items():
-                    new_name = self.add_initializer(self.unique_name(f"{onx.name}_{k}"), v)
-                    repl[k] = new_name
-                new_inits = [repl.get(i, i) for i in new_inits]
-            else:
-                new_inits = []
+        if function_options.move_initializer_to_constant:
+            if function_options.inline:
+                builder.inline_functions(verbose=max(0, self.verbose - 1))
+
+        assert function_options.return_initializer, (
+            f"incompatible options, return_initializer must be True "
+            f"but function_options={function_options!r}"
+        )
+        fct = builder.to_onnx(
+            function_options=function_options,
+            optimize=optimize,
+        )
+        assert isinstance(fct, dict), (
+            f"Unexpected type {type(fct)}, function_options={function_options}"
+            f"{self.get_debug_msg()}"
+        )
+        onx = fct["proto"]
+        to_rename = {}
+        keys = []
+        for f in builder.functions.values():
+            # What if on is already existing?
+            old_key = f.domain, f.name
+            new_key = self.add_function(
+                f,
+                rename_allowed=function_options.rename_allowed,
+                merge_allowed=function_options.merge_allowed,
+            )
+            if new_key != old_key:
+                to_rename[old_key] = new_key
+            keys.append(new_key)
+        if to_rename:
+            # We rename the local functions.
+            onx = self.rename_in_local_functions(to_rename, keys, proto=onx)
+
+        # Let's rename the initializers.
+        if "initializers_dict" in fct:
+            repl = {}
+            inits = fct["initializers_dict"]
+            new_inits = []
+            for i in onx.input:
+                if i in inits:
+                    new_inits.append(i)
+            for i in inits:
+                if i not in new_inits:
+                    new_inits.append(i)
+            for k, v in inits.items():
+                new_name = self.add_initializer(self.unique_name(f"{onx.name}_{k}"), v)
+                repl[k] = new_name
+            new_inits = [repl.get(i, i) for i in new_inits]
+        else:
+            new_inits = []
 
         assert isinstance(
             onx, FunctionProto
@@ -5477,7 +5509,9 @@ class GraphBuilder(_GraphBuilderRuntime):
             f"{self.get_debug_msg()}"
         )
         new_domain, new_name = self.add_function(
-            onx, rename_allowed=rename_allowed, merge_allowed=merge_allowed
+            onx,
+            rename_allowed=function_options.rename_allowed,
+            merge_allowed=function_options.merge_allowed,
         )
         if new_domain not in self.opsets:
             self.opsets[new_domain] = 1

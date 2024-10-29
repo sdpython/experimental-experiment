@@ -6,6 +6,7 @@ from typing import Any, Callable, Dict, Iterable, List, Optional, Set, Tuple, Un
 import numpy as np
 from onnx import TensorProto
 from ..helpers import string_type
+from ..xbuilder import GraphBuilder, FunctionOptions
 from ..xbuilder._shape_helper import all_int, DYNAMIC_SHAPE
 from ..xbuilder._helper import make_hash
 from ..xbuilder._dtype_helper import (
@@ -40,14 +41,16 @@ class DynamoInterpreter:
 
     def __init__(
         self,
-        graph_builder: "GraphBuilder",  # noqa: F821
+        graph_builder: GraphBuilder,
         retriever: Callable,
         dispatcher: Optional["Dispatcher"] = None,  # noqa: F821
         example_inputs: Optional[Tuple["torch.Tensor", ...]] = None,  # noqa: F821
         export_options: Optional[ExportOptions] = None,
         optimize_submodules: bool = False,
+        function_options: Optional[FunctionOptions] = None,
     ):
         import torch
+        from ..xbuilder import FunctionOptions
 
         self.torch = torch
         self.builder = graph_builder
@@ -55,6 +58,14 @@ class DynamoInterpreter:
         self.dispatcher = dispatcher
         self.export_options = export_options
         self.optimize_submodules = optimize_submodules
+        self.function_options = function_options or FunctionOptions(
+            name="any",
+            domain="any",
+            export_as_function=True,
+            external_threshold=256,
+            move_initializer_to_constant=True,
+            return_initializer=True,
+        )
         self.example_values_ = {}
         assert example_inputs is None or isinstance(
             example_inputs, tuple
@@ -1357,6 +1368,7 @@ class DynamoInterpreter:
             dynamic_shapes=self.builder.dynamic_shapes,
             export_options=self.export_options,
             optimize_submodules=self.optimize_submodules,
+            function_options=self.function_options,
         )
         if self.preserved_modules:
             assert (
@@ -1517,15 +1529,16 @@ class DynamoInterpreter:
                 args,
                 output_names,
                 prefix=f"_sub_{name}_",
-                local_function_name=(
-                    LOCAL_DOMAIN,
-                    local_function_name,
-                    dict(
-                        merge_allowed=True,
-                        rename_allowed=True,
-                        optimize=self.optimize_submodules,
-                    ),
+                function_options=FunctionOptions(
+                    name=local_function_name,
+                    domain=LOCAL_DOMAIN,
+                    move_initializer_to_constant=self.function_options.move_initializer_to_constant,
+                    return_initializer=True,
+                    external_threshold=self.function_options.export_as_function,
+                    merge_allowed=self.function_options,
+                    rename_allowed=self.function_options,
                 ),
+                optimize=self.optimize_submodules,
             )
             if len(output_names) == len(builder.outputs):
                 # One output, both tensor

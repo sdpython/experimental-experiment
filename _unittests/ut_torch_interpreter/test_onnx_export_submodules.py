@@ -5,6 +5,7 @@ from experimental_experiment.ext_test_case import (
     skipif_ci_windows,
     requires_torch,
 )
+from experimental_experiment.xbuilder import FunctionOptions
 from experimental_experiment.torch_interpreter import to_onnx
 from experimental_experiment.reference import ExtendedReferenceEvaluator
 
@@ -88,6 +89,7 @@ class TestOnnxExportSubModules(ExtTestCase):
             export_modules_as_functions=True,
             optimize=False,
             verbose=0,
+            function_options=FunctionOptions(merge_allowed=True, external_threshold=0),
         )
         check_model(onx)
         self.assertEqual(len(onx.functions), 2)

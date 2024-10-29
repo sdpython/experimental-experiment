@@ -4,7 +4,7 @@ import numpy as np
 from onnx import FunctionProto, TensorProto
 from experimental_experiment.ext_test_case import ExtTestCase, hide_stdout, ignore_warnings
 from experimental_experiment.reference import ExtendedReferenceEvaluator
-from experimental_experiment.xbuilder import GraphBuilder, OnnxType
+from experimental_experiment.xbuilder import GraphBuilder, FunctionOptions
 
 
 class TestTools(ExtTestCase):
@@ -138,15 +138,12 @@ class TestTools(ExtTestCase):
         onx = gr.to_onnx()
         self.assertEqual(len(onx.functions), 2)
 
-        self.assertRaise(
-            lambda: gr.to_onnx(as_function=True, function_name="lr"),
-            AssertionError,
-        )
         gr.inline_functions()
         function_proto = gr.to_onnx(
-            as_function=True,
-            function_name="lr",
-            function_domain="custom_domain",
+            function_options=FunctionOptions(
+                name="lr",
+                domain="custom_domain",
+            )
         )
         self.assertNotEmpty(function_proto)
 
@@ -217,14 +214,9 @@ class TestTools(ExtTestCase):
         onx = gr.to_onnx()
         self.assertEqual(len(onx.functions), 2)
 
-        self.assertRaise(
-            lambda: gr.to_onnx(as_function=True, function_name="lr"), AssertionError
-        )
         gr.inline_functions()
         function_proto = gr.to_onnx(
-            as_function=True,
-            function_name="lr",
-            function_domain="custom_domain",
+            function_options=FunctionOptions(name="lr", domain="custom_domain")
         )
         self.assertNotEmpty(function_proto)
 
@@ -246,11 +238,7 @@ class TestTools(ExtTestCase):
         g.op.Add(g.op.MatMul("X", init, name="linear"), bias, name="linear", outputs=["Y"])
         g.make_tensor_output("Y", is_dimension=False, indexed=False)
         g.move_initializers_to_constant()
-        fct = g.to_onnx(
-            as_function=True,
-            function_name="linear",
-            function_domain="mine",
-        )
+        fct = g.to_onnx(function_options=FunctionOptions(name="linear", domain="mine"))
         feeds = dict(X=np.random.randn(2, 4).astype(np.float32))
         expected = feeds["X"] @ np_weights + np_bias
         ref = ExtendedReferenceEvaluator(fct)
@@ -274,7 +262,13 @@ class TestTools(ExtTestCase):
         g = GraphBuilder(18, ir_version=9, as_function=True)
         g.make_tensor_input("X", None, None, False)
         new_inits, _ = g.make_local_function(
-            "Regression", gf, domain="custom", move_initializer_to_constant=False
+            gf,
+            function_options=FunctionOptions(
+                name="Regression",
+                domain="custom",
+                move_initializer_to_constant=False,
+                return_initializer=True,
+            ),
         )
         self.assertEqual(new_inits, ["Regression_weights", "Regression_bias"])
         self.assertEqualArray(g.initializers_dict["Regression_weights"], np_weights)
@@ -304,9 +298,9 @@ class TestTools(ExtTestCase):
         text = g.print_text()
         self.assertIn("['_onx_regression0', 'bias2']", text)
         fct = g.to_onnx(
-            as_function=OnnxType.FUNCTION_AND_INITIALIZERS,
-            function_name="linear",
-            function_domain="mine",
+            function_options=FunctionOptions(
+                name="linear", domain="mine", return_initializer=True
+            )
         )
 
         self.assertIsInstance(fct, dict)
@@ -367,7 +361,13 @@ class TestTools(ExtTestCase):
         g2 = GraphBuilder(18, ir_version=9, as_function=True)
         g2.make_tensor_input("X", None, None, False)
         new_inits, _ = g2.make_local_function(
-            "Regression", gf, domain="custom", move_initializer_to_constant=False
+            gf,
+            function_options=FunctionOptions(
+                name="Regression",
+                domain="custom",
+                move_initializer_to_constant=False,
+                return_initializer=True,
+            ),
         )
 
         bias2 = g2.make_initializer("bias2", np_bias2)
@@ -383,7 +383,13 @@ class TestTools(ExtTestCase):
         g = GraphBuilder(18, ir_version=9, as_function=True)
         g.make_tensor_input("X", None, None, False)
         new_inits, _ = g.make_local_function(
-            "RegressionBias", g2, domain="custom", move_initializer_to_constant=False
+            g2,
+            function_options=FunctionOptions(
+                name="RegressionBias",
+                domain="custom",
+                move_initializer_to_constant=False,
+                return_initializer=True,
+            ),
         )
         self.assertEqual(len(g.functions), 2)
 
@@ -399,9 +405,12 @@ class TestTools(ExtTestCase):
         self.assertIn("FUNC RegressionBias[custom]", g.print_text())
 
         fct = g.to_onnx(
-            as_function=OnnxType.FUNCTION_AND_INITIALIZERS,
-            function_name="linear",
-            function_domain="mine",
+            g2,
+            function_options=FunctionOptions(
+                name="linear",
+                domain="mine",
+                return_initializer=True,
+            ),
         )
 
         self.assertIsInstance(fct, dict)
@@ -501,7 +510,13 @@ class TestTools(ExtTestCase):
         g = GraphBuilder(18, ir_version=9, as_function=True)
         g.make_tensor_input("X", None, None, False)
         new_inits, _ = g.make_local_function(
-            "Regression", gf, domain="custom", move_initializer_to_constant=False
+            gf,
+            function_options=FunctionOptions(
+                name="Regression",
+                domain="custom",
+                move_initializer_to_constant=False,
+                return_initializer=True,
+            ),
         )
         self.assertEqual(len(g.functions), 1)
         self.assertEqual(new_inits, ["Regression_weights", "Regression_bias"])
@@ -519,10 +534,13 @@ class TestTools(ExtTestCase):
 
         self.assertEqual(len(g.functions), 1)
         new_inits_2, (domain_name, function_name) = g.make_local_function(
-            "Regression",
             gf,
-            domain="custom",
-            move_initializer_to_constant=False,
+            function_options=FunctionOptions(
+                name="Regression",
+                domain="custom",
+                move_initializer_to_constant=False,
+                return_initializer=True,
+            ),
             rename_allowed=True,
         )
         self.assertEqual(len(g.functions), 2)
@@ -540,9 +558,9 @@ class TestTools(ExtTestCase):
 
         # finally, the conversion to onnx
         fct = g.to_onnx(
-            as_function=OnnxType.FUNCTION_AND_INITIALIZERS,
-            function_name="linear",
-            function_domain="mine",
+            function_options=FunctionOptions(
+                name="linear", domain="mine", return_initializer=True
+            )
         )
 
         self.assertIsInstance(fct, dict)
@@ -622,7 +640,13 @@ class TestTools(ExtTestCase):
             g2 = GraphBuilder(18, ir_version=9, as_function=True)
             g2.make_tensor_input("X", None, None, False)
             new_inits, _ = g2.make_local_function(
-                "Regression", gf, domain="custom", move_initializer_to_constant=False
+                builder=gf,
+                function_options=FunctionOptions(
+                    name="Regression",
+                    domain="custom",
+                    move_initializer_to_constant=False,
+                    return_initializer=True,
+                ),
             )
 
             bias2 = g2.make_initializer("bias2", np_bias2)
@@ -646,16 +670,25 @@ class TestTools(ExtTestCase):
         # let's add the first function
         g1 = _make_function()
         new_inits_1, _ = g.make_local_function(
-            "RegressionBias", g1, domain="custom", move_initializer_to_constant=False
+            g1,
+            function_options=FunctionOptions(
+                name="RegressionBias",
+                domain="custom",
+                move_initializer_to_constant=False,
+                return_initializer=True,
+            ),
         )
         self.assertEqual(len(g.functions), 2)
         # let's add the second function
         g2 = _make_function()
         new_inits_2, (domain_name, function_name) = g.make_local_function(
-            "RegressionBias",
             g2,
-            domain="custom",
-            move_initializer_to_constant=False,
+            function_options=FunctionOptions(
+                name="RegressionBias",
+                domain="custom",
+                move_initializer_to_constant=False,
+                return_initializer=True,
+            ),
             rename_allowed=True,
         )
         self.assertEqual(len(g.functions), 4)
@@ -671,9 +704,11 @@ class TestTools(ExtTestCase):
         self.assertIn("FUNC RegressionBias[custom]", g.print_text())
 
         fct = g.to_onnx(
-            as_function=OnnxType.FUNCTION_AND_INITIALIZERS,
-            function_name="linear",
-            function_domain="mine",
+            function_options=FunctionOptions(
+                name="linear",
+                domain="mine",
+                return_initializer=True,
+            )
         )
 
         self.assertIsInstance(fct, dict)
@@ -771,7 +806,13 @@ class TestTools(ExtTestCase):
             g2 = GraphBuilder(18, ir_version=9, as_function=True)
             g2.make_tensor_input("X", None, None, False)
             new_inits, _ = g2.make_local_function(
-                "Regression", gf, domain="custom", move_initializer_to_constant=False
+                gf,
+                function_options=FunctionOptions(
+                    name="Regression",
+                    domain="custom",
+                    move_initializer_to_constant=False,
+                    return_initializer=True,
+                ),
             )
 
             bias2 = g2.make_initializer("bias2", np_bias2)
@@ -795,16 +836,25 @@ class TestTools(ExtTestCase):
         # let's add the first function
         g1 = _make_function()
         new_inits_1, _ = g.make_local_function(
-            "RegressionBias", g1, domain="custom", move_initializer_to_constant=False
+            g1,
+            function_options=FunctionOptions(
+                name="RegressionBias",
+                domain="custom",
+                move_initializer_to_constant=False,
+                return_initializer=True,
+            ),
         )
         self.assertEqual(len(g.functions), 2)
         # let's add the second function
         g2 = _make_function()
         new_inits_2, (domain_name, function_name) = g.make_local_function(
-            "RegressionBias",
             g2,
-            domain="custom",
-            move_initializer_to_constant=False,
+            function_options=FunctionOptions(
+                name="RegressionBias",
+                domain="custom",
+                move_initializer_to_constant=False,
+                return_initializer=True,
+            ),
             merge_allowed=True,
         )
         self.assertEqual(len(g.functions), 2)
@@ -820,9 +870,11 @@ class TestTools(ExtTestCase):
         self.assertIn("FUNC RegressionBias[custom]", g.print_text())
 
         fct = g.to_onnx(
-            as_function=OnnxType.FUNCTION_AND_INITIALIZERS,
-            function_name="linear",
-            function_domain="mine",
+            function_options=FunctionOptions(
+                name="linear",
+                domain="mine",
+                return_initializer=True,
+            )
         )
 
         self.assertIsInstance(fct, dict)

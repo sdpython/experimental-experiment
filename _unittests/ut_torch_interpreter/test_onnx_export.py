@@ -117,7 +117,8 @@ def export_utils(
         assert len(onx.graph.initializer) == expected_weights, (
             f"The model has {len(onx.graph.initializer)} initiliazers, "
             f"expecting {expected_weights}, inputs are "
-            f"{[_.name for _ in onx.graph.input]}."
+            f"{[_.name for _ in onx.graph.input]}, "
+            f"op_type are {[n.op_type for n in onx.graph.node]}"
         )
     with open(name, "wb") as f:
         f.write(onx.SerializeToString())
