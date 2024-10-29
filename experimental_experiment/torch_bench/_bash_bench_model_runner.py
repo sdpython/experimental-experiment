@@ -582,7 +582,7 @@ class ModelRunner:
                 None,
                 "none",
             ), f"strategy={strategy!r} not implemented for {exporter!r}"
-            return self._to_onnx_script(
+            return self._to_torchscript(
                 name,
                 dynamic=dynamic,
                 fake_tensor=fake_tensor,
@@ -939,7 +939,7 @@ class ModelRunner:
         stats["time_export_optimization"] = time.perf_counter() - begin
         return model_proto, stats
 
-    def _to_onnx_script(
+    def _to_torchscript(
         self,
         name: str,
         dynamic: bool,
@@ -1016,10 +1016,10 @@ class ModelRunner:
                     input_names.append(dname)
 
             if verbose:
-                print(f"[ModelRunner._to_onnx_script] dynamic_axes={dynamic_axes}")
-                print(f"[ModelRunner._to_onnx_script] input_names={input_names}")
+                print(f"[ModelRunner._to_torchscript] dynamic_axes={dynamic_axes}")
+                print(f"[ModelRunner._to_torchscript] input_names={input_names}")
                 print(
-                    f"[ModelRunner._to_onnx_script] n_inputs={len(inputs)}, "
+                    f"[ModelRunner._to_torchscript] n_inputs={len(inputs)}, "
                     f"n_kw_inputs={len(kw_inputs)}"
                 )
             kwargs_export["dynamic_axes"] = dynamic_axes
@@ -1034,6 +1034,7 @@ class ModelRunner:
                     do_constant_folding=False,
                     opset_version=target_opset,
                     verbose=max(verbose - 2, 0),
+                    external_data=True,
                     **kwargs_export,
                 )
         else:
@@ -1045,11 +1046,12 @@ class ModelRunner:
                     do_constant_folding=False,
                     opset_version=target_opset,
                     verbose=max(verbose - 2, 0),
+                    external_data=True,
                     **kwargs_export,
                 )
 
         if verbose:
-            print(f"[ModelRunner._to_onnx_script] done saved into {name}")
+            print(f"[ModelRunner._to_torchscript] done saved into {name}")
 
         if optimization and optimization != "none":
             return self._optimize_rewrite(name, optimization)
@@ -1273,6 +1275,7 @@ class ModelRunner:
 
         export_inputs, export_kw_inputs = self.make_export_inputs(dynamic)
         dynamic_shapes = self.get_dynamic_shapes(dynamic)
+        print("***", self.export_options)
         export_options = ExportOptions(strategy=strategy, **(self.export_options or {}))
         if verbose:
             print(f"[ModelRunner._to_executorch] dynamic_shapes={dynamic_shapes!r}")
