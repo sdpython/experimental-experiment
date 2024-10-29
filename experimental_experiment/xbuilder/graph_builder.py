@@ -3096,8 +3096,20 @@ class GraphBuilder(_GraphBuilderRuntime):
         return new_inits, large_inits
 
     def _build_initializers(
-        self, large_model: bool, switch_low_high: bool, external_threshold: int
+        self, large_model: bool, switch_low_high: bool, external_threshold: Union[bool, int]
     ) -> Tuple[List[TensorProto], Dict[str, TensorProto]]:
+        """
+        Builds initializers.
+
+        :param large_model: build with a large container
+        :param switch_low_high: invert low, high precision
+        :param external_threshold: size to use when moving a tensor to the list of tensors
+            stored outside the model, if can be False for none of them, true for all of them
+            or a number, if the threshold is specified and large_model is False,
+            then all tensors above this threshold are ignored
+        :return: a list of tensors to stored in the model,
+            another list to tensors stored outside the model
+        """
         if self.verbose:
             begin = time.perf_counter()
             print(
@@ -3121,6 +3133,13 @@ class GraphBuilder(_GraphBuilderRuntime):
                 )
             initializer = []
             for k, v in init_dict.items():
+                if isinstance(external_threshold, int) and external_threshold > 0:
+                    itype = self.get_type(k)
+                    shape = self.get_shape(k)
+                    size = np.prod(shape) * self.elem_size(itype)
+                    if size > external_threshold:
+                        # We don't consider this weight.
+                        continue
                 if isinstance(v, TensorProto):
                     if self.verbose > 1:
                         print(
@@ -3200,6 +3219,14 @@ class GraphBuilder(_GraphBuilderRuntime):
         large_inits = {}
         res = []
         for k, v in sorted(init_dict.items()):
+            if isinstance(external_threshold, int) and external_threshold > 0:
+                itype = self.get_type(k)
+                shape = self.get_shape(k)
+                size = np.prod(shape) * self.elem_size(itype)
+                if size > external_threshold:
+                    # We don't consider this weight.
+                    continue
+
             if isinstance(v, self.torch.Tensor):
                 # no string tensor
                 t = self.from_array(v, name=k)
@@ -3592,6 +3619,8 @@ class GraphBuilder(_GraphBuilderRuntime):
                 f"are not supported yet when exporting a local function "
                 f"{self.get_debug_msg()}"
             )
+            # We still move tiny initializers to the function proto to improve the model.
+            self.move_initializers_to_constant(verbose=max(0, self.verbose - 1), threshold=256)
             proto = oh.make_function(
                 function_domain,
                 function_name,
@@ -4216,7 +4245,6 @@ class GraphBuilder(_GraphBuilderRuntime):
                 f"{self.get_debug_msg()}"
             )
             if val is None:
-                print("AAAAAA", name)
                 return None, None
             assert len(val.shape) == 0 or min(val.shape) > 0, (
                 f"One input has a empty shape {val.shape}, name={kval!r}"
@@ -5945,9 +5973,15 @@ class GraphBuilder(_GraphBuilderRuntime):
 
         return new_nodes
 
-    def move_initializers_to_constant(self, verbose: int = 0):
+    def move_initializers_to_constant(
+        self, threshold: Optional[int] = None, verbose: int = 0
+    ) -> int:
         """
         Moves initializers as constant nodes.
+
+        :param threshold: only move intializers to constant if their size is below this limit
+        :param verbose: verbosity
+        :return: number of moves iniatliazers
         """
         if not self.initializers_dict:
             return
@@ -5955,11 +5989,13 @@ class GraphBuilder(_GraphBuilderRuntime):
         initializers, _ = self._build_initializers(
             switch_low_high=sys.byteorder != "big",
             large_model=False,
-            external_threshold=False,
+            external_threshold=threshold,
         )
 
+        to_remove = []
         cst_nodes = []
         for proto in initializers:
+            to_remove.append(proto.name)
             if self.verbose:
                 print(
                     f"[move_initializers_to_constant] convert "
@@ -5974,5 +6010,9 @@ class GraphBuilder(_GraphBuilderRuntime):
                 proto.name
             ), f"Shape is missing for initializer {proto.name!r}"
 
-        self.initializers_dict = {}
-        self.nodes = [*cst_nodes, *self.nodes]
+        if to_remove:
+            remove = set(to_remove)
+            self.initializers_dict = {
+                k: v for k, v in self.initializers_dict.items() if k not in remove
+            }
+            self.nodes = [*cst_nodes, *self.nodes]
