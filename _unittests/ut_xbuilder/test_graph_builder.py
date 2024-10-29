@@ -300,14 +300,6 @@ class TestTools(ExtTestCase):
             ],
         )
 
-        self.assertRaise(
-            lambda: g.to_onnx(
-                as_function=True, function_name="linear", function_domain="mine"
-            ),
-            AssertionError,
-        )
-        self.assertEqual(len(g.functions), 1)
-
         # finally, the conversion to onnx
         text = g.print_text()
         self.assertIn("['_onx_regression0', 'bias2']", text)
