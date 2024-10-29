@@ -1,4 +1,5 @@
 from typing import Any, Dict, Tuple, Union
+import numpy as np
 from . import assert_found
 
 
@@ -625,6 +626,50 @@ def get_smollm_1_7b(
     dim = (1, 30)
     inputs = dict(
         input_ids=torch.randint(0, 49152, dim).to(torch.int64),
+        attention_mask=torch.ones(*dim, dtype=torch.int64),
+    )
+
+    if inputs_as_dict:
+        inputs = tuple(inputs.values())
+
+    return model, inputs
+
+
+def get_llama_32_9b_vision(
+    inputs_as_dict: bool = False, **kwargs
+) -> Tuple[Any, Union[Tuple[Any, ...], Dict[str, Any]]]:
+    """
+    Gets a non initialized model.
+
+    :param inputs_as_dict: returns dummy inputs as a dictionary or not
+    :param kwargs: to overwrite the configuration, example ``num_hidden_layers=1``
+    :return: model, inputs
+
+    See `MLlama
+    <https://huggingface.co/docs/transformers/main/en/model_doc/mllama>`_.
+    """
+    import torch
+    from transformers import MllamaConfig, MllamaForConditionalGeneration
+    from transformers.models.mllama.configuration_mllama import (
+        MllamaVisionConfig,
+        MllamaTextConfig,
+    )
+
+    config = {}
+    config.update(**kwargs)
+
+    vision_config = MllamaVisionConfig(**config)
+    text_config = MllamaTextConfig(**config)
+    configuration = MllamaConfig(vision_config, text_config)
+    model = MllamaForConditionalGeneration(configuration)
+    model.eval()
+
+    dim = (1, 30)
+    inputs = dict(
+        input_ids=torch.randint(0, 49152, dim).to(torch.int64),
+        pixel_values=torch.rand((1, 1, 1, 3, 512, 1080)).to(torch.float16),
+        aspect_ratio_mask=None,
+        aspect_ratio_ids=torch.from_numpy(np.array([[2]], dtype=np.int32)),
         attention_mask=torch.ones(*dim, dtype=torch.int64),
     )
 

@@ -154,7 +154,7 @@ class TestDocumentationExamples(ExtTestCase):
                 if not has_onnxruntime_training(True):
                     reason = "OrtValueVector.push_back_batch is missing (onnxruntime)"
 
-            if not reason and name in {"plot_executorch_101.py"}:
+            if not reason and name in {"plot_executorch_102.py"}:
                 if not has_executorch():
                     reason = "execution is not installed"
 

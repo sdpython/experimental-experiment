@@ -1275,7 +1275,6 @@ class ModelRunner:
 
         export_inputs, export_kw_inputs = self.make_export_inputs(dynamic)
         dynamic_shapes = self.get_dynamic_shapes(dynamic)
-        print("***", self.export_options)
         export_options = ExportOptions(strategy=strategy, **(self.export_options or {}))
         if verbose:
             print(f"[ModelRunner._to_executorch] dynamic_shapes={dynamic_shapes!r}")

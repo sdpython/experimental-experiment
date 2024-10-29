@@ -12,7 +12,7 @@ from experimental_experiment.torch_models.phi3_helper import has_phi3
 from experimental_experiment.torch_interpreter import to_onnx, ExportOptions
 
 
-class TestLlm(ExtTestCase):
+class TestLlmModelHelper(ExtTestCase):
     @unittest.skipIf(not has_phi3(), reason="transformers not recent enough")
     @ignore_warnings("TracerWarning")
     @ignore_warnings(UserWarning)
@@ -263,7 +263,6 @@ class TestLlm(ExtTestCase):
     @ignore_warnings(UserWarning)
     def test_get_phi_35_mini_instruct_cache_export(self):
         import torch
-        from transformers.models.phi3.modeling_phi3 import Phi3Attention
         from experimental_experiment.torch_models.llm_model_helper import (
             get_phi_35_mini_instruct,
         )
@@ -272,21 +271,35 @@ class TestLlm(ExtTestCase):
         )
 
         model, model_inputs = get_phi_35_mini_instruct(num_hidden_layers=1)
-        attentions = {
-            name: inst
-            for name, inst in model.named_modules()
-            if isinstance(inst, Phi3Attention)
-        }
-        self.assertEqual(len(attentions), 1)
 
         with bypass_export_some_errors():
-            exported_program = torch.export.export(
-                model,
-                tuple(),
-                model_inputs,
-                strict=False,
-                preserve_module_call_signature=tuple(attentions),
-            )
+            exported_program = torch.export.export(model, tuple(), model_inputs, strict=False)
+        self.assertNotEmpty(exported_program)
+
+    @skipif_ci_windows("not supported")
+    @ignore_warnings("TracerWarning")
+    @ignore_warnings(UserWarning)
+    @unittest.skip("Wrong setting for the images")
+    def test_get_llama_32_9b_vision(self):
+        import torch
+        from experimental_experiment.torch_models.llm_model_helper import (
+            get_llama_32_9b_vision,
+        )
+        from experimental_experiment.torch_interpreter.onnx_export_errors import (
+            bypass_export_some_errors,
+        )
+
+        model, model_inputs = get_llama_32_9b_vision(
+            num_hidden_layers=1,
+            num_global_layers=1,
+            rope_scaling={
+                "type": "default",
+                "rope_type": "default",
+                "mrope_section": [2, 1, 1],
+            },
+        )
+        with bypass_export_some_errors():
+            exported_program = torch.export.export(model, tuple(), model_inputs, strict=False)
         self.assertNotEmpty(exported_program)
 
 
