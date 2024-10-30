@@ -3153,7 +3153,6 @@ class GraphBuilder(_GraphBuilderRuntime):
                 new_inits[k] = v
             else:
                 location = f"#{k}"
-
                 nt = make_large_tensor_proto(location, k, itype, shape)
                 new_inits[k] = nt
                 large_inits[location] = v
@@ -3276,14 +3275,9 @@ class GraphBuilder(_GraphBuilderRuntime):
         large_inits = {}
         res = []
         for k, v in sorted(init_dict.items()):
-            if isinstance(external_threshold, int) and external_threshold > 0:
-                itype = self.get_type(k)
-                shape = self.get_shape(k)
-                size = np.prod(shape) * self.elem_size(itype)
-                if size > external_threshold:
-                    # We don't consider this weight.
-                    continue
-
+            if isinstance(v, TensorProto):
+                res.append(v)
+                continue
             if isinstance(v, self.torch.Tensor):
                 # no string tensor
                 t = self.from_array(v, name=k)
@@ -3297,9 +3291,6 @@ class GraphBuilder(_GraphBuilderRuntime):
                     )
                 t = onh.from_array(v, name=k)
                 res.append(t)
-                continue
-            if isinstance(v, TensorProto):
-                res.append(v)
                 continue
             raise TypeError(
                 f"Unable to convert initializer {k!r} with type "
@@ -4305,7 +4296,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                 f"{self.get_debug_msg()}"
             )
             output = self._apply_shape_on_shape(v, shape)
-            return output[0], {v.input[0]: self.ShapeConstant(v.input[0], shape)}
+            return output[0], {v.input[0]: self.ShapeConstant(v.input[0], shape, v)}
 
         feeds = {i: self.get_constant(i, exc=exc, computed_value=True) for i in v.input}
         for kval, val in feeds.items():
@@ -6062,6 +6053,9 @@ class GraphBuilder(_GraphBuilderRuntime):
         to_remove = []
         cst_nodes = []
         for proto in initializers:
+            if proto.external_data:
+                # external tensor
+                continue
             to_remove.append(proto.name)
             if self.verbose:
                 print(
