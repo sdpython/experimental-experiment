@@ -233,7 +233,18 @@ class DynamoInterpreter:
                 init, None, None, source_node=node
             )
             self.builder.make_local_function(
-                node.name, builder, domain=LOCAL_DOMAIN, optimize=self.optimize_submodules
+                builder,
+                function_options=FunctionOptions(
+                    name=node.name,
+                    domain=LOCAL_DOMAIN,
+                    export_as_function=True,
+                    return_initializer=True,
+                    move_initializer_to_constant=self.function_options.move_initializer_to_constant,
+                    external_threshold=self.function_options.external_threshold,
+                    merge_allowed=self.function_options,
+                    rename_allowed=self.function_options,
+                ),
+                optimize=self.optimize_submodules,
             )
             return None
 
@@ -1530,9 +1541,9 @@ class DynamoInterpreter:
                 output_names,
                 prefix=f"_sub_{name}_",
                 function_options=FunctionOptions(
-                    export_as_function=True,
                     name=local_function_name,
                     domain=LOCAL_DOMAIN,
+                    export_as_function=True,
                     return_initializer=True,
                     move_initializer_to_constant=self.function_options.move_initializer_to_constant,
                     external_threshold=self.function_options.external_threshold,
