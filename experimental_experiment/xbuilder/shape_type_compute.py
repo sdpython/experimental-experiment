@@ -831,6 +831,8 @@ def _set_shape_type_op_any_squeeze(self: "GraphBuilder", node: NodeProto):  # no
 
 
 def _set_shape_type_op_any_where(self: "GraphBuilder", node: NodeProto):  # noqa: F821
+    if not self.has_type(node.input[2]):
+        return
     self.set_type(node.output[0], self.get_type(node.input[2]))
     if (
         self.has_shape(node.input[0])

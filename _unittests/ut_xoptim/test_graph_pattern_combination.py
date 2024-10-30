@@ -113,7 +113,11 @@ class TestGraphPatternCombination(ExtTestCase):
                 raise
 
         import onnxruntime
-        from onnxruntime.capi.onnxruntime_pybind11_state import Fail, InvalidArgument
+        from onnxruntime.capi.onnxruntime_pybind11_state import (
+            Fail,
+            InvalidArgument,
+            RuntimeException,
+        )
 
         opsets = {d.domain: d.version for d in onx.opset_import}
         options = onnxruntime.SessionOptions()
@@ -136,8 +140,12 @@ class TestGraphPatternCombination(ExtTestCase):
 
         try:
             onnxruntime.InferenceSession(onx.SerializeToString(), options, providers=providers)
-        except (Fail, InvalidArgument) as e:
+        except (Fail, InvalidArgument, RuntimeException) as e:
             if "com.microsoft:SoftmaxGrad(-1) is not a registered" in str(e):
+                raise unittest.SkipTest(  # noqa: B904
+                    f"onnxruntime-training is needed due to {e}"
+                )
+            if "No such file or directory" in str(e):
                 raise unittest.SkipTest(  # noqa: B904
                     f"onnxruntime-training is needed due to {e}"
                 )
