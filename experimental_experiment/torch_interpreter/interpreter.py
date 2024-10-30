@@ -1456,9 +1456,22 @@ class DynamoInterpreter:
                         builder.set_shape(name, val[i].shape)
                     if not builder.has_type(name):
                         builder.set_type(name, val[i].dtype)
-                    self.builder.set_shapes_types(
-                        source_node.name, "call_module", (val[i].dtype, val[i].shape)
-                    )
+                    if isinstance(val[i], self.builder.torch.Tensor):
+                        self.builder.set_shapes_types(
+                            source_node.name, "call_module", (val[i].dtype, val[i].shape)
+                        )
+                    elif isinstance(val[i], (self.builder.torch.SymInt)):
+                        self.builder.set_shapes_types(
+                            source_node.name,
+                            "call_module",
+                            (self.builder.torch.SymInt, tuple()),
+                        )
+                    elif isinstance(val[i], (self.builder.torch.SymFloat)):
+                        self.builder.set_shapes_types(
+                            source_node.name,
+                            "call_module",
+                            (self.builder.torch.SymFloat, tuple()),
+                        )
         else:
             # We could use the informations stored in the builder.
             pass

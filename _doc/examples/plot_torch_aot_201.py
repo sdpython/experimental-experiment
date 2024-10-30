@@ -285,9 +285,9 @@ for k, v in exporters.items():
     filename = f"plot_torch_aot_{k}.onnx"
     torch._dynamo.reset()
     model, input_tensors = create_model_and_input()
-    if 1:  # try:
+    try:
         run(model, *input_tensors)
-    else:  # except Exception as e:
+    except Exception as e:
         print(f"skipped due to {str(e)[:1000]}")  # noqa: F821
         continue
     supported_exporters[k] = v

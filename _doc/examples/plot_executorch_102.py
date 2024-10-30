@@ -15,7 +15,7 @@ Convert a Model
 from pathlib import Path
 import torch
 
-if 1:  # try:
+try:
     from executorch.exir import (
         EdgeProgramManager,
         to_edge,
@@ -30,7 +30,7 @@ if 1:  # try:
     )
 
     executorch = True
-else:  # except ImportError:
+except ImportError:
     print("executorch is not installed.")
     executorch = None
 

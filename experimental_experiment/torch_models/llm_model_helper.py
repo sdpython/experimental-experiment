@@ -4,12 +4,13 @@ from . import assert_found
 
 
 def get_phi_35_mini_instruct(
-    inputs_as_dict: bool = False, **kwargs
+    inputs_as_dict: bool = False, batch: int = 1, **kwargs
 ) -> Tuple[Any, Union[Tuple[Any, ...], Dict[str, Any]]]:
     """
     Gets a non initialized model.
 
     :param inputs_as_dict: returns dummy inputs as a dictionary or not
+    :param batch: batch size
     :param kwargs: to overwrite the configuration, example ``num_hidden_layers=1``
     :return: model, inputs
 
@@ -160,7 +161,7 @@ def get_phi_35_mini_instruct(
     model = Phi3ForCausalLM(conf)
     model.eval()
 
-    dim = (1, 30)
+    dim = (batch, 30)
     inputs = dict(
         input_ids=torch.randint(0, 32064, dim).to(torch.int64),
         attention_mask=torch.ones(*dim, dtype=torch.int64),

@@ -127,6 +127,50 @@ class TestLlmModelHelper(ExtTestCase):
             self.assertEqualArray(a, b, atol=1e-2)
 
     @unittest.skipIf(not has_phi3(), reason="transformers not recent enough")
+    @ignore_warnings("TracerWarning")
+    @ignore_warnings(UserWarning)
+    @skipif_ci_windows("not supported")
+    @requires_cuda()
+    def test_get_phi_35_mini_instruct_cuda_modules_dynshapes(self):
+        import torch
+        from experimental_experiment.torch_models.llm_model_helper import (
+            get_phi_35_mini_instruct,
+        )
+
+        model, model_inputs = get_phi_35_mini_instruct(num_hidden_layers=1, batch=2)
+        model = model.to("cuda")
+        model_inputs = {k: v.to("cuda") for k, v in model_inputs.items()}
+        expected = list(flatten_outputs(model(**model_inputs)))
+        dims = {
+            0: torch.export.Dim("batch", min=1, max=128),
+            1: torch.export.Dim("seq", min=1, max=512) * 8 - 2,
+        }
+        dyn_shapes = {"input_ids": dims, "attention_mask": dims}
+        onx = to_onnx(
+            model,
+            None,  # args
+            model_inputs,  # kwargs
+            large_model=True,
+            verbose=0,
+            options=OptimizationOptions(max_iter=10),
+            export_options=ExportOptions(strict=False, decomposition_table="all"),
+            export_modules_as_functions=True,
+            inline=False,  # function do not retain shape information
+            dynamic_shapes=dyn_shapes,
+        )
+        filename = "test_get_phi_35_mini_instruct_custom_cuda_modules_dynshapes.onnx"
+        onx.save(filename, all_tensors_to_one_file=True)
+        import onnxruntime
+
+        sess = onnxruntime.InferenceSession(
+            filename, providers=["CUDAExecutionProvider", "CPUExecutionProvider"]
+        )
+        got = sess.run(None, {k: v.cpu().numpy() for k, v in model_inputs.items()})
+        self.assertEqual(len(expected), len(got))
+        for a, b in zip(expected, got):
+            self.assertEqualArray(a, b, atol=1e-2)
+
+    @unittest.skipIf(not has_phi3(), reason="transformers not recent enough")
     @skipif_ci_windows("not supported")
     @ignore_warnings("TracerWarning")
     @ignore_warnings(UserWarning)

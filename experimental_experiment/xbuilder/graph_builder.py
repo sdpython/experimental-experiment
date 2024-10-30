@@ -5487,7 +5487,7 @@ class GraphBuilder(_GraphBuilderRuntime):
             return parse_expression(expr, exc=exc, context=self.dynamic_objects)
         except AssertionError as e:
             raise AssertionError(
-                f"Unable to parse an expression expr={expr!r} "
+                f"Unable to parse an expression expr=[{expr!r}] "
                 f"due to {e}{self.get_debug_msg()}"
             ) from e
 
