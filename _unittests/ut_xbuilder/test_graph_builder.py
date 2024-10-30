@@ -540,8 +540,8 @@ class TestTools(ExtTestCase):
                 domain="custom",
                 move_initializer_to_constant=False,
                 return_initializer=True,
+                rename_allowed=True,
             ),
-            rename_allowed=True,
         )
         self.assertEqual(len(g.functions), 2)
         self.assertEqual(new_inits, ["Regression_weights", "Regression_bias"])
@@ -688,8 +688,8 @@ class TestTools(ExtTestCase):
                 domain="custom",
                 move_initializer_to_constant=False,
                 return_initializer=True,
+                rename_allowed=True,
             ),
-            rename_allowed=True,
         )
         self.assertEqual(len(g.functions), 4)
 
@@ -854,8 +854,8 @@ class TestTools(ExtTestCase):
                 domain="custom",
                 move_initializer_to_constant=False,
                 return_initializer=True,
+                merge_allowed=True,
             ),
-            merge_allowed=True,
         )
         self.assertEqual(len(g.functions), 2)
 

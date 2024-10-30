@@ -162,7 +162,7 @@ class _GraphBuilderRuntime:
             # Type conversion between numpy and torch is not robust.
             itype = dtype_to_tensor_dtype(x.dtype)
             ttype = onnx_dtype_to_torch_dtype(itype)
-            x = self.torch.Tensor(x).to(ttype)
+            x = self.torch.from_numpy(x.copy()).to(ttype)
         return [self.torch.permute(x, perm).to(x.dtype)]
 
     def _apply_expand(

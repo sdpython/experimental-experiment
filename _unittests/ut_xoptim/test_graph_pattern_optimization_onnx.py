@@ -2827,7 +2827,7 @@ class TestGraphPatternOptimization(ExtTestCase):
         gr = GraphBuilder(
             model,
             infer_shapes=True,
-            optimization_options=OptimizationOptions(patterns=["Cast", "Gelu"], verbose=0),
+            optimization_options=OptimizationOptions(patterns=["Cast", "Gelu"]),
         )
         opt_onx = gr.to_onnx(optimize=True)
         self.assertIn("Gelu", set(n.op_type for n in opt_onx.graph.node))
@@ -2843,7 +2843,7 @@ class TestGraphPatternOptimization(ExtTestCase):
         gr = GraphBuilder(
             model,
             infer_shapes=True,
-            optimization_options=OptimizationOptions(patterns=["Dropout"], verbose=0),
+            optimization_options=OptimizationOptions(patterns=["Dropout"], verbose=2),
         )
         opt_onx = gr.to_onnx(optimize=True)
         self.assertNotIn("Dropout", set(n.op_type for n in opt_onx.graph.node))

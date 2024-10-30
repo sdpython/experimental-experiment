@@ -1384,8 +1384,15 @@ class GraphBuilder(_GraphBuilderRuntime):
         "Returns the size in byte of the an element of this size."
         if elem_type in {TensorProto.FLOAT, TensorProto.INT32, TensorProto.UINT32}:
             return 4
-        if elem_type in {TensorProto.DOUBLE, TensorProto.INT64, TensorProto.UINT64}:
+        if elem_type in {
+            TensorProto.DOUBLE,
+            TensorProto.INT64,
+            TensorProto.UINT64,
+            TensorProto.COMPLEX64,
+        }:
             return 8
+        if elem_type in {TensorProto.COMPLEX128}:
+            return 16
         if elem_type in {
             TensorProto.INT16,
             TensorProto.UINT16,
@@ -1395,7 +1402,12 @@ class GraphBuilder(_GraphBuilderRuntime):
             return 2
         if elem_type in {TensorProto.BOOL, TensorProto.UINT8, TensorProto.INT8}:
             return 1
-        raise AssertionError(f"elem_size not implemented for elem_type={elem_type}.")
+        from . import str_tensor_proto_type
+
+        raise AssertionError(
+            f"elem_size not implemented for elem_type={elem_type}, "
+            f"among {str_tensor_proto_type()}"
+        )
 
     def make_dynamic_object(
         self,
@@ -3835,7 +3847,13 @@ class GraphBuilder(_GraphBuilderRuntime):
 
         if self.verbose or self.optimization_options.verbose:
             print(f"[GraphBuilder.optimize] start with {len(self.nodes)} nodes")
-            print(f"[GraphBuilder.optimize] options={self.optimization_options!r}")
+            if self.verbose > 1:
+                print(f"[GraphBuilder.optimize] options={self.optimization_options!r}")
+            else:
+                print(
+                    f"[GraphBuilder.optimize] #patterns="
+                    f"{len(self.optimization_options.patterns)}"
+                )
 
         self._check(statistics, "A")
         if self.optimization_options.remove_identity:
@@ -3950,8 +3968,8 @@ class GraphBuilder(_GraphBuilderRuntime):
                 f"[GraphBuilder.optimize] done with "
                 f"{len(self.nodes)} nodes in {duration:.3f}"
             )
-            msg = self._compile_statistics(statistics)
-            print(msg)
+            if self.verbose > 1:
+                print(self._compile_statistics(statistics))
 
         return statistics
 
@@ -4217,16 +4235,19 @@ class GraphBuilder(_GraphBuilderRuntime):
                 removed.add(ind)
 
         if self.optimization_options.verbose > 1:
-            for k, v in self.initializers_dict.items():
+            for i, (k, v) in enumerate(self.initializers_dict.items()):
                 if k not in marked:
                     v = self.initializers_dict[k]
                     if hasattr(v, "dtype") and hasattr(v, "shape"):
                         print(
-                            f"[GraphBuilder.remove_unused] "
+                            f"[GraphBuilder.remove_unused] {i}/{len(self.initializers_dict)}"
                             f"remove_initializer:{k}:{v.dtype}[{v.shape}]"
                         )
                     else:
-                        print(f"[GraphBuilder.remove_unused] remove_initializer:{k}]")
+                        print(
+                            f"[GraphBuilder.remove_unused] remove_initializer:"
+                            f"{i}/{len(self.initializers_dict)}: {k}]"
+                        )
 
         self.initializers_dict = {
             k: v for k, v in self.initializers_dict.items() if k in marked
@@ -5673,7 +5694,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         if isinstance(a, np.ndarray):
             if len(a.shape) == 0:
                 # Then torch may consider this as a the creation of empty array.
-                tt = self.torch.Tensor(a.reshape((1,)))
+                tt = self.torch.from_numpy(a.reshape((1,)).copy())
                 tt = tt[0]
             else:
                 tt = self.torch.Tensor(a)

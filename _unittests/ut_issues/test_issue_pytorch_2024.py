@@ -464,7 +464,7 @@ class TestIssuesPytorch2024(ExtTestCase):
                 dynamo=True,
             )
         else:
-            to_onnx(model, (example_input,), filename=onnx_file_path)
+            to_onnx(model, (example_input,), filename=onnx_file_path, verbose=1)
 
         import onnxruntime
 
