@@ -314,6 +314,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         self._debug_stop = os.environ.get("ONNXSTOP", "#?#")
         self._debug_stop_shape = os.environ.get("ONNXSTOPSHAPE", "#?#")
         self._debug_stop_type = os.environ.get("ONNXSTOPTYPE", "#?#")
+        self._debug_get_constant = os.environ.get("ONNXCST", "0") != "#?#"
         self.time_evaluation_constants_ = 0
         self.statistics_ = {}
         self.constraints_ = {}
@@ -661,6 +662,12 @@ class GraphBuilder(_GraphBuilderRuntime):
         :param multiple_outputs: allow multiple outputs
         :return: value
         """
+        if self._debug_get_constant:
+            print(
+                f"[GraphBuilder.get_constant] name={name}, "
+                f"computed_value={computed_value}, as_shape={as_shape}, "
+                f"exc={exc}"
+            )
         if as_shape:
             assert not multiple_outputs, "multiple outputs not allowed with as_shape=True"
             res = self.get_constant(name, exc, computed_value=computed_value, as_shape=False)
@@ -670,6 +677,8 @@ class GraphBuilder(_GraphBuilderRuntime):
                     f"computed_value={computed_value}, as_shape={as_shape}, "
                     f"multiple_outputs={multiple_outputs}{self.get_debug_msg()}"
                 )
+                if self._debug_get_constant:
+                    print("[GraphBuilder.get_constant]   A: None")
                 return None
             assert multiple_outputs or not isinstance(
                 res, tuple
@@ -678,13 +687,17 @@ class GraphBuilder(_GraphBuilderRuntime):
             for i in res:
                 if isinstance(i, str):
                     new_res.append(i)
-                elif isinstance(i, self.torch.Tensor):
+                else:
                     new_res.append(int(i))
+            if self._debug_get_constant:
+                print(f"[GraphBuilder.get_constant]   B: {tuple(new_res)}")
             return tuple(new_res)
 
         if not self.is_constant(name):
             if exc:
                 raise ValueError(f"Result {name!r} is not a constant{self.get_debug_msg()}")
+            if self._debug_get_constant:
+                print("[GraphBuilder.get_constant]   C: None")
             return None
         possible_value = self.constants_[name]
         if name in self.constants_computed_:
@@ -693,6 +706,8 @@ class GraphBuilder(_GraphBuilderRuntime):
             assert multiple_outputs or not isinstance(
                 value, tuple
             ), f"Multiple output is not allowed but type is {type(value)} for name={name!r}"
+            if self._debug_get_constant:
+                print(f"[GraphBuilder.get_constant]   D: value: {type(value)}")
             return value
 
         if possible_value is not None:
@@ -704,6 +719,8 @@ class GraphBuilder(_GraphBuilderRuntime):
                 res, _ = self.compute_constant(name, exc=exc)
                 if res is None:
                     # The constant is too big to be computed.
+                    if self._debug_get_constant:
+                        print("[GraphBuilder.get_constant]   E: None")
                     return None
 
                 assert multiple_outputs or not isinstance(res, tuple), (
@@ -715,6 +732,8 @@ class GraphBuilder(_GraphBuilderRuntime):
                     f"name={name!r}"
                 )
                 if not isinstance(res, tuple):
+                    if self._debug_get_constant:
+                        print("[GraphBuilder.get_constant]   F: tuple")
                     return res
 
                 assert isinstance(res, tuple), (
@@ -726,6 +745,8 @@ class GraphBuilder(_GraphBuilderRuntime):
                         f"Multiple output is not allowed but type is {type(value)} "
                         f"for name={name!r}"
                     )
+                    if self._debug_get_constant:
+                        print(f"[GraphBuilder.get_constant]   G: {type(res[0])}")
                     return res[0]
 
                 index = list(possible_value.output).index(name)
@@ -735,6 +756,8 @@ class GraphBuilder(_GraphBuilderRuntime):
                     f"Multiple output is not allowed but type is {type(value)} "
                     f"for name={name!r}"
                 )
+                if self._debug_get_constant:
+                    print(f"[GraphBuilder.get_constant]   H: {type(value)}")
                 return value
 
             assert possible_value is not None, f"Constant is empty for name={name!r}"
@@ -742,6 +765,8 @@ class GraphBuilder(_GraphBuilderRuntime):
                 f"Multiple output is not allowed but type is {type(possible_value)} "
                 f"for name={name!r}"
             )
+            if self._debug_get_constant:
+                print(f"[GraphBuilder.get_constant]   I: {type(possible_value)}")
             return possible_value
 
         if name not in self.initializers_dict:
@@ -749,17 +774,32 @@ class GraphBuilder(_GraphBuilderRuntime):
                 raise ValueError(
                     f"Result {name!r} was never evaluated within method 'constant_folding'."
                 )
+            if self._debug_get_constant:
+                print("[GraphBuilder.get_constant]   J: None")
             return None
 
         value = self.initializers_dict[name]
 
         if isinstance(value, np.ndarray):
+            if self._debug_get_constant:
+                if value.size < 10:
+                    print(
+                        f"[GraphBuilder.get_constant]   K: np.array {value.shape}, "
+                        f"{value.dtype}, {value}"
+                    )
+                else:
+                    print(
+                        f"[GraphBuilder.get_constant]   K: np.array {value.shape}, "
+                        f"{value.dtype}"
+                    )
             return value
 
         if isinstance(value, self.torch.Tensor):
             v = value.detach().cpu()
             self.constants_computed_[name] = v
             assert not multiple_outputs, f"Multiple output is not allowed for name={name!r}"
+            if self._debug_get_constant:
+                print(f"[GraphBuilder.get_constant]   L: nptorch.Tensor {v.shape}, {v.dtype}")
             return v
 
         if isinstance(value, TensorProto):
@@ -769,14 +809,20 @@ class GraphBuilder(_GraphBuilderRuntime):
                         f"Tensor is using external data, data_type={value.data_type}, "
                         f"dims={value.dims}"
                     )
+                if self._debug_get_constant:
+                    print("[GraphBuilder.get_constant]   M: None")
                 return None
             v = onh.to_array(value)
             assert not multiple_outputs, f"Multiple output is not allowed for name={name!r}"
             self.constants_computed_[name] = v
+            if self._debug_get_constant:
+                print("[GraphBuilder.get_constant]   O: TensorProto")
             return v
 
         if isinstance(value, np.float32):
             # This should not be needed.
+            if self._debug_get_constant:
+                print(f"[GraphBuilder.get_constant]   P: np.float32 {value}")
             return np.array(value, dtype=np.float32)
 
         raise TypeError(f"Unable to convert type {type(value)} into numpy array.")
@@ -4324,7 +4370,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                     # it is a small shape anyway so the FakeMode
                     # does not come up as an issue.
                     output = [output[0].detach().cpu().numpy()]
-            return output[0], {v.input[0]: self.ShapeConstant(v.input[0], shape, v)}
+                return output[0], {v.input[0]: self.ShapeConstant(v.input[0], shape, v)}
 
         feeds = {i: self.get_constant(i, exc=exc, computed_value=True) for i in v.input}
         for kval, val in feeds.items():
