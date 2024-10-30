@@ -3483,8 +3483,8 @@ class TestGraphPatternOptimization(ExtTestCase):
         )
         check_model(model)
         feeds = {
-            "X": self._range(1024, 3, 64, 64).astype(np.float32),
-            "W": self._range(64, 3, 4, 4).astype(np.float32),
+            "X": np.abs(self._range(1024, 3, 64, 64).astype(np.float32)),
+            "W": np.abs(self._range(64, 3, 4, 4).astype(np.float32)),
         }
         from onnxruntime import InferenceSession
 
@@ -3546,8 +3546,8 @@ class TestGraphPatternOptimization(ExtTestCase):
         )
         check_model(model)
         feeds = {
-            "X": self._range(1024, 3, 64, 64).astype(np.float32),
-            "W": self._range(64, 3, 4, 4).astype(np.float32),
+            "X": np.abs(self._range(1024, 3, 64, 64).astype(np.float32)),
+            "W": np.abs(self._range(64, 3, 4, 4).astype(np.float32)),
         }
         from onnxruntime import InferenceSession
 
