@@ -671,7 +671,6 @@ class GraphBuilder(_GraphBuilderRuntime):
                     f"multiple_outputs={multiple_outputs}{self.get_debug_msg()}"
                 )
                 return None
-
             assert multiple_outputs or not isinstance(
                 res, tuple
             ), f"Multiple output is not allowed but type is {type(res)} for name={name!r}"
@@ -679,7 +678,7 @@ class GraphBuilder(_GraphBuilderRuntime):
             for i in res:
                 if isinstance(i, str):
                     new_res.append(i)
-                else:
+                elif isinstance(i, self.torch.Tensor):
                     new_res.append(int(i))
             return tuple(new_res)
 
@@ -2908,6 +2907,12 @@ class GraphBuilder(_GraphBuilderRuntime):
             if self.is_constant(node.input[1]):
                 cst, _ = self.compute_constant(node.input[1], exc=False, only_array=True)
                 if cst is not None:
+                    assert not isinstance(
+                        cst, self.torch._subclasses.fake_tensor.FakeTensor
+                    ), (
+                        f"self.compute_constant returns a FakeTensor for {node.input[1]!r}"
+                        f"\n{self.pretty_text()}"
+                    )
                     self.set_shape(node.output[0], tuple(int(i) for i in cst))
         elif node.op_type == "Reshape":
             self.set_type(node.output[0], self.get_type(node.input[0]))
@@ -4278,6 +4283,8 @@ class GraphBuilder(_GraphBuilderRuntime):
         :param only_array: do not return TensorProto
         :param allow_empty: allow empty result
         :return: constant
+
+        If returns None if the constant is a FakeTensor.
         """
         assert self.is_constant(name), f"Name {name!r} is not a constant"
         if name in self.initializers_dict:
@@ -4290,6 +4297,8 @@ class GraphBuilder(_GraphBuilderRuntime):
                 v = onh.to_array(value)
                 self.add_initializer(name, v, existing=True, allow_empty=allow_empty)
                 return v, None
+            if isinstance(value, self.torch._subclasses.fake_tensor.FakeTensor):
+                return None, None
             return value, None
 
         v = self.constants_[name]
@@ -4308,7 +4317,13 @@ class GraphBuilder(_GraphBuilderRuntime):
                 f"Shape must be static ({shape}) if shape is constant in {v}"
                 f"{self.get_debug_msg()}"
             )
-            output = self._apply_shape_on_shape(v, shape)
+            with self.maybe_disable_fake_tensor_mode():
+                output = self._apply_shape_on_shape(v, shape)
+                if isinstance(output[0], self.torch.Tensor):
+                    # We convert the tensor into numpy array,
+                    # it is a small shape anyway so the FakeMode
+                    # does not come up as an issue.
+                    output = [output[0].detach().cpu().numpy()]
             return output[0], {v.input[0]: self.ShapeConstant(v.input[0], shape, v)}
 
         feeds = {i: self.get_constant(i, exc=exc, computed_value=True) for i in v.input}
@@ -4394,6 +4409,8 @@ class GraphBuilder(_GraphBuilderRuntime):
             f"v.op_type={v.op_type!r}, v.name={v.name!r}{self.get_debug_msg()}"
         )
         assert cst is not None, f"Constant {name!r} was not found in {v.output}"
+        if isinstance(cst, self.torch._subclasses.fake_tensor.FakeTensor):
+            return None, None
         return cst, feeds
 
     def constant_folding(self, convert_into_initializer: bool = True) -> int:
@@ -5654,14 +5671,16 @@ class GraphBuilder(_GraphBuilderRuntime):
         if rename_allowed and key in self.functions:
             i = 2
             new_name = f"{f.name}_2"
-            while new_name in self.functions:
+            while (f.domain, new_name) in self.functions:
                 i += 1
                 new_name = f"{f.name}_{i}"
             f.name = new_name
         key = f.domain, f.name
         assert key not in self.functions, (
             f"Function {key} was already added, rename_allowed={rename_allowed}, "
-            f"merge_allowed={merge_allowed}{self.get_debug_msg()}"
+            f"merge_allowed={merge_allowed}, same: "
+            f"{same_function_proto(self.functions[key], f)}"
+            f"\n{self.pretty_text()}"
         )
         self.functions[key] = f
         return f.domain, f.name

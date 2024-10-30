@@ -117,6 +117,9 @@ class TestLlmModelHelper(ExtTestCase):
         onx.save(filename, all_tensors_to_one_file=True)
         import onnxruntime
 
+        from experimental_experiment.helpers import pretty_onnx
+
+        print(pretty_onnx(filename))
         sess = onnxruntime.InferenceSession(
             filename, providers=["CUDAExecutionProvider", "CPUExecutionProvider"]
         )

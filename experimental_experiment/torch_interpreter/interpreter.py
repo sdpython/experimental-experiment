@@ -1471,6 +1471,7 @@ class DynamoInterpreter:
             .replace("transformers.", "")
             .replace("models.", "")
             .replace("modeling_", "")
+            .replace("phi3.", "")
         )
         return name
 
@@ -1549,9 +1550,7 @@ class DynamoInterpreter:
             if type(m) in self.preserved_modules:
                 name = type(m).__name__
                 local_function_name = self._clean_any_name(
-                    f"{m.__module__}.{name}"
-                    if m.__module__ != "__main__"
-                    else name.replace("torch.nn.modules.", "")
+                    f"{m.__module__}.{name}" if m.__module__ != "__main__" else name
                 )
 
             # let's create a function under the appropriate name
