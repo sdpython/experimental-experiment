@@ -2843,9 +2843,11 @@ class TestGraphPatternOptimization(ExtTestCase):
         gr = GraphBuilder(
             model,
             infer_shapes=True,
-            optimization_options=OptimizationOptions(patterns=["Dropout"], verbose=2),
+            optimization_options=OptimizationOptions(patterns=["Dropout"], verbose=0),
         )
         opt_onx = gr.to_onnx(optimize=True)
+        with open("test_dropout.onnx", "wb") as f:
+            f.write(opt_onx.SerializeToString())
         self.assertNotIn("Dropout", set(n.op_type for n in opt_onx.graph.node))
         self.assertEqual(169, len(opt_onx.graph.initializer))
         new_inputs = [tuple(n.input) for n in opt_onx.graph.node]

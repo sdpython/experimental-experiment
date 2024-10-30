@@ -3140,6 +3140,9 @@ class GraphBuilder(_GraphBuilderRuntime):
         return output_names
 
     def _build_large_initializers(self, external_threshold: int):
+        assert isinstance(
+            external_threshold, int
+        ), f"Unexpected type {type(external_threshold)} for external_threshold"
         new_inits = {}
         large_inits = {}
         for k, v in self.initializers_dict.items():
@@ -3194,13 +3197,6 @@ class GraphBuilder(_GraphBuilderRuntime):
                 )
             initializer = []
             for k, v in init_dict.items():
-                if isinstance(external_threshold, int) and external_threshold > 0:
-                    itype = self.get_type(k)
-                    shape = self.get_shape(k)
-                    size = np.prod(shape) * self.elem_size(itype)
-                    if size > external_threshold:
-                        # We don't consider this weight.
-                        continue
                 if isinstance(v, TensorProto):
                     if self.verbose > 1:
                         print(
@@ -4235,8 +4231,10 @@ class GraphBuilder(_GraphBuilderRuntime):
                 removed.add(ind)
 
         if self.optimization_options.verbose > 1:
+            n_not_marked = 0
             for i, (k, v) in enumerate(self.initializers_dict.items()):
                 if k not in marked:
+                    n_not_marked += 1
                     v = self.initializers_dict[k]
                     if hasattr(v, "dtype") and hasattr(v, "shape"):
                         print(
@@ -4245,7 +4243,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                         )
                     else:
                         print(
-                            f"[GraphBuilder.remove_unused] remove_initializer:"
+                            f"[GraphBuilder.remove_unused] remove_initializer {n_not_marked}:"
                             f"{i}/{len(self.initializers_dict)}: {k}]"
                         )
 
@@ -6057,8 +6055,8 @@ class GraphBuilder(_GraphBuilderRuntime):
 
         initializers, _ = self._build_initializers(
             switch_low_high=sys.byteorder != "big",
-            large_model=False,
-            external_threshold=threshold,
+            large_model=True,
+            external_threshold=threshold or 2**30,
         )
 
         to_remove = []
