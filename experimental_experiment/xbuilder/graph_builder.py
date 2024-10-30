@@ -157,6 +157,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         existing shapes are ignored
     :param raise_list: raise an exception if a new operator belongs to that list
     :param dynamic_shapes: dynamic shapes
+    :param local_domain: domain name to use for local functions if not specified
 
     Important attributes:
 
@@ -262,6 +263,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         infer_shapes: Union[bool, str] = False,
         raise_list: Optional[Set[str]] = None,
         dynamic_shapes: Optional[Union[Dict[str, Any], Tuple[Any]]] = None,
+        local_domain: str = "local_function",
     ):
         import torch
 
@@ -270,6 +272,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         self.optimization_options = optimization_options or OptimizationOptions(
             verbose=verbose
         )
+        self.local_domain = local_domain
         self.as_function = as_function
         self.input_args = args
         self.verbose = verbose
@@ -536,7 +539,7 @@ class GraphBuilder(_GraphBuilderRuntime):
             return f"{node.op_type}[{node.domain}]: {node.input} -> {node.output}"
         return f"{node.op_type}: {node.input} -> {node.output}"
 
-    def print_text(self) -> str:
+    def pretty_text(self) -> str:
         def _v(v):
             if hasattr(v, "shape"):
                 shape = "x".join(map(str, v.shape))
@@ -3654,6 +3657,11 @@ class GraphBuilder(_GraphBuilderRuntime):
                 f"Function name={function_options.name!r} cannot be empty and "
                 f"Function domain={function_options.domain!r} cannot be empty."
             )
+            key = function_options.domain, function_options.name
+            assert key not in self.functions, (
+                f"The given name {key} is already taken by a local function"
+                f"{self.pretty_text()}"
+            )
             if function_options.move_initializer_to_constant:
                 self.move_initializers_to_constant(
                     threshold=function_options.external_threshold,
@@ -4305,6 +4313,8 @@ class GraphBuilder(_GraphBuilderRuntime):
 
         feeds = {i: self.get_constant(i, exc=exc, computed_value=True) for i in v.input}
         for kval, val in feeds.items():
+            if not exc and "FakeTensor" in str(type(val)):
+                return None, None
             assert "FakeTensor" not in str(type(val)), (
                 f"FakeTensor {kval!r} cannot be an initializer {type(val)}, "
                 f"v.op_type={v.op_type!r}"
@@ -5460,8 +5470,6 @@ class GraphBuilder(_GraphBuilderRuntime):
             or function_options.merge_allowed
             or not self.has_local_function(name=name, domain=domain)
         ), f"Function {name!r}, domain={domain!r} already exists"
-        if function_options is None:
-            function_options = FunctionOptions()
 
         if function_options.move_initializer_to_constant:
             if function_options.inline:

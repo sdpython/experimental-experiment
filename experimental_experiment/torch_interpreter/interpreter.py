@@ -231,14 +231,20 @@ class DynamoInterpreter:
 
         if isinstance(init, self.torch.fx.GraphModule):
             # This function is meant to be used later.
+            if "." in self.builder.local_domain:
+                root, n = self.builder.local_domain.split(".")
+                n = int(n) + 1
+            else:
+                root, n = self.builder.local_domain, 0
+
             builder, _args, _kwargs, _output_names = self._interpret_sub_module(
-                init, None, None, source_node=node
+                init, None, None, source_node=node, local_domain=f"{root}.{n}"
             )
             self.builder.make_local_function(
                 builder,
                 function_options=FunctionOptions(
                     name=node.name,
-                    domain=LOCAL_DOMAIN,
+                    domain=self.builder.local_domain,
                     export_as_function=True,
                     return_initializer=True,
                     move_initializer_to_constant=self.function_options.move_initializer_to_constant,
@@ -1351,7 +1357,9 @@ class DynamoInterpreter:
         if last_node is not None and description:
             last_node.doc_string += "\n".join(description)
 
-    def _interpret_sub_module(self, sub_module, args, kwargs, source_node=None):
+    def _interpret_sub_module(
+        self, sub_module, args, kwargs, source_node=None, local_domain=None
+    ):
         from .onnx_export import _make_builder_interpreter
 
         if hasattr(sub_module, "graph") and isinstance(sub_module, self.torch.fx.GraphModule):
@@ -1382,6 +1390,7 @@ class DynamoInterpreter:
             export_options=self.export_options,
             optimize_submodules=self.optimize_submodules,
             function_options=self.function_options,
+            local_domain=local_domain,
         )
         if self.preserved_modules:
             assert (
@@ -1513,8 +1522,15 @@ class DynamoInterpreter:
                 f"kwargs={string_type(node.kwargs)}]"
             )
 
+        # This function is meant to be used later.
+        if "." in self.builder.local_domain:
+            root, n = self.builder.local_domain.split(".")
+            n = int(n) + 1
+        else:
+            root, n = self.builder.local_domain, 0
+
         builder, args, kwargs, output_names = self._interpret_sub_module(
-            sub_module, args, node.kwargs, source_node=node
+            sub_module, args, node.kwargs, source_node=node, local_domain=f"{root}.{n}"
         )
         assert kwargs is None or len(kwargs) == 0, (
             f"args={string_type(args)}, kwargs={string_type(kwargs)} "
@@ -1537,6 +1553,8 @@ class DynamoInterpreter:
                     if m.__module__ != "__main__"
                     else name.replace("torch.nn.modules.", "")
                 )
+
+            # let's create a function under the appropriate name
             self.builder.make_nodes(
                 builder,
                 args,

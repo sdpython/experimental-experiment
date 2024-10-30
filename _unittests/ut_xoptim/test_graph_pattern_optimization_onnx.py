@@ -3513,7 +3513,7 @@ class TestGraphPatternOptimization(ExtTestCase):
         got = opt_ref.run(None, feeds)[0]
         self.assertEqualArray(expected, got, atol=1e-2)
 
-    def test_folding(self):
+    def test_folding_with_conv_no_bias(self):
         model = oh.make_model(
             oh.make_graph(
                 [

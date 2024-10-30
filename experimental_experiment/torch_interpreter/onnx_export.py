@@ -235,6 +235,7 @@ def _make_builder_interpreter(
     export_options: Optional[Union[str, ExportOptions]] = None,
     optimize_submodules: bool = False,
     function_options: Optional[FunctionOptions] = None,
+    local_domain: str = "local_functions",
 ) -> Tuple[
     Union["torch.export.ExportedProgram", "torch.fx.GraphModule"],  # noqa: F821
     GraphBuilder,
@@ -263,6 +264,7 @@ def _make_builder_interpreter(
     :param optimize_submodules: optimizes submodules, this is done while building the model,
         and not at the end
     :param function_options: how to deal with local functions
+    :param local_domain: domain name to use for local functions if not specified
     :return: onnx model
     """
 
@@ -399,6 +401,7 @@ def _make_builder_interpreter(
         verbose=verbose,
         raise_list=raise_list,
         dynamic_shapes=dynamic_shapes,
+        local_domain=local_domain,
     )
 
     def retrieve(

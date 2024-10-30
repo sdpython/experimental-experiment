@@ -295,7 +295,7 @@ class TestTools(ExtTestCase):
         )
 
         # finally, the conversion to onnx
-        text = g.print_text()
+        text = g.pretty_text()
         self.assertIn("['_onx_regression0', 'bias2']", text)
         fct = g.to_onnx(
             function_options=FunctionOptions(
@@ -402,7 +402,7 @@ class TestTools(ExtTestCase):
         g.make_tensor_output("Y", is_dimension=False, indexed=False)
 
         # finally, the conversion to onnx
-        self.assertIn("FUNC RegressionBias[custom]", g.print_text())
+        self.assertIn("FUNC RegressionBias[custom]", g.pretty_text())
 
         fct = g.to_onnx(
             g2,
@@ -480,7 +480,7 @@ class TestTools(ExtTestCase):
         expected = feeds["X"] @ np_weights + np_bias + np_bias2 + np_bias3
 
         # Evaluation of a function
-        self.assertIn("opset: '': 18", g.print_text())
+        self.assertIn("opset: '': 18", g.pretty_text())
         ref = ExtendedReferenceEvaluator(fct["proto"], functions=fct["functions"])
         got = ref.run(None, feeds)
         self.assertEqualArray(expected, got[0])
@@ -701,7 +701,7 @@ class TestTools(ExtTestCase):
         g.make_tensor_output("Y", is_dimension=False, indexed=False)
 
         # finally, the conversion to onnx
-        self.assertIn("FUNC RegressionBias[custom]", g.print_text())
+        self.assertIn("FUNC RegressionBias[custom]", g.pretty_text())
 
         fct = g.to_onnx(
             function_options=FunctionOptions(
@@ -771,7 +771,7 @@ class TestTools(ExtTestCase):
         expected = (feeds["X"] @ np_weights + np_bias + np_bias2) * 2
 
         # Evaluation of a function
-        self.assertIn("opset: '': 18", g.print_text())
+        self.assertIn("opset: '': 18", g.pretty_text())
         ref = ExtendedReferenceEvaluator(fct["proto"], functions=fct["functions"])
         got = ref.run(None, feeds)
         self.assertEqualArray(expected, got[0])
@@ -867,7 +867,7 @@ class TestTools(ExtTestCase):
         g.make_tensor_output("Y", is_dimension=False, indexed=False)
 
         # finally, the conversion to onnx
-        self.assertIn("FUNC RegressionBias[custom]", g.print_text())
+        self.assertIn("FUNC RegressionBias[custom]", g.pretty_text())
 
         fct = g.to_onnx(
             function_options=FunctionOptions(
@@ -937,7 +937,7 @@ class TestTools(ExtTestCase):
         expected = (feeds["X"] @ np_weights + np_bias + np_bias2) * 2
 
         # Evaluation of a function
-        self.assertIn("opset: '': 18", g.print_text())
+        self.assertIn("opset: '': 18", g.pretty_text())
         ref = ExtendedReferenceEvaluator(fct["proto"], functions=fct["functions"])
         got = ref.run(None, feeds)
         self.assertEqualArray(expected, got[0])

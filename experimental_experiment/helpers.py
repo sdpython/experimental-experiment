@@ -100,6 +100,8 @@ def pretty_onnx(onx: Union[FunctionProto, GraphProto, ModelProto]) -> str:
     try:
         from onnx_array_api.plotting.text_plot import onnx_simple_text_plot
 
+        if isinstance(onx, FunctionProto):
+            return f"function: {onx.name}[{onx.domain}]\n{onnx_simple_text_plot(onx)}"
         return onnx_simple_text_plot(onx)
     except ImportError:
         from onnx.printer import to_text

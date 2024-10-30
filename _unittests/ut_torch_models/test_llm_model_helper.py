@@ -5,6 +5,7 @@ from experimental_experiment.ext_test_case import (
     ignore_warnings,
     requires_cuda,
     skipif_ci_windows,
+    long_test,
 )
 from experimental_experiment.xbuilder import OptimizationOptions
 from experimental_experiment.torch_models import flatten_outputs
@@ -17,6 +18,7 @@ class TestLlmModelHelper(ExtTestCase):
     @ignore_warnings("TracerWarning")
     @ignore_warnings(UserWarning)
     @skipif_ci_windows("not supported")
+    @long_test()
     def test_get_phi_35_mini_instruct(self):
         # import torch
         from experimental_experiment.torch_models.llm_model_helper import (

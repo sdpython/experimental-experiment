@@ -204,7 +204,7 @@ class TestOnnxExportControlFlow(ExtTestCase):
         onx = to_onnx(model, (x,))
         co = Counter([n.op_type for n in onx.graph.node])
         self.assertEqual(co, {"ReduceSum": 1, "Greater": 1, "If": 1})
-        self.assertEqual(len(onx.functions), 2)
+        self.assertEqual(len(onx.functions), 4)
 
         for _x in (x, -x):
             expected = model(_x)
