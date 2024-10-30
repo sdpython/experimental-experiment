@@ -18,7 +18,7 @@ from sklearn.metrics import mean_squared_error, r2_score
 from sklearn.model_selection import train_test_split
 import torch
 from onnxruntime import InferenceSession
-from onnx_array_api.plotting.text_plot import onnx_simple_text_plot
+from experimental_experiment.helpers import pretty_onnx
 from onnx_array_api.plotting.graphviz_helper import plot_dot
 from experimental_experiment.torch_interpreter import to_onnx
 
@@ -171,4 +171,4 @@ onx = to_onnx(
     dynamic_shapes={"x": {0: torch.export.Dim("batch")}},
 )
 
-print(onnx_simple_text_plot(onx))
+print(pretty_onnx(onx))

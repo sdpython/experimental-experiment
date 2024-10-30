@@ -11,7 +11,7 @@ Dummy Example
     :showcode:
 
     import numpy as np
-    from onnx_array_api.plotting.text_plot import onnx_simple_text_plot
+    from experimental_experiment.helpers import pretty_onnx
     import torch
     from transformers import LlamaConfig
     from transformers.models.llama.modeling_llama import LlamaModel
@@ -51,7 +51,7 @@ Dummy Example
         model(input_ids, input_mask)
 
         onx = to_onnx(model, (input_ids, input_mask))
-        print(onnx_simple_text_plot(onx))
+        print(pretty_onnx(onx))
 
 Full Example
 ============

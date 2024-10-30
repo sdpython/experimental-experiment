@@ -193,7 +193,7 @@ Example
     from onnx import TensorProto
     from experimental_experiment.xbuilder import GraphBuilder
     from experimental_experiment.reference import ExtendedReferenceEvaluator
-    from onnx_array_api.plotting.text_plot import onnx_simple_text_plot
+    from experimental_experiment.helpers import pretty_onnx
 
 
     gr = GraphBuilder(18, ir_version=9)
@@ -210,7 +210,7 @@ Example
     y = ref.run(None, {"X": x})[0]
     print(y)
 
-    print(onnx_simple_text_plot(onx))
+    print(pretty_onnx(onx))
 
     print("Without any information, the known shapes are:")
     print(gr._known_shapes)
@@ -240,7 +240,6 @@ of :meth:`get_debug_msg <experimental_experiment.xbuilder.GraphBuilder.get_debug
     from onnx import TensorProto
     from experimental_experiment.xbuilder import GraphBuilder
     from experimental_experiment.reference import ExtendedReferenceEvaluator
-    from onnx_array_api.plotting.text_plot import onnx_simple_text_plot
 
 
     gr = GraphBuilder(18, ir_version=9)
@@ -271,7 +270,6 @@ When the type is specified, it shows the following:
     from onnx import TensorProto
     from experimental_experiment.xbuilder import GraphBuilder
     from experimental_experiment.reference import ExtendedReferenceEvaluator
-    from onnx_array_api.plotting.text_plot import onnx_simple_text_plot
 
 
     gr = GraphBuilder(18, ir_version=9)
@@ -303,7 +301,7 @@ to make the syntax shorter.
     from onnx import TensorProto
     from experimental_experiment.xbuilder import GraphBuilder
     from experimental_experiment.reference import ExtendedReferenceEvaluator
-    from onnx_array_api.plotting.text_plot import onnx_simple_text_plot
+    from experimental_experiment.helpers import pretty_onnx
 
 
     gr = GraphBuilder(18, ir_version=9)
@@ -321,7 +319,7 @@ to make the syntax shorter.
 
     print(y)
 
-    print(onnx_simple_text_plot(onx))
+    print(pretty_onnx(onx))
 
 Optimizations
 +++++++++++++
@@ -503,7 +501,7 @@ First Example
     :showcode:
 
     import torch
-    from onnx_array_api.plotting.text_plot import onnx_simple_text_plot
+    from experimental_experiment.helpers import pretty_onnx
     from experimental_experiment.torch_interpreter import to_onnx
 
     class Neuron(torch.nn.Module):
@@ -521,7 +519,7 @@ First Example
 
     onx = to_onnx(model, (x,), input_names=["x"])
 
-    print(onnx_simple_text_plot(onx))
+    print(pretty_onnx(onx))
 
 And visually:
 
@@ -640,7 +638,7 @@ It just needs to be added when calling function
     :showcode:
 
     import torch
-    from onnx_array_api.plotting.text_plot import onnx_simple_text_plot
+    from experimental_experiment.helpers import pretty_onnx
     from experimental_experiment.torch_interpreter import to_onnx
 
     class Neuron(torch.nn.Module):
@@ -663,7 +661,7 @@ It just needs to be added when calling function
         dynamic_shapes={"x": {0: torch.export.Dim("batch")}},
     )
 
-    print(onnx_simple_text_plot(onx))
+    print(pretty_onnx(onx))
 
 Fallback
 ++++++++
@@ -677,7 +675,7 @@ by a function coming from another source such as :epkg:`onnxscript`.
     :showcode:
 
     import torch
-    from onnx_array_api.plotting.text_plot import onnx_simple_text_plot
+    from experimental_experiment.helpers import pretty_onnx
     from experimental_experiment.torch_interpreter import to_onnx
     from experimental_experiment.torch_interpreter.oxs_dispatcher import OxsDispatcher
 
@@ -695,7 +693,7 @@ by a function coming from another source such as :epkg:`onnxscript`.
 
     onx = to_onnx(model, (x,), input_names=["x"], dispatcher=OxsDispatcher(verbose=2))  
 
-    print(onnx_simple_text_plot(onx))
+    print(pretty_onnx(onx))
 
 Fake Tensors
 ++++++++++++
@@ -744,7 +742,7 @@ all submodules will be exported as local functions in the onnx graph.
     :showcode:
 
     import torch
-    from onnx_array_api.plotting.text_plot import onnx_simple_text_plot
+    from experimental_experiment.helpers import pretty_onnx
     from experimental_experiment.torch_interpreter import to_onnx
 
 
@@ -780,4 +778,4 @@ all submodules will be exported as local functions in the onnx graph.
         optimize=False,
         verbose=0,
     )
-    print(onnx_simple_text_plot(onx))
+    print(pretty_onnx(onx))

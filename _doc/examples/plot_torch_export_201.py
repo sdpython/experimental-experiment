@@ -84,7 +84,6 @@ import numpy as np
 import matplotlib.pyplot as plt
 import pandas
 import onnx
-from onnx_array_api.plotting.text_plot import onnx_simple_text_plot
 from onnx_array_api.profiling import profile2graph
 import torch
 from torch import nn
@@ -96,6 +95,7 @@ from experimental_experiment.plotting.memory import memory_peak_plot
 from experimental_experiment.ext_test_case import measure_time, get_figure
 from experimental_experiment.memory_peak import start_spying_on
 from experimental_experiment.ext_test_case import unit_test_going
+from experimental_experiment.helpers import pretty_onnx
 from tqdm import tqdm
 
 has_cuda = has_cuda and torch.cuda.is_available()
@@ -785,7 +785,7 @@ for compute in ["CPU", "CUDA"]:
 
 model = "ort-plot_torch_export_cus_p2-cpu-aot0.onnx"
 if os.path.exists(model):
-    print(onnx_simple_text_plot(onnx.load(model)))
+    print(pretty_onnx(onnx.load(model)))
 
 ###############################################
 # cus_p2
@@ -793,7 +793,7 @@ if os.path.exists(model):
 
 model = "ort-plot_torch_export_cus_p2-cpu-aot0.onnx"
 if os.path.exists(model):
-    print(onnx_simple_text_plot(onnx.load(model)))
+    print(pretty_onnx(onnx.load(model)))
 
 ###############################################
 # dynopt
@@ -801,7 +801,7 @@ if os.path.exists(model):
 
 model = "ort-plot_torch_export_dynopt-cpu-aot1.onnx"
 if os.path.exists(model):
-    print(onnx_simple_text_plot(onnx.load(model)))
+    print(pretty_onnx(onnx.load(model)))
 
 ###############################################
 # dynamo
@@ -809,7 +809,7 @@ if os.path.exists(model):
 
 model = "ort-plot_torch_export_dynamo-cpu-aot1.onnx"
 if os.path.exists(model):
-    print(onnx_simple_text_plot(onnx.load(model)))
+    print(pretty_onnx(onnx.load(model)))
 
 
 ######################################################
@@ -821,7 +821,7 @@ if os.path.exists(model):
 
 model = "ort-plot_torch_export_cus_p2-cuda-aot0.onnx"
 if os.path.exists(model):
-    print(onnx_simple_text_plot(onnx.load(model)))
+    print(pretty_onnx(onnx.load(model)))
 
 ###############################################
 # cus_p2
@@ -829,7 +829,7 @@ if os.path.exists(model):
 
 model = "ort-plot_torch_export_cus_p2-cuda-aot0.onnx"
 if os.path.exists(model):
-    print(onnx_simple_text_plot(onnx.load(model)))
+    print(pretty_onnx(onnx.load(model)))
 
 ###############################################
 # dynopt
@@ -837,7 +837,7 @@ if os.path.exists(model):
 
 model = "ort-plot_torch_export_dynopt-cuda-aot1.onnx"
 if os.path.exists(model):
-    print(onnx_simple_text_plot(onnx.load(model)))
+    print(pretty_onnx(onnx.load(model)))
 
 ###############################################
 # dynamo
@@ -845,4 +845,4 @@ if os.path.exists(model):
 
 model = "ort-plot_torch_export_dynamo-cuda-aot1.onnx"
 if os.path.exists(model):
-    print(onnx_simple_text_plot(onnx.load(model)))
+    print(pretty_onnx(onnx.load(model)))

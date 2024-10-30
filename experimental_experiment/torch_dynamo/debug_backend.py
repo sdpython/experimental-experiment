@@ -8,6 +8,7 @@ from ..xbuilder import OptimizationOptions
 from ..torch_interpreter._torch_helper import create_input_names
 from ..torch_interpreter import to_onnx
 from ..xoptim import get_pattern_list
+from ..helpers import pretty_onnx
 from .backend_helper import get_dimensions
 
 
@@ -29,12 +30,10 @@ def _get_session(
                 ort_optimization_level=ort_optimization_level,
             )
         except Exception as e:
-            from onnx_array_api.plotting.text_plot import onnx_simple_text_plot
-
             with open("dump_debug_get_session.onnx", "wb") as f:
                 f.write(onx.SerializeToString())
             raise AssertionError(
-                f"Unable to build session ({str(e)})\n{onnx_simple_text_plot(onx)}"
+                f"Unable to build session ({str(e)})\n{pretty_onnx(onx)}"
             ) from e
     if callable(impl):
         return impl(onx, verbose=verbose)

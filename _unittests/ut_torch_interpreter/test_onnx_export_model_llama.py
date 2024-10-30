@@ -16,6 +16,7 @@ from experimental_experiment.torch_models.llama_helper import (
     get_llama_decoder,
     get_llama_model,
 )
+from experimental_experiment.helpers import pretty_onnx
 
 
 def export_script(filename, model, *args):
@@ -71,21 +72,17 @@ class TestOnnxExportLlama(ExtTestCase):
                 InferenceSession(onx, providers=["CPUExecutionProvider"])
             except Exception as e:
                 import onnx
-                from onnx_array_api.plotting.text_plot import onnx_simple_text_plot
 
                 raise AssertionError(  # noqa: B904
                     f"onnxruntime cannot load the model "
-                    f"due to {e}\n{onnx_simple_text_plot(onnx.load(onx))}"
+                    f"due to {e}\n{pretty_onnx(onnx.load(onx))}"
                 )
             return
         try:
             InferenceSession(onx.SerializeToString(), providers=["CPUExecutionProvider"])
         except Exception as e:
-            from onnx_array_api.plotting.text_plot import onnx_simple_text_plot
-
             raise AssertionError(  # noqa: B904
-                f"onnxruntime cannot load the model"
-                f"due to {e}\n{onnx_simple_text_plot(onx)}"
+                f"onnxruntime cannot load the model due to {e}\n{pretty_onnx(onx)}"
             )
 
     @skipif_ci_windows("not supported yet on Windows")

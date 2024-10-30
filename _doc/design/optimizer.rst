@@ -170,7 +170,7 @@ We consider the following simple model:
     :showcode:
 
     import torch
-    from onnx_array_api.plotting.text_plot import onnx_simple_text_plot
+    from experimental_experiment.helpers import pretty_onnx
     from experimental_experiment.xbuilder import OptimizationOptions
     from experimental_experiment.torch_interpreter import to_onnx
 
@@ -194,7 +194,7 @@ We consider the following simple model:
     )
     with open("temp_doc_mlp.onnx", "wb") as f:
         f.write(onx.SerializeToString())
-    print(onnx_simple_text_plot(onx))
+    print(pretty_onnx(onx))
 
 Which we can renders as follows:
 
@@ -214,7 +214,7 @@ We then apply the optimizations by writing the following code:
     :showcode:
 
     import onnx
-    from onnx_array_api.plotting.text_plot import onnx_simple_text_plot
+    from experimental_experiment.helpers import pretty_onnx
     from experimental_experiment.xbuilder import GraphBuilder
 
     onx = onnx.load("temp_doc_mlp.onnx")
@@ -229,7 +229,7 @@ We then apply the optimizations by writing the following code:
     opt_onx = gr.to_onnx(optimize=True)
     with open("temp_doc_mlp_opt.onnx", "wb") as f:
         f.write(opt_onx.SerializeToString())
-    print(onnx_simple_text_plot(opt_onx))
+    print(pretty_onnx(opt_onx))
 
 Which renders as follows:
 
@@ -250,7 +250,6 @@ Verbosity
     :showcode:
 
     import onnx
-    from onnx_array_api.plotting.text_plot import onnx_simple_text_plot
     from experimental_experiment.xbuilder import GraphBuilder
 
     onx = onnx.load("temp_doc_mlp.onnx")
@@ -264,7 +263,6 @@ With more verbosity:
     :showcode:
 
     import onnx
-    from onnx_array_api.plotting.text_plot import onnx_simple_text_plot
     from experimental_experiment.xbuilder import GraphBuilder
 
     onx = onnx.load("temp_doc_mlp.onnx")
@@ -282,7 +280,6 @@ is used to enable or disable patterns.
     :showcode:
 
     import onnx
-    from onnx_array_api.plotting.text_plot import onnx_simple_text_plot
     from experimental_experiment.xbuilder import GraphBuilder, OptimizationOptions
 
     onx = onnx.load("temp_doc_mlp.onnx")
@@ -307,7 +304,6 @@ There exists some predefined lists of patterns:
     :showcode:
 
     import onnx
-    from onnx_array_api.plotting.text_plot import onnx_simple_text_plot
     from experimental_experiment.xbuilder import GraphBuilder, OptimizationOptions
 
     onx = onnx.load("temp_doc_mlp.onnx")
@@ -331,7 +327,6 @@ This can be used to see when a pattern is applied and how long it takes.
 
     import pandas
     import onnx
-    from onnx_array_api.plotting.text_plot import onnx_simple_text_plot
     from experimental_experiment.xbuilder import GraphBuilder, OptimizationOptions
 
     onx = onnx.load("temp_doc_mlp.onnx")
@@ -352,7 +347,6 @@ It can be aggregated:
 
     import pandas
     import onnx
-    from onnx_array_api.plotting.text_plot import onnx_simple_text_plot
     from experimental_experiment.xbuilder import GraphBuilder, OptimizationOptions
 
     onx = onnx.load("temp_doc_mlp.onnx")

@@ -13,6 +13,7 @@ from experimental_experiment.ext_test_case import (
 )
 from experimental_experiment.xbuilder import OptimizationOptions
 from experimental_experiment.torch_interpreter import to_onnx, Dispatcher, ExportOptions
+from experimental_experiment.helpers import pretty_onnx
 
 
 def return_module_cls_conv():
@@ -142,21 +143,17 @@ class TestOnnxExport(ExtTestCase):
                 InferenceSession(name, providers=["CPUExecutionProvider"])
             except Exception as e:
                 import onnx
-                from onnx_array_api.plotting.text_plot import onnx_simple_text_plot
 
                 raise AssertionError(
                     f"onnxruntime cannot load the model "
-                    f"due to {e}\n{onnx_simple_text_plot(onnx.load(name))}"
+                    f"due to {e}\n{pretty_onnx(onnx.load(name))}"
                 )
             return
         try:
             InferenceSession(name.SerializeToString(), providers=["CPUExecutionProvider"])
         except Exception as e:
-            from onnx_array_api.plotting.text_plot import onnx_simple_text_plot
-
             raise AssertionError(
-                f"onnxruntime cannot load the model"
-                f"due to {e}\n{onnx_simple_text_plot(name)}"
+                f"onnxruntime cannot load the modeldue to {e}\n{pretty_onnx(name)}"
             )
 
     @skipif_ci_windows("torch dynamo not supported on windows")
@@ -267,8 +264,6 @@ class TestOnnxExport(ExtTestCase):
     @skipif_ci_windows("torch dynamo not supported on windows")
     @ignore_warnings((UserWarning, DeprecationWarning))
     def test_remove_unused_nodes(self):
-        from onnx_array_api.plotting.text_plot import onnx_simple_text_plot
-
         model, input_tensor = return_module_cls_pool()
         onx1 = to_onnx(
             model,
@@ -296,9 +291,7 @@ class TestOnnxExport(ExtTestCase):
         p1 = [n for n in onx1.graph.node if n.op_type == "MaxPool"]
         p2 = [n for n in onx2.graph.node if n.op_type == "MaxPool"]
         self.assertIn(len(p1), {2, 4})
-        self.assertEqual(
-            len(p2), 2, f"Mismatch number of MaxPool, {onnx_simple_text_plot(onx2)}"
-        )
+        self.assertEqual(len(p2), 2, f"Mismatch number of MaxPool, {pretty_onnx(onx2)}")
         self.check_model_ort(onx2)
 
     @skipif_ci_windows("torch dynamo not supported on windows")
@@ -320,10 +313,6 @@ class TestOnnxExport(ExtTestCase):
     @skipif_ci_windows("torch dynamo not supported on windows")
     @ignore_warnings((UserWarning, DeprecationWarning))
     def test_constant_folding(self):
-        try:
-            from onnx_array_api.plotting.text_plot import onnx_simple_text_plot
-        except ImportError:
-            onnx_simple_text_plot = str
         model, input_tensor = return_module_cls_pool()
         onx1 = to_onnx(
             model,
@@ -334,8 +323,7 @@ class TestOnnxExport(ExtTestCase):
         self.assertGreater(
             len(onx1.graph.node),
             5,
-            msg=f"Mismath number of node {len(onx1.graph.node)}, "
-            f"{onnx_simple_text_plot(onx1)}",
+            msg=f"Mismath number of node {len(onx1.graph.node)}, {pretty_onnx(onx1)}",
         )
         self.assertEqual(len(onx1.graph.input), 1)
         self.assertEqual(len(onx1.graph.output), 1)
@@ -360,15 +348,13 @@ class TestOnnxExport(ExtTestCase):
         p1 = [n for n in onx1.graph.node if n.op_type == "MaxPool"]
         p2 = [n for n in onx2.graph.node if n.op_type == "MaxPool"]
         self.assertEqual(len(p1), 2)
-        self.assertEqual(
-            len(p2), 2, f"Mismatch number of MaxPool, {onnx_simple_text_plot(onx2)}"
-        )
+        self.assertEqual(len(p2), 2, f"Mismatch number of MaxPool, {pretty_onnx(onx2)}")
         self.check_model_ort(onx2)
 
         p1 = [n for n in onx1.graph.node if n.op_type == "Transpose"]
         p2 = [n for n in onx2.graph.node if n.op_type == "Transpose"]
-        self.assertEqual(len(p1), 3, f"Mismatch Transpose\n{onnx_simple_text_plot(onx1)}")
-        self.assertEqual(len(p2), 0, f"Mismatch Transpose\n{onnx_simple_text_plot(onx2)}")
+        self.assertEqual(len(p1), 3, f"Mismatch Transpose\n{pretty_onnx(onx1)}")
+        self.assertEqual(len(p2), 0, f"Mismatch Transpose\n{pretty_onnx(onx2)}")
         self.check_model_ort(onx2)
 
     @skipif_ci_windows("torch dynamo not supported on windows")

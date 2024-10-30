@@ -8,9 +8,9 @@ Phi3
     :showcode:
 
     import numpy as np
-    from onnx_array_api.plotting.text_plot import onnx_simple_text_plot
     import torch
     from transformers import Phi3Config, Phi3Model
+    from experimental_experiment.helpers import pretty_onnx
     from experimental_experiment.torch_interpreter import to_onnx
 
 
@@ -50,4 +50,4 @@ Phi3
         model(input_ids, input_mask)
 
         onx = to_onnx(model, (input_ids, input_mask))
-        print(onnx_simple_text_plot(onx))
+        print(pretty_onnx(onx))

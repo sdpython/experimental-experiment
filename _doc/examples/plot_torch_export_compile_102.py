@@ -10,7 +10,7 @@ export, unflatten and compile
 """
 
 import torch
-from onnx_array_api.plotting.text_plot import onnx_simple_text_plot
+from experimental_experiment.helpers import pretty_onnx
 from experimental_experiment.torch_interpreter import to_onnx
 
 
@@ -98,11 +98,11 @@ inputs = (torch.randn(1, 5),)
 expected = model(*inputs)
 
 onx = to_onnx(model, inputs)
-print(onnx_simple_text_plot(onx))
+print(pretty_onnx(onx))
 
 #################################
 # Let's preserve the module.
 
 
 onx = to_onnx(model, inputs, export_modules_as_functions=True)
-print(onnx_simple_text_plot(onx))
+print(pretty_onnx(onx))

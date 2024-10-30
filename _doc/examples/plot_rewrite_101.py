@@ -14,7 +14,7 @@ A model
 from typing import List, Optional
 import onnx.helper as oh
 from onnx import NodeProto, TensorProto
-from onnx_array_api.plotting.text_plot import onnx_simple_text_plot
+from experimental_experiment.helpers import pretty_onnx
 from onnx_array_api.plotting.graphviz_helper import plot_dot
 from experimental_experiment.xbuilder.graph_builder import (
     GraphBuilder,
@@ -42,7 +42,7 @@ proto = oh.make_model(
 )
 
 
-print(onnx_simple_text_plot(proto))
+print(pretty_onnx(proto))
 
 ##############################
 # And visually.
@@ -76,7 +76,7 @@ gr = GraphBuilder(
 )
 
 new_proto = gr.to_onnx()
-print(onnx_simple_text_plot(new_proto))
+print(pretty_onnx(new_proto))
 
 ##############################
 # And visually.
@@ -133,4 +133,4 @@ gr = GraphBuilder(
 )
 
 new_proto = gr.to_onnx()
-print(onnx_simple_text_plot(new_proto))
+print(pretty_onnx(new_proto))

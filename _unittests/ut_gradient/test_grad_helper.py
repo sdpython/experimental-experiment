@@ -15,7 +15,7 @@ from sklearn.linear_model import LinearRegression
 from skl2onnx.algebra.onnx_ops import OnnxAdd, OnnxMul, OnnxIdentity
 from skl2onnx.common.data_types import FloatTensorType
 from skl2onnx import to_onnx
-from onnx_array_api.plotting.text_plot import onnx_simple_text_plot
+from experimental_experiment.helpers import pretty_onnx
 from experimental_experiment.gradient.grad_helper import (
     random_feed,
     onnx_derivative,
@@ -238,7 +238,7 @@ class TestGradHelper(ExtTestCase):
         reg.coef_ = reg.coef_.reshape((1, -1))
         onx = to_onnx(reg, X, target_opset=opset, black_op={"LinearRegressor"})
         onx_loss = add_loss_output(onx)
-        text1 = onnx_simple_text_plot(onx_loss)
+        text1 = pretty_onnx(onx_loss)
         new_onx = onnx_derivative(
             onx,
             options=DerivativeOptions.Loss,
@@ -246,7 +246,7 @@ class TestGradHelper(ExtTestCase):
             loss="loss",
             path_name=grad_file,
         )
-        text2 = onnx_simple_text_plot(new_onx)
+        text2 = pretty_onnx(new_onx)
         self.assertNotEqual(text1, text2)
 
 

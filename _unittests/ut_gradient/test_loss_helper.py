@@ -15,7 +15,7 @@ from skl2onnx.algebra.onnx_ops import OnnxIdentity
 from skl2onnx.common.data_types import DoubleTensorType
 from skl2onnx import to_onnx
 from onnx.reference import ReferenceEvaluator
-from onnx_array_api.plotting.text_plot import onnx_simple_text_plot
+from experimental_experiment.helpers import pretty_onnx
 from experimental_experiment.gradient.loss_helper import (
     add_loss_output,
     get_train_initializer,
@@ -117,7 +117,7 @@ class TestOrtTraining(ExtTestCase):
         eps = 1e-6
         onx_loss = add_loss_output(onx, "log", output_index="probabilities", eps=eps)
         try:
-            text = onnx_simple_text_plot(onx_loss)
+            text = pretty_onnx(onx_loss)
         except RuntimeError:
             text = ""
         if text:

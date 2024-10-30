@@ -32,7 +32,7 @@ import onnx.numpy_helper as onh
 from onnx.external_data_helper import uses_external_data
 from onnx.model_container import make_large_tensor_proto
 from onnx.shape_inference import infer_shapes as onnx_infer_shapes
-from ..helpers import string_sig
+from ..helpers import string_sig, pretty_onnx
 from ..reference import ExtendedReferenceEvaluator
 from ._shape_helper import (
     DYNAMIC_SHAPE,
@@ -97,6 +97,8 @@ class FunctionOptions:
     :param rename_allowed: allow to rename the function if a duplicate is detected
     :param merge_allowed: allow to merge a function in case the same code is detected
     """
+
+    empty_names = (None, "", "*")
 
     def __init__(
         self,
@@ -3645,16 +3647,13 @@ class GraphBuilder(_GraphBuilderRuntime):
 
         opsets = [oh.make_opsetid(*o) for o in self.opsets.items()]
         if function_options.export_as_function:
-            assert function_options.name not in (
-                None,
-                "",
-                "any",
-            ), f"Function name={function_options.name!r} cannot be empty."
-            assert function_options.domain not in (
-                None,
-                "",
-                "any",
-            ), f"Function domain={function_options.domain!r} cannot be empty."
+            assert (
+                function_options.name not in FunctionOptions.empty_names
+                and function_options.domain not in FunctionOptions.empty_names
+            ), (
+                f"Function name={function_options.name!r} cannot be empty and "
+                f"Function domain={function_options.domain!r} cannot be empty."
+            )
             if function_options.move_initializer_to_constant:
                 self.move_initializers_to_constant(
                     threshold=function_options.external_threshold,
@@ -5522,7 +5521,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         )
         assert all(node.op_type != name or node.domain != domain for node in onx.node), (
             f"Recursivity is not allowed in function {name!r}, domain={domain!r}, "
-            f"function_options={function_options}\n------ONNX----\n{onx}"
+            f"function_options={function_options}\n------ONNX----\n{pretty_onnx(onx)}"
             f"{self.get_debug_msg()}"
         )
         new_domain, new_name = self.add_function(

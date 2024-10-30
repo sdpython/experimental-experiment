@@ -8,6 +8,7 @@ from experimental_experiment.ext_test_case import (
     skipif_ci_windows,
 )
 from experimental_experiment.torch_interpreter import to_onnx
+from experimental_experiment.helpers import pretty_onnx
 from experimental_experiment.xbuilder import OptimizationOptions
 
 
@@ -122,10 +123,8 @@ class TestDynamoCompileOnnx(ExtTestCase):
             try:
                 sess = ReferenceEvaluator(onx, verbose=10)
             except Exception as e:
-                from onnx_array_api.plotting.text_plot import onnx_simple_text_plot
-
                 raise AssertionError(
-                    f"Unable to run onnx graph ({str(e)})\n{onnx_simple_text_plot(onx)}"
+                    f"Unable to run onnx graph ({str(e)})\n{pretty_onnx(onx)}"
                 ) from e
             names = [i.name for i in onx.graph.input]
 
@@ -181,10 +180,8 @@ class TestDynamoCompileOnnx(ExtTestCase):
                     onx.SerializeToString(), providers=["CPUExecutionProvider"]
                 )
             except Exception as e:
-                from onnx_array_api.plotting.text_plot import onnx_simple_text_plot
-
                 raise AssertionError(
-                    f"Unable to run onnx graph ({str(e)})\n{onnx_simple_text_plot(onx)}"
+                    f"Unable to run onnx graph ({str(e)})\n{pretty_onnx(onx)}"
                 ) from e
             names = [i.name for i in onx.graph.input]
 

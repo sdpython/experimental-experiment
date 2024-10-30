@@ -318,9 +318,9 @@ class ExtTestCase(unittest.TestCase):
         unittest.TestCase.setUpClass()
 
     def print_model(self, model: "ModelProto"):  # noqa: F821
-        from onnx_array_api.plotting.text_plot import onnx_simple_text_plot
+        from experimental_experiment.helpers import pretty_onnx
 
-        print(onnx_simple_text_plot(model))
+        print(pretty_onnx(model))
 
     def get_dump_file(self, name: str, folder: Optional[str] = None) -> str:
         """Returns a filename to dump a model."""

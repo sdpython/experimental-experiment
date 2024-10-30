@@ -31,7 +31,7 @@ class TestEdPhi(ExtTestCase):
             rename_inputs=False,
             optimize=True,
             prefix="test_phi_export",
-            verbose=0,
+            verbose=1,
         )
         onx = ret["proto"]
         # with open("test_ed.onnx", "wb") as f:

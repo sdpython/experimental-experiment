@@ -59,8 +59,8 @@ class DynamoInterpreter:
         self.export_options = export_options
         self.optimize_submodules = optimize_submodules
         self.function_options = function_options or FunctionOptions(
-            name="any",
-            domain="any",
+            name="*",
+            domain="*",
             export_as_function=True,
             external_threshold=256,
             move_initializer_to_constant=True,

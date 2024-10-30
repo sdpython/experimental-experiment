@@ -721,7 +721,7 @@ def to_onnx(
 
     if verbose:
         print("[to_onnx] start creating the onnx nodes")
-        print(f"[to_onnx] function_options={interpreter.function_options!r}")
+        print(f"[to_onnx] interpreter.function_options={interpreter.function_options!r}")
 
     begin = t
     builder.process(graph_module, interpreter)

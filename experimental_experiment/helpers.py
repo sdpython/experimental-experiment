@@ -1,6 +1,7 @@
 import inspect
-from typing import Any, Callable, Dict, Optional
+from typing import Any, Callable, Dict, Optional, Union
 import numpy as np
+from onnx import FunctionProto, GraphProto, ModelProto
 
 
 def string_type(obj: Any) -> str:
@@ -90,3 +91,17 @@ def string_sig(f: Callable, kwargs: Optional[Dict[str, Any]] = None) -> str:
             continue
     atts = ", ".join(rows)
     return f"{name}({atts})"
+
+
+def pretty_onnx(onx: Union[FunctionProto, GraphProto, ModelProto]) -> str:
+    """
+    Displays an onnx prot in a better way.
+    """
+    try:
+        from onnx_array_api.plotting.text_plot import onnx_simple_text_plot
+
+        return onnx_simple_text_plot(onx)
+    except ImportError:
+        from onnx.printer import to_text
+
+        return to_text(onx)
